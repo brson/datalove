@@ -297,8 +297,8 @@ pub fn is_linear_type(type_hint: &TypeHint<'_>) -> bool {
         | TypeHint::I16
         | TypeHint::I32
         | TypeHint::I64
-        | TypeHint::Usize
-        | TypeHint::Isize
+        | TypeHint::Index
+        | TypeHint::Offset
         | TypeHint::F32
         | TypeHint::F64 => false,
 
@@ -338,8 +338,8 @@ pub fn types_match<'db>(
         (TypeHint::I32, TypeHint::I32) => true,
         (TypeHint::U64, TypeHint::U64) => true,
         (TypeHint::I64, TypeHint::I64) => true,
-        (TypeHint::Usize, TypeHint::Usize) => true,
-        (TypeHint::Isize, TypeHint::Isize) => true,
+        (TypeHint::Index, TypeHint::Index) => true,
+        (TypeHint::Offset, TypeHint::Offset) => true,
         (TypeHint::F32, TypeHint::F32) => true,
         (TypeHint::F64, TypeHint::F64) => true,
         (TypeHint::Int, TypeHint::Int) => true,

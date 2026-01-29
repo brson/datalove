@@ -186,13 +186,13 @@ pub(crate) unsafe fn int_add_impl(
             if b_abs_size == 0 {
                 result.data = std::ptr::null();
                 result.size_and_sign = 0;
-                result.capacity = rtdt::Usize::ZERO;
+                result.capacity = rtdt::Index::ZERO;
             } else {
                 let b_limbs = std::slice::from_raw_parts(b.data, b_abs_size);
                 let (ptr, len) = add_magnitude(rt, b_limbs, &[]);
                 result.data = ptr;
                 result.size_and_sign = if b_is_neg { -(len as i32) } else { len as i32 };
-                result.capacity = rtdt::Usize(len as rtdt::UsizeRepr);
+                result.capacity = rtdt::Index(len as rtdt::IndexRepr);
             }
             return RtStatus::Ok;
         }
@@ -202,7 +202,7 @@ pub(crate) unsafe fn int_add_impl(
             let (ptr, len) = add_magnitude(rt, a_limbs, &[]);
             result.data = ptr;
             result.size_and_sign = if a_is_neg { -(len as i32) } else { len as i32 };
-            result.capacity = rtdt::Usize(len as rtdt::UsizeRepr);
+            result.capacity = rtdt::Index(len as rtdt::IndexRepr);
             return RtStatus::Ok;
         }
 
@@ -214,7 +214,7 @@ pub(crate) unsafe fn int_add_impl(
             let (ptr, len) = add_magnitude(rt, a_limbs, b_limbs);
             result.data = ptr;
             result.size_and_sign = if a_is_neg { -(len as i32) } else { len as i32 };
-            result.capacity = rtdt::Usize(len as rtdt::UsizeRepr);
+            result.capacity = rtdt::Index(len as rtdt::IndexRepr);
         } else {
             // Different signs: subtract magnitudes.
             let cmp = compare_magnitude(a_limbs, b_limbs);
@@ -222,19 +222,19 @@ pub(crate) unsafe fn int_add_impl(
                 // a + (-a) = 0
                 result.data = std::ptr::null();
                 result.size_and_sign = 0;
-                result.capacity = rtdt::Usize::ZERO;
+                result.capacity = rtdt::Index::ZERO;
             } else if cmp > 0 {
                 // |a| > |b|: result has sign of a.
                 let (ptr, len) = sub_magnitude(rt, a_limbs, b_limbs);
                 result.data = ptr;
                 result.size_and_sign = if a_is_neg { -(len as i32) } else { len as i32 };
-                result.capacity = rtdt::Usize(len as rtdt::UsizeRepr);
+                result.capacity = rtdt::Index(len as rtdt::IndexRepr);
             } else {
                 // |a| < |b|: result has sign of b.
                 let (ptr, len) = sub_magnitude(rt, b_limbs, a_limbs);
                 result.data = ptr;
                 result.size_and_sign = if b_is_neg { -(len as i32) } else { len as i32 };
-                result.capacity = rtdt::Usize(len as rtdt::UsizeRepr);
+                result.capacity = rtdt::Index(len as rtdt::IndexRepr);
             }
         }
 
@@ -269,7 +269,7 @@ pub(crate) unsafe fn int_sub_impl(
         let neg_b = rtdt::Int {
             data: neg_b_limbs_ptr as *const u32,
             size_and_sign: -b_size,
-            capacity: rtdt::Usize(b_abs_size as rtdt::UsizeRepr),
+            capacity: rtdt::Index(b_abs_size as rtdt::IndexRepr),
         };
 
         // Compute a + (-b).
@@ -305,7 +305,7 @@ pub(crate) unsafe fn int_mul_impl(
         if a_abs_size == 0 || b_abs_size == 0 {
             result.data = std::ptr::null();
             result.size_and_sign = 0;
-            result.capacity = rtdt::Usize::ZERO;
+            result.capacity = rtdt::Index::ZERO;
             return RtStatus::Ok;
         }
 
@@ -350,7 +350,7 @@ pub(crate) unsafe fn int_mul_impl(
         } else {
             result_len as i32
         };
-        result.capacity = rtdt::Usize(result_len as rtdt::UsizeRepr);
+        result.capacity = rtdt::Index(result_len as rtdt::IndexRepr);
 
         RtStatus::Ok
     }
@@ -373,7 +373,7 @@ pub(crate) unsafe fn int_neg_impl(
         if abs_size == 0 {
             result.data = std::ptr::null();
             result.size_and_sign = 0;
-            result.capacity = rtdt::Usize::ZERO;
+            result.capacity = rtdt::Index::ZERO;
             return RtStatus::Ok;
         }
 
@@ -388,7 +388,7 @@ pub(crate) unsafe fn int_neg_impl(
         // Negate the sign.
         result.data = limbs_ptr as *const u32;
         result.size_and_sign = -size_and_sign;
-        result.capacity = rtdt::Usize(abs_size as rtdt::UsizeRepr);
+        result.capacity = rtdt::Index(abs_size as rtdt::IndexRepr);
 
         RtStatus::Ok
     }
@@ -587,7 +587,7 @@ pub(crate) unsafe fn int_div_checked_impl(
         if a_abs_size == 0 {
             result.data = std::ptr::null();
             result.size_and_sign = 0;
-            result.capacity = rtdt::Usize::ZERO;
+            result.capacity = rtdt::Index::ZERO;
             return RtStatus::Ok;
         }
 
@@ -599,7 +599,7 @@ pub(crate) unsafe fn int_div_checked_impl(
         if q_len == 0 {
             result.data = std::ptr::null();
             result.size_and_sign = 0;
-            result.capacity = rtdt::Usize::ZERO;
+            result.capacity = rtdt::Index::ZERO;
             return RtStatus::Ok;
         }
 
@@ -612,7 +612,7 @@ pub(crate) unsafe fn int_div_checked_impl(
         } else {
             q_len as i32
         };
-        result.capacity = rtdt::Usize(q_len as rtdt::UsizeRepr);
+        result.capacity = rtdt::Index(q_len as rtdt::IndexRepr);
 
         RtStatus::Ok
     }
@@ -717,14 +717,14 @@ pub(crate) unsafe fn int_from_fixed_impl(
         if magnitude == 0 {
             result.data = std::ptr::null();
             result.size_and_sign = 0;
-            result.capacity = rtdt::Usize::ZERO;
+            result.capacity = rtdt::Index::ZERO;
         } else if magnitude <= u32::MAX as u64 {
             // Single limb.
             let limb_ptr = rt.alloc.alloc(4, 4, 1) as *mut u32;
             *limb_ptr = magnitude as u32;
             result.data = limb_ptr as *const u32;
             result.size_and_sign = if is_negative { -1 } else { 1 };
-            result.capacity = rtdt::Usize(1);
+            result.capacity = rtdt::Index(1);
         } else {
             // Two limbs.
             let limb_ptr = rt.alloc.alloc(4, 4, 2) as *mut u32;
@@ -732,7 +732,7 @@ pub(crate) unsafe fn int_from_fixed_impl(
             *limb_ptr.add(1) = (magnitude >> 32) as u32;
             result.data = limb_ptr as *const u32;
             result.size_and_sign = if is_negative { -2 } else { 2 };
-            result.capacity = rtdt::Usize(2);
+            result.capacity = rtdt::Index(2);
         }
 
         RtStatus::Ok
@@ -758,10 +758,10 @@ pub(crate) unsafe fn int_from_limbs_impl(
             // Zero value.
             result.data = std::ptr::null();
             result.size_and_sign = 0;
-            result.capacity = rtdt::Usize::ZERO;
+            result.capacity = rtdt::Index::ZERO;
         } else {
             // Allocate and copy limbs.
-            let count = limb_count as rtdt::UsizeRepr;
+            let count = limb_count as rtdt::IndexRepr;
             let new_limbs = rt.alloc.alloc(4, 4, count) as *mut u32;
             std::ptr::copy_nonoverlapping(limbs_ptr, new_limbs, limb_count as usize);
 
@@ -771,7 +771,7 @@ pub(crate) unsafe fn int_from_limbs_impl(
             } else {
                 limb_count as i32
             };
-            result.capacity = rtdt::Usize(count);
+            result.capacity = rtdt::Index(count);
         }
 
         RtStatus::Ok

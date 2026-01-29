@@ -199,7 +199,7 @@ impl IrInterpreter {
             }
 
             // Extract string contents.
-            let result = if output_string.data.is_null() || output_string.size == rtdt::Usize::ZERO {
+            let result = if output_string.data.is_null() || output_string.size == rtdt::Index::ZERO {
                 String::new()
             } else {
                 let bytes = std::slice::from_raw_parts(output_string.data, output_string.size.as_usize());
@@ -1388,11 +1388,11 @@ impl IrInterpreter {
                 ConstValue::I64(n) => {
                     *(dest.ptr as *mut i64) = *n;
                 }
-                ConstValue::Usize(n) => {
-                    *(dest.ptr as *mut rtdt::UsizeRepr) = *n;
+                ConstValue::Index(n) => {
+                    *(dest.ptr as *mut rtdt::IndexRepr) = *n;
                 }
-                ConstValue::Isize(n) => {
-                    *(dest.ptr as *mut rtdt::IsizeRepr) = *n;
+                ConstValue::Offset(n) => {
+                    *(dest.ptr as *mut rtdt::OffsetRepr) = *n;
                 }
                 ConstValue::Int { limbs, negative } => {
                     datalove_rt::c::dtlv_rti_int_from_limbs(
@@ -1415,7 +1415,7 @@ impl IrInterpreter {
                     datalove_rt::c::dtlv_rti_string_from_bytes(
                         self.runtime.handle(),
                         bytes_ptr,
-                        s.len() as rtdt::UsizeRepr,
+                        s.len() as rtdt::IndexRepr,
                         dest.ptr,
                         dest.tydesc,
                     );
@@ -1555,7 +1555,7 @@ impl IrInterpreter {
                         dest.ptr,
                         element_tydesc,
                         elements_buffer.as_mut_ptr(),
-                        num_elements as rtdt::UsizeRepr,
+                        num_elements as rtdt::IndexRepr,
                     );
                 }
                 ConstValue::Set(elements) => {
@@ -1588,7 +1588,7 @@ impl IrInterpreter {
                         dest.ptr,
                         element_tydesc,
                         elements_buffer.as_mut_ptr(),
-                        num_elements as rtdt::UsizeRepr,
+                        num_elements as rtdt::IndexRepr,
                     );
                 }
                 ConstValue::Map(entries) => {
@@ -1635,7 +1635,7 @@ impl IrInterpreter {
                         value_tydesc,
                         keys_buffer.as_mut_ptr(),
                         values_buffer.as_mut_ptr(),
-                        num_entries as rtdt::UsizeRepr,
+                        num_entries as rtdt::IndexRepr,
                     );
                 }
                 ConstValue::Table { columns: _, rows } => {
@@ -1708,7 +1708,7 @@ impl IrInterpreter {
                         dest.tydesc,
                         rows_buffer.as_mut_ptr(),
                         &row_tydesc,
-                        num_rows as rtdt::UsizeRepr,
+                        num_rows as rtdt::IndexRepr,
                     );
                 }
                 // Aggregate and collection ConstValues that are not yet supported.

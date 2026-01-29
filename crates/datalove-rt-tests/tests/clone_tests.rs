@@ -44,7 +44,7 @@ fn test_clone_empty_map() -> AnyResult<()> {
     // Verify cloned map is empty.
     let cloned_map = unsafe { &*(cloned_buffer.as_ptr() as *const datalove_rtdt::Map) };
     assert!(cloned_map.root.is_null());
-    assert_eq!(cloned_map.len, datalove_rtdt::Usize::ZERO);
+    assert_eq!(cloned_map.len, datalove_rtdt::Index::ZERO);
 
     // Clean up both original and clone.
     // Destroy contents of original.
@@ -107,7 +107,7 @@ fn test_clone_map_single_entry() -> AnyResult<()> {
     // Verify cloned map has one entry.
     let cloned_map = unsafe { &*(cloned_buffer.as_ptr() as *const datalove_rtdt::Map) };
     assert!(!cloned_map.root.is_null());
-    assert_eq!(cloned_map.len, datalove_rtdt::Usize(1));
+    assert_eq!(cloned_map.len, datalove_rtdt::Index(1));
 
     // Clean up both original and clone.
     // Destroy contents of original.
@@ -172,7 +172,7 @@ fn test_clone_map_multiple_entries() -> AnyResult<()> {
     // Verify cloned map has five entries.
     let cloned_map = unsafe { &*(cloned_buffer.as_ptr() as *const datalove_rtdt::Map) };
     assert!(!cloned_map.root.is_null());
-    assert_eq!(cloned_map.len, datalove_rtdt::Usize(5));
+    assert_eq!(cloned_map.len, datalove_rtdt::Index(5));
 
     // Clean up both original and clone.
     // Destroy contents of original.
@@ -237,7 +237,7 @@ fn test_clone_map_nested_values() -> AnyResult<()> {
     // Verify cloned map has two entries.
     let cloned_map = unsafe { &*(cloned_buffer.as_ptr() as *const datalove_rtdt::Map) };
     assert!(!cloned_map.root.is_null());
-    assert_eq!(cloned_map.len, datalove_rtdt::Usize(2));
+    assert_eq!(cloned_map.len, datalove_rtdt::Index(2));
 
     // Clean up both original and clone.
     // Destroy contents of original.
@@ -300,7 +300,7 @@ fn test_clone_empty_set() -> AnyResult<()> {
     // Verify cloned set is empty.
     let cloned_set = unsafe { &*(cloned_buffer.as_ptr() as *const datalove_rtdt::Set) };
     assert!(cloned_set.root.is_null());
-    assert_eq!(cloned_set.len, datalove_rtdt::Usize::ZERO);
+    assert_eq!(cloned_set.len, datalove_rtdt::Index::ZERO);
 
     // Clean up both original and clone.
     // Destroy contents of original.
@@ -363,7 +363,7 @@ fn test_clone_set_single_element() -> AnyResult<()> {
     // Verify cloned set has one element.
     let cloned_set = unsafe { &*(cloned_buffer.as_ptr() as *const datalove_rtdt::Set) };
     assert!(!cloned_set.root.is_null());
-    assert_eq!(cloned_set.len, datalove_rtdt::Usize(1));
+    assert_eq!(cloned_set.len, datalove_rtdt::Index(1));
 
     // Clean up both original and clone.
     // Destroy contents of original.
@@ -428,7 +428,7 @@ fn test_clone_set_multiple_elements() -> AnyResult<()> {
     // Verify cloned set has five elements.
     let cloned_set = unsafe { &*(cloned_buffer.as_ptr() as *const datalove_rtdt::Set) };
     assert!(!cloned_set.root.is_null());
-    assert_eq!(cloned_set.len, datalove_rtdt::Usize(5));
+    assert_eq!(cloned_set.len, datalove_rtdt::Index(5));
 
     // Clean up both original and clone.
     // Destroy contents of original.
@@ -493,7 +493,7 @@ fn test_clone_set_string_elements() -> AnyResult<()> {
     // Verify cloned set has three elements.
     let cloned_set = unsafe { &*(cloned_buffer.as_ptr() as *const datalove_rtdt::Set) };
     assert!(!cloned_set.root.is_null());
-    assert_eq!(cloned_set.len, datalove_rtdt::Usize(3));
+    assert_eq!(cloned_set.len, datalove_rtdt::Index(3));
 
     // Clean up both original and clone.
     // Destroy contents of original.
@@ -558,7 +558,7 @@ fn test_clone_set_nested_tuples() -> AnyResult<()> {
     // Verify cloned set has two elements.
     let cloned_set = unsafe { &*(cloned_buffer.as_ptr() as *const datalove_rtdt::Set) };
     assert!(!cloned_set.root.is_null());
-    assert_eq!(cloned_set.len, datalove_rtdt::Usize(2));
+    assert_eq!(cloned_set.len, datalove_rtdt::Index(2));
 
     // Clean up both original and clone.
     // Destroy contents of original.
@@ -987,8 +987,8 @@ fn test_clone_empty_table() -> AnyResult<()> {
     // Verify cloned table is empty.
     let cloned_table = unsafe { &*(cloned_buffer.as_ptr() as *const datalove_rtdt::Table) };
     assert!(cloned_table.data.is_null());
-    assert_eq!(cloned_table.len, datalove_rtdt::Usize::ZERO);
-    assert_eq!(cloned_table.capacity, datalove_rtdt::Usize::ZERO);
+    assert_eq!(cloned_table.len, datalove_rtdt::Index::ZERO);
+    assert_eq!(cloned_table.capacity, datalove_rtdt::Index::ZERO);
 
     // Clean up both.
     unsafe {
@@ -1025,7 +1025,7 @@ fn test_clone_table_with_rows() -> AnyResult<()> {
     // Verify cloned table has correct length.
     let cloned_table = unsafe { &*(cloned_buffer.as_ptr() as *const datalove_rtdt::Table) };
     assert!(!cloned_table.data.is_null());
-    assert_eq!(cloned_table.len, datalove_rtdt::Usize(3));
+    assert_eq!(cloned_table.len, datalove_rtdt::Index(3));
 
     // Verify equality.
     let result = unsafe {
@@ -1073,7 +1073,7 @@ fn test_clone_table_with_strings() -> AnyResult<()> {
 
     // Verify cloned table has correct length.
     let cloned_table = unsafe { &*(cloned_buffer.as_ptr() as *const datalove_rtdt::Table) };
-    assert_eq!(cloned_table.len, datalove_rtdt::Usize(2));
+    assert_eq!(cloned_table.len, datalove_rtdt::Index(2));
 
     // Verify equality.
     let result = unsafe {

@@ -568,106 +568,106 @@ impl IrInterpreter {
                 self.write_i64(a % b, dest);
             }
 
-            // Usize bitwise operations.
-            BitnotUsize => {
+            // Index bitwise operations.
+            BitnotIndex => {
                 let a = self.read_usize(&args[0], frame, frames);
                 self.write_usize(!a, dest);
             }
-            BitandUsize => {
+            BitandIndex => {
                 let a = self.read_usize(&args[0], frame, frames);
                 let b = self.read_usize(&args[1], frame, frames);
                 self.write_usize(a & b, dest);
             }
-            BitorUsize => {
+            BitorIndex => {
                 let a = self.read_usize(&args[0], frame, frames);
                 let b = self.read_usize(&args[1], frame, frames);
                 self.write_usize(a | b, dest);
             }
-            BitxorUsize => {
+            BitxorIndex => {
                 let a = self.read_usize(&args[0], frame, frames);
                 let b = self.read_usize(&args[1], frame, frames);
                 self.write_usize(a ^ b, dest);
             }
 
-            // Usize shift operations.
-            ShlUsize => {
+            // Index shift operations.
+            ShlIndex => {
                 let a = self.read_usize(&args[0], frame, frames);
                 let b = self.read_u32(&args[1], frame, frames);
                 self.write_usize(a.wrapping_shl(b), dest);
             }
-            ShrUsize => {
+            ShrIndex => {
                 let a = self.read_usize(&args[0], frame, frames);
                 let b = self.read_u32(&args[1], frame, frames);
                 self.write_usize(a.wrapping_shr(b), dest);
             }
 
-            // Usize bit counting operations.
-            PopcountUsize => {
+            // Index bit counting operations.
+            PopcountIndex => {
                 let a = self.read_usize(&args[0], frame, frames);
                 self.write_u32(a.count_ones(), dest);
             }
-            ClzUsize => {
+            ClzIndex => {
                 let a = self.read_usize(&args[0], frame, frames);
                 self.write_u32(a.leading_zeros(), dest);
             }
-            CtzUsize => {
+            CtzIndex => {
                 let a = self.read_usize(&args[0], frame, frames);
                 self.write_u32(a.trailing_zeros(), dest);
             }
 
-            // Usize byte/bit manipulation.
-            SwapBytesUsize => {
+            // Index byte/bit manipulation.
+            SwapBytesIndex => {
                 let a = self.read_usize(&args[0], frame, frames);
                 self.write_usize(a.swap_bytes(), dest);
             }
-            ReverseBitsUsize => {
+            ReverseBitsIndex => {
                 let a = self.read_usize(&args[0], frame, frames);
                 self.write_usize(a.reverse_bits(), dest);
             }
 
-            // Usize wrapping arithmetic.
-            AddWrappingUsize => {
+            // Index wrapping arithmetic.
+            AddWrappingIndex => {
                 let a = self.read_usize(&args[0], frame, frames);
                 let b = self.read_usize(&args[1], frame, frames);
                 self.write_usize(a.wrapping_add(b), dest);
             }
-            SubWrappingUsize => {
+            SubWrappingIndex => {
                 let a = self.read_usize(&args[0], frame, frames);
                 let b = self.read_usize(&args[1], frame, frames);
                 self.write_usize(a.wrapping_sub(b), dest);
             }
-            MulWrappingUsize => {
+            MulWrappingIndex => {
                 let a = self.read_usize(&args[0], frame, frames);
                 let b = self.read_usize(&args[1], frame, frames);
                 self.write_usize(a.wrapping_mul(b), dest);
             }
-            RemUsize => {
+            RemIndex => {
                 let a = self.read_usize(&args[0], frame, frames);
                 let b = self.read_usize(&args[1], frame, frames);
                 self.write_usize(a % b, dest);
             }
 
             // Usize/Isize type conversion.
-            UsizeToIsize => {
+            IndexToOffset => {
                 let a = self.read_usize(&args[0], frame, frames);
-                self.write_isize(a as datalove_rtdt::IsizeRepr, dest);
+                self.write_isize(a as datalove_rtdt::OffsetRepr, dest);
             }
-            IsizeToUsize => {
+            OffsetToIndex => {
                 let a = self.read_isize(&args[0], frame, frames);
-                self.write_usize(a as datalove_rtdt::UsizeRepr, dest);
+                self.write_usize(a as datalove_rtdt::IndexRepr, dest);
             }
 
-            // Isize operations.
-            NegWrappingIsize => {
+            // Offset operations.
+            NegWrappingOffset => {
                 let a = self.read_isize(&args[0], frame, frames);
                 self.write_isize(a.wrapping_neg(), dest);
             }
-            SshrIsize => {
+            SshrOffset => {
                 let a = self.read_isize(&args[0], frame, frames);
                 let b = self.read_u32(&args[1], frame, frames);
                 self.write_isize(a.wrapping_shr(b), dest);
             }
-            SremIsize => {
+            SremOffset => {
                 let a = self.read_isize(&args[0], frame, frames);
                 let b = self.read_isize(&args[1], frame, frames);
                 self.write_isize(a % b, dest);
@@ -791,25 +791,25 @@ impl IrInterpreter {
     }
 
     /// Read a usize value from an operand.
-    fn read_usize(&self, op: &Operand, frame: &Frame, frames: &FrameStore) -> datalove_rtdt::UsizeRepr {
+    fn read_usize(&self, op: &Operand, frame: &Frame, frames: &FrameStore) -> datalove_rtdt::IndexRepr {
         let val = self.read_operand(op, frame, frames);
-        unsafe { *(val.ptr as *const datalove_rtdt::UsizeRepr) }
+        unsafe { *(val.ptr as *const datalove_rtdt::IndexRepr) }
     }
 
     /// Write a usize value to destination.
-    fn write_usize(&self, value: datalove_rtdt::UsizeRepr, dest: Destination) {
-        unsafe { *(dest.ptr as *mut datalove_rtdt::UsizeRepr) = value; }
+    fn write_usize(&self, value: datalove_rtdt::IndexRepr, dest: Destination) {
+        unsafe { *(dest.ptr as *mut datalove_rtdt::IndexRepr) = value; }
     }
 
     /// Read an isize value from an operand.
-    fn read_isize(&self, op: &Operand, frame: &Frame, frames: &FrameStore) -> datalove_rtdt::IsizeRepr {
+    fn read_isize(&self, op: &Operand, frame: &Frame, frames: &FrameStore) -> datalove_rtdt::OffsetRepr {
         let val = self.read_operand(op, frame, frames);
-        unsafe { *(val.ptr as *const datalove_rtdt::IsizeRepr) }
+        unsafe { *(val.ptr as *const datalove_rtdt::OffsetRepr) }
     }
 
     /// Write an isize value to destination.
-    fn write_isize(&self, value: datalove_rtdt::IsizeRepr, dest: Destination) {
-        unsafe { *(dest.ptr as *mut datalove_rtdt::IsizeRepr) = value; }
+    fn write_isize(&self, value: datalove_rtdt::OffsetRepr, dest: Destination) {
+        unsafe { *(dest.ptr as *mut datalove_rtdt::OffsetRepr) = value; }
     }
 }
 

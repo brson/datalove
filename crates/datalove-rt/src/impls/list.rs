@@ -21,8 +21,8 @@ pub unsafe fn list_create_impl(
     let list_ptr = value_out as *mut List;
     unsafe {
         (*list_ptr).data = std::ptr::null();
-        (*list_ptr).size = rtdt::Usize::ZERO;
-        (*list_ptr).capacity = rtdt::Usize::ZERO;
+        (*list_ptr).size = rtdt::Index::ZERO;
+        (*list_ptr).capacity = rtdt::Index::ZERO;
     }
 
     RtStatus::Ok
@@ -32,7 +32,7 @@ pub unsafe fn list_create_impl(
 pub unsafe fn list_create_from_slice_impl(
     rt: &mut RtLocal,
     slice_ptr_ref: *const u8,
-    slice_len: rtdt::UsizeRepr,
+    slice_len: rtdt::IndexRepr,
     element_tydesc: rtdt::TyDescRef,
     list_value_out: *mut u8,
     list_tydesc: rtdt::TyDescRef,
@@ -91,7 +91,7 @@ pub unsafe fn list_build_from_slice_impl(
     list_out: *mut u8,
     element_tydesc: rtdt::TyDescRef,
     elements_ptr: *mut u8,
-    num_elements: rtdt::UsizeRepr,
+    num_elements: rtdt::IndexRepr,
 ) -> RtStatus {
     let list_ptr = list_out as *mut List;
 
@@ -99,8 +99,8 @@ pub unsafe fn list_build_from_slice_impl(
         // Initialize empty list.
         unsafe {
             (*list_ptr).data = std::ptr::null();
-            (*list_ptr).size = rtdt::Usize::ZERO;
-            (*list_ptr).capacity = rtdt::Usize::ZERO;
+            (*list_ptr).size = rtdt::Index::ZERO;
+            (*list_ptr).capacity = rtdt::Index::ZERO;
         }
         return RtStatus::Ok;
     }
@@ -124,8 +124,8 @@ pub unsafe fn list_build_from_slice_impl(
     // Initialize list structure.
     unsafe {
         (*list_ptr).data = data;
-        (*list_ptr).size = rtdt::Usize::new(num_elements);
-        (*list_ptr).capacity = rtdt::Usize::new(num_elements);
+        (*list_ptr).size = rtdt::Index::new(num_elements);
+        (*list_ptr).capacity = rtdt::Index::new(num_elements);
     }
 
     RtStatus::Ok
@@ -200,7 +200,7 @@ pub unsafe fn list_get_impl(
     rt: &mut RtLocal,
     list_value_ref: *const u8,
     list_tydesc: rtdt::TyDescRef,
-    index: rtdt::UsizeRepr,
+    index: rtdt::IndexRepr,
     option_value_out: *mut u8,
     option_tydesc: rtdt::TyDescRef,
 ) -> RtStatus {
@@ -241,7 +241,7 @@ pub unsafe fn list_set_impl(
     rt: &mut RtLocal,
     list_value_mut: *mut u8,
     _list_tydesc: rtdt::TyDescRef,
-    index: rtdt::UsizeRepr,
+    index: rtdt::IndexRepr,
     element_in: *mut u8,
     element_tydesc: rtdt::TyDescRef,
 ) -> RtStatus {
@@ -356,7 +356,7 @@ pub unsafe fn list_insert_impl(
     rt: &mut RtLocal,
     list_value_mut: *mut u8,
     _list_tydesc: rtdt::TyDescRef,
-    index: rtdt::UsizeRepr,
+    index: rtdt::IndexRepr,
     element_in: *mut u8,
     element_tydesc: rtdt::TyDescRef,
 ) -> RtStatus {
@@ -410,7 +410,7 @@ pub unsafe fn list_remove_impl(
     _rt: &mut RtLocal,
     list_value_mut: *mut u8,
     list_tydesc: rtdt::TyDescRef,
-    index: rtdt::UsizeRepr,
+    index: rtdt::IndexRepr,
     option_value_out: *mut u8,
     option_tydesc: rtdt::TyDescRef,
 ) -> RtStatus {
@@ -456,7 +456,7 @@ pub unsafe fn list_reserve_impl(
     rt: &mut RtLocal,
     list_value_mut: *mut u8,
     list_tydesc: rtdt::TyDescRef,
-    additional: rtdt::UsizeRepr,
+    additional: rtdt::IndexRepr,
 ) -> RtStatus {
     let element_ty = list_tydesc.list_element_ty();
     let list_ptr = list_value_mut as *mut List;
@@ -530,7 +530,7 @@ pub unsafe fn list_extend_from_slice_impl(
     list_value_mut: *mut u8,
     list_tydesc: rtdt::TyDescRef,
     slice_ptr_ref: *const u8,
-    slice_len: rtdt::UsizeRepr,
+    slice_len: rtdt::IndexRepr,
     element_tydesc: rtdt::TyDescRef,
 ) -> RtStatus {
     if slice_len == 0 {
@@ -577,7 +577,7 @@ pub unsafe fn list_extend_from_slice_impl(
 ///
 /// Follows Vec's growth strategy: double capacity or use required, whichever is larger.
 #[inline]
-fn calculate_new_capacity(current: rtdt::UsizeRepr, required: rtdt::UsizeRepr) -> rtdt::UsizeRepr {
+fn calculate_new_capacity(current: rtdt::IndexRepr, required: rtdt::IndexRepr) -> rtdt::IndexRepr {
     let doubled = current.saturating_mul(2);
     doubled.max(required).max(4) // Minimum capacity of 4.
 }
@@ -587,7 +587,7 @@ unsafe fn grow_buffer(
     rt: &mut RtLocal,
     list_ptr: *mut List,
     element_tydesc: rtdt::TyDescRef,
-    new_capacity: rtdt::UsizeRepr,
+    new_capacity: rtdt::IndexRepr,
 ) -> RtStatus {
     let mut list = unsafe { ListMut::new(list_ptr, element_tydesc) };
     let old_capacity = list.capacity();
@@ -630,8 +630,8 @@ unsafe fn destroy_elements(
     rt: &mut RtLocal,
     data_ptr: *mut u8,
     element_tydesc: rtdt::TyDescRef,
-    start: rtdt::UsizeRepr,
-    end: rtdt::UsizeRepr,
+    start: rtdt::IndexRepr,
+    end: rtdt::IndexRepr,
 ) -> RtStatus {
     let rt_handle = rt as *mut RtLocal as crate::c::LocalRtHandle;
     let iter = unsafe { DynElementIter::new(data_ptr, element_tydesc.size(), start, end) };
@@ -683,7 +683,7 @@ impl ListRef {
 
     /// Get the current size (element count).
     #[inline]
-    fn size(&self) -> rtdt::UsizeRepr {
+    fn size(&self) -> rtdt::IndexRepr {
         unsafe { (*self.ptr).size.0 }
     }
 
@@ -691,7 +691,7 @@ impl ListRef {
     ///
     /// Debug-only bounds check: panics if `index >= size`.
     #[inline]
-    fn element_ptr(&self, index: rtdt::UsizeRepr) -> *const u8 {
+    fn element_ptr(&self, index: rtdt::IndexRepr) -> *const u8 {
         debug_assert!(index < self.size(), "element_ptr: index {} >= size {}", index, self.size());
         unsafe {
             self.data().add((index as usize) * (self.element_size as usize))
@@ -737,13 +737,13 @@ impl ListMut {
 
     /// Get the current size (element count).
     #[inline]
-    fn size(&self) -> rtdt::UsizeRepr {
+    fn size(&self) -> rtdt::IndexRepr {
         unsafe { (*self.ptr).size.0 }
     }
 
     /// Get the current capacity (element count).
     #[inline]
-    fn capacity(&self) -> rtdt::UsizeRepr {
+    fn capacity(&self) -> rtdt::IndexRepr {
         unsafe { (*self.ptr).capacity.0 }
     }
 
@@ -755,21 +755,21 @@ impl ListMut {
 
     /// Set the size.
     #[inline]
-    fn set_size(&mut self, size: rtdt::UsizeRepr) {
-        unsafe { (*self.ptr).size = rtdt::Usize(size); }
+    fn set_size(&mut self, size: rtdt::IndexRepr) {
+        unsafe { (*self.ptr).size = rtdt::Index(size); }
     }
 
     /// Set the capacity.
     #[inline]
-    fn set_capacity(&mut self, capacity: rtdt::UsizeRepr) {
-        unsafe { (*self.ptr).capacity = rtdt::Usize(capacity); }
+    fn set_capacity(&mut self, capacity: rtdt::IndexRepr) {
+        unsafe { (*self.ptr).capacity = rtdt::Index(capacity); }
     }
 
     /// Get a pointer to the element at `index`.
     ///
     /// Debug-only bounds check: panics if `index >= size`.
     #[inline]
-    fn element_ptr(&self, index: rtdt::UsizeRepr) -> *const u8 {
+    fn element_ptr(&self, index: rtdt::IndexRepr) -> *const u8 {
         debug_assert!(index < self.size(), "element_ptr: index {} >= size {}", index, self.size());
         unsafe {
             self.data().add((index as usize) * (self.element_size as usize))
@@ -780,7 +780,7 @@ impl ListMut {
     ///
     /// Debug-only bounds check: panics if `index >= size`.
     #[inline]
-    fn element_ptr_mut(&self, index: rtdt::UsizeRepr) -> *mut u8 {
+    fn element_ptr_mut(&self, index: rtdt::IndexRepr) -> *mut u8 {
         debug_assert!(index < self.size(), "element_ptr_mut: index {} >= size {}", index, self.size());
         unsafe {
             self.data_mut().add((index as usize) * (self.element_size as usize))
@@ -879,7 +879,7 @@ impl DynElementIter {
     /// - `data` must be a valid pointer to element storage.
     /// - The range must be within bounds of the allocated buffer.
     #[inline]
-    unsafe fn new(data: *mut u8, element_size: u32, start_index: rtdt::UsizeRepr, end_index: rtdt::UsizeRepr) -> Self {
+    unsafe fn new(data: *mut u8, element_size: u32, start_index: rtdt::IndexRepr, end_index: rtdt::IndexRepr) -> Self {
         debug_assert!(start_index <= end_index);
         let element_size = element_size as usize;
         Self {

@@ -105,8 +105,8 @@ impl fmt::Display for TypeRef {
             TypeRef::I16 => write!(f, "I16"),
             TypeRef::I32 => write!(f, "I32"),
             TypeRef::I64 => write!(f, "I64"),
-            TypeRef::Usize => write!(f, "Usize"),
-            TypeRef::Isize => write!(f, "Isize"),
+            TypeRef::Index => write!(f, "Usize"),
+            TypeRef::Offset => write!(f, "Isize"),
             TypeRef::Int => write!(f, "Int"),
             TypeRef::Tuple(0) => write!(f, "()"),
             TypeRef::Tuple(n) => write!(f, "Tuple{}", n),
@@ -155,8 +155,8 @@ impl fmt::Display for ConstValue {
             ConstValue::I16(n) => write!(f, "{}i16", n),
             ConstValue::I32(n) => write!(f, "{}i32", n),
             ConstValue::I64(n) => write!(f, "{}i64", n),
-            ConstValue::Usize(n) => write!(f, "{}usize", n),
-            ConstValue::Isize(n) => write!(f, "{}isize", n),
+            ConstValue::Index(n) => write!(f, "{}usize", n),
+            ConstValue::Offset(n) => write!(f, "{}isize", n),
             ConstValue::Int { limbs, negative } => {
                 if limbs.is_empty() {
                     write!(f, "0int")

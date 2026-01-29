@@ -58,7 +58,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
 
         let is_signed = matches!(
             type_to_check,
-            IrType::I8 | IrType::I16 | IrType::I32 | IrType::I64 | IrType::Isize
+            IrType::I8 | IrType::I16 | IrType::I32 | IrType::I64 | IrType::Offset
         );
         let is_float = matches!(type_to_check, IrType::F32 | IrType::F64);
 
@@ -436,8 +436,8 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             IrType::U16 => (false, 16, cl_types::I16),
             IrType::U32 => (false, 32, cl_types::I32),
             IrType::U64 => (false, 64, cl_types::I64),
-            IrType::Usize => (false, crate::index_types::INDEX_BITS, crate::index_types::INDEX_TYPE),
-            IrType::Isize => (true, crate::index_types::INDEX_BITS, crate::index_types::INDEX_TYPE),
+            IrType::Index => (false, crate::index_types::INDEX_BITS, crate::index_types::INDEX_TYPE),
+            IrType::Offset => (true, crate::index_types::INDEX_BITS, crate::index_types::INDEX_TYPE),
             _ => {
                 return Err(CraneliftError::Unsupported(format!(
                     "checked binop not supported for type: {:?}",
@@ -592,7 +592,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             IrType::I16 => (i16::MIN as i64, cl_types::I16),
             IrType::I32 => (i32::MIN as i64, cl_types::I32),
             IrType::I64 => (i64::MIN, cl_types::I64),
-            IrType::Isize => (datalove_rtdt::IsizeRepr::MIN as i64, crate::index_types::INDEX_TYPE),
+            IrType::Offset => (datalove_rtdt::OffsetRepr::MIN as i64, crate::index_types::INDEX_TYPE),
             _ => {
                 return Err(CraneliftError::Unsupported(format!(
                     "checked negation only supported for signed integers, got {:?}",

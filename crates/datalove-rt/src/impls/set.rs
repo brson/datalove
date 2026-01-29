@@ -340,7 +340,7 @@ pub unsafe fn btreeset_build_from_sorted_slice(
     set_out: *mut Set,
     element_tydesc: *const TyDesc,
     elements_ptr: *mut u8,
-    num_elements: rtdt::UsizeRepr,
+    num_elements: rtdt::IndexRepr,
 ) -> RtStatus {
     unsafe {
         if set_out.is_null() || element_tydesc.is_null() {
@@ -350,7 +350,7 @@ pub unsafe fn btreeset_build_from_sorted_slice(
         // Handle empty case.
         if num_elements == 0 || elements_ptr.is_null() {
             (*set_out).root = std::ptr::null();
-            (*set_out).len = rtdt::Usize::ZERO;
+            (*set_out).len = rtdt::Index::ZERO;
             return RtStatus::Ok;
         }
 
@@ -406,7 +406,7 @@ pub unsafe fn btreeset_build_from_sorted_slice(
         // If only one leaf, it's the root.
         if leaves.len() == 1 {
             (*set_out).root = leaves[0] as *const SetNode;
-            (*set_out).len = rtdt::Usize(num_elements);
+            (*set_out).len = rtdt::Index(num_elements);
             return RtStatus::Ok;
         }
 
@@ -418,7 +418,7 @@ pub unsafe fn btreeset_build_from_sorted_slice(
             let num_nodes = current_level.len();
             if num_nodes == 1 {
                 (*set_out).root = current_level[0] as *const SetNode;
-                (*set_out).len = rtdt::Usize(num_elements);
+                (*set_out).len = rtdt::Index(num_elements);
                 return RtStatus::Ok;
             }
 
@@ -530,7 +530,7 @@ pub unsafe fn btreeset_create_impl(
         // Create an empty set (null root, zero length).
         let set_ptr = value_out as *mut Set;
         (*set_ptr).root = std::ptr::null_mut();
-        (*set_ptr).len = rtdt::Usize::ZERO;
+        (*set_ptr).len = rtdt::Index::ZERO;
 
         RtStatus::Ok
     }
@@ -560,7 +560,7 @@ pub unsafe fn set_destroy_impl(
 
         // Clear the set struct.
         (*set_ptr).root = std::ptr::null_mut();
-        (*set_ptr).len = rtdt::Usize::ZERO;
+        (*set_ptr).len = rtdt::Index::ZERO;
 
         RtStatus::Ok
     }
@@ -1180,7 +1180,7 @@ pub unsafe fn btreeset_insert_impl(
 
             write_node_len(leaf, 1);
             (*set_ptr).root = leaf as *const SetNode;
-            (*set_ptr).len = rtdt::Usize::ONE;
+            (*set_ptr).len = rtdt::Index::ONE;
 
             *bool_out = 1;
             return RtStatus::Ok;
@@ -1199,7 +1199,7 @@ pub unsafe fn btreeset_insert_impl(
                 RtStatus::Ok
             }
             LeafInsertResult::Inserted => {
-                (*set_ptr).len += rtdt::Usize::ONE;
+                (*set_ptr).len += rtdt::Index::ONE;
                 *bool_out = 1;
                 RtStatus::Ok
             }
@@ -1221,7 +1221,7 @@ pub unsafe fn btreeset_insert_impl(
                 );
 
                 if status == RtStatus::Ok && was_inserted {
-                    (*set_ptr).len += rtdt::Usize::ONE;
+                    (*set_ptr).len += rtdt::Index::ONE;
                     *bool_out = 1;
                 } else {
                     *bool_out = 0;
@@ -1236,7 +1236,7 @@ pub unsafe fn btreeset_insert_impl(
 pub unsafe fn btreeset_clone_from_slice_impl(
     rt: &mut RtLocal,
     slice_ptr_ref: *const u8,
-    slice_ptr_len: rtdt::UsizeRepr,
+    slice_ptr_len: rtdt::IndexRepr,
     slice_element_tydesc: *const TyDesc,
     btreeset_value_out: *mut u8,
     btreeset_tydesc: *const TyDesc,
@@ -1364,10 +1364,10 @@ pub unsafe fn btreeset_remove_impl(
                     }
 
                     write_node_len(leaf, len - 1);
-                    (*set_ptr).len -= rtdt::Usize::ONE;
+                    (*set_ptr).len -= rtdt::Index::ONE;
 
                     // Handle empty root case.
-                    if (*set_ptr).len == rtdt::Usize::ZERO {
+                    if (*set_ptr).len == rtdt::Index::ZERO {
                         destroy_tree_recursive(rt, root, set_element_tydesc);
                         (*set_ptr).root = std::ptr::null();
                     }

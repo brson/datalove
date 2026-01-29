@@ -44,7 +44,7 @@ impl IrInterpreter {
                 rt_handle,
                 list_ptr,
                 list_tydesc,
-                elements.len() as rtdt::UsizeRepr,
+                elements.len() as rtdt::IndexRepr,
             );
         }
 
@@ -64,7 +64,7 @@ impl IrInterpreter {
             // Update list size.
             unsafe {
                 let list = list_ptr as *mut rtdt::List;
-                (*list).size = rtdt::Usize((i + 1) as rtdt::UsizeRepr);
+                (*list).size = rtdt::Index((i + 1) as rtdt::IndexRepr);
             }
         }
     }
@@ -138,7 +138,7 @@ impl IrInterpreter {
                 set_ptr,
                 element_tydesc,
                 buffer,
-                elem_values.len() as rtdt::UsizeRepr,
+                elem_values.len() as rtdt::IndexRepr,
             );
         }
 
@@ -245,7 +245,7 @@ impl IrInterpreter {
                 value_tydesc,
                 keys_buffer,
                 values_buffer,
-                kv_pairs.len() as rtdt::UsizeRepr,
+                kv_pairs.len() as rtdt::IndexRepr,
             );
         }
 
@@ -294,7 +294,7 @@ impl IrInterpreter {
                 datalove_rt::c::dtlv_rti_mem_alloc_local(
                     rt_handle,
                     element_tydesc,
-                    total_elems as rtdt::UsizeRepr,
+                    total_elems as rtdt::IndexRepr,
                 )
             };
 
@@ -318,15 +318,15 @@ impl IrInterpreter {
                     rt_handle,
                     rtdt::INDEX_SIZE,
                     rtdt::INDEX_ALIGN,
-                    rank as rtdt::UsizeRepr,
-                ) as *mut rtdt::UsizeRepr
+                    rank as rtdt::IndexRepr,
+                ) as *mut rtdt::IndexRepr
             };
             for (i, &dim) in shape.iter().enumerate() {
                 unsafe {
-                    *shape_array.add(i) = dim as rtdt::UsizeRepr;
+                    *shape_array.add(i) = dim as rtdt::IndexRepr;
                 }
             }
-            shape_array as *const rtdt::Usize
+            shape_array as *const rtdt::Index
         } else {
             std::ptr::null()
         };
@@ -338,19 +338,19 @@ impl IrInterpreter {
                     rt_handle,
                     rtdt::INDEX_SIZE,
                     rtdt::INDEX_ALIGN,
-                    rank as rtdt::UsizeRepr,
-                ) as *mut rtdt::UsizeRepr
+                    rank as rtdt::IndexRepr,
+                ) as *mut rtdt::IndexRepr
             };
 
             // Compute strides for row-major layout.
             for i in 0..rank {
-                let stride = shape[i + 1..rank].iter().map(|&d| d as rtdt::UsizeRepr).product::<rtdt::UsizeRepr>();
+                let stride = shape[i + 1..rank].iter().map(|&d| d as rtdt::IndexRepr).product::<rtdt::IndexRepr>();
                 unsafe {
                     *strides_array.add(i) = if stride == 0 { 1 } else { stride };
                 }
             }
 
-            strides_array as *const rtdt::Usize
+            strides_array as *const rtdt::Index
         } else {
             std::ptr::null()
         };
@@ -359,8 +359,8 @@ impl IrInterpreter {
         unsafe {
             let tensor = tensor_ptr as *mut rtdt::Tensor;
             (*tensor).ptr_base = data_ptr;
-            (*tensor).capacity_elems = rtdt::Usize(total_elems as rtdt::UsizeRepr);
-            (*tensor).offset_elems = rtdt::Usize::ZERO;
+            (*tensor).capacity_elems = rtdt::Index(total_elems as rtdt::IndexRepr);
+            (*tensor).offset_elems = rtdt::Index::ZERO;
             (*tensor).shape = shape_ptr;
             (*tensor).strides = strides_ptr;
             (*tensor).layout = rtdt::TensorLayout::RowMajor;

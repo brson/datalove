@@ -39,8 +39,8 @@ pub unsafe fn debuglog_local(
         // Create temp string on stack.
         let mut temp_string = rtdt::String {
             data: std::ptr::null(),
-            size: rtdt::Usize::ZERO,
-            capacity: rtdt::Usize::ZERO,
+            size: rtdt::Index::ZERO,
+            capacity: rtdt::Index::ZERO,
         };
         let string_ptr = &mut temp_string as *mut rtdt::String as *mut u8;
 
@@ -62,7 +62,7 @@ pub unsafe fn debuglog_local(
         }
 
         // Extract the UTF-8 bytes.
-        let result = if temp_string.data.is_null() || temp_string.size == rtdt::Usize::ZERO {
+        let result = if temp_string.data.is_null() || temp_string.size == rtdt::Index::ZERO {
             String::new()
         } else {
             let bytes = std::slice::from_raw_parts(

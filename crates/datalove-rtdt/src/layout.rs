@@ -491,7 +491,7 @@ fn align_up_usize(value: usize, align: u32) -> usize {
 pub fn table_column_offset(
     column_tydescs: &[&TyDesc],
     column_index: usize,
-    capacity: UsizeRepr,
+    capacity: IndexRepr,
 ) -> usize {
     let mut offset = 0usize;
     for i in 0..column_index {
@@ -505,7 +505,7 @@ pub fn table_column_offset(
 #[inline]
 pub fn table_data_allocation_size(
     column_tydescs: &[&TyDesc],
-    capacity: UsizeRepr,
+    capacity: IndexRepr,
 ) -> u32 {
     if column_tydescs.is_empty() || capacity == 0 {
         return 0;

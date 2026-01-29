@@ -4,7 +4,7 @@
 
 use cranelift_codegen::ir::types as cl_types;
 
-/// Cranelift type for UsizeRepr/IsizeRepr values.
+/// Cranelift type for IndexRepr/OffsetRepr values.
 #[cfg(not(feature = "index-64"))]
 pub const INDEX_TYPE: cranelift_codegen::ir::Type = cl_types::I32;
 #[cfg(feature = "index-64")]

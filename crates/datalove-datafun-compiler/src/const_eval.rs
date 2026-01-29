@@ -119,13 +119,13 @@ pub unsafe fn extract_const_value(
                 let val = *(ptr as *const i64);
                 Ok(ConstValue::I64(val))
             }
-            IrType::Usize => {
-                let val = *(ptr as *const datalove_rtdt::UsizeRepr);
-                Ok(ConstValue::Usize(val))
+            IrType::Index => {
+                let val = *(ptr as *const datalove_rtdt::IndexRepr);
+                Ok(ConstValue::Index(val))
             }
-            IrType::Isize => {
-                let val = *(ptr as *const datalove_rtdt::IsizeRepr);
-                Ok(ConstValue::Isize(val))
+            IrType::Offset => {
+                let val = *(ptr as *const datalove_rtdt::OffsetRepr);
+                Ok(ConstValue::Offset(val))
             }
             IrType::F32 => {
                 let val = *(ptr as *const f32);

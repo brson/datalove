@@ -64,19 +64,19 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 builder.ins().iconst(cl_types::I64, *v)
             }
             #[cfg(not(feature = "index-64"))]
-            ConstValue::Usize(v) => {
+            ConstValue::Index(v) => {
                 builder.ins().iconst(cl_types::I32, *v as i64)
             }
             #[cfg(feature = "index-64")]
-            ConstValue::Usize(v) => {
+            ConstValue::Index(v) => {
                 builder.ins().iconst(cl_types::I64, *v as i64)
             }
             #[cfg(not(feature = "index-64"))]
-            ConstValue::Isize(v) => {
+            ConstValue::Offset(v) => {
                 builder.ins().iconst(cl_types::I32, *v as i64)
             }
             #[cfg(feature = "index-64")]
-            ConstValue::Isize(v) => {
+            ConstValue::Offset(v) => {
                 builder.ins().iconst(cl_types::I64, *v)
             }
             ConstValue::F32(v) => {
@@ -909,7 +909,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             ConstValue::U16(_) | ConstValue::I16(_) => 2,
             ConstValue::U32(_) | ConstValue::I32(_) | ConstValue::F32(_) => 4,
             ConstValue::U64(_) | ConstValue::I64(_) | ConstValue::F64(_) => 8,
-            ConstValue::Usize(_) | ConstValue::Isize(_) => std::mem::size_of::<usize>() as u32,
+            ConstValue::Index(_) | ConstValue::Offset(_) => std::mem::size_of::<usize>() as u32,
             // Pointer-sized types.
             ConstValue::Int { .. } | ConstValue::String(_) => 8,
             ConstValue::OptionNone => 1,
@@ -945,7 +945,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             ConstValue::U16(_) | ConstValue::I16(_) => 2,
             ConstValue::U32(_) | ConstValue::I32(_) | ConstValue::F32(_) => 4,
             ConstValue::U64(_) | ConstValue::I64(_) | ConstValue::F64(_) => 8,
-            ConstValue::Usize(_) | ConstValue::Isize(_) => std::mem::size_of::<usize>() as u32,
+            ConstValue::Index(_) | ConstValue::Offset(_) => std::mem::size_of::<usize>() as u32,
             ConstValue::Int { .. } => std::mem::size_of::<datalove_rtdt::Int>() as u32,
             ConstValue::String(_) => 16, // ptr + size + capacity
             ConstValue::OptionNone => 1, // Just the tag
@@ -1051,22 +1051,22 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 builder.ins().store(mem_flags, val, addr, 0);
             }
             #[cfg(not(feature = "index-64"))]
-            ConstValue::Usize(v) => {
+            ConstValue::Index(v) => {
                 let val = builder.ins().iconst(cl_types::I32, *v as i64);
                 builder.ins().store(mem_flags, val, addr, 0);
             }
             #[cfg(feature = "index-64")]
-            ConstValue::Usize(v) => {
+            ConstValue::Index(v) => {
                 let val = builder.ins().iconst(cl_types::I64, *v as i64);
                 builder.ins().store(mem_flags, val, addr, 0);
             }
             #[cfg(not(feature = "index-64"))]
-            ConstValue::Isize(v) => {
+            ConstValue::Offset(v) => {
                 let val = builder.ins().iconst(cl_types::I32, *v as i64);
                 builder.ins().store(mem_flags, val, addr, 0);
             }
             #[cfg(feature = "index-64")]
-            ConstValue::Isize(v) => {
+            ConstValue::Offset(v) => {
                 let val = builder.ins().iconst(cl_types::I64, *v);
                 builder.ins().store(mem_flags, val, addr, 0);
             }

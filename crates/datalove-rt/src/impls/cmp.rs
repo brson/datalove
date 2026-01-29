@@ -126,7 +126,7 @@ fn eq_tydesc(
     match td_a.type_tag() {
             rtdt::TyTag::Bool | rtdt::TyTag::U8 | rtdt::TyTag::I8 |
             rtdt::TyTag::U16 | rtdt::TyTag::I16 | rtdt::TyTag::U32 | rtdt::TyTag::I32 |
-            rtdt::TyTag::U64 | rtdt::TyTag::I64 | rtdt::TyTag::Usize | rtdt::TyTag::Isize |
+            rtdt::TyTag::U64 | rtdt::TyTag::I64 | rtdt::TyTag::Index | rtdt::TyTag::Offset |
             rtdt::TyTag::F32 | rtdt::TyTag::F64 |
             rtdt::TyTag::Int | rtdt::TyTag::String | rtdt::TyTag::Data | rtdt::TyTag::Error => {
                 true
@@ -322,14 +322,14 @@ unsafe fn eq_value(
                 let b = *(value_b as *const i64);
                 a == b
             }
-            rtdt::TyTag::Usize => {
-                let a = *(value_a as *const rtdt::UsizeRepr);
-                let b = *(value_b as *const rtdt::UsizeRepr);
+            rtdt::TyTag::Index => {
+                let a = *(value_a as *const rtdt::IndexRepr);
+                let b = *(value_b as *const rtdt::IndexRepr);
                 a == b
             }
-            rtdt::TyTag::Isize => {
-                let a = *(value_a as *const rtdt::IsizeRepr);
-                let b = *(value_b as *const rtdt::IsizeRepr);
+            rtdt::TyTag::Offset => {
+                let a = *(value_a as *const rtdt::OffsetRepr);
+                let b = *(value_b as *const rtdt::OffsetRepr);
                 a == b
             }
             rtdt::TyTag::F32 => {
@@ -386,7 +386,7 @@ unsafe fn eq_value(
                 let str_b = &*(value_b as *const rtdt::String);
 
                 // Handle empty strings (size 0, data can be null).
-                if str_a.size == rtdt::Usize::ZERO && str_b.size == rtdt::Usize::ZERO {
+                if str_a.size == rtdt::Index::ZERO && str_b.size == rtdt::Index::ZERO {
                     return true;
                 }
                 if str_a.size != str_b.size {
@@ -525,7 +525,7 @@ unsafe fn eq_value(
                 }
 
                 // Both empty.
-                if map_a.len == rtdt::Usize::ZERO {
+                if map_a.len == rtdt::Index::ZERO {
                     return true;
                 }
 
@@ -551,7 +551,7 @@ unsafe fn eq_value(
                 }
 
                 // Both empty.
-                if set_a.len == rtdt::Usize::ZERO {
+                if set_a.len == rtdt::Index::ZERO {
                     return true;
                 }
 
@@ -581,7 +581,7 @@ unsafe fn eq_value(
                     }
 
                     // Compute total number of elements.
-                    let total_elems: rtdt::UsizeRepr = shape_a.iter().map(|u| u.0).product();
+                    let total_elems: rtdt::IndexRepr = shape_a.iter().map(|u| u.0).product();
 
                     if total_elems == 0 {
                         return true;  // Empty tensors with matching shapes are equal.
@@ -593,7 +593,7 @@ unsafe fn eq_value(
                     let strides_b = std::slice::from_raw_parts(tensor_b.strides, rank as usize);
 
                     // Iterate through all multi-dimensional indices.
-                    let mut indices: Vec<rtdt::UsizeRepr> = vec![0; rank as usize];
+                    let mut indices: Vec<rtdt::IndexRepr> = vec![0; rank as usize];
                     for _ in 0..total_elems {
                         // Compute linear offset for tensor_a.
                         let mut offset_a = tensor_a.offset_elems.0;
@@ -615,7 +615,7 @@ unsafe fn eq_value(
                         }
 
                         // Increment indices (like odometer).
-                        let mut carry: rtdt::UsizeRepr = 1;
+                        let mut carry: rtdt::IndexRepr = 1;
                         for i in (0..rank as usize).rev() {
                             if carry == 0 {
                                 break;
@@ -652,7 +652,7 @@ unsafe fn eq_value(
                 }
 
                 // Empty tables are equal.
-                if table_a.len == rtdt::Usize::ZERO {
+                if table_a.len == rtdt::Index::ZERO {
                     return true;
                 }
 
@@ -899,9 +899,9 @@ unsafe fn cmp_value(
                     crate::c::RtOrdering::Equal
                 }
             }
-            rtdt::TyTag::Usize => {
-                let a = *(value_a as *const rtdt::UsizeRepr);
-                let b = *(value_b as *const rtdt::UsizeRepr);
+            rtdt::TyTag::Index => {
+                let a = *(value_a as *const rtdt::IndexRepr);
+                let b = *(value_b as *const rtdt::IndexRepr);
                 if a < b {
                     crate::c::RtOrdering::Less
                 } else if a > b {
@@ -910,9 +910,9 @@ unsafe fn cmp_value(
                     crate::c::RtOrdering::Equal
                 }
             }
-            rtdt::TyTag::Isize => {
-                let a = *(value_a as *const rtdt::IsizeRepr);
-                let b = *(value_b as *const rtdt::IsizeRepr);
+            rtdt::TyTag::Offset => {
+                let a = *(value_a as *const rtdt::OffsetRepr);
+                let b = *(value_b as *const rtdt::OffsetRepr);
                 if a < b {
                     crate::c::RtOrdering::Less
                 } else if a > b {
@@ -998,13 +998,13 @@ unsafe fn cmp_value(
                 let str_b = &*(value_b as *const rtdt::String);
 
                 // Handle empty strings (size 0, data can be null).
-                if str_a.size == rtdt::Usize::ZERO && str_b.size == rtdt::Usize::ZERO {
+                if str_a.size == rtdt::Index::ZERO && str_b.size == rtdt::Index::ZERO {
                     return crate::c::RtOrdering::Equal;
                 }
-                if str_a.size == rtdt::Usize::ZERO {
+                if str_a.size == rtdt::Index::ZERO {
                     return crate::c::RtOrdering::Less;
                 }
-                if str_b.size == rtdt::Usize::ZERO {
+                if str_b.size == rtdt::Index::ZERO {
                     return crate::c::RtOrdering::Greater;
                 }
 
@@ -1215,7 +1215,7 @@ unsafe fn cmp_value(
                     }
 
                     // Shapes are equal, compare elements.
-                    let total_elems: rtdt::UsizeRepr = shape_a.iter().map(|u| u.0).product();
+                    let total_elems: rtdt::IndexRepr = shape_a.iter().map(|u| u.0).product();
 
                     if total_elems == 0 {
                         return crate::c::RtOrdering::Equal;  // Empty tensors with matching shapes are equal.
@@ -1227,7 +1227,7 @@ unsafe fn cmp_value(
                     let strides_b = std::slice::from_raw_parts(tensor_b.strides, rank as usize);
 
                     // Iterate through all multi-dimensional indices lexicographically.
-                    let mut indices: Vec<rtdt::UsizeRepr> = vec![0; rank as usize];
+                    let mut indices: Vec<rtdt::IndexRepr> = vec![0; rank as usize];
                     for _ in 0..total_elems {
                         // Compute linear offset for tensor_a.
                         let mut offset_a = tensor_a.offset_elems.0;
@@ -1255,7 +1255,7 @@ unsafe fn cmp_value(
                         }
 
                         // Increment indices (like odometer).
-                        let mut carry: rtdt::UsizeRepr = 1;
+                        let mut carry: rtdt::IndexRepr = 1;
                         for i in (0..rank as usize).rev() {
                             if carry == 0 {
                                 break;

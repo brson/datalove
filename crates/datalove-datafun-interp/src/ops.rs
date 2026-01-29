@@ -48,7 +48,7 @@ impl_checked_int_ops!(u8);
 impl_checked_int_ops!(u16);
 impl_checked_int_ops!(u32);
 impl_checked_int_ops!(u64);
-// IsizeRepr/UsizeRepr are type aliases to i32/u32 or i64/u64 - covered above.
+// OffsetRepr/IndexRepr are type aliases to i32/u32 or i64/u64 - covered above.
 
 /// Generate a binop function for a fixed-width integer type.
 ///
@@ -105,8 +105,8 @@ impl IrInterpreter {
     impl_int_binop!(execute_binop_u16, u16);
     impl_int_binop!(execute_binop_u32, u32);
     impl_int_binop!(execute_binop_u64, u64);
-    impl_int_binop!(execute_binop_usize, rtdt::UsizeRepr);
-    impl_int_binop!(execute_binop_isize, rtdt::IsizeRepr);
+    impl_int_binop!(execute_binop_usize, rtdt::IndexRepr);
+    impl_int_binop!(execute_binop_isize, rtdt::OffsetRepr);
 
     /// Check if a type tag is a fixed-width integer (u8-u64, i8-i64, usize, isize).
     pub(crate) fn is_fixed_width_int(tag: rtdt::TyTag) -> bool {
@@ -120,8 +120,8 @@ impl IrInterpreter {
                 | rtdt::TyTag::I16
                 | rtdt::TyTag::I32
                 | rtdt::TyTag::I64
-                | rtdt::TyTag::Usize
-                | rtdt::TyTag::Isize
+                | rtdt::TyTag::Index
+                | rtdt::TyTag::Offset
         )
     }
 
@@ -176,11 +176,11 @@ impl IrInterpreter {
                         (v as u64, false)
                     }
                 }
-                rtdt::TyTag::Usize => {
-                    (*(src.ptr as *const rtdt::UsizeRepr) as u64, false)
+                rtdt::TyTag::Index => {
+                    (*(src.ptr as *const rtdt::IndexRepr) as u64, false)
                 }
-                rtdt::TyTag::Isize => {
-                    let v = *(src.ptr as *const rtdt::IsizeRepr);
+                rtdt::TyTag::Offset => {
+                    let v = *(src.ptr as *const rtdt::OffsetRepr);
                     #[cfg(not(feature = "index-64"))]
                     {
                         if v < 0 {
@@ -208,7 +208,7 @@ impl IrInterpreter {
             if magnitude == 0 {
                 int_buf.data = std::ptr::null();
                 int_buf.size_and_sign = 0;
-                int_buf.capacity = rtdt::Usize::ZERO;
+                int_buf.capacity = rtdt::Index::ZERO;
             } else if magnitude <= u32::MAX as u64 {
                 // Fits in one limb.
                 let limb_ptr =
@@ -216,7 +216,7 @@ impl IrInterpreter {
                 *limb_ptr = magnitude as u32;
                 int_buf.data = limb_ptr;
                 int_buf.size_and_sign = if is_negative { -1 } else { 1 };
-                int_buf.capacity = rtdt::Usize(1);
+                int_buf.capacity = rtdt::Index(1);
             } else {
                 // Needs two limbs (for u64/i64 values > u32::MAX).
                 let limb_ptr =
@@ -226,7 +226,7 @@ impl IrInterpreter {
                 *limb_ptr.add(1) = (magnitude >> 32) as u32;
                 int_buf.data = limb_ptr;
                 int_buf.size_and_sign = if is_negative { -2 } else { 2 };
-                int_buf.capacity = rtdt::Usize(2);
+                int_buf.capacity = rtdt::Index(2);
             }
         }
     }
@@ -234,7 +234,7 @@ impl IrInterpreter {
     /// Destroy a temporary Int's limb allocation.
     pub(crate) unsafe fn destroy_temp_int(&self, int_buf: &rtdt::Int) {
         unsafe {
-            if !int_buf.data.is_null() && int_buf.capacity > rtdt::Usize::ZERO {
+            if !int_buf.data.is_null() && int_buf.capacity > rtdt::Index::ZERO {
                 datalove_rt::c::dtlv_rti_mem_free_raw_local(
                     self.runtime.handle(),
                     4, // align
@@ -274,8 +274,8 @@ impl IrInterpreter {
                 rtdt::TyTag::U16 => Self::execute_binop_u16(op, lhs, rhs, dest),
                 rtdt::TyTag::U32 => Self::execute_binop_u32(op, lhs, rhs, dest),
                 rtdt::TyTag::U64 => Self::execute_binop_u64(op, lhs, rhs, dest),
-                rtdt::TyTag::Usize => Self::execute_binop_usize(op, lhs, rhs, dest),
-                rtdt::TyTag::Isize => Self::execute_binop_isize(op, lhs, rhs, dest),
+                rtdt::TyTag::Index => Self::execute_binop_usize(op, lhs, rhs, dest),
+                rtdt::TyTag::Offset => Self::execute_binop_isize(op, lhs, rhs, dest),
                 rtdt::TyTag::Int => self.execute_binop_bigint(op, lhs, rhs, dest),
                 rtdt::TyTag::F32 => Self::execute_binop_f32(op, lhs, rhs, dest),
                 rtdt::TyTag::F64 => Self::execute_binop_f64(op, lhs, rhs, dest),
@@ -481,12 +481,12 @@ impl IrInterpreter {
                 rtdt::TyTag::I16 => Self::execute_unaryop_signed::<i16>(op, src, dest),
                 rtdt::TyTag::I32 => Self::execute_unaryop_signed::<i32>(op, src, dest),
                 rtdt::TyTag::I64 => Self::execute_unaryop_signed::<i64>(op, src, dest),
-                rtdt::TyTag::Isize => Self::execute_unaryop_signed::<rtdt::IsizeRepr>(op, src, dest),
+                rtdt::TyTag::Offset => Self::execute_unaryop_signed::<rtdt::OffsetRepr>(op, src, dest),
                 rtdt::TyTag::U8 => Self::execute_unaryop_unsigned::<u8>(op, src, dest),
                 rtdt::TyTag::U16 => Self::execute_unaryop_unsigned::<u16>(op, src, dest),
                 rtdt::TyTag::U32 => Self::execute_unaryop_unsigned::<u32>(op, src, dest),
                 rtdt::TyTag::U64 => Self::execute_unaryop_unsigned::<u64>(op, src, dest),
-                rtdt::TyTag::Usize => Self::execute_unaryop_unsigned::<rtdt::UsizeRepr>(op, src, dest),
+                rtdt::TyTag::Index => Self::execute_unaryop_unsigned::<rtdt::IndexRepr>(op, src, dest),
                 rtdt::TyTag::Int => self.execute_unaryop_bigint(op, src, dest),
                 rtdt::TyTag::F32 => Self::execute_unaryop_f32(op, src, dest),
                 rtdt::TyTag::F64 => Self::execute_unaryop_f64(op, src, dest),
@@ -628,12 +628,12 @@ impl IrInterpreter {
                 rtdt::TyTag::I16 => Self::execute_binop_checked_int::<i16>(op, lhs, rhs, dest, overflow_dest),
                 rtdt::TyTag::I32 => Self::execute_binop_checked_int::<i32>(op, lhs, rhs, dest, overflow_dest),
                 rtdt::TyTag::I64 => Self::execute_binop_checked_int::<i64>(op, lhs, rhs, dest, overflow_dest),
-                rtdt::TyTag::Isize => Self::execute_binop_checked_int::<rtdt::IsizeRepr>(op, lhs, rhs, dest, overflow_dest),
+                rtdt::TyTag::Offset => Self::execute_binop_checked_int::<rtdt::OffsetRepr>(op, lhs, rhs, dest, overflow_dest),
                 rtdt::TyTag::U8 => Self::execute_binop_checked_int::<u8>(op, lhs, rhs, dest, overflow_dest),
                 rtdt::TyTag::U16 => Self::execute_binop_checked_int::<u16>(op, lhs, rhs, dest, overflow_dest),
                 rtdt::TyTag::U32 => Self::execute_binop_checked_int::<u32>(op, lhs, rhs, dest, overflow_dest),
                 rtdt::TyTag::U64 => Self::execute_binop_checked_int::<u64>(op, lhs, rhs, dest, overflow_dest),
-                rtdt::TyTag::Usize => Self::execute_binop_checked_int::<rtdt::UsizeRepr>(op, lhs, rhs, dest, overflow_dest),
+                rtdt::TyTag::Index => Self::execute_binop_checked_int::<rtdt::IndexRepr>(op, lhs, rhs, dest, overflow_dest),
                 // Checked ops only apply to fixed-width ints; type checker ensures this.
                 _ => unreachable!("unsupported checked binop {:?} for type {:?}", op, tag),
             }
@@ -688,7 +688,7 @@ impl IrInterpreter {
                 rtdt::TyTag::I16 => Self::execute_checked_neg::<i16>(src, dest, overflow_dest),
                 rtdt::TyTag::I32 => Self::execute_checked_neg::<i32>(src, dest, overflow_dest),
                 rtdt::TyTag::I64 => Self::execute_checked_neg::<i64>(src, dest, overflow_dest),
-                rtdt::TyTag::Isize => Self::execute_checked_neg::<rtdt::IsizeRepr>(src, dest, overflow_dest),
+                rtdt::TyTag::Offset => Self::execute_checked_neg::<rtdt::OffsetRepr>(src, dest, overflow_dest),
                 // Checked negation only for signed ints; type checker ensures this.
                 _ => unreachable!("checked negation only supported for signed integers, got {:?}", tag),
             }
@@ -732,4 +732,4 @@ impl_checked_neg!(i8);
 impl_checked_neg!(i16);
 impl_checked_neg!(i32);
 impl_checked_neg!(i64);
-// IsizeRepr is a type alias to i32 or i64 - covered above.
+// OffsetRepr is a type alias to i32 or i64 - covered above.

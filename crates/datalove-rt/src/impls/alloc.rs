@@ -3,7 +3,7 @@
 //! On Unix platforms: Single-threaded allocator using mmap for page allocation.
 //! On wasm32: Uses Rust's global allocator.
 
-use datalove_rtdt::UsizeRepr;
+use datalove_rtdt::IndexRepr;
 
 // Unix-only imports and constants (used by unix_impl and tests).
 #[cfg(not(target_arch = "wasm32"))]
@@ -112,7 +112,7 @@ mod unix_impl {
             }
         }
 
-        pub unsafe fn alloc(&mut self, size: u32, align: u32, count: UsizeRepr) -> *mut u8 {
+        pub unsafe fn alloc(&mut self, size: u32, align: u32, count: IndexRepr) -> *mut u8 {
             let total_size = (size as usize)
                 .checked_mul(count as usize)
                 .expect("allocation size overflow");
@@ -146,7 +146,7 @@ mod unix_impl {
             }
         }
 
-        pub unsafe fn free(&mut self, size: u32, align: u32, count: UsizeRepr, ptr: *mut u8) {
+        pub unsafe fn free(&mut self, size: u32, align: u32, count: IndexRepr, ptr: *mut u8) {
             if ptr.is_null() {
                 return;
             }
@@ -442,7 +442,7 @@ mod wasm_impl {
             }
         }
 
-        pub unsafe fn alloc(&mut self, size: u32, align: u32, count: UsizeRepr) -> *mut u8 {
+        pub unsafe fn alloc(&mut self, size: u32, align: u32, count: IndexRepr) -> *mut u8 {
             let total_size = (size as usize)
                 .checked_mul(count as usize)
                 .expect("allocation size overflow");
@@ -461,7 +461,7 @@ mod wasm_impl {
             }
         }
 
-        pub unsafe fn free(&mut self, size: u32, align: u32, count: UsizeRepr, ptr: *mut u8) {
+        pub unsafe fn free(&mut self, size: u32, align: u32, count: IndexRepr, ptr: *mut u8) {
             if ptr.is_null() {
                 return;
             }

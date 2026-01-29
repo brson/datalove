@@ -77,7 +77,7 @@ pub fn pretty_print_runtime_value<'db>(
         }
 
         // Extract value string.
-        let value_str = if output_string.data.is_null() || output_string.size == datalove_rtdt::Usize::ZERO {
+        let value_str = if output_string.data.is_null() || output_string.size == datalove_rtdt::Index::ZERO {
             String::new()
         } else {
             let bytes = std::slice::from_raw_parts(output_string.data, output_string.size.as_usize());
@@ -118,8 +118,8 @@ fn pretty_type<'db>(
         Type::I32 => out.push_str("i32"),
         Type::U64 => out.push_str("u64"),
         Type::I64 => out.push_str("i64"),
-        Type::Usize => out.push_str("usize"),
-        Type::Isize => out.push_str("isize"),
+        Type::Index => out.push_str("index"),
+        Type::Offset => out.push_str("offset"),
         Type::F32 => out.push_str("f32"),
         Type::F64 => out.push_str("f64"),
         Type::Int => out.push_str("int"),
@@ -257,8 +257,8 @@ fn pretty_type_hint<'db>(
         TypeHint::I32 => out.push_str("i32"),
         TypeHint::U64 => out.push_str("u64"),
         TypeHint::I64 => out.push_str("i64"),
-        TypeHint::Usize => out.push_str("usize"),
-        TypeHint::Isize => out.push_str("isize"),
+        TypeHint::Index => out.push_str("index"),
+        TypeHint::Offset => out.push_str("offset"),
         TypeHint::F32 => out.push_str("f32"),
         TypeHint::F64 => out.push_str("f64"),
         TypeHint::Int => out.push_str("int"),

@@ -389,7 +389,7 @@ pub fn types_equivalent<'db>(db: &'db dyn Db, t1: &Type<'db>, t2: &Type<'db>) ->
 pub fn is_primitive_name(name: &str) -> bool {
     matches!(name,
         "bool" | "u8" | "i8" | "u16" | "i16" | "u32" | "i32" | "u64" | "i64" |
-        "usize" | "isize" | "f32" | "f64" | "int" | "string" | "data" | "error" |
+        "index" | "offset" | "f32" | "f64" | "int" | "string" | "data" | "error" |
         "tuple" | "enum" | "map" | "set" | "tensor"
     )
 }
@@ -420,8 +420,8 @@ fn convert_type_hint_inner<'db>(
         TypeHint::I32 => Type::Datalit(datalit::tycheck::Type::I32),
         TypeHint::U64 => Type::Datalit(datalit::tycheck::Type::U64),
         TypeHint::I64 => Type::Datalit(datalit::tycheck::Type::I64),
-        TypeHint::Usize => Type::Datalit(datalit::tycheck::Type::Usize),
-        TypeHint::Isize => Type::Datalit(datalit::tycheck::Type::Isize),
+        TypeHint::Index => Type::Datalit(datalit::tycheck::Type::Index),
+        TypeHint::Offset => Type::Datalit(datalit::tycheck::Type::Offset),
         TypeHint::F32 => Type::Datalit(datalit::tycheck::Type::F32),
         TypeHint::F64 => Type::Datalit(datalit::tycheck::Type::F64),
         TypeHint::Int => Type::Datalit(datalit::tycheck::Type::Int),
@@ -622,8 +622,8 @@ fn convert_type_hint_with_aliases_inner<'db>(
         TypeHint::I32 => Type::Datalit(datalit::tycheck::Type::I32),
         TypeHint::U64 => Type::Datalit(datalit::tycheck::Type::U64),
         TypeHint::I64 => Type::Datalit(datalit::tycheck::Type::I64),
-        TypeHint::Usize => Type::Datalit(datalit::tycheck::Type::Usize),
-        TypeHint::Isize => Type::Datalit(datalit::tycheck::Type::Isize),
+        TypeHint::Index => Type::Datalit(datalit::tycheck::Type::Index),
+        TypeHint::Offset => Type::Datalit(datalit::tycheck::Type::Offset),
         TypeHint::F32 => Type::Datalit(datalit::tycheck::Type::F32),
         TypeHint::F64 => Type::Datalit(datalit::tycheck::Type::F64),
         TypeHint::Int => Type::Datalit(datalit::tycheck::Type::Int),

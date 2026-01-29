@@ -480,7 +480,7 @@ fn test_primitive_type_variety() {
 
         // Count occurrences of each primitive type (no sigils).
         for ty in ["bool", "u8", "i8", "u16", "i16", "u32", "i32",
-                   "u64", "i64", "usize", "isize", "f32", "f64", "string"] {
+                   "u64", "i64", "index", "offset", "f32", "f64", "string"] {
             let count = wf.matches(ty).count();
             *type_counts.entry(ty).or_insert(0) += count;
         }
@@ -499,7 +499,7 @@ fn test_primitive_type_variety() {
     }
 
     // usize/isize should also be generated (they have weight 5 in leaf_only).
-    for ty in ["usize", "isize"] {
+    for ty in ["index", "offset"] {
         let count = type_counts.get(ty).copied().unwrap_or(0);
         assert!(
             count > 0,

@@ -30,7 +30,7 @@ fn create_wrong_tydesc() -> Box<rtdt::TyDesc> {
 
 /// Helper to get string contents as bytes.
 unsafe fn get_string_bytes(s: &rtdt::String) -> &[u8] {
-    if s.data.is_null() || s.size == rtdt::Usize::ZERO {
+    if s.data.is_null() || s.size == rtdt::Index::ZERO {
         &[]
     } else {
         unsafe { std::slice::from_raw_parts(s.data, s.size.as_usize()) }
@@ -61,8 +61,8 @@ fn test_string_create_empty() -> AnyResult<()> {
 
     let string = unsafe { string.assume_init() };
     assert!(string.data.is_null());
-    assert_eq!(string.size, rtdt::Usize::ZERO);
-    assert_eq!(string.capacity, rtdt::Usize::ZERO);
+    assert_eq!(string.size, rtdt::Index::ZERO);
+    assert_eq!(string.capacity, rtdt::Index::ZERO);
 
     unsafe { datalove_rt::c::dtlv_rti_shutdown(rt) };
     Ok(())
@@ -117,8 +117,8 @@ fn test_string_destroy_empty() -> AnyResult<()> {
     };
     assert_eq!(status, RtStatus::Ok);
     assert!(string.data.is_null());
-    assert_eq!(string.size, rtdt::Usize::ZERO);
-    assert_eq!(string.capacity, rtdt::Usize::ZERO);
+    assert_eq!(string.size, rtdt::Index::ZERO);
+    assert_eq!(string.capacity, rtdt::Index::ZERO);
 
     unsafe { datalove_rt::c::dtlv_rti_shutdown(rt) };
     Ok(())
@@ -163,8 +163,8 @@ fn test_string_destroy_with_data() -> AnyResult<()> {
     };
     assert_eq!(status, RtStatus::Ok);
     assert!(string.data.is_null());
-    assert_eq!(string.size, rtdt::Usize::ZERO);
-    assert_eq!(string.capacity, rtdt::Usize::ZERO);
+    assert_eq!(string.size, rtdt::Index::ZERO);
+    assert_eq!(string.capacity, rtdt::Index::ZERO);
 
     unsafe { datalove_rt::c::dtlv_rti_shutdown(rt) };
     Ok(())
@@ -178,8 +178,8 @@ fn test_string_destroy_wrong_type() -> AnyResult<()> {
 
     let mut string = rtdt::String {
         data: std::ptr::null(),
-        size: rtdt::Usize::ZERO,
-        capacity: rtdt::Usize::ZERO,
+        size: rtdt::Index::ZERO,
+        capacity: rtdt::Index::ZERO,
     };
 
     let status = unsafe {
@@ -227,8 +227,8 @@ fn test_string_push_bytes_to_empty() -> AnyResult<()> {
     };
     assert_eq!(status, RtStatus::Ok);
     assert!(!string.data.is_null());
-    assert_eq!(string.size, rtdt::Usize(5));
-    assert!(string.capacity >= rtdt::Usize(5));
+    assert_eq!(string.size, rtdt::Index(5));
+    assert!(string.capacity >= rtdt::Index(5));
     assert_eq!(unsafe { get_string_bytes(&string) }, b"hello");
 
     // Clean up.
@@ -292,7 +292,7 @@ fn test_string_push_bytes_multiple() -> AnyResult<()> {
         );
     }
 
-    assert_eq!(string.size, rtdt::Usize(11));
+    assert_eq!(string.size, rtdt::Index(11));
     assert_eq!(unsafe { get_string_bytes(&string) }, b"hello world");
 
     // Clean up.
@@ -335,7 +335,7 @@ fn test_string_push_bytes_empty() -> AnyResult<()> {
     };
     assert_eq!(status, RtStatus::Ok);
     assert!(string.data.is_null());
-    assert_eq!(string.size, rtdt::Usize::ZERO);
+    assert_eq!(string.size, rtdt::Index::ZERO);
 
     unsafe { datalove_rt::c::dtlv_rti_shutdown(rt) };
     Ok(())
@@ -369,8 +369,8 @@ fn test_string_push_bytes_large() -> AnyResult<()> {
         )
     };
     assert_eq!(status, RtStatus::Ok);
-    assert_eq!(string.size, rtdt::Usize(1000));
-    assert!(string.capacity >= rtdt::Usize(1000));
+    assert_eq!(string.size, rtdt::Index(1000));
+    assert!(string.capacity >= rtdt::Index(1000));
     assert_eq!(unsafe { get_string_bytes(&string) }, large_data.as_slice());
 
     // Clean up.
@@ -393,8 +393,8 @@ fn test_string_push_bytes_wrong_type() -> AnyResult<()> {
 
     let mut string = rtdt::String {
         data: std::ptr::null(),
-        size: rtdt::Usize::ZERO,
-        capacity: rtdt::Usize::ZERO,
+        size: rtdt::Index::ZERO,
+        capacity: rtdt::Index::ZERO,
     };
 
     let status = unsafe {
@@ -440,7 +440,7 @@ fn test_string_clear_empty() -> AnyResult<()> {
         )
     };
     assert_eq!(status, RtStatus::Ok);
-    assert_eq!(string.size, rtdt::Usize::ZERO);
+    assert_eq!(string.size, rtdt::Index::ZERO);
 
     unsafe { datalove_rt::c::dtlv_rti_shutdown(rt) };
     Ok(())
@@ -472,7 +472,7 @@ fn test_string_clear_with_data() -> AnyResult<()> {
             11,
         );
     }
-    assert_eq!(string.size, rtdt::Usize(11));
+    assert_eq!(string.size, rtdt::Index(11));
     let old_capacity = string.capacity;
     let old_data = string.data;
 
@@ -485,7 +485,7 @@ fn test_string_clear_with_data() -> AnyResult<()> {
         )
     };
     assert_eq!(status, RtStatus::Ok);
-    assert_eq!(string.size, rtdt::Usize::ZERO);
+    assert_eq!(string.size, rtdt::Index::ZERO);
     // Capacity and data pointer should be retained.
     assert_eq!(string.capacity, old_capacity);
     assert_eq!(string.data, old_data);
@@ -549,7 +549,7 @@ fn test_string_clear_then_push() -> AnyResult<()> {
             2,
         );
     }
-    assert_eq!(string.size, rtdt::Usize(2));
+    assert_eq!(string.size, rtdt::Index(2));
     assert_eq!(string.data, old_data); // Same buffer.
     assert_eq!(unsafe { get_string_bytes(&string) }, b"hi");
 
@@ -573,8 +573,8 @@ fn test_string_clear_wrong_type() -> AnyResult<()> {
 
     let mut string = rtdt::String {
         data: std::ptr::null(),
-        size: rtdt::Usize::ZERO,
-        capacity: rtdt::Usize::ZERO,
+        size: rtdt::Index::ZERO,
+        capacity: rtdt::Index::ZERO,
     };
 
     let status = unsafe {
@@ -670,7 +670,7 @@ fn test_string_binary_data() -> AnyResult<()> {
         )
     };
     assert_eq!(status, RtStatus::Ok);
-    assert_eq!(string.size, rtdt::Usize(8));
+    assert_eq!(string.size, rtdt::Index(8));
     assert_eq!(unsafe { get_string_bytes(&string) }, &binary_data);
 
     // Clean up.
@@ -712,7 +712,7 @@ fn test_string_capacity_growth() -> AnyResult<()> {
         );
     }
     let initial_capacity = string.capacity;
-    assert!(initial_capacity >= rtdt::Usize(8)); // Minimum capacity is 8.
+    assert!(initial_capacity >= rtdt::Index(8)); // Minimum capacity is 8.
 
     // Keep pushing until we exceed capacity.
     let chunk = b"12345678"; // 8 bytes.
@@ -730,7 +730,7 @@ fn test_string_capacity_growth() -> AnyResult<()> {
 
     // Should have grown.
     assert!(string.capacity > initial_capacity);
-    assert_eq!(string.size, rtdt::Usize(1 + 80)); // 1 + 10*8.
+    assert_eq!(string.size, rtdt::Index(1 + 80)); // 1 + 10*8.
 
     // Clean up.
     unsafe {

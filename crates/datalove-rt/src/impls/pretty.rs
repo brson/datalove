@@ -55,8 +55,8 @@ unsafe fn pretty_value(
             rtdt::TyTag::I32 => pretty_i32(rt, value_ref, string_mut, string_tydesc),
             rtdt::TyTag::U64 => pretty_u64(rt, value_ref, string_mut, string_tydesc),
             rtdt::TyTag::I64 => pretty_i64(rt, value_ref, string_mut, string_tydesc),
-            rtdt::TyTag::Usize => pretty_usize(rt, value_ref, string_mut, string_tydesc),
-            rtdt::TyTag::Isize => pretty_isize(rt, value_ref, string_mut, string_tydesc),
+            rtdt::TyTag::Index => pretty_usize(rt, value_ref, string_mut, string_tydesc),
+            rtdt::TyTag::Offset => pretty_isize(rt, value_ref, string_mut, string_tydesc),
             rtdt::TyTag::F32 => pretty_f32(rt, value_ref, string_mut, string_tydesc),
             rtdt::TyTag::F64 => pretty_f64(rt, value_ref, string_mut, string_tydesc),
             rtdt::TyTag::Int => pretty_int(rt, value_ref, string_mut, string_tydesc),
@@ -209,7 +209,7 @@ unsafe fn pretty_usize(
     string_tydesc: *const rtdt::TyDesc,
 ) -> Result<(), ()> {
     unsafe {
-        let n = &*(value_ref as *const rtdt::Usize);
+        let n = &*(value_ref as *const rtdt::Index);
         let s = n.0.to_string();
         push_str(rt, string_mut, string_tydesc, s.as_bytes())
     }
@@ -222,7 +222,7 @@ unsafe fn pretty_isize(
     string_tydesc: *const rtdt::TyDesc,
 ) -> Result<(), ()> {
     unsafe {
-        let n = &*(value_ref as *const rtdt::Isize);
+        let n = &*(value_ref as *const rtdt::Offset);
         let s = n.0.to_string();
         push_str(rt, string_mut, string_tydesc, s.as_bytes())
     }
@@ -296,7 +296,7 @@ unsafe fn pretty_string(
     unsafe {
         let s = &*(value_ref as *const rtdt::String);
         push_str(rt, string_mut, string_tydesc, b"\"")?;
-        if !s.data.is_null() && s.size > rtdt::Usize::ZERO {
+        if !s.data.is_null() && s.size > rtdt::Index::ZERO {
             let bytes = std::slice::from_raw_parts(s.data, s.size.as_usize());
             for &byte in bytes {
                 match byte {
@@ -409,7 +409,7 @@ unsafe fn pretty_list(
 
         push_str(rt, string_mut, string_tydesc, b"[")?;
 
-        if !list.data.is_null() && list.size > rtdt::Usize::ZERO {
+        if !list.data.is_null() && list.size > rtdt::Index::ZERO {
             for i in 0..list.size.0 {
                 if i > 0 {
                     push_str(rt, string_mut, string_tydesc, b", ")?;
@@ -438,7 +438,7 @@ unsafe fn pretty_map(
 
         push_str(rt, string_mut, string_tydesc, b"map {")?;
 
-        if !map.root.is_null() && map.len > rtdt::Usize::ZERO {
+        if !map.root.is_null() && map.len > rtdt::Index::ZERO {
             let key_size = key_ty.size() as usize;
             let value_size = value_ty.size() as usize;
 
@@ -490,7 +490,7 @@ unsafe fn pretty_set(
 
         push_str(rt, string_mut, string_tydesc, b"set {")?;
 
-        if !set.root.is_null() && set.len > rtdt::Usize::ZERO {
+        if !set.root.is_null() && set.len > rtdt::Index::ZERO {
             let elem_size = elem_ty.size() as usize;
 
             let mut current_leaf = set.root as *mut rtdt::SetNode;
@@ -721,7 +721,7 @@ unsafe fn pretty_table(
         }
 
         // Print data rows.
-        if !table.data.is_null() && table.len > rtdt::Usize::ZERO {
+        if !table.data.is_null() && table.len > rtdt::Index::ZERO {
             for row in 0..table.len.0 {
                 push_str(rt, string_mut, string_tydesc, b"; ")?;
 
@@ -762,7 +762,7 @@ unsafe fn push_str(
             string_mut,
             string_tydesc,
             bytes.as_ptr(),
-            bytes.len() as rtdt::UsizeRepr,
+            bytes.len() as rtdt::IndexRepr,
         );
 
         if status == RtStatus::Ok {
@@ -804,7 +804,7 @@ mod tests {
 
     unsafe fn get_string_contents(string: &rtdt::String) -> String {
         unsafe {
-            if string.data.is_null() || string.size == rtdt::Usize::ZERO {
+            if string.data.is_null() || string.size == rtdt::Index::ZERO {
                 return String::new();
             }
             let bytes = std::slice::from_raw_parts(string.data, string.size.as_usize());

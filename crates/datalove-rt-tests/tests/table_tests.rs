@@ -208,8 +208,8 @@ fn test_table_create_empty() {
     let table_tydesc = create_table_u32_tydesc(&arena);
 
     let mut table = rtdt::Table {
-        len: rtdt::Usize::ZERO,
-        capacity: rtdt::Usize::ZERO,
+        len: rtdt::Index::ZERO,
+        capacity: rtdt::Index::ZERO,
         data: ptr::null(),
     };
     let table_ptr = &mut table as *mut rtdt::Table as *mut u8;
@@ -219,8 +219,8 @@ fn test_table_create_empty() {
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
-    assert_eq!(table.len, rtdt::Usize::ZERO);
-    assert_eq!(table.capacity, rtdt::Usize::ZERO);
+    assert_eq!(table.len, rtdt::Index::ZERO);
+    assert_eq!(table.capacity, rtdt::Index::ZERO);
     assert!(table.data.is_null());
 
     // Destroy.
@@ -242,8 +242,8 @@ fn test_table_push_and_len() {
     let row_tydesc = create_tuple_u32_tydesc(&arena);
 
     let mut table = rtdt::Table {
-        len: rtdt::Usize::ZERO,
-        capacity: rtdt::Usize::ZERO,
+        len: rtdt::Index::ZERO,
+        capacity: rtdt::Index::ZERO,
         data: ptr::null(),
     };
     let table_ptr = &mut table as *mut rtdt::Table as *mut u8;
@@ -275,7 +275,7 @@ fn test_table_push_and_len() {
     // Check length.
     let len = unsafe { datalove_rt::c::dtlv_rti_table_len(rt, table_ptr as *const u8, table_tydesc) };
     assert_eq!(len, 3);
-    assert_eq!(table.len, rtdt::Usize(3));
+    assert_eq!(table.len, rtdt::Index(3));
 
     // Verify elements via get.
     for i in 0u32..3 {
@@ -312,8 +312,8 @@ fn test_table_two_columns() {
     let row_tydesc = create_tuple_u32_u64_tydesc(&arena);
 
     let mut table = rtdt::Table {
-        len: rtdt::Usize::ZERO,
-        capacity: rtdt::Usize::ZERO,
+        len: rtdt::Index::ZERO,
+        capacity: rtdt::Index::ZERO,
         data: ptr::null(),
     };
     let table_ptr = &mut table as *mut rtdt::Table as *mut u8;
@@ -343,7 +343,7 @@ fn test_table_two_columns() {
         assert_eq!(status, datalove_rt::c::RtStatus::Ok);
     }
 
-    assert_eq!(table.len, rtdt::Usize(5));
+    assert_eq!(table.len, rtdt::Index(5));
 
     // Verify elements.
     for i in 0u32..5 {
@@ -381,8 +381,8 @@ fn test_table_get_out_of_bounds() {
     let row_tydesc = create_tuple_u32_tydesc(&arena);
 
     let mut table = rtdt::Table {
-        len: rtdt::Usize::ZERO,
-        capacity: rtdt::Usize::ZERO,
+        len: rtdt::Index::ZERO,
+        capacity: rtdt::Index::ZERO,
         data: ptr::null(),
     };
     let table_ptr = &mut table as *mut rtdt::Table as *mut u8;
@@ -435,8 +435,8 @@ fn test_table_clear() {
     let row_tydesc = create_tuple_u32_tydesc(&arena);
 
     let mut table = rtdt::Table {
-        len: rtdt::Usize::ZERO,
-        capacity: rtdt::Usize::ZERO,
+        len: rtdt::Index::ZERO,
+        capacity: rtdt::Index::ZERO,
         data: ptr::null(),
     };
     let table_ptr = &mut table as *mut rtdt::Table as *mut u8;
@@ -455,7 +455,7 @@ fn test_table_clear() {
             )
         };
     }
-    assert_eq!(table.len, rtdt::Usize(5));
+    assert_eq!(table.len, rtdt::Index(5));
     let old_capacity = table.capacity;
 
     // Clear.
@@ -465,7 +465,7 @@ fn test_table_clear() {
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     // Length is 0 but capacity preserved.
-    assert_eq!(table.len, rtdt::Usize::ZERO);
+    assert_eq!(table.len, rtdt::Index::ZERO);
     assert_eq!(table.capacity, old_capacity);
 
     unsafe { datalove_rt::c::dtlv_rti_table_destroy_local(rt, table_ptr, table_tydesc) };
@@ -482,8 +482,8 @@ fn test_table_clone() {
     let row_tydesc = create_tuple_u32_tydesc(&arena);
 
     let mut table = rtdt::Table {
-        len: rtdt::Usize::ZERO,
-        capacity: rtdt::Usize::ZERO,
+        len: rtdt::Index::ZERO,
+        capacity: rtdt::Index::ZERO,
         data: ptr::null(),
     };
     let table_ptr = &mut table as *mut rtdt::Table as *mut u8;
@@ -505,8 +505,8 @@ fn test_table_clone() {
 
     // Clone.
     let mut cloned = rtdt::Table {
-        len: rtdt::Usize::ZERO,
-        capacity: rtdt::Usize::ZERO,
+        len: rtdt::Index::ZERO,
+        capacity: rtdt::Index::ZERO,
         data: ptr::null(),
     };
     let cloned_ptr = &mut cloned as *mut rtdt::Table as *mut u8;
@@ -550,8 +550,8 @@ fn test_table_eq() {
     let row_tydesc = create_tuple_u32_tydesc(&arena);
 
     // Create two tables with same data.
-    let mut table1 = rtdt::Table { len: rtdt::Usize::ZERO, capacity: rtdt::Usize::ZERO, data: ptr::null() };
-    let mut table2 = rtdt::Table { len: rtdt::Usize::ZERO, capacity: rtdt::Usize::ZERO, data: ptr::null() };
+    let mut table1 = rtdt::Table { len: rtdt::Index::ZERO, capacity: rtdt::Index::ZERO, data: ptr::null() };
+    let mut table2 = rtdt::Table { len: rtdt::Index::ZERO, capacity: rtdt::Index::ZERO, data: ptr::null() };
     let table1_ptr = &mut table1 as *mut rtdt::Table as *mut u8;
     let table2_ptr = &mut table2 as *mut rtdt::Table as *mut u8;
 
@@ -616,8 +616,8 @@ fn test_table_cmp() {
     let table_tydesc = create_table_u32_tydesc(&arena);
     let row_tydesc = create_tuple_u32_tydesc(&arena);
 
-    let mut table1 = rtdt::Table { len: rtdt::Usize::ZERO, capacity: rtdt::Usize::ZERO, data: ptr::null() };
-    let mut table2 = rtdt::Table { len: rtdt::Usize::ZERO, capacity: rtdt::Usize::ZERO, data: ptr::null() };
+    let mut table1 = rtdt::Table { len: rtdt::Index::ZERO, capacity: rtdt::Index::ZERO, data: ptr::null() };
+    let mut table2 = rtdt::Table { len: rtdt::Index::ZERO, capacity: rtdt::Index::ZERO, data: ptr::null() };
     let table1_ptr = &mut table1 as *mut rtdt::Table as *mut u8;
     let table2_ptr = &mut table2 as *mut rtdt::Table as *mut u8;
 

@@ -71,13 +71,13 @@ pub fn ir_type_to_cranelift(ty: &IrType) -> CraneliftRepr {
         IrType::U64 => CraneliftRepr::Scalar(cl_types::I64),
         IrType::I64 => CraneliftRepr::Scalar(cl_types::I64),
         #[cfg(not(feature = "index-64"))]
-        IrType::Usize => CraneliftRepr::Scalar(cl_types::I32),
+        IrType::Index => CraneliftRepr::Scalar(cl_types::I32),
         #[cfg(feature = "index-64")]
-        IrType::Usize => CraneliftRepr::Scalar(cl_types::I64),
+        IrType::Index => CraneliftRepr::Scalar(cl_types::I64),
         #[cfg(not(feature = "index-64"))]
-        IrType::Isize => CraneliftRepr::Scalar(cl_types::I32),
+        IrType::Offset => CraneliftRepr::Scalar(cl_types::I32),
         #[cfg(feature = "index-64")]
-        IrType::Isize => CraneliftRepr::Scalar(cl_types::I64),
+        IrType::Offset => CraneliftRepr::Scalar(cl_types::I64),
         IrType::F32 => CraneliftRepr::Scalar(cl_types::F32),
         IrType::F64 => CraneliftRepr::Scalar(cl_types::F64),
 

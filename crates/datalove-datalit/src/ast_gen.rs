@@ -374,8 +374,8 @@ pub fn gen_type_hint<'db, R: Rng>(
         }
         22 => TypeHint::Data,
         23 => TypeHint::Error,
-        24 => TypeHint::Usize,
-        25 => TypeHint::Isize,
+        24 => TypeHint::Index,
+        25 => TypeHint::Offset,
         _ => TypeHint::Bool,
     }
 }
@@ -541,8 +541,8 @@ fn gen_type_hint_inner<'db, R: Rng>(
         }
         22 => TypeHint::Data,
         23 => TypeHint::Error,
-        24 => TypeHint::Usize,
-        25 => TypeHint::Isize,
+        24 => TypeHint::Index,
+        25 => TypeHint::Offset,
         _ => TypeHint::Bool,
     }
 }
@@ -572,8 +572,8 @@ pub fn gen_expr_matching_type<'db, R: Rng>(
         TypeHint::U64 => gen_uint_expr(db, rng, config, 0u64, u64::MAX),
         TypeHint::I64 => gen_int_expr(db, rng, config, i64::MIN, i64::MAX),
         // For usize/isize, generate 32-bit values (default configuration).
-        TypeHint::Usize => gen_uint_expr(db, rng, config, 0u32, u32::MAX),
-        TypeHint::Isize => gen_int_expr(db, rng, config, i32::MIN, i32::MAX),
+        TypeHint::Index => gen_uint_expr(db, rng, config, 0u32, u32::MAX),
+        TypeHint::Offset => gen_int_expr(db, rng, config, i32::MIN, i32::MAX),
         TypeHint::F32 => gen_f32_expr(db, rng, config),
         TypeHint::F64 => gen_f64_expr(db, rng, config),
         TypeHint::Int => gen_int_expr(db, rng, config, i64::MIN, i64::MAX),

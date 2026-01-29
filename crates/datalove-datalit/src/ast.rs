@@ -42,8 +42,8 @@ pub enum TypeHint<'db> {
     I32,
     U64,
     I64,
-    Usize,
-    Isize,
+    Index,
+    Offset,
     F32,
     F64,
     Int,
@@ -63,6 +63,7 @@ pub enum TypeHint<'db> {
     Alias(InternedText<'db>),
     ParseError(TypeHintParseError<'db>),
 }
+
 
 #[derive(Clone, Hash, PartialEq, Eq)]
 #[derive(salsa::Update)]

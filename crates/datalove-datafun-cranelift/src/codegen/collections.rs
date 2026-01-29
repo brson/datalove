@@ -322,7 +322,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         }
 
         // Call tensor_init runtime function.
-        // element_count is UsizeRepr type (I32 or I64 depending on index-64 feature).
+        // element_count is IndexRepr type (I32 or I64 depending on index-64 feature).
         use crate::index_types::INDEX_TYPE;
 
         let init_ref = self.module.declare_func_in_func(runtime.tensor_init, builder.func);

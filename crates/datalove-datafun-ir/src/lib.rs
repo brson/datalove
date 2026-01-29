@@ -61,7 +61,7 @@ pub enum TypeRef {
     Bool,
     U8, U16, U32, U64,
     I8, I16, I32, I64,
-    Usize, Isize,
+    Index, Offset,
     Int,
     Tuple(u32),
     AnonStruct(u32),
@@ -88,7 +88,7 @@ pub enum IrType {
     /// Signed integers.
     I8, I16, I32, I64,
     /// Collection index types (size depends on index-64 feature).
-    Usize, Isize,
+    Index, Offset,
     /// Arbitrary-precision integer.
     Int,
     /// 32-bit float.
@@ -128,6 +128,7 @@ pub enum IrType {
     Table(Vec<(String, Box<IrType>)>),
 }
 
+
 impl std::fmt::Display for IrType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -141,8 +142,8 @@ impl std::fmt::Display for IrType {
             IrType::I16 => write!(f, "i16"),
             IrType::I32 => write!(f, "i32"),
             IrType::I64 => write!(f, "i64"),
-            IrType::Usize => write!(f, "usize"),
-            IrType::Isize => write!(f, "isize"),
+            IrType::Index => write!(f, "index"),
+            IrType::Offset => write!(f, "offset"),
             IrType::Int => write!(f, "int"),
             IrType::F32 => write!(f, "f32"),
             IrType::F64 => write!(f, "f64"),
@@ -216,8 +217,8 @@ impl IrType {
             TypeHint::I32 => IrType::I32,
             TypeHint::U64 => IrType::U64,
             TypeHint::I64 => IrType::I64,
-            TypeHint::Usize => IrType::Usize,
-            TypeHint::Isize => IrType::Isize,
+            TypeHint::Index => IrType::Index,
+            TypeHint::Offset => IrType::Offset,
             TypeHint::F32 => IrType::F32,
             TypeHint::F64 => IrType::F64,
             TypeHint::Int => IrType::Int,
@@ -317,8 +318,8 @@ impl IrType {
             DlType::I32 => IrType::I32,
             DlType::U64 => IrType::U64,
             DlType::I64 => IrType::I64,
-            DlType::Usize => IrType::Usize,
-            DlType::Isize => IrType::Isize,
+            DlType::Index => IrType::Index,
+            DlType::Offset => IrType::Offset,
             DlType::F32 => IrType::F32,
             DlType::F64 => IrType::F64,
             DlType::Int => IrType::Int,
@@ -407,7 +408,7 @@ impl IrType {
             IrType::Unit | IrType::Bool => true,
             IrType::U8 | IrType::U16 | IrType::U32 | IrType::U64 => true,
             IrType::I8 | IrType::I16 | IrType::I32 | IrType::I64 => true,
-            IrType::Usize | IrType::Isize => true,
+            IrType::Index | IrType::Offset => true,
             IrType::F32 | IrType::F64 => true,
 
             // Heap-allocated types are never copy.
@@ -549,8 +550,8 @@ pub enum ConstValue {
     I16(i16),
     I32(i32),
     I64(i64),
-    Usize(datalove_rtdt::UsizeRepr),
-    Isize(datalove_rtdt::IsizeRepr),
+    Index(datalove_rtdt::IndexRepr),
+    Offset(datalove_rtdt::OffsetRepr),
     /// Bigint stored as limbs (little-endian base 2^32) and sign.
     /// Empty limbs = 0.
     Int { limbs: Vec<u32>, negative: bool },
@@ -608,8 +609,8 @@ impl std::hash::Hash for ConstValue {
             ConstValue::I16(v) => v.hash(state),
             ConstValue::I32(v) => v.hash(state),
             ConstValue::I64(v) => v.hash(state),
-            ConstValue::Usize(v) => v.hash(state),
-            ConstValue::Isize(v) => v.hash(state),
+            ConstValue::Index(v) => v.hash(state),
+            ConstValue::Offset(v) => v.hash(state),
             ConstValue::Int { limbs, negative } => {
                 limbs.hash(state);
                 negative.hash(state);

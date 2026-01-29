@@ -145,8 +145,8 @@ impl RuntimeImports {
                 .map_err(|e| CraneliftError::Module(format!("declare dtlv_rti_any_destroy_local: {}", e)))?
         };
 
-        // dtlv_rti_mem_alloc_raw_local(ptr, u32, u32, UsizeRepr) -> ptr
-        // Count type is UsizeRepr which depends on index-64 feature.
+        // dtlv_rti_mem_alloc_raw_local(ptr, u32, u32, IndexRepr) -> ptr
+        // Count type is IndexRepr which depends on index-64 feature.
         use crate::index_types::INDEX_TYPE;
 
         let mem_alloc_raw = {
@@ -154,7 +154,7 @@ impl RuntimeImports {
             sig.params.push(AbiParam::new(PTR_TYPE));      // rt handle
             sig.params.push(AbiParam::new(cl_types::I32)); // size
             sig.params.push(AbiParam::new(cl_types::I32)); // align
-            sig.params.push(AbiParam::new(INDEX_TYPE));    // count (UsizeRepr)
+            sig.params.push(AbiParam::new(INDEX_TYPE));    // count (IndexRepr)
             sig.returns.push(AbiParam::new(PTR_TYPE));     // allocated ptr
             module
                 .declare_function("dtlv_rti_mem_alloc_raw_local", Linkage::Import, &sig)
@@ -234,7 +234,7 @@ impl RuntimeImports {
             sig.params.push(AbiParam::new(PTR_TYPE));    // list_out
             sig.params.push(AbiParam::new(PTR_TYPE));    // element_tydesc
             sig.params.push(AbiParam::new(PTR_TYPE));    // elements_ptr
-            sig.params.push(AbiParam::new(INDEX_TYPE));  // num_elements (UsizeRepr)
+            sig.params.push(AbiParam::new(INDEX_TYPE));  // num_elements (IndexRepr)
             sig.returns.push(AbiParam::new(cl_types::I8));
             module
                 .declare_function("dtlv_rti_list_build_from_slice_local", Linkage::Import, &sig)
@@ -275,7 +275,7 @@ impl RuntimeImports {
             sig.params.push(AbiParam::new(PTR_TYPE));    // set_out
             sig.params.push(AbiParam::new(PTR_TYPE));    // element_tydesc
             sig.params.push(AbiParam::new(PTR_TYPE));    // elements_ptr
-            sig.params.push(AbiParam::new(INDEX_TYPE));  // num_elements (UsizeRepr)
+            sig.params.push(AbiParam::new(INDEX_TYPE));  // num_elements (IndexRepr)
             sig.returns.push(AbiParam::new(cl_types::I8));
             module
                 .declare_function("dtlv_rti_btreeset_build_from_sorted_slice_local", Linkage::Import, &sig)
@@ -319,7 +319,7 @@ impl RuntimeImports {
             sig.params.push(AbiParam::new(PTR_TYPE));    // value_tydesc
             sig.params.push(AbiParam::new(PTR_TYPE));    // keys_ptr
             sig.params.push(AbiParam::new(PTR_TYPE));    // values_ptr
-            sig.params.push(AbiParam::new(INDEX_TYPE));  // num_entries (UsizeRepr)
+            sig.params.push(AbiParam::new(INDEX_TYPE));  // num_entries (IndexRepr)
             sig.returns.push(AbiParam::new(cl_types::I8));
             module
                 .declare_function("dtlv_rti_btreemap_build_from_sorted_slices_local", Linkage::Import, &sig)
@@ -331,7 +331,7 @@ impl RuntimeImports {
             let mut sig = cl_ir::Signature::new(call_conv);
             sig.params.push(AbiParam::new(PTR_TYPE));      // rt handle
             sig.params.push(AbiParam::new(PTR_TYPE));      // element_data_in
-            sig.params.push(AbiParam::new(INDEX_TYPE));    // element_count (UsizeRepr)
+            sig.params.push(AbiParam::new(INDEX_TYPE));    // element_count (IndexRepr)
             sig.params.push(AbiParam::new(PTR_TYPE));      // element_tydesc
             sig.params.push(AbiParam::new(PTR_TYPE));      // shape_ptr
             sig.params.push(AbiParam::new(cl_types::I32)); // rank
@@ -377,7 +377,7 @@ impl RuntimeImports {
             sig.params.push(AbiParam::new(PTR_TYPE));    // table_tydesc
             sig.params.push(AbiParam::new(PTR_TYPE));    // rows_ptr
             sig.params.push(AbiParam::new(PTR_TYPE));    // row_tydesc
-            sig.params.push(AbiParam::new(INDEX_TYPE));  // num_rows (UsizeRepr)
+            sig.params.push(AbiParam::new(INDEX_TYPE));  // num_rows (IndexRepr)
             sig.returns.push(AbiParam::new(cl_types::I8));
             module
                 .declare_function("dtlv_rti_table_build_from_rows_local", Linkage::Import, &sig)

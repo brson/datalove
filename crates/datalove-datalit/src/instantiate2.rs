@@ -116,8 +116,8 @@ fn instantiate_expr_into<'db>(
         (Expr::Int(int_expr), Type::I32) => instantiate_i32(rt, db, int_expr, dest_ptr),
         (Expr::Int(int_expr), Type::U64) => instantiate_u64(rt, db, int_expr, dest_ptr),
         (Expr::Int(int_expr), Type::I64) => instantiate_i64(rt, db, int_expr, dest_ptr),
-        (Expr::Int(int_expr), Type::Usize) => instantiate_usize(rt, db, int_expr, dest_ptr),
-        (Expr::Int(int_expr), Type::Isize) => instantiate_isize(rt, db, int_expr, dest_ptr),
+        (Expr::Int(int_expr), Type::Index) => instantiate_usize(rt, db, int_expr, dest_ptr),
+        (Expr::Int(int_expr), Type::Offset) => instantiate_isize(rt, db, int_expr, dest_ptr),
         (Expr::Int(int_expr), Type::Int) => instantiate_bigint(rt, db, int_expr, dest_ptr),
 
         (Expr::Float(float_expr), Type::F32) => instantiate_f32(rt, db, float_expr, dest_ptr),
@@ -132,8 +132,8 @@ fn instantiate_expr_into<'db>(
         (Expr::Hex(hex_expr), Type::I32) => instantiate_hex_i32(rt, db, hex_expr, dest_ptr),
         (Expr::Hex(hex_expr), Type::U64) => instantiate_hex_u64(rt, db, hex_expr, dest_ptr),
         (Expr::Hex(hex_expr), Type::I64) => instantiate_hex_i64(rt, db, hex_expr, dest_ptr),
-        (Expr::Hex(hex_expr), Type::Usize) => instantiate_hex_usize(rt, db, hex_expr, dest_ptr),
-        (Expr::Hex(hex_expr), Type::Isize) => instantiate_hex_isize(rt, db, hex_expr, dest_ptr),
+        (Expr::Hex(hex_expr), Type::Index) => instantiate_hex_usize(rt, db, hex_expr, dest_ptr),
+        (Expr::Hex(hex_expr), Type::Offset) => instantiate_hex_isize(rt, db, hex_expr, dest_ptr),
         (Expr::Hex(hex_expr), Type::Int) => instantiate_hex_bigint(rt, db, hex_expr, dest_ptr),
 
         // Hex literals for floats - interpret as bit patterns.
@@ -319,9 +319,9 @@ fn instantiate_i64(_rt: datalove_rt::c::LocalRtHandle, db: &dyn crate::Db, int_e
 fn instantiate_usize(_rt: datalove_rt::c::LocalRtHandle, db: &dyn crate::Db, int_expr: &ExprInt, dest_ptr: *mut u8) -> AnyResult<*const u8> {
     debug_assert!(!dest_ptr.is_null());
     let value_str = int_expr.value.as_str(db);
-    let value: datalove_rtdt::UsizeRepr = value_str.parse()?;
+    let value: datalove_rtdt::IndexRepr = value_str.parse()?;
     unsafe {
-        *(dest_ptr as *mut datalove_rtdt::Usize) = datalove_rtdt::Usize(value);
+        *(dest_ptr as *mut datalove_rtdt::Index) = datalove_rtdt::Index(value);
         Ok(dest_ptr as *const u8)
     }
 }
@@ -329,9 +329,9 @@ fn instantiate_usize(_rt: datalove_rt::c::LocalRtHandle, db: &dyn crate::Db, int
 fn instantiate_isize(_rt: datalove_rt::c::LocalRtHandle, db: &dyn crate::Db, int_expr: &ExprInt, dest_ptr: *mut u8) -> AnyResult<*const u8> {
     debug_assert!(!dest_ptr.is_null());
     let value_str = int_expr.value.as_str(db);
-    let value: datalove_rtdt::IsizeRepr = value_str.parse()?;
+    let value: datalove_rtdt::OffsetRepr = value_str.parse()?;
     unsafe {
-        *(dest_ptr as *mut datalove_rtdt::Isize) = datalove_rtdt::Isize(value);
+        *(dest_ptr as *mut datalove_rtdt::Offset) = datalove_rtdt::Offset(value);
         Ok(dest_ptr as *const u8)
     }
 }
@@ -449,9 +449,9 @@ fn instantiate_hex_i64(_rt: datalove_rt::c::LocalRtHandle, db: &dyn crate::Db, h
 fn instantiate_hex_usize(_rt: datalove_rt::c::LocalRtHandle, db: &dyn crate::Db, hex_expr: &ExprHex, dest_ptr: *mut u8) -> AnyResult<*const u8> {
     debug_assert!(!dest_ptr.is_null());
     let value_str = hex_expr.value.as_str(db);
-    let value = datalove_rtdt::UsizeRepr::from_str_radix(parse_hex_str(value_str), 16)?;
+    let value = datalove_rtdt::IndexRepr::from_str_radix(parse_hex_str(value_str), 16)?;
     unsafe {
-        *(dest_ptr as *mut datalove_rtdt::Usize) = datalove_rtdt::Usize(value);
+        *(dest_ptr as *mut datalove_rtdt::Index) = datalove_rtdt::Index(value);
         Ok(dest_ptr as *const u8)
     }
 }
@@ -459,9 +459,9 @@ fn instantiate_hex_usize(_rt: datalove_rt::c::LocalRtHandle, db: &dyn crate::Db,
 fn instantiate_hex_isize(_rt: datalove_rt::c::LocalRtHandle, db: &dyn crate::Db, hex_expr: &ExprHex, dest_ptr: *mut u8) -> AnyResult<*const u8> {
     debug_assert!(!dest_ptr.is_null());
     let value_str = hex_expr.value.as_str(db);
-    let value = datalove_rtdt::UsizeRepr::from_str_radix(parse_hex_str(value_str), 16)?;
+    let value = datalove_rtdt::IndexRepr::from_str_radix(parse_hex_str(value_str), 16)?;
     unsafe {
-        *(dest_ptr as *mut datalove_rtdt::Isize) = datalove_rtdt::Isize(value as datalove_rtdt::IsizeRepr);
+        *(dest_ptr as *mut datalove_rtdt::Offset) = datalove_rtdt::Offset(value as datalove_rtdt::OffsetRepr);
         Ok(dest_ptr as *const u8)
     }
 }
@@ -526,7 +526,7 @@ fn instantiate_hex_bigint(rt: datalove_rt::c::LocalRtHandle, db: &dyn crate::Db,
         } else {
             limbs.len() as i32
         };
-        (*int_ptr).capacity = rtdt::Usize(limbs.len() as rtdt::UsizeRepr);
+        (*int_ptr).capacity = rtdt::Index(limbs.len() as rtdt::IndexRepr);
 
         Ok(dest_ptr as *const u8)
     }
@@ -568,7 +568,7 @@ fn instantiate_bigint(rt: datalove_rt::c::LocalRtHandle, db: &dyn crate::Db, int
         } else {
             limbs.len() as i32
         };
-        (*int_ptr).capacity = rtdt::Usize(limbs.len() as rtdt::UsizeRepr);
+        (*int_ptr).capacity = rtdt::Index(limbs.len() as rtdt::IndexRepr);
 
         Ok(dest_ptr as *const u8)
     }
@@ -1133,7 +1133,7 @@ fn instantiate_map<'db>(
     if entries.is_empty() {
         unsafe {
             (*map_ptr).root = std::ptr::null();
-            (*map_ptr).len = rtdt::Usize::ZERO;
+            (*map_ptr).len = rtdt::Index::ZERO;
         }
         return Ok(map_ptr as *const u8);
     }
@@ -1257,7 +1257,7 @@ fn instantiate_set<'db>(
     if elements.is_empty() {
         unsafe {
             (*set_ptr).root = std::ptr::null();
-            (*set_ptr).len = rtdt::Usize::ZERO;
+            (*set_ptr).len = rtdt::Index::ZERO;
         }
         return Ok(set_ptr as *const u8);
     }
@@ -1362,29 +1362,29 @@ fn instantiate_tensor<'db>(
             std::ptr::null_mut()
         };
 
-        // Allocate shape array (UsizeRepr per dimension).
+        // Allocate shape array (IndexRepr per dimension).
         let shape_ptr = if rank > 0 {
-            let shape_array = datalove_rt::c::dtlv_rti_mem_alloc_raw_local(rt, rtdt::INDEX_SIZE, rtdt::INDEX_ALIGN, (rank as u32).into()) as *mut rtdt::UsizeRepr;
+            let shape_array = datalove_rt::c::dtlv_rti_mem_alloc_raw_local(rt, rtdt::INDEX_SIZE, rtdt::INDEX_ALIGN, (rank as u32).into()) as *mut rtdt::IndexRepr;
             for (i, &dim) in shape.iter().enumerate() {
-                *shape_array.add(i) = dim as rtdt::UsizeRepr;
+                *shape_array.add(i) = dim as rtdt::IndexRepr;
             }
-            shape_array as *const rtdt::Usize
+            shape_array as *const rtdt::Index
         } else {
             std::ptr::null()
         };
 
-        // Allocate and compute strides array (UsizeRepr per dimension).
+        // Allocate and compute strides array (IndexRepr per dimension).
         let strides_ptr = if rank > 0 {
-            let strides_array = datalove_rt::c::dtlv_rti_mem_alloc_raw_local(rt, rtdt::INDEX_SIZE, rtdt::INDEX_ALIGN, (rank as u32).into()) as *mut rtdt::UsizeRepr;
+            let strides_array = datalove_rt::c::dtlv_rti_mem_alloc_raw_local(rt, rtdt::INDEX_SIZE, rtdt::INDEX_ALIGN, (rank as u32).into()) as *mut rtdt::IndexRepr;
 
             // Compute strides for row-major layout.
             // RowMajor: strides[i] = product of dims[i+1..rank].
             for i in 0..rank {
-                let stride: rtdt::UsizeRepr = shape[i+1..rank].iter().map(|&d| d as rtdt::UsizeRepr).product();
+                let stride: rtdt::IndexRepr = shape[i+1..rank].iter().map(|&d| d as rtdt::IndexRepr).product();
                 *strides_array.add(i) = if stride == 0 { 1 } else { stride };
             }
 
-            strides_array as *const rtdt::Usize
+            strides_array as *const rtdt::Index
         } else {
             std::ptr::null()
         };
@@ -1395,8 +1395,8 @@ fn instantiate_tensor<'db>(
         // Fill in the Tensor struct.
         let tensor_ptr = dest_ptr as *mut rtdt::Tensor;
         (*tensor_ptr).ptr_base = data_ptr;
-        (*tensor_ptr).capacity_elems = rtdt::Usize(total_elems as rtdt::UsizeRepr);
-        (*tensor_ptr).offset_elems = rtdt::Usize::ZERO;
+        (*tensor_ptr).capacity_elems = rtdt::Index(total_elems as rtdt::IndexRepr);
+        (*tensor_ptr).offset_elems = rtdt::Index::ZERO;
         (*tensor_ptr).shape = shape_ptr;
         (*tensor_ptr).strides = strides_ptr;
         (*tensor_ptr).layout = rtdt_layout;
@@ -1567,8 +1567,8 @@ mod tests {
         unsafe {
             assert_eq!(inst.tydesc.type_tag(), rtdt::TyTag::String);
             let string = &*(inst.ptr as *const rtdt::String);
-            assert_eq!(string.size, rtdt::Usize(5));
-            assert!(string.capacity >= rtdt::Usize(5));
+            assert_eq!(string.size, rtdt::Index(5));
+            assert!(string.capacity >= rtdt::Index(5));
             let str_slice = std::slice::from_raw_parts(string.data, string.size.as_usize());
             assert_eq!(str_slice, b"hello");
         }
@@ -1591,8 +1591,8 @@ mod tests {
         unsafe {
             assert_eq!(inst.tydesc.type_tag(), rtdt::TyTag::String);
             let string = &*(inst.ptr as *const rtdt::String);
-            assert_eq!(string.size, rtdt::Usize::ZERO);
-            assert_eq!(string.capacity, rtdt::Usize::ZERO);
+            assert_eq!(string.size, rtdt::Index::ZERO);
+            assert_eq!(string.capacity, rtdt::Index::ZERO);
             assert!(string.data.is_null());
         }
         Ok(())
@@ -1643,7 +1643,7 @@ mod tests {
             assert_eq!(inst.tydesc.type_tag(), rtdt::TyTag::Int);
             let int = &*(inst.ptr as *const rtdt::Int);
             assert_eq!(int.size_and_sign, 1);
-            assert_eq!(int.capacity, rtdt::Usize(1));
+            assert_eq!(int.capacity, rtdt::Index(1));
             let limbs = std::slice::from_raw_parts(int.data, 1);
             assert_eq!(limbs[0], 42);
         }
@@ -1668,7 +1668,7 @@ mod tests {
             let int = &*(inst.ptr as *const rtdt::Int);
             // Canonical zero: no limbs, size_and_sign=0, data=null.
             assert_eq!(int.size_and_sign, 0);
-            assert_eq!(int.capacity, rtdt::Usize::ZERO);
+            assert_eq!(int.capacity, rtdt::Index::ZERO);
             assert!(int.data.is_null());
         }
         Ok(())
@@ -1778,8 +1778,8 @@ mod tests {
         unsafe {
             assert_eq!(inst.tydesc.type_tag(), rtdt::TyTag::List);
             let list = &*(inst.ptr as *const rtdt::List);
-            assert_eq!(list.size, rtdt::Usize(5));
-            assert_eq!(list.capacity, rtdt::Usize(5));
+            assert_eq!(list.size, rtdt::Index(5));
+            assert_eq!(list.capacity, rtdt::Index(5));
 
             let element_tydesc = inst.tydesc.list_element_ty().as_ptr();
             assert!(!element_tydesc.is_null());
@@ -1807,8 +1807,8 @@ mod tests {
         unsafe {
             assert_eq!(inst.tydesc.type_tag(), rtdt::TyTag::List);
             let list = &*(inst.ptr as *const rtdt::List);
-            assert_eq!(list.size, rtdt::Usize::ZERO);
-            assert_eq!(list.capacity, rtdt::Usize::ZERO);
+            assert_eq!(list.size, rtdt::Index::ZERO);
+            assert_eq!(list.capacity, rtdt::Index::ZERO);
             assert!(list.data.is_null());
         }
         Ok(())
@@ -1876,18 +1876,18 @@ mod tests {
         unsafe {
             assert_eq!(inst.tydesc.type_tag(), rtdt::TyTag::List);
             let list = &*(inst.ptr as *const rtdt::List);
-            assert_eq!(list.size, rtdt::Usize(2));
+            assert_eq!(list.size, rtdt::Index(2));
 
             let element_tydesc = inst.tydesc.list_element_ty().as_ptr();
             assert_eq!((*element_tydesc).type_tag, rtdt::TyTag::String);
 
             let strings = std::slice::from_raw_parts(list.data as *const rtdt::String, list.size.as_usize());
 
-            assert_eq!(strings[0].size, rtdt::Usize(5));
+            assert_eq!(strings[0].size, rtdt::Index(5));
             let str0 = std::slice::from_raw_parts(strings[0].data, strings[0].size.as_usize());
             assert_eq!(str0, b"hello");
 
-            assert_eq!(strings[1].size, rtdt::Usize(5));
+            assert_eq!(strings[1].size, rtdt::Index(5));
             let str1 = std::slice::from_raw_parts(strings[1].data, strings[1].size.as_usize());
             assert_eq!(str1, b"world");
         }
@@ -2057,7 +2057,7 @@ mod tests {
         unsafe {
             assert_eq!(inst.tydesc.type_tag(), rtdt::TyTag::List);
             let list = &*(inst.ptr as *const rtdt::List);
-            assert_eq!(list.size, rtdt::Usize(3));
+            assert_eq!(list.size, rtdt::Index(3));
 
             let element_tydesc = inst.tydesc.list_element_ty().as_ptr();
             assert!(!element_tydesc.is_null());
@@ -2248,8 +2248,8 @@ mod tests {
             let payload_ptr = inst.ptr.add(layout.payload_offset as usize);
 
             let list = &*(payload_ptr as *const rtdt::List);
-            assert_eq!(list.size, rtdt::Usize::ZERO);
-            assert_eq!(list.capacity, rtdt::Usize::ZERO);
+            assert_eq!(list.size, rtdt::Index::ZERO);
+            assert_eq!(list.capacity, rtdt::Index::ZERO);
             assert!(list.data.is_null());
         }
         Ok(())
@@ -2277,8 +2277,8 @@ mod tests {
             let payload_ptr = inst.ptr.add(layout.payload_offset as usize);
 
             let list = &*(payload_ptr as *const rtdt::List);
-            assert_eq!(list.size, rtdt::Usize(3));
-            assert_eq!(list.capacity, rtdt::Usize(3));
+            assert_eq!(list.size, rtdt::Index(3));
+            assert_eq!(list.capacity, rtdt::Index(3));
 
             let elements = std::slice::from_raw_parts(list.data as *const u32, list.size.as_usize());
             assert_eq!(elements, &[1, 2, 3]);
@@ -2367,7 +2367,7 @@ mod tests {
 
             let enum_payload_ptr = payload_ptr.add(enum_layout.variant_offsets[1] as usize);
             let string = &*(enum_payload_ptr as *const rtdt::String);
-            assert_eq!(string.size, rtdt::Usize(6));
+            assert_eq!(string.size, rtdt::Index(6));
             let str_slice = std::slice::from_raw_parts(string.data, string.size.as_usize());
             assert_eq!(str_slice, b"failed");
         }
@@ -2568,17 +2568,17 @@ mod tests {
             assert_eq!(inst.tydesc.type_tag(), rtdt::TyTag::Tensor);
 
             let tensor = inst.ptr as *const rtdt::Tensor;
-            assert_eq!((*tensor).capacity_elems, rtdt::Usize(6));
-            assert_eq!((*tensor).offset_elems, rtdt::Usize::ZERO);
+            assert_eq!((*tensor).capacity_elems, rtdt::Index(6));
+            assert_eq!((*tensor).offset_elems, rtdt::Index::ZERO);
             assert_eq!((*tensor).layout, rtdt::TensorLayout::RowMajor);
 
             // Check shape [2, 3]
             let shape = std::slice::from_raw_parts((*tensor).shape, 2);
-            assert_eq!(shape, &[rtdt::Usize(2), rtdt::Usize(3)]);
+            assert_eq!(shape, &[rtdt::Index(2), rtdt::Index(3)]);
 
             // Check strides [3, 1] (row-major)
             let strides = std::slice::from_raw_parts((*tensor).strides, 2);
-            assert_eq!(strides, &[rtdt::Usize(3), rtdt::Usize(1)]);
+            assert_eq!(strides, &[rtdt::Index(3), rtdt::Index(1)]);
 
             // Check data [1, 2, 3, 4, 5, 6]
             let data = std::slice::from_raw_parts((*tensor).ptr_base as *const u32, 6);
@@ -2604,17 +2604,17 @@ mod tests {
             assert_eq!(inst.tydesc.type_tag(), rtdt::TyTag::Tensor);
 
             let tensor = inst.ptr as *const rtdt::Tensor;
-            assert_eq!((*tensor).capacity_elems, rtdt::Usize(5));
-            assert_eq!((*tensor).offset_elems, rtdt::Usize::ZERO);
+            assert_eq!((*tensor).capacity_elems, rtdt::Index(5));
+            assert_eq!((*tensor).offset_elems, rtdt::Index::ZERO);
             assert_eq!((*tensor).layout, rtdt::TensorLayout::RowMajor);
 
             // Check shape [5]
             let shape = std::slice::from_raw_parts((*tensor).shape, 1);
-            assert_eq!(shape, &[rtdt::Usize(5)]);
+            assert_eq!(shape, &[rtdt::Index(5)]);
 
             // Check strides [1] (row-major, but for 1D doesn't matter)
             let strides = std::slice::from_raw_parts((*tensor).strides, 1);
-            assert_eq!(strides, &[rtdt::Usize(1)]);
+            assert_eq!(strides, &[rtdt::Index(1)]);
 
             // Check data [1.0, 2.0, 3.0, 4.0, 5.0]
             let data = std::slice::from_raw_parts((*tensor).ptr_base as *const f32, 5);
@@ -2640,17 +2640,17 @@ mod tests {
             assert_eq!(inst.tydesc.type_tag(), rtdt::TyTag::Tensor);
 
             let tensor = inst.ptr as *const rtdt::Tensor;
-            assert_eq!((*tensor).capacity_elems, rtdt::Usize(16));
-            assert_eq!((*tensor).offset_elems, rtdt::Usize::ZERO);
+            assert_eq!((*tensor).capacity_elems, rtdt::Index(16));
+            assert_eq!((*tensor).offset_elems, rtdt::Index::ZERO);
             assert_eq!((*tensor).layout, rtdt::TensorLayout::RowMajor);
 
             // Check shape [2, 2, 2, 2]
             let shape = std::slice::from_raw_parts((*tensor).shape, 4);
-            assert_eq!(shape, &[rtdt::Usize(2), rtdt::Usize(2), rtdt::Usize(2), rtdt::Usize(2)]);
+            assert_eq!(shape, &[rtdt::Index(2), rtdt::Index(2), rtdt::Index(2), rtdt::Index(2)]);
 
             // Check strides [8, 4, 2, 1] (row-major for 4D)
             let strides = std::slice::from_raw_parts((*tensor).strides, 4);
-            assert_eq!(strides, &[rtdt::Usize(8), rtdt::Usize(4), rtdt::Usize(2), rtdt::Usize(1)]);
+            assert_eq!(strides, &[rtdt::Index(8), rtdt::Index(4), rtdt::Index(2), rtdt::Index(1)]);
 
             // Check data
             let data = std::slice::from_raw_parts((*tensor).ptr_base as *const u32, 16);
@@ -2676,17 +2676,17 @@ mod tests {
             assert_eq!(inst.tydesc.type_tag(), rtdt::TyTag::Tensor);
 
             let tensor = inst.ptr as *const rtdt::Tensor;
-            assert_eq!((*tensor).capacity_elems, rtdt::Usize(8));
-            assert_eq!((*tensor).offset_elems, rtdt::Usize::ZERO);
+            assert_eq!((*tensor).capacity_elems, rtdt::Index(8));
+            assert_eq!((*tensor).offset_elems, rtdt::Index::ZERO);
             assert_eq!((*tensor).layout, rtdt::TensorLayout::RowMajor);
 
             // Check shape [2, 2, 2]
             let shape = std::slice::from_raw_parts((*tensor).shape, 3);
-            assert_eq!(shape, &[rtdt::Usize(2), rtdt::Usize(2), rtdt::Usize(2)]);
+            assert_eq!(shape, &[rtdt::Index(2), rtdt::Index(2), rtdt::Index(2)]);
 
             // Check strides [4, 2, 1] (row-major for 3D)
             let strides = std::slice::from_raw_parts((*tensor).strides, 3);
-            assert_eq!(strides, &[rtdt::Usize(4), rtdt::Usize(2), rtdt::Usize(1)]);
+            assert_eq!(strides, &[rtdt::Index(4), rtdt::Index(2), rtdt::Index(1)]);
 
             // Check data [1, 2, 3, 4, 5, 6, 7, 8]
             let data = std::slice::from_raw_parts((*tensor).ptr_base as *const i32, 8);
@@ -2712,17 +2712,17 @@ mod tests {
             assert_eq!(inst.tydesc.type_tag(), rtdt::TyTag::Tensor);
 
             let tensor = inst.ptr as *const rtdt::Tensor;
-            assert_eq!((*tensor).capacity_elems, rtdt::Usize(4));
-            assert_eq!((*tensor).offset_elems, rtdt::Usize::ZERO);
+            assert_eq!((*tensor).capacity_elems, rtdt::Index(4));
+            assert_eq!((*tensor).offset_elems, rtdt::Index::ZERO);
             assert_eq!((*tensor).layout, rtdt::TensorLayout::RowMajor);
 
             // Check shape [2, 2]
             let shape = std::slice::from_raw_parts((*tensor).shape, 2);
-            assert_eq!(shape, &[rtdt::Usize(2), rtdt::Usize(2)]);
+            assert_eq!(shape, &[rtdt::Index(2), rtdt::Index(2)]);
 
             // Check strides [2, 1]
             let strides = std::slice::from_raw_parts((*tensor).strides, 2);
-            assert_eq!(strides, &[rtdt::Usize(2), rtdt::Usize(1)]);
+            assert_eq!(strides, &[rtdt::Index(2), rtdt::Index(1)]);
 
             // Verify we have tuple elements (just check the tensor structure is correct)
         }
@@ -2746,7 +2746,7 @@ mod tests {
             assert_eq!(inst.tydesc.type_tag(), rtdt::TyTag::List);
 
             let list = inst.ptr as *const rtdt::List;
-            assert_eq!((*list).size, rtdt::Usize(2));
+            assert_eq!((*list).size, rtdt::Index(2));
 
             // Verify both elements are tensors (basic structure check)
         }
@@ -2797,8 +2797,8 @@ mod tests {
         unsafe {
             assert_eq!(inst.tydesc.type_tag(), rtdt::TyTag::Table);
             let table = &*(inst.ptr as *const rtdt::Table);
-            assert_eq!(table.len, rtdt::Usize(2));
-            assert!(table.capacity >= rtdt::Usize(2));
+            assert_eq!(table.len, rtdt::Index(2));
+            assert!(table.capacity >= rtdt::Index(2));
             assert!(!table.data.is_null());
 
             // Check column tydescs.
@@ -2825,8 +2825,8 @@ mod tests {
         unsafe {
             assert_eq!(inst.tydesc.type_tag(), rtdt::TyTag::Table);
             let table = &*(inst.ptr as *const rtdt::Table);
-            assert_eq!(table.len, rtdt::Usize::ZERO);
-            assert_eq!(table.capacity, rtdt::Usize::ZERO);
+            assert_eq!(table.len, rtdt::Index::ZERO);
+            assert_eq!(table.capacity, rtdt::Index::ZERO);
             assert!(table.data.is_null());
         }
         Ok(())
@@ -2848,7 +2848,7 @@ mod tests {
         unsafe {
             assert_eq!(inst.tydesc.type_tag(), rtdt::TyTag::Table);
             let table = &*(inst.ptr as *const rtdt::Table);
-            assert_eq!(table.len, rtdt::Usize(2));
+            assert_eq!(table.len, rtdt::Index(2));
 
             // Verify table tydesc has string and u32 column types.
             let table_tydesc_ref = rtdt::TyDescRef::from_ptr(inst.tydesc.as_ptr());

@@ -9,22 +9,22 @@
 // --- Basic Properties ---
 
 // Returns the length in bytes.
-// intrinsic needed: string_len(ref string) -> usize
-fun len(ref self: string): usize
+// intrinsic needed: string_len(ref string) -> index
+fun len(ref self: string): index
   // TODO: icall string_len(self)
-  ret (: usize / 0)
+  ret (: index / 0)
 end fun
 
 // Returns true if the string is empty.
 fun is_empty(ref self: string): bool
-  ret len(self) == (: usize / 0)
+  ret len(self) == (: index / 0)
 end fun
 
 // --- Byte Access ---
 
 // Returns the byte at the given index, or none if out of bounds.
-// intrinsic needed: string_get_byte(ref string, usize) -> ?u8
-fun get_byte(ref self: string, index: usize): ?u8
+// intrinsic needed: string_get_byte(ref string, index) -> ?u8
+fun get_byte(ref self: string, index: index): ?u8
   // TODO: icall string_get_byte(self, index)
   ret none
 end fun
@@ -32,22 +32,22 @@ end fun
 // --- Character Access ---
 
 // Returns the number of Unicode characters.
-// intrinsic needed: string_char_count(ref string) -> usize
-fun char_count(ref self: string): usize
+// intrinsic needed: string_char_count(ref string) -> index
+fun char_count(ref self: string): index
   // TODO: icall string_char_count(self)
-  ret (: usize / 0)
+  ret (: index / 0)
 end fun
 
 // Returns the character (codepoint) at the given character index, or none if out of bounds.
-// intrinsic needed: string_char_at(ref string, usize) -> ?u32
-fun get_char(ref self: string, index: usize): ?u32
+// intrinsic needed: string_char_at(ref string, index) -> ?u32
+fun get_char(ref self: string, index: index): ?u32
   // TODO: icall string_char_at(self, index)
   ret none
 end fun
 
 // Returns the byte index of the n-th character, or none if out of bounds.
-// intrinsic needed: string_char_to_byte_index(ref string, usize) -> ?usize
-fun find_char(ref self: string, char_index: usize): ?usize
+// intrinsic needed: string_char_to_byte_index(ref string, index) -> ?index
+fun find_char(ref self: string, char_index: index): ?index
   // TODO: icall string_char_to_byte_index(self, char_index)
   ret none
 end fun
@@ -55,22 +55,22 @@ end fun
 // --- Slicing ---
 
 // Returns a substring by byte range, or none if invalid or not on char boundary.
-// intrinsic needed: string_slice(ref string, usize, usize) -> ?string
-fun slice(ref self: string, start: usize, end_idx: usize): ?string
+// intrinsic needed: string_slice(ref string, index, index) -> ?string
+fun slice(ref self: string, start: index, end_idx: index): ?string
   // TODO: icall string_slice(self, start, end_idx)
   ret none
 end fun
 
 // Returns a substring from start to end of string.
-// intrinsic needed: string_slice_from(ref string, usize) -> ?string
-fun slice_from(ref self: string, start: usize): ?string
+// intrinsic needed: string_slice_from(ref string, index) -> ?string
+fun slice_from(ref self: string, start: index): ?string
   // TODO: icall string_slice_from(self, start)
   ret none
 end fun
 
 // Returns a substring from beginning to end index.
-// intrinsic needed: string_slice_to(ref string, usize) -> ?string
-fun slice_to(ref self: string, end_idx: usize): ?string
+// intrinsic needed: string_slice_to(ref string, index) -> ?string
+fun slice_to(ref self: string, end_idx: index): ?string
   // TODO: icall string_slice_to(self, end_idx)
   ret none
 end fun
@@ -99,15 +99,15 @@ fun ends_with(ref self: string, ref suffix: string): bool
 end fun
 
 // Returns the byte index of the first occurrence of pattern, or none.
-// intrinsic needed: string_find(ref string, ref string) -> ?usize
-fun find(ref self: string, ref pattern: string): ?usize
+// intrinsic needed: string_find(ref string, ref string) -> ?index
+fun find(ref self: string, ref pattern: string): ?index
   // TODO: icall string_find(self, pattern)
   ret none
 end fun
 
 // Returns the byte index of the last occurrence of pattern, or none.
-// intrinsic needed: string_rfind(ref string, ref string) -> ?usize
-fun rfind(ref self: string, ref pattern: string): ?usize
+// intrinsic needed: string_rfind(ref string, ref string) -> ?index
+fun rfind(ref self: string, ref pattern: string): ?index
   // TODO: icall string_rfind(self, pattern)
   ret none
 end fun
@@ -224,8 +224,8 @@ fun pop(mut self: string): ?u32
 end fun
 
 // Truncates the string to the given byte length.
-// intrinsic needed: string_truncate(mut string, usize) -> !()
-fun truncate(mut self: string, new_len: usize): !()
+// intrinsic needed: string_truncate(mut string, index) -> !()
+fun truncate(mut self: string, new_len: index): !()
   // TODO: icall string_truncate(self, new_len)
   ret ok ()
 end fun
@@ -237,22 +237,22 @@ fun clear(mut self: string)
 end fun
 
 // Inserts a character at the given byte index.
-// intrinsic needed: string_insert_char(mut string, usize, u32) -> !()
-fun insert_char(mut self: string, index: usize, ch: u32): !()
+// intrinsic needed: string_insert_char(mut string, index, u32) -> !()
+fun insert_char(mut self: string, index: index, ch: u32): !()
   // TODO: icall string_insert_char(self, index, ch)
   ret ok ()
 end fun
 
 // Inserts a string at the given byte index.
-// intrinsic needed: string_insert_str(mut string, usize, ref string) -> !()
-fun insert_str(mut self: string, index: usize, ref other: string): !()
+// intrinsic needed: string_insert_str(mut string, index, ref string) -> !()
+fun insert_str(mut self: string, index: index, ref other: string): !()
   // TODO: icall string_insert_str(self, index, other)
   ret ok ()
 end fun
 
 // Removes and returns the character at the given byte index.
-// intrinsic needed: string_remove(mut string, usize) -> ?u32
-fun remove(mut self: string, index: usize): ?u32
+// intrinsic needed: string_remove(mut string, index) -> ?u32
+fun remove(mut self: string, index: index): ?u32
   // TODO: icall string_remove(self, index)
   ret none
 end fun
@@ -272,8 +272,8 @@ fun from_char(ch: u32): string
 end fun
 
 // Repeats the string n times.
-// intrinsic needed: string_repeat(ref string, usize) -> string
-fun repeat(ref self: string, n: usize): string
+// intrinsic needed: string_repeat(ref string, index) -> string
+fun repeat(ref self: string, n: index): string
   // TODO: icall string_repeat(self, n)
   ret ""
 end fun
@@ -332,8 +332,8 @@ fun replace(ref self: string, ref pattern: string, ref replacement: string): str
 end fun
 
 // Replaces the first n occurrences of pattern.
-// intrinsic needed: string_replacen(ref string, ref string, ref string, usize) -> string
-fun replacen(ref self: string, ref pattern: string, ref replacement: string, n: usize): string
+// intrinsic needed: string_replacen(ref string, ref string, ref string, index) -> string
+fun replacen(ref self: string, ref pattern: string, ref replacement: string, n: index): string
   // TODO: icall string_replacen(self, pattern, replacement, n)
   ret ""
 end fun
@@ -352,9 +352,9 @@ fun is_ascii_alphabetic(ref self: string): bool
   if is_empty(self)
     ret false
   end if
-  var i: usize = (: usize / 0)
+  var i: index = (: index / 0)
   let byte_len = len(self)
-  let one = (: usize / 1)
+  let one = (: index / 1)
   loop while i .< byte_len
     if get_byte(self, i) |b|
       let is_upper = b >= (: u8 / 65) and b <= (: u8 / 90)
@@ -363,7 +363,7 @@ fun is_ascii_alphabetic(ref self: string): bool
         ret false
       end if
     end if
-    set i = icall add_wrapping_usize(i, one)
+    set i = icall add_wrapping_index(i, one)
   end loop
   ret true
 end fun
@@ -373,16 +373,16 @@ fun is_ascii_digit(ref self: string): bool
   if is_empty(self)
     ret false
   end if
-  var i: usize = (: usize / 0)
+  var i: index = (: index / 0)
   let byte_len = len(self)
-  let one = (: usize / 1)
+  let one = (: index / 1)
   loop while i .< byte_len
     if get_byte(self, i) |b|
       if b .< (: u8 / 48) or b .> (: u8 / 57)
         ret false
       end if
     end if
-    set i = icall add_wrapping_usize(i, one)
+    set i = icall add_wrapping_index(i, one)
   end loop
   ret true
 end fun
@@ -392,9 +392,9 @@ fun is_ascii_alphanumeric(ref self: string): bool
   if is_empty(self)
     ret false
   end if
-  var i: usize = (: usize / 0)
+  var i: index = (: index / 0)
   let byte_len = len(self)
-  let one = (: usize / 1)
+  let one = (: index / 1)
   loop while i .< byte_len
     if get_byte(self, i) |b|
       let is_upper = b >= (: u8 / 65) and b <= (: u8 / 90)
@@ -404,7 +404,7 @@ fun is_ascii_alphanumeric(ref self: string): bool
         ret false
       end if
     end if
-    set i = icall add_wrapping_usize(i, one)
+    set i = icall add_wrapping_index(i, one)
   end loop
   ret true
 end fun
@@ -414,9 +414,9 @@ fun is_ascii_whitespace(ref self: string): bool
   if is_empty(self)
     ret false
   end if
-  var i: usize = (: usize / 0)
+  var i: index = (: index / 0)
   let byte_len = len(self)
-  let one = (: usize / 1)
+  let one = (: index / 1)
   loop while i .< byte_len
     if get_byte(self, i) |b|
       // Space, tab, newline, carriage return, form feed, vertical tab.
@@ -430,7 +430,7 @@ fun is_ascii_whitespace(ref self: string): bool
         ret false
       end if
     end if
-    set i = icall add_wrapping_usize(i, one)
+    set i = icall add_wrapping_index(i, one)
   end loop
   ret true
 end fun

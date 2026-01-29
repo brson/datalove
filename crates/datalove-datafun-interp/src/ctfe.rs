@@ -127,7 +127,7 @@ fn align_of_ir_type(ir_type: &IrType) -> u32 {
         IrType::U16 | IrType::I16 => 2,
         IrType::U32 | IrType::I32 | IrType::F32 => 4,
         IrType::U64 | IrType::I64 | IrType::F64 => 8,
-        IrType::Usize | IrType::Isize => std::mem::size_of::<usize>() as u32,
+        IrType::Index | IrType::Offset => std::mem::size_of::<usize>() as u32,
         // Int, String, collections are pointer types - align to pointer size.
         IrType::Int | IrType::String | IrType::Data | IrType::Error => 8,
         IrType::List(_) | IrType::Set(_) | IrType::Map(_, _) => 8,
@@ -151,7 +151,7 @@ fn size_of_ir_type(ir_type: &IrType) -> u32 {
         IrType::U16 | IrType::I16 => 2,
         IrType::U32 | IrType::I32 | IrType::F32 => 4,
         IrType::U64 | IrType::I64 | IrType::F64 => 8,
-        IrType::Usize | IrType::Isize => std::mem::size_of::<usize>() as u32,
+        IrType::Index | IrType::Offset => std::mem::size_of::<usize>() as u32,
         // Pointer-based types.
         IrType::Int => std::mem::size_of::<datalove_rtdt::Int>() as u32,
         IrType::String => std::mem::size_of::<datalove_rtdt::String>() as u32,
@@ -267,13 +267,13 @@ fn extract_const_value(ptr: *const u8, ir_type: &IrType) -> Result<ConstValue, C
                 let val = *(ptr as *const i64);
                 Ok(ConstValue::I64(val))
             }
-            IrType::Usize => {
-                let val = *(ptr as *const datalove_rtdt::UsizeRepr);
-                Ok(ConstValue::Usize(val))
+            IrType::Index => {
+                let val = *(ptr as *const datalove_rtdt::IndexRepr);
+                Ok(ConstValue::Index(val))
             }
-            IrType::Isize => {
-                let val = *(ptr as *const datalove_rtdt::IsizeRepr);
-                Ok(ConstValue::Isize(val))
+            IrType::Offset => {
+                let val = *(ptr as *const datalove_rtdt::OffsetRepr);
+                Ok(ConstValue::Offset(val))
             }
             IrType::F32 => {
                 let val = *(ptr as *const f32);
@@ -557,8 +557,8 @@ fn ir_type_from_tydesc(tydesc: datalove_rtdt::TyDescRef) -> Result<IrType, CtfeE
         TyTag::I32 => Ok(IrType::I32),
         TyTag::U64 => Ok(IrType::U64),
         TyTag::I64 => Ok(IrType::I64),
-        TyTag::Usize => Ok(IrType::Usize),
-        TyTag::Isize => Ok(IrType::Isize),
+        TyTag::Index => Ok(IrType::Index),
+        TyTag::Offset => Ok(IrType::Offset),
         TyTag::F32 => Ok(IrType::F32),
         TyTag::F64 => Ok(IrType::F64),
         TyTag::Int => Ok(IrType::Int),

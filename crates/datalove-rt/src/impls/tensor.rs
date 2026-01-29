@@ -11,16 +11,16 @@ use datalove_rtdt::TyDescRef;
 /// Compute row-major strides from shape.
 ///
 /// Row-major: strides[i] = product(shape[i+1..])
-fn compute_row_major_strides(shape: &[u32]) -> Vec<rtdt::Usize> {
+fn compute_row_major_strides(shape: &[u32]) -> Vec<rtdt::Index> {
     let rank = shape.len();
-    let mut strides: Vec<rtdt::Usize> = vec![rtdt::Usize::ZERO; rank];
+    let mut strides: Vec<rtdt::Index> = vec![rtdt::Index::ZERO; rank];
 
     for i in 0..rank {
-        let mut stride: rtdt::UsizeRepr = 1;
+        let mut stride: rtdt::IndexRepr = 1;
         for j in (i + 1)..rank {
-            stride = stride.saturating_mul(shape[j] as rtdt::UsizeRepr);
+            stride = stride.saturating_mul(shape[j] as rtdt::IndexRepr);
         }
-        strides[i] = rtdt::Usize(stride);
+        strides[i] = rtdt::Index(stride);
     }
 
     strides
@@ -29,16 +29,16 @@ fn compute_row_major_strides(shape: &[u32]) -> Vec<rtdt::Usize> {
 /// Compute column-major strides from shape.
 ///
 /// Column-major: strides[i] = product(shape[..i])
-fn compute_col_major_strides(shape: &[u32]) -> Vec<rtdt::Usize> {
+fn compute_col_major_strides(shape: &[u32]) -> Vec<rtdt::Index> {
     let rank = shape.len();
-    let mut strides: Vec<rtdt::Usize> = vec![rtdt::Usize::ZERO; rank];
+    let mut strides: Vec<rtdt::Index> = vec![rtdt::Index::ZERO; rank];
 
     for i in 0..rank {
-        let mut stride: rtdt::UsizeRepr = 1;
+        let mut stride: rtdt::IndexRepr = 1;
         for j in 0..i {
-            stride = stride.saturating_mul(shape[j] as rtdt::UsizeRepr);
+            stride = stride.saturating_mul(shape[j] as rtdt::IndexRepr);
         }
-        strides[i] = rtdt::Usize(stride);
+        strides[i] = rtdt::Index(stride);
     }
 
     strides
@@ -51,13 +51,13 @@ fn compute_col_major_strides(shape: &[u32]) -> Vec<rtdt::Usize> {
 /// Check if strides match row-major contiguous pattern.
 ///
 /// Row-major: strides[i] == product(shape[i+1..])
-fn is_row_major_contiguous(shape: &[rtdt::Usize], strides: &[rtdt::Usize]) -> bool {
+fn is_row_major_contiguous(shape: &[rtdt::Index], strides: &[rtdt::Index]) -> bool {
     if shape.len() != strides.len() {
         return false;
     }
 
     for i in 0..shape.len() {
-        let mut expected: rtdt::UsizeRepr = 1;
+        let mut expected: rtdt::IndexRepr = 1;
         for j in (i + 1)..shape.len() {
             expected = expected.saturating_mul(shape[j].0);
         }
@@ -72,13 +72,13 @@ fn is_row_major_contiguous(shape: &[rtdt::Usize], strides: &[rtdt::Usize]) -> bo
 /// Check if strides match column-major contiguous pattern.
 ///
 /// Column-major: strides[i] == product(shape[..i])
-fn is_col_major_contiguous(shape: &[rtdt::Usize], strides: &[rtdt::Usize]) -> bool {
+fn is_col_major_contiguous(shape: &[rtdt::Index], strides: &[rtdt::Index]) -> bool {
     if shape.len() != strides.len() {
         return false;
     }
 
     for i in 0..shape.len() {
-        let mut expected: rtdt::UsizeRepr = 1;
+        let mut expected: rtdt::IndexRepr = 1;
         for j in 0..i {
             expected = expected.saturating_mul(shape[j].0);
         }
@@ -91,7 +91,7 @@ fn is_col_major_contiguous(shape: &[rtdt::Usize], strides: &[rtdt::Usize]) -> bo
 }
 
 /// Check if tensor is contiguous (either row-major or column-major).
-fn is_contiguous(shape: &[rtdt::Usize], strides: &[rtdt::Usize]) -> bool {
+fn is_contiguous(shape: &[rtdt::Index], strides: &[rtdt::Index]) -> bool {
     is_row_major_contiguous(shape, strides) || is_col_major_contiguous(shape, strides)
 }
 
@@ -106,7 +106,7 @@ fn is_contiguous(shape: &[rtdt::Usize], strides: &[rtdt::Usize]) -> bool {
 pub unsafe fn tensor_create_from_slice_impl(
     rt_ref: &mut RtLocal,
     slice_ptr_ref: *const u8,
-    slice_len: rtdt::Usize,
+    slice_len: rtdt::Index,
     element_tydesc_ref: TyDescRef,
     // u32 x rank
     shape_in: *mut u8,
@@ -125,7 +125,7 @@ pub unsafe fn tensor_create_from_slice_impl(
         let shape_data = (*shape_list_ptr).data as *const u32;
         let rank = (*shape_list_ptr).size;
 
-        if rank == rtdt::Usize::ZERO || shape_data.is_null() {
+        if rank == rtdt::Index::ZERO || shape_data.is_null() {
             // Destroy the shape list before returning.
             let _ = crate::impls::list::list_destroy_impl(rt_ref, shape_in, shape_tydesc_ref);
             return RtStatus::Error;
@@ -135,9 +135,9 @@ pub unsafe fn tensor_create_from_slice_impl(
         let shape_slice = std::slice::from_raw_parts(shape_data, rank.as_usize());
 
         // Compute total elements from shape.
-        let mut total_elems: rtdt::UsizeRepr = 1;
+        let mut total_elems: rtdt::IndexRepr = 1;
         for &dim in shape_slice {
-            total_elems = total_elems.saturating_mul(dim as rtdt::UsizeRepr);
+            total_elems = total_elems.saturating_mul(dim as rtdt::IndexRepr);
         }
 
         // Validate slice length matches total elements.
@@ -161,7 +161,7 @@ pub unsafe fn tensor_create_from_slice_impl(
             rtdt::INDEX_SIZE,
             rtdt::INDEX_ALIGN,
             rank.0,
-        ) as *mut rtdt::Usize;
+        ) as *mut rtdt::Index;
         if shape_array_ptr.is_null() {
             rt_ref.alloc.free(element_size, element_align, total_elems, data_ptr);
             let _ = crate::impls::list::list_destroy_impl(rt_ref, shape_in, shape_tydesc_ref);
@@ -173,7 +173,7 @@ pub unsafe fn tensor_create_from_slice_impl(
             rtdt::INDEX_SIZE,
             rtdt::INDEX_ALIGN,
             rank.0,
-        ) as *mut rtdt::Usize;
+        ) as *mut rtdt::Index;
         if strides_array_ptr.is_null() {
             rt_ref.alloc.free(element_size, element_align, total_elems, data_ptr);
             rt_ref.alloc.free(
@@ -229,7 +229,7 @@ pub unsafe fn tensor_create_from_slice_impl(
 
         // Copy shape values (convert u32 to Usize).
         for i in 0..rank.as_usize() {
-            *shape_array_ptr.add(i) = rtdt::Usize(*shape_data.add(i) as rtdt::UsizeRepr);
+            *shape_array_ptr.add(i) = rtdt::Index(*shape_data.add(i) as rtdt::IndexRepr);
         }
 
         // Compute and write strides based on layout.
@@ -247,8 +247,8 @@ pub unsafe fn tensor_create_from_slice_impl(
         // Initialize Tensor struct.
         let tensor_ptr = tensor_value_out as *mut rtdt::Tensor;
         (*tensor_ptr).ptr_base = data_ptr;
-        (*tensor_ptr).offset_elems = rtdt::Usize::ZERO;
-        (*tensor_ptr).capacity_elems = rtdt::Usize(total_elems);
+        (*tensor_ptr).offset_elems = rtdt::Index::ZERO;
+        (*tensor_ptr).capacity_elems = rtdt::Index(total_elems);
         (*tensor_ptr).shape = shape_array_ptr;
         (*tensor_ptr).strides = strides_array_ptr;
         (*tensor_ptr).layout = layout_enum;
@@ -267,7 +267,7 @@ pub unsafe fn tensor_create_from_slice_impl(
 pub unsafe fn tensor_init_impl(
     rt_ref: &mut RtLocal,
     element_data_in: *mut u8,
-    element_count: rtdt::Usize,
+    element_count: rtdt::Index,
     element_tydesc_ref: TyDescRef,
     shape_ptr: *const u32,
     rank: u32,
@@ -280,11 +280,11 @@ pub unsafe fn tensor_init_impl(
         }
 
         // Handle empty tensor case.
-        if rank == 0 || element_count == rtdt::Usize::ZERO {
+        if rank == 0 || element_count == rtdt::Index::ZERO {
             let tensor_ptr = tensor_value_out as *mut rtdt::Tensor;
             (*tensor_ptr).ptr_base = std::ptr::null_mut();
-            (*tensor_ptr).offset_elems = rtdt::Usize::ZERO;
-            (*tensor_ptr).capacity_elems = rtdt::Usize::ZERO;
+            (*tensor_ptr).offset_elems = rtdt::Index::ZERO;
+            (*tensor_ptr).capacity_elems = rtdt::Index::ZERO;
             (*tensor_ptr).shape = std::ptr::null();
             (*tensor_ptr).strides = std::ptr::null();
             (*tensor_ptr).layout = rtdt::TensorLayout::RowMajor;
@@ -303,9 +303,9 @@ pub unsafe fn tensor_init_impl(
 
         // Compute total elements from shape.
         let shape_slice = std::slice::from_raw_parts(shape_ptr, rank as usize);
-        let mut total_elems: rtdt::UsizeRepr = 1;
+        let mut total_elems: rtdt::IndexRepr = 1;
         for &dim in shape_slice {
-            total_elems = total_elems.saturating_mul(dim as rtdt::UsizeRepr);
+            total_elems = total_elems.saturating_mul(dim as rtdt::IndexRepr);
         }
 
         // Validate element count matches shape.
@@ -332,14 +332,14 @@ pub unsafe fn tensor_init_impl(
             rtdt::INDEX_SIZE,
             rtdt::INDEX_ALIGN,
             rank.into(),
-        ) as *mut rtdt::Usize;
+        ) as *mut rtdt::Index;
         if shape_array_ptr.is_null() {
             rt_ref.alloc.free(element_size, element_align, total_elems, data_ptr);
             return RtStatus::Error;
         }
         // Convert u32 shape values to Usize.
         for i in 0..rank as usize {
-            *shape_array_ptr.add(i) = rtdt::Usize(*shape_ptr.add(i) as rtdt::UsizeRepr);
+            *shape_array_ptr.add(i) = rtdt::Index(*shape_ptr.add(i) as rtdt::IndexRepr);
         }
 
         // Allocate strides array (Usize per dimension).
@@ -347,7 +347,7 @@ pub unsafe fn tensor_init_impl(
             rtdt::INDEX_SIZE,
             rtdt::INDEX_ALIGN,
             rank.into(),
-        ) as *mut rtdt::Usize;
+        ) as *mut rtdt::Index;
         if strides_array_ptr.is_null() {
             rt_ref.alloc.free(element_size, element_align, total_elems, data_ptr);
             rt_ref.alloc.free(
@@ -366,8 +366,8 @@ pub unsafe fn tensor_init_impl(
         // Initialize Tensor struct.
         let tensor_ptr = tensor_value_out as *mut rtdt::Tensor;
         (*tensor_ptr).ptr_base = data_ptr;
-        (*tensor_ptr).offset_elems = rtdt::Usize::ZERO;
-        (*tensor_ptr).capacity_elems = rtdt::Usize(total_elems);
+        (*tensor_ptr).offset_elems = rtdt::Index::ZERO;
+        (*tensor_ptr).capacity_elems = rtdt::Index(total_elems);
         (*tensor_ptr).shape = shape_array_ptr;
         (*tensor_ptr).strides = strides_array_ptr;
         (*tensor_ptr).layout = rtdt::TensorLayout::RowMajor;
@@ -414,7 +414,7 @@ pub unsafe fn tensor_get_impl(
 
         let mut linear_offset = offset_elems.0;
         for i in 0..rank as usize {
-            let index = indices_slice[i] as rtdt::UsizeRepr;
+            let index = indices_slice[i] as rtdt::IndexRepr;
             let dim = shape_slice[i].0;
 
             if index >= dim {
@@ -480,7 +480,7 @@ pub unsafe fn tensor_set_impl(
 
         let mut linear_offset = offset_elems.0;
         for i in 0..rank as usize {
-            let index = indices_slice[i] as rtdt::UsizeRepr;
+            let index = indices_slice[i] as rtdt::IndexRepr;
             let dim = shape_slice[i].0;
 
             if index >= dim {
@@ -575,7 +575,7 @@ pub unsafe fn tensor_transpose_impl(
             rtdt::INDEX_SIZE,
             rtdt::INDEX_ALIGN,
             rank.into(),
-        ) as *mut rtdt::Usize;
+        ) as *mut rtdt::Index;
         if shape_out_ptr.is_null() {
             return RtStatus::Error;
         }
@@ -585,7 +585,7 @@ pub unsafe fn tensor_transpose_impl(
             rtdt::INDEX_SIZE,
             rtdt::INDEX_ALIGN,
             rank.into(),
-        ) as *mut rtdt::Usize;
+        ) as *mut rtdt::Index;
         if strides_out_ptr.is_null() {
             rt_ref.alloc.free(
                 rtdt::INDEX_SIZE,
@@ -641,8 +641,8 @@ pub unsafe fn tensor_transpose_impl(
 
         // Clear input tensor (linear type system: ownership transferred).
         (*tensor_in_ptr).ptr_base = std::ptr::null_mut();
-        (*tensor_in_ptr).offset_elems = rtdt::Usize::ZERO;
-        (*tensor_in_ptr).capacity_elems = rtdt::Usize::ZERO;
+        (*tensor_in_ptr).offset_elems = rtdt::Index::ZERO;
+        (*tensor_in_ptr).capacity_elems = rtdt::Index::ZERO;
         (*tensor_in_ptr).shape = std::ptr::null();
         (*tensor_in_ptr).strides = std::ptr::null();
 
@@ -669,11 +669,11 @@ pub unsafe fn tensor_destroy_impl(
         let tensor_ptr = tensor_value_in as *mut rtdt::Tensor;
         let ptr_base = (*tensor_ptr).ptr_base;
         let capacity_elems = (*tensor_ptr).capacity_elems;
-        let shape_ptr = (*tensor_ptr).shape as *mut rtdt::Usize;
-        let strides_ptr = (*tensor_ptr).strides as *mut rtdt::Usize;
+        let shape_ptr = (*tensor_ptr).shape as *mut rtdt::Index;
+        let strides_ptr = (*tensor_ptr).strides as *mut rtdt::Index;
 
         // Compute total elements from shape.
-        let mut total_elems: rtdt::UsizeRepr = 1;
+        let mut total_elems: rtdt::IndexRepr = 1;
         if !shape_ptr.is_null() && rank > 0 {
             for i in 0..rank {
                 let dim = (*shape_ptr.add(i as usize)).0;
@@ -700,7 +700,7 @@ pub unsafe fn tensor_destroy_impl(
         }
 
         // Free the data buffer.
-        if !ptr_base.is_null() && capacity_elems > rtdt::Usize::ZERO {
+        if !ptr_base.is_null() && capacity_elems > rtdt::Index::ZERO {
             rt_ref.alloc.free(
                 element_ty.size(),
                 element_ty.align(),
@@ -731,8 +731,8 @@ pub unsafe fn tensor_destroy_impl(
 
         // Reset the tensor.
         (*tensor_ptr).ptr_base = std::ptr::null_mut();
-        (*tensor_ptr).offset_elems = rtdt::Usize::ZERO;
-        (*tensor_ptr).capacity_elems = rtdt::Usize::ZERO;
+        (*tensor_ptr).offset_elems = rtdt::Index::ZERO;
+        (*tensor_ptr).capacity_elems = rtdt::Index::ZERO;
         (*tensor_ptr).shape = std::ptr::null();
         (*tensor_ptr).strides = std::ptr::null();
 
@@ -810,7 +810,7 @@ pub unsafe fn tensor_slice_impl(
             rtdt::INDEX_SIZE,
             rtdt::INDEX_ALIGN,
             rank.into(),
-        ) as *mut rtdt::Usize;
+        ) as *mut rtdt::Index;
 
         if new_shape_ptr.is_null() {
             return error_path(
@@ -827,7 +827,7 @@ pub unsafe fn tensor_slice_impl(
             rtdt::INDEX_SIZE,
             rtdt::INDEX_ALIGN,
             rank.into(),
-        ) as *mut rtdt::Usize;
+        ) as *mut rtdt::Index;
 
         if new_strides_ptr.is_null() {
             // Clean up shape allocation.
@@ -855,7 +855,7 @@ pub unsafe fn tensor_slice_impl(
             );
 
             // New shape: new_shape[i] = ranges[i].end - ranges[i].start
-            *new_shape_ptr.add(i) = rtdt::Usize(ranges[i].end - ranges[i].start);
+            *new_shape_ptr.add(i) = rtdt::Index(ranges[i].end - ranges[i].start);
 
             // Copy stride unchanged.
             *new_strides_ptr.add(i) = strides[i];
@@ -882,7 +882,7 @@ pub unsafe fn tensor_slice_impl(
         let out_tensor = rtdt::Tensor {
             ptr_base,
             capacity_elems,
-            offset_elems: rtdt::Usize(new_offset),
+            offset_elems: rtdt::Index(new_offset),
             shape: new_shape_ptr,
             strides: new_strides_ptr,
             layout,
@@ -968,7 +968,7 @@ pub unsafe fn tensor_reshape_impl(
         let new_rank = (*new_shape_list_ptr).size;
 
         // Validate new rank.
-        if new_rank == rtdt::Usize::ZERO || new_shape_data.is_null() {
+        if new_rank == rtdt::Index::ZERO || new_shape_data.is_null() {
             let _ = crate::impls::list::list_destroy_impl(rt_ref, new_shape_in, new_shape_tydesc_ref);
             return error_path(rt_ref, tensor_value_in, tensor_tydesc_ref, result_value_out, result_tydesc_ref);
         }
@@ -994,7 +994,7 @@ pub unsafe fn tensor_reshape_impl(
         let new_shape = std::slice::from_raw_parts(new_shape_data, new_rank.as_usize());
 
         // Validate offset_elems == 0 (can only reshape full tensor, not view).
-        if offset_elems != rtdt::Usize::ZERO {
+        if offset_elems != rtdt::Index::ZERO {
             let _ = crate::impls::list::list_destroy_impl(rt_ref, new_shape_in, new_shape_tydesc_ref);
             return error_path(rt_ref, tensor_value_in, tensor_tydesc_ref, result_value_out, result_tydesc_ref);
         }
@@ -1006,15 +1006,15 @@ pub unsafe fn tensor_reshape_impl(
         }
 
         // Compute current total elements.
-        let mut current_total: rtdt::UsizeRepr = 1;
+        let mut current_total: rtdt::IndexRepr = 1;
         for &dim in shape {
             current_total = current_total.saturating_mul(dim.0);
         }
 
         // Compute new total elements (from u32 new_shape).
-        let mut new_total: rtdt::UsizeRepr = 1;
+        let mut new_total: rtdt::IndexRepr = 1;
         for &dim in new_shape {
-            new_total = new_total.saturating_mul(dim as rtdt::UsizeRepr);
+            new_total = new_total.saturating_mul(dim as rtdt::IndexRepr);
         }
 
         // Validate total elements match.
@@ -1041,7 +1041,7 @@ pub unsafe fn tensor_reshape_impl(
         }
 
         // Copy new strides into allocated array.
-        let new_strides_ptr_typed = new_strides_ptr as *mut rtdt::Usize;
+        let new_strides_ptr_typed = new_strides_ptr as *mut rtdt::Index;
         for (i, &stride) in new_strides_vec.iter().enumerate() {
             std::ptr::write(new_strides_ptr_typed.add(i), stride);
         }
@@ -1056,9 +1056,9 @@ pub unsafe fn tensor_reshape_impl(
         }
 
         // Copy shape data from List (u32) to new array (Usize).
-        let new_shape_ptr_typed = new_shape_alloc_ptr as *mut rtdt::Usize;
+        let new_shape_ptr_typed = new_shape_alloc_ptr as *mut rtdt::Index;
         for i in 0..new_rank.as_usize() {
-            std::ptr::write(new_shape_ptr_typed.add(i), rtdt::Usize(new_shape[i] as rtdt::UsizeRepr));
+            std::ptr::write(new_shape_ptr_typed.add(i), rtdt::Index(new_shape[i] as rtdt::IndexRepr));
         }
 
         // Free old strides array.
@@ -1077,7 +1077,7 @@ pub unsafe fn tensor_reshape_impl(
         let out_tensor = rtdt::Tensor {
             ptr_base,
             capacity_elems,
-            offset_elems: rtdt::Usize::ZERO,
+            offset_elems: rtdt::Index::ZERO,
             shape: new_shape_ptr_typed,
             strides: new_strides_ptr_typed,
             layout,

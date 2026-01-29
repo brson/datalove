@@ -22,9 +22,9 @@ pub fn collect_column_tydescs<'a>(tydesc: rtdt::TyDescRef<'a>) -> Vec<&'a rtdt::
 pub unsafe fn element_ptr(
     data: *const u8,
     column_tydescs: &[&rtdt::TyDesc],
-    row: rtdt::UsizeRepr,
+    row: rtdt::IndexRepr,
     col: usize,
-    capacity: rtdt::UsizeRepr,
+    capacity: rtdt::IndexRepr,
 ) -> *const u8 {
     let col_offset = rtdt::layout::table_column_offset(column_tydescs, col, capacity);
     let elem_size = column_tydescs[col].size;
@@ -36,9 +36,9 @@ pub unsafe fn element_ptr(
 pub unsafe fn element_ptr_mut(
     data: *mut u8,
     column_tydescs: &[&rtdt::TyDesc],
-    row: rtdt::UsizeRepr,
+    row: rtdt::IndexRepr,
     col: usize,
-    capacity: rtdt::UsizeRepr,
+    capacity: rtdt::IndexRepr,
 ) -> *mut u8 {
     unsafe { element_ptr(data, column_tydescs, row, col, capacity) as *mut u8 }
 }
@@ -51,8 +51,8 @@ pub unsafe fn table_create_impl(
 ) -> RtStatus {
     unsafe {
         let table = &mut *(value_out as *mut rtdt::Table);
-        table.len = rtdt::Usize::ZERO;
-        table.capacity = rtdt::Usize::ZERO;
+        table.len = rtdt::Index::ZERO;
+        table.capacity = rtdt::Index::ZERO;
         table.data = std::ptr::null();
     }
     RtStatus::Ok
@@ -70,8 +70,8 @@ pub unsafe fn table_destroy_impl(
 
         // Early return only if no buffer allocated.
         if table.data.is_null() {
-            (*table_ptr).len = rtdt::Usize::ZERO;
-            (*table_ptr).capacity = rtdt::Usize::ZERO;
+            (*table_ptr).len = rtdt::Index::ZERO;
+            (*table_ptr).capacity = rtdt::Index::ZERO;
             return RtStatus::Ok;
         }
 
@@ -98,7 +98,7 @@ pub unsafe fn table_destroy_impl(
         // Free the data buffer.
         // Re-obtain rt_ref after recursive calls to satisfy Stacked Borrows.
         let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
-        if table.capacity > rtdt::Usize::ZERO {
+        if table.capacity > rtdt::Index::ZERO {
             let alloc_size = rtdt::layout::table_data_allocation_size(&column_tydescs, table.capacity.0);
             let alloc_align = rtdt::layout::table_data_alignment(&column_tydescs);
             if alloc_size > 0 {
@@ -108,8 +108,8 @@ pub unsafe fn table_destroy_impl(
 
         // Clear the table fields.
         (*table_ptr).data = std::ptr::null();
-        (*table_ptr).len = rtdt::Usize::ZERO;
-        (*table_ptr).capacity = rtdt::Usize::ZERO;
+        (*table_ptr).len = rtdt::Index::ZERO;
+        (*table_ptr).capacity = rtdt::Index::ZERO;
 
         RtStatus::Ok
     }
@@ -137,7 +137,7 @@ pub unsafe fn table_push_row_impl(
 
         // Check if we need to grow.
         if table.len >= table.capacity {
-            let new_capacity = if table.capacity == rtdt::Usize::ZERO { 4 } else { table.capacity.0 * 2 };
+            let new_capacity = if table.capacity == rtdt::Index::ZERO { 4 } else { table.capacity.0 * 2 };
             let status = table_grow(rt, table, &column_tydescs, new_capacity);
             if status != RtStatus::Ok {
                 return status;
@@ -179,7 +179,7 @@ pub unsafe fn table_push_row_impl(
             }
         }
 
-        table.len += rtdt::Usize::ONE;
+        table.len += rtdt::Index::ONE;
         RtStatus::Ok
     }
 }
@@ -189,12 +189,12 @@ unsafe fn table_grow(
     rt: LocalRtHandle,
     table: &mut rtdt::Table,
     column_tydescs: &[&rtdt::TyDesc],
-    new_capacity: rtdt::UsizeRepr,
+    new_capacity: rtdt::IndexRepr,
 ) -> RtStatus {
     unsafe {
         if column_tydescs.is_empty() {
             // Zero-column table needs no allocation.
-            table.capacity = rtdt::Usize(new_capacity);
+            table.capacity = rtdt::Index(new_capacity);
             return RtStatus::Ok;
         }
 
@@ -204,7 +204,7 @@ unsafe fn table_grow(
         let alloc_align = rtdt::layout::table_data_alignment(column_tydescs);
 
         if new_alloc_size == 0 {
-            table.capacity = rtdt::Usize(new_capacity);
+            table.capacity = rtdt::Index(new_capacity);
             return RtStatus::Ok;
         }
 
@@ -214,7 +214,7 @@ unsafe fn table_grow(
         }
 
         // Copy existing data column by column if there was old data.
-        if !table.data.is_null() && table.len > rtdt::Usize::ZERO {
+        if !table.data.is_null() && table.len > rtdt::Index::ZERO {
             for col in 0..column_tydescs.len() {
                 let col_tydesc = column_tydescs[col];
                 let elem_size = col_tydesc.size as usize;
@@ -234,7 +234,7 @@ unsafe fn table_grow(
         }
 
         table.data = new_data;
-        table.capacity = rtdt::Usize(new_capacity);
+        table.capacity = rtdt::Index(new_capacity);
         RtStatus::Ok
     }
 }
@@ -245,7 +245,7 @@ unsafe fn table_grow(
 pub unsafe fn table_get_element_ptr(
     table_ref: *const u8,
     tydesc: rtdt::TyDescRef,
-    row: rtdt::UsizeRepr,
+    row: rtdt::IndexRepr,
     col: u32,
 ) -> *const u8 {
     unsafe {
@@ -271,7 +271,7 @@ pub unsafe fn table_set_element(
     rt: LocalRtHandle,
     table_mut: *mut u8,
     tydesc: rtdt::TyDescRef,
-    row: rtdt::UsizeRepr,
+    row: rtdt::IndexRepr,
     col: u32,
     value_ref: *const u8,
     value_tydesc: *const rtdt::TyDesc,
@@ -318,8 +318,8 @@ pub unsafe fn table_clear_impl(
         let table = &*(table_mut as *const rtdt::Table);
         let table_ptr = table_mut as *mut rtdt::Table;
 
-        if table.data.is_null() || table.len == rtdt::Usize::ZERO {
-            (*table_ptr).len = rtdt::Usize::ZERO;
+        if table.data.is_null() || table.len == rtdt::Index::ZERO {
+            (*table_ptr).len = rtdt::Index::ZERO;
             return RtStatus::Ok;
         }
 
@@ -343,13 +343,13 @@ pub unsafe fn table_clear_impl(
             }
         }
 
-        (*table_ptr).len = rtdt::Usize::ZERO;
+        (*table_ptr).len = rtdt::Index::ZERO;
         RtStatus::Ok
     }
 }
 
 /// Get the length (number of rows) of a table.
-pub unsafe fn table_len(table_ref: *const u8) -> rtdt::Usize {
+pub unsafe fn table_len(table_ref: *const u8) -> rtdt::Index {
     unsafe {
         let table = &*(table_ref as *const rtdt::Table);
         table.len
@@ -367,7 +367,7 @@ pub unsafe fn table_build_from_rows_impl(
     table_tydesc: rtdt::TyDescRef,
     rows_ptr: *mut u8,
     row_tydesc: rtdt::TyDescRef,
-    num_rows: rtdt::UsizeRepr,
+    num_rows: rtdt::IndexRepr,
 ) -> RtStatus {
     unsafe {
         let table = &mut *(table_out as *mut rtdt::Table);
@@ -381,8 +381,8 @@ pub unsafe fn table_build_from_rows_impl(
 
         if num_rows == 0 || num_columns == 0 {
             // Initialize empty table.
-            table.len = rtdt::Usize::ZERO;
-            table.capacity = rtdt::Usize::ZERO;
+            table.len = rtdt::Index::ZERO;
+            table.capacity = rtdt::Index::ZERO;
             table.data = std::ptr::null();
             return RtStatus::Ok;
         }
@@ -403,7 +403,7 @@ pub unsafe fn table_build_from_rows_impl(
         };
 
         table.data = data;
-        table.capacity = rtdt::Usize::new(num_rows);
+        table.capacity = rtdt::Index::new(num_rows);
 
         // Move each row's fields into the columnar storage.
         let row_size = row_tydesc.size() as usize;
@@ -420,7 +420,7 @@ pub unsafe fn table_build_from_rows_impl(
             }
         }
 
-        table.len = rtdt::Usize::new(num_rows);
+        table.len = rtdt::Index::new(num_rows);
         RtStatus::Ok
     }
 }
@@ -482,8 +482,8 @@ mod tests {
             assert_eq!(status, RtStatus::Ok);
 
             let table = table.assume_init();
-            assert_eq!(table.len, rtdt::Usize::ZERO);
-            assert_eq!(table.capacity, rtdt::Usize::ZERO);
+            assert_eq!(table.len, rtdt::Index::ZERO);
+            assert_eq!(table.capacity, rtdt::Index::ZERO);
             assert!(table.data.is_null());
         }
     }
@@ -509,7 +509,7 @@ mod tests {
         // Column 0: u32 at offset 0, 4 elements = 16 bytes.
         // Column 1: u64 needs 8-byte alignment, aligns 16 -> 16, starts at 16.
         let base = 0x1000 as *const u8;
-        let capacity: rtdt::UsizeRepr = 4;
+        let capacity: rtdt::IndexRepr = 4;
 
         unsafe {
             // First row, first column.

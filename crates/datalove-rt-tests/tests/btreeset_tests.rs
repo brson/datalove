@@ -148,7 +148,7 @@ fn test_btreeset_create_empty() -> AnyResult<()> {
 
     let mut set = rtdt::Set {
         root: ptr::null(),
-        len: rtdt::Usize::ZERO,
+        len: rtdt::Index::ZERO,
     };
     let set_ptr = &mut set as *mut rtdt::Set as *mut u8;
 
@@ -162,7 +162,7 @@ fn test_btreeset_create_empty() -> AnyResult<()> {
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     assert!(set.root.is_null());
-    assert_eq!(set.len, rtdt::Usize::ZERO);
+    assert_eq!(set.len, rtdt::Index::ZERO);
 
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreeset_destroy_local(
@@ -190,7 +190,7 @@ fn test_btreeset_destroy_empty() -> AnyResult<()> {
 
     let mut set = rtdt::Set {
         root: ptr::null(),
-        len: rtdt::Usize::ZERO,
+        len: rtdt::Index::ZERO,
     };
     let set_ptr = &mut set as *mut rtdt::Set as *mut u8;
 
@@ -213,7 +213,7 @@ fn test_btreeset_destroy_empty() -> AnyResult<()> {
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     assert!(set.root.is_null());
-    assert_eq!(set.len, rtdt::Usize::ZERO);
+    assert_eq!(set.len, rtdt::Index::ZERO);
 
     let status = unsafe { datalove_rt::c::dtlv_rti_shutdown(rt) };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -232,7 +232,7 @@ fn test_btreeset_clear_empty() -> AnyResult<()> {
 
     let mut set = rtdt::Set {
         root: ptr::null(),
-        len: rtdt::Usize::ZERO,
+        len: rtdt::Index::ZERO,
     };
     let set_ptr = &mut set as *mut rtdt::Set as *mut u8;
 
@@ -255,7 +255,7 @@ fn test_btreeset_clear_empty() -> AnyResult<()> {
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     assert!(set.root.is_null());
-    assert_eq!(set.len, rtdt::Usize::ZERO);
+    assert_eq!(set.len, rtdt::Index::ZERO);
 
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreeset_destroy_local(
@@ -283,7 +283,7 @@ fn test_btreeset_insert_single() -> AnyResult<()> {
 
     let mut set = rtdt::Set {
         root: ptr::null(),
-        len: rtdt::Usize::ZERO,
+        len: rtdt::Index::ZERO,
     };
     let set_ptr = &mut set as *mut rtdt::Set as *mut u8;
 
@@ -311,7 +311,7 @@ fn test_btreeset_insert_single() -> AnyResult<()> {
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
     assert_eq!(was_inserted, 1);
-    assert_eq!(set.len, rtdt::Usize(1));
+    assert_eq!(set.len, rtdt::Index(1));
 
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreeset_destroy_local(
@@ -339,7 +339,7 @@ fn test_btreeset_insert_multiple() -> AnyResult<()> {
 
     let mut set = rtdt::Set {
         root: ptr::null(),
-        len: rtdt::Usize::ZERO,
+        len: rtdt::Index::ZERO,
     };
     let set_ptr = &mut set as *mut rtdt::Set as *mut u8;
 
@@ -370,7 +370,7 @@ fn test_btreeset_insert_multiple() -> AnyResult<()> {
         assert_eq!(was_inserted, 1);
     }
 
-    assert_eq!(set.len, rtdt::Usize(10));
+    assert_eq!(set.len, rtdt::Index(10));
 
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreeset_destroy_local(
@@ -398,7 +398,7 @@ fn test_btreeset_insert_duplicate() -> AnyResult<()> {
 
     let mut set = rtdt::Set {
         root: ptr::null(),
-        len: rtdt::Usize::ZERO,
+        len: rtdt::Index::ZERO,
     };
     let set_ptr = &mut set as *mut rtdt::Set as *mut u8;
 
@@ -426,7 +426,7 @@ fn test_btreeset_insert_duplicate() -> AnyResult<()> {
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
     assert_eq!(was_inserted, 1);
-    assert_eq!(set.len, rtdt::Usize(1));
+    assert_eq!(set.len, rtdt::Index(1));
 
     // Insert duplicate.
     let mut element2 = 42u32;
@@ -444,7 +444,7 @@ fn test_btreeset_insert_duplicate() -> AnyResult<()> {
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
     assert_eq!(was_inserted2, 0);
-    assert_eq!(set.len, rtdt::Usize(1));
+    assert_eq!(set.len, rtdt::Index(1));
 
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreeset_destroy_local(
@@ -472,7 +472,7 @@ fn test_btreeset_contains_existing() -> AnyResult<()> {
 
     let mut set = rtdt::Set {
         root: ptr::null(),
-        len: rtdt::Usize::ZERO,
+        len: rtdt::Index::ZERO,
     };
     let set_ptr = &mut set as *mut rtdt::Set as *mut u8;
 
@@ -543,7 +543,7 @@ fn test_btreeset_contains_nonexistent() -> AnyResult<()> {
 
     let mut set = rtdt::Set {
         root: ptr::null(),
-        len: rtdt::Usize::ZERO,
+        len: rtdt::Index::ZERO,
     };
     let set_ptr = &mut set as *mut rtdt::Set as *mut u8;
 
@@ -613,7 +613,7 @@ fn test_btreeset_remove_existing() -> AnyResult<()> {
 
     let mut set = rtdt::Set {
         root: ptr::null(),
-        len: rtdt::Usize::ZERO,
+        len: rtdt::Index::ZERO,
     };
     let set_ptr = &mut set as *mut rtdt::Set as *mut u8;
 
@@ -640,7 +640,7 @@ fn test_btreeset_remove_existing() -> AnyResult<()> {
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
-    assert_eq!(set.len, rtdt::Usize(1));
+    assert_eq!(set.len, rtdt::Index(1));
 
     let remove_element = 42u32;
     let mut was_removed = 0u8;
@@ -657,7 +657,7 @@ fn test_btreeset_remove_existing() -> AnyResult<()> {
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
     assert_eq!(was_removed, 1);
-    assert_eq!(set.len, rtdt::Usize::ZERO);
+    assert_eq!(set.len, rtdt::Index::ZERO);
 
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreeset_destroy_local(
@@ -685,7 +685,7 @@ fn test_btreeset_remove_nonexistent() -> AnyResult<()> {
 
     let mut set = rtdt::Set {
         root: ptr::null(),
-        len: rtdt::Usize::ZERO,
+        len: rtdt::Index::ZERO,
     };
     let set_ptr = &mut set as *mut rtdt::Set as *mut u8;
 
@@ -728,7 +728,7 @@ fn test_btreeset_remove_nonexistent() -> AnyResult<()> {
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
     assert_eq!(was_removed, 0);
-    assert_eq!(set.len, rtdt::Usize(1));
+    assert_eq!(set.len, rtdt::Index(1));
 
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreeset_destroy_local(
@@ -756,7 +756,7 @@ fn test_btreeset_clear_nonempty() -> AnyResult<()> {
 
     let mut set = rtdt::Set {
         root: ptr::null(),
-        len: rtdt::Usize::ZERO,
+        len: rtdt::Index::ZERO,
     };
     let set_ptr = &mut set as *mut rtdt::Set as *mut u8;
 
@@ -786,7 +786,7 @@ fn test_btreeset_clear_nonempty() -> AnyResult<()> {
         assert_eq!(status, datalove_rt::c::RtStatus::Ok);
     }
 
-    assert_eq!(set.len, rtdt::Usize(10));
+    assert_eq!(set.len, rtdt::Index(10));
 
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreeset_clear_local(
@@ -798,7 +798,7 @@ fn test_btreeset_clear_nonempty() -> AnyResult<()> {
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     assert!(set.root.is_null());
-    assert_eq!(set.len, rtdt::Usize::ZERO);
+    assert_eq!(set.len, rtdt::Index::ZERO);
 
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreeset_destroy_local(
@@ -826,7 +826,7 @@ fn test_btreeset_clone_from_slice_single() -> AnyResult<()> {
 
     let mut set = rtdt::Set {
         root: ptr::null(),
-        len: rtdt::Usize::ZERO,
+        len: rtdt::Index::ZERO,
     };
     let set_ptr = &mut set as *mut rtdt::Set as *mut u8;
 
@@ -843,7 +843,7 @@ fn test_btreeset_clone_from_slice_single() -> AnyResult<()> {
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
-    assert_eq!(set.len, rtdt::Usize(1));
+    assert_eq!(set.len, rtdt::Index(1));
 
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreeset_destroy_local(
@@ -873,7 +873,7 @@ fn test_btreeset_insert_1000_elements() -> AnyResult<()> {
 
     let mut set = rtdt::Set {
         root: ptr::null(),
-        len: rtdt::Usize::ZERO,
+        len: rtdt::Index::ZERO,
     };
     let set_ptr = &mut set as *mut rtdt::Set as *mut u8;
 
@@ -904,7 +904,7 @@ fn test_btreeset_insert_1000_elements() -> AnyResult<()> {
         assert_eq!(was_inserted, 1);
     }
 
-    assert_eq!(set.len, rtdt::Usize(1000));
+    assert_eq!(set.len, rtdt::Index(1000));
 
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreeset_destroy_local(
@@ -932,7 +932,7 @@ fn test_btreeset_insert_1000_reverse() -> AnyResult<()> {
 
     let mut set = rtdt::Set {
         root: ptr::null(),
-        len: rtdt::Usize::ZERO,
+        len: rtdt::Index::ZERO,
     };
     let set_ptr = &mut set as *mut rtdt::Set as *mut u8;
 
@@ -963,7 +963,7 @@ fn test_btreeset_insert_1000_reverse() -> AnyResult<()> {
         assert_eq!(was_inserted, 1);
     }
 
-    assert_eq!(set.len, rtdt::Usize(1000));
+    assert_eq!(set.len, rtdt::Index(1000));
 
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreeset_destroy_local(
@@ -991,7 +991,7 @@ fn test_btreeset_insert_1000_random() -> AnyResult<()> {
 
     let mut set = rtdt::Set {
         root: ptr::null(),
-        len: rtdt::Usize::ZERO,
+        len: rtdt::Index::ZERO,
     };
     let set_ptr = &mut set as *mut rtdt::Set as *mut u8;
 
@@ -1004,7 +1004,7 @@ fn test_btreeset_insert_1000_random() -> AnyResult<()> {
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
-    let mut unique_count: rtdt::UsizeRepr = 0;
+    let mut unique_count: rtdt::IndexRepr = 0;
     for i in 0u32..1000 {
         let mut element = (i.wrapping_mul(2654435761)) % 1000;
         let mut was_inserted = 0u8;
@@ -1025,7 +1025,7 @@ fn test_btreeset_insert_1000_random() -> AnyResult<()> {
         }
     }
 
-    assert_eq!(set.len, rtdt::Usize(unique_count), "Set length should match number of unique insertions");
+    assert_eq!(set.len, rtdt::Index(unique_count), "Set length should match number of unique insertions");
 
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreeset_destroy_local(
@@ -1053,7 +1053,7 @@ fn test_btreeset_contains_1000_elements() -> AnyResult<()> {
 
     let mut set = rtdt::Set {
         root: ptr::null(),
-        len: rtdt::Usize::ZERO,
+        len: rtdt::Index::ZERO,
     };
     let set_ptr = &mut set as *mut rtdt::Set as *mut u8;
 
@@ -1142,7 +1142,7 @@ fn test_btreeset_remove_1000_elements() -> AnyResult<()> {
 
     let mut set = rtdt::Set {
         root: ptr::null(),
-        len: rtdt::Usize::ZERO,
+        len: rtdt::Index::ZERO,
     };
     let set_ptr = &mut set as *mut rtdt::Set as *mut u8;
 
@@ -1172,7 +1172,7 @@ fn test_btreeset_remove_1000_elements() -> AnyResult<()> {
         assert_eq!(status, datalove_rt::c::RtStatus::Ok);
     }
 
-    assert_eq!(set.len, rtdt::Usize(1000));
+    assert_eq!(set.len, rtdt::Index(1000));
 
     for i in 0u32..1000 {
         let remove_element = i;
@@ -1192,7 +1192,7 @@ fn test_btreeset_remove_1000_elements() -> AnyResult<()> {
         assert_eq!(was_removed, 1);
     }
 
-    assert_eq!(set.len, rtdt::Usize::ZERO);
+    assert_eq!(set.len, rtdt::Index::ZERO);
 
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreeset_destroy_local(
@@ -1220,7 +1220,7 @@ fn test_btreeset_clone_from_slice_1000() -> AnyResult<()> {
 
     let mut set = rtdt::Set {
         root: ptr::null(),
-        len: rtdt::Usize::ZERO,
+        len: rtdt::Index::ZERO,
     };
     let set_ptr = &mut set as *mut rtdt::Set as *mut u8;
 
@@ -1237,7 +1237,7 @@ fn test_btreeset_clone_from_slice_1000() -> AnyResult<()> {
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
-    assert_eq!(set.len, rtdt::Usize(1000));
+    assert_eq!(set.len, rtdt::Index(1000));
 
     for i in 0u32..1000 {
         let search_element = i;
@@ -1283,7 +1283,7 @@ fn test_btreeset_insert_remove_cycles_1000() -> AnyResult<()> {
 
     let mut set = rtdt::Set {
         root: ptr::null(),
-        len: rtdt::Usize::ZERO,
+        len: rtdt::Index::ZERO,
     };
     let set_ptr = &mut set as *mut rtdt::Set as *mut u8;
 
@@ -1313,7 +1313,7 @@ fn test_btreeset_insert_remove_cycles_1000() -> AnyResult<()> {
         assert_eq!(status, datalove_rt::c::RtStatus::Ok);
     }
 
-    assert_eq!(set.len, rtdt::Usize(1000));
+    assert_eq!(set.len, rtdt::Index(1000));
 
     for i in 0u32..500 {
         let remove_element = i;
@@ -1332,7 +1332,7 @@ fn test_btreeset_insert_remove_cycles_1000() -> AnyResult<()> {
         assert_eq!(status, datalove_rt::c::RtStatus::Ok);
     }
 
-    assert_eq!(set.len, rtdt::Usize(500));
+    assert_eq!(set.len, rtdt::Index(500));
 
     for i in 1000u32..1500 {
         let mut element = i;
@@ -1351,7 +1351,7 @@ fn test_btreeset_insert_remove_cycles_1000() -> AnyResult<()> {
         assert_eq!(status, datalove_rt::c::RtStatus::Ok);
     }
 
-    assert_eq!(set.len, rtdt::Usize(1000));
+    assert_eq!(set.len, rtdt::Index(1000));
 
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreeset_destroy_local(
@@ -1379,7 +1379,7 @@ fn test_btreeset_clear_1000_elements() -> AnyResult<()> {
 
     let mut set = rtdt::Set {
         root: ptr::null(),
-        len: rtdt::Usize::ZERO,
+        len: rtdt::Index::ZERO,
     };
     let set_ptr = &mut set as *mut rtdt::Set as *mut u8;
 
@@ -1409,7 +1409,7 @@ fn test_btreeset_clear_1000_elements() -> AnyResult<()> {
         assert_eq!(status, datalove_rt::c::RtStatus::Ok);
     }
 
-    assert_eq!(set.len, rtdt::Usize(1000));
+    assert_eq!(set.len, rtdt::Index(1000));
 
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreeset_clear_local(
@@ -1421,7 +1421,7 @@ fn test_btreeset_clear_1000_elements() -> AnyResult<()> {
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     assert!(set.root.is_null());
-    assert_eq!(set.len, rtdt::Usize::ZERO);
+    assert_eq!(set.len, rtdt::Index::ZERO);
 
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreeset_destroy_local(
@@ -1451,7 +1451,7 @@ fn test_btreeset_clone_from_slice_empty() -> AnyResult<()> {
 
     let mut set = rtdt::Set {
         root: ptr::null(),
-        len: rtdt::Usize::ZERO,
+        len: rtdt::Index::ZERO,
     };
     let set_ptr = &mut set as *mut rtdt::Set as *mut u8;
 
@@ -1468,7 +1468,7 @@ fn test_btreeset_clone_from_slice_empty() -> AnyResult<()> {
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
-    assert_eq!(set.len, rtdt::Usize::ZERO);
+    assert_eq!(set.len, rtdt::Index::ZERO);
     assert!(set.root.is_null());
 
     let status = unsafe {
@@ -1497,7 +1497,7 @@ fn test_btreeset_clone_from_slice_multiple() -> AnyResult<()> {
 
     let mut set = rtdt::Set {
         root: ptr::null(),
-        len: rtdt::Usize::ZERO,
+        len: rtdt::Index::ZERO,
     };
     let set_ptr = &mut set as *mut rtdt::Set as *mut u8;
 
@@ -1514,7 +1514,7 @@ fn test_btreeset_clone_from_slice_multiple() -> AnyResult<()> {
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
-    assert_eq!(set.len, rtdt::Usize(5));
+    assert_eq!(set.len, rtdt::Index(5));
 
     for &val in &slice {
         let search_element = val;
@@ -1560,7 +1560,7 @@ fn test_btreeset_clone_from_slice_with_duplicates() -> AnyResult<()> {
 
     let mut set = rtdt::Set {
         root: ptr::null(),
-        len: rtdt::Usize::ZERO,
+        len: rtdt::Index::ZERO,
     };
     let set_ptr = &mut set as *mut rtdt::Set as *mut u8;
 
@@ -1577,7 +1577,7 @@ fn test_btreeset_clone_from_slice_with_duplicates() -> AnyResult<()> {
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
-    assert_eq!(set.len, rtdt::Usize(3), "Set should have 3 unique elements");
+    assert_eq!(set.len, rtdt::Index(3), "Set should have 3 unique elements");
 
     let expected = vec![10u32, 20, 30];
     for &val in &expected {
@@ -1624,7 +1624,7 @@ fn test_btreeset_clone_from_slice_strings() -> AnyResult<()> {
 
     let mut set = rtdt::Set {
         root: ptr::null(),
-        len: rtdt::Usize::ZERO,
+        len: rtdt::Index::ZERO,
     };
     let set_ptr = &mut set as *mut rtdt::Set as *mut u8;
 
@@ -1645,7 +1645,7 @@ fn test_btreeset_clone_from_slice_strings() -> AnyResult<()> {
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
-    assert_eq!(set.len, rtdt::Usize(3));
+    assert_eq!(set.len, rtdt::Index(3));
 
     for runtime_str in &mut runtime_strings {
         let status = unsafe {
@@ -1684,7 +1684,7 @@ fn test_btreeset_clone_from_slice_reverse_order() -> AnyResult<()> {
 
     let mut set = rtdt::Set {
         root: ptr::null(),
-        len: rtdt::Usize::ZERO,
+        len: rtdt::Index::ZERO,
     };
     let set_ptr = &mut set as *mut rtdt::Set as *mut u8;
 
@@ -1701,7 +1701,7 @@ fn test_btreeset_clone_from_slice_reverse_order() -> AnyResult<()> {
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
-    assert_eq!(set.len, rtdt::Usize(100));
+    assert_eq!(set.len, rtdt::Index(100));
 
     for i in 0u32..100 {
         let search_element = i;
@@ -1749,7 +1749,7 @@ fn test_btreeset_string_insert_single() -> AnyResult<()> {
 
     let mut set = rtdt::Set {
         root: ptr::null(),
-        len: rtdt::Usize::ZERO,
+        len: rtdt::Index::ZERO,
     };
     let set_ptr = &mut set as *mut rtdt::Set as *mut u8;
 
@@ -1777,7 +1777,7 @@ fn test_btreeset_string_insert_single() -> AnyResult<()> {
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
     assert_eq!(was_inserted, 1);
-    assert_eq!(set.len, rtdt::Usize(1));
+    assert_eq!(set.len, rtdt::Index(1));
 
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreeset_destroy_local(
@@ -1805,7 +1805,7 @@ fn test_btreeset_string_insert_multiple() -> AnyResult<()> {
 
     let mut set = rtdt::Set {
         root: ptr::null(),
-        len: rtdt::Usize::ZERO,
+        len: rtdt::Index::ZERO,
     };
     let set_ptr = &mut set as *mut rtdt::Set as *mut u8;
 
@@ -1838,7 +1838,7 @@ fn test_btreeset_string_insert_multiple() -> AnyResult<()> {
         assert_eq!(was_inserted, 1);
     }
 
-    assert_eq!(set.len, rtdt::Usize(5));
+    assert_eq!(set.len, rtdt::Index(5));
 
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreeset_destroy_local(
@@ -1866,7 +1866,7 @@ fn test_btreeset_string_contains() -> AnyResult<()> {
 
     let mut set = rtdt::Set {
         root: ptr::null(),
-        len: rtdt::Usize::ZERO,
+        len: rtdt::Index::ZERO,
     };
     let set_ptr = &mut set as *mut rtdt::Set as *mut u8;
 
@@ -1945,7 +1945,7 @@ fn test_btreeset_string_remove() -> AnyResult<()> {
 
     let mut set = rtdt::Set {
         root: ptr::null(),
-        len: rtdt::Usize::ZERO,
+        len: rtdt::Index::ZERO,
     };
     let set_ptr = &mut set as *mut rtdt::Set as *mut u8;
 
@@ -1972,7 +1972,7 @@ fn test_btreeset_string_remove() -> AnyResult<()> {
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
-    assert_eq!(set.len, rtdt::Usize(1));
+    assert_eq!(set.len, rtdt::Index(1));
 
     let mut search = unsafe { create_runtime_string(rt, "hello", element_tydesc as *const rtdt::TyDesc) };
     let mut was_removed = 0u8;
@@ -1989,7 +1989,7 @@ fn test_btreeset_string_remove() -> AnyResult<()> {
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
     assert_eq!(was_removed, 1);
-    assert_eq!(set.len, rtdt::Usize::ZERO);
+    assert_eq!(set.len, rtdt::Index::ZERO);
 
     let status = unsafe {
         datalove_rt::c::dtlv_rti_string_destroy_local(
@@ -2026,7 +2026,7 @@ fn test_btreeset_string_clear() -> AnyResult<()> {
 
     let mut set = rtdt::Set {
         root: ptr::null(),
-        len: rtdt::Usize::ZERO,
+        len: rtdt::Index::ZERO,
     };
     let set_ptr = &mut set as *mut rtdt::Set as *mut u8;
 
@@ -2058,7 +2058,7 @@ fn test_btreeset_string_clear() -> AnyResult<()> {
         assert_eq!(status, datalove_rt::c::RtStatus::Ok);
     }
 
-    assert_eq!(set.len, rtdt::Usize(3));
+    assert_eq!(set.len, rtdt::Index(3));
 
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreeset_clear_local(
@@ -2070,7 +2070,7 @@ fn test_btreeset_string_clear() -> AnyResult<()> {
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
     assert!(set.root.is_null());
-    assert_eq!(set.len, rtdt::Usize::ZERO);
+    assert_eq!(set.len, rtdt::Index::ZERO);
 
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreeset_destroy_local(
@@ -2098,7 +2098,7 @@ fn test_btreeset_string_insert_100() -> AnyResult<()> {
 
     let mut set = rtdt::Set {
         root: ptr::null(),
-        len: rtdt::Usize::ZERO,
+        len: rtdt::Index::ZERO,
     };
     let set_ptr = &mut set as *mut rtdt::Set as *mut u8;
 
@@ -2130,7 +2130,7 @@ fn test_btreeset_string_insert_100() -> AnyResult<()> {
         assert_eq!(was_inserted, 1);
     }
 
-    assert_eq!(set.len, rtdt::Usize(100));
+    assert_eq!(set.len, rtdt::Index(100));
 
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreeset_destroy_local(
@@ -2158,7 +2158,7 @@ fn test_btreeset_string_ordering() -> AnyResult<()> {
 
     let mut set = rtdt::Set {
         root: ptr::null(),
-        len: rtdt::Usize::ZERO,
+        len: rtdt::Index::ZERO,
     };
     let set_ptr = &mut set as *mut rtdt::Set as *mut u8;
 
@@ -2190,7 +2190,7 @@ fn test_btreeset_string_ordering() -> AnyResult<()> {
         assert_eq!(status, datalove_rt::c::RtStatus::Ok);
     }
 
-    assert_eq!(set.len, rtdt::Usize(4));
+    assert_eq!(set.len, rtdt::Index(4));
 
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreeset_destroy_local(
@@ -2218,7 +2218,7 @@ fn test_btreeset_string_empty() -> AnyResult<()> {
 
     let mut set = rtdt::Set {
         root: ptr::null(),
-        len: rtdt::Usize::ZERO,
+        len: rtdt::Index::ZERO,
     };
     let set_ptr = &mut set as *mut rtdt::Set as *mut u8;
 
@@ -2246,7 +2246,7 @@ fn test_btreeset_string_empty() -> AnyResult<()> {
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
     assert_eq!(was_inserted, 1);
-    assert_eq!(set.len, rtdt::Usize(1));
+    assert_eq!(set.len, rtdt::Index(1));
 
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreeset_destroy_local(
@@ -2274,7 +2274,7 @@ fn test_btreeset_string_unicode() -> AnyResult<()> {
 
     let mut set = rtdt::Set {
         root: ptr::null(),
-        len: rtdt::Usize::ZERO,
+        len: rtdt::Index::ZERO,
     };
     let set_ptr = &mut set as *mut rtdt::Set as *mut u8;
 
@@ -2307,7 +2307,7 @@ fn test_btreeset_string_unicode() -> AnyResult<()> {
         assert_eq!(was_inserted, 1);
     }
 
-    assert_eq!(set.len, rtdt::Usize(3));
+    assert_eq!(set.len, rtdt::Index(3));
 
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreeset_destroy_local(
@@ -2335,7 +2335,7 @@ fn test_btreeset_string_duplicates() -> AnyResult<()> {
 
     let mut set = rtdt::Set {
         root: ptr::null(),
-        len: rtdt::Usize::ZERO,
+        len: rtdt::Index::ZERO,
     };
     let set_ptr = &mut set as *mut rtdt::Set as *mut u8;
 
@@ -2363,7 +2363,7 @@ fn test_btreeset_string_duplicates() -> AnyResult<()> {
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
     assert_eq!(was_inserted1, 1);
-    assert_eq!(set.len, rtdt::Usize(1));
+    assert_eq!(set.len, rtdt::Index(1));
 
     let mut element2 = unsafe { create_runtime_string(rt, "hello", element_tydesc as *const rtdt::TyDesc) };
     let mut was_inserted2 = 0u8;
@@ -2380,7 +2380,7 @@ fn test_btreeset_string_duplicates() -> AnyResult<()> {
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
     assert_eq!(was_inserted2, 0);
-    assert_eq!(set.len, rtdt::Usize(1));
+    assert_eq!(set.len, rtdt::Index(1));
 
     let status = unsafe {
         datalove_rt::c::dtlv_rti_string_destroy_local(
@@ -2419,7 +2419,7 @@ fn test_btreeset_small_inserts_sequential() -> AnyResult<()> {
 
     let mut set = rtdt::Set {
         root: ptr::null(),
-        len: rtdt::Usize::ZERO,
+        len: rtdt::Index::ZERO,
     };
     let set_ptr = &mut set as *mut rtdt::Set as *mut u8;
 
@@ -2450,7 +2450,7 @@ fn test_btreeset_small_inserts_sequential() -> AnyResult<()> {
         assert_eq!(was_inserted, 1);
     }
 
-    assert_eq!(set.len, rtdt::Usize(20));
+    assert_eq!(set.len, rtdt::Index(20));
 
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreeset_destroy_local(
@@ -2478,7 +2478,7 @@ fn test_btreeset_small_inserts_reverse() -> AnyResult<()> {
 
     let mut set = rtdt::Set {
         root: ptr::null(),
-        len: rtdt::Usize::ZERO,
+        len: rtdt::Index::ZERO,
     };
     let set_ptr = &mut set as *mut rtdt::Set as *mut u8;
 
@@ -2509,7 +2509,7 @@ fn test_btreeset_small_inserts_reverse() -> AnyResult<()> {
         assert_eq!(was_inserted, 1);
     }
 
-    assert_eq!(set.len, rtdt::Usize(20));
+    assert_eq!(set.len, rtdt::Index(20));
 
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreeset_destroy_local(
@@ -2537,7 +2537,7 @@ fn test_btreeset_repeated_clear_and_refill() -> AnyResult<()> {
 
     let mut set = rtdt::Set {
         root: ptr::null(),
-        len: rtdt::Usize::ZERO,
+        len: rtdt::Index::ZERO,
     };
     let set_ptr = &mut set as *mut rtdt::Set as *mut u8;
 
@@ -2568,7 +2568,7 @@ fn test_btreeset_repeated_clear_and_refill() -> AnyResult<()> {
             assert_eq!(status, datalove_rt::c::RtStatus::Ok);
         }
 
-        assert_eq!(set.len, rtdt::Usize(20));
+        assert_eq!(set.len, rtdt::Index(20));
 
         let status = unsafe {
             datalove_rt::c::dtlv_rti_btreeset_clear_local(
@@ -2578,7 +2578,7 @@ fn test_btreeset_repeated_clear_and_refill() -> AnyResult<()> {
             )
         };
         assert_eq!(status, datalove_rt::c::RtStatus::Ok);
-        assert_eq!(set.len, rtdt::Usize::ZERO);
+        assert_eq!(set.len, rtdt::Index::ZERO);
     }
 
     let status = unsafe {
@@ -2607,7 +2607,7 @@ fn test_btreeset_interleaved_ops() -> AnyResult<()> {
 
     let mut set = rtdt::Set {
         root: ptr::null(),
-        len: rtdt::Usize::ZERO,
+        len: rtdt::Index::ZERO,
     };
     let set_ptr = &mut set as *mut rtdt::Set as *mut u8;
 
@@ -2654,7 +2654,7 @@ fn test_btreeset_interleaved_ops() -> AnyResult<()> {
         }
     }
 
-    assert_eq!(set.len, rtdt::Usize(50));
+    assert_eq!(set.len, rtdt::Index(50));
 
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreeset_destroy_local(
@@ -2682,7 +2682,7 @@ fn test_btreeset_remove_pattern_every_other() -> AnyResult<()> {
 
     let mut set = rtdt::Set {
         root: ptr::null(),
-        len: rtdt::Usize::ZERO,
+        len: rtdt::Index::ZERO,
     };
     let set_ptr = &mut set as *mut rtdt::Set as *mut u8;
 
@@ -2712,7 +2712,7 @@ fn test_btreeset_remove_pattern_every_other() -> AnyResult<()> {
         assert_eq!(status, datalove_rt::c::RtStatus::Ok);
     }
 
-    assert_eq!(set.len, rtdt::Usize(100));
+    assert_eq!(set.len, rtdt::Index(100));
 
     for i in (0u32..100).step_by(2) {
         let remove_element = i;
@@ -2732,7 +2732,7 @@ fn test_btreeset_remove_pattern_every_other() -> AnyResult<()> {
         assert_eq!(was_removed, 1);
     }
 
-    assert_eq!(set.len, rtdt::Usize(50));
+    assert_eq!(set.len, rtdt::Index(50));
 
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreeset_destroy_local(
@@ -2760,7 +2760,7 @@ fn test_btreeset_remove_pattern_every_third() -> AnyResult<()> {
 
     let mut set = rtdt::Set {
         root: ptr::null(),
-        len: rtdt::Usize::ZERO,
+        len: rtdt::Index::ZERO,
     };
     let set_ptr = &mut set as *mut rtdt::Set as *mut u8;
 
@@ -2790,7 +2790,7 @@ fn test_btreeset_remove_pattern_every_third() -> AnyResult<()> {
         assert_eq!(status, datalove_rt::c::RtStatus::Ok);
     }
 
-    assert_eq!(set.len, rtdt::Usize(100));
+    assert_eq!(set.len, rtdt::Index(100));
 
     let mut removed_count = 0;
     for i in (0u32..100).step_by(3) {
@@ -2813,7 +2813,7 @@ fn test_btreeset_remove_pattern_every_third() -> AnyResult<()> {
         }
     }
 
-    assert_eq!(set.len, rtdt::Usize(100 - removed_count));
+    assert_eq!(set.len, rtdt::Index(100 - removed_count));
 
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreeset_destroy_local(
@@ -2841,7 +2841,7 @@ fn test_btreeset_boundary_values() -> AnyResult<()> {
 
     let mut set = rtdt::Set {
         root: ptr::null(),
-        len: rtdt::Usize::ZERO,
+        len: rtdt::Index::ZERO,
     };
     let set_ptr = &mut set as *mut rtdt::Set as *mut u8;
 
@@ -2874,7 +2874,7 @@ fn test_btreeset_boundary_values() -> AnyResult<()> {
         assert_eq!(was_inserted, 1);
     }
 
-    assert_eq!(set.len, rtdt::Usize(4));
+    assert_eq!(set.len, rtdt::Index(4));
 
     for &val in &boundary_values {
         let search_element = val;
@@ -2920,7 +2920,7 @@ fn test_btreeset_ascending_descending_pattern() -> AnyResult<()> {
 
     let mut set = rtdt::Set {
         root: ptr::null(),
-        len: rtdt::Usize::ZERO,
+        len: rtdt::Index::ZERO,
     };
     let set_ptr = &mut set as *mut rtdt::Set as *mut u8;
 
@@ -2950,7 +2950,7 @@ fn test_btreeset_ascending_descending_pattern() -> AnyResult<()> {
         assert_eq!(status, datalove_rt::c::RtStatus::Ok);
     }
 
-    assert_eq!(set.len, rtdt::Usize(50));
+    assert_eq!(set.len, rtdt::Index(50));
 
     for i in (0u32..50).rev() {
         let remove_element = i;
@@ -2970,7 +2970,7 @@ fn test_btreeset_ascending_descending_pattern() -> AnyResult<()> {
         assert_eq!(was_removed, 1);
     }
 
-    assert_eq!(set.len, rtdt::Usize::ZERO);
+    assert_eq!(set.len, rtdt::Index::ZERO);
 
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreeset_destroy_local(
@@ -2999,7 +2999,7 @@ fn test_btreeset_contains_empty_set() -> AnyResult<()> {
 
     let mut set = rtdt::Set {
         root: ptr::null(),
-        len: rtdt::Usize::ZERO,
+        len: rtdt::Index::ZERO,
     };
     let set_ptr = &mut set as *mut rtdt::Set as *mut u8;
 
@@ -3054,7 +3054,7 @@ fn test_btreeset_remove_from_empty() -> AnyResult<()> {
 
     let mut set = rtdt::Set {
         root: ptr::null(),
-        len: rtdt::Usize::ZERO,
+        len: rtdt::Index::ZERO,
     };
     let set_ptr = &mut set as *mut rtdt::Set as *mut u8;
 
@@ -3082,7 +3082,7 @@ fn test_btreeset_remove_from_empty() -> AnyResult<()> {
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
     assert_eq!(was_removed, 0);
-    assert_eq!(set.len, rtdt::Usize::ZERO);
+    assert_eq!(set.len, rtdt::Index::ZERO);
 
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreeset_destroy_local(
@@ -3110,7 +3110,7 @@ fn test_btreeset_multiple_clears() -> AnyResult<()> {
 
     let mut set = rtdt::Set {
         root: ptr::null(),
-        len: rtdt::Usize::ZERO,
+        len: rtdt::Index::ZERO,
     };
     let set_ptr = &mut set as *mut rtdt::Set as *mut u8;
 
@@ -3149,7 +3149,7 @@ fn test_btreeset_multiple_clears() -> AnyResult<()> {
             )
         };
         assert_eq!(status, datalove_rt::c::RtStatus::Ok);
-        assert_eq!(set.len, rtdt::Usize::ZERO);
+        assert_eq!(set.len, rtdt::Index::ZERO);
     }
 
     let status = unsafe {
@@ -3178,7 +3178,7 @@ fn test_btreeset_insert_after_clear() -> AnyResult<()> {
 
     let mut set = rtdt::Set {
         root: ptr::null(),
-        len: rtdt::Usize::ZERO,
+        len: rtdt::Index::ZERO,
     };
     let set_ptr = &mut set as *mut rtdt::Set as *mut u8;
 
@@ -3235,7 +3235,7 @@ fn test_btreeset_insert_after_clear() -> AnyResult<()> {
         assert_eq!(was_inserted, 1);
     }
 
-    assert_eq!(set.len, rtdt::Usize(10));
+    assert_eq!(set.len, rtdt::Index(10));
 
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreeset_destroy_local(
@@ -3263,7 +3263,7 @@ fn test_btreeset_duplicate_inserts_many() -> AnyResult<()> {
 
     let mut set = rtdt::Set {
         root: ptr::null(),
-        len: rtdt::Usize::ZERO,
+        len: rtdt::Index::ZERO,
     };
     let set_ptr = &mut set as *mut rtdt::Set as *mut u8;
 
@@ -3293,7 +3293,7 @@ fn test_btreeset_duplicate_inserts_many() -> AnyResult<()> {
         assert_eq!(status, datalove_rt::c::RtStatus::Ok);
     }
 
-    assert_eq!(set.len, rtdt::Usize(1));
+    assert_eq!(set.len, rtdt::Index(1));
 
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreeset_destroy_local(
@@ -3321,7 +3321,7 @@ fn test_btreeset_alternating_insert_remove_same() -> AnyResult<()> {
 
     let mut set = rtdt::Set {
         root: ptr::null(),
-        len: rtdt::Usize::ZERO,
+        len: rtdt::Index::ZERO,
     };
     let set_ptr = &mut set as *mut rtdt::Set as *mut u8;
 
@@ -3364,7 +3364,7 @@ fn test_btreeset_alternating_insert_remove_same() -> AnyResult<()> {
             )
         };
         assert_eq!(status, datalove_rt::c::RtStatus::Ok);
-        assert_eq!(set.len, rtdt::Usize::ZERO);
+        assert_eq!(set.len, rtdt::Index::ZERO);
     }
 
     let status = unsafe {
@@ -3442,7 +3442,7 @@ fn test_btreeset_tuples() -> AnyResult<()> {
 
     let mut set = rtdt::Set {
         root: ptr::null(),
-        len: rtdt::Usize::ZERO,
+        len: rtdt::Index::ZERO,
     };
     let set_ptr = &mut set as *mut rtdt::Set as *mut u8;
 
@@ -3476,7 +3476,7 @@ fn test_btreeset_tuples() -> AnyResult<()> {
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
     assert_eq!(was_inserted1, 1);
-    assert_eq!(set.len, rtdt::Usize(1));
+    assert_eq!(set.len, rtdt::Index(1));
 
     let mut tuple2 = Tuple2U32 { field0: 20, field1: 200 };
     let mut was_inserted2 = 0u8;
@@ -3493,7 +3493,7 @@ fn test_btreeset_tuples() -> AnyResult<()> {
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
     assert_eq!(was_inserted2, 1);
-    assert_eq!(set.len, rtdt::Usize(2));
+    assert_eq!(set.len, rtdt::Index(2));
 
     let search_tuple = Tuple2U32 { field0: 10, field1: 100 };
     let mut contains = 0u8;
@@ -3526,7 +3526,7 @@ fn test_btreeset_tuples() -> AnyResult<()> {
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
     assert_eq!(was_removed, 1);
-    assert_eq!(set.len, rtdt::Usize(1));
+    assert_eq!(set.len, rtdt::Index(1));
 
     let status = unsafe {
         datalove_rt::c::dtlv_rti_btreeset_destroy_local(

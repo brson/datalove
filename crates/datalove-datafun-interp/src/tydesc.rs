@@ -120,14 +120,14 @@ impl IrTyDescTable {
                 align: 8,
                 type_info: rtdt::TyInfo { nothing: rtdt::TyInfoNothing },
             }),
-            IrType::Usize => Box::new(TyDesc {
-                type_tag: rtdt::TyTag::Usize,
+            IrType::Index => Box::new(TyDesc {
+                type_tag: rtdt::TyTag::Index,
                 size: rtdt::INDEX_SIZE,
                 align: rtdt::INDEX_ALIGN,
                 type_info: rtdt::TyInfo { nothing: rtdt::TyInfoNothing },
             }),
-            IrType::Isize => Box::new(TyDesc {
-                type_tag: rtdt::TyTag::Isize,
+            IrType::Offset => Box::new(TyDesc {
+                type_tag: rtdt::TyTag::Offset,
                 size: rtdt::INDEX_SIZE,
                 align: rtdt::INDEX_ALIGN,
                 type_info: rtdt::TyInfo { nothing: rtdt::TyInfoNothing },

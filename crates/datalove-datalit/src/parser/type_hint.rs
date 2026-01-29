@@ -33,8 +33,8 @@ impl<'db> Parser<'db> {
             Some("i32") => { self.eat_word("i32"); ast::TypeHint::I32 }
             Some("u64") => { self.eat_word("u64"); ast::TypeHint::U64 }
             Some("i64") => { self.eat_word("i64"); ast::TypeHint::I64 }
-            Some("usize") => { self.eat_word("usize"); ast::TypeHint::Usize }
-            Some("isize") => { self.eat_word("isize"); ast::TypeHint::Isize }
+            Some("index") => { self.eat_word("index"); ast::TypeHint::Index }
+            Some("offset") => { self.eat_word("offset"); ast::TypeHint::Offset }
             Some("f32") => { self.eat_word("f32"); ast::TypeHint::F32 }
             Some("f64") => { self.eat_word("f64"); ast::TypeHint::F64 }
             Some("int") => { self.eat_word("int"); ast::TypeHint::Int }
@@ -191,7 +191,7 @@ impl<'db> Parser<'db> {
                     match lower.as_str() {
                         "int" | "bool" | "string" | "data" | "error" |
                         "u8" | "i8" | "u16" | "i16" | "u32" | "i32" |
-                        "u64" | "i64" | "usize" | "isize" | "f32" | "f64" => {
+                        "u64" | "i64" | "index" | "offset" | "f32" | "f64" => {
                             let ts = self.peek_text_span();
                             let message = format!("unknown type '{}', did you mean '{}'?", word, lower);
                             self.emit_type_hint_error(ts, &message, "D008", "unexpected token in type hint")

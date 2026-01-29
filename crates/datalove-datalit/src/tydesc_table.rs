@@ -295,9 +295,9 @@ impl<'db> TyDescTable<'db> {
                     },
                 })
             }
-            Type::Usize => {
+            Type::Index => {
                 Box::new(rtdt::TyDesc {
-                    type_tag: rtdt::TyTag::Usize,
+                    type_tag: rtdt::TyTag::Index,
                     size: rtdt::INDEX_SIZE,
                     align: rtdt::INDEX_ALIGN,
                     type_info: rtdt::TyInfo {
@@ -305,9 +305,9 @@ impl<'db> TyDescTable<'db> {
                     },
                 })
             }
-            Type::Isize => {
+            Type::Offset => {
                 Box::new(rtdt::TyDesc {
-                    type_tag: rtdt::TyTag::Isize,
+                    type_tag: rtdt::TyTag::Offset,
                     size: rtdt::INDEX_SIZE,
                     align: rtdt::INDEX_ALIGN,
                     type_info: rtdt::TyInfo {
