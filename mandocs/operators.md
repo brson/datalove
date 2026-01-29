@@ -63,7 +63,7 @@ Target type inferred from context (assignment, parameter, binary op).
 
 ### Clone (linear types)
 
-```
+```datalove
 let x: int = 42
 let y = x@          // clone x
 let z = x           // x still valid
@@ -71,7 +71,7 @@ let z = x           // x still valid
 
 Use in loops where a linear value is consumed repeatedly:
 
-```
+```datalove
 fun sum_n_times(val: int, n: u32): int
     var acc: int = 0
     var i: u32 = 0
@@ -85,7 +85,7 @@ end fun
 
 Multiple consumption in a single call:
 
-```
+```datalove
 fun consume_both(a: int, b: int): int
     ret a + b
 end fun
@@ -96,21 +96,21 @@ let result = consume_both(x@, x)  // clone for first, move for second
 
 ### Widen (fixed integers)
 
-```
+```datalove
 let a: u8 = 10
 let b: u32 = a@     // widen u8 to u32
 ```
 
 Cross-sign conversion is allowed when lossless:
 
-```
+```datalove
 let a: u8 = 5
 let b: i16 = a@
 ```
 
 Valid widening chains:
 
-```
+```datalove
 u8 -> u16 -> u32 -> u64 -> int
 i8 -> i16 -> i32 -> i64 -> int
 index -> int
@@ -126,7 +126,7 @@ Conversion to/from these types are always considered lossy.
 
 Binary operators propagate expected type:
 
-```
+```datalove
 let a: u8 = 100
 let b: u8 = 50
 let sum: u32 = a@ + b@    // + propagates u32 to both sides
@@ -140,7 +140,7 @@ end if
 
 Function parameters propagate their types:
 
-```
+```datalove
 fun lerp(a: u64, b: u64, t: u64): u64
     ret a + (b - a) * t / 100
 end fun
@@ -155,7 +155,7 @@ let mid = lerp(lo@, hi@, pct@)  // each @ gets u64 from param type
 
 Widening to `int` produces a linear type, so `@` clones if needed:
 
-```
+```datalove
 let a: u8 = 10
 let b: int = a@     // widen to int (linear), clone happens implicitly
 let c: int = a@     // can do it again
@@ -163,7 +163,7 @@ let c: int = a@     // can do it again
 
 ### Errors
 
-```
+```datalove
 let x: u8 = 10
 let y = x@          // ERROR: no type context for coercion
 let w: i32 = x@     // ERROR: crosses sign boundary (unsigned to signed)
@@ -173,7 +173,7 @@ let w: i32 = x@     // ERROR: crosses sign boundary (unsigned to signed)
 
 When applied to a copy type where source and target are the same type, `@` is a no-op.
 
-```
+```datalove
 let x: u32 = 10
 let y: u32 = x@     // no-op, x is copy type, no widening needed
 ```
@@ -182,7 +182,7 @@ let y: u32 = x@     // no-op, x is copy type, no widening needed
 
 `@` composes with `?` and `!`:
 
-```
+```datalove
 let val: u32 = get_byte()?@   // unwrap option, then widen
 let data: int = fetch()!@     // unwrap result, then clone
 ```
