@@ -46,7 +46,10 @@ the standard way wrt float zeros and NaNs.
 
 
 
-## Postfix operator `@` - lossless clone and coerce
+## The adapt operator - `@`
+
+The postfix _adapt_ operator, `@`,
+performs a lossless clone and/or coercion.
 
 A single operator for making expression types "fit" their destination.
 Balances correctness with scripting ergonomics.

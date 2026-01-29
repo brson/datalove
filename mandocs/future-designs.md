@@ -65,7 +65,7 @@ on for scripts.
 Could be toggleable:
 
 ```datalove
-feature auto-coerce off
+feature auto_coerce off
 ```
 
 Comparison to visual basic modes that I've forgotten, js strict mode.
