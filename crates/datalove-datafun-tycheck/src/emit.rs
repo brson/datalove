@@ -9,7 +9,7 @@ use salsa::plumbing::FromId;
 
 use datalove_datafun_ast::ast::ExprFun;
 
-use crate::{DatafunSpans, ModuleId, ParsedModuleGraph, PendingDiagnostic};
+use crate::{DatafunSpans, ModuleId, ParsedModuleGraph, PendingDiagnostic, RecoveryHint};
 
 /// Trait for looking up spans during diagnostic emission.
 ///
@@ -237,17 +237,23 @@ fn emit_single_diagnostic<'db>(
                     .emit_type();
             }
         }
-        PendingDiagnostic::TypeMismatch { expr_id, module_id: _, expected, actual, label } => {
+        PendingDiagnostic::TypeMismatch { expr_id, module_id: _, expected, actual, label, recovery_hint } => {
             if let Some(ts) = spans.lookup_expr(db, *expr_id) {
                 let msg = format!(
                     "mismatched types: expected `{}`, found `{}`",
                     expected.as_str(db),
                     actual.as_str(db)
                 );
-                bct::diagnostic::DiagnosticBuilder::error(db, &msg)
+                let mut builder = bct::diagnostic::DiagnosticBuilder::error(db, &msg)
                     .code("F016")
-                    .primary_label(ts, label.as_str(db))
-                    .emit_type();
+                    .primary_label(ts, label.as_str(db));
+
+                // Add help note for recoverable errors
+                if let RecoveryHint::InsertAdapt { description } = recovery_hint {
+                    builder = builder.note(&format!("help: use `@` to {}", description));
+                }
+
+                builder.emit_type();
             }
         }
         PendingDiagnostic::InvalidOperandType { expr_id, module_id: _, op, ty } => {
@@ -482,10 +488,15 @@ fn format_single_diagnostic<'db>(
             let loc = format_location(db, &ts);
             Some(format!("{}: error[F011]: {}", loc, message.as_str(db)))
         }
-        PendingDiagnostic::TypeMismatch { expr_id, module_id: _, expected, actual, label: _ } => {
+        PendingDiagnostic::TypeMismatch { expr_id, module_id: _, expected, actual, label: _, recovery_hint } => {
             let ts = spans.lookup_expr(db, *expr_id)?;
             let loc = format_location(db, &ts);
-            Some(format!("{}: error[F016]: mismatched types: expected `{}`, found `{}`", loc, expected.as_str(db), actual.as_str(db)))
+            let base_msg = format!("{}: error[F016]: mismatched types: expected `{}`, found `{}`", loc, expected.as_str(db), actual.as_str(db));
+            if let RecoveryHint::InsertAdapt { description } = recovery_hint {
+                Some(format!("{} (help: use `@` to {})", base_msg, description))
+            } else {
+                Some(base_msg)
+            }
         }
         PendingDiagnostic::InvalidOperandType { expr_id, module_id: _, op, ty } => {
             let ts = spans.lookup_expr(db, *expr_id)?;

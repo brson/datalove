@@ -1,0 +1,10 @@
+// Test: u8 can widen to int via @
+// Without @: F016 type mismatch
+// With auto-adapt: succeeds
+
+fn process(x: int) -> int
+    ret x * 2
+
+fn main() -> int
+    let n: u8 = 42
+    ret process(n)

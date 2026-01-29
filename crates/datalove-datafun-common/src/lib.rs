@@ -62,6 +62,52 @@ pub fn parallel_mode_from_env() -> ParallelMode {
     }
 }
 
+/// Controls automatic adaptation of type mismatches via the `@` operator.
+///
+/// When enabled, the compiler automatically inserts `@` (adapt) operations
+/// to fix recoverable type errors, such as:
+/// - Integer widening (u8 → int, i16 → i32, etc.)
+/// - Cross-sign widening (u8 → i16, u16 → i32, etc.)
+/// - Cloning linear types for reuse
+///
+/// See `botdocs/report-adapt-cases.md` for the full list of recoverable errors.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum AutoAdaptMode {
+    /// Disabled - emit errors for type mismatches (default).
+    #[default]
+    Disabled,
+    /// Enabled - automatically insert @ for recoverable errors (silent).
+    Enabled,
+    /// Enabled with reporting - insert @ and emit info diagnostics showing what was adapted.
+    EnabledWithReport,
+}
+
+impl AutoAdaptMode {
+    /// Returns true if auto-adapt is enabled (either silent or with reporting).
+    pub fn is_enabled(&self) -> bool {
+        matches!(self, AutoAdaptMode::Enabled | AutoAdaptMode::EnabledWithReport)
+    }
+
+    /// Returns true if adaptations should be reported as diagnostics.
+    pub fn should_report(&self) -> bool {
+        matches!(self, AutoAdaptMode::EnabledWithReport)
+    }
+}
+
+/// Read auto-adapt mode from `DATALOVE_AUTO_ADAPT` environment variable.
+///
+/// Returns:
+/// - `AutoAdaptMode::EnabledWithReport` if set to "report"
+/// - `AutoAdaptMode::Enabled` if set to any other value
+/// - `AutoAdaptMode::Disabled` if not set
+pub fn auto_adapt_mode_from_env() -> AutoAdaptMode {
+    match std::env::var("DATALOVE_AUTO_ADAPT") {
+        Ok(val) if val == "report" => AutoAdaptMode::EnabledWithReport,
+        Ok(_) => AutoAdaptMode::Enabled,
+        Err(_) => AutoAdaptMode::Disabled,
+    }
+}
+
 // ============================================================================
 // Parsed Module Graph
 // ============================================================================

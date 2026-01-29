@@ -492,9 +492,8 @@ pub fn check_expr<'db>(
             if let Type::Datalit(datalit::tycheck::Type::Data) = expected {
                 return Ok(());
             }
-            let expected_str = type_to_string(db, expected);
-            let actual_str = type_to_string(db, &synthesized);
-            Err(ctx.error_type_mismatch(expr, &expected_str, &actual_str, "type mismatch"))
+            // No match or coercion possible - try auto-adapt or report error.
+            ctx.check_type_mismatch_or_adapt(expr, expected, &synthesized, "type mismatch")
         }
 
         // For other non-datalit expressions, use synthesis + comparison with coercion support.
@@ -519,10 +518,8 @@ pub fn check_expr<'db>(
                 return Ok(());
             }
 
-            // No match or coercion possible.
-            let expected_str = type_to_string(db, expected);
-            let actual_str = type_to_string(db, &synthesized);
-            Err(ctx.error_type_mismatch(expr, &expected_str, &actual_str, "type mismatch"))
+            // No match or coercion possible - try auto-adapt or report error.
+            ctx.check_type_mismatch_or_adapt(expr, expected, &synthesized, "type mismatch")
         }
     }
 }

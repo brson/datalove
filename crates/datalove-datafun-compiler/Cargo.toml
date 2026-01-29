@@ -59,3 +59,8 @@ name = "tycheck_tests"
 path = "tests/tycheck_tests.rs"
 harness = false
 
+[[test]]
+name = "auto_adapt_tests"
+path = "tests/auto_adapt_tests.rs"
+harness = false
+

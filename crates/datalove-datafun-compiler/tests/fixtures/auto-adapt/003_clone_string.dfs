@@ -1,0 +1,11 @@
+// Test: string can be cloned via @
+// Without @: F016 type mismatch (attempting to use string twice)
+// With auto-adapt: clone is inserted
+
+fn consume(s: string) -> string
+    ret s
+
+fn main() -> string
+    let msg = "hello"
+    let a = consume(msg)
+    ret a

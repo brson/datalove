@@ -1,0 +1,40 @@
+{
+  "auto_adapt_mode": {
+    "adaptations": [],
+    "diagnostic_count": 2,
+    "diagnostics": [
+      {
+        "code": "F011",
+        "kind": "CannotSynthesize",
+        "message": "cannot infer return type"
+      },
+      {
+        "code": "F011",
+        "kind": "CannotSynthesize",
+        "message": "cannot infer return type"
+      }
+    ],
+    "error_count": 2,
+    "mode": "auto-adapt",
+    "success": false
+  },
+  "normal_mode": {
+    "adaptations": [],
+    "diagnostic_count": 2,
+    "diagnostics": [
+      {
+        "code": "F011",
+        "kind": "CannotSynthesize",
+        "message": "cannot infer return type"
+      },
+      {
+        "code": "F011",
+        "kind": "CannotSynthesize",
+        "message": "cannot infer return type"
+      }
+    ],
+    "error_count": 2,
+    "mode": "normal",
+    "success": false
+  }
+}

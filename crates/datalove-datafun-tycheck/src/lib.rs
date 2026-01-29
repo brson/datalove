@@ -20,6 +20,8 @@ pub use datalove_datafun_common::{
     DbClone,
     ParallelMode,
     parallel_mode_from_env,
+    AutoAdaptMode,
+    auto_adapt_mode_from_env,
     ParsedModuleGraph,
     ModuleNameResolution,
     AllModuleNameResolutions,
@@ -36,12 +38,36 @@ mod api;
 mod check;
 mod context;
 mod emit;
-mod statement;
+pub mod statement;
 pub mod synthesize;
 pub mod types;
 
 // Re-export emit infrastructure.
 pub use emit::{SpanLookup, LocalSpanLookup, ModuleGraphSpanLookup, emit_pending_diagnostics, format_pending_diagnostics};
+
+/// Hint for how to recover from an @-recoverable error.
+///
+/// When a type error can be fixed by inserting the `@` (adapt) operator,
+/// a recovery hint is attached to the diagnostic. This enables:
+/// - Displaying helpful suggestions to the user
+/// - Auto-adapt mode to automatically apply the fix
+#[derive(Clone, Hash, PartialEq, Eq)]
+#[derive(salsa::Update)]
+pub enum RecoveryHint {
+    /// Insert @ after the expression to clone and/or coerce.
+    InsertAdapt {
+        /// Human-readable description of what @ does here (e.g., "widen u8 to int").
+        description: String,
+    },
+    /// No automatic recovery available.
+    None,
+}
+
+impl Default for RecoveryHint {
+    fn default() -> Self {
+        RecoveryHint::None
+    }
+}
 
 /// Pending diagnostic for unified diagnostic emission.
 ///
@@ -72,12 +98,16 @@ pub enum PendingDiagnostic<'db> {
         message: InternedText<'db>,
     },
     /// F016: Type mismatch.
+    ///
+    /// If recovery_hint is `InsertAdapt`, the error can be fixed by inserting `@`.
     TypeMismatch {
         expr_id: u32,
         module_id: Option<ModuleId>,
         expected: InternedText<'db>,
         actual: InternedText<'db>,
         label: InternedText<'db>,
+        /// Recovery hint for auto-adapt mode.
+        recovery_hint: RecoveryHint,
     },
     /// F026: Invalid operand type.
     InvalidOperandType {
