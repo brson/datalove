@@ -109,7 +109,7 @@
         --code-bg: var(--cave-base06);
         --code-bg: color-mix(in srgb, var(--heath-base03), white 94%);
         --table-header-bg: var(--cave-base06);
-        --link: color-mix(in srgb, var(--cave-violet), black 20%);
+        --link: color-mix(in srgb, var(--cave-violet), black 0%);
         --syn-keyword: var(--cave-magenta);
         --syn-type-name: var(--cave-cyan);
         --syn-string: var(--cave-yellow);
@@ -237,7 +237,15 @@ h2 { font-size: calc(1.5rem * var(--font-size-header-scale)); letter-spacing: -0
 h3 { font-size: calc(1.25rem * var(--font-size-header-scale)); }
 
 a {
-    color: var(--link);
+    color: var(--font-text);
+    text-decoration: none;
+    text-decoration: underline dotted;
+    text-decoration-color: var(--link);
+    text-decoration-thickness: 2px;
+}
+
+a:hover {
+    text-decoration: underline dotted;
 }
 
 p {
@@ -521,14 +529,4 @@ th {
     position: absolute;
     left: 0;
     color: var(--accent);
-}
-
-.toc a {
-    text-decoration: none;
-    border-bottom: 1px solid transparent;
-    transition: border-color 0.15s;
-}
-
-.toc a:hover {
-    border-bottom-color: var(--link);
 }
