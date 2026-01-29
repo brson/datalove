@@ -1,0 +1,8 @@
+----------
+scriptunit-fragment
+----------
+
+// Widen u8 to int with @ operator.
+let x: u8 = 100
+let y: int = x@
+debuglog y

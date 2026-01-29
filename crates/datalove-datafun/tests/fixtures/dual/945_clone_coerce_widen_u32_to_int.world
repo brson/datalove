@@ -1,0 +1,8 @@
+----------
+scriptunit-fragment
+----------
+
+// Widen u32 to int with @ operator.
+let x: u32 = 1000000
+let y: int = x@
+debuglog y

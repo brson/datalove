@@ -1,0 +1,9 @@
+----------
+scriptunit-fragment
+----------
+
+// Basic string clone with @ operator.
+let s = "hello"
+let s2: string = s@
+debuglog s
+debuglog s2

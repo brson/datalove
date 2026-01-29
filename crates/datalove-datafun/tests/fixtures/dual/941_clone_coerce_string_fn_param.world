@@ -1,0 +1,12 @@
+----------
+scriptunit-fragment
+----------
+
+// Clone string when passing to function that consumes it.
+fun identity(s: string): string
+    ret s
+end fun
+
+let msg = "world"
+debuglog identity(msg@)
+debuglog identity(msg)

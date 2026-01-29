@@ -1,0 +1,9 @@
+----------
+scriptunit-fragment
+----------
+
+// Clone a list (linear type) with @ operator.
+let xs: [u32] = [1, 2, 3]
+let ys: [u32] = xs@
+debuglog xs
+debuglog ys

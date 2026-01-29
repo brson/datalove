@@ -1,0 +1,12 @@
+----------
+scriptunit-fragment
+----------
+
+// Multiple @ operators - clone string multiple times.
+let s = "test"
+let s1: string = s@
+let s2: string = s@
+let s3: string = s
+debuglog s1
+debuglog s2
+debuglog s3

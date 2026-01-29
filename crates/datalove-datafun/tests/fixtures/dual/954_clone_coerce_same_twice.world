@@ -1,0 +1,12 @@
+----------
+scriptunit-fragment
+----------
+
+// Use the same linear value twice by cloning.
+fun concat_strings(a: string, b: string): string
+    ret a
+end fun
+
+let s = "duplicate"
+let result = concat_strings(s@, s)
+debuglog result

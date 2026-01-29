@@ -1,0 +1,11 @@
+----------
+scriptunit-fragment
+----------
+
+// Widen in function parameter position.
+fun double_int(x: int): int
+    ret x + x
+end fun
+
+let small: u8 = 42
+debuglog double_int(small@)
