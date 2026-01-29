@@ -67,11 +67,10 @@ xor
 0xFF
 ```
 
-**Floating-point** numbers use standard notation:
+**Floating-point** numbers use decimal notation:
 
 ```
 3.14
-1.0e-10
 ```
 
 **Strings** are enclosed in double quotes:
@@ -85,6 +84,7 @@ xor
 ### 2.3 Comments
 
 Line comments begin with `//` and extend to end of line.
+Block comments are delimited by `/*` and `*/` and may be nested.
 
 ## 3. Types
 
@@ -95,14 +95,19 @@ Line comments begin with `//` and extend to end of line.
 | `bool` | Boolean value |
 | `u8`, `u16`, `u32`, `u64` | Unsigned integers |
 | `i8`, `i16`, `i32`, `i64` | Signed integers |
-| `index` | Platform-sized unsigned index |
-| `offset` | Platform-sized signed offset |
+| `index` | Addressable size of indexed collections† |
+| `offset` | Signed addressable size etc. |
 | `f32`, `f64` | Floating-point numbers |
 | `int` | Arbitrary-precision integer |
 | `string` | UTF-8 string |
 
 The `index` and `offset` types are 32-bit by default, or 64-bit when the
 `index-64` feature is enabled.
+
+> † `index` is not the same as the platform pointer size,
+  which is not exposed to the language.
+  The size of `index` is less than or equal to the platform pointer size.
+  Currently `index` and `offset` are 32-bit by compile-time default.
 
 ### 3.2 Collection Types
 
