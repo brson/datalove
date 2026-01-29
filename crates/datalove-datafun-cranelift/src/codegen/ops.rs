@@ -748,7 +748,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         // Determine if we need sign-extend (signed src) or zero-extend (unsigned src).
         let is_signed_src = matches!(
             src_ty,
-            IrType::I8 | IrType::I16 | IrType::I32 | IrType::I64 | IrType::Isize
+            IrType::I8 | IrType::I16 | IrType::I32 | IrType::I64 | IrType::Offset
         );
 
         // Extend the value.
