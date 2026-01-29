@@ -41,3 +41,7 @@ rayon.version = "1.11"
 
 [profile.release]
 overflow-checks = true
+lto = "thin"
+codegen-units = 1
+opt-level = "s"
+
