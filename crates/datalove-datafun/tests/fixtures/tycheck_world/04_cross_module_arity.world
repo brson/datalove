@@ -3,7 +3,7 @@ module sys/std/math
 ----------
 
 fun add(a: u32, b: u32): u32
-  ret a +@ b
+  ret a + b
 end fun
 
 ----------

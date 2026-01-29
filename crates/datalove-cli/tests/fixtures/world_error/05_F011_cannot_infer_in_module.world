@@ -3,7 +3,7 @@ module local/test/main
 ----------
 
 fun broken(): int
-  let x = @-
+  let x = $-
   ret 0
 end fun
 
@@ -11,4 +11,4 @@ end fun
 scriptunit-expr
 ----------
 
-@0
+$0

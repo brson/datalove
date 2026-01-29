@@ -2,4 +2,4 @@
 scriptunit-fragment
 ----------
 
-let output = @-
+let output = $-

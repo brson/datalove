@@ -1,5 +1,5 @@
 fun double(x: u32): u32
-    ret x +@ x
+    ret x + x
 end fun
 
 fun test(): u32

@@ -1,13 +1,27 @@
 {
   "diagnostics": [
     {
+      "code": "F016",
+      "labels": [
+        {
+          "message": "type mismatch",
+          "span": [
+            37,
+            42
+          ],
+          "text": "a + b"
+        }
+      ],
+      "message": "mismatched types: expected `u32`, found `int`"
+    },
+    {
       "code": "F045",
       "labels": [
         {
           "message": "expected 2 arguments",
           "span": [
-            77,
-            80
+            76,
+            79
           ],
           "text": "add"
         },
@@ -25,7 +39,9 @@
   ],
   "errors": [
     {
-      "kind": "CannotSynthesize"
+      "actual": "int",
+      "expected": "u32",
+      "kind": "TypeMismatch"
     },
     {
       "actual": 1,
