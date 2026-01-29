@@ -9,7 +9,7 @@
 - script interpreter reactivity
 - [x] tensors and tables
 - table column projections
-- clone and coerce (@)
+- [ ] adapt opt / clone and coerce / @
 - [x] logic ops
 - [x] type aliases
 - ctfe
@@ -30,18 +30,20 @@
 
 ## In progress
 
+- inlining
 - human docs
-- ctfe
+- adapt op diagnostic hints
+- auto-adapt
+- const args
+
 
 
 
 ## On deck
 
 - fix rt error/alloc semantics
-- clone and coerce
 - datalit syntax cleanup
   - map set type syntax
-  - [x] usize/isize -> index/offset
 - workspaces - waiting for design
 - riders - waiting for workspaces
 - rtcalls - waiting for native riders
@@ -57,7 +59,6 @@
 ## Backlog
 
 - tree-sitter
-- inlining
 - 128-bit ints
 - remove data / error keywords - rely on ~ coercion?
 - testable docs
