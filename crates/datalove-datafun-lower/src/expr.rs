@@ -403,6 +403,9 @@ pub fn lower_expression<'db>(
         ExprFunKind::TryResult(try_expr) => {
             lower_try_result(ctx, expr, try_expr)
         }
+        ExprFunKind::CloneCoerce(cc_expr) => {
+            lower_clone_coerce(ctx, expr, cc_expr)
+        }
         ExprFunKind::FieldProj(proj) => {
             lower_field_proj(ctx, expr, proj)
         }
@@ -1249,6 +1252,46 @@ fn lower_try_result<'db>(
     // Continue block: ok_dest has the unwrapped Ok value.
     ctx.start_block(continue_block);
     Ok(ok_dest)
+}
+
+/// Lower clone/coerce operator (`@`).
+///
+/// The `@` operator performs lossless clone/coerce operations:
+/// - For copy types with same source and dest: emit Copy
+/// - For fixed-width int widening to Int: emit Widen
+/// - For linear types (clone): emit Clone
+fn lower_clone_coerce<'db>(
+    ctx: &mut LowerCtx<'db>,
+    expr: ExprFun<'db>,
+    cc_expr: ast::ExprCloneCoerce<'db>,
+) -> Result<ValueId, LowerError> {
+    let src_type = ctx.expr_type(cc_expr.operand);
+    let dest_type = ctx.expr_type(expr);
+
+    // Use lower_operand to borrow the operand (@ doesn't consume).
+    let src = lower_operand(ctx, cc_expr.operand)?;
+
+    let dest = ctx.fresh_value(dest_type.clone());
+
+    // Determine the right instruction based on types:
+    // 1. Copy types (same type or widening between fixed ints): Copy
+    // 2. Fixed int to Int (bigint): Widen
+    // 3. Linear types: Clone
+    if src_type.is_copy() && dest_type.is_copy() {
+        // Both are copy types - just copy.
+        ctx.emit(Instruction::Copy { dest, src });
+    } else if is_fixed_width_int(&src_type) && matches!(dest_type, IrType::Int) {
+        // Fixed int to Int (bigint) - widen.
+        ctx.emit(Instruction::Widen { dest, src });
+    } else {
+        // Linear type - clone.
+        ctx.emit(Instruction::Clone { dest, src });
+    }
+
+    // Drop expression temporaries after borrowing operation completes.
+    ctx.emit_expr_temp_drops();
+
+    Ok(dest)
 }
 
 /// Lower field projection expression.

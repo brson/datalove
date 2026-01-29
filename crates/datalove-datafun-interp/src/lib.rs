@@ -908,6 +908,23 @@ impl IrInterpreter {
                 frame.mark_value_live(*dest);
                 // Source is borrowed (read), not consumed.
             }
+            Instruction::Clone { dest, src } => {
+                // Clone a linear value (deep copy for @ operator).
+                let src_val = self.read_operand(src, frame, frames);
+                let dest_slot = frame.value_dest(*dest);
+                // Use runtime clone function.
+                unsafe {
+                    datalove_rt::c::dtlv_rti_clone_local(
+                        self.runtime.handle(),
+                        src_val.ptr,
+                        src_val.tydesc,
+                        dest_slot.ptr,
+                        src_val.tydesc, // Same type for clone
+                    );
+                }
+                frame.mark_value_live(*dest);
+                // Source is borrowed (read), not consumed.
+            }
             Instruction::Nop => {}
             Instruction::GetField { dest, src, field_index } => {
                 let src_val = self.read_operand(src, frame, frames);

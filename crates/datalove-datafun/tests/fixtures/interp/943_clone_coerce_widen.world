@@ -1,0 +1,8 @@
+----------
+scriptunit-fragment
+----------
+
+// Test widening u8 to int with @ operator
+let n: u8 = 42
+let big: int = n@
+debuglog big

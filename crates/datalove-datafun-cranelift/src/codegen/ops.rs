@@ -667,4 +667,52 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         self.values.insert(dest, result_ptr);
         Ok(())
     }
+
+    /// Compile clone operation for @ operator.
+    ///
+    /// Creates a deep copy of a value using the runtime's clone function.
+    pub(super) fn compile_clone(
+        &mut self,
+        builder: &mut FunctionBuilder,
+        dest: ValueId,
+        src: &Operand,
+    ) -> Result<(), CraneliftError> {
+        // Get runtime imports and handle.
+        let runtime = self.runtime.ok_or_else(|| {
+            CraneliftError::Codegen("Clone requires runtime imports".into())
+        })?;
+        let rt_handle = self.rt_handle_param.ok_or_else(|| {
+            CraneliftError::Codegen("Clone requires runtime handle".into())
+        })?;
+
+        // Get pointer to source operand and its type.
+        let src_ptr = self.get_operand_ptr(builder, src)?;
+        let src_ty = self.get_operand_type(src)?;
+        let src_tydesc_id = self.tydesc_emitter.get(&src_ty).ok_or_else(|| {
+            CraneliftError::Codegen(format!("TyDesc not found for source type {:?}", src_ty))
+        })?;
+        let src_tydesc_gv = self.module.declare_data_in_func(src_tydesc_id, builder.func);
+        let src_tydesc_ptr = builder.ins().global_value(PTR_TYPE, src_tydesc_gv);
+
+        // Get frame slot and destination address for cloned result.
+        let frame_slot = self.frame_slot.ok_or_else(|| {
+            CraneliftError::Codegen("no frame slot for Clone result".into())
+        })?;
+        let dest_offset = self.layout.value_offset(dest.0);
+        let result_ptr = builder.ins().stack_addr(PTR_TYPE, frame_slot, dest_offset as i32);
+
+        // Call runtime function: dtlv_rti_clone_local(rt, src_ref, src_tydesc, dst_out, dst_tydesc) -> status
+        let func_ref = self.module.declare_func_in_func(runtime.clone_local, builder.func);
+        builder.ins().call(func_ref, &[
+            rt_handle,
+            src_ptr,
+            src_tydesc_ptr,
+            result_ptr,
+            src_tydesc_ptr, // Same type for clone
+        ]);
+
+        // Store pointer to result.
+        self.values.insert(dest, result_ptr);
+        Ok(())
+    }
 }

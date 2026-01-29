@@ -182,6 +182,7 @@ pub enum ExprFunKind {
     UnaryOp(ExprUnaryOp),
     TryOption(ExprTryOption),
     TryResult(ExprTryResult),
+    CloneCoerce(ExprCloneCoerce),
     FieldProj(ExprFieldProj),
 
     // Inline literal expressions.
@@ -290,6 +291,11 @@ pub struct ExprTryOption {
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct ExprTryResult {
+    pub operand: Box<ExprFun>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct ExprCloneCoerce {
     pub operand: Box<ExprFun>,
 }
 
@@ -669,6 +675,7 @@ impl ExprFunKind {
             crate::ast::ExprFunKind::UnaryOp(u) => ExprFunKind::UnaryOp(ExprUnaryOp::from_ast(db, u)),
             crate::ast::ExprFunKind::TryOption(t) => ExprFunKind::TryOption(ExprTryOption::from_ast(db, t)),
             crate::ast::ExprFunKind::TryResult(t) => ExprFunKind::TryResult(ExprTryResult::from_ast(db, t)),
+            crate::ast::ExprFunKind::CloneCoerce(c) => ExprFunKind::CloneCoerce(ExprCloneCoerce::from_ast(db, c)),
             crate::ast::ExprFunKind::FieldProj(f) => ExprFunKind::FieldProj(ExprFieldProj::from_ast(db, f)),
 
             // Inline literal expressions.
@@ -802,6 +809,14 @@ impl ExprTryOption {
 impl ExprTryResult {
     pub fn from_ast<'db>(db: &'db dyn Db, ast: &crate::ast::ExprTryResult<'db>) -> Self {
         ExprTryResult {
+            operand: Box::new(ExprFun::from_ast(db, ast.operand)),
+        }
+    }
+}
+
+impl ExprCloneCoerce {
+    pub fn from_ast<'db>(db: &'db dyn Db, ast: &crate::ast::ExprCloneCoerce<'db>) -> Self {
+        ExprCloneCoerce {
             operand: Box::new(ExprFun::from_ast(db, ast.operand)),
         }
     }

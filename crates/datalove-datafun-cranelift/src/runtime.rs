@@ -81,6 +81,10 @@ pub struct RuntimeImports {
     /// `dtlv_rti_move_value_local(rt, src_ref, tydesc, dst_out) -> RtStatus`
     pub move_value: FuncId,
 
+    // Clone function.
+    /// `dtlv_rti_clone_local(rt, src_ref, src_tydesc, dst_out, dst_tydesc) -> RtStatus`
+    pub clone_local: FuncId,
+
     // Boxing functions.
     /// `dtlv_rti_error_from_local(rt, inner_in, inner_tydesc, dest_out) -> RtStatus`
     pub error_from: FuncId,
@@ -476,6 +480,20 @@ impl RuntimeImports {
                 .map_err(|e| CraneliftError::Module(format!("declare dtlv_rti_move_value_local: {}", e)))?
         };
 
+        // dtlv_rti_clone_local(ptr, ptr, ptr, ptr, ptr) -> u8
+        let clone_local = {
+            let mut sig = cl_ir::Signature::new(call_conv);
+            sig.params.push(AbiParam::new(PTR_TYPE)); // rt handle
+            sig.params.push(AbiParam::new(PTR_TYPE)); // src_ref
+            sig.params.push(AbiParam::new(PTR_TYPE)); // src_tydesc
+            sig.params.push(AbiParam::new(PTR_TYPE)); // dst_out
+            sig.params.push(AbiParam::new(PTR_TYPE)); // dst_tydesc
+            sig.returns.push(AbiParam::new(cl_types::I8));
+            module
+                .declare_function("dtlv_rti_clone_local", Linkage::Import, &sig)
+                .map_err(|e| CraneliftError::Module(format!("declare dtlv_rti_clone_local: {}", e)))?
+        };
+
         // Boxing functions: error_from, data_from
         // Signature: (rt, inner_in, inner_tydesc, dest_out) -> u8
         let boxing_sig = || {
@@ -528,6 +546,7 @@ impl RuntimeImports {
             int_from_limbs,
             int_cmp,
             move_value,
+            clone_local,
             error_from,
             data_from,
         })

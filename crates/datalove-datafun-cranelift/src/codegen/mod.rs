@@ -537,6 +537,9 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             Instruction::Widen { dest, src } => {
                 self.compile_widen(builder, *dest, src)?;
             }
+            Instruction::Clone { dest, src } => {
+                self.compile_clone(builder, *dest, src)?;
+            }
             Instruction::Copy { dest, src } => {
                 self.compile_copy(builder, *dest, src)?;
             }

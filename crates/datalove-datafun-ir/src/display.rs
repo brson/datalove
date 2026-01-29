@@ -361,6 +361,9 @@ impl fmt::Display for Instruction {
             Instruction::Widen { dest, src } => {
                 write!(f, "{} = widen {}", dest, src)
             }
+            Instruction::Clone { dest, src } => {
+                write!(f, "{} = clone {}", dest, src)
+            }
             Instruction::Call { dest, func, args } => {
                 write!(f, "{} = call {}(", dest, func)?;
                 for (i, arg) in args.iter().enumerate() {

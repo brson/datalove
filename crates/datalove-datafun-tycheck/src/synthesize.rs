@@ -183,6 +183,11 @@ pub fn synthesize_expr<'db>(
             synthesize_try_result(ctx, expr, try_op)
         }
 
+        ExprFunKind::CloneCoerce(_) => {
+            // The @ operator requires type context - it cannot synthesize a type.
+            Err(ctx.error_cannot_synthesize(expr, "@ operator requires type context for coercion"))
+        }
+
         ExprFunKind::FieldProj(ref proj) => {
             synthesize_field_proj(ctx, expr, proj)
         }

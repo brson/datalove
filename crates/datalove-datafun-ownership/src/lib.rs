@@ -633,6 +633,12 @@ impl<'db> AnalysisCtx<'db> {
                 self.analyze_expr_moves(try_res.operand, true);
                 None
             }
+            ExprFunKind::CloneCoerce(cc) => {
+                // Clone/coerce reads its operand (creates a clone), doesn't consume it.
+                // The original value remains valid after @.
+                self.analyze_expr_moves(cc.operand, false);
+                None
+            }
             ExprFunKind::List(list) => {
                 // List elements are consumed.
                 for elem in &list.elements {

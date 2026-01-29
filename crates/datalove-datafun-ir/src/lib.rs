@@ -793,6 +793,14 @@ pub enum Instruction {
     /// **Ownership:** Borrows `src`, produces `dest` (Int is non-Copy).
     Widen { dest: ValueId, src: Operand },
 
+    /// Clone a linear value (deep copy for the @ operator).
+    ///
+    /// Creates a deep copy of a linear value so the original remains valid.
+    /// Used by the postfix `@` operator for clone/coerce operations.
+    ///
+    /// **Ownership:** Borrows `src`, produces `dest` (new owned value).
+    Clone { dest: ValueId, src: Operand },
+
     // ========================================================================
     // Function Calls
     // ========================================================================

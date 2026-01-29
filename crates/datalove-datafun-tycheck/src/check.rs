@@ -398,6 +398,23 @@ pub fn check_expr<'db>(
             Err(ctx.error_type_mismatch(expr, &expected_str, &actual_str, "type mismatch"))
         }
 
+        // Handle clone/coerce operator (@) - explicit lossless conversion.
+        ExprFunKind::CloneCoerce(ref cc_expr) => {
+            // Synthesize the operand's type.
+            let operand_ty = ctx.synthesize_expr(cc_expr.operand)?;
+
+            // Check if the conversion is valid using can_clone_coerce_to.
+            if can_clone_coerce_to(&operand_ty, expected, db) {
+                ctx.store_expr_type(expr, expected);
+                return Ok(());
+            }
+
+            // Conversion not valid - report error.
+            let expected_str = type_to_string(db, expected);
+            let actual_str = type_to_string(db, &operand_ty);
+            Err(ctx.error_type_mismatch(expr, &expected_str, &actual_str, "@ operator cannot convert between these types"))
+        }
+
         // Handle binary operations - bidirectional type propagation for arithmetic.
         ExprFunKind::BinOp(ref binop) => {
             let op = binop.op;

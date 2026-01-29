@@ -60,11 +60,12 @@ impl<'db> Parser<'db> {
         lhs
     }
 
-    /// Parse postfix operators (?, !, and field projections).
+    /// Parse postfix operators (?, !, @, and field projections).
     ///
     /// Handles:
     /// - `?` - unwrap Option with early return
     /// - `!` - unwrap Result with early return
+    /// - `@` - clone/coerce (widen or clone to fit target type)
     /// - `.field` - struct field projection
     /// - `.0` - tuple index projection
     fn parse_postfix_try_operators(&mut self, mut expr: ast::ExprFun<'db>) -> ast::ExprFun<'db> {
@@ -88,6 +89,15 @@ impl<'db> Parser<'db> {
                             let span = op_span.start..end_pos;
                             expr = self.create_expr(
                                 ast::ExprFunKind::TryResult(ast::ExprTryResult { operand: expr }),
+                                TextSpan::new(text, span),
+                            );
+                        }
+                        TokenKind::Sigil(Sigil::At) => {
+                            self.next(); // consume @
+                            let end_pos = self.last_byte_end();
+                            let span = op_span.start..end_pos;
+                            expr = self.create_expr(
+                                ast::ExprFunKind::CloneCoerce(ast::ExprCloneCoerce { operand: expr }),
                                 TextSpan::new(text, span),
                             );
                         }

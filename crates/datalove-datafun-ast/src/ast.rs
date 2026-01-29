@@ -293,6 +293,8 @@ pub enum ExprFunKind<'db> {
     // Try operators (postfix ? and !)
     TryOption(ExprTryOption<'db>),
     TryResult(ExprTryResult<'db>),
+    // Clone/coerce operator (postfix @)
+    CloneCoerce(ExprCloneCoerce<'db>),
     // Field projection (postfix .field or .0)
     FieldProj(ExprFieldProj<'db>),
 
@@ -422,6 +424,20 @@ pub struct ExprTryOption<'db> {
 #[derive(Clone, Hash, PartialEq, Eq)]
 #[derive(salsa::Update)]
 pub struct ExprTryResult<'db> {
+    pub operand: ExprFun<'db>,
+}
+
+/// Clone/coerce expression (postfix @).
+///
+/// Performs lossless conversions:
+/// - Clone: for linear types, creates a copy so the original remains valid
+/// - Widen: for fixed integers, widens along signedness chains
+/// - Both: when widening produces a linear type (e.g., to `int`)
+///
+/// Target type is inferred from context (assignment, parameter, binary op).
+#[derive(Clone, Hash, PartialEq, Eq)]
+#[derive(salsa::Update)]
+pub struct ExprCloneCoerce<'db> {
     pub operand: ExprFun<'db>,
 }
 

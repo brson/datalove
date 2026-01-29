@@ -355,6 +355,45 @@ pub fn is_signed_fixed_int_type(ty: &Type<'_>) -> bool {
     is_fixed_int_type(ty) && !is_unsigned_int_type(ty)
 }
 
+/// Check if the `@` operator can convert from one type to another.
+///
+/// The `@` operator performs lossless clone/coerce operations:
+/// - Clone: for linear types where source and target are the same
+/// - Widen: for fixed integers along signedness chains
+/// - Cross-sign widen: for unsigned to larger signed (u8 -> i16, u16 -> i32, etc.)
+/// - Both: when widening produces a linear type (e.g., to `int`)
+///
+/// This function returns true if the conversion is valid.
+pub fn can_clone_coerce_to<'db>(from: &Type<'db>, to: &Type<'db>, db: &'db dyn Db) -> bool {
+    // Same type: always valid (clone for linear, no-op for copy)
+    if types_equivalent(db, from, to) {
+        return true;
+    }
+
+    // Extract datalit types
+    let (from_dt, to_dt) = match (from, to) {
+        (Type::Datalit(from_dt), Type::Datalit(to_dt)) => (from_dt, to_dt),
+        _ => return false,
+    };
+
+    // Check standard widening
+    if datalit::tycheck::can_widen_to(from_dt, to_dt) {
+        return true;
+    }
+
+    // Check cross-sign widening (unsigned to larger signed)
+    // u8 -> i16, i32, i64, int
+    // u16 -> i32, i64, int
+    // u32 -> i64, int
+    use datalit::tycheck::Type as DT;
+    match (from_dt, to_dt) {
+        (DT::U8, DT::I16 | DT::I32 | DT::I64 | DT::Int) => true,
+        (DT::U16, DT::I32 | DT::I64 | DT::Int) => true,
+        (DT::U32, DT::I64 | DT::Int) => true,
+        _ => false,
+    }
+}
+
 /// Check if a type is boolean.
 pub fn is_bool_type(ty: &Type<'_>) -> bool {
     match ty {

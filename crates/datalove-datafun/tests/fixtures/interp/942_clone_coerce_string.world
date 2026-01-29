@@ -1,0 +1,10 @@
+----------
+scriptunit-fragment
+----------
+
+// Test cloning a string with @ operator
+let s: string = "hello"
+let s2: string = s@
+// Original s should still be valid after clone
+debuglog s
+debuglog s2
