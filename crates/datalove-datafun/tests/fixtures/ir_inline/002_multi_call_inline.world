@@ -2,18 +2,18 @@
 module local/test/main
 ----------
 
-fun inc(x: int): int
-    ret x + 1
+fun double(x: i64): int
+    ret x + x
 end fun
 
-fun add_three(x: int): int
-    let a = inc(x)
-    let b = inc(a)
-    let c = inc(b)
-    ret c
+fun add_six(x: i64): int
+    let a = double(x)
+    let b = double(x)
+    let c = double(x)
+    ret a + b + c
 end fun
 
 ----------
 inline-directives
 ----------
-inline add_three inc
+inline add_six double

@@ -6,7 +6,7 @@ fun noop()
 end fun
 
 fun caller(): i64
-    noop()
+    let _ = noop()
     ret 42
 end fun
 

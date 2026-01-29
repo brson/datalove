@@ -232,7 +232,9 @@ impl WorldfileSection {
             | WorldfileSection::ModuleChangeTy { library, package, module, .. } => {
                 Some(ModulePath::new(library.clone(), package.clone(), module.clone()))
             }
-            WorldfileSection::ScriptFragment { .. } | WorldfileSection::ScriptExpr { .. } => None,
+            WorldfileSection::ScriptFragment { .. }
+            | WorldfileSection::ScriptExpr { .. }
+            | WorldfileSection::InlineDirectives { .. } => None,
         }
     }
 
@@ -245,7 +247,8 @@ impl WorldfileSection {
             | WorldfileSection::ModuleChangeAst { source, .. }
             | WorldfileSection::ModuleChangeTy { source, .. }
             | WorldfileSection::ScriptFragment { source }
-            | WorldfileSection::ScriptExpr { source } => Some(source),
+            | WorldfileSection::ScriptExpr { source }
+            | WorldfileSection::InlineDirectives { source } => Some(source),
             WorldfileSection::ModuleRemove { .. } => None,
         }
     }
@@ -259,7 +262,9 @@ impl WorldfileSection {
             WorldfileSection::ModuleChangeWs { .. } => Some(ModuleSectionKind::ChangeWs),
             WorldfileSection::ModuleChangeAst { .. } => Some(ModuleSectionKind::ChangeAst),
             WorldfileSection::ModuleChangeTy { .. } => Some(ModuleSectionKind::ChangeTy),
-            WorldfileSection::ScriptFragment { .. } | WorldfileSection::ScriptExpr { .. } => None,
+            WorldfileSection::ScriptFragment { .. }
+            | WorldfileSection::ScriptExpr { .. }
+            | WorldfileSection::InlineDirectives { .. } => None,
         }
     }
 
@@ -274,6 +279,7 @@ impl WorldfileSection {
             WorldfileSection::ModuleChangeTy { .. } => "module-change-ty",
             WorldfileSection::ScriptFragment { .. } => "scriptunit-fragment",
             WorldfileSection::ScriptExpr { .. } => "scriptunit-expr",
+            WorldfileSection::InlineDirectives { .. } => "inline-directives",
         }
     }
 

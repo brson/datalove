@@ -1,1 +1,31 @@
-Parse error: unexpected statement
+=== BEFORE INLINING ===
+fn caller():
+block0:
+    v0 = call m0.f0()
+    v1 = const 42i64
+    return v1
+
+fn noop():
+block0:
+    return
+
+=== INLINE DIRECTIVES ===
+inline caller noop
+
+=== AFTER INLINING ===
+fn caller():
+block0:
+    goto block1
+block1:
+    goto block2
+block2:
+    v1 = const 42i64
+    return v1
+
+fn noop():
+block0:
+    return
+
+=== INLINING STATS ===
+Inlined: 1 call(s)
+Skipped: 0

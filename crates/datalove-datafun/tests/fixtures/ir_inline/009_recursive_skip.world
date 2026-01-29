@@ -3,7 +3,7 @@ module local/test/main
 ----------
 
 fun factorial(n: i64): i64
-    if n <= 1 then
+    if n <= 1
         ret 1
     else
         ret n

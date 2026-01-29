@@ -2,13 +2,13 @@
 module local/test/main
 ----------
 
-fun mutate(x: int): int
-    var result: int = x
-    set result = result + 1
+fun mutate(x: i64): int
+    var result: i64 = x
+    result = result + 1
     ret result
 end fun
 
-fun use_mutate(x: int): int
+fun use_mutate(x: i64): int
     ret mutate(x)
 end fun
 

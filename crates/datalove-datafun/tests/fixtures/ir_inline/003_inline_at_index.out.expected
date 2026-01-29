@@ -1,1 +1,1 @@
-Typecheck error: line 3, col 9: error[F016]: mismatched types: expected `int`, found `u32`
+Typecheck error: line 3, col 9: error[F016]: mismatched types: expected `i64`, found `u32`

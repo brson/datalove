@@ -2,14 +2,14 @@
 module local/test/main
 ----------
 
-fun inc(x: int): int
+fun inc(x: i64): int
     ret x + 1
 end fun
 
-fun add_two(x: int): int
+fun add_two(x: i64): int
     let a = inc(x)
-    let b = inc(a)
-    ret b
+    let b = inc(x)
+    ret a + b
 end fun
 
 ----------

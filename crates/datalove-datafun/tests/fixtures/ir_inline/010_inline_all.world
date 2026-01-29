@@ -2,15 +2,15 @@
 module local/test/main
 ----------
 
-fun helper(x: int): int
-    ret x + 1
+fun helper(x: i64): int
+    ret x + x
 end fun
 
-fun foo(x: int): int
+fun foo(x: i64): int
     ret helper(x)
 end fun
 
-fun bar(x: int): int
+fun bar(x: i64): int
     ret helper(x)
 end fun
 

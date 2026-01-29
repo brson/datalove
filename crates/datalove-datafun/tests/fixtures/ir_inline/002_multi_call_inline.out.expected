@@ -1,1 +1,79 @@
-Typecheck error: line 3, col 9: error[F016]: mismatched types: expected `int`, found `u32`
+=== BEFORE INLINING ===
+fn add_six(p0):
+block0:
+    v0 = call m0.f0(p0)
+    v1 = call m0.f0(p0)
+    v2 = call m0.f0(p0)
+    v3 = add v0, v1
+    v4 = add v3, v2
+    drop v3
+    drop v0
+    drop v1
+    drop v2
+    return v4
+
+fn double(p0):
+block0:
+    v0 = widen p0
+    v1 = widen p0
+    v2 = add v0, v1
+    drop v0
+    drop v1
+    return v2
+
+=== INLINE DIRECTIVES ===
+inline add_six double
+
+=== AFTER INLINING ===
+fn add_six(p0):
+block0:
+    goto block5
+block1:
+    v8 = copy p0
+    v5 = widen v8
+    v6 = widen v8
+    v7 = add v5, v6
+    drop v5
+    drop v6
+    goto block2(v7)
+block2(v2):
+    v3 = add v0, v1
+    v4 = add v3, v2
+    drop v3
+    drop v0
+    drop v1
+    drop v2
+    return v4
+block3:
+    v12 = copy p0
+    v9 = widen v12
+    v10 = widen v12
+    v11 = add v9, v10
+    drop v9
+    drop v10
+    goto block4(v11)
+block4(v1):
+    goto block1
+block5:
+    v16 = copy p0
+    v13 = widen v16
+    v14 = widen v16
+    v15 = add v13, v14
+    drop v13
+    drop v14
+    goto block6(v15)
+block6(v0):
+    goto block3
+
+fn double(p0):
+block0:
+    v0 = widen p0
+    v1 = widen p0
+    v2 = add v0, v1
+    drop v0
+    drop v1
+    return v2
+
+=== INLINING STATS ===
+Inlined: 3 call(s)
+Skipped: 0
