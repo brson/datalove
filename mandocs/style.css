@@ -109,7 +109,7 @@
         --code-bg: var(--cave-base06);
         --code-bg: color-mix(in srgb, var(--heath-base03), white 94%);
         --table-header-bg: var(--cave-base06);
-        --link: var(--cave-violet);
+        --link: color-mix(in srgb, var(--cave-violet), black 20%);
         --syn-keyword: var(--cave-magenta);
         --syn-type-name: var(--cave-cyan);
         --syn-string: var(--cave-yellow);
@@ -509,8 +509,9 @@ th {
 }
 
 .toc li {
-    padding: 0.4rem 0;
+    padding: 0 0;
     padding-left: 1.4rem;
+    margin: 0 0;
     position: relative;
     break-inside: avoid;
 }
@@ -520,12 +521,6 @@ th {
     position: absolute;
     left: 0;
     color: var(--accent);
-    opacity: 0.5;
-    transition: opacity 0.15s;
-}
-
-.toc li:hover::before {
-    opacity: 1;
 }
 
 .toc a {
