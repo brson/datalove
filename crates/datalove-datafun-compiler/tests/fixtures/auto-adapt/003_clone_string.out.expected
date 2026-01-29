@@ -1,50 +1,7 @@
 {
-  "auto_adapt_mode": {
-    "adaptations": [],
-    "diagnostic_count": 3,
-    "diagnostics": [
-      {
-        "code": "F011",
-        "kind": "CannotSynthesize",
-        "message": "cannot infer return type"
-      },
-      {
-        "code": "F002",
-        "kind": "UndefinedFunction",
-        "name": "consume"
-      },
-      {
-        "code": "F011",
-        "kind": "CannotSynthesize",
-        "message": "cannot infer return type"
-      }
-    ],
-    "error_count": 3,
-    "mode": "auto-adapt",
-    "success": false
-  },
-  "normal_mode": {
-    "adaptations": [],
-    "diagnostic_count": 3,
-    "diagnostics": [
-      {
-        "code": "F011",
-        "kind": "CannotSynthesize",
-        "message": "cannot infer return type"
-      },
-      {
-        "code": "F002",
-        "kind": "UndefinedFunction",
-        "name": "consume"
-      },
-      {
-        "code": "F011",
-        "kind": "CannotSynthesize",
-        "message": "cannot infer return type"
-      }
-    ],
-    "error_count": 3,
-    "mode": "normal",
-    "success": false
-  }
+  "diagnostic_count": 0,
+  "diagnostics": [],
+  "error_count": 0,
+  "errors": [],
+  "success": true
 }

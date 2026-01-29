@@ -1,10 +1,5 @@
-// Test: u8 can cross-sign widen to i16 via @
-// Without @: F016 type mismatch
-// With auto-adapt: succeeds
+// Test: u8 should produce recovery hint for cross-sign widening to i16
+// Expected: F016 type mismatch with "help: use @ to convert from u8 to i16"
 
-fn needs_signed(x: i16) -> i16
-    ret x
-
-fn main() -> i16
-    let n: u8 = 255
-    ret needs_signed(n)
+let n: u8 = 255
+let x: i16 = n

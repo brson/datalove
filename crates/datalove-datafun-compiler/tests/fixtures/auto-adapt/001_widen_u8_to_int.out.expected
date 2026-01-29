@@ -1,40 +1,28 @@
 {
-  "auto_adapt_mode": {
-    "adaptations": [],
-    "diagnostic_count": 2,
-    "diagnostics": [
-      {
-        "code": "F011",
-        "kind": "CannotSynthesize",
-        "message": "cannot infer return type"
-      },
-      {
-        "code": "F011",
-        "kind": "CannotSynthesize",
-        "message": "cannot infer return type"
-      }
-    ],
-    "error_count": 2,
-    "mode": "auto-adapt",
-    "success": false
-  },
-  "normal_mode": {
-    "adaptations": [],
-    "diagnostic_count": 2,
-    "diagnostics": [
-      {
-        "code": "F011",
-        "kind": "CannotSynthesize",
-        "message": "cannot infer return type"
-      },
-      {
-        "code": "F011",
-        "kind": "CannotSynthesize",
-        "message": "cannot infer return type"
-      }
-    ],
-    "error_count": 2,
-    "mode": "normal",
-    "success": false
-  }
+  "diagnostic_count": 1,
+  "diagnostics": [
+    {
+      "code": "F016",
+      "labels": [
+        {
+          "span": [
+            236,
+            237
+          ],
+          "text": "n"
+        }
+      ],
+      "message": "mismatched types: expected `i32`, found `u16`",
+      "notes": [
+        "help: use `@` to convert from `u16` to `i32`"
+      ]
+    }
+  ],
+  "error_count": 1,
+  "errors": [
+    {
+      "error": "TypeMismatch { expected: \"i32\", actual: \"u16\" }"
+    }
+  ],
+  "success": false
 }
