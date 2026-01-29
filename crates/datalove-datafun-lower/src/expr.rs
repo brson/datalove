@@ -1257,7 +1257,8 @@ fn lower_try_result<'db>(
 /// Lower clone/coerce operator (`@`).
 ///
 /// The `@` operator performs lossless clone/coerce operations:
-/// - For copy types with same source and dest: emit Copy
+/// - For same type copy types: emit Copy
+/// - For fixed-width int widening to larger fixed-width: emit WidenFixed
 /// - For fixed-width int widening to Int: emit Widen
 /// - For linear types (clone): emit Clone
 fn lower_clone_coerce<'db>(
@@ -1274,12 +1275,21 @@ fn lower_clone_coerce<'db>(
     let dest = ctx.fresh_value(dest_type.clone());
 
     // Determine the right instruction based on types:
-    // 1. Copy types (same type or widening between fixed ints): Copy
-    // 2. Fixed int to Int (bigint): Widen
-    // 3. Linear types: Clone
+    // 1. Same type copy types: Copy (no-op for same type)
+    // 2. Fixed-width int to larger fixed-width int: WidenFixed
+    // 3. Fixed int to Int (bigint): Widen
+    // 4. Linear types: Clone
     if src_type.is_copy() && dest_type.is_copy() {
-        // Both are copy types - just copy.
-        ctx.emit(Instruction::Copy { dest, src });
+        if src_type == dest_type {
+            // Same type - just copy.
+            ctx.emit(Instruction::Copy { dest, src });
+        } else if is_fixed_width_int(&src_type) && is_fixed_width_int(&dest_type) {
+            // Fixed-width to fixed-width widening.
+            ctx.emit(Instruction::WidenFixed { dest, src });
+        } else {
+            // Other copy types - just copy (shouldn't happen in practice).
+            ctx.emit(Instruction::Copy { dest, src });
+        }
     } else if is_fixed_width_int(&src_type) && matches!(dest_type, IrType::Int) {
         // Fixed int to Int (bigint) - widen.
         ctx.emit(Instruction::Widen { dest, src });

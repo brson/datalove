@@ -715,4 +715,50 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         self.values.insert(dest, result_ptr);
         Ok(())
     }
+
+    /// Compile fixed-width integer widening for @ operator.
+    ///
+    /// Widens a smaller fixed-width integer to a larger one using
+    /// uextend (zero-extend) for unsigned or sextend (sign-extend) for signed.
+    pub(super) fn compile_widen_fixed(
+        &mut self,
+        builder: &mut FunctionBuilder,
+        dest: ValueId,
+        src: &Operand,
+    ) -> Result<(), CraneliftError> {
+        // Get source value and types.
+        let src_val = self.get_operand_value(builder, src)?;
+        let src_ty = self.get_operand_type(src)?;
+        let dest_ty = &self.func.value_types[dest.0 as usize];
+
+        // Determine the Cranelift type for the destination.
+        let dest_cl_type = match dest_ty {
+            IrType::U8 | IrType::I8 => cl_types::I8,
+            IrType::U16 | IrType::I16 => cl_types::I16,
+            IrType::U32 | IrType::I32 => cl_types::I32,
+            IrType::U64 | IrType::I64 => cl_types::I64,
+            _ => {
+                return Err(CraneliftError::Codegen(format!(
+                    "WidenFixed: unsupported destination type {:?}",
+                    dest_ty
+                )));
+            }
+        };
+
+        // Determine if we need sign-extend (signed src) or zero-extend (unsigned src).
+        let is_signed_src = matches!(
+            src_ty,
+            IrType::I8 | IrType::I16 | IrType::I32 | IrType::I64 | IrType::Isize
+        );
+
+        // Extend the value.
+        let extended_val = if is_signed_src {
+            builder.ins().sextend(dest_cl_type, src_val)
+        } else {
+            builder.ins().uextend(dest_cl_type, src_val)
+        };
+
+        self.values.insert(dest, extended_val);
+        Ok(())
+    }
 }

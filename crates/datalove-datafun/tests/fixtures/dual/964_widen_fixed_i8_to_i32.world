@@ -1,0 +1,8 @@
+----------
+scriptunit-fragment
+----------
+
+// Widen i8 to i32 with @ operator (sign extension).
+let x: i8 = -50
+let y: i32 = x@
+debuglog y

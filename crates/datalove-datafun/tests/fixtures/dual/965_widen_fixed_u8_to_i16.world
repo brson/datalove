@@ -1,0 +1,8 @@
+----------
+scriptunit-fragment
+----------
+
+// Cross-sign widen u8 to i16 with @ operator.
+let x: u8 = 200
+let y: i16 = x@
+debuglog y

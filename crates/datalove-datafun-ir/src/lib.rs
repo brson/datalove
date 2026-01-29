@@ -793,6 +793,17 @@ pub enum Instruction {
     /// **Ownership:** Borrows `src`, produces `dest` (Int is non-Copy).
     Widen { dest: ValueId, src: Operand },
 
+    /// Widen a fixed-width integer to a larger fixed-width integer.
+    ///
+    /// Performs zero-extension for unsigned types and sign-extension for signed types.
+    /// Valid widening paths:
+    /// - u8 -> u16 -> u32 -> u64
+    /// - i8 -> i16 -> i32 -> i64
+    /// - Cross-sign: u8 -> i16, u16 -> i32, u32 -> i64
+    ///
+    /// **Ownership:** Borrows `src`, produces `dest` (both are Copy types).
+    WidenFixed { dest: ValueId, src: Operand },
+
     /// Clone a linear value (deep copy for the @ operator).
     ///
     /// Creates a deep copy of a linear value so the original remains valid.

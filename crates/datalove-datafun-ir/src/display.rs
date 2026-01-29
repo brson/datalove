@@ -361,6 +361,9 @@ impl fmt::Display for Instruction {
             Instruction::Widen { dest, src } => {
                 write!(f, "{} = widen {}", dest, src)
             }
+            Instruction::WidenFixed { dest, src } => {
+                write!(f, "{} = widen_fixed {}", dest, src)
+            }
             Instruction::Clone { dest, src } => {
                 write!(f, "{} = clone {}", dest, src)
             }

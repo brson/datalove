@@ -1,0 +1,8 @@
+----------
+scriptunit-fragment
+----------
+
+// Widen u16 to u32 with @ operator.
+let x: u16 = 60000
+let y: u32 = x@
+debuglog y

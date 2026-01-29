@@ -246,6 +246,41 @@ impl IrInterpreter {
         }
     }
 
+    /// Widen a fixed-width integer to a larger fixed-width integer.
+    ///
+    /// Performs zero-extension for unsigned types and sign-extension for signed types.
+    /// Panics if source is not a fixed-width integer type (compiler bug).
+    pub(crate) unsafe fn widen_fixed(&self, src: &Value, dest: &Destination) {
+        unsafe {
+            let src_tag = (*src.tydesc).type_tag;
+            let dest_tag = (*dest.tydesc).type_tag;
+
+            // Read source value as i64 (sign-extended for signed, zero-extended for unsigned).
+            let value: i64 = match src_tag {
+                rtdt::TyTag::U8 => *(src.ptr as *const u8) as i64,
+                rtdt::TyTag::U16 => *(src.ptr as *const u16) as i64,
+                rtdt::TyTag::U32 => *(src.ptr as *const u32) as i64,
+                rtdt::TyTag::U64 => *(src.ptr as *const u64) as i64,
+                rtdt::TyTag::I8 => *(src.ptr as *const i8) as i64,
+                rtdt::TyTag::I16 => *(src.ptr as *const i16) as i64,
+                rtdt::TyTag::I32 => *(src.ptr as *const i32) as i64,
+                rtdt::TyTag::I64 => *(src.ptr as *const i64),
+                _ => panic!("widen_fixed: cannot widen from type {:?}", src_tag),
+            };
+
+            // Write to destination according to its type.
+            match dest_tag {
+                rtdt::TyTag::U16 => *(dest.ptr as *mut u16) = value as u16,
+                rtdt::TyTag::U32 => *(dest.ptr as *mut u32) = value as u32,
+                rtdt::TyTag::U64 => *(dest.ptr as *mut u64) = value as u64,
+                rtdt::TyTag::I16 => *(dest.ptr as *mut i16) = value as i16,
+                rtdt::TyTag::I32 => *(dest.ptr as *mut i32) = value as i32,
+                rtdt::TyTag::I64 => *(dest.ptr as *mut i64) = value,
+                _ => panic!("widen_fixed: cannot widen to type {:?}", dest_tag),
+            }
+        }
+    }
+
     pub(crate) fn execute_binop(
         &mut self,
         op: BinOp,

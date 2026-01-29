@@ -29,6 +29,7 @@ pub fn instruction_dest(instr: &Instruction) -> Option<ValueId> {
         Instruction::BinOpChecked { dest, .. } => Some(*dest),
         Instruction::UnaryOpChecked { dest, .. } => Some(*dest),
         Instruction::Widen { dest, .. } => Some(*dest),
+        Instruction::WidenFixed { dest, .. } => Some(*dest),
         Instruction::Clone { dest, .. } => Some(*dest),
 
         // Function calls
@@ -296,6 +297,7 @@ fn collect_instruction_operands(instr: &Instruction, used: &mut HashSet<ValueId>
         Instruction::Copy { src, .. }
         | Instruction::Move { src, .. }
         | Instruction::Widen { src, .. }
+        | Instruction::WidenFixed { src, .. }
         | Instruction::Clone { src, .. }
         | Instruction::Unpack { src, .. }
         | Instruction::GetField { src, .. }

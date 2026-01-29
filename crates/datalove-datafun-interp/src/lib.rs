@@ -908,6 +908,16 @@ impl IrInterpreter {
                 frame.mark_value_live(*dest);
                 // Source is borrowed (read), not consumed.
             }
+            Instruction::WidenFixed { dest, src } => {
+                // Widen a fixed-width integer to a larger fixed-width integer.
+                let src_val = self.read_operand(src, frame, frames);
+                let dest_slot = frame.value_dest(*dest);
+                unsafe {
+                    self.widen_fixed(&src_val, &dest_slot);
+                }
+                frame.mark_value_live(*dest);
+                // Source is borrowed (read), not consumed.
+            }
             Instruction::Clone { dest, src } => {
                 // Clone a linear value (deep copy for @ operator).
                 let src_val = self.read_operand(src, frame, frames);
