@@ -145,7 +145,7 @@ If `.out.expected.64` exists and index-64 is enabled, it takes precedence.
 
 ### What Differs Between Modes
 
-1. **Literal ranges** - Max usize changes from ~4B to ~18E
+1. **Literal ranges** - Max index changes from ~4B to ~18E
 2. **Error messages** - Type range descriptions differ
 3. **Collection capacities** - Internal representation sizes differ
 4. **Arithmetic wrapping** - Overflow points differ
@@ -154,9 +154,9 @@ Example diagnostic constants in `datalove-datalit/src/tycheck/types.rs`:
 
 ```rust
 #[cfg(not(feature = "index-64"))]
-const USIZE_RANGE: &str = "usize can represent values from 0 to 4,294,967,295";
+const INDEX_RANGE: &str = "index can represent values from 0 to 4,294,967,295";
 #[cfg(feature = "index-64")]
-const USIZE_RANGE: &str = "usize can represent values from 0 to 18,446,744,073,709,551,615";
+const INDEX_RANGE: &str = "index can represent values from 0 to 18,446,744,073,709,551,615";
 ```
 
 ## Build Instructions

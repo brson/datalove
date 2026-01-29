@@ -13,7 +13,7 @@ type           = option_type | result_type | list_type | tuple_type
 
 scalar_type    = "bool" | "u8" | "u16" | "u32" | "u64"
                | "i8" | "i16" | "i32" | "i64"
-               | "usize" | "isize" | "f32" | "f64"
+               | "index" | "offset" | "f32" | "f64"
                | "int" | "string" | "data" | "error" ;
 
 option_type    = "?", type ;

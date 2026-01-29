@@ -286,7 +286,7 @@ Binary operators support checking mode for type propagation from context to oper
 
 #### Check-BinOp-Checked (Fixed Int)
 ```
-T is fixed int (u8, i8, u16, i16, u32, i32, u64, i64, usize, isize)
+T is fixed int (u8, i8, u16, i16, u32, i32, u64, i64, index, offset)
 function returns Result<U>
 e1 <= T
 e2 <= T

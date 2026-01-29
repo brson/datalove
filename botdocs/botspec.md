@@ -23,19 +23,19 @@ Uses Salsa for incremental compilation. REPL-first design.
 | `bool` | Boolean | Implemented |
 | `u8`, `u16`, `u32`, `u64` | Unsigned integers | Implemented |
 | `i8`, `i16`, `i32`, `i64` | Signed integers | Implemented |
-| `usize` | Unsigned index type (32 or 64-bit) | Implemented |
-| `isize` | Signed index type (32 or 64-bit) | Implemented |
+| `index` | Unsigned index type (32 or 64-bit) | Implemented |
+| `offset` | Signed index type (32 or 64-bit) | Implemented |
 | `f32` | 32-bit float | Implemented |
 | `f64` | 64-bit float | Implemented |
 | `int` | Arbitrary precision signed integer (bigint) | Implemented |
 | `string` | UTF-8 string | Implemented |
 
-**Index Types (usize/isize):**
+**Index Types (index/offset):**
 
-`usize` and `isize` are platform-configurable index types used for collection sizes, capacities, and array indices. Their bit width is controlled by the `index-64` compile-time feature:
+`index` and `offset` are platform-configurable index types used for collection sizes, capacities, and array indices. Their bit width is controlled by the `index-64` compile-time feature:
 
-| Feature | `usize` | `isize` |
-|---------|---------|---------|
+| Feature | `index` | `offset` |
+|---------|---------|----------|
 | Default | u32 | i32 |
 | `index-64` | u64 | i64 |
 
@@ -536,7 +536,7 @@ Type aliases are collected in Pass 0 of typechecking, before function signatures
 | Duplicate alias name | `DuplicateTypeAlias` |
 | Shadowing primitive type | `CannotShadowPrimitive` |
 
-**Primitives that cannot be shadowed:** `bool`, `u8`, `u16`, `u32`, `u64`, `i8`, `i16`, `i32`, `i64`, `usize`, `isize`, `f32`, `f64`, `int`, `string`
+**Primitives that cannot be shadowed:** `bool`, `u8`, `u16`, `u32`, `u64`, `i8`, `i16`, `i32`, `i64`, `index`, `offset`, `f32`, `f64`, `int`, `string`
 
 **Semantics:**
 - Type aliases are purely syntactic - the alias name resolves to the structural type during typechecking
@@ -617,8 +617,8 @@ Fixed integers widen along chains:
 ```
 u8 -> u16 -> u32 -> u64 -> int
 i8 -> i16 -> i32 -> i64 -> int
-usize -> int
-isize -> int
+index -> int
+offset -> int
 ```
 
 ### 3.3 Coercions
@@ -637,7 +637,7 @@ isize -> int
 
 | Copy Types | Linear Types |
 |------------|--------------|
-| bool, u8-u64, i8-i64, usize, isize, f32, f64 | int, string, list, map, set, tensor, table, data, error |
+| bool, u8-u64, i8-i64, index, offset, f32, f64 | int, string, list, map, set, tensor, table, data, error |
 
 Linear types have move semantics; copy types can be freely duplicated.
 
