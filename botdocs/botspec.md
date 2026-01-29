@@ -1,211 +1,263 @@
-# Datalove Bot Specification
-
-Bot-maintained specification reflecting actual implementation state.
-Last verified: 2026-01-25
+# Datalove Language Specification
 
 ## Contents
 
-- [Overview](#user-content-overview)
-- [1. Datalit Layer](#user-content-1-datalit-layer)
-  - [1.1 Primitive Types](#user-content-11-primitive-types)
-  - [1.2 Collection Types](#user-content-12-collection-types)
-  - [1.3 Aggregate Types](#user-content-13-aggregate-types)
-  - [1.4 Special Types](#user-content-14-special-types)
-  - [1.5 Literal Syntax](#user-content-15-literal-syntax)
-- [2. Datafun Layer](#user-content-2-datafun-layer)
-  - [2.1 Statements](#user-content-21-statements)
-  - [2.2 Expressions](#user-content-22-expressions)
-  - [2.3 Operators](#user-content-23-operators)
-  - [2.4 Function Definitions](#user-content-24-function-definitions)
-  - [2.5 Parameter Modes](#user-content-25-parameter-modes)
-  - [2.6 Loop Statements](#user-content-26-loop-statements)
-  - [2.7 Operator Argument Semantics](#user-content-27-operator-argument-semantics)
-  - [2.8 Module System](#user-content-28-module-system)
-  - [2.9 Void Functions](#user-content-29-void-functions)
-  - [2.10 Intrinsic Calls](#user-content-210-intrinsic-calls)
-  - [2.11 Type Aliases](#user-content-211-type-aliases)
-- [3. Type System](#user-content-3-type-system)
-  - [3.1 Bidirectional Typing](#user-content-31-bidirectional-typing)
-  - [3.2 Numeric Widening](#user-content-32-numeric-widening)
-  - [3.3 Coercions](#user-content-33-coercions)
-  - [3.4 Copy vs Linear Types](#user-content-34-copy-vs-linear-types)
-  - [3.5 Move Semantics](#user-content-35-move-semantics)
-  - [3.6 Ownership Analysis](#user-content-36-ownership-analysis)
-- [4. Runtime/REPL](#user-content-4-runtimerepl)
-  - [4.1 CLI Commands](#user-content-41-cli-commands)
-  - [4.2 REPL Capabilities](#user-content-42-repl-capabilities)
-- [Appendix A: Documented But Unimplemented Features](#user-content-appendix-a-documented-but-unimplemented-features)
+- [1. Introduction](#user-content-1-introduction)
+- [2. Lexical Conventions](#user-content-2-lexical-conventions)
+- [3. Types](#user-content-3-types)
+- [4. Type Hints](#user-content-4-type-hints)
+- [5. Copy and Linear Types](#user-content-5-copy-and-linear-types)
+- [6. Expressions](#user-content-6-expressions)
+- [7. Statements](#user-content-7-statements)
+- [8. Module System](#user-content-8-module-system)
+- [9. Numeric Widening](#user-content-9-numeric-widening)
+- [10. Ownership Analysis](#user-content-10-ownership-analysis)
+- [11. Bidirectional Type Inference](#user-content-11-bidirectional-type-inference)
+- [Appendix A. Command-Line Interface](#user-content-appendix-a-command-line-interface)
+- [Appendix B. Unimplemented Features](#user-content-appendix-b-unimplemented-features)
 
-## Overview
+## 1. Introduction
 
-Datalove is a typed scripting language with a three-layer design:
-1. **Datalit** (.dlt) - Pure data literal language
-2. **Datafun** (.dfs script, .dfm module) - Pure functional layer
-3. **Full Datalove** (.dls, .dlm) - Procedures and objects [NOT IMPLEMENTED]
+Datalove is a statically-typed scripting language designed for data manipulation
+and incremental computation. The language emphasizes safety through a linear
+type system that tracks ownership, preventing use-after-move errors at compile
+time.
 
-Uses Salsa for incremental compilation. REPL-first design.
+The language has a three-layer design:
 
----
+- **Datalit** (.dlt) - A pure data literal sublanguage for representing values.
+- **Datafun** (.dfs, .dfm) - A pure functional layer with functions, modules,
+  and control flow.
+- **Full Datalove** (.dls, .dlm) - Procedures and mutable objects. (Not yet
+  implemented.)
 
-## 1. Datalit Layer
+This specification describes the Datalit and Datafun layers.
 
-### 1.1 Primitive Types
+### 1.1 Notation
 
-| Type | Description | Interpreter Status |
-|------|-------------|-------------------|
-| `bool` | Boolean | Implemented |
-| `u8`, `u16`, `u32`, `u64` | Unsigned integers | Implemented |
-| `i8`, `i16`, `i32`, `i64` | Signed integers | Implemented |
-| `index` | Unsigned index type (32 or 64-bit) | Implemented |
-| `offset` | Signed index type (32 or 64-bit) | Implemented |
-| `f32` | 32-bit float | Implemented |
-| `f64` | 64-bit float | Implemented |
-| `int` | Arbitrary precision signed integer (bigint) | Implemented |
-| `string` | UTF-8 string | Implemented |
+In syntax descriptions, the following conventions apply:
 
-**Index Types (index/offset):**
+- `monospace` denotes literal syntax
+- *italics* denote syntactic categories
+- `[...]` denotes optional elements
+- `...` denotes repetition
 
-`index` and `offset` are platform-configurable index types used for collection sizes, capacities, and array indices. Their bit width is controlled by the `index-64` compile-time feature:
+## 2. Lexical Conventions
 
-| Feature | `index` | `offset` |
-|---------|---------|----------|
-| Default | u32 | i32 |
-| `index-64` | u64 | i64 |
+### 2.1 Keywords
 
-These types widen to `int` like other fixed integers. See `botdocs/index-64.md` for details on the feature.
+The following identifiers are reserved:
 
-### 1.2 Collection Types
+```
+and       break     continue  data      else      end
+enum      error     er        false     for       fun
+icall     if        import    in        let       loop
+map       mut       none      not       ok        or
+out       ref       require   ret       set       some
+table     tensor    true      type      var       while
+xor
+```
 
-| Type | Syntax | Example | Interpreter Status |
-|------|--------|---------|-------------------|
-| List | `[T]` | `[1, 2, 3]` | Implemented |
-| Map | `map<K, V>` | `map { 0 = 5, 2 = 2 }` | Implemented |
-| Set | `set<T>` | `set { 1, 2, 3 }` | Implemented |
-| Tensor | `tensor<T, N>` | - | [PARTIAL: parsed only] |
-| Table | `{| col: T, ... |}` | `{| x, y; 1, 2 |}` | Implemented |
+### 2.2 Literals
 
-**Table Type:**
+**Integers** may be written in decimal or hexadecimal:
 
-Tables provide struct-of-array (columnar) memory layout, similar to dataframes in Pandas/Polars/Arrow.
+```
+42
+0xFF
+```
 
-Type syntax: `{| col1: T1, col2: T2, ... |}`
+**Floating-point** numbers use standard notation:
 
-Expression syntax:
+```
+3.14
+1.0e-10
+```
+
+**Strings** are enclosed in double quotes:
+
+```
+"hello, world"
+```
+
+**Booleans** are `true` and `false`.
+
+### 2.3 Comments
+
+Line comments begin with `//` and extend to end of line.
+
+## 3. Types
+
+### 3.1 Primitive Types
+
+| Type | Description |
+|------|-------------|
+| `bool` | Boolean value |
+| `u8`, `u16`, `u32`, `u64` | Unsigned integers |
+| `i8`, `i16`, `i32`, `i64` | Signed integers |
+| `index` | Platform-sized unsigned index |
+| `offset` | Platform-sized signed offset |
+| `f32`, `f64` | Floating-point numbers |
+| `int` | Arbitrary-precision integer |
+| `string` | UTF-8 string |
+
+The `index` and `offset` types are 32-bit by default, or 64-bit when the
+`index-64` feature is enabled.
+
+### 3.2 Collection Types
+
+**List.** An ordered sequence of elements.
+
+```
+[T]              // type
+[1, 2, 3]        // literal
+```
+
+**Map.** A key-value mapping.
+
+```
+map<K, V>        // type
+map { 0 = 5 }    // literal
+```
+
+**Set.** An unordered collection of unique elements.
+
+```
+set<T>           // type
+set { 1, 2, 3 }  // literal
+```
+
+**Table.** A columnar data structure with named columns.
+
+```
+{| col1: T1, col2: T2 |}    // type
+```
+
+Table literals use a line-oriented syntax:
+
 ```
 {|
-  col1, col2    // header row (column names required)
-  val1, val2    // data row 1
-  val3, val4    // data row 2
+  x, y           // column names
+  1, 2           // row 1
+  3, 4           // row 2
 |}
 ```
 
-The `{|` opening bracket enters a line-oriented parsing context where rows are separated by newlines. Semicolons can be used for single-line format: `{| x, y; 1, 2; 3, 4 |}`.
+Semicolons permit single-line format: `{| x, y; 1, 2; 3, 4 |}`.
 
-Example with type hint:
+Column projections (e.g., `table.x`) yield a list view that cannot be moved or
+mutated, but can be passed to `ref` parameters.
+
+### 3.3 Aggregate Types
+
+**Tuple.** An ordered sequence of heterogeneous values.
+
 ```
-: {| x: u32, y: u32 |} / {|
-  x, y
-  1, 2
-  3, 4
-|}
-```
-
-Column projections (e.g., `table.x`) have type "list of column type" but cannot be mutated or moved. They can be passed to `ref`-mode function arguments.
-
-### 1.3 Aggregate Types
-
-**Anonymous Tuple:** (Implemented)
-```
-: (bool, u32) / (true, 1)
-: () / ()
+(bool, u32)              // type
+(true, 42)               // literal
+()                       // unit type and value
 ```
 
-**Anonymous Struct:** (Implemented)
-```
-: { field1: bool, field2: u32 } / { field1 = true, field2 = 1 }
-```
+**Struct.** A collection of named fields.
 
-**Anonymous Enum:** (Implemented)
 ```
-: enum { Foo, Bar(u32) } / enum Foo
-: enum { Bar(u32) } / enum Bar(2)
+{ x: f32, y: f32 }       // type
+{ x = 1.0, y = 2.0 }     // literal
 ```
 
-Note: Named tuples, structs, and enums were removed from the language.
+**Enum.** A tagged union of variants.
 
-### 1.4 Special Types
+```
+enum { None, Some(T) }   // type
+enum None                // variant without payload
+enum Some(42)            // variant with payload
+```
 
-| Type | Syntax | Values | Interpreter Status |
-|------|--------|--------|-------------------|
-| Option | `?T` | value or `none` | Implemented |
-| Result | `!T` | value or `error "msg"` | Implemented |
-| Data | `data` | `data 1`, `data : int / 1` | Implemented |
-| Error | `error` | `error "oops"`, `error : int / 1` | Implemented (as result payload) |
+### 3.4 Option and Result
 
-### 1.5 Literal Syntax
+**Option** represents an optional value:
 
-**Type hint syntax:** `: type / expression`
+```
+?T                       // type: value or none
+some expr                // wrap value
+none                     // absent value
+```
+
+**Result** represents success or failure:
+
+```
+!T                       // type: value or error
+ok expr                  // wrap success value
+er expr                  // wrap error value
+error "message"          // error literal
+```
+
+### 3.5 Data Type
+
+The `data` type is a universal container that can hold any value:
+
+```
+data 42
+data : int / 100
+```
+
+Any type coerces to `data`.
+
+### 3.6 Type Aliases
+
+Type aliases provide names for structural types:
+
+```
+type Point: { x: f32, y: f32 }
+type Age: u32
+```
+
+Aliases are purely syntactic; they introduce no new types.
+
+## 4. Type Hints
+
+Type hints specify expected types for expressions:
+
+```
+: type / expression
+```
+
+Examples:
+
 ```
 : u32 / 42
+: [i32] / [1, 2, 3]
+: f32 / 0xABABABAB     // hex as bit pattern
 ```
 
-**Hex literals:** `0x` prefix for hexadecimal values
+## 5. Copy and Linear Types
+
+Types are classified as *copy* or *linear*.
+
+**Copy types** can be freely duplicated: `bool`, fixed-width integers (`u8`
+through `u64`, `i8` through `i64`), `index`, `offset`, `f32`, `f64`.
+
+**Linear types** have move semantics: `int`, `string`, `list`, `map`, `set`,
+`table`, `data`, `error`.
+
+A linear value can be used exactly once. After a value is moved, subsequent
+uses are compile-time errors:
+
 ```
-: u32 / 0xFF        // integer value 255
-: u8 / 0x7F         // integer value 127
-: f32 / 0xABABABAB  // f32 bit pattern coercion
+let x: int = 42
+let y = x              // x is moved
+let z = x              // error: use of moved value
 ```
-Hex literals can be used with any integer type or f32/f64. With floats, the hex value is interpreted as a raw bit pattern.
 
----
+## 6. Expressions
 
-## 2. Datafun Layer
+### 6.1 Operators
 
-### 2.1 Statements
+Operators listed from highest to lowest precedence:
 
-| Statement | Syntax | Status |
-|-----------|--------|--------|
-| `let` | `let name: type = expr` | Implemented |
-| `var` | `var name: type = expr` or `var name: type` | Implemented (mutable slot) |
-| `set` | `set name = expr` | Implemented (mutate var or mut/out param) |
-| `type` | `type Name: structural_type` | Implemented (type alias) |
-| `fun` | `fun name(...): ret_type ... end fun` | Implemented |
-| `ret` | `ret expr` | Implemented |
-| `require module` | `require module sys/std/bool` | Implemented |
-| `require data` | `require data name` | [PARTIAL: parsed] |
-| `import` | `import module_name.item_name` | Implemented |
-| `if` | `if cond ... end if` | Implemented (in function bodies) |
-| `if` with binding | `if opt \|value\| ... end if` | Implemented (option/result unwrap) |
-| `loop` | `loop ... end loop` | Implemented (in function bodies) |
-| `loop while` | `loop while cond ... end loop` | Implemented (conditional loop) |
-| `break` | `break` | Implemented (exits innermost loop) |
-| `continue` | `continue` | Implemented (next iteration of innermost loop) |
-
-### 2.2 Expressions
-
-| Expression | Example | Status |
-|------------|---------|--------|
-| Datalit | Any datalit value | Implemented |
-| Name/variable | `foo` | Implemented |
-| Binary op | `a + b` | Implemented |
-| Function call | `foo(a, b)` | Implemented |
-| Tuple | `(a, b)` | Implemented |
-| Unary negation | `-x` | Implemented (int only) |
-| Unary optional | `-?x` | Implemented (signed fixed ints) |
-| Unary result | `-!x` | Implemented (signed fixed ints) |
-| Logical not | `not x` | Implemented (bool only) |
-| Logical and/or/xor | `a and b` | Implemented (bool only) |
-| Try option | `expr?` | Implemented (early-return on none) |
-| Try result | `expr!` | Implemented (early-return on error) |
-| Intrinsic call | `icall name(args)` | Implemented |
-
-### 2.3 Operators
-
-#### Precedence (Highest to Lowest)
-
-| Level | Operators | Description |
-|-------|-----------|-------------|
-| 1 | `()` | Parenthesized grouping |
+| Precedence | Operators | Description |
+|------------|-----------|-------------|
+| 1 | `()` | Grouping |
 | 2 | `-` `-?` `-!` `not` | Unary prefix |
 | 3 | `?` `!` | Postfix try |
 | 4 | `*` `/` `*!` `/!` `*?` `/?` | Multiplicative |
@@ -214,439 +266,254 @@ Hex literals can be used with any integer type or f32/f64. With floats, the hex 
 | 7 | `and` | Logical AND |
 | 8 | `or` `xor` | Logical OR/XOR |
 
-See `botdocs/op-precedence.md` for detailed reference.
+### 6.2 Arithmetic
 
-#### Bare Arithmetic (`+ - * /`)
+**Bare arithmetic** (`+`, `-`, `*`, `/`) behaves differently by type:
 
-| Type | `+` `-` `*` | `/` | Unary `-` |
-|------|-------------|-----|-----------|
-| **f32/f64** | Returns same type | Returns same type | Returns same type |
-| **int** (bigint) | Returns int | Not allowed (use `/!` or `/?`) | Returns int |
-| **Fixed ints** | Widens to int | Not allowed | Not allowed |
+- **Floats**: Operations return the same float type. Division is permitted.
+- **Bigints**: Addition, subtraction, multiplication, and unary negation
+  return `int`. Division is not permitted (use checked variants).
+- **Fixed integers**: Operands widen to `int`, result is `int`. Division and
+  unary negation are not permitted.
 
-- Floats: All bare ops work, return same float type.
-- Bigints: Add/sub/mul and unary neg work. Division requires checked variant (div0 possible).
-- Fixed ints: Bare `+ - *` widen both operands to `int`, return `int`. No bare `/` or unary `-`.
+**Checked arithmetic** (`+!`, `-!`, `*!`, `/!`) operates on fixed integers and
+returns a result type. On overflow or division by zero, the function
+early-returns an error:
 
-**Tycheck:** Correct per spec.
-**Interpreter:** Correct for widening behavior.
+```
+fun add(a: u32, b: u32): !u32
+    ret ok (a +! b)
+end fun
+```
 
-#### Checked Arithmetic (`+! -! *! /!`) - Early-return Result
+Bigint division `/!` returns `!int`.
 
-| Type | `+!` `-!` `*!` | `/!` | Unary `-!` |
-|------|----------------|------|------------|
-| **f32/f64** | Not allowed | Not allowed | Not allowed |
-| **int** | Not allowed | Returns `!int` | Not allowed |
-| **Fixed ints** | Returns `!T` (same type) | Returns `!T` | Returns `!T` |
+**Optional arithmetic** (`+?`, `-?`, `*?`, `/?`) operates on fixed integers and
+returns an option type. On overflow or division by zero, the function
+early-returns `none`:
 
-These operators early-return on overflow/div0, requiring the enclosing function to return `!T`.
+```
+fun add(a: u32, b: u32): ?u32
+    ret some (a +? b)
+end fun
+```
 
-**Tycheck:** Correct per spec.
-**Interpreter:** Correct per spec (early-returns error on overflow).
+Bigint division `/?` returns `?int`. Unary `-?` is permitted only for signed
+fixed integers.
 
-#### Optional Arithmetic (`+? -? *? /?`) - Early-return Option
+### 6.3 Comparison
 
-| Type | `+?` `-?` `*?` | `/?` | Unary `-?` |
-|------|----------------|------|------------|
-| **f32/f64** | Not allowed | Not allowed | Not allowed |
-| **int** | Not allowed | Returns `?int` | Not allowed |
-| **Fixed ints** | Returns `?T` (same type) | Returns `?T` | Signed only, returns `?T` |
+```
+.<    less than
+.>    greater than
+<=    less than or equal
+>=    greater than or equal
+==    equal
+!=    not equal
+```
 
-These operators early-return `none` on overflow/div0. `-?` disallowed for unsigned ints (footgun).
+All comparison operators return `bool`.
 
-**Tycheck:** Correct per spec (operator yields T, function must return ?T).
-**Interpreter:** Correct per spec (early-returns OptionNone on overflow).
+### 6.4 Logical Operators
 
-#### Comparison (`.<` `.>` `<=` `>=` `==` `!=`)
-
-| Op | Meaning |
-|----|---------|
-| `.<` | Less than |
-| `.>` | Greater than |
-| `<=` | Less or equal |
-| `>=` | Greater or equal |
-| `==` | Equal |
-| `!=` | Not equal |
-
-**Tycheck:** Returns `bool` for any numeric operands.
-**Interpreter:** Implemented for all numeric types.
-
-#### Logical Operators (`and` `or` `xor` `not`)
-
-| Op | Type | Description |
-|----|------|-------------|
-| `and` | Binary | Logical AND |
-| `or` | Binary | Logical OR |
-| `xor` | Binary | Logical XOR |
-| `not` | Unary prefix | Logical NOT |
+```
+and   logical AND
+or    logical OR
+xor   logical XOR
+not   logical NOT (unary)
+```
 
 All require `bool` operands and return `bool`.
 
-**Tycheck:** Implemented.
-**Interpreter:** Implemented.
-**AOT:** Implemented.
+### 6.5 Try Operators
 
-### 2.4 Function Definitions
+The postfix `?` operator unwraps an option, early-returning `none` on failure:
 
 ```
-fun name(param1: type1, param2: type2): return_type
-  let x = param1 + param2
-  ret x
+fun get_value(opt: ?i32): ?i32
+    let x = opt?           // early-return if none
+    ret some (x + 1)
 end fun
 ```
 
-### 2.5 Parameter Modes
+The postfix `!` operator unwraps a result, early-returning the error on
+failure:
 
-All parameters are passed by reference (pointer to caller's data). The mode determines allowed operations:
-
-| Mode | Syntax | Semantics | Status |
-|------|--------|-----------|--------|
-| `in` | `x: T` (default) | Read and consume; ownership transfers to callee | Implemented |
-| `ref` | `ref x: T` | Read only; caller retains ownership | Implemented |
-| `mut` | `mut x: T` | Read and write via `set`; caller retains ownership | Implemented |
-| `out` | `out x: T` | Write only via `set`; callee must initialize before return | Implemented |
-
-**Compile-time checks:**
-- `ref`/`mut`/`out` params cannot be moved (caller owns them)
-- `out` params must be initialized before reading or returning
-- `ref` params cannot be passed to `mut` parameters
-- `out` params cannot be partially written (must write whole value, not fields)
-
-#### Out Parameter Semantics
-
-Out parameters enable functions to write results to caller-provided locations. The caller destroys any existing value before the call; the callee writes to an uninitialized slot.
-
-**Call site behavior:**
 ```
-var result: (u32, u32) = (0, 0)
-init_pair(result)      // caller destroys (0, 0), callee writes new value
-```
-
-**Callee behavior:**
-```
-fun init_pair(out p: (u32, u32))
-    set p = (42, 100)  // OK: writes whole value
+fun parse(s: string): !i32
+    let n = do_parse(s)!   // early-return if error
+    ret ok n
 end fun
 ```
 
-**Partial writes disallowed:**
-```
-fun bad(out p: (u32, u32))
-    set p.0 = 42       // ERROR D009: cannot partially write to out parameter
-    set p.1 = 100      // ERROR D009
-end fun
-```
+### 6.6 Operator Argument Semantics
 
-This restriction exists because runtime tracking is per-parameter, not per-field. The first field write would mark the parameter as initialized, causing the second write to incorrectly try to destroy an uninitialized field.
+All operators treat their operands as immutable references. Operands are not
+consumed:
 
-#### Uninitialized Var Bindings
-
-Var bindings can be declared without an initializer:
-
-```
-var x: i32              // declared but not initialized
-set x = 42              // must initialize before use
-debuglog x              // now valid
-```
-
-**Requirements:**
-- Type hint is required when no initializer is provided
-- Must be initialized via `set` before reading
-- Conditional initialization must occur in all branches
-
-**Example with conditional initialization:**
-```
-var result: i32
-if condition
-    set result = 1
-else
-    set result = 2
-end if
-debuglog result         // valid: initialized on all paths
-```
-
-**Error cases:**
-```
-var x: i32
-debuglog x              // ERROR D005: read of uninitialized binding
-
-var y: i32
-if condition
-    set y = 1
-end if
-debuglog y              // ERROR: may be uninitialized (no else branch)
-```
-
-**Implementation:** Uninitialized vars reuse the same tracking mechanism as `out` parameters. Both use runtime tracking bytes to determine if a value has been written, enabling conditional drops at scope exit.
-
-#### Field Projections as Arguments
-
-Field projections can be passed to `ref`, `mut`, or `out` parameters:
-
-```
-var t: (u32, u32) = (100, 200)
-write_42(t.0)          // pass t.0 as out param
-debuglog t.0           // prints 42
-```
-
-For `out` params, the caller destroys the field value before the call. The callee sees an uninitialized slot and must write to it.
-
-### 2.6 Loop Statements
-
-#### Basic Loop
-
-Unconditional loop with break/continue control flow:
-
-```
-fun count_to_three(): !u32
-    var n: u32 = 0
-    loop
-        set n = n +! 1
-        if n >= 3
-            break
-        end if
-    end loop
-    ret n
-end fun
-```
-
-#### Loop While (Conditional Loop)
-
-Conditional loop that checks condition at start of each iteration:
-
-```
-fun count_while(): u32
-    var n: u32 = 0
-    loop while n .< 10
-        set n = n + 1
-    end loop
-    ret n
-end fun
-```
-
-**Behavior:**
-- `loop ... end loop` repeats indefinitely until `break` or `ret`
-- `break` exits the innermost loop
-- `continue` jumps to the start of the innermost loop
-- `break`/`continue` outside a loop is a typecheck error
-- Nested loops supported; break/continue affect only the innermost loop
-- No loop labels - only innermost loop can be targeted
-
-### 2.7 Operator Argument Semantics
-
-All binary operators and unary operators treat their operands as **immutable references** (`ref`), not by-value (`in`).
-
-**Implications:**
-- Operands are read, not consumed
-- For copy types: values are implicitly copied to temporaries
-- For linear types: values are cloned; originals remain valid after the operation
-- A value can be used in multiple operators without explicit cloning
-
-**Example:**
 ```
 let x: int = 42
-let a = x + 1    // x is cloned for the operation
-let b = x + 2    // x can be used again
-ret x            // x is still valid
+let a = x + 1       // x is cloned for the operation
+let b = x + 2       // x can be used again
+ret x               // x is still valid
 ```
 
-**Implementation Note:** The interpreter evaluates operands into temporary slots. For copy types, this creates a copy. For linear types, the interpreter clones the value so the original remains available.
+### 6.7 Intrinsic Calls
 
-### 2.8 Module System
+Intrinsics are low-level operations that compile to machine instructions:
 
-**Three-level hierarchy:** library -> package -> module
+```
+icall intrinsic_name(args)
+```
 
-**Require syntax:**
+Available intrinsics include bitwise operations (`bitnot_u32`, `bitand_u32`,
+`bitor_u32`, `bitxor_u32`), shifts (`shl_u32`, `shr_u32`), bit counting
+(`popcount_u32`, `clz_u32`, `ctz_u32`), byte manipulation (`swap_bytes_u32`,
+`reverse_bits_u32`), wrapping arithmetic (`add_wrapping_u32`,
+`sub_wrapping_u32`, `mul_wrapping_u32`), and type reinterpretation
+(`u32_to_i32`, `i32_to_u32`).
+
+## 7. Statements
+
+### 7.1 Bindings
+
+**Let** binds an immutable value:
+
+```
+let x: u32 = 42
+let y = compute()      // type inferred
+```
+
+**Var** binds a mutable slot:
+
+```
+var x: u32 = 0
+var y: i32             // uninitialized; must set before use
+```
+
+**Set** mutates a var binding or mutable parameter:
+
+```
+set x = x + 1
+```
+
+### 7.2 Functions
+
+Function definition:
+
+```
+fun name(param1: T1, param2: T2): ReturnType
+    // body
+    ret value
+end fun
+```
+
+Void functions omit the return type and may omit `ret`:
+
+```
+fun log(msg: string)
+    // body
+end fun
+```
+
+### 7.3 Parameter Modes
+
+All parameters are passed by reference. The mode determines permitted
+operations:
+
+| Mode | Syntax | Semantics |
+|------|--------|-----------|
+| `in` | `x: T` | Caller transfers ownership; callee consumes |
+| `ref` | `ref x: T` | Caller retains ownership; callee reads only |
+| `mut` | `mut x: T` | Caller retains ownership; callee may mutate |
+| `out` | `out x: T` | Callee initializes; caller receives value |
+
+**Restrictions:**
+- `ref`, `mut`, and `out` parameters cannot be moved.
+- `out` parameters must be initialized before the function returns.
+- `ref` parameters cannot be passed to `mut` parameters.
+- `out` parameters must be written as a whole, not field-by-field.
+
+### 7.4 Control Flow
+
+**If statement:**
+
+```
+if condition
+    // then branch
+else
+    // else branch
+end if
+```
+
+**If with binding** unwraps an option or result:
+
+```
+if opt |value|
+    // value is bound here
+end if
+```
+
+**Loop:**
+
+```
+loop
+    if done
+        break
+    end if
+end loop
+```
+
+**Conditional loop:**
+
+```
+loop while condition
+    // body
+end loop
+```
+
+`break` exits the innermost loop. `continue` jumps to the next iteration.
+
+### 7.5 Return
+
+`ret` returns a value from a function:
+
+```
+ret 42
+```
+
+Void functions may use bare `ret` for early exit:
+
+```
+ret
+```
+
+## 8. Module System
+
+### 8.1 Hierarchy
+
+The module system has three levels: library, package, module.
+
+### 8.2 Require
+
+`require` loads a module:
+
 ```
 require module sys/std/u32
 ```
 
-**Import syntax:**
+### 8.3 Import
+
+`import` brings a name into scope:
+
 ```
 import u32.negate
 ```
 
-Modules are loaded from `.dfm` files. Each package needs a main module (e.g., `std/std.dfm`).
+## 9. Numeric Widening
 
-### 2.9 Void Functions
+Fixed integers widen to larger types:
 
-Functions without a return type are void functions:
-- Don't require a `ret` statement - function can end without `ret`
-- Allow bare `ret` without value for early exit
-- Must NOT have `ret` with a value
-
-```
-fun log_value(x: u32)        // void - no ret needed
-end fun
-
-fun early_exit(n: u32)       // void - bare ret OK
-  if n .< 10
-    ret
-  end if
-end fun
-```
-
-### 2.10 Intrinsic Calls
-
-Low-level operations that compile directly to machine instructions without function call overhead.
-
-**Syntax:** `icall intrinsic_name(args)`
-
-**Available Intrinsics:**
-
-| Name | Params | Return | Description |
-|------|--------|--------|-------------|
-| `bitnot_u32` | `u32` | `u32` | Bitwise NOT |
-| `bitand_u32` | `u32, u32` | `u32` | Bitwise AND |
-| `bitor_u32` | `u32, u32` | `u32` | Bitwise OR |
-| `bitxor_u32` | `u32, u32` | `u32` | Bitwise XOR |
-| `shl_u32` | `u32, u32` | `u32` | Shift left |
-| `shr_u32` | `u32, u32` | `u32` | Shift right (unsigned) |
-| `popcount_u32` | `u32` | `u32` | Count set bits |
-| `clz_u32` | `u32` | `u32` | Count leading zeros |
-| `ctz_u32` | `u32` | `u32` | Count trailing zeros |
-| `swap_bytes_u32` | `u32` | `u32` | Byte-swap (endian convert) |
-| `reverse_bits_u32` | `u32` | `u32` | Reverse bit order |
-| `add_wrapping_u32` | `u32, u32` | `u32` | Add with wrapping |
-| `sub_wrapping_u32` | `u32, u32` | `u32` | Subtract with wrapping |
-| `mul_wrapping_u32` | `u32, u32` | `u32` | Multiply with wrapping |
-| `u32_to_i32` | `u32` | `i32` | Reinterpret as signed |
-| `i32_to_u32` | `i32` | `u32` | Reinterpret as unsigned |
-| `is_big_endian` | (none) | `bool` | Query platform endianness |
-
-**Example:**
-```
-require module sys/std/u32
-import u32.bitnot
-
-fun bitnot(self: u32): u32
-  ret icall bitnot_u32(self)
-end fun
-```
-
-**Implementation:**
-- Intrinsics are defined in `datalove-datafun-intrinsics` crate
-- Typechecked against a central definition table
-- Interpreter executes via Rust operations
-- AOT compiles to inline Cranelift IR instructions (no call overhead)
-
-### 2.11 Type Aliases
-
-Type aliases provide names for structural types, improving readability without creating new types.
-
-**Syntax:**
-```
-type AliasName: structural_type
-```
-
-**Examples:**
-```
-type Age: u32
-type Point: { x: f32, y: f32 }
-type Callback: { on_success: bool, data: int }
-
-fun create_point(x: f32, y: f32): Point
-  ret { x = x, y = y }
-end fun
-
-fun process(p: Point): Age
-  ret 25
-end fun
-```
-
-**Processing Order:**
-
-Type aliases are collected in Pass 0 of typechecking, before function signatures (Pass 1) and statement typechecking (Pass 2). This means:
-- Aliases must be defined before use (no forward references)
-- Function parameters and return types can reference any alias defined earlier in the file
-- Aliases defined in imported modules are available after the import
-
-**Restrictions:**
-
-| Restriction | Error |
-|-------------|-------|
-| Forward reference | `UnresolvedTypeAlias` |
-| Duplicate alias name | `DuplicateTypeAlias` |
-| Shadowing primitive type | `CannotShadowPrimitive` |
-
-**Primitives that cannot be shadowed:** `bool`, `u8`, `u16`, `u32`, `u64`, `i8`, `i16`, `i32`, `i64`, `index`, `offset`, `f32`, `f64`, `int`, `string`
-
-**Semantics:**
-- Type aliases are purely syntactic - the alias name resolves to the structural type during typechecking
-- No runtime representation difference between aliased and structural types
-- Aliases can reference other aliases (if defined earlier)
-- Aliases can be used in type hints, function parameters, and return types
-
----
-
-## 3. Type System
-
-### 3.1 Bidirectional Typing
-
-- Expressions **synthesize** types (bottom-up)
-- Expressions **check** against expected types (top-down)
-- Type hints provide expected types: `: type / expr`
-
-#### Binop Type Propagation
-
-Arithmetic binary operators support bidirectional type propagation, allowing operand types to be inferred from context rather than requiring explicit type hints.
-
-**Checked/Optional Arithmetic (`+!` `-!` `*!` `/!` `+?` `-?` `*?` `/?`):**
-
-When checking against a fixed-int type inside an `ok`/`some` wrapper, the expected type propagates to operands:
-
-```
-fun add(): !u32
-    ret ok (1 +! 2)    // 1 and 2 infer type u32 from !u32 context
-end fun
-
-fun sub(a: i64, b: i64): ?i64
-    ret some (a -? b)  // operands checked against i64
-end fun
-```
-
-Requirements for bidirectional propagation:
-- Checked ops (`+!` etc.) require the function to return `!T` (Result type)
-- Optional ops (`+?` etc.) require the function to return `?T` (Option type)
-- If return type doesn't match, falls through to synthesis (producing proper error)
-
-**Bigint Division (`/!` `/?`):**
-
-Bigint division also supports bidirectional propagation when checking against `int`:
-
-```
-fun div(a: int, b: int): !int
-    ret ok (a /! b)    // checked against int
-end fun
-```
-
-**Bare Float Arithmetic (`+` `-` `*` `/`):**
-
-Float literals infer their type from context:
-
-```
-fun add(): f32
-    ret 1.0 + 2.0      // literals infer f32 from return type
-end fun
-
-fun mul(a: f64, b: f64): f64
-    ret a * b          // operands checked against f64
-end fun
-```
-
-**Bare Integer Arithmetic:**
-
-Bare arithmetic on fixed integers (`+` `-` `*`) widens operands to `int` via synthesis. No bidirectional propagation occurs - widening is the correct semantic behavior.
-
-```
-fun add(): int
-    ret 1 + 2          // synthesizes: both widen to int, result is int
-end fun
-```
-
-### 3.2 Numeric Widening
-
-Fixed integers widen along chains:
 ```
 u8 -> u16 -> u32 -> u64 -> int
 i8 -> i16 -> i32 -> i64 -> int
@@ -654,156 +521,102 @@ index -> int
 offset -> int
 ```
 
-### 3.3 Coercions
+## 10. Ownership Analysis
 
-- Any type coerces to `data` (T → data)
-- Empty collections check against any element type
+Ownership analysis runs after type checking to verify correct use of linear
+values.
 
-**Explicit constructors for Option/Result:**
-- `some expr` - wrap in Some variant
-- `ok expr` - wrap in Ok variant
-- `er expr` - wrap error in Err variant
-- `none` - None variant (requires type context)
-- `error expr` - error literal (requires type context in Result)
+### 10.1 Errors
 
-### 3.4 Copy vs Linear Types
+| Code | Name | Description |
+|------|------|-------------|
+| D001 | UseAfterMove | Using a value after it was moved |
+| D002 | DoubleMove | Moving a value twice |
+| D003 | CannotMoveBorrowed | Moving a `ref`/`mut`/`out` parameter |
+| D004 | CannotMutFromRef | Passing `ref` where `mut` required |
+| D005 | ReadUninitialized | Reading before initialization |
+| D006 | OutParamNotInitialized | Returning without initializing `out` param |
+| D007 | MoveInLoop | Moving outer-scoped linear value in loop |
+| D008 | InconsistentBranchMove | Moved in one branch but not another |
+| D009 | OutParamPartialWrite | Writing fields of `out` param individually |
 
-| Copy Types | Linear Types |
-|------------|--------------|
-| bool, u8-u64, i8-i64, index, offset, f32, f64 | int, string, list, map, set, tensor, table, data, error |
+### 10.2 Loop Restrictions
 
-Linear types have move semantics; copy types can be freely duplicated.
-
-### 3.5 Move Semantics
-
-**Use after move:** A linear value can only be used once. After being consumed (passed to an `in` parameter, assigned to a variable, etc.), subsequent uses are compile-time errors.
-
-```
-let x: int = 42
-let y = x        // x is moved into y
-let z = x        // ERROR: use of moved value: x
-```
-
-**Move in loop:** Moving an outer-scoped linear value inside a loop body is a compile-time error. The loop could iterate multiple times, but the value can only be moved once.
+Moving an outer-scoped linear value inside a loop is an error:
 
 ```
-var a: int = 4
 var b: int = 5
 loop
-    set a = b    // ERROR: cannot move 'b' in loop
+    set a = b      // error: cannot move 'b' in loop
 end loop
 ```
 
-**Exceptions:**
-- Copy types (fixed-width integers, bool, f32, f64) can be used freely in loops
-- Binary operators borrow their operands (don't consume), so `a + b` doesn't move `a` or `b`
+Copy types and operator operands (which are borrowed) are exempt.
 
-### 3.6 Ownership Analysis
+### 10.3 Branch Consistency
 
-Ownership analysis runs after typechecking and before IR lowering. It performs static analysis of value ownership, detecting errors and computing drop schedules.
+If a value is moved in one branch, it must be moved in all branches:
 
-#### Analysis Errors
+```
+if cond
+    consume(x)     // moves x
+else
+    // error: x not moved here
+end if
+```
 
-| Code | Error | Description |
-|------|-------|-------------|
-| D001 | UseAfterMove | Using a value after ownership was transferred |
-| D002 | DoubleMove | Transferring ownership twice in sequence |
-| D003 | CannotMoveBorrowed | Attempting to move a `ref`/`mut`/`out` parameter |
-| D004 | CannotMutFromRef | Passing immutable `ref` where `mut` is required |
-| D005 | ReadUninitialized | Reading uninitialized binding (`out` param or uninitialized `var`) |
-| D006 | OutParamNotInitialized | Returning without initializing `out` param |
-| D007 | MoveInLoop | Moving outer-scoped value inside loop body |
-| D008 | InconsistentBranchMove | Value moved in one branch but not another |
-| D009 | OutParamPartialWrite | Partial field write to `out` param |
+### 10.4 Tracking Categories
 
-#### Initialization Tracking
+Bindings are categorized for drop scheduling:
 
-Some bindings may be uninitialized at declaration and must be tracked:
+- **Copy**: No tracking needed.
+- **Precise**: Ownership state known statically.
+- **Tracked**: Runtime tracking byte used.
 
-| Binding Type | Starts Initialized | Tracking |
-|--------------|-------------------|----------|
-| `let x = expr` | Yes | Not tracked |
-| `var x = expr` | Yes | Tracked (for reassignment) |
-| `var x: Type` | No | Tracked (for init + reassignment) |
-| `out` param | No | Tracked (for init) |
-| `in`/`ref`/`mut` param | Yes | Not tracked for init |
+Tracked bindings include `var` bindings, `out` parameters, and uninitialized
+variables.
 
-**Initialization state transitions:**
-- `Uninitialized` → `Initialized`: on first `set` to the binding
-- Reading while `Uninitialized`: compile-time error (D005)
-- Scope exit while `Uninitialized`: no drop (nothing to destroy)
+## 11. Bidirectional Type Inference
 
-**Branch convergence:**
-- If a binding is initialized in one branch, it must be initialized in all branches
-- The analysis tracks init state through if/else and merges at convergence points
-- A binding that's uninitialized on some paths cannot be read after the branch
+Expressions can *synthesize* types (bottom-up) or *check* against expected
+types (top-down).
 
-#### Tracking Categories
+Checked arithmetic propagates expected types to operands:
 
-Each binding is assigned a tracking category that determines how moves and drops are handled:
+```
+fun add(): !u32
+    ret ok (1 +! 2)    // 1 and 2 infer u32 from context
+end fun
+```
 
-| Category | Description | Instructions Used |
-|----------|-------------|-------------------|
-| Copy | Copy type, no tracking needed | No drops emitted |
-| Precise | State statically known at every program point | Precise move/drop (no runtime checks) |
-| Tracked | State may vary at runtime | Tracked move/drop (with runtime checks) |
+Float literals infer their precision from context:
 
-**Tracked bindings include:**
-- `var` bindings (mutable slots that may be reassigned)
-- `out` parameters (may be uninitialized)
-- Uninitialized `var` bindings (declared without initializer)
-- Exported script bindings
+```
+fun pi(): f64
+    ret 3.14159        // infers f64
+end fun
+```
 
-#### Drop Scheduling
-
-The analysis computes when Drop instructions should be emitted:
-
-| Drop Point | Description |
-|------------|-------------|
-| Scope exit | When bindings go out of scope |
-| Branch exit | For convergence when branches have different ownership states |
-| Before return | Cleanup all live bindings |
-| Before break/continue | Cleanup bindings before control flow transfer |
-| Loop body end | Drop iteration-scoped bindings |
-| Before try-return | Cleanup before early return from `?` or `!` operators |
-
----
-
-## 4. Runtime/REPL
-
-### 4.1 CLI Commands
+## Appendix A. Command-Line Interface
 
 | Command | Description |
 |---------|-------------|
-| `script` | Execute a .dfs datafun script |
-| `lit-tycheck` | Type check a .dlt expression |
-| `lit-ast` | Print AST of datalit expression |
-| `lit-pretty` | Pretty-print datalit |
-| `lit-op` | Perform operations on datalit values |
+| `script` | Execute a .dfs script |
 | `repl` | Interactive REPL |
-| `typecheck-std` | Typecheck the sys/std library |
+| `lit-tycheck` | Type check a datalit expression |
+| `lit-ast` | Print datalit AST |
+| `lit-pretty` | Pretty-print datalit |
+| `lit-op` | Perform datalit operations |
+| `typecheck-std` | Type check the standard library |
 
-### 4.2 REPL Capabilities
+## Appendix B. Unimplemented Features
 
-- Incremental unit execution
-- Script-level variable and function tracking
-- Module/package loading
-- State persistence across commands
+The following features appear in design documents but are not yet implemented:
 
----
-
-## Appendix A: Documented But Unimplemented Features
-
-Features from documentation that have no or minimal implementation:
-
-| Feature | Source | Status |
-|---------|--------|--------|
-| Tensor operations | notes/arrays.md | Parsed only, no runtime |
-| Zipper heaps | notes/zipper-heaps.md | Design only |
-| `panic` statement | notes/panicking.md | Not implemented |
-| Pattern matching / match | demo-datafun-script.dfs | Not implemented |
-| `arena` blocks | demo-datafun-script.dfs | Not implemented |
-| `memoize` | demo-datafun-script.dfs | Not implemented |
-| `@type` introspection | demo-datafun-script.dfs | Not implemented |
-| `@data` dynamic type | README.md | Implemented |
-| Full Datalove layer | README.md | Not implemented |
+- Tensor operations
+- Pattern matching (`match` expressions)
+- Arena blocks
+- Memoization
+- Type introspection (`@type`)
+- Panic statement
+- Full Datalove layer (procedures and objects)
