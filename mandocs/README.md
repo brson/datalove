@@ -196,4 +196,3 @@ but I do have a [vision](vision.md) about what it will be.
 - [Script Semantics](script-semantics.md)
 - [REPL UI](repl-ui.md)
 - [Zipper Heaps](zipper-heaps.md)
-- [Links](links.md)

@@ -25,3 +25,10 @@
     Modern REPL inspiration.
 - Polars / Pandas.
     Tables.
+
+
+
+
+## Unsorted references
+
+- https://buttondown.com/hillelwayne/archive/my-gripes-with-prolog/
