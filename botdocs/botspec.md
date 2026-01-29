@@ -95,7 +95,7 @@ Block comments are delimited by `/*` and `*/` and may be nested.
 | `bool` | Boolean value |
 | `u8`, `u16`, `u32`, `u64` | Unsigned integers |
 | `i8`, `i16`, `i32`, `i64` | Signed integers |
-| `index` | Addressable size of indexed collections† |
+| `index` | Addressable size of indexed collections |
 | `offset` | Signed addressable size etc. |
 | `f32`, `f64` | Floating-point numbers |
 | `int` | Arbitrary-precision integer |
@@ -103,11 +103,9 @@ Block comments are delimited by `/*` and `*/` and may be nested.
 
 The `index` and `offset` types are 32-bit by default, or 64-bit when the
 `index-64` feature is enabled.
-
-> † `index` is not the same as the platform pointer size,
-  which is not exposed to the language.
-  The size of `index` is less than or equal to the platform pointer size.
-  Currently `index` and `offset` are 32-bit by compile-time default.
+`index` is not the same as the platform pointer size,
+which is not exposed to the language.
+The size of `index` is less than or equal to the platform pointer size.
 
 ### 3.2 Collection Types
 
