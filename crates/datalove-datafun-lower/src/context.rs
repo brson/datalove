@@ -901,6 +901,18 @@ impl<'db> LowerCtx<'db> {
         self.emit(Instruction::Call { site_id, dest, func, args });
     }
 
+    /// Emit ComptimeCall (for calls to functions with const parameters).
+    pub fn emit_comptime_call(
+        &mut self,
+        dest: ValueId,
+        func: FuncRef,
+        args: Vec<Operand>,
+        discriminant: u32,
+        comptime_param_indices: Vec<usize>,
+    ) {
+        self.emit(Instruction::ComptimeCall { dest, func, args, discriminant, comptime_param_indices });
+    }
+
     /// Emit Pack.
     pub fn emit_pack(&mut self, dest: ValueId, ty: TypeRef, fields: Vec<Operand>) {
         self.emit(Instruction::Pack { dest, ty, fields });

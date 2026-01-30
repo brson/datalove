@@ -571,6 +571,12 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             Instruction::Call { dest, func, args, .. } => {
                 self.compile_call(builder, *dest, func, args)?;
             }
+            // ComptimeCall behaves exactly like Call - the specialization metadata is
+            // only used by the specialization pass. Without specialization, this calls
+            // the original function with original args.
+            Instruction::ComptimeCall { dest, func, args, .. } => {
+                self.compile_call(builder, *dest, func, args)?;
+            }
             Instruction::SlotStoreCopy { dest, value } => {
                 self.compile_slot_store(builder, dest, value, true)?;
             }

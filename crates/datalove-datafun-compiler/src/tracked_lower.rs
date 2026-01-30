@@ -24,7 +24,7 @@ use datalove_datafun_tycheck::{
 use datalove_datafun_const::{inline_module_functions, PreparedConst, evaluate_prepared_const};
 use crate::IrTypeExt;
 use crate::lower;
-use crate::specialize::{build_specialization_plan, transform_function};
+use crate::specialize::{build_specialization_plan, transform_function, rewrite_comptime_calls};
 use crate::tracked_ownership_analysis::{SingleModuleAnalysis, ModuleGraphAnalysis};
 
 /// Function ID map for cross-module call resolution.
@@ -719,17 +719,11 @@ pub fn lower_module_graph_with_evaluator<'db>(
 
 /// Specialize functions with comptime parameters using union-branch transformation.
 ///
-/// For each function with comptime parameters that has call sites recorded in the
-/// registry, transforms the function to dispatch on a discriminant and inserts
-/// const values for each instantiation.
-///
-/// NOTE: This currently only transforms callee functions. Call site rewriting
-/// (modifying calls to pass discriminant instead of comptime args) is not yet
-/// implemented. Call site rewriting requires either:
-/// 1. Tracking expression IDs through to IR (for mapping call sites to discriminants)
-/// 2. Doing call rewriting during lowering phase (before IR is finalized)
-///
-/// Without call site rewriting, specialized functions won't work at runtime.
+/// This performs two transformations:
+/// 1. Callee transformation: Functions with comptime params get transformed to
+///    dispatch on a discriminant (union-branch form).
+/// 2. Call site transformation: ComptimeCall instructions get transformed to
+///    Const(discriminant) + Call with modified args.
 fn specialize_comptime_functions<'db>(
     db: &'db dyn salsa::Database,
     typecheck_result: ModuleGraphTypecheckResult<'db>,
@@ -767,8 +761,8 @@ fn specialize_comptime_functions<'db>(
         return lowered_functions;
     }
 
-    // Transform specialized functions.
-    for (module_id, module_funcs) in lowered_functions.iter_mut() {
+    // Phase 1: Transform callee functions (functions with comptime params).
+    for (_module_id, module_funcs) in lowered_functions.iter_mut() {
         let mut new_functions = Vec::new();
 
         for func in &module_funcs.functions {
@@ -780,6 +774,30 @@ fn specialize_comptime_functions<'db>(
             } else {
                 new_functions.push(func.clone());
             }
+        }
+
+        module_funcs.functions = new_functions;
+    }
+
+    // Build a global FuncId -> name map for resolving FuncRef during call rewriting.
+    let mut func_id_to_name: HashMap<FuncId, String> = HashMap::new();
+    for module_funcs in lowered_functions.values() {
+        for (name, func_id) in &module_funcs.func_name_to_id {
+            func_id_to_name.insert(*func_id, name.clone());
+        }
+    }
+
+    // Phase 2: Rewrite call sites (ComptimeCall -> Const + Call).
+    for (_module_id, module_funcs) in lowered_functions.iter_mut() {
+        let mut new_functions = Vec::new();
+
+        for func in &module_funcs.functions {
+            // Track value allocation for new Const instructions.
+            let mut value_types = func.value_types.clone();
+            let mut next_value = func.value_count;
+
+            let transformed = rewrite_comptime_calls(func, &spec_result, &func_id_to_name, &mut value_types, &mut next_value);
+            new_functions.push(transformed);
         }
 
         module_funcs.functions = new_functions;

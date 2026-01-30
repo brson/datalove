@@ -34,6 +34,7 @@ pub fn instruction_dest(instr: &Instruction) -> Option<ValueId> {
 
         // Function calls
         Instruction::Call { dest, .. } => Some(*dest),
+        Instruction::ComptimeCall { dest, .. } => Some(*dest),
 
         // Aggregate construction
         Instruction::Pack { dest, .. } => Some(*dest),
@@ -344,6 +345,11 @@ fn collect_instruction_operands(instr: &Instruction, used: &mut HashSet<ValueId>
 
         // Function call with args.
         Instruction::Call { args, .. } => {
+            for arg in args {
+                add_operand_value(arg, used);
+            }
+        }
+        Instruction::ComptimeCall { args, .. } => {
             for arg in args {
                 add_operand_value(arg, used);
             }

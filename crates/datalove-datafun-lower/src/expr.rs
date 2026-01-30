@@ -370,8 +370,27 @@ pub fn lower_expression<'db>(
             let result_type = ctx.expr_type(expr);
             let dest = ctx.fresh_value(result_type);
 
-            ctx.emit_call(dest, func_ref, args);
-            // Args consumed by Call; pop scope.
+            // Check if this is a call to a function with comptime params.
+            // If so, emit ComptimeCall with discriminant=0 as placeholder.
+            // The specialization pass will compute the correct discriminant.
+            let comptime_param_indices: Vec<usize> = target
+                .map(|t| {
+                    t.func(ctx.db).params(ctx.db)
+                        .iter()
+                        .enumerate()
+                        .filter_map(|(i, p)| if p.is_comptime { Some(i) } else { None })
+                        .collect()
+                })
+                .unwrap_or_default();
+
+            if !comptime_param_indices.is_empty() {
+                // Emit ComptimeCall with discriminant=0 (placeholder).
+                // Specialization pass will fill in correct discriminant from const values.
+                ctx.emit_comptime_call(dest, func_ref, args, 0, comptime_param_indices);
+            } else {
+                ctx.emit_call(dest, func_ref, args);
+            }
+            // Args consumed by Call/ComptimeCall; pop scope.
             ctx.clear_pending_intermediates();
             ctx.pop_pending_scope();
             Ok(dest)

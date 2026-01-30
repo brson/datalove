@@ -1112,11 +1112,11 @@ end fun
 - [x] Propagate `ComptimeCallSiteRegistry` through pipeline
 - [ ] Unit tests for recording
 
-### Sprint 3: IR Transformation (Partial)
+### Sprint 3: IR Transformation ✅
 - [x] Phase 4: Union-branch IR transformation (`transform_function`)
 - [x] Build dispatch blocks and cloned body blocks
 - [x] Const substitution in cloned blocks
-- [ ] **Call instruction rewriting** - BLOCKED: requires expression ID tracking in IR
+- [x] **Call instruction rewriting** - Implemented via `ComptimeCall` instruction variant
 - [ ] Integration tests
 
 ### Sprint 4: Pipeline Integration ✅
@@ -1140,18 +1140,34 @@ end fun
 
 ## Current Status
 
-**BLOCKER: Call site rewriting is not yet implemented.**
+**RESOLVED: Call site rewriting now implemented via ComptimeCall instruction.**
 
-The union-branch transformation of callee functions is complete, but call sites still
-pass the original comptime args instead of discriminants. Two approaches to fix this:
+The previous blocker (call site rewriting) has been resolved by introducing a new
+`ComptimeCall` IR instruction variant. The approach:
 
-1. **Track expression IDs through IR**: Add call expression ID to IR Call instructions
-   during lowering. This enables mapping IR calls back to `call_rewrites` discriminants.
+1. **Lowering phase** emits `ComptimeCall` (instead of `Call`) when calling functions
+   with comptime parameters. The `ComptimeCall` contains:
+   - Original args (including comptime args)
+   - Placeholder discriminant (0)
+   - Indices of comptime parameters
 
-2. **Rewrite during lowering**: Perform call rewriting in the lower crate before IR is
-   finalized, when we still have access to expression IDs.
+2. **Specialization phase (5c)** transforms `ComptimeCall` instructions:
+   - Resolves comptime arg values from const instructions
+   - Computes correct discriminant via specialization plan
+   - Emits `Const(discriminant)` + `Call` with modified args
 
-Without call site rewriting, specialized functions produce incorrect results at runtime.
+3. **Interpreter/AOT compatibility**: Without specialization, `ComptimeCall` is
+   handled exactly like `Call` (ignoring the specialization metadata).
+
+Key files modified:
+- `datafun-ir/src/lib.rs`: Added `ComptimeCall` instruction variant
+- `datafun-lower/src/expr.rs`: Emit `ComptimeCall` for comptime function calls
+- `datafun-compiler/src/specialize.rs`: Added `rewrite_comptime_calls()` function
+- `datafun-interp/src/lib.rs`: Handle `ComptimeCall` like `Call`
+- `datafun-cranelift/src/codegen/mod.rs`: Handle `ComptimeCall` like `Call`
+
+**Next steps**: Differential testing to verify specialized IR produces identical
+output to unspecialized IR.
 
 ---
 

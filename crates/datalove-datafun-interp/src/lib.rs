@@ -888,6 +888,28 @@ impl IrInterpreter {
                 frame.mark_value_live(*dest);
                 Self::mark_out_params_initialized(callee, args, frame);
             }
+            // ComptimeCall behaves exactly like Call - the specialization metadata is
+            // only used by the specialization pass. Without specialization, this calls
+            // the original function with original args.
+            Instruction::ComptimeCall { dest, func, args, .. } => {
+                let (callee, callee_unit) = ctx.get_function_with_context(func, registry);
+                let arg_vals = self.prepare_call_args(callee, args, frame, frames);
+                let dest_slot = frame.value_dest(*dest);
+                Self::mark_consumed_call_args(callee, args, frame);
+
+                // Try dispatcher first, fall back to interpreter.
+                let call_result = if let Some(result) = self.try_dispatch_call(
+                    func, callee, &arg_vals, dest_slot, ctx, registry, frames
+                ) {
+                    result
+                } else {
+                    self.execute_call(callee, callee_unit, arg_vals, dest_slot, ctx, registry, frames)
+                };
+                call_result?;
+
+                frame.mark_value_live(*dest);
+                Self::mark_out_params_initialized(callee, args, frame);
+            }
             Instruction::ListNew { dest, elements } => {
                 let dest_slot = frame.value_dest(*dest);
                 self.execute_list_new(elements, dest_slot, frame, frames);

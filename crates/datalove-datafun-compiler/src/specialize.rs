@@ -46,7 +46,7 @@
 use std::collections::HashMap;
 use datalove_datafun_ir::{
     ConstValue, IrFunction, IrBlock, Instruction, Terminator, Operand,
-    ValueId, BlockId, FuncId, IrType, BinOp, ParamMode, ParamId,
+    ValueId, BlockId, FuncId, FuncRef, IrType, BinOp, ParamMode, ParamId,
 };
 use datalove_datafun_common::ComptimeCallSiteRegistry;
 
@@ -432,26 +432,153 @@ fn remap_terminator_blocks(term: &Terminator, block_offset: u32, _num_blocks: u3
     }
 }
 
-/// Rewrite a call instruction to pass discriminant instead of comptime args.
+/// Rewrite ComptimeCall instructions in a function.
 ///
-/// Returns a new instruction with:
-/// - First arg replaced with discriminant constant
-/// - Comptime args removed
-pub fn rewrite_call_instruction(
-    instr: &Instruction,
-    _discriminant: u32,
-    _comptime_param_indices: &[usize],
-) -> Option<Instruction> {
-    match instr {
-        Instruction::Call { dest: _, func: _, args: _ } => {
-            // First arg is the discriminant.
-            // Note: We can't emit a Const instruction here - the caller needs to do that.
-            // For now, we'll need a different approach: the rewriting should happen
-            // at a higher level where we can emit instructions.
+/// For each ComptimeCall:
+/// 1. Resolve comptime arg values from the IR (find Const instructions that define them)
+/// 2. Look up discriminant from the specialization plan
+/// 3. Replace with: Const(discriminant) + Call with non-comptime args
+///
+/// The `func_id_to_name` map is used to resolve FuncRef to function names.
+///
+/// Returns the transformed function.
+pub fn rewrite_comptime_calls(
+    func: &IrFunction,
+    spec_result: &SpecializationResult,
+    func_id_to_name: &HashMap<FuncId, String>,
+    value_types: &mut Vec<IrType>,
+    next_value: &mut u32,
+) -> IrFunction {
+    // Build a map from ValueId to ConstValue for values defined by Const instructions.
+    let const_values = build_const_value_map(func);
 
-            // This function is a placeholder - actual rewriting needs more context.
-            Some(instr.clone())
+    let mut new_blocks = Vec::new();
+
+    for block in &func.blocks {
+        let mut new_instructions = Vec::new();
+
+        for instr in &block.instructions {
+            match instr {
+                Instruction::ComptimeCall { dest, func: func_ref, args, discriminant: _, comptime_param_indices } => {
+                    // Get the function name from FuncRef.
+                    let func_name = get_func_name_from_ref(func_ref, func_id_to_name);
+
+                    if let Some(ref name) = func_name {
+                        if let Some(spec) = spec_result.specialized_funcs.get(name) {
+                            // Resolve comptime arg values.
+                            let comptime_values: Vec<ConstValue> = comptime_param_indices.iter()
+                                .filter_map(|&idx| {
+                                    if idx < args.len() {
+                                        resolve_operand_value(&args[idx], &const_values)
+                                    } else {
+                                        None
+                                    }
+                                })
+                                .collect();
+
+                            // Look up discriminant.
+                            if let Some(disc) = spec.get_discriminant(&comptime_values) {
+                                // Allocate fresh value for discriminant constant.
+                                let disc_val = ValueId(*next_value);
+                                *next_value += 1;
+                                value_types.push(IrType::I32);
+
+                                // Emit Const instruction for discriminant.
+                                new_instructions.push(Instruction::Const {
+                                    dest: disc_val,
+                                    value: ConstValue::I32(disc as i32),
+                                });
+
+                                // Build new args: discriminant + non-comptime args.
+                                let mut new_args = vec![Operand::Value(disc_val)];
+                                for (i, arg) in args.iter().enumerate() {
+                                    if !comptime_param_indices.contains(&i) {
+                                        new_args.push(arg.clone());
+                                    }
+                                }
+
+                                // Emit Call instruction.
+                                new_instructions.push(Instruction::Call {
+                                    dest: *dest,
+                                    func: func_ref.clone(),
+                                    args: new_args,
+                                });
+                                continue;
+                            }
+                        }
+                    }
+
+                    // Fallback: function not in spec plan or discriminant not found.
+                    // Emit as regular Call (handles skipped specialization).
+                    new_instructions.push(Instruction::Call {
+                        dest: *dest,
+                        func: func_ref.clone(),
+                        args: args.clone(),
+                    });
+                }
+                _ => {
+                    new_instructions.push(instr.clone());
+                }
+            }
         }
+
+        new_blocks.push(IrBlock {
+            id: block.id,
+            params: block.params.clone(),
+            instructions: new_instructions,
+            terminator: block.terminator.clone(),
+        });
+    }
+
+    IrFunction {
+        id: func.id,
+        name: func.name.clone(),
+        params: func.params.clone(),
+        param_modes: func.param_modes.clone(),
+        param_types: func.param_types.clone(),
+        return_type: func.return_type.clone(),
+        blocks: new_blocks,
+        value_count: *next_value,
+        slot_count: func.slot_count,
+        value_types: value_types.clone(),
+        slot_types: func.slot_types.clone(),
+        tracked_slots: func.tracked_slots.clone(),
+        tracked_params: func.tracked_params.clone(),
+        const_values: func.const_values.clone(),
+    }
+}
+
+/// Get the function name from a FuncRef using the provided mapping.
+fn get_func_name_from_ref(func_ref: &FuncRef, func_id_to_name: &HashMap<FuncId, String>) -> Option<String> {
+    match func_ref {
+        FuncRef::Local(id) => func_id_to_name.get(id).cloned(),
+        FuncRef::Module { func, .. } => func_id_to_name.get(func).cloned(),
+        FuncRef::External { func, .. } => func_id_to_name.get(func).cloned(),
+    }
+}
+
+/// Build a map from ValueId to ConstValue for values defined by Const instructions.
+fn build_const_value_map(func: &IrFunction) -> HashMap<ValueId, ConstValue> {
+    let mut map = HashMap::new();
+
+    for block in &func.blocks {
+        for instr in &block.instructions {
+            if let Instruction::Const { dest, value } = instr {
+                map.insert(*dest, value.clone());
+            }
+        }
+    }
+
+    map
+}
+
+/// Resolve an operand to a ConstValue if possible.
+///
+/// Looks up the value from the const_values map if the operand is a Value.
+fn resolve_operand_value(operand: &Operand, const_values: &HashMap<ValueId, ConstValue>) -> Option<ConstValue> {
+    match operand {
+        Operand::Value(vid) => const_values.get(vid).cloned(),
+        // Other operand types (Slot, Param, etc.) cannot be resolved to const values directly.
         _ => None,
     }
 }
