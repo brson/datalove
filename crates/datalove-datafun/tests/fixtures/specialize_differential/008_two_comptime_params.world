@@ -1,0 +1,26 @@
+----------
+module local/test/twoconst
+----------
+
+// Function with two comptime parameters.
+fun add_consts(const a: int, const b: int): int
+    ret a + b
+end fun
+
+----------
+scriptunit-fragment
+----------
+
+require module local/test/twoconst
+import twoconst.add_consts
+
+const TEN: int = 10
+const TWENTY: int = 20
+let result = add_consts(TEN, TWENTY)
+debuglog result
+
+----------
+scriptunit-expr
+----------
+
+result

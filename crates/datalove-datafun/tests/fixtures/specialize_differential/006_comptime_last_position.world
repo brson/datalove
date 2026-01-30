@@ -1,0 +1,25 @@
+----------
+module local/test/lastpos
+----------
+
+// Function with comptime parameter in last position.
+fun multiply(x: int, const n: int): int
+    ret x * n
+end fun
+
+----------
+scriptunit-fragment
+----------
+
+require module local/test/lastpos
+import lastpos.multiply
+
+const THREE: int = 3
+let result = multiply(7, THREE)
+debuglog result
+
+----------
+scriptunit-expr
+----------
+
+result

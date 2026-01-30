@@ -1,0 +1,25 @@
+----------
+module local/test/mixed
+----------
+
+// Function with both comptime and regular parameters.
+fun add_const(const n: int, x: int): int
+    ret n + x
+end fun
+
+----------
+scriptunit-fragment
+----------
+
+require module local/test/mixed
+import mixed.add_const
+
+const FIVE: int = 5
+let result = add_const(FIVE, 10)
+debuglog result
+
+----------
+scriptunit-expr
+----------
+
+result

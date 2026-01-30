@@ -1,0 +1,76 @@
+// PASS: Specialized and unspecialized outputs match
+
+Analysis(
+    sections: [
+        SectionResult(
+            section_type: "module",
+            name: Some("local/test/lastpos"),
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    fn multiply(p0, p1):
+                    block0:
+                        v0 = mul p0, p1
+                        drop p0
+                        drop p1
+                        return v0
+                """,
+            ),
+            output: "",
+        ),
+        SectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 3int
+                        v1 = const 7int
+                        v2 = comptime_call m0.f0(v1, v0) [disc=0, comptime_params=[1]]
+                        debuglog v2
+                        unit_end_drop v2
+                        unit_end
+                    exports:
+                        THREE = v0
+                        result = v2
+                """,
+            ),
+            output: "(fragment executed)",
+            debug_output: Some("21\n"),
+        ),
+        SectionResult(
+            section_type: "scriptunit-expr",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = move unit0.v2
+                        unit_end v0
+                """,
+            ),
+            output: "21",
+        ),
+    ],
+)

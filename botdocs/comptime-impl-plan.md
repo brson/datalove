@@ -1125,11 +1125,11 @@ end fun
 - [x] Add `skip_specialization` option to `lower_module_graph_with_evaluator`
 - [ ] End-to-end tests (interpreter + AOT)
 
-### Sprint 5: Differential Testing
-- [ ] Create `interp_specialize_tests.rs` following `interp_constlet_tests.rs` pattern
-- [ ] Add test fixtures in `fixtures/specialize_differential/`
-- [ ] Verify: specialized IR == unspecialized IR (same debuglog output)
-- [ ] Test edge cases: multiple instantiations, nested calls, mixed params
+### Sprint 5: Differential Testing ✅
+- [x] Create `interp_specialize_tests.rs` following `interp_constlet_tests.rs` pattern
+- [x] Add test fixtures in `fixtures/specialize_differential/`
+- [x] Verify: specialized IR == unspecialized IR (same debuglog output)
+- [x] Test edge cases: multiple instantiations, nested calls, mixed params
 
 ### Sprint 6: Polish
 - [ ] Phase 6: Codegen hints (jump table for many variants)
@@ -1200,26 +1200,19 @@ The lowering then used the original u32 type, which the runtime interpreted inco
 
 **Verified:** Test 004 now correctly outputs `4` for `double(2)`.
 
-#### Outstanding: Mixed comptime + regular parameters not working
+#### Fixed: Mixed comptime + regular parameters
 
-**Problem:** Functions with a comptime parameter followed by regular parameters don't
-execute - module lowering is skipped even though typecheck and ownership succeed.
+**Problem:** Functions with both comptime and regular parameters were previously not
+working - module lowering was skipped.
 
-Examples:
-- `fun add(const n: int, x: int): int` - Lowering skipped
-- `fun prefix(const n: int, s: string): string` - Lowering skipped
+**Status:** Fixed. This was likely resolved during the rebase onto origin/master which
+included widening fixes. Now works for all parameter configurations:
+- Comptime param first: `fun add_const(const n: int, x: int): int` ✓
+- Comptime param last: `fun multiply(x: int, const n: int): int` ✓
+- All comptime params: `fun add_consts(const a: int, const b: int): int` ✓
 
-**Symptoms:** Test output shows `lowering: Skipped` for the module, and script units
-are also skipped since they depend on the module functions.
-
-**Investigation notes:**
-- Debug output added to `lower_module` doesn't appear, suggesting the function
-  isn't being called or salsa is caching stale results
-- The function is present in `parsed.statements` since `func_ids` is computed
-- Need to trace earlier in the pipeline to find where the skip occurs
-
-**Next steps:** Add debug output earlier in the compilation pipeline (before lower_module)
-to understand why modules with mixed-param comptime functions aren't being lowered.
+**Verified:** Tests 005, 006, 008 in `fixtures/specialize_differential/` confirm correct
+behavior with differential testing.
 
 ---
 
