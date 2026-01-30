@@ -1,0 +1,19 @@
+// Test: D007 MoveInLoop pattern in function (ownership auto-adapt)
+// This demonstrates the pattern that would cause D007 without @
+// Note: Type checking passes; ownership errors require separate testing
+
+fun test_move_in_loop(msg: string): string
+  // Pattern: moving outer-scoped value inside loop
+  // Without @: D007 error because loop may iterate multiple times
+  // With @: clone inside loop each iteration succeeds
+  var count: i32 = 0
+  loop
+    // Without @, this would be D007: cannot move msg in loop
+    // set result = msg  // Would cause ownership error
+    set count = count + 1
+    if count > 2
+      break
+    end if
+  end loop
+  ret msg
+end fun

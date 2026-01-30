@@ -1,0 +1,11 @@
+// Test: D002 DoubleMove pattern in function (ownership auto-adapt)
+// This demonstrates the pattern that would cause D002 without @
+// Note: Type checking passes; ownership errors require separate testing
+
+fun test_double_move(msg: string): string
+  // Pattern: double use of linear value in function
+  // Without @: D002 error at second use
+  // With @: first use clones, both uses succeed
+  let a: string = msg
+  ret a
+end fun

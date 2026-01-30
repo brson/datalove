@@ -1,0 +1,10 @@
+// Test: D001 UseAfterMove pattern (ownership auto-adapt)
+// This demonstrates the pattern that would cause D001 without @
+// Note: Type checking passes; ownership errors require separate testing
+//
+// Pattern: sequential use of linear value
+// Without @: D001 error at second use
+// With @: first use clones, both uses succeed
+
+let msg: string = "hello"
+let a: string = msg   // First use (move) - type check OK

@@ -1,0 +1,7 @@
+// Test: Cross-sign widening u8 → i16 in function return
+// u8 cannot implicitly widen to i16 (signed), but @ can do it
+// Expected: F016 type mismatch with recovery hint in function body
+
+fun convert(n: u8): i16
+  ret n
+end fun

@@ -1,0 +1,7 @@
+// Test: Cross-sign widening u32 → i64 in function return
+// u32 cannot implicitly widen to i64 (signed), but @ can do it
+// Expected: F016 type mismatch with recovery hint in function body
+
+fun convert(n: u32): i64
+  ret n
+end fun
