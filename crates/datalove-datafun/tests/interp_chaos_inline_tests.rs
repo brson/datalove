@@ -19,7 +19,7 @@ use datalove_datafun as datafun;
 use datalove_datafun_inline::{
     inline_cross_module, inline_module, CrossModuleInlineContext, GlobalFuncId, InlineDirective,
 };
-use datalove_datafun_ir::{IrModule, IrModuleId, IrScriptUnit, ModuleFunctionRegistry, ParamMode, SymbolTable};
+use datalove_datafun_ir::{IrModule, IrModuleId, IrScriptUnit, ModuleFunctionRegistry, SymbolTable};
 use datalove_datafun_pkg::package_load_worldfile::{self, ParsedWorldfile, WorldfileSection};
 use datafun::pipeline::{ConstInlining, ModuleCompilationPipeline};
 
@@ -56,11 +56,6 @@ impl SimpleRng {
     }
 }
 
-/// Check if a function has any mut or out parameters (which can't be inlined correctly).
-fn has_byref_params(func: &datalove_datafun_ir::IrFunction) -> bool {
-    func.param_modes.iter().any(|m| matches!(m, ParamMode::Mut | ParamMode::Out))
-}
-
 /// Generate random inline directives based on available functions.
 fn generate_random_directives(
     module: &IrModule,
@@ -69,30 +64,20 @@ fn generate_random_directives(
 ) -> Vec<InlineDirective> {
     let mut directives = Vec::new();
 
-    // Collect function names, excluding those with mut/out parameters.
-    let inlineable_funcs: Vec<&str> = module
+    // Collect all function names.
+    let func_names: Vec<&str> = module
         .functions
         .iter()
-        .filter(|f| !has_byref_params(f))
         .map(|f| f.name.as_str())
         .collect();
 
-    // All function names for callers (callers can have any param types).
-    let all_func_names: Vec<&str> = module
-        .symbols
-        .functions
-        .iter()
-        .map(|def| def.name.as_str())
-        .collect();
-
-    if inlineable_funcs.is_empty() || all_func_names.len() < 2 {
+    if func_names.len() < 2 {
         return directives;
     }
 
     // For each pair of functions, randomly decide to inline.
-    // Callee must be inlineable (no mut/out params).
-    for caller in &all_func_names {
-        for callee in &inlineable_funcs {
+    for caller in &func_names {
+        for callee in &func_names {
             // Skip self-calls (recursive inlining not supported).
             if caller == callee {
                 continue;
@@ -191,42 +176,30 @@ fn inline_module_functions(
 /// Generate random cross-module inline directives.
 fn generate_random_cross_module_directives(
     ctx: &CrossModuleInlineContext,
-    registry: &ModuleFunctionRegistry,
     rng: &mut SimpleRng,
     inline_probability: u32,
 ) -> Vec<InlineDirective> {
     let mut directives = Vec::new();
 
-    // Collect all (module_name, func_name, global_func_id) tuples for functions that can be inlined.
-    let mut inlineable_funcs: Vec<(String, String, GlobalFuncId)> = Vec::new();
+    // Collect all (module_name, func_name, global_func_id) tuples.
     let mut all_funcs: Vec<(String, String, GlobalFuncId)> = Vec::new();
 
     for (mod_name, &mod_id) in ctx.iter_modules() {
         if let Some(symbols) = ctx.module_symbols.get(&mod_id) {
             for func_def in &symbols.functions {
                 let global_id = GlobalFuncId { module: mod_id, func: func_def.id };
-
-                // Check if function has byref params.
-                if let Some(func) = registry.get_module_function(mod_id, func_def.id) {
-                    let has_byref = func.param_modes.iter().any(|m| matches!(m, ParamMode::Mut | ParamMode::Out));
-
-                    all_funcs.push((mod_name.clone(), func_def.name.clone(), global_id));
-
-                    if !has_byref {
-                        inlineable_funcs.push((mod_name.clone(), func_def.name.clone(), global_id));
-                    }
-                }
+                all_funcs.push((mod_name.clone(), func_def.name.clone(), global_id));
             }
         }
     }
 
-    if inlineable_funcs.is_empty() || all_funcs.len() < 2 {
+    if all_funcs.len() < 2 {
         return directives;
     }
 
     // For each pair of functions (from different modules), randomly decide to inline.
     for (caller_mod, caller_name, caller_id) in &all_funcs {
-        for (callee_mod, callee_name, callee_id) in &inlineable_funcs {
+        for (callee_mod, callee_name, callee_id) in &all_funcs {
             // Skip self-calls.
             if caller_id == callee_id {
                 continue;
@@ -275,7 +248,7 @@ fn inline_cross_module_functions(
     }
 
     // Generate cross-module directives.
-    let directives = generate_random_cross_module_directives(&ctx, registry, rng, inline_probability);
+    let directives = generate_random_cross_module_directives(&ctx, rng, inline_probability);
 
     if directives.is_empty() {
         return registry.clone();
