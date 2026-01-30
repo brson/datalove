@@ -19,6 +19,8 @@ use crate::check::{check_expr, check_list_elements, check_set_elements, check_ma
 use crate::types::*;
 
 pub use crate::{Type, TypeError, is_copy_type};
+use crate::types::ComptimeCallSite;
+use salsa::plumbing::AsId;
 
 // ============================================================================
 // Operator Display Helpers
@@ -700,11 +702,46 @@ fn synthesize_function_call<'db>(
 
     let param_types = func_type.param_types(db);
     let param_modes = func_type.param_modes(db);
+    let param_comptime = func_type.param_comptime(db);
     let return_type = func_type.return_type(db);
 
     // F045: Function arity mismatch.
     if args.len() != param_types.len() {
         return Err(ctx.error_arity_mismatch(expr, name, param_types.len(), args.len()));
+    }
+
+    // Collect comptime parameter indices.
+    let comptime_indices: Vec<usize> = param_comptime.iter()
+        .enumerate()
+        .filter_map(|(i, &is_ct)| if is_ct { Some(i) } else { None })
+        .collect();
+
+    // If function has comptime params, validate and record.
+    let mut comptime_arg_names = Vec::new();
+    if !comptime_indices.is_empty() {
+        // Register that this function has comptime params.
+        ctx.comptime_registry_mut().register_comptime_func(name, comptime_indices.clone());
+
+        // Validate each comptime argument is a const binding name.
+        for &i in &comptime_indices {
+            let arg = args[i];
+            match validate_comptime_arg(ctx, arg, i)? {
+                Some(arg_name) => comptime_arg_names.push(arg_name),
+                None => {
+                    // Error already recorded by validate_comptime_arg
+                }
+            }
+        }
+
+        // Record this call site if we successfully validated all comptime args.
+        if comptime_arg_names.len() == comptime_indices.len() {
+            ctx.comptime_registry_mut().record_call_site(ComptimeCallSite {
+                call_expr_id: call.as_id(),
+                func_name: name,
+                comptime_param_indices: comptime_indices.clone(),
+                comptime_arg_names,
+            });
+        }
     }
 
     // Check each argument type, setting ref context for ref/mut/out params.
@@ -724,6 +761,37 @@ fn synthesize_function_call<'db>(
 
     // Return the function's return type.
     Ok(return_type)
+}
+
+/// Validate that a comptime argument is a const binding name.
+///
+/// Returns the const binding name if valid, or None if an error was recorded.
+fn validate_comptime_arg<'db>(
+    ctx: &mut TypeContext<'db>,
+    arg: ExprFun<'db>,
+    param_idx: usize,
+) -> Result<Option<bct::text::InternedText<'db>>, TypeError> {
+    let db = ctx.db;
+
+    // The argument must be a simple Name expression.
+    match arg.expr(db) {
+        ExprFunKind::Name(name) => {
+            // Must be a const binding, not a let/var/parameter.
+            if ctx.is_const_binding(name) {
+                Ok(Some(name))
+            } else {
+                let reason = format!("'{}' is not a const binding", name.as_str(db));
+                ctx.add_error(TypeError::ComptimeArgNotConstBinding { param_idx, reason: reason.clone() });
+                // Still return Ok(None) so we can continue checking other args
+                Ok(None)
+            }
+        }
+        _ => {
+            let reason = "comptime argument must be a const binding name".to_string();
+            ctx.add_error(TypeError::ComptimeArgNotConstBinding { param_idx, reason });
+            Ok(None)
+        }
+    }
 }
 
 // ============================================================================

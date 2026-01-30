@@ -251,8 +251,66 @@ pub struct TypeFunction<'db> {
     #[returns(ref)]
     pub param_types: Vec<Type<'db>>,
     pub param_modes: Vec<ParamMode>,
+    #[returns(ref)]
+    pub param_comptime: Vec<bool>,
     #[tracked]
     pub return_type: Type<'db>,
+}
+
+// ============================================================================
+// Comptime Call Site Registry
+// ============================================================================
+
+/// A call site with comptime arguments, recorded during typecheck.
+///
+/// Note: We record const binding *names*, not values. The values are looked up
+/// later from ResolvedConsts during specialization (after const evaluation).
+#[derive(Clone, Debug, Hash, PartialEq, Eq)]
+pub struct ComptimeCallSite<'db> {
+    /// The call expression ID (for locating in IR later).
+    pub call_expr_id: salsa::Id,
+    /// Name of the called function.
+    pub func_name: InternedText<'db>,
+    /// Indices of comptime parameters in the callee.
+    pub comptime_param_indices: Vec<usize>,
+    /// Names of const bindings used as comptime args (NOT values yet).
+    pub comptime_arg_names: Vec<InternedText<'db>>,
+}
+
+/// Registry of comptime call sites and functions, collected during typecheck.
+#[derive(Clone, Debug, Default)]
+pub struct ComptimeCallSiteRegistry<'db> {
+    /// All call sites with comptime args.
+    pub call_sites: Vec<ComptimeCallSite<'db>>,
+    /// Functions that have comptime parameters (name → param indices).
+    pub comptime_funcs: HashMap<InternedText<'db>, Vec<usize>>,
+}
+
+impl<'db> ComptimeCallSiteRegistry<'db> {
+    /// Create a new empty registry.
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Check if there are any comptime functions or call sites.
+    pub fn is_empty(&self) -> bool {
+        self.call_sites.is_empty() && self.comptime_funcs.is_empty()
+    }
+
+    /// Register a function with comptime parameters.
+    pub fn register_comptime_func(&mut self, name: InternedText<'db>, comptime_indices: Vec<usize>) {
+        self.comptime_funcs.entry(name).or_insert(comptime_indices);
+    }
+
+    /// Record a call site with comptime arguments.
+    pub fn record_call_site(&mut self, call_site: ComptimeCallSite<'db>) {
+        self.call_sites.push(call_site);
+    }
+
+    /// Get comptime parameter indices for a function.
+    pub fn get_comptime_indices(&self, func_name: InternedText<'db>) -> Option<&Vec<usize>> {
+        self.comptime_funcs.get(&func_name)
+    }
 }
 
 /// Type error representation.
@@ -299,6 +357,11 @@ pub enum TypeError {
     CannotShadowPrimitive(String),
     /// Const not allowed at module level.
     ConstNotAllowedInModule(String),
+    /// Comptime argument must be a const binding name.
+    ComptimeArgNotConstBinding {
+        param_idx: usize,
+        reason: String,
+    },
 }
 
 impl From<datalove_datalit::tycheck::TypeError> for TypeError {

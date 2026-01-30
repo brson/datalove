@@ -91,6 +91,8 @@ pub struct StmtFun {
 pub struct FunParam {
     pub name: String,
     pub mode: ParamMode,
+    #[serde(default)]
+    pub is_comptime: bool,
     pub type_hint: datalove_datalit::ast_serde::TypeHint,
 }
 
@@ -574,6 +576,7 @@ impl FunParam {
         FunParam {
             name: ast.name.as_str(db).to_string(),
             mode: ParamMode::from_ast(ast.mode),
+            is_comptime: ast.is_comptime,
             type_hint: datalove_datalit::ast_serde::TypeHint::from_ast(db, ast.type_hint.clone()),
         }
     }

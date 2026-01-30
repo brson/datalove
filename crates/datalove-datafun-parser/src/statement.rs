@@ -393,8 +393,16 @@ impl<'db> Parser<'db> {
         params
     }
 
-    /// Parse a single function parameter: `[mode] name: type`.
+    /// Parse a single function parameter: `[const] [mode] name: type`.
     fn parse_fun_param(&mut self) -> ast::FunParam<'db> {
+        // Check for `const` modifier (comptime parameter).
+        let is_comptime = if self.peek_word() == Some("const") {
+            self.eat_word("const");
+            true
+        } else {
+            false
+        };
+
         // Check for parameter mode keywords.
         let mode = match self.peek_word() {
             Some("out") => {
@@ -411,6 +419,16 @@ impl<'db> Parser<'db> {
             }
             _ => ast::ParamMode::In,
         };
+
+        // Validate: const cannot combine with out or mut
+        if is_comptime && matches!(mode, ast::ParamMode::Out | ast::ParamMode::Mut) {
+            self.had_error = true;
+            let ts = self.peek_text_span();
+            DiagnosticBuilder::error(self.db, "const parameter cannot be 'out' or 'mut'")
+                .code("P013")
+                .primary_label(ts, "invalid combination")
+                .emit_parse();
+        }
 
         let name = match self.eat_name() {
             Some(n) => n,
@@ -437,7 +455,7 @@ impl<'db> Parser<'db> {
 
         let type_hint = self.parse_type_hint();
 
-        ast::FunParam { name, mode, type_hint }
+        ast::FunParam { name, mode, is_comptime, type_hint }
     }
 
     fn parse_ret(&mut self) -> ast::Statement<'db> {

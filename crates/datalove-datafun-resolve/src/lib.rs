@@ -92,15 +92,17 @@ pub fn resolve_names_impl<'db>(
             let params = stmt.params(db);
             let return_type = stmt.return_type(db);
 
-            // Convert parameter types and collect modes.
+            // Convert parameter types and collect modes/comptime flags.
             let mut param_types = Vec::new();
             let mut param_modes = Vec::new();
+            let mut param_comptime = Vec::new();
             let mut has_error = false;
             for param in params {
                 match convert_type_hint_with_aliases(db, param.type_hint.clone(), &type_aliases_map) {
                     Ok(ty) => {
                         param_types.push(ty);
                         param_modes.push(param.mode);
+                        param_comptime.push(param.is_comptime);
                     }
                     Err(e) => {
                         errors.push(e);
@@ -129,7 +131,7 @@ pub fn resolve_names_impl<'db>(
             };
 
             // Create function type and collect AST.
-            let func_type = TypeFunction::new(db, param_types, param_modes, ret_ty);
+            let func_type = TypeFunction::new(db, param_types, param_modes, param_comptime, ret_ty);
             functions.push((name, func_type));
             function_asts.push((name, *stmt));
         }

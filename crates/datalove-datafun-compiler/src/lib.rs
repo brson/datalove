@@ -34,6 +34,9 @@ pub mod module_graph;
 // Module compilation from pre-resolved graphs.
 pub mod compile;
 
+// Comptime argument specialization.
+pub mod specialize;
+
 #[salsa::db]
 #[derive(Default, Clone)]
 pub struct Database {

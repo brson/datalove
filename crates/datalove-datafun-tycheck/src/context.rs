@@ -26,7 +26,9 @@ pub use crate::{
     AutoAdaptMode,
 };
 
+pub use crate::types::{ComptimeCallSiteRegistry, ComptimeCallSite};
 use datalove_datafun_common::can_clone_coerce_to;
+use std::collections::HashSet;
 
 /// Context for typechecking.
 pub struct TypeContext<'db> {
@@ -65,6 +67,10 @@ pub struct TypeContext<'db> {
     pub(crate) auto_adapt_mode: AutoAdaptMode,
     /// Auto-adaptations that were applied (for reporting and IR lowering).
     pub(crate) auto_adaptations: Vec<AutoAdaptation<'db>>,
+    /// Names of const bindings (for validating comptime args).
+    pub(crate) const_bindings: HashSet<InternedText<'db>>,
+    /// Registry of comptime call sites and functions.
+    pub(crate) comptime_registry: ComptimeCallSiteRegistry<'db>,
 }
 
 /// Record of an auto-adaptation that was applied.
@@ -121,6 +127,8 @@ impl<'db> TypeContext<'db> {
             intrinsic_targets: Vec::new(),
             auto_adapt_mode,
             auto_adaptations: Vec::new(),
+            const_bindings: HashSet::new(),
+            comptime_registry: ComptimeCallSiteRegistry::new(),
         }
     }
 
@@ -558,6 +566,35 @@ impl<'db> TypeContext<'db> {
         let id = expr.as_id();
         let index = id.index() as usize;
         self.intrinsic_targets.get(index).and_then(|t| *t)
+    }
+
+    // ========================================================================
+    // Comptime Support
+    // ========================================================================
+
+    /// Add a const binding to track.
+    pub fn add_const_binding(&mut self, name: InternedText<'db>) {
+        self.const_bindings.insert(name);
+    }
+
+    /// Check if a name is a const binding.
+    pub fn is_const_binding(&self, name: InternedText<'db>) -> bool {
+        self.const_bindings.contains(&name)
+    }
+
+    /// Get a reference to the comptime registry.
+    pub fn comptime_registry(&self) -> &ComptimeCallSiteRegistry<'db> {
+        &self.comptime_registry
+    }
+
+    /// Get a mutable reference to the comptime registry.
+    pub fn comptime_registry_mut(&mut self) -> &mut ComptimeCallSiteRegistry<'db> {
+        &mut self.comptime_registry
+    }
+
+    /// Take ownership of the comptime registry.
+    pub fn take_comptime_registry(&mut self) -> ComptimeCallSiteRegistry<'db> {
+        std::mem::take(&mut self.comptime_registry)
     }
 
     /// Seed context from a pre-computed name resolution.

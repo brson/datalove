@@ -152,6 +152,7 @@ pub struct StmtFun<'db> {
 pub struct FunParam<'db> {
     pub name: InternedText<'db>,
     pub mode: ParamMode,
+    pub is_comptime: bool,
     pub type_hint: datalit::ast::TypeHint<'db>,
 }
 
