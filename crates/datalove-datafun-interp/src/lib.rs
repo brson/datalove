@@ -609,6 +609,44 @@ impl IrInterpreter {
                 frame.mark_param_initialized(*param);
                 Self::mark_source_dropped_local(value, frame);
             }
+            Instruction::RefStore { dest, value } => {
+                // Store through a reference operand. Used after inlining mut params.
+                // The destination is always precise (initialized), so always destroy old value.
+                let src_val = self.read_operand(value, frame, frames);
+                let dest_val = self.get_operand_dest(dest, frame);
+                let dest_ptr = Destination { ptr: dest_val.ptr, tydesc: dest_val.tydesc };
+                unsafe {
+                    datalove_rt::c::dtlv_rti_any_destroy_local(
+                        self.runtime.handle(),
+                        dest_ptr.ptr,
+                        dest_ptr.tydesc,
+                    );
+                }
+                unsafe { self.move_value(&src_val, dest_ptr); }
+                Self::mark_source_dropped_local(value, frame);
+            }
+            Instruction::RefSetField { dest, field_path, value } => {
+                // Store to a field through a reference operand. Used after inlining mut params.
+                let value_val = self.read_operand(value, frame, frames);
+                let dest_ptr = self.get_operand_dest(dest, frame);
+                // Navigate to the field.
+                let (current_ptr, current_tydesc) = self.navigate_field_path(
+                    dest_ptr.ptr, dest_ptr.tydesc, field_path
+                );
+                // Destroy old value and store new value.
+                unsafe {
+                    datalove_rt::c::dtlv_rti_any_destroy_local(
+                        self.runtime.handle(),
+                        current_ptr,
+                        current_tydesc,
+                    );
+                }
+                let size = unsafe { (*current_tydesc).size as usize };
+                unsafe {
+                    std::ptr::copy_nonoverlapping(value_val.ptr, current_ptr, size);
+                }
+                Self::mark_source_dropped_local(value, frame);
+            }
             Instruction::SlotLoadCopy { dest, slot } => {
                 let slot_val = frame.slot(*slot).unwrap();
                 let dest_slot = frame.value_dest(*dest);

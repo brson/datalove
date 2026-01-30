@@ -262,4 +262,143 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
 
         Ok(())
     }
+
+    /// Compile a RefStore instruction.
+    ///
+    /// Stores a value through a reference operand (Slot, ValueRef, etc).
+    /// Used after inlining mut params.
+    pub(super) fn compile_ref_store(
+        &mut self,
+        builder: &mut FunctionBuilder,
+        dest: &Operand,
+        value: &Operand,
+    ) -> Result<(), CraneliftError> {
+        // Get the destination pointer.
+        let dest_ptr = self.get_operand_ptr(builder, dest)?;
+
+        // Get the type of the destination.
+        let dest_ty = self.get_operand_type(dest)?;
+        let repr = types::ir_type_to_cranelift(&dest_ty);
+
+        // Destroy the old value first.
+        let destroy_func_id = self.runtime.as_ref()
+            .ok_or_else(|| CraneliftError::Codegen("RefStore requires runtime imports".into()))?
+            .destroy_local;
+
+        let rt_handle = self.rt_handle_param.ok_or_else(|| {
+            CraneliftError::Codegen("RefStore requires runtime handle parameter".into())
+        })?;
+
+        let tydesc_id = self.tydesc_emitter.get(&dest_ty).ok_or_else(|| {
+            CraneliftError::Codegen(format!(
+                "TyDesc not found for ref store type {:?}",
+                dest_ty
+            ))
+        })?;
+
+        let tydesc_gv = self.module.declare_data_in_func(tydesc_id, builder.func);
+        let tydesc_addr = builder.ins().global_value(PTR_TYPE, tydesc_gv);
+
+        // Call destroy_local(rt_handle, value_ptr, tydesc).
+        let destroy_ref = self.module.declare_func_in_func(destroy_func_id, builder.func);
+        builder.ins().call(destroy_ref, &[rt_handle, dest_ptr, tydesc_addr]);
+
+        // Now store the new value.
+        match repr {
+            CraneliftRepr::Scalar(_cl_ty) => {
+                let val = self.get_operand_value(builder, value)?;
+                builder.ins().store(MemFlags::new(), val, dest_ptr, 0);
+            }
+            CraneliftRepr::Aggregate(layout) => {
+                let src_ptr = self.get_operand_ptr(builder, value)?;
+                let size = builder.ins().iconst(PTR_TYPE, layout.size as i64);
+                builder.call_memcpy(self.isa.frontend_config(), dest_ptr, src_ptr, size);
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Compile a RefSetField instruction.
+    ///
+    /// Stores a value to a field through a reference operand.
+    /// Used after inlining mut params that have field access.
+    pub(super) fn compile_ref_set_field(
+        &mut self,
+        builder: &mut FunctionBuilder,
+        dest: &Operand,
+        field_path: &[u32],
+        value: &Operand,
+    ) -> Result<(), CraneliftError> {
+        use datalove_datafun_ir::IrType;
+
+        // Get the base pointer and type.
+        let mut current_addr = self.get_operand_ptr(builder, dest)?;
+        let mut current_ty = self.get_operand_type(dest)?;
+
+        // Navigate field path to find target.
+        for &field_idx in field_path.iter() {
+            let field_types: Vec<_> = match &current_ty {
+                IrType::Tuple(tys) => tys.clone(),
+                IrType::Struct(flds) => flds.iter().map(|(_, ty)| ty.clone()).collect(),
+                _ => {
+                    return Err(CraneliftError::Codegen(format!(
+                        "ref_set_field path through non-aggregate type: {:?}",
+                        current_ty
+                    )));
+                }
+            };
+
+            if field_idx as usize >= field_types.len() {
+                return Err(CraneliftError::Codegen(format!(
+                    "field index {} out of bounds",
+                    field_idx
+                )));
+            }
+
+            let offsets = types::compute_tuple_field_offsets(&field_types);
+            current_addr = builder.ins().iadd_imm(current_addr, offsets[field_idx as usize] as i64);
+            current_ty = field_types[field_idx as usize].clone();
+        }
+
+        let repr = types::ir_type_to_cranelift(&current_ty);
+
+        // Destroy the old value first.
+        let destroy_func_id = self.runtime.as_ref()
+            .ok_or_else(|| CraneliftError::Codegen("RefSetField requires runtime imports".into()))?
+            .destroy_local;
+
+        let rt_handle = self.rt_handle_param.ok_or_else(|| {
+            CraneliftError::Codegen("RefSetField requires runtime handle parameter".into())
+        })?;
+
+        let tydesc_id = self.tydesc_emitter.get(&current_ty).ok_or_else(|| {
+            CraneliftError::Codegen(format!(
+                "TyDesc not found for ref set field type {:?}",
+                current_ty
+            ))
+        })?;
+
+        let tydesc_gv = self.module.declare_data_in_func(tydesc_id, builder.func);
+        let tydesc_addr = builder.ins().global_value(PTR_TYPE, tydesc_gv);
+
+        // Call destroy_local(rt_handle, field_ptr, tydesc).
+        let destroy_ref = self.module.declare_func_in_func(destroy_func_id, builder.func);
+        builder.ins().call(destroy_ref, &[rt_handle, current_addr, tydesc_addr]);
+
+        // Now store the new value.
+        match repr {
+            CraneliftRepr::Scalar(_cl_ty) => {
+                let val = self.get_operand_value(builder, value)?;
+                builder.ins().store(MemFlags::new(), val, current_addr, 0);
+            }
+            CraneliftRepr::Aggregate(layout) => {
+                let src_ptr = self.get_operand_ptr(builder, value)?;
+                let size = builder.ins().iconst(PTR_TYPE, layout.size as i64);
+                builder.call_memcpy(self.isa.frontend_config(), current_addr, src_ptr, size);
+            }
+        }
+
+        Ok(())
+    }
 }

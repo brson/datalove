@@ -1093,6 +1093,29 @@ pub enum Instruction {
         value: Operand,
     },
 
+    /// Store value through a reference operand.
+    ///
+    /// Generalizes ParamStore to work with any reference-like operand:
+    /// - Slot(s): store to slot s
+    /// - Param(p): store to mut param p (same as ParamStore)
+    /// - ValueRef(v): store through a reference value
+    ///
+    /// Used after inlining to store to the caller's location directly.
+    ///
+    /// **Ownership:** Consumes `value`, writes to referenced location.
+    RefStore { dest: Operand, value: Operand },
+
+    /// Store value to a field through a reference operand.
+    ///
+    /// Generalizes ParamSetField to work with any reference-like operand.
+    ///
+    /// **Ownership:** Consumes `value`, writes to field within referenced location.
+    RefSetField {
+        dest: Operand,
+        field_path: Vec<u32>,
+        value: Operand,
+    },
+
     /// Load value from mutable slot with copy semantics.
     ///
     /// **Ownership:** Borrows `slot`, produces `dest`.

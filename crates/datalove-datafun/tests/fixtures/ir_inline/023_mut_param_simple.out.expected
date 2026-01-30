@@ -22,7 +22,13 @@ fn caller():
 block0:
     v0 = const 42u32
     store.copy.tracked s0, v0
-    v1 = call m0.f0(s0)
+    goto block1
+block1:
+    v3 = const 100u32
+    refstore s0, v3
+    v4 = const true
+    goto block2(v4)
+block2(v1):
     v2 = load.copy s0
     return v2
 
@@ -34,6 +40,5 @@ block0:
     return v1
 
 === INLINING STATS ===
-Inlined: 0 call(s)
-Skipped: 1 directive(s)
-  - HasMutOrOutParams { callee: "set_to_100" }
+Inlined: 1 call(s)
+Skipped: 0
