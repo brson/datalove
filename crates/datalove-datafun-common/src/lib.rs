@@ -266,6 +266,7 @@ pub struct TypeFunction<'db> {
 /// Note: We record const binding *names*, not values. The values are looked up
 /// later from ResolvedConsts during specialization (after const evaluation).
 #[derive(Clone, Debug, Hash, PartialEq, Eq)]
+#[derive(salsa::Update)]
 pub struct ComptimeCallSite<'db> {
     /// The call expression ID (for locating in IR later).
     pub call_expr_id: salsa::Id,
@@ -310,6 +311,59 @@ impl<'db> ComptimeCallSiteRegistry<'db> {
     /// Get comptime parameter indices for a function.
     pub fn get_comptime_indices(&self, func_name: InternedText<'db>) -> Option<&Vec<usize>> {
         self.comptime_funcs.get(&func_name)
+    }
+
+    /// Convert to a serializable form for salsa tracked structs.
+    pub fn to_serializable(&self) -> ComptimeRegistrySerialized<'db> {
+        let comptime_funcs_entries: Vec<_> = self.comptime_funcs
+            .iter()
+            .map(|(name, indices)| (*name, indices.clone()))
+            .collect();
+        ComptimeRegistrySerialized {
+            call_sites: self.call_sites.clone(),
+            comptime_funcs_entries,
+        }
+    }
+
+    /// Merge another registry into this one.
+    pub fn merge(&mut self, other: &ComptimeCallSiteRegistry<'db>) {
+        self.call_sites.extend(other.call_sites.iter().cloned());
+        for (name, indices) in &other.comptime_funcs {
+            self.comptime_funcs.entry(*name).or_insert_with(|| indices.clone());
+        }
+    }
+}
+
+/// Serializable form of ComptimeCallSiteRegistry for salsa tracked structs.
+///
+/// Uses Vec instead of HashMap to implement Hash/PartialEq/Eq.
+#[derive(Clone, Debug, Default, Hash, PartialEq, Eq)]
+#[derive(salsa::Update)]
+pub struct ComptimeRegistrySerialized<'db> {
+    /// All call sites with comptime args.
+    pub call_sites: Vec<ComptimeCallSite<'db>>,
+    /// Functions with comptime parameters (as sorted entries).
+    pub comptime_funcs_entries: Vec<(InternedText<'db>, Vec<usize>)>,
+}
+
+impl<'db> ComptimeRegistrySerialized<'db> {
+    /// Create a new empty serialized registry.
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Check if there are any comptime functions or call sites.
+    pub fn is_empty(&self) -> bool {
+        self.call_sites.is_empty() && self.comptime_funcs_entries.is_empty()
+    }
+
+    /// Convert to the runtime HashMap-based form.
+    pub fn to_registry(&self) -> ComptimeCallSiteRegistry<'db> {
+        let comptime_funcs: HashMap<_, _> = self.comptime_funcs_entries.iter().cloned().collect();
+        ComptimeCallSiteRegistry {
+            call_sites: self.call_sites.clone(),
+            comptime_funcs,
+        }
     }
 }
 

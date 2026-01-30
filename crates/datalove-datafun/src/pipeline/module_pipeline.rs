@@ -266,6 +266,7 @@ impl ModuleCompilationPipeline {
                 mode,
                 evaluator,
                 self.const_inlining == ConstInlining::Disabled,
+                false, // skip_specialization
             ))
         } else {
             None

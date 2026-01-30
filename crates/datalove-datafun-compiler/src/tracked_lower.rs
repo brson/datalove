@@ -24,6 +24,7 @@ use datalove_datafun_tycheck::{
 use datalove_datafun_const::{inline_module_functions, PreparedConst, evaluate_prepared_const};
 use crate::IrTypeExt;
 use crate::lower;
+use crate::specialize::{build_specialization_plan, transform_function};
 use crate::tracked_ownership_analysis::{SingleModuleAnalysis, ModuleGraphAnalysis};
 
 /// Function ID map for cross-module call resolution.
@@ -644,13 +645,19 @@ fn evaluate_single_const<'db>(
 /// This is the entry point that supports full const expression evaluation.
 ///
 /// Pipeline phases:
-/// 1. Lower functions
-/// 2. Const evaluation (uses lowered functions for CTFE calls)
-/// 3. Module assembly (reuses lowered functions)
-/// 4. Const inlining (replaces const bindings with evaluated values)
+/// 1. Lower functions (5a)
+/// 2. Const evaluation (5b) - uses lowered functions for CTFE calls
+/// 3. Comptime specialization (5c) - transforms functions with const params
+/// 4. Module assembly (5d) - reuses lowered functions
+/// 5. Const inlining - replaces const bindings with evaluated values
 ///
 /// CTFE errors are collected and included in the lowering result, causing
 /// the overall lowering to fail.
+///
+/// # Options
+///
+/// - `skip_const_inlining`: Skip const inlining phase (for testing)
+/// - `skip_specialization`: Skip comptime specialization (for differential testing)
 pub fn lower_module_graph_with_evaluator<'db>(
     db: &'db dyn DbClone,
     parsed_graph: ParsedModuleGraph<'db>,
@@ -659,6 +666,7 @@ pub fn lower_module_graph_with_evaluator<'db>(
     mode: ParallelMode,
     evaluator: Rc<RefCell<dyn CtfeEvaluator>>,
     skip_const_inlining: bool,
+    skip_specialization: bool,
 ) -> ModuleGraphLoweringResult<'db> {
     let db_salsa = db.as_salsa_db();
 
@@ -684,7 +692,20 @@ pub fn lower_module_graph_with_evaluator<'db>(
         (resolved, lowered_functions)
     };
 
-    // Phase 3+4: Assemble modules with lowered functions, then inline consts.
+    // Phase 5c: Specialize comptime functions (union-branch transformation).
+    // This transforms functions with const parameters and rewrites call sites.
+    let lowered_functions = if skip_specialization {
+        lowered_functions
+    } else {
+        specialize_comptime_functions(
+            db_salsa,
+            typecheck_result,
+            &resolved_consts,
+            lowered_functions,
+        )
+    };
+
+    // Phase 5d: Assemble modules with lowered functions, then inline consts.
     // CTFE errors from resolved_consts are included in lower_module via pre_resolved_consts.errors.
     match mode {
         ParallelMode::Sequential => {
@@ -694,6 +715,69 @@ pub fn lower_module_graph_with_evaluator<'db>(
             assemble_module_graph_parallel(db, parsed_graph, typecheck_result, ownership_analysis, &resolved_consts, &lowered_functions, skip_const_inlining)
         }
     }
+}
+
+/// Specialize functions with comptime parameters using union-branch transformation.
+///
+/// For each function with comptime parameters that has call sites recorded in the
+/// registry, transforms the function to dispatch on a discriminant and inserts
+/// const values for each instantiation.
+fn specialize_comptime_functions<'db>(
+    db: &'db dyn salsa::Database,
+    typecheck_result: ModuleGraphTypecheckResult<'db>,
+    resolved_consts: &HashMap<ModuleId, ModulePreResolvedConsts>,
+    mut lowered_functions: HashMap<ModuleId, ModuleLoweredFunctions>,
+) -> HashMap<ModuleId, ModuleLoweredFunctions> {
+    // Get the combined comptime registry.
+    let registry_serialized = typecheck_result.comptime_registry(db);
+    if registry_serialized.is_empty() {
+        return lowered_functions;
+    }
+    let registry = registry_serialized.to_registry();
+
+    // Build a flattened map of const names to values for lookup.
+    // Include both qualified names (func_name::const_name) and unqualified names.
+    let mut const_values_map: HashMap<String, (IrType, ConstValue)> = HashMap::new();
+    for pre_resolved in resolved_consts.values() {
+        for (qualified_name, ir_type, value) in &pre_resolved.consts {
+            const_values_map.insert(qualified_name.clone(), (ir_type.clone(), value.clone()));
+
+            // Also add unqualified name for direct lookup.
+            if let Some(unqualified) = qualified_name.rsplit("::").next() {
+                if unqualified != qualified_name {
+                    // Only add if it's actually qualified.
+                    const_values_map.entry(unqualified.to_string())
+                        .or_insert_with(|| (ir_type.clone(), value.clone()));
+                }
+            }
+        }
+    }
+
+    // Build the specialization plan.
+    let spec_result = build_specialization_plan(db, &registry, &const_values_map);
+    if spec_result.is_empty() {
+        return lowered_functions;
+    }
+
+    // Transform specialized functions.
+    for (module_id, module_funcs) in lowered_functions.iter_mut() {
+        let mut new_functions = Vec::new();
+
+        for func in &module_funcs.functions {
+            let func_name = &func.name;
+            if let Some(spec) = spec_result.specialized_funcs.get(func_name) {
+                // Transform this function to union-branch form.
+                let transformed = transform_function(func, spec);
+                new_functions.push(transformed);
+            } else {
+                new_functions.push(func.clone());
+            }
+        }
+
+        module_funcs.functions = new_functions;
+    }
+
+    lowered_functions
 }
 
 /// Assemble module graph sequentially.
