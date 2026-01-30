@@ -1,0 +1,16 @@
+----------
+scriptunit-fragment
+----------
+
+// Test: D001 UseAfterMove in script
+// Using a linear value after it has been moved
+// Expected: D001 error with recovery hint in normal mode, success in auto-adapt mode
+
+// Helper function that consumes a string
+fun consume(s: string): int
+  ret 42
+end fun
+
+let msg: string = "hello"
+let a: int = consume(msg)
+let b: string = msg

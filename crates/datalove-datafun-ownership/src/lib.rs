@@ -851,6 +851,41 @@ pub fn analyze_script_functions<'db>(
     }
 }
 
+/// Analyze all functions in a list of statements with configurable auto-adapt mode.
+pub fn analyze_script_functions_with_mode<'db>(
+    db: &'db dyn salsa::Database,
+    expr_types: &'db [Option<IrType>],
+    call_info: &'db [Option<CallInfo>],
+    stmts: &[Statement<'db>],
+    func_param_types: Option<&HashMap<String, Vec<IrType>>>,
+    auto_adapt_mode: AutoAdaptMode,
+) -> Result<ScriptFunctionAnalyses<'db>, Vec<(String, Vec<AnalysisError>)>> {
+    let mut analyses = HashMap::new();
+    let mut errors = Vec::new();
+
+    for stmt in stmts {
+        if let Statement::Fun(func) = stmt {
+            // Look up resolved param types if available.
+            let func_name = func.name(db).text(db);
+            let resolved_params = func_param_types
+                .and_then(|m| m.get(func_name))
+                .map(|v| v.as_slice());
+
+            let analysis = analyze_function_with_mode(db, *func, expr_types, call_info, resolved_params, auto_adapt_mode);
+            if !analysis.errors.is_empty() {
+                errors.push((func_name.S(), analysis.errors.C()));
+            }
+            analyses.insert(*func, analysis);
+        }
+    }
+
+    if errors.is_empty() {
+        Ok(analyses)
+    } else {
+        Err(errors)
+    }
+}
+
 /// Result of analyzing script-level statements.
 #[derive(Clone, Debug)]
 pub struct ScriptAnalysis {

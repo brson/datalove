@@ -1,0 +1,17 @@
+----------
+module local/test/ownership
+----------
+
+// Test: D001 UseAfterMove in module function
+// Using a linear value after it has been moved within a function
+// Expected: D001 error with recovery hint in normal mode, success in auto-adapt mode
+
+// Helper function that consumes a string
+fun consume(s: string): int
+  ret 42
+end fun
+
+fun test_move(msg: string): string
+  let a: int = consume(msg)
+  ret msg
+end fun

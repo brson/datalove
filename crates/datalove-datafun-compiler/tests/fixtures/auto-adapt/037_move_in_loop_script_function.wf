@@ -1,0 +1,19 @@
+----------
+scriptunit-fragment
+----------
+
+// Test: D007 MoveInLoop in script function
+// Moving a linear value defined outside a loop inside the loop body within a function
+// Expected: D007 error with recovery hint in normal mode, success in auto-adapt mode
+// Uses int (bigint) which is a linear type
+
+fun test_loop(b: int): int
+  var a: int = (: int / 4)
+  loop {
+    if a == b {
+      break
+    }
+    set a = b
+  }
+  ret a
+end fun

@@ -1,24 +1,61 @@
 //! Auto-adapt mode tests using worldfiles.
 //!
 //! Each test fixture is a worldfile that is run in two modes:
-//! 1. Normal mode (auto-adapt disabled) - should produce type errors with recovery hints
+//! 1. Normal mode (auto-adapt disabled) - should produce type/ownership errors with recovery hints
 //! 2. Auto-adapt mode (enabled) - should succeed by automatically inserting @
 //!
 //! Worldfiles can contain:
 //! - Module sections: `module library/package/module` - tested via module graph pipeline
 //! - Script sections: `scriptunit-fragment` - tested via script unit pipeline
+//!
+//! Both type errors and ownership errors are tested:
+//! - Type errors: F016 type mismatch (e.g., u8→i16 cross-sign widening)
+//! - Ownership errors: D001 UseAfterMove, D002 DoubleMove, D007 MoveInLoop
 
 use rmx::prelude::*;
 use rmx::serde_json::json;
 use std::path::Path;
+use std::collections::HashMap;
 
 use datalove_datafun::{
     Database, package, package_resolve,
     to_module_graph, module_graph,
 };
-use datalove_datafun_tycheck::{typecheck_module_graph, AutoAdaptMode};
+use datalove_datafun_tycheck::{typecheck_module_graph, AutoAdaptMode, ResolvedCallTarget, Type};
 use datalove_datafun_resolve::{resolve_all_names, resolve_all_exports, build_all_function_ast_maps};
 use datalove_datafun_pkg::package_load_worldfile::{WorldfileSection, parse_worldfile_sections};
+use datalove_datafun_ownership::{
+    analyze_script_statements_with_mode, analyze_script_functions_with_mode,
+    CallInfo, format_analysis_errors,
+};
+use datalove_datafun_ir::IrType;
+use datalove_datafun_compiler::IrTypeExt;
+use datalove_datafun_ast::ast::Statement;
+
+/// Convert tycheck expression types to IR types.
+fn convert_expr_types<'db>(
+    db: &'db dyn salsa::Database,
+    types: &[Option<Type<'db>>],
+) -> Vec<Option<IrType>> {
+    types.iter()
+        .map(|opt| opt.as_ref().map(|ty| IrType::from_tycheck(db, ty)))
+        .collect()
+}
+
+/// Convert resolved call targets to CallInfo.
+fn convert_call_targets<'db>(
+    db: &'db dyn salsa::Database,
+    targets: &[Option<ResolvedCallTarget<'db>>],
+) -> Vec<Option<CallInfo>> {
+    targets.iter()
+        .map(|opt| opt.as_ref().map(|target| CallInfo {
+            param_modes: target.func(db).params(db)
+                .iter()
+                .map(|p| p.mode)
+                .collect()
+        }))
+        .collect()
+}
 
 /// Typecheck worldfile sections with a given auto-adapt mode.
 ///
@@ -163,9 +200,49 @@ fn typecheck_sections_with_mode(
                 all_diagnostics.push(obj);
             }
 
-            // Collect script errors.
+            // Collect script type errors.
             for e in tycheck_result.errors(&db).iter() {
                 all_errors.push(format!("{:?}", e.error(&db)));
+            }
+
+            // Run ownership analysis if no type errors (ownership requires successful typecheck).
+            if tycheck_result.errors(&db).is_empty() {
+                // Convert tycheck types to IR types for ownership analysis.
+                let expr_types = convert_expr_types(&db, tycheck_result.expr_types(&db));
+                let call_info = convert_call_targets(&db, tycheck_result.call_targets(&db));
+
+                // Get statements for ownership analysis.
+                let stmts: Vec<Statement> = script.statements.iter().cloned().collect();
+
+                // Build map of function name -> resolved param types for type alias support.
+                let mut func_param_types: HashMap<String, Vec<IrType>> = HashMap::new();
+                for (name, func_type) in tycheck_result.function_types(&db) {
+                    let param_types: Vec<IrType> = func_type.param_types(&db)
+                        .iter()
+                        .map(|ty| IrType::from_tycheck(&db, ty))
+                        .collect();
+                    func_param_types.insert(name.text(&db).S(), param_types);
+                }
+
+                // Analyze functions for ownership.
+                let func_result = analyze_script_functions_with_mode(
+                    &db, &expr_types, &call_info, &stmts, Some(&func_param_types), mode
+                );
+                if let Err(errors) = func_result {
+                    for (func_name, errs) in errors {
+                        let error_msg = format!("{}: {}", func_name, format_analysis_errors(&errs));
+                        all_errors.push(error_msg);
+                    }
+                }
+
+                // Analyze script-level statements for ownership.
+                let script_analysis = analyze_script_statements_with_mode(
+                    &db, &expr_types, &call_info, &stmts, mode
+                );
+                if !script_analysis.errors.is_empty() {
+                    let error_msg = format_analysis_errors(&script_analysis.errors);
+                    all_errors.push(error_msg);
+                }
             }
         }
     }

@@ -1,0 +1,18 @@
+----------
+scriptunit-fragment
+----------
+
+// Test: D002 DoubleMove in script function
+// Moving a linear value twice within a function
+// Expected: D002 error with recovery hint in normal mode, success in auto-adapt mode
+
+// Helper function that consumes a string
+fun consume(s: string): int
+  ret 42
+end fun
+
+fun test_double_move(msg: string): int
+  let a: int = consume(msg)
+  let b: int = consume(msg)
+  ret a + b
+end fun

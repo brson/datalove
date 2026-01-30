@@ -1,0 +1,20 @@
+{
+  "auto_adapt_mode": {
+    "diagnostic_count": 0,
+    "diagnostics": [],
+    "error_count": 0,
+    "errors": [],
+    "success": true
+  },
+  "normal_mode": {
+    "diagnostic_count": 0,
+    "diagnostics": [],
+    "error_count": 1,
+    "errors": [
+      {
+        "error": "test_double_move: error[D001]: use of moved value: `msg`\n  help: use `@` to clone `msg` before the earlier use"
+      }
+    ],
+    "success": false
+  }
+}
