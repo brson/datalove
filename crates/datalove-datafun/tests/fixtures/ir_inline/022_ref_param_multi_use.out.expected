@@ -1,0 +1,52 @@
+=== BEFORE INLINING ===
+fn caller():
+block0:
+    v0 = const 42int
+    v1 = call m0.f0(v0)
+    v2 = call m0.f0(v0)
+    v3 = pack Tuple2 {v1, v2}
+    drop v0
+    return v3
+
+fn read_int(p0):
+block0:
+    v0 = const 0int
+    v1 = add p0, v0
+    drop v0
+    return v1
+
+=== INLINE DIRECTIVES ===
+inline caller read_int
+
+=== AFTER INLINING ===
+fn caller():
+block0:
+    v0 = const 42int
+    goto block3
+block1:
+    v4 = const 0int
+    v5 = add v0, v4
+    drop v4
+    goto block2(v5)
+block2(v2):
+    v3 = pack Tuple2 {v1, v2}
+    drop v0
+    return v3
+block3:
+    v7 = const 0int
+    v8 = add v0, v7
+    drop v7
+    goto block4(v8)
+block4(v1):
+    goto block1
+
+fn read_int(p0):
+block0:
+    v0 = const 0int
+    v1 = add p0, v0
+    drop v0
+    return v1
+
+=== INLINING STATS ===
+Inlined: 2 call(s)
+Skipped: 0

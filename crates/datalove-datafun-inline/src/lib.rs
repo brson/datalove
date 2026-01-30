@@ -9,7 +9,8 @@ use std::collections::HashMap;
 
 use datalove_datafun_ir::{
     BlockId, FuncId, FuncRef, Instruction, IrBlock, IrFunction, IrModule, IrModuleId, IrType,
-    ModuleFunctionRegistry, Operand, ParamId, SlotDest, SlotId, SymbolTable, Terminator, ValueId,
+    ModuleFunctionRegistry, Operand, ParamId, ParamMode, SlotDest, SlotId, SymbolTable, Terminator,
+    ValueId,
 };
 
 /// Directive specifying which function calls to inline.
@@ -200,6 +201,8 @@ pub enum InlineSkipReason {
     },
     /// No calls to callee found in caller.
     NoCallsFound { caller: String, callee: String },
+    /// Callee has mut or out parameters which cannot be inlined.
+    HasMutOrOutParams { callee: String },
 }
 
 /// Result of the inlining pass.
@@ -930,11 +933,21 @@ impl RemapContext {
 /// Inline a single call site in a function.
 ///
 /// Returns the new function with the call inlined, or None if inlining failed.
+/// Returns None if the callee has mut or out parameters, which cannot be inlined correctly.
 fn inline_call_site(
     caller: &IrFunction,
     callee: &IrFunction,
     site: &CallSite,
 ) -> Option<IrFunction> {
+    // Check if callee has mut or out parameters - these cannot be inlined correctly
+    // because ParamStore instructions would need to write back to the caller's location,
+    // which requires tracking argument locations through the inline transformation.
+    for mode in &callee.param_modes {
+        if matches!(mode, ParamMode::Mut | ParamMode::Out) {
+            return None;
+        }
+    }
+
     let mut new_func = caller.clone();
 
     // Set up remapping context.
@@ -960,27 +973,38 @@ fn inline_call_site(
     // The original terminator goes to the continuation block.
     let orig_terminator = orig_block.terminator.clone();
 
-    // Build parameter binding instructions for the inlined entry block.
-    // These copy/move arguments into the positions the callee expects.
+    // Build parameter binding instructions for In params only.
+    // Ref params don't need bindings - we directly substitute the argument operand.
+    // Also build a map from ParamId to replacement operand for use in substitution.
     let mut param_bindings: Vec<Instruction> = Vec::new();
-    for (i, (param_id, arg)) in callee.params.iter().zip(site.args.iter()).enumerate() {
-        // Create a value that holds the argument in the callee's value space.
-        let dest_value = remap.remap_value(ValueId(callee.value_count + i as u32));
-        let param_type = &callee.param_types[param_id.0 as usize];
+    let mut param_replacements: HashMap<ParamId, Operand> = HashMap::new();
 
-        // Use Copy for copy types, Move for non-copy types.
-        let instr = if param_type.is_copy() {
-            Instruction::Copy {
-                dest: dest_value,
-                src: arg.clone(),
-            }
+    for (i, (param_id, arg)) in callee.params.iter().zip(site.args.iter()).enumerate() {
+        let param_type = &callee.param_types[param_id.0 as usize];
+        let param_mode = &callee.param_modes[param_id.0 as usize];
+
+        if matches!(param_mode, ParamMode::Ref) {
+            // Ref params borrow - directly use the argument operand.
+            // No binding needed, no ownership transfer.
+            param_replacements.insert(*param_id, arg.clone());
         } else {
-            Instruction::Move {
-                dest: dest_value,
-                src: arg.clone(),
-            }
-        };
-        param_bindings.push(instr);
+            // In params transfer ownership - create a binding.
+            let dest_value = remap.remap_value(ValueId(callee.value_count + i as u32));
+
+            let instr = if param_type.is_copy() {
+                Instruction::Copy {
+                    dest: dest_value,
+                    src: arg.clone(),
+                }
+            } else {
+                Instruction::Move {
+                    dest: dest_value,
+                    src: arg.clone(),
+                }
+            };
+            param_bindings.push(instr);
+            param_replacements.insert(*param_id, Operand::Value(dest_value));
+        }
     }
 
     // Update the original block: keep instructions before call, jump to inlined entry.
@@ -1004,16 +1028,11 @@ fn inline_call_site(
             new_instructions.extend(param_bindings.clone());
         }
 
-        // Remap and copy instructions, replacing Param operands with the bound values.
+        // Remap and copy instructions, replacing Param operands with the replacements.
         for instr in &block.instructions {
             let remapped = remap.remap_instruction(instr);
-            // Replace Param operands with the corresponding bound values.
-            let replaced = replace_params_in_instruction(
-                &remapped,
-                &callee.params,
-                callee.value_count,
-                &remap,
-            );
+            // Replace Param operands with the corresponding replacement operands.
+            let replaced = replace_params_in_instruction(&remapped, &param_replacements);
             new_instructions.push(replaced);
         }
 
@@ -1065,20 +1084,15 @@ fn inline_call_site(
     Some(new_func)
 }
 
-/// Replace Param operands in an instruction with the corresponding bound values.
+/// Replace Param operands in an instruction with the corresponding replacement operands.
 fn replace_params_in_instruction(
     instr: &Instruction,
-    params: &[ParamId],
-    callee_value_count: u32,
-    remap: &RemapContext,
+    replacements: &HashMap<ParamId, Operand>,
 ) -> Instruction {
     let replace_operand = |op: &Operand| -> Operand {
         if let Operand::Param(p) = op {
-            // Find the index of this param.
-            if let Some(idx) = params.iter().position(|param| param == p) {
-                // The bound value is at callee_value_count + idx.
-                let bound_value = remap.remap_value(ValueId(callee_value_count + idx as u32));
-                return Operand::Value(bound_value);
+            if let Some(replacement) = replacements.get(p) {
+                return replacement.clone();
             }
         }
         op.clone()
@@ -1361,6 +1375,18 @@ pub fn inline_module(module: &IrModule, directives: &[InlineDirective]) -> Inlin
         let caller = &current_module.functions[caller_idx];
         let callee = &current_module.functions[callee_idx];
 
+        // Check if callee has mut or out parameters - these cannot be inlined.
+        let has_mut_or_out = callee
+            .param_modes
+            .iter()
+            .any(|m| matches!(m, ParamMode::Mut | ParamMode::Out));
+        if has_mut_or_out {
+            skipped.push(InlineSkipReason::HasMutOrOutParams {
+                callee: callee.name.clone(),
+            });
+            continue;
+        }
+
         // Find call sites.
         let call_sites = find_call_sites(caller, request.callee);
 
@@ -1442,6 +1468,18 @@ pub fn inline_cross_module(
         let Some(callee) = registry.get_module_function(request.callee.module, request.callee.func) else {
             continue;
         };
+
+        // Check if callee has mut or out parameters - these cannot be inlined.
+        let has_mut_or_out = callee
+            .param_modes
+            .iter()
+            .any(|m| matches!(m, ParamMode::Mut | ParamMode::Out));
+        if has_mut_or_out {
+            skipped.push(InlineSkipReason::HasMutOrOutParams {
+                callee: callee.name.clone(),
+            });
+            continue;
+        }
 
         // Find call sites (cross-module aware).
         let call_sites = find_cross_module_call_sites(caller, request.caller.module, request.callee);

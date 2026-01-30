@@ -1,0 +1,20 @@
+----------
+module local/test/main
+----------
+
+// Test inlining a function with a ref param (copy type).
+// This should work correctly since copy types use Copy instruction.
+fun read_val(ref x: i64): i64
+    ret x
+end fun
+
+fun caller(): i64
+    let v: i64 = 42
+    let r = read_val(v)
+    ret r
+end fun
+
+----------
+inline-directives
+----------
+inline caller read_val

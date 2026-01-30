@@ -1,0 +1,21 @@
+----------
+module local/test/main
+----------
+
+// Test inlining a function with a ref param used multiple times.
+// The original value should remain valid after the first call.
+fun read_int(ref x: int): int
+    ret x + :int/0
+end fun
+
+fun caller(): (int, int)
+    let v: int = 42
+    let r1 = read_int(v)
+    let r2 = read_int(v)
+    ret (r1, r2)
+end fun
+
+----------
+inline-directives
+----------
+inline caller read_int
