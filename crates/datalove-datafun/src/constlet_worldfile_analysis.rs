@@ -27,6 +27,7 @@ pub fn analyze_worldfile_constlet(
 ) -> AnyResult<Analysis> {
     let options = AnalysisOptions {
         skip_const_inlining: true,
+        ..Default::default()
     };
     crate::worldfile_analysis::analyze_worldfile_with_options(db, parsed, options)
 }

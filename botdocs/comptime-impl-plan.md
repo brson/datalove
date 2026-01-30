@@ -1140,10 +1140,9 @@ end fun
 
 ## Current Status
 
-**RESOLVED: Call site rewriting now implemented via ComptimeCall instruction.**
+### Implemented: ComptimeCall Instruction
 
-The previous blocker (call site rewriting) has been resolved by introducing a new
-`ComptimeCall` IR instruction variant. The approach:
+Call site rewriting has been implemented via a new `ComptimeCall` IR instruction variant:
 
 1. **Lowering phase** emits `ComptimeCall` (instead of `Call`) when calling functions
    with comptime parameters. The `ComptimeCall` contains:
@@ -1166,8 +1165,43 @@ Key files modified:
 - `datafun-interp/src/lib.rs`: Handle `ComptimeCall` like `Call`
 - `datafun-cranelift/src/codegen/mod.rs`: Handle `ComptimeCall` like `Call`
 
-**Next steps**: Differential testing to verify specialized IR produces identical
-output to unspecialized IR.
+### Implemented: Differential Testing Infrastructure
+
+The differential testing infrastructure has been added to verify specialization correctness:
+
+1. **Module `specialize_differential_analysis.rs`**: Runs worldfiles twice (specialized
+   vs unspecialized) and compares outputs.
+
+2. **Test runner `interp_specialize_tests.rs`**: Test harness that runs all
+   `.world` files in `fixtures/specialize_differential/`.
+
+3. **Test fixtures**: Basic tests demonstrating the infrastructure works.
+
+Key files added:
+- `datalove-datafun/src/specialize_differential_analysis.rs`
+- `datalove-datafun/tests/interp_specialize_tests.rs`
+- `datalove-datafun/tests/fixtures/specialize_differential/*.world`
+
+### Known Issues Discovered
+
+**Runtime failures with mixed comptime + regular parameters:**
+
+Functions with a comptime parameter followed by regular parameters crash at runtime
+with invalid memory operations. Single-parameter comptime functions work but may
+produce incorrect results (e.g., returning 0 instead of the computed value).
+
+Examples:
+- `fun double(const n: int): int` - Works but produces wrong results
+- `fun add(const n: int, x: int): int` - Crashes (SIGSEGV or SIGABRT)
+- `fun prefix(const n: int, s: string): string` - Crashes
+
+This suggests issues with:
+1. **Parameter indexing**: When comptime args are removed, regular params may be at
+   wrong indices
+2. **Value initialization**: Comptime parameter values may not be correctly substituted
+
+**Next steps**: Debug the runtime execution path for comptime function calls to
+determine why values are incorrect or memory access fails.
 
 ---
 

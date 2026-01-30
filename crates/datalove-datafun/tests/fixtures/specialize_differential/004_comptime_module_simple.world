@@ -1,0 +1,25 @@
+----------
+module local/test/simple
+----------
+
+// Simplest possible comptime function in module.
+fun double(const n: int): int
+    ret n + n
+end fun
+
+----------
+scriptunit-fragment
+----------
+
+require module local/test/simple
+import simple.double
+
+const TWO = 2
+let result = double(TWO)
+debuglog result
+
+----------
+scriptunit-expr
+----------
+
+result

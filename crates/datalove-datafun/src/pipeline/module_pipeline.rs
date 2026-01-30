@@ -60,6 +60,7 @@ pub enum ConstInlining {
 pub struct ModuleCompilationPipeline {
     world: IncrementalModuleWorld,
     const_inlining: ConstInlining,
+    skip_specialization: bool,
 }
 
 impl ModuleCompilationPipeline {
@@ -68,6 +69,7 @@ impl ModuleCompilationPipeline {
         Self {
             world: IncrementalModuleWorld::new(),
             const_inlining,
+            skip_specialization: false,
         }
     }
 
@@ -78,6 +80,19 @@ impl ModuleCompilationPipeline {
         const_inlining: ConstInlining,
     ) -> Self {
         let mut pipeline = Self::new(const_inlining);
+        pipeline.add_modules_from_sections(db, sections);
+        pipeline
+    }
+
+    /// Create a pipeline from worldfile sections with skip_specialization option.
+    pub fn from_sections_with_options(
+        db: &dyn salsa::Database,
+        sections: &[WorldfileSection],
+        const_inlining: ConstInlining,
+        skip_specialization: bool,
+    ) -> Self {
+        let mut pipeline = Self::new(const_inlining);
+        pipeline.skip_specialization = skip_specialization;
         pipeline.add_modules_from_sections(db, sections);
         pipeline
     }
@@ -266,7 +281,7 @@ impl ModuleCompilationPipeline {
                 mode,
                 evaluator,
                 self.const_inlining == ConstInlining::Disabled,
-                false, // skip_specialization
+                self.skip_specialization,
             ))
         } else {
             None

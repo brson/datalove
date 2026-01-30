@@ -65,6 +65,9 @@ pub struct SectionResult {
 pub struct AnalysisOptions {
     /// Skip const inlining (evaluate const bindings at runtime instead of CTFE).
     pub skip_const_inlining: bool,
+    /// Skip comptime specialization (use original function without union-branch dispatch).
+    /// Useful for differential testing to verify specialization correctness.
+    pub skip_specialization: bool,
 }
 
 // ============================================================================
@@ -102,8 +105,13 @@ pub fn analyze_worldfile_with_options(
         ConstInlining::Enabled
     };
 
-    // Build pipeline from sections.
-    let mut pipeline = ModuleCompilationPipeline::from_sections(db, &parsed.sections, const_inlining);
+    // Build pipeline from sections with options.
+    let mut pipeline = ModuleCompilationPipeline::from_sections_with_options(
+        db,
+        &parsed.sections,
+        const_inlining,
+        options.skip_specialization,
+    );
 
     // Compile modules (typecheck, drop analysis, lower).
     let (compiled, db) = pipeline.compile(db);

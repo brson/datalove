@@ -130,3 +130,8 @@ harness = false
 name = "interp_dynamic_inline_tests"
 path = "tests/interp_dynamic_inline_tests.rs"
 harness = false
+
+[[test]]
+name = "interp_specialize_tests"
+path = "tests/interp_specialize_tests.rs"
+harness = false

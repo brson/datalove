@@ -1,0 +1,28 @@
+----------
+module local/test/basic
+----------
+
+// Regular function without comptime parameters.
+fun add(a: int, b: int): int
+    ret a + b
+end fun
+
+----------
+scriptunit-fragment
+----------
+
+require module local/test/basic
+import basic.add
+
+// Regular calls without comptime specialization.
+let x = add(10, 20)
+let y = add(5, 15)
+
+debuglog x
+debuglog y
+
+----------
+scriptunit-expr
+----------
+
+x + y
