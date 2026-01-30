@@ -14,7 +14,7 @@ scriptunit-fragment
 require module local/test/simple
 import simple.double
 
-const TWO = 2
+const TWO: int = 2
 let result = double(TWO)
 debuglog result
 

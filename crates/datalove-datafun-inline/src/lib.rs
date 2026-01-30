@@ -689,6 +689,13 @@ impl RemapContext {
                 func: func.clone(),
                 args: args.iter().map(|a| self.remap_operand(a)).collect(),
             },
+            Instruction::ComptimeCall { dest, func, args, discriminant, comptime_param_indices } => Instruction::ComptimeCall {
+                dest: self.remap_value(*dest),
+                func: func.clone(),
+                args: args.iter().map(|a| self.remap_operand(a)).collect(),
+                discriminant: *discriminant,
+                comptime_param_indices: comptime_param_indices.clone(),
+            },
             Instruction::Pack { dest, ty, fields } => Instruction::Pack {
                 dest: self.remap_value(*dest),
                 ty: ty.clone(),
@@ -1184,6 +1191,13 @@ fn replace_params_in_instruction(
             dest: *dest,
             func: func.clone(),
             args: args.iter().map(replace_operand).collect(),
+        },
+        Instruction::ComptimeCall { dest, func, args, discriminant, comptime_param_indices } => Instruction::ComptimeCall {
+            dest: *dest,
+            func: func.clone(),
+            args: args.iter().map(replace_operand).collect(),
+            discriminant: *discriminant,
+            comptime_param_indices: comptime_param_indices.clone(),
         },
         Instruction::Pack { dest, ty, fields } => Instruction::Pack {
             dest: *dest,

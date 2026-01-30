@@ -37,7 +37,7 @@ Analysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = const 2u32
+                        v0 = const 2int
                         v1 = comptime_call m0.f0(v0) [disc=0, comptime_params=[0]]
                         debuglog v1
                         unit_end_drop v1
@@ -48,7 +48,7 @@ Analysis(
                 """,
             ),
             output: "(fragment executed)",
-            debug_output: Some("0\n"),
+            debug_output: Some("4\n"),
         ),
         SectionResult(
             section_type: "scriptunit-expr",
@@ -68,7 +68,7 @@ Analysis(
                         unit_end v0
                 """,
             ),
-            output: "0",
+            output: "4",
         ),
     ],
 )
