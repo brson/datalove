@@ -313,6 +313,10 @@ fn build_dispatch_blocks(
                     lhs: Operand::Param(ParamId(0)), // Discriminant is param 0
                     rhs: Operand::Value(variant_const_val),
                 },
+                // Drop the comparison constant after use
+                Instruction::Drop {
+                    operand: Operand::Value(variant_const_val),
+                },
             ];
 
             // Branch: if discriminant matches, go to body; else continue chain.
@@ -338,34 +342,44 @@ fn build_dispatch_blocks(
     for (variant_idx, values) in spec.instantiations.iter().enumerate() {
         let block_offset = body_base_offset + (variant_idx as u32) * (num_original_blocks as u32);
 
+        // Build mapping from comptime param index to the new const value ID for this variant.
+        // This mapping is used to rewrite operands in cloned instructions.
+        let mut param_to_const: HashMap<u32, ValueId> = HashMap::new();
+
         for (orig_block_idx, orig_block) in original.blocks.iter().enumerate() {
             let new_block_id = BlockId(block_offset + orig_block_idx as u32);
 
             // Clone instructions, prepending const instructions for comptime params in first block.
             let mut instructions = Vec::new();
             if orig_block_idx == 0 {
+                // Drop the discriminant parameter (p0) - it's only used for dispatch.
+                // This must happen in each variant's first block since only one variant executes.
+                instructions.push(Instruction::Drop {
+                    operand: Operand::Param(ParamId(0)),
+                });
+
                 // Add const instructions for comptime param values.
                 for (&param_idx, value) in spec.comptime_param_indices.iter().zip(values.iter()) {
-                    // The comptime param becomes a local const.
-                    // We use the original param's value ID for compatibility.
-                    // Actually, we need to emit a Const instruction that the body can reference.
                     let dest = fresh_value(get_const_value_type(value));
                     instructions.push(Instruction::Const {
                         dest,
                         value: value.clone(),
                     });
-                    // Note: We'd need to rewrite uses of the original param to use this value.
-                    // For simplicity, this basic implementation assumes param uses can be rewritten.
+                    // Map the original comptime param to this new const value.
+                    param_to_const.insert(param_idx as u32, dest);
                 }
             }
 
-            // Clone original instructions with remapped block references.
+            // Clone original instructions with remapped block references AND comptime params.
             for instr in &orig_block.instructions {
-                instructions.push(remap_instruction_blocks(instr, block_offset, num_original_blocks as u32));
+                let remapped = remap_instruction_blocks(instr, block_offset, num_original_blocks as u32);
+                let rewritten = rewrite_comptime_params_in_instruction(&remapped, &param_to_const);
+                instructions.push(rewritten);
             }
 
-            // Clone terminator with remapped block references.
+            // Clone terminator with remapped block references AND comptime params.
             let terminator = remap_terminator_blocks(&orig_block.terminator, block_offset, num_original_blocks as u32);
+            let terminator = rewrite_comptime_params_in_terminator(&terminator, &param_to_const);
 
             blocks.push(IrBlock {
                 id: new_block_id,
@@ -380,6 +394,11 @@ fn build_dispatch_blocks(
 }
 
 /// Get the IrType for a ConstValue.
+///
+/// Note: For aggregate types (tuples, structs, enums, etc.) this function cannot determine
+/// the full type since ConstValue doesn't carry complete type information. These cases
+/// currently fall back to Unit which may cause issues - callers should ensure comptime
+/// params use scalar types.
 fn get_const_value_type(value: &ConstValue) -> IrType {
     match value {
         ConstValue::Unit => IrType::Unit,
@@ -392,12 +411,27 @@ fn get_const_value_type(value: &ConstValue) -> IrType {
         ConstValue::U16(_) => IrType::U16,
         ConstValue::U32(_) => IrType::U32,
         ConstValue::U64(_) => IrType::U64,
+        ConstValue::Index(_) => IrType::Index,
+        ConstValue::Offset(_) => IrType::Offset,
+        ConstValue::Int { .. } => IrType::Int,
         ConstValue::F32(_) => IrType::F32,
         ConstValue::F64(_) => IrType::F64,
         ConstValue::String(_) => IrType::String,
-        // For complex types, we'd need more information.
-        // For now, fall back to Unit for unsupported types.
-        _ => IrType::Unit,
+        ConstValue::Data(_) => IrType::Data,
+        ConstValue::Error(_) => IrType::Error,
+        // Aggregate and collection types - we can't determine the full type from ConstValue alone.
+        // These would need type information passed in separately.
+        ConstValue::Tuple(_)
+        | ConstValue::Struct(_)
+        | ConstValue::Enum { .. }
+        | ConstValue::OptionSome(_)
+        | ConstValue::OptionNone
+        | ConstValue::ResultOk(_)
+        | ConstValue::ResultErr(_)
+        | ConstValue::List(_)
+        | ConstValue::Set(_)
+        | ConstValue::Map(_)
+        | ConstValue::Table { .. } => IrType::Unit, // Fallback - may need proper type info
     }
 }
 
@@ -429,6 +463,131 @@ fn remap_terminator_blocks(term: &Terminator, block_offset: u32, _num_blocks: u3
         Terminator::Return { value } => Terminator::Return { value: value.clone() },
         Terminator::UnitEnd { result } => Terminator::UnitEnd { result: result.clone() },
         Terminator::UnitEarlyReturn { value } => Terminator::UnitEarlyReturn { value: value.clone() },
+    }
+}
+
+/// Rewrite comptime param references in an instruction.
+///
+/// Replaces `Operand::Param(idx)` with `Operand::Value(value_id)` for comptime params.
+fn rewrite_comptime_params_in_instruction(
+    instr: &Instruction,
+    param_to_const: &HashMap<u32, ValueId>,
+) -> Instruction {
+    let rewrite_operand = |op: &Operand| -> Operand {
+        match op {
+            Operand::Param(ParamId(idx)) => {
+                if let Some(&value_id) = param_to_const.get(&(*idx as u32)) {
+                    Operand::Value(value_id)
+                } else {
+                    op.clone()
+                }
+            }
+            _ => op.clone(),
+        }
+    };
+
+    match instr {
+        Instruction::BinOp { dest, op, lhs, rhs } => Instruction::BinOp {
+            dest: *dest,
+            op: *op,
+            lhs: rewrite_operand(lhs),
+            rhs: rewrite_operand(rhs),
+        },
+        Instruction::UnaryOp { dest, op, operand } => Instruction::UnaryOp {
+            dest: *dest,
+            op: *op,
+            operand: rewrite_operand(operand),
+        },
+        Instruction::Call { dest, func, args } => Instruction::Call {
+            dest: *dest,
+            func: func.clone(),
+            args: args.iter().map(rewrite_operand).collect(),
+        },
+        Instruction::Copy { dest, src } => Instruction::Copy {
+            dest: *dest,
+            src: rewrite_operand(src),
+        },
+        Instruction::Move { dest, src } => Instruction::Move {
+            dest: *dest,
+            src: rewrite_operand(src),
+        },
+        Instruction::Drop { operand } => Instruction::Drop {
+            operand: rewrite_operand(operand),
+        },
+        Instruction::DebugLog { operand } => Instruction::DebugLog {
+            operand: rewrite_operand(operand),
+        },
+        Instruction::Widen { dest, src } => Instruction::Widen {
+            dest: *dest,
+            src: rewrite_operand(src),
+        },
+        Instruction::WidenFixed { dest, src } => Instruction::WidenFixed {
+            dest: *dest,
+            src: rewrite_operand(src),
+        },
+        Instruction::Clone { dest, src } => Instruction::Clone {
+            dest: *dest,
+            src: rewrite_operand(src),
+        },
+        // Instructions with aggregate operands
+        Instruction::Pack { dest, ty, fields } => Instruction::Pack {
+            dest: *dest,
+            ty: ty.clone(),
+            fields: fields.iter().map(rewrite_operand).collect(),
+        },
+        Instruction::Unpack { dests, src } => Instruction::Unpack {
+            dests: dests.clone(),
+            src: rewrite_operand(src),
+        },
+        Instruction::GetField { dest, src, field_index } => Instruction::GetField {
+            dest: *dest,
+            src: rewrite_operand(src),
+            field_index: *field_index,
+        },
+        // Pass through instructions without param operands
+        _ => instr.clone(),
+    }
+}
+
+/// Rewrite comptime param references in a terminator.
+fn rewrite_comptime_params_in_terminator(
+    term: &Terminator,
+    param_to_const: &HashMap<u32, ValueId>,
+) -> Terminator {
+    let rewrite_operand = |op: &Operand| -> Operand {
+        match op {
+            Operand::Param(ParamId(idx)) => {
+                if let Some(&value_id) = param_to_const.get(&(*idx as u32)) {
+                    Operand::Value(value_id)
+                } else {
+                    op.clone()
+                }
+            }
+            _ => op.clone(),
+        }
+    };
+
+    match term {
+        Terminator::Return { value } => Terminator::Return {
+            value: value.as_ref().map(|v| rewrite_operand(v)),
+        },
+        Terminator::UnitEnd { result } => Terminator::UnitEnd {
+            result: result.as_ref().map(|r| rewrite_operand(r)),
+        },
+        Terminator::UnitEarlyReturn { value } => Terminator::UnitEarlyReturn {
+            value: rewrite_operand(value),
+        },
+        Terminator::Goto { target, args } => Terminator::Goto {
+            target: *target,
+            args: args.iter().map(rewrite_operand).collect(),
+        },
+        Terminator::Branch { cond, then_block, then_args, else_block, else_args } => Terminator::Branch {
+            cond: rewrite_operand(cond),
+            then_block: *then_block,
+            then_args: then_args.iter().map(rewrite_operand).collect(),
+            else_block: *else_block,
+            else_args: else_args.iter().map(rewrite_operand).collect(),
+        },
     }
 }
 
