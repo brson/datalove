@@ -1,0 +1,52 @@
+{
+  "auto_adapt_mode": {
+    "diagnostic_count": 1,
+    "diagnostics": [
+      {
+        "code": "F002",
+        "labels": [
+          {
+            "span": [
+              483,
+              497
+            ],
+            "text": "test_ownership"
+          }
+        ],
+        "message": "cannot find function `test_ownership` in this scope"
+      }
+    ],
+    "error_count": 1,
+    "errors": [
+      {
+        "error": "UnresolvedName(\"test_ownership\")"
+      }
+    ],
+    "success": false
+  },
+  "normal_mode": {
+    "diagnostic_count": 1,
+    "diagnostics": [
+      {
+        "code": "F002",
+        "labels": [
+          {
+            "span": [
+              483,
+              497
+            ],
+            "text": "test_ownership"
+          }
+        ],
+        "message": "cannot find function `test_ownership` in this scope"
+      }
+    ],
+    "error_count": 1,
+    "errors": [
+      {
+        "error": "UnresolvedName(\"test_ownership\")"
+      }
+    ],
+    "success": false
+  }
+}
