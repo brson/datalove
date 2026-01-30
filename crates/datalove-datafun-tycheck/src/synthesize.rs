@@ -491,7 +491,8 @@ fn synthesize_binop<'db>(
     // Determine result type based on operator.
     use BinOp::*;
     let result_ty = match op {
-        // Basic arithmetic: floats, bigints, and fixed ints.
+        // Basic arithmetic: floats and bigints only.
+        // Fixed ints must use @ to widen, or use checked/optional operators.
         Add | Sub | Mul => {
             if is_float_type(&operand_ty) {
                 // Floats return float.
@@ -499,10 +500,8 @@ fn synthesize_binop<'db>(
             } else if is_bigint_type(&operand_ty) {
                 // Bigints return bigint.
                 lhs_ty
-            } else if is_fixed_int_type(&operand_ty) {
-                // Fixed ints return the same type (no implicit widening).
-                lhs_ty
             } else {
+                // Fixed ints and other types are not allowed.
                 return Err(ctx.error_invalid_operand_type(
                     expr,
                     binop_to_str(op),

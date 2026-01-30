@@ -276,10 +276,9 @@ Operators listed from highest to lowest precedence:
 - **Floats**: Operations return the same float type. Division is permitted.
 - **Bigints**: Addition, subtraction, multiplication, and unary negation
   return `int`. Division is not permitted (use checked variants).
-- **Fixed integers**: Operands must have the same type; the result has the
-  same type. Division and unary negation are not permitted. Use `@` to widen
-  operands to `int` if bigint semantics are needed, or use checked/optional
-  operators for overflow handling.
+- **Fixed integers**: Bare arithmetic is not permitted. Use `@` to widen
+  operands to `int` for bigint semantics, or use checked/optional operators
+  (`+!`, `-!`, `*!`, `/!` or `+?`, `-?`, `*?`, `/?`) for overflow handling.
 
 **Checked arithmetic** (`+!`, `-!`, `*!`, `/!`) operates on fixed integers and
 returns a result type. On overflow or division by zero, the function
@@ -560,12 +559,14 @@ import u32.negate
 There is no implicit numeric widening in the language. All numeric conversions
 require the explicit `@` operator.
 
-Fixed integer arithmetic returns the same type as the operands:
+Fixed integers cannot use bare arithmetic operators. To perform arithmetic,
+either widen to `int` using `@`, or use checked/optional operators:
 
 ```
 let a: u32 = 10
 let b: u32 = 20
-let c = a + b           // c has type u32
+let c: int = a@ + b@    // widen to int, then add
+let d: u32 = (a +! b)   // checked add, returns same type
 ```
 
 Valid widening chains for `@`:

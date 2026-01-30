@@ -52,8 +52,8 @@ impl_checked_int_ops!(u64);
 
 /// Generate a binop function for a fixed-width integer type.
 ///
-/// Comparisons, bitwise, and wrapping arithmetic operations are valid here.
-/// Arithmetic uses wrapping semantics (no implicit widening to bigint).
+/// Only comparisons and bitwise operations are valid here. Arithmetic operations
+/// (Add, Sub, Mul, Div, Mod) on fixed-width integers are rejected by the type checker.
 /// Checked arithmetic (+!, -!, etc.) is handled via BinOpChecked.
 macro_rules! impl_int_binop {
     ($fname:ident, $ty:ty) => {
@@ -67,13 +67,11 @@ macro_rules! impl_int_binop {
                 let a = *(lhs.ptr as *const $ty);
                 let b = *(rhs.ptr as *const $ty);
                 match op {
-                    // Wrapping arithmetic for fixed-width integers.
-                    BinOp::Add => *(dest.ptr as *mut $ty) = a.wrapping_add(b),
-                    BinOp::Sub => *(dest.ptr as *mut $ty) = a.wrapping_sub(b),
-                    BinOp::Mul => *(dest.ptr as *mut $ty) = a.wrapping_mul(b),
-                    // Division not allowed on fixed ints (type checker rejects it).
-                    BinOp::Div | BinOp::Mod => {
-                        unreachable!("division/mod not allowed on fixed-width integers")
+                    // Arithmetic ops are rejected by the type checker.
+                    BinOp::Add | BinOp::Sub | BinOp::Mul | BinOp::Div | BinOp::Mod => {
+                        unreachable!(
+                            "fixed-width arithmetic rejected by type checker"
+                        )
                     }
                     // Comparisons are valid.
                     BinOp::Lt => *(dest.ptr as *mut bool) = a < b,
