@@ -11,13 +11,15 @@ to datalove using the **union-branch specialization** strategy.
 2. [Architecture Overview](#architecture-overview)
 3. [Phase 1: AST & Parsing](#phase-1-ast--parsing)
 4. [Phase 2: Type System](#phase-2-type-system)
-5. [Phase 3: Comptime Value Collection](#phase-3-comptime-value-collection)
-6. [Phase 4: Union-Branch Transformation](#phase-4-union-branch-transformation)
-7. [Phase 5: IR & Lowering Integration](#phase-5-ir--lowering-integration)
+5. [Phase 3: Comptime Call Site Recording](#phase-3-comptime-call-site-recording)
+6. [Phase 4: IR-Level Specialization](#phase-4-ir-level-specialization)
+7. [Phase 5: Const Folding Within Branches](#phase-5-const-folding-within-branches)
 8. [Phase 6: Codegen Optimization](#phase-6-codegen-optimization)
 9. [Testing Strategy](#testing-strategy)
 10. [Risk Mitigation](#risk-mitigation)
 11. [Future Extensions](#future-extensions)
+12. [Implementation Order](#implementation-order)
+13. [Appendix: Key Files to Modify](#appendix-key-files-to-modify)
 
 ---
 
@@ -32,8 +34,28 @@ fun repeat(const n: i32, s: string) -> string
     // n is known at compile time, enabling optimization
 end fun
 
-let x = repeat(3, "ab")  // n=3 is evaluated at compile time
+const N = 3
+let x = repeat(N, "ab")  // N is a const binding, value looked up
 ```
+
+### Initial Restriction: Const-Binding-Only Arguments
+
+To avoid complexity with CTFE ordering, comptime arguments must be **const binding names**:
+
+```
+const N = 5
+const MODE = 2
+
+fun foo(const n: i32, x: string) -> string ...
+
+let a = foo(N, "hello")     // ✓ N is a const binding
+let b = foo(MODE, "world")  // ✓ MODE is a const binding
+let c = foo(3, "x")         // ✗ ERROR: literal not allowed (for now)
+let d = foo(1 + 2, "y")     // ✗ ERROR: expression not allowed
+```
+
+This restriction means **no additional CTFE is needed during specialization**—we just
+look up already-evaluated const values from `ResolvedConsts`.
 
 ### Strategy: Union-Branch Specialization
 
@@ -42,20 +64,19 @@ with N branches**, dispatching on an enum tag:
 
 ```
 // Generated internal representation
-enum Comptime_repeat_n { N_3, N_5, N_10 }
+enum Comptime_repeat_n { V0, V1, V2 }  // variants for N=3, N=5, N=10
 
 fun repeat_unified(n_tag: Comptime_repeat_n, s: string) -> string
-    match n_tag
-        N_3 =>
-            const n = 3
-            // body with n=3 const-folded
-        N_5 =>
-            const n = 5
-            // body with n=5 const-folded
-        N_10 =>
-            const n = 10
-            // body with n=10 const-folded
-    end match
+    if discriminant(n_tag) == 0
+        const n = 3
+        // body with n=3 const-folded
+    else if discriminant(n_tag) == 1
+        const n = 5
+        // body with n=5 const-folded
+    else
+        const n = 10
+        // body with n=10 const-folded
+    end if
 end fun
 ```
 
@@ -75,103 +96,95 @@ For a scripting language prioritizing compile time, union-branch is the better t
 
 ## Architecture Overview
 
-### Pipeline Integration Point
+### Key Insight: Specialization Within Lowering Phase
+
+Specialization happens **inside the lowering phase**, after const evaluation:
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
-│                     Current Pipeline                                     │
-├─────────────────────────────────────────────────────────────────────────┤
-│  Parse → Resolve → Typecheck → Ownership → Lower → [CTFE] → Assemble    │
-└─────────────────────────────────────────────────────────────────────────┘
-                          │
-                          ▼
-┌─────────────────────────────────────────────────────────────────────────┐
-│                     New Pipeline                                         │
-├─────────────────────────────────────────────────────────────────────────┤
-│  Parse → Resolve → Typecheck → [SPECIALIZE] → Ownership → Lower → ...   │
-│                                     │                                    │
-│                          ┌──────────┴──────────┐                        │
-│                          │ Comptime Collection │                        │
-│                          │ Value Evaluation    │                        │
-│                          │ Union-Branch Gen    │                        │
-│                          │ Call Rewriting      │                        │
-│                          └─────────────────────┘                        │
+│  Parse → Resolve → Typecheck → Ownership → Lower (Phase 5)              │
+│                         │                      │                        │
+│              [record comptime           ┌──────┴──────┐                 │
+│               call sites]               │ 5a: Lower   │                 │
+│                                         │ 5b: Eval    │ ← consts evaluated
+│                                         │ 5c: SPECIAL │ ← NEW: transform IR
+│                                         │ 5d: Assemble│                 │
+│                                         └─────────────┘                 │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
 
-The specialization pass runs **after typecheck, before ownership analysis**:
-- Has full type information (can verify const-ness)
-- Modifies AST before ownership sees it
-- Lowering remains unchanged (just sees more functions)
+### Why This Ordering Works
 
-### New Crate: `datalove-datafun-specialize`
+1. **Typecheck** records which call sites have comptime args (just names, no values yet)
+2. **Phase 5a** lowers all functions to IR (including comptime-param functions)
+3. **Phase 5b** evaluates all const bindings → `ResolvedConsts`
+4. **Phase 5c (NEW)** specializes:
+   - Look up comptime arg values from `ResolvedConsts` (no CTFE needed!)
+   - Transform IR functions to union-branch form
+   - Rewrite call instructions
+5. **Phase 5d** assembles and inlines consts
+
+**No duplicate lowering or CTFE** — const values are already computed in 5b.
+
+### New Module: `datalove-datafun-specialize`
+
+Can be a new crate or a module within `datalove-datafun-lower`:
 
 ```
 datalove-datafun-specialize/
 ├── Cargo.toml
 ├── src/
-│   ├── lib.rs              # Public API, Salsa integration
-│   ├── collect.rs          # Phase 1: Collect comptime call sites
-│   ├── evaluate.rs         # Phase 2: Evaluate comptime arguments
-│   ├── transform.rs        # Phase 3: Generate union-branch functions
-│   ├── rewrite.rs          # Phase 4: Rewrite call sites
-│   ├── types.rs            # Data structures
-│   └── tests.rs            # Unit tests
+│   ├── lib.rs              # Public API
+│   ├── transform.rs        # IR transformation to union-branch
+│   ├── rewrite.rs          # Call instruction rewriting
+│   └── types.rs            # Data structures
 ```
 
 ### Key Data Structures
 
 ```rust
-/// Identifies a comptime-param function
-#[derive(Clone, Hash, Eq, PartialEq)]
-pub struct ComptimeFuncId {
-    pub module_id: Option<ModuleId>,
-    pub func_name: String,
-}
-
-/// All comptime values seen for a parameter across call sites
+/// Recorded during typecheck: a call site with comptime args
 #[derive(Clone, Debug)]
-pub struct ComptimeValueSet {
-    pub param_index: usize,
-    pub param_name: String,
-    pub param_type: IrType,
-    pub values: Vec<ConstValue>,  // deduplicated, sorted
+pub struct ComptimeCallSite<'db> {
+    /// The call expression (for locating in IR later)
+    pub call_expr_id: salsa::Id,
+    /// Name of the called function
+    pub func_name: InternedText<'db>,
+    /// Indices of comptime parameters in the callee
+    pub comptime_param_indices: Vec<usize>,
+    /// Names of const bindings used as comptime args (NOT values yet)
+    pub comptime_arg_names: Vec<InternedText<'db>>,
 }
 
-/// Complete specialization info for one function
+/// Collected during typecheck for a module
+#[derive(Clone, Debug, Default)]
+pub struct ComptimeCallSiteRegistry<'db> {
+    /// All call sites with comptime args
+    pub call_sites: Vec<ComptimeCallSite<'db>>,
+    /// Functions that have comptime parameters
+    pub comptime_funcs: HashMap<InternedText<'db>, Vec<usize>>,  // name → param indices
+}
+
+/// Built during specialization (phase 5c) after const eval
 #[derive(Clone, Debug)]
-pub struct ComptimeFuncSpec {
-    pub func_id: ComptimeFuncId,
-    pub original_func: StmtFun,
-    pub comptime_params: Vec<usize>,  // indices of const params
-    pub value_sets: Vec<ComptimeValueSet>,
+pub struct ResolvedComptimeCall {
+    /// The call site
+    pub call_site_id: salsa::Id,
+    /// Resolved values (looked up from ResolvedConsts)
+    pub comptime_values: Vec<ConstValue>,
 }
 
-/// Mapping from (func, comptime_args) to enum variant
-#[derive(Clone, Debug)]
-pub struct SpecializationMap {
-    /// For each comptime function, the generated enum type and variant mapping
-    pub funcs: HashMap<ComptimeFuncId, FuncSpecialization>,
-}
-
+/// Specialization info for one comptime-param function
 #[derive(Clone, Debug)]
 pub struct FuncSpecialization {
-    /// The enum type for this function's comptime params
+    /// Original function's FuncId
+    pub original_func_id: FuncId,
+    /// The enum type for dispatch
     pub enum_type: IrType,
-    /// Map from comptime arg values to enum variant index
+    /// Map from comptime values to variant index
     pub value_to_variant: HashMap<Vec<ConstValue>, u32>,
-    /// The transformed function (with match dispatch)
-    pub transformed_func: StmtFun,
-}
-
-/// Result of specialization pass
-pub struct SpecializationResult<'db> {
-    /// New/modified functions to add to module
-    pub new_functions: Vec<StmtFun<'db>>,
-    /// Functions to remove (replaced by specialized versions)
-    pub removed_functions: Vec<StmtFun<'db>>,
-    /// Call site rewrites: (call_site_id, new_args)
-    pub call_rewrites: HashMap<salsa::Id, CallRewrite>,
+    /// All unique instantiations
+    pub instantiations: Vec<Vec<ConstValue>>,
 }
 ```
 
@@ -356,510 +369,526 @@ fn synthesize_function_call<'db>(
 }
 ```
 
-### 2.4 Const Evaluability Check
+### 2.4 Const Evaluability Check (Simplified)
+
+With the const-binding-only restriction, this check is simple:
 
 ```rust
 impl<'db> TypeContext<'db> {
-    /// Check if expression can be evaluated at compile time
-    fn is_const_evaluable(&self, expr: ExprFun<'db>) -> bool {
+    /// Check if expression is a const binding name (our initial restriction)
+    fn is_const_binding_arg(&self, expr: ExprFun<'db>) -> Option<InternedText<'db>> {
         match expr.expr(self.db) {
-            // Literals are always const
-            ExprFunKind::Literal(_) => true,
-
-            // Names are const if they refer to const bindings
-            ExprFunKind::Name(name) => {
-                self.is_const_binding(name)
-            }
-
-            // Operators on const operands are const
-            ExprFunKind::BinOp(op) => {
-                self.is_const_evaluable(op.lhs(self.db)) &&
-                self.is_const_evaluable(op.rhs(self.db))
-            }
-
-            // Function calls to pure functions with const args
-            ExprFunKind::FunctionCall(call) => {
-                self.is_pure_function(call.name(self.db)) &&
-                call.args(self.db).iter().all(|a| self.is_const_evaluable(*a))
-            }
-
-            // Tuples/structs with const fields
-            ExprFunKind::Tuple(t) => {
-                t.elements(self.db).iter().all(|e| self.is_const_evaluable(*e))
-            }
-
-            _ => false,
+            ExprFunKind::Name(name) if self.is_const_binding(name) => Some(name),
+            _ => None,
         }
     }
 }
 ```
 
+**Note**: This intentionally rejects literals like `foo(3, x)` even though `3` is
+obviously compile-time known. The restriction simplifies the implementation by
+ensuring all comptime values are already in `ResolvedConsts`. Future extensions
+can relax this to allow literals and expressions.
+
 ---
 
-## Phase 3: Comptime Value Collection
+## Phase 3: Comptime Call Site Recording
 
-### 3.1 Collection Pass
+Recording happens **during typecheck**, not as a separate pass. This is lightweight—
+we just record const binding names, not values.
 
-**File**: `datalove-datafun-specialize/src/collect.rs`
+### 3.1 Extend Typecheck Context
+
+**File**: `datalove-datafun-tycheck/src/context.rs`
 
 ```rust
-/// Collect all comptime call sites in a module graph
-pub fn collect_comptime_calls<'db>(
-    db: &'db dyn Database,
-    modules: &[Module<'db>],
-    typecheck_result: &ModuleGraphTypecheckResult<'db>,
-) -> ComptimeCallCollection<'db> {
-    let mut collection = ComptimeCallCollection::new();
-
-    for module in modules {
-        let parsed = parse_module_ast(db, *module);
-        collect_from_statements(db, &parsed.statements, &mut collection);
-    }
-
-    collection
+impl<'db> TypeContext<'db> {
+    /// Registry of comptime call sites discovered during typecheck
+    pub comptime_registry: ComptimeCallSiteRegistry<'db>,
 }
+```
 
-fn collect_from_statements<'db>(
-    db: &'db dyn Database,
-    stmts: &[Statement<'db>],
-    collection: &mut ComptimeCallCollection<'db>,
-) {
-    for stmt in stmts {
-        match stmt {
-            Statement::Fun(func) => {
-                // Check if this function HAS comptime params
-                let has_comptime = func.params(db).iter().any(|p| p.is_comptime);
-                if has_comptime {
-                    collection.register_comptime_func(*func);
-                }
-                // Recurse into body
-                collect_from_statements(db, func.body(db), collection);
-            }
-            Statement::Let(let_stmt) => {
-                collect_from_expr(db, let_stmt.value(db), collection);
-            }
-            Statement::If(if_stmt) => {
-                collect_from_expr(db, if_stmt.condition(db), collection);
-                collect_from_statements(db, if_stmt.then_body(db), collection);
-                if let Some(else_body) = if_stmt.else_body(db) {
-                    collect_from_statements(db, else_body, collection);
-                }
-            }
-            // ... other statement types
-        }
-    }
-}
+### 3.2 Record During Call Synthesis
 
-fn collect_from_expr<'db>(
-    db: &'db dyn Database,
+**File**: `datalove-datafun-tycheck/src/synthesize.rs`
+
+Extend `synthesize_function_call`:
+
+```rust
+fn synthesize_function_call<'db>(
+    ctx: &mut TypeContext<'db>,
     expr: ExprFun<'db>,
-    collection: &mut ComptimeCallCollection<'db>,
-) {
-    match expr.expr(db) {
-        ExprFunKind::FunctionCall(call) => {
-            // Check if callee has comptime params
-            if let Some(func_spec) = collection.get_comptime_func(call.name(db)) {
-                // Evaluate comptime arguments
-                let comptime_args = evaluate_comptime_args(db, call, func_spec);
-                collection.record_call_site(call, comptime_args);
-            }
-            // Recurse into arguments
-            for arg in call.args(db) {
-                collect_from_expr(db, *arg, collection);
-            }
-        }
-        ExprFunKind::BinOp(op) => {
-            collect_from_expr(db, op.lhs(db), collection);
-            collect_from_expr(db, op.rhs(db), collection);
-        }
-        // ... other expression types
-    }
-}
-```
-
-### 3.2 ComptimeCallCollection Structure
-
-```rust
-pub struct ComptimeCallCollection<'db> {
-    /// Functions that have comptime parameters
-    comptime_funcs: HashMap<InternedText<'db>, ComptimeFuncInfo<'db>>,
-
-    /// All call sites to comptime functions, grouped by callee
-    call_sites: HashMap<InternedText<'db>, Vec<ComptimeCallSite<'db>>>,
-
-    /// Unique (func, comptime_values) combinations seen
-    instantiations: HashMap<InternedText<'db>, HashSet<Vec<ConstValue>>>,
-}
-
-pub struct ComptimeFuncInfo<'db> {
-    pub func: StmtFun<'db>,
-    pub comptime_param_indices: Vec<usize>,
-}
-
-pub struct ComptimeCallSite<'db> {
-    pub call_expr: ExprFunctionCall<'db>,
-    pub comptime_arg_values: Vec<ConstValue>,
-    pub containing_func: Option<StmtFun<'db>>,
-}
-```
-
-### 3.3 Comptime Argument Evaluation
-
-**File**: `datalove-datafun-specialize/src/evaluate.rs`
-
-Reuse existing CTFE infrastructure:
-
-```rust
-pub fn evaluate_comptime_args<'db>(
-    db: &'db dyn Database,
     call: ExprFunctionCall<'db>,
-    func_spec: &ComptimeFuncInfo<'db>,
-    evaluator: &mut dyn CtfeEvaluator,
-) -> Vec<ConstValue> {
-    let args = call.args(db);
-    let mut comptime_values = Vec::new();
+) -> Result<Type<'db>, TypeError> {
+    let func_type = ctx.lookup_function(call.name(ctx.db))?;
+    let param_comptime = func_type.param_comptime(ctx.db);
 
-    for &param_idx in &func_spec.comptime_param_indices {
-        let arg_expr = args[param_idx];
-
-        // Try fast path: literal extraction
-        if let Some(val) = try_extract_literal(db, arg_expr) {
-            comptime_values.push(val);
-            continue;
-        }
-
-        // Slow path: full CTFE evaluation
-        let ir_unit = lower_const_expr_to_unit(db, arg_expr);
-        let param = &func_spec.func.params(db)[param_idx];
-        let result_type = IrType::from_type_hint(db, &param.type_hint);
-
-        let value = evaluator.evaluate(&ir_unit, &result_type)
-            .expect("comptime arg evaluation failed");
-        comptime_values.push(value);
-    }
-
-    comptime_values
-}
-```
-
----
-
-## Phase 4: Union-Branch Transformation
-
-### 4.1 Enum Type Generation
-
-**File**: `datalove-datafun-specialize/src/transform.rs`
-
-```rust
-/// Generate the enum type for a function's comptime parameters
-fn generate_comptime_enum<'db>(
-    db: &'db dyn Database,
-    func_name: &str,
-    instantiations: &HashSet<Vec<ConstValue>>,
-) -> (IrType, HashMap<Vec<ConstValue>, u32>) {
-    // Sort instantiations for deterministic ordering
-    let mut sorted: Vec<_> = instantiations.iter().collect();
-    sorted.sort_by(|a, b| compare_const_value_vecs(a, b));
-
-    // Generate variant names
-    let mut variants = Vec::new();
-    let mut value_to_variant = HashMap::new();
-
-    for (idx, values) in sorted.iter().enumerate() {
-        let variant_name = format!("V{}", idx);  // V0, V1, V2, ...
-        variants.push((variant_name, None));  // No payload - values are const-folded
-        value_to_variant.insert((*values).clone(), idx as u32);
-    }
-
-    let enum_type = IrType::Enum(variants);
-    (enum_type, value_to_variant)
-}
-```
-
-### 4.2 Function Body Transformation
-
-```rust
-/// Transform a comptime-param function into union-branch form
-pub fn transform_to_union_branch<'db>(
-    db: &'db dyn Database,
-    func: StmtFun<'db>,
-    comptime_params: &[usize],
-    instantiations: &HashSet<Vec<ConstValue>>,
-) -> StmtFun<'db> {
-    let (enum_type, value_to_variant) = generate_comptime_enum(
-        db,
-        func.name(db).text(db),
-        instantiations,
-    );
-
-    // Build new parameter list: replace comptime params with single tag
-    let old_params = func.params(db);
-    let mut new_params = Vec::new();
-
-    // Add enum tag parameter
-    let tag_param = FunParam {
-        name: intern_text(db, "__comptime_tag"),
-        mode: ParamMode::In,
-        is_comptime: false,  // Tag is a regular runtime value
-        type_hint: enum_type_to_hint(&enum_type),
-    };
-    new_params.push(tag_param);
-
-    // Add non-comptime params unchanged
-    for (i, param) in old_params.iter().enumerate() {
-        if !comptime_params.contains(&i) {
-            new_params.push(param.clone());
-        }
-    }
-
-    // Build match body
-    let match_body = build_union_branch_body(
-        db,
-        func.body(db),
-        comptime_params,
-        &old_params,
-        instantiations,
-        &value_to_variant,
-    );
-
-    // Create new function
-    StmtFun::new(
-        db,
-        func.module_id(db),
-        func.name(db),  // Keep same name for simplicity
-        new_params,
-        func.return_type(db),
-        match_body,
-        func.local_index(db),
-    )
-}
-```
-
-### 4.3 Match Body Generation
-
-Since `match` is unimplemented, we generate nested if-else chains:
-
-```rust
-fn build_union_branch_body<'db>(
-    db: &'db dyn Database,
-    original_body: &[Statement<'db>],
-    comptime_params: &[usize],
-    old_params: &[FunParam<'db>],
-    instantiations: &HashSet<Vec<ConstValue>>,
-    value_to_variant: &HashMap<Vec<ConstValue>, u32>,
-) -> Vec<Statement<'db>> {
-    let mut sorted: Vec<_> = instantiations.iter().collect();
-    sorted.sort_by(|a, b| compare_const_value_vecs(a, b));
-
-    // Generate nested if-else for each variant
-    // if __comptime_tag == V0 then
-    //     const p1 = v0_1; const p2 = v0_2; ...
-    //     <original body>
-    // else if __comptime_tag == V1 then
-    //     const p1 = v1_1; const p2 = v1_2; ...
-    //     <original body>
-    // ...
-    // end if
-
-    build_variant_chain(db, &sorted, comptime_params, old_params, original_body, 0)
-}
-
-fn build_variant_chain<'db>(
-    db: &'db dyn Database,
-    variants: &[&Vec<ConstValue>],
-    comptime_params: &[usize],
-    old_params: &[FunParam<'db>],
-    original_body: &[Statement<'db>],
-    current_idx: usize,
-) -> Vec<Statement<'db>> {
-    if current_idx >= variants.len() {
-        // Unreachable case - panic or return error
-        return vec![build_panic_stmt(db, "invalid comptime variant")];
-    }
-
-    let values = variants[current_idx];
-
-    // Build condition: __comptime_tag == V{current_idx}
-    let condition = build_enum_check(db, current_idx);
-
-    // Build then-body: const bindings + original body
-    let mut then_body = Vec::new();
-    for (i, &param_idx) in comptime_params.iter().enumerate() {
-        let param = &old_params[param_idx];
-        let const_stmt = Statement::Const(StmtConst::new(
-            db,
-            param.name,
-            Some(param.type_hint.clone()),
-            const_value_to_expr(db, &values[i]),
-        ));
-        then_body.push(const_stmt);
-    }
-    then_body.extend(original_body.iter().cloned());
-
-    // Build else-body: next variant or unreachable
-    let else_body = if current_idx + 1 < variants.len() {
-        Some(build_variant_chain(db, variants, comptime_params, old_params,
-                                  original_body, current_idx + 1))
-    } else {
-        None
-    };
-
-    vec![Statement::If(StmtIf::new(
-        db,
-        condition,
-        None,  // no binding
-        then_body,
-        else_body,
-        0,
-    ))]
-}
-```
-
-### 4.4 Enum Comparison Without Match
-
-Since match is unimplemented, we use intrinsics or comparison:
-
-```rust
-fn build_enum_check<'db>(db: &'db dyn Database, variant_idx: usize) -> ExprFun<'db> {
-    // Build: __comptime_tag == enum V{variant_idx}
-    //
-    // Implementation options:
-    // 1. If enums support == comparison, use that
-    // 2. Use intrinsic to get discriminant and compare
-    // 3. Use pattern: if __comptime_tag |V{idx}| then ... (if-binding on enum)
-
-    // Option 3 is cleanest if enum if-binding works:
-    // Actually, we'd generate:
-    //   if enum_discriminant(__comptime_tag) == {variant_idx}
-
-    ExprFun::new(db, ExprFunKind::BinOp(ExprBinOp::new(
-        db,
-        BinOp::Eq,
-        build_discriminant_call(db, "__comptime_tag"),
-        build_literal(db, variant_idx as i64),
-    )))
-}
-```
-
-**Note**: May need to add `enum_discriminant` intrinsic or use existing comparison.
-
----
-
-## Phase 5: IR & Lowering Integration
-
-### 5.1 Call Site Rewriting
-
-**File**: `datalove-datafun-specialize/src/rewrite.rs`
-
-```rust
-/// Rewrite all call sites to comptime functions
-pub fn rewrite_call_sites<'db>(
-    db: &'db dyn Database,
-    modules: &mut [ParsedModule<'db>],
-    collection: &ComptimeCallCollection<'db>,
-    spec_map: &SpecializationMap,
-) {
-    for module in modules {
-        rewrite_module_calls(db, module, collection, spec_map);
-    }
-}
-
-fn rewrite_call<'db>(
-    db: &'db dyn Database,
-    call: ExprFunctionCall<'db>,
-    collection: &ComptimeCallCollection<'db>,
-    spec_map: &SpecializationMap,
-) -> ExprFunctionCall<'db> {
-    let func_name = call.name(db);
-
-    // Get specialization info
-    let func_spec = match spec_map.funcs.get(&func_name.text(db).to_string()) {
-        Some(spec) => spec,
-        None => return call,  // Not a comptime function
-    };
-
-    // Get comptime arg values for this call site
-    let call_site = collection.get_call_site(call)
-        .expect("call site should be recorded");
-
-    // Look up variant index
-    let variant_idx = func_spec.value_to_variant
-        .get(&call_site.comptime_arg_values)
-        .expect("instantiation should exist");
-
-    // Build new argument list: [enum_variant, non-comptime args...]
-    let old_args = call.args(db);
-    let mut new_args = Vec::new();
-
-    // Add enum variant constructor
-    let variant_expr = build_enum_variant(db, &func_spec.enum_type, *variant_idx);
-    new_args.push(variant_expr);
-
-    // Add non-comptime args
-    let comptime_indices: HashSet<_> = collection.get_comptime_func(func_name)
-        .unwrap()
-        .comptime_param_indices
-        .iter()
-        .cloned()
+    // Check for comptime parameters
+    let comptime_indices: Vec<usize> = param_comptime.iter()
+        .enumerate()
+        .filter_map(|(i, &is_ct)| if is_ct { Some(i) } else { None })
         .collect();
 
-    for (i, arg) in old_args.iter().enumerate() {
-        if !comptime_indices.contains(&i) {
-            new_args.push(*arg);
+    if !comptime_indices.is_empty() {
+        // Record this function has comptime params
+        ctx.comptime_registry.comptime_funcs
+            .entry(call.name(ctx.db))
+            .or_insert_with(|| comptime_indices.clone());
+
+        // Validate and record comptime arguments
+        let mut arg_names = Vec::new();
+        for &i in &comptime_indices {
+            let arg = call.args(ctx.db)[i];
+            let name = validate_comptime_arg(ctx, arg, i)?;
+            arg_names.push(name);
         }
+
+        // Record call site (names only, not values)
+        ctx.comptime_registry.call_sites.push(ComptimeCallSite {
+            call_expr_id: call.as_id(),
+            func_name: call.name(ctx.db),
+            comptime_param_indices: comptime_indices,
+            comptime_arg_names: arg_names,
+        });
     }
 
-    // Create new call expression
-    ExprFunctionCall::new(db, func_name, new_args)
+    // ... rest of type checking (unchanged)
 }
 ```
 
-### 5.2 Integration with Lowering
+### 3.3 Validate Const-Binding-Only
 
-The transformed functions and rewritten calls go through normal lowering:
+```rust
+/// Validate that a comptime argument is a const binding name
+fn validate_comptime_arg<'db>(
+    ctx: &TypeContext<'db>,
+    arg: ExprFun<'db>,
+    param_idx: usize,
+) -> Result<InternedText<'db>, TypeError> {
+    match arg.expr(ctx.db) {
+        ExprFunKind::Name(name) => {
+            // Must be a const binding, not a let/var
+            if ctx.is_const_binding(name) {
+                Ok(name)
+            } else {
+                Err(TypeError::ComptimeArgNotConst {
+                    param_idx,
+                    reason: format!("'{}' is not a const binding", name.text(ctx.db)),
+                })
+            }
+        }
+        _ => Err(TypeError::ComptimeArgNotConst {
+            param_idx,
+            reason: "comptime argument must be a const binding name".to_string(),
+        }),
+    }
+}
+```
 
-1. **Enum construction** (`EnumVariant` instruction) for call site args
-2. **Branch dispatch** in function body via if-else lowering
-3. **Const bindings** within each branch are CTFE-evaluated and inlined
+### 3.4 Propagate Registry Through Pipeline
 
-The existing CTFE pipeline handles the per-branch const folding automatically.
+The `ComptimeCallSiteRegistry` is attached to `SingleModuleTypecheckResult` and
+flows through to the lowering phase:
+
+```rust
+// In typecheck_module result
+pub struct SingleModuleTypecheckResult<'db> {
+    // ... existing fields ...
+    pub comptime_registry: ComptimeCallSiteRegistry<'db>,  // NEW
+}
+```
+
+---
+
+## Phase 4: IR-Level Specialization
+
+This phase runs within lowering, specifically as **phase 5c** after const evaluation.
+All work happens on IR, not AST.
+
+### 4.1 Integration into Lowering Pipeline
+
+**File**: `datalove-datafun-compiler/src/tracked_lower.rs`
+
+```rust
+pub fn lower_module_graph_with_evaluator<'db>(
+    // ... existing params ...
+) -> ModuleGraphLoweringResult<'db> {
+    // Phase 5a: Lower all functions (existing)
+    let lowered_functions = lower_all_module_functions(db, ...);
+
+    // Phase 5b: Evaluate consts (existing)
+    let resolved_consts = evaluate_all_module_consts(db, &lowered_functions, evaluator);
+
+    // Phase 5c: Specialize comptime functions (NEW)
+    let (specialized_functions, call_rewrites) = specialize_comptime_functions(
+        db,
+        &lowered_functions,
+        &resolved_consts,
+        &typecheck_result.comptime_registry,
+    );
+
+    // Phase 5d: Assemble (existing, uses specialized functions)
+    assemble_modules(db, &specialized_functions, &resolved_consts, &call_rewrites)
+}
+```
+
+### 4.2 Resolve Comptime Values
+
+**File**: `datalove-datafun-specialize/src/lib.rs`
+
+```rust
+/// Resolve comptime arg names to values using already-evaluated consts
+fn resolve_comptime_calls(
+    registry: &ComptimeCallSiteRegistry,
+    resolved_consts: &ResolvedConsts,
+) -> Vec<ResolvedComptimeCall> {
+    registry.call_sites.iter().map(|site| {
+        let values: Vec<ConstValue> = site.comptime_arg_names.iter()
+            .map(|name| {
+                resolved_consts.get_by_name(name.text())
+                    .expect("const binding should exist")
+                    .clone()
+            })
+            .collect();
+
+        ResolvedComptimeCall {
+            call_site_id: site.call_expr_id,
+            comptime_values: values,
+        }
+    }).collect()
+}
+```
+
+**Key point**: No CTFE here—just HashMap lookups into `ResolvedConsts`.
+
+### 4.3 Build Specialization Plan
+
+```rust
+/// Group call sites by function and collect unique instantiations
+fn build_specialization_plan(
+    resolved_calls: &[ResolvedComptimeCall],
+    registry: &ComptimeCallSiteRegistry,
+) -> HashMap<String, FuncSpecialization> {
+    let mut plan: HashMap<String, FuncSpecialization> = HashMap::new();
+
+    for call in resolved_calls {
+        let func_name = registry.get_func_name(call.call_site_id);
+
+        let spec = plan.entry(func_name.clone()).or_insert_with(|| {
+            FuncSpecialization {
+                original_func_id: registry.get_func_id(&func_name),
+                enum_type: IrType::Unit,  // built later
+                value_to_variant: HashMap::new(),
+                instantiations: Vec::new(),
+            }
+        });
+
+        // Add unique instantiation
+        if !spec.instantiations.contains(&call.comptime_values) {
+            let variant_idx = spec.instantiations.len() as u32;
+            spec.value_to_variant.insert(call.comptime_values.clone(), variant_idx);
+            spec.instantiations.push(call.comptime_values.clone());
+        }
+    }
+
+    // Build enum types
+    for spec in plan.values_mut() {
+        spec.enum_type = build_comptime_enum(spec.instantiations.len());
+    }
+
+    plan
+}
+
+fn build_comptime_enum(num_variants: usize) -> IrType {
+    let variants: Vec<(String, Option<IrType>)> = (0..num_variants)
+        .map(|i| (format!("V{}", i), None))
+        .collect();
+    IrType::Enum(variants)
+}
+```
+
+### 4.4 Transform IR Function to Union-Branch
+
+```rust
+/// Transform an IrFunction to union-branch form
+fn transform_ir_function(
+    func: &IrFunction,
+    spec: &FuncSpecialization,
+    comptime_param_indices: &[usize],
+) -> IrFunction {
+    // Original: params = [comptime_p0, comptime_p1, regular_p0, ...]
+    // New:      params = [tag, regular_p0, ...]
+
+    let mut new_params = Vec::new();
+    let mut new_param_types = Vec::new();
+    let mut new_param_modes = Vec::new();
+
+    // Add tag parameter
+    new_params.push(ParamId(0));
+    new_param_types.push(spec.enum_type.clone());
+    new_param_modes.push(ParamMode::In);
+
+    // Add non-comptime params (renumbered)
+    for (i, (param, (ty, mode))) in func.params.iter()
+        .zip(func.param_types.iter().zip(func.param_modes.iter()))
+        .enumerate()
+    {
+        if !comptime_param_indices.contains(&i) {
+            new_params.push(ParamId(new_params.len() as u32));
+            new_param_types.push(ty.clone());
+            new_param_modes.push(*mode);
+        }
+    }
+
+    // Build dispatch blocks + specialized body copies
+    let new_blocks = build_dispatch_ir(
+        &func.blocks,
+        &spec.instantiations,
+        comptime_param_indices,
+        &func.param_types,
+    );
+
+    IrFunction {
+        id: func.id,
+        name: func.name.clone(),
+        params: new_params,
+        param_modes: new_param_modes,
+        param_types: new_param_types,
+        return_type: func.return_type.clone(),
+        blocks: new_blocks,
+        // ... update value_count, slot_count, etc.
+    }
+}
+```
+
+### 4.5 Build IR Dispatch Blocks
+
+```rust
+fn build_dispatch_ir(
+    original_blocks: &[IrBlock],
+    instantiations: &[Vec<ConstValue>],
+    comptime_param_indices: &[usize],
+    param_types: &[IrType],
+) -> Vec<IrBlock> {
+    let mut blocks = Vec::new();
+    let num_variants = instantiations.len();
+
+    // Entry block: get discriminant and start dispatch chain
+    let entry = IrBlock {
+        id: BlockId(0),
+        params: vec![],
+        instructions: vec![
+            // v0 = param0 (the tag)
+            // v1 = discriminant(v0) -- or just use v0 if enum is repr(int)
+        ],
+        terminator: Terminator::Branch {
+            cond: /* v1 == 0 */,
+            then_block: BlockId(num_variants as u32),  // first variant body
+            then_args: vec![],
+            else_block: BlockId(1),  // next check
+            else_args: vec![],
+        },
+    };
+    blocks.push(entry);
+
+    // Dispatch chain: check each variant
+    for i in 1..num_variants {
+        let check_block = IrBlock {
+            id: BlockId(i as u32),
+            params: vec![],
+            instructions: vec![],
+            terminator: Terminator::Branch {
+                cond: /* discriminant == i */,
+                then_block: BlockId((num_variants + i) as u32),
+                then_args: vec![],
+                else_block: BlockId((i + 1) as u32),
+                else_args: vec![],
+            },
+        };
+        blocks.push(check_block);
+    }
+
+    // Last check falls through to unreachable/panic
+    // (or last variant with no else)
+
+    // Variant bodies: clone original blocks with const substitution
+    for (variant_idx, values) in instantiations.iter().enumerate() {
+        let variant_blocks = clone_blocks_with_const_substitution(
+            original_blocks,
+            comptime_param_indices,
+            values,
+            param_types,
+            BlockId((num_variants + variant_idx) as u32),  // base block id
+        );
+        blocks.extend(variant_blocks);
+    }
+
+    blocks
+}
+```
+
+### 4.6 Const Substitution in Cloned Blocks
+
+```rust
+fn clone_blocks_with_const_substitution(
+    original_blocks: &[IrBlock],
+    comptime_param_indices: &[usize],
+    values: &[ConstValue],
+    param_types: &[IrType],
+    base_block_id: BlockId,
+) -> Vec<IrBlock> {
+    let mut cloned = Vec::new();
+
+    for (i, block) in original_blocks.iter().enumerate() {
+        let mut new_block = block.clone();
+        new_block.id = BlockId(base_block_id.0 + i as u32);
+
+        // Prepend const instructions for comptime params
+        if i == 0 {
+            let mut const_instrs: Vec<Instruction> = comptime_param_indices.iter()
+                .zip(values.iter())
+                .enumerate()
+                .map(|(i, (&param_idx, value))| {
+                    Instruction::Const {
+                        dest: ValueId(/* fresh id for this param */),
+                        value: value.clone(),
+                    }
+                })
+                .collect();
+            const_instrs.extend(new_block.instructions.drain(..));
+            new_block.instructions = const_instrs;
+        }
+
+        // Rewrite any references to comptime params → the const values
+        rewrite_param_references(&mut new_block, comptime_param_indices);
+
+        // Adjust block references in terminators
+        adjust_block_references(&mut new_block.terminator, base_block_id);
+
+        cloned.push(new_block);
+    }
+
+    cloned
+}
+```
+
+### 4.7 Rewrite Call Instructions
+
+```rust
+fn rewrite_call_instructions(
+    functions: &mut [IrFunction],
+    spec_plan: &HashMap<String, FuncSpecialization>,
+    resolved_calls: &[ResolvedComptimeCall],
+    registry: &ComptimeCallSiteRegistry,
+) {
+    // Build lookup: call_site_id → (func_name, variant_idx)
+    let call_lookup: HashMap<_, _> = resolved_calls.iter()
+        .map(|call| {
+            let func_name = registry.get_func_name(call.call_site_id);
+            let spec = &spec_plan[&func_name];
+            let variant_idx = spec.value_to_variant[&call.comptime_values];
+            (call.call_site_id, (func_name, variant_idx))
+        })
+        .collect();
+
+    for func in functions {
+        for block in &mut func.blocks {
+            for instr in &mut block.instructions {
+                if let Instruction::Call { dest, func: func_ref, args } = instr {
+                    // Check if this call needs rewriting
+                    // (need to map IR call back to original call site somehow)
+                    if let Some((func_name, variant_idx)) = lookup_call(instr, &call_lookup) {
+                        let spec = &spec_plan[&func_name];
+
+                        // Build new args: [enum_variant, non-comptime args...]
+                        let mut new_args = Vec::new();
+
+                        // Add enum variant construction
+                        // (emit EnumVariant instruction before call, use result)
+                        let variant_val = /* value from EnumVariant instr */;
+                        new_args.push(Operand::Value(variant_val));
+
+                        // Add non-comptime args
+                        let comptime_indices = &registry.comptime_funcs[&func_name];
+                        for (i, arg) in args.iter().enumerate() {
+                            if !comptime_indices.contains(&i) {
+                                new_args.push(arg.clone());
+                            }
+                        }
+
+                        *args = new_args;
+                    }
+                }
+            }
+        }
+    }
+}
+```
+
+---
+
+## Phase 5: Const Folding Within Branches
+
+After union-branch transformation, each branch contains `const` bindings for the
+comptime parameter values. The **existing CTFE infrastructure** handles this automatically.
+
+### 5.1 How Existing Const Folding Works
+
+From `compiler-guide.md`, the lowering phase already:
+
+1. Collects const bindings
+2. Evaluates them via CTFE
+3. Inlines the values at use sites
+
+The union-branch transformation produces code like:
+
+```
+// Before CTFE (conceptual IR):
+if discriminant(n_tag) == 0
+    const n = 3          // <- normal const binding
+    let result = s * n   // <- uses const n
+    ...
+```
+
+The existing const eval pass sees `const n = 3` as a normal const binding and
+inlines `3` wherever `n` is used within that branch.
+
+### 5.2 No Additional Work Needed
+
+Because we:
+1. Transform at IR level (Phase 4)
+2. Insert normal `Instruction::Const` for comptime param values
+3. Let the existing phase 5b/5d handle evaluation and inlining
+
+The const folding is **free** — we just emit the right IR structure.
 
 ### 5.3 Salsa Integration
 
-**File**: `datalove-datafun-compiler/src/tracked_specialize.rs`
+The specialization step is not a separate tracked function — it's part of the
+lowering pipeline:
 
 ```rust
-/// Tracked function for specialization
-#[salsa::tracked]
-pub fn specialize_module_graph<'db>(
-    db: &'db dyn salsa::Database,
-    parsed_graph: ParsedModuleGraph<'db>,
-    typecheck_result: ModuleGraphTypecheckResult<'db>,
-) -> SpecializationResult<'db> {
-    // Collection phase
-    let collection = collect_comptime_calls(db, parsed_graph.modules(), typecheck_result);
+// In tracked_lower.rs, within lower_module_graph_with_evaluator:
 
-    // Skip if no comptime functions
-    if collection.is_empty() {
-        return SpecializationResult::empty();
+pub fn lower_module_graph_with_evaluator<'db>(...) -> ModuleGraphLoweringResult<'db> {
+    // 5a: Lower all functions
+    let mut lowered = lower_all_functions(db, ...);
+
+    // 5b: Evaluate top-level consts
+    let resolved_consts = evaluate_consts(db, &lowered, evaluator);
+
+    // 5c: Specialize comptime functions (NEW)
+    if !typecheck_result.comptime_registry.is_empty() {
+        specialize_in_place(&mut lowered, &resolved_consts, &typecheck_result.comptime_registry);
     }
 
-    // Evaluation phase
-    let evaluator = create_ctfe_evaluator();
-    let evaluated = evaluate_all_comptime_args(db, &collection, &mut evaluator);
-
-    // Transformation phase
-    let spec_map = transform_comptime_funcs(db, &collection, &evaluated);
-
-    // Rewriting phase
-    let rewrites = compute_call_rewrites(db, &collection, &spec_map);
-
-    SpecializationResult {
-        transformed_funcs: spec_map.into_transformed_funcs(),
-        call_rewrites: rewrites,
-    }
+    // 5d: Assemble and inline
+    assemble(db, lowered, resolved_consts)
 }
 ```
+
+This keeps specialization as a simple in-place transformation rather than a
+separate Salsa query, avoiding cache invalidation complexity.
 
 ---
 
@@ -972,9 +1001,9 @@ Extend existing dual tests to compare:
 ### Risk 3: Complex Interaction with Existing Passes
 
 **Mitigation**:
-- Insert specialization cleanly between typecheck and ownership
-- Transformed AST should type-check cleanly
-- Add validation pass to verify transformation correctness
+- Specialization is IR-to-IR transformation within lowering (phase 5c)
+- No AST modification needed — all changes happen after lowering
+- Transformed IR uses existing instruction types (Const, Branch, etc.)
 
 ### Risk 4: Enum Discriminant Access
 
@@ -1030,35 +1059,33 @@ end fun
 
 ## Implementation Order
 
-### Sprint 1: Foundation (3-5 days)
-- [ ] Phase 1: AST & Parsing
-- [ ] Phase 2: Type System basics
-- [ ] Basic validation tests
+### Sprint 1: Foundation
+- [ ] Phase 1: AST & Parsing (`is_comptime` field, `const` modifier parsing)
+- [ ] Phase 2: Type System (`param_comptime` in TypeFunction)
+- [ ] Basic parser and typecheck tests
 
-### Sprint 2: Collection & Evaluation (3-4 days)
-- [ ] Phase 3: Collection pass
-- [ ] CTFE integration for arg evaluation
-- [ ] Unit tests
+### Sprint 2: Call Site Recording
+- [ ] Phase 3: Record comptime call sites during typecheck
+- [ ] Validate const-binding-only restriction
+- [ ] Propagate `ComptimeCallSiteRegistry` through pipeline
+- [ ] Unit tests for recording
 
-### Sprint 3: Transformation (5-7 days)
-- [ ] Phase 4: Union-branch generation
-- [ ] Enum type construction
-- [ ] If-else chain generation
+### Sprint 3: IR Transformation
+- [ ] Phase 4: Union-branch IR transformation
+- [ ] Build dispatch blocks and cloned body blocks
+- [ ] Const substitution in cloned blocks
+- [ ] Call instruction rewriting
 - [ ] Integration tests
 
-### Sprint 4: Integration (4-5 days)
-- [ ] Phase 5: Call site rewriting
-- [ ] Salsa integration
-- [ ] Pipeline integration
-- [ ] End-to-end tests
+### Sprint 4: Pipeline Integration
+- [ ] Insert specialization into lowering (phase 5c)
+- [ ] Resolve comptime values from `ResolvedConsts`
+- [ ] End-to-end tests (interpreter + AOT)
 
-### Sprint 5: Polish (3-4 days)
-- [ ] Phase 6: Codegen optimization
-- [ ] Error messages
-- [ ] Documentation
+### Sprint 5: Polish
+- [ ] Phase 6: Codegen hints (jump table for many variants)
+- [ ] Error messages for invalid comptime args
 - [ ] Performance benchmarks
-
-**Total Estimate**: 18-25 days
 
 ---
 
@@ -1069,17 +1096,16 @@ end fun
 | `datafun-ast/src/ast.rs` | Add `is_comptime` to FunParam |
 | `datafun-parser/src/statement.rs` | Parse `const` modifier |
 | `datafun-common/src/lib.rs` | Add `param_comptime` to TypeFunction |
-| `datafun-tycheck/src/synthesize.rs` | Validate comptime args |
-| `datafun-tycheck/src/context.rs` | Track comptime call info |
-| `datafun-compiler/src/compile.rs` | Insert specialization phase |
-| `datafun-compiler/src/lib.rs` | Export new tracked functions |
+| `datafun-tycheck/src/synthesize.rs` | Validate const-binding-only args, record call sites |
+| `datafun-tycheck/src/context.rs` | Add `ComptimeCallSiteRegistry` |
+| `datafun-compiler/src/tracked_lower.rs` | Insert specialization step in phase 5c |
 | `datafun-ir/src/lib.rs` | (Maybe) enum discriminant helpers |
 
-| New File | Purpose |
-|----------|---------|
-| `datafun-specialize/src/lib.rs` | Crate root, public API |
-| `datafun-specialize/src/collect.rs` | Collection pass |
-| `datafun-specialize/src/evaluate.rs` | CTFE integration |
-| `datafun-specialize/src/transform.rs` | Union-branch generation |
-| `datafun-specialize/src/rewrite.rs` | Call site rewriting |
-| `datafun-specialize/src/types.rs` | Data structures |
+| New File/Module | Purpose |
+|-----------------|---------|
+| `datafun-compiler/src/specialize.rs` | IR transformation module |
+| `datafun-compiler/src/specialize/transform.rs` | Union-branch IR generation |
+| `datafun-compiler/src/specialize/rewrite.rs` | Call instruction rewriting |
+| `datafun-compiler/src/specialize/types.rs` | Data structures (FuncSpecialization, etc.) |
+
+**Note**: Can also be a separate `datafun-specialize` crate if preferred for modularity.
