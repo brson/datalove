@@ -626,6 +626,380 @@ Suggested thresholds:
 - Sandy Maguire. (2019). [GHC's Specializer: Much More Than You Wanted to Know](https://reasonablypolymorphic.com/blog/specialization/).
 - Weeks, S. (2006). [Whole-Program Compilation in MLton](https://dl.acm.org/doi/10.1145/1159876.1159877). ML Workshop.
 
+## Extension to Type Arguments: Two Paths
+
+Having established union-branch for const *values*, we can extend to type arguments
+via two distinct paths: **Rust-style type parameters** or **Zig-style comptime types**.
+
+### Path 1: Rust-Style Type Parameters (Separate Namespace)
+
+In Rust, type parameters live in a separate namespace from values:
+
+```rust
+fn swap<T>(x: T, y: T) -> (T, T) { (y, x) }
+```
+
+#### How Union-Branch Extends
+
+The union-branch approach generalizes naturally. Instead of defunctionalizing *values*
+into an enum, we defunctionalize *types* into a type-level enum:
+
+```
+// Source
+fun swap<T>(x: T, y: T) -> (T, T)
+    (y, x)
+end fun
+
+// Called with T = i32, string, {a: bool} in program
+
+// Union-branch transformation
+enum TypeTag_swap { I32, String, AnonStruct_a_bool }
+
+fun swap_unified(type_tag: TypeTag_swap, x: ???, y: ???) -> ???
+    match type_tag
+        I32 =>
+            // T = i32, use i32 operations
+            (y as i32, x as i32)
+        String =>
+            // T = string, use string operations
+            (y as string, x as string)
+        AnonStruct_a_bool =>
+            // T = {a: bool}, use struct operations
+            (y as {a: bool}, x as {a: bool})
+    end match
+end fun
+```
+
+#### The Challenge: What Are x and y's Types?
+
+In the unified function, `x` and `y` can't have a single static type. Options:
+
+**Option 1a: Maximal Layout Union**
+
+```
+// x and y are stored in a union large enough for any variant
+struct UnifiedArg {
+    data: [u8; MAX_SIZE],  // sized for largest type
+    // or: data: *mut u8 for heap-allocated types
+}
+```
+
+Within each branch, reinterpret the bytes as the concrete type. This is what
+intensional polymorphism does—the type tag tells you how to interpret the bits.
+
+**Option 1b: Pointer + Size Descriptor**
+
+```
+// All args passed as (pointer, size, alignment)
+fun swap_unified(
+    type_tag: TypeTag_swap,
+    x_ptr: *u8, x_size: usize,
+    y_ptr: *u8, y_size: usize,
+) -> (*u8, usize)
+```
+
+The type tag determines how to copy/move the bytes. This is closer to Go's approach.
+
+**Option 1c: Boxed Representation**
+
+```
+// All args boxed to uniform representation
+fun swap_unified(type_tag: TypeTag_swap, x: Box<Any>, y: Box<Any>) -> Box<Any>
+```
+
+Defeats much of the purpose, but simplest. Only viable if you're okay with allocation.
+
+#### Type-Dependent Operations
+
+The harder problem: what if the function body *uses* type-specific operations?
+
+```
+fun process<T>(x: T) -> i32
+    x.size()  // T must have a size() method
+end fun
+```
+
+This requires **trait bounds** (Rust) or **concepts** (C++). With union-branch:
+
+```
+enum TypeTag_process { Vec_i32, String, MyCollection }
+
+fun process_unified(type_tag: TypeTag_process, x: ???) -> i32
+    match type_tag
+        Vec_i32 => (x as list<i32>).len()     // list has len()
+        String => (x as string).len()          // string has len()
+        MyCollection => (x as MyCollection).size()  // custom method
+    end match
+end fun
+```
+
+The union-branch approach makes trait bounds less necessary at the type system level—
+the compiler knows all instantiations and can verify each branch type-checks.
+
+#### Rust-Style Summary
+
+| Aspect | Implementation |
+|--------|----------------|
+| Type parameter syntax | `fun foo<T>(x: T)` |
+| Type namespace | Separate from values |
+| Union-branch enum | Over types, not values |
+| Argument passing | Maximal layout or pointer+descriptor |
+| Type operations | Resolved per-branch |
+| Trait bounds | Optional (can verify per-branch instead) |
+
+### Path 2: Zig-Style Comptime Types (Types as Values)
+
+In Zig, types are first-class comptime values:
+
+```zig
+fn swap(comptime T: type, x: T, y: T) -> struct { T, T } {
+    return .{ y, x };
+}
+```
+
+The key insight: **`type` is just another type**, and type values flow through
+the same comptime machinery as integer values.
+
+#### How Union-Branch Extends
+
+Since types are values, they're handled identically to const integers:
+
+```
+// Source
+fun swap(const T: type, x: T, y: T) -> (T, T)
+    (y, x)
+end fun
+
+// Called with T = i32, T = string, T = {a: bool}
+
+// Union-branch transformation (same as values!)
+enum ComptimeT { Type_i32, Type_string, Type_AnonStruct_a_bool }
+
+fun swap_unified(t_tag: ComptimeT, x: ???, y: ???) -> ???
+    match t_tag
+        Type_i32 =>
+            const T: type = i32
+            // Now T is bound, x: T means x: i32
+            (y, x)  // typed as (i32, i32)
+        Type_string =>
+            const T: type = string
+            (y, x)  // typed as (string, string)
+        ...
+    end match
+end fun
+```
+
+#### What Is `type`?
+
+Need a compile-time representation for types. Options:
+
+**Option 2a: IrType as ConstValue**
+
+```rust
+// Already have IrType enum - make it a ConstValue variant
+enum ConstValue {
+    // ... existing variants ...
+    Type(IrType),  // NEW: type values
+}
+```
+
+Now `const T: type = i32` creates `ConstValue::Type(IrType::I32)`.
+
+**Option 2b: Type Descriptors**
+
+```rust
+// Types represented as structured descriptors
+struct TypeDescriptor {
+    kind: TypeKind,
+    size: usize,
+    alignment: usize,
+    fields: Option<Vec<FieldDescriptor>>,
+    // ...
+}
+```
+
+Richer but more complex. Needed for reflection/introspection.
+
+#### Dependent Types (Light)
+
+Zig-style comptime types create a form of dependent typing:
+
+```
+fun make_array(const T: type, const N: i32) -> [T; N]
+    // Return type depends on comptime values T and N
+```
+
+With union-branch, this "just works":
+
+```
+enum ComptimeT { Type_i32, Type_bool }
+enum ComptimeN { N_4, N_8, N_16 }
+
+// Nested union-branch
+fun make_array_unified(t_tag: ComptimeT, n_tag: ComptimeN) -> ???
+    match t_tag
+        Type_i32 => match n_tag
+            N_4 => ... return [i32; 4] ...
+            N_8 => ... return [i32; 8] ...
+            N_16 => ... return [i32; 16] ...
+        Type_bool => match n_tag
+            N_4 => ... return [bool; 4] ...
+            ...
+```
+
+Each branch has a concrete return type. The "dependent" return type is resolved
+per-branch at compile time.
+
+#### Type Operations at Comptime
+
+Zig allows computing on types:
+
+```zig
+fn Pair(comptime A: type, comptime B: type) type {
+    return struct { first: A, second: B };
+}
+
+const MyPair = Pair(i32, bool);  // MyPair is a type!
+var x: MyPair = .{ .first = 42, .second = true };
+```
+
+With union-branch + CTFE:
+
+1. **CTFE evaluates `Pair(i32, bool)`** → returns `ConstValue::Type(struct{first:i32, second:bool})`
+2. **Union-branch collects** all type-returning comptime calls
+3. **Type values substituted** into dependent positions
+
+```
+// After specialization
+const MyPair: type = {first: i32, second: bool}  // CTFE result
+var x: {first: i32, second: bool} = ...          // MyPair substituted
+```
+
+#### Zig-Style Summary
+
+| Aspect | Implementation |
+|--------|----------------|
+| Type parameter syntax | `fun foo(const T: type, x: T)` |
+| Type namespace | Same as values (comptime) |
+| Type representation | `ConstValue::Type(IrType)` |
+| Union-branch enum | Same machinery as values |
+| Dependent types | Resolved per-branch |
+| Type computation | CTFE returns type values |
+
+### Comparison: Rust-Style vs Zig-Style
+
+| Aspect | Rust-Style | Zig-Style |
+|--------|------------|-----------|
+| Conceptual model | Types and values separate | Types are comptime values |
+| Syntax | `<T>` type parameters | `const T: type` argument |
+| Type bounds | Traits/concepts | Ad-hoc (check at instantiation) |
+| Type computation | Associated types only | Full CTFE on types |
+| Implementation complexity | Higher (two namespaces) | Lower (unified) |
+| Familiarity | Mainstream (Rust, C++, Java) | Niche (Zig) |
+| Expressiveness | Bounded | Full dependent types (light) |
+
+### Recommendation for Datalove
+
+**Zig-style is more natural** given the union-branch approach:
+
+1. **Uniform machinery**: Types as comptime values use same enum/match as integers
+2. **Simpler implementation**: One namespace, one specialization mechanism
+3. **More expressive**: Type computation for free via CTFE
+4. **Consistent syntax**: `const n: i32` and `const T: type` parallel
+
+The main downside is unfamiliarity—users expect `<T>` syntax. But Zig has proven
+the `comptime T: type` model is learnable and arguably clearer.
+
+### Implementation Roadmap
+
+**Phase A: Const Values (Current Focus)**
+```
+fun repeat(const n: i32, s: string) -> string
+```
+- Union-branch over value enums
+- CTFE for const evaluation
+- Foundation for everything else
+
+**Phase B: Type as ConstValue**
+```
+const MyType: type = i32
+```
+- Add `ConstValue::Type(IrType)`
+- CTFE can return types
+- Type aliases via const bindings
+
+**Phase C: Comptime Type Parameters**
+```
+fun identity(const T: type, x: T) -> T
+```
+- Parameter type `T` depends on comptime arg
+- Union-branch over type enums
+- Per-branch type substitution
+
+**Phase D: Type Computation**
+```
+fun Pair(const A: type, const B: type) -> type
+    {first: A, second: B}
+end fun
+```
+- Functions returning types
+- CTFE evaluates type expressions
+- Full Zig-style dependent types (light)
+
+### Code Sketch: Type as ConstValue
+
+```rust
+// In datafun-ir/src/lib.rs
+enum ConstValue {
+    // ... existing ...
+
+    /// A type value (for comptime type parameters)
+    Type(Box<IrType>),
+}
+
+// In datafun-tycheck
+fn check_comptime_type_arg(
+    ctx: &mut TypeContext,
+    arg: ExprFun,
+) -> Result<IrType, TypeError> {
+    // Evaluate arg at compile time
+    let const_val = ctx.evaluate_const(arg)?;
+    match const_val {
+        ConstValue::Type(ir_type) => Ok(*ir_type),
+        _ => Err(TypeError::ExpectedType { got: const_val }),
+    }
+}
+
+// In specialization pass
+fn union_branch_for_types(
+    func: &StmtFun,
+    type_sets: &[HashSet<IrType>],  // all types seen per param
+) -> StmtFun {
+    // Build enum: enum TypeTag { Type_i32, Type_string, ... }
+    // Wrap body in match
+    // Within each branch, substitute concrete type
+}
+```
+
+### The Deep Connection to Intensional Polymorphism
+
+This brings us full circle to Harper & Morrisett:
+
+| Their Work | Our Extension |
+|------------|---------------|
+| `typecase T of int => ...` | `match type_tag of Type_i32 => ...` |
+| Type representations at runtime | Type enum discriminants at runtime |
+| Dispatch on type structure | Dispatch on closed type set |
+| Enables unboxed polymorphism | Enables per-branch specialization |
+
+The difference: Harper/Morrisett dispatch on *open* type structure (any type matches
+some case). We dispatch on *closed* type sets (only types seen in program). This
+is possible because we're a whole-program compiler.
+
+Their insight was: **you don't need to know the type at compile time if you can
+dispatch on it at runtime**. Our insight is: **you don't need to monomorphize
+if you can dispatch on a finite set of known instantiations**.
+
 ## Conclusion
 
 Comptime arguments are feasible with moderate implementation effort. The existing CTFE
