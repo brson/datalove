@@ -262,7 +262,7 @@ Operators listed from highest to lowest precedence:
 |------------|-----------|-------------|
 | 1 | `()` | Grouping |
 | 2 | `-` `-?` `-!` `not` | Unary prefix |
-| 3 | `?` `!` | Postfix try |
+| 3 | `@` `?` `!` | Postfix (adapt, try) |
 | 4 | `*` `/` `*!` `/!` `*?` `/?` | Multiplicative |
 | 5 | `+` `-` `+!` `-!` `+?` `-?` | Additive |
 | 6 | `.<` `.>` `<=` `>=` `==` `!=` | Comparison |
@@ -276,8 +276,9 @@ Operators listed from highest to lowest precedence:
 - **Floats**: Operations return the same float type. Division is permitted.
 - **Bigints**: Addition, subtraction, multiplication, and unary negation
   return `int`. Division is not permitted (use checked variants).
-- **Fixed integers**: Operands widen to `int`, result is `int`. Division and
-  unary negation are not permitted.
+- **Fixed integers**: Operands must have the same type; the result widens to
+  `int`. Division and unary negation are not permitted. To use different
+  fixed-integer types together, use `@` to widen one operand first.
 
 **Checked arithmetic** (`+!`, `-!`, `*!`, `/!`) operates on fixed integers and
 returns a result type. On overflow or division by zero, the function
@@ -375,6 +376,46 @@ Available intrinsics include bitwise operations (`bitnot_u32`, `bitand_u32`,
 `reverse_bits_u32`), wrapping arithmetic (`add_wrapping_u32`,
 `sub_wrapping_u32`, `mul_wrapping_u32`), and type reinterpretation
 (`u32_to_i32`, `i32_to_u32`).
+
+### 6.8 Adapt Operator
+
+The postfix `@` operator performs explicit clone and/or widening conversions.
+It requires a type context (expected type) to determine the target type.
+
+**Clone**: For linear types, `@` creates a deep copy:
+
+```
+let msg = "hello"
+let a = consume(msg@)   // clone msg, original stays valid
+let b = consume(msg)    // msg is still available
+```
+
+**Widen**: For fixed integers, `@` widens to a larger type:
+
+```
+let n: u8 = 42
+let x: int = n@         // widen u8 to int
+```
+
+**Cross-sign widen**: Unsigned integers can widen to larger signed types:
+
+```
+let n: u8 = 255
+let x: i16 = n@         // u8 widens to i16 (value fits)
+```
+
+Valid widening chains:
+
+- Same-sign: `u8` -> `u16` -> `u32` -> `u64` -> `int`
+- Same-sign: `i8` -> `i16` -> `i32` -> `i64` -> `int`
+- Cross-sign: `u8` -> `i16`, `i32`, `i64`, `int`
+- Cross-sign: `u16` -> `i32`, `i64`, `int`
+- Cross-sign: `u32` -> `i64`, `int`
+- Index/offset: `index` -> `int`, `offset` -> `int`
+
+The `@` operator cannot synthesize a type; it must appear in a context where
+the expected type is known (function argument, let binding with annotation,
+return position, etc.).
 
 ## 7. Statements
 
@@ -515,13 +556,36 @@ import u32.negate
 
 ## 9. Numeric Widening
 
-Fixed integers widen to larger types:
+The result of bare arithmetic (`+`, `-`, `*`) on fixed integers widens to `int`:
+
+```
+let a: u32 = 10
+let b: u32 = 20
+let c = a + b           // c has type int
+```
+
+This is the only implicit widening in the language. Other numeric conversions
+require the explicit `@` operator. Valid widening chains for `@`:
 
 ```
 u8 -> u16 -> u32 -> u64 -> int
 i8 -> i16 -> i32 -> i64 -> int
+u8 -> i16 -> i32 -> i64 -> int   (cross-sign)
+u16 -> i32 -> i64 -> int         (cross-sign)
+u32 -> i64 -> int                (cross-sign)
 index -> int
 offset -> int
+```
+
+Example requiring explicit widening:
+
+```
+fun process(x: int): int
+    ret x
+
+fun example(): int
+    let n: u32 = 42
+    ret process(n@)     // explicit widen u32 to int
 ```
 
 ## 10. Ownership Analysis
