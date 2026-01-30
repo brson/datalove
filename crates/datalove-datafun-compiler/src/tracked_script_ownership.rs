@@ -6,9 +6,13 @@
 
 use rmx::prelude::*;
 use std::collections::HashMap;
+use bct::text::TextSpan;
 use datalove_datafun_ast::ast::{Statement, StmtFun};
+use datalove_datafun_ast::spans::DatafunSpans;
 use datalove_datafun_ir::IrType;
 use datalove_datafun_tycheck::{UnitTypecheckResultTracked, ResolvedCallTarget, Type};
+use datalove_diagnostic::DiagnosticBuilderExt;
+use salsa::plumbing::FromId;
 
 use crate::IrTypeExt;
 use crate::lower::ScriptFunctionAnalyses;
@@ -16,7 +20,7 @@ use datalove_datafun_ownership::{
     self as ownership_analysis, DropSchedule, BindingInfo, FunctionAnalysis,
     TrackingCategory, format_analysis_errors, CallInfo, AutoAdaptMode,
 };
-pub use datalove_datafun_sema::ScriptAnalysisData;
+pub use datalove_datafun_sema::{ScriptAnalysisData, AnalysisError, OwnershipRecoveryHint};
 
 // Re-export AutoAdaptMode for callers.
 pub use datalove_datafun_ownership::AutoAdaptMode as OwnershipAutoAdaptMode;
@@ -49,9 +53,12 @@ pub struct ScriptUnitOwnershipResult<'db> {
     /// Script-level analysis (None for expression units).
     #[returns(ref)]
     pub script_analysis: Option<ScriptAnalysisData>,
-    /// Formatted error messages.
+    /// Formatted error messages (for backward compatibility).
     #[returns(ref)]
     pub errors: Vec<String>,
+    /// Structured errors for diagnostic emission.
+    #[returns(ref)]
+    pub structured_errors: Vec<AnalysisError>,
 }
 
 impl<'db> ScriptUnitOwnershipResult<'db> {
@@ -152,19 +159,21 @@ pub fn analyze_script_fragment_tracked<'db>(
         db, &expr_types, &call_info, &statements, Some(&func_param_types), auto_adapt_mode
     );
 
-    let (func_analyses, func_errors) = match func_analyses_result {
-        Ok(analyses) => (analyses, Vec::new()),
+    let (func_analyses, func_errors, structured_func_errors) = match func_analyses_result {
+        Ok(analyses) => (analyses, Vec::new(), Vec::new()),
         Err(errors) => {
-            let error_msgs: Vec<String> = errors.into_iter()
-                .map(|(func_name, errs)| {
-                    format!("{}: {}", func_name, format_analysis_errors(&errs))
-                })
-                .collect();
+            let mut error_msgs = Vec::new();
+            let mut structured_errors = Vec::new();
+            for (func_name, errs) in errors {
+                error_msgs.push(format!("{}: {}", func_name, format_analysis_errors(&errs)));
+                structured_errors.extend(errs);
+            }
             return ScriptUnitOwnershipResult::new(
                 db,
                 Vec::new(),
                 None,
                 error_msgs,
+                structured_errors,
             );
         }
     };
@@ -177,11 +186,13 @@ pub fn analyze_script_fragment_tracked<'db>(
     // Check for script analysis errors.
     if !script_analysis.errors.is_empty() {
         let error_msg = format_analysis_errors(&script_analysis.errors);
+        let structured_errors = script_analysis.errors.clone();
         return ScriptUnitOwnershipResult::new(
             db,
             Vec::new(),
             None,
             vec![error_msg],
+            structured_errors,
         );
     }
 
@@ -206,6 +217,7 @@ pub fn analyze_script_fragment_tracked<'db>(
         func_analyses_data,
         Some(script_data),
         func_errors,
+        structured_func_errors,
     )
 }
 
@@ -231,10 +243,149 @@ pub fn analyze_script_expr_tracked<'db>(
 
     if !analysis.errors.is_empty() {
         let error_msg = format_analysis_errors(&analysis.errors);
-        return ScriptUnitOwnershipResult::new(db, Vec::new(), None, vec![error_msg]);
+        let structured_errors = analysis.errors.clone();
+        return ScriptUnitOwnershipResult::new(db, Vec::new(), None, vec![error_msg], structured_errors);
     }
 
     // Expression units have no functions and no script-level drop schedule.
     // The expression result is consumed by the caller, so no drops needed.
-    ScriptUnitOwnershipResult::new(db, Vec::new(), None, Vec::new())
+    ScriptUnitOwnershipResult::new(db, Vec::new(), None, Vec::new(), Vec::new())
+}
+
+// ============================================================================
+// Ownership Diagnostic Emission
+// ============================================================================
+
+/// Emit ownership diagnostics for the given errors using the provided spans.
+///
+/// This should be called from the script compiler where spans are available.
+pub fn emit_ownership_diagnostics<'db>(
+    db: &'db dyn salsa::Database,
+    errors: &[AnalysisError],
+    spans: &DatafunSpans,
+) {
+    for error in errors {
+        emit_single_ownership_diagnostic(db, error, spans);
+    }
+}
+
+/// Emit a single ownership diagnostic.
+fn emit_single_ownership_diagnostic<'db>(
+    db: &'db dyn salsa::Database,
+    error: &AnalysisError,
+    spans: &DatafunSpans,
+) {
+    match error {
+        AnalysisError::UseAfterMove { local_index, name, recovery_hint } => {
+            if let Some(ts) = lookup_expr_span(db, spans, *local_index) {
+                let msg = format!("use of moved value: `{}`", name);
+                let mut builder = bct::diagnostic::DiagnosticBuilder::error(db, &msg)
+                    .code("D001")
+                    .primary_label(ts, "value used after move");
+
+                if let OwnershipRecoveryHint::InsertAdapt { description } = recovery_hint {
+                    builder = builder.note(&format!("help: use `@` to {}", description));
+                }
+
+                builder.emit_ownership();
+            }
+        }
+        AnalysisError::DoubleMove { local_index, name, recovery_hint } => {
+            if let Some(ts) = lookup_expr_span(db, spans, *local_index) {
+                let msg = format!("value moved twice: `{}`", name);
+                let mut builder = bct::diagnostic::DiagnosticBuilder::error(db, &msg)
+                    .code("D002")
+                    .primary_label(ts, "second move here");
+
+                if let OwnershipRecoveryHint::InsertAdapt { description } = recovery_hint {
+                    builder = builder.note(&format!("help: use `@` to {}", description));
+                }
+
+                builder.emit_ownership();
+            }
+        }
+        AnalysisError::CannotMoveBorrowed { local_index, name } => {
+            if let Some(ts) = lookup_expr_span(db, spans, *local_index) {
+                let msg = format!("cannot move borrowed value: `{}`", name);
+                bct::diagnostic::DiagnosticBuilder::error(db, &msg)
+                    .code("D003")
+                    .primary_label(ts, "cannot move borrowed value")
+                    .note("borrowed parameters (ref, mut, out) cannot be moved")
+                    .emit_ownership();
+            }
+        }
+        AnalysisError::CannotMutFromRef { local_index, name } => {
+            if let Some(ts) = lookup_expr_span(db, spans, *local_index) {
+                let msg = format!("cannot get mutable reference from immutable: `{}`", name);
+                bct::diagnostic::DiagnosticBuilder::error(db, &msg)
+                    .code("D004")
+                    .primary_label(ts, "ref parameter cannot be passed as mut")
+                    .emit_ownership();
+            }
+        }
+        AnalysisError::ReadUninitialized { local_index, name } => {
+            if let Some(ts) = lookup_expr_span(db, spans, *local_index) {
+                let msg = format!("read of uninitialized binding: `{}`", name);
+                bct::diagnostic::DiagnosticBuilder::error(db, &msg)
+                    .code("D005")
+                    .primary_label(ts, "used before initialization")
+                    .emit_ownership();
+            }
+        }
+        AnalysisError::OutParamNotInitialized { ret_stmt_idx: _, name } => {
+            // For out param not initialized, we don't have a good span to use
+            // since ret_stmt_idx is a statement index, not an expression index.
+            // For now, emit a diagnostic without a primary span.
+            let msg = format!("out parameter not initialized: `{}`", name);
+            bct::diagnostic::DiagnosticBuilder::error(db, &msg)
+                .code("D006")
+                .emit_ownership();
+        }
+        AnalysisError::MoveInLoop { local_index, name, recovery_hint } => {
+            if let Some(ts) = lookup_expr_span(db, spans, *local_index) {
+                let msg = format!("cannot move `{}` in loop", name);
+                let mut builder = bct::diagnostic::DiagnosticBuilder::error(db, &msg)
+                    .code("D007")
+                    .primary_label(ts, "value moved inside loop");
+
+                if let OwnershipRecoveryHint::InsertAdapt { description } = recovery_hint {
+                    builder = builder.note(&format!("help: use `@` to {}", description));
+                }
+
+                builder.emit_ownership();
+            }
+        }
+        AnalysisError::InconsistentBranchMove { stmt_idx: _, name, moved_in } => {
+            // Similar to OutParamNotInitialized, we don't have an expression span.
+            let msg = format!("`{}` moved in {} branch but not the other", name, moved_in);
+            bct::diagnostic::DiagnosticBuilder::error(db, &msg)
+                .code("D008")
+                .emit_ownership();
+        }
+        AnalysisError::OutParamPartialWrite { local_index, name } => {
+            if let Some(ts) = lookup_expr_span(db, spans, *local_index) {
+                let msg = format!("cannot partially write to out parameter: `{}`", name);
+                bct::diagnostic::DiagnosticBuilder::error(db, &msg)
+                    .code("D009")
+                    .primary_label(ts, "partial write to out parameter")
+                    .note("out parameters must be written as a whole value")
+                    .emit_ownership();
+            }
+        }
+    }
+}
+
+/// Look up span for an expression by local_index.
+fn lookup_expr_span<'db>(
+    db: &'db dyn salsa::Database,
+    spans: &DatafunSpans,
+    local_index: u32,
+) -> Option<TextSpan<'db>> {
+    // The local_index is a salsa ID index for the expression.
+    let id = unsafe { salsa::Id::from_index(local_index) };
+    let expr = datalove_datafun_ast::ast::ExprFun::from_id(id);
+    spans.lookup(expr).map(|entry| {
+        let (text, span) = entry.to_text_and_span(db);
+        TextSpan::new(text, span)
+    })
 }

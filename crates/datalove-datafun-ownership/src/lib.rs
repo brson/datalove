@@ -539,7 +539,8 @@ impl<'db> AnalysisCtx<'db> {
     ///
     /// Returns the binding ID if the expression is a simple move of a binding.
     fn analyze_expr_moves(&mut self, expr: ExprFun<'db>, is_consumed: bool) -> Option<BindingId> {
-        let local_index = expr.local_index(self.db);
+        // Use salsa ID index for span lookup (not the AST sequential local_index).
+        let local_index = expr.as_id().index() as u32;
         match expr.expr(self.db) {
             ExprFunKind::Name(name) => {
                 let name_str = name.text(self.db);
@@ -604,7 +605,7 @@ impl<'db> AnalysisCtx<'db> {
                         if let Some(binding_id) = self.expr_to_binding(*arg) {
                             if self.bindings[binding_id.0 as usize].param_mode == Some(ParamMode::Ref) {
                                 let name = self.bindings[binding_id.0 as usize].name.C();
-                                let local_index = arg.local_index(self.db);
+                                let local_index = arg.as_id().index() as u32;
                                 self.errors.push(AnalysisError::CannotMutFromRef {
                                     local_index,
                                     name,
@@ -622,7 +623,7 @@ impl<'db> AnalysisCtx<'db> {
                                 && !self.auto_adapt_mode.is_enabled()
                             {
                                 let name = self.bindings[binding_id.0 as usize].name.C();
-                                let local_index = arg.local_index(self.db);
+                                let local_index = arg.as_id().index() as u32;
                                 let recovery_hint = OwnershipRecoveryHint::InsertAdapt {
                                     description: format!("clone `{}` before the earlier use", name),
                                 };

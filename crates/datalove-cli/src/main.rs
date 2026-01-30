@@ -437,8 +437,18 @@ impl ScriptCommand {
             render::render_type_diagnostics(compiler.db(), &type_diags, file_path, &cwd);
             bail!("Type error");
         }
-        if let datafun::pipeline::OwnershipResult::Error { message } = &compiled_unit.ownership {
-            bail!("Ownership error: {}", message);
+        if let datafun::pipeline::OwnershipResult::Error { message: _ } = &compiled_unit.ownership {
+            // Render ownership diagnostics directly using structured errors and spans.
+            if let Some(spans) = compiler.get_last_spans() {
+                render::render_ownership_errors_direct(
+                    compiler.db(),
+                    compiler.get_ownership_errors(),
+                    spans,
+                    file_path,
+                    &cwd,
+                );
+            }
+            bail!("Ownership error");
         }
         if let datafun::pipeline::LoweringResult::Error { message } = &compiled_unit.lowering {
             bail!("Lowering error: {}", message);
@@ -731,6 +741,18 @@ impl ScriptWorldCommand {
             let type_diags = compiler.get_type_diagnostics();
             render::render_type_diagnostics(compiler.db(), &type_diags, &self.file_path, &cwd);
             bail!("Type error");
+        }
+        if let datafun::pipeline::OwnershipResult::Error { message: _ } = &compiled_unit.ownership {
+            if let Some(spans) = compiler.get_last_spans() {
+                render::render_ownership_errors_direct(
+                    compiler.db(),
+                    compiler.get_ownership_errors(),
+                    spans,
+                    &self.file_path,
+                    &cwd,
+                );
+            }
+            bail!("Ownership error");
         }
         if let datafun::pipeline::LoweringResult::Error { message } = &compiled_unit.lowering {
             bail!("Lowering error: {}", message);

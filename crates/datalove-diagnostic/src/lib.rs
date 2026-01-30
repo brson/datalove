@@ -45,6 +45,16 @@ impl LintDiagnostic {
     }
 }
 
+/// Salsa accumulator for ownership analysis diagnostics.
+#[salsa::accumulator]
+pub struct OwnershipDiagnostic(StoredDiagnostic);
+
+impl OwnershipDiagnostic {
+    pub fn to_diagnostic<'db>(&self, db: &'db dyn salsa::Database) -> Diagnostic<'db> {
+        self.0.to_diagnostic(db)
+    }
+}
+
 // Extension trait to add emit methods to DiagnosticBuilder for datalove accumulators.
 pub trait DiagnosticBuilderExt<'db> {
     /// Emit this diagnostic as a parse diagnostic.
@@ -58,6 +68,9 @@ pub trait DiagnosticBuilderExt<'db> {
 
     /// Emit this diagnostic as a lint diagnostic.
     fn emit_lint(self);
+
+    /// Emit this diagnostic as an ownership diagnostic.
+    fn emit_ownership(self);
 }
 
 impl<'db> DiagnosticBuilderExt<'db> for DiagnosticBuilder<'db> {
@@ -79,5 +92,10 @@ impl<'db> DiagnosticBuilderExt<'db> for DiagnosticBuilder<'db> {
     fn emit_lint(self) {
         let db = self.db();
         LintDiagnostic(self.build_stored()).accumulate(db);
+    }
+
+    fn emit_ownership(self) {
+        let db = self.db();
+        OwnershipDiagnostic(self.build_stored()).accumulate(db);
     }
 }

@@ -1,0 +1,8 @@
+// D001 use after move with @ hint: cloning int (bigint) linear type
+fun consume_int(n: int): int
+  ret n
+end fun
+
+let val: int = 42
+let a: int = consume_int(val)
+let b: int = consume_int(val)

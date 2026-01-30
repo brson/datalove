@@ -1,0 +1,11 @@
+// D007 move in loop with @ hint
+var outer: int = 100
+var counter: u32 = (: u32 / 0)
+
+loop
+  let x: int = outer
+  if counter .> (: u32 / 0)
+    break
+  end if
+  set counter = counter +! (: u32 / 1)
+end loop

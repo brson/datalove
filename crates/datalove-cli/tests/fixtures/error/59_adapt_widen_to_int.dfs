@@ -1,0 +1,3 @@
+// F016 type mismatch with @ hint: widening u32 to int
+let n: u32 = (: u32 / 42)
+let m: int = n

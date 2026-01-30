@@ -1,0 +1,3 @@
+// F016 type mismatch with @ hint: cross-sign widening u8 to i16
+let n: u8 = (: u8 / 42)
+let m: i16 = n

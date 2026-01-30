@@ -226,6 +226,193 @@ struct MultiSourceCache {
     sources: HashMap<String, Source<String>>,
 }
 
+/// Render ownership diagnostics to stderr using ariadne.
+pub fn render_ownership_diagnostics<'db>(
+    db: &'db dyn salsa::Database,
+    diagnostics: &[&datalove_diagnostic::OwnershipDiagnostic],
+    file_path: &Path,
+    cwd: &Path,
+) {
+    let mut colors = ColorGenerator::new();
+
+    for diag_wrapper in diagnostics {
+        let diag = diag_wrapper.to_diagnostic(db);
+        render_single_diagnostic(db, &diag, file_path, cwd, &mut colors);
+    }
+}
+
+/// Render ownership errors directly from structured AnalysisError and spans.
+///
+/// This bypasses salsa accumulators since ownership diagnostics are emitted
+/// outside of tracked functions. Takes the raw error list and span lookup.
+pub fn render_ownership_errors_direct<'db>(
+    db: &'db dyn salsa::Database,
+    errors: &[datalove_datafun_sema::AnalysisError],
+    spans: &datalove_datafun_ast::spans::DatafunSpans,
+    file_path: &Path,
+    cwd: &Path,
+) {
+    let mut colors = ColorGenerator::new();
+    let display_path = file_path.strip_prefix(cwd).unwrap_or(file_path);
+    let file_name = display_path.display().S();
+
+    for error in errors {
+        render_ownership_error(db, error, spans, &file_name, &mut colors);
+    }
+}
+
+/// Look up span for an expression by local_index.
+fn lookup_expr_span<'db>(
+    db: &'db dyn salsa::Database,
+    spans: &datalove_datafun_ast::spans::DatafunSpans,
+    local_index: u32,
+) -> Option<(bct::text::Text<'db>, std::ops::Range<usize>)> {
+    use salsa::plumbing::FromId;
+    let id = unsafe { salsa::Id::from_index(local_index) };
+    let expr = datalove_datafun_ast::ast::ExprFun::from_id(id);
+    spans.lookup(expr).map(|entry| entry.to_text_and_span(db))
+}
+
+/// Render a single ownership error.
+fn render_ownership_error<'db>(
+    db: &'db dyn salsa::Database,
+    error: &datalove_datafun_sema::AnalysisError,
+    spans: &datalove_datafun_ast::spans::DatafunSpans,
+    file_name: &str,
+    colors: &mut ColorGenerator,
+) {
+    use datalove_datafun_sema::{AnalysisError, OwnershipRecoveryHint};
+
+    match error {
+        AnalysisError::UseAfterMove { local_index, name, recovery_hint } => {
+            if let Some((text, span)) = lookup_expr_span(db, spans, *local_index) {
+                let msg = format!("use of moved value: `{}`", name);
+                let mut builder = Report::build(ReportKind::Error, file_name, span.start)
+                    .with_code("D001")
+                    .with_message(&msg)
+                    .with_label(
+                        Label::new((file_name, span.clone()))
+                            .with_color(colors.next())
+                            .with_message("value used after move")
+                    );
+                if let OwnershipRecoveryHint::InsertAdapt { description } = recovery_hint {
+                    builder = builder.with_note(format!("help: use `@` to {}", description));
+                }
+                let report = builder.finish();
+                let _ = report.eprint((file_name, Source::from(text.as_str(db))));
+            }
+        }
+        AnalysisError::DoubleMove { local_index, name, recovery_hint } => {
+            if let Some((text, span)) = lookup_expr_span(db, spans, *local_index) {
+                let msg = format!("value moved twice: `{}`", name);
+                let mut builder = Report::build(ReportKind::Error, file_name, span.start)
+                    .with_code("D002")
+                    .with_message(&msg)
+                    .with_label(
+                        Label::new((file_name, span.clone()))
+                            .with_color(colors.next())
+                            .with_message("second move here")
+                    );
+                if let OwnershipRecoveryHint::InsertAdapt { description } = recovery_hint {
+                    builder = builder.with_note(format!("help: use `@` to {}", description));
+                }
+                let report = builder.finish();
+                let _ = report.eprint((file_name, Source::from(text.as_str(db))));
+            }
+        }
+        AnalysisError::CannotMoveBorrowed { local_index, name } => {
+            if let Some((text, span)) = lookup_expr_span(db, spans, *local_index) {
+                let msg = format!("cannot move borrowed value: `{}`", name);
+                let report = Report::build(ReportKind::Error, file_name, span.start)
+                    .with_code("D003")
+                    .with_message(&msg)
+                    .with_label(
+                        Label::new((file_name, span.clone()))
+                            .with_color(colors.next())
+                            .with_message("cannot move borrowed value")
+                    )
+                    .with_note("borrowed parameters (ref, mut, out) cannot be moved")
+                    .finish();
+                let _ = report.eprint((file_name, Source::from(text.as_str(db))));
+            }
+        }
+        AnalysisError::CannotMutFromRef { local_index, name } => {
+            if let Some((text, span)) = lookup_expr_span(db, spans, *local_index) {
+                let msg = format!("cannot get mutable reference from immutable: `{}`", name);
+                let report = Report::build(ReportKind::Error, file_name, span.start)
+                    .with_code("D004")
+                    .with_message(&msg)
+                    .with_label(
+                        Label::new((file_name, span.clone()))
+                            .with_color(colors.next())
+                            .with_message("ref parameter cannot be passed as mut")
+                    )
+                    .finish();
+                let _ = report.eprint((file_name, Source::from(text.as_str(db))));
+            }
+        }
+        AnalysisError::ReadUninitialized { local_index, name } => {
+            if let Some((text, span)) = lookup_expr_span(db, spans, *local_index) {
+                let msg = format!("read of uninitialized binding: `{}`", name);
+                let report = Report::build(ReportKind::Error, file_name, span.start)
+                    .with_code("D005")
+                    .with_message(&msg)
+                    .with_label(
+                        Label::new((file_name, span.clone()))
+                            .with_color(colors.next())
+                            .with_message("used before initialization")
+                    )
+                    .finish();
+                let _ = report.eprint((file_name, Source::from(text.as_str(db))));
+            }
+        }
+        AnalysisError::OutParamNotInitialized { ret_stmt_idx: _, name } => {
+            // No expression span available for this error type.
+            let msg = format!("out parameter not initialized: `{}`", name);
+            eprintln!("error[D006]: {}", msg);
+        }
+        AnalysisError::MoveInLoop { local_index, name, recovery_hint } => {
+            if let Some((text, span)) = lookup_expr_span(db, spans, *local_index) {
+                let msg = format!("cannot move `{}` in loop", name);
+                let mut builder = Report::build(ReportKind::Error, file_name, span.start)
+                    .with_code("D007")
+                    .with_message(&msg)
+                    .with_label(
+                        Label::new((file_name, span.clone()))
+                            .with_color(colors.next())
+                            .with_message("value moved inside loop")
+                    );
+                if let OwnershipRecoveryHint::InsertAdapt { description } = recovery_hint {
+                    builder = builder.with_note(format!("help: use `@` to {}", description));
+                }
+                let report = builder.finish();
+                let _ = report.eprint((file_name, Source::from(text.as_str(db))));
+            }
+        }
+        AnalysisError::InconsistentBranchMove { stmt_idx: _, name, moved_in } => {
+            // No expression span available for this error type.
+            let msg = format!("`{}` moved in {} branch but not the other", name, moved_in);
+            eprintln!("error[D008]: {}", msg);
+        }
+        AnalysisError::OutParamPartialWrite { local_index, name } => {
+            if let Some((text, span)) = lookup_expr_span(db, spans, *local_index) {
+                let msg = format!("cannot partially write to out parameter: `{}`", name);
+                let report = Report::build(ReportKind::Error, file_name, span.start)
+                    .with_code("D009")
+                    .with_message(&msg)
+                    .with_label(
+                        Label::new((file_name, span.clone()))
+                            .with_color(colors.next())
+                            .with_message("partial write to out parameter")
+                    )
+                    .with_note("out parameters must be written as a whole value")
+                    .finish();
+                let _ = report.eprint((file_name, Source::from(text.as_str(db))));
+            }
+        }
+    }
+}
+
 impl Cache<String> for MultiSourceCache {
     type Storage = String;
 

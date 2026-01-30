@@ -40,6 +40,7 @@ use datalove_datafun_compiler::tracked_script_lower::{
 };
 use datalove_datafun_compiler::tracked_script_ownership::{
     analyze_script_fragment_tracked, analyze_script_expr_tracked, ScriptAnalysisData,
+    emit_ownership_diagnostics, AnalysisError,
 };
 use datalove_datafun_compiler::lower::ScriptFunctionAnalyses;
 use datalove_datafun_ir::{ConstValue, CtfeEvaluator, CtfeError, IrScriptUnit, IrType, ResolvedConsts, ConstEvalError};
@@ -156,6 +157,8 @@ impl<'db> CompiledModules<'db> {
             skip_const_inlining: false,
             shared_context: self.shared.clone(),
             auto_adapt_mode: AutoAdaptMode::Disabled,
+            last_ownership_errors: Vec::new(),
+            last_spans: None,
         })
     }
 
@@ -196,6 +199,10 @@ pub struct ScriptCompiler<'db> {
     shared_context: Arc<SharedModuleContext<'db>>,
     /// Auto-adapt mode for ownership analysis.
     auto_adapt_mode: AutoAdaptMode,
+    /// Last ownership errors from compilation (for diagnostic rendering).
+    last_ownership_errors: Vec<AnalysisError>,
+    /// Spans for the last compilation unit (for diagnostic rendering).
+    last_spans: Option<datalove_datafun_ast::spans::DatafunSpans>,
 }
 
 impl<'db> ScriptCompiler<'db> {
@@ -247,6 +254,38 @@ impl<'db> ScriptCompiler<'db> {
         } else {
             Vec::new()
         }
+    }
+
+    /// Emit ownership diagnostics from the last compilation.
+    ///
+    /// This should be called when ownership errors occurred to emit proper
+    /// ariadne diagnostics with span information. Call this before displaying
+    /// the error message.
+    pub fn emit_ownership_diagnostics(&self) {
+        if let Some(spans) = &self.last_spans {
+            emit_ownership_diagnostics(self.db, &self.last_ownership_errors, spans);
+        }
+    }
+
+    /// Get ownership diagnostics from the last compilation (salsa accumulator path).
+    ///
+    /// Note: This currently returns empty because ownership diagnostics are
+    /// emitted outside of tracked functions. Use `get_ownership_errors()` and
+    /// `get_last_spans()` for direct rendering instead.
+    pub fn get_ownership_diagnostics(&self) -> Vec<&datalove_diagnostic::OwnershipDiagnostic> {
+        Vec::new()
+    }
+
+    /// Get the structured ownership errors from the last compilation.
+    ///
+    /// Use with `get_last_spans()` for direct diagnostic rendering.
+    pub fn get_ownership_errors(&self) -> &[AnalysisError] {
+        &self.last_ownership_errors
+    }
+
+    /// Get the spans from the last compilation for diagnostic rendering.
+    pub fn get_last_spans(&self) -> Option<&datalove_datafun_ast::spans::DatafunSpans> {
+        self.last_spans.as_ref()
     }
 
     /// Get the database reference.
@@ -433,6 +472,11 @@ impl<'db> ScriptCompiler<'db> {
                     self.auto_adapt_mode,
                 );
                 if !ownership_result.errors(self.db).is_empty() {
+                    // Store structured errors and spans for CLI rendering.
+                    self.last_ownership_errors = ownership_result.structured_errors(self.db).to_vec();
+                    if let Some(unit_spec) = self.accumulated_unit_specs.last() {
+                        self.last_spans = Some(unit_spec.spans.clone());
+                    }
                     let error_msg = ownership_result.errors(self.db).join("\n");
                     self.accumulated_unit_specs.pop();
                     return Err(ScriptCompilationResult {
@@ -454,6 +498,11 @@ impl<'db> ScriptCompiler<'db> {
                     self.auto_adapt_mode,
                 );
                 if !ownership_result.errors(self.db).is_empty() {
+                    // Store structured errors and spans for CLI rendering.
+                    self.last_ownership_errors = ownership_result.structured_errors(self.db).to_vec();
+                    if let Some(unit_spec) = self.accumulated_unit_specs.last() {
+                        self.last_spans = Some(unit_spec.spans.clone());
+                    }
                     let error_msg = ownership_result.errors(self.db).join("\n");
                     self.accumulated_unit_specs.pop();
                     return Err(ScriptCompilationResult {

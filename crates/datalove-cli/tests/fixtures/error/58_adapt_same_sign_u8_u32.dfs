@@ -1,0 +1,3 @@
+// F016 type mismatch with @ hint: same-sign widening u8 to u32
+let n: u8 = (: u8 / 42)
+let m: u32 = n

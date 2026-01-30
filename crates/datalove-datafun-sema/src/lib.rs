@@ -148,6 +148,7 @@ impl BindingInfo {
 /// When an ownership error can be fixed by inserting the `@` (adapt) operator
 /// to clone the value, a recovery hint is attached to the diagnostic.
 #[derive(Clone, Debug, Default, Hash, PartialEq, Eq)]
+#[derive(salsa::Update)]
 pub enum OwnershipRecoveryHint {
     /// Insert @ before the expression to clone the value.
     InsertAdapt {
@@ -165,6 +166,7 @@ pub enum OwnershipRecoveryHint {
 /// emission. The local_index is the expression's sequential index within its
 /// function, stable regardless of parallel vs sequential compilation order.
 #[derive(Clone, Debug, Hash, PartialEq, Eq)]
+#[derive(salsa::Update)]
 pub enum AnalysisError {
     /// Using a value after it was moved.
     /// D001 - Recoverable with @ (clone before first use)
