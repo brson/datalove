@@ -377,15 +377,277 @@ Only specialize when comptime args affect types (like Rust).
 **Pros**: Fewer specializations.
 **Cons**: Less powerful, can't optimize on values like loop bounds.
 
+## Union-Branch Specialization: Literature & Landscape
+
+This section analyzes the **union-branch approach** as an alternative to full monomorphization,
+placing it within the broader PL literature on generics implementation.
+
+### The Generics Implementation Spectrum
+
+The literature identifies three major strategies for implementing parametric polymorphism:
+
+| Strategy | Examples | Code Size | Runtime Cost | Compile Cost |
+|----------|----------|-----------|--------------|--------------|
+| **Type Erasure** | Java, OCaml (default) | O(1) | Boxing overhead | O(1) |
+| **Full Monomorphization** | Rust, C++, MLton | O(n×f) | Optimal | O(n×f) |
+| **Hybrid/Partial** | Go, Swift, GHC | O(k×f), k≤n | Near-optimal | O(k×f) |
+
+The union-branch approach falls into the **hybrid** category, specifically as a form of
+**intensional polymorphism** applied to values rather than types.
+
+### Related Techniques in Literature
+
+#### 1. Intensional Type Analysis (Harper & Morrisett, 1995)
+
+Harper and Morrisett introduced [intensional polymorphism](https://dl.acm.org/doi/10.1145/199448.199475)
+for compiling polymorphic languages without boxing. The key idea: dispatch on type structure
+at runtime using a `typecase` construct.
+
+```
+typecase T of
+  int => ... use int operations ...
+  bool => ... use bool operations ...
+  T1 * T2 => ... use pair operations ...
+```
+
+**Connection to union-branch**: Our approach applies the same principle to *values* rather
+than types. Instead of `typecase` over type structure, we `match` over a closed enum of
+known compile-time values:
+
+```
+match comptime_arg of
+  Value1 => ... const-fold with Value1 ...
+  Value2 => ... const-fold with Value2 ...
+```
+
+#### 2. Dictionary Passing (Wadler & Blott, 1989; GHC)
+
+Haskell's type classes are compiled via [dictionary passing](https://wiki.haskell.org/Inlining_and_Specialisation):
+each type class constraint becomes a runtime dictionary argument containing method implementations.
+
+```haskell
+-- Source
+sort :: Ord a => [a] -> [a]
+
+-- Compiled (conceptually)
+sort :: OrdDict a -> [a] -> [a]
+sort dict xs = ... (compare dict) ...
+```
+
+GHC then [specializes aggressively](https://reasonablypolymorphic.com/blog/specialization/)
+when concrete types are known, eliminating dictionary overhead.
+
+**Connection to union-branch**: The union tag functions like a minimal dictionary—it carries
+just enough information to select the right code path. Unlike full dictionaries, the tag
+is a simple integer discriminant rather than a vtable pointer.
+
+#### 3. GCShape Stenciling (Go 1.18+)
+
+Go's generics use [GCShape stenciling](https://github.com/golang/proposal/blob/master/design/generics-implementation-gcshape.md):
+one code copy per GC shape (memory layout), with a dictionary for type-specific operations.
+
+```go
+// Conceptually: one stencil for all pointer types
+func Map[T any](slice []T, f func(T) T) []T
+// becomes
+func Map_gcshape_ptr(dict, slice, f) []any
+```
+
+**Connection to union-branch**: Both approaches generate fewer copies than full monomorphization
+by grouping instantiations. GCShape groups by memory layout; union-branch groups by
+explicitly listing all values and dispatching via match.
+
+#### 4. Swift Witness Tables
+
+Swift uses [protocol witness tables](https://developer.apple.com/videos/play/wwdc2016/416/)
+for existentials and generic dispatch, with aggressive specialization for concrete types.
+
+**Connection to union-branch**: Swift's "unspecialized generic" with witness tables is
+similar to our union-branch approach—runtime dispatch through a table/tag, with the
+compiler specializing hot paths.
+
+#### 5. Defunctionalization (Reynolds, 1972)
+
+[Defunctionalization](https://blog.sigplan.org/2019/12/30/defunctionalization-everybody-does-it-nobody-talks-about-it/)
+transforms higher-order programs into first-order ones by replacing function values with
+data constructors:
+
+```
+-- Higher-order
+let f = if cond then add1 else mul2
+f(x)
+
+-- Defunctionalized
+enum Func { Add1, Mul2 }
+let f = if cond then Func::Add1 else Func::Mul2
+apply(f, x)  // dispatches on tag
+```
+
+**Connection to union-branch**: Union-branch is essentially *defunctionalization of
+comptime values*. We take the open set of possible values and close it into an enum,
+then dispatch via `apply` (match).
+
+#### 6. Partial Evaluation (Jones, Gomard, Sestoft)
+
+[Partial evaluation](https://en.wikipedia.org/wiki/Partial_evaluation) specializes programs
+by evaluating static (known) inputs at compile time, leaving residual code for dynamic inputs.
+
+**Connection to union-branch**: Within each branch of the union dispatch, we perform
+partial evaluation—the comptime value is static, enabling constant folding, dead code
+elimination, and loop unrolling within that branch.
+
+### The Union-Branch Approach Formalized
+
+Given a function with comptime parameter:
+
+```
+fun f(const c: T, x: U) -> R
+    ... body using c ...
+end fun
+```
+
+And call sites with values `{v1, v2, ..., vn}`, the **union-branch transformation** produces:
+
+```
+enum ComptimeC { V1, V2, ..., Vn }
+
+fun f_unified(c_tag: ComptimeC, x: U) -> R
+    match c_tag
+        V1 =>
+            const c = v1
+            ... body using c ...  // const-folded
+        V2 =>
+            const c = v2
+            ... body using c ...  // const-folded
+        ...
+    end match
+end fun
+```
+
+Call sites transform: `f(v1, x)` → `f_unified(ComptimeC::V1, x)`
+
+### Comparison: Full Monomorphization vs Union-Branch
+
+| Aspect | Full Mono | Union-Branch |
+|--------|-----------|--------------|
+| Code copies | N functions | 1 function, N branches |
+| Instruction cache | Poor (N copies) | Good (1 function) |
+| Branch prediction | Perfect (no branches) | Dependent on value distribution |
+| Const propagation | Full | Full (within branch) |
+| Inlining | Each copy inlinable | Function inlinable, branches not |
+| Debug symbols | N function entries | 1 entry, complex CFG |
+| Compile time | O(N × size) | O(size + N × branch) |
+
+### When Union-Branch Wins
+
+1. **Many instantiations, small body**: Union overhead amortized
+2. **Shared prefix/suffix code**: Not duplicated across branches
+3. **Instruction cache pressure**: Single function stays hot
+4. **Compile time critical**: Less code generation
+5. **Value distribution skewed**: Branch predictor effective
+
+### When Full Mono Wins
+
+1. **Few instantiations**: No point in union overhead
+2. **Large body with value-dependent control flow**: Branches nest poorly
+3. **Inlining critical**: Full mono exposes more to optimizer
+4. **Link-time optimization available**: LTO deduplicates anyway
+
+### Theoretical Classification
+
+The union-branch approach can be characterized as:
+
+- **Intensional polymorphism** at the value level (runtime dispatch on static values)
+- **Defunctionalization** of the comptime value space
+- **Partial monomorphization** (one function, multiple specialized paths)
+- **Type-preserving** (no boxing, values maintain concrete types within branches)
+
+This places it in the same family as:
+- Go's GCShape stenciling
+- GHC's dictionary specialization
+- Swift's unspecialized generics with witness tables
+- JIT polymorphic inline caches (but at compile time)
+
+### Implementation Sketch for Datalove
+
+```rust
+/// Collected comptime values for a parameter
+struct ComptimeValueSet {
+    param_index: usize,
+    values: Vec<ConstValue>,  // all values seen at call sites
+}
+
+/// Transform a function to union-branch form
+fn union_branch_transform(
+    func: &StmtFun,
+    value_sets: &[ComptimeValueSet],
+) -> StmtFun {
+    // 1. Build enum type for each comptime param
+    // 2. Wrap body in nested match on enum tags
+    // 3. Within each branch, bind const to concrete value
+    // 4. Existing const-folding handles the rest
+}
+
+/// Rewrite call site
+fn rewrite_call(
+    call: &ExprCall,
+    value_map: &HashMap<ConstValue, EnumVariant>,
+) -> ExprCall {
+    // Replace const arg with enum variant constructor
+}
+```
+
+### Hybrid Strategy: Adaptive Specialization
+
+The optimal approach may combine both strategies:
+
+```
+if num_instantiations <= MONO_THRESHOLD {
+    full_monomorphization()
+} else if num_instantiations <= UNION_THRESHOLD {
+    union_branch_transform()
+} else {
+    error("too many instantiations")
+}
+```
+
+Suggested thresholds:
+- `MONO_THRESHOLD = 4`: Few enough that code duplication is fine
+- `UNION_THRESHOLD = 64`: Beyond this, even union-branch is expensive
+
+### References
+
+- Harper, R. & Morrisett, G. (1995). [Compiling Polymorphism Using Intensional Type Analysis](https://dl.acm.org/doi/10.1145/199448.199475). POPL.
+- Reynolds, J. C. (1972). Definitional Interpreters for Higher-Order Programming Languages. ACM Annual Conference.
+- Wadler, P. & Blott, S. (1989). How to Make Ad-Hoc Polymorphism Less Ad Hoc. POPL.
+- Jones, N., Gomard, C., & Sestoft, P. (1993). [Partial Evaluation and Automatic Program Generation](https://www.cs.utexas.edu/~novak/jonesgomardsestoft.pdf). Prentice Hall.
+- Go Team. (2022). [Generics Implementation - GCShape Stenciling](https://github.com/golang/proposal/blob/master/design/generics-implementation-gcshape.md).
+- Apple. (2016). [Understanding Swift Performance](https://developer.apple.com/videos/play/wwdc2016/416/). WWDC.
+- Sandy Maguire. (2019). [GHC's Specializer: Much More Than You Wanted to Know](https://reasonablypolymorphic.com/blog/specialization/).
+- Weeks, S. (2006). [Whole-Program Compilation in MLton](https://dl.acm.org/doi/10.1145/1159876.1159877). ML Workshop.
+
 ## Conclusion
 
 Comptime arguments are feasible with moderate implementation effort. The existing CTFE
-infrastructure provides the foundation. Key design decisions:
+infrastructure provides the foundation.
 
+### For Full Monomorphization
+
+Key design decisions:
 1. **Separate `is_comptime` flag** - cleanest separation of concerns
 2. **Post-typecheck specialization pass** - leverages existing pipeline
 3. **Whole-program enumeration** - exploits compiler's global view
 4. **Instance limits** - prevents compile-time explosion
 
-The implementation fits well with the stated priorities of simplicity, separation of
-concerns, and compile-time performance (since most work is bounded AST manipulation).
+### For Union-Branch Approach
+
+Key design decisions:
+1. **Defunctionalize comptime values** into closed enums
+2. **Single function with match dispatch** - better icache, compile time
+3. **Const-fold within branches** - reuse existing CTFE infrastructure
+4. **Adaptive threshold** - mono for few instances, union for many
+
+The union-branch approach places datalove in well-established PL territory alongside
+Go's GCShape stenciling, GHC's dictionary specialization, and Swift's witness tables.
+It trades optimal codegen for reduced code size and compile time—appropriate for a
+scripting language prioritizing fast iteration.
