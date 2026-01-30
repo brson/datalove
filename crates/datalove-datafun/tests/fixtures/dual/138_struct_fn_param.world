@@ -4,7 +4,9 @@ scriptunit-fragment
 
 // Function taking struct parameter.
 fun sum_coords(p: {x: u32, y: u32}): int
-    ret p.x + p.y
+    let x: int = p.x@
+    let y: int = p.y@
+    ret x + y
 end fun
 
 let point = {x = 10, y = 20}

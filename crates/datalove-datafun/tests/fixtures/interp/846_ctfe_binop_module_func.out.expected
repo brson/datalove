@@ -4,25 +4,17 @@ Analysis(
             section_type: "module",
             name: Some("local/test/binopfunc"),
             typecheck: TypecheckResult(
-                status: "Success",
+                status: "Error",
+                errors: [
+                    "line 4, col 20: error[F026]: invalid operand type `u32` for operator `+`",
+                    "line 5, col 9: error[F001]: cannot find value `A` in this scope",
+                ],
             ),
             ownership: OwnershipResult(
-                status: "Success",
+                status: "Skipped",
             ),
             lowering: LoweringResult(
-                status: "Success",
-                ir: """
-                    fn calculate():
-                    block0:
-                        v0 = const 8u32
-                        v1 = const 2u32
-                        v2 = widen v0
-                        v3 = widen v1
-                        v4 = const 10int
-                        drop v2
-                        drop v3
-                        return v4
-                """,
+                status: "Skipped",
             ),
             output: "",
         ),
@@ -30,24 +22,15 @@ Analysis(
             section_type: "scriptunit-fragment",
             name: None,
             typecheck: TypecheckResult(
-                status: "Success",
+                status: "Skipped",
             ),
             ownership: OwnershipResult(
-                status: "Success",
+                status: "Skipped",
             ),
             lowering: LoweringResult(
-                status: "Success",
-                ir: """
-                    scriptunit:
-                    block0:
-                        v0 = call m0.f0()
-                        debuglog v0
-                        drop v0
-                        unit_end
-                """,
+                status: "Skipped",
             ),
-            output: "(fragment executed)",
-            debug_output: Some("10\n"),
+            output: "",
         ),
     ],
 )

@@ -1,3 +1,5 @@
 let x: u32 = 10
 let y: u32 = 20
-debuglog(x + y)
+let xi: int = x@
+let yi: int = y@
+debuglog(xi + yi)

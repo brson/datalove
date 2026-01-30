@@ -39,9 +39,9 @@ DualAnalysis(
                         v10 = widen v4
                         v11 = widen v7
                         v12 = add v10, v11
+                        v13 = some v12
                         drop v10
                         drop v11
-                        v13 = some v12
                         return v13
                     exports:
                         test = f0
@@ -78,9 +78,9 @@ DualAnalysis(
                         v10 = widen v4
                         v11 = widen v7
                         v12 = add v10, v11
+                        v13 = some v12
                         drop v10
                         drop v11
-                        v13 = some v12
                         return v13
                     exports:
                         test = f0

@@ -6,7 +6,7 @@ Analysis(
             typecheck: TypecheckResult(
                 status: "Error",
                 errors: [
-                    "TypeMismatch { expected: \"int\", actual: \"u32\" }",
+                    "InvalidOperandType { op: \"+\", ty: \"u32\" }",
                     "UnresolvedName(\"a\")",
                 ],
             ),

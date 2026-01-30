@@ -26,49 +26,35 @@ Analysis(
             section_type: "scriptunit-fragment",
             name: None,
             typecheck: TypecheckResult(
-                status: "Success",
+                status: "Error",
+                errors: [
+                    "InvalidOperandType { op: \"+\", ty: \"u32\" }",
+                ],
             ),
             ownership: OwnershipResult(
-                status: "Success",
+                status: "Skipped",
             ),
             lowering: LoweringResult(
-                status: "Success",
-                ir: """
-                    scriptunit:
-                    block0:
-                        v0 = const 3u32
-                        v1 = widen unit0.v0
-                        v2 = widen v0
-                        v3 = add v1, v2
-                        drop v1
-                        drop v2
-                        unit_end_drop v3
-                        unit_end
-                    exports:
-                        b = v3
-                """,
+                status: "Skipped",
             ),
-            output: "(fragment executed)",
+            output: "",
         ),
         SectionResult(
             section_type: "scriptunit-expr",
             name: None,
             typecheck: TypecheckResult(
-                status: "Success",
+                status: "Error",
+                errors: [
+                    "UnresolvedName(\"b\")",
+                ],
             ),
             ownership: OwnershipResult(
-                status: "Success",
+                status: "Skipped",
             ),
             lowering: LoweringResult(
-                status: "Success",
-                ir: """
-                    scriptunit:
-                    block0:
-                        v0 = move unit1.v3
-                        unit_end v0
-                """,
+                status: "Skipped",
             ),
-            output: "8",
+            output: "",
         ),
     ],
 )

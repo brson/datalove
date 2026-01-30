@@ -4,35 +4,54 @@ Analysis(
             section_type: "scriptunit-fragment",
             name: None,
             typecheck: TypecheckResult(
-                status: "Error",
-                errors: [
-                    "TypeMismatch { expected: \"u32\", actual: \"int\" }",
-                ],
+                status: "Success",
             ),
             ownership: OwnershipResult(
-                status: "Skipped",
+                status: "Success",
             ),
             lowering: LoweringResult(
-                status: "Skipped",
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 10int
+                        v1 = const 20int
+                        v2 = call f0(v0, v1)
+                        unit_end_drop v2
+                        unit_end
+                    
+                    fn add(p0, p1):
+                    block0:
+                        v0 = add p0, p1
+                        drop p0
+                        drop p1
+                        return v0
+                    exports:
+                        add = f0
+                        SUM = v2
+                """,
             ),
-            output: "",
+            output: "(fragment executed)",
         ),
         SectionResult(
             section_type: "scriptunit-expr",
             name: None,
             typecheck: TypecheckResult(
-                status: "Error",
-                errors: [
-                    "UnresolvedName(\"SUM\")",
-                ],
+                status: "Success",
             ),
             ownership: OwnershipResult(
-                status: "Skipped",
+                status: "Success",
             ),
             lowering: LoweringResult(
-                status: "Skipped",
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = move unit0.v2
+                        unit_end v0
+                """,
             ),
-            output: "",
+            output: "30",
         ),
     ],
 )

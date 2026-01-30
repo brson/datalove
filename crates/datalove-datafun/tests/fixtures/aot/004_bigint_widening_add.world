@@ -2,4 +2,7 @@
 scriptunit-fragment
 ----------
 
-debuglog (10 + 32)
+// Explicit widening with @ to int, then add
+let a: int = : u32 / 10 @
+let b: int = : u32 / 32 @
+debuglog (a + b)

@@ -4,7 +4,9 @@ scriptunit-fragment
 
 // Function taking multiple struct parameters - sum x values.
 fun sum_x(a: {x: u32, y: u32}, b: {x: u32, y: u32}): int
-    ret a.x + b.x
+    let ax: int = a.x@
+    let bx: int = b.x@
+    ret ax + bx
 end fun
 
 let p1 = {x = 1, y = 2}

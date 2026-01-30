@@ -8,7 +8,9 @@ fun test(): ?int
     let b: ?u32 = some 20
     let x: u32 = a?
     let y: u32 = b?
-    ret some (x + y)
+    let xi: int = x@
+    let yi: int = y@
+    ret some (xi + yi)
 end fun
 
 debuglog test()

@@ -6,7 +6,7 @@ scriptunit-fragment
 fun test(): ?int
     let a: ?u32 = some 10
     let x: u32 = a?
-    let y: int = x + 0
+    let y: int = x@
     ret some y
 end fun
 

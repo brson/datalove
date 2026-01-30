@@ -4,35 +4,56 @@ Analysis(
             section_type: "scriptunit-fragment",
             name: None,
             typecheck: TypecheckResult(
-                status: "Error",
-                errors: [
-                    "TypeMismatch { expected: \"u32\", actual: \"int\" }",
-                ],
+                status: "Success",
             ),
             ownership: OwnershipResult(
-                status: "Skipped",
+                status: "Success",
             ),
             lowering: LoweringResult(
-                status: "Skipped",
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        unit_end
+                    
+                    fn multiply(p0, p1):
+                    block0:
+                        v0 = mul p0, p1
+                        drop p0
+                        drop p1
+                        return v0
+                    fn compute():
+                    block0:
+                        v0 = const 6int
+                        v1 = const 7int
+                        v2 = call f0(v0, v1)
+                        return v2
+                    exports:
+                        multiply = f0
+                        compute = f1
+                """,
             ),
-            output: "",
+            output: "(fragment executed)",
         ),
         SectionResult(
             section_type: "scriptunit-expr",
             name: None,
             typecheck: TypecheckResult(
-                status: "Error",
-                errors: [
-                    "UnresolvedName(\"compute\")",
-                ],
+                status: "Success",
             ),
             ownership: OwnershipResult(
-                status: "Skipped",
+                status: "Success",
             ),
             lowering: LoweringResult(
-                status: "Skipped",
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = call unit0.f1()
+                        unit_end v0
+                """,
             ),
-            output: "",
+            output: "42",
         ),
     ],
 )

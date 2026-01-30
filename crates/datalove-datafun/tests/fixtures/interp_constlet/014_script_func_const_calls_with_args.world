@@ -2,12 +2,12 @@
 scriptunit-fragment
 ----------
 
-fun multiply(a: u32, b: u32): u32
+fun multiply(a: int, b: int): int
     ret a * b
 end fun
 
-fun compute(): u32
-    const PRODUCT: u32 = multiply(6, 7)
+fun compute(): int
+    const PRODUCT: int = multiply(6, 7)
     ret PRODUCT
 end fun
 

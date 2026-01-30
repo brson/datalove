@@ -6,7 +6,7 @@ Analysis(
             typecheck: TypecheckResult(
                 status: "Error",
                 errors: [
-                    "TypeMismatch { expected: \"u32\", actual: \"int\" }",
+                    "InvalidOperandType { op: \"+\", ty: \"u32\" }",
                 ],
             ),
             ownership: OwnershipResult(

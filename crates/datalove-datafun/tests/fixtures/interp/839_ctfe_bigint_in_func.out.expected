@@ -4,37 +4,19 @@ Analysis(
             section_type: "scriptunit-fragment",
             name: None,
             typecheck: TypecheckResult(
-                status: "Success",
+                status: "Error",
+                errors: [
+                    "InvalidOperandType { op: \"+\", ty: \"u32\" }",
+                    "UnresolvedName(\"X\")",
+                ],
             ),
             ownership: OwnershipResult(
-                status: "Success",
+                status: "Skipped",
             ),
             lowering: LoweringResult(
-                status: "Success",
-                ir: """
-                    scriptunit:
-                    block0:
-                        v0 = call f0()
-                        debuglog v0
-                        drop v0
-                        unit_end
-                    
-                    fn get_value():
-                    block0:
-                        v0 = const 100u32
-                        v1 = const 200u32
-                        v2 = widen v0
-                        v3 = widen v1
-                        v4 = const 300int
-                        drop v2
-                        drop v3
-                        return v4
-                    exports:
-                        get_value = f0
-                """,
+                status: "Skipped",
             ),
-            output: "(fragment executed)",
-            debug_output: Some("300\n"),
+            output: "",
         ),
     ],
 )

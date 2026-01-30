@@ -28,14 +28,9 @@ DualAnalysis(
                         v4 = none
                         return v4
                     block2:
-                        v5 = const 0u32
-                        v6 = widen v2
-                        v7 = widen v5
-                        v8 = add v6, v7
-                        drop v6
-                        drop v7
-                        v9 = some v8
-                        return v9
+                        v5 = widen v2
+                        v6 = some v5
+                        return v6
                     exports:
                         test = f0
                 """,
@@ -60,14 +55,9 @@ DualAnalysis(
                         v4 = none
                         return v4
                     block2:
-                        v5 = const 0u32
-                        v6 = widen v2
-                        v7 = widen v5
-                        v8 = add v6, v7
-                        drop v6
-                        drop v7
-                        v9 = some v8
-                        return v9
+                        v5 = widen v2
+                        v6 = some v5
+                        return v6
                     exports:
                         test = f0
                 """,
