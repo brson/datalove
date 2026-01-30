@@ -1101,28 +1101,28 @@ end fun
 
 ## Implementation Order
 
-### Sprint 1: Foundation
-- [ ] Phase 1: AST & Parsing (`is_comptime` field, `const` modifier parsing)
-- [ ] Phase 2: Type System (`param_comptime` in TypeFunction)
-- [ ] Basic parser and typecheck tests
+### Sprint 1: Foundation ✅
+- [x] Phase 1: AST & Parsing (`is_comptime` field, `const` modifier parsing)
+- [x] Phase 2: Type System (`param_comptime` in TypeFunction)
+- [x] Basic parser and typecheck tests
 
-### Sprint 2: Call Site Recording
-- [ ] Phase 3: Record comptime call sites during typecheck
-- [ ] Validate const-binding-only restriction
-- [ ] Propagate `ComptimeCallSiteRegistry` through pipeline
+### Sprint 2: Call Site Recording ✅
+- [x] Phase 3: Record comptime call sites during typecheck
+- [x] Validate const-binding-only restriction
+- [x] Propagate `ComptimeCallSiteRegistry` through pipeline
 - [ ] Unit tests for recording
 
-### Sprint 3: IR Transformation
-- [ ] Phase 4: Union-branch IR transformation
-- [ ] Build dispatch blocks and cloned body blocks
-- [ ] Const substitution in cloned blocks
-- [ ] Call instruction rewriting
+### Sprint 3: IR Transformation (Partial)
+- [x] Phase 4: Union-branch IR transformation (`transform_function`)
+- [x] Build dispatch blocks and cloned body blocks
+- [x] Const substitution in cloned blocks
+- [ ] **Call instruction rewriting** - BLOCKED: requires expression ID tracking in IR
 - [ ] Integration tests
 
-### Sprint 4: Pipeline Integration
-- [ ] Insert specialization into lowering (phase 5c)
-- [ ] Resolve comptime values from `ResolvedConsts`
-- [ ] Add `skip_specialization` option to `AnalysisOptions`
+### Sprint 4: Pipeline Integration ✅
+- [x] Insert specialization into lowering (phase 5c)
+- [x] Resolve comptime values from `ResolvedConsts`
+- [x] Add `skip_specialization` option to `lower_module_graph_with_evaluator`
 - [ ] End-to-end tests (interpreter + AOT)
 
 ### Sprint 5: Differential Testing
@@ -1135,6 +1135,23 @@ end fun
 - [ ] Phase 6: Codegen hints (jump table for many variants)
 - [ ] Error messages for invalid comptime args
 - [ ] Performance benchmarks
+
+---
+
+## Current Status
+
+**BLOCKER: Call site rewriting is not yet implemented.**
+
+The union-branch transformation of callee functions is complete, but call sites still
+pass the original comptime args instead of discriminants. Two approaches to fix this:
+
+1. **Track expression IDs through IR**: Add call expression ID to IR Call instructions
+   during lowering. This enables mapping IR calls back to `call_rewrites` discriminants.
+
+2. **Rewrite during lowering**: Perform call rewriting in the lower crate before IR is
+   finalized, when we still have access to expression IDs.
+
+Without call site rewriting, specialized functions produce incorrect results at runtime.
 
 ---
 

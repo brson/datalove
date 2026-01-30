@@ -722,6 +722,14 @@ pub fn lower_module_graph_with_evaluator<'db>(
 /// For each function with comptime parameters that has call sites recorded in the
 /// registry, transforms the function to dispatch on a discriminant and inserts
 /// const values for each instantiation.
+///
+/// NOTE: This currently only transforms callee functions. Call site rewriting
+/// (modifying calls to pass discriminant instead of comptime args) is not yet
+/// implemented. Call site rewriting requires either:
+/// 1. Tracking expression IDs through to IR (for mapping call sites to discriminants)
+/// 2. Doing call rewriting during lowering phase (before IR is finalized)
+///
+/// Without call site rewriting, specialized functions won't work at runtime.
 fn specialize_comptime_functions<'db>(
     db: &'db dyn salsa::Database,
     typecheck_result: ModuleGraphTypecheckResult<'db>,
