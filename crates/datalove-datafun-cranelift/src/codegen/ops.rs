@@ -95,13 +95,13 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             }
         } else {
             match op {
-                // Arithmetic ops on fixed-width integers are unreachable here:
-                // - Regular +, -, *, / widen to Int (handled by compile_int_binop above)
-                // - Checked +!, -!, *!, /! and optional +?, -?, *?, /? use BinOpChecked
-                BinOp::Add | BinOp::Sub | BinOp::Mul | BinOp::Div | BinOp::Mod => {
-                    unreachable!(
-                        "fixed-width integer arithmetic should use widening or checked ops"
-                    )
+                // Wrapping arithmetic for fixed-width integers.
+                BinOp::Add => builder.ins().iadd(lhs_val, rhs_val),
+                BinOp::Sub => builder.ins().isub(lhs_val, rhs_val),
+                BinOp::Mul => builder.ins().imul(lhs_val, rhs_val),
+                // Division not allowed on fixed ints (type checker rejects it).
+                BinOp::Div | BinOp::Mod => {
+                    unreachable!("division/mod not allowed on fixed-width integers")
                 }
                 BinOp::Eq => {
                     builder.ins().icmp(cl_ir::condcodes::IntCC::Equal, lhs_val, rhs_val)
