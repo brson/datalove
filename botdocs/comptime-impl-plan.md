@@ -980,6 +980,48 @@ Extend existing dual tests to compare:
 - AOT output
 - Verify identical results with comptime args
 
+### Differential Specialization Tests (Critical)
+
+**Location**: `datalove-datafun/tests/interp_specialize_tests.rs` (new file)
+
+Following the pattern of `interp_constlet_tests.rs`, create differential tests that verify
+**specialized IR produces identical output to unspecialized IR**:
+
+```rust
+/// Differential test: run worldfiles through interpreter twice:
+/// 1. With specialization enabled (union-branch dispatch)
+/// 2. With specialization disabled (comptime params evaluated normally)
+///
+/// Both must produce identical debuglog output.
+#[test]
+fn test_specialization_differential() {
+    // Similar to constlet tests:
+    // - analyze_worldfile_with_options(..., skip_specialization: false)
+    // - analyze_worldfile_with_options(..., skip_specialization: true)
+    // - Compare outputs
+}
+```
+
+**Test fixtures**: `datalove-datafun/tests/fixtures/specialize_differential/`
+
+```
+001_simple_const_param.world     # Basic comptime parameter
+002_multiple_instantiations.world # Same func with different const args
+003_nested_comptime_calls.world   # Comptime func calling another
+004_mixed_params.world            # const + non-const params
+005_control_flow.world            # Comptime affecting branches
+```
+
+**Why this matters**: The union-branch transformation must be semantically equivalent
+to directly evaluating the comptime values. These tests ensure:
+1. Dispatch logic is correct (right branch taken for each instantiation)
+2. Const substitution in cloned bodies is correct
+3. Parameter remapping doesn't break non-comptime args
+4. Return values match regardless of specialization
+
+**Implementation**: Add `skip_specialization: bool` option to `AnalysisOptions`,
+similar to the existing `skip_const_inlining` option.
+
 ---
 
 ## Risk Mitigation
@@ -1080,9 +1122,16 @@ end fun
 ### Sprint 4: Pipeline Integration
 - [ ] Insert specialization into lowering (phase 5c)
 - [ ] Resolve comptime values from `ResolvedConsts`
+- [ ] Add `skip_specialization` option to `AnalysisOptions`
 - [ ] End-to-end tests (interpreter + AOT)
 
-### Sprint 5: Polish
+### Sprint 5: Differential Testing
+- [ ] Create `interp_specialize_tests.rs` following `interp_constlet_tests.rs` pattern
+- [ ] Add test fixtures in `fixtures/specialize_differential/`
+- [ ] Verify: specialized IR == unspecialized IR (same debuglog output)
+- [ ] Test edge cases: multiple instantiations, nested calls, mixed params
+
+### Sprint 6: Polish
 - [ ] Phase 6: Codegen hints (jump table for many variants)
 - [ ] Error messages for invalid comptime args
 - [ ] Performance benchmarks
