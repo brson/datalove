@@ -2,8 +2,9 @@
 scriptunit-fragment
 ----------
 
-let neg = 0 - 5
-let pos = 10 - 0
+// Use explicit int type hints for bigint arithmetic.
+let neg: int = :int/0 - :int/5
+let pos: int = :int/10 - :int/0
 
 ----------
 scriptunit-expr

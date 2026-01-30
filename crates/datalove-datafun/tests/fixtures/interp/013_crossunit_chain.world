@@ -2,13 +2,13 @@
 scriptunit-fragment
 ----------
 
-let a = 5
+let a: int = 5
 
 ----------
 scriptunit-fragment
 ----------
 
-let b = a + 3
+let b: int = a + :int/3
 
 ----------
 scriptunit-expr

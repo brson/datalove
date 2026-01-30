@@ -3,7 +3,7 @@ scriptunit-fragment
 ----------
 
 fun get_value(): int
-    const X: int = 100 + 200
+    const X: int = :int/100 + :int/200
     ret X
 end fun
 

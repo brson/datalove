@@ -2,7 +2,6 @@
 scriptunit-fragment
 ----------
 
-// CTFE binop that widens fixed-width to int.
-// 10 + 5 -> both u32 literals, widens to int result.
-const A: int = 10 + 5
+// CTFE binop with int type hints.
+const A: int = :int/10 + :int/5
 debuglog A

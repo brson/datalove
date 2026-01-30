@@ -4,18 +4,26 @@ Analysis(
             section_type: "scriptunit-expr",
             name: None,
             typecheck: TypecheckResult(
-                status: "Error",
-                errors: [
-                    "InvalidOperandType { op: \"+\", ty: \"u32\" }",
-                ],
+                status: "Success",
             ),
             ownership: OwnershipResult(
-                status: "Skipped",
+                status: "Success",
             ),
             lowering: LoweringResult(
-                status: "Skipped",
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 100int
+                        v1 = const 200int
+                        v2 = add v0, v1
+                        drop v0
+                        drop v1
+                        v3 = error_from v2
+                        unit_end v3
+                """,
             ),
-            output: "",
+            output: "error 300",
         ),
     ],
 )

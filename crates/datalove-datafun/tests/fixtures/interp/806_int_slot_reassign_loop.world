@@ -10,7 +10,7 @@ scriptunit-fragment
 
 fun fib(n: u32): !int
     if n .< 2
-        ret ok (n + 0)
+        ret ok n@
     end if
     var a: int = 0
     var b: int = 1

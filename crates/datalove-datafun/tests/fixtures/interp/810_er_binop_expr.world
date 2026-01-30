@@ -4,7 +4,7 @@ scriptunit-fragment
 
 // Test that `er` parses the full expression without parens.
 // `ret er error a + b` should parse as `ret (er (error (a + b)))`.
-fun test_er(a: u32, b: u32): !u32
+fun test_er(a: int, b: int): !int
     ret er error a + b
 end fun
 

@@ -2,5 +2,5 @@
 scriptunit-fragment
 ----------
 
-const A: int = 10 + 20
+const A: int = :int/10 + :int/20
 debuglog A

@@ -4,36 +4,55 @@ Analysis(
             section_type: "scriptunit-fragment",
             name: None,
             typecheck: TypecheckResult(
-                status: "Error",
-                errors: [
-                    "InvalidOperandType { op: \"-\", ty: \"u32\" }",
-                    "InvalidOperandType { op: \"-\", ty: \"u32\" }",
-                ],
+                status: "Success",
             ),
             ownership: OwnershipResult(
-                status: "Skipped",
+                status: "Success",
             ),
             lowering: LoweringResult(
-                status: "Skipped",
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 0int
+                        v1 = const 5int
+                        v2 = sub v0, v1
+                        drop v0
+                        drop v1
+                        v3 = const 10int
+                        v4 = const 0int
+                        v5 = sub v3, v4
+                        drop v3
+                        drop v4
+                        unit_end_drop v2
+                        unit_end_drop v5
+                        unit_end
+                    exports:
+                        neg = v2
+                        pos = v5
+                """,
             ),
-            output: "",
+            output: "(fragment executed)",
         ),
         SectionResult(
             section_type: "scriptunit-expr",
             name: None,
             typecheck: TypecheckResult(
-                status: "Error",
-                errors: [
-                    "UnresolvedName(\"neg\")",
-                ],
+                status: "Success",
             ),
             ownership: OwnershipResult(
-                status: "Skipped",
+                status: "Success",
             ),
             lowering: LoweringResult(
-                status: "Skipped",
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = lt unit0.v2, unit0.v5
+                        unit_end v0
+                """,
             ),
-            output: "",
+            output: "true",
         ),
     ],
 )

@@ -4,35 +4,55 @@ Analysis(
             section_type: "scriptunit-fragment",
             name: None,
             typecheck: TypecheckResult(
-                status: "Error",
-                errors: [
-                    "InvalidOperandType { op: \"+\", ty: \"u32\" }",
-                ],
+                status: "Success",
             ),
             ownership: OwnershipResult(
-                status: "Skipped",
+                status: "Success",
             ),
             lowering: LoweringResult(
-                status: "Skipped",
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 5int
+                        v1 = const 3int
+                        v2 = call f0(v0, v1)
+                        unit_end_drop v2
+                        unit_end
+                    
+                    fn get_data(p0, p1):
+                    block0:
+                        v0 = add p0, p1
+                        v1 = data_from v0
+                        drop p0
+                        drop p1
+                        return v1
+                    exports:
+                        get_data = f0
+                        output = v2
+                """,
             ),
-            output: "",
+            output: "(fragment executed)",
         ),
         SectionResult(
             section_type: "scriptunit-expr",
             name: None,
             typecheck: TypecheckResult(
-                status: "Error",
-                errors: [
-                    "UnresolvedName(\"output\")",
-                ],
+                status: "Success",
             ),
             ownership: OwnershipResult(
-                status: "Skipped",
+                status: "Success",
             ),
             lowering: LoweringResult(
-                status: "Skipped",
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = move unit0.v2
+                        unit_end v0
+                """,
             ),
-            output: "",
+            output: "data 8",
         ),
     ],
 )
