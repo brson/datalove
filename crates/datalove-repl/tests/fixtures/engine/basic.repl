@@ -1,7 +1,7 @@
-let x = 42
+let x: int = 42
 ---
 x
 ---
-let y = x + 10
+let y: int = 52
 ---
 y

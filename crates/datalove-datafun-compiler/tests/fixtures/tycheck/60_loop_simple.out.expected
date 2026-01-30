@@ -1,33 +1,12 @@
 {
-  "diagnostics": [
-    {
-      "code": "F016",
-      "labels": [
-        {
-          "message": "operands must have the same type",
-          "span": [
-            65,
-            71
-          ],
-          "text": "n >= 3"
-        }
-      ],
-      "message": "mismatched types: expected `int`, found `u32`"
-    }
-  ],
-  "errors": [
-    {
-      "actual": "u32",
-      "expected": "int",
-      "kind": "TypeMismatch"
-    }
-  ],
+  "diagnostics": [],
+  "errors": [],
   "judgements": [
     {
       "kind": "function",
       "name": "test_loop",
       "params": [],
-      "return_type": "u32"
+      "return_type": "int"
     }
   ]
 }

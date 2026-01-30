@@ -1,15 +1,23 @@
 [
   {
-    "input": "fun compute(x: u32): u32\n  let a = x + 1\n  let b = a * 2\n  ret b - 1\nend fun",
+    "input": "fun compute(x: int): int\n  let a = x + :int/1\n  let b = a * :int/2\n  ret b - :int/1\nend fun",
     "parse": {
       "Command": {
-        "ScriptStatement": "fun compute(x: u32): u32\n  let a = x + 1\n  let b = a * 2\n  ret b - 1\nend fun"
+        "ScriptStatement": "fun compute(x: int): int\n  let a = x + :int/1\n  let b = a * :int/2\n  ret b - :int/1\nend fun"
       }
     },
     "eval": {
-      "Error": "TypeMismatch { expected: \"int\", actual: \"u32\" }; UnresolvedName(\"b\")"
+      "SuccessFun": {
+        "name": "compute"
+      }
     },
-    "environment": []
+    "environment": [
+      {
+        "name": "compute",
+        "ty": "function",
+        "value": "-"
+      }
+    ]
   },
   {
     "input": "compute(5)",
@@ -19,21 +27,44 @@
       }
     },
     "eval": {
-      "Error": "UnresolvedName(\"compute\")"
+      "SuccessExpr": {
+        "expr_kind": "expr",
+        "ty": "int",
+        "value": "11"
+      }
     },
-    "environment": []
+    "environment": [
+      {
+        "name": "compute",
+        "ty": "function",
+        "value": "-"
+      }
+    ]
   },
   {
-    "input": "fun fib(n: u32): u32\n  if n <= 1\n    ret 1\n  else\n    let a = fib(n - 1)\n    let b = fib(n - 2)\n    ret a + b\n  end if\nend fun",
+    "input": "fun fib(n: int): int\n  if n <= :int/1\n    ret :int/1\n  else\n    let a = fib(n - :int/1)\n    let b = fib(n - :int/2)\n    ret a + b\n  end if\nend fun",
     "parse": {
       "Command": {
-        "ScriptStatement": "fun fib(n: u32): u32\n  if n <= 1\n    ret 1\n  else\n    let a = fib(n - 1)\n    let b = fib(n - 2)\n    ret a + b\n  end if\nend fun"
+        "ScriptStatement": "fun fib(n: int): int\n  if n <= :int/1\n    ret :int/1\n  else\n    let a = fib(n - :int/1)\n    let b = fib(n - :int/2)\n    ret a + b\n  end if\nend fun"
       }
     },
     "eval": {
-      "Error": "TypeMismatch { expected: \"u32\", actual: \"int\" }; TypeMismatch { expected: \"u32\", actual: \"int\" }; UnresolvedName(\"a\")"
+      "SuccessFun": {
+        "name": "fib"
+      }
     },
-    "environment": []
+    "environment": [
+      {
+        "name": "compute",
+        "ty": "function",
+        "value": "-"
+      },
+      {
+        "name": "fib",
+        "ty": "function",
+        "value": "-"
+      }
+    ]
   },
   {
     "input": "fib(6)",
@@ -43,21 +74,54 @@
       }
     },
     "eval": {
-      "Error": "UnresolvedName(\"fib\")"
+      "SuccessExpr": {
+        "expr_kind": "expr",
+        "ty": "int",
+        "value": "13"
+      }
     },
-    "environment": []
+    "environment": [
+      {
+        "name": "compute",
+        "ty": "function",
+        "value": "-"
+      },
+      {
+        "name": "fib",
+        "ty": "function",
+        "value": "-"
+      }
+    ]
   },
   {
-    "input": "fun shadow(x: u32): u32\n  let y = x + 1\n  let y = y * 2\n  ret y\nend fun",
+    "input": "fun shadow(x: int): int\n  let y = x + :int/1\n  let y = y * :int/2\n  ret y\nend fun",
     "parse": {
       "Command": {
-        "ScriptStatement": "fun shadow(x: u32): u32\n  let y = x + 1\n  let y = y * 2\n  ret y\nend fun"
+        "ScriptStatement": "fun shadow(x: int): int\n  let y = x + :int/1\n  let y = y * :int/2\n  ret y\nend fun"
       }
     },
     "eval": {
-      "Error": "TypeMismatch { expected: \"int\", actual: \"u32\" }; TypeMismatch { expected: \"u32\", actual: \"int\" }"
+      "SuccessFun": {
+        "name": "shadow"
+      }
     },
-    "environment": []
+    "environment": [
+      {
+        "name": "compute",
+        "ty": "function",
+        "value": "-"
+      },
+      {
+        "name": "fib",
+        "ty": "function",
+        "value": "-"
+      },
+      {
+        "name": "shadow",
+        "ty": "function",
+        "value": "-"
+      }
+    ]
   },
   {
     "input": "shadow(5)",
@@ -67,8 +131,28 @@
       }
     },
     "eval": {
-      "Error": "UnresolvedName(\"shadow\")"
+      "SuccessExpr": {
+        "expr_kind": "expr",
+        "ty": "int",
+        "value": "12"
+      }
     },
-    "environment": []
+    "environment": [
+      {
+        "name": "compute",
+        "ty": "function",
+        "value": "-"
+      },
+      {
+        "name": "fib",
+        "ty": "function",
+        "value": "-"
+      },
+      {
+        "name": "shadow",
+        "ty": "function",
+        "value": "-"
+      }
+    ]
   }
 ]

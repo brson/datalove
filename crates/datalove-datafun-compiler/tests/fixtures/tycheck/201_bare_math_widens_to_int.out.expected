@@ -1,6 +1,27 @@
 {
-  "diagnostics": [],
-  "errors": [],
+  "diagnostics": [
+    {
+      "code": "F026",
+      "labels": [
+        {
+          "message": "operator `*` cannot be applied to type `u32`",
+          "span": [
+            157,
+            162
+          ],
+          "text": "a * b"
+        }
+      ],
+      "message": "invalid operand type `u32` for operator `*`"
+    }
+  ],
+  "errors": [
+    {
+      "kind": "InvalidOperandType",
+      "op": "*",
+      "type": "u32"
+    }
+  ],
   "judgements": [
     {
       "kind": "variable",
@@ -11,11 +32,6 @@
       "kind": "variable",
       "name": "b",
       "type": "u32"
-    },
-    {
-      "kind": "variable",
-      "name": "c",
-      "type": "int"
     }
   ]
 }

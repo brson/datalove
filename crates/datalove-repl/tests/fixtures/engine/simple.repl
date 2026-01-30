@@ -1,5 +1,5 @@
-let a = 100
+let a: int = 100
 ---
-let b = 200
+let b: int = 200
 ---
 a + b

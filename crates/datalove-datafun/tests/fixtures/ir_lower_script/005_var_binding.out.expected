@@ -1,15 +1,14 @@
 --- script unit 0 (fragment) ---
 scriptunit:
 block0:
-    v0 = const 1u32
-    store.copy.tracked s0, v0
-    v1 = const 1u32
-    v2 = widen s0
-    v3 = widen v1
-    v4 = add v2, v3
-    drop v2
-    drop v3
-    store.copy s0, v4
+    v0 = const 1int
+    store.move.tracked s0, v0
+    v1 = const 1int
+    v2 = add s0, v1
+    drop v1
+    drop.tracked s0
+    store.move.tracked s0, v2
+    unit_end_drop.tracked s0
     unit_end
 exports:
     x = s0

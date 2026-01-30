@@ -1,22 +1,22 @@
 [
   {
-    "input": "let x = 42",
+    "input": "let x: int = 42",
     "parse": {
       "Command": {
-        "ScriptStatement": "let x = 42"
+        "ScriptStatement": "let x: int = 42"
       }
     },
     "eval": {
       "SuccessLet": {
         "name": "x",
-        "ty": "u32",
+        "ty": "int",
         "value": "42"
       }
     },
     "environment": [
       {
         "name": "x",
-        "ty": "u32",
+        "ty": "int",
         "value": "42"
       }
     ]
@@ -31,23 +31,23 @@
     "eval": {
       "SuccessExpr": {
         "expr_kind": "expr",
-        "ty": "u32",
+        "ty": "int",
         "value": "42"
       }
     },
     "environment": [
       {
         "name": "x",
-        "ty": "u32",
-        "value": "42"
+        "ty": "int",
+        "value": "<moved>"
       }
     ]
   },
   {
-    "input": "let y = x + 10",
+    "input": "let y: int = 52",
     "parse": {
       "Command": {
-        "ScriptStatement": "let y = x + 10"
+        "ScriptStatement": "let y: int = 52"
       }
     },
     "eval": {
@@ -60,8 +60,8 @@
     "environment": [
       {
         "name": "x",
-        "ty": "u32",
-        "value": "42"
+        "ty": "int",
+        "value": "<moved>"
       },
       {
         "name": "y",
@@ -87,8 +87,8 @@
     "environment": [
       {
         "name": "x",
-        "ty": "u32",
-        "value": "42"
+        "ty": "int",
+        "value": "<moved>"
       },
       {
         "name": "y",

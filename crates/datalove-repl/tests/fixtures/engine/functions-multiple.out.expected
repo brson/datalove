@@ -1,27 +1,48 @@
 [
   {
-    "input": "fun inc(x: u32): u32\n  ret x + 1\nend fun",
+    "input": "fun inc(x: int): int\n  ret x + :int/1\nend fun",
     "parse": {
       "Command": {
-        "ScriptStatement": "fun inc(x: u32): u32\n  ret x + 1\nend fun"
+        "ScriptStatement": "fun inc(x: int): int\n  ret x + :int/1\nend fun"
       }
     },
     "eval": {
-      "Error": "TypeMismatch { expected: \"u32\", actual: \"int\" }"
+      "SuccessFun": {
+        "name": "inc"
+      }
     },
-    "environment": []
+    "environment": [
+      {
+        "name": "inc",
+        "ty": "function",
+        "value": "-"
+      }
+    ]
   },
   {
-    "input": "fun double(x: u32): u32\n  ret x + x\nend fun",
+    "input": "fun double(x: int): int\n  ret x + x\nend fun",
     "parse": {
       "Command": {
-        "ScriptStatement": "fun double(x: u32): u32\n  ret x + x\nend fun"
+        "ScriptStatement": "fun double(x: int): int\n  ret x + x\nend fun"
       }
     },
     "eval": {
-      "Error": "TypeMismatch { expected: \"u32\", actual: \"int\" }"
+      "SuccessFun": {
+        "name": "double"
+      }
     },
-    "environment": []
+    "environment": [
+      {
+        "name": "double",
+        "ty": "function",
+        "value": "-"
+      },
+      {
+        "name": "inc",
+        "ty": "function",
+        "value": "-"
+      }
+    ]
   },
   {
     "input": "inc(5)",
@@ -31,9 +52,24 @@
       }
     },
     "eval": {
-      "Error": "UnresolvedName(\"inc\")"
+      "SuccessExpr": {
+        "expr_kind": "expr",
+        "ty": "int",
+        "value": "6"
+      }
     },
-    "environment": []
+    "environment": [
+      {
+        "name": "double",
+        "ty": "function",
+        "value": "-"
+      },
+      {
+        "name": "inc",
+        "ty": "function",
+        "value": "-"
+      }
+    ]
   },
   {
     "input": "double(5)",
@@ -43,9 +79,24 @@
       }
     },
     "eval": {
-      "Error": "UnresolvedName(\"double\")"
+      "SuccessExpr": {
+        "expr_kind": "expr",
+        "ty": "int",
+        "value": "10"
+      }
     },
-    "environment": []
+    "environment": [
+      {
+        "name": "double",
+        "ty": "function",
+        "value": "-"
+      },
+      {
+        "name": "inc",
+        "ty": "function",
+        "value": "-"
+      }
+    ]
   },
   {
     "input": "double(inc(5))",
@@ -55,9 +106,24 @@
       }
     },
     "eval": {
-      "Error": "UnresolvedName(\"double\")"
+      "SuccessExpr": {
+        "expr_kind": "expr",
+        "ty": "int",
+        "value": "12"
+      }
     },
-    "environment": []
+    "environment": [
+      {
+        "name": "double",
+        "ty": "function",
+        "value": "-"
+      },
+      {
+        "name": "inc",
+        "ty": "function",
+        "value": "-"
+      }
+    ]
   },
   {
     "input": "inc(double(5))",
@@ -67,45 +133,129 @@
       }
     },
     "eval": {
-      "Error": "UnresolvedName(\"inc\")"
+      "SuccessExpr": {
+        "expr_kind": "expr",
+        "ty": "int",
+        "value": "11"
+      }
     },
-    "environment": []
+    "environment": [
+      {
+        "name": "double",
+        "ty": "function",
+        "value": "-"
+      },
+      {
+        "name": "inc",
+        "ty": "function",
+        "value": "-"
+      }
+    ]
   },
   {
-    "input": "fun multiply(a: u32, b: u32): u32\n  ret a * b\nend fun",
+    "input": "fun multiply(a: int, b: int): int\n  ret a * b\nend fun",
     "parse": {
       "Command": {
-        "ScriptStatement": "fun multiply(a: u32, b: u32): u32\n  ret a * b\nend fun"
+        "ScriptStatement": "fun multiply(a: int, b: int): int\n  ret a * b\nend fun"
       }
     },
     "eval": {
-      "Error": "TypeMismatch { expected: \"u32\", actual: \"int\" }"
+      "SuccessFun": {
+        "name": "multiply"
+      }
     },
-    "environment": []
+    "environment": [
+      {
+        "name": "double",
+        "ty": "function",
+        "value": "-"
+      },
+      {
+        "name": "inc",
+        "ty": "function",
+        "value": "-"
+      },
+      {
+        "name": "multiply",
+        "ty": "function",
+        "value": "-"
+      }
+    ]
   },
   {
-    "input": "fun add(a: u32, b: u32): u32\n  ret a + b\nend fun",
+    "input": "fun add(a: int, b: int): int\n  ret a + b\nend fun",
     "parse": {
       "Command": {
-        "ScriptStatement": "fun add(a: u32, b: u32): u32\n  ret a + b\nend fun"
+        "ScriptStatement": "fun add(a: int, b: int): int\n  ret a + b\nend fun"
       }
     },
     "eval": {
-      "Error": "TypeMismatch { expected: \"u32\", actual: \"int\" }"
+      "SuccessFun": {
+        "name": "add"
+      }
     },
-    "environment": []
+    "environment": [
+      {
+        "name": "add",
+        "ty": "function",
+        "value": "-"
+      },
+      {
+        "name": "double",
+        "ty": "function",
+        "value": "-"
+      },
+      {
+        "name": "inc",
+        "ty": "function",
+        "value": "-"
+      },
+      {
+        "name": "multiply",
+        "ty": "function",
+        "value": "-"
+      }
+    ]
   },
   {
-    "input": "fun compute(x: u32, y: u32): u32\n  let a = add(x, y)\n  let b = multiply(a, 2)\n  ret b\nend fun",
+    "input": "fun compute(x: int, y: int): int\n  let a = add(x, y)\n  let b = multiply(a, :int/2)\n  ret b\nend fun",
     "parse": {
       "Command": {
-        "ScriptStatement": "fun compute(x: u32, y: u32): u32\n  let a = add(x, y)\n  let b = multiply(a, 2)\n  ret b\nend fun"
+        "ScriptStatement": "fun compute(x: int, y: int): int\n  let a = add(x, y)\n  let b = multiply(a, :int/2)\n  ret b\nend fun"
       }
     },
     "eval": {
-      "Error": "UnresolvedName(\"add\"); UnresolvedName(\"multiply\"); UnresolvedName(\"b\")"
+      "SuccessFun": {
+        "name": "compute"
+      }
     },
-    "environment": []
+    "environment": [
+      {
+        "name": "add",
+        "ty": "function",
+        "value": "-"
+      },
+      {
+        "name": "compute",
+        "ty": "function",
+        "value": "-"
+      },
+      {
+        "name": "double",
+        "ty": "function",
+        "value": "-"
+      },
+      {
+        "name": "inc",
+        "ty": "function",
+        "value": "-"
+      },
+      {
+        "name": "multiply",
+        "ty": "function",
+        "value": "-"
+      }
+    ]
   },
   {
     "input": "compute(3, 4)",
@@ -115,8 +265,38 @@
       }
     },
     "eval": {
-      "Error": "UnresolvedName(\"compute\")"
+      "SuccessExpr": {
+        "expr_kind": "expr",
+        "ty": "int",
+        "value": "14"
+      }
     },
-    "environment": []
+    "environment": [
+      {
+        "name": "add",
+        "ty": "function",
+        "value": "-"
+      },
+      {
+        "name": "compute",
+        "ty": "function",
+        "value": "-"
+      },
+      {
+        "name": "double",
+        "ty": "function",
+        "value": "-"
+      },
+      {
+        "name": "inc",
+        "ty": "function",
+        "value": "-"
+      },
+      {
+        "name": "multiply",
+        "ty": "function",
+        "value": "-"
+      }
+    ]
   }
 ]

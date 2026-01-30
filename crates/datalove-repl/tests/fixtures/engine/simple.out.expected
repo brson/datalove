@@ -1,49 +1,49 @@
 [
   {
-    "input": "let a = 100",
+    "input": "let a: int = 100",
     "parse": {
       "Command": {
-        "ScriptStatement": "let a = 100"
+        "ScriptStatement": "let a: int = 100"
       }
     },
     "eval": {
       "SuccessLet": {
         "name": "a",
-        "ty": "u32",
+        "ty": "int",
         "value": "100"
       }
     },
     "environment": [
       {
         "name": "a",
-        "ty": "u32",
+        "ty": "int",
         "value": "100"
       }
     ]
   },
   {
-    "input": "let b = 200",
+    "input": "let b: int = 200",
     "parse": {
       "Command": {
-        "ScriptStatement": "let b = 200"
+        "ScriptStatement": "let b: int = 200"
       }
     },
     "eval": {
       "SuccessLet": {
         "name": "b",
-        "ty": "u32",
+        "ty": "int",
         "value": "200"
       }
     },
     "environment": [
       {
         "name": "a",
-        "ty": "u32",
+        "ty": "int",
         "value": "100"
       },
       {
         "name": "b",
-        "ty": "u32",
+        "ty": "int",
         "value": "200"
       }
     ]
@@ -65,12 +65,12 @@
     "environment": [
       {
         "name": "a",
-        "ty": "u32",
+        "ty": "int",
         "value": "100"
       },
       {
         "name": "b",
-        "ty": "u32",
+        "ty": "int",
         "value": "200"
       }
     ]

@@ -7,14 +7,12 @@ ModulesAnalysis(
         ir: """
             fn main():
             block0:
-                v0 = const 100i64
-                v1 = const 25i64
-                v2 = widen v0
-                v3 = widen v1
-                v4 = sub v2, v3
-                drop v2
-                drop v3
-                return v4
+                v0 = const 100int
+                v1 = const 25int
+                v2 = sub v0, v1
+                drop v0
+                drop v1
+                return v2
         """,
     ),
     output: "75",

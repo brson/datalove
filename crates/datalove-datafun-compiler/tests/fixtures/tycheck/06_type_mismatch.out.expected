@@ -9,7 +9,7 @@
             36,
             41
           ],
-          "text": "a + 0"
+          "text": "a + b"
         }
       ],
       "message": "mismatched types: expected `bool`, found `int`"
@@ -29,11 +29,11 @@
       "params": [
         {
           "name": "a",
-          "type": "u32"
+          "type": "int"
         },
         {
           "name": "b",
-          "type": "u32"
+          "type": "int"
         }
       ],
       "return_type": "bool"

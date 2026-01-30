@@ -1,5 +1,5 @@
 ----------
 scriptunit-fragment
 ----------
-var x = 1
-set x = x + 1
+var x: int = :int/1
+set x = x + :int/1

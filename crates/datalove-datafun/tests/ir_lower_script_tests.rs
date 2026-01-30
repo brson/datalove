@@ -112,6 +112,19 @@ fn analyze_file(path: &Path) -> Result<String, String> {
                 let spans = datalove_datafun_parser::datafun_spans(&db, source_obj);
                 let name_resolution = resolve_script_names(&db, source_obj, parsed_ast.clone());
                 let tycheck_result = datalove_datafun_tycheck::type_check_single_script(&db, source_obj, spans, parsed_ast, name_resolution);
+
+                // Check for type errors - if any, skip lowering.
+                let tycheck_errors = tycheck_result.errors(&db);
+                if !tycheck_errors.is_empty() {
+                    output.push_str(&format!("--- script unit {} (fragment) ---\n", unit_index));
+                    for err in &tycheck_errors {
+                        output.push_str(&format!("Type error: {:?}\n", err.error(&db)));
+                    }
+                    output.push('\n');
+                    unit_index += 1;
+                    continue;
+                }
+
                 let expr_types_raw = tycheck_result.expr_types(&db);
                 let call_targets_raw = tycheck_result.call_targets(&db);
 

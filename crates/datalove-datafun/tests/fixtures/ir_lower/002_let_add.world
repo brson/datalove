@@ -3,8 +3,8 @@ module local/test/main
 ----------
 
 fun main(): int
-    let a: i64 = 1
-    let b: i64 = 2
+    let a: int = 1
+    let b: int = 2
     let c = a + b
     ret c
 end fun

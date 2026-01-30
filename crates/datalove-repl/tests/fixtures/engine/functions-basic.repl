@@ -1,16 +1,16 @@
-fun double(x: u32): u32
+fun double(x: int): int
   ret x + x
 end fun
 ---
 double(21)
 ---
-fun add(a: u32, b: u32): u32
+fun add(a: int, b: int): int
   ret a + b
 end fun
 ---
 add(10, 20)
 ---
-fun get_five(): u32
+fun get_five(): int
   ret 5
 end fun
 ---

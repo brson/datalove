@@ -1,15 +1,23 @@
 [
   {
-    "input": "fun factorial(n: u32): u32\n  if n <= 1\n    ret 1\n  else\n    ret n * factorial(n - 1)\n  end if\nend fun",
+    "input": "fun factorial(n: int): int\n  if n <= :int/1\n    ret :int/1\n  else\n    ret n * factorial(n - :int/1)\n  end if\nend fun",
     "parse": {
       "Command": {
-        "ScriptStatement": "fun factorial(n: u32): u32\n  if n <= 1\n    ret 1\n  else\n    ret n * factorial(n - 1)\n  end if\nend fun"
+        "ScriptStatement": "fun factorial(n: int): int\n  if n <= :int/1\n    ret :int/1\n  else\n    ret n * factorial(n - :int/1)\n  end if\nend fun"
       }
     },
     "eval": {
-      "Error": "TypeMismatch { expected: \"u32\", actual: \"int\" }"
+      "SuccessFun": {
+        "name": "factorial"
+      }
     },
-    "environment": []
+    "environment": [
+      {
+        "name": "factorial",
+        "ty": "function",
+        "value": "-"
+      }
+    ]
   },
   {
     "input": "factorial(5)",
@@ -19,9 +27,19 @@
       }
     },
     "eval": {
-      "Error": "UnresolvedName(\"factorial\")"
+      "SuccessExpr": {
+        "expr_kind": "expr",
+        "ty": "int",
+        "value": "120"
+      }
     },
-    "environment": []
+    "environment": [
+      {
+        "name": "factorial",
+        "ty": "function",
+        "value": "-"
+      }
+    ]
   },
   {
     "input": "factorial(0)",
@@ -31,9 +49,19 @@
       }
     },
     "eval": {
-      "Error": "UnresolvedName(\"factorial\")"
+      "SuccessExpr": {
+        "expr_kind": "expr",
+        "ty": "int",
+        "value": "1"
+      }
     },
-    "environment": []
+    "environment": [
+      {
+        "name": "factorial",
+        "ty": "function",
+        "value": "-"
+      }
+    ]
   },
   {
     "input": "factorial(1)",
@@ -43,9 +71,19 @@
       }
     },
     "eval": {
-      "Error": "UnresolvedName(\"factorial\")"
+      "SuccessExpr": {
+        "expr_kind": "expr",
+        "ty": "int",
+        "value": "1"
+      }
     },
-    "environment": []
+    "environment": [
+      {
+        "name": "factorial",
+        "ty": "function",
+        "value": "-"
+      }
+    ]
   },
   {
     "input": "factorial(10)",
@@ -55,8 +93,18 @@
       }
     },
     "eval": {
-      "Error": "UnresolvedName(\"factorial\")"
+      "SuccessExpr": {
+        "expr_kind": "expr",
+        "ty": "int",
+        "value": "3628800"
+      }
     },
-    "environment": []
+    "environment": [
+      {
+        "name": "factorial",
+        "ty": "function",
+        "value": "-"
+      }
+    ]
   }
 ]

@@ -3,7 +3,7 @@ module local/test/main
 ----------
 
 fun main(): int
-    let a = 10
-    let b = 20
+    let a: int = 10
+    let b: int = 20
     ret a + b
 end fun

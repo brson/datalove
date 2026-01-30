@@ -1,11 +1,9 @@
 fn main():
 block0:
-    v0 = const 1i64
-    v1 = const 2i64
-    v2 = widen v0
-    v3 = widen v1
-    v4 = add v2, v3
-    drop v2
-    drop v3
-    return v4
+    v0 = const 1int
+    v1 = const 2int
+    v2 = add v0, v1
+    drop v0
+    drop v1
+    return v2
 

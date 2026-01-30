@@ -1,15 +1,23 @@
 [
   {
-    "input": "fun double(x: u32): u32\n  ret x + x\nend fun",
+    "input": "fun double(x: int): int\n  ret x + x\nend fun",
     "parse": {
       "Command": {
-        "ScriptStatement": "fun double(x: u32): u32\n  ret x + x\nend fun"
+        "ScriptStatement": "fun double(x: int): int\n  ret x + x\nend fun"
       }
     },
     "eval": {
-      "Error": "TypeMismatch { expected: \"u32\", actual: \"int\" }"
+      "SuccessFun": {
+        "name": "double"
+      }
     },
-    "environment": []
+    "environment": [
+      {
+        "name": "double",
+        "ty": "function",
+        "value": "-"
+      }
+    ]
   },
   {
     "input": "double(21)",
@@ -19,21 +27,44 @@
       }
     },
     "eval": {
-      "Error": "UnresolvedName(\"double\")"
+      "SuccessExpr": {
+        "expr_kind": "expr",
+        "ty": "int",
+        "value": "42"
+      }
     },
-    "environment": []
+    "environment": [
+      {
+        "name": "double",
+        "ty": "function",
+        "value": "-"
+      }
+    ]
   },
   {
-    "input": "fun add(a: u32, b: u32): u32\n  ret a + b\nend fun",
+    "input": "fun add(a: int, b: int): int\n  ret a + b\nend fun",
     "parse": {
       "Command": {
-        "ScriptStatement": "fun add(a: u32, b: u32): u32\n  ret a + b\nend fun"
+        "ScriptStatement": "fun add(a: int, b: int): int\n  ret a + b\nend fun"
       }
     },
     "eval": {
-      "Error": "TypeMismatch { expected: \"u32\", actual: \"int\" }"
+      "SuccessFun": {
+        "name": "add"
+      }
     },
-    "environment": []
+    "environment": [
+      {
+        "name": "add",
+        "ty": "function",
+        "value": "-"
+      },
+      {
+        "name": "double",
+        "ty": "function",
+        "value": "-"
+      }
+    ]
   },
   {
     "input": "add(10, 20)",
@@ -43,15 +74,30 @@
       }
     },
     "eval": {
-      "Error": "UnresolvedName(\"add\")"
+      "SuccessExpr": {
+        "expr_kind": "expr",
+        "ty": "int",
+        "value": "30"
+      }
     },
-    "environment": []
+    "environment": [
+      {
+        "name": "add",
+        "ty": "function",
+        "value": "-"
+      },
+      {
+        "name": "double",
+        "ty": "function",
+        "value": "-"
+      }
+    ]
   },
   {
-    "input": "fun get_five(): u32\n  ret 5\nend fun",
+    "input": "fun get_five(): int\n  ret 5\nend fun",
     "parse": {
       "Command": {
-        "ScriptStatement": "fun get_five(): u32\n  ret 5\nend fun"
+        "ScriptStatement": "fun get_five(): int\n  ret 5\nend fun"
       }
     },
     "eval": {
@@ -60,6 +106,16 @@
       }
     },
     "environment": [
+      {
+        "name": "add",
+        "ty": "function",
+        "value": "-"
+      },
+      {
+        "name": "double",
+        "ty": "function",
+        "value": "-"
+      },
       {
         "name": "get_five",
         "ty": "function",
@@ -77,11 +133,21 @@
     "eval": {
       "SuccessExpr": {
         "expr_kind": "expr",
-        "ty": "u32",
+        "ty": "int",
         "value": "5"
       }
     },
     "environment": [
+      {
+        "name": "add",
+        "ty": "function",
+        "value": "-"
+      },
+      {
+        "name": "double",
+        "ty": "function",
+        "value": "-"
+      },
       {
         "name": "get_five",
         "ty": "function",

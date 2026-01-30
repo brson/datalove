@@ -1,20 +1,6 @@
 {
   "diagnostics": [
     {
-      "code": "F016",
-      "labels": [
-        {
-          "message": "type mismatch",
-          "span": [
-            37,
-            42
-          ],
-          "text": "a + b"
-        }
-      ],
-      "message": "mismatched types: expected `u32`, found `int`"
-    },
-    {
       "code": "F045",
       "labels": [
         {
@@ -39,11 +25,6 @@
   ],
   "errors": [
     {
-      "actual": "int",
-      "expected": "u32",
-      "kind": "TypeMismatch"
-    },
-    {
       "actual": 1,
       "expected": 2,
       "kind": "ArityMismatch"
@@ -56,20 +37,20 @@
       "params": [
         {
           "name": "a",
-          "type": "u32"
+          "type": "int"
         },
         {
           "name": "b",
-          "type": "u32"
+          "type": "int"
         }
       ],
-      "return_type": "u32"
+      "return_type": "int"
     },
     {
       "kind": "function",
       "name": "test",
       "params": [],
-      "return_type": "u32"
+      "return_type": "int"
     }
   ]
 }

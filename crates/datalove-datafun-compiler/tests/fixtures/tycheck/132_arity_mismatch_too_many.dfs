@@ -1,7 +1,7 @@
-fun double(x: u32): u32
+fun double(x: int): int
     ret x + x
 end fun
 
-fun test(): u32
+fun test(): int
     ret double(1, 2, 3)
 end fun
