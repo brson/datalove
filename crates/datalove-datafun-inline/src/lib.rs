@@ -957,20 +957,11 @@ impl RemapContext {
 /// Inline a single call site in a function.
 ///
 /// Returns the new function with the call inlined, or None if inlining failed.
-/// Returns None if the callee has out parameters (tracked stores not yet supported).
 fn inline_call_site(
     caller: &IrFunction,
     callee: &IrFunction,
     site: &CallSite,
 ) -> Option<IrFunction> {
-    // Check if callee has out parameters - these use tracked stores which aren't yet supported.
-    // Mut params are now supported via RefStore.
-    for mode in &callee.param_modes {
-        if matches!(mode, ParamMode::Out) {
-            return None;
-        }
-    }
-
     let mut new_func = caller.clone();
 
     // Set up remapping context.
