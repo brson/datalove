@@ -3,18 +3,19 @@
 //! This crate provides:
 //! - Inline directive types for specifying which functions to inline
 //! - Function inlining transformation on IR modules
+//! - Cross-module inlining support
 
 use std::collections::HashMap;
 
 use datalove_datafun_ir::{
-    BlockId, FuncId, FuncRef, Instruction, IrBlock, IrFunction, IrModule, IrType,
-    Operand, ParamId, SlotDest, SlotId, Terminator, ValueId,
+    BlockId, FuncId, FuncRef, Instruction, IrBlock, IrFunction, IrModule, IrModuleId, IrType,
+    ModuleFunctionRegistry, Operand, ParamId, SlotDest, SlotId, SymbolTable, Terminator, ValueId,
 };
 
 /// Directive specifying which function calls to inline.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum InlineDirective {
-    /// Inline all calls to `callee` within `caller`.
+    /// Inline all calls to `callee` within `caller` (same module).
     Inline { caller: String, callee: String },
     /// Inline only the Nth call (0-indexed) to `callee` within `caller`.
     InlineAt {
@@ -22,8 +23,20 @@ pub enum InlineDirective {
         callee: String,
         call_index: usize,
     },
-    /// Inline all calls to `callee` in all functions.
+    /// Inline all calls to `callee` in all functions (same module).
     InlineAll { callee: String },
+    /// Cross-module: Inline all calls to `callee_module::callee` within `caller_module::caller`.
+    InlineCross {
+        caller_module: String,
+        caller: String,
+        callee_module: String,
+        callee: String,
+    },
+    /// Cross-module: Inline all calls to `callee_module::callee` in all functions across all modules.
+    InlineCrossAll {
+        callee_module: String,
+        callee: String,
+    },
 }
 
 /// Parse inline directives from source text.
@@ -33,6 +46,8 @@ pub enum InlineDirective {
 /// inline caller_function callee_function
 /// inline caller_function callee_function at N
 /// inline-all callee_function
+/// inline-cross caller_module::caller_func callee_module::callee_func
+/// inline-cross-all callee_module::callee_func
 /// ```
 pub fn parse_inline_directives(source: &str) -> Result<Vec<InlineDirective>, String> {
     let mut directives = Vec::new();
@@ -69,11 +84,47 @@ pub fn parse_inline_directives(source: &str) -> Result<Vec<InlineDirective>, Str
             ["inline-all", callee] => InlineDirective::InlineAll {
                 callee: (*callee).to_string(),
             },
+            ["inline-cross", caller_spec, callee_spec] => {
+                let (caller_module, caller) = parse_qualified_name(caller_spec).ok_or_else(|| {
+                    format!(
+                        "line {}: invalid caller specification '{}' (expected module::function)",
+                        line_num + 1,
+                        caller_spec
+                    )
+                })?;
+                let (callee_module, callee) = parse_qualified_name(callee_spec).ok_or_else(|| {
+                    format!(
+                        "line {}: invalid callee specification '{}' (expected module::function)",
+                        line_num + 1,
+                        callee_spec
+                    )
+                })?;
+                InlineDirective::InlineCross {
+                    caller_module,
+                    caller,
+                    callee_module,
+                    callee,
+                }
+            }
+            ["inline-cross-all", callee_spec] => {
+                let (callee_module, callee) = parse_qualified_name(callee_spec).ok_or_else(|| {
+                    format!(
+                        "line {}: invalid callee specification '{}' (expected module::function)",
+                        line_num + 1,
+                        callee_spec
+                    )
+                })?;
+                InlineDirective::InlineCrossAll {
+                    callee_module,
+                    callee,
+                }
+            }
             _ => {
                 return Err(format!(
                     "line {}: invalid inline directive '{}' \
                      (expected 'inline caller callee', 'inline caller callee at N', \
-                     or 'inline-all callee')",
+                     'inline-all callee', 'inline-cross mod::caller mod::callee', \
+                     or 'inline-cross-all mod::callee')",
                     line_num + 1,
                     line
                 ))
@@ -86,6 +137,16 @@ pub fn parse_inline_directives(source: &str) -> Result<Vec<InlineDirective>, Str
     Ok(directives)
 }
 
+/// Parse a qualified name like "module::function" into (module, function).
+fn parse_qualified_name(spec: &str) -> Option<(String, String)> {
+    let parts: Vec<&str> = spec.split("::").collect();
+    if parts.len() == 2 {
+        Some((parts[0].to_string(), parts[1].to_string()))
+    } else {
+        None
+    }
+}
+
 /// Specifies which call sites to inline.
 #[derive(Clone, Debug)]
 pub enum CallSiteFilter {
@@ -95,11 +156,26 @@ pub enum CallSiteFilter {
     AtIndex(usize),
 }
 
-/// Request to inline specific calls.
+/// Request to inline specific calls (single-module).
 #[derive(Clone, Debug)]
 pub struct InlineRequest {
     pub caller: FuncId,
     pub callee: FuncId,
+    pub filter: CallSiteFilter,
+}
+
+/// Global function identifier (module + function).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct GlobalFuncId {
+    pub module: IrModuleId,
+    pub func: FuncId,
+}
+
+/// Request to inline specific calls (cross-module).
+#[derive(Clone, Debug)]
+pub struct CrossModuleInlineRequest {
+    pub caller: GlobalFuncId,
+    pub callee: GlobalFuncId,
     pub filter: CallSiteFilter,
 }
 
@@ -110,6 +186,10 @@ pub enum InlineSkipReason {
     CallerNotFound { name: String },
     /// The callee function was not found.
     CalleeNotFound { name: String },
+    /// The caller module was not found.
+    CallerModuleNotFound { name: String },
+    /// The callee module was not found.
+    CalleeModuleNotFound { name: String },
     /// Recursive call detected.
     RecursiveCall { func: String },
     /// The specified call site was not found.
@@ -131,6 +211,72 @@ pub struct InlineResult {
     pub inlined_count: usize,
     /// Reasons why some inlinings were skipped.
     pub skipped: Vec<InlineSkipReason>,
+}
+
+/// Result of cross-module inlining.
+#[derive(Clone)]
+pub struct CrossModuleInlineResult {
+    /// The transformed function registry.
+    pub registry: ModuleFunctionRegistry,
+    /// Number of call sites inlined.
+    pub inlined_count: usize,
+    /// Reasons why some inlinings were skipped.
+    pub skipped: Vec<InlineSkipReason>,
+}
+
+impl std::fmt::Debug for CrossModuleInlineResult {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("CrossModuleInlineResult")
+            .field("inlined_count", &self.inlined_count)
+            .field("skipped", &self.skipped)
+            .finish_non_exhaustive()
+    }
+}
+
+/// Context for cross-module inlining operations.
+pub struct CrossModuleInlineContext {
+    /// Module name to IrModuleId mapping.
+    pub module_names: HashMap<String, IrModuleId>,
+    /// Per-module symbol tables.
+    pub module_symbols: HashMap<IrModuleId, SymbolTable>,
+}
+
+impl CrossModuleInlineContext {
+    /// Create a new cross-module inline context.
+    pub fn new() -> Self {
+        Self {
+            module_names: HashMap::new(),
+            module_symbols: HashMap::new(),
+        }
+    }
+
+    /// Register a module with its name and symbol table.
+    pub fn register_module(&mut self, name: String, module_id: IrModuleId, symbols: SymbolTable) {
+        self.module_names.insert(name, module_id);
+        self.module_symbols.insert(module_id, symbols);
+    }
+
+    /// Look up a function by module name and function name.
+    pub fn lookup_function(&self, module_name: &str, func_name: &str) -> Option<GlobalFuncId> {
+        let module_id = self.module_names.get(module_name)?;
+        let symbols = self.module_symbols.get(module_id)?;
+        let func_def = symbols.functions.iter().find(|f| f.name == func_name)?;
+        Some(GlobalFuncId {
+            module: *module_id,
+            func: func_def.id,
+        })
+    }
+
+    /// Iterate over all modules.
+    pub fn iter_modules(&self) -> impl Iterator<Item = (&String, &IrModuleId)> {
+        self.module_names.iter()
+    }
+}
+
+impl Default for CrossModuleInlineContext {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 /// Resolve inline directives to concrete requests using the module's symbol table.
@@ -231,6 +377,114 @@ pub fn resolve_directives(
                     }
                 }
             }
+
+            // Cross-module directives are skipped in single-module mode.
+            InlineDirective::InlineCross { .. } | InlineDirective::InlineCrossAll { .. } => {}
+        }
+    }
+
+    (requests, skipped)
+}
+
+/// Resolve cross-module inline directives using the context.
+pub fn resolve_cross_module_directives(
+    ctx: &CrossModuleInlineContext,
+    directives: &[InlineDirective],
+) -> (Vec<CrossModuleInlineRequest>, Vec<InlineSkipReason>) {
+    let mut requests = Vec::new();
+    let mut skipped = Vec::new();
+
+    for directive in directives {
+        match directive {
+            InlineDirective::InlineCross {
+                caller_module,
+                caller,
+                callee_module,
+                callee,
+            } => {
+                let Some(caller_id) = ctx.lookup_function(caller_module, caller) else {
+                    if !ctx.module_names.contains_key(caller_module) {
+                        skipped.push(InlineSkipReason::CallerModuleNotFound {
+                            name: caller_module.clone(),
+                        });
+                    } else {
+                        skipped.push(InlineSkipReason::CallerNotFound {
+                            name: format!("{}::{}", caller_module, caller),
+                        });
+                    }
+                    continue;
+                };
+
+                let Some(callee_id) = ctx.lookup_function(callee_module, callee) else {
+                    if !ctx.module_names.contains_key(callee_module) {
+                        skipped.push(InlineSkipReason::CalleeModuleNotFound {
+                            name: callee_module.clone(),
+                        });
+                    } else {
+                        skipped.push(InlineSkipReason::CalleeNotFound {
+                            name: format!("{}::{}", callee_module, callee),
+                        });
+                    }
+                    continue;
+                };
+
+                // Check for recursion (same function).
+                if caller_id == callee_id {
+                    skipped.push(InlineSkipReason::RecursiveCall {
+                        func: format!("{}::{}", caller_module, caller),
+                    });
+                    continue;
+                }
+
+                requests.push(CrossModuleInlineRequest {
+                    caller: caller_id,
+                    callee: callee_id,
+                    filter: CallSiteFilter::All,
+                });
+            }
+
+            InlineDirective::InlineCrossAll {
+                callee_module,
+                callee,
+            } => {
+                let Some(callee_id) = ctx.lookup_function(callee_module, callee) else {
+                    if !ctx.module_names.contains_key(callee_module) {
+                        skipped.push(InlineSkipReason::CalleeModuleNotFound {
+                            name: callee_module.clone(),
+                        });
+                    } else {
+                        skipped.push(InlineSkipReason::CalleeNotFound {
+                            name: format!("{}::{}", callee_module, callee),
+                        });
+                    }
+                    continue;
+                };
+
+                // Add request for each function in each module (except the callee itself).
+                for (_mod_name, &mod_id) in ctx.iter_modules() {
+                    if let Some(symbols) = ctx.module_symbols.get(&mod_id) {
+                        for func_def in &symbols.functions {
+                            let caller_global = GlobalFuncId {
+                                module: mod_id,
+                                func: func_def.id,
+                            };
+                            // Skip recursive calls.
+                            if caller_global != callee_id {
+                                requests.push(CrossModuleInlineRequest {
+                                    caller: caller_global,
+                                    callee: callee_id,
+                                    filter: CallSiteFilter::All,
+                                });
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Single-module directives are skipped in cross-module mode.
+            InlineDirective::Inline { .. }
+            | InlineDirective::InlineAt { .. }
+            | InlineDirective::InlineAll { .. } => {}
         }
     }
 
@@ -246,7 +500,7 @@ struct CallSite {
     args: Vec<Operand>,
 }
 
-/// Find all call sites to a specific callee in a function.
+/// Find all call sites to a specific callee in a function (single-module).
 fn find_call_sites(func: &IrFunction, callee_id: FuncId) -> Vec<CallSite> {
     let mut sites = Vec::new();
 
@@ -257,6 +511,43 @@ fn find_call_sites(func: &IrFunction, callee_id: FuncId) -> Vec<CallSite> {
                 let matches = match func_ref {
                     FuncRef::Local(id) => *id == callee_id,
                     FuncRef::Module { func, .. } => *func == callee_id,
+                    FuncRef::External { .. } => false,
+                };
+                if matches {
+                    sites.push(CallSite {
+                        block_idx,
+                        instr_idx,
+                        dest: *dest,
+                        args: args.clone(),
+                    });
+                }
+            }
+        }
+    }
+
+    sites
+}
+
+/// Find all call sites to a specific callee (cross-module aware).
+fn find_cross_module_call_sites(
+    func: &IrFunction,
+    caller_module: IrModuleId,
+    target: GlobalFuncId,
+) -> Vec<CallSite> {
+    let mut sites = Vec::new();
+
+    for (block_idx, block) in func.blocks.iter().enumerate() {
+        for (instr_idx, instr) in block.instructions.iter().enumerate() {
+            if let Instruction::Call { dest, func: func_ref, args } = instr {
+                let matches = match func_ref {
+                    // Local call - matches if we're in the same module as target.
+                    FuncRef::Local(id) => {
+                        caller_module == target.module && *id == target.func
+                    }
+                    // Module call - check both module and func ID.
+                    FuncRef::Module { module, func } => {
+                        *module == target.module && *func == target.func
+                    }
                     FuncRef::External { .. } => false,
                 };
                 if matches {
@@ -1129,6 +1420,84 @@ pub fn inline_module(module: &IrModule, directives: &[InlineDirective]) -> Inlin
     }
 }
 
+/// Perform cross-module function inlining according to the given directives.
+///
+/// This function handles inlining functions across module boundaries.
+pub fn inline_cross_module(
+    registry: &ModuleFunctionRegistry,
+    ctx: &CrossModuleInlineContext,
+    directives: &[InlineDirective],
+) -> CrossModuleInlineResult {
+    let (requests, mut skipped) = resolve_cross_module_directives(ctx, directives);
+
+    // Clone the registry for mutation.
+    let mut new_registry = registry.clone();
+    let mut inlined_count = 0;
+
+    for request in &requests {
+        // Get the caller and callee functions.
+        let Some(caller) = new_registry.get_module_function(request.caller.module, request.caller.func) else {
+            continue;
+        };
+        let Some(callee) = registry.get_module_function(request.callee.module, request.callee.func) else {
+            continue;
+        };
+
+        // Find call sites (cross-module aware).
+        let call_sites = find_cross_module_call_sites(caller, request.caller.module, request.callee);
+
+        if call_sites.is_empty() {
+            skipped.push(InlineSkipReason::NoCallsFound {
+                caller: caller.name.clone(),
+                callee: callee.name.clone(),
+            });
+            continue;
+        }
+
+        // Determine which sites to inline.
+        let sites_to_inline: Vec<&CallSite> = match &request.filter {
+            CallSiteFilter::All => call_sites.iter().collect(),
+            CallSiteFilter::AtIndex(idx) => {
+                if *idx < call_sites.len() {
+                    vec![&call_sites[*idx]]
+                } else {
+                    skipped.push(InlineSkipReason::CallSiteNotFound {
+                        caller: caller.name.clone(),
+                        callee: callee.name.clone(),
+                        index: *idx,
+                    });
+                    continue;
+                }
+            }
+        };
+
+        // Inline each site (in reverse order to avoid index invalidation).
+        let mut updated_caller = caller.clone();
+        for site in sites_to_inline.into_iter().rev() {
+            // Recompute site location in updated caller.
+            let new_sites = find_cross_module_call_sites(&updated_caller, request.caller.module, request.callee);
+            // Find the matching site by comparing block and instruction indices.
+            if let Some(new_site) = new_sites.iter().find(|s| {
+                s.block_idx == site.block_idx && s.instr_idx == site.instr_idx
+            }) {
+                if let Some(inlined) = inline_call_site(&updated_caller, callee, new_site) {
+                    updated_caller = inlined;
+                    inlined_count += 1;
+                }
+            }
+        }
+
+        // Update the registry with the modified caller.
+        new_registry.add_module_function(request.caller.module, request.caller.func, updated_caller);
+    }
+
+    CrossModuleInlineResult {
+        registry: new_registry,
+        inlined_count,
+        skipped,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1171,8 +1540,44 @@ mod tests {
     }
 
     #[test]
+    fn test_parse_cross_module_directives() {
+        let source = r#"
+            inline-cross main::caller base::callee
+            inline-cross-all helper::util
+        "#;
+
+        let directives = parse_inline_directives(source).unwrap();
+        assert_eq!(directives.len(), 2);
+
+        assert_eq!(
+            directives[0],
+            InlineDirective::InlineCross {
+                caller_module: "main".to_string(),
+                caller: "caller".to_string(),
+                callee_module: "base".to_string(),
+                callee: "callee".to_string(),
+            }
+        );
+
+        assert_eq!(
+            directives[1],
+            InlineDirective::InlineCrossAll {
+                callee_module: "helper".to_string(),
+                callee: "util".to_string(),
+            }
+        );
+    }
+
+    #[test]
     fn test_parse_invalid_directive() {
         let source = "invalid directive line";
+        let result = parse_inline_directives(source);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_parse_invalid_cross_directive() {
+        let source = "inline-cross invalid_no_colons also_invalid";
         let result = parse_inline_directives(source);
         assert!(result.is_err());
     }

@@ -1,0 +1,30 @@
+----------
+module local/test/util
+----------
+
+// Utility function to inline everywhere.
+fun square(x: i64): int
+    ret x * x
+end fun
+
+----------
+module local/test/main
+----------
+
+require module local/test/util
+import util.square
+
+// Multiple functions that call square.
+fun calc_a(x: i64): int
+    ret square(x) + :int/1
+end fun
+
+fun calc_b(x: i64): int
+    ret square(x) * :int/2
+end fun
+
+----------
+inline-directives
+----------
+// Inline square everywhere.
+inline-cross-all util::square

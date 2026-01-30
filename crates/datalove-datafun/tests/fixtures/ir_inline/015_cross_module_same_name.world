@@ -1,0 +1,26 @@
+----------
+module local/test/helper
+----------
+
+// Helper function with a specific name.
+fun double(x: i64): int
+    ret x * :i64/2
+end fun
+
+----------
+module local/test/main
+----------
+
+require module local/test/helper
+import helper.double
+
+// Calls the helper's double function.
+fun compute(x: i64): int
+    ret double(x) + :int/5
+end fun
+
+----------
+inline-directives
+----------
+// Inline helper's double into main's compute.
+inline-cross main::compute helper::double

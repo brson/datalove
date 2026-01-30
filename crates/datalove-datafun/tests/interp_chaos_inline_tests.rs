@@ -16,7 +16,9 @@ use std::path::Path;
 use std::sync::Arc;
 
 use datalove_datafun as datafun;
-use datalove_datafun_inline::{inline_module, InlineDirective};
+use datalove_datafun_inline::{
+    inline_cross_module, inline_module, CrossModuleInlineContext, GlobalFuncId, InlineDirective,
+};
 use datalove_datafun_ir::{IrModule, IrModuleId, IrScriptUnit, ModuleFunctionRegistry, ParamMode, SymbolTable};
 use datalove_datafun_pkg::package_load_worldfile::{self, ParsedWorldfile, WorldfileSection};
 use datafun::pipeline::{ConstInlining, ModuleCompilationPipeline};
@@ -186,6 +188,104 @@ fn inline_module_functions(
     new_registry
 }
 
+/// Generate random cross-module inline directives.
+fn generate_random_cross_module_directives(
+    ctx: &CrossModuleInlineContext,
+    registry: &ModuleFunctionRegistry,
+    rng: &mut SimpleRng,
+    inline_probability: u32,
+) -> Vec<InlineDirective> {
+    let mut directives = Vec::new();
+
+    // Collect all (module_name, func_name, global_func_id) tuples for functions that can be inlined.
+    let mut inlineable_funcs: Vec<(String, String, GlobalFuncId)> = Vec::new();
+    let mut all_funcs: Vec<(String, String, GlobalFuncId)> = Vec::new();
+
+    for (mod_name, &mod_id) in ctx.iter_modules() {
+        if let Some(symbols) = ctx.module_symbols.get(&mod_id) {
+            for func_def in &symbols.functions {
+                let global_id = GlobalFuncId { module: mod_id, func: func_def.id };
+
+                // Check if function has byref params.
+                if let Some(func) = registry.get_module_function(mod_id, func_def.id) {
+                    let has_byref = func.param_modes.iter().any(|m| matches!(m, ParamMode::Mut | ParamMode::Out));
+
+                    all_funcs.push((mod_name.clone(), func_def.name.clone(), global_id));
+
+                    if !has_byref {
+                        inlineable_funcs.push((mod_name.clone(), func_def.name.clone(), global_id));
+                    }
+                }
+            }
+        }
+    }
+
+    if inlineable_funcs.is_empty() || all_funcs.len() < 2 {
+        return directives;
+    }
+
+    // For each pair of functions (from different modules), randomly decide to inline.
+    for (caller_mod, caller_name, caller_id) in &all_funcs {
+        for (callee_mod, callee_name, callee_id) in &inlineable_funcs {
+            // Skip self-calls.
+            if caller_id == callee_id {
+                continue;
+            }
+
+            // Only consider cross-module pairs.
+            if caller_mod == callee_mod {
+                continue;
+            }
+
+            if rng.next_bool(inline_probability) {
+                directives.push(InlineDirective::InlineCross {
+                    caller_module: caller_mod.clone(),
+                    caller: caller_name.clone(),
+                    callee_module: callee_mod.clone(),
+                    callee: callee_name.clone(),
+                });
+            }
+        }
+    }
+
+    directives
+}
+
+/// Apply chaos inlining across modules.
+fn inline_cross_module_functions(
+    registry: &ModuleFunctionRegistry,
+    sections: &[WorldfileSection],
+    rng: &mut SimpleRng,
+    inline_probability: u32,
+) -> ModuleFunctionRegistry {
+    // Build the cross-module context.
+    let mut ctx = CrossModuleInlineContext::new();
+    let module_ids = collect_module_ids(registry);
+
+    let mut module_id_counter = 0;
+    for section in sections {
+        if let WorldfileSection::Module { module, .. } = section {
+            if module_id_counter < module_ids.len() {
+                let module_id = module_ids[module_id_counter];
+                let ir_module = build_ir_module_for_single_module(registry, module_id);
+                ctx.register_module(module.clone(), module_id, ir_module.symbols);
+                module_id_counter += 1;
+            }
+        }
+    }
+
+    // Generate cross-module directives.
+    let directives = generate_random_cross_module_directives(&ctx, registry, rng, inline_probability);
+
+    if directives.is_empty() {
+        return registry.clone();
+    }
+
+    // Apply cross-module inlining.
+    let result = inline_cross_module(registry, &ctx, &directives);
+    result.registry
+}
+
 /// Apply inlining to functions in a script unit.
 fn inline_script_unit(unit: &mut IrScriptUnit, rng: &mut SimpleRng, inline_probability: u32) {
     if unit.functions.is_empty() {
@@ -250,12 +350,21 @@ fn run_worldfile(
 
     // Apply module inlining if seed is provided.
     let module_registry = if let Some(seed) = inline_seed {
-        // Use a different seed derivation for module inlining.
+        // First, apply within-module inlining.
         let mut module_rng = SimpleRng::new(seed.wrapping_mul(0xDEADBEEF));
-        Arc::new(inline_module_functions(
+        let inlined = inline_module_functions(
             &compiled.shared.module_registry,
             &mut module_rng,
             inline_probability,
+        );
+
+        // Then, apply cross-module inlining with a different seed.
+        let mut cross_rng = SimpleRng::new(seed.wrapping_mul(0xCAFEBABE));
+        Arc::new(inline_cross_module_functions(
+            &inlined,
+            &parsed.sections,
+            &mut cross_rng,
+            inline_probability / 2, // Lower probability for cross-module inlining
         ))
     } else {
         Arc::clone(&compiled.shared.module_registry)
