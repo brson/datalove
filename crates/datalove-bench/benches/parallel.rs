@@ -16,6 +16,7 @@ use datalove_datafun_tycheck::{
     typecheck_module_graph, typecheck_module_graph_with_mode,
     resolve_all_names_with_mode,
     ParallelMode as TypecheckParallelMode,
+    AutoAdaptMode,
 };
 
 // Enough modules for parallelism, small enough for fast benchmarks.

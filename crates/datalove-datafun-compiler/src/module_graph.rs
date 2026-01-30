@@ -887,7 +887,7 @@ mod tests {
     // Typecheck Per-Module Caching Tests
     // ========================================================================
 
-    use datalove_datafun_tycheck::typecheck_module_graph;
+    use datalove_datafun_tycheck::{typecheck_module_graph, AutoAdaptMode};
     use datalove_datafun_resolve::{
         resolve_all_names, resolve_all_exports, build_all_function_ast_maps,
         ParsedModuleGraph,
@@ -901,7 +901,7 @@ mod tests {
         let all_names = resolve_all_names(db, parsed);
         let all_exports = resolve_all_exports(db, parsed);
         let all_function_asts = build_all_function_ast_maps(db, parsed);
-        typecheck_module_graph(db, parsed, all_names, all_exports, all_function_asts)
+        typecheck_module_graph(db, parsed, all_names, all_exports, all_function_asts, AutoAdaptMode::Disabled)
     }
 
     #[test]
@@ -1256,7 +1256,7 @@ mod tests {
         resolve_all_names_parallel,
         DbClone,
     };
-    // Note: resolve_all_names, resolve_all_exports, build_all_function_ast_maps, ParsedModuleGraph
+    // Note: resolve_all_names, resolve_all_exports, build_all_function_ast_maps, ParsedModuleGraph, AutoAdaptMode
     // are already imported in the earlier test section.
 
     /// Helper that calls resolve functions and then typecheck_module_graph_parallel.
@@ -1267,7 +1267,7 @@ mod tests {
         let all_names = resolve_all_names_parallel(db, parsed);
         let all_exports = resolve_all_exports(db.as_salsa_db(), parsed);
         let all_function_asts = build_all_function_ast_maps(db.as_salsa_db(), parsed);
-        typecheck_module_graph_parallel(db, parsed, all_names, all_exports, all_function_asts)
+        typecheck_module_graph_parallel(db, parsed, all_names, all_exports, all_function_asts, AutoAdaptMode::Disabled)
     }
 
     /// Helper that calls resolve functions and then typecheck_module_graph_with_mode.
@@ -1279,7 +1279,7 @@ mod tests {
         let all_names = resolve_all_names(db.as_salsa_db(), parsed);
         let all_exports = resolve_all_exports(db.as_salsa_db(), parsed);
         let all_function_asts = build_all_function_ast_maps(db.as_salsa_db(), parsed);
-        typecheck_module_graph_with_mode(db, parsed, all_names, all_exports, all_function_asts, mode)
+        typecheck_module_graph_with_mode(db, parsed, all_names, all_exports, all_function_asts, mode, AutoAdaptMode::Disabled)
     }
 
     #[test]

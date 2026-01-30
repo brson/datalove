@@ -307,6 +307,7 @@ pub fn typecheck_module<'db>(
     name_resolution: crate::ModuleNameResolution<'db>,
     resolved_imports: Vec<ResolvedImportData<'db>>,
     import_errors: Vec<TypeError>,
+    auto_adapt_mode: crate::AutoAdaptMode,
 ) -> SingleModuleTypecheckResult<'db> {
     let module_id = module.id(db);
     let module_path = module_id.path(db);
@@ -314,7 +315,7 @@ pub fn typecheck_module<'db>(
     log_query("typecheck", module_path, QueryPhase::Start);
 
     // Create type context for this module with module_id for pending diagnostics.
-    let mut ctx = TypeContext::with_module_id(db, spans, Some(module_id));
+    let mut ctx = TypeContext::with_options(db, spans, Some(module_id), auto_adapt_mode);
 
     // Add import errors to context.
     for err in import_errors {
@@ -403,6 +404,7 @@ pub fn typecheck_module_graph<'db>(
     all_names: AllModuleNameResolutions<'db>,
     all_exports: AllModuleExports<'db>,
     all_function_asts: AllModuleFunctionAsts<'db>,
+    auto_adapt_mode: crate::AutoAdaptMode,
 ) -> ModuleGraphTypecheckResult<'db> {
     let prep = prepare_typecheck(db, parsed_graph);
 
@@ -436,7 +438,7 @@ pub fn typecheck_module_graph<'db>(
         let spans = DatafunSpans::new(vec![]);
 
         // Call the tracked typecheck function.
-        let result = typecheck_module(db, module, parsed, spans, name_resolution, resolved_imports, import_errors);
+        let result = typecheck_module(db, module, parsed, spans, name_resolution, resolved_imports, import_errors, auto_adapt_mode);
 
         // Collect errors from typecheck result.
         let errors = result.errors(db).C();
@@ -498,6 +500,7 @@ pub fn typecheck_module_graph_parallel<'db>(
     all_names: AllModuleNameResolutions<'db>,
     all_exports: AllModuleExports<'db>,
     all_function_asts: AllModuleFunctionAsts<'db>,
+    auto_adapt_mode: crate::AutoAdaptMode,
 ) -> ModuleGraphTypecheckResult<'db> {
     use rayon::prelude::*;
 
@@ -535,12 +538,12 @@ pub fn typecheck_module_graph_parallel<'db>(
 
         // Typecheck (tracked, memoized per module).
         let spans = DatafunSpans::new(vec![]);
-        let _ = typecheck_module(db_salsa, module, parsed, spans, name_resolution, resolved_imports, import_errors);
+        let _ = typecheck_module(db_salsa, module, parsed, spans, name_resolution, resolved_imports, import_errors, auto_adapt_mode);
     });
 
     // Delegate to tracked function which aggregates results.
     // All resolve_module_names, resolve_module_imports, and typecheck_module calls will be cache hits.
-    typecheck_module_graph(db_salsa, parsed_graph, all_names, all_exports, all_function_asts)
+    typecheck_module_graph(db_salsa, parsed_graph, all_names, all_exports, all_function_asts, auto_adapt_mode)
 }
 
 /// Typecheck module graph with configurable parallelism.
@@ -555,10 +558,11 @@ pub fn typecheck_module_graph_with_mode<'db>(
     all_exports: AllModuleExports<'db>,
     all_function_asts: AllModuleFunctionAsts<'db>,
     mode: crate::ParallelMode,
+    auto_adapt_mode: crate::AutoAdaptMode,
 ) -> ModuleGraphTypecheckResult<'db> {
     match mode {
-        crate::ParallelMode::Sequential => typecheck_module_graph(db.as_salsa_db(), parsed_graph, all_names, all_exports, all_function_asts),
-        crate::ParallelMode::Parallel => typecheck_module_graph_parallel(db, parsed_graph, all_names, all_exports, all_function_asts),
+        crate::ParallelMode::Sequential => typecheck_module_graph(db.as_salsa_db(), parsed_graph, all_names, all_exports, all_function_asts, auto_adapt_mode),
+        crate::ParallelMode::Parallel => typecheck_module_graph_parallel(db, parsed_graph, all_names, all_exports, all_function_asts, auto_adapt_mode),
     }
 }
 

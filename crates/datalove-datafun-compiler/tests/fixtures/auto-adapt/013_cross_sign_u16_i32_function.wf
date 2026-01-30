@@ -1,4 +1,8 @@
-// Test: Cross-sign widening u16 → i32 in function return
+----------
+module local/test/convert
+----------
+
+// Test: Cross-sign widening u16 → i32 in module function return
 // u16 cannot implicitly widen to i32 (signed), but @ can do it
 // Expected: F016 type mismatch with recovery hint in function body
 

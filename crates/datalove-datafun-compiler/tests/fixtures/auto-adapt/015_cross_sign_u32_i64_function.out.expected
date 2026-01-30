@@ -14,10 +14,9 @@
         "labels": [
           {
             "span": [
-              224,
-              225
-            ],
-            "text": "n"
+              232,
+              233
+            ]
           }
         ],
         "message": "mismatched types: expected `i64`, found `u32`",
@@ -29,7 +28,7 @@
     "error_count": 1,
     "errors": [
       {
-        "error": "TypeMismatch { expected: \"i64\", actual: \"u32\" }"
+        "error": "local/test/convert: TypeMismatch { expected: \"i64\", actual: \"u32\" }"
       }
     ],
     "success": false

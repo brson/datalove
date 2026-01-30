@@ -1158,6 +1158,7 @@ version = "0.1.0"
 dependencies = [
  "bcts",
  "datalove-ct",
+ "datalove-datafun",
  "datalove-datafun-ast",
  "datalove-datafun-common",
  "datalove-datafun-const",
@@ -1166,6 +1167,7 @@ dependencies = [
  "datalove-datafun-lower",
  "datalove-datafun-ownership",
  "datalove-datafun-parser",
+ "datalove-datafun-pkg",
  "datalove-datafun-resolve",
  "datalove-datafun-sema",
  "datalove-datafun-tycheck",

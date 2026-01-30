@@ -1,5 +1,0 @@
-// Test: u8 should produce recovery hint for cross-sign widening to i16
-// Expected: F016 type mismatch with "help: use @ to convert from u8 to i16"
-
-let n: u8 = 255
-let x: i16 = n

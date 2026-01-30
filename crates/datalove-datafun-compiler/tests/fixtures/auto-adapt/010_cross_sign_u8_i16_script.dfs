@@ -1,6 +1,0 @@
-// Test: Cross-sign widening u8 → i16 in script context
-// u8 cannot implicitly widen to i16 (signed), but @ can do it
-// Expected: F016 type mismatch with recovery hint
-
-let n: u8 = 255
-let x: i16 = n

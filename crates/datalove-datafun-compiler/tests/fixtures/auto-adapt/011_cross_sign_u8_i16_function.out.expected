@@ -14,10 +14,9 @@
         "labels": [
           {
             "span": [
-              221,
-              222
-            ],
-            "text": "n"
+              229,
+              230
+            ]
           }
         ],
         "message": "mismatched types: expected `i16`, found `u8`",
@@ -29,7 +28,7 @@
     "error_count": 1,
     "errors": [
       {
-        "error": "TypeMismatch { expected: \"i16\", actual: \"u8\" }"
+        "error": "local/test/convert: TypeMismatch { expected: \"i16\", actual: \"u8\" }"
       }
     ],
     "success": false

@@ -1,61 +1,154 @@
-//! Auto-adapt mode tests.
+//! Auto-adapt mode tests using worldfiles.
 //!
-//! Each test fixture is run in two modes:
+//! Each test fixture is a worldfile that is run in two modes:
 //! 1. Normal mode (auto-adapt disabled) - should produce type errors with recovery hints
 //! 2. Auto-adapt mode (enabled) - should succeed by automatically inserting @
 //!
-//! The combined output shows both modes, allowing verification that:
-//! - Normal mode produces the expected type error with helpful recovery hints
-//! - Auto-adapt mode successfully adapts the types
+//! Worldfiles can contain:
+//! - Module sections: `module library/package/module` - tested via module graph pipeline
+//! - Script sections: `scriptunit-fragment` - tested via script unit pipeline
 
 use rmx::prelude::*;
 use rmx::serde_json::json;
 use std::path::Path;
 
-use datalove_datafun_tycheck::AutoAdaptMode;
+use datalove_datafun::{
+    Database, package, package_resolve,
+    to_module_graph, module_graph,
+};
+use datalove_datafun_tycheck::{typecheck_module_graph, AutoAdaptMode};
+use datalove_datafun_resolve::{resolve_all_names, resolve_all_exports, build_all_function_ast_maps};
+use datalove_datafun_pkg::package_load_worldfile::{WorldfileSection, parse_worldfile_sections};
 
-/// Analyze a file in both modes and return combined output.
+/// Typecheck worldfile sections with a given auto-adapt mode.
 ///
-/// Runs analysis in:
-/// 1. Normal mode (auto-adapt disabled) - should produce type errors for recoverable cases
-/// 2. Auto-adapt mode (enabled) - should succeed by automatically inserting @
-///
-/// The combined output includes both results for comparison.
-fn analyze_both_modes(path: &Path) -> Result<String, String> {
-    let source_text = std::fs::read_to_string(path).X();
-    let db = datalove_datafun_compiler::Database::default();
-    let source = bct::input::Source::new(&db, source_text.S());
+/// Handles both module sections (via module graph pipeline) and script sections
+/// (via script unit pipeline).
+fn typecheck_sections_with_mode(
+    sections: &[WorldfileSection],
+    mode: AutoAdaptMode,
+) -> (Vec<String>, Vec<rmx::serde_json::Value>) {
+    let db = Database::default();
+    let mut all_errors = Vec::new();
+    let mut all_diagnostics = Vec::new();
 
-    let script = datalove_datafun_parser::parse_for_diagnostics(&db, source);
-    let spans = datalove_datafun_parser::datafun_spans(&db, source);
+    // Collect module sections and build package world.
+    let mut has_modules = false;
+    let mut pkglib_system = std::collections::BTreeMap::new();
+    let mut pkglib_local = std::collections::BTreeMap::new();
 
-    // Resolve names for the script.
-    let name_resolution = datalove_datafun_resolve::resolve_script_names(&db, source, script.clone());
+    for section in sections {
+        if let WorldfileSection::Module { library, package: pkg, module, source } = section {
+            has_modules = true;
+            let library_map = match library.as_str() {
+                "sys" => &mut pkglib_system,
+                "local" => &mut pkglib_local,
+                other => {
+                    all_errors.push(format!("unknown library '{}'", other));
+                    continue;
+                }
+            };
 
-    // Helper to run analysis with a given mode.
-    let run_analysis = |mode: AutoAdaptMode| {
-        let unit_spec = datalove_datafun_tycheck::ScriptUnitSpec::new(
-            source,
-            spans.clone(),
-            datalove_datafun_tycheck::ScriptUnitKind::Fragment(script.clone(), name_resolution.clone()),
-        );
-        let batch_spec = datalove_datafun_tycheck::create_batch_spec_with_auto_adapt(
-            &db, source, vec![unit_spec], vec![], mode
-        );
-        let results = datalove_datafun_tycheck::type_check_script_units(&db, batch_spec);
-        let tycheck_result = results.results(&db)[0];
+            let package = library_map.entry(pkg.C())
+                .or_insert_with(|| datalove_datafun_pkg::package_load::Package {
+                    name: pkg.C(),
+                    modules: std::collections::BTreeMap::new(),
+                });
 
-        // Collect accumulated type diagnostics.
-        let type_diagnostics = datalove_datafun_tycheck::type_check_script_units::accumulated::<datalove_diagnostic::TypeDiagnostic>(&db, batch_spec);
-        let diagnostics: Vec<_> = type_diagnostics
-            .iter()
-            .map(|d| {
+            let module_path_str = format!("{}/{}/{}", library, pkg, module);
+            let pkg_module = datalove_datafun_pkg::package_load::PackageModule {
+                name: module.C(),
+                path: module_path_str.C().into(),
+                text: source.clone(),
+            };
+
+            package.modules.insert(module.C(), pkg_module);
+        }
+    }
+
+    // Typecheck modules if we have any.
+    if has_modules {
+        let package_world = datalove_datafun_pkg::package_load::PackageWorld {
+            pkglib_system,
+            pkglib_local,
+        };
+        let package_world = package::import_from_loader(&db, package_world);
+
+        let resolution = package_resolve::resolve_package_world_with_imports(&db, package_world);
+        let result = resolution.result(&db);
+
+        if let Err(e) = result {
+            all_errors.push(format!("Resolution error: {:?}", e));
+        } else {
+            let pkg_graph = result.ok().unwrap();
+            let graph_with_requires = to_module_graph(&db, package_world, pkg_graph);
+            let parsed_graph = module_graph::parse_module_graph(&db, graph_with_requires.graph, graph_with_requires.resolved_requires);
+            let all_names = resolve_all_names(&db, parsed_graph);
+            let all_exports = resolve_all_exports(&db, parsed_graph);
+            let all_function_asts = build_all_function_ast_maps(&db, parsed_graph);
+            let typecheck_result = typecheck_module_graph(&db, parsed_graph, all_names, all_exports, all_function_asts, mode);
+
+            // Collect module errors.
+            let module_errors = typecheck_result.module_errors(&db);
+            for (module_id, errs) in module_errors.iter() {
+                for err in errs {
+                    all_errors.push(format!("{}: {:?}", module_id.path(&db), err));
+                }
+            }
+
+            // Collect module diagnostics.
+            let type_diagnostics = typecheck_module_graph::accumulated::<datalove_diagnostic::TypeDiagnostic>(
+                &db, parsed_graph, all_names, all_exports, all_function_asts, mode
+            );
+            for d in type_diagnostics.iter() {
+                let diag = d.to_diagnostic(&db);
+                let code = diag.code.map(|c| c.as_str(&db).to_string());
+                let labels: Vec<_> = diag.labels.iter().map(|label| {
+                    json!({ "span": [label.span.start, label.span.end] })
+                }).collect();
+                let notes: Vec<_> = diag.notes.iter().map(|n| n.as_str(&db).to_string()).collect();
+                let mut obj = json!({
+                    "code": code,
+                    "message": diag.message.as_str(&db),
+                    "labels": labels
+                });
+                if !notes.is_empty() {
+                    obj["notes"] = json!(notes);
+                }
+                all_diagnostics.push(obj);
+            }
+        }
+    }
+
+    // Typecheck script sections.
+    for section in sections {
+        if let WorldfileSection::ScriptFragment { source } = section {
+            let db = datalove_datafun_compiler::Database::default();
+            let source_input = bct::input::Source::new(&db, source.S());
+            let script = datalove_datafun_parser::parse_for_diagnostics(&db, source_input);
+            let spans = datalove_datafun_parser::datafun_spans(&db, source_input);
+            let name_resolution = datalove_datafun_resolve::resolve_script_names(&db, source_input, script.clone());
+
+            let unit_spec = datalove_datafun_tycheck::ScriptUnitSpec::new(
+                source_input,
+                spans,
+                datalove_datafun_tycheck::ScriptUnitKind::Fragment(script.clone(), name_resolution.clone()),
+            );
+            let batch_spec = datalove_datafun_tycheck::create_batch_spec_with_auto_adapt(
+                &db, source_input, vec![unit_spec], vec![], mode
+            );
+            let results = datalove_datafun_tycheck::type_check_script_units(&db, batch_spec);
+            let tycheck_result = results.results(&db)[0];
+
+            // Collect script type diagnostics.
+            let type_diagnostics = datalove_datafun_tycheck::type_check_script_units::accumulated::<datalove_diagnostic::TypeDiagnostic>(&db, batch_spec);
+            for d in type_diagnostics.iter() {
                 let diag = d.to_diagnostic(&db);
                 let code = diag.code.map(|c| c.as_str(&db).to_string());
                 let labels: Vec<_> = diag.labels.iter().map(|label| {
                     json!({
                         "span": [label.span.start, label.span.end],
-                        "text": source_text[label.span.clone()].to_string(),
+                        "text": source[label.span.clone()].to_string(),
                     })
                 }).collect();
                 let notes: Vec<_> = diag.notes.iter().map(|n| n.as_str(&db).to_string()).collect();
@@ -67,29 +160,48 @@ fn analyze_both_modes(path: &Path) -> Result<String, String> {
                 if !notes.is_empty() {
                     obj["notes"] = json!(notes);
                 }
-                obj
-            })
-            .collect();
+                all_diagnostics.push(obj);
+            }
 
-        let errors: Vec<_> = tycheck_result.errors(&db)
-            .iter()
-            .map(|e| json!({ "error": format!("{:?}", e.error(&db)) }))
-            .collect();
+            // Collect script errors.
+            for e in tycheck_result.errors(&db).iter() {
+                all_errors.push(format!("{:?}", e.error(&db)));
+            }
+        }
+    }
 
-        let has_errors = !errors.is_empty() || !diagnostics.is_empty();
+    (all_errors, all_diagnostics)
+}
 
-        json!({
-            "success": !has_errors,
-            "error_count": errors.len(),
-            "diagnostic_count": diagnostics.len(),
-            "diagnostics": diagnostics,
-            "errors": errors,
-        })
-    };
+/// Analyze a worldfile in both modes and return combined output.
+fn analyze_both_modes(path: &Path) -> Result<String, String> {
+    let source = std::fs::read_to_string(path).X();
 
-    // Run in both modes.
-    let normal_result = run_analysis(AutoAdaptMode::Disabled);
-    let adapt_result = run_analysis(AutoAdaptMode::Enabled);
+    // Parse worldfile into sections.
+    let parsed = parse_worldfile_sections(source.as_bytes())
+        .map_err(|e| format!("Parse error: {}", e))?;
+
+    // Run in normal mode (auto-adapt disabled).
+    let (normal_errors, normal_diagnostics) = typecheck_sections_with_mode(&parsed.sections, AutoAdaptMode::Disabled);
+    let normal_has_errors = !normal_errors.is_empty() || !normal_diagnostics.is_empty();
+    let normal_result = json!({
+        "success": !normal_has_errors,
+        "error_count": normal_errors.len(),
+        "diagnostic_count": normal_diagnostics.len(),
+        "diagnostics": normal_diagnostics,
+        "errors": normal_errors.iter().map(|e| json!({ "error": e })).collect::<Vec<_>>(),
+    });
+
+    // Run in auto-adapt mode (enabled).
+    let (adapt_errors, adapt_diagnostics) = typecheck_sections_with_mode(&parsed.sections, AutoAdaptMode::Enabled);
+    let adapt_has_errors = !adapt_errors.is_empty() || !adapt_diagnostics.is_empty();
+    let adapt_result = json!({
+        "success": !adapt_has_errors,
+        "error_count": adapt_errors.len(),
+        "diagnostic_count": adapt_diagnostics.len(),
+        "diagnostics": adapt_diagnostics,
+        "errors": adapt_errors.iter().map(|e| json!({ "error": e })).collect::<Vec<_>>(),
+    });
 
     let combined = json!({
         "normal_mode": normal_result,
@@ -101,11 +213,11 @@ fn analyze_both_modes(path: &Path) -> Result<String, String> {
 
 /// Run tests to verify recovery hints in diagnostics.
 ///
-/// Uses the dual-mode analyzer which runs both normal and auto-adapt modes
-/// and outputs combined results.
+/// Uses worldfiles and the full compilation pipeline to test auto-adapt mode
+/// in both script and module contexts.
 fn main() {
     datalove_exampletest::ExampleTestRunner::new(env!("CARGO_MANIFEST_DIR"), analyze_both_modes)
         .fixture_subdir("auto-adapt")
-        .file_extension("dfs")
+        .file_extension("wf")
         .run();
 }

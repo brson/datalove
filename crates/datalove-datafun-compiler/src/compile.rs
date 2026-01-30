@@ -19,6 +19,7 @@ use datalove_datafun_resolve::{
 use datalove_datafun_tycheck::{
     typecheck_module_graph_with_mode,
     ModuleGraphTypecheckResult,
+    AutoAdaptMode,
 };
 
 use crate::module_graph::{parse_module_graph_with_mode, parse_module_full};
@@ -105,6 +106,7 @@ pub fn compile_modules<'db>(
         all_exports,
         all_function_asts,
         mode,
+        AutoAdaptMode::Disabled,
     );
 
     // Phase 4: Ownership Analysis

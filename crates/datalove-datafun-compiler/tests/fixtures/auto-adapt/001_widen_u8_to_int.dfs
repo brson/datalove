@@ -1,6 +1,0 @@
-// Test: u16 should produce recovery hint for cross-sign widening to i32
-// u16 can't implicitly widen to i32 but @ can do it
-// Expected: F016 type mismatch with "help: use @ to convert from u16 to i32"
-
-let n: u16 = 1000
-let x: i32 = n

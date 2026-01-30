@@ -1,0 +1,10 @@
+----------
+scriptunit-fragment
+----------
+
+// Test: Cross-sign widening u32 → i64 in script
+// u32 cannot implicitly widen to i64 (signed), but @ can do it
+// Expected: F016 type mismatch with recovery hint
+
+let n: u32 = (: u32 / 100000)
+let m: i64 = n

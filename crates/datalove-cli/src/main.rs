@@ -797,7 +797,7 @@ impl TypecheckStdCommand {
         let all_names = resolve_all_names(&db, parsed_graph);
         let all_exports = resolve_all_exports(&db, parsed_graph);
         let all_function_asts = build_all_function_ast_maps(&db, parsed_graph);
-        let typecheck_result = datalove_datafun_tycheck::typecheck_module_graph(&db, parsed_graph, all_names, all_exports, all_function_asts);
+        let typecheck_result = datalove_datafun_tycheck::typecheck_module_graph(&db, parsed_graph, all_names, all_exports, all_function_asts, datalove_datafun_tycheck::AutoAdaptMode::Disabled);
 
         // Report typecheck errors.
         let module_errors = typecheck_result.module_errors(&db);
