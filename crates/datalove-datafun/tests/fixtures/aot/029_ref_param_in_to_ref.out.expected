@@ -15,11 +15,11 @@ AotAnalysis(
                     scriptunit:
                     block0:
                         v0 = const 42int
-                        v1 = call f1(v0)
+                        v1 = call @0 f1(v0)
                         debuglog v1
                         drop v1
                         v2 = const 100int
-                        v3 = call f1(v2)
+                        v3 = call @1 f1(v2)
                         debuglog v3
                         drop v3
                         unit_end
@@ -32,7 +32,7 @@ AotAnalysis(
                         return v1
                     fn outer(p0):
                     block0:
-                        v0 = call f0(p0)
+                        v0 = call @0 f0(p0)
                         drop p0
                         return v0
                     exports:

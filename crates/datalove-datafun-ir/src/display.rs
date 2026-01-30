@@ -367,8 +367,8 @@ impl fmt::Display for Instruction {
             Instruction::Clone { dest, src } => {
                 write!(f, "{} = clone {}", dest, src)
             }
-            Instruction::Call { dest, func, args } => {
-                write!(f, "{} = call {}(", dest, func)?;
+            Instruction::Call { site_id, dest, func, args } => {
+                write!(f, "{} = call @{} {}(", dest, site_id.0, func)?;
                 for (i, arg) in args.iter().enumerate() {
                     if i > 0 {
                         write!(f, ", ")?;

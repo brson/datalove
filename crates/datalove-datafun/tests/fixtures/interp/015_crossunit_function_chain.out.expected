@@ -47,8 +47,8 @@ Analysis(
                     
                     fn add_two(p0):
                     block0:
-                        v0 = call unit0.f0(p0)
-                        v1 = call unit0.f0(v0)
+                        v0 = call @0 unit0.f0(p0)
+                        v1 = call @1 unit0.f0(v0)
                         return v1
                     exports:
                         add_two = f0
@@ -71,9 +71,9 @@ Analysis(
                     scriptunit:
                     block0:
                         v0 = const 10int
-                        v1 = call unit1.f0(v0)
+                        v1 = call @0 unit1.f0(v0)
                         v2 = const 100int
-                        v3 = call unit0.f0(v2)
+                        v3 = call @1 unit0.f0(v2)
                         v4 = add v1, v3
                         drop v1
                         drop v3

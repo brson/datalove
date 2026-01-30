@@ -19,7 +19,7 @@ DualAnalysis(
                         v3 = const 10u32
                         v4 = const 20u32
                         v5 = pack Struct0 {v3, v4}
-                        v6 = call f0(v2, v5)
+                        v6 = call @0 f0(v2, v5)
                         debuglog v6
                         drop v6
                         unit_end
@@ -53,7 +53,7 @@ DualAnalysis(
                         v3 = const 10u32
                         v4 = const 20u32
                         v5 = pack Struct0 {v3, v4}
-                        v6 = call f0(v2, v5)
+                        v6 = call @0 f0(v2, v5)
                         debuglog v6
                         drop v6
                         unit_end

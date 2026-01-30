@@ -8,9 +8,9 @@
 use std::collections::HashMap;
 
 use datalove_datafun_ir::{
-    BlockId, FuncId, FuncRef, Instruction, IrBlock, IrFunction, IrModule, IrModuleId, IrType,
-    ModuleFunctionRegistry, Operand, ParamId, ParamMode, SlotDest, SlotId, SymbolTable, Terminator,
-    ValueId,
+    BlockId, CallSiteId, FuncId, FuncRef, Instruction, IrBlock, IrFunction, IrModule, IrModuleId,
+    IrType, ModuleFunctionRegistry, Operand, ParamId, ParamMode, SlotDest, SlotId, SymbolTable,
+    Terminator, ValueId,
 };
 
 /// Directive specifying which function calls to inline.
@@ -507,7 +507,7 @@ fn find_call_sites(func: &IrFunction, callee_id: FuncId) -> Vec<CallSite> {
 
     for (block_idx, block) in func.blocks.iter().enumerate() {
         for (instr_idx, instr) in block.instructions.iter().enumerate() {
-            if let Instruction::Call { dest, func: func_ref, args } = instr {
+            if let Instruction::Call { dest, func: func_ref, args, .. } = instr {
                 // Match both Local and Module function references.
                 let matches = match func_ref {
                     FuncRef::Local(id) => *id == callee_id,
@@ -539,7 +539,7 @@ fn find_cross_module_call_sites(
 
     for (block_idx, block) in func.blocks.iter().enumerate() {
         for (instr_idx, instr) in block.instructions.iter().enumerate() {
-            if let Instruction::Call { dest, func: func_ref, args } = instr {
+            if let Instruction::Call { dest, func: func_ref, args, .. } = instr {
                 let matches = match func_ref {
                     // Local call - matches if we're in the same module as target.
                     FuncRef::Local(id) => {
@@ -571,6 +571,7 @@ struct RemapContext {
     value_offset: u32,
     slot_offset: u32,
     block_offset: u32,
+    call_site_offset: u32,
 }
 
 impl RemapContext {
@@ -580,6 +581,10 @@ impl RemapContext {
 
     fn remap_slot(&self, s: SlotId) -> SlotId {
         SlotId(s.0 + self.slot_offset)
+    }
+
+    fn remap_call_site(&self, c: CallSiteId) -> CallSiteId {
+        CallSiteId(c.0 + self.call_site_offset)
     }
 
     fn remap_block(&self, b: BlockId) -> BlockId {
@@ -676,7 +681,8 @@ impl RemapContext {
                 dest: self.remap_value(*dest),
                 src: self.remap_operand(src),
             },
-            Instruction::Call { dest, func, args } => Instruction::Call {
+            Instruction::Call { site_id, dest, func, args } => Instruction::Call {
+                site_id: self.remap_call_site(*site_id),
                 dest: self.remap_value(*dest),
                 func: func.clone(),
                 args: args.iter().map(|a| self.remap_operand(a)).collect(),
@@ -969,6 +975,7 @@ fn inline_call_site(
         value_offset: caller.value_count,
         slot_offset: caller.slot_count,
         block_offset: caller.blocks.len() as u32,
+        call_site_offset: caller.call_site_count,
     };
 
     // The continuation block receives the return value.
@@ -1081,6 +1088,7 @@ fn inline_call_site(
     let extra_values = callee.value_count + callee.params.len() as u32;
     new_func.value_count += extra_values;
     new_func.slot_count += callee.slot_count;
+    new_func.call_site_count += callee.call_site_count;
 
     // Extend type arrays.
     new_func.value_types.extend(callee.value_types.iter().cloned());
@@ -1169,7 +1177,8 @@ fn replace_params_in_instruction(
             dest: *dest,
             src: replace_operand(src),
         },
-        Instruction::Call { dest, func, args } => Instruction::Call {
+        Instruction::Call { site_id, dest, func, args } => Instruction::Call {
+            site_id: *site_id,
             dest: *dest,
             func: func.clone(),
             args: args.iter().map(replace_operand).collect(),

@@ -51,7 +51,7 @@ DualAnalysis(
                     block0:
                         v0 = const 10u32
                         v1 = const 20u32
-                        v2 = call m0.f0(v0, v1)
+                        v2 = call @0 m0.f0(v0, v1)
                         v3 = getfieldref v2.0
                         debuglog *v3
                         v4 = getfieldref v2.1
@@ -68,7 +68,7 @@ DualAnalysis(
                     block0:
                         v0 = const 10u32
                         v1 = const 20u32
-                        v2 = call m0.f0(v0, v1)
+                        v2 = call @0 m0.f0(v0, v1)
                         v3 = getfieldref v2.0
                         debuglog *v3
                         v4 = getfieldref v2.1

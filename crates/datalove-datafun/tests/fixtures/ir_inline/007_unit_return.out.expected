@@ -1,7 +1,7 @@
 === BEFORE INLINING ===
 fn caller():
 block0:
-    v0 = call m0.f0()
+    v0 = call @0 m0.f0()
     v1 = const 42i64
     return v1
 

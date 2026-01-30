@@ -14,8 +14,8 @@ Analysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = call f0()
-                        v1 = call f1()
+                        v0 = call @0 f0()
+                        v1 = call @1 f1()
                         v2, v3 = div.checked v0, v1
                         branch v3, block1, block2
                     block1:

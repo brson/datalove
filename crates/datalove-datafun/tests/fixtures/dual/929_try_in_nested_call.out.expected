@@ -13,7 +13,7 @@ DualAnalysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = call f2()
+                        v0 = call @0 f2()
                         debuglog v0
                         drop v0
                         unit_end
@@ -39,8 +39,8 @@ DualAnalysis(
                         drop v1
                         return v4
                     block2:
-                        v5 = call f0(v2)
-                        v6 = call f1(v1, v5)
+                        v5 = call @0 f0(v2)
+                        v6 = call @1 f1(v1, v5)
                         v7 = some v6
                         return v7
                     exports:
@@ -54,7 +54,7 @@ DualAnalysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = call f2()
+                        v0 = call @0 f2()
                         debuglog v0
                         drop v0
                         unit_end
@@ -80,8 +80,8 @@ DualAnalysis(
                         drop v1
                         return v4
                     block2:
-                        v5 = call f0(v2)
-                        v6 = call f1(v1, v5)
+                        v5 = call @0 f0(v2)
+                        v6 = call @1 f1(v1, v5)
                         v7 = some v6
                         return v7
                     exports:

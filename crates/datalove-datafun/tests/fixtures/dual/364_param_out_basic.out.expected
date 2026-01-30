@@ -15,7 +15,7 @@ DualAnalysis(
                     block0:
                         v0 = const 0u32
                         store.copy.tracked s0, v0
-                        v1 = call f0(s0)
+                        v1 = call @0 f0(s0)
                         debuglog s0
                         unit_end
                     
@@ -38,7 +38,7 @@ DualAnalysis(
                     block0:
                         v0 = const 0u32
                         store.copy.tracked s0, v0
-                        v1 = call f0(s0)
+                        v1 = call @0 f0(s0)
                         debuglog s0
                         unit_end
                     

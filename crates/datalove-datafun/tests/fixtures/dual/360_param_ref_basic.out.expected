@@ -14,7 +14,7 @@ DualAnalysis(
                     scriptunit:
                     block0:
                         v0 = const 21int
-                        v1 = call f0(v0)
+                        v1 = call @0 f0(v0)
                         debuglog v1
                         drop v1
                         debuglog v0
@@ -36,7 +36,7 @@ DualAnalysis(
                     scriptunit:
                     block0:
                         v0 = const 21int
-                        v1 = call f0(v0)
+                        v1 = call @0 f0(v0)
                         debuglog v1
                         drop v1
                         debuglog v0

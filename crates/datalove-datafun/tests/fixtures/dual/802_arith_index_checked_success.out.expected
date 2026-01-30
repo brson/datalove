@@ -15,21 +15,21 @@ DualAnalysis(
                     block0:
                         v0 = const 100index
                         v1 = const 50index
-                        v2 = call f1(v0, v1)
+                        v2 = call @0 f1(v0, v1)
                         v3 = const 999index
-                        v4 = call f0(v2, v3)
+                        v4 = call @1 f0(v2, v3)
                         debuglog v4
-                        v5 = call f2(v0, v1)
+                        v5 = call @2 f2(v0, v1)
                         v6 = const 999index
-                        v7 = call f0(v5, v6)
+                        v7 = call @3 f0(v5, v6)
                         debuglog v7
-                        v8 = call f3(v0, v1)
+                        v8 = call @4 f3(v0, v1)
                         v9 = const 999index
-                        v10 = call f0(v8, v9)
+                        v10 = call @5 f0(v8, v9)
                         debuglog v10
-                        v11 = call f4(v0, v1)
+                        v11 = call @6 f4(v0, v1)
                         v12 = const 999index
-                        v13 = call f0(v11, v12)
+                        v13 = call @7 f0(v11, v12)
                         debuglog v13
                         unit_end
                     
@@ -102,21 +102,21 @@ DualAnalysis(
                     block0:
                         v0 = const 100index
                         v1 = const 50index
-                        v2 = call f1(v0, v1)
+                        v2 = call @0 f1(v0, v1)
                         v3 = const 999index
-                        v4 = call f0(v2, v3)
+                        v4 = call @1 f0(v2, v3)
                         debuglog v4
-                        v5 = call f2(v0, v1)
+                        v5 = call @2 f2(v0, v1)
                         v6 = const 999index
-                        v7 = call f0(v5, v6)
+                        v7 = call @3 f0(v5, v6)
                         debuglog v7
-                        v8 = call f3(v0, v1)
+                        v8 = call @4 f3(v0, v1)
                         v9 = const 999index
-                        v10 = call f0(v8, v9)
+                        v10 = call @5 f0(v8, v9)
                         debuglog v10
-                        v11 = call f4(v0, v1)
+                        v11 = call @6 f4(v0, v1)
                         v12 = const 999index
-                        v13 = call f0(v11, v12)
+                        v13 = call @7 f0(v11, v12)
                         debuglog v13
                         unit_end
                     

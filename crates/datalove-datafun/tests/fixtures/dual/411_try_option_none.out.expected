@@ -13,7 +13,7 @@ DualAnalysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = call f0()
+                        v0 = call @0 f0()
                         debuglog v0
                         unit_end
                     
@@ -37,7 +37,7 @@ DualAnalysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = call f0()
+                        v0 = call @0 f0()
                         debuglog v0
                         unit_end
                     

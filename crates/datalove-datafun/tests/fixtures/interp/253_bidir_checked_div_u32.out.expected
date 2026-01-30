@@ -14,7 +14,7 @@ Analysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = call f0()
+                        v0 = call @0 f0()
                         unit_end_drop v0
                         unit_end
                     

@@ -16,21 +16,21 @@ AotAnalysis(
                     block0:
                         v0 = const 10int
                         v1 = const 32int
-                        v2 = call f0(v0, v1)
+                        v2 = call @0 f0(v0, v1)
                         debuglog v2
                         drop v2
                         v3 = const 100int
                         v4 = const 42int
-                        v5 = call f1(v3, v4)
+                        v5 = call @1 f1(v3, v4)
                         debuglog v5
                         drop v5
                         v6 = const 7int
                         v7 = const 6int
-                        v8 = call f2(v6, v7)
+                        v8 = call @2 f2(v6, v7)
                         debuglog v8
                         drop v8
                         v9 = const 42int
-                        v10 = call f3(v9)
+                        v10 = call @3 f3(v9)
                         debuglog v10
                         drop v10
                         unit_end

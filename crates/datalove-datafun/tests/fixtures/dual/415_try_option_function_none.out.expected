@@ -13,7 +13,7 @@ DualAnalysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = call f1()
+                        v0 = call @0 f1()
                         debuglog v0
                         unit_end
                     
@@ -31,7 +31,7 @@ DualAnalysis(
                     fn test():
                     block0:
                         v0 = none
-                        v1 = call f0(v0)
+                        v1 = call @0 f0(v0)
                         return v1
                     exports:
                         extract = f0
@@ -43,7 +43,7 @@ DualAnalysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = call f1()
+                        v0 = call @0 f1()
                         debuglog v0
                         unit_end
                     
@@ -61,7 +61,7 @@ DualAnalysis(
                     fn test():
                     block0:
                         v0 = none
-                        v1 = call f0(v0)
+                        v1 = call @0 f0(v0)
                         return v1
                     exports:
                         extract = f0

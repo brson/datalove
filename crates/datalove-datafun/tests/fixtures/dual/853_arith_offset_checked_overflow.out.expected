@@ -17,17 +17,17 @@ DualAnalysis(
                         v1 = const -2147483648offset
                         v2 = const 1offset
                         v3 = const 0offset
-                        v4 = call f1(v0, v2)
+                        v4 = call @0 f1(v0, v2)
                         v5 = const 999offset
-                        v6 = call f0(v4, v5)
+                        v6 = call @1 f0(v4, v5)
                         debuglog v6
-                        v7 = call f2(v1, v2)
+                        v7 = call @2 f2(v1, v2)
                         v8 = const 999offset
-                        v9 = call f0(v7, v8)
+                        v9 = call @3 f0(v7, v8)
                         debuglog v9
-                        v10 = call f3(v2, v3)
+                        v10 = call @4 f3(v2, v3)
                         v11 = const 999offset
-                        v12 = call f0(v10, v11)
+                        v12 = call @5 f0(v10, v11)
                         debuglog v12
                         unit_end
                     
@@ -93,17 +93,17 @@ DualAnalysis(
                         v1 = const -2147483648offset
                         v2 = const 1offset
                         v3 = const 0offset
-                        v4 = call f1(v0, v2)
+                        v4 = call @0 f1(v0, v2)
                         v5 = const 999offset
-                        v6 = call f0(v4, v5)
+                        v6 = call @1 f0(v4, v5)
                         debuglog v6
-                        v7 = call f2(v1, v2)
+                        v7 = call @2 f2(v1, v2)
                         v8 = const 999offset
-                        v9 = call f0(v7, v8)
+                        v9 = call @3 f0(v7, v8)
                         debuglog v9
-                        v10 = call f3(v2, v3)
+                        v10 = call @4 f3(v2, v3)
                         v11 = const 999offset
-                        v12 = call f0(v10, v11)
+                        v12 = call @5 f0(v10, v11)
                         debuglog v12
                         unit_end
                     

@@ -48,8 +48,8 @@ DualAnalysis(
                 ir: """
                     fn quadruple(p0):
                     block0:
-                        v0 = call m0.f0(p0)
-                        v1 = call m0.f0(v0)
+                        v0 = call @0 m0.f0(p0)
+                        v1 = call @1 m0.f0(v0)
                         return v1
                 """,
             ),
@@ -58,8 +58,8 @@ DualAnalysis(
                 ir: """
                     fn quadruple(p0):
                     block0:
-                        v0 = call m0.f0(p0)
-                        v1 = call m0.f0(v0)
+                        v0 = call @0 m0.f0(p0)
+                        v1 = call @1 m0.f0(v0)
                         return v1
                 """,
             ),
@@ -82,7 +82,7 @@ DualAnalysis(
                     scriptunit:
                     block0:
                         v0 = const 10int
-                        v1 = call m1.f0(v0)
+                        v1 = call @0 m1.f0(v0)
                         debuglog v1
                         drop v1
                         unit_end
@@ -94,7 +94,7 @@ DualAnalysis(
                     scriptunit:
                     block0:
                         v0 = const 10int
-                        v1 = call m1.f0(v0)
+                        v1 = call @0 m1.f0(v0)
                         debuglog v1
                         drop v1
                         unit_end

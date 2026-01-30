@@ -157,6 +157,7 @@ pub fn lower_function_body<'db>(
         blocks: std::mem::take(&mut ctx.body.blocks),
         value_count: ctx.body.next_value,
         slot_count: ctx.body.next_slot,
+        call_site_count: ctx.body.next_call_site,
         value_types: std::mem::take(&mut ctx.body.value_types),
         slot_types: std::mem::take(&mut ctx.body.slot_types),
         tracked_slots: ctx.compute_tracked_slots(),

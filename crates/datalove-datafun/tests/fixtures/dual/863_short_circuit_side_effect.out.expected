@@ -54,14 +54,14 @@ DualAnalysis(
                         drop v0
                         v1 = const true
                         v2 = const "should_not_print"
-                        v3 = call m0.f0(v2)
+                        v3 = call @0 m0.f0(v2)
                         v4 = logic_or v1, v3
                         v5 = const "middle"
                         debuglog v5
                         drop v5
                         v6 = const false
                         v7 = const "should_print"
-                        v8 = call m0.f0(v7)
+                        v8 = call @1 m0.f0(v7)
                         v9 = logic_or v6, v8
                         v10 = const "end"
                         debuglog v10
@@ -82,14 +82,14 @@ DualAnalysis(
                         drop v0
                         v1 = const true
                         v2 = const "should_not_print"
-                        v3 = call m0.f0(v2)
+                        v3 = call @0 m0.f0(v2)
                         v4 = logic_or v1, v3
                         v5 = const "middle"
                         debuglog v5
                         drop v5
                         v6 = const false
                         v7 = const "should_print"
-                        v8 = call m0.f0(v7)
+                        v8 = call @1 m0.f0(v7)
                         v9 = logic_or v6, v8
                         v10 = const "end"
                         debuglog v10

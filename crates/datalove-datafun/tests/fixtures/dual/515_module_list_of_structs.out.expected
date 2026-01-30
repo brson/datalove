@@ -54,7 +54,7 @@ DualAnalysis(
                         v4 = const 3u32
                         v5 = pack Struct0 {v4}
                         v6 = list [v1, v3, v5]
-                        v7 = call m0.f0(v6)
+                        v7 = call @0 m0.f0(v6)
                         debuglog v7
                         unit_end
                     exports:
@@ -73,7 +73,7 @@ DualAnalysis(
                         v4 = const 3u32
                         v5 = pack Struct0 {v4}
                         v6 = list [v1, v3, v5]
-                        v7 = call m0.f0(v6)
+                        v7 = call @0 m0.f0(v6)
                         debuglog v7
                         unit_end
                     exports:

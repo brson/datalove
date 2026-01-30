@@ -17,16 +17,16 @@ AotAnalysis(
                         v0 = const 10int
                         v1 = const 20int
                         v2 = const 30int
-                        v3 = call f0(v0, v1)
+                        v3 = call @0 f0(v0, v1)
                         debuglog v3
                         drop v3
-                        v4 = call f0(v0, v2)
+                        v4 = call @1 f0(v0, v2)
                         debuglog v4
                         drop v4
-                        v5 = call f0(v1, v2)
+                        v5 = call @2 f0(v1, v2)
                         debuglog v5
                         drop v5
-                        v6 = call f0(v0, v0)
+                        v6 = call @3 f0(v0, v0)
                         debuglog v6
                         drop v6
                         unit_end_drop v0

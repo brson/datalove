@@ -13,7 +13,7 @@ ModulesAnalysis(
             
             fn main():
             block0:
-                v0 = call m0.f0()
+                v0 = call @0 m0.f0()
                 v1, v2 = unwrap_option v0
                 branch v2, block1, block2
             block1:

@@ -35,7 +35,7 @@ Analysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = call m0.f0()
+                        v0 = call @0 m0.f0()
                         debuglog v0
                         drop v0
                         unit_end

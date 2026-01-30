@@ -568,7 +568,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             Instruction::DebugLog { operand } => {
                 self.compile_debuglog(builder, operand)?;
             }
-            Instruction::Call { dest, func, args } => {
+            Instruction::Call { dest, func, args, .. } => {
                 self.compile_call(builder, *dest, func, args)?;
             }
             Instruction::SlotStoreCopy { dest, value } => {
@@ -1079,6 +1079,7 @@ mod tests {
             ],
             value_count: 1,
             slot_count: 0,
+            call_site_count: 0,
             value_types: vec![IrType::I32],
             slot_types: vec![],
             tracked_slots: vec![],
@@ -1131,6 +1132,7 @@ mod tests {
             ],
             value_count: 3,
             slot_count: 0,
+            call_site_count: 0,
             value_types: vec![IrType::I32, IrType::I32, IrType::Bool],
             slot_types: vec![],
             tracked_slots: vec![],
@@ -1175,6 +1177,7 @@ mod tests {
             ],
             value_count: 2,
             slot_count: 0,
+            call_site_count: 0,
             value_types: vec![IrType::I32, IrType::I32],
             slot_types: vec![],
             tracked_slots: vec![],
@@ -1250,6 +1253,7 @@ mod tests {
             ],
             value_count: 3,
             slot_count: 0,
+            call_site_count: 0,
             value_types: vec![IrType::Bool, IrType::I32, IrType::I32],
             slot_types: vec![],
             tracked_slots: vec![],

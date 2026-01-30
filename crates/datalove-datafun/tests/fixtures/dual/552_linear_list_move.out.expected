@@ -17,7 +17,7 @@ DualAnalysis(
                         v1 = const 2u32
                         v2 = const 3u32
                         v3 = list [v0, v1, v2]
-                        v4 = call f0(v3)
+                        v4 = call @0 f0(v3)
                         debuglog v4
                         unit_end
                     
@@ -41,7 +41,7 @@ DualAnalysis(
                         v1 = const 2u32
                         v2 = const 3u32
                         v3 = list [v0, v1, v2]
-                        v4 = call f0(v3)
+                        v4 = call @0 f0(v3)
                         debuglog v4
                         unit_end
                     

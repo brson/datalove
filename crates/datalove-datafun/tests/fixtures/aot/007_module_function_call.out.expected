@@ -35,7 +35,7 @@ AotAnalysis(
                     scriptunit:
                     block0:
                         v0 = const 42u32
-                        v1 = call m0.f0(v0)
+                        v1 = call @0 m0.f0(v0)
                         debuglog v1
                         unit_end
                 """,

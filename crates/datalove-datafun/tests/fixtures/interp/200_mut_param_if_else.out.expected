@@ -33,7 +33,7 @@ Analysis(
                         v0 = const 0u32
                         store.copy.tracked s0, v0
                         v1 = const true
-                        v2 = call m0.f0(s0, v1)
+                        v2 = call @0 m0.f0(s0, v1)
                         v3 = load.copy s0
                         return v3
                     
@@ -42,7 +42,7 @@ Analysis(
                         v0 = const 0u32
                         store.copy.tracked s0, v0
                         v1 = const false
-                        v2 = call m0.f0(s0, v1)
+                        v2 = call @0 m0.f0(s0, v1)
                         v3 = load.copy s0
                         return v3
                 """,
@@ -82,8 +82,8 @@ Analysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = call m0.f1()
-                        v1 = call m0.f2()
+                        v0 = call @0 m0.f1()
+                        v1 = call @1 m0.f2()
                         v2 = pack Tuple2 {v0, v1}
                         unit_end v2
                 """,

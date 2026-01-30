@@ -11,7 +11,7 @@ IrSerialAnalysis(
                     scriptunit:
                     block0:
                         v0 = const 5u32
-                        v1 = call f0(v0)
+                        v1 = call @0 f0(v0)
                         debuglog v1
                         drop v1
                         unit_end
@@ -35,7 +35,7 @@ IrSerialAnalysis(
                         v9 = err v8
                         return v9
                     block4:
-                        v10 = call f0(v5)
+                        v10 = call @0 f0(v5)
                         return v10
                     exports:
                         countdown = f0
@@ -43,7 +43,7 @@ IrSerialAnalysis(
             ),
             direct_interp_output: "ok 0\n",
             direct_aot_output: "ok 0\n",
-            serialized_ir_size: 5685,
+            serialized_ir_size: 5837,
             serialized_registry_size: 177,
             deser_success: true,
             deser_interp_output: "ok 0\n",

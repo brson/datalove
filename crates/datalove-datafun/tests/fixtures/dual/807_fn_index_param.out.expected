@@ -15,16 +15,16 @@ DualAnalysis(
                     block0:
                         v0 = const 100index
                         v1 = const 200index
-                        v2 = call f0(v0, v1)
+                        v2 = call @0 f0(v0, v1)
                         debuglog v2
                         v3 = const 50index
-                        v4 = call f1(v3)
+                        v4 = call @1 f1(v3)
                         debuglog v4
                         v5 = const 0index
-                        v6 = call f2(v5)
+                        v6 = call @2 f2(v5)
                         debuglog v6
                         v7 = const 1index
-                        v8 = call f2(v7)
+                        v8 = call @3 f2(v7)
                         debuglog v8
                         unit_end
                     
@@ -54,16 +54,16 @@ DualAnalysis(
                     block0:
                         v0 = const 100index
                         v1 = const 200index
-                        v2 = call f0(v0, v1)
+                        v2 = call @0 f0(v0, v1)
                         debuglog v2
                         v3 = const 50index
-                        v4 = call f1(v3)
+                        v4 = call @1 f1(v3)
                         debuglog v4
                         v5 = const 0index
-                        v6 = call f2(v5)
+                        v6 = call @2 f2(v5)
                         debuglog v6
                         v7 = const 1index
-                        v8 = call f2(v7)
+                        v8 = call @3 f2(v7)
                         debuglog v8
                         unit_end
                     

@@ -35,7 +35,7 @@ Analysis(
                         v9 = err v8
                         return v9
                     block4:
-                        v10 = call f0(v5)
+                        v10 = call @0 f0(v5)
                         v11, v12, v13 = unwrap_result v10
                         branch v13, block6, block5
                     block5:
@@ -51,7 +51,7 @@ Analysis(
                         v20 = err v19
                         return v20
                     block8:
-                        v21 = call f0(v16)
+                        v21 = call @1 f0(v16)
                         v22, v23, v24 = unwrap_result v21
                         branch v24, block10, block9
                     block9:
@@ -89,7 +89,7 @@ Analysis(
                     scriptunit:
                     block0:
                         v0 = const 10u32
-                        v1 = call unit0.f0(v0)
+                        v1 = call @0 unit0.f0(v0)
                         unit_end v1
                 """,
             ),

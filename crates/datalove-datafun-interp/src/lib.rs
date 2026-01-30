@@ -844,7 +844,7 @@ impl IrInterpreter {
                 frame.mark_value_live(*dest);
                 Self::mark_source_dropped_local(inner, frame);
             }
-            Instruction::Call { dest, func, args } => {
+            Instruction::Call { dest, func, args, .. } => {
                 let (callee, callee_unit) = ctx.get_function_with_context(func, registry);
                 let arg_vals = self.prepare_call_args(callee, args, frame, frames);
                 let dest_slot = frame.value_dest(*dest);

@@ -15,7 +15,7 @@ use datalove_datafun_sema::ResolvedCallTarget;
 use datalove_datafun_ir::{
     IrType, IrBlock, IrFunction, Operand, ValueId, SlotId, ParamId, BlockId, FuncId,
     FuncRef, Terminator, Instruction, SymbolTable, ExportBinding, IrModuleId, ParamMode,
-    ConstValue, TypeRef, SlotDest, CtfeEvaluator,
+    ConstValue, TypeRef, SlotDest, CtfeEvaluator, CallSiteId,
 };
 use crate::ir_ext::IrTypeExt;
 use datalove_datafun_sema::{BindingId, DropSchedule, BindingInfo, TrackingCategory, StmtKey};
@@ -42,6 +42,8 @@ pub struct FrameState {
     pub next_slot: u32,
     /// Next ParamId to allocate.
     pub next_param: u32,
+    /// Next CallSiteId to allocate.
+    pub next_call_site: u32,
     /// Mapping from variable names to their operands.
     pub variables: HashMap<String, Operand>,
     /// Mapping from BindingId to Operand (built during lowering).
@@ -100,6 +102,7 @@ impl FrameState {
             next_value: 0,
             next_slot: 0,
             next_param: 0,
+            next_call_site: 0,
             variables: HashMap::new(),
             binding_to_operand: HashMap::new(),
             operand_to_binding: HashMap::new(),
@@ -893,7 +896,9 @@ impl<'db> LowerCtx<'db> {
 
     /// Emit Call.
     pub fn emit_call(&mut self, dest: ValueId, func: FuncRef, args: Vec<Operand>) {
-        self.emit(Instruction::Call { dest, func, args });
+        let site_id = CallSiteId(self.body.next_call_site);
+        self.body.next_call_site += 1;
+        self.emit(Instruction::Call { site_id, dest, func, args });
     }
 
     /// Emit Pack.

@@ -51,7 +51,7 @@ DualAnalysis(
                     block0:
                         v0 = const 100int
                         v1 = const 200int
-                        v2 = call m0.f0(v0, v1)
+                        v2 = call @0 m0.f0(v0, v1)
                         debuglog v2
                         drop v2
                         unit_end
@@ -67,7 +67,7 @@ DualAnalysis(
                     block0:
                         v0 = const 100int
                         v1 = const 200int
-                        v2 = call m0.f0(v0, v1)
+                        v2 = call @0 m0.f0(v0, v1)
                         debuglog v2
                         drop v2
                         unit_end

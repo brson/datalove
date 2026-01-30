@@ -14,7 +14,7 @@ DualAnalysis(
                     scriptunit:
                     block0:
                         v0 = const 11int
-                        v1 = call f1(v0)
+                        v1 = call @0 f1(v0)
                         debuglog v1
                         drop v1
                         debuglog v0
@@ -27,7 +27,7 @@ DualAnalysis(
                         return v0
                     fn outer(p0):
                     block0:
-                        v0 = call f0(p0)
+                        v0 = call @0 f0(p0)
                         return v0
                     exports:
                         inner = f0
@@ -41,7 +41,7 @@ DualAnalysis(
                     scriptunit:
                     block0:
                         v0 = const 11int
-                        v1 = call f1(v0)
+                        v1 = call @0 f1(v0)
                         debuglog v1
                         drop v1
                         debuglog v0
@@ -54,7 +54,7 @@ DualAnalysis(
                         return v0
                     fn outer(p0):
                     block0:
-                        v0 = call f0(p0)
+                        v0 = call @0 f0(p0)
                         return v0
                     exports:
                         inner = f0

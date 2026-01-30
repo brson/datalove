@@ -21,14 +21,14 @@ Analysis(
                     
                     fn outer(p0):
                     block0:
-                        v0 = call m0.f0(p0)
+                        v0 = call @0 m0.f0(p0)
                         return v0
                     
                     fn test():
                     block0:
                         v0 = const 100int
                         store.move.tracked s0, v0
-                        v1 = call m0.f1(s0)
+                        v1 = call @0 m0.f1(s0)
                         drop.tracked s0
                         return v1
                 """,
@@ -68,7 +68,7 @@ Analysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = call m0.f2()
+                        v0 = call @0 m0.f2()
                         unit_end v0
                 """,
             ),

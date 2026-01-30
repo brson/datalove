@@ -272,6 +272,7 @@ mod tests {
             }],
             value_count: 1,
             slot_count: 0,
+            call_site_count: 0,
             value_types: vec![IrType::I32],
             slot_types: vec![],
             tracked_slots: vec![],
@@ -388,6 +389,7 @@ mod tests {
             }],
             value_count: 0,
             slot_count: 0,
+            call_site_count: 0,
             value_types: vec![],
             slot_types: vec![],
             tracked_slots: vec![],
@@ -409,6 +411,7 @@ mod tests {
                 instructions: vec![
                     Instruction::Const { dest: ValueId(0), value: ConstValue::I32(42) },
                     Instruction::Call {
+                        site_id: datalove_datafun_ir::CallSiteId(0),
                         dest: ValueId(1),
                         func: datalove_datafun_ir::FuncRef::Local(FuncId(0)),
                         args: vec![
@@ -422,6 +425,7 @@ mod tests {
             }],
             value_count: 2,
             slot_count: 0,
+            call_site_count: 0,
             value_types: vec![IrType::I32, IrType::I32],
             slot_types: vec![],
             tracked_slots: vec![],
@@ -490,6 +494,7 @@ mod tests {
             }],
             value_count: 0,
             slot_count: 0,
+            call_site_count: 0,
             value_types: vec![],
             slot_types: vec![],
             tracked_slots: vec![],
@@ -511,6 +516,7 @@ mod tests {
                 instructions: vec![
                     Instruction::Const { dest: ValueId(0), value: ConstValue::I32(42) },
                     Instruction::Call {
+                        site_id: datalove_datafun_ir::CallSiteId(0),
                         dest: ValueId(1),
                         func: datalove_datafun_ir::FuncRef::Local(FuncId(0)),
                         args: vec![
@@ -524,6 +530,7 @@ mod tests {
             }],
             value_count: 2,
             slot_count: 0,
+            call_site_count: 0,
             value_types: vec![IrType::I32, IrType::I32],
             slot_types: vec![],
             tracked_slots: vec![],

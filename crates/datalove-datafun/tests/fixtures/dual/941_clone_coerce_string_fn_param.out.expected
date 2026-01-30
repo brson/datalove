@@ -15,10 +15,10 @@ DualAnalysis(
                     block0:
                         v0 = const "world"
                         v1 = clone v0
-                        v2 = call f0(v1)
+                        v2 = call @0 f0(v1)
                         debuglog v2
                         drop v2
-                        v3 = call f0(v0)
+                        v3 = call @1 f0(v0)
                         debuglog v3
                         drop v3
                         unit_end
@@ -39,10 +39,10 @@ DualAnalysis(
                     block0:
                         v0 = const "world"
                         v1 = clone v0
-                        v2 = call f0(v1)
+                        v2 = call @0 f0(v1)
                         debuglog v2
                         drop v2
-                        v3 = call f0(v0)
+                        v3 = call @1 f0(v0)
                         debuglog v3
                         drop v3
                         unit_end

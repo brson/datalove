@@ -59,15 +59,15 @@ DualAnalysis(
                     block0:
                         v0 = const 100u32
                         v1 = const 5u32
-                        v2 = call m0.f0(v0, v1)
+                        v2 = call @0 m0.f0(v0, v1)
                         v3 = const 999u32
-                        v4 = call f0(v2, v3)
+                        v4 = call @1 f0(v2, v3)
                         debuglog v4
                         v5 = const 100u32
                         v6 = const 0u32
-                        v7 = call m0.f0(v5, v6)
+                        v7 = call @2 m0.f0(v5, v6)
                         v8 = const 999u32
-                        v9 = call f0(v7, v8)
+                        v9 = call @3 f0(v7, v8)
                         debuglog v9
                         unit_end
                     
@@ -94,15 +94,15 @@ DualAnalysis(
                     block0:
                         v0 = const 100u32
                         v1 = const 5u32
-                        v2 = call m0.f0(v0, v1)
+                        v2 = call @0 m0.f0(v0, v1)
                         v3 = const 999u32
-                        v4 = call f0(v2, v3)
+                        v4 = call @1 f0(v2, v3)
                         debuglog v4
                         v5 = const 100u32
                         v6 = const 0u32
-                        v7 = call m0.f0(v5, v6)
+                        v7 = call @2 m0.f0(v5, v6)
                         v8 = const 999u32
-                        v9 = call f0(v7, v8)
+                        v9 = call @3 f0(v7, v8)
                         debuglog v9
                         unit_end
                     

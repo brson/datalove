@@ -82,29 +82,29 @@ DualAnalysis(
                         v0 = const 2u32
                         v1 = const 3u32
                         v2 = const 4u32
-                        v3 = call f0(v0, v1, v2)
+                        v3 = call @0 f0(v0, v1, v2)
                         v4 = const 999u32
-                        v5 = call f1(v3, v4)
+                        v5 = call @1 f1(v3, v4)
                         debuglog v5
                         v6 = const 10u32
                         v7 = const 20u32
                         v8 = const 2u32
-                        v9 = call f0(v6, v7, v8)
+                        v9 = call @2 f0(v6, v7, v8)
                         v10 = const 999u32
-                        v11 = call f1(v9, v10)
+                        v11 = call @3 f1(v9, v10)
                         debuglog v11
                         unit_end
                     
                     fn pipeline(p0, p1, p2):
                     block0:
-                        v0 = call m0.f0(p0, p1)
+                        v0 = call @0 m0.f0(p0, p1)
                         v1, v2 = unwrap_option v0
                         branch v2, block2, block1
                     block1:
                         v3 = none
                         return v3
                     block2:
-                        v4 = call m0.f1(v1, p2)
+                        v4 = call @1 m0.f1(v1, p2)
                         v5, v6 = unwrap_option v4
                         branch v6, block4, block3
                     block3:
@@ -138,29 +138,29 @@ DualAnalysis(
                         v0 = const 2u32
                         v1 = const 3u32
                         v2 = const 4u32
-                        v3 = call f0(v0, v1, v2)
+                        v3 = call @0 f0(v0, v1, v2)
                         v4 = const 999u32
-                        v5 = call f1(v3, v4)
+                        v5 = call @1 f1(v3, v4)
                         debuglog v5
                         v6 = const 10u32
                         v7 = const 20u32
                         v8 = const 2u32
-                        v9 = call f0(v6, v7, v8)
+                        v9 = call @2 f0(v6, v7, v8)
                         v10 = const 999u32
-                        v11 = call f1(v9, v10)
+                        v11 = call @3 f1(v9, v10)
                         debuglog v11
                         unit_end
                     
                     fn pipeline(p0, p1, p2):
                     block0:
-                        v0 = call m0.f0(p0, p1)
+                        v0 = call @0 m0.f0(p0, p1)
                         v1, v2 = unwrap_option v0
                         branch v2, block2, block1
                     block1:
                         v3 = none
                         return v3
                     block2:
-                        v4 = call m0.f1(v1, p2)
+                        v4 = call @1 m0.f1(v1, p2)
                         v5, v6 = unwrap_option v4
                         branch v6, block4, block3
                     block3:

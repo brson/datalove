@@ -14,7 +14,7 @@ DualAnalysis(
                     scriptunit:
                     block0:
                         v0 = const "hello"
-                        v1 = call f0(v0)
+                        v1 = call @0 f0(v0)
                         debuglog v1
                         unit_end
                     
@@ -35,7 +35,7 @@ DualAnalysis(
                     scriptunit:
                     block0:
                         v0 = const "hello"
-                        v1 = call f0(v0)
+                        v1 = call @0 f0(v0)
                         debuglog v1
                         unit_end
                     
