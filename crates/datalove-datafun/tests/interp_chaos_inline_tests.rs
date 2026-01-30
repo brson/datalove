@@ -223,7 +223,6 @@ fn run_worldfile(
     parsed: &ParsedWorldfile,
     inline_seed: Option<u64>,
     inline_probability: u32,
-    inline_modules: bool,
 ) -> Vec<UnitOutput> {
     let mut results = Vec::new();
 
@@ -249,19 +248,15 @@ fn run_worldfile(
         return results;
     };
 
-    // Apply module inlining if enabled.
-    let module_registry = if inline_modules {
-        if let Some(seed) = inline_seed {
-            // Use a different seed derivation for module inlining.
-            let mut module_rng = SimpleRng::new(seed.wrapping_mul(0xDEADBEEF));
-            Arc::new(inline_module_functions(
-                &compiled.shared.module_registry,
-                &mut module_rng,
-                inline_probability,
-            ))
-        } else {
-            Arc::clone(&compiled.shared.module_registry)
-        }
+    // Apply module inlining if seed is provided.
+    let module_registry = if let Some(seed) = inline_seed {
+        // Use a different seed derivation for module inlining.
+        let mut module_rng = SimpleRng::new(seed.wrapping_mul(0xDEADBEEF));
+        Arc::new(inline_module_functions(
+            &compiled.shared.module_registry,
+            &mut module_rng,
+            inline_probability,
+        ))
     } else {
         Arc::clone(&compiled.shared.module_registry)
     };
@@ -358,27 +353,17 @@ fn run_worldfile(
 
 /// Run a worldfile with pure interpreter (no inlining).
 fn run_with_interpreter(db: &datafun::Database, parsed: &ParsedWorldfile) -> Vec<UnitOutput> {
-    run_worldfile(db, parsed, None, 0, false)
-}
-
-/// Run a worldfile with chaos inlining (script units only).
-fn run_with_script_inline(
-    db: &datafun::Database,
-    parsed: &ParsedWorldfile,
-    seed: u64,
-    probability: u32,
-) -> Vec<UnitOutput> {
-    run_worldfile(db, parsed, Some(seed), probability, false)
+    run_worldfile(db, parsed, None, 0)
 }
 
 /// Run a worldfile with chaos inlining (modules and script units).
-fn run_with_full_inline(
+fn run_with_chaos_inline(
     db: &datafun::Database,
     parsed: &ParsedWorldfile,
     seed: u64,
     probability: u32,
 ) -> Vec<UnitOutput> {
-    run_worldfile(db, parsed, Some(seed), probability, true)
+    run_worldfile(db, parsed, Some(seed), probability)
 }
 
 /// Compute a hash of the file contents for reproducible randomness.
@@ -403,34 +388,16 @@ fn test_file(path: &Path) -> Result<(), String> {
     // Run with interpreter (baseline).
     let interp_results = run_with_interpreter(&db, &parsed);
 
-    // Run with chaos inlining on script units only.
+    // Run with chaos inlining (multiple iterations with different seeds and probabilities).
     for iter in 0..3 {
         let chaos_seed = seed.wrapping_add(iter);
 
         for probability in [25, 50, 75] {
-            let chaos_results = run_with_script_inline(&db, &parsed, chaos_seed, probability);
+            let chaos_results = run_with_chaos_inline(&db, &parsed, chaos_seed, probability);
 
             if chaos_results != interp_results {
                 return Err(format!(
-                    "Script chaos inline (seed={}, prob={}%) differs from interpreter!\n\
-                     Interpreter: {:?}\n\
-                     Chaos: {:?}",
-                    chaos_seed, probability, interp_results, chaos_results
-                ));
-            }
-        }
-    }
-
-    // Run with chaos inlining on both modules and script units.
-    for iter in 0..3 {
-        let chaos_seed = seed.wrapping_add(iter);
-
-        for probability in [25, 50, 75] {
-            let chaos_results = run_with_full_inline(&db, &parsed, chaos_seed, probability);
-
-            if chaos_results != interp_results {
-                return Err(format!(
-                    "Full chaos inline (seed={}, prob={}%) differs from interpreter!\n\
+                    "Chaos inline (seed={}, prob={}%) differs from interpreter!\n\
                      Interpreter: {:?}\n\
                      Chaos: {:?}",
                     chaos_seed, probability, interp_results, chaos_results
