@@ -1,0 +1,36 @@
+{
+  "auto_adapt_mode": {
+    "diagnostic_count": 0,
+    "diagnostics": [],
+    "error_count": 0,
+    "errors": [],
+    "success": true
+  },
+  "normal_mode": {
+    "diagnostic_count": 1,
+    "diagnostics": [
+      {
+        "code": "F016",
+        "labels": [
+          {
+            "span": [
+              214,
+              215
+            ]
+          }
+        ],
+        "message": "mismatched types: expected `int`, found `u32`",
+        "notes": [
+          "help: use `@` to convert from `u32` to `int`"
+        ]
+      }
+    ],
+    "error_count": 1,
+    "errors": [
+      {
+        "error": "local/test/convert: TypeMismatch { expected: \"int\", actual: \"u32\" }"
+      }
+    ],
+    "success": false
+  }
+}

@@ -1,0 +1,11 @@
+----------
+scriptunit-fragment
+----------
+
+// Test: Widening u32 → int in script function return
+// Fixed int to bigint requires @ (no implicit widening)
+// Expected: F016 type mismatch with recovery hint in function body
+
+fun convert(n: u32): int
+  ret n
+end fun

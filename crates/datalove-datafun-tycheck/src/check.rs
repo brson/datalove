@@ -480,14 +480,12 @@ pub fn check_expr<'db>(
             // We don't do bidirectional checking for this case - let synthesis handle it.
 
             // Fall through to default synthesis behavior.
+            // Note: Implicit widening for binops to int is handled by synthesis
+            // (binops on fixed ints synthesize to int). No implicit widening
+            // from fixed int to fixed int - that requires @.
             let synthesized = ctx.synthesize_expr(expr)?;
             if types_equivalent(db, &synthesized, expected) {
                 return Ok(());
-            }
-            if let (Type::Datalit(synth_ty), Type::Datalit(expect_ty)) = (&synthesized, expected) {
-                if datalit::tycheck::can_widen_to(synth_ty, expect_ty) {
-                    return Ok(());
-                }
             }
             if let Type::Datalit(datalit::tycheck::Type::Data) = expected {
                 return Ok(());
@@ -496,7 +494,8 @@ pub fn check_expr<'db>(
             ctx.check_type_mismatch_or_adapt(expr, expected, &synthesized, "type mismatch")
         }
 
-        // For other non-datalit expressions, use synthesis + comparison with coercion support.
+        // For other non-datalit expressions, use synthesis + comparison.
+        // No implicit widening - numeric conversions require @.
         _ => {
             let synthesized = ctx.synthesize_expr(expr)?;
 
@@ -505,14 +504,7 @@ pub fn check_expr<'db>(
                 return Ok(());
             }
 
-            // If exact match fails, try numeric widening.
-            if let (Type::Datalit(synth_ty), Type::Datalit(expect_ty)) = (&synthesized, expected) {
-                if datalit::tycheck::can_widen_to(synth_ty, expect_ty) {
-                    return Ok(());
-                }
-            }
-
-            // If widening fails, check for automatic coercion to Data.
+            // Check for automatic coercion to Data.
             if let Type::Datalit(datalit::tycheck::Type::Data) = expected {
                 // Any type can coerce to data.
                 return Ok(());

@@ -1,0 +1,11 @@
+----------
+scriptunit-fragment
+----------
+
+// Test: Same-sign widening u8 → u16 in script function return
+// Fixed int to fixed int requires @ (no implicit widening)
+// Expected: F016 type mismatch with recovery hint in function body
+
+fun convert(n: u8): u16
+  ret n
+end fun

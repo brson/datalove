@@ -1,0 +1,36 @@
+{
+  "auto_adapt_mode": {
+    "diagnostic_count": 0,
+    "diagnostics": [],
+    "error_count": 0,
+    "errors": [],
+    "success": true
+  },
+  "normal_mode": {
+    "diagnostic_count": 1,
+    "diagnostics": [
+      {
+        "code": "F016",
+        "labels": [
+          {
+            "span": [
+              225,
+              226
+            ]
+          }
+        ],
+        "message": "mismatched types: expected `u16`, found `u8`",
+        "notes": [
+          "help: use `@` to convert from `u8` to `u16`"
+        ]
+      }
+    ],
+    "error_count": 1,
+    "errors": [
+      {
+        "error": "local/test/convert: TypeMismatch { expected: \"u16\", actual: \"u8\" }"
+      }
+    ],
+    "success": false
+  }
+}

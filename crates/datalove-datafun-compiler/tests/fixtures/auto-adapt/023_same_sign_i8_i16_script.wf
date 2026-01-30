@@ -1,0 +1,10 @@
+----------
+scriptunit-fragment
+----------
+
+// Test: Same-sign widening i8 → i16 in script
+// Fixed int to fixed int requires @ (no implicit widening)
+// Expected: F016 type mismatch with recovery hint
+
+let n: i8 = (: i8 / 42)
+let m: i16 = n

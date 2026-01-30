@@ -1,0 +1,10 @@
+----------
+scriptunit-fragment
+----------
+
+// Test: Widening u32 → int in script
+// Fixed int to bigint requires @ (no implicit widening)
+// Expected: F016 type mismatch with recovery hint
+
+let n: u32 = (: u32 / 42)
+let m: int = n

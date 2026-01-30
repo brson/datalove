@@ -1,0 +1,11 @@
+----------
+module local/test/convert
+----------
+
+// Test: Same-sign widening i8 → i16 in module function return
+// Fixed int to fixed int requires @ (no implicit widening)
+// Expected: F016 type mismatch with recovery hint in function body
+
+fun convert(n: i8): i16
+  ret n
+end fun

@@ -1,6 +1,30 @@
 {
-  "diagnostics": [],
-  "errors": [],
+  "diagnostics": [
+    {
+      "code": "F016",
+      "labels": [
+        {
+          "message": "type mismatch",
+          "span": [
+            28,
+            29
+          ],
+          "text": "a"
+        }
+      ],
+      "message": "mismatched types: expected `int`, found `u32`",
+      "notes": [
+        "help: use `@` to convert from `u32` to `int`"
+      ]
+    }
+  ],
+  "errors": [
+    {
+      "actual": "u32",
+      "expected": "int",
+      "kind": "TypeMismatch"
+    }
+  ],
   "judgements": [
     {
       "kind": "variable",
