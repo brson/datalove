@@ -1116,6 +1116,27 @@ pub enum Instruction {
         value: Operand,
     },
 
+    /// Store value through a reference operand with tracking.
+    ///
+    /// Like RefStore but also updates the tracking byte to LIVE.
+    /// Used for Out params which start uninitialized.
+    ///
+    /// **Ownership:** Consumes `value`, writes to referenced location.
+    /// **Tracking:** Writes LIVE to tracking byte.
+    RefStoreTracked { dest: Operand, value: Operand },
+
+    /// Store value to a field through a reference operand with tracking.
+    ///
+    /// Like RefSetField but also updates the tracking byte to LIVE.
+    ///
+    /// **Ownership:** Consumes `value`, writes to field within referenced location.
+    /// **Tracking:** Writes LIVE to tracking byte.
+    RefSetFieldTracked {
+        dest: Operand,
+        field_path: Vec<u32>,
+        value: Operand,
+    },
+
     /// Load value from mutable slot with copy semantics.
     ///
     /// **Ownership:** Borrows `slot`, produces `dest`.

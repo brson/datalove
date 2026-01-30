@@ -85,7 +85,9 @@ pub fn instruction_dest(instr: &Instruction) -> Option<ValueId> {
         Instruction::ParamSetField { .. } => None,
         Instruction::ParamSetFieldTracked { .. } => None,
         Instruction::RefStore { .. } => None,
+        Instruction::RefStoreTracked { .. } => None,
         Instruction::RefSetField { .. } => None,
+        Instruction::RefSetFieldTracked { .. } => None,
 
         // Drop operations (no dest)
         Instruction::Drop { .. } => None,
@@ -405,12 +407,14 @@ fn collect_instruction_operands(instr: &Instruction, used: &mut HashSet<ValueId>
         Instruction::ParamSetField { value, .. }
         | Instruction::ParamSetFieldTracked { value, .. } => add_operand_value(value, used),
 
-        // Ref store operations (from inlining mut params).
-        Instruction::RefStore { dest, value } => {
+        // Ref store operations (from inlining mut/out params).
+        Instruction::RefStore { dest, value }
+        | Instruction::RefStoreTracked { dest, value } => {
             add_operand_value(dest, used);
             add_operand_value(value, used);
         }
-        Instruction::RefSetField { dest, value, .. } => {
+        Instruction::RefSetField { dest, value, .. }
+        | Instruction::RefSetFieldTracked { dest, value, .. } => {
             add_operand_value(dest, used);
             add_operand_value(value, used);
         }
@@ -478,7 +482,9 @@ fn has_side_effects(instr: &Instruction) -> bool {
         | Instruction::ParamSetField { .. }
         | Instruction::ParamSetFieldTracked { .. }
         | Instruction::RefStore { .. }
-        | Instruction::RefSetField { .. } => true,
+        | Instruction::RefStoreTracked { .. }
+        | Instruction::RefSetField { .. }
+        | Instruction::RefSetFieldTracked { .. } => true,
         // Call may have side effects.
         Instruction::Call { .. } => true,
         // DebugLog has side effects (prints).

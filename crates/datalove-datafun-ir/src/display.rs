@@ -547,6 +547,16 @@ impl fmt::Display for Instruction {
                 }
                 write!(f, ", {}", value)
             }
+            Instruction::RefStoreTracked { dest, value } => {
+                write!(f, "refstore.tracked {}, {}", dest, value)
+            }
+            Instruction::RefSetFieldTracked { dest, field_path, value } => {
+                write!(f, "refsetfield.tracked {}", dest)?;
+                for idx in field_path {
+                    write!(f, ".{}", idx)?;
+                }
+                write!(f, ", {}", value)
+            }
             Instruction::SlotLoadCopy { dest, slot } => {
                 write!(f, "{} = load.copy {}", dest, slot)
             }

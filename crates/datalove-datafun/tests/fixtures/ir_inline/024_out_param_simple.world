@@ -1,0 +1,21 @@
+----------
+module local/test/main
+----------
+
+// Test inlining a function with an out param.
+// The out param is written by callee.
+fun write_100(out x: u32): bool
+    set x = 100
+    ret true
+end fun
+
+fun caller(): u32
+    var v: u32 = 0
+    let _ok = write_100(v)
+    ret v
+end fun
+
+----------
+inline-directives
+----------
+inline caller write_100

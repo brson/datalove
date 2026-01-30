@@ -647,6 +647,44 @@ impl IrInterpreter {
                 }
                 Self::mark_source_dropped_local(value, frame);
             }
+            Instruction::RefStoreTracked { dest, value } => {
+                // Store through a reference operand with tracking. Used after inlining out params.
+                // The destination was uninitialized, so don't destroy old value.
+                let src_val = self.read_operand(value, frame, frames);
+                let dest_val = self.get_operand_dest(dest, frame);
+                let dest_ptr = Destination { ptr: dest_val.ptr, tydesc: dest_val.tydesc };
+                unsafe { self.move_value(&src_val, dest_ptr); }
+                // Mark the destination as initialized.
+                match dest {
+                    Operand::Slot(slot) => frame.mark_slot_initialized(*slot),
+                    Operand::Param(param) => frame.mark_param_initialized(*param),
+                    // Other operand types don't have tracking in the same way.
+                    _ => {}
+                }
+                Self::mark_source_dropped_local(value, frame);
+            }
+            Instruction::RefSetFieldTracked { dest, field_path, value } => {
+                // Store to a field through a reference operand with tracking. Used after inlining out params.
+                let value_val = self.read_operand(value, frame, frames);
+                let dest_ptr = self.get_operand_dest(dest, frame);
+                // Navigate to the field.
+                let (current_ptr, current_tydesc) = self.navigate_field_path(
+                    dest_ptr.ptr, dest_ptr.tydesc, field_path
+                );
+                // Don't destroy old value (was uninitialized), just store new value.
+                let size = unsafe { (*current_tydesc).size as usize };
+                unsafe {
+                    std::ptr::copy_nonoverlapping(value_val.ptr, current_ptr, size);
+                }
+                // Mark the destination as initialized.
+                match dest {
+                    Operand::Slot(slot) => frame.mark_slot_initialized(*slot),
+                    Operand::Param(param) => frame.mark_param_initialized(*param),
+                    // Other operand types don't have tracking in the same way.
+                    _ => {}
+                }
+                Self::mark_source_dropped_local(value, frame);
+            }
             Instruction::SlotLoadCopy { dest, slot } => {
                 let slot_val = frame.slot(*slot).unwrap();
                 let dest_slot = frame.value_dest(*dest);

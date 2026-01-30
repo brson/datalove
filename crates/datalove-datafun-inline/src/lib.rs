@@ -201,8 +201,6 @@ pub enum InlineSkipReason {
     },
     /// No calls to callee found in caller.
     NoCallsFound { caller: String, callee: String },
-    /// Callee has out parameters which cannot be inlined (tracked stores not yet supported).
-    HasOutParams { callee: String },
 }
 
 /// Result of the inlining pass.
@@ -854,11 +852,24 @@ impl RemapContext {
                 dest: self.remap_operand(dest),
                 value: self.remap_operand(value),
             },
+            Instruction::RefStoreTracked { dest, value } => Instruction::RefStoreTracked {
+                dest: self.remap_operand(dest),
+                value: self.remap_operand(value),
+            },
             Instruction::RefSetField {
                 dest,
                 field_path,
                 value,
             } => Instruction::RefSetField {
+                dest: self.remap_operand(dest),
+                field_path: field_path.clone(),
+                value: self.remap_operand(value),
+            },
+            Instruction::RefSetFieldTracked {
+                dest,
+                field_path,
+                value,
+            } => Instruction::RefSetFieldTracked {
                 dest: self.remap_operand(dest),
                 field_path: field_path.clone(),
                 value: self.remap_operand(value),
@@ -995,10 +1006,10 @@ fn inline_call_site(
         let param_type = &callee.param_types[param_id.0 as usize];
         let param_mode = &callee.param_modes[param_id.0 as usize];
 
-        if matches!(param_mode, ParamMode::Ref | ParamMode::Mut) {
-            // Ref/Mut params borrow - directly use the argument operand.
+        if matches!(param_mode, ParamMode::Ref | ParamMode::Mut | ParamMode::Out) {
+            // Ref/Mut/Out params borrow - directly use the argument operand.
             // No binding needed, no ownership transfer.
-            // For Mut params, ParamStore will be converted to RefStore.
+            // For Mut/Out params, ParamStore/ParamStoreTracked will be converted to RefStore/RefStoreTracked.
             param_replacements.insert(*param_id, arg.clone());
         } else {
             // In params transfer ownership - create a binding.
@@ -1320,10 +1331,20 @@ fn replace_params_in_instruction(
                 }
             }
         }
-        Instruction::ParamStoreTracked { param, value } => Instruction::ParamStoreTracked {
-            param: *param,
-            value: replace_operand(value),
-        },
+        Instruction::ParamStoreTracked { param, value } => {
+            // If the param is being replaced, convert to RefStoreTracked.
+            if let Some(replacement) = replacements.get(param) {
+                Instruction::RefStoreTracked {
+                    dest: replacement.clone(),
+                    value: replace_operand(value),
+                }
+            } else {
+                Instruction::ParamStoreTracked {
+                    param: *param,
+                    value: replace_operand(value),
+                }
+            }
+        }
         Instruction::ParamSetField {
             param,
             field_path,
@@ -1348,12 +1369,27 @@ fn replace_params_in_instruction(
             param,
             field_path,
             value,
-        } => Instruction::ParamSetFieldTracked {
-            param: *param,
-            field_path: field_path.clone(),
+        } => {
+            // If the param is being replaced, convert to RefSetFieldTracked.
+            if let Some(replacement) = replacements.get(param) {
+                Instruction::RefSetFieldTracked {
+                    dest: replacement.clone(),
+                    field_path: field_path.clone(),
+                    value: replace_operand(value),
+                }
+            } else {
+                Instruction::ParamSetFieldTracked {
+                    param: *param,
+                    field_path: field_path.clone(),
+                    value: replace_operand(value),
+                }
+            }
+        }
+        Instruction::RefStore { dest, value } => Instruction::RefStore {
+            dest: replace_operand(dest),
             value: replace_operand(value),
         },
-        Instruction::RefStore { dest, value } => Instruction::RefStore {
+        Instruction::RefStoreTracked { dest, value } => Instruction::RefStoreTracked {
             dest: replace_operand(dest),
             value: replace_operand(value),
         },
@@ -1362,6 +1398,15 @@ fn replace_params_in_instruction(
             field_path,
             value,
         } => Instruction::RefSetField {
+            dest: replace_operand(dest),
+            field_path: field_path.clone(),
+            value: replace_operand(value),
+        },
+        Instruction::RefSetFieldTracked {
+            dest,
+            field_path,
+            value,
+        } => Instruction::RefSetFieldTracked {
             dest: replace_operand(dest),
             field_path: field_path.clone(),
             value: replace_operand(value),
@@ -1421,19 +1466,6 @@ pub fn inline_module(module: &IrModule, directives: &[InlineDirective]) -> Inlin
 
         let caller = &current_module.functions[caller_idx];
         let callee = &current_module.functions[callee_idx];
-
-        // Check if callee has out parameters - these use tracked stores which aren't yet supported.
-        // Mut params are now supported via RefStore.
-        let has_out = callee
-            .param_modes
-            .iter()
-            .any(|m| matches!(m, ParamMode::Out));
-        if has_out {
-            skipped.push(InlineSkipReason::HasOutParams {
-                callee: callee.name.clone(),
-            });
-            continue;
-        }
 
         // Find call sites.
         let call_sites = find_call_sites(caller, request.callee);
@@ -1516,19 +1548,6 @@ pub fn inline_cross_module(
         let Some(callee) = registry.get_module_function(request.callee.module, request.callee.func) else {
             continue;
         };
-
-        // Check if callee has out parameters - these use tracked stores which aren't yet supported.
-        // Mut params are now supported via RefStore.
-        let has_out = callee
-            .param_modes
-            .iter()
-            .any(|m| matches!(m, ParamMode::Out));
-        if has_out {
-            skipped.push(InlineSkipReason::HasOutParams {
-                callee: callee.name.clone(),
-            });
-            continue;
-        }
 
         // Find call sites (cross-module aware).
         let call_sites = find_cross_module_call_sites(caller, request.caller.module, request.callee);

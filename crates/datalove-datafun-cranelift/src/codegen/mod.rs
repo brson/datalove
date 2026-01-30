@@ -604,8 +604,14 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             Instruction::RefStore { dest, value } => {
                 self.compile_ref_store(builder, dest, value)?;
             }
+            Instruction::RefStoreTracked { dest, value } => {
+                self.compile_ref_store_tracked(builder, dest, value)?;
+            }
             Instruction::RefSetField { dest, field_path, value } => {
                 self.compile_ref_set_field(builder, dest, field_path, value)?;
+            }
+            Instruction::RefSetFieldTracked { dest, field_path, value } => {
+                self.compile_ref_set_field_tracked(builder, dest, field_path, value)?;
             }
             Instruction::Drop { operand } => {
                 self.compile_drop(builder, operand)?;

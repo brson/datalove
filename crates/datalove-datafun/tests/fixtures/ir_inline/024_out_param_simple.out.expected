@@ -1,0 +1,38 @@
+=== BEFORE INLINING ===
+fn caller():
+block0:
+    v0 = const 0u32
+    store.copy.tracked s0, v0
+    v1 = call m0.f0(s0)
+    v2 = load.copy s0
+    return v2
+
+fn write_100(p0):
+block0:
+    v0 = const 100u32
+    store.tracked p0, v0
+    v1 = const true
+    return v1
+
+=== INLINE DIRECTIVES ===
+inline caller write_100
+
+=== AFTER INLINING ===
+fn caller():
+block0:
+    v0 = const 0u32
+    store.copy.tracked s0, v0
+    v1 = call m0.f0(s0)
+    v2 = load.copy s0
+    return v2
+
+fn write_100(p0):
+block0:
+    v0 = const 100u32
+    store.tracked p0, v0
+    v1 = const true
+    return v1
+
+=== INLINING STATS ===
+Inlined: 0 call(s)
+Skipped: 0
