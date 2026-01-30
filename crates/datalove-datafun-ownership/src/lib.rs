@@ -52,6 +52,9 @@ pub use datalove_datafun_sema::{
     OwnershipRecoveryHint, format_analysis_errors, DropSchedule, FunctionAnalysis,
 };
 
+// Re-export AutoAdaptMode for callers.
+pub use datalove_datafun_common::AutoAdaptMode;
+
 // ============================================================================
 // Call site information
 // ============================================================================
@@ -117,6 +120,8 @@ struct AnalysisCtx<'db> {
     errors: Vec<AnalysisError>,
     /// Computed drop schedule.
     schedule: DropSchedule,
+    /// Auto-adapt mode for suppressing recoverable errors.
+    auto_adapt_mode: AutoAdaptMode,
 }
 
 /// A scope frame for tracking bindings.
@@ -149,6 +154,7 @@ impl<'db> AnalysisCtx<'db> {
         db: &'db dyn salsa::Database,
         expr_types: &'db [Option<IrType>],
         call_info: &'db [Option<CallInfo>],
+        auto_adapt_mode: AutoAdaptMode,
     ) -> Self {
         Self {
             db,
@@ -161,6 +167,7 @@ impl<'db> AnalysisCtx<'db> {
             scope_stack: Vec::new(),
             errors: Vec::new(),
             schedule: DropSchedule::default(),
+            auto_adapt_mode,
         }
     }
 
@@ -348,6 +355,11 @@ impl<'db> AnalysisCtx<'db> {
 
         if self.get_state(id) == Some(BindingState::Moved) {
             // Double move error - can be recovered by cloning before the second move.
+            if self.auto_adapt_mode.is_enabled() {
+                // Auto-adapt: treat as if value was cloned, no error.
+                // The value remains in Moved state (second "move" is really a clone+move).
+                return;
+            }
             let name = self.bindings[id.0 as usize].name.C();
             let recovery_hint = OwnershipRecoveryHint::InsertAdapt {
                 description: format!("clone `{}` before the second use", name),
@@ -540,12 +552,17 @@ impl<'db> AnalysisCtx<'db> {
                     }
                     // Check for use after move - can be recovered by cloning before first use.
                     if self.get_state(id) == Some(BindingState::Moved) {
-                        let name = self.bindings[id.0 as usize].name.C();
-                        let recovery_hint = OwnershipRecoveryHint::InsertAdapt {
-                            description: format!("clone `{}` before the earlier use", name),
-                        };
-                        self.errors.push(AnalysisError::UseAfterMove { local_index, name, recovery_hint });
-                        return None;
+                        if self.auto_adapt_mode.is_enabled() {
+                            // Auto-adapt: treat as if the original move was a clone+move.
+                            // Allow this use by continuing (value was implicitly cloned).
+                        } else {
+                            let name = self.bindings[id.0 as usize].name.C();
+                            let recovery_hint = OwnershipRecoveryHint::InsertAdapt {
+                                description: format!("clone `{}` before the earlier use", name),
+                            };
+                            self.errors.push(AnalysisError::UseAfterMove { local_index, name, recovery_hint });
+                            return None;
+                        }
                     }
                     if is_consumed && !self.bindings[id.0 as usize].ty.is_copy() {
                         // This is a move.
@@ -601,7 +618,9 @@ impl<'db> AnalysisCtx<'db> {
                     if callee_mode == Some(ParamMode::Out) {
                         // For Out args, we only need to check use-after-move, not uninitialized.
                         if let Some(binding_id) = self.expr_to_binding(*arg) {
-                            if self.get_state(binding_id) == Some(BindingState::Moved) {
+                            if self.get_state(binding_id) == Some(BindingState::Moved)
+                                && !self.auto_adapt_mode.is_enabled()
+                            {
                                 let name = self.bindings[binding_id.0 as usize].name.C();
                                 let local_index = arg.local_index(self.db);
                                 let recovery_hint = OwnershipRecoveryHint::InsertAdapt {
@@ -745,7 +764,19 @@ pub fn analyze_function<'db>(
     call_info: &'db [Option<CallInfo>],
     resolved_param_types: Option<&[IrType]>,
 ) -> FunctionAnalysis {
-    let mut ctx = AnalysisCtx::new(db, expr_types, call_info);
+    analyze_function_with_mode(db, func, expr_types, call_info, resolved_param_types, AutoAdaptMode::Disabled)
+}
+
+/// Analyze a function for ownership with configurable auto-adapt mode.
+pub fn analyze_function_with_mode<'db>(
+    db: &'db dyn salsa::Database,
+    func: StmtFun<'db>,
+    expr_types: &'db [Option<IrType>],
+    call_info: &'db [Option<CallInfo>],
+    resolved_param_types: Option<&[IrType]>,
+    auto_adapt_mode: AutoAdaptMode,
+) -> FunctionAnalysis {
+    let mut ctx = AnalysisCtx::new(db, expr_types, call_info, auto_adapt_mode);
 
     // Enter function scope.
     ctx.enter_scope(ScopeKind::Function);
@@ -859,7 +890,18 @@ pub fn analyze_script_statements<'db>(
     call_info: &'db [Option<CallInfo>],
     stmts: &[Statement<'db>],
 ) -> ScriptAnalysis {
-    let mut ctx = AnalysisCtx::new(db, expr_types, call_info);
+    analyze_script_statements_with_mode(db, expr_types, call_info, stmts, AutoAdaptMode::Disabled)
+}
+
+/// Analyze script statements for ownership with configurable auto-adapt mode.
+pub fn analyze_script_statements_with_mode<'db>(
+    db: &'db dyn salsa::Database,
+    expr_types: &'db [Option<IrType>],
+    call_info: &'db [Option<CallInfo>],
+    stmts: &[Statement<'db>],
+    auto_adapt_mode: AutoAdaptMode,
+) -> ScriptAnalysis {
+    let mut ctx = AnalysisCtx::new(db, expr_types, call_info, auto_adapt_mode);
 
     // Enter ScriptUnit scope so bindings are Tracked.
     ctx.enter_scope(ScopeKind::ScriptUnit);
@@ -923,7 +965,18 @@ pub fn analyze_expr<'db>(
     expr_types: &'db [Option<IrType>],
     call_info: &'db [Option<CallInfo>],
 ) -> ExprAnalysis {
-    let mut ctx = AnalysisCtx::new(db, expr_types, call_info);
+    analyze_expr_with_mode(db, expr, expr_types, call_info, AutoAdaptMode::Disabled)
+}
+
+/// Analyze expression for ownership with configurable auto-adapt mode.
+pub fn analyze_expr_with_mode<'db>(
+    db: &'db dyn salsa::Database,
+    expr: datalove_datafun_ast::ast::ExprFun<'db>,
+    expr_types: &'db [Option<IrType>],
+    call_info: &'db [Option<CallInfo>],
+    auto_adapt_mode: AutoAdaptMode,
+) -> ExprAnalysis {
+    let mut ctx = AnalysisCtx::new(db, expr_types, call_info, auto_adapt_mode);
 
     // Enter a scope for the expression analysis.
     ctx.enter_scope(ScopeKind::Function);
@@ -1341,16 +1394,22 @@ fn analyze_loop<'db>(ctx: &mut AnalysisCtx<'db>, stmt: &StmtLoop<'db>, stmt_idx:
 
     // Check for outer-scope bindings that were moved inside the loop body.
     // This is an error because the loop could iterate multiple times.
-    // Can be recovered by cloning before entering the loop.
+    // Can be recovered by cloning inside the loop.
     for id in &outer_live_bindings {
         if ctx.get_state(*id) == Some(BindingState::Moved) {
-            let name = ctx.bindings[id.0 as usize].name.C();
-            // Use the recorded move location for the error span.
-            let local_index = ctx.get_moved_at(*id).unwrap_or(0);
-            let recovery_hint = OwnershipRecoveryHint::InsertAdapt {
-                description: format!("clone `{}` inside the loop", name),
-            };
-            ctx.errors.push(AnalysisError::MoveInLoop { local_index, name, recovery_hint });
+            if ctx.auto_adapt_mode.is_enabled() {
+                // Auto-adapt: treat as if value is cloned inside the loop each iteration.
+                // Restore binding to Live state so subsequent iterations can use it.
+                ctx.set_state(*id, BindingState::Live);
+            } else {
+                let name = ctx.bindings[id.0 as usize].name.C();
+                // Use the recorded move location for the error span.
+                let local_index = ctx.get_moved_at(*id).unwrap_or(0);
+                let recovery_hint = OwnershipRecoveryHint::InsertAdapt {
+                    description: format!("clone `{}` inside the loop", name),
+                };
+                ctx.errors.push(AnalysisError::MoveInLoop { local_index, name, recovery_hint });
+            }
         }
     }
 
