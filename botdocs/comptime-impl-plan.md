@@ -1184,24 +1184,42 @@ Key files added:
 
 ### Known Issues Discovered
 
-**Runtime failures with mixed comptime + regular parameters:**
+#### Fixed: Single-param comptime functions returning 0
 
-Functions with a comptime parameter followed by regular parameters crash at runtime
-with invalid memory operations. Single-parameter comptime functions work but may
-produce incorrect results (e.g., returning 0 instead of the computed value).
+**Problem:** Functions like `fun double(const n: int): int` returned 0 instead of the
+correct computed value (e.g., `double(2)` returned 0 instead of 4).
+
+**Root cause:** When a fixed-width integer (u32) was passed to a function expecting
+int (BigInt), the typechecker allowed the widening but didn't store the expected type.
+The lowering then used the original u32 type, which the runtime interpreted incorrectly.
+
+**Fix (commit 1c194d8):**
+1. In `check.rs`, store the expected type when widening is detected
+2. Add `operand_type()` method in `context.rs` to get the type of an operand
+3. In `lower_call_arg`, check if widening is needed and emit Widen instruction
+
+**Verified:** Test 004 now correctly outputs `4` for `double(2)`.
+
+#### Outstanding: Mixed comptime + regular parameters not working
+
+**Problem:** Functions with a comptime parameter followed by regular parameters don't
+execute - module lowering is skipped even though typecheck and ownership succeed.
 
 Examples:
-- `fun double(const n: int): int` - Works but produces wrong results
-- `fun add(const n: int, x: int): int` - Crashes (SIGSEGV or SIGABRT)
-- `fun prefix(const n: int, s: string): string` - Crashes
+- `fun add(const n: int, x: int): int` - Lowering skipped
+- `fun prefix(const n: int, s: string): string` - Lowering skipped
 
-This suggests issues with:
-1. **Parameter indexing**: When comptime args are removed, regular params may be at
-   wrong indices
-2. **Value initialization**: Comptime parameter values may not be correctly substituted
+**Symptoms:** Test output shows `lowering: Skipped` for the module, and script units
+are also skipped since they depend on the module functions.
 
-**Next steps**: Debug the runtime execution path for comptime function calls to
-determine why values are incorrect or memory access fails.
+**Investigation notes:**
+- Debug output added to `lower_module` doesn't appear, suggesting the function
+  isn't being called or salsa is caching stale results
+- The function is present in `parsed.statements` since `func_ids` is computed
+- Need to trace earlier in the pipeline to find where the skip occurs
+
+**Next steps:** Add debug output earlier in the compilation pipeline (before lower_module)
+to understand why modules with mixed-param comptime functions aren't being lowered.
 
 ---
 
