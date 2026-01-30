@@ -143,6 +143,22 @@ impl BindingInfo {
 // Error types
 // ============================================================================
 
+/// Hint for how to recover from an @-recoverable ownership error.
+///
+/// When an ownership error can be fixed by inserting the `@` (adapt) operator
+/// to clone the value, a recovery hint is attached to the diagnostic.
+#[derive(Clone, Debug, Default, Hash, PartialEq, Eq)]
+pub enum OwnershipRecoveryHint {
+    /// Insert @ before the expression to clone the value.
+    InsertAdapt {
+        /// Human-readable description of what @ does here.
+        description: String,
+    },
+    /// No automatic recovery available.
+    #[default]
+    None,
+}
+
 /// Error detected during ownership analysis.
 ///
 /// Each variant includes a `local_index` for span lookup during diagnostic
@@ -151,16 +167,18 @@ impl BindingInfo {
 #[derive(Clone, Debug, Hash, PartialEq, Eq)]
 pub enum AnalysisError {
     /// Using a value after it was moved.
-    /// D001
+    /// D001 - Recoverable with @ (clone before first use)
     UseAfterMove {
         local_index: u32,
         name: String,
+        recovery_hint: OwnershipRecoveryHint,
     },
     /// Moving a value multiple times.
-    /// D002
+    /// D002 - Recoverable with @ (clone before second move)
     DoubleMove {
         local_index: u32,
         name: String,
+        recovery_hint: OwnershipRecoveryHint,
     },
     /// Attempting to move a borrowed value (ref/mut/out parameter).
     /// D003
@@ -188,11 +206,12 @@ pub enum AnalysisError {
         name: String,
     },
     /// Moving an outer-scoped value inside a loop body.
-    /// D007
+    /// D007 - Recoverable with @ (clone before entering loop)
     MoveInLoop {
         /// Expression where the move occurred.
         local_index: u32,
         name: String,
+        recovery_hint: OwnershipRecoveryHint,
     },
     /// Value moved in one branch but not another.
     /// D008
@@ -221,11 +240,13 @@ pub fn format_analysis_errors(errors: &[AnalysisError]) -> String {
 
 fn format_single_error(error: &AnalysisError) -> String {
     match error {
-        AnalysisError::UseAfterMove { local_index: _, name } => {
-            format!("error[D001]: use of moved value: `{}`", name)
+        AnalysisError::UseAfterMove { local_index: _, name, recovery_hint } => {
+            let base = format!("error[D001]: use of moved value: `{}`", name);
+            format_with_hint(base, recovery_hint)
         }
-        AnalysisError::DoubleMove { local_index: _, name } => {
-            format!("error[D002]: value moved twice: `{}`", name)
+        AnalysisError::DoubleMove { local_index: _, name, recovery_hint } => {
+            let base = format!("error[D002]: value moved twice: `{}`", name);
+            format_with_hint(base, recovery_hint)
         }
         AnalysisError::CannotMoveBorrowed { local_index: _, name } => {
             format!("error[D003]: cannot move borrowed value: `{}`", name)
@@ -239,8 +260,9 @@ fn format_single_error(error: &AnalysisError) -> String {
         AnalysisError::OutParamNotInitialized { ret_stmt_idx: _, name } => {
             format!("error[D006]: out parameter not initialized: `{}`", name)
         }
-        AnalysisError::MoveInLoop { local_index: _, name } => {
-            format!("error[D007]: cannot move `{}` in loop", name)
+        AnalysisError::MoveInLoop { local_index: _, name, recovery_hint } => {
+            let base = format!("error[D007]: cannot move `{}` in loop", name);
+            format_with_hint(base, recovery_hint)
         }
         AnalysisError::InconsistentBranchMove { stmt_idx: _, name, moved_in } => {
             format!("error[D008]: `{}` moved in {} branch but not the other", name, moved_in)
@@ -248,6 +270,15 @@ fn format_single_error(error: &AnalysisError) -> String {
         AnalysisError::OutParamPartialWrite { local_index: _, name } => {
             format!("error[D009]: cannot partially write to out parameter: `{}`", name)
         }
+    }
+}
+
+fn format_with_hint(base: String, hint: &OwnershipRecoveryHint) -> String {
+    match hint {
+        OwnershipRecoveryHint::InsertAdapt { description } => {
+            format!("{}\n  help: use `@` to {}", base, description)
+        }
+        OwnershipRecoveryHint::None => base,
     }
 }
 

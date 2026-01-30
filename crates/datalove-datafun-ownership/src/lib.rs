@@ -49,7 +49,7 @@ use datalove_datafun_ir::IrType;
 // Re-export types from sema for backward compatibility.
 pub use datalove_datafun_sema::{
     StmtKey, BindingId, TrackingCategory, BindingInfo, AnalysisError,
-    format_analysis_errors, DropSchedule, FunctionAnalysis,
+    OwnershipRecoveryHint, format_analysis_errors, DropSchedule, FunctionAnalysis,
 };
 
 // ============================================================================
@@ -347,9 +347,12 @@ impl<'db> AnalysisCtx<'db> {
         }
 
         if self.get_state(id) == Some(BindingState::Moved) {
-            // Double move error.
+            // Double move error - can be recovered by cloning before the second move.
             let name = self.bindings[id.0 as usize].name.C();
-            self.errors.push(AnalysisError::DoubleMove { local_index, name });
+            let recovery_hint = OwnershipRecoveryHint::InsertAdapt {
+                description: format!("clone `{}` before the second use", name),
+            };
+            self.errors.push(AnalysisError::DoubleMove { local_index, name, recovery_hint });
         } else {
             // Track the move for error detection.
             // Note: ScriptUnit bindings are tracked for error detection (e.g., move in loop)
@@ -535,10 +538,13 @@ impl<'db> AnalysisCtx<'db> {
                         self.errors.push(AnalysisError::ReadUninitialized { local_index, name });
                         return None;
                     }
-                    // Check for use after move.
+                    // Check for use after move - can be recovered by cloning before first use.
                     if self.get_state(id) == Some(BindingState::Moved) {
                         let name = self.bindings[id.0 as usize].name.C();
-                        self.errors.push(AnalysisError::UseAfterMove { local_index, name });
+                        let recovery_hint = OwnershipRecoveryHint::InsertAdapt {
+                            description: format!("clone `{}` before the earlier use", name),
+                        };
+                        self.errors.push(AnalysisError::UseAfterMove { local_index, name, recovery_hint });
                         return None;
                     }
                     if is_consumed && !self.bindings[id.0 as usize].ty.is_copy() {
@@ -598,7 +604,10 @@ impl<'db> AnalysisCtx<'db> {
                             if self.get_state(binding_id) == Some(BindingState::Moved) {
                                 let name = self.bindings[binding_id.0 as usize].name.C();
                                 let local_index = arg.local_index(self.db);
-                                self.errors.push(AnalysisError::UseAfterMove { local_index, name });
+                                let recovery_hint = OwnershipRecoveryHint::InsertAdapt {
+                                    description: format!("clone `{}` before the earlier use", name),
+                                };
+                                self.errors.push(AnalysisError::UseAfterMove { local_index, name, recovery_hint });
                             }
                             // Mark the binding as initialized after the call writes to it.
                             if self.bindings[binding_id.0 as usize].param_mode == Some(ParamMode::Out) {
@@ -1332,12 +1341,16 @@ fn analyze_loop<'db>(ctx: &mut AnalysisCtx<'db>, stmt: &StmtLoop<'db>, stmt_idx:
 
     // Check for outer-scope bindings that were moved inside the loop body.
     // This is an error because the loop could iterate multiple times.
+    // Can be recovered by cloning before entering the loop.
     for id in &outer_live_bindings {
         if ctx.get_state(*id) == Some(BindingState::Moved) {
             let name = ctx.bindings[id.0 as usize].name.C();
             // Use the recorded move location for the error span.
             let local_index = ctx.get_moved_at(*id).unwrap_or(0);
-            ctx.errors.push(AnalysisError::MoveInLoop { local_index, name });
+            let recovery_hint = OwnershipRecoveryHint::InsertAdapt {
+                description: format!("clone `{}` inside the loop", name),
+            };
+            ctx.errors.push(AnalysisError::MoveInLoop { local_index, name, recovery_hint });
         }
     }
 
