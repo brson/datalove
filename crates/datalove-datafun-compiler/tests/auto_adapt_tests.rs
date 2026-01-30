@@ -15,48 +15,16 @@
 use rmx::prelude::*;
 use rmx::serde_json::json;
 use std::path::Path;
-use std::collections::HashMap;
 
 use datalove_datafun::{
     Database, package, package_resolve,
     to_module_graph, module_graph,
 };
-use datalove_datafun_tycheck::{typecheck_module_graph, AutoAdaptMode, ResolvedCallTarget, Type};
+use datalove_datafun_tycheck::{typecheck_module_graph, AutoAdaptMode};
 use datalove_datafun_resolve::{resolve_all_names, resolve_all_exports, build_all_function_ast_maps, ParallelMode};
 use datalove_datafun_pkg::package_load_worldfile::{WorldfileSection, parse_worldfile_sections};
-use datalove_datafun_ownership::{
-    analyze_script_statements_with_mode, analyze_script_functions_with_mode,
-    CallInfo, format_analysis_errors,
-};
-use datalove_datafun_ir::IrType;
-use datalove_datafun_compiler::IrTypeExt;
 use datalove_datafun_compiler::tracked_ownership_analysis::analyze_module_graph_with_mode;
-use datalove_datafun_ast::ast::Statement;
-
-/// Convert tycheck expression types to IR types.
-fn convert_expr_types<'db>(
-    db: &'db dyn salsa::Database,
-    types: &[Option<Type<'db>>],
-) -> Vec<Option<IrType>> {
-    types.iter()
-        .map(|opt| opt.as_ref().map(|ty| IrType::from_tycheck(db, ty)))
-        .collect()
-}
-
-/// Convert resolved call targets to CallInfo.
-fn convert_call_targets<'db>(
-    db: &'db dyn salsa::Database,
-    targets: &[Option<ResolvedCallTarget<'db>>],
-) -> Vec<Option<CallInfo>> {
-    targets.iter()
-        .map(|opt| opt.as_ref().map(|target| CallInfo {
-            param_modes: target.func(db).params(db)
-                .iter()
-                .map(|p| p.mode)
-                .collect()
-        }))
-        .collect()
-}
+use datalove_datafun_compiler::tracked_script_ownership::analyze_script_fragment_tracked;
 
 /// Typecheck worldfile sections with a given auto-adapt mode.
 ///
@@ -218,41 +186,11 @@ fn typecheck_sections_with_mode(
 
             // Run ownership analysis if no type errors (ownership requires successful typecheck).
             if tycheck_result.errors(&db).is_empty() {
-                // Convert tycheck types to IR types for ownership analysis.
-                let expr_types = convert_expr_types(&db, tycheck_result.expr_types(&db));
-                let call_info = convert_call_targets(&db, tycheck_result.call_targets(&db));
-
-                // Get statements for ownership analysis.
-                let stmts: Vec<Statement> = script.statements.iter().cloned().collect();
-
-                // Build map of function name -> resolved param types for type alias support.
-                let mut func_param_types: HashMap<String, Vec<IrType>> = HashMap::new();
-                for (name, func_type) in tycheck_result.function_types(&db) {
-                    let param_types: Vec<IrType> = func_type.param_types(&db)
-                        .iter()
-                        .map(|ty| IrType::from_tycheck(&db, ty))
-                        .collect();
-                    func_param_types.insert(name.text(&db).S(), param_types);
-                }
-
-                // Analyze functions for ownership.
-                let func_result = analyze_script_functions_with_mode(
-                    &db, &expr_types, &call_info, &stmts, Some(&func_param_types), mode
-                );
-                if let Err(errors) = func_result {
-                    for (func_name, errs) in errors {
-                        let error_msg = format!("{}: {}", func_name, format_analysis_errors(&errs));
-                        all_errors.push(error_msg);
-                    }
-                }
-
-                // Analyze script-level statements for ownership.
-                let script_analysis = analyze_script_statements_with_mode(
-                    &db, &expr_types, &call_info, &stmts, mode
-                );
-                if !script_analysis.errors.is_empty() {
-                    let error_msg = format_analysis_errors(&script_analysis.errors);
-                    all_errors.push(error_msg);
+                // Use tracked ownership analysis function (same as ScriptCompiler uses).
+                let stmts: Vec<_> = script.statements.iter().cloned().collect();
+                let ownership_result = analyze_script_fragment_tracked(&db, tycheck_result, stmts, mode);
+                for err in ownership_result.errors(&db) {
+                    all_errors.push(err.clone());
                 }
             }
         }
