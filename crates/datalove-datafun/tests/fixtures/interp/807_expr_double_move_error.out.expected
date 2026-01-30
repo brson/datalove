@@ -8,7 +8,7 @@ Analysis(
             ),
             ownership: OwnershipResult(
                 status: "Error",
-                message: "error[D001]: use of moved value: `x`",
+                message: "error[D001]: use of moved value: `x`\n  help: use `@` to clone `x` before the earlier use",
             ),
             lowering: LoweringResult(
                 status: "Skipped",

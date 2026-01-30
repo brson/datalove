@@ -110,7 +110,7 @@ pub fn compile_modules<'db>(
     );
 
     // Phase 4: Ownership Analysis
-    let ownership_analysis = analyze_module_graph_with_mode(db, parsed_graph, typecheck_result, mode);
+    let ownership_analysis = analyze_module_graph_with_mode(db, parsed_graph, typecheck_result, mode, AutoAdaptMode::Disabled);
 
     collect_results(db, input.graph, parsed_graph, name_resolution, typecheck_result, ownership_analysis)
 }

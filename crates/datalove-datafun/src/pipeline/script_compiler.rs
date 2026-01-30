@@ -48,6 +48,7 @@ use datalove_datafun_tycheck::{
     type_check_script_units, create_batch_spec,
     ScriptUnitSpec, ModuleSpec, ScriptBatchSpec, ScriptUnitKind,
     UnitTypecheckResultTracked, ResolvedCallTarget, Type,
+    AutoAdaptMode,
 };
 use datalove_datafun_resolve::resolve_script_names;
 use datalove_datafun_compiler::IrTypeExt;
@@ -154,6 +155,7 @@ impl<'db> CompiledModules<'db> {
             ctfe_evaluator,
             skip_const_inlining: false,
             shared_context: self.shared.clone(),
+            auto_adapt_mode: AutoAdaptMode::Disabled,
         })
     }
 
@@ -192,6 +194,8 @@ pub struct ScriptCompiler<'db> {
     skip_const_inlining: bool,
     /// Shared module context for cross-module CTFE function calls.
     shared_context: Arc<SharedModuleContext<'db>>,
+    /// Auto-adapt mode for ownership analysis.
+    auto_adapt_mode: AutoAdaptMode,
 }
 
 impl<'db> ScriptCompiler<'db> {
@@ -257,6 +261,19 @@ impl<'db> ScriptCompiler<'db> {
     /// and debugging const expressions.
     pub fn set_skip_const_inlining(&mut self, enabled: bool) {
         self.skip_const_inlining = enabled;
+    }
+
+    /// Set auto-adapt mode for ownership analysis.
+    ///
+    /// When enabled, recoverable ownership errors (use-after-move, double-move,
+    /// move-in-loop) are suppressed, treating them as if `@` was inserted.
+    pub fn set_auto_adapt_mode(&mut self, mode: AutoAdaptMode) {
+        self.auto_adapt_mode = mode;
+    }
+
+    /// Get current auto-adapt mode.
+    pub fn auto_adapt_mode(&self) -> AutoAdaptMode {
+        self.auto_adapt_mode
     }
 
     /// Check for parse errors and return early result if any.
@@ -413,6 +430,7 @@ impl<'db> ScriptCompiler<'db> {
                     self.db,
                     typecheck.result,
                     stmts.clone(),
+                    self.auto_adapt_mode,
                 );
                 if !ownership_result.errors(self.db).is_empty() {
                     let error_msg = ownership_result.errors(self.db).join("\n");
@@ -433,6 +451,7 @@ impl<'db> ScriptCompiler<'db> {
                     self.db,
                     typecheck.result,
                     *expr,
+                    self.auto_adapt_mode,
                 );
                 if !ownership_result.errors(self.db).is_empty() {
                     let error_msg = ownership_result.errors(self.db).join("\n");

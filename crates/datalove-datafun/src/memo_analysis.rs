@@ -350,7 +350,7 @@ pub fn analyze_memo_worldfile(content: &str) -> AnyResult<MemoAnalysis> {
             .into_iter().collect();
 
         enable_query_logging();
-        let ownership_analysis = analyze_module_graph(&db, parsed_graph, typecheck_result);
+        let ownership_analysis = analyze_module_graph(&db, parsed_graph, typecheck_result, AutoAdaptMode::Disabled);
         let _ownership_analysis_log = disable_query_logging();
         // TODO: Track ownership analysis memoization separately if needed.
         let _ownership_analyzed_modules: BTreeSet<String> = get_executed_modules(&_ownership_analysis_log, "ownership_analysis")

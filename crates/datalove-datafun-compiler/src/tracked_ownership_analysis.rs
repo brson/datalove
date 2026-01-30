@@ -18,7 +18,7 @@ use datalove_datafun_tycheck::{
     Type,
 };
 use datalove_datafun_ir::IrType;
-use datalove_datafun_ownership::{self as ownership_analysis, FunctionAnalysis, CallInfo};
+use datalove_datafun_ownership::{self as ownership_analysis, FunctionAnalysis, CallInfo, AutoAdaptMode};
 
 use crate::IrTypeExt;
 
@@ -114,6 +114,7 @@ pub fn analyze_module<'db>(
     module: Module,
     parsed: ParsedStatements<'db>,
     typecheck_result: SingleModuleTypecheckResult<'db>,
+    auto_adapt_mode: AutoAdaptMode,
 ) -> SingleModuleAnalysis<'db> {
     let module_id = module.id(db);
     let module_path = module_id.path(db);
@@ -145,8 +146,10 @@ pub fn analyze_module<'db>(
             // Get resolved param types for this function.
             let resolved_params = func_param_types.get(&func_name).map(|v| v.as_slice());
 
-            // Run ownership analysis.
-            let analysis = ownership_analysis::analyze_function(db, *func, &expr_types, &call_info, resolved_params);
+            // Run ownership analysis with auto-adapt mode.
+            let analysis = ownership_analysis::analyze_function_with_mode(
+                db, *func, &expr_types, &call_info, resolved_params, auto_adapt_mode
+            );
 
             let (opt_analysis, errors) = if analysis.errors.is_empty() {
                 (Some(analysis), Vec::new())
@@ -185,6 +188,7 @@ pub fn analyze_module_graph<'db>(
     db: &'db dyn salsa::Database,
     parsed_graph: ParsedModuleGraph<'db>,
     typecheck_result: ModuleGraphTypecheckResult<'db>,
+    auto_adapt_mode: AutoAdaptMode,
 ) -> ModuleGraphAnalysis<'db> {
     let graph = parsed_graph.graph(db);
 
@@ -213,7 +217,7 @@ pub fn analyze_module_graph<'db>(
         let single_typecheck = *typecheck_module_results.get(module_id)
             .expect("module should have typecheck result");
 
-        let result = analyze_module(db, module, parsed.clone(), single_typecheck);
+        let result = analyze_module(db, module, parsed.clone(), single_typecheck, auto_adapt_mode);
 
         if !result.errors(db).is_empty() {
             all_success = false;
@@ -230,6 +234,7 @@ pub fn analyze_module_graph_parallel<'db>(
     db: &'db dyn DbClone,
     parsed_graph: ParsedModuleGraph<'db>,
     typecheck_result: ModuleGraphTypecheckResult<'db>,
+    auto_adapt_mode: AutoAdaptMode,
 ) -> ModuleGraphAnalysis<'db> {
     use rayon::prelude::*;
 
@@ -263,11 +268,11 @@ pub fn analyze_module_graph_parallel<'db>(
     // Analyze modules in parallel - populates salsa's memoization cache.
     work.into_par_iter().for_each(|(db_clone, module, parsed, single_typecheck)| {
         let db_s = db_clone.as_salsa_db();
-        let _ = analyze_module(db_s, module, parsed, single_typecheck);
+        let _ = analyze_module(db_s, module, parsed, single_typecheck, auto_adapt_mode);
     });
 
     // Delegate to tracked function which aggregates results.
-    analyze_module_graph(db_salsa, parsed_graph, typecheck_result)
+    analyze_module_graph(db_salsa, parsed_graph, typecheck_result, auto_adapt_mode)
 }
 
 /// Analyze module graph for ownership errors with configurable parallelism.
@@ -276,9 +281,10 @@ pub fn analyze_module_graph_with_mode<'db>(
     parsed_graph: ParsedModuleGraph<'db>,
     typecheck_result: ModuleGraphTypecheckResult<'db>,
     mode: ParallelMode,
+    auto_adapt_mode: AutoAdaptMode,
 ) -> ModuleGraphAnalysis<'db> {
     match mode {
-        ParallelMode::Sequential => analyze_module_graph(db.as_salsa_db(), parsed_graph, typecheck_result),
-        ParallelMode::Parallel => analyze_module_graph_parallel(db, parsed_graph, typecheck_result),
+        ParallelMode::Sequential => analyze_module_graph(db.as_salsa_db(), parsed_graph, typecheck_result, auto_adapt_mode),
+        ParallelMode::Parallel => analyze_module_graph_parallel(db, parsed_graph, typecheck_result, auto_adapt_mode),
     }
 }

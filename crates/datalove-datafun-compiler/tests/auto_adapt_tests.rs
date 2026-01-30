@@ -22,7 +22,7 @@ use datalove_datafun::{
     to_module_graph, module_graph,
 };
 use datalove_datafun_tycheck::{typecheck_module_graph, AutoAdaptMode, ResolvedCallTarget, Type};
-use datalove_datafun_resolve::{resolve_all_names, resolve_all_exports, build_all_function_ast_maps};
+use datalove_datafun_resolve::{resolve_all_names, resolve_all_exports, build_all_function_ast_maps, ParallelMode};
 use datalove_datafun_pkg::package_load_worldfile::{WorldfileSection, parse_worldfile_sections};
 use datalove_datafun_ownership::{
     analyze_script_statements_with_mode, analyze_script_functions_with_mode,
@@ -30,6 +30,7 @@ use datalove_datafun_ownership::{
 };
 use datalove_datafun_ir::IrType;
 use datalove_datafun_compiler::IrTypeExt;
+use datalove_datafun_compiler::tracked_ownership_analysis::analyze_module_graph_with_mode;
 use datalove_datafun_ast::ast::Statement;
 
 /// Convert tycheck expression types to IR types.
@@ -153,6 +154,16 @@ fn typecheck_sections_with_mode(
                     obj["notes"] = json!(notes);
                 }
                 all_diagnostics.push(obj);
+            }
+
+            // Run ownership analysis for modules if no type errors.
+            if module_errors.values().all(|e| e.is_empty()) {
+                let ownership_result = analyze_module_graph_with_mode(&db, parsed_graph, typecheck_result, ParallelMode::Sequential, mode);
+                for (module_id, analysis) in ownership_result.module_results(&db).iter() {
+                    for err in analysis.errors(&db) {
+                        all_errors.push(format!("{}: {}", module_id.path(&db), err));
+                    }
+                }
             }
         }
     }
