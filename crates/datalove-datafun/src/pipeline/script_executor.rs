@@ -60,6 +60,33 @@ impl<'db> CompiledModules<'db> {
         })
     }
 
+    /// Create a script executor with a custom module registry.
+    ///
+    /// This allows tests to inject modified module functions (e.g., after inlining)
+    /// while still using the compiled module context for script compilation.
+    ///
+    /// Returns `None` if module compilation failed (has errors).
+    pub fn script_executor_with_module_registry(
+        &self,
+        module_registry: Arc<datalove_datafun_interp::ModuleFunctionRegistry>,
+        debug_mode: datalove_rt::c::DebugOutputMode,
+        call_dispatcher: Option<Box<dyn CallDispatcher>>,
+    ) -> Option<ScriptExecutor> {
+        if self.has_errors() {
+            return None;
+        }
+
+        let script_ctx = lower::ScriptLowerContext::new();
+        let env = ScriptEnvironment::with_module_registry(module_registry);
+        let interp = datalove_datafun_interp::IrInterpreter::new_with_options(debug_mode, call_dispatcher);
+
+        Some(ScriptExecutor {
+            script_ctx,
+            env,
+            interp,
+        })
+    }
+
     /// Get a function registry containing module functions for AOT compilation.
     ///
     /// This provides access to module function types without creating an executor.

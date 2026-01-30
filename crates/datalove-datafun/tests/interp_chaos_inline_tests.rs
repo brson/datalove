@@ -5,14 +5,19 @@
 //! results as the baseline interpreter (no inlining).
 //!
 //! The random seed is derived from file contents for reproducibility.
+//!
+//! Tests both:
+//! - Script unit function inlining (functions defined in script fragments)
+//! - Module function inlining (functions defined in module sections)
 
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::path::Path;
+use std::sync::Arc;
 
 use datalove_datafun as datafun;
 use datalove_datafun_inline::{inline_module, InlineDirective};
-use datalove_datafun_ir::{IrModule, IrScriptUnit, SymbolTable};
+use datalove_datafun_ir::{IrModule, IrModuleId, IrScriptUnit, ModuleFunctionRegistry, ParamMode, SymbolTable};
 use datalove_datafun_pkg::package_load_worldfile::{self, ParsedWorldfile, WorldfileSection};
 use datafun::pipeline::{ConstInlining, ModuleCompilationPipeline};
 
@@ -31,7 +36,8 @@ struct SimpleRng {
 
 impl SimpleRng {
     fn new(seed: u64) -> Self {
-        Self { state: seed }
+        // Ensure non-zero state for xorshift.
+        Self { state: if seed == 0 { 1 } else { seed } }
     }
 
     fn next_u64(&mut self) -> u64 {
@@ -48,6 +54,11 @@ impl SimpleRng {
     }
 }
 
+/// Check if a function has any mut or out parameters (which can't be inlined correctly).
+fn has_byref_params(func: &datalove_datafun_ir::IrFunction) -> bool {
+    func.param_modes.iter().any(|m| matches!(m, ParamMode::Mut | ParamMode::Out))
+}
+
 /// Generate random inline directives based on available functions.
 fn generate_random_directives(
     module: &IrModule,
@@ -56,21 +67,30 @@ fn generate_random_directives(
 ) -> Vec<InlineDirective> {
     let mut directives = Vec::new();
 
-    // Collect function names.
-    let func_names: Vec<&str> = module
+    // Collect function names, excluding those with mut/out parameters.
+    let inlineable_funcs: Vec<&str> = module
+        .functions
+        .iter()
+        .filter(|f| !has_byref_params(f))
+        .map(|f| f.name.as_str())
+        .collect();
+
+    // All function names for callers (callers can have any param types).
+    let all_func_names: Vec<&str> = module
         .symbols
         .functions
         .iter()
         .map(|def| def.name.as_str())
         .collect();
 
-    if func_names.len() < 2 {
+    if inlineable_funcs.is_empty() || all_func_names.len() < 2 {
         return directives;
     }
 
     // For each pair of functions, randomly decide to inline.
-    for caller in &func_names {
-        for callee in &func_names {
+    // Callee must be inlineable (no mut/out params).
+    for caller in &all_func_names {
+        for callee in &inlineable_funcs {
             // Skip self-calls (recursive inlining not supported).
             if caller == callee {
                 continue;
@@ -86,6 +106,84 @@ fn generate_random_directives(
     }
 
     directives
+}
+
+/// Build an IrModule from functions belonging to a single module in the registry.
+fn build_ir_module_for_single_module(
+    registry: &ModuleFunctionRegistry,
+    target_module_id: IrModuleId,
+) -> IrModule {
+    let mut functions = Vec::new();
+
+    for ((module_id, _func_id), func) in registry.iter_module_functions_with_ids() {
+        if module_id == target_module_id {
+            functions.push(func.clone());
+        }
+    }
+
+    // Sort functions by name for deterministic output.
+    functions.sort_by(|a, b| a.name.cmp(&b.name));
+
+    let mut symbols = SymbolTable::new();
+    for func in &functions {
+        symbols.define_func_with_id(func.id, func.name.clone(), func.params.len());
+    }
+
+    IrModule { functions, symbols }
+}
+
+/// Collect all unique module IDs in the registry.
+fn collect_module_ids(registry: &ModuleFunctionRegistry) -> Vec<IrModuleId> {
+    let mut ids: Vec<IrModuleId> = registry
+        .iter_module_functions_with_ids()
+        .map(|((module_id, _), _)| module_id)
+        .collect();
+    ids.sort_by_key(|id| id.0);
+    ids.dedup();
+    ids
+}
+
+/// Apply chaos inlining to module functions.
+///
+/// Inlines within each module separately (not across modules) to preserve FuncId consistency.
+fn inline_module_functions(
+    registry: &ModuleFunctionRegistry,
+    rng: &mut SimpleRng,
+    inline_probability: u32,
+) -> ModuleFunctionRegistry {
+    let module_ids = collect_module_ids(registry);
+    let mut new_registry = ModuleFunctionRegistry::new();
+
+    for module_id in module_ids {
+        let ir_module = build_ir_module_for_single_module(registry, module_id);
+
+        if ir_module.functions.len() < 2 {
+            // Not enough functions to inline in this module, copy as-is.
+            for func in &ir_module.functions {
+                new_registry.add_module_function(module_id, func.id, func.clone());
+            }
+            continue;
+        }
+
+        let directives = generate_random_directives(&ir_module, rng, inline_probability);
+
+        if directives.is_empty() {
+            // No inlining to do, copy as-is.
+            for func in &ir_module.functions {
+                new_registry.add_module_function(module_id, func.id, func.clone());
+            }
+            continue;
+        }
+
+        let result = inline_module(&ir_module, &directives);
+
+        // Add inlined functions to the new registry.
+        for func in &result.module.functions {
+            new_registry.add_module_function(module_id, func.id, func.clone());
+        }
+    }
+
+    new_registry
 }
 
 /// Apply inlining to functions in a script unit.
@@ -125,6 +223,7 @@ fn run_worldfile(
     parsed: &ParsedWorldfile,
     inline_seed: Option<u64>,
     inline_probability: u32,
+    inline_modules: bool,
 ) -> Vec<UnitOutput> {
     let mut results = Vec::new();
 
@@ -150,9 +249,29 @@ fn run_worldfile(
         return results;
     };
 
-    let Some(mut executor) =
-        compiled.script_executor(datalove_rt::c::DebugOutputMode::Buffer, None)
-    else {
+    // Apply module inlining if enabled.
+    let module_registry = if inline_modules {
+        if let Some(seed) = inline_seed {
+            // Use a different seed derivation for module inlining.
+            let mut module_rng = SimpleRng::new(seed.wrapping_mul(0xDEADBEEF));
+            Arc::new(inline_module_functions(
+                &compiled.shared.module_registry,
+                &mut module_rng,
+                inline_probability,
+            ))
+        } else {
+            Arc::clone(&compiled.shared.module_registry)
+        }
+    } else {
+        Arc::clone(&compiled.shared.module_registry)
+    };
+
+    // Create executor with possibly inlined module registry.
+    let Some(mut executor) = compiled.script_executor_with_module_registry(
+        module_registry,
+        datalove_rt::c::DebugOutputMode::Buffer,
+        None,
+    ) else {
         results.push(UnitOutput {
             section_type: "compilation".into(),
             output: "error".into(),
@@ -162,7 +281,7 @@ fn run_worldfile(
     };
 
     // Create RNG for script unit inlining.
-    let mut script_rng = inline_seed.map(|s| SimpleRng::new(s));
+    let mut script_rng = inline_seed.map(SimpleRng::new);
 
     for section in &parsed.sections {
         match section {
@@ -239,17 +358,27 @@ fn run_worldfile(
 
 /// Run a worldfile with pure interpreter (no inlining).
 fn run_with_interpreter(db: &datafun::Database, parsed: &ParsedWorldfile) -> Vec<UnitOutput> {
-    run_worldfile(db, parsed, None, 0)
+    run_worldfile(db, parsed, None, 0, false)
 }
 
-/// Run a worldfile with chaos inlining.
-fn run_with_chaos_inline(
+/// Run a worldfile with chaos inlining (script units only).
+fn run_with_script_inline(
     db: &datafun::Database,
     parsed: &ParsedWorldfile,
     seed: u64,
     probability: u32,
 ) -> Vec<UnitOutput> {
-    run_worldfile(db, parsed, Some(seed), probability)
+    run_worldfile(db, parsed, Some(seed), probability, false)
+}
+
+/// Run a worldfile with chaos inlining (modules and script units).
+fn run_with_full_inline(
+    db: &datafun::Database,
+    parsed: &ParsedWorldfile,
+    seed: u64,
+    probability: u32,
+) -> Vec<UnitOutput> {
+    run_worldfile(db, parsed, Some(seed), probability, true)
 }
 
 /// Compute a hash of the file contents for reproducible randomness.
@@ -274,18 +403,34 @@ fn test_file(path: &Path) -> Result<(), String> {
     // Run with interpreter (baseline).
     let interp_results = run_with_interpreter(&db, &parsed);
 
-    // Run with chaos inlining (multiple iterations with different seeds and probabilities).
+    // Run with chaos inlining on script units only.
     for iter in 0..3 {
         let chaos_seed = seed.wrapping_add(iter);
 
-        // Try different inline probabilities.
         for probability in [25, 50, 75] {
-            let chaos_results = run_with_chaos_inline(&db, &parsed, chaos_seed, probability);
+            let chaos_results = run_with_script_inline(&db, &parsed, chaos_seed, probability);
 
-            // Compare chaos results with interpreter.
             if chaos_results != interp_results {
                 return Err(format!(
-                    "Chaos inline (seed={}, prob={}%) differs from interpreter!\n\
+                    "Script chaos inline (seed={}, prob={}%) differs from interpreter!\n\
+                     Interpreter: {:?}\n\
+                     Chaos: {:?}",
+                    chaos_seed, probability, interp_results, chaos_results
+                ));
+            }
+        }
+    }
+
+    // Run with chaos inlining on both modules and script units.
+    for iter in 0..3 {
+        let chaos_seed = seed.wrapping_add(iter);
+
+        for probability in [25, 50, 75] {
+            let chaos_results = run_with_full_inline(&db, &parsed, chaos_seed, probability);
+
+            if chaos_results != interp_results {
+                return Err(format!(
+                    "Full chaos inline (seed={}, prob={}%) differs from interpreter!\n\
                      Interpreter: {:?}\n\
                      Chaos: {:?}",
                     chaos_seed, probability, interp_results, chaos_results
