@@ -95,20 +95,6 @@ impl AutoAdaptMode {
     }
 }
 
-/// Read auto-adapt mode from `DATALOVE_AUTO_ADAPT` environment variable.
-///
-/// Returns:
-/// - `AutoAdaptMode::EnabledWithReport` if set to "report"
-/// - `AutoAdaptMode::Enabled` if set to any other value
-/// - `AutoAdaptMode::Disabled` if not set
-pub fn auto_adapt_mode_from_env() -> AutoAdaptMode {
-    match std::env::var("DATALOVE_AUTO_ADAPT") {
-        Ok(val) if val == "report" => AutoAdaptMode::EnabledWithReport,
-        Ok(_) => AutoAdaptMode::Enabled,
-        Err(_) => AutoAdaptMode::Disabled,
-    }
-}
-
 // ============================================================================
 // Parsed Module Graph
 // ============================================================================

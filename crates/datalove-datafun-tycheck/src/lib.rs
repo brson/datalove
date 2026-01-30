@@ -21,7 +21,6 @@ pub use datalove_datafun_common::{
     ParallelMode,
     parallel_mode_from_env,
     AutoAdaptMode,
-    auto_adapt_mode_from_env,
     ParsedModuleGraph,
     ModuleNameResolution,
     AllModuleNameResolutions,
