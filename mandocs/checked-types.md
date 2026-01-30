@@ -99,9 +99,8 @@ Bigints (`int`) support all but div:
 `+ - *` and unary `-`.
 For div we must use a checked variant to handle divide-by-zero.
 
-Fixed ints support all but div:
-`+ - *` and unary `-`,
-but _widen_ to bigints.
+Fixed ints do not support bare arithmetic (`+ - * /`).
+Use `@` to widen to `int` first, or use checked/optional operators.
 
 Fixed ints support checked early-return varieties:
 

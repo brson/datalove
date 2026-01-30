@@ -476,13 +476,9 @@ pub fn check_expr<'db>(
                 }
             }
 
-            // Note: Bare arithmetic on fixed ints widens to int via synthesis.
-            // We don't do bidirectional checking for this case - let synthesis handle it.
-
             // Fall through to default synthesis behavior.
-            // Note: Implicit widening for binops to int is handled by synthesis
-            // (binops on fixed ints synthesize to int). No implicit widening
-            // from fixed int to fixed int - that requires @.
+            // Note: Bare arithmetic on fixed ints is a type error - they must use
+            // @ to widen first, or use checked/optional operators (+!, +?, etc.).
             let synthesized = ctx.synthesize_expr(expr)?;
             if types_equivalent(db, &synthesized, expected) {
                 return Ok(());

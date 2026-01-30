@@ -86,30 +86,38 @@ Examples:
 
 ## Numeric Widening
 
-Datalove supports automatic numeric widening for fixed-size integer types.
+There is no implicit numeric widening in Datalove. All numeric conversions
+require the explicit `@` (adapt) operator.
 
-### Widening Chains
+### Widening with `@`
 
-Unsigned integers can widen along this chain:
+The `@` operator can widen fixed integers along these chains:
+
+Unsigned integers:
 ```
 u8 -> u16 -> u32 -> u64 -> int
 ```
 
-Signed integers can widen along this chain:
+Signed integers:
 ```
 i8 -> i16 -> i32 -> i64 -> int
 ```
 
-**No cross-widening**: Unsigned types cannot widen to signed types and vice versa.
+Cross-sign widening is allowed when lossless (unsigned to larger signed):
+```
+u8 -> i16, i32, i64, int
+u16 -> i32, i64, int
+u32 -> i64, int
+```
 
 Examples:
 ```datalove
 let a: @u8 = @10
-let b: @u16 = a         // OK: u8 widens to u16
-let c: @u32 = b         // OK: u16 widens to u32
-let d: @int = c         // OK: u32 widens to int
+let b: @u16 = a@        // OK: @ widens u8 to u16
+let c: @u32 = b@        // OK: @ widens u16 to u32
+let d: @int = c@        // OK: @ widens u32 to int
 
-let e: @i32 = c         // ERROR: u32 cannot widen to i32 (cross-widening)
+let e: @i32 = c         // ERROR: no implicit widening (requires @)
 ```
 
 ## Synthesis Rules (e => T)

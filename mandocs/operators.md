@@ -166,7 +166,8 @@ let c: int = a@     // can do it again
 ```datalove
 let x: u8 = 10
 let y = x@          // ERROR: no type context for coercion
-let w: i32 = x@     // ERROR: crosses sign boundary (unsigned to signed)
+let w: u32 = 1000
+let z: u16 = w@     // ERROR: narrowing (u32 to u16 loses precision)
 ```
 
 ### Behavior on copy types without widening
