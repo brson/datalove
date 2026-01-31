@@ -1,0 +1,13 @@
+// D001 use after move in if branch
+fun consume(s: string): int
+  ret 42
+end fun
+
+fun check(s: string): bool
+  ret true
+end fun
+
+let msg: string = "hello"
+if check(msg)
+  let a: int = consume(msg)
+end if

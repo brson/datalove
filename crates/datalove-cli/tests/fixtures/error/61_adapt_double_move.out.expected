@@ -8,6 +8,8 @@
  [38;5;240m  │[0m                      [38;5;201m─[0m[38;5;201m┬[0m[38;5;201m─[0m  
  [38;5;240m  │[0m                       [38;5;201m╰[0m[38;5;201m─[0m[38;5;201m─[0m[38;5;201m─[0m value used after move
  [38;5;240m  │[0m 
- [38;5;240m  │[0m [38;5;115mHelp[0m: insert `@` to clone: `msg@`
+ [38;5;240m  │[0m [38;5;115mHelp[0m: insert `@` to clone:
+7 |     let a: int = consume(msg@)
+  |                             +
 [38;5;246m───╯[0m
 Error: Ownership error

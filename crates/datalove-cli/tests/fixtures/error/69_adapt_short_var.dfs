@@ -1,0 +1,8 @@
+// D001 use after move with short variable name
+fun consume(s: string): int
+  ret 42
+end fun
+
+let x: string = "hello"
+let a: int = consume(x)
+let b: string = x

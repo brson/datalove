@@ -1,0 +1,10 @@
+// D001 use after move where first use is in return
+fun consume(s: string): int
+  ret 42
+end fun
+
+fun test(): int
+  let msg: string = "hello"
+  let a: int = consume(msg)
+  ret consume(msg)
+end fun

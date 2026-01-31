@@ -1,0 +1,7 @@
+// D001 use after move in tuple - both uses in same expression
+fun consume(s: string): int
+  ret 42
+end fun
+
+let msg: string = "hello"
+let pair: (int, int) = (consume(msg), consume(msg))

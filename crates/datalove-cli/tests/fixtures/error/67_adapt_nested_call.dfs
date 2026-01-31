@@ -1,0 +1,12 @@
+// D001 use after move in nested function call
+fun inner(s: string): string
+  ret s
+end fun
+
+fun outer(s: string): int
+  ret 42
+end fun
+
+let msg: string = "hello"
+let a: int = outer(inner(msg))
+let b: string = msg

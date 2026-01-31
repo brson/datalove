@@ -1,0 +1,8 @@
+// D001 use after move with long variable name
+fun consume(s: string): int
+  ret 42
+end fun
+
+let very_long_variable_name: string = "hello"
+let a: int = consume(very_long_variable_name)
+let b: string = very_long_variable_name

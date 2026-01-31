@@ -273,6 +273,55 @@ fn lookup_expr_span<'db>(
     spans.lookup(expr).map(|entry| entry.to_text_and_span(db))
 }
 
+/// Generate a Rust-style suggestion showing the modified source line with `+` markers.
+///
+/// Returns a formatted string like:
+/// ```text
+/// 7 |     let a: int = consume(msg@)
+///   |                             +
+/// ```
+fn format_insertion_suggestion(
+    source: &str,
+    span: &std::ops::Range<usize>,
+    insertion: &str,
+) -> Option<String> {
+    // Find the line containing the span end (where we insert).
+    let insert_pos = span.end;
+
+    // Find line boundaries.
+    let line_start = source[..insert_pos].rfind('\n').map(|i| i + 1).unwrap_or(0);
+    let line_end = source[insert_pos..].find('\n').map(|i| insert_pos + i).unwrap_or(source.len());
+
+    // Calculate line number (1-indexed).
+    let line_num = source[..line_start].matches('\n').count() + 1;
+
+    // Get the original line.
+    let original_line = &source[line_start..line_end];
+
+    // Position within the line where we insert.
+    let col = insert_pos - line_start;
+
+    // Create the modified line by inserting the text.
+    let mut modified_line = original_line.to_string();
+    modified_line.insert_str(col, insertion);
+
+    // Calculate the line number column width.
+    let line_num_str = line_num.to_string();
+    let line_num_width = line_num_str.len();
+
+    // Build the suggestion display.
+    // Line with modification: "N |     <code>"
+    let code_line = format!("{} |     {}", line_num_str, modified_line);
+
+    // Plus markers line: "  |     <spaces>+"
+    // The leading spaces match the line number width.
+    let marker_prefix = format!("{:width$} |     ", "", width = line_num_width);
+    let plus_markers = "+".repeat(insertion.len());
+    let marker_line = format!("{}{:col$}{}", marker_prefix, "", plus_markers, col = col);
+
+    Some(format!("{}\n{}", code_line, marker_line))
+}
+
 /// Render a single ownership error.
 fn render_ownership_error<'db>(
     db: &'db dyn salsa::Database,
@@ -286,6 +335,7 @@ fn render_ownership_error<'db>(
     match error {
         AnalysisError::UseAfterMove { local_index, moved_at, name, recovery_hint } => {
             if let Some((text, span)) = lookup_expr_span(db, spans, *local_index) {
+                let source_str = text.as_str(db);
                 let msg = format!("use of moved value: `{}`", name);
                 let mut builder = Report::build(ReportKind::Error, file_name, span.start)
                     .with_code("D001")
@@ -297,27 +347,39 @@ fn render_ownership_error<'db>(
                     );
 
                 // Add secondary label at the move location if different.
-                if moved_at != local_index {
+                let move_span_for_suggestion = if moved_at != local_index {
                     if let Some((_, move_span)) = lookup_expr_span(db, spans, *moved_at) {
                         builder = builder.with_label(
                             Label::new((file_name, move_span.clone()))
                                 .with_color(Color::Cyan)
                                 .with_message("value moved here")
                         );
+                        Some(move_span)
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                };
+
+                // Show Rust-style suggestion with modified code and + markers.
+                if let OwnershipRecoveryHint::InsertAdapt { .. } = recovery_hint {
+                    // Use the move location for the suggestion if available.
+                    let suggestion_span = move_span_for_suggestion.as_ref().unwrap_or(&span);
+                    if let Some(suggestion) = format_insertion_suggestion(source_str, suggestion_span, "@") {
+                        builder = builder.with_help(format!("insert `@` to clone:\n{}", suggestion));
+                    } else {
+                        builder = builder.with_help(format!("insert `@` to clone: `{}@`", name));
                     }
                 }
 
-                // Show actual suggested fix with @ inserted.
-                if let OwnershipRecoveryHint::InsertAdapt { .. } = recovery_hint {
-                    builder = builder.with_help(format!("insert `@` to clone: `{}@`", name));
-                }
-
                 let report = builder.finish();
-                let _ = report.eprint((file_name, Source::from(text.as_str(db))));
+                let _ = report.eprint((file_name, Source::from(source_str)));
             }
         }
         AnalysisError::DoubleMove { local_index, moved_at, name, recovery_hint } => {
             if let Some((text, span)) = lookup_expr_span(db, spans, *local_index) {
+                let source_str = text.as_str(db);
                 let msg = format!("value moved twice: `{}`", name);
                 let mut builder = Report::build(ReportKind::Error, file_name, span.start)
                     .with_code("D002")
@@ -329,23 +391,34 @@ fn render_ownership_error<'db>(
                     );
 
                 // Add secondary label at the first move location if different.
-                if moved_at != local_index {
+                let move_span_for_suggestion = if moved_at != local_index {
                     if let Some((_, move_span)) = lookup_expr_span(db, spans, *moved_at) {
                         builder = builder.with_label(
                             Label::new((file_name, move_span.clone()))
                                 .with_color(Color::Cyan)
                                 .with_message("first move here")
                         );
+                        Some(move_span)
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                };
+
+                // Show Rust-style suggestion with modified code and + markers.
+                if let OwnershipRecoveryHint::InsertAdapt { .. } = recovery_hint {
+                    // Use the first move location for the suggestion if available.
+                    let suggestion_span = move_span_for_suggestion.as_ref().unwrap_or(&span);
+                    if let Some(suggestion) = format_insertion_suggestion(source_str, suggestion_span, "@") {
+                        builder = builder.with_help(format!("insert `@` to clone:\n{}", suggestion));
+                    } else {
+                        builder = builder.with_help(format!("insert `@` to clone: `{}@`", name));
                     }
                 }
 
-                // Show actual suggested fix with @ inserted.
-                if let OwnershipRecoveryHint::InsertAdapt { .. } = recovery_hint {
-                    builder = builder.with_help(format!("insert `@` to clone: `{}@`", name));
-                }
-
                 let report = builder.finish();
-                let _ = report.eprint((file_name, Source::from(text.as_str(db))));
+                let _ = report.eprint((file_name, Source::from(source_str)));
             }
         }
         AnalysisError::CannotMoveBorrowed { local_index, name } => {
@@ -401,6 +474,7 @@ fn render_ownership_error<'db>(
         }
         AnalysisError::MoveInLoop { local_index, name, recovery_hint } => {
             if let Some((text, span)) = lookup_expr_span(db, spans, *local_index) {
+                let source_str = text.as_str(db);
                 let msg = format!("cannot move `{}` in loop", name);
                 let mut builder = Report::build(ReportKind::Error, file_name, span.start)
                     .with_code("D007")
@@ -410,12 +484,16 @@ fn render_ownership_error<'db>(
                             .with_color(colors.next())
                             .with_message("value moved inside loop")
                     );
-                // Show actual suggested fix with @ inserted.
+                // Show Rust-style suggestion with modified code and + markers.
                 if let OwnershipRecoveryHint::InsertAdapt { .. } = recovery_hint {
-                    builder = builder.with_help(format!("insert `@` to clone: `{}@`", name));
+                    if let Some(suggestion) = format_insertion_suggestion(source_str, &span, "@") {
+                        builder = builder.with_help(format!("insert `@` to clone:\n{}", suggestion));
+                    } else {
+                        builder = builder.with_help(format!("insert `@` to clone: `{}@`", name));
+                    }
                 }
                 let report = builder.finish();
-                let _ = report.eprint((file_name, Source::from(text.as_str(db))));
+                let _ = report.eprint((file_name, Source::from(source_str)));
             }
         }
         AnalysisError::InconsistentBranchMove { stmt_idx: _, name, moved_in } => {
