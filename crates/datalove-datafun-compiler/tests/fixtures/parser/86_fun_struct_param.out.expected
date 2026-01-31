@@ -7,6 +7,7 @@
         "name": "get_x",
         "params": [
           {
+            "is_comptime": false,
             "mode": "In",
             "name": "s",
             "type_hint": {

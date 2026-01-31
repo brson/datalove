@@ -45,6 +45,7 @@
         "name": "check",
         "params": [
           {
+            "is_comptime": false,
             "mode": "In",
             "name": "n",
             "type_hint": "U32"

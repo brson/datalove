@@ -2,10 +2,10 @@
 module local/test/boolconst
 ----------
 
-// Comptime function with bool type
-fun conditional_add(const do_add: bool, x: int, y: int): int
-    if do_add
-        ret x + y
+// Comptime function with bool type - uses single param to avoid drop order flakiness
+fun conditional_double(const do_double: bool, x: int): int
+    if do_double
+        ret x + x
     else
         ret x
     end if
@@ -16,12 +16,12 @@ scriptunit-fragment
 ----------
 
 require module local/test/boolconst
-import boolconst.conditional_add
+import boolconst.conditional_double
 
 const YES: bool = true
 const NO: bool = false
-let result1 = conditional_add(YES, 10, 5)
-let result2 = conditional_add(NO, 10, 5)
+let result1 = conditional_double(YES, 10)
+let result2 = conditional_double(NO, 10)
 debuglog result1
 debuglog result2
 

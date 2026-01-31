@@ -7,6 +7,7 @@
         "name": "f",
         "params": [
           {
+            "is_comptime": false,
             "mode": "In",
             "name": "x",
             "type_hint": "I32"

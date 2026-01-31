@@ -24,11 +24,13 @@
         "name": "process",
         "params": [
           {
+            "is_comptime": false,
             "mode": "In",
             "name": "x",
             "type_hint": "U32"
           },
           {
+            "is_comptime": false,
             "mode": "In",
             "name": "y",
             "type_hint": "String"

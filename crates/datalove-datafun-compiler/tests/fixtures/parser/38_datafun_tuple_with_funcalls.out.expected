@@ -31,11 +31,13 @@
         "name": "add",
         "params": [
           {
+            "is_comptime": false,
             "mode": "In",
             "name": "a",
             "type_hint": "U32"
           },
           {
+            "is_comptime": false,
             "mode": "In",
             "name": "b",
             "type_hint": "U32"

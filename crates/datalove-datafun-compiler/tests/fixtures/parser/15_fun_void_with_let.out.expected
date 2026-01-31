@@ -32,6 +32,7 @@
         "name": "do_something",
         "params": [
           {
+            "is_comptime": false,
             "mode": "In",
             "name": "x",
             "type_hint": "U32"

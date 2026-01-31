@@ -126,6 +126,7 @@
         "name": "grade",
         "params": [
           {
+            "is_comptime": false,
             "mode": "In",
             "name": "score",
             "type_hint": "U32"

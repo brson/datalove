@@ -892,18 +892,19 @@ impl IrInterpreter {
             // only used by the specialization pass. Without specialization, this calls
             // the original function with original args.
             Instruction::ComptimeCall { dest, func, args, .. } => {
-                let (callee, callee_unit) = ctx.get_function_with_context(func, registry);
+                let callee = ctx.get_function(func, registry);
                 let arg_vals = self.prepare_call_args(callee, args, frame, frames);
                 let dest_slot = frame.value_dest(*dest);
                 Self::mark_consumed_call_args(callee, args, frame);
 
                 // Try dispatcher first, fall back to interpreter.
+                // ComptimeCall doesn't have site_id, so no call_site_info.
                 let call_result = if let Some(result) = self.try_dispatch_call(
-                    func, callee, &arg_vals, dest_slot, ctx, registry, frames
+                    func, callee, &arg_vals, dest_slot, ctx, registry, frames, None
                 ) {
                     result
                 } else {
-                    self.execute_call(callee, callee_unit, arg_vals, dest_slot, ctx, registry, frames)
+                    self.execute_call(callee, func, arg_vals, dest_slot, ctx, registry, frames)
                 };
                 call_result?;
 

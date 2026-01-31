@@ -7,21 +7,25 @@
         "name": "demo",
         "params": [
           {
+            "is_comptime": false,
             "mode": "In",
             "name": "a",
             "type_hint": "U32"
           },
           {
+            "is_comptime": false,
             "mode": "Out",
             "name": "b",
             "type_hint": "U32"
           },
           {
+            "is_comptime": false,
             "mode": "Ref",
             "name": "c",
             "type_hint": "U32"
           },
           {
+            "is_comptime": false,
             "mode": "Mut",
             "name": "d",
             "type_hint": "U32"

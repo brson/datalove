@@ -30,7 +30,7 @@ Analysis(
                         v0 = const 2int
                         v2 = const 0i32
                         drop v0
-                        v1 = call m0.f0(v2, p0)
+                        v1 = call @0 m0.f0(v2, p0)
                         return v1
                 """,
             ),
@@ -51,7 +51,7 @@ Analysis(
                     scriptunit:
                     block0:
                         v0 = const 10int
-                        v1 = call m0.f1(v0)
+                        v1 = call @0 m0.f1(v0)
                         debuglog v1
                         unit_end_drop v1
                         unit_end

@@ -47,7 +47,7 @@ use std::collections::HashMap;
 use datalove_datafun_ir::{
     ConstValue, IrFunction, IrBlock, Instruction, Terminator, Operand,
     ValueId, BlockId, FuncId, FuncRef, IrType, BinOp, ParamMode, ParamId,
-    IrModuleId,
+    IrModuleId, CallSiteId,
 };
 use datalove_datafun_common::ComptimeCallSiteRegistry;
 
@@ -233,6 +233,7 @@ pub fn transform_function(
         blocks: new_blocks,
         value_count: new_value_count,
         slot_count: new_slot_count,
+        call_site_count: original.call_site_count,
         value_types: new_value_types,
         slot_types: new_slot_types,
         tracked_slots: original.tracked_slots.clone(), // May need adjustment
@@ -459,7 +460,8 @@ fn rewrite_comptime_params_in_instruction(
             op: *op,
             operand: rewrite_operand(operand),
         },
-        Instruction::Call { dest, func, args } => Instruction::Call {
+        Instruction::Call { site_id, dest, func, args } => Instruction::Call {
+            site_id: *site_id,
             dest: *dest,
             func: func.clone(),
             args: args.iter().map(rewrite_operand).collect(),
@@ -578,6 +580,7 @@ pub fn rewrite_comptime_calls(
     let const_values = build_const_value_map(func);
 
     let mut new_blocks = Vec::new();
+    let mut next_call_site = func.call_site_count;
 
     for block in &func.blocks {
         let mut new_instructions = Vec::new();
@@ -634,8 +637,11 @@ pub fn rewrite_comptime_calls(
                                     new_instructions.push(Instruction::Drop { operand: arg });
                                 }
 
-                                // Emit Call instruction.
+                                // Emit Call instruction with new site_id.
+                                let site_id = CallSiteId(next_call_site);
+                                next_call_site += 1;
                                 new_instructions.push(Instruction::Call {
+                                    site_id,
                                     dest: *dest,
                                     func: func_ref.clone(),
                                     args: new_args,
@@ -647,7 +653,10 @@ pub fn rewrite_comptime_calls(
 
                     // Fallback: function not in spec plan or discriminant not found.
                     // Emit as regular Call (handles skipped specialization).
+                    let site_id = CallSiteId(next_call_site);
+                    next_call_site += 1;
                     new_instructions.push(Instruction::Call {
+                        site_id,
                         dest: *dest,
                         func: func_ref.clone(),
                         args: args.clone(),
@@ -677,6 +686,7 @@ pub fn rewrite_comptime_calls(
         blocks: new_blocks,
         value_count: *next_value,
         slot_count: func.slot_count,
+        call_site_count: next_call_site,
         value_types: value_types.clone(),
         slot_types: func.slot_types.clone(),
         tracked_slots: func.tracked_slots.clone(),

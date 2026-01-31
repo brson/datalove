@@ -29,11 +29,13 @@
         "name": "increment",
         "params": [
           {
+            "is_comptime": false,
             "mode": "In",
             "name": "accum",
             "type_hint": "U64"
           },
           {
+            "is_comptime": false,
             "mode": "In",
             "name": "amount",
             "type_hint": "U8"
