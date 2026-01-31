@@ -284,7 +284,7 @@ fn render_ownership_error<'db>(
     use datalove_datafun_sema::{AnalysisError, OwnershipRecoveryHint};
 
     match error {
-        AnalysisError::UseAfterMove { local_index, name, recovery_hint } => {
+        AnalysisError::UseAfterMove { local_index, moved_at, name, recovery_hint } => {
             if let Some((text, span)) = lookup_expr_span(db, spans, *local_index) {
                 let msg = format!("use of moved value: `{}`", name);
                 let mut builder = Report::build(ReportKind::Error, file_name, span.start)
@@ -295,14 +295,28 @@ fn render_ownership_error<'db>(
                             .with_color(colors.next())
                             .with_message("value used after move")
                     );
-                if let OwnershipRecoveryHint::InsertAdapt { description } = recovery_hint {
-                    builder = builder.with_note(format!("help: use `@` to {}", description));
+
+                // Add secondary label at the move location if different.
+                if moved_at != local_index {
+                    if let Some((_, move_span)) = lookup_expr_span(db, spans, *moved_at) {
+                        builder = builder.with_label(
+                            Label::new((file_name, move_span.clone()))
+                                .with_color(Color::Cyan)
+                                .with_message("value moved here")
+                        );
+                    }
                 }
+
+                // Show actual suggested fix with @ inserted.
+                if let OwnershipRecoveryHint::InsertAdapt { .. } = recovery_hint {
+                    builder = builder.with_help(format!("insert `@` to clone: `{}@`", name));
+                }
+
                 let report = builder.finish();
                 let _ = report.eprint((file_name, Source::from(text.as_str(db))));
             }
         }
-        AnalysisError::DoubleMove { local_index, name, recovery_hint } => {
+        AnalysisError::DoubleMove { local_index, moved_at, name, recovery_hint } => {
             if let Some((text, span)) = lookup_expr_span(db, spans, *local_index) {
                 let msg = format!("value moved twice: `{}`", name);
                 let mut builder = Report::build(ReportKind::Error, file_name, span.start)
@@ -313,9 +327,23 @@ fn render_ownership_error<'db>(
                             .with_color(colors.next())
                             .with_message("second move here")
                     );
-                if let OwnershipRecoveryHint::InsertAdapt { description } = recovery_hint {
-                    builder = builder.with_note(format!("help: use `@` to {}", description));
+
+                // Add secondary label at the first move location if different.
+                if moved_at != local_index {
+                    if let Some((_, move_span)) = lookup_expr_span(db, spans, *moved_at) {
+                        builder = builder.with_label(
+                            Label::new((file_name, move_span.clone()))
+                                .with_color(Color::Cyan)
+                                .with_message("first move here")
+                        );
+                    }
                 }
+
+                // Show actual suggested fix with @ inserted.
+                if let OwnershipRecoveryHint::InsertAdapt { .. } = recovery_hint {
+                    builder = builder.with_help(format!("insert `@` to clone: `{}@`", name));
+                }
+
                 let report = builder.finish();
                 let _ = report.eprint((file_name, Source::from(text.as_str(db))));
             }
@@ -382,8 +410,9 @@ fn render_ownership_error<'db>(
                             .with_color(colors.next())
                             .with_message("value moved inside loop")
                     );
-                if let OwnershipRecoveryHint::InsertAdapt { description } = recovery_hint {
-                    builder = builder.with_note(format!("help: use `@` to {}", description));
+                // Show actual suggested fix with @ inserted.
+                if let OwnershipRecoveryHint::InsertAdapt { .. } = recovery_hint {
+                    builder = builder.with_help(format!("insert `@` to clone: `{}@`", name));
                 }
                 let report = builder.finish();
                 let _ = report.eprint((file_name, Source::from(text.as_str(db))));

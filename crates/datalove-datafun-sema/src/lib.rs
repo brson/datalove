@@ -163,22 +163,28 @@ pub enum OwnershipRecoveryHint {
 /// Error detected during ownership analysis.
 ///
 /// Each variant includes a `local_index` for span lookup during diagnostic
-/// emission. The local_index is the expression's sequential index within its
-/// function, stable regardless of parallel vs sequential compilation order.
+/// emission. The local_index is the expression's salsa ID index, used to
+/// look up spans in DatafunSpans.
 #[derive(Clone, Debug, Hash, PartialEq, Eq)]
 #[derive(salsa::Update)]
 pub enum AnalysisError {
     /// Using a value after it was moved.
     /// D001 - Recoverable with @ (clone before first use)
     UseAfterMove {
+        /// Location of the second use (where error is detected).
         local_index: u32,
+        /// Location of the first move (where @ should be inserted).
+        moved_at: u32,
         name: String,
         recovery_hint: OwnershipRecoveryHint,
     },
     /// Moving a value multiple times.
     /// D002 - Recoverable with @ (clone before second move)
     DoubleMove {
+        /// Location of the second move (where error is detected).
         local_index: u32,
+        /// Location of the first move (where @ should be inserted).
+        moved_at: u32,
         name: String,
         recovery_hint: OwnershipRecoveryHint,
     },
@@ -242,11 +248,11 @@ pub fn format_analysis_errors(errors: &[AnalysisError]) -> String {
 
 fn format_single_error(error: &AnalysisError) -> String {
     match error {
-        AnalysisError::UseAfterMove { local_index: _, name, recovery_hint } => {
+        AnalysisError::UseAfterMove { local_index: _, moved_at: _, name, recovery_hint } => {
             let base = format!("error[D001]: use of moved value: `{}`", name);
             format_with_hint(base, recovery_hint)
         }
-        AnalysisError::DoubleMove { local_index: _, name, recovery_hint } => {
+        AnalysisError::DoubleMove { local_index: _, moved_at: _, name, recovery_hint } => {
             let base = format!("error[D002]: value moved twice: `{}`", name);
             format_with_hint(base, recovery_hint)
         }

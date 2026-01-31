@@ -361,10 +361,11 @@ impl<'db> AnalysisCtx<'db> {
                 return;
             }
             let name = self.bindings[id.0 as usize].name.C();
+            let moved_at = self.get_moved_at(id).unwrap_or(local_index);
             let recovery_hint = OwnershipRecoveryHint::InsertAdapt {
                 description: format!("clone `{}` before the second use", name),
             };
-            self.errors.push(AnalysisError::DoubleMove { local_index, name, recovery_hint });
+            self.errors.push(AnalysisError::DoubleMove { local_index, moved_at, name, recovery_hint });
         } else {
             // Track the move for error detection.
             // Note: ScriptUnit bindings are tracked for error detection (e.g., move in loop)
@@ -558,10 +559,11 @@ impl<'db> AnalysisCtx<'db> {
                             // Allow this use by continuing (value was implicitly cloned).
                         } else {
                             let name = self.bindings[id.0 as usize].name.C();
+                            let moved_at = self.get_moved_at(id).unwrap_or(local_index);
                             let recovery_hint = OwnershipRecoveryHint::InsertAdapt {
                                 description: format!("clone `{}` before the earlier use", name),
                             };
-                            self.errors.push(AnalysisError::UseAfterMove { local_index, name, recovery_hint });
+                            self.errors.push(AnalysisError::UseAfterMove { local_index, moved_at, name, recovery_hint });
                             return None;
                         }
                     }
@@ -624,10 +626,11 @@ impl<'db> AnalysisCtx<'db> {
                             {
                                 let name = self.bindings[binding_id.0 as usize].name.C();
                                 let local_index = arg.as_id().index() as u32;
+                                let moved_at = self.get_moved_at(binding_id).unwrap_or(local_index);
                                 let recovery_hint = OwnershipRecoveryHint::InsertAdapt {
                                     description: format!("clone `{}` before the earlier use", name),
                                 };
-                                self.errors.push(AnalysisError::UseAfterMove { local_index, name, recovery_hint });
+                                self.errors.push(AnalysisError::UseAfterMove { local_index, moved_at, name, recovery_hint });
                             }
                             // Mark the binding as initialized after the call writes to it.
                             if self.bindings[binding_id.0 as usize].param_mode == Some(ParamMode::Out) {

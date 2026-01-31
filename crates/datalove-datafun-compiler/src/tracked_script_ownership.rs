@@ -276,7 +276,7 @@ fn emit_single_ownership_diagnostic<'db>(
     spans: &DatafunSpans,
 ) {
     match error {
-        AnalysisError::UseAfterMove { local_index, name, recovery_hint } => {
+        AnalysisError::UseAfterMove { local_index, moved_at: _, name, recovery_hint } => {
             if let Some(ts) = lookup_expr_span(db, spans, *local_index) {
                 let msg = format!("use of moved value: `{}`", name);
                 let mut builder = bct::diagnostic::DiagnosticBuilder::error(db, &msg)
@@ -290,7 +290,7 @@ fn emit_single_ownership_diagnostic<'db>(
                 builder.emit_ownership();
             }
         }
-        AnalysisError::DoubleMove { local_index, name, recovery_hint } => {
+        AnalysisError::DoubleMove { local_index, moved_at: _, name, recovery_hint } => {
             if let Some(ts) = lookup_expr_span(db, spans, *local_index) {
                 let msg = format!("value moved twice: `{}`", name);
                 let mut builder = bct::diagnostic::DiagnosticBuilder::error(db, &msg)
