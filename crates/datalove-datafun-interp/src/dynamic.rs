@@ -210,11 +210,23 @@ impl CallDispatcher for DynamicInliner {
         let should_inline = self.record_call(&call_site_info, func);
 
         if should_inline {
-            // Only inline local functions (we have the caller in context).
-            if let FuncRef::Local(func_id) = &call_site_info.caller {
-                if let Some(caller) = call_ctx.exec_ctx.find_local_function(*func_id) {
-                    self.perform_inlining(&call_site_info, caller, func);
+            // Look up the caller function based on its FuncRef type.
+            let caller = match &call_site_info.caller {
+                FuncRef::Local(func_id) => {
+                    call_ctx.exec_ctx.find_local_function(*func_id)
                 }
+                FuncRef::Module { module, func: func_id } => {
+                    call_ctx.registry.get_module_function(*module, *func_id)
+                }
+                FuncRef::External { .. } => {
+                    // External functions are from previous script units.
+                    // TODO: Could support this by looking up in registry.
+                    None
+                }
+            };
+
+            if let Some(caller) = caller {
+                self.perform_inlining(&call_site_info, caller, func);
             }
         }
 
