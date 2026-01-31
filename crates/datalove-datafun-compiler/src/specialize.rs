@@ -360,8 +360,10 @@ fn build_dispatch_blocks(
                 });
 
                 // Add const instructions for comptime param values.
+                // Use the original function's param_types to get the correct type for each comptime param.
                 for (&param_idx, value) in spec.comptime_param_indices.iter().zip(values.iter()) {
-                    let dest = fresh_value(get_const_value_type(value));
+                    let param_type = original.param_types[param_idx].clone();
+                    let dest = fresh_value(param_type);
                     instructions.push(Instruction::Const {
                         dest,
                         value: value.clone(),
@@ -392,48 +394,6 @@ fn build_dispatch_blocks(
     }
 
     (blocks, next_value, original.slot_count, value_types, original.slot_types.clone())
-}
-
-/// Get the IrType for a ConstValue.
-///
-/// Note: For aggregate types (tuples, structs, enums, etc.) this function cannot determine
-/// the full type since ConstValue doesn't carry complete type information. These cases
-/// currently fall back to Unit which may cause issues - callers should ensure comptime
-/// params use scalar types.
-fn get_const_value_type(value: &ConstValue) -> IrType {
-    match value {
-        ConstValue::Unit => IrType::Unit,
-        ConstValue::Bool(_) => IrType::Bool,
-        ConstValue::I8(_) => IrType::I8,
-        ConstValue::I16(_) => IrType::I16,
-        ConstValue::I32(_) => IrType::I32,
-        ConstValue::I64(_) => IrType::I64,
-        ConstValue::U8(_) => IrType::U8,
-        ConstValue::U16(_) => IrType::U16,
-        ConstValue::U32(_) => IrType::U32,
-        ConstValue::U64(_) => IrType::U64,
-        ConstValue::Index(_) => IrType::Index,
-        ConstValue::Offset(_) => IrType::Offset,
-        ConstValue::Int { .. } => IrType::Int,
-        ConstValue::F32(_) => IrType::F32,
-        ConstValue::F64(_) => IrType::F64,
-        ConstValue::String(_) => IrType::String,
-        ConstValue::Data(_) => IrType::Data,
-        ConstValue::Error(_) => IrType::Error,
-        // Aggregate and collection types - we can't determine the full type from ConstValue alone.
-        // These would need type information passed in separately.
-        ConstValue::Tuple(_)
-        | ConstValue::Struct(_)
-        | ConstValue::Enum { .. }
-        | ConstValue::OptionSome(_)
-        | ConstValue::OptionNone
-        | ConstValue::ResultOk(_)
-        | ConstValue::ResultErr(_)
-        | ConstValue::List(_)
-        | ConstValue::Set(_)
-        | ConstValue::Map(_)
-        | ConstValue::Table { .. } => IrType::Unit, // Fallback - may need proper type info
-    }
 }
 
 /// Remap block IDs in an instruction for a cloned body.

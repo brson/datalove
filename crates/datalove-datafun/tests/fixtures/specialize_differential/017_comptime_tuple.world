@@ -1,0 +1,26 @@
+----------
+module local/test/tupleconst
+----------
+
+// Comptime function with tuple type parameter - verifies aggregate types work
+// Note: Can't destructure tuples yet, so just pass through
+fun get_pair(const pair: (int, int)): (int, int)
+    ret pair
+end fun
+
+----------
+scriptunit-fragment
+----------
+
+require module local/test/tupleconst
+import tupleconst.get_pair
+
+const PAIR: (int, int) = (: int / 10, : int / 20)
+let result = get_pair(PAIR)
+debuglog result
+
+----------
+scriptunit-expr
+----------
+
+result

@@ -1,0 +1,73 @@
+// PASS: Specialized and unspecialized outputs match
+
+Analysis(
+    sections: [
+        SectionResult(
+            section_type: "module",
+            name: Some("local/test/tupleconst"),
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    fn get_pair(p0):
+                    block0:
+                        v0 = move p0
+                        return v0
+                """,
+            ),
+            output: "",
+        ),
+        SectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v2 = const (10int, 20int)
+                        v3 = comptime_call m0.f0(v2) [disc=0, comptime_params=[0]]
+                        debuglog v3
+                        unit_end_drop v3
+                        unit_end
+                    exports:
+                        PAIR = v2
+                        result = v3
+                """,
+            ),
+            output: "(fragment executed)",
+            debug_output: Some("(10, 20)\n"),
+        ),
+        SectionResult(
+            section_type: "scriptunit-expr",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = move unit0.v3
+                        unit_end v0
+                """,
+            ),
+            output: "(10, 20)",
+        ),
+    ],
+)
