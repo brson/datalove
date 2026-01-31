@@ -349,7 +349,7 @@ pub fn typecheck_module<'db>(
         .collect();
 
     // Extract comptime registry from context.
-    let comptime_registry = ctx.take_comptime_registry().to_serializable();
+    let comptime_registry = ctx.take_comptime_registry();
 
     log_query("typecheck", module_path, QueryPhase::End);
 
@@ -485,17 +485,13 @@ pub fn typecheck_module_graph<'db>(
         emit_pending_diagnostics_for_module(db, &parsed_graph, module_id, result.pending_diagnostics(db));
 
         // Merge comptime registry from this module.
-        let module_registry = result.comptime_registry(db).to_registry();
-        combined_comptime_registry.merge(&module_registry);
+        combined_comptime_registry.merge(result.comptime_registry(db));
 
         // Store the per-module result for use by downstream phases.
         module_results_map.insert(module_id, result);
     }
 
-    // Serialize combined comptime registry.
-    let combined_comptime_serialized = combined_comptime_registry.to_serializable();
-
-    ModuleGraphTypecheckResult::new(db, prep.graph, module_errors, module_exports_map, module_imports_map, combined_expr_types, combined_call_targets, module_results_map, combined_comptime_serialized)
+    ModuleGraphTypecheckResult::new(db, prep.graph, module_errors, module_exports_map, module_imports_map, combined_expr_types, combined_call_targets, module_results_map, combined_comptime_registry)
 }
 
 /// Typecheck a module graph using parallel execution.

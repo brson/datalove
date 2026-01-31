@@ -729,11 +729,10 @@ fn specialize_comptime_functions<'db>(
     mut lowered_functions: HashMap<ModuleId, ModuleLoweredFunctions>,
 ) -> HashMap<ModuleId, ModuleLoweredFunctions> {
     // Get the combined comptime registry.
-    let registry_serialized = typecheck_result.comptime_registry(db);
-    if registry_serialized.is_empty() {
+    let registry = typecheck_result.comptime_registry(db);
+    if registry.is_empty() {
         return lowered_functions;
     }
-    let registry = registry_serialized.to_registry();
 
     // Build a flattened map of const names to values for lookup.
     // Include both qualified names (func_name::const_name) and unqualified names.

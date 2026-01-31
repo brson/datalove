@@ -135,8 +135,7 @@ pub fn build_specialization_plan<'db>(
         // Get or create specialization entry for this function.
         let spec = specialized_funcs.entry(func_name.clone()).or_insert_with(|| {
             // Get function info from registry.
-            let comptime_indices = registry.comptime_funcs
-                .get(&call_site.func_name)
+            let comptime_indices = registry.get_comptime_indices(call_site.func_name)
                 .cloned()
                 .unwrap_or_default();
 

@@ -279,12 +279,16 @@ pub struct ComptimeCallSite<'db> {
 }
 
 /// Registry of comptime call sites and functions, collected during typecheck.
-#[derive(Clone, Debug, Default)]
+///
+/// Uses Vec instead of HashMap to satisfy Hash/Eq requirements for Salsa tracking.
+/// Linear search is fine since the number of comptime functions is typically small.
+#[derive(Clone, Debug, Default, Hash, PartialEq, Eq)]
+#[derive(salsa::Update)]
 pub struct ComptimeCallSiteRegistry<'db> {
     /// All call sites with comptime args.
     pub call_sites: Vec<ComptimeCallSite<'db>>,
-    /// Functions that have comptime parameters (name → param indices).
-    pub comptime_funcs: HashMap<InternedText<'db>, Vec<usize>>,
+    /// Functions that have comptime parameters (name, param indices).
+    pub comptime_funcs: Vec<(InternedText<'db>, Vec<usize>)>,
 }
 
 impl<'db> ComptimeCallSiteRegistry<'db> {
@@ -300,7 +304,10 @@ impl<'db> ComptimeCallSiteRegistry<'db> {
 
     /// Register a function with comptime parameters.
     pub fn register_comptime_func(&mut self, name: InternedText<'db>, comptime_indices: Vec<usize>) {
-        self.comptime_funcs.entry(name).or_insert(comptime_indices);
+        // Only insert if not already present.
+        if !self.comptime_funcs.iter().any(|(n, _)| *n == name) {
+            self.comptime_funcs.push((name, comptime_indices));
+        }
     }
 
     /// Record a call site with comptime arguments.
@@ -310,59 +317,18 @@ impl<'db> ComptimeCallSiteRegistry<'db> {
 
     /// Get comptime parameter indices for a function.
     pub fn get_comptime_indices(&self, func_name: InternedText<'db>) -> Option<&Vec<usize>> {
-        self.comptime_funcs.get(&func_name)
-    }
-
-    /// Convert to a serializable form for salsa tracked structs.
-    pub fn to_serializable(&self) -> ComptimeRegistrySerialized<'db> {
-        let comptime_funcs_entries: Vec<_> = self.comptime_funcs
-            .iter()
-            .map(|(name, indices)| (*name, indices.clone()))
-            .collect();
-        ComptimeRegistrySerialized {
-            call_sites: self.call_sites.clone(),
-            comptime_funcs_entries,
-        }
+        self.comptime_funcs.iter()
+            .find(|(n, _)| *n == func_name)
+            .map(|(_, indices)| indices)
     }
 
     /// Merge another registry into this one.
     pub fn merge(&mut self, other: &ComptimeCallSiteRegistry<'db>) {
         self.call_sites.extend(other.call_sites.iter().cloned());
         for (name, indices) in &other.comptime_funcs {
-            self.comptime_funcs.entry(*name).or_insert_with(|| indices.clone());
-        }
-    }
-}
-
-/// Serializable form of ComptimeCallSiteRegistry for salsa tracked structs.
-///
-/// Uses Vec instead of HashMap to implement Hash/PartialEq/Eq.
-#[derive(Clone, Debug, Default, Hash, PartialEq, Eq)]
-#[derive(salsa::Update)]
-pub struct ComptimeRegistrySerialized<'db> {
-    /// All call sites with comptime args.
-    pub call_sites: Vec<ComptimeCallSite<'db>>,
-    /// Functions with comptime parameters (as sorted entries).
-    pub comptime_funcs_entries: Vec<(InternedText<'db>, Vec<usize>)>,
-}
-
-impl<'db> ComptimeRegistrySerialized<'db> {
-    /// Create a new empty serialized registry.
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    /// Check if there are any comptime functions or call sites.
-    pub fn is_empty(&self) -> bool {
-        self.call_sites.is_empty() && self.comptime_funcs_entries.is_empty()
-    }
-
-    /// Convert to the runtime HashMap-based form.
-    pub fn to_registry(&self) -> ComptimeCallSiteRegistry<'db> {
-        let comptime_funcs: HashMap<_, _> = self.comptime_funcs_entries.iter().cloned().collect();
-        ComptimeCallSiteRegistry {
-            call_sites: self.call_sites.clone(),
-            comptime_funcs,
+            if !self.comptime_funcs.iter().any(|(n, _)| n == name) {
+                self.comptime_funcs.push((*name, indices.clone()));
+            }
         }
     }
 }
