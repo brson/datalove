@@ -8,10 +8,12 @@
 set -euo pipefail
 
 REBUILD=false
+COMMAND="claude"
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --rebuild) REBUILD=true; shift ;;
-        *) echo "Unknown option: $1" >&2; exit 1 ;;
+        claude|bash) COMMAND="$1"; shift ;;
+        *) echo "Usage: $0 [--rebuild] [claude|bash]" >&2; exit 1 ;;
     esac
 done
 
@@ -136,4 +138,9 @@ exec podman run -it --rm \
     "${mounts[@]}" \
     "${envs[@]}" \
     "$IMAGE_NAME" \
-    bash -c '. ~/.nvm/nvm.sh && export PATH="$HOME/.cargo/bin:$PATH" && claude --dangerously-skip-permissions'
+    bash -c '. ~/.nvm/nvm.sh && export PATH="$HOME/.cargo/bin:$PATH" && '"$(
+        case "$COMMAND" in
+            claude) echo 'claude --dangerously-skip-permissions' ;;
+            bash) echo 'exec bash' ;;
+        esac
+    )"
