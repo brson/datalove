@@ -280,15 +280,14 @@ pub struct ComptimeCallSite<'db> {
 
 /// Registry of comptime call sites and functions, collected during typecheck.
 ///
-/// Uses Vec instead of HashMap to satisfy Hash/Eq requirements for Salsa tracking.
-/// Linear search is fine since the number of comptime functions is typically small.
+/// Uses BTreeMap instead of HashMap to satisfy Hash/Eq requirements for Salsa tracking.
 #[derive(Clone, Debug, Default, Hash, PartialEq, Eq)]
 #[derive(salsa::Update)]
 pub struct ComptimeCallSiteRegistry<'db> {
     /// All call sites with comptime args.
     pub call_sites: Vec<ComptimeCallSite<'db>>,
-    /// Functions that have comptime parameters (name, param indices).
-    pub comptime_funcs: Vec<(InternedText<'db>, Vec<usize>)>,
+    /// Functions that have comptime parameters (name → param indices).
+    pub comptime_funcs: BTreeMap<InternedText<'db>, Vec<usize>>,
 }
 
 impl<'db> ComptimeCallSiteRegistry<'db> {
@@ -304,10 +303,7 @@ impl<'db> ComptimeCallSiteRegistry<'db> {
 
     /// Register a function with comptime parameters.
     pub fn register_comptime_func(&mut self, name: InternedText<'db>, comptime_indices: Vec<usize>) {
-        // Only insert if not already present.
-        if !self.comptime_funcs.iter().any(|(n, _)| *n == name) {
-            self.comptime_funcs.push((name, comptime_indices));
-        }
+        self.comptime_funcs.entry(name).or_insert(comptime_indices);
     }
 
     /// Record a call site with comptime arguments.
@@ -317,18 +313,14 @@ impl<'db> ComptimeCallSiteRegistry<'db> {
 
     /// Get comptime parameter indices for a function.
     pub fn get_comptime_indices(&self, func_name: InternedText<'db>) -> Option<&Vec<usize>> {
-        self.comptime_funcs.iter()
-            .find(|(n, _)| *n == func_name)
-            .map(|(_, indices)| indices)
+        self.comptime_funcs.get(&func_name)
     }
 
     /// Merge another registry into this one.
     pub fn merge(&mut self, other: &ComptimeCallSiteRegistry<'db>) {
         self.call_sites.extend(other.call_sites.iter().cloned());
         for (name, indices) in &other.comptime_funcs {
-            if !self.comptime_funcs.iter().any(|(n, _)| n == name) {
-                self.comptime_funcs.push((*name, indices.clone()));
-            }
+            self.comptime_funcs.entry(*name).or_insert_with(|| indices.clone());
         }
     }
 }
