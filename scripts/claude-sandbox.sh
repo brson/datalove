@@ -39,6 +39,7 @@ mounts=(
 
 # Git config (no SSH keys)
 [[ -f "$HOME/.gitconfig" ]] && mounts+=("-v" "$HOME/.gitconfig:/home/claude/.gitconfig:ro")
+[[ -f "$HOME/.gitignore" ]] && mounts+=("-v" "$HOME/.gitignore:/home/claude/.gitignore:ro")
 
 # gh CLI credentials
 #[[ -d "$HOME/.config/gh" ]] && mounts+=("-v" "$HOME/.config/gh:/home/claude/.config/gh:ro")
@@ -115,12 +116,19 @@ DOCKERFILE
 
 # Build the image if needed (tagged with UID since it's baked in)
 IMAGE_NAME="claude-sandbox:uid-${HOST_UID}"
+# Use empty context - Dockerfile doesn't need local files, and current dir may be huge
+build_image() {
+    local ctx
+    ctx=$(mktemp -d)
+    echo "$dockerfile" | podman build "$@" -t "$IMAGE_NAME" -f - "$ctx"
+    rm -rf "$ctx"
+}
 if $REBUILD; then
     info "Rebuilding sandbox image..."
-    echo "$dockerfile" | podman build --no-cache -t "$IMAGE_NAME" -f - .
+    build_image --no-cache
 elif ! podman image exists "$IMAGE_NAME" 2>/dev/null; then
     info "Building sandbox image (one-time)..."
-    echo "$dockerfile" | podman build -t "$IMAGE_NAME" -f - .
+    build_image
 fi
 
 info "Starting sandbox..."
