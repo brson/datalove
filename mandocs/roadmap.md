@@ -33,8 +33,6 @@
 
 - inlining
 - human docs
-- adapt op diagnostic hints
-- auto-adapt
 - const args
 
 
