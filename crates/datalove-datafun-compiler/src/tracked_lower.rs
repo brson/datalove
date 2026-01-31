@@ -13,7 +13,7 @@ use datalove_datafun_ast::ast::{ParsedStatements, Statement};
 use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::Arc;
-use datalove_datafun_ir::{ConstValue, CtfeEvaluator, IrFunction, IrType, FuncId, IrModuleId, ModuleFunctionRegistry};
+use datalove_datafun_ir::{ConstValue, CtfeEvaluator, IrFunction, IrCodeUnit, IrType, FuncId, IrModuleId, ModuleFunctionRegistry};
 use datalove_datafun_tycheck::{
     DbClone, ParallelMode,
     SingleModuleTypecheckResult,
@@ -134,9 +134,9 @@ pub struct SingleModuleLoweringResult<'db> {
     /// IR module index (0-based position in graph).
     pub ir_module_id: IrModuleId,
 
-    /// Successfully lowered functions.
+    /// Successfully lowered code units (functions).
     #[returns(ref)]
-    pub functions: Vec<IrFunction>,
+    pub functions: Vec<IrCodeUnit>,
 
     /// Lowering errors (IR generation only, not ownership analysis).
     #[returns(ref)]
@@ -190,13 +190,13 @@ impl<'db> ModuleGraphLoweringResult<'db> {
             .collect()
     }
 
-    /// Get all successfully lowered functions.
-    pub fn all_functions(&self, db: &'db dyn salsa::Database) -> Vec<(IrModuleId, FuncId, IrFunction)> {
+    /// Get all successfully lowered code units.
+    pub fn all_functions(&self, db: &'db dyn salsa::Database) -> Vec<(IrModuleId, FuncId, IrCodeUnit)> {
         self.module_results(db)
             .values()
             .flat_map(|r| {
                 let ir_mod = r.ir_module_id(db);
-                r.functions(db).iter().map(move |f| (ir_mod, f.id, f.clone()))
+                r.functions(db).iter().map(move |f| (ir_mod, FuncId(f.id.0), f.clone()))
             })
             .collect()
     }
@@ -343,7 +343,10 @@ pub fn lower_module<'db>(
                 .iter()
                 .map(|(name, _ir_type, value)| (name.clone(), value.clone()))
                 .collect();
-            inline_module_functions(&mut functions, &const_values);
+            // Convert to IrFunction for const inlining, then back to IrCodeUnit.
+            let mut ir_functions: Vec<IrFunction> = functions.iter().cloned().map(IrFunction::from).collect();
+            inline_module_functions(&mut ir_functions, &const_values);
+            functions = ir_functions.into_iter().map(IrCodeUnit::from).collect();
         }
     }
 
@@ -365,8 +368,8 @@ pub fn lower_module<'db>(
 /// and final module assembly.
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub struct ModuleLoweredFunctions {
-    /// The lowered IR functions for this module.
-    pub functions: Vec<IrFunction>,
+    /// The lowered IR code units (functions) for this module.
+    pub functions: Vec<IrCodeUnit>,
     /// Map from function name to FuncId.
     /// Sorted vector for deterministic hashing.
     pub func_name_to_id: Vec<(String, FuncId)>,
@@ -384,10 +387,11 @@ fn build_module_registry_from_lowered(
 
     // Iterate over the func_id_map to get the IrModuleId for each function.
     for ((module_id, _func_name), (ir_module_id, func_id)) in func_id_map {
-        // Find the corresponding lowered function.
+        // Find the corresponding lowered function (code unit).
         if let Some(lowered) = lowered_functions.get(module_id) {
-            if let Some(func) = lowered.functions.iter().find(|f| f.id == *func_id) {
-                registry.add_module_function(*ir_module_id, *func_id, func.clone());
+            if let Some(unit) = lowered.functions.iter().find(|f| f.id.0 == func_id.0) {
+                // Convert IrCodeUnit to IrFunction for the registry.
+                registry.add_module_function(*ir_module_id, *func_id, IrFunction::from(unit.clone()));
             }
         }
     }
@@ -532,7 +536,7 @@ pub fn evaluate_all_module_consts<'db>(
         let call_targets = single_typecheck.call_targets(db);
 
         // Get lowered functions for this module (if any).
-        let (funcs, func_map): (&[IrFunction], HashMap<String, FuncId>) = match lowered_functions.get(module_id) {
+        let (funcs, func_map): (&[IrCodeUnit], HashMap<String, FuncId>) = match lowered_functions.get(module_id) {
             Some(lf) => (lf.functions.as_slice(), lf.func_name_to_id.iter().cloned().collect()),
             None => (&[], HashMap::new()),
         };
@@ -594,7 +598,7 @@ fn evaluate_single_const<'db>(
     call_targets: &'db [Option<datalove_datafun_tycheck::ResolvedCallTarget<'db>>],
     resolved_so_far: &HashMap<String, (IrType, ConstValue)>,
     evaluator: &Rc<RefCell<dyn CtfeEvaluator>>,
-    lowered_functions: &[IrFunction],
+    lowered_functions: &[IrCodeUnit],
     func_name_to_id: &HashMap<String, FuncId>,
     func_return_type: Option<IrType>,
     func_id_map: FuncIdMap<'db>,

@@ -15,7 +15,7 @@ use std::collections::HashMap;
 use bct::module_graph::ModuleId;
 use datalove_datafun_ast::ast::{ExprFun, ExprFunKind};
 use datalove_datafun_ir::{
-    ConstValue, IrType, IrScriptUnit, IrModuleId,
+    ConstValue, IrType, IrScriptUnit, IrCodeUnit, IrModuleId,
     Operand, Terminator, SymbolTable,
 };
 use datalove_datafun_common::Type;
@@ -130,7 +130,7 @@ pub fn lower_const_expr_to_unit_standalone<'db>(
     call_targets: &'db [Option<ResolvedCallTarget<'db>>],
     resolved_consts: &HashMap<String, (IrType, ConstValue)>,
     return_type: Option<IrType>,
-    lowered_functions: &[datalove_datafun_ir::IrFunction],
+    lowered_functions: &[IrCodeUnit],
     func_name_to_id: &HashMap<String, datalove_datafun_ir::FuncId>,
     module_func_id_map: &'db HashMap<(ModuleId, String), (IrModuleId, datalove_datafun_ir::FuncId)>,
 ) -> Result<IrScriptUnit, LowerError> {
@@ -158,8 +158,9 @@ pub fn lower_const_expr_to_unit_standalone<'db>(
     // We need to use the same FuncIds as the lowered functions.
     for (func_name, &func_id) in func_name_to_id {
         // Find the param count from the lowered function.
-        if let Some(func) = lowered_functions.iter().find(|f| f.id == func_id) {
-            ctx.register_func_with_id(func_name, func.params.len(), func_id);
+        if let Some(unit) = lowered_functions.iter().find(|f| f.id.0 == func_id.0) {
+            let param_count = unit.function_context().map(|c| c.params.len()).unwrap_or(0);
+            ctx.register_func_with_id(func_name, param_count, func_id);
         }
     }
 
@@ -187,11 +188,12 @@ pub fn lower_const_expr_to_unit_standalone<'db>(
     }
 
     // Include called functions from the lowered set (no re-lowering needed).
+    // Convert IrCodeUnit to IrFunction for IrScriptUnit.functions.
     let mut functions: Vec<IrFunction> = Vec::new();
     for func_id in called_func_ids {
         // Find the function in lowered functions.
-        if let Some(func) = lowered_functions.iter().find(|f| f.id == func_id) {
-            functions.push(func.clone());
+        if let Some(unit) = lowered_functions.iter().find(|f| f.id.0 == func_id.0) {
+            functions.push(IrFunction::from(unit.clone()));
         }
     }
 
@@ -239,7 +241,7 @@ pub fn lower_const_binding<'db>(
     call_targets: &'db [Option<ResolvedCallTarget<'db>>],
     resolved_consts: &HashMap<String, (IrType, ConstValue)>,
     return_type: Option<IrType>,
-    lowered_functions: &[datalove_datafun_ir::IrFunction],
+    lowered_functions: &[IrCodeUnit],
     func_name_to_id: &HashMap<String, datalove_datafun_ir::FuncId>,
     module_func_id_map: Option<&'db HashMap<(ModuleId, String), (IrModuleId, datalove_datafun_ir::FuncId)>>,
 ) -> Result<(Option<IrScriptUnit>, Option<ConstValue>), LowerError> {

@@ -16,8 +16,8 @@ use datalove_datafun_ast::ast::{self, Statement, ExprFun, ExprFunKind};
 use datalove_datafun_common::Type;
 use datalove_datafun_sema::ResolvedCallTarget;
 use datalove_datafun_ir::{
-    IrType, IrScriptUnit, IrFunction, Operand, Terminator, Instruction, ConstValue, SlotDest,
-    ExportBinding, IrModuleId, FuncId,
+    IrType, IrFunction, IrCodeUnit, CodeUnitId, CodeUnitContext, ScriptContext,
+    Operand, Terminator, Instruction, ConstValue, SlotDest, ExportBinding, IrModuleId, FuncId,
 };
 use datalove_datafun_sema::ScriptAnalysisData;
 use crate::ScriptFunctionAnalyses;
@@ -82,8 +82,8 @@ pub fn lower_script_fragment_raw<'db>(
     script_analysis: ScriptAnalysisData,
     func_param_types: Option<&HashMap<String, Vec<IrType>>>,
     func_return_types: Option<&HashMap<String, IrType>>,
-    lowered_functions: Option<(Vec<IrFunction>, HashMap<String, FuncId>)>,
-) -> Result<IrScriptUnit, LowerError> {
+    lowered_functions: Option<(Vec<IrCodeUnit>, HashMap<String, FuncId>)>,
+) -> Result<IrCodeUnit, LowerError> {
     let mut ctx = LowerCtx::new_for_script(db, expr_types, call_targets, func_id_map, script_ctx);
 
     // Use pre-computed script analysis from ownership analysis phase.
@@ -97,8 +97,8 @@ pub fn lower_script_fragment_raw<'db>(
 
     // Handle lowered functions if provided.
     if let Some((functions, func_name_to_id)) = lowered_functions {
-        // Use lowered functions directly.
-        ctx.functions = functions;
+        // Use lowered functions directly (convert IrCodeUnit to IrFunction for internal storage).
+        ctx.functions = functions.into_iter().map(IrFunction::from).collect();
 
         // Register each function with its existing FuncId so call resolution works.
         for (name, func_id) in &func_name_to_id {
@@ -142,7 +142,9 @@ pub fn lower_script_fragment_raw<'db>(
     // Renumber blocks for O(1) lookup in interpreter.
     ctx.renumber_blocks();
 
-    Ok(IrScriptUnit {
+    Ok(IrCodeUnit {
+        id: CodeUnitId(0),
+        name: String::new(),
         blocks: std::mem::take(&mut ctx.body.blocks),
         value_count: ctx.body.next_value,
         slot_count: ctx.body.next_slot,
@@ -150,13 +152,15 @@ pub fn lower_script_fragment_raw<'db>(
         value_types: std::mem::take(&mut ctx.body.value_types),
         slot_types: std::mem::take(&mut ctx.body.slot_types),
         tracked_slots,
-        unit_end_values,
-        unit_end_slots,
-        functions: ctx.functions,
-        symbols: ctx.symbols,
-        result: None,
-        exports: ctx.exports,
         const_values: std::mem::take(&mut ctx.body.const_values),
+        symbols: ctx.symbols,
+        context: CodeUnitContext::Script(ScriptContext {
+            unit_end_values,
+            unit_end_slots,
+            result: None,
+            exports: ctx.exports,
+        }),
+        nested_units: ctx.functions.into_iter().map(IrCodeUnit::from).collect(),
     })
 }
 
@@ -183,7 +187,7 @@ pub fn lower_script_functions<'db>(
     func_return_types: Option<&HashMap<String, IrType>>,
     func_id_map: &'db HashMap<(ModuleId, String), (IrModuleId, FuncId)>,
     script_ctx: ScriptLowerContext,
-) -> Result<(Vec<datalove_datafun_ir::IrFunction>, HashMap<String, FuncId>), LowerError> {
+) -> Result<(Vec<IrCodeUnit>, HashMap<String, FuncId>), LowerError> {
     // Create a minimal context with the accumulated script context.
     let mut ctx = LowerCtx::new_for_script(db, expr_types, call_targets, func_id_map, script_ctx);
 
@@ -198,6 +202,7 @@ pub fn lower_script_functions<'db>(
 
     // Build a map of function names to FuncIds.
     let mut func_name_to_id: HashMap<String, FuncId> = HashMap::new();
+    let mut lowered_units: Vec<IrCodeUnit> = Vec::new();
 
     // Lower only the function statements.
     for stmt in stmts {
@@ -225,17 +230,17 @@ pub fn lower_script_functions<'db>(
                 .and_then(|m| m.get(func_name_str))
                 .cloned();
 
-            // Lower the function body.
-            let func = lower_function_body(&mut ctx, func_id, *fun_stmt, analysis, resolved_params, resolved_return)?;
+            // Lower the function body (returns IrCodeUnit).
+            let unit = lower_function_body(&mut ctx, func_id, *fun_stmt, analysis, resolved_params, resolved_return)?;
 
             // Restore parent state.
             ctx.swap_body_state(saved);
 
-            ctx.functions.push(func);
+            lowered_units.push(unit);
         }
     }
 
-    Ok((ctx.functions, func_name_to_id))
+    Ok((lowered_units, func_name_to_id))
 }
 
 /// Lower a script expression unit.
@@ -249,7 +254,7 @@ pub fn lower_script_expr<'db>(
     func_id_map: &'db HashMap<(ModuleId, String), (IrModuleId, FuncId)>,
     script_ctx: ScriptLowerContext,
     expr: ExprFun<'db>,
-) -> Result<IrScriptUnit, LowerError> {
+) -> Result<IrCodeUnit, LowerError> {
     let mut ctx = LowerCtx::new_for_script(db, expr_types, call_targets, func_id_map, script_ctx);
 
     // Lower the expression and capture the result.
@@ -264,7 +269,9 @@ pub fn lower_script_expr<'db>(
     ctx.renumber_blocks();
 
     // Expression units don't create script-level bindings, so unit_end is empty.
-    Ok(IrScriptUnit {
+    Ok(IrCodeUnit {
+        id: CodeUnitId(0),
+        name: String::new(),
         blocks: std::mem::take(&mut ctx.body.blocks),
         value_count: ctx.body.next_value,
         slot_count: ctx.body.next_slot,
@@ -272,13 +279,15 @@ pub fn lower_script_expr<'db>(
         value_types: std::mem::take(&mut ctx.body.value_types),
         slot_types: std::mem::take(&mut ctx.body.slot_types),
         tracked_slots: ctx.compute_tracked_slots(),
-        unit_end_values: Vec::new(),
-        unit_end_slots: Vec::new(),
-        functions: ctx.functions,
-        symbols: ctx.symbols,
-        result: Some(value_id),
-        exports: ctx.exports,
         const_values: Vec::new(), // Expression units don't have const bindings.
+        symbols: ctx.symbols,
+        context: CodeUnitContext::Script(ScriptContext {
+            unit_end_values: Vec::new(),
+            unit_end_slots: Vec::new(),
+            result: Some(value_id),
+            exports: ctx.exports,
+        }),
+        nested_units: ctx.functions.into_iter().map(IrCodeUnit::from).collect(),
     })
 }
 
@@ -493,13 +502,13 @@ fn lower_statement_for_script<'db>(
                 .cloned();
 
             // Lower the function body with resolved types for type alias support.
-            let func = lower_function_body(ctx, func_id, *fun_stmt, analysis, resolved_params, resolved_return)?;
+            let unit = lower_function_body(ctx, func_id, *fun_stmt, analysis, resolved_params, resolved_return)?;
 
             // Restore parent state.
             ctx.swap_body_state(saved);
 
-            // Add the function to the unit's functions.
-            ctx.functions.push(func);
+            // Add the function to the unit's functions (convert IrCodeUnit to IrFunction).
+            ctx.functions.push(IrFunction::from(unit));
 
             // Export the function.
             ctx.exports.push((func_name, ExportBinding::Function(func_id)));

@@ -59,6 +59,62 @@ pub enum FuncRef {
     Module { module: IrModuleId, func: FuncId },
 }
 
+// ============================================================================
+// Unified Code Unit Types
+// ============================================================================
+
+/// Identifier for a code unit.
+///
+/// Replaces FuncId for unified addressing. The numeric value is local to
+/// the containing scope (module or script execution session).
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
+pub struct CodeUnitId(pub u32);
+
+/// Reference to a code unit.
+///
+/// Unified reference type for functions, script units, and future code unit kinds.
+#[derive(Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
+pub enum CodeRef {
+    /// Unit in the current compilation scope.
+    Local(CodeUnitId),
+    /// Unit from a previous script execution.
+    External { unit: u32, id: CodeUnitId },
+    /// Unit from a compiled module.
+    Module { module: IrModuleId, id: CodeUnitId },
+}
+
+impl CodeRef {
+    /// Convert from FuncRef (for migration).
+    pub fn from_func_ref(func_ref: &FuncRef) -> Self {
+        match func_ref {
+            FuncRef::Local(id) => CodeRef::Local(CodeUnitId(id.0)),
+            FuncRef::External { unit, func } => CodeRef::External {
+                unit: *unit,
+                id: CodeUnitId(func.0),
+            },
+            FuncRef::Module { module, func } => CodeRef::Module {
+                module: *module,
+                id: CodeUnitId(func.0),
+            },
+        }
+    }
+
+    /// Convert to FuncRef (for migration).
+    pub fn to_func_ref(&self) -> FuncRef {
+        match self {
+            CodeRef::Local(id) => FuncRef::Local(FuncId(id.0)),
+            CodeRef::External { unit, id } => FuncRef::External {
+                unit: *unit,
+                func: FuncId(id.0),
+            },
+            CodeRef::Module { module, id } => FuncRef::Module {
+                module: *module,
+                func: FuncId(id.0),
+            },
+        }
+    }
+}
+
 /// Reference to a type (used in Pack instructions).
 ///
 /// Lightweight type tag without inner type details.
@@ -1415,6 +1471,274 @@ pub struct IrScriptUnit {
     /// replaced with a Const literal.
     #[serde(default)]
     pub const_values: Vec<(String, ValueId)>,
+}
+
+// ============================================================================
+// Unified Code Unit
+// ============================================================================
+
+/// Context for function execution.
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct FunctionContext {
+    /// Parameter IDs (references to caller's data).
+    pub params: Vec<ParamId>,
+    /// Parameter modes (In, Out, Ref, Mut).
+    pub param_modes: Vec<ParamMode>,
+    /// Type for each parameter.
+    pub param_types: Vec<IrType>,
+    /// Return type.
+    pub return_type: IrType,
+    /// Out params that need runtime tracking.
+    #[serde(default)]
+    pub tracked_params: Vec<ParamId>,
+}
+
+/// Context for script unit execution.
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct ScriptContext {
+    /// Values that persist for REPL cleanup.
+    #[serde(default)]
+    pub unit_end_values: Vec<ValueId>,
+    /// Slots that persist for REPL cleanup.
+    #[serde(default)]
+    pub unit_end_slots: Vec<SlotId>,
+    /// Result value for expression units.
+    pub result: Option<ValueId>,
+    /// Bindings exported to subsequent units.
+    #[serde(default)]
+    pub exports: Vec<(String, ExportBinding)>,
+}
+
+/// Context determining how a code unit executes.
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum CodeUnitContext {
+    /// A callable function with parameters.
+    Function(FunctionContext),
+    /// A script unit with captures and exports.
+    Script(ScriptContext),
+}
+
+/// Unified IR representation for executable code.
+///
+/// Represents both functions and script units. The `context` field
+/// determines execution semantics (parameter passing vs captures,
+/// return vs unit-end, etc.).
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct IrCodeUnit {
+    /// Unique identifier within containing scope.
+    pub id: CodeUnitId,
+    /// Name for debugging/symbol resolution.
+    pub name: String,
+
+    // ========== Body ==========
+    /// Basic blocks.
+    pub blocks: Vec<IrBlock>,
+    /// Number of SSA values.
+    pub value_count: u32,
+    /// Number of mutable slots.
+    pub slot_count: u32,
+    /// Number of call sites.
+    #[serde(default)]
+    pub call_site_count: u32,
+    /// Type for each value.
+    pub value_types: Vec<IrType>,
+    /// Type for each slot.
+    pub slot_types: Vec<IrType>,
+    /// Slots requiring runtime tracking.
+    #[serde(default)]
+    pub tracked_slots: Vec<SlotId>,
+    /// Const bindings for inlining.
+    #[serde(default)]
+    pub const_values: Vec<(String, ValueId)>,
+    /// Symbol table for nested unit resolution.
+    pub symbols: SymbolTable,
+
+    // ========== Context ==========
+    /// Determines execution semantics.
+    pub context: CodeUnitContext,
+
+    // ========== Nested Units ==========
+    /// Code units defined inside this unit.
+    #[serde(default)]
+    pub nested_units: Vec<IrCodeUnit>,
+}
+
+impl IrCodeUnit {
+    /// Get the entry block (always block 0).
+    pub fn entry_block(&self) -> &IrBlock {
+        &self.blocks[0]
+    }
+
+    /// Check if this is a function.
+    pub fn is_function(&self) -> bool {
+        matches!(&self.context, CodeUnitContext::Function(_))
+    }
+
+    /// Check if this is a script unit.
+    pub fn is_script(&self) -> bool {
+        matches!(&self.context, CodeUnitContext::Script(_))
+    }
+
+    /// Get function context if this is a function.
+    pub fn function_context(&self) -> Option<&FunctionContext> {
+        match &self.context {
+            CodeUnitContext::Function(ctx) => Some(ctx),
+            _ => None,
+        }
+    }
+
+    /// Get mutable function context if this is a function.
+    pub fn function_context_mut(&mut self) -> Option<&mut FunctionContext> {
+        match &mut self.context {
+            CodeUnitContext::Function(ctx) => Some(ctx),
+            _ => None,
+        }
+    }
+
+    /// Get script context if this is a script unit.
+    pub fn script_context(&self) -> Option<&ScriptContext> {
+        match &self.context {
+            CodeUnitContext::Script(ctx) => Some(ctx),
+            _ => None,
+        }
+    }
+
+    /// Get mutable script context if this is a script unit.
+    pub fn script_context_mut(&mut self) -> Option<&mut ScriptContext> {
+        match &mut self.context {
+            CodeUnitContext::Script(ctx) => Some(ctx),
+            _ => None,
+        }
+    }
+
+    /// Get return type (for functions).
+    pub fn return_type(&self) -> Option<&IrType> {
+        self.function_context().map(|c| &c.return_type)
+    }
+
+    /// Get parameter count (0 for scripts).
+    pub fn param_count(&self) -> usize {
+        self.function_context().map(|c| c.params.len()).unwrap_or(0)
+    }
+
+    /// Serialize to RON format.
+    pub fn to_ron(&self) -> Result<String, ron::Error> {
+        let config = ron::ser::PrettyConfig::new()
+            .struct_names(true)
+            .enumerate_arrays(false);
+        ron::ser::to_string_pretty(self, config)
+    }
+
+    /// Deserialize from RON format.
+    pub fn from_ron(s: &str) -> Result<Self, ron::error::SpannedError> {
+        ron::from_str(s)
+    }
+}
+
+/// Convert IrFunction to IrCodeUnit.
+impl From<IrFunction> for IrCodeUnit {
+    fn from(func: IrFunction) -> Self {
+        IrCodeUnit {
+            id: CodeUnitId(func.id.0),
+            name: func.name,
+            blocks: func.blocks,
+            value_count: func.value_count,
+            slot_count: func.slot_count,
+            call_site_count: func.call_site_count,
+            value_types: func.value_types,
+            slot_types: func.slot_types,
+            tracked_slots: func.tracked_slots,
+            const_values: func.const_values,
+            symbols: SymbolTable::new(),
+            context: CodeUnitContext::Function(FunctionContext {
+                params: func.params,
+                param_modes: func.param_modes,
+                param_types: func.param_types,
+                return_type: func.return_type,
+                tracked_params: func.tracked_params,
+            }),
+            nested_units: Vec::new(),
+        }
+    }
+}
+
+/// Convert IrScriptUnit to IrCodeUnit.
+impl From<IrScriptUnit> for IrCodeUnit {
+    fn from(unit: IrScriptUnit) -> Self {
+        IrCodeUnit {
+            id: CodeUnitId(0),
+            name: String::new(),
+            blocks: unit.blocks,
+            value_count: unit.value_count,
+            slot_count: unit.slot_count,
+            call_site_count: unit.call_site_count,
+            value_types: unit.value_types,
+            slot_types: unit.slot_types,
+            tracked_slots: unit.tracked_slots,
+            const_values: unit.const_values,
+            symbols: unit.symbols,
+            context: CodeUnitContext::Script(ScriptContext {
+                unit_end_values: unit.unit_end_values,
+                unit_end_slots: unit.unit_end_slots,
+                result: unit.result,
+                exports: unit.exports,
+            }),
+            nested_units: unit.functions.into_iter().map(IrCodeUnit::from).collect(),
+        }
+    }
+}
+
+/// Convert IrCodeUnit back to IrFunction (panics if not a function).
+impl From<IrCodeUnit> for IrFunction {
+    fn from(unit: IrCodeUnit) -> Self {
+        let ctx = match unit.context {
+            CodeUnitContext::Function(ctx) => ctx,
+            CodeUnitContext::Script(_) => panic!("Cannot convert script unit to IrFunction"),
+        };
+        IrFunction {
+            id: FuncId(unit.id.0),
+            name: unit.name,
+            params: ctx.params,
+            param_modes: ctx.param_modes,
+            param_types: ctx.param_types,
+            return_type: ctx.return_type,
+            blocks: unit.blocks,
+            value_count: unit.value_count,
+            slot_count: unit.slot_count,
+            call_site_count: unit.call_site_count,
+            value_types: unit.value_types,
+            slot_types: unit.slot_types,
+            tracked_slots: unit.tracked_slots,
+            tracked_params: ctx.tracked_params,
+            const_values: unit.const_values,
+        }
+    }
+}
+
+/// Convert IrCodeUnit back to IrScriptUnit (panics if not a script).
+impl From<IrCodeUnit> for IrScriptUnit {
+    fn from(unit: IrCodeUnit) -> Self {
+        let ctx = match unit.context {
+            CodeUnitContext::Script(ctx) => ctx,
+            CodeUnitContext::Function(_) => panic!("Cannot convert function to IrScriptUnit"),
+        };
+        IrScriptUnit {
+            blocks: unit.blocks,
+            value_count: unit.value_count,
+            slot_count: unit.slot_count,
+            call_site_count: unit.call_site_count,
+            value_types: unit.value_types,
+            slot_types: unit.slot_types,
+            tracked_slots: unit.tracked_slots,
+            unit_end_values: ctx.unit_end_values,
+            unit_end_slots: ctx.unit_end_slots,
+            functions: unit.nested_units.into_iter().map(IrFunction::from).collect(),
+            symbols: unit.symbols,
+            result: ctx.result,
+            exports: ctx.exports,
+            const_values: unit.const_values,
+        }
+    }
 }
 
 // ============================================================================

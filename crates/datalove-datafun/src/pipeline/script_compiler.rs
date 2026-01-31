@@ -80,7 +80,7 @@ struct OwnershipOutput<'db> {
 /// and the final IR assembly.
 #[derive(Clone)]
 struct LoweredFunctions {
-    functions: Vec<datalove_datafun_ir::IrFunction>,
+    functions: Vec<datalove_datafun_ir::IrCodeUnit>,
     func_name_to_id: HashMap<String, datalove_datafun_ir::FuncId>,
 }
 
@@ -921,7 +921,7 @@ impl<'db> ScriptCompiler<'db> {
                     Some(&func_param_types),
                     Some(&func_return_types),
                     lowered_funcs_arg,
-                ).map_err(|e| {
+                ).map(IrScriptUnit::from).map_err(|e| {
                     self.accumulated_unit_specs.pop();
                     ScriptCompilationResult {
                         typecheck: TypecheckResult::Success,
@@ -939,7 +939,7 @@ impl<'db> ScriptCompiler<'db> {
                     &func_id_map,
                     script_ctx,
                     *expr,
-                ).map_err(|e| {
+                ).map(IrScriptUnit::from).map_err(|e| {
                     self.accumulated_unit_specs.pop();
                     ScriptCompilationResult {
                         typecheck: TypecheckResult::Success,

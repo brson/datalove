@@ -11,7 +11,10 @@ use bct::module_graph::ModuleId;
 use datalove_datafun_ast::ast;
 use datalove_datafun_common::Type;
 use datalove_datafun_sema::ResolvedCallTarget;
-use datalove_datafun_ir::{IrType, IrFunction, Operand, FuncId, IrModuleId, Terminator, ParamMode, ParamId};
+use datalove_datafun_ir::{
+    IrType, IrCodeUnit, CodeUnitId, CodeUnitContext, FunctionContext,
+    Operand, FuncId, IrModuleId, Terminator, ParamMode, ParamId, SymbolTable,
+};
 use datalove_datafun_sema::FunctionAnalysis;
 use super::context::LowerCtx;
 use super::stmt::lower_statement_indexed;
@@ -42,7 +45,7 @@ pub fn lower_function_for_module<'db>(
     analysis: FunctionAnalysis,
     resolved_param_types: Option<&[IrType]>,
     resolved_return_type: Option<IrType>,
-) -> Result<IrFunction, LowerError> {
+) -> Result<IrCodeUnit, LowerError> {
     let mut ctx = LowerCtx::new_for_module(db, expr_types, call_targets, func_id_map);
     lower_function_body(&mut ctx, func_id, func, analysis, resolved_param_types, resolved_return_type)
 }
@@ -61,7 +64,7 @@ pub fn lower_function_body<'db>(
     analysis: FunctionAnalysis,
     resolved_param_types: Option<&[IrType]>,
     resolved_return_type: Option<IrType>,
-) -> Result<IrFunction, LowerError> {
+) -> Result<IrCodeUnit, LowerError> {
     // Assert no analysis errors - caller should have checked.
     assert!(
         analysis.errors.is_empty(),
@@ -147,13 +150,9 @@ pub fn lower_function_body<'db>(
     ctx.return_type = saved_return_type;
     ctx.is_script_unit = saved_is_script_unit;
 
-    Ok(IrFunction {
-        id: func_id,
+    Ok(IrCodeUnit {
+        id: CodeUnitId(func_id.0),
         name,
-        params,
-        param_modes,
-        param_types: std::mem::take(&mut ctx.body.param_types),
-        return_type,
         blocks: std::mem::take(&mut ctx.body.blocks),
         value_count: ctx.body.next_value,
         slot_count: ctx.body.next_slot,
@@ -161,8 +160,16 @@ pub fn lower_function_body<'db>(
         value_types: std::mem::take(&mut ctx.body.value_types),
         slot_types: std::mem::take(&mut ctx.body.slot_types),
         tracked_slots: ctx.compute_tracked_slots(),
-        tracked_params: ctx.compute_tracked_params(),
         const_values: std::mem::take(&mut ctx.body.const_values),
+        symbols: SymbolTable::new(),
+        context: CodeUnitContext::Function(FunctionContext {
+            params,
+            param_modes,
+            param_types: std::mem::take(&mut ctx.body.param_types),
+            return_type,
+            tracked_params: ctx.compute_tracked_params(),
+        }),
+        nested_units: Vec::new(),
     })
 }
 

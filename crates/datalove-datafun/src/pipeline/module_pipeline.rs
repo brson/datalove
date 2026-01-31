@@ -323,13 +323,17 @@ impl ModuleCompilationPipeline {
                     // Collect IR dumps.
                     let ir_dumps: Vec<String> = result.functions(db.as_salsa_db())
                         .iter()
-                        .map(|ir_func| format!("{}", ir_func))
+                        .map(|ir_unit| {
+                            let ir_func = datalove_datafun_ir::IrFunction::from(ir_unit.clone());
+                            format!("{}", ir_func)
+                        })
                         .collect();
                     module_ir_dumps.insert(module_path, ir_dumps);
 
                     // Add functions to registry.
-                    for ir_func in result.functions(db.as_salsa_db()) {
-                        registry.add_module_function(ir_module_id, ir_func.id, ir_func.clone());
+                    for ir_unit in result.functions(db.as_salsa_db()) {
+                        let ir_func = datalove_datafun_ir::IrFunction::from(ir_unit.clone());
+                        registry.add_module_function(ir_module_id, ir_func.id, ir_func);
                     }
                 }
 
