@@ -78,7 +78,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 ENV NVM_DIR=/home/claude/.nvm
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    curl git ca-certificates \
+    curl git ca-certificates build-essential clang pkg-config libssl-dev nano emacs-nox \
     && rm -rf /var/lib/apt/lists/*
 
 # Install gh CLI
