@@ -49,6 +49,7 @@ mounts=(
 
 # Claude config/auth (read-write for OAuth tokens)
 [[ -d "$HOME/.claude" ]] && mounts+=("-v" "$HOME/.claude:/home/claude/.claude")
+[[ -f "$HOME/.claude.json" ]] && mounts+=("-v" "$HOME/.claude.json:/home/claude/.claude.json")
 
 # Podman socket for container-in-container
 podman_sock="/run/user/$(id -u)/podman/podman.sock"
@@ -66,6 +67,7 @@ info "Sandbox: $(pwd) -> ${WORKDIR}"
 info "Git config: $([[ -f "$HOME/.gitconfig" ]] && echo "yes" || echo "no")"
 info "gh credentials: $([[ -d "$HOME/.config/gh" ]] && echo "yes" || echo "no")"
 info "Claude config: $([[ -d "$HOME/.claude" ]] && echo "yes" || echo "no")"
+info "Claude auth: $([[ -f "$HOME/.claude.json" ]] && echo "yes" || echo "no")"
 info "SSH keys: no (intentionally excluded)"
 
 # Dockerfile for the sandbox image
@@ -106,11 +108,9 @@ RUN curl -fsSL https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh |
     && npm install -g @anthropic-ai/claude-code \
     && git config --global --add safe.directory /workspace \
     && echo 'export NVM_DIR="\$HOME/.nvm"' >> ~/.bashrc \
-    && echo '[ -s "\$NVM_DIR/nvm.sh" ] && . "\$NVM_DIR/nvm.sh"' >> ~/.bashrc \
-    && echo 'echo -e "\033[0;32m[*]\033[0m Sandbox ready. Run: claude --dangerously-skip-permissions"' >> ~/.bashrc
+    && echo '[ -s "\$NVM_DIR/nvm.sh" ] && . "\$NVM_DIR/nvm.sh"' >> ~/.bashrc
 
 WORKDIR /workspace
-CMD ["bash"]
 DOCKERFILE
 )
 
@@ -137,4 +137,4 @@ exec podman run -it --rm \
     "${mounts[@]}" \
     "${envs[@]}" \
     "$IMAGE_NAME" \
-    bash
+    bash -c '. ~/.nvm/nvm.sh && claude --dangerously-skip-permissions'
