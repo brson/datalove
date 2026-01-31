@@ -1,0 +1,101 @@
+// PASS: Specialized and unspecialized outputs match
+
+Analysis(
+    sections: [
+        SectionResult(
+            section_type: "module",
+            name: Some("local/test/provider"),
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    fn scale(p0, p1):
+                    block0:
+                        goto block1
+                    block1:
+                        drop p0
+                        v1 = const 3int
+                        v0 = mul v1, p1
+                        drop v1
+                        drop p1
+                        return v0
+                """,
+            ),
+            output: "",
+        ),
+        SectionResult(
+            section_type: "module",
+            name: Some("local/test/consumer"),
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    fn triple(p0):
+                    block0:
+                        v0 = const 3int
+                        v2 = const 0i32
+                        drop v0
+                        v1 = call m0.f0(v2, p0)
+                        return v1
+                """,
+            ),
+            output: "",
+        ),
+        SectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 7int
+                        v1 = call m1.f0(v0)
+                        debuglog v1
+                        unit_end_drop v1
+                        unit_end
+                    exports:
+                        result = v1
+                """,
+            ),
+            output: "(fragment executed)",
+            debug_output: Some("21\n"),
+        ),
+        SectionResult(
+            section_type: "scriptunit-expr",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = move unit0.v1
+                        unit_end v0
+                """,
+            ),
+            output: "21",
+        ),
+    ],
+)

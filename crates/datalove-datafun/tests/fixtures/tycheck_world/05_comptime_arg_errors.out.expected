@@ -1,0 +1,56 @@
+{
+  "diagnostics": [],
+  "modules": {
+    "comptime": {
+      "errors": [
+        {
+          "kind": "ComptimeArgNotConstBinding",
+          "param_idx": 0,
+          "reason": "'three' is not a const binding"
+        },
+        {
+          "kind": "ComptimeArgNotConstBinding",
+          "param_idx": 0,
+          "reason": "comptime argument must be a const binding name"
+        },
+        {
+          "kind": "ComptimeArgNotConstBinding",
+          "param_idx": 0,
+          "reason": "'factor' is not a const binding"
+        }
+      ],
+      "functions": [
+        {
+          "name": "scale",
+          "params": [
+            "int",
+            "int"
+          ],
+          "return_type": "int"
+        },
+        {
+          "name": "bad_let_binding",
+          "params": [
+            "int"
+          ],
+          "return_type": "int"
+        },
+        {
+          "name": "bad_literal",
+          "params": [
+            "int"
+          ],
+          "return_type": "int"
+        },
+        {
+          "name": "bad_param",
+          "params": [
+            "int",
+            "int"
+          ],
+          "return_type": "int"
+        }
+      ]
+    }
+  }
+}

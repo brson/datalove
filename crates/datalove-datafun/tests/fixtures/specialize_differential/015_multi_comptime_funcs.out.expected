@@ -1,0 +1,77 @@
+// PASS: Specialized and unspecialized outputs match
+
+Analysis(
+    sections: [
+        SectionResult(
+            section_type: "module",
+            name: Some("local/test/multi"),
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    fn add_const(p0, p1):
+                    block0:
+                        v0 = add p0, p1
+                        drop p0
+                        drop p1
+                        return v0
+                    
+                    fn mul_const(p0, p1):
+                    block0:
+                        v0 = mul p0, p1
+                        drop p0
+                        drop p1
+                        return v0
+                    
+                    fn shift_by(p0, p1, p2):
+                    block0:
+                        v0 = add p2, p0
+                        v1 = mul v0, p1
+                        drop v0
+                        drop p0
+                        drop p1
+                        drop p2
+                        return v1
+                """,
+            ),
+            output: "",
+        ),
+        SectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Error",
+                message: "error[D001]: use of moved value: `TWO`\n  help: use `@` to clone `TWO` before the earlier use",
+            ),
+            lowering: LoweringResult(
+                status: "Skipped",
+            ),
+            output: "",
+        ),
+        SectionResult(
+            section_type: "scriptunit-expr",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Error",
+                errors: [
+                    "UnresolvedName(\"r1\")",
+                ],
+            ),
+            ownership: OwnershipResult(
+                status: "Skipped",
+            ),
+            lowering: LoweringResult(
+                status: "Skipped",
+            ),
+            output: "",
+        ),
+    ],
+)

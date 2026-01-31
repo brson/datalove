@@ -1,0 +1,32 @@
+----------
+module local/test/boolconst
+----------
+
+// Comptime function with bool type
+fun conditional_add(const do_add: bool, x: int, y: int): int
+    if do_add
+        ret x + y
+    else
+        ret x
+    end if
+end fun
+
+----------
+scriptunit-fragment
+----------
+
+require module local/test/boolconst
+import boolconst.conditional_add
+
+const YES: bool = true
+const NO: bool = false
+let result1 = conditional_add(YES, 10, 5)
+let result2 = conditional_add(NO, 10, 5)
+debuglog result1
+debuglog result2
+
+----------
+scriptunit-expr
+----------
+
+(result1, result2)

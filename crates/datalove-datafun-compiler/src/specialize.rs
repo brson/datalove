@@ -47,6 +47,7 @@ use std::collections::HashMap;
 use datalove_datafun_ir::{
     ConstValue, IrFunction, IrBlock, Instruction, Terminator, Operand,
     ValueId, BlockId, FuncId, FuncRef, IrType, BinOp, ParamMode, ParamId,
+    IrModuleId,
 };
 use datalove_datafun_common::ComptimeCallSiteRegistry;
 
@@ -599,12 +600,17 @@ fn rewrite_comptime_params_in_terminator(
 /// 3. Replace with: Const(discriminant) + Call with non-comptime args
 ///
 /// The `func_id_to_name` map is used to resolve FuncRef to function names.
+/// It's keyed by (IrModuleId, FuncId) because FuncId is only unique within a module.
+///
+/// `current_module` is the IrModuleId of the module containing this function,
+/// used for resolving local function references.
 ///
 /// Returns the transformed function.
 pub fn rewrite_comptime_calls(
     func: &IrFunction,
     spec_result: &SpecializationResult,
-    func_id_to_name: &HashMap<FuncId, String>,
+    func_id_to_name: &HashMap<(IrModuleId, FuncId), String>,
+    current_module: IrModuleId,
     value_types: &mut Vec<IrType>,
     next_value: &mut u32,
 ) -> IrFunction {
@@ -620,7 +626,7 @@ pub fn rewrite_comptime_calls(
             match instr {
                 Instruction::ComptimeCall { dest, func: func_ref, args, discriminant: _, comptime_param_indices } => {
                     // Get the function name from FuncRef.
-                    let func_name = get_func_name_from_ref(func_ref, func_id_to_name);
+                    let func_name = get_func_name_from_ref(func_ref, func_id_to_name, current_module);
 
                     if let Some(ref name) = func_name {
                         if let Some(spec) = spec_result.specialized_funcs.get(name) {
@@ -720,11 +726,19 @@ pub fn rewrite_comptime_calls(
 }
 
 /// Get the function name from a FuncRef using the provided mapping.
-fn get_func_name_from_ref(func_ref: &FuncRef, func_id_to_name: &HashMap<FuncId, String>) -> Option<String> {
+///
+/// `current_module` is the IrModuleId of the function containing this call,
+/// used for resolving FuncRef::Local.
+fn get_func_name_from_ref(
+    func_ref: &FuncRef,
+    func_id_to_name: &HashMap<(IrModuleId, FuncId), String>,
+    current_module: IrModuleId,
+) -> Option<String> {
     match func_ref {
-        FuncRef::Local(id) => func_id_to_name.get(id).cloned(),
-        FuncRef::Module { func, .. } => func_id_to_name.get(func).cloned(),
-        FuncRef::External { func, .. } => func_id_to_name.get(func).cloned(),
+        FuncRef::Local(id) => func_id_to_name.get(&(current_module, *id)).cloned(),
+        FuncRef::Module { module, func } => func_id_to_name.get(&(*module, *func)).cloned(),
+        // External calls (from previous script units) are not supported for comptime specialization.
+        FuncRef::External { .. } => None,
     }
 }
 

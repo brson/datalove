@@ -1,0 +1,44 @@
+----------
+module local/test/multi
+----------
+
+// Multiple comptime functions in the same module
+fun add_const(const n: int, x: int): int
+    ret n + x
+end fun
+
+fun mul_const(const n: int, x: int): int
+    ret n * x
+end fun
+
+fun shift_by(const offset: int, const scale: int, x: int): int
+    ret (x + offset) * scale
+end fun
+
+----------
+scriptunit-fragment
+----------
+
+require module local/test/multi
+import multi.add_const
+import multi.mul_const
+import multi.shift_by
+
+const TWO: int = 2
+const THREE: int = 3
+const FIVE: int = 5
+
+// Call all three comptime functions
+let r1 = add_const(TWO, 10)
+let r2 = mul_const(THREE, 10)
+let r3 = shift_by(TWO, FIVE, 10)
+
+debuglog r1
+debuglog r2
+debuglog r3
+
+----------
+scriptunit-expr
+----------
+
+(r1, r2, r3)

@@ -1,0 +1,37 @@
+----------
+module local/test/provider
+----------
+
+// Module providing a comptime function.
+fun scale(const factor: int, x: int): int
+    ret factor * x
+end fun
+
+----------
+module local/test/consumer
+----------
+
+require module local/test/provider
+import provider.scale
+
+// This module calls the comptime function from another module.
+fun triple(x: int): int
+    const THREE: int = 3
+    ret scale(THREE, x)
+end fun
+
+----------
+scriptunit-fragment
+----------
+
+require module local/test/consumer
+import consumer.triple
+
+let result = triple(7)
+debuglog result
+
+----------
+scriptunit-expr
+----------
+
+result

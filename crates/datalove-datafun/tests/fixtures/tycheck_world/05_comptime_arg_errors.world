@@ -1,0 +1,24 @@
+----------
+module local/test/comptime
+----------
+
+// Function with a comptime param
+fun scale(const factor: int, x: int): int
+    ret factor * x
+end fun
+
+// This function tries to pass a let binding to a const param - should error
+fun bad_let_binding(x: int): int
+    let three: int = 3
+    ret scale(three, x)
+end fun
+
+// This function tries to pass a literal directly - should error
+fun bad_literal(x: int): int
+    ret scale(5, x)
+end fun
+
+// This function tries to pass a function param to a const param - should error
+fun bad_param(factor: int, x: int): int
+    ret scale(factor, x)
+end fun

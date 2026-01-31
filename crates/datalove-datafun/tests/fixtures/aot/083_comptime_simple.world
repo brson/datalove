@@ -1,0 +1,18 @@
+----------
+module local/test/comptime
+----------
+
+fun scale(const factor: int, x: int): int
+    ret factor * x
+end fun
+
+----------
+scriptunit-fragment
+----------
+
+require module local/test/comptime
+import comptime.scale
+
+const THREE: int = 3
+let result = scale(THREE, 7)
+debuglog result

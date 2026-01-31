@@ -1,0 +1,51 @@
+// PASS: Specialized and unspecialized outputs match
+
+Analysis(
+    sections: [
+        SectionResult(
+            section_type: "module",
+            name: Some("local/test/i32const"),
+            typecheck: TypecheckResult(
+                status: "Error",
+                errors: [
+                    "line 4, col 9: error[F049]: try operator `*!` return type mismatch: expected `Result`, found `i32`",
+                ],
+            ),
+            ownership: OwnershipResult(
+                status: "Skipped",
+            ),
+            lowering: LoweringResult(
+                status: "Skipped",
+            ),
+            output: "",
+        ),
+        SectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Skipped",
+            ),
+            ownership: OwnershipResult(
+                status: "Skipped",
+            ),
+            lowering: LoweringResult(
+                status: "Skipped",
+            ),
+            output: "",
+        ),
+        SectionResult(
+            section_type: "scriptunit-expr",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Skipped",
+            ),
+            ownership: OwnershipResult(
+                status: "Skipped",
+            ),
+            lowering: LoweringResult(
+                status: "Skipped",
+            ),
+            output: "",
+        ),
+    ],
+)

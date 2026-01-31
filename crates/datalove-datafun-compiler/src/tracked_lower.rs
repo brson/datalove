@@ -779,16 +779,31 @@ fn specialize_comptime_functions<'db>(
         module_funcs.functions = new_functions;
     }
 
-    // Build a global FuncId -> name map for resolving FuncRef during call rewriting.
-    let mut func_id_to_name: HashMap<FuncId, String> = HashMap::new();
-    for module_funcs in lowered_functions.values() {
-        for (name, func_id) in &module_funcs.func_name_to_id {
-            func_id_to_name.insert(*func_id, name.clone());
+    // Build ModuleId -> IrModuleId mapping from the graph.
+    let graph = typecheck_result.graph(db);
+    let module_id_to_ir: HashMap<ModuleId, IrModuleId> = graph.iter_modules(db)
+        .enumerate()
+        .map(|(idx, module)| (module.id(db), IrModuleId(idx as u32)))
+        .collect();
+
+    // Build a global (IrModuleId, FuncId) -> name map for resolving FuncRef during call rewriting.
+    // This is module-aware because FuncId is only unique within a module.
+    let mut func_id_to_name: HashMap<(IrModuleId, FuncId), String> = HashMap::new();
+    for (module_id, module_funcs) in lowered_functions.iter() {
+        if let Some(&ir_module_id) = module_id_to_ir.get(module_id) {
+            for (name, func_id) in &module_funcs.func_name_to_id {
+                func_id_to_name.insert((ir_module_id, *func_id), name.clone());
+            }
         }
     }
 
     // Phase 2: Rewrite call sites (ComptimeCall -> Const + Call).
-    for (_module_id, module_funcs) in lowered_functions.iter_mut() {
+    for (module_id, module_funcs) in lowered_functions.iter_mut() {
+        // Get the IrModuleId for this module.
+        let Some(&ir_module_id) = module_id_to_ir.get(module_id) else {
+            continue;
+        };
+
         let mut new_functions = Vec::new();
 
         for func in &module_funcs.functions {
@@ -796,7 +811,7 @@ fn specialize_comptime_functions<'db>(
             let mut value_types = func.value_types.clone();
             let mut next_value = func.value_count;
 
-            let transformed = rewrite_comptime_calls(func, &spec_result, &func_id_to_name, &mut value_types, &mut next_value);
+            let transformed = rewrite_comptime_calls(func, &spec_result, &func_id_to_name, ir_module_id, &mut value_types, &mut next_value);
             new_functions.push(transformed);
         }
 

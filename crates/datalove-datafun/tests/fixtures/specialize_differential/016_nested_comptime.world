@@ -1,0 +1,32 @@
+----------
+module local/test/nested
+----------
+
+// Comptime function A
+fun add_n(const n: int, x: int): int
+    ret n + x
+end fun
+
+// Comptime function B that calls comptime function A
+fun double_add(const n: int, x: int): int
+    const N: int = n
+    let first = add_n(N, x)
+    ret add_n(N, first)
+end fun
+
+----------
+scriptunit-fragment
+----------
+
+require module local/test/nested
+import nested.double_add
+
+const FIVE: int = 5
+let result = double_add(FIVE, 10)
+debuglog result
+
+----------
+scriptunit-expr
+----------
+
+result
