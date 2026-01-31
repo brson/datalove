@@ -230,8 +230,11 @@ pub unsafe extern "C" fn __jit_dispatch_call(
             // Not yet compiled or compilation failed - fall back to interpreter.
             // For In-mode non-copy args, interpreter takes ownership and destroys them.
             // JIT caller must not access these args after the call returns.
+            // Note: We pass None for func_unit since JIT trampolines don't track unit context.
+            // This means dynamic inlining won't apply to JIT->interpreter callbacks.
             let result = ctx.interp.call_in_context(
                 ir_func,
+                None,
                 arg_vals,
                 dest,
                 ctx.exec_ctx,

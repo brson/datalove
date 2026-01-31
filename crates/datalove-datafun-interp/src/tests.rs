@@ -132,7 +132,7 @@ fn test_simple_function_call() {
     };
     let registry = FunctionRegistry::new();
     let mut frames = FrameStore::new();
-    interp.call_in_context(&main_fn, vec![], ret_dest, &ctx, &registry, &mut frames).unwrap();
+    interp.call_in_context(&main_fn, None, vec![], ret_dest, &ctx, &registry, &mut frames).unwrap();
 
     // Verify result is 10 (first parameter returned by identity).
     assert_eq!(result_storage, 10);
@@ -230,7 +230,7 @@ fn test_nested_function_calls() {
 
     let registry = FunctionRegistry::new();
     let mut frames = FrameStore::new();
-    interp.call_in_context(&nested_fn, vec![arg], ret_dest, &ctx, &registry, &mut frames).unwrap();
+    interp.call_in_context(&nested_fn, None, vec![arg], ret_dest, &ctx, &registry, &mut frames).unwrap();
 
     // Verify result is 42 (passthrough returns input unchanged).
     assert_eq!(result_storage, 42);
@@ -249,7 +249,7 @@ fn run_i64_function(func: &IrFunction) -> i64 {
     };
     let registry = FunctionRegistry::new();
     let mut frames = FrameStore::new();
-    interp.call_in_context(func, vec![], ret_dest, &ctx, &registry, &mut frames).unwrap();
+    interp.call_in_context(func, None, vec![], ret_dest, &ctx, &registry, &mut frames).unwrap();
     result
 }
 
@@ -266,7 +266,7 @@ fn run_u32_function(func: &IrFunction) -> u32 {
     };
     let registry = FunctionRegistry::new();
     let mut frames = FrameStore::new();
-    interp.call_in_context(func, vec![], ret_dest, &ctx, &registry, &mut frames).unwrap();
+    interp.call_in_context(func, None, vec![], ret_dest, &ctx, &registry, &mut frames).unwrap();
     result
 }
 
@@ -283,7 +283,7 @@ fn run_bool_function(func: &IrFunction) -> bool {
     };
     let registry = FunctionRegistry::new();
     let mut frames = FrameStore::new();
-    interp.call_in_context(func, vec![], ret_dest, &ctx, &registry, &mut frames).unwrap();
+    interp.call_in_context(func, None, vec![], ret_dest, &ctx, &registry, &mut frames).unwrap();
     result
 }
 
@@ -334,7 +334,7 @@ fn test_const_u8() {
     };
     let registry = FunctionRegistry::new();
     let mut frames = FrameStore::new();
-    interp.call_in_context(&func, vec![], ret_dest, &ctx, &registry, &mut frames).unwrap();
+    interp.call_in_context(&func, None, vec![], ret_dest, &ctx, &registry, &mut frames).unwrap();
     assert_eq!(result, 42);
 }
 
@@ -381,7 +381,7 @@ fn test_const_i32() {
     };
     let registry = FunctionRegistry::new();
     let mut frames = FrameStore::new();
-    interp.call_in_context(&func, vec![], ret_dest, &ctx, &registry, &mut frames).unwrap();
+    interp.call_in_context(&func, None, vec![], ret_dest, &ctx, &registry, &mut frames).unwrap();
     assert_eq!(result, -12345);
 }
 

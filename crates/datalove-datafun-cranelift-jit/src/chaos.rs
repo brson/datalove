@@ -3,6 +3,7 @@
 //! Randomly decides whether to JIT or interpret each function call,
 //! exposing issues in mixed-mode execution paths.
 
+use std::any::Any;
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 
@@ -149,7 +150,7 @@ impl ChaosDispatcher {
         }
 
         // Use interpreter.
-        interp.call_in_context(func, args, ret_dest, ctx, registry, frames)
+        interp.call_in_context(func, None, args, ret_dest, ctx, registry, frames)
     }
 }
 
@@ -247,6 +248,14 @@ impl CallDispatcher for ChaosDispatcher {
                 }
             }
         }
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn Any {
+        self
     }
 }
 

@@ -22,6 +22,7 @@ pub mod chaos;
 pub use trampoline::{DispatchContext, set_dispatch_context, clear_dispatch_context};
 pub use chaos::ChaosDispatcher;
 
+use std::any::Any;
 use std::collections::HashMap;
 
 use datalove_datafun_ir::{FuncId, FuncRef, IrFunction, IrModuleId, IrType};
@@ -456,7 +457,7 @@ mod tests {
 
         // Execute main, which calls identity(42).
         // The call to identity should go through the JIT dispatcher.
-        interp.call_in_context(&main_fn, vec![], ret_dest, &ctx, &registry, &mut frames)
+        interp.call_in_context(&main_fn, None, vec![], ret_dest, &ctx, &registry, &mut frames)
             .expect("execution failed");
 
         // Verify result.
@@ -696,5 +697,13 @@ impl CallDispatcher for JitEngine {
                 }
             }
         }
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn Any {
+        self
     }
 }

@@ -78,6 +78,13 @@ impl<'a> ExecutionContext<'a> {
         Self { functions }
     }
 
+    /// Find a local function by ID.
+    ///
+    /// Returns None if no local function with this ID exists.
+    pub fn find_local_function(&self, func_id: FuncId) -> Option<&IrFunction> {
+        self.functions.iter().find(|f| f.id == func_id)
+    }
+
     /// Look up a function by reference.
     ///
     /// Panics if function not found (compiler bug).

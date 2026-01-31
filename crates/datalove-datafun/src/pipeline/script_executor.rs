@@ -289,4 +289,12 @@ impl ScriptExecutor {
     pub fn destroy_live_values(&mut self) {
         self.env.destroy_live_values(self.interp.runtime_handle());
     }
+
+    /// Take the call dispatcher from the interpreter.
+    ///
+    /// Returns the dispatcher if one was set, leaving None in its place.
+    /// Useful for inspecting dispatcher state (like inliner stats) after execution.
+    pub fn take_dispatcher(&self) -> Option<Box<dyn CallDispatcher>> {
+        self.interp.take_dispatcher()
+    }
 }

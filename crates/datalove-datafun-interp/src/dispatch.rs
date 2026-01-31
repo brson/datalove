@@ -1,8 +1,10 @@
 //! Call dispatch trait for extensibility.
 //!
-//! Allows external code (like a JIT) to intercept function calls.
+//! Allows external code (like a JIT or dynamic inliner) to intercept function calls.
 
-use datalove_datafun_ir::{FuncRef, IrFunction};
+use std::any::Any;
+
+use datalove_datafun_ir::{CallSiteId, FuncId, FuncRef, IrFunction};
 use datalove_rt::c::LocalRtHandle;
 
 use crate::error::InterpError;
@@ -10,6 +12,30 @@ use crate::env::{ExecutionContext, FunctionRegistry};
 use crate::frame::FrameStore;
 use crate::value::{Destination, Value};
 use crate::IrInterpreter;
+
+/// Script-relative function identifier.
+///
+/// Combines a unit index with a FuncId to identify functions relative to a
+/// script execution context. `unit` is `None` for the current unit's local
+/// functions, or `Some(n)` for functions from script unit n in the registry.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub struct ScriptFuncId {
+    /// The script unit containing this function, or None for current unit.
+    pub unit: Option<u32>,
+    /// The function ID within its unit.
+    pub func_id: FuncId,
+}
+
+/// Information about the call site in the caller function.
+///
+/// Used for tracking call sites for dynamic inlining decisions.
+#[derive(Clone, Copy, Debug)]
+pub struct CallSiteInfo {
+    /// The function containing this call site.
+    pub caller: ScriptFuncId,
+    /// The unique ID of this call site within the caller.
+    pub call_site_id: CallSiteId,
+}
 
 /// Result of dispatching a call.
 pub enum DispatchResult {
@@ -31,6 +57,10 @@ pub struct DispatchCallContext<'a, 'b> {
     pub frames: &'a mut FrameStore,
     /// Interpreter for executing non-compiled functions.
     pub interp: &'b mut IrInterpreter,
+    /// Information about the call site (for dynamic inlining).
+    ///
+    /// None for calls from JIT code or when caller context is unavailable.
+    pub call_site_info: Option<CallSiteInfo>,
 }
 
 /// Trait for intercepting function calls.
@@ -59,4 +89,20 @@ pub trait CallDispatcher {
         rt_handle: LocalRtHandle,
         call_ctx: DispatchCallContext<'_, '_>,
     ) -> DispatchResult;
+
+    /// Convert to Any for downcasting.
+    ///
+    /// Used to access dispatcher-specific state (like inliner stats) after execution.
+    fn as_any(&self) -> &dyn Any;
+
+    /// Convert to mutable Any for downcasting.
+    fn as_any_mut(&mut self) -> &mut dyn Any;
+
+    /// Get an optimized version of a function if available.
+    ///
+    /// Called before executing a function to check if there's an inlined/optimized
+    /// version that should be used instead. Returns None to use the original function.
+    fn get_optimized_function(&self, _func_id: ScriptFuncId) -> Option<&IrFunction> {
+        None
+    }
 }

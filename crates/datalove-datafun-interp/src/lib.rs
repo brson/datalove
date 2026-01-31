@@ -47,6 +47,7 @@ mod ops;
 mod types;
 mod collections;
 mod dispatch;
+mod dynamic;
 mod intrinsics;
 mod ctfe;
 
@@ -59,7 +60,8 @@ pub use layout::IrLayout;
 pub use tydesc::IrTyDescTable;
 pub use frame::{Frame, FrameStore};
 pub use env::{FunctionRegistry, ModuleFunctionRegistry, UnitFunctionRegistry, ScriptEnvironment, ExecutionContext};
-pub use dispatch::{CallDispatcher, DispatchCallContext, DispatchResult};
+pub use dispatch::{CallDispatcher, CallSiteInfo, DispatchCallContext, DispatchResult, ScriptFuncId};
+pub use dynamic::{DynamicInliner, DynamicInlinerConfig, InlinerStats};
 pub use ctfe::InterpCtfeEvaluator;
 pub use datalove_rt::c::DebugOutputMode;
 
@@ -120,6 +122,14 @@ impl IrInterpreter {
     /// Get the runtime handle for memory management.
     pub fn runtime_handle(&self) -> datalove_rt::c::LocalRtHandle {
         self.runtime.handle()
+    }
+
+    /// Take the call dispatcher out of the interpreter.
+    ///
+    /// Returns the dispatcher if one was set, leaving None in its place.
+    /// Useful for inspecting dispatcher state (like inliner stats) after execution.
+    pub fn take_dispatcher(&self) -> Option<Box<dyn CallDispatcher>> {
+        self.call_dispatcher.borrow_mut().take()
     }
 
     /// Get mutable access to the type descriptor table.
@@ -243,13 +253,16 @@ impl IrInterpreter {
         // Use the environment's registry but create fresh frames (function execution
         // doesn't persist frames like script units do).
         let mut frames = FrameStore::new();
-        self.call_in_context(func, args, ret_dest, &ctx, &env.registry, &mut frames)
+        self.call_in_context(func, None, args, ret_dest, &ctx, &env.registry, &mut frames)
     }
 
     /// Execute a function with arguments in a context with available functions.
+    ///
+    /// `func_unit` is the script unit the function came from, or None for local functions.
     pub fn call_in_context(
         &mut self,
         func: &IrFunction,
+        func_unit: Option<u32>,
         args: Vec<Value>,
         ret_dest: Destination,
         ctx: &ExecutionContext,
@@ -284,9 +297,15 @@ impl IrInterpreter {
             }
         }
 
+        // Build globally unique function ID.
+        let current_func = Some(dispatch::ScriptFuncId {
+            unit: func_unit,
+            func_id: func.id,
+        });
+
         // Execute blocks, writing return value directly to ret_dest.
         // Functions use ret_dest for Return, not expr_dest.
-        let result = self.execute_blocks(&func.blocks, &mut frame, ret_dest, None, ctx, registry, frames);
+        let result = self.execute_blocks(&func.blocks, &mut frame, ret_dest, None, ctx, registry, frames, current_func);
 
         // Convert UnitCompletion to () - functions always complete normally.
         result.map(|_| ())
@@ -323,6 +342,7 @@ impl IrInterpreter {
         let ctx = ExecutionContext::new(&unit.functions);
 
         // Execute blocks with registry for function lookups and frames for slot access.
+        // Script units don't have a single function ID, so pass None.
         let result = self.execute_blocks(
             &unit.blocks,
             &mut frame,
@@ -331,6 +351,7 @@ impl IrInterpreter {
             &ctx,
             &env.registry,
             &mut env.frames,
+            None,
         );
 
         // On error, destroy the frame and propagate the error.
@@ -363,6 +384,7 @@ impl IrInterpreter {
         ctx: &ExecutionContext,
         registry: &FunctionRegistry,
         frames: &mut FrameStore,
+        current_func: Option<dispatch::ScriptFuncId>,
     ) -> Result<UnitCompletion, InterpError> {
         let mut current_block = BlockId(0);
 
@@ -372,7 +394,7 @@ impl IrInterpreter {
 
             // Execute instructions.
             for instr in &block.instructions {
-                self.execute_instruction(instr, frame, ctx, registry, frames)?;
+                self.execute_instruction(instr, frame, ctx, registry, frames, current_func)?;
             }
 
             // Handle terminator.
@@ -477,6 +499,7 @@ impl IrInterpreter {
         ctx: &ExecutionContext,
         registry: &FunctionRegistry,
         frames: &mut FrameStore,
+        current_func: Option<dispatch::ScriptFuncId>,
     ) -> Result<(), InterpError> {
         match instr {
             Instruction::Const { dest, value } => {
@@ -844,15 +867,23 @@ impl IrInterpreter {
                 frame.mark_value_live(*dest);
                 Self::mark_source_dropped_local(inner, frame);
             }
-            Instruction::Call { dest, func, args, .. } => {
+            Instruction::Call { site_id, dest, func, args } => {
                 let (callee, callee_unit) = ctx.get_function_with_context(func, registry);
                 let arg_vals = self.prepare_call_args(callee, args, frame, frames);
                 let dest_slot = frame.value_dest(*dest);
                 Self::mark_consumed_call_args(callee, args, frame);
 
+                // Build call site info for dispatcher if we have caller context.
+                let call_site_info = current_func.map(|caller| {
+                    dispatch::CallSiteInfo {
+                        caller,
+                        call_site_id: *site_id,
+                    }
+                });
+
                 // Try dispatcher first, fall back to interpreter.
                 let call_result = if let Some(result) = self.try_dispatch_call(
-                    func, callee, &arg_vals, dest_slot, ctx, registry, frames
+                    func, callee, &arg_vals, dest_slot, ctx, registry, frames, call_site_info
                 ) {
                     result
                 } else {
@@ -1397,6 +1428,7 @@ impl IrInterpreter {
         ctx: &ExecutionContext,
         registry: &FunctionRegistry,
         frames: &mut FrameStore,
+        call_site_info: Option<dispatch::CallSiteInfo>,
     ) -> Option<Result<(), InterpError>> {
         // Take dispatcher temporarily to avoid borrow conflicts.
         let mut dispatcher = self.call_dispatcher.borrow_mut().take()?;
@@ -1409,6 +1441,7 @@ impl IrInterpreter {
             registry,
             frames,
             interp: self,
+            call_site_info,
         };
 
         let result = match dispatcher.dispatch_call(func, callee, arg_vals, dest, rt_handle, call_ctx) {
@@ -1419,6 +1452,14 @@ impl IrInterpreter {
         // Restore dispatcher.
         *self.call_dispatcher.borrow_mut() = Some(dispatcher);
         result
+    }
+
+    /// Get an optimized version of a function from the dispatcher if available.
+    ///
+    /// Returns a cloned function to avoid lifetime issues with the dispatcher borrow.
+    fn get_optimized_function(&self, func_id: dispatch::ScriptFuncId) -> Option<IrFunction> {
+        let dispatcher = self.call_dispatcher.borrow();
+        dispatcher.as_ref().and_then(|d| d.get_optimized_function(func_id).cloned())
     }
 
     /// Mark Out param destinations as initialized after a call returns.
@@ -1450,13 +1491,23 @@ impl IrInterpreter {
         registry: &FunctionRegistry,
         frames: &mut FrameStore,
     ) -> Result<(), InterpError> {
+        // Build globally unique function ID for the callee.
+        let callee_global_id = dispatch::ScriptFuncId {
+            unit: callee_unit,
+            func_id: callee.id,
+        };
+
+        // Check if there's an optimized (inlined) version of this function.
+        let optimized = self.get_optimized_function(callee_global_id);
+        let func_to_use = optimized.as_ref().unwrap_or(callee);
+
         if let Some(unit) = callee_unit {
             let unit_funcs = registry.unit_functions(unit)
                 .unwrap_or_else(|| panic!("external unit {} not found", unit));
             let callee_ctx = ExecutionContext::new(unit_funcs);
-            self.call_in_context(callee, arg_vals, dest, &callee_ctx, registry, frames)
+            self.call_in_context(func_to_use, callee_unit, arg_vals, dest, &callee_ctx, registry, frames)
         } else {
-            self.call_in_context(callee, arg_vals, dest, ctx, registry, frames)
+            self.call_in_context(func_to_use, callee_unit, arg_vals, dest, ctx, registry, frames)
         }
     }
 

@@ -4,6 +4,8 @@
 //! - Inline directive types for specifying which functions to inline
 //! - Function inlining transformation on IR modules
 //! - Cross-module inlining support
+//! - Dynamic inlining for interpreter optimization
+
 
 use std::collections::HashMap;
 
@@ -494,11 +496,11 @@ pub fn resolve_cross_module_directives(
 
 /// Information about a call site to inline.
 #[derive(Clone, Debug)]
-struct CallSite {
-    block_idx: usize,
-    instr_idx: usize,
-    dest: ValueId,
-    args: Vec<Operand>,
+pub struct CallSite {
+    pub block_idx: usize,
+    pub instr_idx: usize,
+    pub dest: ValueId,
+    pub args: Vec<Operand>,
 }
 
 /// Find all call sites to a specific callee in a function (single-module).
@@ -963,7 +965,7 @@ impl RemapContext {
 /// Inline a single call site in a function.
 ///
 /// Returns the new function with the call inlined, or None if inlining failed.
-fn inline_call_site(
+pub fn inline_call_site(
     caller: &IrFunction,
     callee: &IrFunction,
     site: &CallSite,

@@ -1253,6 +1253,7 @@ dependencies = [
 name = "datalove-datafun-interp"
 version = "0.1.0"
 dependencies = [
+ "datalove-datafun-inline",
  "datalove-datafun-intrinsics",
  "datalove-datafun-ir",
  "datalove-rt",
