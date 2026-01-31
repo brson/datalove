@@ -51,6 +51,7 @@ mounts=(
 # Rust toolchain
 [[ -d "$HOME/.rustup" ]] && mounts+=("-v" "$HOME/.rustup:/home/claude/.rustup")
 [[ -d "$HOME/.cargo" ]] && mounts+=("-v" "$HOME/.cargo:/home/claude/.cargo")
+[[ -d "$HOME/.cargo" ]] && mounts+=("-v" "/dev/null:/home/claude/.cargo/config.toml:ro")
 
 # Environment variables
 envs=(
