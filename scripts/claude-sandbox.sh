@@ -45,9 +45,15 @@ mounts=(
 [[ -d "$HOME/.claude" ]] && mounts+=("-v" "$HOME/.claude:/home/claude/.claude")
 [[ -f "$HOME/.claude.json" ]] && mounts+=("-v" "$HOME/.claude.json:/home/claude/.claude.json")
 
+# Rust toolchain
+[[ -d "$HOME/.rustup" ]] && mounts+=("-v" "$HOME/.rustup:/home/claude/.rustup")
+[[ -d "$HOME/.cargo" ]] && mounts+=("-v" "$HOME/.cargo:/home/claude/.cargo")
+
 # Environment variables
 envs=(
     "-e" "TERM=${TERM:-xterm-256color}"
+    "-e" "RUSTUP_HOME=/home/claude/.rustup"
+    "-e" "CARGO_HOME=/home/claude/.cargo"
 )
 [[ -n "${GH_TOKEN:-}" ]] && envs+=("-e" "GH_TOKEN")
 [[ -n "${GITHUB_TOKEN:-}" ]] && envs+=("-e" "GITHUB_TOKEN")
@@ -57,6 +63,8 @@ info "Git config: $([[ -f "$HOME/.gitconfig" ]] && echo "yes" || echo "no")"
 info "gh credentials: $([[ -d "$HOME/.config/gh" ]] && echo "yes" || echo "no")"
 info "Claude config: $([[ -d "$HOME/.claude" ]] && echo "yes" || echo "no")"
 info "Claude auth: $([[ -f "$HOME/.claude.json" ]] && echo "yes" || echo "no")"
+info "Rust toolchain: $([[ -d "$HOME/.rustup" ]] && echo "yes" || echo "no")"
+info "Cargo: $([[ -d "$HOME/.cargo" ]] && echo "yes" || echo "no")"
 info "SSH keys: no (intentionally excluded)"
 
 # Dockerfile for the sandbox image
@@ -128,4 +136,4 @@ exec podman run -it --rm \
     "${mounts[@]}" \
     "${envs[@]}" \
     "$IMAGE_NAME" \
-    bash -c '. ~/.nvm/nvm.sh && claude --dangerously-skip-permissions'
+    bash -c '. ~/.nvm/nvm.sh && export PATH="$HOME/.cargo/bin:$PATH" && claude --dangerously-skip-permissions'
