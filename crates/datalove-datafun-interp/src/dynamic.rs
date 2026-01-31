@@ -9,15 +9,15 @@ use datalove_datafun_ir::{CallSiteId, FuncRef, IrFunction};
 use datalove_rt::c::LocalRtHandle;
 
 use crate::dispatch::{
-    CallDispatcher, CallSiteInfo, DispatchCallContext, DispatchResult, ScriptFuncId,
+    CallDispatcher, CallSiteInfo, DispatchCallContext, DispatchResult,
 };
 use crate::value::{Destination, Value};
 
 /// Key for tracking call site counts.
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
 struct CallSiteKey {
-    /// The function containing the call site (globally unique).
-    caller: ScriptFuncId,
+    /// The function containing the call site.
+    caller: FuncRef,
     /// The call site within the caller.
     call_site_id: CallSiteId,
 }
@@ -58,8 +58,8 @@ pub struct DynamicInliner {
     /// Cache of inlined functions.
     ///
     /// When a function is modified by inlining, the new version is stored here.
-    /// Key is the globally unique function ID of the modified caller.
-    inlined_functions: HashMap<ScriptFuncId, IrFunction>,
+    /// Key is the FuncRef identifying the modified caller.
+    inlined_functions: HashMap<FuncRef, IrFunction>,
     /// Statistics.
     stats: InlinerStats,
 }
@@ -97,8 +97,8 @@ impl DynamicInliner {
     }
 
     /// Get an inlined version of a function, if available.
-    pub fn get_inlined_function(&self, func_id: ScriptFuncId) -> Option<&IrFunction> {
-        self.inlined_functions.get(&func_id)
+    pub fn get_inlined_function(&self, func_ref: &FuncRef) -> Option<&IrFunction> {
+        self.inlined_functions.get(func_ref)
     }
 
     /// Record a call and check if inlining should be triggered.
@@ -112,7 +112,7 @@ impl DynamicInliner {
         self.stats.calls_tracked += 1;
 
         let key = CallSiteKey {
-            caller: call_site_info.caller,
+            caller: call_site_info.caller.clone(),
             call_site_id: call_site_info.call_site_id,
         };
 
@@ -177,7 +177,7 @@ impl DynamicInliner {
             .unwrap_or(caller);
 
         if let Some(inlined_func) = inline_call_site_by_index(caller_to_use, callee, call_index) {
-            self.inlined_functions.insert(call_site_info.caller, inlined_func);
+            self.inlined_functions.insert(call_site_info.caller.clone(), inlined_func);
             self.stats.inlinings_performed += 1;
         } else {
             self.stats.inlinings_skipped += 1;
@@ -210,10 +210,9 @@ impl CallDispatcher for DynamicInliner {
         let should_inline = self.record_call(&call_site_info, func);
 
         if should_inline {
-            // Look up the caller function in local functions.
-            // Only inline if caller is in the current context (same unit).
-            if call_site_info.caller.unit.is_none() {
-                if let Some(caller) = call_ctx.exec_ctx.find_local_function(call_site_info.caller.func_id) {
+            // Only inline local functions (we have the caller in context).
+            if let FuncRef::Local(func_id) = &call_site_info.caller {
+                if let Some(caller) = call_ctx.exec_ctx.find_local_function(*func_id) {
                     self.perform_inlining(&call_site_info, caller, func);
                 }
             }
@@ -231,8 +230,8 @@ impl CallDispatcher for DynamicInliner {
         self
     }
 
-    fn get_optimized_function(&self, func_id: ScriptFuncId) -> Option<&IrFunction> {
-        self.get_inlined_function(func_id)
+    fn get_optimized_function(&self, func_ref: &FuncRef) -> Option<&IrFunction> {
+        self.get_inlined_function(func_ref)
     }
 }
 

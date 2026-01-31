@@ -4,7 +4,7 @@
 
 use std::any::Any;
 
-use datalove_datafun_ir::{CallSiteId, FuncId, FuncRef, IrFunction};
+use datalove_datafun_ir::{CallSiteId, FuncRef, IrFunction};
 use datalove_rt::c::LocalRtHandle;
 
 use crate::error::InterpError;
@@ -13,26 +13,13 @@ use crate::frame::FrameStore;
 use crate::value::{Destination, Value};
 use crate::IrInterpreter;
 
-/// Script-relative function identifier.
-///
-/// Combines a unit index with a FuncId to identify functions relative to a
-/// script execution context. `unit` is `None` for the current unit's local
-/// functions, or `Some(n)` for functions from script unit n in the registry.
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-pub struct ScriptFuncId {
-    /// The script unit containing this function, or None for current unit.
-    pub unit: Option<u32>,
-    /// The function ID within its unit.
-    pub func_id: FuncId,
-}
-
 /// Information about the call site in the caller function.
 ///
 /// Used for tracking call sites for dynamic inlining decisions.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 pub struct CallSiteInfo {
     /// The function containing this call site.
-    pub caller: ScriptFuncId,
+    pub caller: FuncRef,
     /// The unique ID of this call site within the caller.
     pub call_site_id: CallSiteId,
 }
@@ -102,7 +89,7 @@ pub trait CallDispatcher {
     ///
     /// Called before executing a function to check if there's an inlined/optimized
     /// version that should be used instead. Returns None to use the original function.
-    fn get_optimized_function(&self, _func_id: ScriptFuncId) -> Option<&IrFunction> {
+    fn get_optimized_function(&self, _func_ref: &FuncRef) -> Option<&IrFunction> {
         None
     }
 }
