@@ -1,0 +1,25 @@
+----------
+module local/test/structconst
+----------
+
+// Comptime function with inline struct type parameter
+fun get_config(const cfg: {enabled: bool, value: i32}): {enabled: bool, value: i32}
+    ret cfg
+end fun
+
+----------
+scriptunit-fragment
+----------
+
+require module local/test/structconst
+import structconst.get_config
+
+const MY_CONFIG: {enabled: bool, value: i32} = {enabled = true, value = : i32 / 42}
+let result = get_config(MY_CONFIG)
+debuglog result
+
+----------
+scriptunit-expr
+----------
+
+result

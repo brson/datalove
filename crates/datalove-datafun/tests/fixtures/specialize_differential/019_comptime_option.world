@@ -1,0 +1,28 @@
+----------
+module local/test/optconst
+----------
+
+// Comptime function with option type parameter
+fun get_opt(const opt: ?i32): ?i32
+    ret opt
+end fun
+
+----------
+scriptunit-fragment
+----------
+
+require module local/test/optconst
+import optconst.get_opt
+
+const SOME_VAL: ?i32 = some(: i32 / 42)
+const NO_VAL: ?i32 = none
+let result1 = get_opt(SOME_VAL)
+let result2 = get_opt(NO_VAL)
+debuglog result1
+debuglog result2
+
+----------
+scriptunit-expr
+----------
+
+(result1, result2)
