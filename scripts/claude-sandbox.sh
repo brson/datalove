@@ -7,6 +7,8 @@
 
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 REBUILD=false
 COMMAND="claude"
 while [[ $# -gt 0 ]]; do
@@ -46,6 +48,12 @@ mounts=(
 
 # Claude config/auth (read-write for OAuth tokens)
 [[ -d "$HOME/.claude" ]] && mounts+=("-v" "$HOME/.claude:/home/claude/.claude")
+# Override settings.json with container-specific paths for hooks
+[[ -f "$SCRIPT_DIR/claude-sandbox-settings.json" ]] && mounts+=("-v" "$SCRIPT_DIR/claude-sandbox-settings.json:/home/claude/.claude/settings.json:ro")
+
+# PipeWire audio socket for notification chimes
+XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
+[[ -S "$XDG_RUNTIME_DIR/pipewire-0" ]] && mounts+=("-v" "$XDG_RUNTIME_DIR/pipewire-0:/run/user/1000/pipewire-0")
 [[ -f "$HOME/.claude.json" ]] && mounts+=("-v" "$HOME/.claude.json:/home/claude/.claude.json")
 
 # Rust toolchain
@@ -58,6 +66,7 @@ envs=(
     "-e" "TERM=${TERM:-xterm-256color}"
     "-e" "RUSTUP_HOME=/home/claude/.rustup"
     "-e" "CARGO_HOME=/home/claude/.cargo"
+    "-e" "XDG_RUNTIME_DIR=/run/user/1000"
 )
 [[ -n "${GH_TOKEN:-}" ]] && envs+=("-e" "GH_TOKEN")
 [[ -n "${GITHUB_TOKEN:-}" ]] && envs+=("-e" "GITHUB_TOKEN")
@@ -70,6 +79,7 @@ info "Claude auth: $([[ -f "$HOME/.claude.json" ]] && echo "yes" || echo "no")"
 info "Rust toolchain: $([[ -d "$HOME/.rustup" ]] && echo "yes" || echo "no")"
 info "Cargo: $([[ -d "$HOME/.cargo" ]] && echo "yes" || echo "no")"
 info "SSH keys: no (intentionally excluded)"
+info "PipeWire audio: $([[ -S "${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/pipewire-0" ]] && echo "yes" || echo "no")"
 
 # Dockerfile for the sandbox image
 HOST_UID=$(id -u)
@@ -83,6 +93,7 @@ ENV NVM_DIR=/home/claude/.nvm
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl git ca-certificates build-essential clang pkg-config libssl-dev nano emacs-nox \
+    pipewire pipewire-audio-client-libraries \
     && rm -rf /var/lib/apt/lists/*
 
 # Install gh CLI
@@ -99,6 +110,10 @@ RUN userdel -r ubuntu 2>/dev/null || true \
     && groupdel ubuntu 2>/dev/null || true \
     && groupadd -g ${HOST_GID} claude 2>/dev/null || true \
     && useradd -m -s /bin/bash -u ${HOST_UID} -g ${HOST_GID} claude
+
+# Install notification chime assets
+COPY --chown=claude:claude claude-chime-notify.sh /home/claude/.local/bin/claude-chime-notify
+COPY --chown=claude:claude chime.wav /home/claude/.local/share/sounds/chime.wav
 
 # Install nvm and node as claude user
 USER claude
@@ -117,10 +132,12 @@ DOCKERFILE
 
 # Build the image if needed (tagged with UID since it's baked in)
 IMAGE_NAME="claude-sandbox:uid-${HOST_UID}"
-# Use empty context - Dockerfile doesn't need local files, and current dir may be huge
+# Use minimal build context with just the assets needed
 build_image() {
     local ctx
     ctx=$(mktemp -d)
+    cp "$SCRIPT_DIR/claude-chime-notify.sh" "$ctx/"
+    cp "$SCRIPT_DIR/assets/chime.wav" "$ctx/"
     echo "$dockerfile" | podman build "$@" -t "$IMAGE_NAME" -f - "$ctx"
     rm -rf "$ctx"
 }
