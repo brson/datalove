@@ -122,6 +122,9 @@ exec podman run -it --rm \
     --user claude \
     --userns=keep-id \
     --security-opt label=disable \
+    --cpus=4 \
+    --cpu-shares=512 \
+    --memory=8g \
     "${mounts[@]}" \
     "${envs[@]}" \
     "$IMAGE_NAME" \
