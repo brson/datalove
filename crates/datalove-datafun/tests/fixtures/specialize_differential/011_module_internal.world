@@ -1,0 +1,32 @@
+----------
+module local/test/internal
+----------
+
+// Module-internal comptime call: helper function with comptime param
+// called from another function within the same module.
+
+fun add_factor(const factor: int, x: int): int
+    ret factor + x
+end fun
+
+// This function calls add_factor internally with a const.
+fun add_two(x: int): int
+    const TWO: int = 2
+    ret add_factor(TWO, x)
+end fun
+
+----------
+scriptunit-fragment
+----------
+
+require module local/test/internal
+import internal.add_two
+
+let result = add_two(10)
+debuglog result
+
+----------
+scriptunit-expr
+----------
+
+result

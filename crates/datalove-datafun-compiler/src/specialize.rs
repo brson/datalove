@@ -649,11 +649,23 @@ pub fn rewrite_comptime_calls(
                                 });
 
                                 // Build new args: discriminant + non-comptime args.
+                                // Also collect comptime args that need to be dropped.
                                 let mut new_args = vec![Operand::Value(disc_val)];
+                                let mut comptime_args_to_drop = Vec::new();
                                 for (i, arg) in args.iter().enumerate() {
-                                    if !comptime_param_indices.contains(&i) {
+                                    if comptime_param_indices.contains(&i) {
+                                        // Comptime arg is not passed - needs to be dropped.
+                                        comptime_args_to_drop.push(arg.clone());
+                                    } else {
                                         new_args.push(arg.clone());
                                     }
+                                }
+
+                                // Drop comptime args that are no longer being passed.
+                                // These were originally passed to the function but are now
+                                // replaced by the discriminant + inlined const values.
+                                for arg in comptime_args_to_drop {
+                                    new_instructions.push(Instruction::Drop { operand: arg });
                                 }
 
                                 // Emit Call instruction.
