@@ -4,12 +4,6 @@
 # - Only mounts the current directory
 # - No SSH keyring access
 # - Passes git and gh credentials
-# - Supports container-in-container (podman in podman)
-#
-# Outer container requirements for nested podman:
-# - Mount /dev/fuse device (--device /dev/fuse)
-# - Disable SELinux labeling (--security-opt label=disable)
-# - Use fuse-overlayfs or vfs storage driver
 
 set -euo pipefail
 
@@ -45,21 +39,16 @@ mounts=(
 [[ -f "$HOME/.gitconfig" ]] && mounts+=("-v" "$HOME/.gitconfig:/home/claude/.gitconfig:ro")
 
 # gh CLI credentials
-[[ -d "$HOME/.config/gh" ]] && mounts+=("-v" "$HOME/.config/gh:/home/claude/.config/gh:ro")
+#[[ -d "$HOME/.config/gh" ]] && mounts+=("-v" "$HOME/.config/gh:/home/claude/.config/gh:ro")
 
 # Claude config/auth (read-write for OAuth tokens)
 [[ -d "$HOME/.claude" ]] && mounts+=("-v" "$HOME/.claude:/home/claude/.claude")
 [[ -f "$HOME/.claude.json" ]] && mounts+=("-v" "$HOME/.claude.json:/home/claude/.claude.json")
 
-# Podman socket for container-in-container
-podman_sock="/run/user/$(id -u)/podman/podman.sock"
-[[ -S "$podman_sock" ]] && mounts+=("-v" "${podman_sock}:/run/podman/podman.sock")
-
 # Environment variables
 envs=(
     "-e" "TERM=${TERM:-xterm-256color}"
 )
-[[ -n "${ANTHROPIC_API_KEY:-}" ]] && envs+=("-e" "ANTHROPIC_API_KEY")
 [[ -n "${GH_TOKEN:-}" ]] && envs+=("-e" "GH_TOKEN")
 [[ -n "${GITHUB_TOKEN:-}" ]] && envs+=("-e" "GITHUB_TOKEN")
 
@@ -81,7 +70,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 ENV NVM_DIR=/home/claude/.nvm
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    curl git ca-certificates fuse-overlayfs podman \
+    curl git ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
 # Install gh CLI
@@ -133,7 +122,6 @@ exec podman run -it --rm \
     --user claude \
     --userns=keep-id \
     --security-opt label=disable \
-    --device /dev/fuse \
     "${mounts[@]}" \
     "${envs[@]}" \
     "$IMAGE_NAME" \
