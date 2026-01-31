@@ -9,10 +9,11 @@
 - script interpreter reactivity
 - [x] tensors and tables
 - table column projections
-- [ ] adapt opt / clone and coerce / @
+- [x] adapt opt / clone and coerce / @
 - [x] logic ops
 - [x] type aliases
-- ctfe
+- [x] ctfe
+- const argument specialization
 - generic functions for built-in generic types
 - basic repl,
 - [x] script runner
