@@ -673,23 +673,21 @@ pub fn lower_module_graph_with_evaluator<'db>(
     // Compute func_id_map first (needed for lowering).
     let func_id_map = compute_func_id_map(db_salsa, parsed_graph);
 
-    // Phase 1+2: Lower functions and evaluate consts.
-    // Skip const evaluation if skip_const_inlining is enabled.
-    let (resolved_consts, lowered_functions) = if skip_const_inlining {
-        (HashMap::new(), HashMap::new())
-    } else {
-        // Lower all module functions first so CTFE can call them.
-        let lowered_functions = lower_all_module_functions(
-            db_salsa, parsed_graph, typecheck_result, ownership_analysis, func_id_map
-        );
+    // Phase 5a: Always lower all module functions first.
+    let lowered_functions = lower_all_module_functions(
+        db_salsa, parsed_graph, typecheck_result, ownership_analysis, func_id_map
+    );
 
+    // Phase 5b: Evaluate consts (skip if skip_const_inlining is enabled).
+    let resolved_consts = if skip_const_inlining {
+        HashMap::new()
+    } else {
         // Build a module registry from lowered functions for cross-module CTFE calls.
         let func_id_hashmap = func_id_map.to_hashmap(db_salsa);
         let module_registry = build_module_registry_from_lowered(&lowered_functions, &func_id_hashmap);
         evaluator.borrow_mut().set_module_registry(module_registry);
 
-        let resolved = evaluate_all_module_consts(db_salsa, parsed_graph, typecheck_result, evaluator, &lowered_functions, func_id_map);
-        (resolved, lowered_functions)
+        evaluate_all_module_consts(db_salsa, parsed_graph, typecheck_result, evaluator, &lowered_functions, func_id_map)
     };
 
     // Phase 5c: Specialize comptime functions (union-branch transformation).
