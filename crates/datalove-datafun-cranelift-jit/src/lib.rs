@@ -18,12 +18,19 @@ mod compiler;
 pub(crate) mod bridge;
 pub(crate) mod trampoline;
 pub mod chaos;
+pub mod optimizing;
+pub mod ab_test;
+pub mod metrics;
 
 pub use trampoline::{DispatchContext, set_dispatch_context, clear_dispatch_context};
 pub use chaos::ChaosDispatcher;
+pub use optimizing::OptimizingDispatcher;
+pub use ab_test::{ABTestDispatcher, ABMode};
+pub use metrics::{MetricsCollector, FunctionMetrics, AggregateMetrics, ExecutionMode};
 
 use std::any::Any;
 use std::collections::HashMap;
+use std::time::{Duration, Instant};
 
 use datalove_datafun_ir::{FuncId, FuncRef, IrFunction, IrModuleId, IrType};
 use datalove_datafun_interp::{CallDispatcher, DispatchCallContext, Destination, DispatchResult, InterpError, Value};
@@ -114,7 +121,26 @@ pub enum FunctionState {
         code_ptr: *const u8,
         /// Whether return uses sret convention.
         uses_sret: bool,
+        /// Estimated code size in bytes.
+        code_size: usize,
     },
+}
+
+/// Statistics about JIT compilation activity.
+#[derive(Clone, Debug, Default)]
+pub struct JitStats {
+    /// Total number of functions compiled.
+    pub compiled_count: u32,
+    /// Total compilation time across all functions.
+    pub total_compile_time: Duration,
+    /// Total generated code size in bytes.
+    pub total_code_size: usize,
+    /// Number of compilation failures (function fell back to interpreter).
+    pub compilation_failures: u32,
+    /// Per-function compilation times (function name -> duration).
+    pub per_function_compile_time: HashMap<String, Duration>,
+    /// Per-function code sizes (function name -> bytes).
+    pub per_function_code_size: HashMap<String, usize>,
 }
 
 /// Per-function tracing JIT engine.
@@ -128,6 +154,8 @@ pub struct JitEngine {
     compiler: JitCompiler,
     /// Call count threshold for triggering compilation.
     threshold: u32,
+    /// Compilation statistics.
+    stats: JitStats,
 }
 
 impl JitEngine {
@@ -137,7 +165,18 @@ impl JitEngine {
             states: HashMap::new(),
             compiler: JitCompiler::new()?,
             threshold,
+            stats: JitStats::default(),
         })
+    }
+
+    /// Get compilation statistics.
+    pub fn stats(&self) -> &JitStats {
+        &self.stats
+    }
+
+    /// Get the compilation threshold.
+    pub fn threshold(&self) -> u32 {
+        self.threshold
     }
 
     /// Record a function call and trigger compilation if threshold reached.
@@ -160,15 +199,25 @@ impl JitEngine {
                 // interpreted (e.g., function uses unsupported features).
                 *call_count = call_count.saturating_add(1);
                 if *call_count >= self.threshold && *call_count != u32::MAX {
-                    // Compile the function.
-                    let (code_ptr, uses_sret) = self.compiler.compile_function(func)?;
-                    *state = FunctionState::Compiled { code_ptr, uses_sret };
+                    // Compile the function with timing.
+                    let start = Instant::now();
+                    let (code_ptr, uses_sret, code_size) = self.compiler.compile_function(func)?;
+                    let compile_time = start.elapsed();
+
+                    // Update stats.
+                    self.stats.compiled_count += 1;
+                    self.stats.total_compile_time += compile_time;
+                    self.stats.total_code_size += code_size;
+                    self.stats.per_function_compile_time.insert(func.name.clone(), compile_time);
+                    self.stats.per_function_code_size.insert(func.name.clone(), code_size);
+
+                    *state = FunctionState::Compiled { code_ptr, uses_sret, code_size };
                     Ok(Some((code_ptr, uses_sret)))
                 } else {
                     Ok(None)
                 }
             }
-            FunctionState::Compiled { code_ptr, uses_sret } => {
+            FunctionState::Compiled { code_ptr, uses_sret, .. } => {
                 Ok(Some((*code_ptr, *uses_sret)))
             }
         }
@@ -196,15 +245,25 @@ impl JitEngine {
                 // interpreted (e.g., function uses unsupported features).
                 *call_count = call_count.saturating_add(1);
                 if *call_count >= self.threshold && *call_count != u32::MAX {
-                    // Compile the function with context.
-                    let (code_ptr, uses_sret) = self.compiler.compile_function_with_context(func, ctx, registry)?;
-                    *state = FunctionState::Compiled { code_ptr, uses_sret };
+                    // Compile the function with context and timing.
+                    let start = Instant::now();
+                    let (code_ptr, uses_sret, code_size) = self.compiler.compile_function_with_context(func, ctx, registry)?;
+                    let compile_time = start.elapsed();
+
+                    // Update stats.
+                    self.stats.compiled_count += 1;
+                    self.stats.total_compile_time += compile_time;
+                    self.stats.total_code_size += code_size;
+                    self.stats.per_function_compile_time.insert(func.name.clone(), compile_time);
+                    self.stats.per_function_code_size.insert(func.name.clone(), code_size);
+
+                    *state = FunctionState::Compiled { code_ptr, uses_sret, code_size };
                     Ok(Some((code_ptr, uses_sret)))
                 } else {
                     Ok(None)
                 }
             }
-            FunctionState::Compiled { code_ptr, uses_sret } => {
+            FunctionState::Compiled { code_ptr, uses_sret, .. } => {
                 Ok(Some((*code_ptr, *uses_sret)))
             }
         }
@@ -213,11 +272,16 @@ impl JitEngine {
     /// Get compiled code for a function if available.
     pub fn get_compiled(&self, key: &FunctionKey) -> Option<(*const u8, bool)> {
         match self.states.get(key) {
-            Some(FunctionState::Compiled { code_ptr, uses_sret }) => {
+            Some(FunctionState::Compiled { code_ptr, uses_sret, .. }) => {
                 Some((*code_ptr, *uses_sret))
             }
             _ => None,
         }
+    }
+
+    /// Record a compilation failure for stats tracking.
+    pub fn record_compilation_failure(&mut self) {
+        self.stats.compilation_failures += 1;
     }
 
     /// Call a JIT-compiled function.

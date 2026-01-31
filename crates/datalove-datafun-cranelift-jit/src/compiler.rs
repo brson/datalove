@@ -99,8 +99,8 @@ impl JitCompiler {
 
     /// Compile a function to native code (no calls to other functions).
     ///
-    /// Returns (code_ptr, uses_sret).
-    pub fn compile_function(&mut self, func: &IrFunction) -> Result<(*const u8, bool), JitError> {
+    /// Returns (code_ptr, uses_sret, code_size).
+    pub fn compile_function(&mut self, func: &IrFunction) -> Result<(*const u8, bool, usize), JitError> {
         // Emit TyDescs for all types in this function.
         let mut types = HashSet::new();
         tydesc_emit::collect_types_from_function(func, &mut types);
@@ -126,13 +126,17 @@ impl JitCompiler {
         self.jit_module.finalize_definitions()
             .map_err(|e| JitError::CompilationFailed(format!("finalize: {}", e)))?;
 
-        // Get the code pointer.
+        // Get the code pointer and size.
         let code_ptr = self.jit_module.get_finalized_function(cl_func_id);
+
+        // Estimate code size from IR function (Cranelift doesn't expose compiled size directly).
+        // Use a heuristic: ~10 bytes per instruction + 20 per block for control flow.
+        let code_size = estimate_code_size(func);
 
         // Determine if function uses sret.
         let sret = uses_sret(&func.return_type);
 
-        Ok((code_ptr, sret))
+        Ok((code_ptr, sret, code_size))
     }
 
     /// Compile a function that may call other functions.
@@ -140,13 +144,13 @@ impl JitCompiler {
     /// Creates stub functions for all callees that dispatch through the trampoline.
     /// This enables mixed-mode execution where JIT code can call interpreted functions.
     ///
-    /// Returns (code_ptr, uses_sret).
+    /// Returns (code_ptr, uses_sret, code_size).
     pub fn compile_function_with_context<'a>(
         &mut self,
         func: &IrFunction,
         ctx: &ExecutionContext<'a>,
         registry: &FunctionRegistry,
-    ) -> Result<(*const u8, bool), JitError> {
+    ) -> Result<(*const u8, bool, usize), JitError> {
         // Collect all Call targets in this function.
         let callees = self.collect_call_targets(func);
 
@@ -209,13 +213,16 @@ impl JitCompiler {
         self.jit_module.finalize_definitions()
             .map_err(|e| JitError::CompilationFailed(format!("finalize: {}", e)))?;
 
-        // Get the code pointer.
+        // Get the code pointer and size.
         let code_ptr = self.jit_module.get_finalized_function(cl_func_id);
+
+        // Estimate code size from IR function.
+        let code_size = estimate_code_size(func);
 
         // Determine if function uses sret.
         let sret = uses_sret(&func.return_type);
 
-        Ok((code_ptr, sret))
+        Ok((code_ptr, sret, code_size))
     }
 
     /// Collect all unique Call targets in a function.
@@ -388,6 +395,29 @@ impl JitCompiler {
 
         Ok(())
     }
+}
+
+/// Estimate code size for a function based on IR complexity.
+///
+/// Uses heuristics since Cranelift doesn't expose compiled code size directly.
+/// Estimates ~10 bytes per instruction + 20 bytes per block for control flow.
+fn estimate_code_size(func: &IrFunction) -> usize {
+    let mut instruction_count = 0;
+    for block in &func.blocks {
+        instruction_count += block.instructions.len();
+    }
+    let block_count = func.blocks.len();
+
+    // Base estimate: 10 bytes per instruction, 20 bytes per block.
+    let base = instruction_count * 10 + block_count * 20;
+
+    // Add overhead for function prologue/epilogue (~32 bytes).
+    let overhead = 32;
+
+    // Add overhead for parameters (~8 bytes each for stack setup).
+    let param_overhead = func.params.len() * 8;
+
+    base + overhead + param_overhead
 }
 
 /// Register all runtime symbols with the JIT builder.
