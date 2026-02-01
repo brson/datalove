@@ -20,10 +20,10 @@ AotAnalysis(
                         branch v4, block2, block1
                     block1:
                         v5 = err v3
-                        early_exit v5
+                        unit_early_return v5
                     block2:
                         debuglog v2
-                        exit
+                        unit_end
                     
                     fn count_up(p0):
                     block0:
@@ -42,7 +42,7 @@ AotAnalysis(
                         v5 = const "arithmetic overflow"
                         v6 = error_from v5
                         v7 = err v6
-                        exit v7
+                        return v7
                     block4:
                         store.copy s0, v3
                         v8 = const 1u32
@@ -52,14 +52,14 @@ AotAnalysis(
                         v11 = const "arithmetic overflow"
                         v12 = error_from v11
                         v13 = err v12
-                        exit v13
+                        return v13
                     block6:
                         store.copy s1, v9
                         goto block1
                     block7:
                         v14 = load.copy s0
                         v15 = ok v14
-                        exit v15
+                        return v15
                 """,
             ),
             aot_compile: Some(AotCompileResult(

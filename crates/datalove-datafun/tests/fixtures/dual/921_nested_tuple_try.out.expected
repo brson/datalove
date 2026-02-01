@@ -16,7 +16,7 @@ DualAnalysis(
                         v0 = call @0 u0()
                         debuglog v0
                         drop v0
-                        exit
+                        unit_end
                     
                     fn test():
                     block0:
@@ -29,14 +29,14 @@ DualAnalysis(
                         v5 = none
                         drop v2
                         drop v1
-                        exit v5
+                        return v5
                     block2:
                         v6 = const "third"
                         v7 = pack Tuple2 {v3, v6}
                         v8 = pack Tuple2 {v2, v7}
                         v9 = pack Tuple2 {v1, v8}
                         v10 = some v9
-                        exit v10
+                        return v10
                 """,
             ),
             aot_lowering: LoweringResult(
@@ -47,7 +47,7 @@ DualAnalysis(
                         v0 = call @0 u0()
                         debuglog v0
                         drop v0
-                        exit
+                        unit_end
                     
                     fn test():
                     block0:
@@ -60,14 +60,14 @@ DualAnalysis(
                         v5 = none
                         drop v2
                         drop v1
-                        exit v5
+                        return v5
                     block2:
                         v6 = const "third"
                         v7 = pack Tuple2 {v3, v6}
                         v8 = pack Tuple2 {v2, v7}
                         v9 = pack Tuple2 {v1, v8}
                         v10 = some v9
-                        exit v10
+                        return v10
                 """,
             ),
             ir_match: true,

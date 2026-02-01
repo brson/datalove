@@ -17,7 +17,7 @@ Analysis(
                     fn get_opt(p0):
                     block0:
                         v0 = copy p0
-                        exit v0
+                        return v0
                 """,
             ),
             output: "",
@@ -42,7 +42,7 @@ Analysis(
                         v4 = comptime_call m0.u0(v2) [disc=0, comptime_params=[0]]
                         debuglog v3
                         debuglog v4
-                        exit
+                        unit_end
                 """,
             ),
             output: "(fragment executed)",
@@ -65,7 +65,7 @@ Analysis(
                         v0 = copy unit0.v3
                         v1 = copy unit0.v4
                         v2 = pack Tuple2 {v0, v1}
-                        exit v2
+                        unit_end v2
                 """,
             ),
             output: "(some 42, none)",

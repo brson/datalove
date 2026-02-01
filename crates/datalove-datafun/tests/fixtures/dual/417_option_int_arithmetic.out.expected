@@ -16,7 +16,7 @@ DualAnalysis(
                         v0 = call @0 u0()
                         debuglog v0
                         drop v0
-                        exit
+                        unit_end
                     
                     fn test():
                     block0:
@@ -28,13 +28,13 @@ DualAnalysis(
                         branch v5, block2, block1
                     block1:
                         v6 = none
-                        exit v6
+                        return v6
                     block2:
                         v7, v8 = unwrap_option v3
                         branch v8, block4, block3
                     block3:
                         v9 = none
-                        exit v9
+                        return v9
                     block4:
                         v10 = widen v4
                         v11 = widen v7
@@ -42,7 +42,7 @@ DualAnalysis(
                         v13 = some v12
                         drop v10
                         drop v11
-                        exit v13
+                        return v13
                 """,
             ),
             aot_lowering: LoweringResult(
@@ -53,7 +53,7 @@ DualAnalysis(
                         v0 = call @0 u0()
                         debuglog v0
                         drop v0
-                        exit
+                        unit_end
                     
                     fn test():
                     block0:
@@ -65,13 +65,13 @@ DualAnalysis(
                         branch v5, block2, block1
                     block1:
                         v6 = none
-                        exit v6
+                        return v6
                     block2:
                         v7, v8 = unwrap_option v3
                         branch v8, block4, block3
                     block3:
                         v9 = none
-                        exit v9
+                        return v9
                     block4:
                         v10 = widen v4
                         v11 = widen v7
@@ -79,7 +79,7 @@ DualAnalysis(
                         v13 = some v12
                         drop v10
                         drop v11
-                        exit v13
+                        return v13
                 """,
             ),
             ir_match: true,

@@ -1285,11 +1285,14 @@ pub enum Terminator {
         else_args: Vec<Operand>,
     },
 
-    /// Normal exit from code unit (function return or script completion).
-    Exit { value: Option<Operand> },
+    /// Return from a function.
+    Return { value: Option<Operand> },
 
-    /// Early exit from code unit (from `ret`, !, or checked operators in scripts).
-    EarlyExit { value: Operand },
+    /// End of a script unit.
+    UnitEnd { result: Option<Operand> },
+
+    /// Early exit from a script unit (from `ret`, !, or checked operators).
+    UnitEarlyReturn { value: Operand },
 }
 
 /// A basic block - sequence of instructions followed by a terminator.

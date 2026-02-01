@@ -16,7 +16,7 @@ Analysis(
                     block0:
                         v0 = const none
                         debuglog v0
-                        exit
+                        unit_end
                 """,
             ),
             output: "(fragment executed)",

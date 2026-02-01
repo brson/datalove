@@ -18,7 +18,7 @@ Analysis(
                         v1 = const -2147483648i32
                         v2 = const -9223372036854775808i64
                         v3 = pack Tuple3 {v0, v1, v2}
-                        exit
+                        unit_end
                 """,
             ),
             output: "(fragment executed)",

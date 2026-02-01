@@ -17,7 +17,7 @@ Analysis(
                         v0 = const 100u32
                         v1 = error_from v0
                         unit_end_drop v1
-                        exit
+                        unit_end
                 """,
             ),
             output: "(fragment executed)",
@@ -37,7 +37,7 @@ Analysis(
                     scriptunit:
                     block0:
                         v0 = move unit0.v1
-                        exit v0
+                        unit_end v0
                 """,
             ),
             output: "error 100",

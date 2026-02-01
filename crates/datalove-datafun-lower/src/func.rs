@@ -135,9 +135,9 @@ pub fn lower_function_body<'db>(
     // If no explicit return, add implicit return unit.
     // Drop analysis schedules drops at function scope exit.
     let needs_return = ctx.body.blocks.is_empty()
-        || !matches!(ctx.body.blocks.last().unwrap().terminator, Terminator::Exit { .. });
+        || !matches!(ctx.body.blocks.last().unwrap().terminator, Terminator::Return { .. });
     if needs_return {
-        ctx.finish_block(Terminator::Exit { value: None });
+        ctx.finish_block(Terminator::Return { value: None });
     }
 
     // Renumber blocks for O(1) lookup in interpreter.

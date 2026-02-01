@@ -19,7 +19,7 @@ Analysis(
                         v2 = const "test"
                         v3 = list [v0, v1, v2]
                         unit_end_drop v3
-                        exit
+                        unit_end
                 """,
             ),
             output: "(fragment executed)",
@@ -39,7 +39,7 @@ Analysis(
                     scriptunit:
                     block0:
                         v0 = move unit0.v3
-                        exit v0
+                        unit_end v0
                 """,
             ),
             output: "[\"hello\", \"world\", \"test\"]",

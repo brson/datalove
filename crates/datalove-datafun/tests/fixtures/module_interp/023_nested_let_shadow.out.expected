@@ -16,13 +16,13 @@ ModulesAnalysis(
                 branch v3, block2, block3
             block2:
                 v4 = const 3u32
-                exit v4
+                return v4
             block3:
                 v5 = const 99u32
-                exit v5
+                return v5
             block4:
                 v6 = const 88u32
-                exit v6
+                return v6
         """,
     ),
     output: "3",

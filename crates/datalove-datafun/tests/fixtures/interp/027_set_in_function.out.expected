@@ -14,7 +14,7 @@ Analysis(
                 ir: """
                     scriptunit:
                     block0:
-                        exit
+                        unit_end
                     
                     fn make_set():
                     block0:
@@ -22,7 +22,7 @@ Analysis(
                         v1 = const 200u32
                         v2 = const 300u32
                         v3 = set {v0, v1, v2}
-                        exit v3
+                        return v3
                 """,
             ),
             output: "(fragment executed)",
@@ -42,7 +42,7 @@ Analysis(
                     scriptunit:
                     block0:
                         v0 = call @0 unit0.u0()
-                        exit v0
+                        unit_end v0
                 """,
             ),
             output: "set {100, 200, 300}",

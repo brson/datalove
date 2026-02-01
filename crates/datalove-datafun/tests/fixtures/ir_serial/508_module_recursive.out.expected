@@ -14,13 +14,13 @@ IrSerialAnalysis(
                         v1 = call @0 m0.u0(v0)
                         debuglog v1
                         drop v1
-                        exit
+                        unit_end
                 """,
             ),
             direct_interp_output: "ok 120\n",
             direct_aot_output: "ok 120\n",
-            serialized_ir_size: 1363,
-            serialized_registry_size: 9603,
+            serialized_ir_size: 1367,
+            serialized_registry_size: 9613,
             deser_success: true,
             deser_interp_output: "ok 120\n",
             deser_aot_output: "ok 120\n",

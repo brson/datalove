@@ -21,7 +21,7 @@ Analysis(
                         v4 = const 4u32
                         v5 = pack Tuple2 {v3, v4}
                         v6 = table [v2, v5]
-                        exit v6
+                        unit_end v6
                 """,
             ),
             output: "{| a, b; 1, 2; 3, 4 |}",

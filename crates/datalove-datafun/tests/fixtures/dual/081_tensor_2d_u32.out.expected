@@ -22,7 +22,7 @@ DualAnalysis(
                         v6 = tensor [2, 3] [v0, v1, v2, v3, v4, v5]
                         debuglog v6
                         unit_end_drop v6
-                        exit
+                        unit_end
                 """,
             ),
             aot_lowering: LoweringResult(
@@ -39,7 +39,7 @@ DualAnalysis(
                         v6 = tensor [2, 3] [v0, v1, v2, v3, v4, v5]
                         debuglog v6
                         unit_end_drop v6
-                        exit
+                        unit_end
                 """,
             ),
             ir_match: true,

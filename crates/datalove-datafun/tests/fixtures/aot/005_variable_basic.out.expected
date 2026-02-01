@@ -19,7 +19,7 @@ AotAnalysis(
                         v1 = const 15u32
                         store.copy s0, v1
                         debuglog s0
-                        exit
+                        unit_end
                 """,
             ),
             aot_compile: Some(AotCompileResult(

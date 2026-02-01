@@ -422,8 +422,9 @@ fn remap_terminator_blocks(term: &Terminator, block_offset: u32, _num_blocks: u3
                 else_args: else_args.clone(),
             }
         }
-        Terminator::Exit { value } => Terminator::Exit { value: value.clone() },
-        Terminator::EarlyExit { value } => Terminator::EarlyExit { value: value.clone() },
+        Terminator::Return { value } => Terminator::Return { value: value.clone() },
+        Terminator::UnitEnd { result } => Terminator::UnitEnd { result: result.clone() },
+        Terminator::UnitEarlyReturn { value } => Terminator::UnitEarlyReturn { value: value.clone() },
     }
 }
 
@@ -542,10 +543,13 @@ fn rewrite_comptime_params_in_terminator(
     };
 
     match term {
-        Terminator::Exit { value } => Terminator::Exit {
+        Terminator::Return { value } => Terminator::Return {
             value: value.as_ref().map(|v| rewrite_operand(v)),
         },
-        Terminator::EarlyExit { value } => Terminator::EarlyExit {
+        Terminator::UnitEnd { result } => Terminator::UnitEnd {
+            result: result.as_ref().map(|v| rewrite_operand(v)),
+        },
+        Terminator::UnitEarlyReturn { value } => Terminator::UnitEarlyReturn {
             value: rewrite_operand(value),
         },
         Terminator::Goto { target, args } => Terminator::Goto {

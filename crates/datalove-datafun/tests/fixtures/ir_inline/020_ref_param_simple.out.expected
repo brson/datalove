@@ -3,12 +3,12 @@ fn caller():
 block0:
     v0 = const 42i64
     v1 = call @0 m0.u0(v0)
-    exit v1
+    return v1
 
 fn read_val(p0):
 block0:
     v0 = copy p0
-    exit v0
+    return v0
 
 === INLINE DIRECTIVES ===
 inline caller read_val
@@ -22,12 +22,12 @@ block1:
     v2 = copy v0
     goto block2(v2)
 block2(v1):
-    exit v1
+    return v1
 
 fn read_val(p0):
 block0:
     v0 = copy p0
-    exit v0
+    return v0
 
 === INLINING STATS ===
 Inlined: 1 call(s)

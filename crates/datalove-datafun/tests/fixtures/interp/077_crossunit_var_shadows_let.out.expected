@@ -15,7 +15,7 @@ Analysis(
                     scriptunit:
                     block0:
                         v0 = const 1u32
-                        exit
+                        unit_end
                 """,
             ),
             output: "(fragment executed)",
@@ -36,7 +36,7 @@ Analysis(
                     block0:
                         v0 = const 2u32
                         store.copy.tracked s0, v0
-                        exit
+                        unit_end
                 """,
             ),
             output: "(fragment executed)",
@@ -56,7 +56,7 @@ Analysis(
                     scriptunit:
                     block0:
                         v0 = copy unit1.s0
-                        exit v0
+                        unit_end v0
                 """,
             ),
             output: "2",

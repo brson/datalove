@@ -17,12 +17,12 @@ Analysis(
                         v0 = call @0 u0()
                         debuglog v0
                         drop v0
-                        exit
+                        unit_end
                     
                     fn get_message():
                     block0:
                         v0 = const "\"test message\""
-                        exit v0
+                        return v0
                 """,
             ),
             output: "(fragment executed)",

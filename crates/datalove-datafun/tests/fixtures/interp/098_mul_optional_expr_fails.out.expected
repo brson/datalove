@@ -14,17 +14,17 @@ Analysis(
                 ir: """
                     scriptunit:
                     block0:
-                        exit
+                        unit_end
                     
                     fn get_a():
                     block0:
                         v0 = const 10u32
-                        exit v0
+                        return v0
                     
                     fn get_b():
                     block0:
                         v0 = const 3u32
-                        exit v0
+                        return v0
                 """,
             ),
             output: "(fragment executed)",

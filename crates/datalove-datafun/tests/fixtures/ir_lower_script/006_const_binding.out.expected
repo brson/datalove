@@ -2,5 +2,5 @@
 scriptunit:
 block0:
     v0 = const 42u32
-    exit
+    unit_end
 

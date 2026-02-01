@@ -16,13 +16,13 @@ DualAnalysis(
                     block0:
                         v0 = copy p0
                         v1 = getfield v0.0
-                        exit v1
+                        return v1
                     
                     fn get_y(p0):
                     block0:
                         v0 = copy p0
                         v1 = getfield v0.1
-                        exit v1
+                        return v1
                 """,
             ),
             aot_lowering: LoweringResult(
@@ -32,13 +32,13 @@ DualAnalysis(
                     block0:
                         v0 = copy p0
                         v1 = getfield v0.0
-                        exit v1
+                        return v1
                     
                     fn get_y(p0):
                     block0:
                         v0 = copy p0
                         v1 = getfield v0.1
-                        exit v1
+                        return v1
                 """,
             ),
             ir_match: true,
@@ -66,7 +66,7 @@ DualAnalysis(
                         debuglog v3
                         v4 = call @1 m0.u1(v2)
                         debuglog v4
-                        exit
+                        unit_end
                 """,
             ),
             aot_lowering: LoweringResult(
@@ -81,7 +81,7 @@ DualAnalysis(
                         debuglog v3
                         v4 = call @1 m0.u1(v2)
                         debuglog v4
-                        exit
+                        unit_end
                 """,
             ),
             ir_match: true,

@@ -18,7 +18,7 @@ Analysis(
                         v1 = const 8u32
                         v2 = const 9u32
                         v3 = const [7u32, 8u32, 9u32]
-                        exit v3
+                        return v3
                 """,
             ),
             output: "",
@@ -40,7 +40,7 @@ Analysis(
                         v0 = call @0 m0.u0()
                         debuglog v0
                         drop v0
-                        exit
+                        unit_end
                 """,
             ),
             output: "(fragment executed)",

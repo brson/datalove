@@ -11,7 +11,7 @@ ModulesAnalysis(
                 v1 = const 2u32
                 store.copy.tracked s0, v1
                 v2 = load.copy s0
-                exit v2
+                return v2
         """,
     ),
     output: "2",

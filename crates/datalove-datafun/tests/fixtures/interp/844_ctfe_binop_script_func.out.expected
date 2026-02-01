@@ -17,7 +17,7 @@ Analysis(
                         v0 = call @0 u0()
                         debuglog v0
                         drop v0
-                        exit
+                        unit_end
                     
                     fn compute():
                     block0:
@@ -26,7 +26,7 @@ Analysis(
                         v2 = const 10int
                         drop v0
                         drop v1
-                        exit v2
+                        return v2
                 """,
             ),
             output: "(fragment executed)",

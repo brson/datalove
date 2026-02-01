@@ -160,7 +160,9 @@ pub fn eliminate_dead_blocks_func(func: &mut IrCodeUnit) {
                     worklist.push(*then_block);
                     worklist.push(*else_block);
                 }
-                Terminator::Exit { .. } | Terminator::EarlyExit { .. } => {
+                Terminator::Return { .. }
+                | Terminator::UnitEnd { .. }
+                | Terminator::UnitEarlyReturn { .. } => {
                     // No successors.
                 }
             }
@@ -199,7 +201,9 @@ pub fn eliminate_dead_blocks_func(func: &mut IrCodeUnit) {
                 *then_block = *old_to_new.get(then_block).unwrap();
                 *else_block = *old_to_new.get(else_block).unwrap();
             }
-            Terminator::Exit { .. } | Terminator::EarlyExit { .. } => {
+            Terminator::Return { .. }
+            | Terminator::UnitEnd { .. }
+            | Terminator::UnitEarlyReturn { .. } => {
                 // No targets to update.
             }
         }
@@ -265,7 +269,10 @@ fn collect_block_used_values(block: &IrBlock, used: &mut HashSet<ValueId>) {
 
     // Collect from terminator.
     match &block.terminator {
-        Terminator::Exit { value: Some(op) } => {
+        Terminator::Return { value: Some(op) } => {
+            add_operand_value(op, used);
+        }
+        Terminator::UnitEnd { result: Some(op) } => {
             add_operand_value(op, used);
         }
         Terminator::Branch { cond, then_args, else_args, .. } => {
@@ -282,7 +289,7 @@ fn collect_block_used_values(block: &IrBlock, used: &mut HashSet<ValueId>) {
                 add_operand_value(arg, used);
             }
         }
-        Terminator::EarlyExit { value } => {
+        Terminator::UnitEarlyReturn { value } => {
             add_operand_value(value, used);
         }
         _ => {}

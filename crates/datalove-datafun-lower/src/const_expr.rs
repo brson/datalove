@@ -82,15 +82,15 @@ fn lower_const_expr_to_unit<'db>(
     // Copy return type from parent for early-return operators (? and !).
     isolated_ctx.return_type = parent_ctx.return_type.clone();
 
-    // Mark as script unit so early-return uses EarlyExit terminator.
+    // Mark as script unit so early-return uses UnitEarlyReturn terminator.
     isolated_ctx.is_script_unit = true;
 
     // Use the real lowering pipeline.
     let result_value = super::expr::lower_expression(&mut isolated_ctx, expr)?;
 
-    // Finish the block with an Exit terminator.
-    isolated_ctx.finish_block(Terminator::Exit {
-        value: Some(Operand::Value(result_value)),
+    // Finish the block with a UnitEnd terminator.
+    isolated_ctx.finish_block(Terminator::UnitEnd {
+        result: Some(Operand::Value(result_value)),
     });
 
     // Renumber blocks for sequential IDs.
@@ -155,7 +155,7 @@ pub fn lower_const_expr_to_unit_standalone<'db>(
     // Set return type for early-return operators (? and !).
     ctx.return_type = return_type;
 
-    // Mark as script unit so early-return uses EarlyExit terminator.
+    // Mark as script unit so early-return uses UnitEarlyReturn terminator.
     ctx.is_script_unit = true;
 
     // Pre-register all functions using the name-to-id map so call resolution works.
@@ -170,9 +170,9 @@ pub fn lower_const_expr_to_unit_standalone<'db>(
     // Use the real lowering pipeline.
     let result_value = super::expr::lower_expression(&mut ctx, expr)?;
 
-    // Finish the block with an Exit terminator.
-    ctx.finish_block(Terminator::Exit {
-        value: Some(Operand::Value(result_value)),
+    // Finish the block with a UnitEnd terminator.
+    ctx.finish_block(Terminator::UnitEnd {
+        result: Some(Operand::Value(result_value)),
     });
 
     // Renumber blocks for sequential IDs.

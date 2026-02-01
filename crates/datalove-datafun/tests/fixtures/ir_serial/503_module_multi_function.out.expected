@@ -22,13 +22,13 @@ IrSerialAnalysis(
                         v5 = call @2 m0.u2(v4)
                         debuglog v5
                         drop v5
-                        exit
+                        unit_end
                 """,
             ),
             direct_interp_output: "ok 6\nok 4\nok 25\n",
             direct_aot_output: "ok 6\nok 4\nok 25\n",
-            serialized_ir_size: 2753,
-            serialized_registry_size: 10723,
+            serialized_ir_size: 2757,
+            serialized_registry_size: 10735,
             deser_success: true,
             deser_interp_output: "ok 6\nok 4\nok 25\n",
             deser_aot_output: "ok 6\nok 4\nok 25\n",

@@ -20,14 +20,14 @@ Analysis(
                         v3 = pack Tuple2 {v1, v2}
                         unit_end_drop v0
                         unit_end_drop v3
-                        exit
+                        unit_end
                     
                     fn read_int(p0):
                     block0:
                         v0 = const 0int
                         v1 = add p0, v0
                         drop v0
-                        exit v1
+                        return v1
                 """,
             ),
             output: "(fragment executed)",
@@ -47,7 +47,7 @@ Analysis(
                     scriptunit:
                     block0:
                         v0 = move unit0.v3
-                        exit v0
+                        unit_end v0
                 """,
             ),
             output: "(42, 42)",

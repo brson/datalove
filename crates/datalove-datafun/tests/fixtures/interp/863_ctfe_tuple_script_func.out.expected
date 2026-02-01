@@ -16,14 +16,14 @@ Analysis(
                     block0:
                         v0 = call @0 u0()
                         debuglog v0
-                        exit
+                        unit_end
                     
                     fn get_pair():
                     block0:
                         v0 = const 100u32
                         v1 = const false
                         v2 = const (100u32, false)
-                        exit v2
+                        return v2
                 """,
             ),
             output: "(fragment executed)",

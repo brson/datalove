@@ -16,14 +16,14 @@ Analysis(
                     block0:
                         v0 = call @0 u0()
                         debuglog v0
-                        exit
+                        unit_end
                     
                     fn check_xor():
                     block0:
                         v0 = const true
                         v1 = const true
                         v2 = const false
-                        exit v2
+                        return v2
                 """,
             ),
             output: "(fragment executed)",

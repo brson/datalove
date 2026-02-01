@@ -20,14 +20,14 @@ DualAnalysis(
                         debuglog *v3
                         v4 = getfieldref v2.1
                         debuglog *v4
-                        exit
+                        unit_end
                     
                     fn make_pair(p0, p1):
                     block0:
                         v0 = copy p0
                         v1 = copy p1
                         v2 = pack Struct0 {v0, v1}
-                        exit v2
+                        return v2
                 """,
             ),
             aot_lowering: LoweringResult(
@@ -42,14 +42,14 @@ DualAnalysis(
                         debuglog *v3
                         v4 = getfieldref v2.1
                         debuglog *v4
-                        exit
+                        unit_end
                     
                     fn make_pair(p0, p1):
                     block0:
                         v0 = copy p0
                         v1 = copy p1
                         v2 = pack Struct0 {v0, v1}
-                        exit v2
+                        return v2
                 """,
             ),
             ir_match: true,

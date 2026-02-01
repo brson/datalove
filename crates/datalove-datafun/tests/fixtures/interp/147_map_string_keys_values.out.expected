@@ -20,7 +20,7 @@ Analysis(
                         v3 = const "second"
                         v4 = map {v0: v1, v2: v3}
                         unit_end_drop v4
-                        exit
+                        unit_end
                 """,
             ),
             output: "(fragment executed)",
@@ -40,7 +40,7 @@ Analysis(
                     scriptunit:
                     block0:
                         v0 = move unit0.v4
-                        exit v0
+                        unit_end v0
                 """,
             ),
             output: "map {\"one\" = \"first\", \"two\" = \"second\"}",

@@ -17,7 +17,7 @@ DualAnalysis(
                         v1 = pack Struct0 {v0}
                         debuglog v1
                         drop v1
-                        exit
+                        unit_end
                 """,
             ),
             aot_lowering: LoweringResult(
@@ -29,7 +29,7 @@ DualAnalysis(
                         v1 = pack Struct0 {v0}
                         debuglog v1
                         drop v1
-                        exit
+                        unit_end
                 """,
             ),
             ir_match: true,

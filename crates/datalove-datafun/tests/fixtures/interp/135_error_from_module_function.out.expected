@@ -16,7 +16,7 @@ Analysis(
                     block0:
                         v0 = const "module error"
                         v1 = error_from v0
-                        exit v1
+                        return v1
                 """,
             ),
             output: "",
@@ -35,7 +35,7 @@ Analysis(
                 ir: """
                     scriptunit:
                     block0:
-                        exit
+                        unit_end
                 """,
             ),
             output: "(fragment executed)",
@@ -55,7 +55,7 @@ Analysis(
                     scriptunit:
                     block0:
                         v0 = call @0 m0.u0()
-                        exit v0
+                        unit_end v0
                 """,
             ),
             output: "error \"module error\"",

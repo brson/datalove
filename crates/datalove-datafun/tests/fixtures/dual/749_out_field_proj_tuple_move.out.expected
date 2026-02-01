@@ -23,14 +23,14 @@ DualAnalysis(
                         v5 = getfieldref s0.0
                         debuglog *v5
                         unit_end_drop.tracked s0
-                        exit
+                        unit_end
                     
                     fn write_42(p0):
                     block0:
                         v0 = const 42int
                         store.tracked p0, v0
                         v1 = const true
-                        exit v1
+                        return v1
                 """,
             ),
             aot_lowering: LoweringResult(
@@ -48,14 +48,14 @@ DualAnalysis(
                         v5 = getfieldref s0.0
                         debuglog *v5
                         unit_end_drop.tracked s0
-                        exit
+                        unit_end
                     
                     fn write_42(p0):
                     block0:
                         v0 = const 42int
                         store.tracked p0, v0
                         v1 = const true
-                        exit v1
+                        return v1
                 """,
             ),
             ir_match: true,

@@ -14,7 +14,7 @@ ModulesAnalysis(
                 v2 = const 3u32
                 store.copy s1, v2
                 v3 = load.copy s1
-                exit v3
+                return v3
         """,
     ),
     output: "3",

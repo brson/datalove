@@ -19,7 +19,7 @@ AotAnalysis(
                         v2 = pack Struct0 {v0, v1}
                         debuglog v2
                         unit_end_drop v2
-                        exit
+                        unit_end
                 """,
             ),
             aot_compile: Some(AotCompileResult(

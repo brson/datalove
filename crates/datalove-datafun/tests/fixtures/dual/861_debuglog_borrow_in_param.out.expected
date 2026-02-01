@@ -17,14 +17,14 @@ DualAnalysis(
                         debuglog p0
                         v0 = const false
                         drop p0
-                        exit v0
+                        return v0
                     
                     fn test_string(p0):
                     block0:
                         debuglog p0
                         v0 = const 42u32
                         drop p0
-                        exit v0
+                        return v0
                 """,
             ),
             aot_lowering: LoweringResult(
@@ -35,14 +35,14 @@ DualAnalysis(
                         debuglog p0
                         v0 = const false
                         drop p0
-                        exit v0
+                        return v0
                     
                     fn test_string(p0):
                     block0:
                         debuglog p0
                         v0 = const 42u32
                         drop p0
-                        exit v0
+                        return v0
                 """,
             ),
             ir_match: true,
@@ -69,7 +69,7 @@ DualAnalysis(
                         v2 = const "hello"
                         v3 = call @1 m0.u1(v2)
                         debuglog v3
-                        exit
+                        unit_end
                 """,
             ),
             aot_lowering: LoweringResult(
@@ -83,7 +83,7 @@ DualAnalysis(
                         v2 = const "hello"
                         v3 = call @1 m0.u1(v2)
                         debuglog v3
-                        exit
+                        unit_end
                 """,
             ),
             ir_match: true,

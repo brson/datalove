@@ -15,7 +15,7 @@ Analysis(
                     scriptunit:
                     block0:
                         v0 = const 999u32
-                        exit
+                        unit_end
                 """,
             ),
             output: "(fragment executed)",
@@ -35,7 +35,7 @@ Analysis(
                     scriptunit:
                     block0:
                         v0 = copy unit0.v0
-                        exit v0
+                        unit_end v0
                 """,
             ),
             output: "999",

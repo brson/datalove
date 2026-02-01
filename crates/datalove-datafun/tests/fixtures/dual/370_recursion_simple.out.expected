@@ -17,7 +17,7 @@ DualAnalysis(
                         v1 = call @0 u0(v0)
                         debuglog v1
                         drop v1
-                        exit
+                        unit_end
                     
                     fn countdown(p0):
                     block0:
@@ -27,7 +27,7 @@ DualAnalysis(
                     block1:
                         v2 = const 0u32
                         v3 = ok v2
-                        exit v3
+                        return v3
                     block2:
                         v4 = const 1u32
                         v5, v6 = sub.checked p0, v4
@@ -36,10 +36,10 @@ DualAnalysis(
                         v7 = const "arithmetic overflow"
                         v8 = error_from v7
                         v9 = err v8
-                        exit v9
+                        return v9
                     block4:
                         v10 = call @0 u0(v5)
-                        exit v10
+                        return v10
                 """,
             ),
             aot_lowering: LoweringResult(
@@ -51,7 +51,7 @@ DualAnalysis(
                         v1 = call @0 u0(v0)
                         debuglog v1
                         drop v1
-                        exit
+                        unit_end
                     
                     fn countdown(p0):
                     block0:
@@ -61,7 +61,7 @@ DualAnalysis(
                     block1:
                         v2 = const 0u32
                         v3 = ok v2
-                        exit v3
+                        return v3
                     block2:
                         v4 = const 1u32
                         v5, v6 = sub.checked p0, v4
@@ -70,10 +70,10 @@ DualAnalysis(
                         v7 = const "arithmetic overflow"
                         v8 = error_from v7
                         v9 = err v8
-                        exit v9
+                        return v9
                     block4:
                         v10 = call @0 u0(v5)
-                        exit v10
+                        return v10
                 """,
             ),
             ir_match: true,

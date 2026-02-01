@@ -362,7 +362,7 @@ mod tests {
                 instructions: vec![
                     Instruction::Const { dest: ValueId(0), value: ConstValue::I32(42) },
                 ],
-                terminator: Terminator::Exit {
+                terminator: Terminator::Return {
                     value: Some(Operand::Value(ValueId(0))),
                 },
             }],
@@ -471,7 +471,7 @@ mod tests {
                 id: BlockId(0),
                 params: vec![],
                 instructions: vec![],
-                terminator: Terminator::Exit {
+                terminator: Terminator::Return {
                     value: Some(Operand::Param(ParamId(0))),
                 },
             }],
@@ -499,7 +499,7 @@ mod tests {
                         ],
                     },
                 ],
-                terminator: Terminator::Exit {
+                terminator: Terminator::Return {
                     value: Some(Operand::Value(ValueId(1))),
                 },
             }],
@@ -560,7 +560,7 @@ mod tests {
                 id: BlockId(0),
                 params: vec![],
                 instructions: vec![],
-                terminator: Terminator::Exit {
+                terminator: Terminator::Return {
                     value: Some(Operand::Param(ParamId(0))),
                 },
             }],
@@ -588,7 +588,7 @@ mod tests {
                         ],
                     },
                 ],
-                terminator: Terminator::Exit {
+                terminator: Terminator::Return {
                     value: Some(Operand::Value(ValueId(1))),
                 },
             }],

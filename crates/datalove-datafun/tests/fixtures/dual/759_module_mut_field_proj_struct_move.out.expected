@@ -17,7 +17,7 @@ DualAnalysis(
                         v0 = const 42int
                         store p0, v0
                         v1 = const true
-                        exit v1
+                        return v1
                 """,
             ),
             aot_lowering: LoweringResult(
@@ -28,7 +28,7 @@ DualAnalysis(
                         v0 = const 42int
                         store p0, v0
                         v1 = const true
-                        exit v1
+                        return v1
                 """,
             ),
             ir_match: true,
@@ -58,7 +58,7 @@ DualAnalysis(
                         v5 = getfieldref s0.0
                         debuglog *v5
                         unit_end_drop.tracked s0
-                        exit
+                        unit_end
                 """,
             ),
             aot_lowering: LoweringResult(
@@ -75,7 +75,7 @@ DualAnalysis(
                         v5 = getfieldref s0.0
                         debuglog *v5
                         unit_end_drop.tracked s0
-                        exit
+                        unit_end
                 """,
             ),
             ir_match: true,

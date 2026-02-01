@@ -16,14 +16,14 @@ DualAnalysis(
                         v0 = call @0 u1()
                         debuglog v0
                         drop v0
-                        exit
+                        unit_end
                     
                     fn make_pair(p0, p1):
                     block0:
                         v0 = move p0
                         v1 = copy p1
                         v2 = pack Struct0 {v0, v1}
-                        exit v2
+                        return v2
                     
                     fn test():
                     block0:
@@ -34,11 +34,11 @@ DualAnalysis(
                     block1:
                         v4 = none
                         drop v1
-                        exit v4
+                        return v4
                     block2:
                         v5 = call @0 u0(v1, v2)
                         v6 = some v5
-                        exit v6
+                        return v6
                 """,
             ),
             aot_lowering: LoweringResult(
@@ -49,14 +49,14 @@ DualAnalysis(
                         v0 = call @0 u1()
                         debuglog v0
                         drop v0
-                        exit
+                        unit_end
                     
                     fn make_pair(p0, p1):
                     block0:
                         v0 = move p0
                         v1 = copy p1
                         v2 = pack Struct0 {v0, v1}
-                        exit v2
+                        return v2
                     
                     fn test():
                     block0:
@@ -67,11 +67,11 @@ DualAnalysis(
                     block1:
                         v4 = none
                         drop v1
-                        exit v4
+                        return v4
                     block2:
                         v5 = call @0 u0(v1, v2)
                         v6 = some v5
-                        exit v6
+                        return v6
                 """,
             ),
             ir_match: true,

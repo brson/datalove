@@ -26,17 +26,17 @@ Analysis(
                         v6 = const false
                         v7 = call @3 u1(v6)
                         debuglog v7
-                        exit
+                        unit_end
                     
                     fn pass_through(p0):
                     block0:
                         v0 = copy p0
-                        exit v0
+                        return v0
                     
                     fn negate(p0):
                     block0:
                         v0 = logic_not p0
-                        exit v0
+                        return v0
                 """,
             ),
             output: "(fragment executed)",

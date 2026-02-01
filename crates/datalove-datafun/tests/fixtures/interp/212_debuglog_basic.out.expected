@@ -19,7 +19,7 @@ Analysis(
                         v1 = const "hello"
                         debuglog v1
                         unit_end_drop v1
-                        exit
+                        unit_end
                 """,
             ),
             output: "(fragment executed)",

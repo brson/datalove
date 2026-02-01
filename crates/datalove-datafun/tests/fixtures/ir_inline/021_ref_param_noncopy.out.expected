@@ -4,14 +4,14 @@ block0:
     v0 = const 42int
     v1 = call @0 m0.u0(v0)
     drop v0
-    exit v1
+    return v1
 
 fn read_int(p0):
 block0:
     v0 = const 0int
     v1 = add p0, v0
     drop v0
-    exit v1
+    return v1
 
 === INLINE DIRECTIVES ===
 inline caller read_int
@@ -28,14 +28,14 @@ block1:
     goto block2(v3)
 block2(v1):
     drop v0
-    exit v1
+    return v1
 
 fn read_int(p0):
 block0:
     v0 = const 0int
     v1 = add p0, v0
     drop v0
-    exit v1
+    return v1
 
 === INLINING STATS ===
 Inlined: 1 call(s)

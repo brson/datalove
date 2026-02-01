@@ -268,7 +268,7 @@ mod tests {
                     rhs: Operand::Value(ValueId(1)),
                 },
             ],
-            terminator: Terminator::Exit { value: None },
+            terminator: Terminator::UnitEnd { result: None },
         }];
 
         let unit = IrCodeUnit {
@@ -327,7 +327,7 @@ mod tests {
                     args: vec![],
                 },
             ],
-            terminator: Terminator::Exit { value: None },
+            terminator: Terminator::UnitEnd { result: None },
         }];
 
         let unit = IrCodeUnit {

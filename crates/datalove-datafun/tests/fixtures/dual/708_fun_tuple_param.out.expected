@@ -18,13 +18,13 @@ DualAnalysis(
                         v2 = pack Tuple2 {v0, v1}
                         v3 = call @0 u0(v2)
                         debuglog v3
-                        exit
+                        unit_end
                     
                     fn get_first(p0):
                     block0:
                         v0 = copy p0
                         v1 = getfield v0.0
-                        exit v1
+                        return v1
                 """,
             ),
             aot_lowering: LoweringResult(
@@ -37,13 +37,13 @@ DualAnalysis(
                         v2 = pack Tuple2 {v0, v1}
                         v3 = call @0 u0(v2)
                         debuglog v3
-                        exit
+                        unit_end
                     
                     fn get_first(p0):
                     block0:
                         v0 = copy p0
                         v1 = getfield v0.0
-                        exit v1
+                        return v1
                 """,
             ),
             ir_match: true,

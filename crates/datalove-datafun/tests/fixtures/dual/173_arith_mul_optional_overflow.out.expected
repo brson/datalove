@@ -19,7 +19,7 @@ DualAnalysis(
                         v3 = const 999u32
                         v4 = call @1 u1(v2, v3)
                         debuglog v4
-                        exit
+                        unit_end
                     
                     fn mul_opt(p0, p1):
                     block0:
@@ -27,10 +27,10 @@ DualAnalysis(
                         branch v1, block1, block2
                     block1:
                         v2 = none
-                        exit v2
+                        return v2
                     block2:
                         v3 = some v0
-                        exit v3
+                        return v3
                     
                     fn unwrap(p0, p1):
                     block0:
@@ -38,12 +38,12 @@ DualAnalysis(
                         v1, v2 = unwrap_option v0
                         branch v2, block1, block2
                     block1:
-                        exit v1
+                        return v1
                     block2:
                         goto block3
                     block3:
                         v3 = copy p1
-                        exit v3
+                        return v3
                 """,
             ),
             aot_lowering: LoweringResult(
@@ -57,7 +57,7 @@ DualAnalysis(
                         v3 = const 999u32
                         v4 = call @1 u1(v2, v3)
                         debuglog v4
-                        exit
+                        unit_end
                     
                     fn mul_opt(p0, p1):
                     block0:
@@ -65,10 +65,10 @@ DualAnalysis(
                         branch v1, block1, block2
                     block1:
                         v2 = none
-                        exit v2
+                        return v2
                     block2:
                         v3 = some v0
-                        exit v3
+                        return v3
                     
                     fn unwrap(p0, p1):
                     block0:
@@ -76,12 +76,12 @@ DualAnalysis(
                         v1, v2 = unwrap_option v0
                         branch v2, block1, block2
                     block1:
-                        exit v1
+                        return v1
                     block2:
                         goto block3
                     block3:
                         v3 = copy p1
-                        exit v3
+                        return v3
                 """,
             ),
             ir_match: true,

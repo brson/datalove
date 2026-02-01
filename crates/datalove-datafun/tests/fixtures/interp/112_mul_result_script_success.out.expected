@@ -22,19 +22,19 @@ Analysis(
                         v4 = const "arithmetic overflow"
                         v5 = error_from v4
                         v6 = err v5
-                        early_exit v6
+                        unit_early_return v6
                     block2:
-                        exit
+                        unit_end
                     
                     fn get_a():
                     block0:
                         v0 = const 100u32
-                        exit v0
+                        return v0
                     
                     fn get_b():
                     block0:
                         v0 = const 200u32
-                        exit v0
+                        return v0
                 """,
             ),
             output: "(fragment executed)",

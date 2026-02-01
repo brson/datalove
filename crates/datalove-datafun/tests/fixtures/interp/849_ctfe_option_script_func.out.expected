@@ -16,13 +16,13 @@ Analysis(
                     block0:
                         v0 = call @0 u0()
                         debuglog v0
-                        exit
+                        unit_end
                     
                     fn get_opt():
                     block0:
                         v0 = const 100u32
                         v1 = const some 100u32
-                        exit v1
+                        return v1
                 """,
             ),
             output: "(fragment executed)",

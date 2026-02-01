@@ -137,7 +137,7 @@ pub fn lower_script_fragment_raw<'db>(
     ctx.emit_unit_end_drops();
 
     // Fragment units have no result value.
-    ctx.finish_block(Terminator::Exit { value: None });
+    ctx.finish_block(Terminator::UnitEnd { result: None });
 
     // Renumber blocks for O(1) lookup in interpreter.
     ctx.renumber_blocks();
@@ -260,9 +260,9 @@ pub fn lower_script_expr<'db>(
     // Lower the expression and capture the result.
     let value_id = lower_expression(&mut ctx, expr)?;
 
-    // Finish the final block with Exit.
-    ctx.finish_block(Terminator::Exit {
-        value: Some(Operand::Value(value_id)),
+    // Finish the final block with UnitEnd.
+    ctx.finish_block(Terminator::UnitEnd {
+        result: Some(Operand::Value(value_id)),
     });
 
     // Renumber blocks for O(1) lookup in interpreter.
@@ -459,7 +459,7 @@ fn lower_statement_for_script<'db>(
             };
             // Emit drops for nested scopes (but not top-level bindings).
             ctx.emit_before_return_drops(stmt_idx);
-            ctx.finish_block(Terminator::EarlyExit { value });
+            ctx.finish_block(Terminator::UnitEarlyReturn { value });
             // Start a new unreachable block.
             let new_block = ctx.fresh_block();
             ctx.start_block(new_block);

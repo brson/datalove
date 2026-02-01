@@ -19,7 +19,7 @@ Analysis(
                         v0 = mul p0, p1
                         drop p0
                         drop p1
-                        exit v0
+                        return v0
                 """,
             ),
             output: "",
@@ -43,7 +43,7 @@ Analysis(
                         v2 = comptime_call m0.u0(v1, v0) [disc=0, comptime_params=[1]]
                         debuglog v2
                         unit_end_drop v2
-                        exit
+                        unit_end
                 """,
             ),
             output: "(fragment executed)",
@@ -64,7 +64,7 @@ Analysis(
                     scriptunit:
                     block0:
                         v0 = move unit0.v2
-                        exit v0
+                        unit_end v0
                 """,
             ),
             output: "21",

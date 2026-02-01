@@ -14,7 +14,7 @@ Analysis(
                 ir: """
                     scriptunit:
                     block0:
-                        exit
+                        unit_end
                     
                     fn shadow(p0):
                     block0:
@@ -24,7 +24,7 @@ Analysis(
                         store.move.tracked s0, v1
                         v2 = load.move.tracked s0
                         drop p0
-                        exit v2
+                        return v2
                 """,
             ),
             output: "(fragment executed)",
@@ -45,7 +45,7 @@ Analysis(
                     block0:
                         v0 = const 5int
                         v1 = call @0 unit0.u0(v0)
-                        exit v1
+                        unit_end v1
                 """,
             ),
             output: "15",

@@ -16,7 +16,7 @@ Analysis(
                     block0:
                         v0 = const 42int
                         unit_end_drop v0
-                        exit
+                        unit_end
                 """,
             ),
             output: "(fragment executed)",
@@ -36,7 +36,7 @@ Analysis(
                     scriptunit:
                     block0:
                         v0 = move unit0.v0
-                        exit v0
+                        unit_end v0
                 """,
             ),
             output: "42",

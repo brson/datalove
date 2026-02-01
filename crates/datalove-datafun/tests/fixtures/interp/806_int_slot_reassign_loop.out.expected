@@ -14,7 +14,7 @@ Analysis(
                 ir: """
                     scriptunit:
                     block0:
-                        exit
+                        unit_end
                     
                     fn fib(p0):
                     block0:
@@ -24,7 +24,7 @@ Analysis(
                     block1:
                         v2 = widen p0
                         v3 = ok v2
-                        exit v3
+                        return v3
                     block2:
                         goto block3
                     block3:
@@ -52,7 +52,7 @@ Analysis(
                         v13 = const "arithmetic overflow"
                         v14 = error_from v13
                         v15 = err v14
-                        exit v15
+                        return v15
                     block7:
                         store.copy s2, v11
                         goto block4
@@ -60,7 +60,7 @@ Analysis(
                         v16 = load.move.tracked s1
                         v17 = ok v16
                         drop.tracked s0
-                        exit v17
+                        return v17
                 """,
             ),
             output: "(fragment executed)",
@@ -81,7 +81,7 @@ Analysis(
                     block0:
                         v0 = const 10u32
                         v1 = call @0 unit0.u0(v0)
-                        exit v1
+                        unit_end v1
                 """,
             ),
             output: "ok 55",

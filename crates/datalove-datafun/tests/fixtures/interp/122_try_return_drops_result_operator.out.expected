@@ -18,7 +18,7 @@ Analysis(
                         v1 = const 1i8
                         v2 = call @0 u0(v0, v1)
                         unit_end_drop v2
-                        exit
+                        unit_end
                     
                     fn test_add_result(p0, p1):
                     block0:
@@ -30,11 +30,11 @@ Analysis(
                         v4 = error_from v3
                         v5 = err v4
                         drop v0
-                        exit v5
+                        return v5
                     block2:
                         v6 = ok v1
                         drop v0
-                        exit v6
+                        return v6
                 """,
             ),
             output: "(fragment executed)",

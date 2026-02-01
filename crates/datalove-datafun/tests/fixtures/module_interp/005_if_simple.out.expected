@@ -11,10 +11,10 @@ ModulesAnalysis(
                 branch v0, block1, block2
             block1:
                 v1 = const 1u32
-                exit v1
+                return v1
             block2:
                 v2 = const 0u32
-                exit v2
+                return v2
         """,
     ),
     output: "1",

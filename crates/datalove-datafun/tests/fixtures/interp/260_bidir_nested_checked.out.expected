@@ -16,7 +16,7 @@ Analysis(
                     block0:
                         v0 = call @0 u0()
                         unit_end_drop v0
-                        exit
+                        unit_end
                     
                     fn nested():
                     block0:
@@ -28,7 +28,7 @@ Analysis(
                         v4 = const "arithmetic overflow"
                         v5 = error_from v4
                         v6 = err v5
-                        exit v6
+                        return v6
                     block2:
                         v7 = const 3u32
                         v8, v9 = add.checked v2, v7
@@ -37,10 +37,10 @@ Analysis(
                         v10 = const "arithmetic overflow"
                         v11 = error_from v10
                         v12 = err v11
-                        exit v12
+                        return v12
                     block4:
                         v13 = ok v8
-                        exit v13
+                        return v13
                 """,
             ),
             output: "(fragment executed)",

@@ -26,7 +26,7 @@ Analysis(
                         goto block3
                     block3:
                         v3 = const true
-                        exit v3
+                        return v3
                     
                     fn test_true():
                     block0:
@@ -35,7 +35,7 @@ Analysis(
                         v1 = const true
                         v2 = call @0 m0.u0(s0, v1)
                         v3 = load.copy s0
-                        exit v3
+                        return v3
                     
                     fn test_false():
                     block0:
@@ -44,7 +44,7 @@ Analysis(
                         v1 = const false
                         v2 = call @0 m0.u0(s0, v1)
                         v3 = load.copy s0
-                        exit v3
+                        return v3
                 """,
             ),
             output: "",
@@ -63,7 +63,7 @@ Analysis(
                 ir: """
                     scriptunit:
                     block0:
-                        exit
+                        unit_end
                 """,
             ),
             output: "(fragment executed)",
@@ -85,7 +85,7 @@ Analysis(
                         v0 = call @0 m0.u1()
                         v1 = call @1 m0.u2()
                         v2 = pack Tuple2 {v0, v1}
-                        exit v2
+                        unit_end v2
                 """,
             ),
             output: "(42, 99)",

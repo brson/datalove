@@ -40,7 +40,7 @@ DualAnalysis(
                         v19 = const 999offset
                         v20 = call @11 u0(v18, v19)
                         debuglog v20
-                        exit
+                        unit_end
                     
                     fn unwrap_offset(p0, p1):
                     block0:
@@ -48,12 +48,12 @@ DualAnalysis(
                         v1, v2 = unwrap_option v0
                         branch v2, block1, block2
                     block1:
-                        exit v1
+                        return v1
                     block2:
                         goto block3
                     block3:
                         v3 = copy p1
-                        exit v3
+                        return v3
                     
                     fn checked_add(p0, p1):
                     block0:
@@ -61,10 +61,10 @@ DualAnalysis(
                         branch v1, block1, block2
                     block1:
                         v2 = none
-                        exit v2
+                        return v2
                     block2:
                         v3 = some v0
-                        exit v3
+                        return v3
                     
                     fn checked_sub(p0, p1):
                     block0:
@@ -72,10 +72,10 @@ DualAnalysis(
                         branch v1, block1, block2
                     block1:
                         v2 = none
-                        exit v2
+                        return v2
                     block2:
                         v3 = some v0
-                        exit v3
+                        return v3
                     
                     fn checked_mul(p0, p1):
                     block0:
@@ -83,10 +83,10 @@ DualAnalysis(
                         branch v1, block1, block2
                     block1:
                         v2 = none
-                        exit v2
+                        return v2
                     block2:
                         v3 = some v0
-                        exit v3
+                        return v3
                     
                     fn checked_div(p0, p1):
                     block0:
@@ -94,10 +94,10 @@ DualAnalysis(
                         branch v1, block1, block2
                     block1:
                         v2 = none
-                        exit v2
+                        return v2
                     block2:
                         v3 = some v0
-                        exit v3
+                        return v3
                 """,
             ),
             aot_lowering: LoweringResult(
@@ -132,7 +132,7 @@ DualAnalysis(
                         v19 = const 999offset
                         v20 = call @11 u0(v18, v19)
                         debuglog v20
-                        exit
+                        unit_end
                     
                     fn unwrap_offset(p0, p1):
                     block0:
@@ -140,12 +140,12 @@ DualAnalysis(
                         v1, v2 = unwrap_option v0
                         branch v2, block1, block2
                     block1:
-                        exit v1
+                        return v1
                     block2:
                         goto block3
                     block3:
                         v3 = copy p1
-                        exit v3
+                        return v3
                     
                     fn checked_add(p0, p1):
                     block0:
@@ -153,10 +153,10 @@ DualAnalysis(
                         branch v1, block1, block2
                     block1:
                         v2 = none
-                        exit v2
+                        return v2
                     block2:
                         v3 = some v0
-                        exit v3
+                        return v3
                     
                     fn checked_sub(p0, p1):
                     block0:
@@ -164,10 +164,10 @@ DualAnalysis(
                         branch v1, block1, block2
                     block1:
                         v2 = none
-                        exit v2
+                        return v2
                     block2:
                         v3 = some v0
-                        exit v3
+                        return v3
                     
                     fn checked_mul(p0, p1):
                     block0:
@@ -175,10 +175,10 @@ DualAnalysis(
                         branch v1, block1, block2
                     block1:
                         v2 = none
-                        exit v2
+                        return v2
                     block2:
                         v3 = some v0
-                        exit v3
+                        return v3
                     
                     fn checked_div(p0, p1):
                     block0:
@@ -186,10 +186,10 @@ DualAnalysis(
                         branch v1, block1, block2
                     block1:
                         v2 = none
-                        exit v2
+                        return v2
                     block2:
                         v3 = some v0
-                        exit v3
+                        return v3
                 """,
             ),
             ir_match: true,

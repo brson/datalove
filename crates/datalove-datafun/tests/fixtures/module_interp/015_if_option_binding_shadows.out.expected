@@ -13,10 +13,10 @@ ModulesAnalysis(
                 v3, v4 = unwrap_option v2
                 branch v4, block1, block2
             block1:
-                exit v3
+                return v3
             block2:
                 v5 = const 999u32
-                exit v5
+                return v5
         """,
     ),
     output: "42",

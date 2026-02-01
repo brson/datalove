@@ -21,7 +21,7 @@ AotAnalysis(
                         v4 = map {v0: v1, v2: v3}
                         debuglog v4
                         unit_end_drop v4
-                        exit
+                        unit_end
                 """,
             ),
             aot_compile: Some(AotCompileResult(

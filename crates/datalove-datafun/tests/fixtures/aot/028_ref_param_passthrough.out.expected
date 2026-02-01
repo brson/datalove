@@ -22,19 +22,19 @@ AotAnalysis(
                         debuglog v2
                         drop v2
                         unit_end_drop v0
-                        exit
+                        unit_end
                     
                     fn inner(p0):
                     block0:
                         v0 = const 1int
                         v1 = add p0, v0
                         drop v0
-                        exit v1
+                        return v1
                     
                     fn outer(p0):
                     block0:
                         v0 = call @0 u0(p0)
-                        exit v0
+                        return v0
                 """,
             ),
             aot_compile: Some(AotCompileResult(

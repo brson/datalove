@@ -19,17 +19,17 @@ DualAnalysis(
                         drop v1
                         debuglog v0
                         unit_end_drop v0
-                        exit
+                        unit_end
                     
                     fn inner(p0):
                     block0:
                         v0 = add p0, p0
-                        exit v0
+                        return v0
                     
                     fn outer(p0):
                     block0:
                         v0 = call @0 u0(p0)
-                        exit v0
+                        return v0
                 """,
             ),
             aot_lowering: LoweringResult(
@@ -43,17 +43,17 @@ DualAnalysis(
                         drop v1
                         debuglog v0
                         unit_end_drop v0
-                        exit
+                        unit_end
                     
                     fn inner(p0):
                     block0:
                         v0 = add p0, p0
-                        exit v0
+                        return v0
                     
                     fn outer(p0):
                     block0:
                         v0 = call @0 u0(p0)
-                        exit v0
+                        return v0
                 """,
             ),
             ir_match: true,

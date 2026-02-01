@@ -16,7 +16,7 @@ Analysis(
                     block0:
                         v0 = call @0 u0()
                         debuglog v0
-                        exit
+                        unit_end
                     
                     fn compute():
                     block0:
@@ -26,10 +26,10 @@ Analysis(
                         branch v3, block1, block2
                     block1:
                         v4 = none
-                        exit v4
+                        return v4
                     block2:
                         v5 = const some 8u32
-                        exit v5
+                        return v5
                 """,
             ),
             output: "(fragment executed)",

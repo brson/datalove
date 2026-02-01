@@ -8,12 +8,12 @@ ModulesAnalysis(
             fn main():
             block0:
                 v0 = call @0 m0.u0()
-                exit v0
+                return v0
             
             fn helper():
             block0:
                 v0 = const 42u32
-                exit v0
+                return v0
         """,
     ),
     output: "42",

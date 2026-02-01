@@ -24,7 +24,7 @@ DualAnalysis(
                         v6 = const "arithmetic overflow"
                         v7 = error_from v6
                         v8 = err v7
-                        exit v8
+                        return v8
                     block2:
                         v9 = copy p0
                         v10 = getfield v9.1
@@ -36,11 +36,11 @@ DualAnalysis(
                         v15 = const "arithmetic overflow"
                         v16 = error_from v15
                         v17 = err v16
-                        exit v17
+                        return v17
                     block4:
                         v18 = pack Struct0 {v4, v13}
                         v19 = ok v18
-                        exit v19
+                        return v19
                 """,
             ),
             aot_lowering: LoweringResult(
@@ -58,7 +58,7 @@ DualAnalysis(
                         v6 = const "arithmetic overflow"
                         v7 = error_from v6
                         v8 = err v7
-                        exit v8
+                        return v8
                     block2:
                         v9 = copy p0
                         v10 = getfield v9.1
@@ -70,11 +70,11 @@ DualAnalysis(
                         v15 = const "arithmetic overflow"
                         v16 = error_from v15
                         v17 = err v16
-                        exit v17
+                        return v17
                     block4:
                         v18 = pack Struct0 {v4, v13}
                         v19 = ok v18
-                        exit v19
+                        return v19
                 """,
             ),
             ir_match: true,
@@ -101,7 +101,7 @@ DualAnalysis(
                         v3 = call @0 m0.u0(v2)
                         debuglog v3
                         drop v3
-                        exit
+                        unit_end
                 """,
             ),
             aot_lowering: LoweringResult(
@@ -115,7 +115,7 @@ DualAnalysis(
                         v3 = call @0 m0.u0(v2)
                         debuglog v3
                         drop v3
-                        exit
+                        unit_end
                 """,
             ),
             ir_match: true,

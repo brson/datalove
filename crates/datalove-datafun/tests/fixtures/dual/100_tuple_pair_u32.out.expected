@@ -17,7 +17,7 @@ DualAnalysis(
                         v1 = const 2u32
                         v2 = pack Tuple2 {v0, v1}
                         debuglog v2
-                        exit
+                        unit_end
                 """,
             ),
             aot_lowering: LoweringResult(
@@ -29,7 +29,7 @@ DualAnalysis(
                         v1 = const 2u32
                         v2 = pack Tuple2 {v0, v1}
                         debuglog v2
-                        exit
+                        unit_end
                 """,
             ),
             ir_match: true,

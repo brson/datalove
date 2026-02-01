@@ -17,13 +17,13 @@ DualAnalysis(
                         v1 = call @0 u0(v0)
                         debuglog v1
                         drop v1
-                        exit
+                        unit_end
                     
                     fn double(p0):
                     block0:
                         v0 = add p0, p0
                         drop p0
-                        exit v0
+                        return v0
                 """,
             ),
             aot_lowering: LoweringResult(
@@ -35,13 +35,13 @@ DualAnalysis(
                         v1 = call @0 u0(v0)
                         debuglog v1
                         drop v1
-                        exit
+                        unit_end
                     
                     fn double(p0):
                     block0:
                         v0 = add p0, p0
                         drop p0
-                        exit v0
+                        return v0
                 """,
             ),
             ir_match: true,

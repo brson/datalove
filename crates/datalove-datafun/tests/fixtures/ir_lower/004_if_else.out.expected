@@ -4,8 +4,8 @@ block0:
     branch v0, block1, block2
 block1:
     v1 = const 1i64
-    exit v1
+    return v1
 block2:
     v2 = const 0i64
-    exit v2
+    return v2
 

@@ -14,17 +14,17 @@ Analysis(
                 ir: """
                     scriptunit:
                     block0:
-                        exit
+                        unit_end
                     
                     fn first_const():
                     block0:
                         v0 = const 10u32
-                        exit v0
+                        return v0
                     
                     fn second_const():
                     block0:
                         v0 = const 20u32
-                        exit v0
+                        return v0
                 """,
             ),
             output: "(fragment executed)",
@@ -44,7 +44,7 @@ Analysis(
                     scriptunit:
                     block0:
                         v0 = call @0 unit0.u0()
-                        exit v0
+                        unit_end v0
                 """,
             ),
             output: "10",

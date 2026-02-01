@@ -18,7 +18,7 @@ AotAnalysis(
                         v1 = const 0u32
                         v2 = call @1 u0(v0, v1)
                         debuglog v2
-                        exit
+                        unit_end
                     
                     fn unwrap_or_default(p0, p1):
                     block0:
@@ -26,18 +26,18 @@ AotAnalysis(
                         v1, v2 = unwrap_option v0
                         branch v2, block1, block2
                     block1:
-                        exit v1
+                        return v1
                     block2:
                         goto block3
                     block3:
                         v3 = copy p1
-                        exit v3
+                        return v3
                     
                     fn get_some():
                     block0:
                         v0 = const 42u32
                         v1 = some v0
-                        exit v1
+                        return v1
                 """,
             ),
             aot_compile: Some(AotCompileResult(

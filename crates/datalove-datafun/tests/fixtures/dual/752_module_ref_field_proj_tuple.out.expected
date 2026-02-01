@@ -15,7 +15,7 @@ DualAnalysis(
                     fn takes_ref(p0):
                     block0:
                         v0 = copy p0
-                        exit v0
+                        return v0
                 """,
             ),
             aot_lowering: LoweringResult(
@@ -24,7 +24,7 @@ DualAnalysis(
                     fn takes_ref(p0):
                     block0:
                         v0 = copy p0
-                        exit v0
+                        return v0
                 """,
             ),
             ir_match: true,
@@ -51,7 +51,7 @@ DualAnalysis(
                         v3 = getfieldref v2.0
                         v4 = call @0 m0.u0(*v3)
                         debuglog v4
-                        exit
+                        unit_end
                 """,
             ),
             aot_lowering: LoweringResult(
@@ -65,7 +65,7 @@ DualAnalysis(
                         v3 = getfieldref v2.0
                         v4 = call @0 m0.u0(*v3)
                         debuglog v4
-                        exit
+                        unit_end
                 """,
             ),
             ir_match: true,

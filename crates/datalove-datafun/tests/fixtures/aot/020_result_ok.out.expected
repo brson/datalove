@@ -19,16 +19,16 @@ AotAnalysis(
                         branch v3, block2, block1
                     block1:
                         v4 = err v2
-                        early_exit v4
+                        unit_early_return v4
                     block2:
                         debuglog v1
-                        exit
+                        unit_end
                     
                     fn get_ok():
                     block0:
                         v0 = const 42u32
                         v1 = ok v0
-                        exit v1
+                        return v1
                 """,
             ),
             aot_compile: Some(AotCompileResult(

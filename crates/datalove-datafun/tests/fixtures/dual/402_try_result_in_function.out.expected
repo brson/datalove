@@ -16,7 +16,7 @@ DualAnalysis(
                         v0 = call @0 u0()
                         debuglog v0
                         drop v0
-                        exit
+                        unit_end
                     
                     fn get_value():
                     block0:
@@ -26,10 +26,10 @@ DualAnalysis(
                         branch v4, block2, block1
                     block1:
                         v5 = err v3
-                        exit v5
+                        return v5
                     block2:
                         v6 = ok v2
-                        exit v6
+                        return v6
                 """,
             ),
             aot_lowering: LoweringResult(
@@ -40,7 +40,7 @@ DualAnalysis(
                         v0 = call @0 u0()
                         debuglog v0
                         drop v0
-                        exit
+                        unit_end
                     
                     fn get_value():
                     block0:
@@ -50,10 +50,10 @@ DualAnalysis(
                         branch v4, block2, block1
                     block1:
                         v5 = err v3
-                        exit v5
+                        return v5
                     block2:
                         v6 = ok v2
-                        exit v6
+                        return v6
                 """,
             ),
             ir_match: true,

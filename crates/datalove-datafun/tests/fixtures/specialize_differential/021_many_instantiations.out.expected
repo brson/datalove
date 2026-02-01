@@ -19,7 +19,7 @@ Analysis(
                         v0 = mul p1, p0
                         drop p0
                         drop p1
-                        exit v0
+                        return v0
                 """,
             ),
             output: "",
@@ -78,7 +78,7 @@ Analysis(
                         unit_end_drop v19
                         unit_end_drop v21
                         unit_end_drop v23
-                        exit
+                        unit_end
                 """,
             ),
             output: "(fragment executed)",
@@ -111,7 +111,7 @@ Analysis(
                         drop v4
                         v6 = add v5, unit0.v23
                         drop v5
-                        exit v6
+                        unit_end v6
                 """,
             ),
             output: "360",

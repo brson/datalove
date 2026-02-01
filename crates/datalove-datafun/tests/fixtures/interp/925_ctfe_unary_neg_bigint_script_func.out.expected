@@ -17,14 +17,14 @@ Analysis(
                         v0 = call @0 u0()
                         debuglog v0
                         drop v0
-                        exit
+                        unit_end
                     
                     fn negate():
                     block0:
                         v0 = const 100int
                         v1 = const -100int
                         drop v0
-                        exit v1
+                        return v1
                 """,
             ),
             output: "(fragment executed)",

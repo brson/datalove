@@ -1129,7 +1129,7 @@ mod tests {
                             value: ConstValue::I32(42),
                         },
                     ],
-                    terminator: Terminator::Exit {
+                    terminator: Terminator::Return {
                         value: Some(Operand::Value(ValueId(0))),
                     },
                 },
@@ -1171,7 +1171,7 @@ mod tests {
                             rhs: Operand::Value(ValueId(1)),
                         },
                     ],
-                    terminator: Terminator::Exit {
+                    terminator: Terminator::Return {
                         value: Some(Operand::Value(ValueId(2))),
                     },
                 },
@@ -1205,7 +1205,7 @@ mod tests {
                             operand: Operand::Value(ValueId(0)),
                         },
                     ],
-                    terminator: Terminator::Exit {
+                    terminator: Terminator::Return {
                         value: Some(Operand::Value(ValueId(1))),
                     },
                 },
@@ -1257,7 +1257,7 @@ mod tests {
                             value: ConstValue::I32(1),
                         },
                     ],
-                    terminator: Terminator::Exit {
+                    terminator: Terminator::Return {
                         value: Some(Operand::Value(ValueId(1))),
                     },
                 },
@@ -1270,7 +1270,7 @@ mod tests {
                             value: ConstValue::I32(2),
                         },
                     ],
-                    terminator: Terminator::Exit {
+                    terminator: Terminator::Return {
                         value: Some(Operand::Value(ValueId(2))),
                     },
                 },

@@ -16,7 +16,7 @@ Analysis(
                     block0:
                         v0 = const 42int
                         unit_end_drop v0
-                        exit
+                        unit_end
                 """,
             ),
             output: "(fragment executed)",

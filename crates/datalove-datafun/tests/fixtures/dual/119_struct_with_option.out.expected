@@ -20,7 +20,7 @@ DualAnalysis(
                         v4 = none
                         debuglog v3
                         debuglog v4
-                        exit
+                        unit_end
                 """,
             ),
             aot_lowering: LoweringResult(
@@ -35,7 +35,7 @@ DualAnalysis(
                         v4 = none
                         debuglog v3
                         debuglog v4
-                        exit
+                        unit_end
                 """,
             ),
             ir_match: true,

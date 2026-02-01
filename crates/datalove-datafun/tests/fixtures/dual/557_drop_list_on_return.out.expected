@@ -15,7 +15,7 @@ DualAnalysis(
                     block0:
                         v0 = call @0 u0()
                         debuglog v0
-                        exit
+                        unit_end
                     
                     fn test_drop():
                     block0:
@@ -25,7 +25,7 @@ DualAnalysis(
                         v3 = list [v0, v1, v2]
                         v4 = const 42u32
                         drop v3
-                        exit v4
+                        return v4
                 """,
             ),
             aot_lowering: LoweringResult(
@@ -35,7 +35,7 @@ DualAnalysis(
                     block0:
                         v0 = call @0 u0()
                         debuglog v0
-                        exit
+                        unit_end
                     
                     fn test_drop():
                     block0:
@@ -45,7 +45,7 @@ DualAnalysis(
                         v3 = list [v0, v1, v2]
                         v4 = const 42u32
                         drop v3
-                        exit v4
+                        return v4
                 """,
             ),
             ir_match: true,

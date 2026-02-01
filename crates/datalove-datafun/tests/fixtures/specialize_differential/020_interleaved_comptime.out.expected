@@ -22,7 +22,7 @@ Analysis(
                         drop p0
                         drop p1
                         drop p2
-                        exit v1
+                        return v1
                     
                     fn multi_interleaved(p0, p1, p2, p3, p4):
                     block0:
@@ -38,7 +38,7 @@ Analysis(
                         drop p2
                         drop p3
                         drop p4
-                        exit v3
+                        return v3
                 """,
             ),
             output: "",

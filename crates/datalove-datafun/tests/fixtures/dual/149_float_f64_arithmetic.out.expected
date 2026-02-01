@@ -23,7 +23,7 @@ DualAnalysis(
                         debuglog v3
                         debuglog v4
                         debuglog v5
-                        exit
+                        unit_end
                 """,
             ),
             aot_lowering: LoweringResult(
@@ -41,7 +41,7 @@ DualAnalysis(
                         debuglog v3
                         debuglog v4
                         debuglog v5
-                        exit
+                        unit_end
                 """,
             ),
             ir_match: true,

@@ -15,7 +15,7 @@ Analysis(
                     fn is_equal(p0, p1):
                     block0:
                         v0 = eq p0, p1
-                        exit v0
+                        return v0
                 """,
             ),
             output: "",
@@ -44,7 +44,7 @@ Analysis(
                         unit_end_drop v0
                         unit_end_drop v1
                         unit_end_drop v2
-                        exit
+                        unit_end
                 """,
             ),
             output: "(fragment executed)",
@@ -64,7 +64,7 @@ Analysis(
                     scriptunit:
                     block0:
                         v0 = copy unit0.v6
-                        exit v0
+                        unit_end v0
                 """,
             ),
             output: "(true, false, true)",

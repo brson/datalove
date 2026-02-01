@@ -27,7 +27,7 @@ DualAnalysis(
                         v10 = const 999u32
                         v11 = call @5 u2(v9, v10)
                         debuglog v11
-                        exit
+                        unit_end
                     
                     fn safe_divide(p0, p1):
                     block0:
@@ -37,7 +37,7 @@ DualAnalysis(
                     block1:
                         v2 = none
                         v3 = ok v2
-                        exit v3
+                        return v3
                     block2:
                         goto block3
                     block3:
@@ -47,11 +47,11 @@ DualAnalysis(
                         v6 = const "arithmetic overflow"
                         v7 = error_from v6
                         v8 = err v7
-                        exit v8
+                        return v8
                     block5:
                         v9 = some v4
                         v10 = ok v9
-                        exit v10
+                        return v10
                     
                     fn unwrap_result(p0):
                     block0:
@@ -59,11 +59,11 @@ DualAnalysis(
                         v1, v2, v3 = unwrap_result v0
                         branch v3, block1, block2
                     block1:
-                        exit v1
+                        return v1
                     block2:
                         v4 = none
                         drop v2
-                        exit v4
+                        return v4
                     
                     fn unwrap_opt(p0, p1):
                     block0:
@@ -71,12 +71,12 @@ DualAnalysis(
                         v1, v2 = unwrap_option v0
                         branch v2, block1, block2
                     block1:
-                        exit v1
+                        return v1
                     block2:
                         goto block3
                     block3:
                         v3 = copy p1
-                        exit v3
+                        return v3
                 """,
             ),
             aot_lowering: LoweringResult(
@@ -98,7 +98,7 @@ DualAnalysis(
                         v10 = const 999u32
                         v11 = call @5 u2(v9, v10)
                         debuglog v11
-                        exit
+                        unit_end
                     
                     fn safe_divide(p0, p1):
                     block0:
@@ -108,7 +108,7 @@ DualAnalysis(
                     block1:
                         v2 = none
                         v3 = ok v2
-                        exit v3
+                        return v3
                     block2:
                         goto block3
                     block3:
@@ -118,11 +118,11 @@ DualAnalysis(
                         v6 = const "arithmetic overflow"
                         v7 = error_from v6
                         v8 = err v7
-                        exit v8
+                        return v8
                     block5:
                         v9 = some v4
                         v10 = ok v9
-                        exit v10
+                        return v10
                     
                     fn unwrap_result(p0):
                     block0:
@@ -130,11 +130,11 @@ DualAnalysis(
                         v1, v2, v3 = unwrap_result v0
                         branch v3, block1, block2
                     block1:
-                        exit v1
+                        return v1
                     block2:
                         v4 = none
                         drop v2
-                        exit v4
+                        return v4
                     
                     fn unwrap_opt(p0, p1):
                     block0:
@@ -142,12 +142,12 @@ DualAnalysis(
                         v1, v2 = unwrap_option v0
                         branch v2, block1, block2
                     block1:
-                        exit v1
+                        return v1
                     block2:
                         goto block3
                     block3:
                         v3 = copy p1
-                        exit v3
+                        return v3
                 """,
             ),
             ir_match: true,

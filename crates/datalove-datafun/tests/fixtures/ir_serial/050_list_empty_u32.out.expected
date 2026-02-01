@@ -13,12 +13,12 @@ IrSerialAnalysis(
                         v0 = list []
                         debuglog v0
                         unit_end_drop v0
-                        exit
+                        unit_end
                 """,
             ),
             direct_interp_output: "[]\n",
             direct_aot_output: "[]\n",
-            serialized_ir_size: 1073,
+            serialized_ir_size: 1077,
             serialized_registry_size: 177,
             deser_success: true,
             deser_interp_output: "[]\n",

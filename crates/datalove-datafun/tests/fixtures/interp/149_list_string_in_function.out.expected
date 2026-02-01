@@ -14,7 +14,7 @@ Analysis(
                 ir: """
                     scriptunit:
                     block0:
-                        exit
+                        unit_end
                     
                     fn make_list():
                     block0:
@@ -22,7 +22,7 @@ Analysis(
                         v1 = const "b"
                         v2 = const "c"
                         v3 = list [v0, v1, v2]
-                        exit v3
+                        return v3
                 """,
             ),
             output: "(fragment executed)",
@@ -42,7 +42,7 @@ Analysis(
                     scriptunit:
                     block0:
                         v0 = call @0 unit0.u0()
-                        exit v0
+                        unit_end v0
                 """,
             ),
             output: "[\"a\", \"b\", \"c\"]",

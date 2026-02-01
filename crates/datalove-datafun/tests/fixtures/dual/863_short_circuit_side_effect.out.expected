@@ -17,7 +17,7 @@ DualAnalysis(
                         debuglog p0
                         v0 = const true
                         drop p0
-                        exit v0
+                        return v0
                 """,
             ),
             aot_lowering: LoweringResult(
@@ -28,7 +28,7 @@ DualAnalysis(
                         debuglog p0
                         v0 = const true
                         drop p0
-                        exit v0
+                        return v0
                 """,
             ),
             ir_match: true,
@@ -66,7 +66,7 @@ DualAnalysis(
                         v10 = const "end"
                         debuglog v10
                         drop v10
-                        exit
+                        unit_end
                 """,
             ),
             aot_lowering: LoweringResult(
@@ -91,7 +91,7 @@ DualAnalysis(
                         v10 = const "end"
                         debuglog v10
                         drop v10
-                        exit
+                        unit_end
                 """,
             ),
             ir_match: true,

@@ -17,7 +17,7 @@ Analysis(
                     fn get_config(p0):
                     block0:
                         v0 = copy p0
-                        exit v0
+                        return v0
                 """,
             ),
             output: "",
@@ -39,7 +39,7 @@ Analysis(
                         v2 = const {enabled = true, value = 42i32}
                         v3 = comptime_call m0.u0(v2) [disc=0, comptime_params=[0]]
                         debuglog v3
-                        exit
+                        unit_end
                 """,
             ),
             output: "(fragment executed)",
@@ -60,7 +60,7 @@ Analysis(
                     scriptunit:
                     block0:
                         v0 = copy unit0.v3
-                        exit v0
+                        unit_end v0
                 """,
             ),
             output: "{enabled = true, value = 42}",

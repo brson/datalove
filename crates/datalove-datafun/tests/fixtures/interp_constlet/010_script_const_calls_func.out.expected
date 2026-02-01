@@ -15,12 +15,12 @@ Analysis(
                     scriptunit:
                     block0:
                         v0 = call @0 u0()
-                        exit
+                        unit_end
                     
                     fn compute():
                     block0:
                         v0 = const 100u32
-                        exit v0
+                        return v0
                 """,
             ),
             output: "(fragment executed)",
@@ -40,7 +40,7 @@ Analysis(
                     scriptunit:
                     block0:
                         v0 = copy unit0.v0
-                        exit v0
+                        unit_end v0
                 """,
             ),
             output: "100",

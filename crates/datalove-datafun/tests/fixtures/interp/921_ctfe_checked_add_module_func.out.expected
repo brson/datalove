@@ -21,7 +21,7 @@ Analysis(
                         goto block1
                     block1:
                         v7 = ok v2
-                        exit v7
+                        return v7
                 """,
             ),
             output: "",
@@ -43,7 +43,7 @@ Analysis(
                         v0 = call @0 m0.u0()
                         debuglog v0
                         drop v0
-                        exit
+                        unit_end
                 """,
             ),
             output: "(fragment executed)",

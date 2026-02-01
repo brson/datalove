@@ -17,12 +17,12 @@ AotAnalysis(
                         v0 = const 42u32
                         v1 = call @0 u0(v0)
                         debuglog v1
-                        exit
+                        unit_end
                     
                     fn identity(p0):
                     block0:
                         v0 = copy p0
-                        exit v0
+                        return v0
                 """,
             ),
             aot_compile: Some(AotCompileResult(

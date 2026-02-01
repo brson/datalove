@@ -50,7 +50,7 @@ Analysis(
                     block8:
                         unit_end_drop.tracked s0
                         unit_end_drop.tracked s1
-                        exit
+                        unit_end
                 """,
             ),
             output: "(fragment executed)",
@@ -70,7 +70,7 @@ Analysis(
                     scriptunit:
                     block0:
                         v0 = move unit0.s1
-                        exit v0
+                        unit_end v0
                 """,
             ),
             output: "12",

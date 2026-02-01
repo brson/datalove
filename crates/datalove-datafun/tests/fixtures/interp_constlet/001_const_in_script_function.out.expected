@@ -14,12 +14,12 @@ Analysis(
                 ir: """
                     scriptunit:
                     block0:
-                        exit
+                        unit_end
                     
                     fn get_answer():
                     block0:
                         v0 = const 42u32
-                        exit v0
+                        return v0
                 """,
             ),
             output: "(fragment executed)",
@@ -39,7 +39,7 @@ Analysis(
                     scriptunit:
                     block0:
                         v0 = call @0 unit0.u0()
-                        exit v0
+                        unit_end v0
                 """,
             ),
             output: "42",

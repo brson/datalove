@@ -16,7 +16,7 @@ Analysis(
                     block0:
                         v3 = const {a = {b = {c = 42u32}}}
                         debuglog v3
-                        exit
+                        unit_end
                 """,
             ),
             output: "(fragment executed)",

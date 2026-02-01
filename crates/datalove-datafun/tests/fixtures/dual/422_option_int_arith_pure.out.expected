@@ -16,7 +16,7 @@ DualAnalysis(
                         v0 = call @0 u0()
                         debuglog v0
                         drop v0
-                        exit
+                        unit_end
                     
                     fn test():
                     block0:
@@ -26,7 +26,7 @@ DualAnalysis(
                         v3 = some v2
                         drop v0
                         drop v1
-                        exit v3
+                        return v3
                 """,
             ),
             aot_lowering: LoweringResult(
@@ -37,7 +37,7 @@ DualAnalysis(
                         v0 = call @0 u0()
                         debuglog v0
                         drop v0
-                        exit
+                        unit_end
                     
                     fn test():
                     block0:
@@ -47,7 +47,7 @@ DualAnalysis(
                         v3 = some v2
                         drop v0
                         drop v1
-                        exit v3
+                        return v3
                 """,
             ),
             ir_match: true,

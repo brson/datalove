@@ -32,7 +32,7 @@ DualAnalysis(
                     block4:
                         v5 = getfieldref s0.0
                         debuglog *v5
-                        exit
+                        unit_end
                 """,
             ),
             aot_lowering: LoweringResult(
@@ -59,7 +59,7 @@ DualAnalysis(
                     block4:
                         v5 = getfieldref s0.0
                         debuglog *v5
-                        exit
+                        unit_end
                 """,
             ),
             ir_match: true,

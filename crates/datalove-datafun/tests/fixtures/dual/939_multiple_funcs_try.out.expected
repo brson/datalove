@@ -16,17 +16,17 @@ DualAnalysis(
                         v0 = call @0 u2()
                         debuglog v0
                         drop v0
-                        exit
+                        unit_end
                     
                     fn make_string():
                     block0:
                         v0 = const "created"
-                        exit v0
+                        return v0
                     
                     fn get_opt():
                     block0:
                         v0 = none
-                        exit v0
+                        return v0
                     
                     fn test():
                     block0:
@@ -37,11 +37,11 @@ DualAnalysis(
                     block1:
                         v4 = none
                         drop v0
-                        exit v4
+                        return v4
                     block2:
                         v5 = pack Struct0 {v0, v2}
                         v6 = some v5
-                        exit v6
+                        return v6
                 """,
             ),
             aot_lowering: LoweringResult(
@@ -52,17 +52,17 @@ DualAnalysis(
                         v0 = call @0 u2()
                         debuglog v0
                         drop v0
-                        exit
+                        unit_end
                     
                     fn make_string():
                     block0:
                         v0 = const "created"
-                        exit v0
+                        return v0
                     
                     fn get_opt():
                     block0:
                         v0 = none
-                        exit v0
+                        return v0
                     
                     fn test():
                     block0:
@@ -73,11 +73,11 @@ DualAnalysis(
                     block1:
                         v4 = none
                         drop v0
-                        exit v4
+                        return v4
                     block2:
                         v5 = pack Struct0 {v0, v2}
                         v6 = some v5
-                        exit v6
+                        return v6
                 """,
             ),
             ir_match: true,

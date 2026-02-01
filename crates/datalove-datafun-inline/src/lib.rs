@@ -951,15 +951,18 @@ impl RemapContext {
                 else_block: self.remap_block(*else_block),
                 else_args: else_args.iter().map(|a| self.remap_operand(a)).collect(),
             },
-            Terminator::Exit { value } => {
-                // Exit becomes a goto to the continuation block.
+            Terminator::Return { value } => {
+                // Return becomes a goto to the continuation block.
                 Terminator::Goto {
                     target: continuation_block,
                     args: value.iter().map(|v| self.remap_operand(v)).collect(),
                 }
             }
-            // EarlyExit shouldn't appear in function bodies being inlined.
-            Terminator::EarlyExit { value } => Terminator::EarlyExit {
+            // UnitEnd/UnitEarlyReturn shouldn't appear in function bodies being inlined.
+            Terminator::UnitEnd { result } => Terminator::UnitEnd {
+                result: result.as_ref().map(|v| self.remap_operand(v)),
+            },
+            Terminator::UnitEarlyReturn { value } => Terminator::UnitEarlyReturn {
                 value: self.remap_operand(value),
             },
         }

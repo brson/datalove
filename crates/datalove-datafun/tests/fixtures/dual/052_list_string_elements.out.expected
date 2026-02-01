@@ -18,7 +18,7 @@ DualAnalysis(
                         v2 = list [v0, v1]
                         debuglog v2
                         unit_end_drop v2
-                        exit
+                        unit_end
                 """,
             ),
             aot_lowering: LoweringResult(
@@ -31,7 +31,7 @@ DualAnalysis(
                         v2 = list [v0, v1]
                         debuglog v2
                         unit_end_drop v2
-                        exit
+                        unit_end
                 """,
             ),
             ir_match: true,

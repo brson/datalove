@@ -1,5 +1,5 @@
 fn main():
 block0:
     v0 = const true
-    exit v0
+    return v0
 

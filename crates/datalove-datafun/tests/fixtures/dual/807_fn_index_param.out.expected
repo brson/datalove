@@ -26,23 +26,23 @@ DualAnalysis(
                         v7 = const 1index
                         v8 = call @3 u2(v7)
                         debuglog v8
-                        exit
+                        unit_end
                     
                     fn add_index(p0, p1):
                     block0:
                         v0 = intrinsic AddWrappingIndex(p0, p1)
-                        exit v0
+                        return v0
                     
                     fn double_index(p0):
                     block0:
                         v0 = intrinsic AddWrappingIndex(p0, p0)
-                        exit v0
+                        return v0
                     
                     fn is_zero_index(p0):
                     block0:
                         v0 = const 0index
                         v1 = eq p0, v0
-                        exit v1
+                        return v1
                 """,
             ),
             aot_lowering: LoweringResult(
@@ -63,23 +63,23 @@ DualAnalysis(
                         v7 = const 1index
                         v8 = call @3 u2(v7)
                         debuglog v8
-                        exit
+                        unit_end
                     
                     fn add_index(p0, p1):
                     block0:
                         v0 = intrinsic AddWrappingIndex(p0, p1)
-                        exit v0
+                        return v0
                     
                     fn double_index(p0):
                     block0:
                         v0 = intrinsic AddWrappingIndex(p0, p0)
-                        exit v0
+                        return v0
                     
                     fn is_zero_index(p0):
                     block0:
                         v0 = const 0index
                         v1 = eq p0, v0
-                        exit v1
+                        return v1
                 """,
             ),
             ir_match: true,

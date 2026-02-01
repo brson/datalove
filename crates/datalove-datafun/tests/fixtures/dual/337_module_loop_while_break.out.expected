@@ -49,7 +49,7 @@ DualAnalysis(
                         goto block12
                     block12:
                         v9 = const 111i32
-                        exit v9
+                        return v9
                 """,
             ),
             aot_lowering: LoweringResult(
@@ -92,7 +92,7 @@ DualAnalysis(
                         goto block12
                     block12:
                         v9 = const 111i32
-                        exit v9
+                        return v9
                 """,
             ),
             ir_match: true,
@@ -115,7 +115,7 @@ DualAnalysis(
                     block0:
                         v0 = call @0 m0.u0()
                         debuglog v0
-                        exit
+                        unit_end
                 """,
             ),
             aot_lowering: LoweringResult(
@@ -125,7 +125,7 @@ DualAnalysis(
                     block0:
                         v0 = call @0 m0.u0()
                         debuglog v0
-                        exit
+                        unit_end
                 """,
             ),
             ir_match: true,

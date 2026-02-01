@@ -37,7 +37,7 @@ DualAnalysis(
                         v16 = const 4u32
                         v17 = intrinsic SshrOffset(v15, v16)
                         debuglog v17
-                        exit
+                        unit_end
                 """,
             ),
             aot_lowering: LoweringResult(
@@ -69,7 +69,7 @@ DualAnalysis(
                         v16 = const 4u32
                         v17 = intrinsic SshrOffset(v15, v16)
                         debuglog v17
-                        exit
+                        unit_end
                 """,
             ),
             ir_match: true,

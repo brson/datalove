@@ -32,7 +32,7 @@ DualAnalysis(
                         v11 = const 0offset
                         v12 = call @5 u2(v11)
                         debuglog v12
-                        exit
+                        unit_end
                     
                     fn add_offset(p0, p1):
                     block0:
@@ -40,7 +40,7 @@ DualAnalysis(
                         v1 = intrinsic OffsetToIndex(p1)
                         v2 = intrinsic AddWrappingIndex(v0, v1)
                         v3 = intrinsic IndexToOffset(v2)
-                        exit v3
+                        return v3
                     
                     fn abs_offset(p0):
                     block0:
@@ -49,10 +49,10 @@ DualAnalysis(
                         branch v1, block1, block2
                     block1:
                         v2 = intrinsic NegWrappingOffset(p0)
-                        exit v2
+                        return v2
                     block2:
                         v3 = copy p0
-                        exit v3
+                        return v3
                     
                     fn signum_offset(p0):
                     block0:
@@ -62,14 +62,14 @@ DualAnalysis(
                         v3 = gt p0, v0
                         branch v3, block1, block2
                     block1:
-                        exit v1
+                        return v1
                     block2:
                         v4 = lt p0, v0
                         branch v4, block3, block4
                     block3:
-                        exit v2
+                        return v2
                     block4:
-                        exit v0
+                        return v0
                 """,
             ),
             aot_lowering: LoweringResult(
@@ -96,7 +96,7 @@ DualAnalysis(
                         v11 = const 0offset
                         v12 = call @5 u2(v11)
                         debuglog v12
-                        exit
+                        unit_end
                     
                     fn add_offset(p0, p1):
                     block0:
@@ -104,7 +104,7 @@ DualAnalysis(
                         v1 = intrinsic OffsetToIndex(p1)
                         v2 = intrinsic AddWrappingIndex(v0, v1)
                         v3 = intrinsic IndexToOffset(v2)
-                        exit v3
+                        return v3
                     
                     fn abs_offset(p0):
                     block0:
@@ -113,10 +113,10 @@ DualAnalysis(
                         branch v1, block1, block2
                     block1:
                         v2 = intrinsic NegWrappingOffset(p0)
-                        exit v2
+                        return v2
                     block2:
                         v3 = copy p0
-                        exit v3
+                        return v3
                     
                     fn signum_offset(p0):
                     block0:
@@ -126,14 +126,14 @@ DualAnalysis(
                         v3 = gt p0, v0
                         branch v3, block1, block2
                     block1:
-                        exit v1
+                        return v1
                     block2:
                         v4 = lt p0, v0
                         branch v4, block3, block4
                     block3:
-                        exit v2
+                        return v2
                     block4:
-                        exit v0
+                        return v0
                 """,
             ),
             ir_match: true,

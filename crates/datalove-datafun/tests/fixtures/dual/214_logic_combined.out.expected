@@ -41,7 +41,7 @@ DualAnalysis(
                         v21 = logic_and v19, v20
                         v22 = logic_xor v18, v21
                         debuglog v22
-                        exit
+                        unit_end
                 """,
             ),
             aot_lowering: LoweringResult(
@@ -77,7 +77,7 @@ DualAnalysis(
                         v21 = logic_and v19, v20
                         v22 = logic_xor v18, v21
                         debuglog v22
-                        exit
+                        unit_end
                 """,
             ),
             ir_match: true,

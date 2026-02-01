@@ -29,7 +29,7 @@ DualAnalysis(
                         v10 = const false
                         v11 = logic_and v9, v10
                         debuglog v11
-                        exit
+                        unit_end
                 """,
             ),
             aot_lowering: LoweringResult(
@@ -53,7 +53,7 @@ DualAnalysis(
                         v10 = const false
                         v11 = logic_and v9, v10
                         debuglog v11
-                        exit
+                        unit_end
                 """,
             ),
             ir_match: true,

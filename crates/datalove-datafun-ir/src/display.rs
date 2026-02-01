@@ -651,14 +651,20 @@ impl fmt::Display for Terminator {
                 }
                 Ok(())
             }
-            Terminator::Exit { value: Some(v) } => {
-                write!(f, "exit {}", v)
+            Terminator::Return { value: Some(v) } => {
+                write!(f, "return {}", v)
             }
-            Terminator::Exit { value: None } => {
-                write!(f, "exit")
+            Terminator::Return { value: None } => {
+                write!(f, "return")
             }
-            Terminator::EarlyExit { value } => {
-                write!(f, "early_exit {}", value)
+            Terminator::UnitEnd { result: Some(v) } => {
+                write!(f, "unit_end {}", v)
+            }
+            Terminator::UnitEnd { result: None } => {
+                write!(f, "unit_end")
+            }
+            Terminator::UnitEarlyReturn { value } => {
+                write!(f, "unit_early_return {}", value)
             }
         }
     }

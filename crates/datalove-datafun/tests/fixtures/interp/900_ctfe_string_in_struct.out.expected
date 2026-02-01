@@ -17,7 +17,7 @@ Analysis(
                         v2 = const {name = "Alice", age = 30u32}
                         debuglog v2
                         unit_end_drop v2
-                        exit
+                        unit_end
                 """,
             ),
             output: "(fragment executed)",

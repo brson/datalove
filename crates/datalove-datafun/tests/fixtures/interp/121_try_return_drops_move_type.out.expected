@@ -17,7 +17,7 @@ Analysis(
                         v0 = const 127i8
                         v1 = const 1i8
                         v2 = call @0 u0(v0, v1)
-                        exit
+                        unit_end
                     
                     fn test_add_overflow(p0, p1):
                     block0:
@@ -27,11 +27,11 @@ Analysis(
                     block1:
                         v3 = none
                         drop v0
-                        exit v3
+                        return v3
                     block2:
                         v4 = some v1
                         drop v0
-                        exit v4
+                        return v4
                 """,
             ),
             output: "(fragment executed)",

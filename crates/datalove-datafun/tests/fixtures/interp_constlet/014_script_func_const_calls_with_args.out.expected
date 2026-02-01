@@ -14,21 +14,21 @@ Analysis(
                 ir: """
                     scriptunit:
                     block0:
-                        exit
+                        unit_end
                     
                     fn multiply(p0, p1):
                     block0:
                         v0 = mul p0, p1
                         drop p0
                         drop p1
-                        exit v0
+                        return v0
                     
                     fn compute():
                     block0:
                         v0 = const 6int
                         v1 = const 7int
                         v2 = call @0 u0(v0, v1)
-                        exit v2
+                        return v2
                 """,
             ),
             output: "(fragment executed)",
@@ -48,7 +48,7 @@ Analysis(
                     scriptunit:
                     block0:
                         v0 = call @0 unit0.u1()
-                        exit v0
+                        unit_end v0
                 """,
             ),
             output: "42",

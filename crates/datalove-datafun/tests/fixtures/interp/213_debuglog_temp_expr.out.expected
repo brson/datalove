@@ -40,7 +40,7 @@ Analysis(
                         unit_end_drop v6
                         unit_end_drop v7
                         unit_end_drop v9
-                        exit
+                        unit_end
                 """,
             ),
             output: "(fragment executed)",

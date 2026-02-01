@@ -13,10 +13,10 @@ ModulesAnalysis(
                 branch v3, block2, block1
             block1:
                 v4 = none
-                exit v4
+                return v4
             block2:
                 v5 = some v2
-                exit v5
+                return v5
         """,
     ),
     output: "some 42",

@@ -16,7 +16,7 @@ DualAnalysis(
                         v0 = call @0 u0()
                         debuglog v0
                         drop v0
-                        exit
+                        unit_end
                     
                     fn test():
                     block0:
@@ -25,7 +25,7 @@ DualAnalysis(
                         branch v2, block2, block1
                     block1:
                         v3 = none
-                        exit v3
+                        return v3
                     block2:
                         v4 = pack Struct0 {v1}
                         v5 = const "middle_name"
@@ -33,7 +33,7 @@ DualAnalysis(
                         v7 = const "outer_label"
                         v8 = pack Struct0 {v6, v7}
                         v9 = some v8
-                        exit v9
+                        return v9
                 """,
             ),
             aot_lowering: LoweringResult(
@@ -44,7 +44,7 @@ DualAnalysis(
                         v0 = call @0 u0()
                         debuglog v0
                         drop v0
-                        exit
+                        unit_end
                     
                     fn test():
                     block0:
@@ -53,7 +53,7 @@ DualAnalysis(
                         branch v2, block2, block1
                     block1:
                         v3 = none
-                        exit v3
+                        return v3
                     block2:
                         v4 = pack Struct0 {v1}
                         v5 = const "middle_name"
@@ -61,7 +61,7 @@ DualAnalysis(
                         v7 = const "outer_label"
                         v8 = pack Struct0 {v6, v7}
                         v9 = some v8
-                        exit v9
+                        return v9
                 """,
             ),
             ir_match: true,

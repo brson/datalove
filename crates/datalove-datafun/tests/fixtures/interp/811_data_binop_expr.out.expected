@@ -18,7 +18,7 @@ Analysis(
                         v1 = const 3int
                         v2 = call @0 u0(v0, v1)
                         unit_end_drop v2
-                        exit
+                        unit_end
                     
                     fn get_data(p0, p1):
                     block0:
@@ -26,7 +26,7 @@ Analysis(
                         v1 = data_from v0
                         drop p0
                         drop p1
-                        exit v1
+                        return v1
                 """,
             ),
             output: "(fragment executed)",
@@ -46,7 +46,7 @@ Analysis(
                     scriptunit:
                     block0:
                         v0 = move unit0.v2
-                        exit v0
+                        unit_end v0
                 """,
             ),
             output: "data 8",

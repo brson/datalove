@@ -16,14 +16,14 @@ DualAnalysis(
                         v0 = const 12345int
                         v1 = call @0 u0(v0)
                         debuglog v1
-                        exit
+                        unit_end
                     
                     fn consume_int(p0):
                     block0:
                         v0 = move p0
                         v1 = const 42u32
                         drop v0
-                        exit v1
+                        return v1
                 """,
             ),
             aot_lowering: LoweringResult(
@@ -34,14 +34,14 @@ DualAnalysis(
                         v0 = const 12345int
                         v1 = call @0 u0(v0)
                         debuglog v1
-                        exit
+                        unit_end
                     
                     fn consume_int(p0):
                     block0:
                         v0 = move p0
                         v1 = const 42u32
                         drop v0
-                        exit v1
+                        return v1
                 """,
             ),
             ir_match: true,

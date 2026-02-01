@@ -19,10 +19,10 @@ DualAnalysis(
                         branch v4, block2, block1
                     block1:
                         v5 = err v3
-                        early_exit v5
+                        unit_early_return v5
                     block2:
                         debuglog v2
-                        exit
+                        unit_end
                 """,
             ),
             aot_lowering: LoweringResult(
@@ -36,10 +36,10 @@ DualAnalysis(
                         branch v4, block2, block1
                     block1:
                         v5 = err v3
-                        early_exit v5
+                        unit_early_return v5
                     block2:
                         debuglog v2
-                        exit
+                        unit_end
                 """,
             ),
             ir_match: true,

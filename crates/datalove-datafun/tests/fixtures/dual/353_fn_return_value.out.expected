@@ -15,12 +15,12 @@ DualAnalysis(
                     block0:
                         v0 = call @0 u0()
                         debuglog v0
-                        exit
+                        unit_end
                     
                     fn get_ten():
                     block0:
                         v0 = const 10u32
-                        exit v0
+                        return v0
                 """,
             ),
             aot_lowering: LoweringResult(
@@ -30,12 +30,12 @@ DualAnalysis(
                     block0:
                         v0 = call @0 u0()
                         debuglog v0
-                        exit
+                        unit_end
                     
                     fn get_ten():
                     block0:
                         v0 = const 10u32
-                        exit v0
+                        return v0
                 """,
             ),
             ir_match: true,

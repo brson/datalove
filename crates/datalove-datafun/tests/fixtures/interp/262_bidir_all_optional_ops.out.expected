@@ -17,7 +17,7 @@ Analysis(
                         v0 = const 10i32
                         v1 = const 2i32
                         v2 = call @0 u0(v0, v1)
-                        exit
+                        unit_end
                     
                     fn all_ops(p0, p1):
                     block0:
@@ -25,28 +25,28 @@ Analysis(
                         branch v1, block1, block2
                     block1:
                         v2 = none
-                        exit v2
+                        return v2
                     block2:
                         v3, v4 = sub.checked p0, p1
                         branch v4, block3, block4
                     block3:
                         v5 = none
-                        exit v5
+                        return v5
                     block4:
                         v6, v7 = mul.checked p0, p1
                         branch v7, block5, block6
                     block5:
                         v8 = none
-                        exit v8
+                        return v8
                     block6:
                         v9, v10 = div.checked p0, p1
                         branch v10, block7, block8
                     block7:
                         v11 = none
-                        exit v11
+                        return v11
                     block8:
                         v12 = some v9
-                        exit v12
+                        return v12
                 """,
             ),
             output: "(fragment executed)",

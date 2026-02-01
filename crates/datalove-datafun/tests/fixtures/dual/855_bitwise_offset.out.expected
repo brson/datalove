@@ -34,7 +34,7 @@ DualAnalysis(
                         v14 = intrinsic BitxorIndex(v4, v4)
                         v15 = intrinsic IndexToOffset(v14)
                         debuglog v15
-                        exit
+                        unit_end
                 """,
             ),
             aot_lowering: LoweringResult(
@@ -63,7 +63,7 @@ DualAnalysis(
                         v14 = intrinsic BitxorIndex(v4, v4)
                         v15 = intrinsic IndexToOffset(v14)
                         debuglog v15
-                        exit
+                        unit_end
                 """,
             ),
             ir_match: true,

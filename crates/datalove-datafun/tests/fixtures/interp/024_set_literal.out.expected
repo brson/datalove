@@ -18,7 +18,7 @@ Analysis(
                         v1 = const 10u32
                         v2 = const 15u32
                         v3 = set {v0, v1, v2}
-                        exit v3
+                        unit_end v3
                 """,
             ),
             output: "set {5, 10, 15}",

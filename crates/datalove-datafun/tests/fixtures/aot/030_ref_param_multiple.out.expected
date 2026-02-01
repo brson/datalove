@@ -32,12 +32,12 @@ AotAnalysis(
                         unit_end_drop v0
                         unit_end_drop v1
                         unit_end_drop v2
-                        exit
+                        unit_end
                     
                     fn add_refs(p0, p1):
                     block0:
                         v0 = add p0, p1
-                        exit v0
+                        return v0
                 """,
             ),
             aot_compile: Some(AotCompileResult(

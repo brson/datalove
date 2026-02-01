@@ -16,7 +16,7 @@ Analysis(
                     block0:
                         v0 = add p0, p0
                         drop p0
-                        exit v0
+                        return v0
                 """,
             ),
             output: "",
@@ -35,7 +35,7 @@ Analysis(
                 ir: """
                     scriptunit:
                     block0:
-                        exit
+                        unit_end
                 """,
             ),
             output: "(fragment executed)",
@@ -56,7 +56,7 @@ Analysis(
                     block0:
                         v0 = const 7int
                         v1 = call @0 m0.u0(v0)
-                        exit v1
+                        unit_end v1
                 """,
             ),
             output: "14",

@@ -14,14 +14,14 @@ Analysis(
                 ir: """
                     scriptunit:
                     block0:
-                        exit
+                        unit_end
                     
                     fn make_person():
                     block0:
                         v0 = const "Bob"
                         v1 = const 42u32
                         v2 = pack Struct0 {v0, v1}
-                        exit v2
+                        return v2
                 """,
             ),
             output: "(fragment executed)",
@@ -41,7 +41,7 @@ Analysis(
                     scriptunit:
                     block0:
                         v0 = call @0 unit0.u0()
-                        exit v0
+                        unit_end v0
                 """,
             ),
             output: "{name = \"Bob\", age = 42}",

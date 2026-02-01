@@ -15,12 +15,12 @@ Analysis(
                     fn inner(p0):
                     block0:
                         v0 = const true
-                        exit v0
+                        return v0
                     
                     fn outer(p0):
                     block0:
                         v0 = call @0 m0.u0(p0)
-                        exit v0
+                        return v0
                 """,
             ),
             output: "",
@@ -42,7 +42,7 @@ Analysis(
                         v0 = const 100int
                         v1 = call @0 m0.u1(v0)
                         unit_end_drop v0
-                        exit
+                        unit_end
                 """,
             ),
             output: "(fragment executed)",
@@ -62,7 +62,7 @@ Analysis(
                     scriptunit:
                     block0:
                         v0 = copy unit0.v1
-                        exit v0
+                        unit_end v0
                 """,
             ),
             output: "true",

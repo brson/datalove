@@ -17,7 +17,7 @@ Analysis(
                         v3 = const ["hello", "world", "test"]
                         debuglog v3
                         unit_end_drop v3
-                        exit
+                        unit_end
                 """,
             ),
             output: "(fragment executed)",

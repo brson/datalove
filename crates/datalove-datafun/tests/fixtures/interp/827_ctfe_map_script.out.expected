@@ -17,7 +17,7 @@ Analysis(
                         v6 = const map {1u32 = 100u32, 2u32 = 200u32, 3u32 = 300u32}
                         debuglog v6
                         unit_end_drop v6
-                        exit
+                        unit_end
                 """,
             ),
             output: "(fragment executed)",

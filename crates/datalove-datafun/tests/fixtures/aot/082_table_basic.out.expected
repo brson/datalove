@@ -24,7 +24,7 @@ AotAnalysis(
                         v7 = const 42u32
                         debuglog v7
                         unit_end_drop v6
-                        exit
+                        unit_end
                 """,
             ),
             aot_compile: Some(AotCompileResult(

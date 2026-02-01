@@ -19,7 +19,7 @@ Analysis(
                         v2 = const 2u32
                         v3 = const 2000u32
                         v4 = map {v0: v1, v2: v3}
-                        exit v4
+                        return v4
                 """,
             ),
             output: "",
@@ -38,7 +38,7 @@ Analysis(
                 ir: """
                     scriptunit:
                     block0:
-                        exit
+                        unit_end
                 """,
             ),
             output: "(fragment executed)",
@@ -58,7 +58,7 @@ Analysis(
                     scriptunit:
                     block0:
                         v0 = call @0 m0.u0()
-                        exit v0
+                        unit_end v0
                 """,
             ),
             output: "map {1 = 1000, 2 = 2000}",

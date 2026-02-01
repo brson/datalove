@@ -1310,8 +1310,9 @@ impl<'db> LowerCtx<'db> {
                     *then_block = BlockId(id_map[then_block.0 as usize]);
                     *else_block = BlockId(id_map[else_block.0 as usize]);
                 }
-                Terminator::Exit { .. }
-                | Terminator::EarlyExit { .. } => {}
+                Terminator::Return { .. }
+                | Terminator::UnitEnd { .. }
+                | Terminator::UnitEarlyReturn { .. } => {}
             }
         }
     }

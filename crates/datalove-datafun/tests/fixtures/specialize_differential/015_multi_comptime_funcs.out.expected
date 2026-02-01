@@ -19,14 +19,14 @@ Analysis(
                         v0 = add p0, p1
                         drop p0
                         drop p1
-                        exit v0
+                        return v0
                     
                     fn mul_const(p0, p1):
                     block0:
                         v0 = mul p0, p1
                         drop p0
                         drop p1
-                        exit v0
+                        return v0
                     
                     fn shift_by(p0, p1, p2):
                     block0:
@@ -36,7 +36,7 @@ Analysis(
                         drop p0
                         drop p1
                         drop p2
-                        exit v1
+                        return v1
                 """,
             ),
             output: "",

@@ -14,7 +14,7 @@ Analysis(
                 ir: """
                     scriptunit:
                     block0:
-                        exit
+                        unit_end
                     
                     fn select_const(p0):
                     block0:
@@ -23,11 +23,11 @@ Analysis(
                         v2 = copy p0
                         branch v2, block1, block2
                     block1:
-                        exit v0
+                        return v0
                     block2:
                         goto block3
                     block3:
-                        exit v1
+                        return v1
                 """,
             ),
             output: "(fragment executed)",
@@ -48,7 +48,7 @@ Analysis(
                     block0:
                         v0 = const true
                         v1 = call @0 unit0.u0(v0)
-                        exit v1
+                        unit_end v1
                 """,
             ),
             output: "100",

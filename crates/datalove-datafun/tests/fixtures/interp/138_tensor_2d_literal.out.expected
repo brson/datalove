@@ -21,7 +21,7 @@ Analysis(
                         v4 = const 5u32
                         v5 = const 6u32
                         v6 = tensor [2, 3] [v0, v1, v2, v3, v4, v5]
-                        exit v6
+                        unit_end v6
                 """,
             ),
             output: "tensor [2, 3] [1 2 3, 4 5 6]",

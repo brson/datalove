@@ -16,7 +16,7 @@ DualAnalysis(
                         v0 = call @0 u0()
                         debuglog v0
                         drop v0
-                        exit
+                        unit_end
                     
                     fn test():
                     block0:
@@ -28,7 +28,7 @@ DualAnalysis(
                     block1:
                         v5 = none
                         drop v0
-                        exit v5
+                        return v5
                     block2:
                         v6 = const 1000000000u32
                         v7, v8 = mul.checked v3, v6
@@ -36,11 +36,11 @@ DualAnalysis(
                     block3:
                         v9 = none
                         drop v0
-                        exit v9
+                        return v9
                     block4:
                         v10 = pack Struct0 {v0, v7}
                         v11 = some v10
-                        exit v11
+                        return v11
                 """,
             ),
             aot_lowering: LoweringResult(
@@ -51,7 +51,7 @@ DualAnalysis(
                         v0 = call @0 u0()
                         debuglog v0
                         drop v0
-                        exit
+                        unit_end
                     
                     fn test():
                     block0:
@@ -63,7 +63,7 @@ DualAnalysis(
                     block1:
                         v5 = none
                         drop v0
-                        exit v5
+                        return v5
                     block2:
                         v6 = const 1000000000u32
                         v7, v8 = mul.checked v3, v6
@@ -71,11 +71,11 @@ DualAnalysis(
                     block3:
                         v9 = none
                         drop v0
-                        exit v9
+                        return v9
                     block4:
                         v10 = pack Struct0 {v0, v7}
                         v11 = some v10
-                        exit v11
+                        return v11
                 """,
             ),
             ir_match: true,

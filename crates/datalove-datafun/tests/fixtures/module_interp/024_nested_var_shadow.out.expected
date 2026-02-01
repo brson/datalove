@@ -17,10 +17,10 @@ ModulesAnalysis(
                 v3 = const 3u32
                 store.copy s1, v3
                 v4 = load.copy s1
-                exit v4
+                return v4
             block2:
                 v5 = const 88u32
-                exit v5
+                return v5
         """,
     ),
     output: "3",

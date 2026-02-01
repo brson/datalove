@@ -16,7 +16,7 @@ AotAnalysis(
                     block0:
                         v0 = call @0 u0()
                         debuglog v0
-                        exit
+                        unit_end
                     
                     fn test_string():
                     block0:
@@ -24,7 +24,7 @@ AotAnalysis(
                         debuglog v0
                         v1 = const 0u32
                         drop v0
-                        exit v1
+                        return v1
                 """,
             ),
             aot_compile: Some(AotCompileResult(

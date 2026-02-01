@@ -18,7 +18,7 @@ DualAnalysis(
                         v2 = call @0 u0(v0, v1)
                         debuglog v2
                         drop v2
-                        exit
+                        unit_end
                     
                     fn sub_checked(p0, p1):
                     block0:
@@ -28,10 +28,10 @@ DualAnalysis(
                         v2 = const "arithmetic overflow"
                         v3 = error_from v2
                         v4 = err v3
-                        exit v4
+                        return v4
                     block2:
                         v5 = ok v0
-                        exit v5
+                        return v5
                 """,
             ),
             aot_lowering: LoweringResult(
@@ -44,7 +44,7 @@ DualAnalysis(
                         v2 = call @0 u0(v0, v1)
                         debuglog v2
                         drop v2
-                        exit
+                        unit_end
                     
                     fn sub_checked(p0, p1):
                     block0:
@@ -54,10 +54,10 @@ DualAnalysis(
                         v2 = const "arithmetic overflow"
                         v3 = error_from v2
                         v4 = err v3
-                        exit v4
+                        return v4
                     block2:
                         v5 = ok v0
-                        exit v5
+                        return v5
                 """,
             ),
             ir_match: true,

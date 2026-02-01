@@ -15,7 +15,7 @@ Analysis(
                     fn get_value():
                     block0:
                         v0 = const 21u32
-                        exit v0
+                        return v0
                 """,
             ),
             output: "",
@@ -35,7 +35,7 @@ Analysis(
                     fn compute():
                     block0:
                         v0 = const 21u32
-                        exit v0
+                        return v0
                 """,
             ),
             output: "",
@@ -56,7 +56,7 @@ Analysis(
                     block0:
                         v0 = call @0 m1.u0()
                         debuglog v0
-                        exit
+                        unit_end
                 """,
             ),
             output: "(fragment executed)",

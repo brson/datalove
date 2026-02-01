@@ -40,7 +40,7 @@ DualAnalysis(
                         debuglog v16
                         v17 = intrinsic OffsetToIndex(v12)
                         debuglog v17
-                        exit
+                        unit_end
                 """,
             ),
             aot_lowering: LoweringResult(
@@ -75,7 +75,7 @@ DualAnalysis(
                         debuglog v16
                         v17 = intrinsic OffsetToIndex(v12)
                         debuglog v17
-                        exit
+                        unit_end
                 """,
             ),
             ir_match: true,

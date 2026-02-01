@@ -23,7 +23,7 @@ DualAnalysis(
                     block2:
                         goto block3
                     block3:
-                        exit
+                        unit_end
                 """,
             ),
             aot_lowering: LoweringResult(
@@ -41,7 +41,7 @@ DualAnalysis(
                     block2:
                         goto block3
                     block3:
-                        exit
+                        unit_end
                 """,
             ),
             ir_match: true,

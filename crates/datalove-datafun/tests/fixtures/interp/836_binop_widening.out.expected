@@ -17,7 +17,7 @@ Analysis(
                         v0 = call @0 u0()
                         debuglog v0
                         drop v0
-                        exit
+                        unit_end
                     
                     fn calc():
                     block0:
@@ -30,7 +30,7 @@ Analysis(
                         v4 = add v2, v3
                         drop v2
                         drop v3
-                        exit v4
+                        return v4
                 """,
             ),
             output: "(fragment executed)",

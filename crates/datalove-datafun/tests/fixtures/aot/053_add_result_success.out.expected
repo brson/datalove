@@ -20,7 +20,7 @@ AotAnalysis(
                         v3 = const 999u32
                         v4 = call @1 u1(v2, v3)
                         debuglog v4
-                        exit
+                        unit_end
                     
                     fn checked_add(p0, p1):
                     block0:
@@ -30,10 +30,10 @@ AotAnalysis(
                         v2 = const "arithmetic overflow"
                         v3 = error_from v2
                         v4 = err v3
-                        exit v4
+                        return v4
                     block2:
                         v5 = ok v0
-                        exit v5
+                        return v5
                     
                     fn unwrap_or_default(p0, p1):
                     block0:
@@ -41,11 +41,11 @@ AotAnalysis(
                         v1, v2, v3 = unwrap_result v0
                         branch v3, block1, block2
                     block1:
-                        exit v1
+                        return v1
                     block2:
                         v4 = copy p1
                         drop v2
-                        exit v4
+                        return v4
                 """,
             ),
             aot_compile: Some(AotCompileResult(

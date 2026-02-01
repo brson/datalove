@@ -14,12 +14,12 @@ IrSerialAnalysis(
                         v1 = const 2u32
                         v2 = pack Tuple2 {v0, v1}
                         debuglog v2
-                        exit
+                        unit_end
                 """,
             ),
             direct_interp_output: "(1, 2)\n",
             direct_aot_output: "(1, 2)\n",
-            serialized_ir_size: 1378,
+            serialized_ir_size: 1382,
             serialized_registry_size: 177,
             deser_success: true,
             deser_interp_output: "(1, 2)\n",

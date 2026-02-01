@@ -28,7 +28,7 @@ Analysis(
                         goto block3
                     block3:
                         unit_end_drop.tracked s0
-                        exit
+                        unit_end
                 """,
             ),
             output: "(fragment executed)",
@@ -48,7 +48,7 @@ Analysis(
                     scriptunit:
                     block0:
                         v0 = move unit0.s0
-                        exit v0
+                        unit_end v0
                 """,
             ),
             output: "\"hello world\"",

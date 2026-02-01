@@ -418,25 +418,28 @@ impl IrInterpreter {
                         current_block = *else_block;
                     }
                 }
-                Terminator::Exit { value } => {
+                Terminator::Return { value } => {
                     if let Some(op) = value {
                         let val = self.read_operand(op, frame, frames);
-                        // Determine destination based on context:
-                        // - Functions provide expr_dest=None, write to ret_dest
-                        // - Scripts provide expr_dest=Some(...), write to expr_dest
-                        let dest = if let Some(dest) = expr_dest {
-                            // Script context: write to expr_dest.
-                            dest
-                        } else {
-                            // Function context: write to ret_dest.
-                            ret_dest
-                        };
+                        // Use move_value (shallow copy). The frame will be
+                        // destroyed by call_in_context, so we must transfer
+                        // ownership to avoid double-free.
+                        unsafe { self.move_value(&val, ret_dest); }
+                        Self::mark_source_dropped_all(op, frame, frames);
+                    }
+                    return Ok(UnitCompletion::Normal);
+                }
+                Terminator::UnitEnd { result } => {
+                    if let Some(op) = result {
+                        let val = self.read_operand(op, frame, frames);
+                        // Write to expr_dest (not ret_dest) for expression results.
+                        let dest = expr_dest.expect("UnitEnd with result requires expr_dest");
                         unsafe { self.move_value(&val, dest); }
                         Self::mark_source_dropped_all(op, frame, frames);
                     }
                     return Ok(UnitCompletion::Normal);
                 }
-                Terminator::EarlyExit { value } => {
+                Terminator::UnitEarlyReturn { value } => {
                     let val = self.read_operand(value, frame, frames);
                     // Debuglog the value (borrow, not consume).
                     let rt_handle = self.runtime.handle();

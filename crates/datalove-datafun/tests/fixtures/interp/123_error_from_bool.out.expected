@@ -16,7 +16,7 @@ Analysis(
                     block0:
                         v0 = const true
                         v1 = error_from v0
-                        exit v1
+                        unit_end v1
                 """,
             ),
             output: "error true",

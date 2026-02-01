@@ -26,7 +26,7 @@ Analysis(
                     block2:
                         goto block3
                     block3:
-                        exit
+                        unit_end
                 """,
             ),
             output: "(fragment executed)",
@@ -46,7 +46,7 @@ Analysis(
                     scriptunit:
                     block0:
                         v0 = copy unit0.s0
-                        exit v0
+                        unit_end v0
                 """,
             ),
             output: "42",

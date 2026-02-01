@@ -19,7 +19,7 @@ DualAnalysis(
                         v3 = call @0 u0(v2)
                         debuglog v3
                         drop v3
-                        exit
+                        unit_end
                     
                     fn sum_coords(p0):
                     block0:
@@ -32,7 +32,7 @@ DualAnalysis(
                         v6 = add v2, v5
                         drop v2
                         drop v5
-                        exit v6
+                        return v6
                 """,
             ),
             aot_lowering: LoweringResult(
@@ -46,7 +46,7 @@ DualAnalysis(
                         v3 = call @0 u0(v2)
                         debuglog v3
                         drop v3
-                        exit
+                        unit_end
                     
                     fn sum_coords(p0):
                     block0:
@@ -59,7 +59,7 @@ DualAnalysis(
                         v6 = add v2, v5
                         drop v2
                         drop v5
-                        exit v6
+                        return v6
                 """,
             ),
             ir_match: true,
