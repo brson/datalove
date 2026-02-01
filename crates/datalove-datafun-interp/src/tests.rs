@@ -3,8 +3,6 @@ use datalove_rtdt as rtdt;
 use datalove_datafun_ir::{
     CallSiteId, IrType, IrBlock, Terminator, FuncRef, FuncId, ParamId, TypeRef, SlotId, SlotDest,
     BinOp, UnaryOp, ValueId, IrCodeUnit, CodeUnitId, CodeUnitContext, FunctionContext, ScriptContext,
-    // Legacy types kept for test compatibility.
-    IrFunction, IrScriptUnit,
 };
 
 /// Helper to create a function code unit for tests.
@@ -80,6 +78,51 @@ fn make_script_unit(
     }
 }
 
+/// Simple helper for parameterless test functions.
+fn make_test_func(
+    return_type: IrType,
+    blocks: Vec<IrBlock>,
+    value_types: Vec<IrType>,
+) -> IrCodeUnit {
+    make_func_unit(
+        0,
+        "test",
+        vec![],
+        vec![],
+        return_type,
+        blocks,
+        value_types.len() as u32,
+        value_types,
+        0,
+        vec![],
+        0,
+    )
+}
+
+/// Simple helper for script units without nested functions.
+fn make_simple_script(
+    blocks: Vec<IrBlock>,
+    value_types: Vec<IrType>,
+    slot_types: Vec<IrType>,
+    unit_end_values: Vec<ValueId>,
+    unit_end_slots: Vec<SlotId>,
+    result: Option<ValueId>,
+) -> IrCodeUnit {
+    make_script_unit(
+        blocks,
+        value_types.len() as u32,
+        value_types,
+        slot_types.len() as u32,
+        slot_types,
+        0,
+        unit_end_values,
+        unit_end_slots,
+        result,
+        vec![],
+        vec![],
+    )
+}
+
 #[test]
 fn test_tydesc_table_primitives() {
     let mut table = IrTyDescTable::new();
@@ -149,14 +192,13 @@ fn test_simple_function_call() {
 
     // Create main function that calls identity(10, 20).
     // fn main() -> i64 { identity(10, 20) }
-    let main_fn = IrFunction {
-        id: FuncId(1),
-        name: "main".to_string(),
-        params: vec![],
-        param_modes: vec![],
-        param_types: vec![],
-        return_type: IrType::I64,
-        blocks: vec![
+    let main_code_unit = make_func_unit(
+        1,
+        "main",
+        vec![],
+        vec![],
+        IrType::I64,
+        vec![
             IrBlock { id: BlockId(0), params: vec![],
                 instructions: vec![
                     Instruction::Const {
@@ -182,19 +224,15 @@ fn test_simple_function_call() {
                 },
             },
         ],
-        value_count: 3,
-        slot_count: 0,
-        call_site_count: 0,
-        value_types: vec![IrType::I64, IrType::I64, IrType::I64],
-        slot_types: vec![],
-        tracked_slots: vec![],
-    tracked_params: vec![],
-        const_values: vec![],
-    };
+        3,
+        vec![IrType::I64, IrType::I64, IrType::I64],
+        0,
+        vec![],
+        0,
+    );
 
-    // Create context with both functions (convert to IrCodeUnit).
-    let main_code_unit = IrCodeUnit::from(main_fn);
-    let functions: Vec<IrCodeUnit> = vec![IrCodeUnit::from(identity_fn), main_code_unit.clone()];
+    // Create context with both functions.
+    let functions: Vec<IrCodeUnit> = vec![identity_fn, main_code_unit.clone()];
     let ctx = ExecutionContext::new(&functions);
 
     // Execute main, writing result to our storage.
@@ -216,14 +254,13 @@ fn test_simple_function_call() {
 #[test]
 fn test_nested_function_calls() {
     // fn passthrough(x: i64) -> i64 { x }
-    let passthrough_fn = IrFunction {
-        id: FuncId(0),
-        name: "passthrough".to_string(),
-        params: vec![ParamId(0)],
-        param_modes: vec![],
-        param_types: vec![IrType::I64],
-        return_type: IrType::I64,
-        blocks: vec![
+    let passthrough_fn = make_func_unit(
+        0,
+        "passthrough",
+        vec![ParamId(0)],
+        vec![IrType::I64],
+        IrType::I64,
+        vec![
             IrBlock { id: BlockId(0), params: vec![],
                 instructions: vec![],
                 terminator: Terminator::Return {
@@ -231,25 +268,21 @@ fn test_nested_function_calls() {
                 },
             },
         ],
-        value_count: 0,
-        slot_count: 0,
-        call_site_count: 0,
-        value_types: vec![],
-        slot_types: vec![],
-        tracked_slots: vec![],
-    tracked_params: vec![],
-        const_values: vec![],
-    };
+        0,
+        vec![],
+        0,
+        vec![],
+        0,
+    );
 
     // fn nested(x: i64) -> i64 { passthrough(passthrough(x)) }
-    let nested_fn = IrFunction {
-        id: FuncId(1),
-        name: "nested".to_string(),
-        params: vec![ParamId(0)],
-        param_modes: vec![],
-        param_types: vec![IrType::I64],
-        return_type: IrType::I64,
-        blocks: vec![
+    let nested_code_unit = make_func_unit(
+        1,
+        "nested",
+        vec![ParamId(0)],
+        vec![IrType::I64],
+        IrType::I64,
+        vec![
             IrBlock { id: BlockId(0), params: vec![],
                 instructions: vec![
                     // First call: passthrough(x)
@@ -272,19 +305,15 @@ fn test_nested_function_calls() {
                 },
             },
         ],
-        value_count: 2,
-        slot_count: 0,
-        call_site_count: 0,
-        value_types: vec![IrType::I64, IrType::I64],
-        slot_types: vec![],
-        tracked_slots: vec![],
-    tracked_params: vec![],
-        const_values: vec![],
-    };
+        2,
+        vec![IrType::I64, IrType::I64],
+        0,
+        vec![],
+        0,
+    );
 
-    // Create context with both functions (convert to IrCodeUnit).
-    let nested_code_unit = IrCodeUnit::from(nested_fn);
-    let functions: Vec<IrCodeUnit> = vec![IrCodeUnit::from(passthrough_fn), nested_code_unit.clone()];
+    // Create context with both functions.
+    let functions: Vec<IrCodeUnit> = vec![passthrough_fn, nested_code_unit.clone()];
     let ctx = ExecutionContext::new(&functions);
 
     // Create argument value: 42.
@@ -313,8 +342,7 @@ fn test_nested_function_calls() {
 }
 
 /// Helper to run a function and get an i64 result.
-fn run_i64_function(func: &IrFunction) -> i64 {
-    let code_unit = IrCodeUnit::from(func.clone());
+fn run_i64_function(code_unit: &IrCodeUnit) -> i64 {
     let functions = [code_unit.clone()];
     let ctx = ExecutionContext::new(&functions);
     let mut interp = IrInterpreter::new();
@@ -326,13 +354,12 @@ fn run_i64_function(func: &IrFunction) -> i64 {
     };
     let registry = FunctionRegistry::new();
     let mut frames = FrameStore::new();
-    interp.call_in_context(&code_unit, None, vec![], ret_dest, &ctx, &registry, &mut frames).unwrap();
+    interp.call_in_context(code_unit, None, vec![], ret_dest, &ctx, &registry, &mut frames).unwrap();
     result
 }
 
 /// Helper to run a function and get a u32 result.
-fn run_u32_function(func: &IrFunction) -> u32 {
-    let code_unit = IrCodeUnit::from(func.clone());
+fn run_u32_function(code_unit: &IrCodeUnit) -> u32 {
     let functions = [code_unit.clone()];
     let ctx = ExecutionContext::new(&functions);
     let mut interp = IrInterpreter::new();
@@ -344,13 +371,12 @@ fn run_u32_function(func: &IrFunction) -> u32 {
     };
     let registry = FunctionRegistry::new();
     let mut frames = FrameStore::new();
-    interp.call_in_context(&code_unit, None, vec![], ret_dest, &ctx, &registry, &mut frames).unwrap();
+    interp.call_in_context(code_unit, None, vec![], ret_dest, &ctx, &registry, &mut frames).unwrap();
     result
 }
 
 /// Helper to run a function and get a bool result.
-fn run_bool_function(func: &IrFunction) -> bool {
-    let code_unit = IrCodeUnit::from(func.clone());
+fn run_bool_function(code_unit: &IrCodeUnit) -> bool {
     let functions = [code_unit.clone()];
     let ctx = ExecutionContext::new(&functions);
     let mut interp = IrInterpreter::new();
@@ -362,7 +388,7 @@ fn run_bool_function(func: &IrFunction) -> bool {
     };
     let registry = FunctionRegistry::new();
     let mut frames = FrameStore::new();
-    interp.call_in_context(&code_unit, None, vec![], ret_dest, &ctx, &registry, &mut frames).unwrap();
+    interp.call_in_context(code_unit, None, vec![], ret_dest, &ctx, &registry, &mut frames).unwrap();
     result
 }
 
@@ -372,14 +398,9 @@ fn run_bool_function(func: &IrFunction) -> bool {
 
 #[test]
 fn test_const_u8() {
-    let func = IrFunction {
-        id: FuncId(0),
-        name: "test".to_string(),
-        params: vec![],
-        param_modes: vec![],
-        param_types: vec![],
-        return_type: IrType::U8,
-        blocks: vec![
+    let func = make_test_func(
+        IrType::U8,
+        vec![
             IrBlock { id: BlockId(0), params: vec![],
                 instructions: vec![
                     Instruction::Const {
@@ -392,15 +413,8 @@ fn test_const_u8() {
                 },
             },
         ],
-        value_count: 1,
-        slot_count: 0,
-        call_site_count: 0,
-        value_types: vec![IrType::U8],
-        slot_types: vec![],
-        tracked_slots: vec![],
-    tracked_params: vec![],
-        const_values: vec![],
-    };
+        vec![IrType::U8],
+    );
 
     let code_unit = IrCodeUnit::from(func);
     let functions = [code_unit.clone()];
@@ -420,14 +434,9 @@ fn test_const_u8() {
 
 #[test]
 fn test_const_i32() {
-    let func = IrFunction {
-        id: FuncId(0),
-        name: "test".to_string(),
-        params: vec![],
-        param_modes: vec![],
-        param_types: vec![],
-        return_type: IrType::I32,
-        blocks: vec![
+    let func = make_test_func(
+        IrType::I32,
+        vec![
             IrBlock { id: BlockId(0), params: vec![],
                 instructions: vec![
                     Instruction::Const {
@@ -440,15 +449,8 @@ fn test_const_i32() {
                 },
             },
         ],
-        value_count: 1,
-        slot_count: 0,
-        call_site_count: 0,
-        value_types: vec![IrType::I32],
-        slot_types: vec![],
-        tracked_slots: vec![],
-    tracked_params: vec![],
-        const_values: vec![],
-    };
+        vec![IrType::I32],
+    );
 
     let code_unit = IrCodeUnit::from(func);
     let functions = [code_unit.clone()];
@@ -468,14 +470,9 @@ fn test_const_i32() {
 
 #[test]
 fn test_const_bool() {
-    let func = IrFunction {
-        id: FuncId(0),
-        name: "test".to_string(),
-        params: vec![],
-        param_modes: vec![],
-        param_types: vec![],
-        return_type: IrType::Bool,
-        blocks: vec![
+    let func = make_test_func(
+        IrType::Bool,
+        vec![
             IrBlock { id: BlockId(0), params: vec![],
                 instructions: vec![
                     Instruction::Const {
@@ -488,15 +485,8 @@ fn test_const_bool() {
                 },
             },
         ],
-        value_count: 1,
-        slot_count: 0,
-        call_site_count: 0,
-        value_types: vec![IrType::Bool],
-        slot_types: vec![],
-        tracked_slots: vec![],
-    tracked_params: vec![],
-        const_values: vec![],
-    };
+        vec![IrType::Bool],
+    );
 
     assert!(run_bool_function(&func));
 }
@@ -512,14 +502,9 @@ fn test_const_bool() {
 #[test]
 fn test_binop_eq() {
     // fn test() -> bool { 42 == 42 }
-    let func = IrFunction {
-        id: FuncId(0),
-        name: "test".to_string(),
-        params: vec![],
-        param_modes: vec![],
-        param_types: vec![],
-        return_type: IrType::Bool,
-        blocks: vec![
+    let func = make_test_func(
+        IrType::Bool,
+        vec![
             IrBlock { id: BlockId(0), params: vec![],
                 instructions: vec![
                     Instruction::Const { dest: ValueId(0), value: ConstValue::I64(42) },
@@ -534,15 +519,8 @@ fn test_binop_eq() {
                 terminator: Terminator::Return { value: Some(Operand::Value(ValueId(2))) },
             },
         ],
-        value_count: 3,
-        slot_count: 0,
-        call_site_count: 0,
-        value_types: vec![IrType::I64, IrType::I64, IrType::Bool],
-        slot_types: vec![],
-        tracked_slots: vec![],
-    tracked_params: vec![],
-        const_values: vec![],
-    };
+        vec![IrType::I64, IrType::I64, IrType::Bool],
+    );
 
     assert!(run_bool_function(&func));
 }
@@ -550,14 +528,9 @@ fn test_binop_eq() {
 #[test]
 fn test_binop_ne() {
     // fn test() -> bool { 1 != 2 }
-    let func = IrFunction {
-        id: FuncId(0),
-        name: "test".to_string(),
-        params: vec![],
-        param_modes: vec![],
-        param_types: vec![],
-        return_type: IrType::Bool,
-        blocks: vec![
+    let func = make_test_func(
+        IrType::Bool,
+        vec![
             IrBlock { id: BlockId(0), params: vec![],
                 instructions: vec![
                     Instruction::Const { dest: ValueId(0), value: ConstValue::I64(1) },
@@ -572,15 +545,8 @@ fn test_binop_ne() {
                 terminator: Terminator::Return { value: Some(Operand::Value(ValueId(2))) },
             },
         ],
-        value_count: 3,
-        slot_count: 0,
-        call_site_count: 0,
-        value_types: vec![IrType::I64, IrType::I64, IrType::Bool],
-        slot_types: vec![],
-        tracked_slots: vec![],
-    tracked_params: vec![],
-        const_values: vec![],
-    };
+        vec![IrType::I64, IrType::I64, IrType::Bool],
+    );
 
     assert!(run_bool_function(&func));
 }
@@ -588,14 +554,9 @@ fn test_binop_ne() {
 #[test]
 fn test_binop_lt() {
     // fn test() -> bool { 1 < 2 }
-    let func = IrFunction {
-        id: FuncId(0),
-        name: "test".to_string(),
-        params: vec![],
-        param_modes: vec![],
-        param_types: vec![],
-        return_type: IrType::Bool,
-        blocks: vec![
+    let func = make_test_func(
+        IrType::Bool,
+        vec![
             IrBlock { id: BlockId(0), params: vec![],
                 instructions: vec![
                     Instruction::Const { dest: ValueId(0), value: ConstValue::I64(1) },
@@ -610,15 +571,8 @@ fn test_binop_lt() {
                 terminator: Terminator::Return { value: Some(Operand::Value(ValueId(2))) },
             },
         ],
-        value_count: 3,
-        slot_count: 0,
-        call_site_count: 0,
-        value_types: vec![IrType::I64, IrType::I64, IrType::Bool],
-        slot_types: vec![],
-        tracked_slots: vec![],
-    tracked_params: vec![],
-        const_values: vec![],
-    };
+        vec![IrType::I64, IrType::I64, IrType::Bool],
+    );
 
     assert!(run_bool_function(&func));
 }
@@ -626,14 +580,9 @@ fn test_binop_lt() {
 #[test]
 fn test_binop_bitand() {
     // fn test() -> i64 { 0b1100 & 0b1010 } = 0b1000 = 8
-    let func = IrFunction {
-        id: FuncId(0),
-        name: "test".to_string(),
-        params: vec![],
-        param_modes: vec![],
-        param_types: vec![],
-        return_type: IrType::I64,
-        blocks: vec![
+    let func = make_test_func(
+        IrType::I64,
+        vec![
             IrBlock { id: BlockId(0), params: vec![],
                 instructions: vec![
                     Instruction::Const { dest: ValueId(0), value: ConstValue::I64(0b1100) },
@@ -648,15 +597,8 @@ fn test_binop_bitand() {
                 terminator: Terminator::Return { value: Some(Operand::Value(ValueId(2))) },
             },
         ],
-        value_count: 3,
-        slot_count: 0,
-        call_site_count: 0,
-        value_types: vec![IrType::I64, IrType::I64, IrType::I64],
-        slot_types: vec![],
-        tracked_slots: vec![],
-    tracked_params: vec![],
-        const_values: vec![],
-    };
+        vec![IrType::I64, IrType::I64, IrType::I64],
+    );
 
     assert_eq!(run_i64_function(&func), 8);
 }
@@ -664,14 +606,9 @@ fn test_binop_bitand() {
 #[test]
 fn test_binop_bitor() {
     // fn test() -> i64 { 0b1100 | 0b1010 } = 0b1110 = 14
-    let func = IrFunction {
-        id: FuncId(0),
-        name: "test".to_string(),
-        params: vec![],
-        param_modes: vec![],
-        param_types: vec![],
-        return_type: IrType::I64,
-        blocks: vec![
+    let func = make_test_func(
+        IrType::I64,
+        vec![
             IrBlock { id: BlockId(0), params: vec![],
                 instructions: vec![
                     Instruction::Const { dest: ValueId(0), value: ConstValue::I64(0b1100) },
@@ -686,15 +623,8 @@ fn test_binop_bitor() {
                 terminator: Terminator::Return { value: Some(Operand::Value(ValueId(2))) },
             },
         ],
-        value_count: 3,
-        slot_count: 0,
-        call_site_count: 0,
-        value_types: vec![IrType::I64, IrType::I64, IrType::I64],
-        slot_types: vec![],
-        tracked_slots: vec![],
-    tracked_params: vec![],
-        const_values: vec![],
-    };
+        vec![IrType::I64, IrType::I64, IrType::I64],
+    );
 
     assert_eq!(run_i64_function(&func), 14);
 }
@@ -702,14 +632,9 @@ fn test_binop_bitor() {
 #[test]
 fn test_binop_shl() {
     // fn test() -> i64 { 1 << 4 } = 16
-    let func = IrFunction {
-        id: FuncId(0),
-        name: "test".to_string(),
-        params: vec![],
-        param_modes: vec![],
-        param_types: vec![],
-        return_type: IrType::I64,
-        blocks: vec![
+    let func = make_test_func(
+        IrType::I64,
+        vec![
             IrBlock { id: BlockId(0), params: vec![],
                 instructions: vec![
                     Instruction::Const { dest: ValueId(0), value: ConstValue::I64(1) },
@@ -724,15 +649,8 @@ fn test_binop_shl() {
                 terminator: Terminator::Return { value: Some(Operand::Value(ValueId(2))) },
             },
         ],
-        value_count: 3,
-        slot_count: 0,
-        call_site_count: 0,
-        value_types: vec![IrType::I64, IrType::I64, IrType::I64],
-        slot_types: vec![],
-        tracked_slots: vec![],
-    tracked_params: vec![],
-        const_values: vec![],
-    };
+        vec![IrType::I64, IrType::I64, IrType::I64],
+    );
 
     assert_eq!(run_i64_function(&func), 16);
 }
@@ -745,14 +663,9 @@ fn test_binop_shl() {
 fn test_binop_checked_no_overflow() {
     // fn test() -> (i64, bool) { checked_add(10, 20) }
     // Returns (30, false) - no overflow.
-    let func = IrFunction {
-        id: FuncId(0),
-        name: "test".to_string(),
-        params: vec![],
-        param_modes: vec![],
-        param_types: vec![],
-        return_type: IrType::I64,
-        blocks: vec![
+    let func = make_test_func(
+        IrType::I64,
+        vec![
             IrBlock { id: BlockId(0), params: vec![],
                 instructions: vec![
                     Instruction::Const { dest: ValueId(0), value: ConstValue::I64(10) },
@@ -768,15 +681,8 @@ fn test_binop_checked_no_overflow() {
                 terminator: Terminator::Return { value: Some(Operand::Value(ValueId(2))) },
             },
         ],
-        value_count: 4,
-        slot_count: 0,
-        call_site_count: 0,
-        value_types: vec![IrType::I64, IrType::I64, IrType::I64, IrType::Bool],
-        slot_types: vec![],
-        tracked_slots: vec![],
-    tracked_params: vec![],
-        const_values: vec![],
-    };
+        vec![IrType::I64, IrType::I64, IrType::I64, IrType::Bool],
+    );
 
     assert_eq!(run_i64_function(&func), 30);
 }
@@ -785,14 +691,9 @@ fn test_binop_checked_no_overflow() {
 fn test_binop_checked_overflow() {
     // fn test() -> bool { let (_, overflow) = checked_add(i64::MAX, 1); overflow }
     // Returns true - overflow occurred.
-    let func = IrFunction {
-        id: FuncId(0),
-        name: "test".to_string(),
-        params: vec![],
-        param_modes: vec![],
-        param_types: vec![],
-        return_type: IrType::Bool,
-        blocks: vec![
+    let func = make_test_func(
+        IrType::Bool,
+        vec![
             IrBlock { id: BlockId(0), params: vec![],
                 instructions: vec![
                     Instruction::Const { dest: ValueId(0), value: ConstValue::I64(i64::MAX) },
@@ -808,15 +709,8 @@ fn test_binop_checked_overflow() {
                 terminator: Terminator::Return { value: Some(Operand::Value(ValueId(3))) },
             },
         ],
-        value_count: 4,
-        slot_count: 0,
-        call_site_count: 0,
-        value_types: vec![IrType::I64, IrType::I64, IrType::I64, IrType::Bool],
-        slot_types: vec![],
-        tracked_slots: vec![],
-    tracked_params: vec![],
-        const_values: vec![],
-    };
+        vec![IrType::I64, IrType::I64, IrType::I64, IrType::Bool],
+    );
 
     assert!(run_bool_function(&func));
 }
@@ -828,14 +722,9 @@ fn test_binop_checked_overflow() {
 #[test]
 fn test_unaryop_neg() {
     // fn test() -> i64 { -42 }
-    let func = IrFunction {
-        id: FuncId(0),
-        name: "test".to_string(),
-        params: vec![],
-        param_modes: vec![],
-        param_types: vec![],
-        return_type: IrType::I64,
-        blocks: vec![
+    let func = make_test_func(
+        IrType::I64,
+        vec![
             IrBlock { id: BlockId(0), params: vec![],
                 instructions: vec![
                     Instruction::Const { dest: ValueId(0), value: ConstValue::I64(42) },
@@ -848,15 +737,8 @@ fn test_unaryop_neg() {
                 terminator: Terminator::Return { value: Some(Operand::Value(ValueId(1))) },
             },
         ],
-        value_count: 2,
-        slot_count: 0,
-        call_site_count: 0,
-        value_types: vec![IrType::I64, IrType::I64],
-        slot_types: vec![],
-        tracked_slots: vec![],
-    tracked_params: vec![],
-        const_values: vec![],
-    };
+        vec![IrType::I64, IrType::I64],
+    );
 
     assert_eq!(run_i64_function(&func), -42);
 }
@@ -864,14 +746,9 @@ fn test_unaryop_neg() {
 #[test]
 fn test_unaryop_not() {
     // fn test() -> bool { !true }
-    let func = IrFunction {
-        id: FuncId(0),
-        name: "test".to_string(),
-        params: vec![],
-        param_modes: vec![],
-        param_types: vec![],
-        return_type: IrType::Bool,
-        blocks: vec![
+    let func = make_test_func(
+        IrType::Bool,
+        vec![
             IrBlock { id: BlockId(0), params: vec![],
                 instructions: vec![
                     Instruction::Const { dest: ValueId(0), value: ConstValue::Bool(true) },
@@ -884,15 +761,8 @@ fn test_unaryop_not() {
                 terminator: Terminator::Return { value: Some(Operand::Value(ValueId(1))) },
             },
         ],
-        value_count: 2,
-        slot_count: 0,
-        call_site_count: 0,
-        value_types: vec![IrType::Bool, IrType::Bool],
-        slot_types: vec![],
-        tracked_slots: vec![],
-    tracked_params: vec![],
-        const_values: vec![],
-    };
+        vec![IrType::Bool, IrType::Bool],
+    );
 
     assert!(!run_bool_function(&func));
 }
@@ -900,14 +770,9 @@ fn test_unaryop_not() {
 #[test]
 fn test_unaryop_bitnot() {
     // fn test() -> u32 { ~0u32 } = 0xFFFFFFFF
-    let func = IrFunction {
-        id: FuncId(0),
-        name: "test".to_string(),
-        params: vec![],
-        param_modes: vec![],
-        param_types: vec![],
-        return_type: IrType::U32,
-        blocks: vec![
+    let func = make_test_func(
+        IrType::U32,
+        vec![
             IrBlock { id: BlockId(0), params: vec![],
                 instructions: vec![
                     Instruction::Const { dest: ValueId(0), value: ConstValue::U32(0) },
@@ -920,15 +785,8 @@ fn test_unaryop_bitnot() {
                 terminator: Terminator::Return { value: Some(Operand::Value(ValueId(1))) },
             },
         ],
-        value_count: 2,
-        slot_count: 0,
-        call_site_count: 0,
-        value_types: vec![IrType::U32, IrType::U32],
-        slot_types: vec![],
-        tracked_slots: vec![],
-    tracked_params: vec![],
-        const_values: vec![],
-    };
+        vec![IrType::U32, IrType::U32],
+    );
 
     assert_eq!(run_u32_function(&func), 0xFFFFFFFF);
 }
@@ -940,14 +798,13 @@ fn test_unaryop_bitnot() {
 #[test]
 fn test_slot_store_load() {
     // var x = 10; x = 42; ret x
-    let func = IrFunction {
-        id: FuncId(0),
-        name: "test".to_string(),
-        params: vec![],
-        param_modes: vec![],
-        param_types: vec![],
-        return_type: IrType::I64,
-        blocks: vec![
+    let func = make_func_unit(
+        0,
+        "test",
+        vec![],
+        vec![],
+        IrType::I64,
+        vec![
             IrBlock { id: BlockId(0), params: vec![],
                 instructions: vec![
                     // var x = 10
@@ -962,15 +819,12 @@ fn test_slot_store_load() {
                 terminator: Terminator::Return { value: Some(Operand::Value(ValueId(2))) },
             },
         ],
-        value_count: 3,
-        slot_count: 1,
-        call_site_count: 0,
-        value_types: vec![IrType::I64, IrType::I64, IrType::I64],
-        slot_types: vec![IrType::I64],
-        tracked_slots: vec![],
-    tracked_params: vec![],
-        const_values: vec![],
-    };
+        3,
+        vec![IrType::I64, IrType::I64, IrType::I64],
+        1,
+        vec![IrType::I64],
+        0,
+    );
 
     assert_eq!(run_i64_function(&func), 42);
 }
@@ -978,14 +832,13 @@ fn test_slot_store_load() {
 #[test]
 fn test_slot_multiple_updates() {
     // var x = 1; x = 2; x = 4; x = 8; ret x
-    let func = IrFunction {
-        id: FuncId(0),
-        name: "test".to_string(),
-        params: vec![],
-        param_modes: vec![],
-        param_types: vec![],
-        return_type: IrType::I64,
-        blocks: vec![
+    let func = make_func_unit(
+        0,
+        "test",
+        vec![],
+        vec![],
+        IrType::I64,
+        vec![
             IrBlock { id: BlockId(0), params: vec![],
                 instructions: vec![
                     Instruction::Const { dest: ValueId(0), value: ConstValue::I64(1) },
@@ -1005,15 +858,12 @@ fn test_slot_multiple_updates() {
                 terminator: Terminator::Return { value: Some(Operand::Value(ValueId(4))) },
             },
         ],
-        value_count: 5,
-        slot_count: 1,
-        call_site_count: 0,
-        value_types: vec![IrType::I64; 5],
-        slot_types: vec![IrType::I64],
-        tracked_slots: vec![],
-    tracked_params: vec![],
-        const_values: vec![],
-    };
+        5,
+        vec![IrType::I64; 5],
+        1,
+        vec![IrType::I64],
+        0,
+    );
 
     assert_eq!(run_i64_function(&func), 8);
 }
@@ -1025,14 +875,9 @@ fn test_slot_multiple_updates() {
 #[test]
 fn test_branch_true() {
     // fn test() -> i64 { if true { 1 } else { 2 } }
-    let func = IrFunction {
-        id: FuncId(0),
-        name: "test".to_string(),
-        params: vec![],
-        param_modes: vec![],
-        param_types: vec![],
-        return_type: IrType::I64,
-        blocks: vec![
+    let func = make_test_func(
+        IrType::I64,
+        vec![
             IrBlock { id: BlockId(0), params: vec![],
                 instructions: vec![
                     Instruction::Const { dest: ValueId(0), value: ConstValue::Bool(true) },
@@ -1055,15 +900,8 @@ fn test_branch_true() {
                 terminator: Terminator::Return { value: Some(Operand::Value(ValueId(2))) },
             },
         ],
-        value_count: 3,
-        slot_count: 0,
-        call_site_count: 0,
-        value_types: vec![IrType::Bool, IrType::I64, IrType::I64],
-        slot_types: vec![],
-        tracked_slots: vec![],
-    tracked_params: vec![],
-        const_values: vec![],
-    };
+        vec![IrType::Bool, IrType::I64, IrType::I64],
+    );
 
     assert_eq!(run_i64_function(&func), 1);
 }
@@ -1071,14 +909,9 @@ fn test_branch_true() {
 #[test]
 fn test_branch_false() {
     // fn test() -> i64 { if false { 1 } else { 2 } }
-    let func = IrFunction {
-        id: FuncId(0),
-        name: "test".to_string(),
-        params: vec![],
-        param_modes: vec![],
-        param_types: vec![],
-        return_type: IrType::I64,
-        blocks: vec![
+    let func = make_test_func(
+        IrType::I64,
+        vec![
             IrBlock { id: BlockId(0), params: vec![],
                 instructions: vec![
                     Instruction::Const { dest: ValueId(0), value: ConstValue::Bool(false) },
@@ -1101,15 +934,8 @@ fn test_branch_false() {
                 terminator: Terminator::Return { value: Some(Operand::Value(ValueId(2))) },
             },
         ],
-        value_count: 3,
-        slot_count: 0,
-        call_site_count: 0,
-        value_types: vec![IrType::Bool, IrType::I64, IrType::I64],
-        slot_types: vec![],
-        tracked_slots: vec![],
-    tracked_params: vec![],
-        const_values: vec![],
-    };
+        vec![IrType::Bool, IrType::I64, IrType::I64],
+    );
 
     assert_eq!(run_i64_function(&func), 2);
 }
@@ -1118,14 +944,9 @@ fn test_branch_false() {
 fn test_goto_chain() {
     // block0 -> block1 -> block2 (return)
     // Tests control flow through multiple blocks.
-    let func = IrFunction {
-        id: FuncId(0),
-        name: "test".to_string(),
-        params: vec![],
-        param_modes: vec![],
-        param_types: vec![],
-        return_type: IrType::I64,
-        blocks: vec![
+    let func = make_test_func(
+        IrType::I64,
+        vec![
             IrBlock { id: BlockId(0), params: vec![],
                 instructions: vec![
                     Instruction::Const { dest: ValueId(0), value: ConstValue::I64(1) },
@@ -1153,15 +974,8 @@ fn test_goto_chain() {
                 terminator: Terminator::Return { value: Some(Operand::Value(ValueId(1))) },
             },
         ],
-        value_count: 3,
-        slot_count: 0,
-        call_site_count: 0,
-        value_types: vec![IrType::I64, IrType::I64, IrType::Bool],
-        slot_types: vec![],
-        tracked_slots: vec![],
-    tracked_params: vec![],
-        const_values: vec![],
-    };
+        vec![IrType::I64, IrType::I64, IrType::Bool],
+    );
 
     // Returns 2 from block1, proving control flow worked.
     assert_eq!(run_i64_function(&func), 2);
@@ -1174,14 +988,9 @@ fn test_goto_chain() {
 #[test]
 fn test_copy() {
     // fn test() -> i64 { let a = 42; let b = a; b }
-    let func = IrFunction {
-        id: FuncId(0),
-        name: "test".to_string(),
-        params: vec![],
-        param_modes: vec![],
-        param_types: vec![],
-        return_type: IrType::I64,
-        blocks: vec![
+    let func = make_test_func(
+        IrType::I64,
+        vec![
             IrBlock { id: BlockId(0), params: vec![],
                 instructions: vec![
                     Instruction::Const { dest: ValueId(0), value: ConstValue::I64(42) },
@@ -1190,15 +999,8 @@ fn test_copy() {
                 terminator: Terminator::Return { value: Some(Operand::Value(ValueId(1))) },
             },
         ],
-        value_count: 2,
-        slot_count: 0,
-        call_site_count: 0,
-        value_types: vec![IrType::I64, IrType::I64],
-        slot_types: vec![],
-        tracked_slots: vec![],
-    tracked_params: vec![],
-        const_values: vec![],
-    };
+        vec![IrType::I64, IrType::I64],
+    );
 
     assert_eq!(run_i64_function(&func), 42);
 }
@@ -1206,14 +1008,9 @@ fn test_copy() {
 #[test]
 fn test_move() {
     // fn test() -> i64 { let a = 42; let b = move a; b }
-    let func = IrFunction {
-        id: FuncId(0),
-        name: "test".to_string(),
-        params: vec![],
-        param_modes: vec![],
-        param_types: vec![],
-        return_type: IrType::I64,
-        blocks: vec![
+    let func = make_test_func(
+        IrType::I64,
+        vec![
             IrBlock { id: BlockId(0), params: vec![],
                 instructions: vec![
                     Instruction::Const { dest: ValueId(0), value: ConstValue::I64(42) },
@@ -1222,15 +1019,8 @@ fn test_move() {
                 terminator: Terminator::Return { value: Some(Operand::Value(ValueId(1))) },
             },
         ],
-        value_count: 2,
-        slot_count: 0,
-        call_site_count: 0,
-        value_types: vec![IrType::I64, IrType::I64],
-        slot_types: vec![],
-        tracked_slots: vec![],
-    tracked_params: vec![],
-        const_values: vec![],
-    };
+        vec![IrType::I64, IrType::I64],
+    );
 
     assert_eq!(run_i64_function(&func), 42);
 }
@@ -1245,14 +1035,9 @@ fn test_pack_tuple() {
     // Pack tuple, then unpack and return first element.
     let tuple_ty = IrType::Tuple(vec![IrType::I64, IrType::I64]);
 
-    let func = IrFunction {
-        id: FuncId(0),
-        name: "test".to_string(),
-        params: vec![],
-        param_modes: vec![],
-        param_types: vec![],
-        return_type: IrType::I64,
-        blocks: vec![
+    let func = make_test_func(
+        IrType::I64,
+        vec![
             IrBlock { id: BlockId(0), params: vec![],
                 instructions: vec![
                     Instruction::Const { dest: ValueId(0), value: ConstValue::I64(10) },
@@ -1270,15 +1055,8 @@ fn test_pack_tuple() {
                 terminator: Terminator::Return { value: Some(Operand::Value(ValueId(3))) },
             },
         ],
-        value_count: 5,
-        slot_count: 0,
-        call_site_count: 0,
-        value_types: vec![IrType::I64, IrType::I64, tuple_ty, IrType::I64, IrType::I64],
-        slot_types: vec![],
-        tracked_slots: vec![],
-    tracked_params: vec![],
-        const_values: vec![],
-    };
+        vec![IrType::I64, IrType::I64, tuple_ty, IrType::I64, IrType::I64],
+    );
 
     assert_eq!(run_i64_function(&func), 10);
 }
@@ -1288,14 +1066,9 @@ fn test_unpack_tuple() {
     // fn test() -> i64 { let (a, b) = (10, 20); b }
     let tuple_ty = IrType::Tuple(vec![IrType::I64, IrType::I64]);
 
-    let func = IrFunction {
-        id: FuncId(0),
-        name: "test".to_string(),
-        params: vec![],
-        param_modes: vec![],
-        param_types: vec![],
-        return_type: IrType::I64,
-        blocks: vec![
+    let func = make_test_func(
+        IrType::I64,
+        vec![
             IrBlock { id: BlockId(0), params: vec![],
                 instructions: vec![
                     // Create tuple (10, 20).
@@ -1316,18 +1089,11 @@ fn test_unpack_tuple() {
                 terminator: Terminator::Return { value: Some(Operand::Value(ValueId(4))) },
             },
         ],
-        value_count: 5,
-        slot_count: 0,
-        call_site_count: 0,
-        value_types: vec![
+        vec![
             IrType::I64, IrType::I64, tuple_ty,
             IrType::I64, IrType::I64
         ],
-        slot_types: vec![],
-        tracked_slots: vec![],
-    tracked_params: vec![],
-        const_values: vec![],
-    };
+    );
 
     assert_eq!(run_i64_function(&func), 20);
 }
@@ -1341,14 +1107,9 @@ fn test_wrap_some_unwrap() {
     // fn test() -> i64 { let opt = Some(42); opt.unwrap() }
     let opt_ty = IrType::Option(Box::new(IrType::I64));
 
-    let func = IrFunction {
-        id: FuncId(0),
-        name: "test".to_string(),
-        params: vec![],
-        param_modes: vec![],
-        param_types: vec![],
-        return_type: IrType::I64,
-        blocks: vec![
+    let func = make_test_func(
+        IrType::I64,
+        vec![
             IrBlock { id: BlockId(0), params: vec![],
                 instructions: vec![
                     Instruction::Const { dest: ValueId(0), value: ConstValue::I64(42) },
@@ -1365,15 +1126,8 @@ fn test_wrap_some_unwrap() {
                 terminator: Terminator::Return { value: Some(Operand::Value(ValueId(2))) },
             },
         ],
-        value_count: 4,
-        slot_count: 0,
-        call_site_count: 0,
-        value_types: vec![IrType::I64, opt_ty, IrType::I64, IrType::Bool],
-        slot_types: vec![],
-        tracked_slots: vec![],
-    tracked_params: vec![],
-        const_values: vec![],
-    };
+        vec![IrType::I64, opt_ty, IrType::I64, IrType::Bool],
+    );
 
     assert_eq!(run_i64_function(&func), 42);
 }
@@ -1383,14 +1137,9 @@ fn test_is_some() {
     // fn test() -> bool { let opt = Some(42); opt.is_some() }
     let opt_ty = IrType::Option(Box::new(IrType::I64));
 
-    let func = IrFunction {
-        id: FuncId(0),
-        name: "test".to_string(),
-        params: vec![],
-        param_modes: vec![],
-        param_types: vec![],
-        return_type: IrType::Bool,
-        blocks: vec![
+    let func = make_test_func(
+        IrType::Bool,
+        vec![
             IrBlock { id: BlockId(0), params: vec![],
                 instructions: vec![
                     Instruction::Const { dest: ValueId(0), value: ConstValue::I64(42) },
@@ -1407,15 +1156,8 @@ fn test_is_some() {
                 terminator: Terminator::Return { value: Some(Operand::Value(ValueId(3))) },
             },
         ],
-        value_count: 4,
-        slot_count: 0,
-        call_site_count: 0,
-        value_types: vec![IrType::I64, opt_ty, IrType::I64, IrType::Bool],
-        slot_types: vec![],
-        tracked_slots: vec![],
-    tracked_params: vec![],
-        const_values: vec![],
-    };
+        vec![IrType::I64, opt_ty, IrType::I64, IrType::Bool],
+    );
 
     assert!(run_bool_function(&func));
 }
@@ -1425,14 +1167,9 @@ fn test_is_none() {
     // fn test() -> bool { let opt: ?i64 = none; !opt.is_some() }
     let opt_ty = IrType::Option(Box::new(IrType::I64));
 
-    let func = IrFunction {
-        id: FuncId(0),
-        name: "test".to_string(),
-        params: vec![],
-        param_modes: vec![],
-        param_types: vec![],
-        return_type: IrType::Bool,
-        blocks: vec![
+    let func = make_test_func(
+        IrType::Bool,
+        vec![
             IrBlock { id: BlockId(0), params: vec![],
                 instructions: vec![
                     Instruction::WrapNone { dest: ValueId(0) },
@@ -1450,15 +1187,8 @@ fn test_is_none() {
                 terminator: Terminator::Return { value: Some(Operand::Value(ValueId(3))) },
             },
         ],
-        value_count: 4,
-        slot_count: 0,
-        call_site_count: 0,
-        value_types: vec![opt_ty, IrType::I64, IrType::Bool, IrType::Bool],
-        slot_types: vec![],
-        tracked_slots: vec![],
-    tracked_params: vec![],
-        const_values: vec![],
-    };
+        vec![opt_ty, IrType::I64, IrType::Bool, IrType::Bool],
+    );
 
     assert!(run_bool_function(&func));
 }
@@ -1468,14 +1198,9 @@ fn test_option_branch() {
     // fn test() -> i64 { if Some(42).is_some() { 1 } else { 0 } }
     let opt_ty = IrType::Option(Box::new(IrType::I64));
 
-    let func = IrFunction {
-        id: FuncId(0),
-        name: "test".to_string(),
-        params: vec![],
-        param_modes: vec![],
-        param_types: vec![],
-        return_type: IrType::I64,
-        blocks: vec![
+    let func = make_test_func(
+        IrType::I64,
+        vec![
             IrBlock { id: BlockId(0), params: vec![],
                 instructions: vec![
                     Instruction::Const { dest: ValueId(0), value: ConstValue::I64(42) },
@@ -1507,15 +1232,8 @@ fn test_option_branch() {
                 terminator: Terminator::Return { value: Some(Operand::Value(ValueId(5))) },
             },
         ],
-        value_count: 6,
-        slot_count: 0,
-        call_site_count: 0,
-        value_types: vec![IrType::I64, opt_ty, IrType::I64, IrType::Bool, IrType::I64, IrType::I64],
-        slot_types: vec![],
-        tracked_slots: vec![],
-    tracked_params: vec![],
-        const_values: vec![],
-    };
+        vec![IrType::I64, opt_ty, IrType::I64, IrType::Bool, IrType::I64, IrType::I64],
+    );
 
     assert_eq!(run_i64_function(&func), 1);
 }
@@ -1529,14 +1247,9 @@ fn test_wrap_ok_unwrap() {
     // fn test() -> i64 { let res = Ok(42); res.unwrap() }
     let res_ty = IrType::Result(Box::new(IrType::I64));
 
-    let func = IrFunction {
-        id: FuncId(0),
-        name: "test".to_string(),
-        params: vec![],
-        param_modes: vec![],
-        param_types: vec![],
-        return_type: IrType::I64,
-        blocks: vec![
+    let func = make_test_func(
+        IrType::I64,
+        vec![
             IrBlock { id: BlockId(0), params: vec![],
                 instructions: vec![
                     Instruction::Const { dest: ValueId(0), value: ConstValue::I64(42) },
@@ -1554,15 +1267,8 @@ fn test_wrap_ok_unwrap() {
                 terminator: Terminator::Return { value: Some(Operand::Value(ValueId(2))) },
             },
         ],
-        value_count: 5,
-        slot_count: 0,
-        call_site_count: 0,
-        value_types: vec![IrType::I64, res_ty, IrType::I64, IrType::Error, IrType::Bool],
-        slot_types: vec![],
-        tracked_slots: vec![],
-    tracked_params: vec![],
-        const_values: vec![],
-    };
+        vec![IrType::I64, res_ty, IrType::I64, IrType::Error, IrType::Bool],
+    );
 
     assert_eq!(run_i64_function(&func), 42);
 }
@@ -1572,14 +1278,9 @@ fn test_is_ok() {
     // fn test() -> bool { let res = Ok(42); res.is_ok() }
     let res_ty = IrType::Result(Box::new(IrType::I64));
 
-    let func = IrFunction {
-        id: FuncId(0),
-        name: "test".to_string(),
-        params: vec![],
-        param_modes: vec![],
-        param_types: vec![],
-        return_type: IrType::Bool,
-        blocks: vec![
+    let func = make_test_func(
+        IrType::Bool,
+        vec![
             IrBlock { id: BlockId(0), params: vec![],
                 instructions: vec![
                     Instruction::Const { dest: ValueId(0), value: ConstValue::I64(42) },
@@ -1597,15 +1298,8 @@ fn test_is_ok() {
                 terminator: Terminator::Return { value: Some(Operand::Value(ValueId(4))) },
             },
         ],
-        value_count: 5,
-        slot_count: 0,
-        call_site_count: 0,
-        value_types: vec![IrType::I64, res_ty, IrType::I64, IrType::Error, IrType::Bool],
-        slot_types: vec![],
-        tracked_slots: vec![],
-    tracked_params: vec![],
-        const_values: vec![],
-    };
+        vec![IrType::I64, res_ty, IrType::I64, IrType::Error, IrType::Bool],
+    );
 
     assert!(run_bool_function(&func));
 }
@@ -1615,14 +1309,9 @@ fn test_is_err() {
     // fn test() -> bool { let res: !i64 = err; !res.is_ok() }
     let res_ty = IrType::Result(Box::new(IrType::I64));
 
-    let func = IrFunction {
-        id: FuncId(0),
-        name: "test".to_string(),
-        params: vec![],
-        param_modes: vec![],
-        param_types: vec![],
-        return_type: IrType::Bool,
-        blocks: vec![
+    let func = make_test_func(
+        IrType::Bool,
+        vec![
             IrBlock { id: BlockId(0), params: vec![],
                 instructions: vec![
                     // Create an error value for WrapErr.
@@ -1647,15 +1336,8 @@ fn test_is_err() {
                 terminator: Terminator::Return { value: Some(Operand::Value(ValueId(5))) },
             },
         ],
-        value_count: 6,
-        slot_count: 0,
-        call_site_count: 0,
-        value_types: vec![IrType::Unit, res_ty, IrType::I64, IrType::Error, IrType::Bool, IrType::Bool],
-        slot_types: vec![],
-        tracked_slots: vec![],
-    tracked_params: vec![],
-        const_values: vec![],
-    };
+        vec![IrType::Unit, res_ty, IrType::I64, IrType::Error, IrType::Bool, IrType::Bool],
+    );
 
     assert!(run_bool_function(&func));
 }
@@ -1665,14 +1347,9 @@ fn test_result_branch() {
     // fn test() -> i64 { if Ok(42).is_ok() { 1 } else { 0 } }
     let res_ty = IrType::Result(Box::new(IrType::I64));
 
-    let func = IrFunction {
-        id: FuncId(0),
-        name: "test".to_string(),
-        params: vec![],
-        param_modes: vec![],
-        param_types: vec![],
-        return_type: IrType::I64,
-        blocks: vec![
+    let func = make_test_func(
+        IrType::I64,
+        vec![
             IrBlock { id: BlockId(0), params: vec![],
                 instructions: vec![
                     Instruction::Const { dest: ValueId(0), value: ConstValue::I64(42) },
@@ -1705,15 +1382,8 @@ fn test_result_branch() {
                 terminator: Terminator::Return { value: Some(Operand::Value(ValueId(6))) },
             },
         ],
-        value_count: 7,
-        slot_count: 0,
-        call_site_count: 0,
-        value_types: vec![IrType::I64, res_ty, IrType::I64, IrType::Error, IrType::Bool, IrType::I64, IrType::I64],
-        slot_types: vec![],
-        tracked_slots: vec![],
-    tracked_params: vec![],
-        const_values: vec![],
-    };
+        vec![IrType::I64, res_ty, IrType::I64, IrType::Error, IrType::Bool, IrType::I64, IrType::I64],
+    );
 
     assert_eq!(run_i64_function(&func), 1);
 }
@@ -1731,14 +1401,9 @@ fn test_pack_struct() {
         ("y".to_string(), IrType::I64),
     ]);
 
-    let func = IrFunction {
-        id: FuncId(0),
-        name: "test".to_string(),
-        params: vec![],
-        param_modes: vec![],
-        param_types: vec![],
-        return_type: IrType::I64,
-        blocks: vec![
+    let func = make_test_func(
+        IrType::I64,
+        vec![
             IrBlock { id: BlockId(0), params: vec![],
                 instructions: vec![
                     Instruction::Const { dest: ValueId(0), value: ConstValue::I64(10) },
@@ -1756,15 +1421,8 @@ fn test_pack_struct() {
                 terminator: Terminator::Return { value: Some(Operand::Value(ValueId(3))) },
             },
         ],
-        value_count: 5,
-        slot_count: 0,
-        call_site_count: 0,
-        value_types: vec![IrType::I64, IrType::I64, struct_ty, IrType::I64, IrType::I64],
-        slot_types: vec![],
-        tracked_slots: vec![],
-    tracked_params: vec![],
-        const_values: vec![],
-    };
+        vec![IrType::I64, IrType::I64, struct_ty, IrType::I64, IrType::I64],
+    );
 
     assert_eq!(run_i64_function(&func), 10);
 }
@@ -1777,14 +1435,9 @@ fn test_unpack_struct() {
         ("y".to_string(), IrType::I64),
     ]);
 
-    let func = IrFunction {
-        id: FuncId(0),
-        name: "test".to_string(),
-        params: vec![],
-        param_modes: vec![],
-        param_types: vec![],
-        return_type: IrType::I64,
-        blocks: vec![
+    let func = make_test_func(
+        IrType::I64,
+        vec![
             IrBlock { id: BlockId(0), params: vec![],
                 instructions: vec![
                     // Create struct { x: 10, y: 20 }.
@@ -1805,18 +1458,11 @@ fn test_unpack_struct() {
                 terminator: Terminator::Return { value: Some(Operand::Value(ValueId(4))) },
             },
         ],
-        value_count: 5,
-        slot_count: 0,
-        call_site_count: 0,
-        value_types: vec![
+        vec![
             IrType::I64, IrType::I64, struct_ty,
             IrType::I64, IrType::I64
         ],
-        slot_types: vec![],
-        tracked_slots: vec![],
-    tracked_params: vec![],
-        const_values: vec![],
-    };
+    );
 
     assert_eq!(run_i64_function(&func), 20);
 }
@@ -1828,8 +1474,8 @@ fn test_unpack_struct() {
 #[test]
 fn test_crossunit_external_value() {
     // Unit 0: let x = 42
-    let unit0 = IrScriptUnit {
-        blocks: vec![
+    let unit0 = make_script_unit(
+        vec![
             IrBlock { id: BlockId(0), params: vec![],
                 instructions: vec![
                     Instruction::Const {
@@ -1840,24 +1486,21 @@ fn test_crossunit_external_value() {
                 terminator: Terminator::UnitEnd { result: None },
             },
         ],
-        value_count: 1,
-        slot_count: 0,
-        call_site_count: 0,
-        value_types: vec![IrType::I64],
-        slot_types: vec![],
-        tracked_slots: vec![],
-        unit_end_values: vec![],
-        unit_end_slots: vec![],
-        functions: vec![],
-        symbols: datalove_datafun_ir::SymbolTable::new(),
-        result: None,
-        exports: vec![("x".to_string(), datalove_datafun_ir::ExportBinding::Value(ValueId(0)))],
-        const_values: vec![],
-    };
+        1,
+        vec![IrType::I64],
+        0,
+        vec![],
+        0,
+        vec![],
+        vec![],
+        None,
+        vec![("x".to_string(), datalove_datafun_ir::ExportBinding::Value(ValueId(0)))],
+        vec![],
+    );
 
     // Unit 1: return x (from unit 0)
-    let unit1 = IrScriptUnit {
-        blocks: vec![
+    let unit1 = make_script_unit(
+        vec![
             IrBlock { id: BlockId(0), params: vec![],
                 instructions: vec![
                     // Copy external value to local for return.
@@ -1869,20 +1512,17 @@ fn test_crossunit_external_value() {
                 terminator: Terminator::UnitEnd { result: Some(Operand::Value(ValueId(0))) },
             },
         ],
-        value_count: 1,
-        slot_count: 0,
-        call_site_count: 0,
-        value_types: vec![IrType::I64],
-        slot_types: vec![],
-        tracked_slots: vec![],
-        unit_end_values: vec![],
-        unit_end_slots: vec![],
-        functions: vec![],
-        symbols: datalove_datafun_ir::SymbolTable::new(),
-        result: Some(ValueId(0)),
-        exports: vec![],
-        const_values: vec![],
-    };
+        1,
+        vec![IrType::I64],
+        0,
+        vec![],
+        0,
+        vec![],
+        vec![],
+        Some(ValueId(0)),
+        vec![],
+        vec![],
+    );
 
     // Execute both units.
     let mut interp = IrInterpreter::new();
@@ -1896,7 +1536,7 @@ fn test_crossunit_external_value() {
     let ret_dest = Destination { ptr: ret_buffer.as_mut_ptr(), tydesc: ret_tydesc };
 
     // Execute unit 0 (fragment, no result).
-    let completion = interp.execute_script_unit_in_env(&IrCodeUnit::from(unit0.clone()), &mut env, ret_dest, None).unwrap();
+    let completion = interp.execute_script_unit_in_env(&unit0, &mut env, ret_dest, None).unwrap();
     assert_eq!(completion, super::UnitCompletion::Normal);
 
     // Execute unit 1 (returns x).
@@ -1906,7 +1546,7 @@ fn test_crossunit_external_value() {
         ptr: &mut result as *mut i64 as *mut u8,
         tydesc: expr_tydesc,
     };
-    let completion = interp.execute_script_unit_in_env(&IrCodeUnit::from(unit1.clone()), &mut env, ret_dest, Some(expr_dest)).unwrap();
+    let completion = interp.execute_script_unit_in_env(&unit1, &mut env, ret_dest, Some(expr_dest)).unwrap();
     assert_eq!(completion, super::UnitCompletion::Normal);
 
     assert_eq!(result, 42);
@@ -1915,8 +1555,8 @@ fn test_crossunit_external_value() {
 #[test]
 fn test_crossunit_external_slot() {
     // Unit 0: var y = 10
-    let unit0 = IrScriptUnit {
-        blocks: vec![
+    let unit0 = make_script_unit(
+        vec![
             IrBlock { id: BlockId(0), params: vec![],
                 instructions: vec![
                     Instruction::Const {
@@ -1931,24 +1571,21 @@ fn test_crossunit_external_slot() {
                 terminator: Terminator::UnitEnd { result: None },
             },
         ],
-        value_count: 1,
-        slot_count: 1,
-        call_site_count: 0,
-        value_types: vec![IrType::I64],
-        slot_types: vec![IrType::I64],
-        tracked_slots: vec![],
-        unit_end_values: vec![],
-        unit_end_slots: vec![],
-        functions: vec![],
-        symbols: datalove_datafun_ir::SymbolTable::new(),
-        result: None,
-        exports: vec![("y".to_string(), datalove_datafun_ir::ExportBinding::Slot(SlotId(0)))],
-        const_values: vec![],
-    };
+        1,
+        vec![IrType::I64],
+        1,
+        vec![IrType::I64],
+        0,
+        vec![],
+        vec![],
+        None,
+        vec![("y".to_string(), datalove_datafun_ir::ExportBinding::Slot(SlotId(0)))],
+        vec![],
+    );
 
     // Unit 1: return y (from unit 0's slot)
-    let unit1 = IrScriptUnit {
-        blocks: vec![
+    let unit1 = make_script_unit(
+        vec![
             IrBlock { id: BlockId(0), params: vec![],
                 instructions: vec![
                     // Copy external slot to local value for return.
@@ -1960,20 +1597,17 @@ fn test_crossunit_external_slot() {
                 terminator: Terminator::UnitEnd { result: Some(Operand::Value(ValueId(0))) },
             },
         ],
-        value_count: 1,
-        slot_count: 0,
-        call_site_count: 0,
-        value_types: vec![IrType::I64],
-        slot_types: vec![],
-        tracked_slots: vec![],
-        unit_end_values: vec![],
-        unit_end_slots: vec![],
-        functions: vec![],
-        symbols: datalove_datafun_ir::SymbolTable::new(),
-        result: Some(ValueId(0)),
-        exports: vec![],
-        const_values: vec![],
-    };
+        1,
+        vec![IrType::I64],
+        0,
+        vec![],
+        0,
+        vec![],
+        vec![],
+        Some(ValueId(0)),
+        vec![],
+        vec![],
+    );
 
     // Execute both units.
     let mut interp = IrInterpreter::new();
@@ -1987,7 +1621,7 @@ fn test_crossunit_external_slot() {
     let ret_dest = Destination { ptr: ret_buffer.as_mut_ptr(), tydesc: ret_tydesc };
 
     // Execute unit 0 (fragment).
-    let completion = interp.execute_script_unit_in_env(&IrCodeUnit::from(unit0.clone()), &mut env, ret_dest, None).unwrap();
+    let completion = interp.execute_script_unit_in_env(&unit0, &mut env, ret_dest, None).unwrap();
     assert_eq!(completion, super::UnitCompletion::Normal);
 
     // Execute unit 1 (returns y).
@@ -1997,7 +1631,7 @@ fn test_crossunit_external_slot() {
         ptr: &mut result as *mut i64 as *mut u8,
         tydesc: expr_tydesc,
     };
-    let completion = interp.execute_script_unit_in_env(&IrCodeUnit::from(unit1.clone()), &mut env, ret_dest, Some(expr_dest)).unwrap();
+    let completion = interp.execute_script_unit_in_env(&unit1, &mut env, ret_dest, Some(expr_dest)).unwrap();
     assert_eq!(completion, super::UnitCompletion::Normal);
 
     assert_eq!(result, 10);
@@ -2006,14 +1640,13 @@ fn test_crossunit_external_slot() {
 #[test]
 fn test_crossunit_external_function() {
     // Unit 0: fn identity(x: i64) -> i64 { x }
-    let identity_fn = IrFunction {
-        id: FuncId(0),
-        name: "identity".to_string(),
-        params: vec![ParamId(0)],
-        param_modes: vec![],
-        param_types: vec![IrType::I64],
-        return_type: IrType::I64,
-        blocks: vec![
+    let identity_fn = make_func_unit(
+        0,
+        "identity",
+        vec![ParamId(0)],
+        vec![IrType::I64],
+        IrType::I64,
+        vec![
             IrBlock { id: BlockId(0), params: vec![],
                 instructions: vec![],
                 terminator: Terminator::Return {
@@ -2021,41 +1654,35 @@ fn test_crossunit_external_function() {
                 },
             },
         ],
-        value_count: 0,
-        slot_count: 0,
-        call_site_count: 0,
-        value_types: vec![],
-        slot_types: vec![],
-        tracked_slots: vec![],
-    tracked_params: vec![],
-        const_values: vec![],
-    };
+        0,
+        vec![],
+        0,
+        vec![],
+        0,
+    );
 
-    let unit0 = IrScriptUnit {
-        blocks: vec![
+    let unit0 = make_script_unit(
+        vec![
             IrBlock { id: BlockId(0), params: vec![],
                 instructions: vec![],
                 terminator: Terminator::UnitEnd { result: None },
             },
         ],
-        value_count: 0,
-        slot_count: 0,
-        call_site_count: 0,
-        value_types: vec![],
-        slot_types: vec![],
-        tracked_slots: vec![],
-        unit_end_values: vec![],
-        unit_end_slots: vec![],
-        functions: vec![identity_fn],
-        symbols: datalove_datafun_ir::SymbolTable::new(),
-        result: None,
-        exports: vec![("identity".to_string(), datalove_datafun_ir::ExportBinding::Function(FuncId(0)))],
-        const_values: vec![],
-    };
+        0,
+        vec![],
+        0,
+        vec![],
+        0,
+        vec![],
+        vec![],
+        None,
+        vec![("identity".to_string(), datalove_datafun_ir::ExportBinding::Function(FuncId(0)))],
+        vec![identity_fn],
+    );
 
     // Unit 1: return identity(7)
-    let unit1 = IrScriptUnit {
-        blocks: vec![
+    let unit1 = make_script_unit(
+        vec![
             IrBlock { id: BlockId(0), params: vec![],
                 instructions: vec![
                     Instruction::Const {
@@ -2072,20 +1699,17 @@ fn test_crossunit_external_function() {
                 terminator: Terminator::UnitEnd { result: Some(Operand::Value(ValueId(1))) },
             },
         ],
-        value_count: 2,
-        slot_count: 0,
-        call_site_count: 0,
-        value_types: vec![IrType::I64, IrType::I64],
-        slot_types: vec![],
-        tracked_slots: vec![],
-        unit_end_values: vec![],
-        unit_end_slots: vec![],
-        functions: vec![],
-        symbols: datalove_datafun_ir::SymbolTable::new(),
-        result: Some(ValueId(1)),
-        exports: vec![],
-        const_values: vec![],
-    };
+        2,
+        vec![IrType::I64, IrType::I64],
+        0,
+        vec![],
+        0,
+        vec![],
+        vec![],
+        Some(ValueId(1)),
+        vec![],
+        vec![],
+    );
 
     // Execute both units.
     let mut interp = IrInterpreter::new();
@@ -2099,7 +1723,7 @@ fn test_crossunit_external_function() {
     let ret_dest = Destination { ptr: ret_buffer.as_mut_ptr(), tydesc: ret_tydesc };
 
     // Execute unit 0 (fragment with function).
-    let completion = interp.execute_script_unit_in_env(&IrCodeUnit::from(unit0.clone()), &mut env, ret_dest, None).unwrap();
+    let completion = interp.execute_script_unit_in_env(&unit0, &mut env, ret_dest, None).unwrap();
     assert_eq!(completion, super::UnitCompletion::Normal);
 
     // Execute unit 1 (returns identity(7)).
@@ -2109,7 +1733,7 @@ fn test_crossunit_external_function() {
         ptr: &mut result as *mut i64 as *mut u8,
         tydesc: expr_tydesc,
     };
-    let completion = interp.execute_script_unit_in_env(&IrCodeUnit::from(unit1.clone()), &mut env, ret_dest, Some(expr_dest)).unwrap();
+    let completion = interp.execute_script_unit_in_env(&unit1, &mut env, ret_dest, Some(expr_dest)).unwrap();
     assert_eq!(completion, super::UnitCompletion::Normal);
 
     assert_eq!(result, 7);  // identity(7) = 7
@@ -2118,8 +1742,8 @@ fn test_crossunit_external_function() {
 #[test]
 fn test_crossunit_chain() {
     // Unit 0: let a = 5
-    let unit0 = IrScriptUnit {
-        blocks: vec![
+    let unit0 = make_script_unit(
+        vec![
             IrBlock { id: BlockId(0), params: vec![],
                 instructions: vec![
                     Instruction::Const {
@@ -2130,24 +1754,21 @@ fn test_crossunit_chain() {
                 terminator: Terminator::UnitEnd { result: None },
             },
         ],
-        value_count: 1,
-        slot_count: 0,
-        call_site_count: 0,
-        value_types: vec![IrType::I64],
-        slot_types: vec![],
-        tracked_slots: vec![],
-        unit_end_values: vec![],
-        unit_end_slots: vec![],
-        functions: vec![],
-        symbols: datalove_datafun_ir::SymbolTable::new(),
-        result: None,
-        exports: vec![("a".to_string(), datalove_datafun_ir::ExportBinding::Value(ValueId(0)))],
-        const_values: vec![],
-    };
+        1,
+        vec![IrType::I64],
+        0,
+        vec![],
+        0,
+        vec![],
+        vec![],
+        None,
+        vec![("a".to_string(), datalove_datafun_ir::ExportBinding::Value(ValueId(0)))],
+        vec![],
+    );
 
     // Unit 1: let b = a (just pass through)
-    let unit1 = IrScriptUnit {
-        blocks: vec![
+    let unit1 = make_script_unit(
+        vec![
             IrBlock { id: BlockId(0), params: vec![],
                 instructions: vec![
                     // Load a from unit 0.
@@ -2159,24 +1780,21 @@ fn test_crossunit_chain() {
                 terminator: Terminator::UnitEnd { result: None },
             },
         ],
-        value_count: 1,
-        slot_count: 0,
-        call_site_count: 0,
-        value_types: vec![IrType::I64],
-        slot_types: vec![],
-        tracked_slots: vec![],
-        unit_end_values: vec![],
-        unit_end_slots: vec![],
-        functions: vec![],
-        symbols: datalove_datafun_ir::SymbolTable::new(),
-        result: None,
-        exports: vec![("b".to_string(), datalove_datafun_ir::ExportBinding::Value(ValueId(0)))],
-        const_values: vec![],
-    };
+        1,
+        vec![IrType::I64],
+        0,
+        vec![],
+        0,
+        vec![],
+        vec![],
+        None,
+        vec![("b".to_string(), datalove_datafun_ir::ExportBinding::Value(ValueId(0)))],
+        vec![],
+    );
 
     // Unit 2: return b
-    let unit2 = IrScriptUnit {
-        blocks: vec![
+    let unit2 = make_script_unit(
+        vec![
             IrBlock { id: BlockId(0), params: vec![],
                 instructions: vec![
                     // Load b from unit 1.
@@ -2188,20 +1806,17 @@ fn test_crossunit_chain() {
                 terminator: Terminator::UnitEnd { result: Some(Operand::Value(ValueId(0))) },
             },
         ],
-        value_count: 1,
-        slot_count: 0,
-        call_site_count: 0,
-        value_types: vec![IrType::I64],
-        slot_types: vec![],
-        tracked_slots: vec![],
-        unit_end_values: vec![],
-        unit_end_slots: vec![],
-        functions: vec![],
-        symbols: datalove_datafun_ir::SymbolTable::new(),
-        result: Some(ValueId(0)),
-        exports: vec![],
-        const_values: vec![],
-    };
+        1,
+        vec![IrType::I64],
+        0,
+        vec![],
+        0,
+        vec![],
+        vec![],
+        Some(ValueId(0)),
+        vec![],
+        vec![],
+    );
 
     // Execute all units.
     let mut interp = IrInterpreter::new();
@@ -2247,8 +1862,8 @@ fn test_crossunit_chain() {
 #[test]
 fn test_list_with_explicit_drop() {
     // Script unit that creates a list and explicitly drops it.
-    let unit = IrScriptUnit {
-        blocks: vec![
+    let unit = make_script_unit(
+        vec![
             IrBlock { id: BlockId(0), params: vec![],
                 instructions: vec![
                     // Create element values.
@@ -2268,21 +1883,17 @@ fn test_list_with_explicit_drop() {
                 terminator: Terminator::UnitEnd { result: None },
             },
         ],
-        value_count: 3,
-        slot_count: 0,
-        call_site_count: 0,
-        value_types: vec![IrType::I64, IrType::I64, IrType::List(Box::new(IrType::I64))],
-        slot_types: vec![],
-        // Key: the list is NOT tracked (precise).
-        tracked_slots: vec![],
-        unit_end_values: vec![],
-        unit_end_slots: vec![],
-        functions: vec![],
-        symbols: datalove_datafun_ir::SymbolTable::new(),
-        result: None,
-        exports: vec![],
-        const_values: vec![],
-    };
+        3,
+        vec![IrType::I64, IrType::I64, IrType::List(Box::new(IrType::I64))],
+        0,
+        vec![],
+        0,
+        vec![],
+        vec![],
+        None,
+        vec![],
+        vec![],
+    );
 
     let mut interp = IrInterpreter::new();
     let mut env = ScriptEnvironment::new();
@@ -2293,7 +1904,7 @@ fn test_list_with_explicit_drop() {
     let mut ret_buffer = vec![0u8; ret_size as usize];
     let ret_dest = Destination { ptr: ret_buffer.as_mut_ptr(), tydesc: ret_tydesc };
 
-    let completion = interp.execute_script_unit_in_env(&IrCodeUnit::from(unit.clone()), &mut env, ret_dest, None).unwrap();
+    let completion = interp.execute_script_unit_in_env(&unit, &mut env, ret_dest, None).unwrap();
     assert_eq!(completion, super::UnitCompletion::Normal);
 
     // destroy_live_values won't touch the list (not tracked), but explicit Drop already handled it.
@@ -2304,14 +1915,13 @@ fn test_list_with_explicit_drop() {
 #[test]
 fn test_script_with_function_and_list_drop() {
     // A function with two i64 parameters that just returns the first one.
-    let identity_fn = IrFunction {
-        id: FuncId(0),
-        name: "identity".to_string(),
-        params: vec![ParamId(0), ParamId(1)],
-        param_modes: vec![],
-        param_types: vec![IrType::I64, IrType::I64],
-        return_type: IrType::I64,
-        blocks: vec![
+    let identity_fn = make_func_unit(
+        0,
+        "identity",
+        vec![ParamId(0), ParamId(1)],
+        vec![IrType::I64, IrType::I64],
+        IrType::I64,
+        vec![
             IrBlock { id: BlockId(0), params: vec![],
                 instructions: vec![],
                 terminator: Terminator::Return {
@@ -2319,19 +1929,16 @@ fn test_script_with_function_and_list_drop() {
                 },
             },
         ],
-        value_count: 0,
-        slot_count: 0,
-        call_site_count: 0,
-        value_types: vec![],
-        slot_types: vec![],
-        tracked_slots: vec![],
-    tracked_params: vec![],
-        const_values: vec![],
-    };
+        0,
+        vec![],
+        0,
+        vec![],
+        0,
+    );
 
     // Script unit that defines the function and creates a list binding with explicit drop.
-    let unit = IrScriptUnit {
-        blocks: vec![
+    let unit = make_script_unit(
+        vec![
             IrBlock { id: BlockId(0), params: vec![],
                 instructions: vec![
                     // Create list [100, 200, 300, 400].
@@ -2363,24 +1970,21 @@ fn test_script_with_function_and_list_drop() {
                 terminator: Terminator::UnitEnd { result: None },
             },
         ],
-        value_count: 8,
-        slot_count: 0,
-        call_site_count: 0,
-        value_types: vec![
+        8,
+        vec![
             IrType::I64, IrType::I64, IrType::I64, IrType::I64,  // list elements
             IrType::List(Box::new(IrType::I64)),                  // the list
             IrType::I64, IrType::I64, IrType::I64,                // call args and result
         ],
-        slot_types: vec![],
-        tracked_slots: vec![],
-        unit_end_values: vec![],
-        unit_end_slots: vec![],
-        functions: vec![identity_fn],
-        symbols: datalove_datafun_ir::SymbolTable::new(),
-        result: None,
-        exports: vec![],
-        const_values: vec![],
-    };
+        0,
+        vec![],
+        0,
+        vec![],
+        vec![],
+        None,
+        vec![],
+        vec![identity_fn],
+    );
 
     let mut interp = IrInterpreter::new();
     let mut env = ScriptEnvironment::new();
@@ -2391,7 +1995,7 @@ fn test_script_with_function_and_list_drop() {
     let mut ret_buffer = vec![0u8; ret_size as usize];
     let ret_dest = Destination { ptr: ret_buffer.as_mut_ptr(), tydesc: ret_tydesc };
 
-    let completion = interp.execute_script_unit_in_env(&IrCodeUnit::from(unit.clone()), &mut env, ret_dest, None).unwrap();
+    let completion = interp.execute_script_unit_in_env(&unit, &mut env, ret_dest, None).unwrap();
     assert_eq!(completion, super::UnitCompletion::Normal);
 
     env.destroy_live_values(interp.runtime_handle());
@@ -2401,8 +2005,8 @@ fn test_script_with_function_and_list_drop() {
 #[test]
 fn test_multiple_explicit_drops() {
     // Create two separate lists with explicit drops.
-    let unit = IrScriptUnit {
-        blocks: vec![
+    let unit = make_script_unit(
+        vec![
             IrBlock { id: BlockId(0), params: vec![],
                 instructions: vec![
                     // First list [1, 2].
@@ -2432,23 +2036,20 @@ fn test_multiple_explicit_drops() {
                 terminator: Terminator::UnitEnd { result: None },
             },
         ],
-        value_count: 6,
-        slot_count: 0,
-        call_site_count: 0,
-        value_types: vec![
+        6,
+        vec![
             IrType::I64, IrType::I64, IrType::List(Box::new(IrType::I64)),
             IrType::I64, IrType::I64, IrType::List(Box::new(IrType::I64)),
         ],
-        slot_types: vec![],
-        tracked_slots: vec![],
-        unit_end_values: vec![],
-        unit_end_slots: vec![],
-        functions: vec![],
-        symbols: datalove_datafun_ir::SymbolTable::new(),
-        result: None,
-        exports: vec![],
-        const_values: vec![],
-    };
+        0,
+        vec![],
+        0,
+        vec![],
+        vec![],
+        None,
+        vec![],
+        vec![],
+    );
 
     let mut interp = IrInterpreter::new();
     let mut env = ScriptEnvironment::new();
@@ -2459,7 +2060,7 @@ fn test_multiple_explicit_drops() {
     let mut ret_buffer = vec![0u8; ret_size as usize];
     let ret_dest = Destination { ptr: ret_buffer.as_mut_ptr(), tydesc: ret_tydesc };
 
-    let completion = interp.execute_script_unit_in_env(&IrCodeUnit::from(unit.clone()), &mut env, ret_dest, None).unwrap();
+    let completion = interp.execute_script_unit_in_env(&unit, &mut env, ret_dest, None).unwrap();
     assert_eq!(completion, super::UnitCompletion::Normal);
 
     env.destroy_live_values(interp.runtime_handle());
@@ -2479,8 +2080,8 @@ fn test_ctfe_struct_with_string_destruction() {
         ("age".to_string(), ConstValue::U32(30)),
     ]);
 
-    let unit = IrScriptUnit {
-        blocks: vec![
+    let unit = make_script_unit(
+        vec![
             IrBlock { id: BlockId(0), params: vec![],
                 instructions: vec![
                     // Create struct constant.
@@ -2491,20 +2092,17 @@ fn test_ctfe_struct_with_string_destruction() {
                 terminator: Terminator::UnitEnd { result: None },
             },
         ],
-        value_count: 1,
-        slot_count: 0,
-        call_site_count: 0,
-        value_types: vec![struct_type],
-        slot_types: vec![],
-        tracked_slots: vec![],
-        unit_end_values: vec![],
-        unit_end_slots: vec![],
-        functions: vec![],
-        symbols: datalove_datafun_ir::SymbolTable::new(),
-        result: None,
-        exports: vec![],
-        const_values: vec![],
-    };
+        1,
+        vec![struct_type],
+        0,
+        vec![],
+        0,
+        vec![],
+        vec![],
+        None,
+        vec![],
+        vec![],
+    );
 
     let mut interp = IrInterpreter::new();
     let mut env = ScriptEnvironment::new();
@@ -2535,8 +2133,8 @@ fn test_ctfe_struct_with_string_unit_end_destruction() {
         ("age".to_string(), ConstValue::U32(30)),
     ]);
 
-    let unit = IrScriptUnit {
-        blocks: vec![
+    let unit = make_script_unit(
+        vec![
             IrBlock { id: BlockId(0), params: vec![],
                 instructions: vec![
                     // Create struct constant (no explicit drop - destroyed via unit_end_values).
@@ -2545,20 +2143,17 @@ fn test_ctfe_struct_with_string_unit_end_destruction() {
                 terminator: Terminator::UnitEnd { result: None },
             },
         ],
-        value_count: 1,
-        slot_count: 0,
-        call_site_count: 0,
-        value_types: vec![struct_type],
-        slot_types: vec![],
-        tracked_slots: vec![],
-        unit_end_values: vec![ValueId(0)],  // Struct is tracked for cleanup.
-        unit_end_slots: vec![],
-        functions: vec![],
-        symbols: datalove_datafun_ir::SymbolTable::new(),
-        result: None,
-        exports: vec![],
-        const_values: vec![],
-    };
+        1,
+        vec![struct_type],
+        0,
+        vec![],
+        0,
+        vec![ValueId(0)],  // Struct is tracked for cleanup.
+        vec![],
+        None,
+        vec![],
+        vec![],
+    );
 
     let mut interp = IrInterpreter::new();
     let mut env = ScriptEnvironment::new();
@@ -2569,7 +2164,7 @@ fn test_ctfe_struct_with_string_unit_end_destruction() {
     let mut ret_buffer = vec![0u8; ret_size as usize];
     let ret_dest = Destination { ptr: ret_buffer.as_mut_ptr(), tydesc: ret_tydesc };
 
-    let completion = interp.execute_script_unit_in_env(&IrCodeUnit::from(unit.clone()), &mut env, ret_dest, None).unwrap();
+    let completion = interp.execute_script_unit_in_env(&unit, &mut env, ret_dest, None).unwrap();
     assert_eq!(completion, super::UnitCompletion::Normal);
 
     env.destroy_live_values(interp.runtime_handle());
@@ -2589,8 +2184,8 @@ fn test_ctfe_struct_with_string_and_debuglog() {
         ("age".to_string(), ConstValue::U32(30)),
     ]);
 
-    let unit = IrScriptUnit {
-        blocks: vec![
+    let unit = make_script_unit(
+        vec![
             IrBlock { id: BlockId(0), params: vec![],
                 instructions: vec![
                     // Create struct constant.
@@ -2601,20 +2196,17 @@ fn test_ctfe_struct_with_string_and_debuglog() {
                 terminator: Terminator::UnitEnd { result: None },
             },
         ],
-        value_count: 1,
-        slot_count: 0,
-        call_site_count: 0,
-        value_types: vec![struct_type],
-        slot_types: vec![],
-        tracked_slots: vec![],
-        unit_end_values: vec![ValueId(0)],  // Struct is tracked for cleanup.
-        unit_end_slots: vec![],
-        functions: vec![],
-        symbols: datalove_datafun_ir::SymbolTable::new(),
-        result: None,
-        exports: vec![],
-        const_values: vec![],
-    };
+        1,
+        vec![struct_type],
+        0,
+        vec![],
+        0,
+        vec![ValueId(0)],  // Struct is tracked for cleanup.
+        vec![],
+        None,
+        vec![],
+        vec![],
+    );
 
     let mut interp = IrInterpreter::new();
     let mut env = ScriptEnvironment::new();
@@ -2625,7 +2217,7 @@ fn test_ctfe_struct_with_string_and_debuglog() {
     let mut ret_buffer = vec![0u8; ret_size as usize];
     let ret_dest = Destination { ptr: ret_buffer.as_mut_ptr(), tydesc: ret_tydesc };
 
-    let completion = interp.execute_script_unit_in_env(&IrCodeUnit::from(unit.clone()), &mut env, ret_dest, None).unwrap();
+    let completion = interp.execute_script_unit_in_env(&unit, &mut env, ret_dest, None).unwrap();
     assert_eq!(completion, super::UnitCompletion::Normal);
 
     env.destroy_live_values(interp.runtime_handle());
@@ -2641,8 +2233,8 @@ fn test_const_error() {
     // Test ConstValue::Error - boxes an inner value.
     let error_const = ConstValue::Error(Box::new(ConstValue::String("test error message".to_string())));
 
-    let unit = IrScriptUnit {
-        blocks: vec![
+    let unit = make_script_unit(
+        vec![
             IrBlock { id: BlockId(0), params: vec![],
                 instructions: vec![
                     Instruction::Const { dest: ValueId(0), value: error_const },
@@ -2652,20 +2244,17 @@ fn test_const_error() {
                 terminator: Terminator::UnitEnd { result: None },
             },
         ],
-        value_count: 1,
-        slot_count: 0,
-        call_site_count: 0,
-        value_types: vec![IrType::Error],
-        slot_types: vec![],
-        tracked_slots: vec![],
-        unit_end_values: vec![ValueId(0)],
-        unit_end_slots: vec![],
-        functions: vec![],
-        symbols: datalove_datafun_ir::SymbolTable::new(),
-        result: None,
-        exports: vec![],
-        const_values: vec![],
-    };
+        1,
+        vec![IrType::Error],
+        0,
+        vec![],
+        0,
+        vec![ValueId(0)],
+        vec![],
+        None,
+        vec![],
+        vec![],
+    );
 
     let mut interp = IrInterpreter::new();
     let mut env = ScriptEnvironment::new();
@@ -2676,7 +2265,7 @@ fn test_const_error() {
     let mut ret_buffer = vec![0u8; ret_size as usize];
     let ret_dest = Destination { ptr: ret_buffer.as_mut_ptr(), tydesc: ret_tydesc };
 
-    let completion = interp.execute_script_unit_in_env(&IrCodeUnit::from(unit.clone()), &mut env, ret_dest, None).unwrap();
+    let completion = interp.execute_script_unit_in_env(&unit, &mut env, ret_dest, None).unwrap();
     assert_eq!(completion, super::UnitCompletion::Normal);
 
     env.destroy_live_values(interp.runtime_handle());
@@ -2687,8 +2276,8 @@ fn test_const_data() {
     // Test ConstValue::Data - boxes an inner value.
     let data_const = ConstValue::Data(Box::new(ConstValue::I32(42)));
 
-    let unit = IrScriptUnit {
-        blocks: vec![
+    let unit = make_script_unit(
+        vec![
             IrBlock { id: BlockId(0), params: vec![],
                 instructions: vec![
                     Instruction::Const { dest: ValueId(0), value: data_const },
@@ -2698,20 +2287,17 @@ fn test_const_data() {
                 terminator: Terminator::UnitEnd { result: None },
             },
         ],
-        value_count: 1,
-        slot_count: 0,
-        call_site_count: 0,
-        value_types: vec![IrType::Data],
-        slot_types: vec![],
-        tracked_slots: vec![],
-        unit_end_values: vec![ValueId(0)],
-        unit_end_slots: vec![],
-        functions: vec![],
-        symbols: datalove_datafun_ir::SymbolTable::new(),
-        result: None,
-        exports: vec![],
-        const_values: vec![],
-    };
+        1,
+        vec![IrType::Data],
+        0,
+        vec![],
+        0,
+        vec![ValueId(0)],
+        vec![],
+        None,
+        vec![],
+        vec![],
+    );
 
     let mut interp = IrInterpreter::new();
     let mut env = ScriptEnvironment::new();
@@ -2737,8 +2323,8 @@ fn test_const_result_err() {
 
     let result_type = IrType::Result(Box::new(IrType::I32));
 
-    let unit = IrScriptUnit {
-        blocks: vec![
+    let unit = make_script_unit(
+        vec![
             IrBlock { id: BlockId(0), params: vec![],
                 instructions: vec![
                     Instruction::Const { dest: ValueId(0), value: result_err_const },
@@ -2748,20 +2334,17 @@ fn test_const_result_err() {
                 terminator: Terminator::UnitEnd { result: None },
             },
         ],
-        value_count: 1,
-        slot_count: 0,
-        call_site_count: 0,
-        value_types: vec![result_type],
-        slot_types: vec![],
-        tracked_slots: vec![],
-        unit_end_values: vec![ValueId(0)],
-        unit_end_slots: vec![],
-        functions: vec![],
-        symbols: datalove_datafun_ir::SymbolTable::new(),
-        result: None,
-        exports: vec![],
-        const_values: vec![],
-    };
+        1,
+        vec![result_type],
+        0,
+        vec![],
+        0,
+        vec![ValueId(0)],
+        vec![],
+        None,
+        vec![],
+        vec![],
+    );
 
     let mut interp = IrInterpreter::new();
     let mut env = ScriptEnvironment::new();
@@ -2783,8 +2366,8 @@ fn test_const_data_with_string() {
     // Test ConstValue::Data with a String inside.
     let data_const = ConstValue::Data(Box::new(ConstValue::String("boxed string".to_string())));
 
-    let unit = IrScriptUnit {
-        blocks: vec![
+    let unit = make_script_unit(
+        vec![
             IrBlock { id: BlockId(0), params: vec![],
                 instructions: vec![
                     Instruction::Const { dest: ValueId(0), value: data_const },
@@ -2793,20 +2376,17 @@ fn test_const_data_with_string() {
                 terminator: Terminator::UnitEnd { result: None },
             },
         ],
-        value_count: 1,
-        slot_count: 0,
-        call_site_count: 0,
-        value_types: vec![IrType::Data],
-        slot_types: vec![],
-        tracked_slots: vec![],
-        unit_end_values: vec![ValueId(0)],
-        unit_end_slots: vec![],
-        functions: vec![],
-        symbols: datalove_datafun_ir::SymbolTable::new(),
-        result: None,
-        exports: vec![],
-        const_values: vec![],
-    };
+        1,
+        vec![IrType::Data],
+        0,
+        vec![],
+        0,
+        vec![ValueId(0)],
+        vec![],
+        None,
+        vec![],
+        vec![],
+    );
 
     let mut interp = IrInterpreter::new();
     let mut env = ScriptEnvironment::new();
@@ -2828,8 +2408,8 @@ fn test_const_error_with_i32() {
     // Test ConstValue::Error boxing an i32.
     let error_const = ConstValue::Error(Box::new(ConstValue::I32(42)));
 
-    let unit = IrScriptUnit {
-        blocks: vec![
+    let unit = make_script_unit(
+        vec![
             IrBlock { id: BlockId(0), params: vec![],
                 instructions: vec![
                     Instruction::Const { dest: ValueId(0), value: error_const },
@@ -2838,20 +2418,17 @@ fn test_const_error_with_i32() {
                 terminator: Terminator::UnitEnd { result: None },
             },
         ],
-        value_count: 1,
-        slot_count: 0,
-        call_site_count: 0,
-        value_types: vec![IrType::Error],
-        slot_types: vec![],
-        tracked_slots: vec![],
-        unit_end_values: vec![ValueId(0)],
-        unit_end_slots: vec![],
-        functions: vec![],
-        symbols: datalove_datafun_ir::SymbolTable::new(),
-        result: None,
-        exports: vec![],
-        const_values: vec![],
-    };
+        1,
+        vec![IrType::Error],
+        0,
+        vec![],
+        0,
+        vec![ValueId(0)],
+        vec![],
+        None,
+        vec![],
+        vec![],
+    );
 
     let mut interp = IrInterpreter::new();
     let mut env = ScriptEnvironment::new();
@@ -2876,8 +2453,8 @@ fn test_const_error_with_tuple() {
         ConstValue::Bool(true),
     ])));
 
-    let unit = IrScriptUnit {
-        blocks: vec![
+    let unit = make_script_unit(
+        vec![
             IrBlock { id: BlockId(0), params: vec![],
                 instructions: vec![
                     Instruction::Const { dest: ValueId(0), value: error_const },
@@ -2886,20 +2463,17 @@ fn test_const_error_with_tuple() {
                 terminator: Terminator::UnitEnd { result: None },
             },
         ],
-        value_count: 1,
-        slot_count: 0,
-        call_site_count: 0,
-        value_types: vec![IrType::Error],
-        slot_types: vec![],
-        tracked_slots: vec![],
-        unit_end_values: vec![ValueId(0)],
-        unit_end_slots: vec![],
-        functions: vec![],
-        symbols: datalove_datafun_ir::SymbolTable::new(),
-        result: None,
-        exports: vec![],
-        const_values: vec![],
-    };
+        1,
+        vec![IrType::Error],
+        0,
+        vec![],
+        0,
+        vec![ValueId(0)],
+        vec![],
+        None,
+        vec![],
+        vec![],
+    );
 
     let mut interp = IrInterpreter::new();
     let mut env = ScriptEnvironment::new();
@@ -2924,8 +2498,8 @@ fn test_const_data_with_tuple() {
         ConstValue::U32(200),
     ])));
 
-    let unit = IrScriptUnit {
-        blocks: vec![
+    let unit = make_script_unit(
+        vec![
             IrBlock { id: BlockId(0), params: vec![],
                 instructions: vec![
                     Instruction::Const { dest: ValueId(0), value: data_const },
@@ -2934,20 +2508,17 @@ fn test_const_data_with_tuple() {
                 terminator: Terminator::UnitEnd { result: None },
             },
         ],
-        value_count: 1,
-        slot_count: 0,
-        call_site_count: 0,
-        value_types: vec![IrType::Data],
-        slot_types: vec![],
-        tracked_slots: vec![],
-        unit_end_values: vec![ValueId(0)],
-        unit_end_slots: vec![],
-        functions: vec![],
-        symbols: datalove_datafun_ir::SymbolTable::new(),
-        result: None,
-        exports: vec![],
-        const_values: vec![],
-    };
+        1,
+        vec![IrType::Data],
+        0,
+        vec![],
+        0,
+        vec![ValueId(0)],
+        vec![],
+        None,
+        vec![],
+        vec![],
+    );
 
     let mut interp = IrInterpreter::new();
     let mut env = ScriptEnvironment::new();
@@ -2973,8 +2544,8 @@ fn test_const_result_err_with_i32() {
 
     let result_type = IrType::Result(Box::new(IrType::String));
 
-    let unit = IrScriptUnit {
-        blocks: vec![
+    let unit = make_script_unit(
+        vec![
             IrBlock { id: BlockId(0), params: vec![],
                 instructions: vec![
                     Instruction::Const { dest: ValueId(0), value: result_err_const },
@@ -2983,20 +2554,17 @@ fn test_const_result_err_with_i32() {
                 terminator: Terminator::UnitEnd { result: None },
             },
         ],
-        value_count: 1,
-        slot_count: 0,
-        call_site_count: 0,
-        value_types: vec![result_type],
-        slot_types: vec![],
-        tracked_slots: vec![],
-        unit_end_values: vec![ValueId(0)],
-        unit_end_slots: vec![],
-        functions: vec![],
-        symbols: datalove_datafun_ir::SymbolTable::new(),
-        result: None,
-        exports: vec![],
-        const_values: vec![],
-    };
+        1,
+        vec![result_type],
+        0,
+        vec![],
+        0,
+        vec![ValueId(0)],
+        vec![],
+        None,
+        vec![],
+        vec![],
+    );
 
     let mut interp = IrInterpreter::new();
     let mut env = ScriptEnvironment::new();
@@ -3018,8 +2586,8 @@ fn test_const_data_with_bool() {
     // Test ConstValue::Data boxing a bool.
     let data_const = ConstValue::Data(Box::new(ConstValue::Bool(true)));
 
-    let unit = IrScriptUnit {
-        blocks: vec![
+    let unit = make_script_unit(
+        vec![
             IrBlock { id: BlockId(0), params: vec![],
                 instructions: vec![
                     Instruction::Const { dest: ValueId(0), value: data_const },
@@ -3028,20 +2596,17 @@ fn test_const_data_with_bool() {
                 terminator: Terminator::UnitEnd { result: None },
             },
         ],
-        value_count: 1,
-        slot_count: 0,
-        call_site_count: 0,
-        value_types: vec![IrType::Data],
-        slot_types: vec![],
-        tracked_slots: vec![],
-        unit_end_values: vec![ValueId(0)],
-        unit_end_slots: vec![],
-        functions: vec![],
-        symbols: datalove_datafun_ir::SymbolTable::new(),
-        result: None,
-        exports: vec![],
-        const_values: vec![],
-    };
+        1,
+        vec![IrType::Data],
+        0,
+        vec![],
+        0,
+        vec![ValueId(0)],
+        vec![],
+        None,
+        vec![],
+        vec![],
+    );
 
     let mut interp = IrInterpreter::new();
     let mut env = ScriptEnvironment::new();
@@ -3063,8 +2628,8 @@ fn test_const_error_with_unit() {
     // Test ConstValue::Error boxing Unit.
     let error_const = ConstValue::Error(Box::new(ConstValue::Unit));
 
-    let unit = IrScriptUnit {
-        blocks: vec![
+    let unit = make_script_unit(
+        vec![
             IrBlock { id: BlockId(0), params: vec![],
                 instructions: vec![
                     Instruction::Const { dest: ValueId(0), value: error_const },
@@ -3073,20 +2638,17 @@ fn test_const_error_with_unit() {
                 terminator: Terminator::UnitEnd { result: None },
             },
         ],
-        value_count: 1,
-        slot_count: 0,
-        call_site_count: 0,
-        value_types: vec![IrType::Error],
-        slot_types: vec![],
-        tracked_slots: vec![],
-        unit_end_values: vec![ValueId(0)],
-        unit_end_slots: vec![],
-        functions: vec![],
-        symbols: datalove_datafun_ir::SymbolTable::new(),
-        result: None,
-        exports: vec![],
-        const_values: vec![],
-    };
+        1,
+        vec![IrType::Error],
+        0,
+        vec![],
+        0,
+        vec![ValueId(0)],
+        vec![],
+        None,
+        vec![],
+        vec![],
+    );
 
     let mut interp = IrInterpreter::new();
     let mut env = ScriptEnvironment::new();

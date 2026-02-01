@@ -683,23 +683,6 @@ impl fmt::Display for IrBlock {
     }
 }
 
-impl fmt::Display for IrFunction {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "fn {}(", self.name)?;
-        for (i, param) in self.params.iter().enumerate() {
-            if i > 0 {
-                write!(f, ", ")?;
-            }
-            write!(f, "{}", param)?;
-        }
-        writeln!(f, "):")?;
-        for block in &self.blocks {
-            write!(f, "{}", block)?;
-        }
-        Ok(())
-    }
-}
-
 impl fmt::Display for IrModule {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         for (i, func) in self.functions.iter().enumerate() {
@@ -755,24 +738,3 @@ impl fmt::Display for ExportBinding {
     }
 }
 
-impl fmt::Display for IrScriptUnit {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        writeln!(f, "scriptunit:")?;
-        for block in &self.blocks {
-            write!(f, "{}", block)?;
-        }
-        if !self.functions.is_empty() {
-            writeln!(f)?;
-            for func in &self.functions {
-                write!(f, "{}", func)?;
-            }
-        }
-        if !self.exports.is_empty() {
-            writeln!(f, "exports:")?;
-            for (name, binding) in &self.exports {
-                writeln!(f, "    {} = {}", name, binding)?;
-            }
-        }
-        Ok(())
-    }
-}
