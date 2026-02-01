@@ -69,9 +69,9 @@ use std::cell::RefCell;
 
 use datalove_rtdt as rtdt;
 use datalove_datafun_ir::{
-    IrFunction, IrScriptUnit, IrBlock, IrType, Instruction, Terminator,
+    IrBlock, IrType, Instruction, Terminator,
     BlockId, Operand, SlotDest, ConstValue, ParamMode, FuncRef,
-    IrCodeUnit, CodeUnitId, CodeRef, CodeUnitContext,
+    IrCodeUnit,
 };
 
 /// Get param mode for argument at index, defaulting to In.

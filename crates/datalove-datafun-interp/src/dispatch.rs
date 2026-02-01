@@ -4,7 +4,7 @@
 
 use std::any::Any;
 
-use datalove_datafun_ir::{CallSiteId, FuncRef, IrFunction, IrCodeUnit};
+use datalove_datafun_ir::{CallSiteId, FuncRef, IrCodeUnit};
 use datalove_rt::c::LocalRtHandle;
 
 use crate::error::InterpError;

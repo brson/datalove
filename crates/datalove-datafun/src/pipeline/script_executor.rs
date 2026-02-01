@@ -27,7 +27,7 @@
 use rmx::prelude::*;
 use std::sync::Arc;
 
-use datalove_datafun_ir::{IrType, IrScriptUnit, IrCodeUnit};
+use datalove_datafun_ir::{IrType, IrCodeUnit};
 use datalove_datafun_compiler::lower;
 use datalove_datafun_interp::{CallDispatcher, ScriptEnvironment, UnitCompletion};
 use datalove_rt::rust::AlignedBuffer;

@@ -40,7 +40,7 @@ use cranelift_object::{ObjectBuilder, ObjectModule, ObjectProduct};
 use target_lexicon::Triple;
 
 use datalove_datafun_ir::{
-    IrBlock, IrCodeUnit, IrModule, IrModuleId, IrType,
+    IrCodeUnit, IrModule, IrModuleId, IrType,
 };
 
 /// Errors during AOT compilation.

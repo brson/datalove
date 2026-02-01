@@ -30,7 +30,7 @@ use std::any::Any;
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
 
-use datalove_datafun_ir::{FuncId, FuncRef, IrFunction, IrCodeUnit, IrModuleId, IrType};
+use datalove_datafun_ir::{FuncId, FuncRef, IrCodeUnit, IrModuleId, IrType};
 use datalove_datafun_interp::{CallDispatcher, DispatchCallContext, Destination, DispatchResult, InterpError, Value};
 use datalove_rt::c::LocalRtHandle;
 
@@ -307,7 +307,7 @@ impl JitEngine {
 mod tests {
     use super::*;
     use datalove_datafun_ir::{
-        IrBlock, Instruction, Terminator, Operand,
+        IrBlock, IrFunction, Instruction, Terminator, Operand,
         ValueId, BlockId, ConstValue, IrType, IrCodeUnit,
     };
     use datalove_datafun_interp::{

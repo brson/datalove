@@ -7,7 +7,7 @@ use std::any::Any;
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 
-use datalove_datafun_ir::{FuncRef, IrFunction, IrCodeUnit};
+use datalove_datafun_ir::{FuncRef, IrCodeUnit};
 use datalove_datafun_interp::{
     CallDispatcher, DispatchCallContext, Destination, DispatchResult, InterpError, Value,
     ExecutionContext, FrameStore, FunctionRegistry, IrInterpreter,

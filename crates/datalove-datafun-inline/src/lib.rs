@@ -12,7 +12,7 @@ use std::collections::HashMap;
 use datalove_datafun_ir::{
     BlockId, CallSiteId, FuncId, FuncRef, Instruction, IrBlock, IrCodeUnit, IrModule, IrModuleId,
     IrType, ModuleFunctionRegistry, Operand, ParamId, ParamMode, SlotDest, SlotId, SymbolTable,
-    Terminator, ValueId, CodeUnitId, FunctionContext,
+    Terminator, ValueId,
 };
 
 /// Directive specifying which function calls to inline.
@@ -978,7 +978,7 @@ pub fn inline_call_site(
     site: &CallSite,
 ) -> Option<IrCodeUnit> {
     // Get function contexts - inlining only works on functions.
-    let caller_ctx = caller.function_context()?;
+    let _caller_ctx = caller.function_context()?;
     let callee_ctx = callee.function_context()?;
 
     let mut new_unit = caller.clone();
