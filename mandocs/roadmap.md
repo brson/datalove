@@ -3,28 +3,28 @@
 
 ## Next checkpoint
 
-- documentation
+- [ ] top-level documentation
 - [x] diagnostics
-- module and script compile reactivity
-- script interpreter reactivity
+- [ ] module and script compile reactivity
+- [ ] script interpreter reactivity
 - [x] tensors and tables
-- table column projections
+- [ ] table column projections
 - [x] adapt opt / clone and coerce / @
 - [x] logic ops
 - [x] type aliases
 - [x] ctfe
-- const argument specialization
-- generic functions for built-in generic types
-- basic repl,
+- [ ] const argument specialization
+- [ ] generic functions for built-in generic types
+- [ ] basic repl,
 - [x] script runner
 - [x] interpreter
 - [x] jit
 - [x] aot
-- compute-only core library
-- core->runtime calls
-- intrinsics and core functions
+- [ ] compute-only core library
+- [ ] core->runtime calls
+- [ ] intrinsics and core functions
 - [x] field projections
-- match for enums
+- [ ] match for enums
 
 
 
@@ -40,6 +40,7 @@
 
 ## On deck
 
+- new repl
 - match syntax / switch ir instruction
   - use switch during specialization
 - fix rt error/alloc semantics
