@@ -478,7 +478,42 @@ operations:
 - `ref` parameters cannot be passed to `mut` parameters.
 - `out` parameters must be written as a whole, not field-by-field.
 
-### 7.4 Control Flow
+### 7.4 Const Parameters
+
+The `const` modifier declares a parameter whose value must be known at compile
+time:
+
+```
+fun repeat(const n: i32, s: string): string
+    var result = ""
+    var i: i32 = 0
+    loop while i .< n
+        set result = result + s
+        set i = i +! 1
+    end loop
+    ret result
+end fun
+
+const COUNT = 3
+let x = repeat(COUNT, "ab")  // COUNT is a const binding
+```
+
+**Semantics:**
+- The argument must be a const binding name (not a literal or expression)
+- The compiler specializes the function for each unique const argument value
+- Within the function body, the const parameter is available as a compile-time
+  constant, enabling optimizations like loop unrolling and dead code elimination
+
+**Restrictions:**
+- Const parameters must have primitive types or simple aggregates
+- Cannot combine `const` with `out` or `mut` modes
+- Arguments must be const binding names (e.g., `repeat(N, s)` not `repeat(3, s)`)
+
+**Implementation:** The compiler uses union-branch specialization - a single
+function with dispatch over an enum of known instantiations. See
+`const-param-specialization.md` for design details.
+
+### 7.5 Control Flow
 
 **If statement:**
 
@@ -518,7 +553,7 @@ end loop
 
 `break` exits the innermost loop. `continue` jumps to the next iteration.
 
-### 7.5 Return
+### 7.6 Return
 
 `ret` returns a value from a function:
 

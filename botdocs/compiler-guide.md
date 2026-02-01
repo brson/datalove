@@ -7,6 +7,7 @@ Reference for the datalove-datafun compiler architecture.
 - [Crate Organization](#user-content-crate-organization)
 - [Module Compilation Pipeline](#user-content-module-compilation-pipeline)
   - [Phase 5: IR Lowering Detail](#user-content-phase-5-ir-lowering-detail)
+  - [Const Parameter Specialization](#user-content-const-parameter-specialization)
   - [Const Evaluation](#user-content-const-evaluation)
 - [Script Compilation Pipeline](#user-content-script-compilation-pipeline)
 - [IR Types](#user-content-ir-types)
@@ -132,6 +133,33 @@ Why this structure:
 
 The `skip_const_inlining` flag skips phases 5a and 5b entirely, lowering const bindings as
 let bindings. Used for testing CTFE accuracy.
+
+### Const Parameter Specialization
+
+Functions with `const` parameters undergo specialization during phase 5c. The compiler
+collects all call sites with const arguments during typechecking, then transforms the IR:
+
+```
+Phase 5c: Specialize comptime functions
+    |   specialize_comptime_functions
+    |   - Resolve const arg values from ResolvedConsts
+    |   - Transform functions to union-branch form
+    |   - Rewrite ComptimeCall instructions to Call
+    v   Output: Specialized IrFunctions
+```
+
+**Union-branch strategy:** Instead of generating N separate functions (full monomorphization),
+the compiler generates one function with N branches dispatching on an enum tag. This trades
+minimal branch overhead for better instruction cache behavior and faster compile times.
+
+**Call site handling:** The lowering phase emits `ComptimeCall` instructions for calls to
+functions with const parameters. During specialization, these are transformed to emit the
+enum discriminant as a `Const` instruction followed by a regular `Call` with modified arguments.
+
+**Testing:** The `skip_specialization` flag (like `skip_const_inlining`) allows differential
+testing - comparing specialized vs unspecialized output to verify correctness.
+
+See `const-param-specialization.md` and `const-param-impl-plan.md` for detailed design.
 
 ### Const Evaluation
 
