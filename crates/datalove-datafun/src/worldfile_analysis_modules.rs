@@ -11,7 +11,6 @@
 use rmx::prelude::*;
 use serde::{Serialize, Deserialize};
 
-use datalove_datafun_ir::IrCodeUnit;
 use datalove_datafun_pkg::package_load_worldfile::{WorldfileSection, ParsedWorldfile};
 
 use crate::pipeline::{
@@ -117,11 +116,14 @@ pub fn analyze_modules_worldfile(
         .get(&(main_salsa_module_id, "main".S()))
         .ok_or_else(|| anyhow!("main function not found"))?;
 
-    let main_func = compiled.shared.module_registry.get_module_function(*main_ir_module_id, *main_func_id)
-        .ok_or_else(|| anyhow!("main function not in registry"))?;
+    let main_code_unit = compiled.shared.module_registry.get_module_function_as_unit(*main_ir_module_id, *main_func_id)
+        .ok_or_else(|| anyhow!("main function not in registry"))?
+        .clone();
 
-    // Verify main is nullary.
-    if !main_func.params.is_empty() {
+    // Verify main is a function and is nullary.
+    let main_ctx = main_code_unit.function_context()
+        .ok_or_else(|| anyhow!("main is not a function"))?;
+    if !main_ctx.params.is_empty() {
         bail!("main function must have no parameters");
     }
 
@@ -137,8 +139,9 @@ pub fn analyze_modules_worldfile(
     let mut tydesc_table = datalove_datafun_interp::IrTyDescTable::new();
 
     // Get return type from the IR function.
-    let ret_ir_type = &main_func.return_type;
-    let ret_tydesc = tydesc_table.get_or_create(&ret_ir_type);
+    let ret_ir_type = main_code_unit.return_type()
+        .ok_or_else(|| anyhow!("main function has no return type"))?;
+    let ret_tydesc = tydesc_table.get_or_create(ret_ir_type);
     let ret_size = unsafe { (*ret_tydesc).size };
 
     // Allocate return buffer.
@@ -152,9 +155,6 @@ pub fn analyze_modules_worldfile(
     let mut env = datalove_datafun_interp::ScriptEnvironment::with_module_registry(
         std::sync::Arc::clone(&compiled.shared.module_registry)
     );
-
-    // Execute main with the environment (so it can call other functions).
-    let main_code_unit = IrCodeUnit::from(main_func);
     let output = match interp.call_with_env(&main_code_unit, Vec::new(), ret_dest, &env) {
         Ok(()) => {
             // Pretty-print the return value.

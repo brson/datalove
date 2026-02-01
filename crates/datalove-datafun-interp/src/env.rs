@@ -37,9 +37,14 @@ impl ScriptEnvironment {
         }
     }
 
-    /// Add a module function.
+    /// Add a module function (legacy, accepts IrFunction).
     pub fn add_module_function(&mut self, module_id: IrModuleId, func_id: FuncId, func: IrFunction) {
         self.registry.add_module_function(module_id, func_id, func);
+    }
+
+    /// Add a module code unit.
+    pub fn add_module_code_unit(&mut self, module_id: IrModuleId, func_id: FuncId, unit: IrCodeUnit) {
+        self.registry.add_module_code_unit(module_id, func_id, unit);
     }
 
     /// Add a completed unit's frame and functions.

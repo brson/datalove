@@ -390,8 +390,7 @@ fn build_module_registry_from_lowered(
         // Find the corresponding lowered function (code unit).
         if let Some(lowered) = lowered_functions.get(module_id) {
             if let Some(unit) = lowered.functions.iter().find(|f| f.id.0 == func_id.0) {
-                // Convert IrCodeUnit to IrFunction for the registry.
-                registry.add_module_function(*ir_module_id, *func_id, IrFunction::from(unit.clone()));
+                registry.add_module_code_unit(*ir_module_id, *func_id, unit.clone());
             }
         }
     }

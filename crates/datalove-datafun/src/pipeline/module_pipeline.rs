@@ -332,8 +332,8 @@ impl ModuleCompilationPipeline {
 
                     // Add functions to registry.
                     for ir_unit in result.functions(db.as_salsa_db()) {
-                        let ir_func = datalove_datafun_ir::IrFunction::from(ir_unit.clone());
-                        registry.add_module_function(ir_module_id, ir_func.id, ir_func);
+                        let func_id = datalove_datafun_ir::FuncId(ir_unit.id.0);
+                        registry.add_module_code_unit(ir_module_id, func_id, ir_unit.clone());
                     }
                 }
 
