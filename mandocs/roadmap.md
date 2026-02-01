@@ -40,6 +40,8 @@
 
 ## On deck
 
+- match syntax / switch ir instruction
+  - use switch during specialization
 - fix rt error/alloc semantics
 - datalit syntax cleanup
   - map set type syntax
@@ -49,7 +51,6 @@
 - std.string - waiting for rtcalls
 - assert statements - needed for std_tests?
 - fully reactive scripts, undo/redo
-- match
 - generics
 
 
