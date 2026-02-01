@@ -27,7 +27,7 @@
 use rmx::prelude::*;
 use std::sync::Arc;
 
-use datalove_datafun_ir::{IrType, IrScriptUnit};
+use datalove_datafun_ir::{IrType, IrScriptUnit, IrCodeUnit};
 use datalove_datafun_compiler::lower;
 use datalove_datafun_interp::{CallDispatcher, ScriptEnvironment, UnitCompletion};
 use datalove_rt::rust::AlignedBuffer;
@@ -124,7 +124,8 @@ impl ScriptExecutor {
             tydesc: ret_tydesc,
         };
 
-        match self.interp.execute_script_unit_in_env(ir_unit, &mut self.env, ret_dest, None) {
+        let code_unit = IrCodeUnit::from(ir_unit.clone());
+        match self.interp.execute_script_unit_in_env(&code_unit, &mut self.env, ret_dest, None) {
             Ok(UnitCompletion::Normal) => "(fragment executed)".S(),
             Ok(UnitCompletion::EarlyReturn) => {
                 let value = datalove_datafun_interp::Value {
@@ -169,7 +170,8 @@ impl ScriptExecutor {
                 tydesc: expr_tydesc,
             };
 
-            match self.interp.execute_script_unit_in_env(ir_unit, &mut self.env, ret_dest, Some(expr_dest)) {
+            let code_unit = IrCodeUnit::from(ir_unit.clone());
+            match self.interp.execute_script_unit_in_env(&code_unit, &mut self.env, ret_dest, Some(expr_dest)) {
                 Ok(UnitCompletion::Normal) => {
                     let value = datalove_datafun_interp::Value {
                         ptr: expr_buffer.as_mut_ptr(),

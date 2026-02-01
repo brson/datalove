@@ -30,7 +30,7 @@ use std::any::Any;
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
 
-use datalove_datafun_ir::{FuncId, FuncRef, IrFunction, IrModuleId, IrType};
+use datalove_datafun_ir::{FuncId, FuncRef, IrFunction, IrCodeUnit, IrModuleId, IrType};
 use datalove_datafun_interp::{CallDispatcher, DispatchCallContext, Destination, DispatchResult, InterpError, Value};
 use datalove_rt::c::LocalRtHandle;
 
@@ -503,8 +503,9 @@ mod tests {
             Some(Box::new(jit)),
         );
 
-        // Set up execution context with both functions.
-        let functions = vec![identity_fn, main_fn.clone()];
+        // Set up execution context with both functions (convert to IrCodeUnit).
+        let main_code_unit = IrCodeUnit::from(main_fn);
+        let functions: Vec<IrCodeUnit> = vec![IrCodeUnit::from(identity_fn), main_code_unit.clone()];
         let ctx = ExecutionContext::new(&functions);
         let registry = FunctionRegistry::new();
         let mut frames = FrameStore::new();
@@ -519,7 +520,7 @@ mod tests {
 
         // Execute main, which calls identity(42).
         // The call to identity should go through the JIT dispatcher.
-        interp.call_in_context(&main_fn, None, vec![], ret_dest, &ctx, &registry, &mut frames)
+        interp.call_in_context(&main_code_unit, None, vec![], ret_dest, &ctx, &registry, &mut frames)
             .expect("execution failed");
 
         // Verify result.
@@ -601,8 +602,8 @@ mod tests {
             const_values: vec![],
         };
 
-        // Set up context with both functions.
-        let functions = vec![identity_fn, main_fn.clone()];
+        // Set up context with both functions (convert to IrCodeUnit).
+        let functions: Vec<IrCodeUnit> = vec![IrCodeUnit::from(identity_fn), IrCodeUnit::from(main_fn.clone())];
         let ctx = ExecutionContext::new(&functions);
         let registry = FunctionRegistry::new();
 
@@ -673,7 +674,7 @@ impl CallDispatcher for JitEngine {
     fn dispatch_call(
         &mut self,
         func_ref: &FuncRef,
-        func: &IrFunction,
+        func: &IrCodeUnit,
         args: &[Value],
         ret_dest: Destination,
         rt_handle: LocalRtHandle,
@@ -710,7 +711,8 @@ impl CallDispatcher for JitEngine {
 
         // Use record_call_with_context to enable JIT for functions with calls.
         // This creates stubs for callees so JIT code can call back to interpreter.
-        match self.record_call_with_context(key, func, compile_ctx, call_ctx.registry) {
+        let func_ir = IrFunction::from(func.clone());
+        match self.record_call_with_context(key, &func_ir, compile_ctx, call_ctx.registry) {
             Ok(Some((code_ptr, uses_sret))) => {
                 // JIT code available - set up dispatch context and call it.
                 // The trampoline needs this context to route calls back to the interpreter.
@@ -728,7 +730,7 @@ impl CallDispatcher for JitEngine {
 
                 // SAFETY: code_ptr is a valid JIT-compiled function for this signature.
                 let result = unsafe {
-                    bridge::call_jit(code_ptr, uses_sret, rt_handle, args, ret_dest, &func.return_type)
+                    bridge::call_jit(code_ptr, uses_sret, rt_handle, args, ret_dest, func.return_type().expect("JIT dispatch requires function return type"))
                 };
 
                 // Clear dispatch context.

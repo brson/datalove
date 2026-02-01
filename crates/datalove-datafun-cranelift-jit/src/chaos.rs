@@ -7,7 +7,7 @@ use std::any::Any;
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 
-use datalove_datafun_ir::{FuncRef, IrFunction};
+use datalove_datafun_ir::{FuncRef, IrFunction, IrCodeUnit};
 use datalove_datafun_interp::{
     CallDispatcher, DispatchCallContext, Destination, DispatchResult, InterpError, Value,
     ExecutionContext, FrameStore, FunctionRegistry, IrInterpreter,
@@ -150,7 +150,8 @@ impl ChaosDispatcher {
         }
 
         // Use interpreter.
-        interp.call_in_context(func, None, args, ret_dest, ctx, registry, frames)
+        let func_unit = IrCodeUnit::from(func.clone());
+        interp.call_in_context(&func_unit, None, args, ret_dest, ctx, registry, frames)
     }
 }
 
@@ -158,7 +159,7 @@ impl CallDispatcher for ChaosDispatcher {
     fn dispatch_call(
         &mut self,
         func_ref: &FuncRef,
-        func: &IrFunction,
+        func: &IrCodeUnit,
         args: &[Value],
         ret_dest: Destination,
         rt_handle: LocalRtHandle,
@@ -195,7 +196,8 @@ impl CallDispatcher for ChaosDispatcher {
         };
 
         // Use record_call_with_context to enable JIT for functions with calls.
-        match self.jit.record_call_with_context(key, func, compile_ctx, call_ctx.registry) {
+        let func_ir = IrFunction::from(func.clone());
+        match self.jit.record_call_with_context(key, &func_ir, compile_ctx, call_ctx.registry) {
             Ok(Some((code_ptr, uses_sret))) => {
                 // Compiled! Randomly decide whether to use it.
                 if self.should_use_jit() {
@@ -218,7 +220,7 @@ impl CallDispatcher for ChaosDispatcher {
                             rt_handle,
                             args,
                             ret_dest,
-                            &func.return_type,
+                            func.return_type().expect("JIT dispatch requires function return type"),
                         )
                     };
 

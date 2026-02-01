@@ -5,7 +5,7 @@
 use std::any::Any;
 use std::collections::HashMap;
 
-use datalove_datafun_ir::{CallSiteId, FuncRef, IrFunction};
+use datalove_datafun_ir::{CallSiteId, FuncRef, IrFunction, IrCodeUnit};
 use datalove_rt::c::LocalRtHandle;
 
 use crate::dispatch::{
@@ -107,7 +107,7 @@ impl DynamicInliner {
     fn record_call(
         &mut self,
         call_site_info: &CallSiteInfo,
-        _callee: &IrFunction,
+        _callee: &IrCodeUnit,
     ) -> bool {
         self.stats.calls_tracked += 1;
 
@@ -138,22 +138,26 @@ impl DynamicInliner {
     fn perform_inlining(
         &mut self,
         call_site_info: &CallSiteInfo,
-        caller: &IrFunction,
-        callee: &IrFunction,
+        caller: &IrCodeUnit,
+        callee: &IrCodeUnit,
     ) {
+        // Convert to IrFunction for inlining (inlining crate uses IrFunction).
+        let caller_func = IrFunction::from(caller.clone());
+        let callee_func = IrFunction::from(callee.clone());
+
         // Find the call site index by iterating through instructions.
         let mut call_index = 0;
         let mut found = false;
 
-        'outer: for block in &caller.blocks {
+        'outer: for block in &caller_func.blocks {
             for instr in &block.instructions {
                 if let datalove_datafun_ir::Instruction::Call { site_id, func, .. } = instr {
                     if *site_id == call_site_info.call_site_id {
                         // Verify this call is to the expected callee.
                         let matches = match func {
-                            FuncRef::Local(id) => *id == callee.id,
-                            FuncRef::Module { func: id, .. } => *id == callee.id,
-                            FuncRef::External { func: id, .. } => *id == callee.id,
+                            FuncRef::Local(id) => id.0 == callee.id.0,
+                            FuncRef::Module { func: id, .. } => id.0 == callee.id.0,
+                            FuncRef::External { func: id, .. } => id.0 == callee.id.0,
                         };
                         if matches {
                             found = true;
@@ -174,9 +178,9 @@ impl DynamicInliner {
         let caller_to_use = self
             .inlined_functions
             .get(&call_site_info.caller)
-            .unwrap_or(caller);
+            .unwrap_or(&caller_func);
 
-        if let Some(inlined_func) = inline_call_site_by_index(caller_to_use, callee, call_index) {
+        if let Some(inlined_func) = inline_call_site_by_index(caller_to_use, &callee_func, call_index) {
             self.inlined_functions.insert(call_site_info.caller.clone(), inlined_func);
             self.stats.inlinings_performed += 1;
         } else {
@@ -195,7 +199,7 @@ impl CallDispatcher for DynamicInliner {
     fn dispatch_call(
         &mut self,
         _func_ref: &FuncRef,
-        func: &IrFunction,
+        func: &IrCodeUnit,
         _args: &[Value],
         _ret_dest: Destination,
         _rt_handle: LocalRtHandle,
@@ -216,7 +220,7 @@ impl CallDispatcher for DynamicInliner {
                     call_ctx.exec_ctx.find_local_function(*func_id)
                 }
                 FuncRef::Module { module, func: func_id } => {
-                    call_ctx.registry.get_module_function(*module, *func_id)
+                    call_ctx.registry.get_module_function_as_unit(*module, *func_id)
                 }
                 FuncRef::External { .. } => {
                     // External functions are from previous script units.

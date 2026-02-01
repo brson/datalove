@@ -11,6 +11,7 @@
 use rmx::prelude::*;
 use serde::{Serialize, Deserialize};
 
+use datalove_datafun_ir::IrCodeUnit;
 use datalove_datafun_pkg::package_load_worldfile::{WorldfileSection, ParsedWorldfile};
 
 use crate::pipeline::{
@@ -153,7 +154,8 @@ pub fn analyze_modules_worldfile(
     );
 
     // Execute main with the environment (so it can call other functions).
-    let output = match interp.call_with_env(main_func, Vec::new(), ret_dest, &env) {
+    let main_code_unit = IrCodeUnit::from(main_func);
+    let output = match interp.call_with_env(&main_code_unit, Vec::new(), ret_dest, &env) {
         Ok(()) => {
             // Pretty-print the return value.
             let value = datalove_datafun_interp::Value {

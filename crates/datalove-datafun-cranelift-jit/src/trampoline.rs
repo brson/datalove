@@ -189,14 +189,18 @@ pub unsafe extern "C" fn __jit_dispatch_call(
     let func_key = FunctionKey::from(&func_ref);
 
     // Look up the function IR using ExecutionContext (handles Local, Module, External).
-    let ir_func = ctx.exec_ctx.get_function(&func_ref, ctx.registry);
+    let ir_unit = ctx.exec_ctx.get_function(&func_ref, ctx.registry);
+    // Convert to IrFunction for compatibility with JIT engine (still uses IrFunction).
+    let ir_func = datalove_datafun_ir::IrFunction::from(ir_unit.clone());
+    let func_ctx = ir_unit.function_context()
+        .expect("trampoline dispatch requires a function code unit");
 
     // Build argument Values.
     let mut arg_vals = Vec::with_capacity(arg_count as usize);
     for i in 0..arg_count as usize {
         let arg_ptr = unsafe { *args.add(i) };
         // Get tydesc for this arg type.
-        let arg_ty = &ir_func.param_types[i];
+        let arg_ty = &func_ctx.param_types[i];
         let tydesc = ctx.interp.tydesc_table_mut().get_or_create(arg_ty);
         arg_vals.push(Value {
             ptr: arg_ptr as *mut u8,
@@ -205,7 +209,7 @@ pub unsafe extern "C" fn __jit_dispatch_call(
     }
 
     // Build return destination.
-    let ret_ty = &ir_func.return_type;
+    let ret_ty = &func_ctx.return_type;
     let ret_tydesc = ctx.interp.tydesc_table_mut().get_or_create(ret_ty);
     let dest = Destination {
         ptr: ret_dest,
@@ -214,12 +218,12 @@ pub unsafe extern "C" fn __jit_dispatch_call(
 
     // Try to JIT compile the target function (or get existing compiled code).
     // This triggers compilation when the call count threshold is reached.
-    match ctx.jit_engine.record_call_with_context(func_key, ir_func, ctx.exec_ctx, ctx.registry) {
+    match ctx.jit_engine.record_call_with_context(func_key, &ir_func, ctx.exec_ctx, ctx.registry) {
         Ok(Some((code_ptr, uses_sret))) => {
             // Call JIT code directly.
             // SAFETY: code_ptr is valid JIT code.
             let result = unsafe {
-                crate::bridge::call_jit(code_ptr, uses_sret, rt_handle, &arg_vals, dest, &ir_func.return_type)
+                crate::bridge::call_jit(code_ptr, uses_sret, rt_handle, &arg_vals, dest, &func_ctx.return_type)
             };
             if let Err(e) = result {
                 panic!("JIT dispatch: JIT call failed: {}", e);
@@ -233,7 +237,7 @@ pub unsafe extern "C" fn __jit_dispatch_call(
             // Note: We pass None for func_unit since JIT trampolines don't track unit context.
             // This means dynamic inlining won't apply to JIT->interpreter callbacks.
             let result = ctx.interp.call_in_context(
-                ir_func,
+                ir_unit,
                 None,
                 arg_vals,
                 dest,

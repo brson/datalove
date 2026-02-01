@@ -4,7 +4,7 @@
 //! const expressions to be evaluated at compile time.
 
 use std::sync::Arc;
-use datalove_datafun_ir::{ConstValue, CtfeError, CtfeEvaluator, IrScriptUnit, IrType};
+use datalove_datafun_ir::{ConstValue, CtfeError, CtfeEvaluator, IrScriptUnit, IrCodeUnit, IrType};
 use crate::{IrInterpreter, ScriptEnvironment, UnitCompletion, Destination, ModuleFunctionRegistry};
 
 /// CTFE evaluator backed by the IR interpreter.
@@ -67,9 +67,10 @@ impl CtfeEvaluator for InterpCtfeEvaluator {
             tydesc: ret_tydesc,
         };
 
-        // Execute the unit.
+        // Execute the unit (convert to IrCodeUnit for the interpreter).
+        let code_unit = IrCodeUnit::from(unit.clone());
         let completion = self.interp
-            .execute_script_unit_in_env(unit, &mut env, ret_dest, Some(result_dest))
+            .execute_script_unit_in_env(&code_unit, &mut env, ret_dest, Some(result_dest))
             .map_err(|e| CtfeError::InterpError(format!("{:?}", e)))?;
 
         // Clean up the environment (frames from executed units).

@@ -1566,7 +1566,7 @@ pub fn inline_cross_module(
         };
 
         // Find call sites (cross-module aware).
-        let call_sites = find_cross_module_call_sites(caller, request.caller.module, request.callee);
+        let call_sites = find_cross_module_call_sites(&caller, request.caller.module, request.callee);
 
         if call_sites.is_empty() {
             skipped.push(InlineSkipReason::NoCallsFound {
@@ -1602,7 +1602,7 @@ pub fn inline_cross_module(
             if let Some(new_site) = new_sites.iter().find(|s| {
                 s.block_idx == site.block_idx && s.instr_idx == site.instr_idx
             }) {
-                if let Some(inlined) = inline_call_site(&updated_caller, callee, new_site) {
+                if let Some(inlined) = inline_call_site(&updated_caller, &callee, new_site) {
                     updated_caller = inlined;
                     inlined_count += 1;
                 }

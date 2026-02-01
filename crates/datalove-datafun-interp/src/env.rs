@@ -7,7 +7,7 @@
 //! - `ScriptEnvironment`: Combines registry with `FrameStore` for script execution.
 
 use std::sync::Arc;
-use datalove_datafun_ir::{IrFunction, FuncId, FuncRef, IrModuleId, ValueId, SlotId};
+use datalove_datafun_ir::{IrFunction, IrCodeUnit, CodeUnitId, FuncId, FuncRef, IrModuleId, ValueId, SlotId};
 use crate::frame::{Frame, FrameStore};
 
 // Re-export registry types from the IR crate.
@@ -69,20 +69,20 @@ impl Default for ScriptEnvironment {
 /// Execution context holding available functions.
 pub struct ExecutionContext<'a> {
     /// Local functions available for calling (from current unit).
-    functions: &'a [IrFunction],
+    functions: &'a [IrCodeUnit],
 }
 
 impl<'a> ExecutionContext<'a> {
     /// Create a new execution context with the given functions.
-    pub fn new(functions: &'a [IrFunction]) -> Self {
+    pub fn new(functions: &'a [IrCodeUnit]) -> Self {
         Self { functions }
     }
 
     /// Find a local function by ID.
     ///
     /// Returns None if no local function with this ID exists.
-    pub fn find_local_function(&self, func_id: FuncId) -> Option<&IrFunction> {
-        self.functions.iter().find(|f| f.id == func_id)
+    pub fn find_local_function(&self, func_id: FuncId) -> Option<&IrCodeUnit> {
+        self.functions.iter().find(|f| f.id.0 == func_id.0)
     }
 
     /// Look up a function by reference.
@@ -92,19 +92,19 @@ impl<'a> ExecutionContext<'a> {
         &'b self,
         func_ref: &FuncRef,
         registry: &'b FunctionRegistry,
-    ) -> &'b IrFunction {
+    ) -> &'b IrCodeUnit {
         match func_ref {
             FuncRef::Local(id) => {
                 self.functions.iter()
-                    .find(|f| f.id == *id)
+                    .find(|f| f.id.0 == id.0)
                     .unwrap_or_else(|| panic!("local function {:?} not found", id))
             }
             FuncRef::External { unit, func } => {
-                registry.get_external_function(*unit, *func)
+                registry.get_external_function_as_unit(*unit, *func)
                     .unwrap_or_else(|| panic!("external function unit={} func={:?} not found", unit, func))
             }
             FuncRef::Module { module, func } => {
-                registry.get_module_function(*module, *func)
+                registry.get_module_function_as_unit(*module, *func)
                     .unwrap_or_else(|| panic!("module function {:?}::{:?} not found", module, func))
             }
         }
@@ -120,23 +120,23 @@ impl<'a> ExecutionContext<'a> {
         &'b self,
         func_ref: &FuncRef,
         registry: &'b FunctionRegistry,
-    ) -> (&'b IrFunction, Option<u32>) {
+    ) -> (&'b IrCodeUnit, Option<u32>) {
         match func_ref {
             FuncRef::Local(id) => {
                 let func = self.functions.iter()
-                    .find(|f| f.id == *id)
+                    .find(|f| f.id.0 == id.0)
                     .unwrap_or_else(|| panic!("local function {:?} not found", id));
                 (func, None) // Use current context.
             }
             FuncRef::External { unit, func } => {
-                let callee = registry.get_external_function(*unit, *func)
+                let callee = registry.get_external_function_as_unit(*unit, *func)
                     .unwrap_or_else(|| panic!("external function unit={} func={:?} not found", unit, func));
                 (callee, Some(*unit)) // Need context from this unit.
             }
             FuncRef::Module { module, func } => {
                 // Module calls resolve via FuncRef::Module (through registry),
                 // not FuncRef::Local, so they don't use ExecutionContext.
-                let callee = registry.get_module_function(*module, *func)
+                let callee = registry.get_module_function_as_unit(*module, *func)
                     .unwrap_or_else(|| panic!("module function {:?}::{:?} not found", module, func));
                 (callee, None)
             }

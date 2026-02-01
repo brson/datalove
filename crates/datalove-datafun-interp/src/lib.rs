@@ -71,11 +71,14 @@ use datalove_rtdt as rtdt;
 use datalove_datafun_ir::{
     IrFunction, IrScriptUnit, IrBlock, IrType, Instruction, Terminator,
     BlockId, Operand, SlotDest, ConstValue, ParamMode, FuncRef,
+    IrCodeUnit, CodeUnitId, CodeRef, CodeUnitContext,
 };
 
 /// Get param mode for argument at index, defaulting to In.
-fn param_mode(callee: &IrFunction, i: usize) -> ParamMode {
-    callee.param_modes.get(i).copied().unwrap_or(ParamMode::In)
+fn param_mode(callee: &IrCodeUnit, i: usize) -> ParamMode {
+    callee.function_context()
+        .and_then(|ctx| ctx.param_modes.get(i).copied())
+        .unwrap_or(ParamMode::In)
 }
 
 /// Result of executing a script unit.
@@ -243,7 +246,7 @@ impl IrInterpreter {
     /// This allows the function to call other functions registered in the environment.
     pub fn call_with_env(
         &mut self,
-        func: &IrFunction,
+        func: &IrCodeUnit,
         args: Vec<Value>,
         ret_dest: Destination,
         env: &ScriptEnvironment,
@@ -261,7 +264,7 @@ impl IrInterpreter {
     /// `func_ref` identifies the function being executed (for call site tracking).
     pub fn call_in_context(
         &mut self,
-        func: &IrFunction,
+        func: &IrCodeUnit,
         func_ref: Option<FuncRef>,
         args: Vec<Value>,
         ret_dest: Destination,
@@ -269,6 +272,9 @@ impl IrInterpreter {
         registry: &FunctionRegistry,
         frames: &mut FrameStore,
     ) -> Result<(), InterpError> {
+        let func_ctx = func.function_context()
+            .expect("call_in_context requires a function code unit");
+
         // Compute layout.
         let layout = IrLayout::compute(
             &func.value_types,
@@ -277,17 +283,17 @@ impl IrInterpreter {
         );
 
         // Create frame with param storage (no live value tracking for functions).
-        let mut frame = Frame::new_function(layout, func.params.len());
+        let mut frame = Frame::new_function(layout, func_ctx.params.len());
 
         // Set up parameters as pointers to caller's data.
         // All params store pointers - mode determines ownership semantics.
-        for (i, &param_id) in func.params.iter().enumerate() {
+        for (i, &param_id) in func_ctx.params.iter().enumerate() {
             if i < args.len() {
                 let src = &args[i];
-                let mode = func.param_modes.get(i).copied().unwrap_or(ParamMode::In);
+                let mode = func_ctx.param_modes.get(i).copied().unwrap_or(ParamMode::In);
 
                 // Get tydesc for this param from param_types.
-                let param_type = &func.param_types[i];
+                let param_type = &func_ctx.param_types[i];
                 let tydesc = self.tydesc_table.get_or_create(param_type);
 
                 // Initialized: true for In/Ref/Mut (data exists), false for Out (callee writes first).
@@ -317,11 +323,14 @@ impl IrInterpreter {
     /// - `expr_dest`: Destination for expression result (for expr units, `None` for fragments)
     pub fn execute_script_unit_in_env(
         &mut self,
-        unit: &IrScriptUnit,
+        unit: &IrCodeUnit,
         env: &mut ScriptEnvironment,
         ret_dest: Destination,
         expr_dest: Option<Destination>,
     ) -> Result<UnitCompletion, InterpError> {
+        let script_ctx = unit.script_context()
+            .expect("execute_script_unit_in_env requires a script code unit");
+
         // Compute layout.
         let layout = IrLayout::compute(
             &unit.value_types,
@@ -333,7 +342,7 @@ impl IrInterpreter {
         let mut frame = Frame::new_script(layout);
 
         // Create execution context with local functions.
-        let ctx = ExecutionContext::new(&unit.functions);
+        let ctx = ExecutionContext::new(&unit.nested_units);
 
         // Execute blocks with registry for function lookups and frames for slot access.
         // Script units don't have a single function ID, so pass None.
@@ -352,18 +361,22 @@ impl IrInterpreter {
         if let Err(e) = result {
             frame.destroy_on_error(
                 self.runtime.handle(),
-                &unit.unit_end_values,
-                &unit.unit_end_slots,
+                &script_ctx.unit_end_values,
+                &script_ctx.unit_end_slots,
             );
             return Err(e);
         }
 
         // Add this unit's frame and functions to the environment for future units.
+        // Convert nested_units to IrFunction for the registry (still uses IrFunction).
+        let nested_funcs: Vec<IrFunction> = unit.nested_units.iter()
+            .map(|u| IrFunction::from(u.clone()))
+            .collect();
         env.add_unit(
             frame,
-            unit.functions.clone(),
-            unit.unit_end_values.clone(),
-            unit.unit_end_slots.clone(),
+            nested_funcs,
+            script_ctx.unit_end_values.clone(),
+            script_ctx.unit_end_slots.clone(),
         );
 
         result
@@ -1385,7 +1398,7 @@ impl IrInterpreter {
     /// For other params, reads the value normally.
     fn prepare_call_args(
         &self,
-        callee: &IrFunction,
+        callee: &IrCodeUnit,
         args: &[Operand],
         frame: &mut Frame,
         frames: &FrameStore,
@@ -1417,13 +1430,14 @@ impl IrInterpreter {
     /// - Ref/Mut/Out params: borrowed, caller retains ownership
     /// - In params with Copy types: copied, caller retains ownership
     /// - In params with non-Copy types: moved, mark as dropped
-    fn mark_consumed_call_args(callee: &IrFunction, args: &[Operand], frame: &mut Frame) {
+    fn mark_consumed_call_args(callee: &IrCodeUnit, args: &[Operand], frame: &mut Frame) {
+        let param_types = callee.function_context().map(|c| &c.param_types[..]).unwrap_or(&[]);
         for (i, arg) in args.iter().enumerate() {
             let mode = param_mode(callee, i);
             if matches!(mode, ParamMode::Ref | ParamMode::Mut | ParamMode::Out) {
                 continue; // Borrowed, not consumed.
             }
-            if let Some(param_type) = callee.param_types.get(i) {
+            if let Some(param_type) = param_types.get(i) {
                 if param_type.is_copy() {
                     continue; // Copied, not consumed.
                 }
@@ -1439,7 +1453,7 @@ impl IrInterpreter {
     fn try_dispatch_call(
         &mut self,
         func: &FuncRef,
-        callee: &IrFunction,
+        callee: &IrCodeUnit,
         arg_vals: &[Value],
         dest: Destination,
         ctx: &ExecutionContext,
@@ -1480,7 +1494,7 @@ impl IrInterpreter {
     }
 
     /// Mark Out param destinations as initialized after a call returns.
-    fn mark_out_params_initialized(callee: &IrFunction, args: &[Operand], frame: &mut Frame) {
+    fn mark_out_params_initialized(callee: &IrCodeUnit, args: &[Operand], frame: &mut Frame) {
         for (i, arg) in args.iter().enumerate() {
             if param_mode(callee, i) == ParamMode::Out {
                 match arg {
@@ -1499,7 +1513,7 @@ impl IrInterpreter {
     /// local functions; local and module functions use the current context.
     fn execute_call(
         &mut self,
-        callee: &IrFunction,
+        callee: &IrCodeUnit,
         func_ref: &FuncRef,
         arg_vals: Vec<Value>,
         dest: Destination,
@@ -1508,7 +1522,8 @@ impl IrInterpreter {
         frames: &mut FrameStore,
     ) -> Result<(), InterpError> {
         // Check if there's an optimized (inlined) version of this function.
-        let optimized = self.get_optimized_function(func_ref);
+        // Convert optimized IrFunction to IrCodeUnit if present.
+        let optimized = self.get_optimized_function(func_ref).map(IrCodeUnit::from);
         let func_to_use = optimized.as_ref().unwrap_or(callee);
 
         if let FuncRef::External { unit, .. } = func_ref {

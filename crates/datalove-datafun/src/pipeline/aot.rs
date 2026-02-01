@@ -126,14 +126,16 @@ pub fn compile_script_to_object(unit: &IrScriptUnit) -> AnyResult<Vec<u8>> {
 }
 
 /// Compile a script unit with module functions to object bytes.
-pub fn compile_script_to_object_with_world<'a>(
+pub fn compile_script_to_object_with_world(
     unit: &IrScriptUnit,
-    world_funcs: impl Iterator<Item = &'a IrFunction>,
+    world_funcs: impl Iterator<Item = IrFunction>,
     registry: &FunctionRegistry,
 ) -> AnyResult<Vec<u8>> {
     let mut compiler = AotCompiler::new_for_host()
         .map_err(|e| anyhow!("failed to create AOT compiler: {}", e))?;
-    let product = compiler.compile_script_unit_with_world_types(unit, world_funcs, registry)
+    // Collect to Vec to get references.
+    let world_funcs_vec: Vec<_> = world_funcs.collect();
+    let product = compiler.compile_script_unit_with_world_types(unit, world_funcs_vec.iter(), registry)
         .map_err(|e| anyhow!("AOT compilation failed: {}", e))?;
     let obj_bytes = product.emit()
         .map_err(|e| anyhow!("failed to emit object: {}", e))?;
@@ -203,9 +205,9 @@ pub fn compile_link_run(unit: &IrScriptUnit) -> AnyResult<ExecOutput> {
 }
 
 /// Compile, link, and run a script unit with module functions.
-pub fn compile_link_run_with_world<'a>(
+pub fn compile_link_run_with_world(
     unit: &IrScriptUnit,
-    world_funcs: impl Iterator<Item = &'a IrFunction>,
+    world_funcs: impl Iterator<Item = IrFunction>,
     registry: &FunctionRegistry,
 ) -> AnyResult<ExecOutput> {
     let obj_bytes = compile_script_to_object_with_world(unit, world_funcs, registry)?;

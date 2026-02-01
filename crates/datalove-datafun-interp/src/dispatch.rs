@@ -4,7 +4,7 @@
 
 use std::any::Any;
 
-use datalove_datafun_ir::{CallSiteId, FuncRef, IrFunction};
+use datalove_datafun_ir::{CallSiteId, FuncRef, IrFunction, IrCodeUnit};
 use datalove_rt::c::LocalRtHandle;
 
 use crate::error::InterpError;
@@ -62,7 +62,7 @@ pub trait CallDispatcher {
     /// # Arguments
     ///
     /// * `func_ref` - The function reference being called
-    /// * `func` - The resolved function
+    /// * `func` - The resolved function as IrCodeUnit
     /// * `args` - Arguments as Value pointers
     /// * `ret_dest` - Destination for return value
     /// * `rt_handle` - Runtime handle
@@ -70,7 +70,7 @@ pub trait CallDispatcher {
     fn dispatch_call(
         &mut self,
         func_ref: &FuncRef,
-        func: &IrFunction,
+        func: &IrCodeUnit,
         args: &[Value],
         ret_dest: Destination,
         rt_handle: LocalRtHandle,

@@ -167,10 +167,12 @@ impl JitCompiler {
             let callee_ir = ctx.get_function(&func_ref, registry);
 
             // Collect types from callee for TyDesc emission.
-            tydesc_emit::collect_types_from_function(callee_ir, &mut types);
+            // Convert to IrFunction for type collection (tydesc_emit uses IrFunction).
+            let callee_func = datalove_datafun_ir::IrFunction::from(callee_ir.clone());
+            tydesc_emit::collect_types_from_function(&callee_func, &mut types);
 
             // Create a stub for this callee.
-            let stub_id = self.create_stub_for_callee(&func_ref, callee_ir)?;
+            let stub_id = self.create_stub_for_callee(&func_ref, &callee_func)?;
 
             // Register in appropriate map.
             match &func_ref {

@@ -199,7 +199,7 @@ impl AotCompiler {
         let mut module_funcs: HashMap<(IrModuleId, datalove_datafun_ir::FuncId), FuncId> = HashMap::new();
         for ((module_id, func_id), ir_func) in registry.iter_module_functions_with_ids() {
             let name = format!("__mod_{}_{}", module_id.0, ir_func.name);
-            let sig = codegen::build_signature_for_func(ir_func, self.isa.as_ref());
+            let sig = codegen::build_signature_for_func(&ir_func, self.isa.as_ref());
             let cl_func_id = obj_module
                 .declare_function(&name, Linkage::Local, &sig)
                 .map_err(|e| AotError::Module(format!("declare module function {}: {}", name, e)))?;
@@ -228,7 +228,7 @@ impl AotCompiler {
                 .ok_or_else(|| AotError::Module(format!("module function not found: {:?}, {:?}", module_id, func_id)))?;
 
             let mut compiler = codegen::FunctionCompiler::new_with_runtime_and_tydescs(
-                ir_func,
+                &ir_func,
                 self.isa.as_ref(),
                 &mut obj_module,
                 runtime_imports.clone(),

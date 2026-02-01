@@ -1,6 +1,6 @@
 use crate::*;
 use datalove_rtdt as rtdt;
-use datalove_datafun_ir::{CallSiteId, IrType, IrBlock, Terminator, FuncRef, FuncId, ParamId, TypeRef, SlotId, SlotDest, BinOp, UnaryOp, ValueId};
+use datalove_datafun_ir::{CallSiteId, IrType, IrBlock, Terminator, FuncRef, FuncId, ParamId, TypeRef, SlotId, SlotDest, BinOp, UnaryOp, ValueId, IrCodeUnit};
 
 #[test]
 fn test_tydesc_table_primitives() {
@@ -118,8 +118,9 @@ fn test_simple_function_call() {
         const_values: vec![],
     };
 
-    // Create context with both functions.
-    let functions = vec![identity_fn, main_fn.clone()];
+    // Create context with both functions (convert to IrCodeUnit).
+    let main_code_unit = IrCodeUnit::from(main_fn);
+    let functions: Vec<IrCodeUnit> = vec![IrCodeUnit::from(identity_fn), main_code_unit.clone()];
     let ctx = ExecutionContext::new(&functions);
 
     // Execute main, writing result to our storage.
@@ -132,7 +133,7 @@ fn test_simple_function_call() {
     };
     let registry = FunctionRegistry::new();
     let mut frames = FrameStore::new();
-    interp.call_in_context(&main_fn, None, vec![], ret_dest, &ctx, &registry, &mut frames).unwrap();
+    interp.call_in_context(&main_code_unit, None, vec![], ret_dest, &ctx, &registry, &mut frames).unwrap();
 
     // Verify result is 10 (first parameter returned by identity).
     assert_eq!(result_storage, 10);
@@ -207,8 +208,9 @@ fn test_nested_function_calls() {
         const_values: vec![],
     };
 
-    // Create context with both functions.
-    let functions = vec![passthrough_fn, nested_fn.clone()];
+    // Create context with both functions (convert to IrCodeUnit).
+    let nested_code_unit = IrCodeUnit::from(nested_fn);
+    let functions: Vec<IrCodeUnit> = vec![IrCodeUnit::from(passthrough_fn), nested_code_unit.clone()];
     let ctx = ExecutionContext::new(&functions);
 
     // Create argument value: 42.
@@ -230,7 +232,7 @@ fn test_nested_function_calls() {
 
     let registry = FunctionRegistry::new();
     let mut frames = FrameStore::new();
-    interp.call_in_context(&nested_fn, None, vec![arg], ret_dest, &ctx, &registry, &mut frames).unwrap();
+    interp.call_in_context(&nested_code_unit, None, vec![arg], ret_dest, &ctx, &registry, &mut frames).unwrap();
 
     // Verify result is 42 (passthrough returns input unchanged).
     assert_eq!(result_storage, 42);
@@ -238,7 +240,8 @@ fn test_nested_function_calls() {
 
 /// Helper to run a function and get an i64 result.
 fn run_i64_function(func: &IrFunction) -> i64 {
-    let functions = [func.clone()];
+    let code_unit = IrCodeUnit::from(func.clone());
+    let functions = [code_unit.clone()];
     let ctx = ExecutionContext::new(&functions);
     let mut interp = IrInterpreter::new();
     let mut result: i64 = 0;
@@ -249,13 +252,14 @@ fn run_i64_function(func: &IrFunction) -> i64 {
     };
     let registry = FunctionRegistry::new();
     let mut frames = FrameStore::new();
-    interp.call_in_context(func, None, vec![], ret_dest, &ctx, &registry, &mut frames).unwrap();
+    interp.call_in_context(&code_unit, None, vec![], ret_dest, &ctx, &registry, &mut frames).unwrap();
     result
 }
 
 /// Helper to run a function and get a u32 result.
 fn run_u32_function(func: &IrFunction) -> u32 {
-    let functions = [func.clone()];
+    let code_unit = IrCodeUnit::from(func.clone());
+    let functions = [code_unit.clone()];
     let ctx = ExecutionContext::new(&functions);
     let mut interp = IrInterpreter::new();
     let mut result: u32 = 0;
@@ -266,13 +270,14 @@ fn run_u32_function(func: &IrFunction) -> u32 {
     };
     let registry = FunctionRegistry::new();
     let mut frames = FrameStore::new();
-    interp.call_in_context(func, None, vec![], ret_dest, &ctx, &registry, &mut frames).unwrap();
+    interp.call_in_context(&code_unit, None, vec![], ret_dest, &ctx, &registry, &mut frames).unwrap();
     result
 }
 
 /// Helper to run a function and get a bool result.
 fn run_bool_function(func: &IrFunction) -> bool {
-    let functions = [func.clone()];
+    let code_unit = IrCodeUnit::from(func.clone());
+    let functions = [code_unit.clone()];
     let ctx = ExecutionContext::new(&functions);
     let mut interp = IrInterpreter::new();
     let mut result: bool = false;
@@ -283,7 +288,7 @@ fn run_bool_function(func: &IrFunction) -> bool {
     };
     let registry = FunctionRegistry::new();
     let mut frames = FrameStore::new();
-    interp.call_in_context(func, None, vec![], ret_dest, &ctx, &registry, &mut frames).unwrap();
+    interp.call_in_context(&code_unit, None, vec![], ret_dest, &ctx, &registry, &mut frames).unwrap();
     result
 }
 
@@ -323,7 +328,8 @@ fn test_const_u8() {
         const_values: vec![],
     };
 
-    let functions = [func.clone()];
+    let code_unit = IrCodeUnit::from(func);
+    let functions = [code_unit.clone()];
     let ctx = ExecutionContext::new(&functions);
     let mut interp = IrInterpreter::new();
     let mut result: u8 = 0;
@@ -334,7 +340,7 @@ fn test_const_u8() {
     };
     let registry = FunctionRegistry::new();
     let mut frames = FrameStore::new();
-    interp.call_in_context(&func, None, vec![], ret_dest, &ctx, &registry, &mut frames).unwrap();
+    interp.call_in_context(&code_unit, None, vec![], ret_dest, &ctx, &registry, &mut frames).unwrap();
     assert_eq!(result, 42);
 }
 
@@ -370,7 +376,8 @@ fn test_const_i32() {
         const_values: vec![],
     };
 
-    let functions = [func.clone()];
+    let code_unit = IrCodeUnit::from(func);
+    let functions = [code_unit.clone()];
     let ctx = ExecutionContext::new(&functions);
     let mut interp = IrInterpreter::new();
     let mut result: i32 = 0;
@@ -381,7 +388,7 @@ fn test_const_i32() {
     };
     let registry = FunctionRegistry::new();
     let mut frames = FrameStore::new();
-    interp.call_in_context(&func, None, vec![], ret_dest, &ctx, &registry, &mut frames).unwrap();
+    interp.call_in_context(&code_unit, None, vec![], ret_dest, &ctx, &registry, &mut frames).unwrap();
     assert_eq!(result, -12345);
 }
 
@@ -1815,7 +1822,7 @@ fn test_crossunit_external_value() {
     let ret_dest = Destination { ptr: ret_buffer.as_mut_ptr(), tydesc: ret_tydesc };
 
     // Execute unit 0 (fragment, no result).
-    let completion = interp.execute_script_unit_in_env(&unit0, &mut env, ret_dest, None).unwrap();
+    let completion = interp.execute_script_unit_in_env(&IrCodeUnit::from(unit0.clone()), &mut env, ret_dest, None).unwrap();
     assert_eq!(completion, super::UnitCompletion::Normal);
 
     // Execute unit 1 (returns x).
@@ -1825,7 +1832,7 @@ fn test_crossunit_external_value() {
         ptr: &mut result as *mut i64 as *mut u8,
         tydesc: expr_tydesc,
     };
-    let completion = interp.execute_script_unit_in_env(&unit1, &mut env, ret_dest, Some(expr_dest)).unwrap();
+    let completion = interp.execute_script_unit_in_env(&IrCodeUnit::from(unit1.clone()), &mut env, ret_dest, Some(expr_dest)).unwrap();
     assert_eq!(completion, super::UnitCompletion::Normal);
 
     assert_eq!(result, 42);
@@ -1906,7 +1913,7 @@ fn test_crossunit_external_slot() {
     let ret_dest = Destination { ptr: ret_buffer.as_mut_ptr(), tydesc: ret_tydesc };
 
     // Execute unit 0 (fragment).
-    let completion = interp.execute_script_unit_in_env(&unit0, &mut env, ret_dest, None).unwrap();
+    let completion = interp.execute_script_unit_in_env(&IrCodeUnit::from(unit0.clone()), &mut env, ret_dest, None).unwrap();
     assert_eq!(completion, super::UnitCompletion::Normal);
 
     // Execute unit 1 (returns y).
@@ -1916,7 +1923,7 @@ fn test_crossunit_external_slot() {
         ptr: &mut result as *mut i64 as *mut u8,
         tydesc: expr_tydesc,
     };
-    let completion = interp.execute_script_unit_in_env(&unit1, &mut env, ret_dest, Some(expr_dest)).unwrap();
+    let completion = interp.execute_script_unit_in_env(&IrCodeUnit::from(unit1.clone()), &mut env, ret_dest, Some(expr_dest)).unwrap();
     assert_eq!(completion, super::UnitCompletion::Normal);
 
     assert_eq!(result, 10);
@@ -2018,7 +2025,7 @@ fn test_crossunit_external_function() {
     let ret_dest = Destination { ptr: ret_buffer.as_mut_ptr(), tydesc: ret_tydesc };
 
     // Execute unit 0 (fragment with function).
-    let completion = interp.execute_script_unit_in_env(&unit0, &mut env, ret_dest, None).unwrap();
+    let completion = interp.execute_script_unit_in_env(&IrCodeUnit::from(unit0.clone()), &mut env, ret_dest, None).unwrap();
     assert_eq!(completion, super::UnitCompletion::Normal);
 
     // Execute unit 1 (returns identity(7)).
@@ -2028,7 +2035,7 @@ fn test_crossunit_external_function() {
         ptr: &mut result as *mut i64 as *mut u8,
         tydesc: expr_tydesc,
     };
-    let completion = interp.execute_script_unit_in_env(&unit1, &mut env, ret_dest, Some(expr_dest)).unwrap();
+    let completion = interp.execute_script_unit_in_env(&IrCodeUnit::from(unit1.clone()), &mut env, ret_dest, Some(expr_dest)).unwrap();
     assert_eq!(completion, super::UnitCompletion::Normal);
 
     assert_eq!(result, 7);  // identity(7) = 7
@@ -2134,9 +2141,9 @@ fn test_crossunit_chain() {
     let ret_dest = Destination { ptr: ret_buffer.as_mut_ptr(), tydesc: ret_tydesc };
 
     // Execute unit 0 and unit 1 (fragments).
-    let completion = interp.execute_script_unit_in_env(&unit0, &mut env, ret_dest, None).unwrap();
+    let completion = interp.execute_script_unit_in_env(&IrCodeUnit::from(unit0.clone()), &mut env, ret_dest, None).unwrap();
     assert_eq!(completion, super::UnitCompletion::Normal);
-    let completion = interp.execute_script_unit_in_env(&unit1, &mut env, ret_dest, None).unwrap();
+    let completion = interp.execute_script_unit_in_env(&IrCodeUnit::from(unit1.clone()), &mut env, ret_dest, None).unwrap();
     assert_eq!(completion, super::UnitCompletion::Normal);
 
     // Execute unit 2 (returns b which is a copy of a).
@@ -2146,7 +2153,7 @@ fn test_crossunit_chain() {
         ptr: &mut result as *mut i64 as *mut u8,
         tydesc: expr_tydesc,
     };
-    let completion = interp.execute_script_unit_in_env(&unit2, &mut env, ret_dest, Some(expr_dest)).unwrap();
+    let completion = interp.execute_script_unit_in_env(&IrCodeUnit::from(unit2.clone()), &mut env, ret_dest, Some(expr_dest)).unwrap();
     assert_eq!(completion, super::UnitCompletion::Normal);
 
     assert_eq!(result, 5);  // b = a = 5
@@ -2212,7 +2219,7 @@ fn test_list_with_explicit_drop() {
     let mut ret_buffer = vec![0u8; ret_size as usize];
     let ret_dest = Destination { ptr: ret_buffer.as_mut_ptr(), tydesc: ret_tydesc };
 
-    let completion = interp.execute_script_unit_in_env(&unit, &mut env, ret_dest, None).unwrap();
+    let completion = interp.execute_script_unit_in_env(&IrCodeUnit::from(unit.clone()), &mut env, ret_dest, None).unwrap();
     assert_eq!(completion, super::UnitCompletion::Normal);
 
     // destroy_live_values won't touch the list (not tracked), but explicit Drop already handled it.
@@ -2310,7 +2317,7 @@ fn test_script_with_function_and_list_drop() {
     let mut ret_buffer = vec![0u8; ret_size as usize];
     let ret_dest = Destination { ptr: ret_buffer.as_mut_ptr(), tydesc: ret_tydesc };
 
-    let completion = interp.execute_script_unit_in_env(&unit, &mut env, ret_dest, None).unwrap();
+    let completion = interp.execute_script_unit_in_env(&IrCodeUnit::from(unit.clone()), &mut env, ret_dest, None).unwrap();
     assert_eq!(completion, super::UnitCompletion::Normal);
 
     env.destroy_live_values(interp.runtime_handle());
@@ -2378,7 +2385,7 @@ fn test_multiple_explicit_drops() {
     let mut ret_buffer = vec![0u8; ret_size as usize];
     let ret_dest = Destination { ptr: ret_buffer.as_mut_ptr(), tydesc: ret_tydesc };
 
-    let completion = interp.execute_script_unit_in_env(&unit, &mut env, ret_dest, None).unwrap();
+    let completion = interp.execute_script_unit_in_env(&IrCodeUnit::from(unit.clone()), &mut env, ret_dest, None).unwrap();
     assert_eq!(completion, super::UnitCompletion::Normal);
 
     env.destroy_live_values(interp.runtime_handle());
@@ -2434,7 +2441,7 @@ fn test_ctfe_struct_with_string_destruction() {
     let mut ret_buffer = vec![0u8; ret_size as usize];
     let ret_dest = Destination { ptr: ret_buffer.as_mut_ptr(), tydesc: ret_tydesc };
 
-    let completion = interp.execute_script_unit_in_env(&unit, &mut env, ret_dest, None).unwrap();
+    let completion = interp.execute_script_unit_in_env(&IrCodeUnit::from(unit.clone()), &mut env, ret_dest, None).unwrap();
     assert_eq!(completion, super::UnitCompletion::Normal);
 
     env.destroy_live_values(interp.runtime_handle());
@@ -2488,7 +2495,7 @@ fn test_ctfe_struct_with_string_unit_end_destruction() {
     let mut ret_buffer = vec![0u8; ret_size as usize];
     let ret_dest = Destination { ptr: ret_buffer.as_mut_ptr(), tydesc: ret_tydesc };
 
-    let completion = interp.execute_script_unit_in_env(&unit, &mut env, ret_dest, None).unwrap();
+    let completion = interp.execute_script_unit_in_env(&IrCodeUnit::from(unit.clone()), &mut env, ret_dest, None).unwrap();
     assert_eq!(completion, super::UnitCompletion::Normal);
 
     env.destroy_live_values(interp.runtime_handle());
@@ -2544,7 +2551,7 @@ fn test_ctfe_struct_with_string_and_debuglog() {
     let mut ret_buffer = vec![0u8; ret_size as usize];
     let ret_dest = Destination { ptr: ret_buffer.as_mut_ptr(), tydesc: ret_tydesc };
 
-    let completion = interp.execute_script_unit_in_env(&unit, &mut env, ret_dest, None).unwrap();
+    let completion = interp.execute_script_unit_in_env(&IrCodeUnit::from(unit.clone()), &mut env, ret_dest, None).unwrap();
     assert_eq!(completion, super::UnitCompletion::Normal);
 
     env.destroy_live_values(interp.runtime_handle());
@@ -2595,7 +2602,7 @@ fn test_const_error() {
     let mut ret_buffer = vec![0u8; ret_size as usize];
     let ret_dest = Destination { ptr: ret_buffer.as_mut_ptr(), tydesc: ret_tydesc };
 
-    let completion = interp.execute_script_unit_in_env(&unit, &mut env, ret_dest, None).unwrap();
+    let completion = interp.execute_script_unit_in_env(&IrCodeUnit::from(unit.clone()), &mut env, ret_dest, None).unwrap();
     assert_eq!(completion, super::UnitCompletion::Normal);
 
     env.destroy_live_values(interp.runtime_handle());
@@ -2641,7 +2648,7 @@ fn test_const_data() {
     let mut ret_buffer = vec![0u8; ret_size as usize];
     let ret_dest = Destination { ptr: ret_buffer.as_mut_ptr(), tydesc: ret_tydesc };
 
-    let completion = interp.execute_script_unit_in_env(&unit, &mut env, ret_dest, None).unwrap();
+    let completion = interp.execute_script_unit_in_env(&IrCodeUnit::from(unit.clone()), &mut env, ret_dest, None).unwrap();
     assert_eq!(completion, super::UnitCompletion::Normal);
 
     env.destroy_live_values(interp.runtime_handle());
@@ -2691,7 +2698,7 @@ fn test_const_result_err() {
     let mut ret_buffer = vec![0u8; ret_size as usize];
     let ret_dest = Destination { ptr: ret_buffer.as_mut_ptr(), tydesc: ret_tydesc };
 
-    let completion = interp.execute_script_unit_in_env(&unit, &mut env, ret_dest, None).unwrap();
+    let completion = interp.execute_script_unit_in_env(&IrCodeUnit::from(unit.clone()), &mut env, ret_dest, None).unwrap();
     assert_eq!(completion, super::UnitCompletion::Normal);
 
     env.destroy_live_values(interp.runtime_handle());
@@ -2736,7 +2743,7 @@ fn test_const_data_with_string() {
     let mut ret_buffer = vec![0u8; ret_size as usize];
     let ret_dest = Destination { ptr: ret_buffer.as_mut_ptr(), tydesc: ret_tydesc };
 
-    let completion = interp.execute_script_unit_in_env(&unit, &mut env, ret_dest, None).unwrap();
+    let completion = interp.execute_script_unit_in_env(&IrCodeUnit::from(unit.clone()), &mut env, ret_dest, None).unwrap();
     assert_eq!(completion, super::UnitCompletion::Normal);
 
     env.destroy_live_values(interp.runtime_handle());
@@ -2781,7 +2788,7 @@ fn test_const_error_with_i32() {
     let mut ret_buffer = vec![0u8; ret_size as usize];
     let ret_dest = Destination { ptr: ret_buffer.as_mut_ptr(), tydesc: ret_tydesc };
 
-    let completion = interp.execute_script_unit_in_env(&unit, &mut env, ret_dest, None).unwrap();
+    let completion = interp.execute_script_unit_in_env(&IrCodeUnit::from(unit.clone()), &mut env, ret_dest, None).unwrap();
     assert_eq!(completion, super::UnitCompletion::Normal);
 
     env.destroy_live_values(interp.runtime_handle());
@@ -2829,7 +2836,7 @@ fn test_const_error_with_tuple() {
     let mut ret_buffer = vec![0u8; ret_size as usize];
     let ret_dest = Destination { ptr: ret_buffer.as_mut_ptr(), tydesc: ret_tydesc };
 
-    let completion = interp.execute_script_unit_in_env(&unit, &mut env, ret_dest, None).unwrap();
+    let completion = interp.execute_script_unit_in_env(&IrCodeUnit::from(unit.clone()), &mut env, ret_dest, None).unwrap();
     assert_eq!(completion, super::UnitCompletion::Normal);
 
     env.destroy_live_values(interp.runtime_handle());
@@ -2877,7 +2884,7 @@ fn test_const_data_with_tuple() {
     let mut ret_buffer = vec![0u8; ret_size as usize];
     let ret_dest = Destination { ptr: ret_buffer.as_mut_ptr(), tydesc: ret_tydesc };
 
-    let completion = interp.execute_script_unit_in_env(&unit, &mut env, ret_dest, None).unwrap();
+    let completion = interp.execute_script_unit_in_env(&IrCodeUnit::from(unit.clone()), &mut env, ret_dest, None).unwrap();
     assert_eq!(completion, super::UnitCompletion::Normal);
 
     env.destroy_live_values(interp.runtime_handle());
@@ -2926,7 +2933,7 @@ fn test_const_result_err_with_i32() {
     let mut ret_buffer = vec![0u8; ret_size as usize];
     let ret_dest = Destination { ptr: ret_buffer.as_mut_ptr(), tydesc: ret_tydesc };
 
-    let completion = interp.execute_script_unit_in_env(&unit, &mut env, ret_dest, None).unwrap();
+    let completion = interp.execute_script_unit_in_env(&IrCodeUnit::from(unit.clone()), &mut env, ret_dest, None).unwrap();
     assert_eq!(completion, super::UnitCompletion::Normal);
 
     env.destroy_live_values(interp.runtime_handle());
@@ -2971,7 +2978,7 @@ fn test_const_data_with_bool() {
     let mut ret_buffer = vec![0u8; ret_size as usize];
     let ret_dest = Destination { ptr: ret_buffer.as_mut_ptr(), tydesc: ret_tydesc };
 
-    let completion = interp.execute_script_unit_in_env(&unit, &mut env, ret_dest, None).unwrap();
+    let completion = interp.execute_script_unit_in_env(&IrCodeUnit::from(unit.clone()), &mut env, ret_dest, None).unwrap();
     assert_eq!(completion, super::UnitCompletion::Normal);
 
     env.destroy_live_values(interp.runtime_handle());
@@ -3016,7 +3023,7 @@ fn test_const_error_with_unit() {
     let mut ret_buffer = vec![0u8; ret_size as usize];
     let ret_dest = Destination { ptr: ret_buffer.as_mut_ptr(), tydesc: ret_tydesc };
 
-    let completion = interp.execute_script_unit_in_env(&unit, &mut env, ret_dest, None).unwrap();
+    let completion = interp.execute_script_unit_in_env(&IrCodeUnit::from(unit.clone()), &mut env, ret_dest, None).unwrap();
     assert_eq!(completion, super::UnitCompletion::Normal);
 
     env.destroy_live_values(interp.runtime_handle());
