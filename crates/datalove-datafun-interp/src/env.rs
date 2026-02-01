@@ -7,7 +7,7 @@
 //! - `ScriptEnvironment`: Combines registry with `FrameStore` for script execution.
 
 use std::sync::Arc;
-use datalove_datafun_ir::{IrFunction, IrCodeUnit, CodeUnitId, FuncId, FuncRef, IrModuleId, ValueId, SlotId};
+use datalove_datafun_ir::{IrCodeUnit, FuncId, FuncRef, IrModuleId, ValueId, SlotId};
 use crate::frame::{Frame, FrameStore};
 
 // Re-export registry types from the IR crate.
@@ -35,11 +35,6 @@ impl ScriptEnvironment {
             registry: FunctionRegistry::with_module_registry(module_registry),
             frames: FrameStore::new(),
         }
-    }
-
-    /// Add a module function (legacy, accepts IrFunction).
-    pub fn add_module_function(&mut self, module_id: IrModuleId, func_id: FuncId, func: IrFunction) {
-        self.registry.add_module_function(module_id, func_id, func);
     }
 
     /// Add a module code unit.
