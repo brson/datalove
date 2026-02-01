@@ -91,33 +91,37 @@ fn format_directives(directives: &[InlineDirective]) -> String {
         .join("\n")
 }
 
-/// Build an IrModule from the module registry's functions.
+/// Build an IrModule from the module registry's code units.
 fn build_ir_module_from_registry(registry: &ModuleFunctionRegistry) -> IrModule {
-    // Collect all functions and build symbol table.
-    let mut functions: Vec<_> = registry.iter_module_functions().collect();
+    // Collect all code units and build symbol table.
+    let mut functions: Vec<_> = registry.iter_module_code_units().cloned().collect();
 
     // Sort functions by name for deterministic output.
     functions.sort_by(|a, b| a.name.cmp(&b.name));
 
     let mut symbols = SymbolTable::new();
     for func in &functions {
-        // Register in symbol table using the function's existing ID.
-        symbols.define_func_with_id(func.id, func.name.clone(), func.params.len());
+        // Register in symbol table using the code unit's existing ID.
+        symbols.define_func_with_id(
+            datalove_datafun_ir::FuncId(func.id.0),
+            func.name.clone(),
+            func.param_count(),
+        );
     }
 
     IrModule { functions, symbols }
 }
 
-/// Build an IrModule from functions of a single module in the registry.
+/// Build an IrModule from code units of a single module in the registry.
 fn build_ir_module_for_single_module(
     registry: &ModuleFunctionRegistry,
     target_module_id: IrModuleId,
 ) -> IrModule {
     let mut functions = Vec::new();
 
-    for ((module_id, _func_id), func) in registry.iter_module_functions_with_ids() {
+    for ((module_id, _func_id), unit) in registry.iter_module_code_units_with_ids() {
         if module_id == target_module_id {
-            functions.push(func.clone());
+            functions.push(unit.clone());
         }
     }
 
@@ -126,7 +130,11 @@ fn build_ir_module_for_single_module(
 
     let mut symbols = SymbolTable::new();
     for func in &functions {
-        symbols.define_func_with_id(func.id, func.name.clone(), func.params.len());
+        symbols.define_func_with_id(
+            datalove_datafun_ir::FuncId(func.id.0),
+            func.name.clone(),
+            func.param_count(),
+        );
     }
 
     IrModule { functions, symbols }
@@ -135,7 +143,7 @@ fn build_ir_module_for_single_module(
 /// Collect all unique module IDs in the registry.
 fn collect_module_ids(registry: &ModuleFunctionRegistry) -> Vec<IrModuleId> {
     let mut ids: Vec<IrModuleId> = registry
-        .iter_module_functions_with_ids()
+        .iter_module_code_units_with_ids()
         .map(|((module_id, _), _)| module_id)
         .collect();
     ids.sort_by_key(|id| id.0);

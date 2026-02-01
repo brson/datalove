@@ -491,7 +491,7 @@ fn analyze_worldfile_dual(parsed: package_load_worldfile::ParsedWorldfile) -> Du
 
 /// AOT compile, link, and run an IR unit. Returns results and captured output.
 fn aot_compile_link_run(
-    ir_unit: &datalove_datafun_ir::IrScriptUnit,
+    ir_unit: &datalove_datafun_ir::IrCodeUnit,
     registry: &FunctionRegistry,
 ) -> (AotCompileResult, LinkResult, ExecutionResult, String) {
     // Create AOT compiler.
@@ -510,7 +510,7 @@ fn aot_compile_link_run(
     // Compile to object file.
     let product = match compiler.compile_script_unit_with_world_types(
         ir_unit,
-        registry.iter_all_functions(),
+        registry.iter_all_code_units(),
         registry,
     ) {
         Ok(p) => p,

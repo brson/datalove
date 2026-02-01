@@ -2,7 +2,7 @@
 
 use datalove_datafun_cranelift_aot::AotCompiler;
 use datalove_datafun_ir::{
-    BlockId, ConstValue, IrBlock, IrScriptUnit, IrType, Instruction, Operand, Terminator, ValueId,
+    BlockId, ConstValue, IrBlock, IrScriptUnit, IrCodeUnit, IrType, Instruction, Operand, Terminator, ValueId,
 };
 
 /// Create a simple script unit that logs an i32 constant.
@@ -47,7 +47,7 @@ fn create_debuglog_i32_script(value: i32) -> IrScriptUnit {
 
 #[test]
 fn test_compile_debuglog_i32() {
-    let unit = create_debuglog_i32_script(42);
+    let unit = IrCodeUnit::from(create_debuglog_i32_script(42));
 
     let mut compiler = AotCompiler::new_for_host().expect("failed to create compiler");
     let product = compiler
@@ -79,7 +79,7 @@ fn test_compile_debuglog_i32() {
 
 #[test]
 fn test_compile_debuglog_bool() {
-    let unit = IrScriptUnit {
+    let unit = IrCodeUnit::from(IrScriptUnit {
         blocks: vec![IrBlock {
             id: BlockId(0),
             params: vec![],
@@ -107,7 +107,7 @@ fn test_compile_debuglog_bool() {
         result: None,
         exports: vec![],
         const_values: vec![],
-    };
+    });
 
     let mut compiler = AotCompiler::new_for_host().expect("failed to create compiler");
     let product = compiler
@@ -121,7 +121,7 @@ fn test_compile_debuglog_bool() {
 #[test]
 fn test_compile_multiple_debuglogs() {
     // Test multiple debuglog statements in sequence.
-    let unit = IrScriptUnit {
+    let unit = IrCodeUnit::from(IrScriptUnit {
         blocks: vec![IrBlock {
             id: BlockId(0),
             params: vec![],
@@ -163,7 +163,7 @@ fn test_compile_multiple_debuglogs() {
         result: None,
         exports: vec![],
         const_values: vec![],
-    };
+    });
 
     let mut compiler = AotCompiler::new_for_host().expect("failed to create compiler");
     let product = compiler

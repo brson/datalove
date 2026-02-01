@@ -308,15 +308,15 @@ mod tests {
     use super::*;
     use datalove_datafun_ir::{
         IrBlock, Instruction, Terminator, Operand,
-        ValueId, BlockId, ConstValue, IrType,
+        ValueId, BlockId, ConstValue, IrType, IrCodeUnit,
     };
     use datalove_datafun_interp::{
         ExecutionContext, FrameStore, FunctionRegistry, IrInterpreter,
     };
 
-    fn make_test_function() -> IrFunction {
+    fn make_test_function() -> IrCodeUnit {
         // fn test() -> i32 { 42 }
-        IrFunction {
+        IrCodeUnit::from(IrFunction {
             id: FuncId(0),
             name: "test".to_string(),
             params: vec![],
@@ -341,7 +341,7 @@ mod tests {
             tracked_slots: vec![],
             tracked_params: vec![],
             const_values: vec![],
-        }
+        })
     }
 
     #[test]
@@ -603,7 +603,9 @@ mod tests {
         };
 
         // Set up context with both functions (convert to IrCodeUnit).
-        let functions: Vec<IrCodeUnit> = vec![IrCodeUnit::from(identity_fn), IrCodeUnit::from(main_fn.clone())];
+        let identity_code_unit = IrCodeUnit::from(identity_fn);
+        let main_code_unit = IrCodeUnit::from(main_fn);
+        let functions: Vec<IrCodeUnit> = vec![identity_code_unit, main_code_unit.clone()];
         let ctx = ExecutionContext::new(&functions);
         let registry = FunctionRegistry::new();
 
@@ -613,7 +615,7 @@ mod tests {
         // Compile main() with context (creates stub for identity()).
         let main_key = FunctionKey::local(FuncId(1));
         let (code_ptr, uses_sret) = jit
-            .record_call_with_context(main_key, &main_fn, &ctx, &registry)
+            .record_call_with_context(main_key, &main_code_unit, &ctx, &registry)
             .expect("compilation failed")
             .expect("should compile on first call");
 

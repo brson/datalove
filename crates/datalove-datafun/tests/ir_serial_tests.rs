@@ -16,7 +16,7 @@ use std::process::Command;
 use datalove_datafun as datafun;
 use datalove_datafun_cranelift_aot::AotCompiler;
 use datalove_datafun_interp::{Destination, IrInterpreter, ScriptEnvironment};
-use datalove_datafun_ir::{expand_ir_strings, FunctionRegistry, IrScriptUnit, IrType};
+use datalove_datafun_ir::{expand_ir_strings, FunctionRegistry, IrCodeUnit, IrType};
 use datalove_datafun_pkg::package_load_worldfile::{self, WorldfileSection};
 use datalove_rt::rust::AlignedBuffer;
 use datafun::pipeline::ConstInlining;
@@ -113,15 +113,15 @@ fn ensure_runtime_lib() -> &'static Path {
 // ============================================================================
 
 /// Execute an IR unit via interpreter, returning debug output.
-fn execute_ir_interp(ir_unit: &IrScriptUnit, registry: &FunctionRegistry) -> String {
+fn execute_ir_interp(ir_unit: &IrCodeUnit, registry: &FunctionRegistry) -> String {
     let mut interp = IrInterpreter::new_with_debug_mode(datalove_rt::c::DebugOutputMode::Buffer);
     interp.clear_debug_buffer();
 
     let mut env = ScriptEnvironment::new();
 
-    // Copy module functions from registry to env.
-    for ((module_id, func_id), func) in registry.iter_module_functions_with_ids() {
-        env.add_module_function(module_id, func_id, func.clone());
+    // Copy module code units from registry to env.
+    for ((module_id, func_id), unit) in registry.iter_module_code_units_with_ids() {
+        env.add_module_code_unit(module_id, func_id, unit.clone());
     }
 
     // Set up return destination.
@@ -134,9 +134,7 @@ fn execute_ir_interp(ir_unit: &IrScriptUnit, registry: &FunctionRegistry) -> Str
         tydesc: ret_tydesc,
     };
 
-    // Convert IrScriptUnit to IrCodeUnit for interpreter.
-    let code_unit = datalove_datafun_ir::IrCodeUnit::from(ir_unit.clone());
-    let _ = interp.execute_script_unit_in_env(&code_unit, &mut env, ret_dest, None);
+    let _ = interp.execute_script_unit_in_env(ir_unit, &mut env, ret_dest, None);
 
     let output = interp.get_debug_buffer();
     env.destroy_live_values(interp.runtime_handle());
@@ -145,7 +143,7 @@ fn execute_ir_interp(ir_unit: &IrScriptUnit, registry: &FunctionRegistry) -> Str
 
 /// Execute an IR unit via AOT, returning debug output and status.
 fn execute_ir_aot(
-    ir_unit: &IrScriptUnit,
+    ir_unit: &IrCodeUnit,
     registry: &FunctionRegistry,
 ) -> (String, AotCompileResult, LinkResult, ExecutionResult) {
     // Create AOT compiler.
@@ -169,7 +167,7 @@ fn execute_ir_aot(
     // Compile with world types.
     let product = match compiler.compile_script_unit_with_world_types(
         ir_unit,
-        registry.iter_all_functions(),
+        registry.iter_all_code_units(),
         registry,
     ) {
         Ok(p) => p,
@@ -630,7 +628,7 @@ fn analyze_worldfile_ir_serial(
     let serialized_registry_size = serialized_registry.len();
 
     // Deserialize IR.
-    let deser_ir_unit = match IrScriptUnit::from_ron(&serialized_ir) {
+    let deser_ir_unit = match IrCodeUnit::from_ron(&serialized_ir) {
         Ok(unit) => unit,
         Err(e) => {
             results.push(IrSerialSectionResult {

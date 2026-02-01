@@ -282,7 +282,7 @@ fn run_with_aot(
 
 /// AOT compile, link, and run an IR unit.
 fn aot_compile_link_run(
-    ir_unit: &datalove_datafun_ir::IrScriptUnit,
+    ir_unit: &datalove_datafun_ir::IrCodeUnit,
     registry: &FunctionRegistry,
 ) -> RunResult {
     let mut compiler = match AotCompiler::new_for_host() {
@@ -299,7 +299,7 @@ fn aot_compile_link_run(
 
     let product = match compiler.compile_script_unit_with_world_types(
         ir_unit,
-        registry.iter_all_functions(),
+        registry.iter_all_code_units(),
         registry,
     ) {
         Ok(p) => p,

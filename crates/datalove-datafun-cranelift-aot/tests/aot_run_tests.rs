@@ -2,7 +2,7 @@
 
 use datalove_datafun::pipeline::aot as pipeline_aot;
 use datalove_datafun_ir::{
-    BlockId, ConstValue, IrBlock, IrScriptUnit, IrType, Instruction, Operand, Terminator, ValueId,
+    BlockId, ConstValue, IrBlock, IrScriptUnit, IrCodeUnit, IrType, Instruction, Operand, Terminator, ValueId,
 };
 
 /// Create a simple script unit that logs an i32 constant.
@@ -40,7 +40,7 @@ fn create_debuglog_i32_script(value: i32) -> IrScriptUnit {
 
 #[test]
 fn test_link_and_run_debuglog_i32() {
-    let unit = create_debuglog_i32_script(42);
+    let unit = IrCodeUnit::from(create_debuglog_i32_script(42));
 
     // Use pipeline::aot to compile, link, and run.
     let output = pipeline_aot::compile_link_run(&unit)
@@ -56,7 +56,7 @@ fn test_link_and_run_debuglog_i32() {
 
 #[test]
 fn test_link_and_run_debuglog_bool_true() {
-    let unit = IrScriptUnit {
+    let unit = IrCodeUnit::from(IrScriptUnit {
         blocks: vec![IrBlock {
             id: BlockId(0),
             params: vec![],
@@ -84,7 +84,7 @@ fn test_link_and_run_debuglog_bool_true() {
         result: None,
         exports: vec![],
         const_values: vec![],
-    };
+    });
 
     // Use pipeline::aot to compile, link, and run.
     let output = pipeline_aot::compile_link_run(&unit)
@@ -99,7 +99,7 @@ fn test_link_and_run_debuglog_bool_true() {
 
 #[test]
 fn test_link_and_run_multiple_debuglogs() {
-    let unit = IrScriptUnit {
+    let unit = IrCodeUnit::from(IrScriptUnit {
         blocks: vec![IrBlock {
             id: BlockId(0),
             params: vec![],
@@ -141,7 +141,7 @@ fn test_link_and_run_multiple_debuglogs() {
         result: None,
         exports: vec![],
         const_values: vec![],
-    };
+    });
 
     // Use pipeline::aot to compile, link, and run.
     let output = pipeline_aot::compile_link_run(&unit)

@@ -372,13 +372,13 @@ fn aot_compile_link_run(
     typecheck: datafun::pipeline::TypecheckResult,
     ownership: datafun::pipeline::OwnershipResult,
     lowering: datafun::pipeline::LoweringResult,
-    ir_unit: datalove_datafun_ir::IrScriptUnit,
+    ir_unit: datalove_datafun_ir::IrCodeUnit,
     registry: &FunctionRegistry,
 ) -> AotSectionResult {
     // Compile to object bytes.
     let obj_bytes = match pipeline_aot::compile_script_to_object_with_world(
         &ir_unit,
-        registry.iter_all_functions(),
+        registry.iter_all_code_units(),
         registry,
     ) {
         Ok(b) => b,

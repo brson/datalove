@@ -1057,7 +1057,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
 mod tests {
     use super::*;
     use cranelift_object::{ObjectBuilder, ObjectModule};
-    use datalove_datafun_ir::{BinOp, IrBlock, IrFunction, FuncId as IrFuncId, ConstValue, Terminator};
+    use datalove_datafun_ir::{BinOp, IrBlock, IrFunction, IrCodeUnit, FuncId as IrFuncId, ConstValue, Terminator};
 
     fn create_test_isa() -> std::sync::Arc<dyn TargetIsa> {
         use cranelift_codegen::isa;
@@ -1117,8 +1117,9 @@ mod tests {
             tracked_params: vec![],
             const_values: vec![],
         };
+        let code_unit = IrCodeUnit::from(func);
 
-        let compiler = FunctionCompiler::new(&func, isa.as_ref(), &mut module);
+        let compiler = FunctionCompiler::new(&code_unit, isa.as_ref(), &mut module);
         let result = compiler.compile();
         assert!(result.is_ok(), "compile failed: {:?}", result.err());
     }
@@ -1170,8 +1171,9 @@ mod tests {
             tracked_params: vec![],
             const_values: vec![],
         };
+        let code_unit = IrCodeUnit::from(func);
 
-        let compiler = FunctionCompiler::new(&func, isa.as_ref(), &mut module);
+        let compiler = FunctionCompiler::new(&code_unit, isa.as_ref(), &mut module);
         let result = compiler.compile();
         assert!(result.is_ok(), "compile failed: {:?}", result.err());
     }
@@ -1215,8 +1217,9 @@ mod tests {
             tracked_params: vec![],
             const_values: vec![],
         };
+        let code_unit = IrCodeUnit::from(func);
 
-        let compiler = FunctionCompiler::new(&func, isa.as_ref(), &mut module);
+        let compiler = FunctionCompiler::new(&code_unit, isa.as_ref(), &mut module);
         let result = compiler.compile();
         assert!(result.is_ok(), "compile failed: {:?}", result.err());
     }
@@ -1291,8 +1294,9 @@ mod tests {
             tracked_params: vec![],
             const_values: vec![],
         };
+        let code_unit = IrCodeUnit::from(func);
 
-        let compiler = FunctionCompiler::new(&func, isa.as_ref(), &mut module);
+        let compiler = FunctionCompiler::new(&code_unit, isa.as_ref(), &mut module);
         let result = compiler.compile();
         assert!(result.is_ok(), "compile failed: {:?}", result.err());
     }
