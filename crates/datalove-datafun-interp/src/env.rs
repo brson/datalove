@@ -47,16 +47,16 @@ impl ScriptEnvironment {
         self.registry.add_module_code_unit(module_id, func_id, unit);
     }
 
-    /// Add a completed unit's frame and functions.
+    /// Add a completed unit's frame and code units.
     pub fn add_unit(
         &mut self,
         frame: Frame,
-        functions: Vec<IrFunction>,
+        code_units: Vec<IrCodeUnit>,
         unit_end_values: Vec<ValueId>,
         unit_end_slots: Vec<SlotId>,
     ) {
         self.frames.add_frame(frame, unit_end_values, unit_end_slots);
-        self.registry.add_unit_functions(functions);
+        self.registry.add_unit_code_units(code_units);
     }
 
     /// Destroy live values in all frames.

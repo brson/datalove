@@ -198,16 +198,9 @@ impl AotCompiler {
 
         // Pass 2: Declare all module functions to get Cranelift FuncIds.
         let mut module_funcs: HashMap<(IrModuleId, datalove_datafun_ir::FuncId), FuncId> = HashMap::new();
-        for unit in registry.iter_module_code_units() {
-            // Extract module ID from registry iteration - need to use iter_module_functions_with_ids
-            // but that returns IrFunction. For now, we'll use a workaround by using the unit's ID.
-            // TODO: Registry should provide iter_module_code_units_with_ids
-        }
-        // Use the legacy iterator for now since we still have it
-        for ((module_id, func_id), ir_func) in registry.iter_module_functions_with_ids() {
-            let name = format!("__mod_{}_{}", module_id.0, ir_func.name);
-            let ir_unit = datalove_datafun_ir::IrCodeUnit::from(ir_func);
-            let sig = codegen::build_signature_for_func(&ir_unit, self.isa.as_ref());
+        for ((module_id, func_id), ir_unit) in registry.iter_module_code_units_with_ids() {
+            let name = format!("__mod_{}_{}", module_id.0, ir_unit.name);
+            let sig = codegen::build_signature_for_func(ir_unit, self.isa.as_ref());
             let cl_func_id = obj_module
                 .declare_function(&name, Linkage::Local, &sig)
                 .map_err(|e| AotError::Module(format!("declare module function {}: {}", name, e)))?;

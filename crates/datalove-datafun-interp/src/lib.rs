@@ -367,14 +367,10 @@ impl IrInterpreter {
             return Err(e);
         }
 
-        // Add this unit's frame and functions to the environment for future units.
-        // Convert nested_units to IrFunction for the registry (still uses IrFunction).
-        let nested_funcs: Vec<IrFunction> = unit.nested_units.iter()
-            .map(|u| IrFunction::from(u.clone()))
-            .collect();
+        // Add this unit's frame and code units to the environment for future units.
         env.add_unit(
             frame,
-            nested_funcs,
+            unit.nested_units.clone(),
             script_ctx.unit_end_values.clone(),
             script_ctx.unit_end_slots.clone(),
         );

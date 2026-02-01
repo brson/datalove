@@ -56,6 +56,11 @@ impl ModuleFunctionRegistry {
         self.module_functions.values()
     }
 
+    /// Iterate over all module code units with their IDs.
+    pub fn iter_module_code_units_with_ids(&self) -> impl Iterator<Item = ((IrModuleId, FuncId), &IrCodeUnit)> {
+        self.module_functions.iter().map(|((m, f), unit)| ((*m, *f), unit))
+    }
+
     /// Iterate over all module functions with their IDs.
     pub fn iter_module_functions_with_ids(&self) -> impl Iterator<Item = ((IrModuleId, FuncId), IrFunction)> + '_ {
         self.module_functions.iter().map(|((m, f), unit)| ((*m, *f), IrFunction::from(unit.clone())))
@@ -218,6 +223,11 @@ impl FunctionRegistry {
     /// Iterate over all module code units.
     pub fn iter_module_code_units(&self) -> impl Iterator<Item = &IrCodeUnit> {
         self.module_registry.iter_module_code_units()
+    }
+
+    /// Iterate over all module code units with their IDs.
+    pub fn iter_module_code_units_with_ids(&self) -> impl Iterator<Item = ((IrModuleId, FuncId), &IrCodeUnit)> {
+        self.module_registry.iter_module_code_units_with_ids()
     }
 
     /// Iterate over all module functions with their IDs (legacy).
