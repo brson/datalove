@@ -36,8 +36,6 @@ Analysis(
                     block5:
                         unit_end_drop.tracked s0
                         unit_end
-                    exports:
-                        count = s0
                 """,
             ),
             output: "(fragment executed)",

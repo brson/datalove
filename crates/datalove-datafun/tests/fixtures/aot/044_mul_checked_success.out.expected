@@ -34,6 +34,7 @@ AotAnalysis(
                     block3:
                         v3 = copy p1
                         return v3
+                    
                     fn checked_mul(p0, p1):
                     block0:
                         v0, v1 = mul.checked p0, p1
@@ -44,9 +45,6 @@ AotAnalysis(
                     block2:
                         v3 = some v0
                         return v3
-                    exports:
-                        unwrap_or_default = f0
-                        checked_mul = f1
                 """,
             ),
             aot_compile: Some(AotCompileResult(

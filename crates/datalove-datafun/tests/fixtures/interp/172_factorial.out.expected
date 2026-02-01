@@ -52,8 +52,6 @@ Analysis(
                     block8:
                         v20 = ok v15
                         return v20
-                    exports:
-                        factorial = f0
                 """,
             ),
             output: "(fragment executed)",

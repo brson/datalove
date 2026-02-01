@@ -18,8 +18,6 @@ Analysis(
                         v1 = error_from v0
                         unit_end_drop v1
                         unit_end
-                    exports:
-                        e = v1
                 """,
             ),
             output: "(fragment executed)",

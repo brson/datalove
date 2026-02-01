@@ -1057,7 +1057,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
 mod tests {
     use super::*;
     use cranelift_object::{ObjectBuilder, ObjectModule};
-    use datalove_datafun_ir::{BinOp, IrBlock, IrCodeUnit, CodeUnitId, CodeUnitContext, FunctionContext, ConstValue, Terminator};
+    use datalove_datafun_ir::{BinOp, IrBlock, IrCodeUnit, CodeUnitId, CodeUnitContext, FunctionContext, ConstValue, Terminator, SymbolTable};
 
     fn create_test_isa() -> std::sync::Arc<dyn TargetIsa> {
         use cranelift_codegen::isa;
@@ -1101,6 +1101,7 @@ mod tests {
             slot_types: vec![],
             tracked_slots: vec![],
             const_values: vec![],
+            symbols: SymbolTable::default(),
             context: CodeUnitContext::Function(FunctionContext {
                 params: vec![],
                 param_modes: vec![],
@@ -1281,6 +1282,7 @@ mod tests {
             slot_types: vec![],
             tracked_slots: vec![],
             const_values: vec![],
+            symbols: SymbolTable::default(),
             context: CodeUnitContext::Function(FunctionContext {
                 params: vec![],
                 param_modes: vec![],

@@ -18,13 +18,6 @@ Analysis(
                         v1 = const 100u64
                         v2 = const true
                         unit_end
-                    exports:
-                        I = v0
-                        U = v1
-                        B = v2
-                        i = v0
-                        u = v1
-                        b = v2
                 """,
             ),
             output: "(fragment executed)",

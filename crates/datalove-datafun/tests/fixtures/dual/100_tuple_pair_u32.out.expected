@@ -18,8 +18,6 @@ DualAnalysis(
                         v2 = pack Tuple2 {v0, v1}
                         debuglog v2
                         unit_end
-                    exports:
-                        t = v2
                 """,
             ),
             aot_lowering: LoweringResult(
@@ -32,8 +30,6 @@ DualAnalysis(
                         v2 = pack Tuple2 {v0, v1}
                         debuglog v2
                         unit_end
-                    exports:
-                        t = v2
                 """,
             ),
             ir_match: true,

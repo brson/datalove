@@ -22,8 +22,6 @@ AotAnalysis(
                         debuglog v4
                         unit_end_drop v4
                         unit_end
-                    exports:
-                        m = v4
                 """,
             ),
             aot_compile: Some(AotCompileResult(

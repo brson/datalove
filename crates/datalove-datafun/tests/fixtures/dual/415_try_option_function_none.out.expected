@@ -28,14 +28,12 @@ DualAnalysis(
                     block2:
                         v4 = some v1
                         return v4
+                    
                     fn test():
                     block0:
                         v0 = none
                         v1 = call @0 f0(v0)
                         return v1
-                    exports:
-                        extract = f0
-                        test = f1
                 """,
             ),
             aot_lowering: LoweringResult(
@@ -58,14 +56,12 @@ DualAnalysis(
                     block2:
                         v4 = some v1
                         return v4
+                    
                     fn test():
                     block0:
                         v0 = none
                         v1 = call @0 f0(v0)
                         return v1
-                    exports:
-                        extract = f0
-                        test = f1
                 """,
             ),
             ir_match: true,

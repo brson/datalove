@@ -20,8 +20,6 @@ Analysis(
                     block0:
                         v0 = const "hello"
                         return v0
-                    exports:
-                        get_greeting = f0
                 """,
             ),
             output: "(fragment executed)",

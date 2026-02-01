@@ -24,9 +24,6 @@ AotAnalysis(
                     block2:
                         debuglog v2
                         unit_end
-                    exports:
-                        input = v1
-                        x = v2
                 """,
             ),
             aot_compile: Some(AotCompileResult(

@@ -24,9 +24,6 @@ AotAnalysis(
                         unit_end_drop v1
                         unit_end_drop v3
                         unit_end
-                    exports:
-                        a = v1
-                        b = v3
                 """,
             ),
             aot_compile: Some(AotCompileResult(

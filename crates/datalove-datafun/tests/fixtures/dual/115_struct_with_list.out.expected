@@ -27,8 +27,6 @@ DualAnalysis(
                         debuglog *v9
                         unit_end_drop v7
                         unit_end
-                    exports:
-                        container = v7
                 """,
             ),
             aot_lowering: LoweringResult(
@@ -50,8 +48,6 @@ DualAnalysis(
                         debuglog *v9
                         unit_end_drop v7
                         unit_end
-                    exports:
-                        container = v7
                 """,
             ),
             ir_match: true,

@@ -29,8 +29,6 @@ AotAnalysis(
                         debuglog s0
                         unit_end_drop.tracked s0
                         unit_end
-                    exports:
-                        x = s0
                 """,
             ),
             aot_compile: Some(AotCompileResult(

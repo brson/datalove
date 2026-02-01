@@ -29,10 +29,6 @@ AotAnalysis(
                         v0 = const 42u32
                         v1 = ok v0
                         return v1
-                    exports:
-                        get_ok = f0
-                        r = v0
-                        x = v1
                 """,
             ),
             aot_compile: Some(AotCompileResult(

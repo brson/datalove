@@ -28,8 +28,6 @@ Analysis(
                         goto block3
                     block3:
                         return v1
-                    exports:
-                        select_const = f0
                 """,
             ),
             output: "(fragment executed)",

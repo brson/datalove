@@ -18,11 +18,6 @@ Analysis(
                         v1 = const 20u32
                         v2 = const 30u32
                         unit_end
-                    exports:
-                        A = v0
-                        B = v1
-                        C = v2
-                        sum = v0
                 """,
             ),
             output: "(fragment executed)",

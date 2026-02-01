@@ -45,14 +45,6 @@ Analysis(
                         unit_end_drop v1
                         unit_end_drop v2
                         unit_end
-                    exports:
-                        x = v0
-                        y = v1
-                        z = v2
-                        eq1 = v3
-                        eq2 = v4
-                        eq3 = v5
-                        output = v6
                 """,
             ),
             output: "(fragment executed)",

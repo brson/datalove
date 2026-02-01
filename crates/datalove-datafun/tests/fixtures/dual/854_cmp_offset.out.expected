@@ -60,13 +60,6 @@ DualAnalysis(
                         v25 = ge v0, v3
                         debuglog v25
                         unit_end
-                    exports:
-                        a = v0
-                        b = v1
-                        c = v2
-                        neg = v3
-                        min = v4
-                        max = v5
                 """,
             ),
             aot_lowering: LoweringResult(
@@ -121,13 +114,6 @@ DualAnalysis(
                         v25 = ge v0, v3
                         debuglog v25
                         unit_end
-                    exports:
-                        a = v0
-                        b = v1
-                        c = v2
-                        neg = v3
-                        min = v4
-                        max = v5
                 """,
             ),
             ir_match: true,

@@ -33,9 +33,6 @@ DualAnalysis(
                         drop v2
                         drop v5
                         return v6
-                    exports:
-                        sum_coords = f0
-                        point = v2
                 """,
             ),
             aot_lowering: LoweringResult(
@@ -63,9 +60,6 @@ DualAnalysis(
                         drop v2
                         drop v5
                         return v6
-                    exports:
-                        sum_coords = f0
-                        point = v2
                 """,
             ),
             ir_match: true,

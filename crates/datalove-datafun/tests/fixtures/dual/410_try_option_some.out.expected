@@ -29,8 +29,6 @@ DualAnalysis(
                     block2:
                         v5 = some v2
                         return v5
-                    exports:
-                        test = f0
                 """,
             ),
             aot_lowering: LoweringResult(
@@ -54,8 +52,6 @@ DualAnalysis(
                     block2:
                         v5 = some v2
                         return v5
-                    exports:
-                        test = f0
                 """,
             ),
             ir_match: true,

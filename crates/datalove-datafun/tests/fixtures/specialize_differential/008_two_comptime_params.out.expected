@@ -44,10 +44,6 @@ Analysis(
                         debuglog v2
                         unit_end_drop v2
                         unit_end
-                    exports:
-                        TEN = v0
-                        TWENTY = v1
-                        result = v2
                 """,
             ),
             output: "(fragment executed)",

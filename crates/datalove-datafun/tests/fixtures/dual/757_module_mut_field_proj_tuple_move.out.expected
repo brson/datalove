@@ -59,9 +59,6 @@ DualAnalysis(
                         debuglog *v5
                         unit_end_drop.tracked s0
                         unit_end
-                    exports:
-                        t = s0
-                        _ok = v4
                 """,
             ),
             aot_lowering: LoweringResult(
@@ -79,9 +76,6 @@ DualAnalysis(
                         debuglog *v5
                         unit_end_drop.tracked s0
                         unit_end
-                    exports:
-                        t = s0
-                        _ok = v4
                 """,
             ),
             ir_match: true,

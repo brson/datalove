@@ -20,9 +20,6 @@ Analysis(
                         debuglog v1
                         unit_end_drop v1
                         unit_end
-                    exports:
-                        x = v0
-                        y = v1
                 """,
             ),
             output: "(fragment executed)",

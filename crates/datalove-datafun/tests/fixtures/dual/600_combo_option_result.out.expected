@@ -52,6 +52,7 @@ DualAnalysis(
                         v9 = some v4
                         v10 = ok v9
                         return v10
+                    
                     fn unwrap_result(p0):
                     block0:
                         v0 = move p0
@@ -63,6 +64,7 @@ DualAnalysis(
                         v4 = none
                         drop v2
                         return v4
+                    
                     fn unwrap_opt(p0, p1):
                     block0:
                         v0 = copy p0
@@ -75,10 +77,6 @@ DualAnalysis(
                     block3:
                         v3 = copy p1
                         return v3
-                    exports:
-                        safe_divide = f0
-                        unwrap_result = f1
-                        unwrap_opt = f2
                 """,
             ),
             aot_lowering: LoweringResult(
@@ -125,6 +123,7 @@ DualAnalysis(
                         v9 = some v4
                         v10 = ok v9
                         return v10
+                    
                     fn unwrap_result(p0):
                     block0:
                         v0 = move p0
@@ -136,6 +135,7 @@ DualAnalysis(
                         v4 = none
                         drop v2
                         return v4
+                    
                     fn unwrap_opt(p0, p1):
                     block0:
                         v0 = copy p0
@@ -148,10 +148,6 @@ DualAnalysis(
                     block3:
                         v3 = copy p1
                         return v3
-                    exports:
-                        safe_divide = f0
-                        unwrap_result = f1
-                        unwrap_opt = f2
                 """,
             ),
             ir_match: true,

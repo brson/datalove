@@ -51,12 +51,6 @@ DualAnalysis(
                         v20 = ge v0, v1
                         debuglog v20
                         unit_end
-                    exports:
-                        a = v0
-                        b = v1
-                        c = v2
-                        zero = v3
-                        max = v4
                 """,
             ),
             aot_lowering: LoweringResult(
@@ -102,12 +96,6 @@ DualAnalysis(
                         v20 = ge v0, v1
                         debuglog v20
                         unit_end
-                    exports:
-                        a = v0
-                        b = v1
-                        c = v2
-                        zero = v3
-                        max = v4
                 """,
             ),
             ir_match: true,

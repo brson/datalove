@@ -33,8 +33,6 @@ DualAnalysis(
                         v7 = pack Struct0 {v2, v3}
                         v8 = ok v7
                         return v8
-                    exports:
-                        test = f0
                 """,
             ),
             aot_lowering: LoweringResult(
@@ -62,8 +60,6 @@ DualAnalysis(
                         v7 = pack Struct0 {v2, v3}
                         v8 = ok v7
                         return v8
-                    exports:
-                        test = f0
                 """,
             ),
             ir_match: true,

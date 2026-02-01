@@ -42,9 +42,6 @@ AotAnalysis(
                         debuglog v2
                         unit_end_drop v2
                         unit_end
-                    exports:
-                        THREE = v0
-                        result = v2
                 """,
             ),
             aot_compile: Some(AotCompileResult(

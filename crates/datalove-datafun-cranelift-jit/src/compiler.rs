@@ -403,11 +403,11 @@ impl JitCompiler {
     }
 }
 
-/// Estimate code size for a function based on IR complexity.
+/// Estimate code size for a code unit based on IR complexity.
 ///
 /// Uses heuristics since Cranelift doesn't expose compiled code size directly.
 /// Estimates ~10 bytes per instruction + 20 bytes per block for control flow.
-fn estimate_code_size(func: &IrFunction) -> usize {
+fn estimate_code_size(func: &IrCodeUnit) -> usize {
     let mut instruction_count = 0;
     for block in &func.blocks {
         instruction_count += block.instructions.len();
@@ -421,7 +421,9 @@ fn estimate_code_size(func: &IrFunction) -> usize {
     let overhead = 32;
 
     // Add overhead for parameters (~8 bytes each for stack setup).
-    let param_overhead = func.params.len() * 8;
+    let param_overhead = func.function_context()
+        .map(|ctx| ctx.params.len() * 8)
+        .unwrap_or(0);
 
     base + overhead + param_overhead
 }

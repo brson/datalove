@@ -21,9 +21,6 @@ Analysis(
                     block0:
                         v0 = const 100u32
                         return v0
-                    exports:
-                        compute = f0
-                        RESULT = v0
                 """,
             ),
             output: "(fragment executed)",

@@ -25,6 +25,7 @@ AotAnalysis(
                         store p0, v0
                         v1 = const true
                         return v1
+                    
                     fn test():
                     block0:
                         v0 = const 5int
@@ -32,9 +33,6 @@ AotAnalysis(
                         v1 = call @0 f0(s0)
                         v2 = load.move.tracked s0
                         return v2
-                    exports:
-                        set_to_100 = f0
-                        test = f1
                 """,
             ),
             aot_compile: Some(AotCompileResult(

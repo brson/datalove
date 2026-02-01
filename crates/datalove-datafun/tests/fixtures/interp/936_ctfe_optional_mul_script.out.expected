@@ -28,8 +28,6 @@ Analysis(
                     block1:
                         v5 = some v2
                         return v5
-                    exports:
-                        mul_opt = f0
                 """,
             ),
             output: "(fragment executed)",

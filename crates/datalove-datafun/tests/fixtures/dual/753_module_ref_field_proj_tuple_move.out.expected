@@ -58,8 +58,6 @@ DualAnalysis(
                         drop v4
                         unit_end_drop v2
                         unit_end
-                    exports:
-                        t = v2
                 """,
             ),
             aot_lowering: LoweringResult(
@@ -76,8 +74,6 @@ DualAnalysis(
                         drop v4
                         unit_end_drop v2
                         unit_end
-                    exports:
-                        t = v2
                 """,
             ),
             ir_match: true,

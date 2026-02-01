@@ -25,9 +25,6 @@ DualAnalysis(
                     block0:
                         v0 = copy p0
                         return v0
-                    exports:
-                        use_i32 = f0
-                        x = v0
                 """,
             ),
             aot_lowering: LoweringResult(
@@ -47,9 +44,6 @@ DualAnalysis(
                     block0:
                         v0 = copy p0
                         return v0
-                    exports:
-                        use_i32 = f0
-                        x = v0
                 """,
             ),
             ir_match: true,

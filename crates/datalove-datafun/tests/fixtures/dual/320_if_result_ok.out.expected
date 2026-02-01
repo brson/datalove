@@ -29,8 +29,6 @@ DualAnalysis(
                         v5 = const 999u32
                         drop v3
                         return v5
-                    exports:
-                        test = f0
                 """,
             ),
             aot_lowering: LoweringResult(
@@ -54,8 +52,6 @@ DualAnalysis(
                         v5 = const 999u32
                         drop v3
                         return v5
-                    exports:
-                        test = f0
                 """,
             ),
             ir_match: true,

@@ -26,8 +26,6 @@ DualAnalysis(
                         debuglog v9
                         unit_end_drop v9
                         unit_end
-                    exports:
-                        points = v9
                 """,
             ),
             aot_lowering: LoweringResult(
@@ -48,8 +46,6 @@ DualAnalysis(
                         debuglog v9
                         unit_end_drop v9
                         unit_end
-                    exports:
-                        points = v9
                 """,
             ),
             ir_match: true,

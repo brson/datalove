@@ -31,8 +31,6 @@ Analysis(
                         drop v2
                         drop v3
                         return v4
-                    exports:
-                        calc = f0
                 """,
             ),
             output: "(fragment executed)",

@@ -20,9 +20,6 @@ AotAnalysis(
                         debuglog v2
                         unit_end_drop v2
                         unit_end
-                    exports:
-                        s = v0
-                        t = v2
                 """,
             ),
             aot_compile: Some(AotCompileResult(

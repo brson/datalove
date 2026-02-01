@@ -24,8 +24,6 @@ DualAnalysis(
                         goto block3
                     block3:
                         unit_end
-                    exports:
-                        opt = v1
                 """,
             ),
             aot_lowering: LoweringResult(
@@ -44,8 +42,6 @@ DualAnalysis(
                         goto block3
                     block3:
                         unit_end
-                    exports:
-                        opt = v1
                 """,
             ),
             ir_match: true,

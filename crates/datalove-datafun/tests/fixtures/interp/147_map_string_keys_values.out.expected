@@ -21,8 +21,6 @@ Analysis(
                         v4 = map {v0: v1, v2: v3}
                         unit_end_drop v4
                         unit_end
-                    exports:
-                        dict = v4
                 """,
             ),
             output: "(fragment executed)",

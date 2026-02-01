@@ -18,8 +18,6 @@ Analysis(
                         v1 = enum_variant 1 v0
                         unit_end_drop v1
                         unit_end
-                    exports:
-                        message = v1
                 """,
             ),
             output: "(fragment executed)",

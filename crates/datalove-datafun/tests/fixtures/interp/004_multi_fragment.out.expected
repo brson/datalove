@@ -16,8 +16,6 @@ Analysis(
                     block0:
                         v0 = const 1u32
                         unit_end
-                    exports:
-                        a = v0
                 """,
             ),
             output: "(fragment executed)",
@@ -38,8 +36,6 @@ Analysis(
                     block0:
                         v0 = const 2u32
                         unit_end
-                    exports:
-                        b = v0
                 """,
             ),
             output: "(fragment executed)",

@@ -23,8 +23,6 @@ Analysis(
                         drop v0
                         drop p0
                         return v1
-                    exports:
-                        add_one = f0
                 """,
             ),
             output: "(fragment executed)",
@@ -50,8 +48,6 @@ Analysis(
                         v0 = call @0 unit0.f0(p0)
                         v1 = call @1 unit0.f0(v0)
                         return v1
-                    exports:
-                        add_two = f0
                 """,
             ),
             output: "(fragment executed)",

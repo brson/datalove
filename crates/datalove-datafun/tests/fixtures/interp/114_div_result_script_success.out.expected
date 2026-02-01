@@ -30,14 +30,11 @@ Analysis(
                     block0:
                         v0 = const 100u32
                         return v0
+                    
                     fn get_b():
                     block0:
                         v0 = const 20u32
                         return v0
-                    exports:
-                        get_a = f0
-                        get_b = f1
-                        output = v2
                 """,
             ),
             output: "(fragment executed)",

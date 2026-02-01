@@ -28,8 +28,6 @@ Analysis(
                     block3:
                         unit_end_drop.tracked s0
                         unit_end
-                    exports:
-                        x = s0
                 """,
             ),
             output: "(fragment executed)",

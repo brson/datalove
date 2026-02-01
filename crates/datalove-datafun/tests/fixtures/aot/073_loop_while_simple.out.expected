@@ -39,9 +39,6 @@ AotAnalysis(
                         unit_end_drop.tracked s0
                         unit_end_drop.tracked s1
                         unit_end
-                    exports:
-                        i = s0
-                        sum = s1
                 """,
             ),
             aot_compile: Some(AotCompileResult(

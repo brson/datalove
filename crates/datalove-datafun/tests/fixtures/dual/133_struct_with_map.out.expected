@@ -26,8 +26,6 @@ DualAnalysis(
                         debuglog *v8
                         unit_end_drop v6
                         unit_end
-                    exports:
-                        config = v6
                 """,
             ),
             aot_lowering: LoweringResult(
@@ -48,8 +46,6 @@ DualAnalysis(
                         debuglog *v8
                         unit_end_drop v6
                         unit_end
-                    exports:
-                        config = v6
                 """,
             ),
             ir_match: true,

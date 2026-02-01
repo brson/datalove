@@ -23,20 +23,18 @@ Analysis(
                         drop v0
                         drop p0
                         return v1
+                    
                     fn add_two(p0):
                     block0:
                         v0 = call @0 f0(p0)
                         v1 = call @1 f0(v0)
                         return v1
+                    
                     fn add_four(p0):
                     block0:
                         v0 = call @0 f1(p0)
                         v1 = call @1 f1(v0)
                         return v1
-                    exports:
-                        add_one = f0
-                        add_two = f1
-                        add_four = f2
                 """,
             ),
             output: "(fragment executed)",

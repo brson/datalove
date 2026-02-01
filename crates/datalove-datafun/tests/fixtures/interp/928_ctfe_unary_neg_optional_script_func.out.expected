@@ -27,8 +27,6 @@ Analysis(
                     block1:
                         v4 = some v1
                         return v4
-                    exports:
-                        negate_value = f0
                 """,
             ),
             output: "(fragment executed)",

@@ -31,10 +31,6 @@ DualAnalysis(
                         v3 = getfield v2.0
                         v4 = pack Struct0 {v1, v3}
                         return v4
-                    exports:
-                        swap_coords = f0
-                        original = v2
-                        swapped = v3
                 """,
             ),
             aot_lowering: LoweringResult(
@@ -60,10 +56,6 @@ DualAnalysis(
                         v3 = getfield v2.0
                         v4 = pack Struct0 {v1, v3}
                         return v4
-                    exports:
-                        swap_coords = f0
-                        original = v2
-                        swapped = v3
                 """,
             ),
             ir_match: true,

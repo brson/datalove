@@ -26,8 +26,6 @@ Analysis(
                         v5 = const "three"
                         v6 = map {v0: v1, v2: v3, v4: v5}
                         return v6
-                    exports:
-                        make_map = f0
                 """,
             ),
             output: "(fragment executed)",

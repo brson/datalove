@@ -113,6 +113,7 @@ DualAnalysis(
                     block4:
                         v8 = some v5
                         return v8
+                    
                     fn unwrap(p0, p1):
                     block0:
                         v0 = copy p0
@@ -125,9 +126,6 @@ DualAnalysis(
                     block3:
                         v3 = copy p1
                         return v3
-                    exports:
-                        pipeline = f0
-                        unwrap = f1
                 """,
             ),
             aot_lowering: LoweringResult(
@@ -169,6 +167,7 @@ DualAnalysis(
                     block4:
                         v8 = some v5
                         return v8
+                    
                     fn unwrap(p0, p1):
                     block0:
                         v0 = copy p0
@@ -181,9 +180,6 @@ DualAnalysis(
                     block3:
                         v3 = copy p1
                         return v3
-                    exports:
-                        pipeline = f0
-                        unwrap = f1
                 """,
             ),
             ir_match: true,

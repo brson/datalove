@@ -25,14 +25,12 @@ AotAnalysis(
                         v0 = add p0, p0
                         drop p0
                         return v0
+                    
                     fn quadruple(p0):
                     block0:
                         v0 = call @0 f0(p0)
                         v1 = call @1 f0(v0)
                         return v1
-                    exports:
-                        double = f0
-                        quadruple = f1
                 """,
             ),
             aot_compile: Some(AotCompileResult(

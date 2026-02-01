@@ -30,6 +30,7 @@ DualAnalysis(
                         v0 = const 42u32
                         v1 = some v0
                         return v1
+                    
                     fn unwrap(p0, p1):
                     block0:
                         v0 = copy p0
@@ -42,10 +43,6 @@ DualAnalysis(
                     block3:
                         v3 = copy p1
                         return v3
-                    exports:
-                        get_opt = f0
-                        unwrap = f1
-                        lst = v3
                 """,
             ),
             aot_lowering: LoweringResult(
@@ -70,6 +67,7 @@ DualAnalysis(
                         v0 = const 42u32
                         v1 = some v0
                         return v1
+                    
                     fn unwrap(p0, p1):
                     block0:
                         v0 = copy p0
@@ -82,10 +80,6 @@ DualAnalysis(
                     block3:
                         v3 = copy p1
                         return v3
-                    exports:
-                        get_opt = f0
-                        unwrap = f1
-                        lst = v3
                 """,
             ),
             ir_match: true,

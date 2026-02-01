@@ -23,8 +23,6 @@ Analysis(
                         v2 = const 300u32
                         v3 = set {v0, v1, v2}
                         return v3
-                    exports:
-                        make_set = f0
                 """,
             ),
             output: "(fragment executed)",

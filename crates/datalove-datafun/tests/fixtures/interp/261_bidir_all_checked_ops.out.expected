@@ -56,9 +56,6 @@ Analysis(
                     block8:
                         v20 = ok v15
                         return v20
-                    exports:
-                        all_ops = f0
-                        output = v2
                 """,
             ),
             output: "(fragment executed)",

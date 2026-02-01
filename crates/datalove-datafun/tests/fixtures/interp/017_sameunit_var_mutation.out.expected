@@ -19,8 +19,6 @@ Analysis(
                         v1 = const 20u32
                         store.copy s0, v1
                         unit_end
-                    exports:
-                        x = s0
                 """,
             ),
             output: "(fragment executed)",

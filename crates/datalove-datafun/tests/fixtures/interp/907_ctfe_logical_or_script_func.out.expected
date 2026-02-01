@@ -24,8 +24,6 @@ Analysis(
                         v1 = const true
                         v2 = const true
                         return v2
-                    exports:
-                        check_or = f0
                 """,
             ),
             output: "(fragment executed)",

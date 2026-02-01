@@ -26,14 +26,6 @@ DualAnalysis(
                         debuglog v5
                         debuglog v6
                         unit_end
-                    exports:
-                        a = v0
-                        b = v1
-                        sum = v2
-                        diff = v3
-                        prod = v4
-                        quot = v5
-                        neg = v6
                 """,
             ),
             aot_lowering: LoweringResult(
@@ -54,14 +46,6 @@ DualAnalysis(
                         debuglog v5
                         debuglog v6
                         unit_end
-                    exports:
-                        a = v0
-                        b = v1
-                        sum = v2
-                        diff = v3
-                        prod = v4
-                        quot = v5
-                        neg = v6
                 """,
             ),
             ir_match: true,

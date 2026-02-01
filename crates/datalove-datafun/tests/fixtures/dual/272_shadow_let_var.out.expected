@@ -21,9 +21,6 @@ DualAnalysis(
                         store.copy s0, v2
                         debuglog s0
                         unit_end
-                    exports:
-                        x = v0
-                        x = s0
                 """,
             ),
             aot_lowering: LoweringResult(
@@ -39,9 +36,6 @@ DualAnalysis(
                         store.copy s0, v2
                         debuglog s0
                         unit_end
-                    exports:
-                        x = v0
-                        x = s0
                 """,
             ),
             ir_match: true,

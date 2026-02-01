@@ -27,9 +27,6 @@ Analysis(
                         goto block3
                     block3:
                         unit_end
-                    exports:
-                        opt = v1
-                        result = s0
                 """,
             ),
             output: "(fragment executed)",

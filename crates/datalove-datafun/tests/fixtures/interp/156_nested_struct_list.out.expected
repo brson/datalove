@@ -22,8 +22,6 @@ Analysis(
                         v5 = pack Struct0 {v3, v4}
                         unit_end_drop v5
                         unit_end
-                    exports:
-                        container = v5
                 """,
             ),
             output: "(fragment executed)",

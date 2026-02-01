@@ -33,6 +33,7 @@ DualAnalysis(
                     block3:
                         v3 = copy p1
                         return v3
+                    
                     fn checked_div(p0, p1):
                     block0:
                         v0, v1 = div.checked p0, p1
@@ -43,9 +44,6 @@ DualAnalysis(
                     block2:
                         v3 = some v0
                         return v3
-                    exports:
-                        unwrap_or_default = f0
-                        checked_div = f1
                 """,
             ),
             aot_lowering: LoweringResult(
@@ -73,6 +71,7 @@ DualAnalysis(
                     block3:
                         v3 = copy p1
                         return v3
+                    
                     fn checked_div(p0, p1):
                     block0:
                         v0, v1 = div.checked p0, p1
@@ -83,9 +82,6 @@ DualAnalysis(
                     block2:
                         v3 = some v0
                         return v3
-                    exports:
-                        unwrap_or_default = f0
-                        checked_div = f1
                 """,
             ),
             ir_match: true,

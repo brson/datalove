@@ -40,9 +40,6 @@ Analysis(
                         v3 = comptime_call m0.f0(v2) [disc=0, comptime_params=[0]]
                         debuglog v3
                         unit_end
-                    exports:
-                        MY_CONFIG = v2
-                        result = v3
                 """,
             ),
             output: "(fragment executed)",

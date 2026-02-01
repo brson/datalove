@@ -32,14 +32,12 @@ AotAnalysis(
                     block3:
                         v3 = copy p1
                         return v3
+                    
                     fn get_some():
                     block0:
                         v0 = const 42u32
                         v1 = some v0
                         return v1
-                    exports:
-                        unwrap_or_default = f0
-                        get_some = f1
                 """,
             ),
             aot_compile: Some(AotCompileResult(

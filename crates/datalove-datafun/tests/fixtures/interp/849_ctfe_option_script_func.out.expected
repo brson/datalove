@@ -23,8 +23,6 @@ Analysis(
                         v0 = const 100u32
                         v1 = const some 100u32
                         return v1
-                    exports:
-                        get_opt = f0
                 """,
             ),
             output: "(fragment executed)",

@@ -19,10 +19,6 @@ Analysis(
                         v2 = const true
                         debuglog v2
                         unit_end
-                    exports:
-                        A = v0
-                        B = v1
-                        C = v2
                 """,
             ),
             output: "(fragment executed)",

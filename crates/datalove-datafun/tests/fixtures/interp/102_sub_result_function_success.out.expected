@@ -32,9 +32,6 @@ Analysis(
                     block2:
                         v5 = ok v0
                         return v5
-                    exports:
-                        test_sub = f0
-                        output = v2
                 """,
             ),
             output: "(fragment executed)",

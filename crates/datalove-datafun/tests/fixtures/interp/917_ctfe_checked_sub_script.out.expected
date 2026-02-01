@@ -29,8 +29,6 @@ Analysis(
                     block1:
                         v7 = ok v2
                         return v7
-                    exports:
-                        sub_checked = f0
                 """,
             ),
             output: "(fragment executed)",

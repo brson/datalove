@@ -17,9 +17,6 @@ DualAnalysis(
                         store.copy.tracked s0, v0
                         debuglog v0
                         unit_end
-                    exports:
-                        v0 = v0
-                        v1 = s0
                 """,
             ),
             aot_lowering: LoweringResult(
@@ -31,9 +28,6 @@ DualAnalysis(
                         store.copy.tracked s0, v0
                         debuglog v0
                         unit_end
-                    exports:
-                        v0 = v0
-                        v1 = s0
                 """,
             ),
             ir_match: true,

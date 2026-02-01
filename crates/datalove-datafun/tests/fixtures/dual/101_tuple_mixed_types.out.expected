@@ -20,8 +20,6 @@ DualAnalysis(
                         debuglog v3
                         unit_end_drop v3
                         unit_end
-                    exports:
-                        t = v3
                 """,
             ),
             aot_lowering: LoweringResult(
@@ -36,8 +34,6 @@ DualAnalysis(
                         debuglog v3
                         unit_end_drop v3
                         unit_end
-                    exports:
-                        t = v3
                 """,
             ),
             ir_match: true,

@@ -21,8 +21,6 @@ Analysis(
                         v0 = add p0, p0
                         drop p0
                         return v0
-                    exports:
-                        double = f0
                 """,
             ),
             output: "(fragment executed)",

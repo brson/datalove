@@ -37,6 +37,7 @@ Analysis(
                     block4:
                         v10 = call @0 f1(v5)
                         return v10
+                    
                     fn is_odd(p0):
                     block0:
                         v0 = const 0u32
@@ -58,9 +59,6 @@ Analysis(
                     block4:
                         v10 = call @0 f0(v5)
                         return v10
-                    exports:
-                        is_even = f0
-                        is_odd = f1
                 """,
             ),
             output: "(fragment executed)",

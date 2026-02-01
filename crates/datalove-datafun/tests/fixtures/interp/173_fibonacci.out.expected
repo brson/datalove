@@ -68,8 +68,6 @@ Analysis(
                     block12:
                         v31 = ok v26
                         return v31
-                    exports:
-                        fib = f0
                 """,
             ),
             output: "(fragment executed)",

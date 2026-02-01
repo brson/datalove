@@ -18,8 +18,6 @@ IrSerialAnalysis(
                     block0:
                         v0 = const 5u32
                         return v0
-                    exports:
-                        get_five = f0
                 """,
             ),
             direct_interp_output: "5\n",

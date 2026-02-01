@@ -120,8 +120,6 @@ DualAnalysis(
                     block3:
                         v2 = call @1 m0.f0(p0)
                         return v2
-                    exports:
-                        process = f0
                 """,
             ),
             aot_lowering: LoweringResult(
@@ -158,8 +156,6 @@ DualAnalysis(
                     block3:
                         v2 = call @1 m0.f0(p0)
                         return v2
-                    exports:
-                        process = f0
                 """,
             ),
             ir_match: true,

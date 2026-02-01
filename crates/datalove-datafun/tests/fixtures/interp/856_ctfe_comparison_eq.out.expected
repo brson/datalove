@@ -24,8 +24,6 @@ Analysis(
                         v1 = const 10u32
                         v2 = const true
                         return v2
-                    exports:
-                        check = f0
                 """,
             ),
             output: "(fragment executed)",

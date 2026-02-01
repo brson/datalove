@@ -45,10 +45,6 @@ DualAnalysis(
                     block8:
                         debuglog s0
                         unit_end
-                    exports:
-                        x = s0
-                        skip_once = s1
-                        done = s2
                 """,
             ),
             aot_lowering: LoweringResult(
@@ -88,10 +84,6 @@ DualAnalysis(
                     block8:
                         debuglog s0
                         unit_end
-                    exports:
-                        x = s0
-                        skip_once = s1
-                        done = s2
                 """,
             ),
             ir_match: true,

@@ -26,8 +26,6 @@ DualAnalysis(
                         drop p0
                         drop p1
                         return v0
-                    exports:
-                        add = f0
                 """,
             ),
             aot_lowering: LoweringResult(
@@ -48,8 +46,6 @@ DualAnalysis(
                         drop p0
                         drop p1
                         return v0
-                    exports:
-                        add = f0
                 """,
             ),
             ir_match: true,

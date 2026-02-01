@@ -61,8 +61,6 @@ Analysis(
                         v17 = ok v16
                         drop.tracked s0
                         return v17
-                    exports:
-                        fib = f0
                 """,
             ),
             output: "(fragment executed)",

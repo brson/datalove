@@ -37,8 +37,6 @@ Analysis(
                     block4:
                         v10 = call @0 f0(v5)
                         return v10
-                    exports:
-                        countdown = f0
                 """,
             ),
             output: "(fragment executed)",

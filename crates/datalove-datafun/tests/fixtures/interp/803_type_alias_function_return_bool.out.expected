@@ -32,13 +32,11 @@ Analysis(
                     block0:
                         v0 = copy p0
                         return v0
+                    
                     fn negate(p0):
                     block0:
                         v0 = logic_not p0
                         return v0
-                    exports:
-                        pass_through = f0
-                        negate = f1
                 """,
             ),
             output: "(fragment executed)",

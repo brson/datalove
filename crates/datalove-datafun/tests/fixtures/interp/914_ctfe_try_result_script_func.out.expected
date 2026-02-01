@@ -29,8 +29,6 @@ Analysis(
                     block1:
                         v6 = ok v2
                         return v6
-                    exports:
-                        get_value = f0
                 """,
             ),
             output: "(fragment executed)",

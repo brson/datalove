@@ -34,11 +34,6 @@ DualAnalysis(
                         v11 = intrinsic BitxorIndex(v0, v0)
                         debuglog v11
                         unit_end
-                    exports:
-                        a = v0
-                        b = v1
-                        zero = v2
-                        max = v3
                 """,
             ),
             aot_lowering: LoweringResult(
@@ -67,11 +62,6 @@ DualAnalysis(
                         v11 = intrinsic BitxorIndex(v0, v0)
                         debuglog v11
                         unit_end
-                    exports:
-                        a = v0
-                        b = v1
-                        zero = v2
-                        max = v3
                 """,
             ),
             ir_match: true,

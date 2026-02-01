@@ -17,9 +17,6 @@ DualAnalysis(
                         v1 = widen_fixed v0
                         debuglog v1
                         unit_end
-                    exports:
-                        x = v0
-                        y = v1
                 """,
             ),
             aot_lowering: LoweringResult(
@@ -31,9 +28,6 @@ DualAnalysis(
                         v1 = widen_fixed v0
                         debuglog v1
                         unit_end
-                    exports:
-                        x = v0
-                        y = v1
                 """,
             ),
             ir_match: true,

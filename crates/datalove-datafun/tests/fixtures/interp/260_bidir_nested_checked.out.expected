@@ -41,9 +41,6 @@ Analysis(
                     block4:
                         v13 = ok v8
                         return v13
-                    exports:
-                        nested = f0
-                        output = v0
                 """,
             ),
             output: "(fragment executed)",

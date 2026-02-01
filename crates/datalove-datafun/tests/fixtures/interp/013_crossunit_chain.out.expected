@@ -17,8 +17,6 @@ Analysis(
                         v0 = const 5int
                         unit_end_drop v0
                         unit_end
-                    exports:
-                        a = v0
                 """,
             ),
             output: "(fragment executed)",
@@ -42,8 +40,6 @@ Analysis(
                         drop v0
                         unit_end_drop v1
                         unit_end
-                    exports:
-                        b = v1
                 """,
             ),
             output: "(fragment executed)",

@@ -53,8 +53,6 @@ DualAnalysis(
                         v3 = call @0 m0.f0(v2)
                         debuglog v3
                         unit_end
-                    exports:
-                        user = v2
                 """,
             ),
             aot_lowering: LoweringResult(
@@ -68,8 +66,6 @@ DualAnalysis(
                         v3 = call @0 m0.f0(v2)
                         debuglog v3
                         unit_end
-                    exports:
-                        user = v2
                 """,
             ),
             ir_match: true,

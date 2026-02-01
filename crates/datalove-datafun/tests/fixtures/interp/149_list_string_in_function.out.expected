@@ -23,8 +23,6 @@ Analysis(
                         v2 = const "c"
                         v3 = list [v0, v1, v2]
                         return v3
-                    exports:
-                        make_list = f0
                 """,
             ),
             output: "(fragment executed)",

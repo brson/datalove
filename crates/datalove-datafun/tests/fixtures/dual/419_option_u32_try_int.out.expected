@@ -31,8 +31,6 @@ DualAnalysis(
                         v5 = widen v2
                         v6 = some v5
                         return v6
-                    exports:
-                        test = f0
                 """,
             ),
             aot_lowering: LoweringResult(
@@ -58,8 +56,6 @@ DualAnalysis(
                         v5 = widen v2
                         v6 = some v5
                         return v6
-                    exports:
-                        test = f0
                 """,
             ),
             ir_match: true,

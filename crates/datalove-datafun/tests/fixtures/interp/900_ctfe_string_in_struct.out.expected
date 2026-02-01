@@ -18,8 +18,6 @@ Analysis(
                         debuglog v2
                         unit_end_drop v2
                         unit_end
-                    exports:
-                        P = v2
                 """,
             ),
             output: "(fragment executed)",

@@ -35,9 +35,6 @@ Analysis(
                         v6 = ok v1
                         drop v0
                         return v6
-                    exports:
-                        test_add_result = f0
-                        output = v2
                 """,
             ),
             output: "(fragment executed)",

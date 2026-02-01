@@ -43,10 +43,6 @@ Analysis(
                         v1 = call @0 m0.f1(v0)
                         unit_end_drop v0
                         unit_end
-                    exports:
-                        val = v0
-                        result1 = v1
-                        output = v1
                 """,
             ),
             output: "(fragment executed)",

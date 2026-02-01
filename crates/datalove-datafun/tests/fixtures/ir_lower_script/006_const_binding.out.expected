@@ -3,7 +3,4 @@ scriptunit:
 block0:
     v0 = const 42u32
     unit_end
-exports:
-    X = v0
-    y = v0
 

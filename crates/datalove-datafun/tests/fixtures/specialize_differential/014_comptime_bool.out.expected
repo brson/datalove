@@ -54,11 +54,6 @@ Analysis(
                         unit_end_drop v3
                         unit_end_drop v5
                         unit_end
-                    exports:
-                        YES = v0
-                        NO = v1
-                        result1 = v3
-                        result2 = v5
                 """,
             ),
             output: "(fragment executed)",

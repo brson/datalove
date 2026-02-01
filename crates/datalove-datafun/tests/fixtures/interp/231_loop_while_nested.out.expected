@@ -57,9 +57,6 @@ Analysis(
                         unit_end_drop.tracked s0
                         unit_end_drop.tracked s1
                         unit_end
-                    exports:
-                        total = s0
-                        i = s1
                 """,
             ),
             output: "(fragment executed)",

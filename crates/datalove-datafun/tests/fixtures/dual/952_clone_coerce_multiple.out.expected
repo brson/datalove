@@ -23,11 +23,6 @@ DualAnalysis(
                         unit_end_drop v2
                         unit_end_drop v0
                         unit_end
-                    exports:
-                        s = v0
-                        s1 = v1
-                        s2 = v2
-                        s3 = v0
                 """,
             ),
             aot_lowering: LoweringResult(
@@ -45,11 +40,6 @@ DualAnalysis(
                         unit_end_drop v2
                         unit_end_drop v0
                         unit_end
-                    exports:
-                        s = v0
-                        s1 = v1
-                        s2 = v2
-                        s3 = v0
                 """,
             ),
             ir_match: true,

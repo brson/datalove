@@ -33,6 +33,7 @@ AotAnalysis(
                     block2:
                         v5 = ok v0
                         return v5
+                    
                     fn unwrap_or_default(p0, p1):
                     block0:
                         v0 = move p0
@@ -44,9 +45,6 @@ AotAnalysis(
                         v4 = copy p1
                         drop v2
                         return v4
-                    exports:
-                        checked_neg = f0
-                        unwrap_or_default = f1
                 """,
             ),
             aot_compile: Some(AotCompileResult(

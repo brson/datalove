@@ -49,9 +49,6 @@ Analysis(
                         unit_end_drop v2
                         unit_end_drop v5
                         unit_end
-                    exports:
-                        x = v2
-                        y = v5
                 """,
             ),
             output: "(fragment executed)",

@@ -35,13 +35,6 @@ DualAnalysis(
                         v15 = intrinsic IndexToOffset(v14)
                         debuglog v15
                         unit_end
-                    exports:
-                        a = v0
-                        b = v1
-                        zero = v2
-                        neg_one = v3
-                        a_u = v4
-                        b_u = v7
                 """,
             ),
             aot_lowering: LoweringResult(
@@ -71,13 +64,6 @@ DualAnalysis(
                         v15 = intrinsic IndexToOffset(v14)
                         debuglog v15
                         unit_end
-                    exports:
-                        a = v0
-                        b = v1
-                        zero = v2
-                        neg_one = v3
-                        a_u = v4
-                        b_u = v7
                 """,
             ),
             ir_match: true,

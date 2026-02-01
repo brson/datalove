@@ -28,10 +28,6 @@ Analysis(
                         goto block3
                     block3:
                         unit_end
-                    exports:
-                        x = v0
-                        opt = v2
-                        result = s0
                 """,
             ),
             output: "(fragment executed)",

@@ -30,10 +30,6 @@ DualAnalysis(
                         setfield p0.0, v0
                         v1 = const true
                         return v1
-                    exports:
-                        set_x = f0
-                        p = s0
-                        _ok = v3
                 """,
             ),
             aot_lowering: LoweringResult(
@@ -58,10 +54,6 @@ DualAnalysis(
                         setfield p0.0, v0
                         v1 = const true
                         return v1
-                    exports:
-                        set_x = f0
-                        p = s0
-                        _ok = v3
                 """,
             ),
             ir_match: true,

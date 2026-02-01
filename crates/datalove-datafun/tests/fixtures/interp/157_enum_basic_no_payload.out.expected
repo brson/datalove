@@ -16,8 +16,6 @@ Analysis(
                     block0:
                         v0 = enum_variant 0
                         unit_end
-                    exports:
-                        status = v0
                 """,
             ),
             output: "(fragment executed)",

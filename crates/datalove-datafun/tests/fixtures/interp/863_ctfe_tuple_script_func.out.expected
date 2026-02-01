@@ -24,8 +24,6 @@ Analysis(
                         v1 = const false
                         v2 = const (100u32, false)
                         return v2
-                    exports:
-                        get_pair = f0
                 """,
             ),
             output: "(fragment executed)",

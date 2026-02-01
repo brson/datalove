@@ -23,8 +23,6 @@ AotAnalysis(
                     block0:
                         v0 = copy p0
                         return v0
-                    exports:
-                        identity = f0
                 """,
             ),
             aot_compile: Some(AotCompileResult(

@@ -39,8 +39,6 @@ DualAnalysis(
                         goto block6
                     block6:
                         unit_end
-                    exports:
-                        p = v2
                 """,
             ),
             aot_lowering: LoweringResult(
@@ -74,8 +72,6 @@ DualAnalysis(
                         goto block6
                     block6:
                         unit_end
-                    exports:
-                        p = v2
                 """,
             ),
             ir_match: true,

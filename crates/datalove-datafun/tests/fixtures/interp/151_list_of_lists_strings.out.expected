@@ -24,8 +24,6 @@ Analysis(
                         v7 = list [v2, v6]
                         unit_end_drop v7
                         unit_end
-                    exports:
-                        nested = v7
                 """,
             ),
             output: "(fragment executed)",

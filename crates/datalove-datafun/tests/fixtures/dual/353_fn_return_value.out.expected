@@ -21,9 +21,6 @@ DualAnalysis(
                     block0:
                         v0 = const 10u32
                         return v0
-                    exports:
-                        get_ten = f0
-                        x = v0
                 """,
             ),
             aot_lowering: LoweringResult(
@@ -39,9 +36,6 @@ DualAnalysis(
                     block0:
                         v0 = const 10u32
                         return v0
-                    exports:
-                        get_ten = f0
-                        x = v0
                 """,
             ),
             ir_match: true,

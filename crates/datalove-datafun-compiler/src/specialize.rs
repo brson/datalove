@@ -45,9 +45,9 @@
 
 use std::collections::HashMap;
 use datalove_datafun_ir::{
-    ConstValue, IrFunction, IrBlock, Instruction, Terminator, Operand,
+    ConstValue, IrCodeUnit, IrBlock, Instruction, Terminator, Operand,
     ValueId, BlockId, FuncId, FuncRef, IrType, BinOp, ParamMode, ParamId,
-    IrModuleId, CallSiteId,
+    IrModuleId, CallSiteId, CodeUnitContext, FunctionContext, SymbolTable,
 };
 use datalove_datafun_common::ComptimeCallSiteRegistry;
 
@@ -175,16 +175,22 @@ pub fn build_specialization_plan<'db>(
 /// Note: The actual const folding within branches is handled by existing
 /// const inlining infrastructure in the assembly phase.
 pub fn transform_function(
-    original: &IrFunction,
+    original: &IrCodeUnit,
     spec: &FuncSpecialization,
-) -> IrFunction {
+) -> IrCodeUnit {
     // For functions with no instantiations, return unchanged.
     if spec.instantiations.is_empty() {
         return original.clone();
     }
 
+    // Extract function context - this function only works on function code units.
+    let func_ctx = match &original.context {
+        CodeUnitContext::Function(ctx) => ctx,
+        _ => return original.clone(),
+    };
+
     // Build new parameter list: replace comptime params with discriminant.
-    let mut new_param_types = Vec::new();
+    let mut new_param_types: Vec<IrType> = Vec::new();
     let mut new_param_modes = Vec::new();
 
     // Add discriminant parameter as first param.
@@ -192,7 +198,7 @@ pub fn transform_function(
     new_param_modes.push(ParamMode::In);
 
     // Add non-comptime params.
-    for (i, (ty, mode)) in original.param_types.iter().zip(original.param_modes.iter()).enumerate() {
+    for (i, (ty, mode)) in func_ctx.param_types.iter().zip(func_ctx.param_modes.iter()).enumerate() {
         if !spec.comptime_param_indices.contains(&i) {
             new_param_types.push(ty.clone());
             new_param_modes.push(*mode);
@@ -203,7 +209,7 @@ pub fn transform_function(
     // Old param indices → new param indices (accounting for removed comptime params).
     let mut param_remap: HashMap<u32, u32> = HashMap::new();
     let mut new_param_idx = 1u32; // Start after discriminant
-    for (old_idx, _) in original.params.iter().enumerate() {
+    for (old_idx, _) in func_ctx.params.iter().enumerate() {
         if !spec.comptime_param_indices.contains(&old_idx) {
             param_remap.insert(old_idx as u32, new_param_idx);
             new_param_idx += 1;
@@ -217,24 +223,28 @@ pub fn transform_function(
 
     // Build dispatch blocks.
     let (new_blocks, new_value_count, new_slot_count, new_value_types, new_slot_types) =
-        build_dispatch_blocks(original, spec, &param_remap);
+        build_dispatch_blocks(original, func_ctx, spec, &param_remap);
 
-    IrFunction {
+    IrCodeUnit {
         id: original.id,
         name: original.name.clone(),
-        params: new_params,
-        param_modes: new_param_modes,
-        param_types: new_param_types,
-        return_type: original.return_type.clone(),
         blocks: new_blocks,
         value_count: new_value_count,
         slot_count: new_slot_count,
         call_site_count: original.call_site_count,
         value_types: new_value_types,
         slot_types: new_slot_types,
-        tracked_slots: original.tracked_slots.clone(), // May need adjustment
-        tracked_params: Vec::new(), // Recompute if needed
-        const_values: Vec::new(), // Will be populated during const inlining
+        tracked_slots: original.tracked_slots.clone(),
+        const_values: Vec::new(),
+        symbols: SymbolTable::default(),
+        context: CodeUnitContext::Function(FunctionContext {
+            params: new_params,
+            param_modes: new_param_modes,
+            param_types: new_param_types,
+            return_type: func_ctx.return_type.clone(),
+            tracked_params: Vec::new(),
+        }),
+        nested_units: vec![],
     }
 }
 
@@ -245,7 +255,8 @@ pub fn transform_function(
 /// 2. Dispatch chain blocks (one per variant except last)
 /// 3. Body blocks (cloned original body for each instantiation)
 fn build_dispatch_blocks(
-    original: &IrFunction,
+    original: &IrCodeUnit,
+    func_ctx: &FunctionContext,
     spec: &FuncSpecialization,
     param_remap: &HashMap<u32, u32>,
 ) -> (Vec<IrBlock>, u32, u32, Vec<IrType>, Vec<IrType>) {
@@ -359,7 +370,7 @@ fn build_dispatch_blocks(
                 // Add const instructions for comptime param values.
                 // Use the original function's param_types to get the correct type for each comptime param.
                 for (&param_idx, value) in spec.comptime_param_indices.iter().zip(values.iter()) {
-                    let param_type = original.param_types[param_idx].clone();
+                    let param_type = func_ctx.param_types[param_idx].clone();
                     let dest = fresh_value(param_type);
                     instructions.push(Instruction::Const {
                         dest,
@@ -555,7 +566,7 @@ fn rewrite_comptime_params_in_terminator(
     }
 }
 
-/// Rewrite ComptimeCall instructions in a function.
+/// Rewrite ComptimeCall instructions in a code unit.
 ///
 /// For each ComptimeCall:
 /// 1. Resolve comptime arg values from the IR (find Const instructions that define them)
@@ -568,15 +579,15 @@ fn rewrite_comptime_params_in_terminator(
 /// `current_module` is the IrModuleId of the module containing this function,
 /// used for resolving local function references.
 ///
-/// Returns the transformed function.
+/// Returns the transformed code unit.
 pub fn rewrite_comptime_calls(
-    func: &IrFunction,
+    func: &IrCodeUnit,
     spec_result: &SpecializationResult,
     func_id_to_name: &HashMap<(IrModuleId, FuncId), String>,
     current_module: IrModuleId,
     value_types: &mut Vec<IrType>,
     next_value: &mut u32,
-) -> IrFunction {
+) -> IrCodeUnit {
     // Build a map from ValueId to ConstValue for values defined by Const instructions.
     let const_values = build_const_value_map(func);
 
@@ -590,7 +601,7 @@ pub fn rewrite_comptime_calls(
             match instr {
                 Instruction::ComptimeCall { dest, func: func_ref, args, discriminant: _, comptime_param_indices } => {
                     // Get the function name from FuncRef.
-                    let func_name = get_func_name_from_ref(func_ref, func_id_to_name, current_module);
+                    let func_name = get_func_name_from_ref(&func_ref, func_id_to_name, current_module);
 
                     if let Some(ref name) = func_name {
                         if let Some(spec) = spec_result.specialized_funcs.get(name) {
@@ -675,13 +686,9 @@ pub fn rewrite_comptime_calls(
         });
     }
 
-    IrFunction {
+    IrCodeUnit {
         id: func.id,
         name: func.name.clone(),
-        params: func.params.clone(),
-        param_modes: func.param_modes.clone(),
-        param_types: func.param_types.clone(),
-        return_type: func.return_type.clone(),
         blocks: new_blocks,
         value_count: *next_value,
         slot_count: func.slot_count,
@@ -689,8 +696,10 @@ pub fn rewrite_comptime_calls(
         value_types: value_types.clone(),
         slot_types: func.slot_types.clone(),
         tracked_slots: func.tracked_slots.clone(),
-        tracked_params: func.tracked_params.clone(),
         const_values: func.const_values.clone(),
+        symbols: func.symbols.clone(),
+        context: func.context.clone(),
+        nested_units: func.nested_units.clone(),
     }
 }
 
@@ -712,7 +721,7 @@ fn get_func_name_from_ref(
 }
 
 /// Build a map from ValueId to ConstValue for values defined by Const instructions.
-fn build_const_value_map(func: &IrFunction) -> HashMap<ValueId, ConstValue> {
+fn build_const_value_map(func: &IrCodeUnit) -> HashMap<ValueId, ConstValue> {
     let mut map = HashMap::new();
 
     for block in &func.blocks {

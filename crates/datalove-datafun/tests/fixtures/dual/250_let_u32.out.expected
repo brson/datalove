@@ -16,9 +16,6 @@ DualAnalysis(
                         v0 = const 42u32
                         debuglog v0
                         unit_end
-                    exports:
-                        x = v0
-                        y = v0
                 """,
             ),
             aot_lowering: LoweringResult(
@@ -29,9 +26,6 @@ DualAnalysis(
                         v0 = const 42u32
                         debuglog v0
                         unit_end
-                    exports:
-                        x = v0
-                        y = v0
                 """,
             ),
             ir_match: true,

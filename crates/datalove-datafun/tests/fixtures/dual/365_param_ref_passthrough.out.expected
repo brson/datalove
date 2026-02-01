@@ -25,14 +25,11 @@ DualAnalysis(
                     block0:
                         v0 = add p0, p0
                         return v0
+                    
                     fn outer(p0):
                     block0:
                         v0 = call @0 f0(p0)
                         return v0
-                    exports:
-                        inner = f0
-                        outer = f1
-                        val = v0
                 """,
             ),
             aot_lowering: LoweringResult(
@@ -52,14 +49,11 @@ DualAnalysis(
                     block0:
                         v0 = add p0, p0
                         return v0
+                    
                     fn outer(p0):
                     block0:
                         v0 = call @0 f0(p0)
                         return v0
-                    exports:
-                        inner = f0
-                        outer = f1
-                        val = v0
                 """,
             ),
             ir_match: true,

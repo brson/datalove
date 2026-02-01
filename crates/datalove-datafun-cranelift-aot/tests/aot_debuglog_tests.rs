@@ -3,7 +3,7 @@
 use datalove_datafun_cranelift_aot::AotCompiler;
 use datalove_datafun_ir::{
     BlockId, ConstValue, IrBlock, IrCodeUnit, CodeUnitId, CodeUnitContext, ScriptContext,
-    IrType, Instruction, Operand, Terminator, ValueId,
+    IrType, Instruction, Operand, Terminator, ValueId, SymbolTable,
 };
 
 /// Helper to create a script code unit for tests.
@@ -23,6 +23,7 @@ fn make_script_unit(
         slot_types: vec![],
         tracked_slots: vec![],
         const_values: vec![],
+        symbols: SymbolTable::default(),
         context: CodeUnitContext::Script(ScriptContext {
             unit_end_values: vec![],
             unit_end_slots: vec![],

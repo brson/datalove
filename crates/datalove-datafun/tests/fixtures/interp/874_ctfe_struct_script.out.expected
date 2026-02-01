@@ -17,8 +17,6 @@ Analysis(
                         v2 = const {x = 10u32, y = 20u32}
                         debuglog v2
                         unit_end
-                    exports:
-                        P = v2
                 """,
             ),
             output: "(fragment executed)",

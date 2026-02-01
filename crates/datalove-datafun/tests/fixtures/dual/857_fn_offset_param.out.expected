@@ -41,6 +41,7 @@ DualAnalysis(
                         v2 = intrinsic AddWrappingIndex(v0, v1)
                         v3 = intrinsic IndexToOffset(v2)
                         return v3
+                    
                     fn abs_offset(p0):
                     block0:
                         v0 = const 0offset
@@ -52,6 +53,7 @@ DualAnalysis(
                     block2:
                         v3 = copy p0
                         return v3
+                    
                     fn signum_offset(p0):
                     block0:
                         v0 = const 0offset
@@ -68,10 +70,6 @@ DualAnalysis(
                         return v2
                     block4:
                         return v0
-                    exports:
-                        add_offset = f0
-                        abs_offset = f1
-                        signum_offset = f2
                 """,
             ),
             aot_lowering: LoweringResult(
@@ -107,6 +105,7 @@ DualAnalysis(
                         v2 = intrinsic AddWrappingIndex(v0, v1)
                         v3 = intrinsic IndexToOffset(v2)
                         return v3
+                    
                     fn abs_offset(p0):
                     block0:
                         v0 = const 0offset
@@ -118,6 +117,7 @@ DualAnalysis(
                     block2:
                         v3 = copy p0
                         return v3
+                    
                     fn signum_offset(p0):
                     block0:
                         v0 = const 0offset
@@ -134,10 +134,6 @@ DualAnalysis(
                         return v2
                     block4:
                         return v0
-                    exports:
-                        add_offset = f0
-                        abs_offset = f1
-                        signum_offset = f2
                 """,
             ),
             ir_match: true,

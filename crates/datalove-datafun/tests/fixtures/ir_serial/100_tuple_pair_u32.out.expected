@@ -15,8 +15,6 @@ IrSerialAnalysis(
                         v2 = pack Tuple2 {v0, v1}
                         debuglog v2
                         unit_end
-                    exports:
-                        t = v2
                 """,
             ),
             direct_interp_output: "(1, 2)\n",

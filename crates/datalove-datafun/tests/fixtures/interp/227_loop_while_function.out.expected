@@ -41,8 +41,6 @@ Analysis(
                         drop p0
                         drop.tracked s1
                         return v6
-                    exports:
-                        count_up = f0
                 """,
             ),
             output: "(fragment executed)",

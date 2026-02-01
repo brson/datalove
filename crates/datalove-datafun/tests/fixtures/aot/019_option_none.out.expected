@@ -32,13 +32,11 @@ AotAnalysis(
                     block3:
                         v3 = copy p1
                         return v3
+                    
                     fn get_none():
                     block0:
                         v0 = none
                         return v0
-                    exports:
-                        unwrap_or_default = f0
-                        get_none = f1
                 """,
             ),
             aot_compile: Some(AotCompileResult(

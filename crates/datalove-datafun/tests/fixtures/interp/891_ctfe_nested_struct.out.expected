@@ -17,8 +17,6 @@ Analysis(
                         v4 = const {outer = {x = 1u32, y = 2u32}, value = 3u32}
                         debuglog v4
                         unit_end
-                    exports:
-                        P = v4
                 """,
             ),
             output: "(fragment executed)",

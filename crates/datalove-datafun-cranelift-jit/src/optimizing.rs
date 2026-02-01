@@ -13,7 +13,7 @@ use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::time::Instant;
 
-use datalove_datafun_ir::{FuncRef, IrFunction};
+use datalove_datafun_ir::{FuncRef, IrCodeUnit};
 use datalove_datafun_interp::{
     CallDispatcher, DispatchCallContext, DispatchResult, Destination,
     DynamicInliner, DynamicInlinerConfig, InterpError, Value,
@@ -315,7 +315,7 @@ impl OptimizingDispatcher {
     fn try_jit_execution(
         &mut self,
         func_ref: &FuncRef,
-        func: &IrFunction,
+        func: &IrCodeUnit,
         args: &[Value],
         ret_dest: Destination,
         rt_handle: LocalRtHandle,
@@ -371,8 +371,10 @@ impl OptimizingDispatcher {
 
                 // Execute JIT code.
                 // SAFETY: code_ptr is a valid JIT-compiled function.
+                let func_ctx = func.function_context()
+                    .expect("JIT function must have function context");
                 let result = unsafe {
-                    bridge::call_jit(code_ptr, uses_sret, rt_handle, args, ret_dest, &func.return_type)
+                    bridge::call_jit(code_ptr, uses_sret, rt_handle, args, ret_dest, &func_ctx.return_type)
                 };
 
                 clear_dispatch_context();
@@ -425,7 +427,7 @@ impl CallDispatcher for OptimizingDispatcher {
     fn dispatch_call(
         &mut self,
         func_ref: &FuncRef,
-        func: &IrFunction,
+        func: &IrCodeUnit,
         args: &[Value],
         ret_dest: Destination,
         rt_handle: LocalRtHandle,
@@ -447,7 +449,7 @@ impl CallDispatcher for OptimizingDispatcher {
                         call_ctx.exec_ctx.find_local_function(*func_id)
                     }
                     FuncRef::Module { module, func: func_id } => {
-                        call_ctx.registry.get_module_function(*module, *func_id)
+                        call_ctx.registry.get_module_function_as_unit(*module, *func_id)
                     }
                     FuncRef::External { .. } => None,
                 };
@@ -529,7 +531,7 @@ impl CallDispatcher for OptimizingDispatcher {
         self
     }
 
-    fn get_optimized_function(&self, func_ref: &FuncRef) -> Option<&IrFunction> {
+    fn get_optimized_function(&self, func_ref: &FuncRef) -> Option<&IrCodeUnit> {
         self.inliner.get_inlined_function(func_ref)
     }
 }

@@ -41,28 +41,26 @@ AotAnalysis(
                         drop p0
                         drop p1
                         return v0
+                    
                     fn sub_ints(p0, p1):
                     block0:
                         v0 = sub p0, p1
                         drop p0
                         drop p1
                         return v0
+                    
                     fn mul_ints(p0, p1):
                     block0:
                         v0 = mul p0, p1
                         drop p0
                         drop p1
                         return v0
+                    
                     fn neg_int(p0):
                     block0:
                         v0 = neg p0
                         drop p0
                         return v0
-                    exports:
-                        add_ints = f0
-                        sub_ints = f1
-                        mul_ints = f2
-                        neg_int = f3
                 """,
             ),
             aot_compile: Some(AotCompileResult(

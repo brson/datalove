@@ -30,8 +30,6 @@ DualAnalysis(
                     block2:
                         v6 = ok v2
                         return v6
-                    exports:
-                        get_value = f0
                 """,
             ),
             aot_lowering: LoweringResult(
@@ -56,8 +54,6 @@ DualAnalysis(
                     block2:
                         v6 = ok v2
                         return v6
-                    exports:
-                        get_value = f0
                 """,
             ),
             ir_match: true,

@@ -31,10 +31,6 @@ DualAnalysis(
                         store p0, v0
                         v1 = const true
                         return v1
-                    exports:
-                        set_to_42 = f0
-                        t = s0
-                        _ok = v4
                 """,
             ),
             aot_lowering: LoweringResult(
@@ -60,10 +56,6 @@ DualAnalysis(
                         store p0, v0
                         v1 = const true
                         return v1
-                    exports:
-                        set_to_42 = f0
-                        t = s0
-                        _ok = v4
                 """,
             ),
             ir_match: true,

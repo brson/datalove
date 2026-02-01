@@ -22,10 +22,12 @@ DualAnalysis(
                     block0:
                         v0 = const "created"
                         return v0
+                    
                     fn get_opt():
                     block0:
                         v0 = none
                         return v0
+                    
                     fn test():
                     block0:
                         v0 = call @0 f0()
@@ -40,10 +42,6 @@ DualAnalysis(
                         v5 = pack Struct0 {v0, v2}
                         v6 = some v5
                         return v6
-                    exports:
-                        make_string = f0
-                        get_opt = f1
-                        test = f2
                 """,
             ),
             aot_lowering: LoweringResult(
@@ -60,10 +58,12 @@ DualAnalysis(
                     block0:
                         v0 = const "created"
                         return v0
+                    
                     fn get_opt():
                     block0:
                         v0 = none
                         return v0
+                    
                     fn test():
                     block0:
                         v0 = call @0 f0()
@@ -78,10 +78,6 @@ DualAnalysis(
                         v5 = pack Struct0 {v0, v2}
                         v6 = some v5
                         return v6
-                    exports:
-                        make_string = f0
-                        get_opt = f1
-                        test = f2
                 """,
             ),
             ir_match: true,

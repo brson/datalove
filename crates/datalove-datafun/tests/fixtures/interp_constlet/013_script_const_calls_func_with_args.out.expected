@@ -26,9 +26,6 @@ Analysis(
                         drop p0
                         drop p1
                         return v0
-                    exports:
-                        add = f0
-                        SUM = v2
                 """,
             ),
             output: "(fragment executed)",

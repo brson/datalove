@@ -38,11 +38,6 @@ AotAnalysis(
                     block0:
                         v0 = add p0, p1
                         return v0
-                    exports:
-                        add_refs = f0
-                        x = v0
-                        y = v1
-                        z = v2
                 """,
             ),
             aot_compile: Some(AotCompileResult(

@@ -19,9 +19,6 @@ Analysis(
                         v1 = const 2u32
                         store.copy.tracked s1, v1
                         unit_end
-                    exports:
-                        x = s0
-                        x = s1
                 """,
             ),
             output: "(fragment executed)",

@@ -24,8 +24,6 @@ Analysis(
                         v3 = const 2000u32
                         v4 = map {v0: v1, v2: v3}
                         return v4
-                    exports:
-                        make_map = f0
                 """,
             ),
             output: "(fragment executed)",

@@ -30,8 +30,6 @@ Analysis(
                     block2:
                         v5 = const some 8u32
                         return v5
-                    exports:
-                        compute = f0
                 """,
             ),
             output: "(fragment executed)",

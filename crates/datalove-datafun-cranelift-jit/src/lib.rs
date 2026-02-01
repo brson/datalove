@@ -309,7 +309,7 @@ mod tests {
     use datalove_datafun_ir::{
         IrBlock, Instruction, Terminator, Operand,
         ValueId, BlockId, ConstValue, IrType, IrCodeUnit,
-        CodeUnitId, CodeUnitContext, FunctionContext,
+        CodeUnitId, CodeUnitContext, FunctionContext, SymbolTable,
     };
     use datalove_datafun_interp::{
         ExecutionContext, FrameStore, FunctionRegistry, IrInterpreter,
@@ -336,6 +336,7 @@ mod tests {
             slot_types: vec![],
             tracked_slots: vec![],
             const_values: vec![],
+            symbols: SymbolTable::default(),
             context: CodeUnitContext::Function(FunctionContext {
                 params,
                 param_modes: vec![],
@@ -605,7 +606,7 @@ mod tests {
         // Compile main() with context (creates stub for identity()).
         let main_key = FunctionKey::local(FuncId(1));
         let (code_ptr, uses_sret) = jit
-            .record_call_with_context(main_key, &main_code_unit, &ctx, &registry)
+            .record_call_with_context(main_key, &main_fn, &ctx, &registry)
             .expect("compilation failed")
             .expect("should compile on first call");
 

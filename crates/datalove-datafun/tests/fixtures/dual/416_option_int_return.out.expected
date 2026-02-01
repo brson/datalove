@@ -23,8 +23,6 @@ DualAnalysis(
                         v0 = const 42int
                         v1 = some v0
                         return v1
-                    exports:
-                        test = f0
                 """,
             ),
             aot_lowering: LoweringResult(
@@ -42,8 +40,6 @@ DualAnalysis(
                         v0 = const 42int
                         v1 = some v0
                         return v1
-                    exports:
-                        test = f0
                 """,
             ),
             ir_match: true,

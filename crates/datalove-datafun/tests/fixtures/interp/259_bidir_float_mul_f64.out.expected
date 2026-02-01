@@ -23,9 +23,6 @@ Analysis(
                     block0:
                         v0 = mul p0, p1
                         return v0
-                    exports:
-                        mul = f0
-                        output = v2
                 """,
             ),
             output: "(fragment executed)",

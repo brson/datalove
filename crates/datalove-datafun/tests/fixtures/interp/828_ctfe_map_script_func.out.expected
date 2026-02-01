@@ -29,8 +29,6 @@ Analysis(
                         v5 = const 3u32
                         v6 = const map {10u32 = 1u32, 20u32 = 2u32, 30u32 = 3u32}
                         return v6
-                    exports:
-                        get_mapping = f0
                 """,
             ),
             output: "(fragment executed)",

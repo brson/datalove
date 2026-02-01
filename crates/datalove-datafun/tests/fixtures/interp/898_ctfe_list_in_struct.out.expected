@@ -18,8 +18,6 @@ Analysis(
                         debuglog v5
                         unit_end_drop v5
                         unit_end
-                    exports:
-                        S = v5
                 """,
             ),
             output: "(fragment executed)",

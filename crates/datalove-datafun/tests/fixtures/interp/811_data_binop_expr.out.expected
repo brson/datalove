@@ -27,9 +27,6 @@ Analysis(
                         drop p0
                         drop p1
                         return v1
-                    exports:
-                        get_data = f0
-                        output = v2
                 """,
             ),
             output: "(fragment executed)",

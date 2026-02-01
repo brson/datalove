@@ -20,8 +20,6 @@ Analysis(
                         v3 = data_from v2
                         unit_end_drop v3
                         unit_end
-                    exports:
-                        d = v3
                 """,
             ),
             output: "(fragment executed)",

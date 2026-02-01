@@ -26,8 +26,6 @@ DualAnalysis(
                     block3:
                         debuglog s0
                         unit_end
-                    exports:
-                        x = s0
                 """,
             ),
             aot_lowering: LoweringResult(
@@ -48,8 +46,6 @@ DualAnalysis(
                     block3:
                         debuglog s0
                         unit_end
-                    exports:
-                        x = s0
                 """,
             ),
             ir_match: true,

@@ -20,8 +20,6 @@ AotAnalysis(
                         store.copy s0, v1
                         debuglog s0
                         unit_end
-                    exports:
-                        x = s0
                 """,
             ),
             aot_compile: Some(AotCompileResult(

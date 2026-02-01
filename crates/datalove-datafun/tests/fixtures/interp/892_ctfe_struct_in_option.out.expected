@@ -17,8 +17,6 @@ Analysis(
                         v3 = const some {x = 10u32, y = 20u32}
                         debuglog v3
                         unit_end
-                    exports:
-                        O = v3
                 """,
             ),
             output: "(fragment executed)",

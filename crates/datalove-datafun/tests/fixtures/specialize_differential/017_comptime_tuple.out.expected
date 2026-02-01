@@ -41,9 +41,6 @@ Analysis(
                         debuglog v3
                         unit_end_drop v3
                         unit_end
-                    exports:
-                        PAIR = v2
-                        result = v3
                 """,
             ),
             output: "(fragment executed)",

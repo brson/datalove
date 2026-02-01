@@ -20,13 +20,11 @@ Analysis(
                     block0:
                         v0 = const 50u32
                         return v0
+                    
                     fn main_func():
                     block0:
                         v0 = call @0 f0()
                         return v0
-                    exports:
-                        helper = f0
-                        main_func = f1
                 """,
             ),
             output: "(fragment executed)",

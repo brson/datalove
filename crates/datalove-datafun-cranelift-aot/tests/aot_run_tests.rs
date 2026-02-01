@@ -23,6 +23,7 @@ fn make_script_unit(
         slot_types: vec![],
         tracked_slots: vec![],
         const_values: vec![],
+        symbols: SymbolTable::default(),
         context: CodeUnitContext::Script(ScriptContext {
             unit_end_values: vec![],
             unit_end_slots: vec![],

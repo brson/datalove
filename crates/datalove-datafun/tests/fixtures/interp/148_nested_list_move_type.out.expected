@@ -26,8 +26,6 @@ Analysis(
                         v9 = list [v2, v5, v8]
                         unit_end_drop v9
                         unit_end
-                    exports:
-                        matrix = v9
                 """,
             ),
             output: "(fragment executed)",

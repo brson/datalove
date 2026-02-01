@@ -23,8 +23,6 @@ Analysis(
                         drop v0
                         drop p0
                         return v1
-                    exports:
-                        add_one = f0
                 """,
             ),
             output: "(fragment executed)",

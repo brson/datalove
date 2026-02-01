@@ -22,15 +22,13 @@ Analysis(
                         drop p0
                         drop p1
                         return v0
+                    
                     fn compute():
                     block0:
                         v0 = const 6int
                         v1 = const 7int
                         v2 = call @0 f0(v0, v1)
                         return v2
-                    exports:
-                        multiply = f0
-                        compute = f1
                 """,
             ),
             output: "(fragment executed)",

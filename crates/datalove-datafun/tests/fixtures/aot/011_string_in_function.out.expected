@@ -25,8 +25,6 @@ AotAnalysis(
                         v1 = const 0u32
                         drop v0
                         return v1
-                    exports:
-                        test_string = f0
                 """,
             ),
             aot_compile: Some(AotCompileResult(

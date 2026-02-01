@@ -26,8 +26,6 @@ Analysis(
                         v2 = const 20u32
                         v3 = const set {10u32, 20u32, 30u32}
                         return v3
-                    exports:
-                        get_numbers = f0
                 """,
             ),
             output: "(fragment executed)",

@@ -27,9 +27,6 @@ Analysis(
                         unit_end_drop v2
                         unit_end_drop v5
                         unit_end
-                    exports:
-                        neg = v2
-                        pos = v5
                 """,
             ),
             output: "(fragment executed)",

@@ -32,9 +32,6 @@ Analysis(
                         v4 = some v1
                         drop v0
                         return v4
-                    exports:
-                        test_add_overflow = f0
-                        output = v2
                 """,
             ),
             output: "(fragment executed)",

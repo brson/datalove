@@ -25,8 +25,6 @@ DualAnalysis(
                         v7 = getfieldref v6.0
                         debuglog *v7
                         unit_end
-                    exports:
-                        s = s0
                 """,
             ),
             aot_lowering: LoweringResult(
@@ -46,8 +44,6 @@ DualAnalysis(
                         v7 = getfieldref v6.0
                         debuglog *v7
                         unit_end
-                    exports:
-                        s = s0
                 """,
             ),
             ir_match: true,

@@ -60,8 +60,6 @@ AotAnalysis(
                         v14 = load.copy s0
                         v15 = ok v14
                         return v15
-                    exports:
-                        count_up = f0
                 """,
             ),
             aot_compile: Some(AotCompileResult(
