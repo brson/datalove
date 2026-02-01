@@ -54,8 +54,6 @@ use datalove_datafun_common::ComptimeCallSiteRegistry;
 /// Information about a function's const parameter specialization.
 #[derive(Clone, Debug)]
 pub struct FuncSpecialization {
-    /// Original function's FuncId.
-    pub original_func_id: FuncId,
     /// Original function name.
     pub func_name: String,
     /// Indices of const parameters.
@@ -140,7 +138,6 @@ pub fn build_specialization_plan<'db>(
                 .unwrap_or_default();
 
             FuncSpecialization {
-                original_func_id: FuncId(0), // Will be set later when we have the function
                 func_name: func_name.clone(),
                 comptime_param_indices: comptime_indices,
                 value_to_discriminant: HashMap::new(),
@@ -373,16 +370,16 @@ fn build_dispatch_blocks(
                 }
             }
 
-            // Clone original instructions with remapped block references AND comptime params.
+            // Clone original instructions with params rewritten.
+            // Note: IR instructions don't contain block references, so no block remapping needed.
             for instr in &orig_block.instructions {
-                let remapped = remap_instruction_blocks(instr, block_offset, num_original_blocks as u32);
-                let rewritten = rewrite_comptime_params_in_instruction(&remapped, &param_to_const);
+                let rewritten = rewrite_comptime_params_in_instruction(instr, &param_to_const, param_remap);
                 instructions.push(rewritten);
             }
 
-            // Clone terminator with remapped block references AND comptime params.
+            // Clone terminator with remapped block references and params.
             let terminator = remap_terminator_blocks(&orig_block.terminator, block_offset, num_original_blocks as u32);
-            let terminator = rewrite_comptime_params_in_terminator(&terminator, &param_to_const);
+            let terminator = rewrite_comptime_params_in_terminator(&terminator, &param_to_const, param_remap);
 
             blocks.push(IrBlock {
                 id: new_block_id,
@@ -394,13 +391,6 @@ fn build_dispatch_blocks(
     }
 
     (blocks, next_value, original.slot_count, value_types, original.slot_types.clone())
-}
-
-/// Remap block IDs in an instruction for a cloned body.
-fn remap_instruction_blocks(instr: &Instruction, block_offset: u32, num_blocks: u32) -> Instruction {
-    // Most instructions don't contain block references.
-    // Clone as-is for now. A full implementation would handle any block refs.
-    instr.clone()
 }
 
 /// Remap block IDs in a terminator for a cloned body.
@@ -427,19 +417,27 @@ fn remap_terminator_blocks(term: &Terminator, block_offset: u32, _num_blocks: u3
     }
 }
 
-/// Rewrite comptime param references in an instruction.
+/// Rewrite param references in an instruction.
 ///
-/// Replaces `Operand::Param(idx)` with `Operand::Value(value_id)` for comptime params.
+/// - Comptime params: replaced with `Operand::Value(value_id)` pointing to inlined const
+/// - Non-comptime params: remapped to new indices (accounting for discriminant + removed params)
 fn rewrite_comptime_params_in_instruction(
     instr: &Instruction,
     param_to_const: &HashMap<u32, ValueId>,
+    param_remap: &HashMap<u32, u32>,
 ) -> Instruction {
     let rewrite_operand = |op: &Operand| -> Operand {
         match op {
             Operand::Param(ParamId(idx)) => {
-                if let Some(&value_id) = param_to_const.get(&(*idx as u32)) {
+                let idx_u32 = *idx as u32;
+                if let Some(&value_id) = param_to_const.get(&idx_u32) {
+                    // Comptime param: replace with inlined const value
                     Operand::Value(value_id)
+                } else if let Some(&new_idx) = param_remap.get(&idx_u32) {
+                    // Non-comptime param: remap to new index
+                    Operand::Param(ParamId(new_idx))
                 } else {
+                    // Should not happen if param_remap is built correctly
                     op.clone()
                 }
             }
@@ -511,16 +509,20 @@ fn rewrite_comptime_params_in_instruction(
     }
 }
 
-/// Rewrite comptime param references in a terminator.
+/// Rewrite param references in a terminator.
 fn rewrite_comptime_params_in_terminator(
     term: &Terminator,
     param_to_const: &HashMap<u32, ValueId>,
+    param_remap: &HashMap<u32, u32>,
 ) -> Terminator {
     let rewrite_operand = |op: &Operand| -> Operand {
         match op {
             Operand::Param(ParamId(idx)) => {
-                if let Some(&value_id) = param_to_const.get(&(*idx as u32)) {
+                let idx_u32 = *idx as u32;
+                if let Some(&value_id) = param_to_const.get(&idx_u32) {
                     Operand::Value(value_id)
+                } else if let Some(&new_idx) = param_remap.get(&idx_u32) {
+                    Operand::Param(ParamId(new_idx))
                 } else {
                     op.clone()
                 }
@@ -650,16 +652,14 @@ pub fn rewrite_comptime_calls(
                         }
                     }
 
-                    // Fallback: function not in spec plan or discriminant not found.
-                    // Emit as regular Call (handles skipped specialization).
-                    let site_id = CallSiteId(next_call_site);
-                    next_call_site += 1;
-                    new_instructions.push(Instruction::Call {
-                        site_id,
-                        dest: *dest,
-                        func: func_ref.clone(),
-                        args: args.clone(),
-                    });
+                    // ComptimeCall should always be rewritable if specialization is enabled.
+                    // If we reach here, it indicates a bug in the specialization pipeline.
+                    panic!(
+                        "ComptimeCall not found in specialization plan: func={:?}, \
+                         func_name={:?}, comptime_indices={:?}. \
+                         This indicates a mismatch between typecheck registry and IR lowering.",
+                        func_ref, func_name, comptime_param_indices
+                    );
                 }
                 _ => {
                     new_instructions.push(instr.clone());
@@ -750,7 +750,6 @@ mod tests {
     #[test]
     fn test_func_specialization_discriminant() {
         let mut spec = FuncSpecialization {
-            original_func_id: FuncId(0),
             func_name: "test".to_string(),
             comptime_param_indices: vec![0],
             value_to_discriminant: HashMap::new(),

@@ -1,0 +1,79 @@
+// PASS: Specialized and unspecialized outputs match
+
+Analysis(
+    sections: [
+        SectionResult(
+            section_type: "module",
+            name: Some("local/test/interleaved"),
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    fn compute(p0, p1, p2):
+                    block0:
+                        v0 = add p0, p2
+                        v1 = mul v0, p1
+                        drop v0
+                        drop p0
+                        drop p1
+                        drop p2
+                        return v1
+                    
+                    fn multi_interleaved(p0, p1, p2, p3, p4):
+                    block0:
+                        v0 = mul p0, p1
+                        v1 = mul p2, p3
+                        drop v0
+                        v2 = add v0, v1
+                        drop v1
+                        v3 = add v2, p4
+                        drop v2
+                        drop p0
+                        drop p1
+                        drop p2
+                        drop p3
+                        drop p4
+                        return v3
+                """,
+            ),
+            output: "",
+        ),
+        SectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Error",
+                message: "error[D001]: use of moved value: `THREE`\n  help: use `@` to clone `THREE` before the earlier use",
+            ),
+            lowering: LoweringResult(
+                status: "Skipped",
+            ),
+            output: "",
+        ),
+        SectionResult(
+            section_type: "scriptunit-expr",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Error",
+                errors: [
+                    "UnresolvedName(\"r1\")",
+                ],
+            ),
+            ownership: OwnershipResult(
+                status: "Skipped",
+            ),
+            lowering: LoweringResult(
+                status: "Skipped",
+            ),
+            output: "",
+        ),
+    ],
+)

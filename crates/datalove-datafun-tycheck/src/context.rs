@@ -26,7 +26,7 @@ pub use crate::{
     AutoAdaptMode,
 };
 
-pub use crate::types::{ComptimeCallSiteRegistry, ComptimeCallSite};
+pub use crate::types::ComptimeCallSiteRegistry;
 use datalove_datafun_common::can_clone_coerce_to;
 use std::collections::HashSet;
 

@@ -1,0 +1,45 @@
+----------
+module local/test/interleaved
+----------
+
+// Function with comptime parameter in middle position.
+// Tests that non-comptime params are correctly remapped when
+// comptime params are not at the start or end.
+fun compute(a: int, const factor: int, b: int): int
+    ret (a + b) * factor
+end fun
+
+// Function with multiple interleaved comptime params.
+fun multi_interleaved(x: int, const m: int, y: int, const n: int, z: int): int
+    ret (x * m) + (y * n) + z
+end fun
+
+----------
+scriptunit-fragment
+----------
+
+require module local/test/interleaved
+import interleaved.compute
+import interleaved.multi_interleaved
+
+const TWO: int = 2
+const THREE: int = 3
+const FIVE: int = 5
+
+// Test single interleaved comptime param
+let r1 = compute(10, TWO, 5)
+debuglog r1
+
+// Test multiple interleaved comptime params
+let r2 = multi_interleaved(2, THREE, 4, FIVE, 1)
+debuglog r2
+
+// Test with different instantiation
+let r3 = compute(3, THREE, 7)
+debuglog r3
+
+----------
+scriptunit-expr
+----------
+
+(r1, r2, r3)

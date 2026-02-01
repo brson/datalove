@@ -1,0 +1,51 @@
+----------
+module local/test/many
+----------
+
+// Function that will be instantiated with many different const values.
+// Tests that the dispatch chain handles multiple instantiations correctly.
+fun scale(const factor: int, x: int): int
+    ret x * factor
+end fun
+
+----------
+scriptunit-fragment
+----------
+
+require module local/test/many
+import many.scale
+
+// Define many different const values
+const C1: int = 1
+const C2: int = 2
+const C3: int = 3
+const C4: int = 4
+const C5: int = 5
+const C6: int = 6
+const C7: int = 7
+const C8: int = 8
+
+// Call with all different instantiations
+let r1 = scale(C1, 10)
+let r2 = scale(C2, 10)
+let r3 = scale(C3, 10)
+let r4 = scale(C4, 10)
+let r5 = scale(C5, 10)
+let r6 = scale(C6, 10)
+let r7 = scale(C7, 10)
+let r8 = scale(C8, 10)
+
+debuglog r1
+debuglog r2
+debuglog r3
+debuglog r4
+debuglog r5
+debuglog r6
+debuglog r7
+debuglog r8
+
+----------
+scriptunit-expr
+----------
+
+r1 + r2 + r3 + r4 + r5 + r6 + r7 + r8
