@@ -148,10 +148,10 @@ impl AotCompiler {
     /// Generates:
     /// - `__script_body(rt: *mut u8)` - The script body that takes runtime handle
     /// - `main()` - Entry point that initializes runtime, runs body, cleans up
-    pub fn compile_script_unit_with_world_types<'a>(
+    pub fn compile_script_unit_with_world_types(
         &mut self,
         unit: &IrScriptUnit,
-        world_funcs: impl Iterator<Item = &'a IrFunction>,
+        world_funcs: impl Iterator<Item = IrFunction>,
         registry: &datalove_datafun_ir::FunctionRegistry,
     ) -> Result<ObjectProduct, AotError> {
         // Collect types from world functions and the script unit.

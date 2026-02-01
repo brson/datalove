@@ -265,13 +265,15 @@ fn analyze_file(path: &Path) -> Result<String, String> {
                 };
 
                 match lower::lower_script_fragment_raw(&db, expr_types_raw, call_targets_raw, &func_id_map, script_ctx.clone(), stmts, func_analyses, script_analysis, Some(&func_param_types), Some(&func_return_types), lowered_funcs_arg) {
-                    Ok(ir_unit) => {
+                    Ok(ir_code_unit) => {
+                        // Convert to IrScriptUnit for const inlining.
+                        let ir_script_unit: datalove_datafun_ir::IrScriptUnit = ir_code_unit.into();
                         // Inline const values into the IR.
                         let const_values_map: HashMap<String, datalove_datafun_ir::ConstValue> = resolved_consts
                             .as_ref()
                             .map(|rc| rc.iter().map(|(k, v)| (k.to_string(), v.clone())).collect())
                             .unwrap_or_default();
-                        let ir_unit = inline_script_consts(ir_unit, &const_values_map);
+                        let ir_unit = inline_script_consts(ir_script_unit, &const_values_map);
 
                         output.push_str(&format!("{}", ir_unit));
                         // Update context with exports for next unit.

@@ -94,7 +94,7 @@ fn format_directives(directives: &[InlineDirective]) -> String {
 /// Build an IrModule from the module registry's functions.
 fn build_ir_module_from_registry(registry: &ModuleFunctionRegistry) -> IrModule {
     // Collect all functions and build symbol table.
-    let mut functions: Vec<_> = registry.iter_module_functions().cloned().collect();
+    let mut functions: Vec<_> = registry.iter_module_functions().collect();
 
     // Sort functions by name for deterministic output.
     functions.sort_by(|a, b| a.name.cmp(&b.name));

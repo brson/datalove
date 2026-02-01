@@ -1327,12 +1327,12 @@ pub fn collect_types_from_script_unit(unit: &IrScriptUnit) -> HashSet<IrType> {
 /// Collect types from an iterator of functions.
 ///
 /// Use this to collect types from module functions in a ScriptEnvironment.
-pub fn collect_types_from_functions<'a>(
-    funcs: impl Iterator<Item = &'a IrFunction>,
+pub fn collect_types_from_functions(
+    funcs: impl Iterator<Item = IrFunction>,
     types: &mut HashSet<IrType>,
 ) {
     for func in funcs {
-        collect_types_from_function(func, types);
+        collect_types_from_function(&func, types);
     }
 }
 

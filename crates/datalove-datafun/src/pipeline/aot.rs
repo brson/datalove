@@ -133,9 +133,7 @@ pub fn compile_script_to_object_with_world(
 ) -> AnyResult<Vec<u8>> {
     let mut compiler = AotCompiler::new_for_host()
         .map_err(|e| anyhow!("failed to create AOT compiler: {}", e))?;
-    // Collect to Vec to get references.
-    let world_funcs_vec: Vec<_> = world_funcs.collect();
-    let product = compiler.compile_script_unit_with_world_types(unit, world_funcs_vec.iter(), registry)
+    let product = compiler.compile_script_unit_with_world_types(unit, world_funcs, registry)
         .map_err(|e| anyhow!("AOT compilation failed: {}", e))?;
     let obj_bytes = product.emit()
         .map_err(|e| anyhow!("failed to emit object: {}", e))?;
