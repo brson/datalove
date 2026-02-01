@@ -90,6 +90,7 @@
 
 ## Far future wants
 
+- gadts
 - heap types and global heap
 - named types
 - first-class type variables
