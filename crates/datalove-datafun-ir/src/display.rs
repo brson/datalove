@@ -712,6 +712,39 @@ impl fmt::Display for IrModule {
     }
 }
 
+impl fmt::Display for IrCodeUnit {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match &self.context {
+            CodeUnitContext::Function(ctx) => {
+                write!(f, "fn {}(", self.name)?;
+                for (i, param) in ctx.params.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{}", param)?;
+                }
+                writeln!(f, "):")?;
+                for block in &self.blocks {
+                    write!(f, "{}", block)?;
+                }
+                Ok(())
+            }
+            CodeUnitContext::Script(_) => {
+                writeln!(f, "scriptunit:")?;
+                for block in &self.blocks {
+                    write!(f, "{}", block)?;
+                }
+                // Print nested functions.
+                for nested in &self.nested_units {
+                    writeln!(f)?;
+                    write!(f, "{}", nested)?;
+                }
+                Ok(())
+            }
+        }
+    }
+}
+
 impl fmt::Display for ExportBinding {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {

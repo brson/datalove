@@ -118,7 +118,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             CraneliftError::Codegen(format!("undefined param: {:?}", param))
         })?;
 
-        let param_ty = &self.func.param_types[param.0 as usize];
+        let param_ty = &self.func_ctx.param_types[param.0 as usize];
         let repr = types::ir_type_to_cranelift(param_ty);
 
         // For mut params, destroy the old value first.
@@ -183,7 +183,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             CraneliftError::Codegen(format!("undefined param: {:?}", param))
         })?;
 
-        let param_ty = &self.func.param_types[param.0 as usize];
+        let param_ty = &self.func_ctx.param_types[param.0 as usize];
         let repr = types::ir_type_to_cranelift(param_ty);
 
         // Get tracking byte offset (should exist for tracked params).

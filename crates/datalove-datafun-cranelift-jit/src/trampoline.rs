@@ -190,8 +190,6 @@ pub unsafe extern "C" fn __jit_dispatch_call(
 
     // Look up the function IR using ExecutionContext (handles Local, Module, External).
     let ir_unit = ctx.exec_ctx.get_function(&func_ref, ctx.registry);
-    // Convert to IrFunction for compatibility with JIT engine (still uses IrFunction).
-    let ir_func = datalove_datafun_ir::IrFunction::from(ir_unit.clone());
     let func_ctx = ir_unit.function_context()
         .expect("trampoline dispatch requires a function code unit");
 
@@ -218,7 +216,7 @@ pub unsafe extern "C" fn __jit_dispatch_call(
 
     // Try to JIT compile the target function (or get existing compiled code).
     // This triggers compilation when the call count threshold is reached.
-    match ctx.jit_engine.record_call_with_context(func_key, &ir_func, ctx.exec_ctx, ctx.registry) {
+    match ctx.jit_engine.record_call_with_context(func_key, &ir_unit, ctx.exec_ctx, ctx.registry) {
         Ok(Some((code_ptr, uses_sret))) => {
             // Call JIT code directly.
             // SAFETY: code_ptr is valid JIT code.

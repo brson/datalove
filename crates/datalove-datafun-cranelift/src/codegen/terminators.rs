@@ -49,7 +49,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                         let src_ptr = self.get_operand_value(builder, val_op)?;
 
                         // Get the size of the return type.
-                        let ret_ty = &self.func.return_type;
+                        let ret_ty = &self.func_ctx.return_type;
                         let size = types::ir_type_size(ret_ty);
 
                         // Use memcpy to copy the data to sret location.

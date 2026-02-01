@@ -5,7 +5,7 @@
 //! - [`ScriptCompilationResult`]: Output of script compilation (no execution).
 //! - [`ScriptUnitResult`]: Combined compile+execute result for tests.
 
-use datalove_datafun_ir::IrScriptUnit;
+use datalove_datafun_ir::IrCodeUnit;
 
 /// Typecheck result summary (serializable).
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -91,6 +91,6 @@ pub struct ScriptCompilationResult {
     pub typecheck: TypecheckResult,
     pub ownership: OwnershipResult,
     pub lowering: LoweringResult,
-    /// The lowered IR unit, if compilation succeeded.
-    pub ir_unit: Option<IrScriptUnit>,
+    /// The lowered IR code unit, if compilation succeeded.
+    pub ir_unit: Option<IrCodeUnit>,
 }

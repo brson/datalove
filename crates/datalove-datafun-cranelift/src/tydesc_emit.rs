@@ -10,7 +10,7 @@ use std::collections::{HashMap, HashSet};
 use std::mem::{align_of, offset_of, size_of};
 
 use cranelift_module::{DataDescription, DataId, Linkage, Module};
-use datalove_datafun_ir::{IrFunction, IrScriptUnit, IrType};
+use datalove_datafun_ir::{IrCodeUnit, IrType};
 use datalove_rtdt::{
     Data as RtData, Error as RtError, Int as RtInt, List as RtList, Map as RtMap,
     Set as RtSet, String as RtString, Table as RtTable, Tensor as RtTensor, TyDesc,
@@ -1291,23 +1291,8 @@ impl Default for TyDescEmitter {
     }
 }
 
-/// Collect all types from a single function.
-pub fn collect_types_from_function(func: &IrFunction, types: &mut HashSet<IrType>) {
-    for ty in &func.param_types {
-        types.insert(ty.clone());
-    }
-    for ty in &func.value_types {
-        types.insert(ty.clone());
-    }
-    for ty in &func.slot_types {
-        types.insert(ty.clone());
-    }
-}
-
-/// Collect all types from a script unit for upfront TyDesc emission.
-pub fn collect_types_from_script_unit(unit: &IrScriptUnit) -> HashSet<IrType> {
-    let mut types = HashSet::new();
-
+/// Collect all types from a code unit for TyDesc emission.
+pub fn collect_types_from_code_unit(unit: &IrCodeUnit, types: &mut HashSet<IrType>) {
     // Collect from unit's value and slot types.
     for ty in &unit.value_types {
         types.insert(ty.clone());
@@ -1316,23 +1301,35 @@ pub fn collect_types_from_script_unit(unit: &IrScriptUnit) -> HashSet<IrType> {
         types.insert(ty.clone());
     }
 
-    // Collect from each function's types.
-    for func in &unit.functions {
-        collect_types_from_function(func, &mut types);
+    // Collect from function context if present.
+    if let Some(func_ctx) = unit.function_context() {
+        for ty in &func_ctx.param_types {
+            types.insert(ty.clone());
+        }
     }
 
+    // Recursively collect from nested units.
+    for nested in &unit.nested_units {
+        collect_types_from_code_unit(nested, types);
+    }
+}
+
+/// Collect all types from a script unit for upfront TyDesc emission.
+pub fn collect_types_from_script_unit(unit: &IrCodeUnit) -> HashSet<IrType> {
+    let mut types = HashSet::new();
+    collect_types_from_code_unit(unit, &mut types);
     types
 }
 
-/// Collect types from an iterator of functions.
+/// Collect types from an iterator of code units.
 ///
 /// Use this to collect types from module functions in a ScriptEnvironment.
-pub fn collect_types_from_functions(
-    funcs: impl Iterator<Item = IrFunction>,
+pub fn collect_types_from_code_units<'a>(
+    units: impl Iterator<Item = &'a IrCodeUnit>,
     types: &mut HashSet<IrType>,
 ) {
-    for func in funcs {
-        collect_types_from_function(&func, types);
+    for unit in units {
+        collect_types_from_code_unit(unit, types);
     }
 }
 

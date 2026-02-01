@@ -187,7 +187,7 @@ impl JitEngine {
     pub fn record_call(
         &mut self,
         key: FunctionKey,
-        func: &IrFunction,
+        func: &IrCodeUnit,
     ) -> Result<Option<(*const u8, bool)>, JitError> {
         let state = self.states.entry(key).or_insert(FunctionState::Interpreted { call_count: 0 });
 
@@ -231,7 +231,7 @@ impl JitEngine {
     pub fn record_call_with_context<'a>(
         &mut self,
         key: FunctionKey,
-        func: &IrFunction,
+        func: &IrCodeUnit,
         ctx: &datalove_datafun_interp::ExecutionContext<'a>,
         registry: &datalove_datafun_interp::FunctionRegistry,
     ) -> Result<Option<(*const u8, bool)>, JitError> {
@@ -711,8 +711,7 @@ impl CallDispatcher for JitEngine {
 
         // Use record_call_with_context to enable JIT for functions with calls.
         // This creates stubs for callees so JIT code can call back to interpreter.
-        let func_ir = IrFunction::from(func.clone());
-        match self.record_call_with_context(key, &func_ir, compile_ctx, call_ctx.registry) {
+        match self.record_call_with_context(key, func, compile_ctx, call_ctx.registry) {
             Ok(Some((code_ptr, uses_sret))) => {
                 // JIT code available - set up dispatch context and call it.
                 // The trampoline needs this context to route calls back to the interpreter.

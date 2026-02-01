@@ -111,7 +111,7 @@ impl ScriptExecutor {
     /// Execute a compiled fragment unit.
     ///
     /// Registers bindings from the unit and executes it.
-    pub fn execute_fragment(&mut self, ir_unit: &IrScriptUnit) -> String {
+    pub fn execute_fragment(&mut self, ir_unit: &IrCodeUnit) -> String {
         // Register bindings for future lookups.
         self.register_bindings(ir_unit);
 
@@ -124,8 +124,7 @@ impl ScriptExecutor {
             tydesc: ret_tydesc,
         };
 
-        let code_unit = IrCodeUnit::from(ir_unit.clone());
-        match self.interp.execute_script_unit_in_env(&code_unit, &mut self.env, ret_dest, None) {
+        match self.interp.execute_script_unit_in_env(ir_unit, &mut self.env, ret_dest, None) {
             Ok(UnitCompletion::Normal) => "(fragment executed)".S(),
             Ok(UnitCompletion::EarlyReturn) => {
                 let value = datalove_datafun_interp::Value {
@@ -144,14 +143,17 @@ impl ScriptExecutor {
     /// Execute a compiled expression unit.
     ///
     /// Registers bindings from the unit and executes it, returning (type, value).
-    pub fn execute_expr(&mut self, ir_unit: &IrScriptUnit) -> (Option<String>, String) {
+    pub fn execute_expr(&mut self, ir_unit: &IrCodeUnit) -> (Option<String>, String) {
         // Register bindings for future lookups.
         self.register_bindings(ir_unit);
 
-        let result_ty = ir_unit.result
+        // Get the script context for result field
+        let script_ctx = ir_unit.script_context()
+            .expect("execute_expr requires a script code unit");
+        let result_ty = script_ctx.result
             .map(|id| format!("{}", &ir_unit.value_types[id.0 as usize]));
 
-        let output = if let Some(result_id) = ir_unit.result {
+        let output = if let Some(result_id) = script_ctx.result {
             let ret_type = IrType::Result(Box::new(IrType::Unit));
             let ret_tydesc = self.interp.tydesc_table_mut().get_or_create(&ret_type);
             let (ret_size, ret_align) = unsafe { ((*ret_tydesc).size, (*ret_tydesc).align) };
@@ -170,8 +172,7 @@ impl ScriptExecutor {
                 tydesc: expr_tydesc,
             };
 
-            let code_unit = IrCodeUnit::from(ir_unit.clone());
-            match self.interp.execute_script_unit_in_env(&code_unit, &mut self.env, ret_dest, Some(expr_dest)) {
+            match self.interp.execute_script_unit_in_env(ir_unit, &mut self.env, ret_dest, Some(expr_dest)) {
                 Ok(UnitCompletion::Normal) => {
                     let value = datalove_datafun_interp::Value {
                         ptr: expr_buffer.as_mut_ptr(),
@@ -202,9 +203,11 @@ impl ScriptExecutor {
     }
 
     /// Register bindings from an IR unit for future lookups.
-    fn register_bindings(&mut self, ir_unit: &IrScriptUnit) {
+    fn register_bindings(&mut self, ir_unit: &IrCodeUnit) {
+        let script_ctx = ir_unit.script_context()
+            .expect("register_bindings requires a script code unit");
         let unit_index = self.script_ctx.current_unit;
-        self.script_ctx.add_exports(unit_index, &ir_unit.exports, &ir_unit.value_types, &ir_unit.slot_types);
+        self.script_ctx.add_exports(unit_index, &script_ctx.exports, &ir_unit.value_types, &ir_unit.slot_types);
         self.script_ctx.current_unit += 1;
     }
 

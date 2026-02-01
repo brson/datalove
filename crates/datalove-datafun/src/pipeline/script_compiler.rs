@@ -390,11 +390,13 @@ impl<'db> ScriptCompiler<'db> {
         self.update_accumulated_state(&ir_unit);
 
         let ir_dump = format!("{}", ir_unit);
+        // Convert IrScriptUnit to IrCodeUnit
+        let ir_code_unit = datalove_datafun_ir::IrCodeUnit::from(ir_unit);
         ScriptCompilationResult {
             typecheck: TypecheckResult::Success,
             ownership: OwnershipResult::Success,
             lowering: LoweringResult::Success { ir: ir_dump },
-            ir_unit: Some(ir_unit),
+            ir_unit: Some(ir_code_unit),
         }
     }
 

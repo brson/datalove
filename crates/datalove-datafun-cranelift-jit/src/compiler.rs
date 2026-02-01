@@ -11,7 +11,7 @@ use cranelift_jit::{JITBuilder, JITModule};
 use cranelift_module::{FuncId, Linkage, Module};
 use target_lexicon::Triple;
 
-use datalove_datafun_ir::{FuncRef, Instruction, IrFunction, IrModuleId};
+use datalove_datafun_ir::{FuncRef, Instruction, IrCodeUnit, IrModuleId};
 use datalove_datafun_interp::{ExecutionContext, FunctionRegistry};
 use datalove_datafun_cranelift::codegen::{self, build_signature_for_func, uses_sret};
 use datalove_datafun_cranelift::runtime::RuntimeImports;
@@ -100,10 +100,10 @@ impl JitCompiler {
     /// Compile a function to native code (no calls to other functions).
     ///
     /// Returns (code_ptr, uses_sret, code_size).
-    pub fn compile_function(&mut self, func: &IrFunction) -> Result<(*const u8, bool, usize), JitError> {
+    pub fn compile_function(&mut self, func: &IrCodeUnit) -> Result<(*const u8, bool, usize), JitError> {
         // Emit TyDescs for all types in this function.
         let mut types = HashSet::new();
-        tydesc_emit::collect_types_from_function(func, &mut types);
+        tydesc_emit::collect_types_from_code_unit(func, &mut types);
 
         self.tydesc_emitter.emit_all(&mut self.jit_module, types)
             .map_err(|e| JitError::CompilationFailed(format!("tydesc emit: {}", e)))?;
@@ -134,7 +134,9 @@ impl JitCompiler {
         let code_size = estimate_code_size(func);
 
         // Determine if function uses sret.
-        let sret = uses_sret(&func.return_type);
+        let func_ctx = func.function_context()
+            .expect("function must be a function code unit");
+        let sret = uses_sret(&func_ctx.return_type);
 
         Ok((code_ptr, sret, code_size))
     }
@@ -147,7 +149,7 @@ impl JitCompiler {
     /// Returns (code_ptr, uses_sret, code_size).
     pub fn compile_function_with_context<'a>(
         &mut self,
-        func: &IrFunction,
+        func: &IrCodeUnit,
         ctx: &ExecutionContext<'a>,
         registry: &FunctionRegistry,
     ) -> Result<(*const u8, bool, usize), JitError> {
@@ -156,7 +158,7 @@ impl JitCompiler {
 
         // Collect types from main function and all callees for TyDesc emission.
         let mut types = HashSet::new();
-        tydesc_emit::collect_types_from_function(func, &mut types);
+        tydesc_emit::collect_types_from_code_unit(func, &mut types);
 
         // Create stubs for each callee.
         let mut local_funcs: HashMap<datalove_datafun_ir::FuncId, FuncId> = HashMap::new();
@@ -167,12 +169,10 @@ impl JitCompiler {
             let callee_ir = ctx.get_function(&func_ref, registry);
 
             // Collect types from callee for TyDesc emission.
-            // Convert to IrFunction for type collection (tydesc_emit uses IrFunction).
-            let callee_func = datalove_datafun_ir::IrFunction::from(callee_ir.clone());
-            tydesc_emit::collect_types_from_function(&callee_func, &mut types);
+            tydesc_emit::collect_types_from_code_unit(&callee_ir, &mut types);
 
             // Create a stub for this callee.
-            let stub_id = self.create_stub_for_callee(&func_ref, &callee_func)?;
+            let stub_id = self.create_stub_for_callee(&func_ref, &callee_ir)?;
 
             // Register in appropriate map.
             match &func_ref {
@@ -222,13 +222,15 @@ impl JitCompiler {
         let code_size = estimate_code_size(func);
 
         // Determine if function uses sret.
-        let sret = uses_sret(&func.return_type);
+        let func_ctx = func.function_context()
+            .expect("function must be a function code unit");
+        let sret = uses_sret(&func_ctx.return_type);
 
         Ok((code_ptr, sret, code_size))
     }
 
-    /// Collect all unique Call targets in a function.
-    fn collect_call_targets(&self, func: &IrFunction) -> HashSet<FuncRef> {
+    /// Collect all unique Call targets in a code unit.
+    fn collect_call_targets(&self, func: &IrCodeUnit) -> HashSet<FuncRef> {
         let mut targets = HashSet::new();
 
         for block in &func.blocks {
@@ -249,7 +251,7 @@ impl JitCompiler {
     fn create_stub_for_callee(
         &mut self,
         func_ref: &FuncRef,
-        callee: &IrFunction,
+        callee: &IrCodeUnit,
     ) -> Result<FuncId, JitError> {
         // Generate unique stub name.
         static STUB_COUNTER: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
@@ -275,7 +277,7 @@ impl JitCompiler {
         &mut self,
         stub_id: FuncId,
         func_ref: &FuncRef,
-        callee: &IrFunction,
+        callee: &IrCodeUnit,
         sig: &cl_ir::Signature,
     ) -> Result<(), JitError> {
         let mut cl_func = cl_ir::Function::with_name_signature(
@@ -298,7 +300,9 @@ impl JitCompiler {
         let rt_handle = params[0];
 
         // Determine if callee uses sret.
-        let callee_uses_sret = uses_sret(&callee.return_type);
+        let callee_ctx = callee.function_context()
+            .expect("callee must be a function code unit");
+        let callee_uses_sret = uses_sret(&callee_ctx.return_type);
 
         // Get sret ptr if applicable.
         let (sret_ptr, user_args_start) = if callee_uses_sret {
@@ -345,7 +349,7 @@ impl JitCompiler {
         // For scalar: allocate stack space.
         let (ret_dest, ret_slot) = if let Some(sret) = sret_ptr {
             (sret, None)
-        } else if !matches!(callee.return_type, datalove_datafun_ir::IrType::Unit) {
+        } else if !matches!(callee_ctx.return_type, datalove_datafun_ir::IrType::Unit) {
             // Allocate space for scalar return (8 bytes).
             let slot = builder.create_sized_stack_slot(cl_ir::StackSlotData::new(
                 cl_ir::StackSlotKind::ExplicitSlot,

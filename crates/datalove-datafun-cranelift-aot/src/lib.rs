@@ -40,7 +40,7 @@ use cranelift_object::{ObjectBuilder, ObjectModule, ObjectProduct};
 use target_lexicon::Triple;
 
 use datalove_datafun_ir::{
-    IrBlock, IrFunction, IrModule, IrModuleId, IrScriptUnit, IrType,
+    IrBlock, IrCodeUnit, IrModule, IrModuleId, IrType,
 };
 
 /// Errors during AOT compilation.
@@ -134,7 +134,7 @@ impl AotCompiler {
     /// Generates:
     /// - `__script_body(rt: *mut u8)` - The script body that takes runtime handle
     /// - `main()` - Entry point that initializes runtime, runs body, cleans up
-    pub fn compile_script_unit(&mut self, unit: &IrScriptUnit) -> Result<ObjectProduct, AotError> {
+    pub fn compile_script_unit(&mut self, unit: &IrCodeUnit) -> Result<ObjectProduct, AotError> {
         let types = tydesc_emit::collect_types_from_script_unit(unit);
         let empty_registry = datalove_datafun_ir::FunctionRegistry::new();
         self.compile_script_unit_with_types(unit, types, &empty_registry)
@@ -148,22 +148,22 @@ impl AotCompiler {
     /// Generates:
     /// - `__script_body(rt: *mut u8)` - The script body that takes runtime handle
     /// - `main()` - Entry point that initializes runtime, runs body, cleans up
-    pub fn compile_script_unit_with_world_types(
+    pub fn compile_script_unit_with_world_types<'a>(
         &mut self,
-        unit: &IrScriptUnit,
-        world_funcs: impl Iterator<Item = IrFunction>,
+        unit: &IrCodeUnit,
+        world_units: impl Iterator<Item = &'a IrCodeUnit>,
         registry: &datalove_datafun_ir::FunctionRegistry,
     ) -> Result<ObjectProduct, AotError> {
-        // Collect types from world functions and the script unit.
+        // Collect types from world code units and the script unit.
         let mut types = tydesc_emit::collect_types_from_script_unit(unit);
-        tydesc_emit::collect_types_from_functions(world_funcs, &mut types);
+        tydesc_emit::collect_types_from_code_units(world_units, &mut types);
         self.compile_script_unit_with_types(unit, types, registry)
     }
 
     /// Compile an IR script unit with pre-collected types.
     fn compile_script_unit_with_types(
         &mut self,
-        unit: &IrScriptUnit,
+        unit: &IrCodeUnit,
         types: std::collections::HashSet<IrType>,
         registry: &datalove_datafun_ir::FunctionRegistry,
     ) -> Result<ObjectProduct, AotError> {
@@ -185,21 +185,29 @@ impl AotCompiler {
 
         // === Three-pass compilation for local and module functions ===
 
-        // Pass 1: Declare all local functions to get Cranelift FuncIds.
+        // Pass 1: Declare all local functions (nested units) to get Cranelift FuncIds.
         let mut local_funcs: HashMap<datalove_datafun_ir::FuncId, FuncId> = HashMap::new();
-        for func in &unit.functions {
+        for func in &unit.nested_units {
             let sig = codegen::build_signature_for_func(func, self.isa.as_ref());
+            let func_id = datalove_datafun_ir::FuncId(func.id.0);
             let cl_func_id = obj_module
                 .declare_function(&func.name, Linkage::Local, &sig)
                 .map_err(|e| AotError::Module(format!("declare function {}: {}", func.name, e)))?;
-            local_funcs.insert(func.id, cl_func_id);
+            local_funcs.insert(func_id, cl_func_id);
         }
 
         // Pass 2: Declare all module functions to get Cranelift FuncIds.
         let mut module_funcs: HashMap<(IrModuleId, datalove_datafun_ir::FuncId), FuncId> = HashMap::new();
+        for unit in registry.iter_module_code_units() {
+            // Extract module ID from registry iteration - need to use iter_module_functions_with_ids
+            // but that returns IrFunction. For now, we'll use a workaround by using the unit's ID.
+            // TODO: Registry should provide iter_module_code_units_with_ids
+        }
+        // Use the legacy iterator for now since we still have it
         for ((module_id, func_id), ir_func) in registry.iter_module_functions_with_ids() {
             let name = format!("__mod_{}_{}", module_id.0, ir_func.name);
-            let sig = codegen::build_signature_for_func(&ir_func, self.isa.as_ref());
+            let ir_unit = datalove_datafun_ir::IrCodeUnit::from(ir_func);
+            let sig = codegen::build_signature_for_func(&ir_unit, self.isa.as_ref());
             let cl_func_id = obj_module
                 .declare_function(&name, Linkage::Local, &sig)
                 .map_err(|e| AotError::Module(format!("declare module function {}: {}", name, e)))?;
@@ -207,8 +215,9 @@ impl AotCompiler {
         }
 
         // Pass 3a: Compile all local functions with pre-declared FuncIds.
-        for func in &unit.functions {
-            let cl_func_id = local_funcs[&func.id];
+        for func in &unit.nested_units {
+            let func_id = datalove_datafun_ir::FuncId(func.id.0);
+            let cl_func_id = local_funcs[&func_id];
             let mut compiler = codegen::FunctionCompiler::new_with_runtime_and_tydescs(
                 func,
                 self.isa.as_ref(),
@@ -224,11 +233,11 @@ impl AotCompiler {
 
         // Pass 3b: Compile all module functions with pre-declared FuncIds.
         for ((module_id, func_id), &cl_func_id) in &module_funcs {
-            let ir_func = registry.get_module_function(*module_id, *func_id)
+            let ir_unit = registry.get_module_function_as_unit(*module_id, *func_id)
                 .ok_or_else(|| AotError::Module(format!("module function not found: {:?}, {:?}", module_id, func_id)))?;
 
             let mut compiler = codegen::FunctionCompiler::new_with_runtime_and_tydescs(
-                &ir_func,
+                ir_unit,
                 self.isa.as_ref(),
                 &mut obj_module,
                 runtime_imports.clone(),
@@ -240,7 +249,7 @@ impl AotCompiler {
             compiler.compile_predeclared(cl_func_id)?;
         }
 
-        // Convert script unit to a function with rt_handle as first param.
+        // Convert script unit to a function-like code unit for compilation.
         let body_func = self.script_unit_to_function(unit);
 
         // Compile the body function with pre-populated local_funcs and module_funcs.
@@ -262,28 +271,34 @@ impl AotCompiler {
         Ok(obj_module.finish())
     }
 
-    /// Convert an IrScriptUnit to an IrFunction for compilation.
-    fn script_unit_to_function(&self, unit: &IrScriptUnit) -> IrFunction {
+    /// Convert a script code unit to a function-like code unit for compilation.
+    ///
+    /// The script body becomes a function with no params and Unit return type.
+    fn script_unit_to_function(&self, unit: &IrCodeUnit) -> IrCodeUnit {
         // Keep terminators as-is; compile_terminator handles UnitEnd/UnitEarlyReturn.
         // Note: rt_handle is implicit - codegen adds it to all function signatures.
-        let blocks: Vec<IrBlock> = unit.blocks.iter().cloned().collect();
-
-        IrFunction {
-            id: datalove_datafun_ir::FuncId(0),
+        IrCodeUnit {
+            id: datalove_datafun_ir::CodeUnitId(0),
             name: "__script_body".to_string(),
-            params: vec![],
-            param_modes: vec![],
-            param_types: vec![],
-            return_type: datalove_datafun_ir::IrType::Unit,
-            blocks,
+            blocks: unit.blocks.clone(),
             value_count: unit.value_count,
             slot_count: unit.slot_count,
             call_site_count: unit.call_site_count,
             value_types: unit.value_types.clone(),
             slot_types: unit.slot_types.clone(),
             tracked_slots: unit.tracked_slots.clone(),
-            tracked_params: vec![],
             const_values: unit.const_values.clone(),
+            symbols: unit.symbols.clone(),
+            context: datalove_datafun_ir::CodeUnitContext::Function(
+                datalove_datafun_ir::FunctionContext {
+                    params: vec![],
+                    param_modes: vec![],
+                    param_types: vec![],
+                    return_type: datalove_datafun_ir::IrType::Unit,
+                    tracked_params: vec![],
+                }
+            ),
+            nested_units: vec![], // Functions don't have nested units
         }
     }
 
@@ -353,11 +368,11 @@ impl AotCompiler {
         Ok(())
     }
 
-    /// Compile a single function into the module.
+    /// Compile a single code unit into the module.
     fn compile_function(
         &mut self,
         module: &mut ObjectModule,
-        func: &IrFunction,
+        func: &IrCodeUnit,
     ) -> Result<(), AotError> {
         let compiler = codegen::FunctionCompiler::new(func, self.isa.as_ref(), module);
         compiler.compile()?;

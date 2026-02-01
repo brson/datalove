@@ -85,11 +85,11 @@ pub trait CallDispatcher {
     /// Convert to mutable Any for downcasting.
     fn as_any_mut(&mut self) -> &mut dyn Any;
 
-    /// Get an optimized version of a function if available.
+    /// Get an optimized version of a code unit if available.
     ///
     /// Called before executing a function to check if there's an inlined/optimized
-    /// version that should be used instead. Returns None to use the original function.
-    fn get_optimized_function(&self, _func_ref: &FuncRef) -> Option<&IrFunction> {
+    /// version that should be used instead. Returns None to use the original code unit.
+    fn get_optimized_function(&self, _func_ref: &FuncRef) -> Option<&IrCodeUnit> {
         None
     }
 }

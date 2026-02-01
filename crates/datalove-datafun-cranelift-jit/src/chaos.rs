@@ -87,7 +87,7 @@ impl ChaosDispatcher {
     /// This is the key function that sets up DispatchContext for mixed-mode.
     pub fn execute_with_context<'a>(
         &mut self,
-        func: &IrFunction,
+        func: &IrCodeUnit,
         args: Vec<Value>,
         ret_dest: Destination,
         interp: &mut IrInterpreter,
@@ -95,12 +95,15 @@ impl ChaosDispatcher {
         registry: &FunctionRegistry,
         frames: &mut FrameStore,
     ) -> Result<(), InterpError> {
-        let func_ref = FuncRef::Local(func.id);
+        let func_ref = FuncRef::Local(datalove_datafun_ir::FuncId(func.id.0));
         let key = FunctionKey::from(&func_ref);
         let rt_handle = interp.runtime_handle();
 
         // Randomly decide whether to try JIT.
         let try_jit = self.should_compile();
+
+        let func_ctx = func.function_context()
+            .expect("execute_with_context requires a function code unit");
 
         if try_jit {
             // Try to compile with context (creates stubs for callees).
@@ -128,7 +131,7 @@ impl ChaosDispatcher {
                                 rt_handle,
                                 &[],
                                 ret_dest,
-                                &func.return_type,
+                                &func_ctx.return_type,
                             )
                         };
 
@@ -196,8 +199,7 @@ impl CallDispatcher for ChaosDispatcher {
         };
 
         // Use record_call_with_context to enable JIT for functions with calls.
-        let func_ir = IrFunction::from(func.clone());
-        match self.jit.record_call_with_context(key, &func_ir, compile_ctx, call_ctx.registry) {
+        match self.jit.record_call_with_context(key, func, compile_ctx, call_ctx.registry) {
             Ok(Some((code_ptr, uses_sret))) => {
                 // Compiled! Randomly decide whether to use it.
                 if self.should_use_jit() {

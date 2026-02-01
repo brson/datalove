@@ -1413,7 +1413,7 @@ impl IrFunction {
 /// Result of lowering a module to IR.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct IrModule {
-    pub functions: Vec<IrFunction>,
+    pub functions: Vec<IrCodeUnit>,
     pub symbols: SymbolTable,
 }
 

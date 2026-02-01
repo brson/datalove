@@ -1485,10 +1485,10 @@ impl IrInterpreter {
         result
     }
 
-    /// Get an optimized version of a function from the dispatcher if available.
+    /// Get an optimized version of a code unit from the dispatcher if available.
     ///
-    /// Returns a cloned function to avoid lifetime issues with the dispatcher borrow.
-    fn get_optimized_function(&self, func_ref: &FuncRef) -> Option<IrFunction> {
+    /// Returns a cloned code unit to avoid lifetime issues with the dispatcher borrow.
+    fn get_optimized_function(&self, func_ref: &FuncRef) -> Option<IrCodeUnit> {
         let dispatcher = self.call_dispatcher.borrow();
         dispatcher.as_ref().and_then(|d| d.get_optimized_function(func_ref).cloned())
     }

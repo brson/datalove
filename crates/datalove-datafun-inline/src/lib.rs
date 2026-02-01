@@ -10,9 +10,9 @@
 use std::collections::HashMap;
 
 use datalove_datafun_ir::{
-    BlockId, CallSiteId, FuncId, FuncRef, Instruction, IrBlock, IrFunction, IrModule, IrModuleId,
+    BlockId, CallSiteId, FuncId, FuncRef, Instruction, IrBlock, IrCodeUnit, IrModule, IrModuleId,
     IrType, ModuleFunctionRegistry, Operand, ParamId, ParamMode, SlotDest, SlotId, SymbolTable,
-    Terminator, ValueId,
+    Terminator, ValueId, CodeUnitId, FunctionContext,
 };
 
 /// Directive specifying which function calls to inline.
@@ -504,7 +504,7 @@ pub struct CallSite {
 }
 
 /// Find all call sites to a specific callee in a function (single-module).
-fn find_call_sites(func: &IrFunction, callee_id: FuncId) -> Vec<CallSite> {
+fn find_call_sites(func: &IrCodeUnit, callee_id: FuncId) -> Vec<CallSite> {
     let mut sites = Vec::new();
 
     for (block_idx, block) in func.blocks.iter().enumerate() {
@@ -533,7 +533,7 @@ fn find_call_sites(func: &IrFunction, callee_id: FuncId) -> Vec<CallSite> {
 
 /// Find all call sites to a specific callee (cross-module aware).
 fn find_cross_module_call_sites(
-    func: &IrFunction,
+    func: &IrCodeUnit,
     caller_module: IrModuleId,
     target: GlobalFuncId,
 ) -> Vec<CallSite> {
@@ -973,11 +973,15 @@ impl RemapContext {
 ///
 /// Returns the new function with the call inlined, or None if inlining failed.
 pub fn inline_call_site(
-    caller: &IrFunction,
-    callee: &IrFunction,
+    caller: &IrCodeUnit,
+    callee: &IrCodeUnit,
     site: &CallSite,
-) -> Option<IrFunction> {
-    let mut new_func = caller.clone();
+) -> Option<IrCodeUnit> {
+    // Get function contexts - inlining only works on functions.
+    let caller_ctx = caller.function_context()?;
+    let callee_ctx = callee.function_context()?;
+
+    let mut new_unit = caller.clone();
 
     // Set up remapping context.
     let remap = RemapContext {
@@ -1009,9 +1013,9 @@ pub fn inline_call_site(
     let mut param_bindings: Vec<Instruction> = Vec::new();
     let mut param_replacements: HashMap<ParamId, Operand> = HashMap::new();
 
-    for (i, (param_id, arg)) in callee.params.iter().zip(site.args.iter()).enumerate() {
-        let param_type = &callee.param_types[param_id.0 as usize];
-        let param_mode = &callee.param_modes[param_id.0 as usize];
+    for (i, (param_id, arg)) in callee_ctx.params.iter().zip(site.args.iter()).enumerate() {
+        let param_type = &callee_ctx.param_types[param_id.0 as usize];
+        let param_mode = &callee_ctx.param_modes[param_id.0 as usize];
 
         if matches!(param_mode, ParamMode::Ref | ParamMode::Mut | ParamMode::Out) {
             // Ref/Mut/Out params borrow - directly use the argument operand.
@@ -1040,7 +1044,7 @@ pub fn inline_call_site(
 
     // Update the original block: keep instructions before call, jump to inlined entry.
     let inlined_entry_block = remap.remap_block(BlockId(0));
-    new_func.blocks[site.block_idx] = IrBlock {
+    new_unit.blocks[site.block_idx] = IrBlock {
         id: BlockId(site.block_idx as u32),
         params: orig_block.params.clone(),
         instructions: before_call,
@@ -1073,12 +1077,12 @@ pub fn inline_call_site(
             instructions: new_instructions,
             terminator: remap.remap_terminator(&block.terminator, continuation_block_id),
         };
-        new_func.blocks.push(new_block);
+        new_unit.blocks.push(new_block);
     }
 
     // Create continuation block.
     // If the callee returns a value, it becomes a block parameter.
-    let cont_params = if callee.return_type != IrType::Unit {
+    let cont_params = if callee_ctx.return_type != IrType::Unit {
         vec![site.dest]
     } else {
         vec![]
@@ -1090,30 +1094,30 @@ pub fn inline_call_site(
         instructions: after_call,
         terminator: orig_terminator,
     };
-    new_func.blocks.push(continuation_block);
+    new_unit.blocks.push(continuation_block);
 
     // Update function metadata.
     // Add callee's values + param binding values.
-    let extra_values = callee.value_count + callee.params.len() as u32;
-    new_func.value_count += extra_values;
-    new_func.slot_count += callee.slot_count;
-    new_func.call_site_count += callee.call_site_count;
+    let extra_values = callee.value_count + callee_ctx.params.len() as u32;
+    new_unit.value_count += extra_values;
+    new_unit.slot_count += callee.slot_count;
+    new_unit.call_site_count += callee.call_site_count;
 
     // Extend type arrays.
-    new_func.value_types.extend(callee.value_types.iter().cloned());
+    new_unit.value_types.extend(callee.value_types.iter().cloned());
     // Add types for param binding values.
-    for param_id in &callee.params {
-        let ty = callee.param_types[param_id.0 as usize].clone();
-        new_func.value_types.push(ty);
+    for param_id in &callee_ctx.params {
+        let ty = callee_ctx.param_types[param_id.0 as usize].clone();
+        new_unit.value_types.push(ty);
     }
-    new_func.slot_types.extend(callee.slot_types.iter().cloned());
+    new_unit.slot_types.extend(callee.slot_types.iter().cloned());
 
     // Extend tracked slots (with offset).
     for slot in &callee.tracked_slots {
-        new_func.tracked_slots.push(remap.remap_slot(*slot));
+        new_unit.tracked_slots.push(remap.remap_slot(*slot));
     }
 
-    Some(new_func)
+    Some(new_unit)
 }
 
 /// Replace Param operands in an instruction with the corresponding replacement operands.
@@ -1467,14 +1471,15 @@ pub fn inline_module(module: &IrModule, directives: &[InlineDirective]) -> Inlin
 
     for request in &requests {
         // Find caller and callee in current state of module.
+        // Compare CodeUnitId.0 with FuncId.0 since they both wrap u32.
         let caller_idx = current_module
             .functions
             .iter()
-            .position(|f| f.id == request.caller);
+            .position(|f| f.id.0 == request.caller.0);
         let callee_idx = current_module
             .functions
             .iter()
-            .position(|f| f.id == request.callee);
+            .position(|f| f.id.0 == request.callee.0);
 
         let (Some(caller_idx), Some(callee_idx)) = (caller_idx, callee_idx) else {
             continue;
@@ -1557,16 +1562,16 @@ pub fn inline_cross_module(
     let mut inlined_count = 0;
 
     for request in &requests {
-        // Get the caller and callee functions.
-        let Some(caller) = new_registry.get_module_function(request.caller.module, request.caller.func) else {
+        // Get the caller and callee code units.
+        let Some(caller) = new_registry.get_module_function_as_unit(request.caller.module, request.caller.func) else {
             continue;
         };
-        let Some(callee) = registry.get_module_function(request.callee.module, request.callee.func) else {
+        let Some(callee) = registry.get_module_function_as_unit(request.callee.module, request.callee.func) else {
             continue;
         };
 
         // Find call sites (cross-module aware).
-        let call_sites = find_cross_module_call_sites(&caller, request.caller.module, request.callee);
+        let call_sites = find_cross_module_call_sites(caller, request.caller.module, request.callee);
 
         if call_sites.is_empty() {
             skipped.push(InlineSkipReason::NoCallsFound {
@@ -1602,7 +1607,7 @@ pub fn inline_cross_module(
             if let Some(new_site) = new_sites.iter().find(|s| {
                 s.block_idx == site.block_idx && s.instr_idx == site.instr_idx
             }) {
-                if let Some(inlined) = inline_call_site(&updated_caller, &callee, new_site) {
+                if let Some(inlined) = inline_call_site(&updated_caller, callee, new_site) {
                     updated_caller = inlined;
                     inlined_count += 1;
                 }
@@ -1610,7 +1615,7 @@ pub fn inline_cross_module(
         }
 
         // Update the registry with the modified caller.
-        new_registry.add_module_function(request.caller.module, request.caller.func, updated_caller);
+        new_registry.add_module_code_unit(request.caller.module, request.caller.func, updated_caller);
     }
 
     CrossModuleInlineResult {

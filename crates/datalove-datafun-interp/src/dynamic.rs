@@ -55,11 +55,11 @@ pub struct DynamicInliner {
     config: DynamicInlinerConfig,
     /// Call site execution counts.
     call_sites: HashMap<CallSiteKey, CallSiteState>,
-    /// Cache of inlined functions.
+    /// Cache of inlined code units.
     ///
-    /// When a function is modified by inlining, the new version is stored here.
+    /// When a code unit is modified by inlining, the new version is stored here.
     /// Key is the FuncRef identifying the modified caller.
-    inlined_functions: HashMap<FuncRef, IrFunction>,
+    inlined_functions: HashMap<FuncRef, IrCodeUnit>,
     /// Statistics.
     stats: InlinerStats,
 }
@@ -96,8 +96,8 @@ impl DynamicInliner {
         &self.stats
     }
 
-    /// Get an inlined version of a function, if available.
-    pub fn get_inlined_function(&self, func_ref: &FuncRef) -> Option<&IrFunction> {
+    /// Get an inlined version of a code unit, if available.
+    pub fn get_inlined_function(&self, func_ref: &FuncRef) -> Option<&IrCodeUnit> {
         self.inlined_functions.get(func_ref)
     }
 
@@ -134,22 +134,18 @@ impl DynamicInliner {
 
     /// Perform inlining for a call site.
     ///
-    /// This modifies the caller function to inline the callee at the specified site.
+    /// This modifies the caller code unit to inline the callee at the specified site.
     fn perform_inlining(
         &mut self,
         call_site_info: &CallSiteInfo,
         caller: &IrCodeUnit,
         callee: &IrCodeUnit,
     ) {
-        // Convert to IrFunction for inlining (inlining crate uses IrFunction).
-        let caller_func = IrFunction::from(caller.clone());
-        let callee_func = IrFunction::from(callee.clone());
-
         // Find the call site index by iterating through instructions.
         let mut call_index = 0;
         let mut found = false;
 
-        'outer: for block in &caller_func.blocks {
+        'outer: for block in &caller.blocks {
             for instr in &block.instructions {
                 if let datalove_datafun_ir::Instruction::Call { site_id, func, .. } = instr {
                     if *site_id == call_site_info.call_site_id {
@@ -178,10 +174,10 @@ impl DynamicInliner {
         let caller_to_use = self
             .inlined_functions
             .get(&call_site_info.caller)
-            .unwrap_or(&caller_func);
+            .unwrap_or(caller);
 
-        if let Some(inlined_func) = inline_call_site_by_index(caller_to_use, &callee_func, call_index) {
-            self.inlined_functions.insert(call_site_info.caller.clone(), inlined_func);
+        if let Some(inlined_unit) = inline_call_site_by_index(caller_to_use, callee, call_index) {
+            self.inlined_functions.insert(call_site_info.caller.clone(), inlined_unit);
             self.stats.inlinings_performed += 1;
         } else {
             self.stats.inlinings_skipped += 1;
@@ -246,7 +242,7 @@ impl CallDispatcher for DynamicInliner {
         self
     }
 
-    fn get_optimized_function(&self, func_ref: &FuncRef) -> Option<&IrFunction> {
+    fn get_optimized_function(&self, func_ref: &FuncRef) -> Option<&IrCodeUnit> {
         self.get_inlined_function(func_ref)
     }
 }
@@ -255,10 +251,10 @@ impl CallDispatcher for DynamicInliner {
 ///
 /// This is a simplified version that works with the dynamic inliner.
 pub fn inline_call_site_by_index(
-    caller: &IrFunction,
-    callee: &IrFunction,
+    caller: &IrCodeUnit,
+    callee: &IrCodeUnit,
     call_index: usize,
-) -> Option<IrFunction> {
+) -> Option<IrCodeUnit> {
     // Find the call site at the given index.
     let mut current_index = 0;
 

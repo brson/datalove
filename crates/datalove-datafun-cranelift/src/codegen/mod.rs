@@ -1,6 +1,6 @@
 //! Core codegen driver for translating IR to Cranelift.
 //!
-//! Translates [`IrFunction`] to Cranelift IR using FunctionBuilder. The main type is
+//! Translates [`IrCodeUnit`] to Cranelift IR using FunctionBuilder. The main type is
 //! [`FunctionCompiler`], which handles the translation of a single function.
 //!
 //! # Submodules
@@ -73,7 +73,7 @@ use cranelift_frontend::{FunctionBuilder, FunctionBuilderContext, Variable};
 use cranelift_module::{FuncId, Linkage, Module};
 
 use datalove_datafun_ir::{
-    BlockId, FunctionRegistry, IrFunction,
+    BlockId, FunctionContext, FunctionRegistry, IrCodeUnit,
     IrModuleId, IrType, Instruction, Operand, ParamId, SlotDest, SlotId,
     ValueId,
 };
@@ -84,15 +84,20 @@ use crate::tydesc_emit::TyDescEmitter;
 use crate::types::{self, CraneliftRepr, PTR_TYPE};
 use crate::CraneliftError;
 
-/// Build a Cranelift function signature for an IR function.
+/// Build a Cranelift function signature for an IR code unit.
 ///
 /// All functions have an implicit rt_handle as first parameter.
 /// For aggregate returns, an sret (structure return) pointer is the second parameter.
 /// User-visible parameters follow, all passed by pointer.
+///
+/// Panics if the code unit is not a function.
 pub fn build_signature_for_func(
-    func: &IrFunction,
+    func: &IrCodeUnit,
     isa: &dyn TargetIsa,
 ) -> cl_ir::Signature {
+    let func_ctx = func.function_context()
+        .expect("build_signature_for_func requires a function code unit");
+
     let call_conv = isa.default_call_conv();
     let mut sig = cl_ir::Signature::new(call_conv);
 
@@ -101,7 +106,7 @@ pub fn build_signature_for_func(
 
     // For aggregate returns, add sret pointer as second param.
     // Caller allocates space and passes pointer; callee writes result there.
-    let ret_ty = &func.return_type;
+    let ret_ty = &func_ctx.return_type;
     let has_sret = match ret_ty {
         IrType::Unit => false,
         _ => matches!(types::ir_type_to_cranelift(ret_ty), CraneliftRepr::Aggregate(_)),
@@ -111,7 +116,7 @@ pub fn build_signature_for_func(
     }
 
     // User parameters are passed by pointer.
-    for _ in &func.param_types {
+    for _ in &func_ctx.param_types {
         sig.params.push(cl_ir::AbiParam::new(PTR_TYPE));
     }
 
@@ -143,8 +148,10 @@ pub fn uses_sret(ret_ty: &IrType) -> bool {
 
 /// Compiles a single IR function to Cranelift IR.
 pub struct FunctionCompiler<'a, M: Module> {
-    /// The IR function being compiled.
-    func: &'a IrFunction,
+    /// The IR code unit being compiled.
+    func: &'a IrCodeUnit,
+    /// Function-specific context (always present for compiled code units).
+    func_ctx: &'a FunctionContext,
     /// Frame layout for values and slots.
     layout: FrameLayout,
     /// Target ISA for pointer size etc.
@@ -184,21 +191,27 @@ pub struct FunctionCompiler<'a, M: Module> {
 
 impl<'a, M: Module> FunctionCompiler<'a, M> {
     /// Create a new function compiler.
+    ///
+    /// Panics if the code unit is not a function.
     pub fn new(
-        func: &'a IrFunction,
+        func: &'a IrCodeUnit,
         isa: &'a dyn TargetIsa,
         module: &'a mut M,
     ) -> Self {
+        let func_ctx = func.function_context()
+            .expect("FunctionCompiler requires a function code unit");
+
         let layout = FrameLayout::compute(
-            &func.param_types,
+            &func_ctx.param_types,
             &func.value_types,
             &func.slot_types,
             &func.tracked_slots,
-            &func.tracked_params,
+            &func_ctx.tracked_params,
         );
 
         Self {
             func,
+            func_ctx,
             layout,
             isa,
             module,
@@ -221,22 +234,28 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
     /// Create a new function compiler with runtime imports.
     ///
     /// Use this for functions that may need runtime calls (like DebugLog).
+    ///
+    /// Panics if the code unit is not a function.
     pub fn new_with_runtime(
-        func: &'a IrFunction,
+        func: &'a IrCodeUnit,
         isa: &'a dyn TargetIsa,
         module: &'a mut M,
         runtime: RuntimeImports,
     ) -> Self {
+        let func_ctx = func.function_context()
+            .expect("FunctionCompiler requires a function code unit");
+
         let layout = FrameLayout::compute(
-            &func.param_types,
+            &func_ctx.param_types,
             &func.value_types,
             &func.slot_types,
             &func.tracked_slots,
-            &func.tracked_params,
+            &func_ctx.tracked_params,
         );
 
         Self {
             func,
+            func_ctx,
             layout,
             isa,
             module,
@@ -259,24 +278,30 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
     /// Create a new function compiler with runtime imports and pre-populated TyDescs.
     ///
     /// Use this when TyDescs have been emitted upfront (whole-world compilation).
+    ///
+    /// Panics if the code unit is not a function.
     pub fn new_with_runtime_and_tydescs(
-        func: &'a IrFunction,
+        func: &'a IrCodeUnit,
         isa: &'a dyn TargetIsa,
         module: &'a mut M,
         runtime: RuntimeImports,
         tydesc_emitter: TyDescEmitter,
         registry: Option<&'a FunctionRegistry>,
     ) -> Self {
+        let func_ctx = func.function_context()
+            .expect("FunctionCompiler requires a function code unit");
+
         let layout = FrameLayout::compute(
-            &func.param_types,
+            &func_ctx.param_types,
             &func.value_types,
             &func.slot_types,
             &func.tracked_slots,
-            &func.tracked_params,
+            &func_ctx.tracked_params,
         );
 
         Self {
             func,
+            func_ctx,
             layout,
             isa,
             module,
@@ -375,7 +400,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         self.rt_handle_param = Some(param_values[0]);
 
         // Check if this function uses sret.
-        let has_sret = uses_sret(&self.func.return_type);
+        let has_sret = uses_sret(&self.func_ctx.return_type);
         let user_param_start = if has_sret {
             // Second param is sret pointer.
             self.sret_param = Some(param_values[1]);
@@ -861,7 +886,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                     CraneliftError::Codegen(format!("undefined param: {:?}", pid))
                 })?;
 
-                let param_ty = &self.func.param_types[pid.0 as usize];
+                let param_ty = &self.func_ctx.param_types[pid.0 as usize];
                 let repr = types::ir_type_to_cranelift(param_ty);
 
                 match repr {
@@ -922,7 +947,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 }
             }
             Operand::Param(pid) => {
-                Ok(self.func.param_types[pid.0 as usize].clone())
+                Ok(self.func_ctx.param_types[pid.0 as usize].clone())
             }
             Operand::Slot(sid) => {
                 Ok(self.func.slot_types[sid.0 as usize].clone())

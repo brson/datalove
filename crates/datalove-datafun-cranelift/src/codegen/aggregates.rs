@@ -433,7 +433,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         let addr = self.param_values.get(param).copied().ok_or_else(|| {
             CraneliftError::Codegen(format!("param {:?} not found in param_values", param))
         })?;
-        let ty = self.func.param_types.get(param.0 as usize)
+        let ty = self.func_ctx.param_types.get(param.0 as usize)
             .cloned()
             .ok_or_else(|| CraneliftError::Codegen(format!("param {:?} type not found", param)))?;
 
@@ -522,7 +522,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         let addr = self.param_values.get(param).copied().ok_or_else(|| {
             CraneliftError::Codegen(format!("param {:?} not found in param_values", param))
         })?;
-        let ty = self.func.param_types.get(param.0 as usize)
+        let ty = self.func_ctx.param_types.get(param.0 as usize)
             .cloned()
             .ok_or_else(|| CraneliftError::Codegen(format!("param {:?} type not found", param)))?;
 

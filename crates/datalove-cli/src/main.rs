@@ -594,7 +594,7 @@ impl AotCompileCommand {
         // Compile to object bytes using pipeline::aot.
         let obj_bytes = aot::compile_script_to_object_with_world(
             &ir_unit,
-            registry.iter_all_functions(),
+            registry.iter_all_code_units(),
             &registry,
         )?;
 
