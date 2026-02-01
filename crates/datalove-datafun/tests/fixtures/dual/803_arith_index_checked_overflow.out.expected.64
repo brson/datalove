@@ -16,17 +16,17 @@ DualAnalysis(
                         v0 = const 4294967295index
                         v1 = const 1index
                         v2 = const 0index
-                        v3 = call f1(v0, v1)
+                        v3 = call @0 f1(v0, v1)
                         v4 = const 999index
-                        v5 = call f0(v3, v4)
+                        v5 = call @1 f0(v3, v4)
                         debuglog v5
-                        v6 = call f2(v2, v1)
+                        v6 = call @2 f2(v2, v1)
                         v7 = const 999index
-                        v8 = call f0(v6, v7)
+                        v8 = call @3 f0(v6, v7)
                         debuglog v8
-                        v9 = call f3(v1, v2)
+                        v9 = call @4 f3(v1, v2)
                         v10 = const 999index
-                        v11 = call f0(v9, v10)
+                        v11 = call @5 f0(v9, v10)
                         debuglog v11
                         unit_end
                     
@@ -90,17 +90,17 @@ DualAnalysis(
                         v0 = const 4294967295index
                         v1 = const 1index
                         v2 = const 0index
-                        v3 = call f1(v0, v1)
+                        v3 = call @0 f1(v0, v1)
                         v4 = const 999index
-                        v5 = call f0(v3, v4)
+                        v5 = call @1 f0(v3, v4)
                         debuglog v5
-                        v6 = call f2(v2, v1)
+                        v6 = call @2 f2(v2, v1)
                         v7 = const 999index
-                        v8 = call f0(v6, v7)
+                        v8 = call @3 f0(v6, v7)
                         debuglog v8
-                        v9 = call f3(v1, v2)
+                        v9 = call @4 f3(v1, v2)
                         v10 = const 999index
-                        v11 = call f0(v9, v10)
+                        v11 = call @5 f0(v9, v10)
                         debuglog v11
                         unit_end
                     
