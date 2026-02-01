@@ -107,6 +107,7 @@ pub fn parse_posts(posts_dir: &Path) -> AnyResult<Vec<Post>> {
         options.extension.table = true;
         options.extension.strikethrough = true;
         options.extension.autolink = true;
+        options.extension.tasklist = true;
         options.render.unsafe_ = true;
         let content_html = rmx::comrak::markdown_to_html(&content_md, &options);
 

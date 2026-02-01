@@ -915,6 +915,7 @@ impl DocsCommand {
                 options.extension.table = true;
                 options.extension.strikethrough = true;
                 options.extension.autolink = true;
+                options.extension.tasklist = true;
                 options.extension.header_ids = Some("user-content-".S());
                 options.render.unsafe_ = true; // Allow raw HTML in markdown.
                 let html = rmx::comrak::markdown_to_html(&markdown, &options);
