@@ -1518,8 +1518,7 @@ impl IrInterpreter {
         frames: &mut FrameStore,
     ) -> Result<(), InterpError> {
         // Check if there's an optimized (inlined) version of this function.
-        // Convert optimized IrFunction to IrCodeUnit if present.
-        let optimized = self.get_optimized_function(func_ref).map(IrCodeUnit::from);
+        let optimized = self.get_optimized_function(func_ref);
         let func_to_use = optimized.as_ref().unwrap_or(callee);
 
         if let FuncRef::External { unit, .. } = func_ref {

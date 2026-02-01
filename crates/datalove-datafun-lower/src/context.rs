@@ -13,7 +13,7 @@ use bct::module_graph::ModuleId;
 use datalove_datafun_ast::ast::{Statement, ExprFun, ExprFunctionCall};
 use datalove_datafun_sema::ResolvedCallTarget;
 use datalove_datafun_ir::{
-    IrType, IrBlock, IrFunction, Operand, ValueId, SlotId, ParamId, BlockId, FuncId,
+    IrType, IrBlock, IrCodeUnit, Operand, ValueId, SlotId, ParamId, BlockId, FuncId,
     FuncRef, Terminator, Instruction, SymbolTable, ExportBinding, IrModuleId, ParamMode,
     ConstValue, TypeRef, SlotDest, CtfeEvaluator, CallSiteId,
 };
@@ -238,7 +238,7 @@ pub struct LowerCtx<'db> {
     /// Exports from this unit (only used for script units).
     pub(super) exports: Vec<(String, ExportBinding)>,
     /// Functions defined in this script unit.
-    pub(super) functions: Vec<IrFunction>,
+    pub(super) functions: Vec<IrCodeUnit>,
     /// Symbol table for function resolution.
     pub(super) symbols: SymbolTable,
     /// Available functions: name -> FuncRef (for resolving calls).

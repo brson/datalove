@@ -323,10 +323,7 @@ impl ModuleCompilationPipeline {
                     // Collect IR dumps.
                     let ir_dumps: Vec<String> = result.functions(db.as_salsa_db())
                         .iter()
-                        .map(|ir_unit| {
-                            let ir_func = datalove_datafun_ir::IrFunction::from(ir_unit.clone());
-                            format!("{}", ir_func)
-                        })
+                        .map(|ir_unit| format!("{}", ir_unit))
                         .collect();
                     module_ir_dumps.insert(module_path, ir_dumps);
 

@@ -26,7 +26,7 @@
 //!             1. swap_body_state(FrameState::new())  // Save script state
 //!             2. lower_function_body(...)            // Lower the function
 //!             3. swap_body_state(saved)              // Restore script state
-//!             4. Add IrFunction to unit's functions list
+//!             4. Add IrCodeUnit to unit's nested_units list
 //! ```
 //!
 //! The `FrameState` swap isolates each function's IR (blocks, values, slots)

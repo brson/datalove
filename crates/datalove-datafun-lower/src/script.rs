@@ -16,7 +16,7 @@ use datalove_datafun_ast::ast::{self, Statement, ExprFun, ExprFunKind};
 use datalove_datafun_common::Type;
 use datalove_datafun_sema::ResolvedCallTarget;
 use datalove_datafun_ir::{
-    IrType, IrFunction, IrCodeUnit, CodeUnitId, CodeUnitContext, ScriptContext,
+    IrType, IrCodeUnit, CodeUnitId, CodeUnitContext, ScriptContext,
     Operand, Terminator, Instruction, ConstValue, SlotDest, ExportBinding, IrModuleId, FuncId,
 };
 use datalove_datafun_sema::ScriptAnalysisData;
@@ -97,8 +97,8 @@ pub fn lower_script_fragment_raw<'db>(
 
     // Handle lowered functions if provided.
     if let Some((functions, func_name_to_id)) = lowered_functions {
-        // Use lowered functions directly (convert IrCodeUnit to IrFunction for internal storage).
-        ctx.functions = functions.into_iter().map(IrFunction::from).collect();
+        // Use lowered functions directly.
+        ctx.functions = functions;
 
         // Register each function with its existing FuncId so call resolution works.
         for (name, func_id) in &func_name_to_id {
@@ -160,7 +160,7 @@ pub fn lower_script_fragment_raw<'db>(
             result: None,
             exports: ctx.exports,
         }),
-        nested_units: ctx.functions.into_iter().map(IrCodeUnit::from).collect(),
+        nested_units: ctx.functions,
     })
 }
 
@@ -287,7 +287,7 @@ pub fn lower_script_expr<'db>(
             result: Some(value_id),
             exports: ctx.exports,
         }),
-        nested_units: ctx.functions.into_iter().map(IrCodeUnit::from).collect(),
+        nested_units: ctx.functions,
     })
 }
 
@@ -507,8 +507,8 @@ fn lower_statement_for_script<'db>(
             // Restore parent state.
             ctx.swap_body_state(saved);
 
-            // Add the function to the unit's functions (convert IrCodeUnit to IrFunction).
-            ctx.functions.push(IrFunction::from(unit));
+            // Add the function to the unit's functions.
+            ctx.functions.push(unit);
 
             // Export the function.
             ctx.exports.push((func_name, ExportBinding::Function(func_id)));

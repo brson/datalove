@@ -1793,13 +1793,13 @@ impl std::error::Error for CtfeError {}
 /// Trait for compile-time evaluation of const expressions.
 ///
 /// Implemented by the interpreter to execute IR at compile time.
-/// The compiler generates an `IrScriptUnit` for the const expression
+/// The compiler generates an `IrCodeUnit` for the const expression
 /// and calls this trait to evaluate it.
 pub trait CtfeEvaluator {
-    /// Execute a script unit and extract the result as a ConstValue.
+    /// Execute a code unit and extract the result as a ConstValue.
     ///
     /// The unit should be a simple expression unit (single block, UnitEnd terminator).
-    fn evaluate(&mut self, unit: &IrScriptUnit, result_type: &IrType) -> Result<ConstValue, CtfeError>;
+    fn evaluate(&mut self, unit: &IrCodeUnit, result_type: &IrType) -> Result<ConstValue, CtfeError>;
 
     /// Set the module function registry for cross-module CTFE calls.
     ///
@@ -1814,7 +1814,7 @@ pub trait CtfeEvaluator {
 pub struct NoopCtfeEvaluator;
 
 impl CtfeEvaluator for NoopCtfeEvaluator {
-    fn evaluate(&mut self, _unit: &IrScriptUnit, _result_type: &IrType) -> Result<ConstValue, CtfeError> {
+    fn evaluate(&mut self, _unit: &IrCodeUnit, _result_type: &IrType) -> Result<ConstValue, CtfeError> {
         Err(CtfeError::InterpError("CTFE evaluator not configured".to_string()))
     }
 

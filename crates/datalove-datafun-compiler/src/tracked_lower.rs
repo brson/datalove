@@ -13,7 +13,7 @@ use datalove_datafun_ast::ast::{ParsedStatements, Statement};
 use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::Arc;
-use datalove_datafun_ir::{ConstValue, CtfeEvaluator, IrFunction, IrCodeUnit, IrType, FuncId, IrModuleId, ModuleFunctionRegistry};
+use datalove_datafun_ir::{ConstValue, CtfeEvaluator, IrCodeUnit, IrType, FuncId, IrModuleId, ModuleFunctionRegistry};
 use datalove_datafun_tycheck::{
     DbClone, ParallelMode,
     SingleModuleTypecheckResult,
@@ -343,10 +343,8 @@ pub fn lower_module<'db>(
                 .iter()
                 .map(|(name, _ir_type, value)| (name.clone(), value.clone()))
                 .collect();
-            // Convert to IrFunction for const inlining, then back to IrCodeUnit.
-            let mut ir_functions: Vec<IrFunction> = functions.iter().cloned().map(IrFunction::from).collect();
-            inline_module_functions(&mut ir_functions, &const_values);
-            functions = ir_functions.into_iter().map(IrCodeUnit::from).collect();
+            // Inline const values directly into the functions.
+            inline_module_functions(&mut functions, &const_values);
         }
     }
 

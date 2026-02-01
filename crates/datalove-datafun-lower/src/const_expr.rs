@@ -15,8 +15,8 @@ use std::collections::HashMap;
 use bct::module_graph::ModuleId;
 use datalove_datafun_ast::ast::{ExprFun, ExprFunKind};
 use datalove_datafun_ir::{
-    ConstValue, IrType, IrScriptUnit, IrCodeUnit, IrModuleId,
-    Operand, Terminator, SymbolTable,
+    ConstValue, IrType, IrCodeUnit, CodeUnitId, CodeUnitContext, ScriptContext, IrModuleId,
+    Operand, Terminator,
 };
 use datalove_datafun_common::Type;
 use datalove_datafun_sema::ResolvedCallTarget;
@@ -61,14 +61,14 @@ pub fn eval_const_expr<'db>(
         .map_err(|e| LowerError::NotImplemented(format!("CTFE error: {}", e)))
 }
 
-/// Lower a const expression to a minimal IrScriptUnit for execution.
+/// Lower a const expression to a minimal IrCodeUnit for execution.
 ///
 /// Uses isolated lowering: creates a fresh `LowerCtx` with independent IR state
 /// but reuses type information from the parent context.
 fn lower_const_expr_to_unit<'db>(
     parent_ctx: &LowerCtx<'db>,
     expr: ExprFun<'db>,
-) -> Result<IrScriptUnit, LowerError> {
+) -> Result<IrCodeUnit, LowerError> {
     // Create isolated LowerCtx that reuses type info but has fresh IR state.
     let mut isolated_ctx = LowerCtx::new(
         parent_ctx.db,
@@ -96,8 +96,10 @@ fn lower_const_expr_to_unit<'db>(
     // Renumber blocks for sequential IDs.
     isolated_ctx.renumber_blocks();
 
-    // Extract IR into an IrScriptUnit.
-    Ok(IrScriptUnit {
+    // Extract IR into an IrCodeUnit.
+    Ok(IrCodeUnit {
+        id: CodeUnitId(0),
+        name: String::new(),
         blocks: isolated_ctx.body.blocks,
         value_count: isolated_ctx.body.next_value,
         slot_count: isolated_ctx.body.next_slot,
@@ -105,17 +107,19 @@ fn lower_const_expr_to_unit<'db>(
         value_types: isolated_ctx.body.value_types,
         slot_types: isolated_ctx.body.slot_types,
         tracked_slots: Vec::new(),
-        unit_end_values: Vec::new(),
-        unit_end_slots: Vec::new(),
-        functions: Vec::new(),
-        symbols: SymbolTable::new(),
-        result: Some(result_value),
-        exports: Vec::new(),
         const_values: Vec::new(),
+        symbols: isolated_ctx.symbols,
+        context: CodeUnitContext::Script(ScriptContext {
+            unit_end_values: Vec::new(),
+            unit_end_slots: Vec::new(),
+            result: Some(result_value),
+            exports: Vec::new(),
+        }),
+        nested_units: Vec::new(),
     })
 }
 
-/// Lower a const expression to IrScriptUnit without needing a parent LowerCtx.
+/// Lower a const expression to IrCodeUnit without needing a parent LowerCtx.
 ///
 /// Used for module-level const evaluation. This is the public entry point for
 /// the "lower then evaluate" pattern where callers first lower const expressions,
@@ -133,8 +137,8 @@ pub fn lower_const_expr_to_unit_standalone<'db>(
     lowered_functions: &[IrCodeUnit],
     func_name_to_id: &HashMap<String, datalove_datafun_ir::FuncId>,
     module_func_id_map: &'db HashMap<(ModuleId, String), (IrModuleId, datalove_datafun_ir::FuncId)>,
-) -> Result<IrScriptUnit, LowerError> {
-    use datalove_datafun_ir::{FuncRef, FuncId, Instruction, IrFunction};
+) -> Result<IrCodeUnit, LowerError> {
+    use datalove_datafun_ir::{FuncRef, FuncId, Instruction};
     use std::collections::HashSet;
 
     // Create a fresh LowerCtx with the provided type information and module func_id_map.
@@ -188,17 +192,18 @@ pub fn lower_const_expr_to_unit_standalone<'db>(
     }
 
     // Include called functions from the lowered set (no re-lowering needed).
-    // Convert IrCodeUnit to IrFunction for IrScriptUnit.functions.
-    let mut functions: Vec<IrFunction> = Vec::new();
+    let mut nested_units: Vec<IrCodeUnit> = Vec::new();
     for func_id in called_func_ids {
         // Find the function in lowered functions.
         if let Some(unit) = lowered_functions.iter().find(|f| f.id.0 == func_id.0) {
-            functions.push(IrFunction::from(unit.clone()));
+            nested_units.push(unit.clone());
         }
     }
 
-    // Extract IR into an IrScriptUnit.
-    Ok(IrScriptUnit {
+    // Extract IR into an IrCodeUnit.
+    Ok(IrCodeUnit {
+        id: CodeUnitId(0),
+        name: String::new(),
         blocks: ctx.body.blocks,
         value_count: ctx.body.next_value,
         slot_count: ctx.body.next_slot,
@@ -206,13 +211,15 @@ pub fn lower_const_expr_to_unit_standalone<'db>(
         value_types: ctx.body.value_types,
         slot_types: ctx.body.slot_types,
         tracked_slots: Vec::new(),
-        unit_end_values: Vec::new(),
-        unit_end_slots: Vec::new(),
-        functions,
-        symbols: SymbolTable::new(),
-        result: Some(result_value),
-        exports: Vec::new(),
         const_values: Vec::new(),
+        symbols: ctx.symbols,
+        context: CodeUnitContext::Script(ScriptContext {
+            unit_end_values: Vec::new(),
+            unit_end_slots: Vec::new(),
+            result: Some(result_value),
+            exports: Vec::new(),
+        }),
+        nested_units,
     })
 }
 
@@ -244,7 +251,7 @@ pub fn lower_const_binding<'db>(
     lowered_functions: &[IrCodeUnit],
     func_name_to_id: &HashMap<String, datalove_datafun_ir::FuncId>,
     module_func_id_map: Option<&'db HashMap<(ModuleId, String), (IrModuleId, datalove_datafun_ir::FuncId)>>,
-) -> Result<(Option<IrScriptUnit>, Option<ConstValue>), LowerError> {
+) -> Result<(Option<IrCodeUnit>, Option<ConstValue>), LowerError> {
     // Try simple literal extraction first.
     if let Some(value) = try_extract_literal(db, expr, ir_type) {
         return Ok((None, Some(value)));

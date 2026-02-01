@@ -1057,7 +1057,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
 mod tests {
     use super::*;
     use cranelift_object::{ObjectBuilder, ObjectModule};
-    use datalove_datafun_ir::{BinOp, IrBlock, IrFunction, IrCodeUnit, FuncId as IrFuncId, ConstValue, Terminator};
+    use datalove_datafun_ir::{BinOp, IrBlock, IrCodeUnit, CodeUnitId, CodeUnitContext, FunctionContext, ConstValue, Terminator};
 
     fn create_test_isa() -> std::sync::Arc<dyn TargetIsa> {
         use cranelift_codegen::isa;
@@ -1083,20 +1083,45 @@ mod tests {
         ObjectModule::new(obj_builder)
     }
 
+    /// Helper to create a function code unit for tests.
+    fn make_func_unit(
+        name: &str,
+        return_type: IrType,
+        blocks: Vec<IrBlock>,
+        value_types: Vec<IrType>,
+    ) -> IrCodeUnit {
+        IrCodeUnit {
+            id: CodeUnitId(0),
+            name: name.into(),
+            blocks,
+            value_count: value_types.len() as u32,
+            slot_count: 0,
+            call_site_count: 0,
+            value_types,
+            slot_types: vec![],
+            tracked_slots: vec![],
+            const_values: vec![],
+            context: CodeUnitContext::Function(FunctionContext {
+                params: vec![],
+                param_modes: vec![],
+                param_types: vec![],
+                return_type,
+                tracked_params: vec![],
+            }),
+            nested_units: vec![],
+        }
+    }
+
     #[test]
     fn test_compile_const_i32() {
         let isa = create_test_isa();
         let mut module = create_test_module(isa.clone());
 
         // Create a function: fn foo() -> i32 { 42 }
-        let func = IrFunction {
-            id: IrFuncId(0),
-            name: "test_const".into(),
-            params: vec![],
-            param_modes: vec![],
-            param_types: vec![],
-            return_type: IrType::I32,
-            blocks: vec![
+        let code_unit = make_func_unit(
+            "test_const",
+            IrType::I32,
+            vec![
                 IrBlock { id: BlockId(0), params: vec![], instructions: vec![
                         Instruction::Const {
                             dest: ValueId(0),
@@ -1108,16 +1133,8 @@ mod tests {
                     },
                 },
             ],
-            value_count: 1,
-            slot_count: 0,
-            call_site_count: 0,
-            value_types: vec![IrType::I32],
-            slot_types: vec![],
-            tracked_slots: vec![],
-            tracked_params: vec![],
-            const_values: vec![],
-        };
-        let code_unit = IrCodeUnit::from(func);
+            vec![IrType::I32],
+        );
 
         let compiler = FunctionCompiler::new(&code_unit, isa.as_ref(), &mut module);
         let result = compiler.compile();
@@ -1133,14 +1150,10 @@ mod tests {
         let mut module = create_test_module(isa.clone());
 
         // Create a function: fn foo() -> bool { 10 < 32 }
-        let func = IrFunction {
-            id: IrFuncId(0),
-            name: "test_cmp".into(),
-            params: vec![],
-            param_modes: vec![],
-            param_types: vec![],
-            return_type: IrType::Bool,
-            blocks: vec![
+        let code_unit = make_func_unit(
+            "test_cmp",
+            IrType::Bool,
+            vec![
                 IrBlock { id: BlockId(0), params: vec![], instructions: vec![
                         Instruction::Const {
                             dest: ValueId(0),
@@ -1162,16 +1175,8 @@ mod tests {
                     },
                 },
             ],
-            value_count: 3,
-            slot_count: 0,
-            call_site_count: 0,
-            value_types: vec![IrType::I32, IrType::I32, IrType::Bool],
-            slot_types: vec![],
-            tracked_slots: vec![],
-            tracked_params: vec![],
-            const_values: vec![],
-        };
-        let code_unit = IrCodeUnit::from(func);
+            vec![IrType::I32, IrType::I32, IrType::Bool],
+        );
 
         let compiler = FunctionCompiler::new(&code_unit, isa.as_ref(), &mut module);
         let result = compiler.compile();
@@ -1184,14 +1189,10 @@ mod tests {
         let mut module = create_test_module(isa.clone());
 
         // Create a function: fn foo() -> i32 { -42 }
-        let func = IrFunction {
-            id: IrFuncId(0),
-            name: "test_neg".into(),
-            params: vec![],
-            param_modes: vec![],
-            param_types: vec![],
-            return_type: IrType::I32,
-            blocks: vec![
+        let code_unit = make_func_unit(
+            "test_neg",
+            IrType::I32,
+            vec![
                 IrBlock { id: BlockId(0), params: vec![], instructions: vec![
                         Instruction::Const {
                             dest: ValueId(0),
@@ -1208,16 +1209,8 @@ mod tests {
                     },
                 },
             ],
-            value_count: 2,
-            slot_count: 0,
-            call_site_count: 0,
-            value_types: vec![IrType::I32, IrType::I32],
-            slot_types: vec![],
-            tracked_slots: vec![],
-            tracked_params: vec![],
-            const_values: vec![],
-        };
-        let code_unit = IrCodeUnit::from(func);
+            vec![IrType::I32, IrType::I32],
+        );
 
         let compiler = FunctionCompiler::new(&code_unit, isa.as_ref(), &mut module);
         let result = compiler.compile();
@@ -1233,13 +1226,9 @@ mod tests {
         // fn foo() -> i32 {
         //     if true { 1 } else { 2 }
         // }
-        let func = IrFunction {
-            id: IrFuncId(0),
+        let code_unit = IrCodeUnit {
+            id: CodeUnitId(0),
             name: "test_branch".into(),
-            params: vec![],
-            param_modes: vec![],
-            param_types: vec![],
-            return_type: IrType::I32,
             blocks: vec![
                 IrBlock {
                     id: BlockId(0),
@@ -1291,10 +1280,16 @@ mod tests {
             value_types: vec![IrType::Bool, IrType::I32, IrType::I32],
             slot_types: vec![],
             tracked_slots: vec![],
-            tracked_params: vec![],
             const_values: vec![],
+            context: CodeUnitContext::Function(FunctionContext {
+                params: vec![],
+                param_modes: vec![],
+                param_types: vec![],
+                return_type: IrType::I32,
+                tracked_params: vec![],
+            }),
+            nested_units: vec![],
         };
-        let code_unit = IrCodeUnit::from(func);
 
         let compiler = FunctionCompiler::new(&code_unit, isa.as_ref(), &mut module);
         let result = compiler.compile();

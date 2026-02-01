@@ -14,13 +14,13 @@
 
 use std::collections::HashMap;
 use datalove_datafun_ir::{
-    ConstValue, IrScriptUnit, IrFunction, IrBlock, Instruction, ValueId,
+    ConstValue, IrCodeUnit, IrBlock, Instruction, ValueId,
     Operand, Terminator,
 };
 
 use crate::dce::{eliminate_dead_blocks_func, eliminate_dead_code_unit, instruction_dest};
 
-/// Inline const values into an IrScriptUnit.
+/// Inline const values into an IrCodeUnit (script unit).
 ///
 /// Takes the lowered IR and a map of const names to their evaluated values.
 /// For each const binding tracked in the IR's const_values field, replaces
@@ -28,9 +28,9 @@ use crate::dce::{eliminate_dead_blocks_func, eliminate_dead_code_unit, instructi
 ///
 /// Returns the transformed IR.
 pub fn inline_script_consts(
-    mut unit: IrScriptUnit,
+    mut unit: IrCodeUnit,
     const_values: &HashMap<String, ConstValue>,
-) -> IrScriptUnit {
+) -> IrCodeUnit {
     // Build map of ValueId -> ConstValue for consts that should be inlined.
     let mut value_to_const: HashMap<ValueId, ConstValue> = HashMap::new();
     for (name, value_id) in &unit.const_values {
@@ -49,15 +49,15 @@ pub fn inline_script_consts(
     // instruction with a Const, leaving the intermediate values orphaned.
     eliminate_dead_code_unit(&mut unit);
 
-    // Inline consts in nested functions.
-    for func in &mut unit.functions {
-        inline_function_consts(func, const_values);
+    // Inline consts in nested units.
+    for nested in &mut unit.nested_units {
+        inline_function_consts(nested, const_values);
     }
 
     unit
 }
 
-/// Inline const values into an IrFunction.
+/// Inline const values into an IrCodeUnit (function).
 ///
 /// Takes the lowered IR and a map of const names to their evaluated values.
 /// For functions, the const_values field tracks function-local consts.
@@ -65,7 +65,7 @@ pub fn inline_script_consts(
 /// After inlining, eliminates dead (unreachable) blocks that may result from
 /// constant branch simplification.
 pub fn inline_function_consts(
-    func: &mut IrFunction,
+    func: &mut IrCodeUnit,
     const_values: &HashMap<String, ConstValue>,
 ) {
     // Build map of ValueId -> ConstValue for consts that should be inlined.
@@ -200,7 +200,7 @@ fn inline_block_consts(block: &mut IrBlock, value_to_const: &HashMap<ValueId, Co
 ///
 /// This function modifies the functions in place.
 pub fn inline_module_functions(
-    functions: &mut [IrFunction],
+    functions: &mut [IrCodeUnit],
     const_values: &HashMap<String, ConstValue>,
 ) {
     for func in functions {
@@ -212,12 +212,12 @@ pub fn inline_module_functions(
     }
 }
 
-/// Inline const values into a module IrFunction.
+/// Inline const values into a module IrCodeUnit.
 ///
 /// Like inline_function_consts but qualifies const names with the function name
 /// when looking them up in the const_values map.
 fn inline_module_function_consts(
-    func: &mut IrFunction,
+    func: &mut IrCodeUnit,
     const_values: &HashMap<String, ConstValue>,
     func_name: &str,
 ) {
@@ -243,7 +243,7 @@ fn inline_module_function_consts(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use datalove_datafun_ir::{BlockId, Terminator, Operand, IrType, BinOp};
+    use datalove_datafun_ir::{BlockId, Terminator, Operand, IrType, BinOp, CodeUnitId, CodeUnitContext, ScriptContext};
 
     #[test]
     fn test_inline_simple_const() {
@@ -271,7 +271,9 @@ mod tests {
             terminator: Terminator::UnitEnd { result: None },
         }];
 
-        let unit = IrScriptUnit {
+        let unit = IrCodeUnit {
+            id: CodeUnitId(0),
+            name: String::new(),
             blocks,
             value_count: 3,
             slot_count: 0,
@@ -279,13 +281,15 @@ mod tests {
             value_types: vec![IrType::I32, IrType::I32, IrType::I32],
             slot_types: vec![],
             tracked_slots: vec![],
-            unit_end_values: vec![],
-            unit_end_slots: vec![],
-            functions: vec![],
-            symbols: datalove_datafun_ir::SymbolTable::new(),
-            result: None,
-            exports: vec![("X".to_string(), ExportBinding::Value(ValueId(2)))],
             const_values: vec![("X".to_string(), ValueId(2))],
+            symbols: datalove_datafun_ir::SymbolTable::new(),
+            context: CodeUnitContext::Script(ScriptContext {
+                unit_end_values: vec![],
+                unit_end_slots: vec![],
+                result: None,
+                exports: vec![("X".to_string(), ExportBinding::Value(ValueId(2)))],
+            }),
+            nested_units: vec![],
         };
 
         let mut const_values = HashMap::new();
@@ -326,7 +330,9 @@ mod tests {
             terminator: Terminator::UnitEnd { result: None },
         }];
 
-        let unit = IrScriptUnit {
+        let unit = IrCodeUnit {
+            id: CodeUnitId(0),
+            name: String::new(),
             blocks,
             value_count: 1,
             slot_count: 0,
@@ -334,13 +340,15 @@ mod tests {
             value_types: vec![IrType::I32],
             slot_types: vec![],
             tracked_slots: vec![],
-            unit_end_values: vec![],
-            unit_end_slots: vec![],
-            functions: vec![],
-            symbols: datalove_datafun_ir::SymbolTable::new(),
-            result: None,
-            exports: vec![("X".to_string(), ExportBinding::Value(ValueId(0)))],
             const_values: vec![("X".to_string(), ValueId(0))],
+            symbols: datalove_datafun_ir::SymbolTable::new(),
+            context: CodeUnitContext::Script(ScriptContext {
+                unit_end_values: vec![],
+                unit_end_slots: vec![],
+                result: None,
+                exports: vec![("X".to_string(), ExportBinding::Value(ValueId(0)))],
+            }),
+            nested_units: vec![],
         };
 
         let mut const_values = HashMap::new();
@@ -392,7 +400,9 @@ mod tests {
             },
         }];
 
-        let unit = IrScriptUnit {
+        let unit = IrCodeUnit {
+            id: CodeUnitId(0),
+            name: String::new(),
             blocks,
             value_count: 3,
             slot_count: 0,
@@ -404,14 +414,16 @@ mod tests {
             ],
             slot_types: vec![],
             tracked_slots: vec![],
-            unit_end_values: vec![],
-            unit_end_slots: vec![],
-            functions: vec![],
-            symbols: datalove_datafun_ir::SymbolTable::new(),
-            result: None,
-            exports: vec![("X".to_string(), ExportBinding::Value(ValueId(1)))],
             // v1 (the unwrapped value) is tracked as a const.
             const_values: vec![("X".to_string(), ValueId(1))],
+            symbols: datalove_datafun_ir::SymbolTable::new(),
+            context: CodeUnitContext::Script(ScriptContext {
+                unit_end_values: vec![],
+                unit_end_slots: vec![],
+                result: None,
+                exports: vec![("X".to_string(), ExportBinding::Value(ValueId(1)))],
+            }),
+            nested_units: vec![],
         };
 
         let mut const_values = HashMap::new();

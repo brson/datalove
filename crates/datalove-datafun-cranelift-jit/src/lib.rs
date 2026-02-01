@@ -307,23 +307,55 @@ impl JitEngine {
 mod tests {
     use super::*;
     use datalove_datafun_ir::{
-        IrBlock, IrFunction, Instruction, Terminator, Operand,
+        IrBlock, Instruction, Terminator, Operand,
         ValueId, BlockId, ConstValue, IrType, IrCodeUnit,
+        CodeUnitId, CodeUnitContext, FunctionContext,
     };
     use datalove_datafun_interp::{
         ExecutionContext, FrameStore, FunctionRegistry, IrInterpreter,
     };
 
+    /// Helper to create a function code unit for tests.
+    fn make_func_unit(
+        id: u32,
+        name: &str,
+        params: Vec<datalove_datafun_ir::ParamId>,
+        param_types: Vec<IrType>,
+        return_type: IrType,
+        blocks: Vec<IrBlock>,
+        value_types: Vec<IrType>,
+    ) -> IrCodeUnit {
+        IrCodeUnit {
+            id: CodeUnitId(id),
+            name: name.to_string(),
+            blocks,
+            value_count: value_types.len() as u32,
+            slot_count: 0,
+            call_site_count: 0,
+            value_types,
+            slot_types: vec![],
+            tracked_slots: vec![],
+            const_values: vec![],
+            context: CodeUnitContext::Function(FunctionContext {
+                params,
+                param_modes: vec![],
+                param_types,
+                return_type,
+                tracked_params: vec![],
+            }),
+            nested_units: vec![],
+        }
+    }
+
     fn make_test_function() -> IrCodeUnit {
         // fn test() -> i32 { 42 }
-        IrCodeUnit::from(IrFunction {
-            id: FuncId(0),
-            name: "test".to_string(),
-            params: vec![],
-            param_modes: vec![],
-            param_types: vec![],
-            return_type: IrType::I32,
-            blocks: vec![IrBlock {
+        make_func_unit(
+            0,
+            "test",
+            vec![],
+            vec![],
+            IrType::I32,
+            vec![IrBlock {
                 id: BlockId(0),
                 params: vec![],
                 instructions: vec![
@@ -333,15 +365,8 @@ mod tests {
                     value: Some(Operand::Value(ValueId(0))),
                 },
             }],
-            value_count: 1,
-            slot_count: 0,
-            call_site_count: 0,
-            value_types: vec![IrType::I32],
-            slot_types: vec![],
-            tracked_slots: vec![],
-            tracked_params: vec![],
-            const_values: vec![],
-        })
+            vec![IrType::I32],
+        )
     }
 
     #[test]
@@ -435,14 +460,13 @@ mod tests {
         // Create callee: fn identity(a: i32) -> i32 { a }
         // Note: We use identity instead of arithmetic because fixed-width
         // integer arithmetic widens to Int; arithmetic on i32 uses BinOpChecked.
-        let identity_fn = IrFunction {
-            id: FuncId(0),
-            name: "identity".to_string(),
-            params: vec![ParamId(0)],
-            param_modes: vec![],
-            param_types: vec![IrType::I32],
-            return_type: IrType::I32,
-            blocks: vec![IrBlock {
+        let identity_fn = make_func_unit(
+            0,
+            "identity",
+            vec![ParamId(0)],
+            vec![IrType::I32],
+            IrType::I32,
+            vec![IrBlock {
                 id: BlockId(0),
                 params: vec![],
                 instructions: vec![],
@@ -450,25 +474,17 @@ mod tests {
                     value: Some(Operand::Param(ParamId(0))),
                 },
             }],
-            value_count: 0,
-            slot_count: 0,
-            call_site_count: 0,
-            value_types: vec![],
-            slot_types: vec![],
-            tracked_slots: vec![],
-            tracked_params: vec![],
-            const_values: vec![],
-        };
+            vec![],
+        );
 
         // Create caller: fn main() -> i32 { identity(42) }
-        let main_fn = IrFunction {
-            id: FuncId(1),
-            name: "main".to_string(),
-            params: vec![],
-            param_modes: vec![],
-            param_types: vec![],
-            return_type: IrType::I32,
-            blocks: vec![IrBlock {
+        let main_fn = make_func_unit(
+            1,
+            "main",
+            vec![],
+            vec![],
+            IrType::I32,
+            vec![IrBlock {
                 id: BlockId(0),
                 params: vec![],
                 instructions: vec![
@@ -486,15 +502,8 @@ mod tests {
                     value: Some(Operand::Value(ValueId(1))),
                 },
             }],
-            value_count: 2,
-            slot_count: 0,
-            call_site_count: 0,
-            value_types: vec![IrType::I32, IrType::I32],
-            slot_types: vec![],
-            tracked_slots: vec![],
-            tracked_params: vec![],
-            const_values: vec![],
-        };
+            vec![IrType::I32, IrType::I32],
+        );
 
         // Set up interpreter with JIT dispatcher (threshold=1: compile on first call).
         let jit = JitEngine::new(1).expect("JitEngine creation failed");
@@ -503,9 +512,8 @@ mod tests {
             Some(Box::new(jit)),
         );
 
-        // Set up execution context with both functions (convert to IrCodeUnit).
-        let main_code_unit = IrCodeUnit::from(main_fn);
-        let functions: Vec<IrCodeUnit> = vec![IrCodeUnit::from(identity_fn), main_code_unit.clone()];
+        // Set up execution context with both functions.
+        let functions: Vec<IrCodeUnit> = vec![identity_fn, main_fn.clone()];
         let ctx = ExecutionContext::new(&functions);
         let registry = FunctionRegistry::new();
         let mut frames = FrameStore::new();
@@ -520,7 +528,7 @@ mod tests {
 
         // Execute main, which calls identity(42).
         // The call to identity should go through the JIT dispatcher.
-        interp.call_in_context(&main_code_unit, None, vec![], ret_dest, &ctx, &registry, &mut frames)
+        interp.call_in_context(&main_fn, None, vec![], ret_dest, &ctx, &registry, &mut frames)
             .expect("execution failed");
 
         // Verify result.
@@ -541,14 +549,13 @@ mod tests {
         // Create callee: fn identity(a: i32) -> i32 { a }
         // Note: We use identity instead of arithmetic because fixed-width
         // integer arithmetic widens to Int; arithmetic on i32 uses BinOpChecked.
-        let identity_fn = IrFunction {
-            id: FuncId(0),
-            name: "identity".to_string(),
-            params: vec![ParamId(0)],
-            param_modes: vec![],
-            param_types: vec![IrType::I32],
-            return_type: IrType::I32,
-            blocks: vec![IrBlock {
+        let identity_fn = make_func_unit(
+            0,
+            "identity",
+            vec![ParamId(0)],
+            vec![IrType::I32],
+            IrType::I32,
+            vec![IrBlock {
                 id: BlockId(0),
                 params: vec![],
                 instructions: vec![],
@@ -556,25 +563,17 @@ mod tests {
                     value: Some(Operand::Param(ParamId(0))),
                 },
             }],
-            value_count: 0,
-            slot_count: 0,
-            call_site_count: 0,
-            value_types: vec![],
-            slot_types: vec![],
-            tracked_slots: vec![],
-            tracked_params: vec![],
-            const_values: vec![],
-        };
+            vec![],
+        );
 
         // Create caller: fn main() -> i32 { identity(42) }
-        let main_fn = IrFunction {
-            id: FuncId(1),
-            name: "main".to_string(),
-            params: vec![],
-            param_modes: vec![],
-            param_types: vec![],
-            return_type: IrType::I32,
-            blocks: vec![IrBlock {
+        let main_fn = make_func_unit(
+            1,
+            "main",
+            vec![],
+            vec![],
+            IrType::I32,
+            vec![IrBlock {
                 id: BlockId(0),
                 params: vec![],
                 instructions: vec![
@@ -592,20 +591,11 @@ mod tests {
                     value: Some(Operand::Value(ValueId(1))),
                 },
             }],
-            value_count: 2,
-            slot_count: 0,
-            call_site_count: 0,
-            value_types: vec![IrType::I32, IrType::I32],
-            slot_types: vec![],
-            tracked_slots: vec![],
-            tracked_params: vec![],
-            const_values: vec![],
-        };
+            vec![IrType::I32, IrType::I32],
+        );
 
-        // Set up context with both functions (convert to IrCodeUnit).
-        let identity_code_unit = IrCodeUnit::from(identity_fn);
-        let main_code_unit = IrCodeUnit::from(main_fn);
-        let functions: Vec<IrCodeUnit> = vec![identity_code_unit, main_code_unit.clone()];
+        // Set up context with both functions.
+        let functions: Vec<IrCodeUnit> = vec![identity_fn, main_fn.clone()];
         let ctx = ExecutionContext::new(&functions);
         let registry = FunctionRegistry::new();
 

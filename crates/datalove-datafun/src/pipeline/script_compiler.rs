@@ -43,7 +43,7 @@ use datalove_datafun_compiler::tracked_script_ownership::{
     emit_ownership_diagnostics, AnalysisError,
 };
 use datalove_datafun_compiler::lower::ScriptFunctionAnalyses;
-use datalove_datafun_ir::{ConstValue, CtfeEvaluator, CtfeError, IrScriptUnit, IrType, ResolvedConsts, ConstEvalError};
+use datalove_datafun_ir::{ConstValue, CtfeEvaluator, CtfeError, IrCodeUnit, IrType, ResolvedConsts, ConstEvalError};
 use datalove_datafun_interp::InterpCtfeEvaluator;
 use datalove_datafun_tycheck::{
     type_check_script_units, create_batch_spec,
@@ -390,13 +390,11 @@ impl<'db> ScriptCompiler<'db> {
         self.update_accumulated_state(&ir_unit);
 
         let ir_dump = format!("{}", ir_unit);
-        // Convert IrScriptUnit to IrCodeUnit
-        let ir_code_unit = datalove_datafun_ir::IrCodeUnit::from(ir_unit);
         ScriptCompilationResult {
             typecheck: TypecheckResult::Success,
             ownership: OwnershipResult::Success,
             lowering: LoweringResult::Success { ir: ir_dump },
-            ir_unit: Some(ir_code_unit),
+            ir_unit: Some(ir_unit),
         }
     }
 
@@ -879,7 +877,7 @@ impl<'db> ScriptCompiler<'db> {
         ownership: &OwnershipOutput<'db>,
         _consts: &ConstEvalOutput,
         lowered_funcs: &LoweredFunctions,
-    ) -> Result<IrScriptUnit, ScriptCompilationResult> {
+    ) -> Result<IrCodeUnit, ScriptCompilationResult> {
         let func_id_map = build_func_id_map(self.db, &self.module_specs);
         let script_ctx = self.accumulated_lower_bindings.to_script_lower_context();
 
@@ -923,7 +921,7 @@ impl<'db> ScriptCompiler<'db> {
                     Some(&func_param_types),
                     Some(&func_return_types),
                     lowered_funcs_arg,
-                ).map(IrScriptUnit::from).map_err(|e| {
+                ).map_err(|e| {
                     self.accumulated_unit_specs.pop();
                     ScriptCompilationResult {
                         typecheck: TypecheckResult::Success,
@@ -941,7 +939,7 @@ impl<'db> ScriptCompiler<'db> {
                     &func_id_map,
                     script_ctx,
                     *expr,
-                ).map(IrScriptUnit::from).map_err(|e| {
+                ).map_err(|e| {
                     self.accumulated_unit_specs.pop();
                     ScriptCompilationResult {
                         typecheck: TypecheckResult::Success,
@@ -965,9 +963,9 @@ impl<'db> ScriptCompiler<'db> {
     /// expressions are evaluated at runtime instead of compile time.
     fn phase_const_inline(
         &self,
-        ir_unit: IrScriptUnit,
+        ir_unit: IrCodeUnit,
         consts: &ConstEvalOutput,
-    ) -> IrScriptUnit {
+    ) -> IrCodeUnit {
         // In skip_const_inlining mode, skip inlining - consts are evaluated at runtime.
         if self.skip_const_inlining {
             return ir_unit;
@@ -1001,13 +999,15 @@ impl<'db> ScriptCompiler<'db> {
     // ========================================================================
 
     /// Update accumulated state after successful compilation.
-    fn update_accumulated_state(&mut self, ir_unit: &IrScriptUnit) {
+    fn update_accumulated_state(&mut self, ir_unit: &IrCodeUnit) {
         let unit_index = self.accumulated_lower_bindings.current_unit;
-        self.accumulated_lower_bindings.add_exports(
-            unit_index,
-            &ir_unit.exports,
-            &ir_unit.value_types,
-            &ir_unit.slot_types,
-        );
+        if let Some(script_ctx) = ir_unit.script_context() {
+            self.accumulated_lower_bindings.add_exports(
+                unit_index,
+                &script_ctx.exports,
+                &ir_unit.value_types,
+                &ir_unit.slot_types,
+            );
+        }
     }
 }

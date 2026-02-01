@@ -1,6 +1,84 @@
 use crate::*;
 use datalove_rtdt as rtdt;
-use datalove_datafun_ir::{CallSiteId, IrType, IrBlock, IrFunction, IrScriptUnit, Terminator, FuncRef, FuncId, ParamId, TypeRef, SlotId, SlotDest, BinOp, UnaryOp, ValueId, IrCodeUnit};
+use datalove_datafun_ir::{
+    CallSiteId, IrType, IrBlock, Terminator, FuncRef, FuncId, ParamId, TypeRef, SlotId, SlotDest,
+    BinOp, UnaryOp, ValueId, IrCodeUnit, CodeUnitId, CodeUnitContext, FunctionContext, ScriptContext,
+    // Legacy types kept for test compatibility.
+    IrFunction, IrScriptUnit,
+};
+
+/// Helper to create a function code unit for tests.
+fn make_func_unit(
+    id: u32,
+    name: &str,
+    params: Vec<ParamId>,
+    param_types: Vec<IrType>,
+    return_type: IrType,
+    blocks: Vec<IrBlock>,
+    value_count: u32,
+    value_types: Vec<IrType>,
+    slot_count: u32,
+    slot_types: Vec<IrType>,
+    call_site_count: u32,
+) -> IrCodeUnit {
+    IrCodeUnit {
+        id: CodeUnitId(id),
+        name: name.to_string(),
+        blocks,
+        value_count,
+        slot_count,
+        call_site_count,
+        value_types,
+        slot_types,
+        tracked_slots: vec![],
+        const_values: vec![],
+        symbols: datalove_datafun_ir::SymbolTable::new(),
+        context: CodeUnitContext::Function(FunctionContext {
+            params,
+            param_modes: vec![],
+            param_types,
+            return_type,
+            tracked_params: vec![],
+        }),
+        nested_units: vec![],
+    }
+}
+
+/// Helper to create a script code unit for tests.
+fn make_script_unit(
+    blocks: Vec<IrBlock>,
+    value_count: u32,
+    value_types: Vec<IrType>,
+    slot_count: u32,
+    slot_types: Vec<IrType>,
+    call_site_count: u32,
+    unit_end_values: Vec<ValueId>,
+    unit_end_slots: Vec<SlotId>,
+    result: Option<ValueId>,
+    exports: Vec<(String, datalove_datafun_ir::ExportBinding)>,
+    nested_units: Vec<IrCodeUnit>,
+) -> IrCodeUnit {
+    IrCodeUnit {
+        id: CodeUnitId(0),
+        name: String::new(),
+        blocks,
+        value_count,
+        slot_count,
+        call_site_count,
+        value_types,
+        slot_types,
+        tracked_slots: vec![],
+        const_values: vec![],
+        symbols: datalove_datafun_ir::SymbolTable::new(),
+        context: CodeUnitContext::Script(ScriptContext {
+            unit_end_values,
+            unit_end_slots,
+            result,
+            exports,
+        }),
+        nested_units,
+    }
+}
 
 #[test]
 fn test_tydesc_table_primitives() {
@@ -40,16 +118,15 @@ fn test_layout_computation() {
 ///
 /// Returns the first parameter (identity). We avoid arithmetic here because
 /// fixed-width integer arithmetic requires widening to Int or checked ops.
-fn make_identity_function() -> IrFunction {
+fn make_identity_function() -> IrCodeUnit {
     // fn identity(a: i64, b: i64) -> i64 { a }
-    IrFunction {
-        id: FuncId(0),
-        name: "identity".to_string(),
-        params: vec![ParamId(0), ParamId(1)],  // a, b
-        param_modes: vec![],
-        param_types: vec![IrType::I64, IrType::I64],
-        return_type: IrType::I64,
-        blocks: vec![
+    make_func_unit(
+        0,
+        "identity",
+        vec![ParamId(0), ParamId(1)],  // a, b
+        vec![IrType::I64, IrType::I64],
+        IrType::I64,
+        vec![
             IrBlock { id: BlockId(0), params: vec![],
                 instructions: vec![],
                 terminator: Terminator::Return {
@@ -57,15 +134,12 @@ fn make_identity_function() -> IrFunction {
                 },
             },
         ],
-        value_count: 0,
-        slot_count: 0,
-        call_site_count: 0,
-        value_types: vec![],
-        slot_types: vec![],
-        tracked_slots: vec![],
-    tracked_params: vec![],
-        const_values: vec![],
-    }
+        0, // value_count
+        vec![], // value_types
+        0, // slot_count
+        vec![], // slot_types
+        0, // call_site_count
+    )
 }
 
 #[test]

@@ -8,7 +8,7 @@
 
 use std::collections::{HashMap, HashSet};
 use datalove_datafun_ir::{
-    BlockId, ExportBinding, Instruction, IrBlock, IrFunction, IrScriptUnit,
+    BlockId, ExportBinding, Instruction, IrBlock, IrCodeUnit,
     Operand, Terminator, ValueId,
 };
 
@@ -103,7 +103,7 @@ pub fn instruction_dest(instr: &Instruction) -> Option<ValueId> {
     }
 }
 
-/// Eliminate dead code from an IrScriptUnit.
+/// Eliminate dead code from an IrCodeUnit.
 ///
 /// After const inlining, some instructions may produce values that are no longer
 /// used. For example, if a Pack instruction is replaced with a Const containing
@@ -113,7 +113,7 @@ pub fn instruction_dest(instr: &Instruction) -> Option<ValueId> {
 /// This function removes instructions that:
 /// - Define values that are not used by any other instruction
 /// - Have no side effects (Const, Copy, etc.)
-pub fn eliminate_dead_code_unit(unit: &mut IrScriptUnit) {
+pub fn eliminate_dead_code_unit(unit: &mut IrCodeUnit) {
     // Iterate until no changes (removing an instruction may make its operands unused).
     loop {
         let used_values = collect_used_values(unit);
@@ -124,7 +124,7 @@ pub fn eliminate_dead_code_unit(unit: &mut IrScriptUnit) {
     }
 }
 
-/// Eliminate dead (unreachable) blocks from an IrFunction.
+/// Eliminate dead (unreachable) blocks from an IrCodeUnit.
 ///
 /// After constant branch simplification, some blocks may become unreachable.
 /// For example, when `Branch(is_ok, then, else)` is simplified to `Goto(then)`,
@@ -135,7 +135,7 @@ pub fn eliminate_dead_code_unit(unit: &mut IrScriptUnit) {
 ///
 /// After removal, blocks are renumbered to maintain the invariant that
 /// `blocks[i].id.0 == i` (required by the interpreter).
-pub fn eliminate_dead_blocks_func(func: &mut IrFunction) {
+pub fn eliminate_dead_blocks_func(func: &mut IrCodeUnit) {
     if func.blocks.is_empty() {
         return;
     }
@@ -207,24 +207,27 @@ pub fn eliminate_dead_blocks_func(func: &mut IrFunction) {
 }
 
 /// Collect all ValueIds that are used in the unit.
-fn collect_used_values(unit: &IrScriptUnit) -> HashSet<ValueId> {
+fn collect_used_values(unit: &IrCodeUnit) -> HashSet<ValueId> {
     let mut used = HashSet::new();
 
-    // Values in unit_end_values are used (need to be cleaned up).
-    for vid in &unit.unit_end_values {
-        used.insert(*vid);
-    }
-
-    // Exported values must be kept.
-    for (_name, binding) in &unit.exports {
-        if let ExportBinding::Value(vid) = binding {
+    // Access script context if this is a script unit.
+    if let Some(script_ctx) = unit.script_context() {
+        // Values in unit_end_values are used (need to be cleaned up).
+        for vid in &script_ctx.unit_end_values {
             used.insert(*vid);
         }
-    }
 
-    // Result value must be kept.
-    if let Some(vid) = &unit.result {
-        used.insert(*vid);
+        // Exported values must be kept.
+        for (_name, binding) in &script_ctx.exports {
+            if let ExportBinding::Value(vid) = binding {
+                used.insert(*vid);
+            }
+        }
+
+        // Result value must be kept.
+        if let Some(vid) = &script_ctx.result {
+            used.insert(*vid);
+        }
     }
 
     // Collect from blocks.
@@ -232,9 +235,9 @@ fn collect_used_values(unit: &IrScriptUnit) -> HashSet<ValueId> {
         collect_block_used_values(block, &mut used);
     }
 
-    // Collect from functions.
-    for func in &unit.functions {
-        for block in &func.blocks {
+    // Collect from nested units.
+    for nested in &unit.nested_units {
+        for block in &nested.blocks {
             collect_block_used_values(block, &mut used);
         }
     }
@@ -437,7 +440,7 @@ fn collect_instruction_operands(instr: &Instruction, used: &mut HashSet<ValueId>
 /// Remove instructions that define unused values.
 ///
 /// Returns true if any instructions were removed.
-fn remove_dead_instructions(unit: &mut IrScriptUnit, used: &HashSet<ValueId>) -> bool {
+fn remove_dead_instructions(unit: &mut IrCodeUnit, used: &HashSet<ValueId>) -> bool {
     let mut changed = false;
 
     for block in &mut unit.blocks {

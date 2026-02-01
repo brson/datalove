@@ -4,7 +4,7 @@
 //! const expressions to be evaluated at compile time.
 
 use std::sync::Arc;
-use datalove_datafun_ir::{ConstValue, CtfeError, CtfeEvaluator, IrScriptUnit, IrCodeUnit, IrType};
+use datalove_datafun_ir::{ConstValue, CtfeError, CtfeEvaluator, IrCodeUnit, IrType};
 use crate::{IrInterpreter, ScriptEnvironment, UnitCompletion, Destination, ModuleFunctionRegistry};
 
 /// CTFE evaluator backed by the IR interpreter.
@@ -41,7 +41,7 @@ impl Default for InterpCtfeEvaluator {
 }
 
 impl CtfeEvaluator for InterpCtfeEvaluator {
-    fn evaluate(&mut self, unit: &IrScriptUnit, result_type: &IrType) -> Result<ConstValue, CtfeError> {
+    fn evaluate(&mut self, unit: &IrCodeUnit, result_type: &IrType) -> Result<ConstValue, CtfeError> {
         // Create environment with module registry if available (for cross-module CTFE).
         let mut env = match &self.module_registry {
             Some(registry) => ScriptEnvironment::with_module_registry(registry.clone()),
@@ -67,10 +67,9 @@ impl CtfeEvaluator for InterpCtfeEvaluator {
             tydesc: ret_tydesc,
         };
 
-        // Execute the unit (convert to IrCodeUnit for the interpreter).
-        let code_unit = IrCodeUnit::from(unit.clone());
+        // Execute the unit.
         let completion = self.interp
-            .execute_script_unit_in_env(&code_unit, &mut env, ret_dest, Some(result_dest))
+            .execute_script_unit_in_env(unit, &mut env, ret_dest, Some(result_dest))
             .map_err(|e| CtfeError::InterpError(format!("{:?}", e)))?;
 
         // Clean up the environment (frames from executed units).

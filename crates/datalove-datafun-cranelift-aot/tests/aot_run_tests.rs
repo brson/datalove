@@ -2,13 +2,41 @@
 
 use datalove_datafun::pipeline::aot as pipeline_aot;
 use datalove_datafun_ir::{
-    BlockId, ConstValue, IrBlock, IrScriptUnit, IrCodeUnit, IrType, Instruction, Operand, Terminator, ValueId,
+    BlockId, ConstValue, IrBlock, IrCodeUnit, CodeUnitId, CodeUnitContext, ScriptContext,
+    IrType, Instruction, Operand, Terminator, ValueId, SymbolTable,
 };
 
+/// Helper to create a script code unit for tests.
+fn make_script_unit(
+    blocks: Vec<IrBlock>,
+    value_types: Vec<IrType>,
+    result: Option<ValueId>,
+) -> IrCodeUnit {
+    IrCodeUnit {
+        id: CodeUnitId(0),
+        name: String::new(),
+        blocks,
+        value_count: value_types.len() as u32,
+        slot_count: 0,
+        call_site_count: 0,
+        value_types,
+        slot_types: vec![],
+        tracked_slots: vec![],
+        const_values: vec![],
+        context: CodeUnitContext::Script(ScriptContext {
+            unit_end_values: vec![],
+            unit_end_slots: vec![],
+            result,
+            exports: vec![],
+        }),
+        nested_units: vec![],
+    }
+}
+
 /// Create a simple script unit that logs an i32 constant.
-fn create_debuglog_i32_script(value: i32) -> IrScriptUnit {
-    IrScriptUnit {
-        blocks: vec![IrBlock {
+fn create_debuglog_i32_script(value: i32) -> IrCodeUnit {
+    make_script_unit(
+        vec![IrBlock {
             id: BlockId(0),
             params: vec![],
             instructions: vec![
@@ -22,25 +50,14 @@ fn create_debuglog_i32_script(value: i32) -> IrScriptUnit {
             ],
             terminator: Terminator::UnitEnd { result: None },
         }],
-        value_count: 1,
-        slot_count: 0,
-        call_site_count: 0,
-        value_types: vec![IrType::I32],
-        slot_types: vec![],
-        tracked_slots: vec![],
-        unit_end_values: vec![],
-        unit_end_slots: vec![],
-        functions: vec![],
-        symbols: datalove_datafun_ir::SymbolTable::new(),
-        result: None,
-        exports: vec![],
-        const_values: vec![],
-    }
+        vec![IrType::I32],
+        None,
+    )
 }
 
 #[test]
 fn test_link_and_run_debuglog_i32() {
-    let unit = IrCodeUnit::from(create_debuglog_i32_script(42));
+    let unit = create_debuglog_i32_script(42);
 
     // Use pipeline::aot to compile, link, and run.
     let output = pipeline_aot::compile_link_run(&unit)
@@ -56,8 +73,8 @@ fn test_link_and_run_debuglog_i32() {
 
 #[test]
 fn test_link_and_run_debuglog_bool_true() {
-    let unit = IrCodeUnit::from(IrScriptUnit {
-        blocks: vec![IrBlock {
+    let unit = make_script_unit(
+        vec![IrBlock {
             id: BlockId(0),
             params: vec![],
             instructions: vec![
@@ -71,20 +88,9 @@ fn test_link_and_run_debuglog_bool_true() {
             ],
             terminator: Terminator::UnitEnd { result: None },
         }],
-        value_count: 1,
-        slot_count: 0,
-        call_site_count: 0,
-        value_types: vec![IrType::Bool],
-        slot_types: vec![],
-        tracked_slots: vec![],
-        unit_end_values: vec![],
-        unit_end_slots: vec![],
-        functions: vec![],
-        symbols: datalove_datafun_ir::SymbolTable::new(),
-        result: None,
-        exports: vec![],
-        const_values: vec![],
-    });
+        vec![IrType::Bool],
+        None,
+    );
 
     // Use pipeline::aot to compile, link, and run.
     let output = pipeline_aot::compile_link_run(&unit)
@@ -99,8 +105,8 @@ fn test_link_and_run_debuglog_bool_true() {
 
 #[test]
 fn test_link_and_run_multiple_debuglogs() {
-    let unit = IrCodeUnit::from(IrScriptUnit {
-        blocks: vec![IrBlock {
+    let unit = make_script_unit(
+        vec![IrBlock {
             id: BlockId(0),
             params: vec![],
             instructions: vec![
@@ -128,20 +134,9 @@ fn test_link_and_run_multiple_debuglogs() {
             ],
             terminator: Terminator::UnitEnd { result: None },
         }],
-        value_count: 3,
-        slot_count: 0,
-        call_site_count: 0,
-        value_types: vec![IrType::I32, IrType::I32, IrType::I32],
-        slot_types: vec![],
-        tracked_slots: vec![],
-        unit_end_values: vec![],
-        unit_end_slots: vec![],
-        functions: vec![],
-        symbols: datalove_datafun_ir::SymbolTable::new(),
-        result: None,
-        exports: vec![],
-        const_values: vec![],
-    });
+        vec![IrType::I32, IrType::I32, IrType::I32],
+        None,
+    );
 
     // Use pipeline::aot to compile, link, and run.
     let output = pipeline_aot::compile_link_run(&unit)

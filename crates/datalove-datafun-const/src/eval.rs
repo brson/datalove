@@ -13,7 +13,7 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
 use datalove_datafun_ir::{
-    ConstValue, IrType, IrScriptUnit, ConstBindingGraph, ResolvedConsts,
+    ConstValue, IrType, IrCodeUnit, ConstBindingGraph, ResolvedConsts,
     ConstEvalError, CtfeEvaluator, CtfeError, ConstStmtId,
 };
 
@@ -43,7 +43,7 @@ pub enum PreparedConst {
     /// Simple literal extracted without lowering.
     Simple(ConstValue),
     /// Pre-lowered IR unit that needs interpreter execution.
-    Unit(IrScriptUnit),
+    Unit(IrCodeUnit),
 }
 
 /// Evaluate a single pre-lowered const expression.
