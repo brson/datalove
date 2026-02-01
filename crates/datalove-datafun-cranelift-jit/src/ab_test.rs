@@ -12,7 +12,7 @@ use datalove_datafun_interp::{
 };
 use datalove_rt::c::LocalRtHandle;
 
-use crate::optimizing::{OptimizingDispatcher, OptimizingConfig};
+use crate::optimizing::{OptimizingDispatcher, DispatcherConfig};
 use crate::JitError;
 
 /// Mode for A/B testing.
@@ -105,11 +105,11 @@ pub struct ABTestDispatcher {
 impl ABTestDispatcher {
     /// Create a new A/B test dispatcher with default configuration.
     pub fn new(mode: ABMode) -> Result<Self, JitError> {
-        Self::with_config(mode, OptimizingConfig::default())
+        Self::with_config(mode, DispatcherConfig::default())
     }
 
     /// Create a new A/B test dispatcher with custom configuration.
-    pub fn with_config(mode: ABMode, config: OptimizingConfig) -> Result<Self, JitError> {
+    pub fn with_config(mode: ABMode, config: DispatcherConfig) -> Result<Self, JitError> {
         Ok(Self {
             optimized: OptimizingDispatcher::with_config(config)?,
             mode,

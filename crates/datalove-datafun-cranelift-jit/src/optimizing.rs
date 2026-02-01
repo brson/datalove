@@ -9,6 +9,8 @@
 //! 6. Record timing if metrics enabled
 
 use std::any::Any;
+use std::collections::hash_map::DefaultHasher;
+use std::hash::{Hash, Hasher};
 use std::time::Instant;
 
 use datalove_datafun_ir::{FuncRef, IrFunction};
@@ -23,25 +25,142 @@ use crate::metrics::{ExecutionMode, MetricsCollector, MetricsConfig};
 use crate::trampoline::{set_dispatch_context, clear_dispatch_context, DispatchContext};
 use crate::{FunctionKey, FunctionState, JitEngine, JitError};
 
+/// Execution mode for the dispatcher.
+#[derive(Clone, Debug)]
+pub enum DispatcherMode {
+    /// Use threshold-based heuristics.
+    Tuned {
+        /// JIT compilation threshold (number of calls before compiling).
+        jit_threshold: u32,
+        /// Inlining threshold (number of calls before inlining).
+        inline_threshold: u32,
+    },
+    /// Seeded pseudo-random decisions for testing.
+    Chaos {
+        /// Random seed for reproducibility.
+        seed: u64,
+        /// Probability (0-100) of triggering JIT compilation.
+        compile_probability: u32,
+        /// Probability (0-100) of using JIT code when available.
+        use_jit_probability: u32,
+        /// Probability (0-100) of performing inlining.
+        inline_probability: u32,
+    },
+}
+
+impl Default for DispatcherMode {
+    fn default() -> Self {
+        DispatcherMode::Tuned {
+            jit_threshold: 100,
+            inline_threshold: 50,
+        }
+    }
+}
+
 /// Configuration for the optimizing dispatcher.
 #[derive(Clone, Debug)]
-pub struct OptimizingConfig {
-    /// JIT compilation threshold (number of calls before compiling).
-    pub jit_threshold: u32,
-    /// Inlining threshold (number of calls before inlining).
-    pub inline_threshold: u32,
-    /// Whether metrics collection is enabled.
+pub struct DispatcherConfig {
+    /// Enable JIT compilation.
+    pub jit_enabled: bool,
+    /// Enable dynamic inlining.
+    pub inlining_enabled: bool,
+    /// Execution mode.
+    pub mode: DispatcherMode,
+    /// Enable metrics collection.
     pub metrics_enabled: bool,
     /// Configuration for metrics collection.
     pub metrics_config: MetricsConfig,
 }
 
-impl Default for OptimizingConfig {
+impl Default for DispatcherConfig {
     fn default() -> Self {
+        Self::production()
+    }
+}
+
+impl DispatcherConfig {
+    /// Production defaults: JIT + inlining, tuned mode.
+    pub fn production() -> Self {
         Self {
-            jit_threshold: 100,
-            inline_threshold: 50,
+            jit_enabled: true,
+            inlining_enabled: true,
+            mode: DispatcherMode::Tuned {
+                jit_threshold: 100,
+                inline_threshold: 50,
+            },
             metrics_enabled: true,
+            metrics_config: MetricsConfig::default(),
+        }
+    }
+
+    /// Testing: JIT + inlining, chaos mode with given seed.
+    pub fn chaos(seed: u64) -> Self {
+        Self {
+            jit_enabled: true,
+            inlining_enabled: true,
+            mode: DispatcherMode::Chaos {
+                seed,
+                compile_probability: 50,
+                use_jit_probability: 50,
+                inline_probability: 50,
+            },
+            metrics_enabled: false,
+            metrics_config: MetricsConfig::default(),
+        }
+    }
+
+    /// Derive seed from hashable value (for test reproducibility).
+    pub fn chaos_from_hashable<H: Hash>(value: H) -> Self {
+        let mut hasher = DefaultHasher::new();
+        value.hash(&mut hasher);
+        Self::chaos(hasher.finish())
+    }
+
+    /// Pure interpreter: both JIT and inlining disabled.
+    pub fn interpreter_only() -> Self {
+        Self {
+            jit_enabled: false,
+            inlining_enabled: false,
+            mode: DispatcherMode::Tuned {
+                jit_threshold: u32::MAX,
+                inline_threshold: u32::MAX,
+            },
+            metrics_enabled: false,
+            metrics_config: MetricsConfig::default(),
+        }
+    }
+
+    /// JIT only, no inlining.
+    pub fn jit_only() -> Self {
+        Self {
+            jit_enabled: true,
+            inlining_enabled: false,
+            mode: DispatcherMode::Tuned {
+                jit_threshold: 100,
+                inline_threshold: u32::MAX,
+            },
+            metrics_enabled: true,
+            metrics_config: MetricsConfig::default(),
+        }
+    }
+
+    /// Chaos mode with custom probabilities.
+    pub fn chaos_with_probabilities(
+        seed: u64,
+        compile_probability: u32,
+        use_jit_probability: u32,
+        inline_probability: u32,
+    ) -> Self {
+        Self {
+            jit_enabled: true,
+            inlining_enabled: true,
+            mode: DispatcherMode::Chaos {
+                seed,
+                compile_probability: compile_probability.min(100),
+                use_jit_probability: use_jit_probability.min(100),
+                inline_probability: inline_probability.min(100),
+            },
+            metrics_enabled: false,
             metrics_config: MetricsConfig::default(),
         }
     }
@@ -64,21 +183,35 @@ pub struct OptimizingDispatcher {
     /// Metrics collector (optional).
     metrics: Option<MetricsCollector>,
     /// Configuration.
-    config: OptimizingConfig,
+    config: DispatcherConfig,
+    /// Random state for chaos mode (xorshift64).
+    rng_state: u64,
+    /// Call counter for chaos mode RNG.
+    call_counter: u64,
 }
 
 impl OptimizingDispatcher {
     /// Create a new optimizing dispatcher with default configuration.
     pub fn new() -> Result<Self, JitError> {
-        Self::with_config(OptimizingConfig::default())
+        Self::with_config(DispatcherConfig::default())
     }
 
     /// Create a new optimizing dispatcher with custom configuration.
-    pub fn with_config(config: OptimizingConfig) -> Result<Self, JitError> {
+    pub fn with_config(config: DispatcherConfig) -> Result<Self, JitError> {
+        let (jit_threshold, inline_threshold, rng_state) = match &config.mode {
+            DispatcherMode::Tuned { jit_threshold, inline_threshold } => {
+                (*jit_threshold, *inline_threshold, 0)
+            }
+            DispatcherMode::Chaos { seed, .. } => {
+                // In chaos mode, use threshold=1 so compilation is always possible.
+                (1, 1, *seed)
+            }
+        };
+
         let inliner = DynamicInliner::with_config(DynamicInlinerConfig {
-            threshold: config.inline_threshold,
+            threshold: if config.inlining_enabled { inline_threshold } else { u32::MAX },
         });
-        let jit = JitEngine::new(config.jit_threshold)?;
+        let jit = JitEngine::new(jit_threshold)?;
         let metrics = if config.metrics_enabled {
             Some(MetricsCollector::with_config(config.metrics_config.clone()))
         } else {
@@ -90,6 +223,8 @@ impl OptimizingDispatcher {
             jit,
             metrics,
             config,
+            rng_state,
+            call_counter: 0,
         })
     }
 
@@ -114,8 +249,59 @@ impl OptimizingDispatcher {
     }
 
     /// Get the configuration.
-    pub fn config(&self) -> &OptimizingConfig {
+    pub fn config(&self) -> &DispatcherConfig {
         &self.config
+    }
+
+    /// Generate a pseudo-random number in [0, 100) for chaos mode.
+    fn random_percent(&mut self) -> u32 {
+        // Simple xorshift64 PRNG.
+        self.call_counter += 1;
+        let mut x = self.rng_state.wrapping_add(self.call_counter);
+        x ^= x << 13;
+        x ^= x >> 7;
+        x ^= x << 17;
+        self.rng_state = x;
+        (x % 100) as u32
+    }
+
+    /// Decide whether to try compilation in chaos mode.
+    fn chaos_should_compile(&mut self) -> bool {
+        let prob = if let DispatcherMode::Chaos { compile_probability, .. } = &self.config.mode {
+            Some(*compile_probability)
+        } else {
+            None
+        };
+        match prob {
+            Some(p) => self.random_percent() < p,
+            None => true,
+        }
+    }
+
+    /// Decide whether to use JIT code in chaos mode.
+    fn chaos_should_use_jit(&mut self) -> bool {
+        let prob = if let DispatcherMode::Chaos { use_jit_probability, .. } = &self.config.mode {
+            Some(*use_jit_probability)
+        } else {
+            None
+        };
+        match prob {
+            Some(p) => self.random_percent() < p,
+            None => true,
+        }
+    }
+
+    /// Decide whether to perform inlining in chaos mode.
+    fn chaos_should_inline(&mut self) -> bool {
+        let prob = if let DispatcherMode::Chaos { inline_probability, .. } = &self.config.mode {
+            Some(*inline_probability)
+        } else {
+            None
+        };
+        match prob {
+            Some(p) => self.random_percent() < p,
+            None => true,
+        }
     }
 
     /// Check if we have an inlined version of a function.
@@ -248,67 +434,82 @@ impl CallDispatcher for OptimizingDispatcher {
         // Start timing if metrics enabled.
         let start_time = self.metrics.as_mut().and_then(|m| m.start_call());
 
+        // Determine whether to attempt inlining based on mode.
+        let should_inline = self.config.inlining_enabled && self.chaos_should_inline();
+
         // Step 1: Record call site for inlining decisions.
         // The inliner tracks call sites and may trigger inlining.
-        if let Some(call_site_info) = &call_ctx.call_site_info {
-            // Look up the caller function.
-            let caller = match &call_site_info.caller {
-                FuncRef::Local(func_id) => {
-                    call_ctx.exec_ctx.find_local_function(*func_id)
-                }
-                FuncRef::Module { module, func: func_id } => {
-                    call_ctx.registry.get_module_function(*module, *func_id)
-                }
-                FuncRef::External { .. } => None,
-            };
-
-            if let Some(caller) = caller {
-                // Record the call in the inliner (may trigger inlining).
-                let inliner_result = self.inliner.dispatch_call(
-                    func_ref,
-                    func,
-                    args,
-                    ret_dest,
-                    rt_handle,
-                    DispatchCallContext {
-                        exec_ctx: call_ctx.exec_ctx,
-                        registry: call_ctx.registry,
-                        frames: call_ctx.frames,
-                        interp: call_ctx.interp,
-                        call_site_info: call_ctx.call_site_info.clone(),
-                    },
-                );
-
-                // Check if inlining was performed.
-                if self.inliner.get_inlined_function(&call_site_info.caller).is_some() {
-                    if let Some(metrics) = &mut self.metrics {
-                        metrics.record_inlining(&call_site_info.caller);
+        if should_inline {
+            if let Some(call_site_info) = &call_ctx.call_site_info {
+                // Look up the caller function.
+                let caller = match &call_site_info.caller {
+                    FuncRef::Local(func_id) => {
+                        call_ctx.exec_ctx.find_local_function(*func_id)
                     }
-                }
+                    FuncRef::Module { module, func: func_id } => {
+                        call_ctx.registry.get_module_function(*module, *func_id)
+                    }
+                    FuncRef::External { .. } => None,
+                };
 
-                // Inliner always returns NotHandled, so we continue.
-                let _ = inliner_result;
-                let _ = caller;
+                if let Some(caller) = caller {
+                    // Record the call in the inliner (may trigger inlining).
+                    let inliner_result = self.inliner.dispatch_call(
+                        func_ref,
+                        func,
+                        args,
+                        ret_dest,
+                        rt_handle,
+                        DispatchCallContext {
+                            exec_ctx: call_ctx.exec_ctx,
+                            registry: call_ctx.registry,
+                            frames: call_ctx.frames,
+                            interp: call_ctx.interp,
+                            call_site_info: call_ctx.call_site_info.clone(),
+                        },
+                    );
+
+                    // Check if inlining was performed.
+                    if self.inliner.get_inlined_function(&call_site_info.caller).is_some() {
+                        if let Some(metrics) = &mut self.metrics {
+                            metrics.record_inlining(&call_site_info.caller);
+                        }
+                    }
+
+                    // Inliner always returns NotHandled, so we continue.
+                    let _ = inliner_result;
+                    let _ = caller;
+                }
             }
         }
 
         // Step 2: Check if we have an inlined version.
         let is_inlined = self.has_inlined_version(func_ref);
 
+        // Determine whether to attempt JIT based on mode.
+        let should_try_jit = self.config.jit_enabled && self.chaos_should_compile();
+
         // Step 3-4: Try JIT execution.
         // Note: We always pass the original function to JIT. The inliner modifies
         // the caller, not the callee, so the callee IR is the same either way.
-        if let Some(result) = self.try_jit_execution(
-            func_ref,
-            func,
-            args,
-            ret_dest,
-            rt_handle,
-            &mut call_ctx,
-            start_time,
-            is_inlined,
-        ) {
-            return result;
+        if should_try_jit {
+            // In chaos mode, we may also decide not to use the JIT even if compiled.
+            let use_jit_if_compiled = self.chaos_should_use_jit();
+
+            if use_jit_if_compiled {
+                if let Some(result) = self.try_jit_execution(
+                    func_ref,
+                    func,
+                    args,
+                    ret_dest,
+                    rt_handle,
+                    &mut call_ctx,
+                    start_time,
+                    is_inlined,
+                ) {
+                    return result;
+                }
+            }
         }
 
         // Step 5: Fall back to interpreter.
@@ -330,5 +531,197 @@ impl CallDispatcher for OptimizingDispatcher {
 
     fn get_optimized_function(&self, func_ref: &FuncRef) -> Option<&IrFunction> {
         self.inliner.get_inlined_function(func_ref)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_dispatcher_config_production() {
+        let config = DispatcherConfig::production();
+        assert!(config.jit_enabled);
+        assert!(config.inlining_enabled);
+        assert!(config.metrics_enabled);
+        match config.mode {
+            DispatcherMode::Tuned { jit_threshold, inline_threshold } => {
+                assert_eq!(jit_threshold, 100);
+                assert_eq!(inline_threshold, 50);
+            }
+            _ => panic!("Expected Tuned mode"),
+        }
+    }
+
+    #[test]
+    fn test_dispatcher_config_chaos() {
+        let config = DispatcherConfig::chaos(12345);
+        assert!(config.jit_enabled);
+        assert!(config.inlining_enabled);
+        assert!(!config.metrics_enabled);
+        match config.mode {
+            DispatcherMode::Chaos { seed, compile_probability, use_jit_probability, inline_probability } => {
+                assert_eq!(seed, 12345);
+                assert_eq!(compile_probability, 50);
+                assert_eq!(use_jit_probability, 50);
+                assert_eq!(inline_probability, 50);
+            }
+            _ => panic!("Expected Chaos mode"),
+        }
+    }
+
+    #[test]
+    fn test_dispatcher_config_interpreter_only() {
+        let config = DispatcherConfig::interpreter_only();
+        assert!(!config.jit_enabled);
+        assert!(!config.inlining_enabled);
+        assert!(!config.metrics_enabled);
+    }
+
+    #[test]
+    fn test_dispatcher_config_jit_only() {
+        let config = DispatcherConfig::jit_only();
+        assert!(config.jit_enabled);
+        assert!(!config.inlining_enabled);
+        assert!(config.metrics_enabled);
+    }
+
+    #[test]
+    fn test_dispatcher_config_chaos_from_hashable() {
+        let config1 = DispatcherConfig::chaos_from_hashable("test_input");
+        let config2 = DispatcherConfig::chaos_from_hashable("test_input");
+        let config3 = DispatcherConfig::chaos_from_hashable("other_input");
+
+        // Same input should produce same seed.
+        match (&config1.mode, &config2.mode) {
+            (
+                DispatcherMode::Chaos { seed: s1, .. },
+                DispatcherMode::Chaos { seed: s2, .. },
+            ) => {
+                assert_eq!(s1, s2);
+            }
+            _ => panic!("Expected Chaos modes"),
+        }
+
+        // Different input should produce different seed.
+        match (&config1.mode, &config3.mode) {
+            (
+                DispatcherMode::Chaos { seed: s1, .. },
+                DispatcherMode::Chaos { seed: s3, .. },
+            ) => {
+                assert_ne!(s1, s3);
+            }
+            _ => panic!("Expected Chaos modes"),
+        }
+    }
+
+    #[test]
+    fn test_dispatcher_config_chaos_with_probabilities() {
+        let config = DispatcherConfig::chaos_with_probabilities(42, 80, 60, 40);
+        match config.mode {
+            DispatcherMode::Chaos { seed, compile_probability, use_jit_probability, inline_probability } => {
+                assert_eq!(seed, 42);
+                assert_eq!(compile_probability, 80);
+                assert_eq!(use_jit_probability, 60);
+                assert_eq!(inline_probability, 40);
+            }
+            _ => panic!("Expected Chaos mode"),
+        }
+    }
+
+    #[test]
+    fn test_dispatcher_config_chaos_probability_clamping() {
+        let config = DispatcherConfig::chaos_with_probabilities(0, 200, 150, 999);
+        match config.mode {
+            DispatcherMode::Chaos { compile_probability, use_jit_probability, inline_probability, .. } => {
+                assert_eq!(compile_probability, 100);
+                assert_eq!(use_jit_probability, 100);
+                assert_eq!(inline_probability, 100);
+            }
+            _ => panic!("Expected Chaos mode"),
+        }
+    }
+
+    #[test]
+    fn test_optimizing_dispatcher_creation_default() {
+        let dispatcher = OptimizingDispatcher::new();
+        assert!(dispatcher.is_ok());
+    }
+
+    #[test]
+    fn test_optimizing_dispatcher_creation_with_config() {
+        let config = DispatcherConfig::chaos(42);
+        let dispatcher = OptimizingDispatcher::with_config(config);
+        assert!(dispatcher.is_ok());
+    }
+
+    #[test]
+    fn test_optimizing_dispatcher_chaos_rng_determinism() {
+        // Create two dispatchers with the same chaos seed.
+        let config1 = DispatcherConfig::chaos(12345);
+        let config2 = DispatcherConfig::chaos(12345);
+
+        let mut d1 = OptimizingDispatcher::with_config(config1).unwrap();
+        let mut d2 = OptimizingDispatcher::with_config(config2).unwrap();
+
+        // They should produce the same random sequence.
+        for _ in 0..100 {
+            assert_eq!(d1.random_percent(), d2.random_percent());
+        }
+    }
+
+    #[test]
+    fn test_optimizing_dispatcher_chaos_rng_different_seeds() {
+        let config1 = DispatcherConfig::chaos(1);
+        let config2 = DispatcherConfig::chaos(2);
+
+        let mut d1 = OptimizingDispatcher::with_config(config1).unwrap();
+        let mut d2 = OptimizingDispatcher::with_config(config2).unwrap();
+
+        // Different seeds should produce different sequences.
+        let mut different_count = 0;
+        for _ in 0..100 {
+            if d1.random_percent() != d2.random_percent() {
+                different_count += 1;
+            }
+        }
+        // Should be mostly different (allow some collisions).
+        assert!(different_count > 50);
+    }
+
+    #[test]
+    fn test_chaos_probability_methods() {
+        // With 100% probability, should always return true.
+        let config = DispatcherConfig::chaos_with_probabilities(42, 100, 100, 100);
+        let mut d = OptimizingDispatcher::with_config(config).unwrap();
+
+        for _ in 0..100 {
+            assert!(d.chaos_should_compile());
+            assert!(d.chaos_should_use_jit());
+            assert!(d.chaos_should_inline());
+        }
+
+        // With 0% probability, should always return false.
+        let config = DispatcherConfig::chaos_with_probabilities(42, 0, 0, 0);
+        let mut d = OptimizingDispatcher::with_config(config).unwrap();
+
+        for _ in 0..100 {
+            assert!(!d.chaos_should_compile());
+            assert!(!d.chaos_should_use_jit());
+            assert!(!d.chaos_should_inline());
+        }
+    }
+
+    #[test]
+    fn test_tuned_mode_always_returns_true_for_chaos_methods() {
+        let config = DispatcherConfig::production();
+        let mut d = OptimizingDispatcher::with_config(config).unwrap();
+
+        // In tuned mode, chaos methods should always return true.
+        for _ in 0..100 {
+            assert!(d.chaos_should_compile());
+            assert!(d.chaos_should_use_jit());
+            assert!(d.chaos_should_inline());
+        }
     }
 }

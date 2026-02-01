@@ -24,7 +24,7 @@ pub mod metrics;
 
 pub use trampoline::{DispatchContext, set_dispatch_context, clear_dispatch_context};
 pub use chaos::ChaosDispatcher;
-pub use optimizing::OptimizingDispatcher;
+pub use optimizing::{OptimizingDispatcher, DispatcherConfig, DispatcherMode};
 pub use ab_test::{ABTestDispatcher, ABMode};
 pub use metrics::{MetricsCollector, FunctionMetrics, AggregateMetrics, ExecutionMode};
 
