@@ -657,7 +657,7 @@ fn evaluate_single_const<'db>(
 /// # Options
 ///
 /// - `skip_const_inlining`: Skip const inlining phase (for testing)
-/// - `skip_specialization`: Skip comptime specialization (for differential testing)
+/// - `skip_specialization`: Skip const parameter specialization (for differential testing)
 pub fn lower_module_graph_with_evaluator<'db>(
     db: &'db dyn DbClone,
     parsed_graph: ParsedModuleGraph<'db>,
@@ -690,7 +690,7 @@ pub fn lower_module_graph_with_evaluator<'db>(
         evaluate_all_module_consts(db_salsa, parsed_graph, typecheck_result, evaluator, &lowered_functions, func_id_map)
     };
 
-    // Phase 5c: Specialize comptime functions (union-branch transformation).
+    // Phase 5c: Specialize const parameter functions (union-branch transformation).
     // This transforms functions with const parameters and rewrites call sites.
     let lowered_functions = if skip_specialization {
         lowered_functions
@@ -715,10 +715,10 @@ pub fn lower_module_graph_with_evaluator<'db>(
     }
 }
 
-/// Specialize functions with comptime parameters using union-branch transformation.
+/// Specialize functions with const parameters using union-branch transformation.
 ///
 /// This performs two transformations:
-/// 1. Callee transformation: Functions with comptime params get transformed to
+/// 1. Callee transformation: Functions with const params get transformed to
 ///    dispatch on a discriminant (union-branch form).
 /// 2. Call site transformation: ComptimeCall instructions get transformed to
 ///    Const(discriminant) + Call with modified args.

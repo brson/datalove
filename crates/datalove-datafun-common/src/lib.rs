@@ -258,10 +258,10 @@ pub struct TypeFunction<'db> {
 }
 
 // ============================================================================
-// Comptime Call Site Registry
+// Const Parameter Specialization Registry
 // ============================================================================
 
-/// A call site with comptime arguments, recorded during typecheck.
+/// A call site with const parameter arguments, recorded during typecheck.
 ///
 /// Note: We record const binding *names*, not values. The values are looked up
 /// later from ResolvedConsts during specialization (after const evaluation).
@@ -272,21 +272,21 @@ pub struct ComptimeCallSite<'db> {
     pub call_expr_id: salsa::Id,
     /// Name of the called function.
     pub func_name: InternedText<'db>,
-    /// Indices of comptime parameters in the callee.
+    /// Indices of const parameters in the callee.
     pub comptime_param_indices: Vec<usize>,
-    /// Names of const bindings used as comptime args (NOT values yet).
+    /// Names of const bindings used as const parameter args (NOT values yet).
     pub comptime_arg_names: Vec<InternedText<'db>>,
 }
 
-/// Registry of comptime call sites and functions, collected during typecheck.
+/// Registry of const parameter call sites and functions, collected during typecheck.
 ///
 /// Uses BTreeMap instead of HashMap to satisfy Hash/Eq requirements for Salsa tracking.
 #[derive(Clone, Debug, Default, Hash, PartialEq, Eq)]
 #[derive(salsa::Update)]
 pub struct ComptimeCallSiteRegistry<'db> {
-    /// All call sites with comptime args.
+    /// All call sites with const parameter args.
     pub call_sites: Vec<ComptimeCallSite<'db>>,
-    /// Functions that have comptime parameters (name → param indices).
+    /// Functions that have const parameters (name -> param indices).
     pub comptime_funcs: BTreeMap<InternedText<'db>, Vec<usize>>,
 }
 
@@ -296,22 +296,22 @@ impl<'db> ComptimeCallSiteRegistry<'db> {
         Self::default()
     }
 
-    /// Check if there are any comptime functions or call sites.
+    /// Check if there are any const parameter functions or call sites.
     pub fn is_empty(&self) -> bool {
         self.call_sites.is_empty() && self.comptime_funcs.is_empty()
     }
 
-    /// Register a function with comptime parameters.
+    /// Register a function with const parameters.
     pub fn register_comptime_func(&mut self, name: InternedText<'db>, comptime_indices: Vec<usize>) {
         self.comptime_funcs.entry(name).or_insert(comptime_indices);
     }
 
-    /// Record a call site with comptime arguments.
+    /// Record a call site with const parameter arguments.
     pub fn record_call_site(&mut self, call_site: ComptimeCallSite<'db>) {
         self.call_sites.push(call_site);
     }
 
-    /// Get comptime parameter indices for a function.
+    /// Get const parameter indices for a function.
     pub fn get_comptime_indices(&self, func_name: InternedText<'db>) -> Option<&Vec<usize>> {
         self.comptime_funcs.get(&func_name)
     }

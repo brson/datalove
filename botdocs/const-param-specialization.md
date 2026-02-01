@@ -1,9 +1,9 @@
-# Comptime Arguments: Research & Design
+# Const Parameter Specialization: Research & Design
 
 ## Overview
 
-This document analyzes the feasibility of adding Zig-style comptime arguments to datalove,
-using `const` as the argument modifier. Comptime arguments are function parameters whose
+This document analyzes the feasibility of adding Zig-style const parameter specialization to datalove,
+using `const` as the argument modifier. Const parameters are function parameters whose
 values must be known at compile time, enabling function specialization based on those values.
 
 ```
@@ -104,7 +104,7 @@ pub struct FunParam<'db> {
 **Option B** better serves the stated priorities:
 - **Simplicity**: Each flag has one meaning
 - **Separation of concerns**: Runtime vs compile-time are orthogonal
-- **Future path**: Types as comptime values use same mechanism
+- **Future path**: Types as const values use same mechanism
 
 ## Specialization Strategy
 
@@ -112,7 +112,7 @@ pub struct FunParam<'db> {
 
 As a whole-program compiler, datalove can:
 1. See all call sites before codegen
-2. Enumerate all unique comptime argument combinations
+2. Enumerate all unique const parameter combinations
 3. Generate exactly the needed specializations
 4. No need for on-demand instantiation machinery
 
@@ -139,7 +139,7 @@ This location:
 ```
 1. COLLECT PHASE (per module)
    For each function call in typechecked AST:
-     If callee has comptime params:
+     If callee has const parameters:
        Extract const argument values
        Record (callee, const_values) → call_site
 
@@ -150,8 +150,8 @@ This location:
 
 3. GENERATE PHASE (per specialization)
    Clone function AST
-   Replace comptime params with local const bindings
-   Remove comptime params from signature
+   Replace const parameters with local const bindings
+   Remove const parameters from signature
    Add to module's function list
 
 4. REWRITE PHASE (per module)
@@ -229,8 +229,8 @@ pub struct TypeFunction<'db> {
 ### Phase 3: Type Checking (Moderate)
 
 **Files to modify:**
-- `datafun-tycheck/src/synthesize.rs`: Validate comptime args are const expressions
-- `datafun-tycheck/src/context.rs`: Track comptime arg values for specialization
+- `datafun-tycheck/src/synthesize.rs`: Validate const args are const expressions
+- `datafun-tycheck/src/context.rs`: Track const arg values for specialization
 
 **Key validation:**
 ```rust
@@ -282,7 +282,7 @@ The lowering pass should remain largely unchanged:
 
 **Minor changes:**
 - `datafun-ir/src/lib.rs`: Maybe add `is_comptime` to IR ParamMode if needed
-- `datafun-lower/src/lib.rs`: Skip comptime params when lowering specialized functions
+- `datafun-lower/src/lib.rs`: Skip const parameters when lowering specialized functions
 
 ## Compile-Time Considerations
 
@@ -295,7 +295,7 @@ For a scripting language prioritizing compile speed:
 | Parse `const` keyword | Negligible |
 | Track comptime flag | Negligible |
 | Detect const arguments | O(1) per call site |
-| Evaluate comptime args | Reuse existing CTFE |
+| Evaluate const args | Reuse existing CTFE |
 | Generate specializations | O(specializations × function_size) |
 | Clone AST for specialization | Moderate - can optimize |
 
@@ -312,7 +312,7 @@ Limit specialization to avoid compile-time blowup:
 
 1. **Depth limit**: Max 3 levels of nested comptime calls
 2. **Instance limit**: Max 100 specializations per function
-3. **Size limit**: Max 10 comptime params per function
+3. **Size limit**: Max 10 const parameters per function
 4. **Error on exceeded**: Clear error message, not silent degradation
 
 ## Future: Type Parameters
@@ -358,7 +358,7 @@ Total estimate: 9-11 days for basic implementation.
 
 ### Alternative: No Specialization (Just Inlining)
 
-Always inline comptime-param functions at call sites.
+Always inline const-param functions at call sites.
 
 **Pros**: Simpler, no new pass.
 **Cons**: Code bloat, poor cache behavior, loses function identity.
@@ -372,7 +372,7 @@ Specialize lazily at runtime, cache results.
 
 ### Alternative: Type-Directed Specialization Only
 
-Only specialize when comptime args affect types (like Rust).
+Only specialize when const args affect types (like Rust).
 
 **Pros**: Fewer specializations.
 **Cons**: Less powerful, can't optimize on values like loop bounds.
@@ -484,7 +484,7 @@ apply(f, x)  // dispatches on tag
 ```
 
 **Connection to union-branch**: Union-branch is essentially *defunctionalization of
-comptime values*. We take the open set of possible values and close it into an enum,
+const values*. We take the open set of possible values and close it into an enum,
 then dispatch via `apply` (match).
 
 #### 6. Partial Evaluation (Jones, Gomard, Sestoft)
@@ -493,12 +493,12 @@ then dispatch via `apply` (match).
 by evaluating static (known) inputs at compile time, leaving residual code for dynamic inputs.
 
 **Connection to union-branch**: Within each branch of the union dispatch, we perform
-partial evaluation—the comptime value is static, enabling constant folding, dead code
+partial evaluation—the const value is static, enabling constant folding, dead code
 elimination, and loop unrolling within that branch.
 
 ### The Union-Branch Approach Formalized
 
-Given a function with comptime parameter:
+Given a function with const parametereter:
 
 ```
 fun f(const c: T, x: U) -> R
@@ -558,7 +558,7 @@ Call sites transform: `f(v1, x)` → `f_unified(ComptimeC::V1, x)`
 The union-branch approach can be characterized as:
 
 - **Intensional polymorphism** at the value level (runtime dispatch on static values)
-- **Defunctionalization** of the comptime value space
+- **Defunctionalization** of the const value space
 - **Partial monomorphization** (one function, multiple specialized paths)
 - **Type-preserving** (no boxing, values maintain concrete types within branches)
 
@@ -571,7 +571,7 @@ This places it in the same family as:
 ### Implementation Sketch for Datalove
 
 ```rust
-/// Collected comptime values for a parameter
+/// Collected const values for a parameter
 struct ComptimeValueSet {
     param_index: usize,
     values: Vec<ConstValue>,  // all values seen at call sites
@@ -582,7 +582,7 @@ fn union_branch_transform(
     func: &StmtFun,
     value_sets: &[ComptimeValueSet],
 ) -> StmtFun {
-    // 1. Build enum type for each comptime param
+    // 1. Build enum type for each const parameter
     // 2. Wrap body in nested match on enum tags
     // 3. Within each branch, bind const to concrete value
     // 4. Existing const-folding handles the rest
@@ -629,7 +629,7 @@ Suggested thresholds:
 ## Extension to Type Arguments: Two Paths
 
 Having established union-branch for const *values*, we can extend to type arguments
-via two distinct paths: **Rust-style type parameters** or **Zig-style comptime types**.
+via two distinct paths: **Rust-style type parameters** or **const parameter types**.
 
 ### Path 1: Rust-Style Type Parameters (Separate Namespace)
 
@@ -749,7 +749,7 @@ the compiler knows all instantiations and can verify each branch type-checks.
 
 ### Path 2: Zig-Style Comptime Types (Types as Values)
 
-In Zig, types are first-class comptime values:
+In Zig, types are first-class const values:
 
 ```zig
 fn swap(comptime T: type, x: T, y: T) -> struct { T, T } {
@@ -822,11 +822,11 @@ Richer but more complex. Needed for reflection/introspection.
 
 #### Dependent Types (Light)
 
-Zig-style comptime types create a form of dependent typing:
+const parameter types create a form of dependent typing:
 
 ```
 fun make_array(const T: type, const N: i32) -> [T; N]
-    // Return type depends on comptime values T and N
+    // Return type depends on const values T and N
 ```
 
 With union-branch, this "just works":
@@ -890,7 +890,7 @@ var x: {first: i32, second: bool} = ...          // MyPair substituted
 
 | Aspect | Rust-Style | Zig-Style |
 |--------|------------|-----------|
-| Conceptual model | Types and values separate | Types are comptime values |
+| Conceptual model | Types and values separate | Types are const values |
 | Syntax | `<T>` type parameters | `const T: type` argument |
 | Type bounds | Traits/concepts | Ad-hoc (check at instantiation) |
 | Type computation | Associated types only | Full CTFE on types |
@@ -902,7 +902,7 @@ var x: {first: i32, second: bool} = ...          // MyPair substituted
 
 **Zig-style is more natural** given the union-branch approach:
 
-1. **Uniform machinery**: Types as comptime values use same enum/match as integers
+1. **Uniform machinery**: Types as const values use same enum/match as integers
 2. **Simpler implementation**: One namespace, one specialization mechanism
 3. **More expressive**: Type computation for free via CTFE
 4. **Consistent syntax**: `const n: i32` and `const T: type` parallel
@@ -932,7 +932,7 @@ const MyType: type = i32
 ```
 fun identity(const T: type, x: T) -> T
 ```
-- Parameter type `T` depends on comptime arg
+- Parameter type `T` depends on const arg
 - Union-branch over type enums
 - Per-branch type substitution
 
@@ -1002,7 +1002,7 @@ if you can dispatch on a finite set of known instantiations**.
 
 ## Conclusion
 
-Comptime arguments are feasible with moderate implementation effort. The existing CTFE
+Const parameters are feasible with moderate implementation effort. The existing CTFE
 infrastructure provides the foundation.
 
 ### For Full Monomorphization
@@ -1016,7 +1016,7 @@ Key design decisions:
 ### For Union-Branch Approach
 
 Key design decisions:
-1. **Defunctionalize comptime values** into closed enums
+1. **Defunctionalize const values** into closed enums
 2. **Single function with match dispatch** - better icache, compile time
 3. **Const-fold within branches** - reuse existing CTFE infrastructure
 4. **Adaptive threshold** - mono for few instances, union for many

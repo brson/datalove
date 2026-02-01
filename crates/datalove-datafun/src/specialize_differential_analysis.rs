@@ -1,7 +1,7 @@
-//! Differential testing for comptime specialization.
+//! Differential testing for const parameter specialization.
 //!
 //! This module provides functions to compare execution results with and without
-//! comptime specialization enabled. The outputs should be identical, verifying
+//! const parameter specialization enabled. The outputs should be identical, verifying
 //! that the union-branch transformation is semantically correct.
 //!
 //! # Usage

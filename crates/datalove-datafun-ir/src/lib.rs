@@ -842,9 +842,9 @@ pub enum Instruction {
         args: Vec<Operand>,
     },
 
-    /// Call to a function with comptime (const) parameters.
+    /// Call to a function with const parameters.
     ///
-    /// This is emitted during lowering when the callee has comptime parameters.
+    /// This is emitted during lowering when the callee has const parameters.
     /// Contains metadata for the specialization pass to rewrite the call.
     ///
     /// **Behavior without specialization:** Acts exactly like `Call` - the interpreter
@@ -852,17 +852,17 @@ pub enum Instruction {
     ///
     /// **Behavior with specialization:** The specialization pass transforms this to
     /// a `Const` instruction (for the discriminant) followed by a `Call` with the
-    /// comptime args removed and discriminant added as first arg.
+    /// const args removed and discriminant added as first arg.
     ///
     /// **Ownership:** Same as `Call`.
     ComptimeCall {
         dest: ValueId,
         func: FuncRef,
-        /// Original arguments including comptime args.
+        /// Original arguments including const parameter args.
         args: Vec<Operand>,
         /// Pre-computed discriminant for this instantiation (from typecheck).
         discriminant: u32,
-        /// Indices of comptime parameters (to be removed during specialization).
+        /// Indices of const parameters (to be removed during specialization).
         comptime_param_indices: Vec<usize>,
     },
 

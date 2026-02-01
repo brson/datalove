@@ -1,8 +1,8 @@
-# Comptime Arguments Implementation Plan
+# Const Parameter Specialization Implementation Plan
 
 ## Union-Branch Approach for `const` Parameters
 
-This document provides a detailed implementation plan for adding Zig-style comptime arguments
+This document provides a detailed implementation plan for adding Zig-style const parameter specialization
 to datalove using the **union-branch specialization** strategy.
 
 ## Table of Contents
@@ -40,7 +40,7 @@ let x = repeat(N, "ab")  // N is a const binding, value looked up
 
 ### Initial Restriction: Const-Binding-Only Arguments
 
-To avoid complexity with CTFE ordering, comptime arguments must be **const binding names**:
+To avoid complexity with CTFE ordering, const parameter specialization must be **const binding names**:
 
 ```
 const N = 5
@@ -115,11 +115,11 @@ Specialization happens **inside the lowering phase**, after const evaluation:
 
 ### Why This Ordering Works
 
-1. **Typecheck** records which call sites have comptime args (just names, no values yet)
-2. **Phase 5a** lowers all functions to IR (including comptime-param functions)
+1. **Typecheck** records which call sites have const args (just names, no values yet)
+2. **Phase 5a** lowers all functions to IR (including const-param functions)
 3. **Phase 5b** evaluates all const bindings → `ResolvedConsts`
 4. **Phase 5c (NEW)** specializes:
-   - Look up comptime arg values from `ResolvedConsts` (no CTFE needed!)
+   - Look up const arg values from `ResolvedConsts` (no CTFE needed!)
    - Transform IR functions to union-branch form
    - Rewrite call instructions
 5. **Phase 5d** assembles and inlines consts
@@ -143,25 +143,25 @@ datalove-datafun-specialize/
 ### Key Data Structures
 
 ```rust
-/// Recorded during typecheck: a call site with comptime args
+/// Recorded during typecheck: a call site with const args
 #[derive(Clone, Debug)]
 pub struct ComptimeCallSite<'db> {
     /// The call expression (for locating in IR later)
     pub call_expr_id: salsa::Id,
     /// Name of the called function
     pub func_name: InternedText<'db>,
-    /// Indices of comptime parameters in the callee
+    /// Indices of const parametereters in the callee
     pub comptime_param_indices: Vec<usize>,
-    /// Names of const bindings used as comptime args (NOT values yet)
+    /// Names of const bindings used as const args (NOT values yet)
     pub comptime_arg_names: Vec<InternedText<'db>>,
 }
 
 /// Collected during typecheck for a module
 #[derive(Clone, Debug, Default)]
 pub struct ComptimeCallSiteRegistry<'db> {
-    /// All call sites with comptime args
+    /// All call sites with const args
     pub call_sites: Vec<ComptimeCallSite<'db>>,
-    /// Functions that have comptime parameters
+    /// Functions that have const parametereters
     pub comptime_funcs: HashMap<InternedText<'db>, Vec<usize>>,  // name → param indices
 }
 
@@ -174,14 +174,14 @@ pub struct ResolvedComptimeCall {
     pub comptime_values: Vec<ConstValue>,
 }
 
-/// Specialization info for one comptime-param function
+/// Specialization info for one const-param function
 #[derive(Clone, Debug)]
 pub struct FuncSpecialization {
     /// Original function's FuncId
     pub original_func_id: FuncId,
     /// The enum type for dispatch
     pub enum_type: IrType,
-    /// Map from comptime values to variant index
+    /// Map from const values to variant index
     pub value_to_variant: HashMap<Vec<ConstValue>, u32>,
     /// All unique instantiations
     pub instantiations: Vec<Vec<ConstValue>>,
@@ -344,7 +344,7 @@ fn synthesize_function_call<'db>(
 
     // Existing argument checking...
 
-    // NEW: Validate comptime arguments
+    // NEW: Validate const parameter specialization
     for (i, (arg, &is_comptime)) in call.args(ctx.db).iter()
         .zip(param_comptime.iter())
         .enumerate()
@@ -387,7 +387,7 @@ impl<'db> TypeContext<'db> {
 
 **Note**: This intentionally rejects literals like `foo(3, x)` even though `3` is
 obviously compile-time known. The restriction simplifies the implementation by
-ensuring all comptime values are already in `ResolvedConsts`. Future extensions
+ensuring all const values are already in `ResolvedConsts`. Future extensions
 can relax this to allow literals and expressions.
 
 ---
@@ -423,19 +423,19 @@ fn synthesize_function_call<'db>(
     let func_type = ctx.lookup_function(call.name(ctx.db))?;
     let param_comptime = func_type.param_comptime(ctx.db);
 
-    // Check for comptime parameters
+    // Check for const parametereters
     let comptime_indices: Vec<usize> = param_comptime.iter()
         .enumerate()
         .filter_map(|(i, &is_ct)| if is_ct { Some(i) } else { None })
         .collect();
 
     if !comptime_indices.is_empty() {
-        // Record this function has comptime params
+        // Record this function has const parameters
         ctx.comptime_registry.comptime_funcs
             .entry(call.name(ctx.db))
             .or_insert_with(|| comptime_indices.clone());
 
-        // Validate and record comptime arguments
+        // Validate and record const parameter specialization
         let mut arg_names = Vec::new();
         for &i in &comptime_indices {
             let arg = call.args(ctx.db)[i];
@@ -459,7 +459,7 @@ fn synthesize_function_call<'db>(
 ### 3.3 Validate Const-Binding-Only
 
 ```rust
-/// Validate that a comptime argument is a const binding name
+/// Validate that a const parameter is a const binding name
 fn validate_comptime_arg<'db>(
     ctx: &TypeContext<'db>,
     arg: ExprFun<'db>,
@@ -479,7 +479,7 @@ fn validate_comptime_arg<'db>(
         }
         _ => Err(TypeError::ComptimeArgNotConst {
             param_idx,
-            reason: "comptime argument must be a const binding name".to_string(),
+            reason: "const parameter must be a const binding name".to_string(),
         }),
     }
 }
@@ -537,7 +537,7 @@ pub fn lower_module_graph_with_evaluator<'db>(
 **File**: `datalove-datafun-specialize/src/lib.rs`
 
 ```rust
-/// Resolve comptime arg names to values using already-evaluated consts
+/// Resolve const arg names to values using already-evaluated consts
 fn resolve_comptime_calls(
     registry: &ComptimeCallSiteRegistry,
     resolved_consts: &ResolvedConsts,
@@ -628,7 +628,7 @@ fn transform_ir_function(
     new_param_types.push(spec.enum_type.clone());
     new_param_modes.push(ParamMode::In);
 
-    // Add non-comptime params (renumbered)
+    // Add non-const parameters (renumbered)
     for (i, (param, (ty, mode))) in func.params.iter()
         .zip(func.param_types.iter().zip(func.param_modes.iter()))
         .enumerate()
@@ -743,7 +743,7 @@ fn clone_blocks_with_const_substitution(
         let mut new_block = block.clone();
         new_block.id = BlockId(base_block_id.0 + i as u32);
 
-        // Prepend const instructions for comptime params
+        // Prepend const instructions for const parameters
         if i == 0 {
             let mut const_instrs: Vec<Instruction> = comptime_param_indices.iter()
                 .zip(values.iter())
@@ -759,7 +759,7 @@ fn clone_blocks_with_const_substitution(
             new_block.instructions = const_instrs;
         }
 
-        // Rewrite any references to comptime params → the const values
+        // Rewrite any references to const parameters → the const values
         rewrite_param_references(&mut new_block, comptime_param_indices);
 
         // Adjust block references in terminators
@@ -800,7 +800,7 @@ fn rewrite_call_instructions(
                     if let Some((func_name, variant_idx)) = lookup_call(instr, &call_lookup) {
                         let spec = &spec_plan[&func_name];
 
-                        // Build new args: [enum_variant, non-comptime args...]
+                        // Build new args: [enum_variant, non-const args...]
                         let mut new_args = Vec::new();
 
                         // Add enum variant construction
@@ -808,7 +808,7 @@ fn rewrite_call_instructions(
                         let variant_val = /* value from EnumVariant instr */;
                         new_args.push(Operand::Value(variant_val));
 
-                        // Add non-comptime args
+                        // Add non-const args
                         let comptime_indices = &registry.comptime_funcs[&func_name];
                         for (i, arg) in args.iter().enumerate() {
                             if !comptime_indices.contains(&i) {
@@ -830,7 +830,7 @@ fn rewrite_call_instructions(
 ## Phase 5: Const Folding Within Branches
 
 After union-branch transformation, each branch contains `const` bindings for the
-comptime parameter values. The **existing CTFE infrastructure** handles this automatically.
+const parametereter values. The **existing CTFE infrastructure** handles this automatically.
 
 ### 5.1 How Existing Const Folding Works
 
@@ -857,7 +857,7 @@ inlines `3` wherever `n` is used within that branch.
 
 Because we:
 1. Transform at IR level (Phase 4)
-2. Insert normal `Instruction::Const` for comptime param values
+2. Insert normal `Instruction::Const` for const parameter values
 3. Let the existing phase 5b/5d handle evaluation and inlining
 
 The const folding is **free** — we just emit the right IR structure.
@@ -898,7 +898,7 @@ separate Salsa query, avoiding cache invalidation complexity.
 
 The Cranelift backend can optimize the generated code:
 
-1. **Constant propagation**: Within each branch, comptime values are constants
+1. **Constant propagation**: Within each branch, const values are constants
 2. **Dead code elimination**: Branches not taken based on const conditions
 3. **Switch lowering**: Convert if-else chain to jump table if many variants
 
@@ -978,7 +978,7 @@ fn test_call_rewriting() {
 Extend existing dual tests to compare:
 - Interpreter output
 - AOT output
-- Verify identical results with comptime args
+- Verify identical results with const args
 
 ### Differential Specialization Tests (Critical)
 
@@ -990,7 +990,7 @@ Following the pattern of `interp_constlet_tests.rs`, create differential tests t
 ```rust
 /// Differential test: run worldfiles through interpreter twice:
 /// 1. With specialization enabled (union-branch dispatch)
-/// 2. With specialization disabled (comptime params evaluated normally)
+/// 2. With specialization disabled (const parameters evaluated normally)
 ///
 /// Both must produce identical debuglog output.
 #[test]
@@ -1005,7 +1005,7 @@ fn test_specialization_differential() {
 **Test fixtures**: `datalove-datafun/tests/fixtures/specialize_differential/`
 
 ```
-001_simple_const_param.world     # Basic comptime parameter
+001_simple_const_param.world     # Basic const parametereter
 002_multiple_instantiations.world # Same func with different const args
 003_nested_comptime_calls.world   # Comptime func calling another
 004_mixed_params.world            # const + non-const params
@@ -1013,10 +1013,10 @@ fn test_specialization_differential() {
 ```
 
 **Why this matters**: The union-branch transformation must be semantically equivalent
-to directly evaluating the comptime values. These tests ensure:
+to directly evaluating the const values. These tests ensure:
 1. Dispatch logic is correct (right branch taken for each instantiation)
 2. Const substitution in cloned bodies is correct
-3. Parameter remapping doesn't break non-comptime args
+3. Parameter remapping doesn't break non-const args
 4. Return values match regardless of specialization
 
 **Implementation**: Add `skip_specialization: bool` option to `AnalysisOptions`,
@@ -1121,7 +1121,7 @@ end fun
 
 ### Sprint 4: Pipeline Integration ✅
 - [x] Insert specialization into lowering (phase 5c)
-- [x] Resolve comptime values from `ResolvedConsts`
+- [x] Resolve const values from `ResolvedConsts`
 - [x] Add `skip_specialization` option to `lower_module_graph_with_evaluator`
 - [ ] End-to-end tests (interpreter + AOT)
 
@@ -1133,7 +1133,7 @@ end fun
 
 ### Sprint 6: Polish
 - [ ] Phase 6: Codegen hints (jump table for many variants)
-- [ ] Error messages for invalid comptime args
+- [ ] Error messages for invalid const args
 - [ ] Performance benchmarks
 
 ---
@@ -1145,13 +1145,13 @@ end fun
 Call site rewriting has been implemented via a new `ComptimeCall` IR instruction variant:
 
 1. **Lowering phase** emits `ComptimeCall` (instead of `Call`) when calling functions
-   with comptime parameters. The `ComptimeCall` contains:
-   - Original args (including comptime args)
+   with const parametereters. The `ComptimeCall` contains:
+   - Original args (including const args)
    - Placeholder discriminant (0)
-   - Indices of comptime parameters
+   - Indices of const parametereters
 
 2. **Specialization phase (5c)** transforms `ComptimeCall` instructions:
-   - Resolves comptime arg values from const instructions
+   - Resolves const arg values from const instructions
    - Computes correct discriminant via specialization plan
    - Emits `Const(discriminant)` + `Call` with modified args
 
@@ -1209,7 +1209,7 @@ working - module lowering was skipped.
 included widening fixes. Now works for all parameter configurations:
 - Comptime param first: `fun add_const(const n: int, x: int): int` ✓
 - Comptime param last: `fun multiply(x: int, const n: int): int` ✓
-- All comptime params: `fun add_consts(const a: int, const b: int): int` ✓
+- All const parameters: `fun add_consts(const a: int, const b: int): int` ✓
 
 **Verified:** Tests 005, 006, 008 in `fixtures/specialize_differential/` confirm correct
 behavior with differential testing.

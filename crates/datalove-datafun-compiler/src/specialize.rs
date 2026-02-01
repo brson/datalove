@@ -1,4 +1,4 @@
-//! Comptime argument specialization via union-branch transformation.
+//! Const parameter specialization via union-branch transformation.
 //!
 //! This module implements specialization of functions with `const` parameters
 //! using the union-branch approach: instead of N monomorphized copies, we generate
@@ -19,7 +19,7 @@
 //! We transform the function and call sites:
 //!
 //! ```text
-//! // Transformed function: discriminant replaces comptime param
+//! // Transformed function: discriminant replaces const param
 //! fun repeat_specialized(tag: i32, s: string) -> string
 //!     if tag == 0
 //!         const n = 3  // body with n=3
@@ -38,8 +38,8 @@
 //! # Integration
 //!
 //! Specialization runs within the lowering phase (phase 5c), after const evaluation (5b):
-//! 1. Lowering (5a) produces IR functions including comptime-param functions
-//! 2. Const eval (5b) evaluates all const bindings → ResolvedConsts
+//! 1. Lowering (5a) produces IR functions including const-param functions
+//! 2. Const eval (5b) evaluates all const bindings -> ResolvedConsts
 //! 3. Specialization (5c) transforms IR functions and rewrites calls
 //! 4. Assembly (5d) inlines constants within each branch
 
@@ -51,23 +51,23 @@ use datalove_datafun_ir::{
 };
 use datalove_datafun_common::ComptimeCallSiteRegistry;
 
-/// Information about a function's comptime specialization.
+/// Information about a function's const parameter specialization.
 #[derive(Clone, Debug)]
 pub struct FuncSpecialization {
     /// Original function's FuncId.
     pub original_func_id: FuncId,
     /// Original function name.
     pub func_name: String,
-    /// Indices of comptime parameters.
+    /// Indices of const parameters.
     pub comptime_param_indices: Vec<usize>,
-    /// Map from comptime values tuple to discriminant (0, 1, 2, ...).
+    /// Map from const values tuple to discriminant (0, 1, 2, ...).
     pub value_to_discriminant: HashMap<Vec<ConstValue>, u32>,
-    /// All unique instantiations (comptime value tuples).
+    /// All unique instantiations (const value tuples).
     pub instantiations: Vec<Vec<ConstValue>>,
 }
 
 impl FuncSpecialization {
-    /// Get the discriminant for a given set of comptime values.
+    /// Get the discriminant for a given set of const values.
     pub fn get_discriminant(&self, values: &[ConstValue]) -> Option<u32> {
         self.value_to_discriminant.get(values).copied()
     }

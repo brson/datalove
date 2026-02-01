@@ -1,10 +1,10 @@
-//! Differential tests for comptime specialization.
+//! Differential tests for const parameter specialization.
 //!
-//! This test suite verifies that comptime specialization produces identical
+//! This test suite verifies that const parameter specialization produces identical
 //! runtime behavior to unspecialized execution. For each test fixture,
 //! the worldfile is analyzed twice:
 //! 1. With specialization enabled (union-branch dispatch)
-//! 2. With specialization disabled (original function with comptime args)
+//! 2. With specialization disabled (original function with const params)
 //!
 //! The debug outputs must match, demonstrating that specialization is
 //! semantically correct.

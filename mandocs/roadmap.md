@@ -74,7 +74,7 @@
 - pipeline tools
 - worldfile generator - waiting on pipeline stability
 - closures
-- comptime / const evaluation
+- const parameter specialization
 - allocation statistics
 - jit statistics
 - cleanup and specify bidirectional typechecking
