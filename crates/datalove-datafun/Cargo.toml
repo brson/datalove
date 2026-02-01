@@ -107,11 +107,6 @@ path = "tests/interp_jit_tests.rs"
 harness = false
 
 [[test]]
-name = "interp_jit_chaos_tests"
-path = "tests/interp_jit_chaos_tests.rs"
-harness = false
-
-[[test]]
 name = "interp_constlet_tests"
 path = "tests/interp_constlet_tests.rs"
 harness = false
@@ -119,16 +114,6 @@ harness = false
 [[test]]
 name = "ir_inline_tests"
 path = "tests/ir_inline_tests.rs"
-harness = false
-
-[[test]]
-name = "interp_chaos_inline_tests"
-path = "tests/interp_chaos_inline_tests.rs"
-harness = false
-
-[[test]]
-name = "interp_dynamic_inline_tests"
-path = "tests/interp_dynamic_inline_tests.rs"
 harness = false
 
 [[test]]

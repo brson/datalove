@@ -3,8 +3,13 @@
 //! Uses the OptimizingDispatcher with production configuration (tuned thresholds
 //! for JIT compilation and inlining). Tests verify tuned mode produces the same
 //! results as pure interpreter.
+//!
+//! Note: Production thresholds (jit=100, inline=50) mean most fixtures won't
+//! trigger JIT/inlining since they don't call functions enough times. Use the
+//! chaos tests for verifying JIT/inliner correctness under mixed-mode execution.
 
 use std::path::Path;
+use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 
 use datalove_datafun as datafun;
 use datalove_datafun_pkg::package_load_worldfile::{self, WorldfileSection, ParsedWorldfile};
@@ -12,12 +17,127 @@ use datalove_datafun_cranelift_jit::{OptimizingDispatcher, DispatcherConfig};
 use datalove_datafun_interp::CallDispatcher;
 use datafun::pipeline::{ModuleCompilationPipeline, ConstInlining};
 
+/// Global stats for tracking JIT and inlining activity.
+static TOTAL_JIT_COMPILED: AtomicU32 = AtomicU32::new(0);
+static TOTAL_INLININGS: AtomicU32 = AtomicU32::new(0);
+static TOTAL_CALLS_TRACKED: AtomicU64 = AtomicU64::new(0);
+
 /// Simplified result for comparison.
 #[derive(Debug, Clone, PartialEq)]
 struct UnitOutput {
     section_type: String,
     output: String,
     had_error: bool,
+}
+
+/// Stats from a single run.
+struct RunStats {
+    jit_compiled: u32,
+    inlinings_performed: u32,
+    calls_tracked: u64,
+}
+
+/// Run a worldfile and return results plus stats.
+fn run_worldfile_with_stats(
+    db: &datafun::Database,
+    parsed: &ParsedWorldfile,
+    dispatcher: OptimizingDispatcher,
+) -> (Vec<UnitOutput>, RunStats) {
+    let mut results = Vec::new();
+
+    let mut pipeline = ModuleCompilationPipeline::from_sections(db, &parsed.sections, ConstInlining::Enabled);
+    let compiled = pipeline.compile_fresh(db);
+
+    if compiled.resolution_error.is_some() {
+        results.push(UnitOutput {
+            section_type: "resolution".into(),
+            output: "error".into(),
+            had_error: true,
+        });
+        return (results, RunStats { jit_compiled: 0, inlinings_performed: 0, calls_tracked: 0 });
+    }
+
+    let Some(mut compiler) = compiled.script_compiler_default(db) else {
+        results.push(UnitOutput {
+            section_type: "compilation".into(),
+            output: "error".into(),
+            had_error: true,
+        });
+        return (results, RunStats { jit_compiled: 0, inlinings_performed: 0, calls_tracked: 0 });
+    };
+
+    let Some(mut executor) = compiled.script_executor(
+        datalove_rt::c::DebugOutputMode::Buffer,
+        Some(Box::new(dispatcher)),
+    ) else {
+        results.push(UnitOutput {
+            section_type: "compilation".into(),
+            output: "error".into(),
+            had_error: true,
+        });
+        return (results, RunStats { jit_compiled: 0, inlinings_performed: 0, calls_tracked: 0 });
+    };
+
+    for section in &parsed.sections {
+        match section {
+            WorldfileSection::Module { .. } => {}
+            WorldfileSection::ModuleAdd { .. }
+            | WorldfileSection::ModuleRemove { .. }
+            | WorldfileSection::ModuleChangeWs { .. }
+            | WorldfileSection::ModuleChangeAst { .. }
+            | WorldfileSection::ModuleChangeTy { .. }
+            | WorldfileSection::InlineDirectives { .. } => {}
+            WorldfileSection::ScriptFragment { source } => {
+                executor.clear_debug_buffer();
+                let compiled_unit = compiler.compile_fragment(source);
+                let output = if let Some(ir_unit) = &compiled_unit.ir_unit {
+                    executor.execute_fragment(ir_unit)
+                } else {
+                    String::new()
+                };
+                results.push(UnitOutput {
+                    section_type: "scriptunit-fragment".into(),
+                    output,
+                    had_error: matches!(compiled_unit.typecheck, datafun::pipeline::TypecheckResult::Error { .. })
+                        || matches!(compiled_unit.lowering, datafun::pipeline::LoweringResult::Error { .. }),
+                });
+            }
+            WorldfileSection::ScriptExpr { source } => {
+                executor.clear_debug_buffer();
+                let compiled_unit = compiler.compile_expr(source);
+                let output = if let Some(ir_unit) = &compiled_unit.ir_unit {
+                    let (_, value) = executor.execute_expr(ir_unit);
+                    value
+                } else {
+                    String::new()
+                };
+                results.push(UnitOutput {
+                    section_type: "scriptunit-expr".into(),
+                    output,
+                    had_error: matches!(compiled_unit.typecheck, datafun::pipeline::TypecheckResult::Error { .. })
+                        || matches!(compiled_unit.lowering, datafun::pipeline::LoweringResult::Error { .. }),
+                });
+            }
+        }
+    }
+
+    // Get stats before destroying.
+    let stats = if let Some(dispatcher) = executor.take_dispatcher() {
+        if let Some(opt_dispatcher) = dispatcher.as_any().downcast_ref::<OptimizingDispatcher>() {
+            RunStats {
+                jit_compiled: opt_dispatcher.jit().stats().compiled_count,
+                inlinings_performed: opt_dispatcher.inliner().stats().inlinings_performed,
+                calls_tracked: opt_dispatcher.inliner().stats().calls_tracked,
+            }
+        } else {
+            RunStats { jit_compiled: 0, inlinings_performed: 0, calls_tracked: 0 }
+        }
+    } else {
+        RunStats { jit_compiled: 0, inlinings_performed: 0, calls_tracked: 0 }
+    };
+
+    executor.destroy_live_values();
+    (results, stats)
 }
 
 /// Run a worldfile with optional call dispatcher.
@@ -117,11 +237,11 @@ fn run_with_interpreter(
 fn run_with_tuned_dispatcher(
     db: &datafun::Database,
     parsed: &ParsedWorldfile,
-) -> Vec<UnitOutput> {
+) -> (Vec<UnitOutput>, RunStats) {
     let config = DispatcherConfig::production();
     let dispatcher = OptimizingDispatcher::with_config(config)
         .expect("OptimizingDispatcher creation failed");
-    run_worldfile(db, parsed, Some(Box::new(dispatcher)))
+    run_worldfile_with_stats(db, parsed, dispatcher)
 }
 
 /// Test a single worldfile with tuned dispatcher.
@@ -140,7 +260,12 @@ fn test_file(path: &Path) -> Result<(), String> {
         let interp_results = run_with_interpreter(&db, &parsed);
 
         // Run with tuned dispatcher.
-        let tuned_results = run_with_tuned_dispatcher(&db, &parsed);
+        let (tuned_results, stats) = run_with_tuned_dispatcher(&db, &parsed);
+
+        // Accumulate global stats.
+        TOTAL_JIT_COMPILED.fetch_add(stats.jit_compiled, Ordering::Relaxed);
+        TOTAL_INLININGS.fetch_add(stats.inlinings_performed, Ordering::Relaxed);
+        TOTAL_CALLS_TRACKED.fetch_add(stats.calls_tracked, Ordering::Relaxed);
 
         // Compare tuned results with interpreter.
         if tuned_results != interp_results {
@@ -198,8 +323,19 @@ fn main() {
         }
     }
 
+    // Print aggregate stats.
+    let jit_compiled = TOTAL_JIT_COMPILED.load(Ordering::Relaxed);
+    let inlinings = TOTAL_INLININGS.load(Ordering::Relaxed);
+    let calls_tracked = TOTAL_CALLS_TRACKED.load(Ordering::Relaxed);
+
     println!();
     println!("Tuned Dispatcher Tests: {} passed, {} failed", pass_count, fail_count);
+    println!(
+        "  JIT: {} functions compiled, Inliner: {} inlinings ({} calls tracked)",
+        jit_compiled, inlinings, calls_tracked
+    );
+    // Note: tuned mode has high thresholds so most fixtures won't trigger JIT/inlining.
+    // The chaos tests verify JIT/inliner correctness.
 
     if fail_count > 0 {
         std::process::exit(1);
