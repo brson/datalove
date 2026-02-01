@@ -14,29 +14,29 @@ AotAnalysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = call @0 f2()
+                        v0 = call @0 u2()
                         debuglog v0
-                        unit_end
+                        exit
                     
                     fn inner(p0):
                     block0:
                         v0 = const 42u32
                         store p0, v0
                         v1 = const true
-                        return v1
+                        exit v1
                     
                     fn outer(p0):
                     block0:
-                        v0 = call @0 f0(p0)
-                        return v0
+                        v0 = call @0 u0(p0)
+                        exit v0
                     
                     fn test():
                     block0:
                         v0 = const 0u32
                         store.copy.tracked s0, v0
-                        v1 = call @0 f1(s0)
+                        v1 = call @0 u1(s0)
                         v2 = load.copy s0
-                        return v2
+                        exit v2
                 """,
             ),
             aot_compile: Some(AotCompileResult(

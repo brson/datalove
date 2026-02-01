@@ -46,7 +46,7 @@
 use std::collections::HashMap;
 use datalove_datafun_ir::{
     ConstValue, IrCodeUnit, IrBlock, Instruction, Terminator, Operand,
-    ValueId, BlockId, FuncId, FuncRef, IrType, BinOp, ParamMode, ParamId,
+    ValueId, BlockId, FuncId, CodeRef, IrType, BinOp, ParamMode, ParamId,
     IrModuleId, CallSiteId, CodeUnitContext, FunctionContext, SymbolTable,
 };
 use datalove_datafun_common::ComptimeCallSiteRegistry;
@@ -422,9 +422,8 @@ fn remap_terminator_blocks(term: &Terminator, block_offset: u32, _num_blocks: u3
                 else_args: else_args.clone(),
             }
         }
-        Terminator::Return { value } => Terminator::Return { value: value.clone() },
-        Terminator::UnitEnd { result } => Terminator::UnitEnd { result: result.clone() },
-        Terminator::UnitEarlyReturn { value } => Terminator::UnitEarlyReturn { value: value.clone() },
+        Terminator::Exit { value } => Terminator::Exit { value: value.clone() },
+        Terminator::EarlyExit { value } => Terminator::EarlyExit { value: value.clone() },
     }
 }
 
@@ -543,13 +542,10 @@ fn rewrite_comptime_params_in_terminator(
     };
 
     match term {
-        Terminator::Return { value } => Terminator::Return {
+        Terminator::Exit { value } => Terminator::Exit {
             value: value.as_ref().map(|v| rewrite_operand(v)),
         },
-        Terminator::UnitEnd { result } => Terminator::UnitEnd {
-            result: result.as_ref().map(|r| rewrite_operand(r)),
-        },
-        Terminator::UnitEarlyReturn { value } => Terminator::UnitEarlyReturn {
+        Terminator::EarlyExit { value } => Terminator::EarlyExit {
             value: rewrite_operand(value),
         },
         Terminator::Goto { target, args } => Terminator::Goto {
@@ -573,7 +569,7 @@ fn rewrite_comptime_params_in_terminator(
 /// 2. Look up discriminant from the specialization plan
 /// 3. Replace with: Const(discriminant) + Call with non-comptime args
 ///
-/// The `func_id_to_name` map is used to resolve FuncRef to function names.
+/// The `func_id_to_name` map is used to resolve CodeRef to function names.
 /// It's keyed by (IrModuleId, FuncId) because FuncId is only unique within a module.
 ///
 /// `current_module` is the IrModuleId of the module containing this function,
@@ -600,7 +596,7 @@ pub fn rewrite_comptime_calls(
         for instr in &block.instructions {
             match instr {
                 Instruction::ComptimeCall { dest, func: func_ref, args, discriminant: _, comptime_param_indices } => {
-                    // Get the function name from FuncRef.
+                    // Get the function name from CodeRef.
                     let func_name = get_func_name_from_ref(&func_ref, func_id_to_name, current_module);
 
                     if let Some(ref name) = func_name {
@@ -703,20 +699,20 @@ pub fn rewrite_comptime_calls(
     }
 }
 
-/// Get the function name from a FuncRef using the provided mapping.
+/// Get the function name from a CodeRef using the provided mapping.
 ///
 /// `current_module` is the IrModuleId of the function containing this call,
-/// used for resolving FuncRef::Local.
+/// used for resolving CodeRef::Local.
 fn get_func_name_from_ref(
-    func_ref: &FuncRef,
+    code_ref: &CodeRef,
     func_id_to_name: &HashMap<(IrModuleId, FuncId), String>,
     current_module: IrModuleId,
 ) -> Option<String> {
-    match func_ref {
-        FuncRef::Local(id) => func_id_to_name.get(&(current_module, *id)).cloned(),
-        FuncRef::Module { module, func } => func_id_to_name.get(&(*module, *func)).cloned(),
+    match code_ref {
+        CodeRef::Local(id) => func_id_to_name.get(&(current_module, FuncId(id.0))).cloned(),
+        CodeRef::Module { module, id } => func_id_to_name.get(&(*module, FuncId(id.0))).cloned(),
         // External calls (from previous script units) are not supported for comptime specialization.
-        FuncRef::External { .. } => None,
+        CodeRef::External { .. } => None,
     }
 }
 

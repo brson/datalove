@@ -18,7 +18,7 @@ Analysis(
                         v1 = const "hello"
                         v2 = const true
                         v3 = pack Tuple3 {v0, v1, v2}
-                        unit_end v3
+                        exit v3
                 """,
             ),
             output: "(42, \"hello\", true)",

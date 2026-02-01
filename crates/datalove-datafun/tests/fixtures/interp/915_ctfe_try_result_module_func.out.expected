@@ -21,7 +21,7 @@ Analysis(
                         goto block1
                     block1:
                         v6 = ok v2
-                        return v6
+                        exit v6
                 """,
             ),
             output: "",
@@ -40,10 +40,10 @@ Analysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = call @0 m0.f0()
+                        v0 = call @0 m0.u0()
                         debuglog v0
                         drop v0
-                        unit_end
+                        exit
                 """,
             ),
             output: "(fragment executed)",

@@ -17,14 +17,14 @@ Analysis(
                         v0 = const 10int
                         v1 = add p0, v0
                         drop v0
-                        return v1
+                        exit v1
                     
                     fn main():
                     block0:
                         v0 = const 42int
-                        v1 = call @0 m0.f0(v0)
+                        v1 = call @0 m0.u0(v0)
                         drop v0
-                        return v1
+                        exit v1
                 """,
             ),
             output: "",

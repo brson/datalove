@@ -17,7 +17,7 @@ DualAnalysis(
                         debuglog p0
                         v0 = const true
                         drop p0
-                        return v0
+                        exit v0
                 """,
             ),
             aot_lowering: LoweringResult(
@@ -28,7 +28,7 @@ DualAnalysis(
                         debuglog p0
                         v0 = const true
                         drop p0
-                        return v0
+                        exit v0
                 """,
             ),
             ir_match: true,
@@ -54,19 +54,19 @@ DualAnalysis(
                         drop v0
                         v1 = const true
                         v2 = const "should_not_print"
-                        v3 = call @0 m0.f0(v2)
+                        v3 = call @0 m0.u0(v2)
                         v4 = logic_or v1, v3
                         v5 = const "middle"
                         debuglog v5
                         drop v5
                         v6 = const false
                         v7 = const "should_print"
-                        v8 = call @1 m0.f0(v7)
+                        v8 = call @1 m0.u0(v7)
                         v9 = logic_or v6, v8
                         v10 = const "end"
                         debuglog v10
                         drop v10
-                        unit_end
+                        exit
                 """,
             ),
             aot_lowering: LoweringResult(
@@ -79,19 +79,19 @@ DualAnalysis(
                         drop v0
                         v1 = const true
                         v2 = const "should_not_print"
-                        v3 = call @0 m0.f0(v2)
+                        v3 = call @0 m0.u0(v2)
                         v4 = logic_or v1, v3
                         v5 = const "middle"
                         debuglog v5
                         drop v5
                         v6 = const false
                         v7 = const "should_print"
-                        v8 = call @1 m0.f0(v7)
+                        v8 = call @1 m0.u0(v7)
                         v9 = logic_or v6, v8
                         v10 = const "end"
                         debuglog v10
                         drop v10
-                        unit_end
+                        exit
                 """,
             ),
             ir_match: true,

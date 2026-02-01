@@ -83,12 +83,18 @@ impl fmt::Display for IrModuleId {
     }
 }
 
-impl fmt::Display for FuncRef {
+impl fmt::Display for CodeUnitId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "u{}", self.0)
+    }
+}
+
+impl fmt::Display for CodeRef {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            FuncRef::Local(id) => write!(f, "{}", id),
-            FuncRef::External { unit, func } => write!(f, "unit{}.{}", unit, func),
-            FuncRef::Module { module, func } => write!(f, "{}.{}", module, func),
+            CodeRef::Local(id) => write!(f, "{}", id),
+            CodeRef::External { unit, id } => write!(f, "unit{}.{}", unit, id),
+            CodeRef::Module { module, id } => write!(f, "{}.{}", module, id),
         }
     }
 }
@@ -645,20 +651,14 @@ impl fmt::Display for Terminator {
                 }
                 Ok(())
             }
-            Terminator::Return { value: Some(v) } => {
-                write!(f, "return {}", v)
+            Terminator::Exit { value: Some(v) } => {
+                write!(f, "exit {}", v)
             }
-            Terminator::Return { value: None } => {
-                write!(f, "return")
+            Terminator::Exit { value: None } => {
+                write!(f, "exit")
             }
-            Terminator::UnitEnd { result: Some(v) } => {
-                write!(f, "unit_end {}", v)
-            }
-            Terminator::UnitEnd { result: None } => {
-                write!(f, "unit_end")
-            }
-            Terminator::UnitEarlyReturn { value } => {
-                write!(f, "unit_early_return {}", value)
+            Terminator::EarlyExit { value } => {
+                write!(f, "early_exit {}", value)
             }
         }
     }

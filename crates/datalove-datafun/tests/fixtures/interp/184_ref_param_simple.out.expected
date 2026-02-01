@@ -15,7 +15,7 @@ Analysis(
                     fn read_ref(p0):
                     block0:
                         v0 = const true
-                        return v0
+                        exit v0
                 """,
             ),
             output: "",
@@ -35,9 +35,9 @@ Analysis(
                     scriptunit:
                     block0:
                         v0 = const 100int
-                        v1 = call @0 m0.f0(v0)
+                        v1 = call @0 m0.u0(v0)
                         unit_end_drop v0
-                        unit_end
+                        exit
                 """,
             ),
             output: "(fragment executed)",
@@ -57,7 +57,7 @@ Analysis(
                     scriptunit:
                     block0:
                         v0 = copy unit0.v1
-                        unit_end v0
+                        exit v0
                 """,
             ),
             output: "true",

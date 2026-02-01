@@ -18,7 +18,7 @@ Analysis(
                         v1 = const 2u32
                         v2 = const 3u32
                         v3 = list [v0, v1, v2]
-                        unit_end v3
+                        exit v3
                 """,
             ),
             output: "[1, 2, 3]",

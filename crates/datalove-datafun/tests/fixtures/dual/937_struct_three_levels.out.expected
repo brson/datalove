@@ -13,10 +13,10 @@ DualAnalysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = call @0 f0()
+                        v0 = call @0 u0()
                         debuglog v0
                         drop v0
-                        unit_end
+                        exit
                     
                     fn test():
                     block0:
@@ -29,13 +29,13 @@ DualAnalysis(
                         v5 = none
                         drop v2
                         drop v1
-                        return v5
+                        exit v5
                     block2:
                         v6 = pack Struct0 {v3}
                         v7 = pack Struct0 {v2, v6}
                         v8 = pack Struct0 {v1, v7}
                         v9 = some v8
-                        return v9
+                        exit v9
                 """,
             ),
             aot_lowering: LoweringResult(
@@ -43,10 +43,10 @@ DualAnalysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = call @0 f0()
+                        v0 = call @0 u0()
                         debuglog v0
                         drop v0
-                        unit_end
+                        exit
                     
                     fn test():
                     block0:
@@ -59,13 +59,13 @@ DualAnalysis(
                         v5 = none
                         drop v2
                         drop v1
-                        return v5
+                        exit v5
                     block2:
                         v6 = pack Struct0 {v3}
                         v7 = pack Struct0 {v2, v6}
                         v8 = pack Struct0 {v1, v7}
                         v9 = some v8
-                        return v9
+                        exit v9
                 """,
             ),
             ir_match: true,

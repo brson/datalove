@@ -14,8 +14,8 @@ Analysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = call @0 f0()
-                        unit_end
+                        v0 = call @0 u0()
+                        exit
                     
                     fn add():
                     block0:
@@ -25,10 +25,10 @@ Analysis(
                         branch v3, block1, block2
                     block1:
                         v4 = none
-                        return v4
+                        exit v4
                     block2:
                         v5 = some v2
-                        return v5
+                        exit v5
                 """,
             ),
             output: "(fragment executed)",

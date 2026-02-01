@@ -7,7 +7,7 @@ use std::any::Any;
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 
-use datalove_datafun_ir::{FuncRef, IrCodeUnit};
+use datalove_datafun_ir::{CodeRef, IrCodeUnit};
 use datalove_datafun_interp::{
     CallDispatcher, DispatchCallContext, Destination, DispatchResult, InterpError, Value,
     ExecutionContext, FrameStore, FunctionRegistry, IrInterpreter,
@@ -95,8 +95,8 @@ impl ChaosDispatcher {
         registry: &FunctionRegistry,
         frames: &mut FrameStore,
     ) -> Result<(), InterpError> {
-        let func_ref = FuncRef::Local(datalove_datafun_ir::FuncId(func.id.0));
-        let key = FunctionKey::from(&func_ref);
+        let code_ref = CodeRef::Local(datalove_datafun_ir::CodeUnitId(func.id.0));
+        let key = FunctionKey::from(&code_ref);
         let rt_handle = interp.runtime_handle();
 
         // Randomly decide whether to try JIT.
@@ -161,7 +161,7 @@ impl ChaosDispatcher {
 impl CallDispatcher for ChaosDispatcher {
     fn dispatch_call(
         &mut self,
-        func_ref: &FuncRef,
+        code_ref: &CodeRef,
         func: &IrCodeUnit,
         args: &[Value],
         ret_dest: Destination,
@@ -170,7 +170,7 @@ impl CallDispatcher for ChaosDispatcher {
     ) -> DispatchResult {
         use datalove_datafun_interp::ExecutionContext;
 
-        let key = FunctionKey::from(func_ref);
+        let key = FunctionKey::from(code_ref);
 
         // Randomly decide whether to try JIT.
         if !self.should_compile() {
@@ -180,8 +180,8 @@ impl CallDispatcher for ChaosDispatcher {
         // For external functions, use the callee's unit's context to find local functions.
         // _callee_ctx_owned keeps the context alive for the duration of this function.
         let _callee_ctx_owned: Option<ExecutionContext>;
-        let compile_ctx = match func_ref {
-            FuncRef::External { unit, .. } => {
+        let compile_ctx = match code_ref {
+            CodeRef::External { unit, .. } => {
                 match call_ctx.registry.unit_functions(*unit) {
                     Some(unit_funcs) => {
                         _callee_ctx_owned = Some(ExecutionContext::new(unit_funcs));

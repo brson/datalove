@@ -14,10 +14,10 @@ Analysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = call @0 f0()
+                        v0 = call @0 u0()
                         debuglog v0
                         drop v0
-                        unit_end
+                        exit
                     
                     fn get_numbers():
                     block0:
@@ -25,7 +25,7 @@ Analysis(
                         v1 = const 20u32
                         v2 = const 30u32
                         v3 = const [10u32, 20u32, 30u32]
-                        return v3
+                        exit v3
                 """,
             ),
             output: "(fragment executed)",

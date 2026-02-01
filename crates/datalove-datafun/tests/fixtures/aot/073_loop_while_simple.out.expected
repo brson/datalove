@@ -38,7 +38,7 @@ AotAnalysis(
                         debuglog s1
                         unit_end_drop.tracked s0
                         unit_end_drop.tracked s1
-                        unit_end
+                        exit
                 """,
             ),
             aot_compile: Some(AotCompileResult(

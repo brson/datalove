@@ -17,18 +17,18 @@ Analysis(
                         v0 = const 100int
                         store p0, v0
                         v1 = const true
-                        return v1
+                        exit v1
                     
                     fn test():
                     block0:
                         v0 = const 5int
                         store.move.tracked s0, v0
-                        v1 = call @0 m0.f0(s0)
+                        v1 = call @0 m0.u0(s0)
                         v2 = const 100int
                         v3 = eq s0, v2
                         drop v2
                         drop.tracked s0
-                        return v3
+                        exit v3
                 """,
             ),
             output: "",
@@ -47,7 +47,7 @@ Analysis(
                 ir: """
                     scriptunit:
                     block0:
-                        unit_end
+                        exit
                 """,
             ),
             output: "(fragment executed)",
@@ -66,8 +66,8 @@ Analysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = call @0 m0.f1()
-                        unit_end v0
+                        v0 = call @0 m0.u1()
+                        exit v0
                 """,
             ),
             output: "true",

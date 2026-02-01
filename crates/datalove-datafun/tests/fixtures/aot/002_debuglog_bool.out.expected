@@ -16,7 +16,7 @@ AotAnalysis(
                     block0:
                         v0 = const true
                         debuglog v0
-                        unit_end
+                        exit
                 """,
             ),
             aot_compile: Some(AotCompileResult(

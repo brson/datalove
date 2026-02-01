@@ -18,7 +18,7 @@ Analysis(
                         v1 = add p0, v0
                         drop v0
                         drop p0
-                        return v1
+                        exit v1
                 """,
             ),
             output: "",
@@ -37,7 +37,7 @@ Analysis(
                 ir: """
                     scriptunit:
                     block0:
-                        unit_end
+                        exit
                 """,
             ),
             output: "(fragment executed)",
@@ -56,14 +56,14 @@ Analysis(
                 ir: """
                     scriptunit:
                     block0:
-                        unit_end
+                        exit
                     
                     fn add_three(p0):
                     block0:
-                        v0 = call @0 m0.f0(p0)
-                        v1 = call @1 m0.f0(v0)
-                        v2 = call @2 m0.f0(v1)
-                        return v2
+                        v0 = call @0 m0.u0(p0)
+                        v1 = call @1 m0.u0(v0)
+                        v2 = call @2 m0.u0(v1)
+                        exit v2
                 """,
             ),
             output: "(fragment executed)",
@@ -83,8 +83,8 @@ Analysis(
                     scriptunit:
                     block0:
                         v0 = const 10int
-                        v1 = call @0 unit1.f0(v0)
-                        unit_end v1
+                        v1 = call @0 unit1.u0(v0)
+                        exit v1
                 """,
             ),
             output: "13",

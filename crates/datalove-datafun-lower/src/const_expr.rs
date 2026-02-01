@@ -82,15 +82,15 @@ fn lower_const_expr_to_unit<'db>(
     // Copy return type from parent for early-return operators (? and !).
     isolated_ctx.return_type = parent_ctx.return_type.clone();
 
-    // Mark as script unit so early-return uses UnitEarlyReturn terminator.
+    // Mark as script unit so early-return uses EarlyExit terminator.
     isolated_ctx.is_script_unit = true;
 
     // Use the real lowering pipeline.
     let result_value = super::expr::lower_expression(&mut isolated_ctx, expr)?;
 
-    // Finish the block with a UnitEnd terminator.
-    isolated_ctx.finish_block(Terminator::UnitEnd {
-        result: Some(Operand::Value(result_value)),
+    // Finish the block with an Exit terminator.
+    isolated_ctx.finish_block(Terminator::Exit {
+        value: Some(Operand::Value(result_value)),
     });
 
     // Renumber blocks for sequential IDs.
@@ -138,7 +138,7 @@ pub fn lower_const_expr_to_unit_standalone<'db>(
     func_name_to_id: &HashMap<String, datalove_datafun_ir::FuncId>,
     module_func_id_map: &'db HashMap<(ModuleId, String), (IrModuleId, datalove_datafun_ir::FuncId)>,
 ) -> Result<IrCodeUnit, LowerError> {
-    use datalove_datafun_ir::{FuncRef, FuncId, Instruction};
+    use datalove_datafun_ir::{CodeRef, FuncId, Instruction};
     use std::collections::HashSet;
 
     // Create a fresh LowerCtx with the provided type information and module func_id_map.
@@ -155,11 +155,10 @@ pub fn lower_const_expr_to_unit_standalone<'db>(
     // Set return type for early-return operators (? and !).
     ctx.return_type = return_type;
 
-    // Mark as script unit so early-return uses UnitEarlyReturn terminator.
+    // Mark as script unit so early-return uses EarlyExit terminator.
     ctx.is_script_unit = true;
 
     // Pre-register all functions using the name-to-id map so call resolution works.
-    // We need to use the same FuncIds as the lowered functions.
     for (func_name, &func_id) in func_name_to_id {
         // Find the param count from the lowered function.
         if let Some(unit) = lowered_functions.iter().find(|f| f.id.0 == func_id.0) {
@@ -171,9 +170,9 @@ pub fn lower_const_expr_to_unit_standalone<'db>(
     // Use the real lowering pipeline.
     let result_value = super::expr::lower_expression(&mut ctx, expr)?;
 
-    // Finish the block with a UnitEnd terminator.
-    ctx.finish_block(Terminator::UnitEnd {
-        result: Some(Operand::Value(result_value)),
+    // Finish the block with an Exit terminator.
+    ctx.finish_block(Terminator::Exit {
+        value: Some(Operand::Value(result_value)),
     });
 
     // Renumber blocks for sequential IDs.
@@ -184,8 +183,8 @@ pub fn lower_const_expr_to_unit_standalone<'db>(
     for block in &ctx.body.blocks {
         for instr in &block.instructions {
             if let Instruction::Call { func, .. } = instr {
-                if let FuncRef::Local(func_id) = func {
-                    called_func_ids.insert(*func_id);
+                if let CodeRef::Local(id) = func {
+                    called_func_ids.insert(FuncId(id.0));
                 }
             }
         }

@@ -29,7 +29,7 @@ Analysis(
                         drop v4
                         goto block3
                     block3:
-                        unit_end
+                        exit
                 """,
             ),
             output: "(fragment executed)",
@@ -49,7 +49,7 @@ Analysis(
                     scriptunit:
                     block0:
                         v0 = copy unit0.s0
-                        unit_end v0
+                        exit v0
                 """,
             ),
             output: "42",

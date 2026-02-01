@@ -268,7 +268,7 @@ mod tests {
                     rhs: Operand::Value(ValueId(1)),
                 },
             ],
-            terminator: Terminator::UnitEnd { result: None },
+            terminator: Terminator::Exit { value: None },
         }];
 
         let unit = IrCodeUnit {
@@ -323,11 +323,11 @@ mod tests {
                 Instruction::Call {
                     site_id: datalove_datafun_ir::CallSiteId(0),
                     dest: ValueId(0),
-                    func: datalove_datafun_ir::FuncRef::Local(datalove_datafun_ir::FuncId(0)),
+                    func: datalove_datafun_ir::CodeRef::Local(datalove_datafun_ir::CodeUnitId(0)),
                     args: vec![],
                 },
             ],
-            terminator: Terminator::UnitEnd { result: None },
+            terminator: Terminator::Exit { value: None },
         }];
 
         let unit = IrCodeUnit {

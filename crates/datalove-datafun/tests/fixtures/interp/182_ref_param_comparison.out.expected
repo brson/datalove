@@ -15,7 +15,7 @@ Analysis(
                     fn is_equal(p0, p1):
                     block0:
                         v0 = eq p0, p1
-                        return v0
+                        exit v0
                 """,
             ),
             output: "",
@@ -37,14 +37,14 @@ Analysis(
                         v0 = const 10int
                         v1 = const 20int
                         v2 = const 10int
-                        v3 = call @0 m0.f0(v0, v2)
-                        v4 = call @1 m0.f0(v0, v1)
-                        v5 = call @2 m0.f0(v0, v0)
+                        v3 = call @0 m0.u0(v0, v2)
+                        v4 = call @1 m0.u0(v0, v1)
+                        v5 = call @2 m0.u0(v0, v0)
                         v6 = pack Tuple3 {v3, v4, v5}
                         unit_end_drop v0
                         unit_end_drop v1
                         unit_end_drop v2
-                        unit_end
+                        exit
                 """,
             ),
             output: "(fragment executed)",
@@ -64,7 +64,7 @@ Analysis(
                     scriptunit:
                     block0:
                         v0 = copy unit0.v6
-                        unit_end v0
+                        exit v0
                 """,
             ),
             output: "(true, false, true)",

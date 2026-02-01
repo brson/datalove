@@ -5,7 +5,7 @@
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
 
-use datalove_datafun_ir::FuncRef;
+use datalove_datafun_ir::CodeRef;
 
 /// Execution mode for a function call.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -82,7 +82,7 @@ impl Default for MetricsConfig {
 /// Tracks per-function and aggregate execution statistics.
 pub struct MetricsCollector {
     /// Per-function metrics.
-    per_function: HashMap<FuncRef, FunctionMetrics>,
+    per_function: HashMap<CodeRef, FunctionMetrics>,
     /// Aggregate metrics.
     aggregate: AggregateMetrics,
     /// Configuration.
@@ -130,7 +130,7 @@ impl MetricsCollector {
     /// Record completion of a function call.
     pub fn record_call(
         &mut self,
-        func_ref: &FuncRef,
+        code_ref: &CodeRef,
         mode: ExecutionMode,
         start_time: Option<Instant>,
     ) {
@@ -153,7 +153,7 @@ impl MetricsCollector {
 
         // Update per-function metrics if enabled.
         if self.config.per_function_enabled {
-            let metrics = self.per_function.entry(func_ref.clone()).or_default();
+            let metrics = self.per_function.entry(code_ref.clone()).or_default();
             metrics.call_count += 1;
             metrics.total_time_ns += elapsed_ns;
             metrics.mode = Some(mode);
@@ -161,18 +161,18 @@ impl MetricsCollector {
     }
 
     /// Record that a function was JIT-compiled.
-    pub fn record_jit_compile(&mut self, func_ref: &FuncRef, code_size: usize) {
+    pub fn record_jit_compile(&mut self, code_ref: &CodeRef, code_size: usize) {
         self.aggregate.jit_compiled_count += 1;
         self.aggregate.total_jit_code_size += code_size;
 
         if self.config.per_function_enabled {
-            let metrics = self.per_function.entry(func_ref.clone()).or_default();
+            let metrics = self.per_function.entry(code_ref.clone()).or_default();
             metrics.jit_compiled = true;
         }
     }
 
     /// Record that a call site was inlined.
-    pub fn record_inlining(&mut self, caller_ref: &FuncRef) {
+    pub fn record_inlining(&mut self, caller_ref: &CodeRef) {
         self.aggregate.inlined_sites_count += 1;
 
         if self.config.per_function_enabled {
@@ -192,12 +192,12 @@ impl MetricsCollector {
     }
 
     /// Get per-function metrics for a specific function.
-    pub fn function_metrics(&self, func_ref: &FuncRef) -> Option<&FunctionMetrics> {
-        self.per_function.get(func_ref)
+    pub fn function_metrics(&self, code_ref: &CodeRef) -> Option<&FunctionMetrics> {
+        self.per_function.get(code_ref)
     }
 
     /// Get all per-function metrics.
-    pub fn all_function_metrics(&self) -> &HashMap<FuncRef, FunctionMetrics> {
+    pub fn all_function_metrics(&self) -> &HashMap<CodeRef, FunctionMetrics> {
         &self.per_function
     }
 

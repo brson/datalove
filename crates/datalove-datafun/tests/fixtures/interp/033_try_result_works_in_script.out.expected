@@ -20,9 +20,9 @@ Analysis(
                         branch v4, block2, block1
                     block1:
                         v5 = err v3
-                        unit_early_return v5
+                        early_exit v5
                     block2:
-                        unit_end
+                        exit
                 """,
             ),
             output: "(fragment executed)",

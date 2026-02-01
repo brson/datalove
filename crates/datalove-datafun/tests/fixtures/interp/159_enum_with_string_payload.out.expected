@@ -17,7 +17,7 @@ Analysis(
                         v0 = const "hello"
                         v1 = enum_variant 1 v0
                         unit_end_drop v1
-                        unit_end
+                        exit
                 """,
             ),
             output: "(fragment executed)",
@@ -37,7 +37,7 @@ Analysis(
                     scriptunit:
                     block0:
                         v0 = move unit0.v1
-                        unit_end v0
+                        exit v0
                 """,
             ),
             output: "enum Text(\"hello\")",

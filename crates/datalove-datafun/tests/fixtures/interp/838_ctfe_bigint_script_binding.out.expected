@@ -21,7 +21,7 @@ Analysis(
                         drop v1
                         debuglog v2
                         unit_end_drop v2
-                        unit_end
+                        exit
                 """,
             ),
             output: "(fragment executed)",

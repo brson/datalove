@@ -18,7 +18,7 @@ AotAnalysis(
                         v1 = enum_variant 1 v0
                         debuglog v1
                         unit_end_drop v1
-                        unit_end
+                        exit
                 """,
             ),
             aot_compile: Some(AotCompileResult(

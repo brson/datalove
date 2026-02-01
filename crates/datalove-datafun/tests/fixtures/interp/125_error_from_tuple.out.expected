@@ -18,7 +18,7 @@ Analysis(
                         v1 = const 2u32
                         v2 = pack Tuple2 {v0, v1}
                         v3 = error_from v2
-                        unit_end v3
+                        exit v3
                 """,
             ),
             output: "error (1, 2)",

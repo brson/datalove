@@ -6,21 +6,21 @@ block0:
     v1 = add p0, v0
     drop v0
     drop p0
-    return v1
+    exit v1
 
 --- Module: main ---
 fn add_four(p0):
 block0:
-    v0 = call @0 m1.f0(p0)
-    v1 = call @1 m1.f0(v0)
-    return v1
+    v0 = call @0 m1.u0(p0)
+    v1 = call @1 m1.u0(v0)
+    exit v1
 
 --- Module: middle ---
 fn add_two(p0):
 block0:
-    v0 = call @0 m0.f0(p0)
-    v1 = call @1 m0.f0(v0)
-    return v1
+    v0 = call @0 m0.u0(p0)
+    v1 = call @1 m0.u0(v0)
+    exit v1
 
 === INLINE DIRECTIVES ===
 inline-cross main::add_four middle::add_two
@@ -34,7 +34,7 @@ block0:
     v1 = add p0, v0
     drop v0
     drop p0
-    return v1
+    exit v1
 
 --- Module: main ---
 fn add_four(p0):
@@ -42,15 +42,15 @@ block0:
     goto block3
 block1:
     v4 = move v0
-    v2 = call @2 m0.f0(v4)
-    v3 = call @3 m0.f0(v2)
+    v2 = call @2 m0.u0(v4)
+    v3 = call @3 m0.u0(v2)
     goto block2(v3)
 block2(v1):
-    return v1
+    exit v1
 block3:
     v7 = move p0
-    v5 = call @4 m0.f0(v7)
-    v6 = call @5 m0.f0(v5)
+    v5 = call @4 m0.u0(v7)
+    v6 = call @5 m0.u0(v5)
     goto block4(v6)
 block4(v0):
     goto block1
@@ -67,7 +67,7 @@ block1:
     drop v4
     goto block2(v3)
 block2(v1):
-    return v1
+    exit v1
 block3:
     v7 = move p0
     v5 = const 1int

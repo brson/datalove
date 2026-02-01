@@ -15,19 +15,19 @@ DualAnalysis(
                     block0:
                         v0 = const 5u32
                         v1 = const 10u32
-                        v2 = call @0 f0(v0, v1)
+                        v2 = call @0 u0(v0, v1)
                         v3 = getfieldref v2.0
                         debuglog *v3
                         v4 = getfieldref v2.1
                         debuglog *v4
-                        unit_end
+                        exit
                     
                     fn make_pair(p0, p1):
                     block0:
                         v0 = copy p0
                         v1 = copy p1
                         v2 = pack Struct0 {v0, v1}
-                        return v2
+                        exit v2
                 """,
             ),
             aot_lowering: LoweringResult(
@@ -37,19 +37,19 @@ DualAnalysis(
                     block0:
                         v0 = const 5u32
                         v1 = const 10u32
-                        v2 = call @0 f0(v0, v1)
+                        v2 = call @0 u0(v0, v1)
                         v3 = getfieldref v2.0
                         debuglog *v3
                         v4 = getfieldref v2.1
                         debuglog *v4
-                        unit_end
+                        exit
                     
                     fn make_pair(p0, p1):
                     block0:
                         v0 = copy p0
                         v1 = copy p1
                         v2 = pack Struct0 {v0, v1}
-                        return v2
+                        exit v2
                 """,
             ),
             ir_match: true,

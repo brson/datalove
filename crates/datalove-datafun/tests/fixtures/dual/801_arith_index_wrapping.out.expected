@@ -22,7 +22,7 @@ DualAnalysis(
                         v5 = const "arithmetic overflow"
                         v6 = error_from v5
                         v7 = err v6
-                        unit_early_return v7
+                        early_exit v7
                     block2:
                         debuglog v3
                         v8, v9 = sub.checked v0, v1
@@ -31,7 +31,7 @@ DualAnalysis(
                         v10 = const "arithmetic overflow"
                         v11 = error_from v10
                         v12 = err v11
-                        unit_early_return v12
+                        early_exit v12
                     block4:
                         debuglog v8
                         v13, v14 = mul.checked v0, v2
@@ -40,7 +40,7 @@ DualAnalysis(
                         v15 = const "arithmetic overflow"
                         v16 = error_from v15
                         v17 = err v16
-                        unit_early_return v17
+                        early_exit v17
                     block6:
                         debuglog v13
                         v18 = const 4294967295index
@@ -51,7 +51,7 @@ DualAnalysis(
                         v22 = const "arithmetic overflow"
                         v23 = error_from v22
                         v24 = err v23
-                        unit_early_return v24
+                        early_exit v24
                     block8:
                         debuglog v20
                         v25 = const 0index
@@ -61,10 +61,10 @@ DualAnalysis(
                         v28 = const "arithmetic overflow"
                         v29 = error_from v28
                         v30 = err v29
-                        unit_early_return v30
+                        early_exit v30
                     block10:
                         debuglog v26
-                        unit_end
+                        exit
                 """,
             ),
             aot_lowering: LoweringResult(
@@ -81,7 +81,7 @@ DualAnalysis(
                         v5 = const "arithmetic overflow"
                         v6 = error_from v5
                         v7 = err v6
-                        unit_early_return v7
+                        early_exit v7
                     block2:
                         debuglog v3
                         v8, v9 = sub.checked v0, v1
@@ -90,7 +90,7 @@ DualAnalysis(
                         v10 = const "arithmetic overflow"
                         v11 = error_from v10
                         v12 = err v11
-                        unit_early_return v12
+                        early_exit v12
                     block4:
                         debuglog v8
                         v13, v14 = mul.checked v0, v2
@@ -99,7 +99,7 @@ DualAnalysis(
                         v15 = const "arithmetic overflow"
                         v16 = error_from v15
                         v17 = err v16
-                        unit_early_return v17
+                        early_exit v17
                     block6:
                         debuglog v13
                         v18 = const 4294967295index
@@ -110,7 +110,7 @@ DualAnalysis(
                         v22 = const "arithmetic overflow"
                         v23 = error_from v22
                         v24 = err v23
-                        unit_early_return v24
+                        early_exit v24
                     block8:
                         debuglog v20
                         v25 = const 0index
@@ -120,10 +120,10 @@ DualAnalysis(
                         v28 = const "arithmetic overflow"
                         v29 = error_from v28
                         v30 = err v29
-                        unit_early_return v30
+                        early_exit v30
                     block10:
                         debuglog v26
-                        unit_end
+                        exit
                 """,
             ),
             ir_match: true,

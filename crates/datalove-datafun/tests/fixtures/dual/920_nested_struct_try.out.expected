@@ -13,10 +13,10 @@ DualAnalysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = call @0 f0()
+                        v0 = call @0 u0()
                         debuglog v0
                         drop v0
-                        unit_end
+                        exit
                     
                     fn test():
                     block0:
@@ -25,7 +25,7 @@ DualAnalysis(
                         branch v2, block2, block1
                     block1:
                         v3 = none
-                        return v3
+                        exit v3
                     block2:
                         v4 = pack Struct0 {v1}
                         v5 = const "middle_name"
@@ -33,7 +33,7 @@ DualAnalysis(
                         v7 = const "outer_label"
                         v8 = pack Struct0 {v6, v7}
                         v9 = some v8
-                        return v9
+                        exit v9
                 """,
             ),
             aot_lowering: LoweringResult(
@@ -41,10 +41,10 @@ DualAnalysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = call @0 f0()
+                        v0 = call @0 u0()
                         debuglog v0
                         drop v0
-                        unit_end
+                        exit
                     
                     fn test():
                     block0:
@@ -53,7 +53,7 @@ DualAnalysis(
                         branch v2, block2, block1
                     block1:
                         v3 = none
-                        return v3
+                        exit v3
                     block2:
                         v4 = pack Struct0 {v1}
                         v5 = const "middle_name"
@@ -61,7 +61,7 @@ DualAnalysis(
                         v7 = const "outer_label"
                         v8 = pack Struct0 {v6, v7}
                         v9 = some v8
-                        return v9
+                        exit v9
                 """,
             ),
             ir_match: true,

@@ -16,7 +16,7 @@ Analysis(
                     block0:
                         v0 = const "hello world"
                         v1 = data_from v0
-                        unit_end v1
+                        exit v1
                 """,
             ),
             output: "data \"hello world\"",

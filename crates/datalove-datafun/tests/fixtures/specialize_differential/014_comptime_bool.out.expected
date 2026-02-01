@@ -21,10 +21,10 @@ Analysis(
                     block1:
                         v1 = add p1, p1
                         drop p1
-                        return v1
+                        exit v1
                     block2:
                         v2 = move p1
-                        return v2
+                        exit v2
                 """,
             ),
             output: "",
@@ -46,14 +46,14 @@ Analysis(
                         v0 = const true
                         v1 = const false
                         v2 = const 10int
-                        v3 = comptime_call m0.f0(v0, v2) [disc=0, comptime_params=[0]]
+                        v3 = comptime_call m0.u0(v0, v2) [disc=0, comptime_params=[0]]
                         v4 = const 10int
-                        v5 = comptime_call m0.f0(v1, v4) [disc=0, comptime_params=[0]]
+                        v5 = comptime_call m0.u0(v1, v4) [disc=0, comptime_params=[0]]
                         debuglog v3
                         debuglog v5
                         unit_end_drop v3
                         unit_end_drop v5
-                        unit_end
+                        exit
                 """,
             ),
             output: "(fragment executed)",
@@ -76,7 +76,7 @@ Analysis(
                         v0 = move unit0.v3
                         v1 = move unit0.v5
                         v2 = pack Tuple2 {v0, v1}
-                        unit_end v2
+                        exit v2
                 """,
             ),
             output: "(20, 10)",

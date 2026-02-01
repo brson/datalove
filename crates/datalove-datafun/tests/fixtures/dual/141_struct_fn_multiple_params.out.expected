@@ -19,10 +19,10 @@ DualAnalysis(
                         v3 = const 10u32
                         v4 = const 20u32
                         v5 = pack Struct0 {v3, v4}
-                        v6 = call @0 f0(v2, v5)
+                        v6 = call @0 u0(v2, v5)
                         debuglog v6
                         drop v6
-                        unit_end
+                        exit
                     
                     fn sum_x(p0, p1):
                     block0:
@@ -35,7 +35,7 @@ DualAnalysis(
                         v6 = add v2, v5
                         drop v2
                         drop v5
-                        return v6
+                        exit v6
                 """,
             ),
             aot_lowering: LoweringResult(
@@ -49,10 +49,10 @@ DualAnalysis(
                         v3 = const 10u32
                         v4 = const 20u32
                         v5 = pack Struct0 {v3, v4}
-                        v6 = call @0 f0(v2, v5)
+                        v6 = call @0 u0(v2, v5)
                         debuglog v6
                         drop v6
-                        unit_end
+                        exit
                     
                     fn sum_x(p0, p1):
                     block0:
@@ -65,7 +65,7 @@ DualAnalysis(
                         v6 = add v2, v5
                         drop v2
                         drop v5
-                        return v6
+                        exit v6
                 """,
             ),
             ir_match: true,

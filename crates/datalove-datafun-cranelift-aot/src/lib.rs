@@ -186,10 +186,10 @@ impl AotCompiler {
         // === Three-pass compilation for local and module functions ===
 
         // Pass 1: Declare all local functions (nested units) to get Cranelift FuncIds.
-        let mut local_funcs: HashMap<datalove_datafun_ir::FuncId, FuncId> = HashMap::new();
+        let mut local_funcs: HashMap<datalove_datafun_ir::CodeUnitId, FuncId> = HashMap::new();
         for func in &unit.nested_units {
             let sig = codegen::build_signature_for_func(func, self.isa.as_ref());
-            let func_id = datalove_datafun_ir::FuncId(func.id.0);
+            let func_id = datalove_datafun_ir::CodeUnitId(func.id.0);
             let cl_func_id = obj_module
                 .declare_function(&func.name, Linkage::Local, &sig)
                 .map_err(|e| AotError::Module(format!("declare function {}: {}", func.name, e)))?;
@@ -197,7 +197,7 @@ impl AotCompiler {
         }
 
         // Pass 2: Declare all module functions to get Cranelift FuncIds.
-        let mut module_funcs: HashMap<(IrModuleId, datalove_datafun_ir::FuncId), FuncId> = HashMap::new();
+        let mut module_funcs: HashMap<(IrModuleId, datalove_datafun_ir::CodeUnitId), FuncId> = HashMap::new();
         for ((module_id, func_id), ir_unit) in registry.iter_module_code_units_with_ids() {
             let name = format!("__mod_{}_{}", module_id.0, ir_unit.name);
             let sig = codegen::build_signature_for_func(ir_unit, self.isa.as_ref());
@@ -209,7 +209,7 @@ impl AotCompiler {
 
         // Pass 3a: Compile all local functions with pre-declared FuncIds.
         for func in &unit.nested_units {
-            let func_id = datalove_datafun_ir::FuncId(func.id.0);
+            let func_id = datalove_datafun_ir::CodeUnitId(func.id.0);
             let cl_func_id = local_funcs[&func_id];
             let mut compiler = codegen::FunctionCompiler::new_with_runtime_and_tydescs(
                 func,
@@ -268,7 +268,7 @@ impl AotCompiler {
     ///
     /// The script body becomes a function with no params and Unit return type.
     fn script_unit_to_function(&self, unit: &IrCodeUnit) -> IrCodeUnit {
-        // Keep terminators as-is; compile_terminator handles UnitEnd/UnitEarlyReturn.
+        // Keep terminators as-is; compile_terminator handles Exit/EarlyExit.
         // Note: rt_handle is implicit - codegen adds it to all function signatures.
         IrCodeUnit {
             id: datalove_datafun_ir::CodeUnitId(0),

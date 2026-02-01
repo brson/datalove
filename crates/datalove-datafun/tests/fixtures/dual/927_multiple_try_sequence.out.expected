@@ -13,9 +13,9 @@ DualAnalysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = call @0 f0()
+                        v0 = call @0 u0()
                         debuglog v0
-                        unit_end
+                        exit
                     
                     fn test():
                     block0:
@@ -28,23 +28,23 @@ DualAnalysis(
                         branch v6, block2, block1
                     block1:
                         v7 = none
-                        return v7
+                        exit v7
                     block2:
                         v8, v9 = unwrap_option v2
                         branch v9, block4, block3
                     block3:
                         v10 = none
-                        return v10
+                        exit v10
                     block4:
                         v11, v12 = unwrap_option v4
                         branch v12, block6, block5
                     block5:
                         v13 = none
-                        return v13
+                        exit v13
                     block6:
                         v14 = pack Struct0 {v5, v8, v11}
                         v15 = some v14
-                        return v15
+                        exit v15
                 """,
             ),
             aot_lowering: LoweringResult(
@@ -52,9 +52,9 @@ DualAnalysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = call @0 f0()
+                        v0 = call @0 u0()
                         debuglog v0
-                        unit_end
+                        exit
                     
                     fn test():
                     block0:
@@ -67,23 +67,23 @@ DualAnalysis(
                         branch v6, block2, block1
                     block1:
                         v7 = none
-                        return v7
+                        exit v7
                     block2:
                         v8, v9 = unwrap_option v2
                         branch v9, block4, block3
                     block3:
                         v10 = none
-                        return v10
+                        exit v10
                     block4:
                         v11, v12 = unwrap_option v4
                         branch v12, block6, block5
                     block5:
                         v13 = none
-                        return v13
+                        exit v13
                     block6:
                         v14 = pack Struct0 {v5, v8, v11}
                         v15 = some v14
-                        return v15
+                        exit v15
                 """,
             ),
             ir_match: true,

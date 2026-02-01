@@ -15,7 +15,7 @@ Analysis(
                     fn compute():
                     block0:
                         v0 = const "\"from module\""
-                        return v0
+                        exit v0
                 """,
             ),
             output: "",
@@ -34,10 +34,10 @@ Analysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = call @0 m0.f0()
+                        v0 = call @0 m0.u0()
                         debuglog v0
                         drop v0
-                        unit_end
+                        exit
                 """,
             ),
             output: "(fragment executed)",

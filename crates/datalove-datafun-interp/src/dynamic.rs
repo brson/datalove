@@ -5,7 +5,7 @@
 use std::any::Any;
 use std::collections::HashMap;
 
-use datalove_datafun_ir::{CallSiteId, FuncRef, IrCodeUnit};
+use datalove_datafun_ir::{CallSiteId, CodeRef, IrCodeUnit};
 use datalove_rt::c::LocalRtHandle;
 
 use crate::dispatch::{
@@ -17,7 +17,7 @@ use crate::value::{Destination, Value};
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 struct CallSiteKey {
     /// The function containing the call site.
-    caller: FuncRef,
+    caller: CodeRef,
     /// The call site within the caller.
     call_site_id: CallSiteId,
 }
@@ -58,8 +58,8 @@ pub struct DynamicInliner {
     /// Cache of inlined code units.
     ///
     /// When a code unit is modified by inlining, the new version is stored here.
-    /// Key is the FuncRef identifying the modified caller.
-    inlined_functions: HashMap<FuncRef, IrCodeUnit>,
+    /// Key is the CodeRef identifying the modified caller.
+    inlined_functions: HashMap<CodeRef, IrCodeUnit>,
     /// Statistics.
     stats: InlinerStats,
 }
@@ -97,8 +97,8 @@ impl DynamicInliner {
     }
 
     /// Get an inlined version of a code unit, if available.
-    pub fn get_inlined_function(&self, func_ref: &FuncRef) -> Option<&IrCodeUnit> {
-        self.inlined_functions.get(func_ref)
+    pub fn get_inlined_function(&self, code_ref: &CodeRef) -> Option<&IrCodeUnit> {
+        self.inlined_functions.get(code_ref)
     }
 
     /// Record a call and check if inlining should be triggered.
@@ -151,9 +151,9 @@ impl DynamicInliner {
                     if *site_id == call_site_info.call_site_id {
                         // Verify this call is to the expected callee.
                         let matches = match func {
-                            FuncRef::Local(id) => id.0 == callee.id.0,
-                            FuncRef::Module { func: id, .. } => id.0 == callee.id.0,
-                            FuncRef::External { func: id, .. } => id.0 == callee.id.0,
+                            CodeRef::Local(id) => id.0 == callee.id.0,
+                            CodeRef::Module { id, .. } => id.0 == callee.id.0,
+                            CodeRef::External { id, .. } => id.0 == callee.id.0,
                         };
                         if matches {
                             found = true;
@@ -194,7 +194,7 @@ impl Default for DynamicInliner {
 impl CallDispatcher for DynamicInliner {
     fn dispatch_call(
         &mut self,
-        _func_ref: &FuncRef,
+        _code_ref: &CodeRef,
         func: &IrCodeUnit,
         _args: &[Value],
         _ret_dest: Destination,
@@ -210,15 +210,15 @@ impl CallDispatcher for DynamicInliner {
         let should_inline = self.record_call(&call_site_info, func);
 
         if should_inline {
-            // Look up the caller function based on its FuncRef type.
+            // Look up the caller function based on its CodeRef type.
             let caller = match &call_site_info.caller {
-                FuncRef::Local(func_id) => {
-                    call_ctx.exec_ctx.find_local_function(*func_id)
+                CodeRef::Local(id) => {
+                    call_ctx.exec_ctx.find_local_function(*id)
                 }
-                FuncRef::Module { module, func: func_id } => {
-                    call_ctx.registry.get_module_function_as_unit(*module, *func_id)
+                CodeRef::Module { module, id } => {
+                    call_ctx.registry.get_module_function_as_unit(*module, *id)
                 }
-                FuncRef::External { .. } => {
+                CodeRef::External { .. } => {
                     // External functions are from previous script units.
                     // TODO: Could support this by looking up in registry.
                     None
@@ -242,8 +242,8 @@ impl CallDispatcher for DynamicInliner {
         self
     }
 
-    fn get_optimized_function(&self, func_ref: &FuncRef) -> Option<&IrCodeUnit> {
-        self.get_inlined_function(func_ref)
+    fn get_optimized_function(&self, code_ref: &CodeRef) -> Option<&IrCodeUnit> {
+        self.get_inlined_function(code_ref)
     }
 }
 

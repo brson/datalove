@@ -14,16 +14,16 @@ Analysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = call @0 f0()
+                        v0 = call @0 u0()
                         debuglog v0
                         drop v0
-                        unit_end
+                        exit
                     
                     fn get_result():
                     block0:
                         v0 = const 100u32
                         v1 = const ok 100u32
-                        return v1
+                        exit v1
                 """,
             ),
             output: "(fragment executed)",

@@ -17,7 +17,7 @@ Analysis(
                         v0 = const -42i32
                         v1 = const 100u64
                         v2 = const true
-                        unit_end
+                        exit
                 """,
             ),
             output: "(fragment executed)",
@@ -37,7 +37,7 @@ Analysis(
                     scriptunit:
                     block0:
                         v0 = copy unit0.v0
-                        unit_end v0
+                        exit v0
                 """,
             ),
             output: "-42",

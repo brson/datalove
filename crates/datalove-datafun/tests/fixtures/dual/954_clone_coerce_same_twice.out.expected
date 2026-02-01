@@ -15,16 +15,16 @@ DualAnalysis(
                     block0:
                         v0 = const "duplicate"
                         v1 = clone v0
-                        v2 = call @0 f0(v1, v0)
+                        v2 = call @0 u0(v1, v0)
                         debuglog v2
                         unit_end_drop v2
-                        unit_end
+                        exit
                     
                     fn concat_strings(p0, p1):
                     block0:
                         v0 = move p0
                         drop p1
-                        return v0
+                        exit v0
                 """,
             ),
             aot_lowering: LoweringResult(
@@ -34,16 +34,16 @@ DualAnalysis(
                     block0:
                         v0 = const "duplicate"
                         v1 = clone v0
-                        v2 = call @0 f0(v1, v0)
+                        v2 = call @0 u0(v1, v0)
                         debuglog v2
                         unit_end_drop v2
-                        unit_end
+                        exit
                     
                     fn concat_strings(p0, p1):
                     block0:
                         v0 = move p0
                         drop p1
-                        return v0
+                        exit v0
                 """,
             ),
             ir_match: true,

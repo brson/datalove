@@ -15,16 +15,16 @@ DualAnalysis(
                     block0:
                         v0 = const 0u32
                         store.copy.tracked s0, v0
-                        v1 = call @0 f0(s0)
+                        v1 = call @0 u0(s0)
                         debuglog s0
-                        unit_end
+                        exit
                     
                     fn init_42(p0):
                     block0:
                         v0 = const 42u32
                         store.tracked p0, v0
                         v1 = const true
-                        return v1
+                        exit v1
                 """,
             ),
             aot_lowering: LoweringResult(
@@ -34,16 +34,16 @@ DualAnalysis(
                     block0:
                         v0 = const 0u32
                         store.copy.tracked s0, v0
-                        v1 = call @0 f0(s0)
+                        v1 = call @0 u0(s0)
                         debuglog s0
-                        unit_end
+                        exit
                     
                     fn init_42(p0):
                     block0:
                         v0 = const 42u32
                         store.tracked p0, v0
                         v1 = const true
-                        return v1
+                        exit v1
                 """,
             ),
             ir_match: true,

@@ -14,7 +14,7 @@ Analysis(
                 ir: """
                     scriptunit:
                     block0:
-                        unit_end
+                        exit
                     
                     fn make_map():
                     block0:
@@ -25,7 +25,7 @@ Analysis(
                         v4 = const 3int
                         v5 = const "three"
                         v6 = map {v0: v1, v2: v3, v4: v5}
-                        return v6
+                        exit v6
                 """,
             ),
             output: "(fragment executed)",
@@ -44,8 +44,8 @@ Analysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = call @0 unit0.f0()
-                        unit_end v0
+                        v0 = call @0 unit0.u0()
+                        exit v0
                 """,
             ),
             output: "map {1 = \"one\", 2 = \"two\", 3 = \"three\"}",

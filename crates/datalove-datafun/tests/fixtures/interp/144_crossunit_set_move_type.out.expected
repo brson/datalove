@@ -19,7 +19,7 @@ Analysis(
                         v2 = list [v0, v1]
                         store.move.tracked s0, v2
                         unit_end_drop.tracked s0
-                        unit_end
+                        exit
                 """,
             ),
             output: "(fragment executed)",
@@ -44,7 +44,7 @@ Analysis(
                         v3 = list [v0, v1, v2]
                         drop.tracked unit0.s0
                         store.move.tracked unit0.s0, v3
-                        unit_end
+                        exit
                 """,
             ),
             output: "(fragment executed)",
@@ -64,7 +64,7 @@ Analysis(
                     scriptunit:
                     block0:
                         v0 = move unit0.s0
-                        unit_end v0
+                        exit v0
                 """,
             ),
             output: "[3, 4, 5]",

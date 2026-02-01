@@ -13,9 +13,9 @@ DualAnalysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = call @0 f0()
+                        v0 = call @0 u0()
                         debuglog v0
-                        unit_end
+                        exit
                     
                     fn test():
                     block0:
@@ -24,11 +24,11 @@ DualAnalysis(
                         branch v2, block2, block1
                     block1:
                         v3 = none
-                        return v3
+                        exit v3
                     block2:
                         v4 = getfield v1.0
                         v5 = some v4
-                        return v5
+                        exit v5
                 """,
             ),
             aot_lowering: LoweringResult(
@@ -36,9 +36,9 @@ DualAnalysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = call @0 f0()
+                        v0 = call @0 u0()
                         debuglog v0
-                        unit_end
+                        exit
                     
                     fn test():
                     block0:
@@ -47,11 +47,11 @@ DualAnalysis(
                         branch v2, block2, block1
                     block1:
                         v3 = none
-                        return v3
+                        exit v3
                     block2:
                         v4 = getfield v1.0
                         v5 = some v4
-                        return v5
+                        exit v5
                 """,
             ),
             ir_match: true,

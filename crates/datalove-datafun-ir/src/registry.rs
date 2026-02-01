@@ -8,14 +8,14 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
-use crate::{IrCodeUnit, FuncId, IrModuleId};
+use crate::{IrCodeUnit, CodeUnitId, IrModuleId};
 
 /// Registry of module functions, shared across all scripts.
 ///
 /// Immutable after module compilation completes.
 #[derive(Clone, Default, Serialize, Deserialize)]
 pub struct ModuleFunctionRegistry {
-    module_functions: HashMap<(IrModuleId, FuncId), IrCodeUnit>,
+    module_functions: HashMap<(IrModuleId, CodeUnitId), IrCodeUnit>,
 }
 
 impl ModuleFunctionRegistry {
@@ -27,12 +27,12 @@ impl ModuleFunctionRegistry {
     }
 
     /// Add a module code unit.
-    pub fn add_module_code_unit(&mut self, module_id: IrModuleId, func_id: FuncId, unit: IrCodeUnit) {
+    pub fn add_module_code_unit(&mut self, module_id: IrModuleId, func_id: CodeUnitId, unit: IrCodeUnit) {
         self.module_functions.insert((module_id, func_id), unit);
     }
 
     /// Get a module code unit by module and function ID.
-    pub fn get_module_function_as_unit(&self, module_id: IrModuleId, func_id: FuncId) -> Option<&IrCodeUnit> {
+    pub fn get_module_function_as_unit(&self, module_id: IrModuleId, func_id: CodeUnitId) -> Option<&IrCodeUnit> {
         self.module_functions.get(&(module_id, func_id))
     }
 
@@ -42,7 +42,7 @@ impl ModuleFunctionRegistry {
     }
 
     /// Iterate over all module code units with their IDs.
-    pub fn iter_module_code_units_with_ids(&self) -> impl Iterator<Item = ((IrModuleId, FuncId), &IrCodeUnit)> {
+    pub fn iter_module_code_units_with_ids(&self) -> impl Iterator<Item = ((IrModuleId, CodeUnitId), &IrCodeUnit)> {
         self.module_functions.iter().map(|((m, f), unit)| ((*m, *f), unit))
     }
 }
@@ -69,7 +69,7 @@ impl UnitFunctionRegistry {
     }
 
     /// Look up a code unit from a previous unit.
-    pub fn get_external_function_as_unit(&self, unit: u32, func_id: FuncId) -> Option<&IrCodeUnit> {
+    pub fn get_external_function_as_unit(&self, unit: u32, func_id: CodeUnitId) -> Option<&IrCodeUnit> {
         let functions = self.unit_functions.get(unit as usize)?;
         functions.iter().find(|f| f.id.0 == func_id.0)
     }
@@ -135,7 +135,7 @@ impl FunctionRegistry {
     }
 
     /// Add a module code unit.
-    pub fn add_module_code_unit(&mut self, module_id: IrModuleId, func_id: FuncId, unit: IrCodeUnit) {
+    pub fn add_module_code_unit(&mut self, module_id: IrModuleId, func_id: CodeUnitId, unit: IrCodeUnit) {
         self.module_registry_mut().add_module_code_unit(module_id, func_id, unit);
     }
 
@@ -145,12 +145,12 @@ impl FunctionRegistry {
     }
 
     /// Get a module code unit by module and function ID.
-    pub fn get_module_function_as_unit(&self, module_id: IrModuleId, func_id: FuncId) -> Option<&IrCodeUnit> {
+    pub fn get_module_function_as_unit(&self, module_id: IrModuleId, func_id: CodeUnitId) -> Option<&IrCodeUnit> {
         self.module_registry.get_module_function_as_unit(module_id, func_id)
     }
 
     /// Look up a code unit from a previous unit.
-    pub fn get_external_function_as_unit(&self, unit: u32, func_id: FuncId) -> Option<&IrCodeUnit> {
+    pub fn get_external_function_as_unit(&self, unit: u32, func_id: CodeUnitId) -> Option<&IrCodeUnit> {
         self.unit_registry.get_external_function_as_unit(unit, func_id)
     }
 
@@ -165,7 +165,7 @@ impl FunctionRegistry {
     }
 
     /// Iterate over all module code units with their IDs.
-    pub fn iter_module_code_units_with_ids(&self) -> impl Iterator<Item = ((IrModuleId, FuncId), &IrCodeUnit)> {
+    pub fn iter_module_code_units_with_ids(&self) -> impl Iterator<Item = ((IrModuleId, CodeUnitId), &IrCodeUnit)> {
         self.module_registry.iter_module_code_units_with_ids()
     }
 

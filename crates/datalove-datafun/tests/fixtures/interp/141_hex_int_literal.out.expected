@@ -15,7 +15,7 @@ Analysis(
                     scriptunit:
                     block0:
                         v0 = const 18446744073709551615int
-                        unit_end v0
+                        exit v0
                 """,
             ),
             output: "18446744073709551615",

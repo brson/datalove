@@ -14,7 +14,7 @@ Analysis(
                 ir: """
                     scriptunit:
                     block0:
-                        unit_end
+                        exit
                     
                     fn is_even(p0):
                     block0:
@@ -24,7 +24,7 @@ Analysis(
                     block1:
                         v2 = const true
                         v3 = ok v2
-                        return v3
+                        exit v3
                     block2:
                         v4 = const 1u32
                         v5, v6 = sub.checked p0, v4
@@ -33,10 +33,10 @@ Analysis(
                         v7 = const "arithmetic overflow"
                         v8 = error_from v7
                         v9 = err v8
-                        return v9
+                        exit v9
                     block4:
-                        v10 = call @0 f1(v5)
-                        return v10
+                        v10 = call @0 u1(v5)
+                        exit v10
                     
                     fn is_odd(p0):
                     block0:
@@ -46,7 +46,7 @@ Analysis(
                     block1:
                         v2 = const false
                         v3 = ok v2
-                        return v3
+                        exit v3
                     block2:
                         v4 = const 1u32
                         v5, v6 = sub.checked p0, v4
@@ -55,10 +55,10 @@ Analysis(
                         v7 = const "arithmetic overflow"
                         v8 = error_from v7
                         v9 = err v8
-                        return v9
+                        exit v9
                     block4:
-                        v10 = call @0 f0(v5)
-                        return v10
+                        v10 = call @0 u0(v5)
+                        exit v10
                 """,
             ),
             output: "(fragment executed)",
@@ -78,8 +78,8 @@ Analysis(
                     scriptunit:
                     block0:
                         v0 = const 6u32
-                        v1 = call @0 unit0.f0(v0)
-                        unit_end v1
+                        v1 = call @0 unit0.u0(v0)
+                        exit v1
                 """,
             ),
             output: "ok true",

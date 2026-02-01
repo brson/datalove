@@ -16,11 +16,11 @@ AotAnalysis(
                     block0:
                         v0 = const 10u32
                         v1 = const 3u32
-                        v2 = call @0 f0(v0, v1)
+                        v2 = call @0 u0(v0, v1)
                         v3 = const 999u32
-                        v4 = call @1 f1(v2, v3)
+                        v4 = call @1 u1(v2, v3)
                         debuglog v4
-                        unit_end
+                        exit
                     
                     fn checked_sub(p0, p1):
                     block0:
@@ -30,10 +30,10 @@ AotAnalysis(
                         v2 = const "arithmetic overflow"
                         v3 = error_from v2
                         v4 = err v3
-                        return v4
+                        exit v4
                     block2:
                         v5 = ok v0
-                        return v5
+                        exit v5
                     
                     fn unwrap_or_default(p0, p1):
                     block0:
@@ -41,11 +41,11 @@ AotAnalysis(
                         v1, v2, v3 = unwrap_result v0
                         branch v3, block1, block2
                     block1:
-                        return v1
+                        exit v1
                     block2:
                         v4 = copy p1
                         drop v2
-                        return v4
+                        exit v4
                 """,
             ),
             aot_compile: Some(AotCompileResult(

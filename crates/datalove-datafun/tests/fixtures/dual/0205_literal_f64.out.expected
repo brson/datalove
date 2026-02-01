@@ -15,7 +15,7 @@ DualAnalysis(
                     block0:
                         v0 = const 3.141592653589793f64
                         debuglog v0
-                        unit_end
+                        exit
                 """,
             ),
             aot_lowering: LoweringResult(
@@ -25,7 +25,7 @@ DualAnalysis(
                     block0:
                         v0 = const 3.141592653589793f64
                         debuglog v0
-                        unit_end
+                        exit
                 """,
             ),
             ir_match: true,

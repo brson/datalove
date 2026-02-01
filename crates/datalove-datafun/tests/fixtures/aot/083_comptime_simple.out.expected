@@ -17,7 +17,7 @@ AotAnalysis(
                         v0 = mul p0, p1
                         drop p0
                         drop p1
-                        return v0
+                        exit v0
                 """,
             ),
             output: "",
@@ -38,10 +38,10 @@ AotAnalysis(
                     block0:
                         v0 = const 3int
                         v1 = const 7int
-                        v2 = comptime_call m0.f0(v0, v1) [disc=0, comptime_params=[0]]
+                        v2 = comptime_call m0.u0(v0, v1) [disc=0, comptime_params=[0]]
                         debuglog v2
                         unit_end_drop v2
-                        unit_end
+                        exit
                 """,
             ),
             aot_compile: Some(AotCompileResult(

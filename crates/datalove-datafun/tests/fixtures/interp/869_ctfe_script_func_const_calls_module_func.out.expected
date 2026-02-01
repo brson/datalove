@@ -15,7 +15,7 @@ Analysis(
                     fn get_value():
                     block0:
                         v0 = const 42u32
-                        return v0
+                        exit v0
                 """,
             ),
             output: "",
@@ -34,14 +34,14 @@ Analysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = call @0 f0()
+                        v0 = call @0 u0()
                         debuglog v0
-                        unit_end
+                        exit
                     
                     fn get_result():
                     block0:
                         v0 = const 42u32
-                        return v0
+                        exit v0
                 """,
             ),
             output: "(fragment executed)",

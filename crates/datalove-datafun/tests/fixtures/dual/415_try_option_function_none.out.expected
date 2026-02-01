@@ -13,9 +13,9 @@ DualAnalysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = call @0 f1()
+                        v0 = call @0 u1()
                         debuglog v0
-                        unit_end
+                        exit
                     
                     fn extract(p0):
                     block0:
@@ -24,16 +24,16 @@ DualAnalysis(
                         branch v2, block2, block1
                     block1:
                         v3 = none
-                        return v3
+                        exit v3
                     block2:
                         v4 = some v1
-                        return v4
+                        exit v4
                     
                     fn test():
                     block0:
                         v0 = none
-                        v1 = call @0 f0(v0)
-                        return v1
+                        v1 = call @0 u0(v0)
+                        exit v1
                 """,
             ),
             aot_lowering: LoweringResult(
@@ -41,9 +41,9 @@ DualAnalysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = call @0 f1()
+                        v0 = call @0 u1()
                         debuglog v0
-                        unit_end
+                        exit
                     
                     fn extract(p0):
                     block0:
@@ -52,16 +52,16 @@ DualAnalysis(
                         branch v2, block2, block1
                     block1:
                         v3 = none
-                        return v3
+                        exit v3
                     block2:
                         v4 = some v1
-                        return v4
+                        exit v4
                     
                     fn test():
                     block0:
                         v0 = none
-                        v1 = call @0 f0(v0)
-                        return v1
+                        v1 = call @0 u0(v0)
+                        exit v1
                 """,
             ),
             ir_match: true,

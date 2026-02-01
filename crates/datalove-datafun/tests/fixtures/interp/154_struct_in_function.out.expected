@@ -14,14 +14,14 @@ Analysis(
                 ir: """
                     scriptunit:
                     block0:
-                        unit_end
+                        exit
                     
                     fn make_point():
                     block0:
                         v0 = const 100u32
                         v1 = const 200u32
                         v2 = pack Struct0 {v0, v1}
-                        return v2
+                        exit v2
                 """,
             ),
             output: "(fragment executed)",
@@ -40,8 +40,8 @@ Analysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = call @0 unit0.f0()
-                        unit_end v0
+                        v0 = call @0 unit0.u0()
+                        exit v0
                 """,
             ),
             output: "{x = 100, y = 200}",

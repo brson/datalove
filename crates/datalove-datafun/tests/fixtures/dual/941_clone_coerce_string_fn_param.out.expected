@@ -15,18 +15,18 @@ DualAnalysis(
                     block0:
                         v0 = const "world"
                         v1 = clone v0
-                        v2 = call @0 f0(v1)
+                        v2 = call @0 u0(v1)
                         debuglog v2
                         drop v2
-                        v3 = call @1 f0(v0)
+                        v3 = call @1 u0(v0)
                         debuglog v3
                         drop v3
-                        unit_end
+                        exit
                     
                     fn identity(p0):
                     block0:
                         v0 = move p0
-                        return v0
+                        exit v0
                 """,
             ),
             aot_lowering: LoweringResult(
@@ -36,18 +36,18 @@ DualAnalysis(
                     block0:
                         v0 = const "world"
                         v1 = clone v0
-                        v2 = call @0 f0(v1)
+                        v2 = call @0 u0(v1)
                         debuglog v2
                         drop v2
-                        v3 = call @1 f0(v0)
+                        v3 = call @1 u0(v0)
                         debuglog v3
                         drop v3
-                        unit_end
+                        exit
                     
                     fn identity(p0):
                     block0:
                         v0 = move p0
-                        return v0
+                        exit v0
                 """,
             ),
             ir_match: true,

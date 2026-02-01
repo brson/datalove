@@ -15,15 +15,15 @@ Analysis(
                     scriptunit:
                     block0:
                         v0 = const 6int
-                        v1 = call @0 f0(v0)
+                        v1 = call @0 u0(v0)
                         unit_end_drop v1
-                        unit_end
+                        exit
                     
                     fn square(p0):
                     block0:
                         v0 = mul p0, p0
                         drop p0
-                        return v0
+                        exit v0
                 """,
             ),
             output: "(fragment executed)",

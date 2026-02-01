@@ -50,7 +50,7 @@ DualAnalysis(
                         debuglog v19
                         v20 = ge v0, v1
                         debuglog v20
-                        unit_end
+                        exit
                 """,
             ),
             aot_lowering: LoweringResult(
@@ -95,7 +95,7 @@ DualAnalysis(
                         debuglog v19
                         v20 = ge v0, v1
                         debuglog v20
-                        unit_end
+                        exit
                 """,
             ),
             ir_match: true,

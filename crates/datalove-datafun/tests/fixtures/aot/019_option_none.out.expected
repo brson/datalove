@@ -14,11 +14,11 @@ AotAnalysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = call @0 f1()
+                        v0 = call @0 u1()
                         v1 = const 99u32
-                        v2 = call @1 f0(v0, v1)
+                        v2 = call @1 u0(v0, v1)
                         debuglog v2
-                        unit_end
+                        exit
                     
                     fn unwrap_or_default(p0, p1):
                     block0:
@@ -26,17 +26,17 @@ AotAnalysis(
                         v1, v2 = unwrap_option v0
                         branch v2, block1, block2
                     block1:
-                        return v1
+                        exit v1
                     block2:
                         goto block3
                     block3:
                         v3 = copy p1
-                        return v3
+                        exit v3
                     
                     fn get_none():
                     block0:
                         v0 = none
-                        return v0
+                        exit v0
                 """,
             ),
             aot_compile: Some(AotCompileResult(

@@ -18,7 +18,7 @@ Analysis(
                         v1 = const "Boston"
                         v2 = pack Struct0 {v0, v1}
                         unit_end_drop v2
-                        unit_end
+                        exit
                 """,
             ),
             output: "(fragment executed)",
@@ -38,7 +38,7 @@ Analysis(
                     scriptunit:
                     block0:
                         v0 = move unit0.v2
-                        unit_end v0
+                        exit v0
                 """,
             ),
             output: "{name = \"Alice\", city = \"Boston\"}",

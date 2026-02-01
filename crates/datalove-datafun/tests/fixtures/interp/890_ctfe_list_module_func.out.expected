@@ -18,7 +18,7 @@ Analysis(
                         v1 = const 8u32
                         v2 = const 9u32
                         v3 = const [7u32, 8u32, 9u32]
-                        return v3
+                        exit v3
                 """,
             ),
             output: "",
@@ -37,10 +37,10 @@ Analysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = call @0 m0.f0()
+                        v0 = call @0 m0.u0()
                         debuglog v0
                         drop v0
-                        unit_end
+                        exit
                 """,
             ),
             output: "(fragment executed)",

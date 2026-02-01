@@ -13,7 +13,7 @@ use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::time::Instant;
 
-use datalove_datafun_ir::{FuncRef, IrCodeUnit};
+use datalove_datafun_ir::{CodeRef, IrCodeUnit};
 use datalove_datafun_interp::{
     CallDispatcher, DispatchCallContext, DispatchResult, Destination,
     DynamicInliner, DynamicInlinerConfig, InterpError, Value,
@@ -305,8 +305,8 @@ impl OptimizingDispatcher {
     }
 
     /// Check if we have an inlined version of a function.
-    fn has_inlined_version(&self, func_ref: &FuncRef) -> bool {
-        self.inliner.get_inlined_function(func_ref).is_some()
+    fn has_inlined_version(&self, code_ref: &CodeRef) -> bool {
+        self.inliner.get_inlined_function(code_ref).is_some()
     }
 
     /// Try to execute via JIT if compiled.
@@ -314,7 +314,7 @@ impl OptimizingDispatcher {
     /// Returns Some(result) if JIT execution was attempted, None to fall back.
     fn try_jit_execution(
         &mut self,
-        func_ref: &FuncRef,
+        code_ref: &CodeRef,
         func: &IrCodeUnit,
         args: &[Value],
         ret_dest: Destination,
@@ -325,12 +325,12 @@ impl OptimizingDispatcher {
     ) -> Option<DispatchResult> {
         use datalove_datafun_interp::ExecutionContext;
 
-        let key = FunctionKey::from(func_ref);
+        let key = FunctionKey::from(code_ref);
 
         // For external functions, get context from callee's unit.
         let _callee_ctx_owned: Option<ExecutionContext>;
-        let compile_ctx = match func_ref {
-            FuncRef::External { unit, .. } => {
+        let compile_ctx = match code_ref {
+            CodeRef::External { unit, .. } => {
                 match call_ctx.registry.unit_functions(*unit) {
                     Some(unit_funcs) => {
                         _callee_ctx_owned = Some(ExecutionContext::new(unit_funcs));
@@ -353,7 +353,7 @@ impl OptimizingDispatcher {
                 // Record JIT compilation in metrics if this was a new compilation.
                 if let Some(metrics) = &mut self.metrics {
                     if let Some(FunctionState::Compiled { code_size, .. }) = self.jit.states.get(&key) {
-                        metrics.record_jit_compile(func_ref, *code_size);
+                        metrics.record_jit_compile(code_ref, *code_size);
                     }
                 }
 
@@ -386,7 +386,7 @@ impl OptimizingDispatcher {
                     } else {
                         ExecutionMode::Jit
                     };
-                    metrics.record_call(func_ref, mode, start_time);
+                    metrics.record_call(code_ref, mode, start_time);
                 }
 
                 match result {
@@ -426,7 +426,7 @@ impl Default for OptimizingDispatcher {
 impl CallDispatcher for OptimizingDispatcher {
     fn dispatch_call(
         &mut self,
-        func_ref: &FuncRef,
+        code_ref: &CodeRef,
         func: &IrCodeUnit,
         args: &[Value],
         ret_dest: Destination,
@@ -445,19 +445,19 @@ impl CallDispatcher for OptimizingDispatcher {
             if let Some(call_site_info) = &call_ctx.call_site_info {
                 // Look up the caller function.
                 let caller = match &call_site_info.caller {
-                    FuncRef::Local(func_id) => {
-                        call_ctx.exec_ctx.find_local_function(*func_id)
+                    CodeRef::Local(id) => {
+                        call_ctx.exec_ctx.find_local_function(*id)
                     }
-                    FuncRef::Module { module, func: func_id } => {
-                        call_ctx.registry.get_module_function_as_unit(*module, *func_id)
+                    CodeRef::Module { module, id } => {
+                        call_ctx.registry.get_module_function_as_unit(*module, *id)
                     }
-                    FuncRef::External { .. } => None,
+                    CodeRef::External { .. } => None,
                 };
 
                 if let Some(caller) = caller {
                     // Record the call in the inliner (may trigger inlining).
                     let inliner_result = self.inliner.dispatch_call(
-                        func_ref,
+                        code_ref,
                         func,
                         args,
                         ret_dest,
@@ -486,7 +486,7 @@ impl CallDispatcher for OptimizingDispatcher {
         }
 
         // Step 2: Check if we have an inlined version.
-        let is_inlined = self.has_inlined_version(func_ref);
+        let is_inlined = self.has_inlined_version(code_ref);
 
         // Determine whether to attempt JIT based on mode.
         let should_try_jit = self.config.jit_enabled && self.chaos_should_compile();
@@ -500,7 +500,7 @@ impl CallDispatcher for OptimizingDispatcher {
 
             if use_jit_if_compiled {
                 if let Some(result) = self.try_jit_execution(
-                    func_ref,
+                    code_ref,
                     func,
                     args,
                     ret_dest,
@@ -517,7 +517,7 @@ impl CallDispatcher for OptimizingDispatcher {
         // Step 5: Fall back to interpreter.
         // Record interpreted execution in metrics.
         if let Some(metrics) = &mut self.metrics {
-            metrics.record_call(func_ref, ExecutionMode::Interpreted, start_time);
+            metrics.record_call(code_ref, ExecutionMode::Interpreted, start_time);
         }
 
         DispatchResult::NotHandled
@@ -531,8 +531,8 @@ impl CallDispatcher for OptimizingDispatcher {
         self
     }
 
-    fn get_optimized_function(&self, func_ref: &FuncRef) -> Option<&IrCodeUnit> {
-        self.inliner.get_inlined_function(func_ref)
+    fn get_optimized_function(&self, code_ref: &CodeRef) -> Option<&IrCodeUnit> {
+        self.inliner.get_inlined_function(code_ref)
     }
 }
 

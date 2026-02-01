@@ -7,13 +7,13 @@ ModulesAnalysis(
         ir: """
             fn main():
             block0:
-                v0 = call @0 m0.f0()
-                return v0
+                v0 = call @0 m0.u0()
+                exit v0
             
             fn helper():
             block0:
                 v0 = const 42u32
-                return v0
+                exit v0
         """,
     ),
     output: "42",

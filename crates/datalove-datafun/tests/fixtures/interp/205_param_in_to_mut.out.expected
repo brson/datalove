@@ -17,14 +17,14 @@ Analysis(
                         v0 = const 42u32
                         store p0, v0
                         v1 = const true
-                        return v1
+                        exit v1
                     
                     fn outer(p0):
                     block0:
                         v0 = copy p0
                         store.copy.tracked s0, v0
-                        v1 = call @0 m0.f0(s0)
-                        return v1
+                        v1 = call @0 m0.u0(s0)
+                        exit v1
                 """,
             ),
             output: "",
@@ -43,7 +43,7 @@ Analysis(
                 ir: """
                     scriptunit:
                     block0:
-                        unit_end
+                        exit
                 """,
             ),
             output: "(fragment executed)",
@@ -63,8 +63,8 @@ Analysis(
                     scriptunit:
                     block0:
                         v0 = const 100u32
-                        v1 = call @0 m0.f1(v0)
-                        unit_end v1
+                        v1 = call @0 m0.u1(v0)
+                        exit v1
                 """,
             ),
             output: "true",

@@ -28,7 +28,7 @@ DualAnalysis(
                         debuglog v8
                         v9 = intrinsic NegWrappingOffset(v4)
                         debuglog v9
-                        unit_end
+                        exit
                 """,
             ),
             aot_lowering: LoweringResult(
@@ -51,7 +51,7 @@ DualAnalysis(
                         debuglog v8
                         v9 = intrinsic NegWrappingOffset(v4)
                         debuglog v9
-                        unit_end
+                        exit
                 """,
             ),
             ir_match: true,

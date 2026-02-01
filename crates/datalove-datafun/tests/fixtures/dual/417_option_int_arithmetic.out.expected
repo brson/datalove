@@ -13,10 +13,10 @@ DualAnalysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = call @0 f0()
+                        v0 = call @0 u0()
                         debuglog v0
                         drop v0
-                        unit_end
+                        exit
                     
                     fn test():
                     block0:
@@ -28,13 +28,13 @@ DualAnalysis(
                         branch v5, block2, block1
                     block1:
                         v6 = none
-                        return v6
+                        exit v6
                     block2:
                         v7, v8 = unwrap_option v3
                         branch v8, block4, block3
                     block3:
                         v9 = none
-                        return v9
+                        exit v9
                     block4:
                         v10 = widen v4
                         v11 = widen v7
@@ -42,7 +42,7 @@ DualAnalysis(
                         v13 = some v12
                         drop v10
                         drop v11
-                        return v13
+                        exit v13
                 """,
             ),
             aot_lowering: LoweringResult(
@@ -50,10 +50,10 @@ DualAnalysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = call @0 f0()
+                        v0 = call @0 u0()
                         debuglog v0
                         drop v0
-                        unit_end
+                        exit
                     
                     fn test():
                     block0:
@@ -65,13 +65,13 @@ DualAnalysis(
                         branch v5, block2, block1
                     block1:
                         v6 = none
-                        return v6
+                        exit v6
                     block2:
                         v7, v8 = unwrap_option v3
                         branch v8, block4, block3
                     block3:
                         v9 = none
-                        return v9
+                        exit v9
                     block4:
                         v10 = widen v4
                         v11 = widen v7
@@ -79,7 +79,7 @@ DualAnalysis(
                         v13 = some v12
                         drop v10
                         drop v11
-                        return v13
+                        exit v13
                 """,
             ),
             ir_match: true,

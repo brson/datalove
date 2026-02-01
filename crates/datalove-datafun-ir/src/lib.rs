@@ -46,18 +46,6 @@ pub struct CallSiteId(pub u32);
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
 pub struct IrModuleId(pub u32);
 
-/// Reference to a function.
-///
-/// Functions can be defined in the current unit or imported from previous units.
-#[derive(Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
-pub enum FuncRef {
-    /// Function defined locally (in the current unit or module).
-    Local(FuncId),
-    /// Function from a previous script unit.
-    External { unit: u32, func: FuncId },
-    /// Function from a module.
-    Module { module: IrModuleId, func: FuncId },
-}
 
 // ============================================================================
 // Unified Code Unit Types
@@ -83,37 +71,6 @@ pub enum CodeRef {
     Module { module: IrModuleId, id: CodeUnitId },
 }
 
-impl CodeRef {
-    /// Convert from FuncRef (for migration).
-    pub fn from_func_ref(func_ref: &FuncRef) -> Self {
-        match func_ref {
-            FuncRef::Local(id) => CodeRef::Local(CodeUnitId(id.0)),
-            FuncRef::External { unit, func } => CodeRef::External {
-                unit: *unit,
-                id: CodeUnitId(func.0),
-            },
-            FuncRef::Module { module, func } => CodeRef::Module {
-                module: *module,
-                id: CodeUnitId(func.0),
-            },
-        }
-    }
-
-    /// Convert to FuncRef (for migration).
-    pub fn to_func_ref(&self) -> FuncRef {
-        match self {
-            CodeRef::Local(id) => FuncRef::Local(FuncId(id.0)),
-            CodeRef::External { unit, id } => FuncRef::External {
-                unit: *unit,
-                func: FuncId(id.0),
-            },
-            CodeRef::Module { module, id } => FuncRef::Module {
-                module: *module,
-                func: FuncId(id.0),
-            },
-        }
-    }
-}
 
 /// Reference to a type (used in Pack instructions).
 ///
@@ -894,7 +851,7 @@ pub enum Instruction {
     Call {
         site_id: CallSiteId,
         dest: ValueId,
-        func: FuncRef,
+        func: CodeRef,
         args: Vec<Operand>,
     },
 
@@ -913,7 +870,7 @@ pub enum Instruction {
     /// **Ownership:** Same as `Call`.
     ComptimeCall {
         dest: ValueId,
-        func: FuncRef,
+        func: CodeRef,
         /// Original arguments including const parameter args.
         args: Vec<Operand>,
         /// Pre-computed discriminant for this instantiation (from typecheck).
@@ -1328,14 +1285,11 @@ pub enum Terminator {
         else_args: Vec<Operand>,
     },
 
-    /// Return from function.
-    Return { value: Option<Operand> },
+    /// Normal exit from code unit (function return or script completion).
+    Exit { value: Option<Operand> },
 
-    /// End of script unit (normal completion).
-    UnitEnd { result: Option<Operand> },
-
-    /// Early return from script unit (from `ret`, !, or checked operators).
-    UnitEarlyReturn { value: Operand },
+    /// Early exit from code unit (from `ret`, !, or checked operators in scripts).
+    EarlyExit { value: Operand },
 }
 
 /// A basic block - sequence of instructions followed by a terminator.
@@ -1374,7 +1328,7 @@ pub enum ExportBinding {
     /// A mutable slot (from var binding).
     Slot(SlotId),
     /// A function defined in this unit.
-    Function(FuncId),
+    Function(CodeUnitId),
 }
 
 // ============================================================================
@@ -1575,7 +1529,7 @@ impl std::error::Error for CtfeError {}
 pub trait CtfeEvaluator {
     /// Execute a code unit and extract the result as a ConstValue.
     ///
-    /// The unit should be a simple expression unit (single block, UnitEnd terminator).
+    /// The unit should be a simple expression unit (single block, Exit terminator).
     fn evaluate(&mut self, unit: &IrCodeUnit, result_type: &IrType) -> Result<ConstValue, CtfeError>;
 
     /// Set the module function registry for cross-module CTFE calls.

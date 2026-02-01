@@ -18,7 +18,7 @@
 use std::cell::RefCell;
 use std::ptr::NonNull;
 
-use datalove_datafun_ir::{FuncId, FuncRef, IrModuleId};
+use datalove_datafun_ir::{CodeRef, CodeUnitId, IrModuleId};
 use datalove_datafun_interp::{
     Destination, ExecutionContext, FrameStore, FunctionRegistry, IrInterpreter, Value,
 };
@@ -86,41 +86,41 @@ fn get_dispatch_context() -> Option<NonNull<DispatchContext<'static>>> {
 pub struct EncodedFuncKey(u64);
 
 impl EncodedFuncKey {
-    pub fn from_func_ref(func_ref: &FuncRef) -> Self {
-        match func_ref {
-            FuncRef::Local(func_id) => {
-                let func = func_id.0 as u64;
+    pub fn from_code_ref(code_ref: &CodeRef) -> Self {
+        match code_ref {
+            CodeRef::Local(id) => {
+                let func = id.0 as u64;
                 Self(func) // kind=0
             }
-            FuncRef::Module { module, func } => {
+            CodeRef::Module { module, id } => {
                 let kind = 1u64 << 62;
                 let mod_id = (module.0 as u64 & 0x3FFFFFFF) << 32;
-                let func_id = func.0 as u64;
+                let func_id = id.0 as u64;
                 Self(kind | mod_id | func_id)
             }
-            FuncRef::External { unit, func } => {
+            CodeRef::External { unit, id } => {
                 let kind = 2u64 << 62;
                 let unit_val = (*unit as u64 & 0x3FFFFFFF) << 32;
-                let func_id = func.0 as u64;
+                let func_id = id.0 as u64;
                 Self(kind | unit_val | func_id)
             }
         }
     }
 
-    pub fn to_func_ref(self) -> FuncRef {
+    pub fn to_code_ref(self) -> CodeRef {
         let kind = (self.0 >> 62) & 0x3;
         let mid_bits = ((self.0 >> 32) & 0x3FFFFFFF) as u32;
-        let func_id = FuncId(self.0 as u32);
+        let id = CodeUnitId(self.0 as u32);
 
         match kind {
-            0 => FuncRef::Local(func_id),
-            1 => FuncRef::Module {
+            0 => CodeRef::Local(id),
+            1 => CodeRef::Module {
                 module: IrModuleId(mid_bits),
-                func: func_id,
+                id,
             },
-            2 => FuncRef::External {
+            2 => CodeRef::External {
                 unit: mid_bits,
-                func: func_id,
+                id,
             },
             _ => unreachable!(),
         }
@@ -135,9 +135,9 @@ impl EncodedFuncKey {
     }
 }
 
-impl From<&FuncRef> for EncodedFuncKey {
-    fn from(func_ref: &FuncRef) -> Self {
-        Self::from_func_ref(func_ref)
+impl From<&CodeRef> for EncodedFuncKey {
+    fn from(code_ref: &CodeRef) -> Self {
+        Self::from_code_ref(code_ref)
     }
 }
 
@@ -185,11 +185,11 @@ pub unsafe extern "C" fn __jit_dispatch_call(
     let ctx = unsafe { &mut *ctx_ptr.as_ptr() };
 
     // Decode target function.
-    let func_ref = EncodedFuncKey::from_u64(encoded_key).to_func_ref();
-    let func_key = FunctionKey::from(&func_ref);
+    let code_ref = EncodedFuncKey::from_u64(encoded_key).to_code_ref();
+    let func_key = FunctionKey::from(&code_ref);
 
     // Look up the function IR using ExecutionContext (handles Local, Module, External).
-    let ir_unit = ctx.exec_ctx.get_function(&func_ref, ctx.registry);
+    let ir_unit = ctx.exec_ctx.get_unit(&code_ref, ctx.registry);
     let func_ctx = ir_unit.function_context()
         .expect("trampoline dispatch requires a function code unit");
 
@@ -262,31 +262,31 @@ mod tests {
 
     #[test]
     fn test_encoded_func_key_local() {
-        let func_ref = FuncRef::Local(FuncId(42));
-        let encoded = EncodedFuncKey::from_func_ref(&func_ref);
-        let decoded = encoded.to_func_ref();
-        assert_eq!(decoded, func_ref);
+        let code_ref = CodeRef::Local(CodeUnitId(42));
+        let encoded = EncodedFuncKey::from_code_ref(&code_ref);
+        let decoded = encoded.to_code_ref();
+        assert_eq!(decoded, code_ref);
     }
 
     #[test]
     fn test_encoded_func_key_module() {
-        let func_ref = FuncRef::Module {
+        let code_ref = CodeRef::Module {
             module: IrModuleId(123),
-            func: FuncId(456),
+            id: CodeUnitId(456),
         };
-        let encoded = EncodedFuncKey::from_func_ref(&func_ref);
-        let decoded = encoded.to_func_ref();
-        assert_eq!(decoded, func_ref);
+        let encoded = EncodedFuncKey::from_code_ref(&code_ref);
+        let decoded = encoded.to_code_ref();
+        assert_eq!(decoded, code_ref);
     }
 
     #[test]
     fn test_encoded_func_key_external() {
-        let func_ref = FuncRef::External {
+        let code_ref = CodeRef::External {
             unit: 7,
-            func: FuncId(99),
+            id: CodeUnitId(99),
         };
-        let encoded = EncodedFuncKey::from_func_ref(&func_ref);
-        let decoded = encoded.to_func_ref();
-        assert_eq!(decoded, func_ref);
+        let encoded = EncodedFuncKey::from_code_ref(&code_ref);
+        let decoded = encoded.to_code_ref();
+        assert_eq!(decoded, code_ref);
     }
 }

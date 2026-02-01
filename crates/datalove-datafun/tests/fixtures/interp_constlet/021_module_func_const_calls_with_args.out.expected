@@ -17,14 +17,14 @@ Analysis(
                         v0 = sub p0, p1
                         drop p0
                         drop p1
-                        return v0
+                        exit v0
                     
                     fn get_diff():
                     block0:
                         v0 = const 100int
                         v1 = const 35int
-                        v2 = call @0 m0.f0(v0, v1)
-                        return v2
+                        v2 = call @0 m0.u0(v0, v1)
+                        exit v2
                 """,
             ),
             output: "",
@@ -43,7 +43,7 @@ Analysis(
                 ir: """
                     scriptunit:
                     block0:
-                        unit_end
+                        exit
                 """,
             ),
             output: "(fragment executed)",
@@ -62,8 +62,8 @@ Analysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = call @0 m0.f1()
-                        unit_end v0
+                        v0 = call @0 m0.u1()
+                        exit v0
                 """,
             ),
             output: "65",

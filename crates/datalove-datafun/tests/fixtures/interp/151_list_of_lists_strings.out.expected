@@ -23,7 +23,7 @@ Analysis(
                         v6 = list [v3, v4, v5]
                         v7 = list [v2, v6]
                         unit_end_drop v7
-                        unit_end
+                        exit
                 """,
             ),
             output: "(fragment executed)",
@@ -43,7 +43,7 @@ Analysis(
                     scriptunit:
                     block0:
                         v0 = move unit0.v7
-                        unit_end v0
+                        exit v0
                 """,
             ),
             output: "[[\"a\", \"b\"], [\"c\", \"d\", \"e\"]]",

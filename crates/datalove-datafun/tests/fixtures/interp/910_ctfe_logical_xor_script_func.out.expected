@@ -14,16 +14,16 @@ Analysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = call @0 f0()
+                        v0 = call @0 u0()
                         debuglog v0
-                        unit_end
+                        exit
                     
                     fn check_xor():
                     block0:
                         v0 = const true
                         v1 = const true
                         v2 = const false
-                        return v2
+                        exit v2
                 """,
             ),
             output: "(fragment executed)",

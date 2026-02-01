@@ -22,7 +22,7 @@ DualAnalysis(
                         unit_end_drop v1
                         unit_end_drop v2
                         unit_end_drop v0
-                        unit_end
+                        exit
                 """,
             ),
             aot_lowering: LoweringResult(
@@ -39,7 +39,7 @@ DualAnalysis(
                         unit_end_drop v1
                         unit_end_drop v2
                         unit_end_drop v0
-                        unit_end
+                        exit
                 """,
             ),
             ir_match: true,

@@ -9,18 +9,18 @@ ModulesAnalysis(
             block0:
                 v0 = const 42int
                 v1 = some v0
-                return v1
+                exit v1
             
             fn main():
             block0:
-                v0 = call @0 m0.f0()
+                v0 = call @0 m0.u0()
                 v1, v2 = unwrap_option v0
                 branch v2, block1, block2
             block1:
-                return v1
+                exit v1
             block2:
                 v3 = const 0int
-                return v3
+                exit v3
         """,
     ),
     output: "42",

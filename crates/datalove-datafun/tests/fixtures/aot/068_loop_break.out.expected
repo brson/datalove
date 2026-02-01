@@ -34,7 +34,7 @@ AotAnalysis(
                         goto block1
                     block5:
                         debuglog s0
-                        unit_end
+                        exit
                 """,
             ),
             aot_compile: Some(AotCompileResult(

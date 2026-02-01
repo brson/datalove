@@ -14,10 +14,10 @@ Analysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = call @0 f0()
+                        v0 = call @0 u0()
                         debuglog v0
                         drop v0
-                        unit_end
+                        exit
                     
                     fn div_checked():
                     block0:
@@ -28,7 +28,7 @@ Analysis(
                         goto block1
                     block1:
                         v7 = ok v2
-                        return v7
+                        exit v7
                 """,
             ),
             output: "(fragment executed)",

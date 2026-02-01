@@ -15,11 +15,11 @@ DualAnalysis(
                     block0:
                         v0 = const 127i8
                         v1 = const 1i8
-                        v2 = call @0 f0(v0, v1)
+                        v2 = call @0 u0(v0, v1)
                         v3 = const 99i8
-                        v4 = call @1 f1(v2, v3)
+                        v4 = call @1 u1(v2, v3)
                         debuglog v4
-                        unit_end
+                        exit
                     
                     fn test_drop(p0, p1):
                     block0:
@@ -29,11 +29,11 @@ DualAnalysis(
                     block1:
                         v3 = none
                         drop v0
-                        return v3
+                        exit v3
                     block2:
                         v4 = some v1
                         drop v0
-                        return v4
+                        exit v4
                     
                     fn unwrap(p0, p1):
                     block0:
@@ -41,12 +41,12 @@ DualAnalysis(
                         v1, v2 = unwrap_option v0
                         branch v2, block1, block2
                     block1:
-                        return v1
+                        exit v1
                     block2:
                         goto block3
                     block3:
                         v3 = copy p1
-                        return v3
+                        exit v3
                 """,
             ),
             aot_lowering: LoweringResult(
@@ -56,11 +56,11 @@ DualAnalysis(
                     block0:
                         v0 = const 127i8
                         v1 = const 1i8
-                        v2 = call @0 f0(v0, v1)
+                        v2 = call @0 u0(v0, v1)
                         v3 = const 99i8
-                        v4 = call @1 f1(v2, v3)
+                        v4 = call @1 u1(v2, v3)
                         debuglog v4
-                        unit_end
+                        exit
                     
                     fn test_drop(p0, p1):
                     block0:
@@ -70,11 +70,11 @@ DualAnalysis(
                     block1:
                         v3 = none
                         drop v0
-                        return v3
+                        exit v3
                     block2:
                         v4 = some v1
                         drop v0
-                        return v4
+                        exit v4
                     
                     fn unwrap(p0, p1):
                     block0:
@@ -82,12 +82,12 @@ DualAnalysis(
                         v1, v2 = unwrap_option v0
                         branch v2, block1, block2
                     block1:
-                        return v1
+                        exit v1
                     block2:
                         goto block3
                     block3:
                         v3 = copy p1
-                        return v3
+                        exit v3
                 """,
             ),
             ir_match: true,

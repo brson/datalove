@@ -32,7 +32,7 @@ DualAnalysis(
                         debuglog v10
                         debuglog v12
                         debuglog v14
-                        unit_end
+                        exit
                 """,
             ),
             aot_lowering: LoweringResult(
@@ -59,7 +59,7 @@ DualAnalysis(
                         debuglog v10
                         debuglog v12
                         debuglog v14
-                        unit_end
+                        exit
                 """,
             ),
             ir_match: true,

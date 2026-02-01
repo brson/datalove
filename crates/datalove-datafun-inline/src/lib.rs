@@ -10,7 +10,7 @@
 use std::collections::HashMap;
 
 use datalove_datafun_ir::{
-    BlockId, CallSiteId, FuncId, FuncRef, Instruction, IrBlock, IrCodeUnit, IrModule, IrModuleId,
+    BlockId, CallSiteId, CodeRef, CodeUnitId, FuncId, Instruction, IrBlock, IrCodeUnit, IrModule, IrModuleId,
     IrType, ModuleFunctionRegistry, Operand, ParamId, ParamMode, SlotDest, SlotId, SymbolTable,
     Terminator, ValueId,
 };
@@ -509,12 +509,12 @@ fn find_call_sites(func: &IrCodeUnit, callee_id: FuncId) -> Vec<CallSite> {
 
     for (block_idx, block) in func.blocks.iter().enumerate() {
         for (instr_idx, instr) in block.instructions.iter().enumerate() {
-            if let Instruction::Call { dest, func: func_ref, args, .. } = instr {
+            if let Instruction::Call { dest, func: code_ref, args, .. } = instr {
                 // Match both Local and Module function references.
-                let matches = match func_ref {
-                    FuncRef::Local(id) => *id == callee_id,
-                    FuncRef::Module { func, .. } => *func == callee_id,
-                    FuncRef::External { .. } => false,
+                let matches = match code_ref {
+                    CodeRef::Local(id) => id.0 == callee_id.0,
+                    CodeRef::Module { id, .. } => id.0 == callee_id.0,
+                    CodeRef::External { .. } => false,
                 };
                 if matches {
                     sites.push(CallSite {
@@ -541,17 +541,17 @@ fn find_cross_module_call_sites(
 
     for (block_idx, block) in func.blocks.iter().enumerate() {
         for (instr_idx, instr) in block.instructions.iter().enumerate() {
-            if let Instruction::Call { dest, func: func_ref, args, .. } = instr {
-                let matches = match func_ref {
+            if let Instruction::Call { dest, func: code_ref, args, .. } = instr {
+                let matches = match code_ref {
                     // Local call - matches if we're in the same module as target.
-                    FuncRef::Local(id) => {
-                        caller_module == target.module && *id == target.func
+                    CodeRef::Local(id) => {
+                        caller_module == target.module && id.0 == target.func.0
                     }
                     // Module call - check both module and func ID.
-                    FuncRef::Module { module, func } => {
-                        *module == target.module && *func == target.func
+                    CodeRef::Module { module, id } => {
+                        *module == target.module && id.0 == target.func.0
                     }
-                    FuncRef::External { .. } => false,
+                    CodeRef::External { .. } => false,
                 };
                 if matches {
                     sites.push(CallSite {
@@ -951,18 +951,15 @@ impl RemapContext {
                 else_block: self.remap_block(*else_block),
                 else_args: else_args.iter().map(|a| self.remap_operand(a)).collect(),
             },
-            Terminator::Return { value } => {
-                // Return becomes a goto to the continuation block.
+            Terminator::Exit { value } => {
+                // Exit becomes a goto to the continuation block.
                 Terminator::Goto {
                     target: continuation_block,
                     args: value.iter().map(|v| self.remap_operand(v)).collect(),
                 }
             }
-            // These shouldn't appear in function bodies being inlined.
-            Terminator::UnitEnd { result } => Terminator::UnitEnd {
-                result: result.as_ref().map(|r| self.remap_operand(r)),
-            },
-            Terminator::UnitEarlyReturn { value } => Terminator::UnitEarlyReturn {
+            // EarlyExit shouldn't appear in function bodies being inlined.
+            Terminator::EarlyExit { value } => Terminator::EarlyExit {
                 value: self.remap_operand(value),
             },
         }
@@ -1563,10 +1560,10 @@ pub fn inline_cross_module(
 
     for request in &requests {
         // Get the caller and callee code units.
-        let Some(caller) = new_registry.get_module_function_as_unit(request.caller.module, request.caller.func) else {
+        let Some(caller) = new_registry.get_module_function_as_unit(request.caller.module, CodeUnitId(request.caller.func.0)) else {
             continue;
         };
-        let Some(callee) = registry.get_module_function_as_unit(request.callee.module, request.callee.func) else {
+        let Some(callee) = registry.get_module_function_as_unit(request.callee.module, CodeUnitId(request.callee.func.0)) else {
             continue;
         };
 
@@ -1615,7 +1612,7 @@ pub fn inline_cross_module(
         }
 
         // Update the registry with the modified caller.
-        new_registry.add_module_code_unit(request.caller.module, request.caller.func, updated_caller);
+        new_registry.add_module_code_unit(request.caller.module, CodeUnitId(request.caller.func.0), updated_caller);
     }
 
     CrossModuleInlineResult {

@@ -116,7 +116,7 @@ pub fn analyze_modules_worldfile(
         .get(&(main_salsa_module_id, "main".S()))
         .ok_or_else(|| anyhow!("main function not found"))?;
 
-    let main_code_unit = compiled.shared.module_registry.get_module_function_as_unit(*main_ir_module_id, *main_func_id)
+    let main_code_unit = compiled.shared.module_registry.get_module_function_as_unit(*main_ir_module_id, datalove_datafun_ir::CodeUnitId(main_func_id.0))
         .ok_or_else(|| anyhow!("main function not in registry"))?
         .clone();
 

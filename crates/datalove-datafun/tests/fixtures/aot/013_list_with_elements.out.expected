@@ -20,7 +20,7 @@ AotAnalysis(
                         v3 = list [v0, v1, v2]
                         debuglog v3
                         unit_end_drop v3
-                        unit_end
+                        exit
                 """,
             ),
             aot_compile: Some(AotCompileResult(

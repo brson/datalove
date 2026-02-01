@@ -14,10 +14,10 @@ Analysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = call @0 f0()
+                        v0 = call @0 u0()
                         debuglog v0
                         drop v0
-                        unit_end
+                        exit
                     
                     fn get_mapping():
                     block0:
@@ -28,7 +28,7 @@ Analysis(
                         v4 = const 30u32
                         v5 = const 3u32
                         v6 = const map {10u32 = 1u32, 20u32 = 2u32, 30u32 = 3u32}
-                        return v6
+                        exit v6
                 """,
             ),
             output: "(fragment executed)",

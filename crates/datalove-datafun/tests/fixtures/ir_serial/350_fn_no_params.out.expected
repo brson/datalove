@@ -10,19 +10,19 @@ IrSerialAnalysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = call @0 f0()
+                        v0 = call @0 u0()
                         debuglog v0
-                        unit_end
+                        exit
                     
                     fn get_five():
                     block0:
                         v0 = const 5u32
-                        return v0
+                        exit v0
                 """,
             ),
             direct_interp_output: "5\n",
             direct_aot_output: "5\n",
-            serialized_ir_size: 2211,
+            serialized_ir_size: 2213,
             serialized_registry_size: 177,
             deser_success: true,
             deser_interp_output: "5\n",

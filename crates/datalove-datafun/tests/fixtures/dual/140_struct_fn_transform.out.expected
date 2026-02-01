@@ -16,12 +16,12 @@ DualAnalysis(
                         v0 = const 1u32
                         v1 = const 2u32
                         v2 = pack Struct0 {v0, v1}
-                        v3 = call @0 f0(v2)
+                        v3 = call @0 u0(v2)
                         v4 = getfieldref v3.0
                         debuglog *v4
                         v5 = getfieldref v3.1
                         debuglog *v5
-                        unit_end
+                        exit
                     
                     fn swap_coords(p0):
                     block0:
@@ -30,7 +30,7 @@ DualAnalysis(
                         v2 = copy p0
                         v3 = getfield v2.0
                         v4 = pack Struct0 {v1, v3}
-                        return v4
+                        exit v4
                 """,
             ),
             aot_lowering: LoweringResult(
@@ -41,12 +41,12 @@ DualAnalysis(
                         v0 = const 1u32
                         v1 = const 2u32
                         v2 = pack Struct0 {v0, v1}
-                        v3 = call @0 f0(v2)
+                        v3 = call @0 u0(v2)
                         v4 = getfieldref v3.0
                         debuglog *v4
                         v5 = getfieldref v3.1
                         debuglog *v5
-                        unit_end
+                        exit
                     
                     fn swap_coords(p0):
                     block0:
@@ -55,7 +55,7 @@ DualAnalysis(
                         v2 = copy p0
                         v3 = getfield v2.0
                         v4 = pack Struct0 {v1, v3}
-                        return v4
+                        exit v4
                 """,
             ),
             ir_match: true,

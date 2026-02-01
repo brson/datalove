@@ -14,21 +14,21 @@ AotAnalysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = call @0 f0()
+                        v0 = call @0 u0()
                         v1, v2, v3 = unwrap_result v0
                         branch v3, block2, block1
                     block1:
                         v4 = err v2
-                        unit_early_return v4
+                        early_exit v4
                     block2:
                         debuglog v1
-                        unit_end
+                        exit
                     
                     fn get_ok():
                     block0:
                         v0 = const 42u32
                         v1 = ok v0
-                        return v1
+                        exit v1
                 """,
             ),
             aot_compile: Some(AotCompileResult(

@@ -16,9 +16,9 @@ Analysis(
                     block0:
                         v0 = const 10u32
                         v1 = const 2u32
-                        v2 = call @0 f0(v0, v1)
+                        v2 = call @0 u0(v0, v1)
                         unit_end_drop v2
-                        unit_end
+                        exit
                     
                     fn all_ops(p0, p1):
                     block0:
@@ -28,7 +28,7 @@ Analysis(
                         v2 = const "arithmetic overflow"
                         v3 = error_from v2
                         v4 = err v3
-                        return v4
+                        exit v4
                     block2:
                         v5, v6 = sub.checked p0, p1
                         branch v6, block3, block4
@@ -36,7 +36,7 @@ Analysis(
                         v7 = const "arithmetic overflow"
                         v8 = error_from v7
                         v9 = err v8
-                        return v9
+                        exit v9
                     block4:
                         v10, v11 = mul.checked p0, p1
                         branch v11, block5, block6
@@ -44,7 +44,7 @@ Analysis(
                         v12 = const "arithmetic overflow"
                         v13 = error_from v12
                         v14 = err v13
-                        return v14
+                        exit v14
                     block6:
                         v15, v16 = div.checked p0, p1
                         branch v16, block7, block8
@@ -52,10 +52,10 @@ Analysis(
                         v17 = const "arithmetic overflow"
                         v18 = error_from v17
                         v19 = err v18
-                        return v19
+                        exit v19
                     block8:
                         v20 = ok v15
-                        return v20
+                        exit v20
                 """,
             ),
             output: "(fragment executed)",

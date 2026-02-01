@@ -11,7 +11,7 @@ use cranelift_jit::{JITBuilder, JITModule};
 use cranelift_module::{FuncId, Linkage, Module};
 use target_lexicon::Triple;
 
-use datalove_datafun_ir::{FuncRef, Instruction, IrCodeUnit, IrModuleId};
+use datalove_datafun_ir::{CodeRef, CodeUnitId, Instruction, IrCodeUnit, IrModuleId};
 use datalove_datafun_interp::{ExecutionContext, FunctionRegistry};
 use datalove_datafun_cranelift::codegen::{self, build_signature_for_func, uses_sret};
 use datalove_datafun_cranelift::runtime::RuntimeImports;
@@ -161,31 +161,31 @@ impl JitCompiler {
         tydesc_emit::collect_types_from_code_unit(func, &mut types);
 
         // Create stubs for each callee.
-        let mut local_funcs: HashMap<datalove_datafun_ir::FuncId, FuncId> = HashMap::new();
-        let mut module_funcs: HashMap<(IrModuleId, datalove_datafun_ir::FuncId), FuncId> = HashMap::new();
+        let mut local_funcs: HashMap<CodeUnitId, FuncId> = HashMap::new();
+        let mut module_funcs: HashMap<(IrModuleId, CodeUnitId), FuncId> = HashMap::new();
 
-        for func_ref in callees {
+        for code_ref in callees {
             // Look up the callee's IR to get its signature.
-            let callee_ir = ctx.get_function(&func_ref, registry);
+            let callee_ir = ctx.get_unit(&code_ref, registry);
 
             // Collect types from callee for TyDesc emission.
             tydesc_emit::collect_types_from_code_unit(&callee_ir, &mut types);
 
             // Create a stub for this callee.
-            let stub_id = self.create_stub_for_callee(&func_ref, &callee_ir)?;
+            let stub_id = self.create_stub_for_callee(&code_ref, &callee_ir)?;
 
             // Register in appropriate map.
-            match &func_ref {
-                FuncRef::Local(id) => {
-                    local_funcs.insert(*id, stub_id);
+            match &code_ref {
+                CodeRef::Local(id) => {
+                    local_funcs.insert(CodeUnitId(id.0), stub_id);
                 }
-                FuncRef::Module { module, func: fid } => {
-                    module_funcs.insert((*module, *fid), stub_id);
+                CodeRef::Module { module, id } => {
+                    module_funcs.insert((*module, CodeUnitId(id.0)), stub_id);
                 }
-                FuncRef::External { unit, func: fid } => {
+                CodeRef::External { unit, id } => {
                     // External functions go in local_funcs for now.
                     // The stub handles the dispatch correctly.
-                    local_funcs.insert(*fid, stub_id);
+                    local_funcs.insert(CodeUnitId(id.0), stub_id);
                     let _ = unit; // Silence warning; actual unit is encoded in stub.
                 }
             }
@@ -230,13 +230,13 @@ impl JitCompiler {
     }
 
     /// Collect all unique Call targets in a code unit.
-    fn collect_call_targets(&self, func: &IrCodeUnit) -> HashSet<FuncRef> {
+    fn collect_call_targets(&self, func: &IrCodeUnit) -> HashSet<CodeRef> {
         let mut targets = HashSet::new();
 
         for block in &func.blocks {
             for inst in &block.instructions {
-                if let Instruction::Call { func: func_ref, .. } = inst {
-                    targets.insert(func_ref.clone());
+                if let Instruction::Call { func: code_ref, .. } = inst {
+                    targets.insert(code_ref.clone());
                 }
             }
         }
@@ -250,7 +250,7 @@ impl JitCompiler {
     /// __jit_dispatch_call with the encoded function key.
     fn create_stub_for_callee(
         &mut self,
-        func_ref: &FuncRef,
+        code_ref: &CodeRef,
         callee: &IrCodeUnit,
     ) -> Result<FuncId, JitError> {
         // Generate unique stub name.
@@ -267,7 +267,7 @@ impl JitCompiler {
             .map_err(|e| JitError::CompilationFailed(format!("declare stub: {}", e)))?;
 
         // Define the stub.
-        self.define_stub(stub_id, func_ref, callee, &sig)?;
+        self.define_stub(stub_id, code_ref, callee, &sig)?;
 
         Ok(stub_id)
     }
@@ -276,7 +276,7 @@ impl JitCompiler {
     fn define_stub(
         &mut self,
         stub_id: FuncId,
-        func_ref: &FuncRef,
+        code_ref: &CodeRef,
         callee: &IrCodeUnit,
         sig: &cl_ir::Signature,
     ) -> Result<(), JitError> {
@@ -341,7 +341,7 @@ impl JitCompiler {
         };
 
         // Encode function key.
-        let encoded_key = EncodedFuncKey::from_func_ref(func_ref);
+        let encoded_key = EncodedFuncKey::from_code_ref(code_ref);
         let encoded_key_val = builder.ins().iconst(cl_types::I64, encoded_key.as_u64() as i64);
 
         // Get return destination pointer.

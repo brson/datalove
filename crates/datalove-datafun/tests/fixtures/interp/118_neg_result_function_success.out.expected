@@ -15,9 +15,9 @@ Analysis(
                     scriptunit:
                     block0:
                         v0 = const 42i32
-                        v1 = call @0 f0(v0)
+                        v1 = call @0 u0(v0)
                         unit_end_drop v1
-                        unit_end
+                        exit
                     
                     fn test_neg(p0):
                     block0:
@@ -27,10 +27,10 @@ Analysis(
                         v2 = const "negation overflow"
                         v3 = error_from v2
                         v4 = err v3
-                        return v4
+                        exit v4
                     block2:
                         v5 = ok v0
-                        return v5
+                        exit v5
                 """,
             ),
             output: "(fragment executed)",

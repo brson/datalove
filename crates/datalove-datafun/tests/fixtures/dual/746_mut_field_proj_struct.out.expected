@@ -18,19 +18,19 @@ DualAnalysis(
                         v2 = pack Struct0 {v0, v1}
                         store.copy.tracked s0, v2
                         v3 = getfieldref s0.0
-                        v4 = call @0 f0(*v3)
+                        v4 = call @0 u0(*v3)
                         v5 = getfieldref s0.0
                         debuglog *v5
                         v6 = getfieldref s0.1
                         debuglog *v6
-                        unit_end
+                        exit
                     
                     fn set_to_42(p0):
                     block0:
                         v0 = const 42u32
                         store p0, v0
                         v1 = const true
-                        return v1
+                        exit v1
                 """,
             ),
             aot_lowering: LoweringResult(
@@ -43,19 +43,19 @@ DualAnalysis(
                         v2 = pack Struct0 {v0, v1}
                         store.copy.tracked s0, v2
                         v3 = getfieldref s0.0
-                        v4 = call @0 f0(*v3)
+                        v4 = call @0 u0(*v3)
                         v5 = getfieldref s0.0
                         debuglog *v5
                         v6 = getfieldref s0.1
                         debuglog *v6
-                        unit_end
+                        exit
                     
                     fn set_to_42(p0):
                     block0:
                         v0 = const 42u32
                         store p0, v0
                         v1 = const true
-                        return v1
+                        exit v1
                 """,
             ),
             ir_match: true,

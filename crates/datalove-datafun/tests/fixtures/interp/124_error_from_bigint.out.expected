@@ -20,7 +20,7 @@ Analysis(
                         drop v0
                         drop v1
                         v3 = error_from v2
-                        unit_end v3
+                        exit v3
                 """,
             ),
             output: "error 300",

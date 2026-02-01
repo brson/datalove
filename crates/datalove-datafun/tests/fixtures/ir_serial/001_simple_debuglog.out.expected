@@ -12,12 +12,12 @@ IrSerialAnalysis(
                     block0:
                         v0 = const 42u32
                         debuglog v0
-                        unit_end
+                        exit
                 """,
             ),
             direct_interp_output: "42\n",
             direct_aot_output: "42\n",
-            serialized_ir_size: 894,
+            serialized_ir_size: 890,
             serialized_registry_size: 177,
             deser_success: true,
             deser_interp_output: "42\n",

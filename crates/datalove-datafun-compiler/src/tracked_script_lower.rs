@@ -96,10 +96,10 @@ impl AccumulatedLowerBindings {
                         self.slot_types.push((name.clone(), ty.clone()));
                     }
                 }
-                ExportBinding::Function(func_id) => {
+                ExportBinding::Function(unit_id) => {
                     // Remove any existing function with same name.
                     self.functions.retain(|(n, _, _)| n != name);
-                    self.functions.push((name.clone(), unit_index, *func_id));
+                    self.functions.push((name.clone(), unit_index, FuncId(unit_id.0)));
                 }
             }
         }

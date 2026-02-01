@@ -936,11 +936,11 @@ fn lower_optional_binop<'db>(
     ctx.emit_pending_intermediate_drops();
     ctx.emit_before_try_return_drops();
     if ctx.is_script_unit {
-        ctx.finish_block(Terminator::UnitEarlyReturn {
+        ctx.finish_block(Terminator::EarlyExit {
             value: Operand::Value(none_value),
         });
     } else {
-        ctx.finish_block(Terminator::Return {
+        ctx.finish_block(Terminator::Exit {
             value: Some(Operand::Value(none_value)),
         });
     }
@@ -1006,11 +1006,11 @@ fn lower_checked_result_binop<'db>(
     ctx.emit_pending_intermediate_drops();
     ctx.emit_before_try_return_drops();
     if ctx.is_script_unit {
-        ctx.finish_block(Terminator::UnitEarlyReturn {
+        ctx.finish_block(Terminator::EarlyExit {
             value: Operand::Value(wrapped_err),
         });
     } else {
-        ctx.finish_block(Terminator::Return {
+        ctx.finish_block(Terminator::Exit {
             value: Some(Operand::Value(wrapped_err)),
         });
     }
@@ -1064,11 +1064,11 @@ fn lower_optional_unaryop<'db>(
     ctx.emit_pending_intermediate_drops();
     ctx.emit_before_try_return_drops();
     if ctx.is_script_unit {
-        ctx.finish_block(Terminator::UnitEarlyReturn {
+        ctx.finish_block(Terminator::EarlyExit {
             value: Operand::Value(none_value),
         });
     } else {
-        ctx.finish_block(Terminator::Return {
+        ctx.finish_block(Terminator::Exit {
             value: Some(Operand::Value(none_value)),
         });
     }
@@ -1132,11 +1132,11 @@ fn lower_checked_result_unaryop<'db>(
     ctx.emit_pending_intermediate_drops();
     ctx.emit_before_try_return_drops();
     if ctx.is_script_unit {
-        ctx.finish_block(Terminator::UnitEarlyReturn {
+        ctx.finish_block(Terminator::EarlyExit {
             value: Operand::Value(wrapped_err),
         });
     } else {
-        ctx.finish_block(Terminator::Return {
+        ctx.finish_block(Terminator::Exit {
             value: Some(Operand::Value(wrapped_err)),
         });
     }
@@ -1184,11 +1184,11 @@ fn lower_try_option<'db>(
     ctx.emit_pending_intermediate_drops();
     ctx.emit_before_try_return_drops();
     if ctx.is_script_unit {
-        ctx.finish_block(Terminator::UnitEarlyReturn {
+        ctx.finish_block(Terminator::EarlyExit {
             value: Operand::Value(none_value),
         });
     } else {
-        ctx.finish_block(Terminator::Return {
+        ctx.finish_block(Terminator::Exit {
             value: Some(Operand::Value(none_value)),
         });
     }
@@ -1238,11 +1238,11 @@ fn lower_try_result<'db>(
     ctx.emit_pending_intermediate_drops();
     ctx.emit_before_try_return_drops();
     if ctx.is_script_unit {
-        ctx.finish_block(Terminator::UnitEarlyReturn {
+        ctx.finish_block(Terminator::EarlyExit {
             value: Operand::Value(wrapped_err),
         });
     } else {
-        ctx.finish_block(Terminator::Return {
+        ctx.finish_block(Terminator::Exit {
             value: Some(Operand::Value(wrapped_err)),
         });
     }

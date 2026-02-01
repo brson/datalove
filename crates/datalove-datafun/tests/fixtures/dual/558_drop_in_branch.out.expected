@@ -14,12 +14,12 @@ DualAnalysis(
                     scriptunit:
                     block0:
                         v0 = const true
-                        v1 = call @0 f0(v0)
+                        v1 = call @0 u0(v0)
                         debuglog v1
                         v2 = const false
-                        v3 = call @1 f0(v2)
+                        v3 = call @1 u0(v2)
                         debuglog v3
-                        unit_end
+                        exit
                     
                     fn test_branch(p0):
                     block0:
@@ -29,11 +29,11 @@ DualAnalysis(
                     block1:
                         v2 = const 1u32
                         drop v0
-                        return v2
+                        exit v2
                     block2:
                         v3 = const 0u32
                         drop v0
-                        return v3
+                        exit v3
                 """,
             ),
             aot_lowering: LoweringResult(
@@ -42,12 +42,12 @@ DualAnalysis(
                     scriptunit:
                     block0:
                         v0 = const true
-                        v1 = call @0 f0(v0)
+                        v1 = call @0 u0(v0)
                         debuglog v1
                         v2 = const false
-                        v3 = call @1 f0(v2)
+                        v3 = call @1 u0(v2)
                         debuglog v3
-                        unit_end
+                        exit
                     
                     fn test_branch(p0):
                     block0:
@@ -57,11 +57,11 @@ DualAnalysis(
                     block1:
                         v2 = const 1u32
                         drop v0
-                        return v2
+                        exit v2
                     block2:
                         v3 = const 0u32
                         drop v0
-                        return v3
+                        exit v3
                 """,
             ),
             ir_match: true,

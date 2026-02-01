@@ -17,13 +17,13 @@ Analysis(
                         v0 = const 100int
                         v1 = eq p0, v0
                         drop v0
-                        return v1
+                        exit v1
                     
                     fn outer(p0):
                     block0:
-                        v0 = call @0 m0.f0(p0)
+                        v0 = call @0 m0.u0(p0)
                         drop p0
-                        return v0
+                        exit v0
                 """,
             ),
             output: "",
@@ -42,7 +42,7 @@ Analysis(
                 ir: """
                     scriptunit:
                     block0:
-                        unit_end
+                        exit
                 """,
             ),
             output: "(fragment executed)",
@@ -62,8 +62,8 @@ Analysis(
                     scriptunit:
                     block0:
                         v0 = const 100int
-                        v1 = call @0 m0.f1(v0)
-                        unit_end v1
+                        v1 = call @0 m0.u1(v0)
+                        exit v1
                 """,
             ),
             output: "true",

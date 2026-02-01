@@ -165,9 +165,9 @@ pub struct FunctionCompiler<'a, M: Module> {
     /// Mapping from IR ParamId to Cranelift Value (user params, not rt_handle).
     param_values: HashMap<ParamId, cl_ir::Value>,
     /// Mapping from local IR FuncId to Cranelift FuncId.
-    local_funcs: HashMap<datalove_datafun_ir::FuncId, FuncId>,
+    local_funcs: HashMap<datalove_datafun_ir::CodeUnitId, FuncId>,
     /// Mapping from module function (IrModuleId, FuncId) to Cranelift FuncId.
-    module_funcs: HashMap<(IrModuleId, datalove_datafun_ir::FuncId), FuncId>,
+    module_funcs: HashMap<(IrModuleId, datalove_datafun_ir::CodeUnitId), FuncId>,
     /// Function registry for looking up module functions.
     #[allow(dead_code)]
     registry: Option<&'a FunctionRegistry>,
@@ -740,7 +740,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
     /// that may call them.
     pub fn register_local_func(
         &mut self,
-        ir_func_id: datalove_datafun_ir::FuncId,
+        ir_func_id: datalove_datafun_ir::CodeUnitId,
         cl_func_id: FuncId,
     ) {
         self.local_funcs.insert(ir_func_id, cl_func_id);
@@ -749,14 +749,14 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
     /// Set all local function mappings at once.
     ///
     /// Use this for two-pass compilation where all functions are declared first.
-    pub fn set_local_funcs(&mut self, local_funcs: HashMap<datalove_datafun_ir::FuncId, FuncId>) {
+    pub fn set_local_funcs(&mut self, local_funcs: HashMap<datalove_datafun_ir::CodeUnitId, FuncId>) {
         self.local_funcs = local_funcs;
     }
 
     /// Set all module function mappings at once.
     ///
     /// Use this for three-pass compilation where all module functions are declared first.
-    pub fn set_module_funcs(&mut self, module_funcs: HashMap<(IrModuleId, datalove_datafun_ir::FuncId), FuncId>) {
+    pub fn set_module_funcs(&mut self, module_funcs: HashMap<(IrModuleId, datalove_datafun_ir::CodeUnitId), FuncId>) {
         self.module_funcs = module_funcs;
     }
 
@@ -1129,7 +1129,7 @@ mod tests {
                             value: ConstValue::I32(42),
                         },
                     ],
-                    terminator: Terminator::Return {
+                    terminator: Terminator::Exit {
                         value: Some(Operand::Value(ValueId(0))),
                     },
                 },
@@ -1171,7 +1171,7 @@ mod tests {
                             rhs: Operand::Value(ValueId(1)),
                         },
                     ],
-                    terminator: Terminator::Return {
+                    terminator: Terminator::Exit {
                         value: Some(Operand::Value(ValueId(2))),
                     },
                 },
@@ -1205,7 +1205,7 @@ mod tests {
                             operand: Operand::Value(ValueId(0)),
                         },
                     ],
-                    terminator: Terminator::Return {
+                    terminator: Terminator::Exit {
                         value: Some(Operand::Value(ValueId(1))),
                     },
                 },
@@ -1257,7 +1257,7 @@ mod tests {
                             value: ConstValue::I32(1),
                         },
                     ],
-                    terminator: Terminator::Return {
+                    terminator: Terminator::Exit {
                         value: Some(Operand::Value(ValueId(1))),
                     },
                 },
@@ -1270,7 +1270,7 @@ mod tests {
                             value: ConstValue::I32(2),
                         },
                     ],
-                    terminator: Terminator::Return {
+                    terminator: Terminator::Exit {
                         value: Some(Operand::Value(ValueId(2))),
                     },
                 },

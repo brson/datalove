@@ -118,7 +118,7 @@ fn lower_statement_impl<'db>(
             };
             // Emit drops for all values in all scopes before return.
             ctx.emit_before_return_drops(stmt_idx);
-            ctx.finish_block(Terminator::Return { value });
+            ctx.finish_block(Terminator::Exit { value });
             // Start a new unreachable block (code after return).
             let new_block = ctx.fresh_block();
             ctx.start_unreachable_block(new_block);

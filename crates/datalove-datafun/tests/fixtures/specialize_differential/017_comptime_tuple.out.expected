@@ -17,7 +17,7 @@ Analysis(
                     fn get_pair(p0):
                     block0:
                         v0 = move p0
-                        return v0
+                        exit v0
                 """,
             ),
             output: "",
@@ -37,10 +37,10 @@ Analysis(
                     scriptunit:
                     block0:
                         v2 = const (10int, 20int)
-                        v3 = comptime_call m0.f0(v2) [disc=0, comptime_params=[0]]
+                        v3 = comptime_call m0.u0(v2) [disc=0, comptime_params=[0]]
                         debuglog v3
                         unit_end_drop v3
-                        unit_end
+                        exit
                 """,
             ),
             output: "(fragment executed)",
@@ -61,7 +61,7 @@ Analysis(
                     scriptunit:
                     block0:
                         v0 = move unit0.v3
-                        unit_end v0
+                        exit v0
                 """,
             ),
             output: "(10, 20)",

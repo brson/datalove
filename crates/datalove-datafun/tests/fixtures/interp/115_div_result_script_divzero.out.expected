@@ -14,27 +14,27 @@ Analysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = call @0 f0()
-                        v1 = call @1 f1()
+                        v0 = call @0 u0()
+                        v1 = call @1 u1()
                         v2, v3 = div.checked v0, v1
                         branch v3, block1, block2
                     block1:
                         v4 = const "arithmetic overflow"
                         v5 = error_from v4
                         v6 = err v5
-                        unit_early_return v6
+                        early_exit v6
                     block2:
-                        unit_end
+                        exit
                     
                     fn get_a():
                     block0:
                         v0 = const 100u32
-                        return v0
+                        exit v0
                     
                     fn get_b():
                     block0:
                         v0 = const 0u32
-                        return v0
+                        exit v0
                 """,
             ),
             output: "error \"arithmetic overflow\"",

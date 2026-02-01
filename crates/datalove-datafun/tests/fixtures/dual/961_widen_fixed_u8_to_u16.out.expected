@@ -16,7 +16,7 @@ DualAnalysis(
                         v0 = const 42u8
                         v1 = widen_fixed v0
                         debuglog v1
-                        unit_end
+                        exit
                 """,
             ),
             aot_lowering: LoweringResult(
@@ -27,7 +27,7 @@ DualAnalysis(
                         v0 = const 42u8
                         v1 = widen_fixed v0
                         debuglog v1
-                        unit_end
+                        exit
                 """,
             ),
             ir_match: true,

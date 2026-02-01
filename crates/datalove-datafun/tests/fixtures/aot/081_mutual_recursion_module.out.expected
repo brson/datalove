@@ -20,7 +20,7 @@ AotAnalysis(
                     block1:
                         v2 = const true
                         v3 = ok v2
-                        return v3
+                        exit v3
                     block2:
                         v4 = const 1u32
                         v5, v6 = sub.checked p0, v4
@@ -29,10 +29,10 @@ AotAnalysis(
                         v7 = const "arithmetic overflow"
                         v8 = error_from v7
                         v9 = err v8
-                        return v9
+                        exit v9
                     block4:
-                        v10 = call @0 m0.f1(v5)
-                        return v10
+                        v10 = call @0 m0.u1(v5)
+                        exit v10
                     
                     fn is_odd(p0):
                     block0:
@@ -42,7 +42,7 @@ AotAnalysis(
                     block1:
                         v2 = const false
                         v3 = ok v2
-                        return v3
+                        exit v3
                     block2:
                         v4 = const 1u32
                         v5, v6 = sub.checked p0, v4
@@ -51,10 +51,10 @@ AotAnalysis(
                         v7 = const "arithmetic overflow"
                         v8 = error_from v7
                         v9 = err v8
-                        return v9
+                        exit v9
                     block4:
-                        v10 = call @0 m0.f0(v5)
-                        return v10
+                        v10 = call @0 m0.u0(v5)
+                        exit v10
                 """,
             ),
             output: "",
@@ -74,14 +74,14 @@ AotAnalysis(
                     scriptunit:
                     block0:
                         v0 = const 6u32
-                        v1 = call @0 m0.f0(v0)
+                        v1 = call @0 m0.u0(v0)
                         debuglog v1
                         drop v1
                         v2 = const 6u32
-                        v3 = call @1 m0.f1(v2)
+                        v3 = call @1 m0.u1(v2)
                         debuglog v3
                         drop v3
-                        unit_end
+                        exit
                 """,
             ),
             aot_compile: Some(AotCompileResult(

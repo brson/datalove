@@ -6,7 +6,7 @@
 use std::collections::HashSet;
 use datalove_rt::rust::AlignedBuffer;
 use datalove_rtdt::TyDesc;
-use datalove_datafun_ir::{ValueId, SlotId, ParamId};
+use datalove_datafun_ir::{CodeUnitContext, IrCodeUnit, ValueId, SlotId, ParamId};
 use crate::layout::IrLayout;
 use crate::value::{Value, Destination};
 
@@ -32,48 +32,43 @@ pub struct Frame {
 }
 
 impl Frame {
-    /// Create a new frame for function execution.
+    /// Create a new frame for code unit execution.
     ///
-    /// Function frames don't need value initialization tracking since they
-    /// use precise Drop instructions and are discarded on return.
-    pub fn new_function(layout: IrLayout, param_count: usize) -> Self {
+    /// Dispatches on the unit's context:
+    /// - Function frames don't track value initialization (precise Drop instructions)
+    /// - Script frames track value initialization for DropTracked cleanup
+    pub fn new(unit: &IrCodeUnit, layout: IrLayout) -> Self {
         let slot_count = layout.slot_offsets.len();
         let data = AlignedBuffer::with_align(
             layout.frame_size as usize,
             layout.frame_align as usize,
         );
 
-        Self {
-            data,
-            layout,
-            value_initialized: None,
-            slot_initialized: vec![false; slot_count],
-            param_ptrs: vec![std::ptr::null_mut(); param_count],
-            param_tydescs: vec![std::ptr::null(); param_count],
-            param_initialized: vec![false; param_count],
-        }
-    }
-
-    /// Create a new frame for script execution.
-    ///
-    /// Script frames track value initialization for DropTracked instructions,
-    /// which handle cleanup of unit_end bindings that may have been moved.
-    pub fn new_script(layout: IrLayout) -> Self {
-        let value_count = layout.value_offsets.len();
-        let slot_count = layout.slot_offsets.len();
-        let data = AlignedBuffer::with_align(
-            layout.frame_size as usize,
-            layout.frame_align as usize,
-        );
-
-        Self {
-            data,
-            layout,
-            value_initialized: Some(vec![false; value_count]),
-            slot_initialized: vec![false; slot_count],
-            param_ptrs: Vec::new(),
-            param_tydescs: Vec::new(),
-            param_initialized: Vec::new(),
+        match &unit.context {
+            CodeUnitContext::Function(ctx) => {
+                let param_count = ctx.params.len();
+                Self {
+                    data,
+                    layout,
+                    value_initialized: None,
+                    slot_initialized: vec![false; slot_count],
+                    param_ptrs: vec![std::ptr::null_mut(); param_count],
+                    param_tydescs: vec![std::ptr::null(); param_count],
+                    param_initialized: vec![false; param_count],
+                }
+            }
+            CodeUnitContext::Script(_) => {
+                let value_count = layout.value_offsets.len();
+                Self {
+                    data,
+                    layout,
+                    value_initialized: Some(vec![false; value_count]),
+                    slot_initialized: vec![false; slot_count],
+                    param_ptrs: Vec::new(),
+                    param_tydescs: Vec::new(),
+                    param_initialized: Vec::new(),
+                }
+            }
         }
     }
 

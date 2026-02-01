@@ -7,7 +7,7 @@
 //! - `ScriptEnvironment`: Combines registry with `FrameStore` for script execution.
 
 use std::sync::Arc;
-use datalove_datafun_ir::{IrCodeUnit, FuncId, FuncRef, IrModuleId, ValueId, SlotId};
+use datalove_datafun_ir::{IrCodeUnit, CodeUnitId, CodeRef, IrModuleId, ValueId, SlotId};
 use crate::frame::{Frame, FrameStore};
 
 // Re-export registry types from the IR crate.
@@ -38,8 +38,8 @@ impl ScriptEnvironment {
     }
 
     /// Add a module code unit.
-    pub fn add_module_code_unit(&mut self, module_id: IrModuleId, func_id: FuncId, unit: IrCodeUnit) {
-        self.registry.add_module_code_unit(module_id, func_id, unit);
+    pub fn add_module_code_unit(&mut self, module_id: IrModuleId, unit_id: CodeUnitId, unit: IrCodeUnit) {
+        self.registry.add_module_code_unit(module_id, unit_id, unit);
     }
 
     /// Add a completed unit's frame and code units.
@@ -81,31 +81,31 @@ impl<'a> ExecutionContext<'a> {
     /// Find a local function by ID.
     ///
     /// Returns None if no local function with this ID exists.
-    pub fn find_local_function(&self, func_id: FuncId) -> Option<&IrCodeUnit> {
-        self.functions.iter().find(|f| f.id.0 == func_id.0)
+    pub fn find_local_function(&self, unit_id: CodeUnitId) -> Option<&IrCodeUnit> {
+        self.functions.iter().find(|f| f.id.0 == unit_id.0)
     }
 
     /// Look up a function by reference.
     ///
     /// Panics if function not found (compiler bug).
-    pub fn get_function<'b>(
+    pub fn get_unit<'b>(
         &'b self,
-        func_ref: &FuncRef,
+        code_ref: &CodeRef,
         registry: &'b FunctionRegistry,
     ) -> &'b IrCodeUnit {
-        match func_ref {
-            FuncRef::Local(id) => {
+        match code_ref {
+            CodeRef::Local(id) => {
                 self.functions.iter()
                     .find(|f| f.id.0 == id.0)
-                    .unwrap_or_else(|| panic!("local function {:?} not found", id))
+                    .unwrap_or_else(|| panic!("local unit {:?} not found", id))
             }
-            FuncRef::External { unit, func } => {
-                registry.get_external_function_as_unit(*unit, *func)
-                    .unwrap_or_else(|| panic!("external function unit={} func={:?} not found", unit, func))
+            CodeRef::External { unit, id } => {
+                registry.get_external_function_as_unit(*unit, *id)
+                    .unwrap_or_else(|| panic!("external unit unit={} id={:?} not found", unit, id))
             }
-            FuncRef::Module { module, func } => {
-                registry.get_module_function_as_unit(*module, *func)
-                    .unwrap_or_else(|| panic!("module function {:?}::{:?} not found", module, func))
+            CodeRef::Module { module, id } => {
+                registry.get_module_function_as_unit(*module, *id)
+                    .unwrap_or_else(|| panic!("module unit {:?}::{:?} not found", module, id))
             }
         }
     }
@@ -116,28 +116,28 @@ impl<'a> ExecutionContext<'a> {
     /// For external functions, returns a context with that unit's functions.
     ///
     /// Panics if function not found (compiler bug).
-    pub fn get_function_with_context<'b>(
+    pub fn get_unit_with_context<'b>(
         &'b self,
-        func_ref: &FuncRef,
+        code_ref: &CodeRef,
         registry: &'b FunctionRegistry,
     ) -> (&'b IrCodeUnit, Option<u32>) {
-        match func_ref {
-            FuncRef::Local(id) => {
+        match code_ref {
+            CodeRef::Local(id) => {
                 let func = self.functions.iter()
                     .find(|f| f.id.0 == id.0)
-                    .unwrap_or_else(|| panic!("local function {:?} not found", id));
+                    .unwrap_or_else(|| panic!("local unit {:?} not found", id));
                 (func, None) // Use current context.
             }
-            FuncRef::External { unit, func } => {
-                let callee = registry.get_external_function_as_unit(*unit, *func)
-                    .unwrap_or_else(|| panic!("external function unit={} func={:?} not found", unit, func));
+            CodeRef::External { unit, id } => {
+                let callee = registry.get_external_function_as_unit(*unit, *id)
+                    .unwrap_or_else(|| panic!("external unit unit={} id={:?} not found", unit, id));
                 (callee, Some(*unit)) // Need context from this unit.
             }
-            FuncRef::Module { module, func } => {
-                // Module calls resolve via FuncRef::Module (through registry),
-                // not FuncRef::Local, so they don't use ExecutionContext.
-                let callee = registry.get_module_function_as_unit(*module, *func)
-                    .unwrap_or_else(|| panic!("module function {:?}::{:?} not found", module, func));
+            CodeRef::Module { module, id } => {
+                // Module calls resolve via CodeRef::Module (through registry),
+                // not CodeRef::Local, so they don't use ExecutionContext.
+                let callee = registry.get_module_function_as_unit(*module, *id)
+                    .unwrap_or_else(|| panic!("module unit {:?}::{:?} not found", module, id));
                 (callee, None)
             }
         }

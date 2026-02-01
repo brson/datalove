@@ -14,7 +14,7 @@ use datalove_datafun_ast::ast::{Statement, ExprFun, ExprFunctionCall};
 use datalove_datafun_sema::ResolvedCallTarget;
 use datalove_datafun_ir::{
     IrType, IrBlock, IrCodeUnit, Operand, ValueId, SlotId, ParamId, BlockId, FuncId,
-    FuncRef, Terminator, Instruction, SymbolTable, ExportBinding, IrModuleId, ParamMode,
+    CodeRef, CodeUnitId, Terminator, Instruction, SymbolTable, ExportBinding, IrModuleId, ParamMode,
     ConstValue, TypeRef, SlotDest, CtfeEvaluator, CallSiteId,
 };
 use crate::ir_ext::IrTypeExt;
@@ -197,8 +197,8 @@ impl ScriptLowerContext {
                         self.slot_types.insert(name.clone(), ty.clone());
                     }
                 }
-                ExportBinding::Function(func_id) => {
-                    self.functions.insert(name.clone(), (unit_index, *func_id));
+                ExportBinding::Function(unit_id) => {
+                    self.functions.insert(name.clone(), (unit_index, FuncId(unit_id.0)));
                 }
             }
         }
@@ -241,9 +241,9 @@ pub struct LowerCtx<'db> {
     pub(super) functions: Vec<IrCodeUnit>,
     /// Symbol table for function resolution.
     pub(super) symbols: SymbolTable,
-    /// Available functions: name -> FuncRef (for resolving calls).
+    /// Available functions: name -> CodeRef (for resolving calls).
     /// Used for script-local and external unit functions (not module functions).
-    pub(super) func_scope: HashMap<String, FuncRef>,
+    pub(super) func_scope: HashMap<String, CodeRef>,
     /// Types of external slots from previous script units, keyed by name.
     pub(super) external_slot_types: HashMap<String, IrType>,
     /// Bindings to drop at unit end (for AOT compilation).
@@ -354,9 +354,9 @@ impl<'db> LowerCtx<'db> {
         // Seed function scope with external functions from previous units.
         let mut func_scope = HashMap::new();
         for (name, (unit, func_id)) in &script_ctx.functions {
-            func_scope.insert(name.clone(), FuncRef::External {
+            func_scope.insert(name.clone(), CodeRef::External {
                 unit: *unit,
-                func: *func_id,
+                id: CodeUnitId(func_id.0),
             });
         }
 
@@ -395,15 +395,15 @@ impl<'db> LowerCtx<'db> {
     /// looked up via `lookup_func` when lowering calls to it.
     pub fn pre_register_func(&mut self, name: &str, param_count: usize) {
         let func_id = self.symbols.define_func(name.to_string(), param_count);
-        self.func_scope.insert(name.to_string(), FuncRef::Local(func_id));
+        self.func_scope.insert(name.to_string(), CodeRef::Local(CodeUnitId(func_id.0)));
     }
 
     /// Register a function with a specific FuncId.
     ///
     /// Used for CTFE to register functions with the same IDs as pre-lowered functions,
-    /// so that call resolution produces matching FuncRefs.
+    /// so that call resolution produces matching CodeRefs.
     pub fn register_func_with_id(&mut self, name: &str, _param_count: usize, func_id: FuncId) {
-        self.func_scope.insert(name.to_string(), FuncRef::Local(func_id));
+        self.func_scope.insert(name.to_string(), CodeRef::Local(CodeUnitId(func_id.0)));
     }
 
     /// Define a function in the current scope.
@@ -412,16 +412,16 @@ impl<'db> LowerCtx<'db> {
     /// existing FuncId. Otherwise allocates a new one.
     pub fn define_func(&mut self, name: &str, param_count: usize) -> FuncId {
         // Check if already pre-registered.
-        if let Some(FuncRef::Local(func_id)) = self.func_scope.get(name) {
-            return *func_id;
+        if let Some(CodeRef::Local(id)) = self.func_scope.get(name) {
+            return FuncId(id.0);
         }
         let func_id = self.symbols.define_func(name.to_string(), param_count);
-        self.func_scope.insert(name.to_string(), FuncRef::Local(func_id));
+        self.func_scope.insert(name.to_string(), CodeRef::Local(CodeUnitId(func_id.0)));
         func_id
     }
 
     /// Look up a function by name (for local/external functions only).
-    pub fn lookup_func(&self, name: &str) -> Option<FuncRef> {
+    pub fn lookup_func(&self, name: &str) -> Option<CodeRef> {
         self.func_scope.get(name).cloned()
     }
 
@@ -429,11 +429,11 @@ impl<'db> LowerCtx<'db> {
     ///
     /// This is the preferred way to resolve function calls. It uses the
     /// `call_targets` from typechecking to get the exact function being called,
-    /// then maps it to an IR function reference.
+    /// then maps it to an IR code reference.
     ///
     /// For module functions (module_id = Some), looks up in `func_id_map`.
     /// For local functions (module_id = None), uses `func_scope` lookup.
-    pub fn resolve_call(&self, call: ExprFunctionCall<'db>) -> FuncRef {
+    pub fn resolve_call(&self, call: ExprFunctionCall<'db>) -> CodeRef {
         let id = call.as_id().index() as usize;
         let func_name = call.name(self.db).text(self.db).to_string();
 
@@ -455,7 +455,7 @@ impl<'db> LowerCtx<'db> {
                         "module function not in func_id_map: {}",
                         resolved_func_name
                     ));
-                FuncRef::Module { module: *ir_mod, func: *func_id }
+                CodeRef::Module { module: *ir_mod, id: CodeUnitId(func_id.0) }
             }
             None => {
                 // Local function resolved by typechecker - use func_scope lookup.
@@ -895,7 +895,7 @@ impl<'db> LowerCtx<'db> {
     }
 
     /// Emit Call.
-    pub fn emit_call(&mut self, dest: ValueId, func: FuncRef, args: Vec<Operand>) {
+    pub fn emit_call(&mut self, dest: ValueId, func: CodeRef, args: Vec<Operand>) {
         let site_id = CallSiteId(self.body.next_call_site);
         self.body.next_call_site += 1;
         self.emit(Instruction::Call { site_id, dest, func, args });
@@ -905,7 +905,7 @@ impl<'db> LowerCtx<'db> {
     pub fn emit_comptime_call(
         &mut self,
         dest: ValueId,
-        func: FuncRef,
+        func: CodeRef,
         args: Vec<Operand>,
         discriminant: u32,
         comptime_param_indices: Vec<usize>,
@@ -1310,9 +1310,8 @@ impl<'db> LowerCtx<'db> {
                     *then_block = BlockId(id_map[then_block.0 as usize]);
                     *else_block = BlockId(id_map[else_block.0 as usize]);
                 }
-                Terminator::Return { .. }
-                | Terminator::UnitEnd { .. }
-                | Terminator::UnitEarlyReturn { .. } => {}
+                Terminator::Exit { .. }
+                | Terminator::EarlyExit { .. } => {}
             }
         }
     }

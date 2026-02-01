@@ -34,7 +34,7 @@ DualAnalysis(
                         v4 = const "done"
                         debuglog v4
                         drop v4
-                        unit_end
+                        exit
                 """,
             ),
             aot_lowering: LoweringResult(
@@ -63,7 +63,7 @@ DualAnalysis(
                         v4 = const "done"
                         debuglog v4
                         drop v4
-                        unit_end
+                        exit
                 """,
             ),
             ir_match: true,

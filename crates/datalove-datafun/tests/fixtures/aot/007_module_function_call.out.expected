@@ -15,7 +15,7 @@ AotAnalysis(
                     fn identity(p0):
                     block0:
                         v0 = copy p0
-                        return v0
+                        exit v0
                 """,
             ),
             output: "",
@@ -35,9 +35,9 @@ AotAnalysis(
                     scriptunit:
                     block0:
                         v0 = const 42u32
-                        v1 = call @0 m0.f0(v0)
+                        v1 = call @0 m0.u0(v0)
                         debuglog v1
-                        unit_end
+                        exit
                 """,
             ),
             aot_compile: Some(AotCompileResult(

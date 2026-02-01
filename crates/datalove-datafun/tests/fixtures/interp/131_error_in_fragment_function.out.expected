@@ -14,13 +14,13 @@ Analysis(
                 ir: """
                     scriptunit:
                     block0:
-                        unit_end
+                        exit
                     
                     fn get_error():
                     block0:
                         v0 = const 42u32
                         v1 = error_from v0
-                        return v1
+                        exit v1
                 """,
             ),
             output: "(fragment executed)",
@@ -39,8 +39,8 @@ Analysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = call @0 unit0.f0()
-                        unit_end v0
+                        v0 = call @0 unit0.u0()
+                        exit v0
                 """,
             ),
             output: "error 42",

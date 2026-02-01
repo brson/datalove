@@ -16,16 +16,16 @@ Analysis(
                     block0:
                         v0 = const 10int
                         v1 = const 20int
-                        v2 = call @0 f0(v0, v1)
+                        v2 = call @0 u0(v0, v1)
                         unit_end_drop v2
-                        unit_end
+                        exit
                     
                     fn add(p0, p1):
                     block0:
                         v0 = add p0, p1
                         drop p0
                         drop p1
-                        return v0
+                        exit v0
                 """,
             ),
             output: "(fragment executed)",
@@ -45,7 +45,7 @@ Analysis(
                     scriptunit:
                     block0:
                         v0 = move unit0.v2
-                        unit_end v0
+                        exit v0
                 """,
             ),
             output: "30",

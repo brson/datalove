@@ -19,7 +19,7 @@ DualAnalysis(
                         v1 = const 20u32
                         store.copy.tracked s1, v1
                         debuglog s1
-                        unit_end
+                        exit
                 """,
             ),
             aot_lowering: LoweringResult(
@@ -33,7 +33,7 @@ DualAnalysis(
                         v1 = const 20u32
                         store.copy.tracked s1, v1
                         debuglog s1
-                        unit_end
+                        exit
                 """,
             ),
             ir_match: true,

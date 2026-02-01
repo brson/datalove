@@ -4,7 +4,7 @@
 
 use std::any::Any;
 
-use datalove_datafun_ir::{CallSiteId, FuncRef, IrCodeUnit};
+use datalove_datafun_ir::{CallSiteId, CodeRef, IrCodeUnit};
 use datalove_rt::c::LocalRtHandle;
 
 use crate::error::InterpError;
@@ -19,7 +19,7 @@ use crate::IrInterpreter;
 #[derive(Clone, Debug)]
 pub struct CallSiteInfo {
     /// The function containing this call site.
-    pub caller: FuncRef,
+    pub caller: CodeRef,
     /// The unique ID of this call site within the caller.
     pub call_site_id: CallSiteId,
 }
@@ -61,7 +61,7 @@ pub trait CallDispatcher {
     ///
     /// # Arguments
     ///
-    /// * `func_ref` - The function reference being called
+    /// * `code_ref` - The code reference being called
     /// * `func` - The resolved function as IrCodeUnit
     /// * `args` - Arguments as Value pointers
     /// * `ret_dest` - Destination for return value
@@ -69,7 +69,7 @@ pub trait CallDispatcher {
     /// * `call_ctx` - Context for mixed-mode execution (JIT calling interpreter)
     fn dispatch_call(
         &mut self,
-        func_ref: &FuncRef,
+        code_ref: &CodeRef,
         func: &IrCodeUnit,
         args: &[Value],
         ret_dest: Destination,
@@ -89,7 +89,7 @@ pub trait CallDispatcher {
     ///
     /// Called before executing a function to check if there's an inlined/optimized
     /// version that should be used instead. Returns None to use the original code unit.
-    fn get_optimized_function(&self, _func_ref: &FuncRef) -> Option<&IrCodeUnit> {
+    fn get_optimized_function(&self, _code_ref: &CodeRef) -> Option<&IrCodeUnit> {
         None
     }
 }

@@ -14,7 +14,7 @@ Analysis(
                 ir: """
                     scriptunit:
                     block0:
-                        unit_end
+                        exit
                     
                     fn count_up(p0):
                     block0:
@@ -40,7 +40,7 @@ Analysis(
                         v6 = load.move.tracked s0
                         drop p0
                         drop.tracked s1
-                        return v6
+                        exit v6
                 """,
             ),
             output: "(fragment executed)",
@@ -60,8 +60,8 @@ Analysis(
                     scriptunit:
                     block0:
                         v0 = const 6int
-                        v1 = call @0 unit0.f0(v0)
-                        unit_end v1
+                        v1 = call @0 unit0.u0(v0)
+                        exit v1
                 """,
             ),
             output: "15",

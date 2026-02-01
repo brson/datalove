@@ -16,7 +16,7 @@ Analysis(
                     block0:
                         v0 = const "oops something went wrong"
                         v1 = error_from v0
-                        unit_end v1
+                        exit v1
                 """,
             ),
             output: "error \"oops something went wrong\"",

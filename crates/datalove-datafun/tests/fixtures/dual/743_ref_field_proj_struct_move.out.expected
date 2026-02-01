@@ -17,18 +17,18 @@ DualAnalysis(
                         v1 = const 200int
                         v2 = pack Struct0 {v0, v1}
                         v3 = getfieldref v2.0
-                        v4 = call @0 f0(*v3)
+                        v4 = call @0 u0(*v3)
                         debuglog v4
                         drop v4
                         unit_end_drop v2
-                        unit_end
+                        exit
                     
                     fn takes_ref(p0):
                     block0:
                         v0 = const 0int
                         v1 = add p0, v0
                         drop v0
-                        return v1
+                        exit v1
                 """,
             ),
             aot_lowering: LoweringResult(
@@ -40,18 +40,18 @@ DualAnalysis(
                         v1 = const 200int
                         v2 = pack Struct0 {v0, v1}
                         v3 = getfieldref v2.0
-                        v4 = call @0 f0(*v3)
+                        v4 = call @0 u0(*v3)
                         debuglog v4
                         drop v4
                         unit_end_drop v2
-                        unit_end
+                        exit
                     
                     fn takes_ref(p0):
                     block0:
                         v0 = const 0int
                         v1 = add p0, v0
                         drop v0
-                        return v1
+                        exit v1
                 """,
             ),
             ir_match: true,

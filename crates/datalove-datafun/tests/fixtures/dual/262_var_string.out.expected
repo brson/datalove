@@ -20,7 +20,7 @@ DualAnalysis(
                         store.move.tracked s0, v1
                         debuglog s0
                         unit_end_drop.tracked s0
-                        unit_end
+                        exit
                 """,
             ),
             aot_lowering: LoweringResult(
@@ -35,7 +35,7 @@ DualAnalysis(
                         store.move.tracked s0, v1
                         debuglog s0
                         unit_end_drop.tracked s0
-                        unit_end
+                        exit
                 """,
             ),
             ir_match: true,

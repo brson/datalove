@@ -24,7 +24,7 @@ DualAnalysis(
                         v8 = map {v0: v3, v4: v7}
                         debuglog v8
                         unit_end_drop v8
-                        unit_end
+                        exit
                 """,
             ),
             aot_lowering: LoweringResult(
@@ -43,7 +43,7 @@ DualAnalysis(
                         v8 = map {v0: v3, v4: v7}
                         debuglog v8
                         unit_end_drop v8
-                        unit_end
+                        exit
                 """,
             ),
             ir_match: true,

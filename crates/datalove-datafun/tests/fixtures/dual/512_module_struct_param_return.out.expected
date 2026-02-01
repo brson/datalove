@@ -24,7 +24,7 @@ DualAnalysis(
                         v6 = const "arithmetic overflow"
                         v7 = error_from v6
                         v8 = err v7
-                        return v8
+                        exit v8
                     block2:
                         v9 = copy p0
                         v10 = getfield v9.1
@@ -36,11 +36,11 @@ DualAnalysis(
                         v15 = const "arithmetic overflow"
                         v16 = error_from v15
                         v17 = err v16
-                        return v17
+                        exit v17
                     block4:
                         v18 = pack Struct0 {v4, v13}
                         v19 = ok v18
-                        return v19
+                        exit v19
                 """,
             ),
             aot_lowering: LoweringResult(
@@ -58,7 +58,7 @@ DualAnalysis(
                         v6 = const "arithmetic overflow"
                         v7 = error_from v6
                         v8 = err v7
-                        return v8
+                        exit v8
                     block2:
                         v9 = copy p0
                         v10 = getfield v9.1
@@ -70,11 +70,11 @@ DualAnalysis(
                         v15 = const "arithmetic overflow"
                         v16 = error_from v15
                         v17 = err v16
-                        return v17
+                        exit v17
                     block4:
                         v18 = pack Struct0 {v4, v13}
                         v19 = ok v18
-                        return v19
+                        exit v19
                 """,
             ),
             ir_match: true,
@@ -98,10 +98,10 @@ DualAnalysis(
                         v0 = const 5u32
                         v1 = const 10u32
                         v2 = pack Struct0 {v0, v1}
-                        v3 = call @0 m0.f0(v2)
+                        v3 = call @0 m0.u0(v2)
                         debuglog v3
                         drop v3
-                        unit_end
+                        exit
                 """,
             ),
             aot_lowering: LoweringResult(
@@ -112,10 +112,10 @@ DualAnalysis(
                         v0 = const 5u32
                         v1 = const 10u32
                         v2 = pack Struct0 {v0, v1}
-                        v3 = call @0 m0.f0(v2)
+                        v3 = call @0 m0.u0(v2)
                         debuglog v3
                         drop v3
-                        unit_end
+                        exit
                 """,
             ),
             ir_match: true,

@@ -15,8 +15,8 @@ Analysis(
                     scriptunit:
                     block0:
                         v0 = const -128i8
-                        v1 = call @0 f0(v0)
-                        unit_end
+                        v1 = call @0 u0(v0)
+                        exit
                     
                     fn test_neg(p0):
                     block0:
@@ -24,10 +24,10 @@ Analysis(
                         branch v1, block1, block2
                     block1:
                         v2 = none
-                        return v2
+                        exit v2
                     block2:
                         v3 = some v0
-                        return v3
+                        exit v3
                 """,
             ),
             output: "(fragment executed)",

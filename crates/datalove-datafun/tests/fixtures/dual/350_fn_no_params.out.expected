@@ -13,14 +13,14 @@ DualAnalysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = call @0 f0()
+                        v0 = call @0 u0()
                         debuglog v0
-                        unit_end
+                        exit
                     
                     fn get_five():
                     block0:
                         v0 = const 5u32
-                        return v0
+                        exit v0
                 """,
             ),
             aot_lowering: LoweringResult(
@@ -28,14 +28,14 @@ DualAnalysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = call @0 f0()
+                        v0 = call @0 u0()
                         debuglog v0
-                        unit_end
+                        exit
                     
                     fn get_five():
                     block0:
                         v0 = const 5u32
-                        return v0
+                        exit v0
                 """,
             ),
             ir_match: true,

@@ -14,10 +14,10 @@ Analysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = call @0 f0()
+                        v0 = call @0 u0()
                         debuglog v0
                         drop v0
-                        unit_end
+                        exit
                     
                     fn calc():
                     block0:
@@ -30,7 +30,7 @@ Analysis(
                         v4 = add v2, v3
                         drop v2
                         drop v3
-                        return v4
+                        exit v4
                 """,
             ),
             output: "(fragment executed)",

@@ -16,7 +16,7 @@ Analysis(
                     block0:
                         v0 = const true
                         v1 = data_from v0
-                        return v1
+                        exit v1
                 """,
             ),
             output: "",
@@ -35,7 +35,7 @@ Analysis(
                 ir: """
                     scriptunit:
                     block0:
-                        unit_end
+                        exit
                 """,
             ),
             output: "(fragment executed)",
@@ -54,8 +54,8 @@ Analysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = call @0 m0.f0()
-                        unit_end v0
+                        v0 = call @0 m0.u0()
+                        exit v0
                 """,
             ),
             output: "data true",

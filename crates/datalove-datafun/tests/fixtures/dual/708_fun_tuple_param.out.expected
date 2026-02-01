@@ -16,15 +16,15 @@ DualAnalysis(
                         v0 = const 42u32
                         v1 = const 99u32
                         v2 = pack Tuple2 {v0, v1}
-                        v3 = call @0 f0(v2)
+                        v3 = call @0 u0(v2)
                         debuglog v3
-                        unit_end
+                        exit
                     
                     fn get_first(p0):
                     block0:
                         v0 = copy p0
                         v1 = getfield v0.0
-                        return v1
+                        exit v1
                 """,
             ),
             aot_lowering: LoweringResult(
@@ -35,15 +35,15 @@ DualAnalysis(
                         v0 = const 42u32
                         v1 = const 99u32
                         v2 = pack Tuple2 {v0, v1}
-                        v3 = call @0 f0(v2)
+                        v3 = call @0 u0(v2)
                         debuglog v3
-                        unit_end
+                        exit
                     
                     fn get_first(p0):
                     block0:
                         v0 = copy p0
                         v1 = getfield v0.0
-                        return v1
+                        exit v1
                 """,
             ),
             ir_match: true,

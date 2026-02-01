@@ -15,7 +15,7 @@ DualAnalysis(
                     fn greeting():
                     block0:
                         v0 = const "hello world"
-                        return v0
+                        exit v0
                 """,
             ),
             aot_lowering: LoweringResult(
@@ -24,7 +24,7 @@ DualAnalysis(
                     fn greeting():
                     block0:
                         v0 = const "hello world"
-                        return v0
+                        exit v0
                 """,
             ),
             ir_match: true,
@@ -45,10 +45,10 @@ DualAnalysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = call @0 m0.f0()
+                        v0 = call @0 m0.u0()
                         debuglog v0
                         drop v0
-                        unit_end
+                        exit
                 """,
             ),
             aot_lowering: LoweringResult(
@@ -56,10 +56,10 @@ DualAnalysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = call @0 m0.f0()
+                        v0 = call @0 m0.u0()
                         debuglog v0
                         drop v0
-                        unit_end
+                        exit
                 """,
             ),
             ir_match: true,

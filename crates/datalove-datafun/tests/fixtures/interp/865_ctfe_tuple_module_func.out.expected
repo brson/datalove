@@ -17,7 +17,7 @@ Analysis(
                         v0 = const 77u32
                         v1 = const false
                         v2 = const (77u32, false)
-                        return v2
+                        exit v2
                 """,
             ),
             output: "",
@@ -36,9 +36,9 @@ Analysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = call @0 m0.f0()
+                        v0 = call @0 m0.u0()
                         debuglog v0
-                        unit_end
+                        exit
                 """,
             ),
             output: "(fragment executed)",

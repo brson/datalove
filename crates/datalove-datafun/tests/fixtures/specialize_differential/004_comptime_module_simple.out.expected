@@ -18,7 +18,7 @@ Analysis(
                     block0:
                         v0 = add p0, p0
                         drop p0
-                        return v0
+                        exit v0
                 """,
             ),
             output: "",
@@ -38,10 +38,10 @@ Analysis(
                     scriptunit:
                     block0:
                         v0 = const 2int
-                        v1 = comptime_call m0.f0(v0) [disc=0, comptime_params=[0]]
+                        v1 = comptime_call m0.u0(v0) [disc=0, comptime_params=[0]]
                         debuglog v1
                         unit_end_drop v1
-                        unit_end
+                        exit
                 """,
             ),
             output: "(fragment executed)",
@@ -62,7 +62,7 @@ Analysis(
                     scriptunit:
                     block0:
                         v0 = move unit0.v1
-                        unit_end v0
+                        exit v0
                 """,
             ),
             output: "4",

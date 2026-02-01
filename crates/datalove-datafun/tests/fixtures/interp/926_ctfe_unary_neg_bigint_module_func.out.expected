@@ -17,7 +17,7 @@ Analysis(
                         v0 = const 999int
                         v1 = const -999int
                         drop v0
-                        return v1
+                        exit v1
                 """,
             ),
             output: "",
@@ -36,10 +36,10 @@ Analysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = call @0 m0.f0()
+                        v0 = call @0 m0.u0()
                         debuglog v0
                         drop v0
-                        unit_end
+                        exit
                 """,
             ),
             output: "(fragment executed)",

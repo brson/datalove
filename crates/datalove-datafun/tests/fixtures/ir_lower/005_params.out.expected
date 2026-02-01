@@ -3,12 +3,12 @@ block0:
     v0 = add p0, p1
     drop p0
     drop p1
-    return v0
+    exit v0
 
 fn main():
 block0:
     v0 = const 1int
     v1 = const 2int
-    v2 = call @0 m0.f0(v0, v1)
-    return v2
+    v2 = call @0 m0.u0(v0, v1)
+    exit v2
 

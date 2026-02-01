@@ -13,9 +13,9 @@ DualAnalysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = call @0 f0()
+                        v0 = call @0 u0()
                         debuglog v0
-                        unit_end
+                        exit
                     
                     fn test():
                     block0:
@@ -26,16 +26,16 @@ DualAnalysis(
                         branch v4, block2, block1
                     block1:
                         v5 = none
-                        return v5
+                        exit v5
                     block2:
                         v6, v7 = unwrap_option v2
                         branch v7, block4, block3
                     block3:
                         v8 = none
-                        return v8
+                        exit v8
                     block4:
                         v9 = some v6
-                        return v9
+                        exit v9
                 """,
             ),
             aot_lowering: LoweringResult(
@@ -43,9 +43,9 @@ DualAnalysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = call @0 f0()
+                        v0 = call @0 u0()
                         debuglog v0
-                        unit_end
+                        exit
                     
                     fn test():
                     block0:
@@ -56,16 +56,16 @@ DualAnalysis(
                         branch v4, block2, block1
                     block1:
                         v5 = none
-                        return v5
+                        exit v5
                     block2:
                         v6, v7 = unwrap_option v2
                         branch v7, block4, block3
                     block3:
                         v8 = none
-                        return v8
+                        exit v8
                     block4:
                         v9 = some v6
-                        return v9
+                        exit v9
                 """,
             ),
             ir_match: true,

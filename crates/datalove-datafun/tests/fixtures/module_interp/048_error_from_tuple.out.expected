@@ -12,12 +12,12 @@ ModulesAnalysis(
                 v2 = const 3u32
                 v3 = pack Tuple3 {v0, v1, v2}
                 v4 = error_from v3
-                return v4
+                exit v4
             
             fn main():
             block0:
-                v0 = call @0 m0.f0()
-                return v0
+                v0 = call @0 m0.u0()
+                exit v0
         """,
     ),
     output: "error (1, 2, 3)",

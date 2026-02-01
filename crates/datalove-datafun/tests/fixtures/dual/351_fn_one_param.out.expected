@@ -14,10 +14,10 @@ DualAnalysis(
                     scriptunit:
                     block0:
                         v0 = const 4int
-                        v1 = call @0 f0(v0)
+                        v1 = call @0 u0(v0)
                         debuglog v1
                         drop v1
-                        unit_end
+                        exit
                     
                     fn add_one(p0):
                     block0:
@@ -25,7 +25,7 @@ DualAnalysis(
                         v1 = add p0, v0
                         drop v0
                         drop p0
-                        return v1
+                        exit v1
                 """,
             ),
             aot_lowering: LoweringResult(
@@ -34,10 +34,10 @@ DualAnalysis(
                     scriptunit:
                     block0:
                         v0 = const 4int
-                        v1 = call @0 f0(v0)
+                        v1 = call @0 u0(v0)
                         debuglog v1
                         drop v1
-                        unit_end
+                        exit
                     
                     fn add_one(p0):
                     block0:
@@ -45,7 +45,7 @@ DualAnalysis(
                         v1 = add p0, v0
                         drop v0
                         drop p0
-                        return v1
+                        exit v1
                 """,
             ),
             ir_match: true,

@@ -15,19 +15,19 @@ DualAnalysis(
                     block0:
                         v0 = const 100u32
                         v1 = const 5u32
-                        v2 = call @0 f0(v0, v1)
-                        v3 = call @1 f1(v2)
+                        v2 = call @0 u0(v0, v1)
+                        v3 = call @1 u1(v2)
                         v4 = const 999u32
-                        v5 = call @2 f2(v3, v4)
+                        v5 = call @2 u2(v3, v4)
                         debuglog v5
                         v6 = const 100u32
                         v7 = const 0u32
-                        v8 = call @3 f0(v6, v7)
-                        v9 = call @4 f1(v8)
+                        v8 = call @3 u0(v6, v7)
+                        v9 = call @4 u1(v8)
                         v10 = const 999u32
-                        v11 = call @5 f2(v9, v10)
+                        v11 = call @5 u2(v9, v10)
                         debuglog v11
-                        unit_end
+                        exit
                     
                     fn safe_divide(p0, p1):
                     block0:
@@ -37,7 +37,7 @@ DualAnalysis(
                     block1:
                         v2 = none
                         v3 = ok v2
-                        return v3
+                        exit v3
                     block2:
                         goto block3
                     block3:
@@ -47,11 +47,11 @@ DualAnalysis(
                         v6 = const "arithmetic overflow"
                         v7 = error_from v6
                         v8 = err v7
-                        return v8
+                        exit v8
                     block5:
                         v9 = some v4
                         v10 = ok v9
-                        return v10
+                        exit v10
                     
                     fn unwrap_result(p0):
                     block0:
@@ -59,11 +59,11 @@ DualAnalysis(
                         v1, v2, v3 = unwrap_result v0
                         branch v3, block1, block2
                     block1:
-                        return v1
+                        exit v1
                     block2:
                         v4 = none
                         drop v2
-                        return v4
+                        exit v4
                     
                     fn unwrap_opt(p0, p1):
                     block0:
@@ -71,12 +71,12 @@ DualAnalysis(
                         v1, v2 = unwrap_option v0
                         branch v2, block1, block2
                     block1:
-                        return v1
+                        exit v1
                     block2:
                         goto block3
                     block3:
                         v3 = copy p1
-                        return v3
+                        exit v3
                 """,
             ),
             aot_lowering: LoweringResult(
@@ -86,19 +86,19 @@ DualAnalysis(
                     block0:
                         v0 = const 100u32
                         v1 = const 5u32
-                        v2 = call @0 f0(v0, v1)
-                        v3 = call @1 f1(v2)
+                        v2 = call @0 u0(v0, v1)
+                        v3 = call @1 u1(v2)
                         v4 = const 999u32
-                        v5 = call @2 f2(v3, v4)
+                        v5 = call @2 u2(v3, v4)
                         debuglog v5
                         v6 = const 100u32
                         v7 = const 0u32
-                        v8 = call @3 f0(v6, v7)
-                        v9 = call @4 f1(v8)
+                        v8 = call @3 u0(v6, v7)
+                        v9 = call @4 u1(v8)
                         v10 = const 999u32
-                        v11 = call @5 f2(v9, v10)
+                        v11 = call @5 u2(v9, v10)
                         debuglog v11
-                        unit_end
+                        exit
                     
                     fn safe_divide(p0, p1):
                     block0:
@@ -108,7 +108,7 @@ DualAnalysis(
                     block1:
                         v2 = none
                         v3 = ok v2
-                        return v3
+                        exit v3
                     block2:
                         goto block3
                     block3:
@@ -118,11 +118,11 @@ DualAnalysis(
                         v6 = const "arithmetic overflow"
                         v7 = error_from v6
                         v8 = err v7
-                        return v8
+                        exit v8
                     block5:
                         v9 = some v4
                         v10 = ok v9
-                        return v10
+                        exit v10
                     
                     fn unwrap_result(p0):
                     block0:
@@ -130,11 +130,11 @@ DualAnalysis(
                         v1, v2, v3 = unwrap_result v0
                         branch v3, block1, block2
                     block1:
-                        return v1
+                        exit v1
                     block2:
                         v4 = none
                         drop v2
-                        return v4
+                        exit v4
                     
                     fn unwrap_opt(p0, p1):
                     block0:
@@ -142,12 +142,12 @@ DualAnalysis(
                         v1, v2 = unwrap_option v0
                         branch v2, block1, block2
                     block1:
-                        return v1
+                        exit v1
                     block2:
                         goto block3
                     block3:
                         v3 = copy p1
-                        return v3
+                        exit v3
                 """,
             ),
             ir_match: true,

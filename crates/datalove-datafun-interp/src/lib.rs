@@ -70,7 +70,7 @@ use std::cell::RefCell;
 use datalove_rtdt as rtdt;
 use datalove_datafun_ir::{
     IrBlock, IrType, Instruction, Terminator,
-    BlockId, Operand, SlotDest, ConstValue, ParamMode, FuncRef,
+    BlockId, Operand, SlotDest, ConstValue, ParamMode, CodeRef,
     IrCodeUnit,
 };
 
@@ -261,11 +261,11 @@ impl IrInterpreter {
 
     /// Execute a function with arguments in a context with available functions.
     ///
-    /// `func_ref` identifies the function being executed (for call site tracking).
+    /// `code_ref` identifies the function being executed (for call site tracking).
     pub fn call_in_context(
         &mut self,
         func: &IrCodeUnit,
-        func_ref: Option<FuncRef>,
+        code_ref: Option<CodeRef>,
         args: Vec<Value>,
         ret_dest: Destination,
         ctx: &ExecutionContext,
@@ -283,7 +283,7 @@ impl IrInterpreter {
         );
 
         // Create frame with param storage (no live value tracking for functions).
-        let mut frame = Frame::new_function(layout, func_ctx.params.len());
+        let mut frame = Frame::new(func, layout);
 
         // Set up parameters as pointers to caller's data.
         // All params store pointers - mode determines ownership semantics.
@@ -305,7 +305,7 @@ impl IrInterpreter {
 
         // Execute blocks, writing return value directly to ret_dest.
         // Functions use ret_dest for Return, not expr_dest.
-        let result = self.execute_blocks(&func.blocks, &mut frame, ret_dest, None, ctx, registry, frames, func_ref.as_ref());
+        let result = self.execute_blocks(&func.blocks, &mut frame, ret_dest, None, ctx, registry, frames, code_ref.as_ref());
 
         // Convert UnitCompletion to () - functions always complete normally.
         result.map(|_| ())
@@ -339,7 +339,7 @@ impl IrInterpreter {
         );
 
         // Create frame with live value tracking for script cleanup.
-        let mut frame = Frame::new_script(layout);
+        let mut frame = Frame::new(unit, layout);
 
         // Create execution context with local functions.
         let ctx = ExecutionContext::new(&unit.nested_units);
@@ -387,7 +387,7 @@ impl IrInterpreter {
         ctx: &ExecutionContext,
         registry: &FunctionRegistry,
         frames: &mut FrameStore,
-        current_func: Option<&FuncRef>,
+        current_func: Option<&CodeRef>,
     ) -> Result<UnitCompletion, InterpError> {
         let mut current_block = BlockId(0);
 
@@ -418,28 +418,25 @@ impl IrInterpreter {
                         current_block = *else_block;
                     }
                 }
-                Terminator::Return { value } => {
+                Terminator::Exit { value } => {
                     if let Some(op) = value {
                         let val = self.read_operand(op, frame, frames);
-                        // Use move_value (shallow copy). The frame will be
-                        // destroyed by call_in_context, so we must transfer
-                        // ownership to avoid double-free.
-                        unsafe { self.move_value(&val, ret_dest); }
-                        Self::mark_source_dropped_all(op, frame, frames);
-                    }
-                    return Ok(UnitCompletion::Normal);
-                }
-                Terminator::UnitEnd { result } => {
-                    if let Some(op) = result {
-                        let val = self.read_operand(op, frame, frames);
-                        // Write to expr_dest (not ret_dest) for expression results.
-                        let dest = expr_dest.expect("UnitEnd with result requires expr_dest");
+                        // Determine destination based on context:
+                        // - Functions provide expr_dest=None, write to ret_dest
+                        // - Scripts provide expr_dest=Some(...), write to expr_dest
+                        let dest = if let Some(dest) = expr_dest {
+                            // Script context: write to expr_dest.
+                            dest
+                        } else {
+                            // Function context: write to ret_dest.
+                            ret_dest
+                        };
                         unsafe { self.move_value(&val, dest); }
                         Self::mark_source_dropped_all(op, frame, frames);
                     }
                     return Ok(UnitCompletion::Normal);
                 }
-                Terminator::UnitEarlyReturn { value } => {
+                Terminator::EarlyExit { value } => {
                     let val = self.read_operand(value, frame, frames);
                     // Debuglog the value (borrow, not consume).
                     let rt_handle = self.runtime.handle();
@@ -502,7 +499,7 @@ impl IrInterpreter {
         ctx: &ExecutionContext,
         registry: &FunctionRegistry,
         frames: &mut FrameStore,
-        current_func: Option<&FuncRef>,
+        current_func: Option<&CodeRef>,
     ) -> Result<(), InterpError> {
         match instr {
             Instruction::Const { dest, value } => {
@@ -871,7 +868,7 @@ impl IrInterpreter {
                 Self::mark_source_dropped_local(inner, frame);
             }
             Instruction::Call { site_id, dest, func, args } => {
-                let callee = ctx.get_function(func, registry);
+                let callee = ctx.get_unit(func, registry);
                 let arg_vals = self.prepare_call_args(callee, args, frame, frames);
                 let dest_slot = frame.value_dest(*dest);
                 Self::mark_consumed_call_args(callee, args, frame);
@@ -901,7 +898,7 @@ impl IrInterpreter {
             // only used by the specialization pass. Without specialization, this calls
             // the original function with original args.
             Instruction::ComptimeCall { dest, func, args, .. } => {
-                let callee = ctx.get_function(func, registry);
+                let callee = ctx.get_unit(func, registry);
                 let arg_vals = self.prepare_call_args(callee, args, frame, frames);
                 let dest_slot = frame.value_dest(*dest);
                 Self::mark_consumed_call_args(callee, args, frame);
@@ -1322,8 +1319,8 @@ impl IrInterpreter {
 
     /// Mark any operand as dropped after a move, including external operands.
     ///
-    /// Used for terminators (Return, UnitEnd, UnitEarlyReturn) and the Move
-    /// instruction where external values/slots may be consumed.
+    /// Used for terminators (Exit, EarlyExit) and the Move instruction where
+    /// external values/slots may be consumed.
     fn mark_source_dropped_all(operand: &Operand, frame: &mut Frame, frames: &mut FrameStore) {
         match operand {
             Operand::Value(id) | Operand::ValueRef(id) => frame.mark_value_dropped(*id),
@@ -1448,7 +1445,7 @@ impl IrInterpreter {
     /// `None` if it should fall through to the interpreter.
     fn try_dispatch_call(
         &mut self,
-        func: &FuncRef,
+        func: &CodeRef,
         callee: &IrCodeUnit,
         arg_vals: &[Value],
         dest: Destination,
@@ -1484,9 +1481,9 @@ impl IrInterpreter {
     /// Get an optimized version of a code unit from the dispatcher if available.
     ///
     /// Returns a cloned code unit to avoid lifetime issues with the dispatcher borrow.
-    fn get_optimized_function(&self, func_ref: &FuncRef) -> Option<IrCodeUnit> {
+    fn get_optimized_function(&self, code_ref: &CodeRef) -> Option<IrCodeUnit> {
         let dispatcher = self.call_dispatcher.borrow();
-        dispatcher.as_ref().and_then(|d| d.get_optimized_function(func_ref).cloned())
+        dispatcher.as_ref().and_then(|d| d.get_optimized_function(code_ref).cloned())
     }
 
     /// Mark Out param destinations as initialized after a call returns.
@@ -1504,13 +1501,13 @@ impl IrInterpreter {
 
     /// Execute a function call via the interpreter.
     ///
-    /// Uses `func_ref` to look up optimized versions and to identify the function
+    /// Uses `code_ref` to look up optimized versions and to identify the function
     /// for call site tracking. External functions need a context with that unit's
     /// local functions; local and module functions use the current context.
     fn execute_call(
         &mut self,
         callee: &IrCodeUnit,
-        func_ref: &FuncRef,
+        code_ref: &CodeRef,
         arg_vals: Vec<Value>,
         dest: Destination,
         ctx: &ExecutionContext,
@@ -1518,16 +1515,16 @@ impl IrInterpreter {
         frames: &mut FrameStore,
     ) -> Result<(), InterpError> {
         // Check if there's an optimized (inlined) version of this function.
-        let optimized = self.get_optimized_function(func_ref);
+        let optimized = self.get_optimized_function(code_ref);
         let func_to_use = optimized.as_ref().unwrap_or(callee);
 
-        if let FuncRef::External { unit, .. } = func_ref {
+        if let CodeRef::External { unit, .. } = code_ref {
             let unit_funcs = registry.unit_functions(*unit)
                 .unwrap_or_else(|| panic!("external unit {} not found", unit));
             let callee_ctx = ExecutionContext::new(unit_funcs);
-            self.call_in_context(func_to_use, Some(func_ref.clone()), arg_vals, dest, &callee_ctx, registry, frames)
+            self.call_in_context(func_to_use, Some(code_ref.clone()), arg_vals, dest, &callee_ctx, registry, frames)
         } else {
-            self.call_in_context(func_to_use, Some(func_ref.clone()), arg_vals, dest, ctx, registry, frames)
+            self.call_in_context(func_to_use, Some(code_ref.clone()), arg_vals, dest, ctx, registry, frames)
         }
     }
 

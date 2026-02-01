@@ -18,10 +18,10 @@ DualAnalysis(
                         branch v1, block1, block2
                     block1:
                         v2 = none
-                        return v2
+                        exit v2
                     block2:
                         v3 = some v0
-                        return v3
+                        exit v3
                 """,
             ),
             aot_lowering: LoweringResult(
@@ -33,10 +33,10 @@ DualAnalysis(
                         branch v1, block1, block2
                     block1:
                         v2 = none
-                        return v2
+                        exit v2
                     block2:
                         v3 = some v0
-                        return v3
+                        exit v3
                 """,
             ),
             ir_match: true,
@@ -59,17 +59,17 @@ DualAnalysis(
                     block0:
                         v0 = const 100u32
                         v1 = const 5u32
-                        v2 = call @0 m0.f0(v0, v1)
+                        v2 = call @0 m0.u0(v0, v1)
                         v3 = const 999u32
-                        v4 = call @1 f0(v2, v3)
+                        v4 = call @1 u0(v2, v3)
                         debuglog v4
                         v5 = const 100u32
                         v6 = const 0u32
-                        v7 = call @2 m0.f0(v5, v6)
+                        v7 = call @2 m0.u0(v5, v6)
                         v8 = const 999u32
-                        v9 = call @3 f0(v7, v8)
+                        v9 = call @3 u0(v7, v8)
                         debuglog v9
-                        unit_end
+                        exit
                     
                     fn unwrap(p0, p1):
                     block0:
@@ -77,12 +77,12 @@ DualAnalysis(
                         v1, v2 = unwrap_option v0
                         branch v2, block1, block2
                     block1:
-                        return v1
+                        exit v1
                     block2:
                         goto block3
                     block3:
                         v3 = copy p1
-                        return v3
+                        exit v3
                 """,
             ),
             aot_lowering: LoweringResult(
@@ -92,17 +92,17 @@ DualAnalysis(
                     block0:
                         v0 = const 100u32
                         v1 = const 5u32
-                        v2 = call @0 m0.f0(v0, v1)
+                        v2 = call @0 m0.u0(v0, v1)
                         v3 = const 999u32
-                        v4 = call @1 f0(v2, v3)
+                        v4 = call @1 u0(v2, v3)
                         debuglog v4
                         v5 = const 100u32
                         v6 = const 0u32
-                        v7 = call @2 m0.f0(v5, v6)
+                        v7 = call @2 m0.u0(v5, v6)
                         v8 = const 999u32
-                        v9 = call @3 f0(v7, v8)
+                        v9 = call @3 u0(v7, v8)
                         debuglog v9
-                        unit_end
+                        exit
                     
                     fn unwrap(p0, p1):
                     block0:
@@ -110,12 +110,12 @@ DualAnalysis(
                         v1, v2 = unwrap_option v0
                         branch v2, block1, block2
                     block1:
-                        return v1
+                        exit v1
                     block2:
                         goto block3
                     block3:
                         v3 = copy p1
-                        return v3
+                        exit v3
                 """,
             ),
             ir_match: true,

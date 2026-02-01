@@ -14,14 +14,14 @@ Analysis(
                 ir: """
                     scriptunit:
                     block0:
-                        unit_end
+                        exit
                     
                     fn get_error():
                     block0:
                         v0 = const 1u32
                         v1 = error_from v0
                         v2 = err v1
-                        return v2
+                        exit v2
                 """,
             ),
             output: "(fragment executed)",
@@ -40,14 +40,14 @@ Analysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = call @0 unit0.f0()
+                        v0 = call @0 unit0.u0()
                         v1, v2, v3 = unwrap_result v0
                         branch v3, block2, block1
                     block1:
                         v4 = err v2
-                        unit_early_return v4
+                        early_exit v4
                     block2:
-                        unit_end v1
+                        exit v1
                 """,
             ),
             output: "error 1",

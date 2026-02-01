@@ -13,10 +13,10 @@ DualAnalysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = call @0 f0()
+                        v0 = call @0 u0()
                         debuglog v0
                         drop v0
-                        unit_end
+                        exit
                     
                     fn test():
                     block0:
@@ -27,7 +27,7 @@ DualAnalysis(
                     block1:
                         v4 = none
                         drop v1
-                        return v4
+                        exit v4
                     block2:
                         v5 = const "leaf"
                         v6 = pack Tuple2 {v2, v5}
@@ -35,7 +35,7 @@ DualAnalysis(
                         v8 = pack Tuple2 {v1, v7}
                         v9 = pack Struct0 {v8}
                         v10 = some v9
-                        return v10
+                        exit v10
                 """,
             ),
             aot_lowering: LoweringResult(
@@ -43,10 +43,10 @@ DualAnalysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = call @0 f0()
+                        v0 = call @0 u0()
                         debuglog v0
                         drop v0
-                        unit_end
+                        exit
                     
                     fn test():
                     block0:
@@ -57,7 +57,7 @@ DualAnalysis(
                     block1:
                         v4 = none
                         drop v1
-                        return v4
+                        exit v4
                     block2:
                         v5 = const "leaf"
                         v6 = pack Tuple2 {v2, v5}
@@ -65,7 +65,7 @@ DualAnalysis(
                         v8 = pack Tuple2 {v1, v7}
                         v9 = pack Struct0 {v8}
                         v10 = some v9
-                        return v10
+                        exit v10
                 """,
             ),
             ir_match: true,

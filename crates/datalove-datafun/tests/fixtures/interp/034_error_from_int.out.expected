@@ -16,7 +16,7 @@ Analysis(
                     block0:
                         v0 = const 42u32
                         v1 = error_from v0
-                        unit_end v1
+                        exit v1
                 """,
             ),
             output: "error 42",

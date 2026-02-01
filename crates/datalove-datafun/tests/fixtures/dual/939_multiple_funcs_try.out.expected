@@ -13,35 +13,35 @@ DualAnalysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = call @0 f2()
+                        v0 = call @0 u2()
                         debuglog v0
                         drop v0
-                        unit_end
+                        exit
                     
                     fn make_string():
                     block0:
                         v0 = const "created"
-                        return v0
+                        exit v0
                     
                     fn get_opt():
                     block0:
                         v0 = none
-                        return v0
+                        exit v0
                     
                     fn test():
                     block0:
-                        v0 = call @0 f0()
-                        v1 = call @1 f1()
+                        v0 = call @0 u0()
+                        v1 = call @1 u1()
                         v2, v3 = unwrap_option v1
                         branch v3, block2, block1
                     block1:
                         v4 = none
                         drop v0
-                        return v4
+                        exit v4
                     block2:
                         v5 = pack Struct0 {v0, v2}
                         v6 = some v5
-                        return v6
+                        exit v6
                 """,
             ),
             aot_lowering: LoweringResult(
@@ -49,35 +49,35 @@ DualAnalysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = call @0 f2()
+                        v0 = call @0 u2()
                         debuglog v0
                         drop v0
-                        unit_end
+                        exit
                     
                     fn make_string():
                     block0:
                         v0 = const "created"
-                        return v0
+                        exit v0
                     
                     fn get_opt():
                     block0:
                         v0 = none
-                        return v0
+                        exit v0
                     
                     fn test():
                     block0:
-                        v0 = call @0 f0()
-                        v1 = call @1 f1()
+                        v0 = call @0 u0()
+                        v1 = call @1 u1()
                         v2, v3 = unwrap_option v1
                         branch v3, block2, block1
                     block1:
                         v4 = none
                         drop v0
-                        return v4
+                        exit v4
                     block2:
                         v5 = pack Struct0 {v0, v2}
                         v6 = some v5
-                        return v6
+                        exit v6
                 """,
             ),
             ir_match: true,

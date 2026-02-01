@@ -4,7 +4,7 @@ use cranelift_codegen::ir::{types as cl_types, InstBuilder};
 use cranelift_frontend::FunctionBuilder;
 use cranelift_module::{FuncId, Module};
 
-use datalove_datafun_ir::{FuncRef, Operand, ValueId};
+use datalove_datafun_ir::{CodeRef, CodeUnitId, Operand, ValueId};
 
 use crate::types::PTR_TYPE;
 use crate::CraneliftError;
@@ -20,7 +20,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         &mut self,
         builder: &mut FunctionBuilder,
         dest: ValueId,
-        func_ref: &FuncRef,
+        code_ref: &CodeRef,
         args: &[Operand],
     ) -> Result<(), CraneliftError> {
         // Get rt_handle for threading.
@@ -29,7 +29,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         })?;
 
         // Look up or declare the callee.
-        let callee_func_id = self.resolve_func_ref(func_ref)?;
+        let callee_func_id = self.resolve_code_ref(code_ref)?;
 
         // Check if the return type uses sret convention.
         let dest_ty = &self.func.value_types[dest.0 as usize];
@@ -84,12 +84,13 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         Ok(())
     }
 
-    /// Resolve a FuncRef to a Cranelift FuncId.
-    pub(super) fn resolve_func_ref(&mut self, func_ref: &FuncRef) -> Result<FuncId, CraneliftError> {
-        match func_ref {
-            FuncRef::Local(ir_func_id) => {
+    /// Resolve a CodeRef to a Cranelift FuncId.
+    pub(super) fn resolve_code_ref(&mut self, code_ref: &CodeRef) -> Result<FuncId, CraneliftError> {
+        match code_ref {
+            CodeRef::Local(id) => {
                 // Look up in local_funcs or declare.
-                if let Some(&func_id) = self.local_funcs.get(ir_func_id) {
+                let ir_func_id = CodeUnitId(id.0);
+                if let Some(&func_id) = self.local_funcs.get(&ir_func_id) {
                     return Ok(func_id);
                 }
 
@@ -98,21 +99,22 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 // or a two-pass approach (declare all, then define all).
                 Err(CraneliftError::Unsupported(format!(
                     "local function {:?} not yet declared - needs two-pass compilation",
-                    ir_func_id
+                    id
                 )))
             }
-            FuncRef::External { unit, func } => {
+            CodeRef::External { unit, id } => {
                 Err(CraneliftError::Unsupported(format!(
-                    "external function call (unit={}, func={:?}) not yet implemented",
-                    unit, func
+                    "external function call (unit={}, id={:?}) not yet implemented",
+                    unit, id
                 )))
             }
-            FuncRef::Module { module, func } => {
+            CodeRef::Module { module, id } => {
                 // Look up in module_funcs (pre-declared in three-pass compilation).
-                self.module_funcs.get(&(*module, *func)).copied().ok_or_else(|| {
+                let ir_func_id = CodeUnitId(id.0);
+                self.module_funcs.get(&(*module, ir_func_id)).copied().ok_or_else(|| {
                     CraneliftError::Unsupported(format!(
                         "module function ({:?}, {:?}) not pre-compiled",
-                        module, func
+                        module, id
                     ))
                 })
             }

@@ -30,7 +30,7 @@ use std::any::Any;
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
 
-use datalove_datafun_ir::{FuncId, FuncRef, IrCodeUnit, IrModuleId, IrType};
+use datalove_datafun_ir::{CodeUnitId, CodeRef, IrCodeUnit, IrModuleId, IrType};
 use datalove_datafun_interp::{CallDispatcher, DispatchCallContext, Destination, DispatchResult, InterpError, Value};
 use datalove_rt::c::LocalRtHandle;
 
@@ -64,47 +64,47 @@ impl std::error::Error for JitError {}
 pub struct FunctionKey {
     /// Module ID (None for local or external unit functions).
     pub module_id: Option<IrModuleId>,
-    /// Function ID within the module or unit.
-    pub func_id: FuncId,
+    /// Code unit ID within the module or unit.
+    pub unit_id: CodeUnitId,
     /// Script unit number (for external unit functions).
     pub unit: Option<u32>,
 }
 
 impl FunctionKey {
     /// Create a key for a local function.
-    pub fn local(func_id: FuncId) -> Self {
+    pub fn local(unit_id: CodeUnitId) -> Self {
         Self {
             module_id: None,
-            func_id,
+            unit_id,
             unit: None,
         }
     }
 
     /// Create a key for a module function.
-    pub fn module(module_id: IrModuleId, func_id: FuncId) -> Self {
+    pub fn module(module_id: IrModuleId, unit_id: CodeUnitId) -> Self {
         Self {
             module_id: Some(module_id),
-            func_id,
+            unit_id,
             unit: None,
         }
     }
 
     /// Create a key for an external unit function.
-    pub fn external(unit: u32, func_id: FuncId) -> Self {
+    pub fn external(unit: u32, unit_id: CodeUnitId) -> Self {
         Self {
             module_id: None,
-            func_id,
+            unit_id,
             unit: Some(unit),
         }
     }
 }
 
-impl From<&FuncRef> for FunctionKey {
-    fn from(func_ref: &FuncRef) -> Self {
-        match func_ref {
-            FuncRef::Local(func_id) => FunctionKey::local(*func_id),
-            FuncRef::Module { module, func } => FunctionKey::module(*module, *func),
-            FuncRef::External { unit, func } => FunctionKey::external(*unit, *func),
+impl From<&CodeRef> for FunctionKey {
+    fn from(code_ref: &CodeRef) -> Self {
+        match code_ref {
+            CodeRef::Local(id) => FunctionKey::local(*id),
+            CodeRef::Module { module, id } => FunctionKey::module(*module, *id),
+            CodeRef::External { unit, id } => FunctionKey::external(*unit, *id),
         }
     }
 }
@@ -362,7 +362,7 @@ mod tests {
                 instructions: vec![
                     Instruction::Const { dest: ValueId(0), value: ConstValue::I32(42) },
                 ],
-                terminator: Terminator::Return {
+                terminator: Terminator::Exit {
                     value: Some(Operand::Value(ValueId(0))),
                 },
             }],
@@ -380,7 +380,7 @@ mod tests {
     fn test_call_counting() {
         let mut jit = JitEngine::new(3).unwrap();
         let func = make_test_function();
-        let key = FunctionKey::local(FuncId(0));
+        let key = FunctionKey::local(CodeUnitId(0));
 
         // First two calls should not trigger compilation.
         assert!(jit.record_call(key, &func).unwrap().is_none());
@@ -401,7 +401,7 @@ mod tests {
     fn test_compilation_produces_code() {
         let mut jit = JitEngine::new(1).unwrap(); // Compile immediately
         let func = make_test_function();
-        let key = FunctionKey::local(FuncId(0));
+        let key = FunctionKey::local(CodeUnitId(0));
 
         let result = jit.record_call(key, &func);
         match result {
@@ -421,7 +421,7 @@ mod tests {
 
         let mut jit = JitEngine::new(1).unwrap();
         let func = make_test_function();
-        let key = FunctionKey::local(FuncId(0));
+        let key = FunctionKey::local(CodeUnitId(0));
 
         // Compile the function.
         let (code_ptr, uses_sret) = jit.record_call(key, &func).unwrap().unwrap();
@@ -471,7 +471,7 @@ mod tests {
                 id: BlockId(0),
                 params: vec![],
                 instructions: vec![],
-                terminator: Terminator::Return {
+                terminator: Terminator::Exit {
                     value: Some(Operand::Param(ParamId(0))),
                 },
             }],
@@ -493,13 +493,13 @@ mod tests {
                     Instruction::Call {
                         site_id: datalove_datafun_ir::CallSiteId(0),
                         dest: ValueId(1),
-                        func: datalove_datafun_ir::FuncRef::Local(FuncId(0)),
+                        func: CodeRef::Local(CodeUnitId(0)),
                         args: vec![
                             Operand::Value(ValueId(0)),
                         ],
                     },
                 ],
-                terminator: Terminator::Return {
+                terminator: Terminator::Exit {
                     value: Some(Operand::Value(ValueId(1))),
                 },
             }],
@@ -560,7 +560,7 @@ mod tests {
                 id: BlockId(0),
                 params: vec![],
                 instructions: vec![],
-                terminator: Terminator::Return {
+                terminator: Terminator::Exit {
                     value: Some(Operand::Param(ParamId(0))),
                 },
             }],
@@ -582,13 +582,13 @@ mod tests {
                     Instruction::Call {
                         site_id: datalove_datafun_ir::CallSiteId(0),
                         dest: ValueId(1),
-                        func: datalove_datafun_ir::FuncRef::Local(FuncId(0)),
+                        func: CodeRef::Local(CodeUnitId(0)),
                         args: vec![
                             Operand::Value(ValueId(0)),
                         ],
                     },
                 ],
-                terminator: Terminator::Return {
+                terminator: Terminator::Exit {
                     value: Some(Operand::Value(ValueId(1))),
                 },
             }],
@@ -604,7 +604,7 @@ mod tests {
         let mut jit = JitEngine::new(1).expect("JitEngine creation failed");
 
         // Compile main() with context (creates stub for identity()).
-        let main_key = FunctionKey::local(FuncId(1));
+        let main_key = FunctionKey::local(CodeUnitId(1));
         let (code_ptr, uses_sret) = jit
             .record_call_with_context(main_key, &main_fn, &ctx, &registry)
             .expect("compilation failed")
@@ -666,7 +666,7 @@ mod tests {
 impl CallDispatcher for JitEngine {
     fn dispatch_call(
         &mut self,
-        func_ref: &FuncRef,
+        code_ref: &CodeRef,
         func: &IrCodeUnit,
         args: &[Value],
         ret_dest: Destination,
@@ -675,14 +675,14 @@ impl CallDispatcher for JitEngine {
     ) -> DispatchResult {
         use datalove_datafun_interp::ExecutionContext;
 
-        let key = FunctionKey::from(func_ref);
+        let key = FunctionKey::from(code_ref);
 
         // For external functions, we need to use the callee's unit's context to find
         // its local functions. For local/module functions, use the caller's context.
         // _callee_ctx_owned keeps the context alive for the duration of this function.
         let _callee_ctx_owned: Option<ExecutionContext>;
-        let compile_ctx = match func_ref {
-            FuncRef::External { unit, .. } => {
+        let compile_ctx = match code_ref {
+            CodeRef::External { unit, .. } => {
                 // External function - get context from callee's unit.
                 match call_ctx.registry.unit_functions(*unit) {
                     Some(unit_funcs) => {

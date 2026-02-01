@@ -12,15 +12,15 @@ IrSerialAnalysis(
                     block0:
                         v0 = const 10u32
                         v1 = const 32u32
-                        v2 = call @0 m0.f0(v0, v1)
+                        v2 = call @0 m0.u0(v0, v1)
                         debuglog v2
                         drop v2
-                        unit_end
+                        exit
                 """,
             ),
             direct_interp_output: "ok 42\n",
             direct_aot_output: "ok 42\n",
-            serialized_ir_size: 1538,
+            serialized_ir_size: 1536,
             serialized_registry_size: 3665,
             deser_success: true,
             deser_interp_output: "ok 42\n",

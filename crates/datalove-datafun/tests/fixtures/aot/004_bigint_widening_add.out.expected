@@ -23,7 +23,7 @@ AotAnalysis(
                         drop v4
                         unit_end_drop v1
                         unit_end_drop v3
-                        unit_end
+                        exit
                 """,
             ),
             aot_compile: Some(AotCompileResult(

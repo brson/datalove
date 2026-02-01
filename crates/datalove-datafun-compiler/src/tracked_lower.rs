@@ -13,7 +13,7 @@ use datalove_datafun_ast::ast::{ParsedStatements, Statement};
 use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::Arc;
-use datalove_datafun_ir::{ConstValue, CtfeEvaluator, IrCodeUnit, IrType, FuncId, IrModuleId, ModuleFunctionRegistry};
+use datalove_datafun_ir::{CodeUnitId, ConstValue, CtfeEvaluator, IrCodeUnit, IrType, FuncId, IrModuleId, ModuleFunctionRegistry};
 use datalove_datafun_tycheck::{
     DbClone, ParallelMode,
     SingleModuleTypecheckResult,
@@ -388,7 +388,7 @@ fn build_module_registry_from_lowered(
         // Find the corresponding lowered function (code unit).
         if let Some(lowered) = lowered_functions.get(module_id) {
             if let Some(unit) = lowered.functions.iter().find(|f| f.id.0 == func_id.0) {
-                registry.add_module_code_unit(*ir_module_id, *func_id, unit.clone());
+                registry.add_module_code_unit(*ir_module_id, CodeUnitId(func_id.0), unit.clone());
             }
         }
     }
@@ -784,7 +784,7 @@ fn specialize_comptime_functions<'db>(
         .map(|(idx, module)| (module.id(db), IrModuleId(idx as u32)))
         .collect();
 
-    // Build a global (IrModuleId, FuncId) -> name map for resolving FuncRef during call rewriting.
+    // Build a global (IrModuleId, FuncId) -> name map for resolving CodeRef during call rewriting.
     // This is module-aware because FuncId is only unique within a module.
     let mut func_id_to_name: HashMap<(IrModuleId, FuncId), String> = HashMap::new();
     for (module_id, module_funcs) in lowered_functions.iter() {

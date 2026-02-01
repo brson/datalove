@@ -12,7 +12,7 @@ ModulesAnalysis(
                 v2 = const 3u32
                 v3 = const 4u32
                 v4 = tensor [2, 2] [v0, v1, v2, v3]
-                return v4
+                exit v4
         """,
     ),
     output: "tensor [2, 2] [1 2, 3 4]",

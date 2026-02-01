@@ -16,7 +16,7 @@ Analysis(
                     block0:
                         v0 = const 5int
                         unit_end_drop v0
-                        unit_end
+                        exit
                 """,
             ),
             output: "(fragment executed)",
@@ -39,7 +39,7 @@ Analysis(
                         v1 = add unit0.v0, v0
                         drop v0
                         unit_end_drop v1
-                        unit_end
+                        exit
                 """,
             ),
             output: "(fragment executed)",
@@ -59,7 +59,7 @@ Analysis(
                     scriptunit:
                     block0:
                         v0 = move unit1.v1
-                        unit_end v0
+                        exit v0
                 """,
             ),
             output: "8",

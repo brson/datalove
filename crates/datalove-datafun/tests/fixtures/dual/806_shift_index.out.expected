@@ -39,7 +39,7 @@ DualAnalysis(
                         v17 = const 8u32
                         v18 = intrinsic ShrIndex(v16, v17)
                         debuglog v18
-                        unit_end
+                        exit
                 """,
             ),
             aot_lowering: LoweringResult(
@@ -73,7 +73,7 @@ DualAnalysis(
                         v17 = const 8u32
                         v18 = intrinsic ShrIndex(v16, v17)
                         debuglog v18
-                        unit_end
+                        exit
                 """,
             ),
             ir_match: true,

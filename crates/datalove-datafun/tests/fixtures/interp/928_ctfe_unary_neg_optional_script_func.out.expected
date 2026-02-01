@@ -14,9 +14,9 @@ Analysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = call @0 f0()
+                        v0 = call @0 u0()
                         debuglog v0
-                        unit_end
+                        exit
                     
                     fn negate_value():
                     block0:
@@ -26,7 +26,7 @@ Analysis(
                         goto block1
                     block1:
                         v4 = some v1
-                        return v4
+                        exit v4
                 """,
             ),
             output: "(fragment executed)",

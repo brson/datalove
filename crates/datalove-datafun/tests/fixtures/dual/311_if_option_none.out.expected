@@ -24,7 +24,7 @@ DualAnalysis(
                         debuglog v3
                         goto block3
                     block3:
-                        unit_end
+                        exit
                 """,
             ),
             aot_lowering: LoweringResult(
@@ -43,7 +43,7 @@ DualAnalysis(
                         debuglog v3
                         goto block3
                     block3:
-                        unit_end
+                        exit
                 """,
             ),
             ir_match: true,

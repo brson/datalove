@@ -12,12 +12,12 @@ IrSerialAnalysis(
                     block0:
                         v0 = enum_variant 0
                         debuglog v0
-                        unit_end
+                        exit
                 """,
             ),
             direct_interp_output: "enum None\n",
             direct_aot_output: "enum None\n",
-            serialized_ir_size: 1059,
+            serialized_ir_size: 1055,
             serialized_registry_size: 177,
             deser_success: true,
             deser_interp_output: "enum None\n",
