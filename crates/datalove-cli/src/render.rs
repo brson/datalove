@@ -226,21 +226,6 @@ struct MultiSourceCache {
     sources: HashMap<String, Source<String>>,
 }
 
-/// Render ownership diagnostics to stderr using ariadne.
-pub fn render_ownership_diagnostics<'db>(
-    db: &'db dyn salsa::Database,
-    diagnostics: &[&datalove_diagnostic::OwnershipDiagnostic],
-    file_path: &Path,
-    cwd: &Path,
-) {
-    let mut colors = ColorGenerator::new();
-
-    for diag_wrapper in diagnostics {
-        let diag = diag_wrapper.to_diagnostic(db);
-        render_single_diagnostic(db, &diag, file_path, cwd, &mut colors);
-    }
-}
-
 /// Render ownership errors directly from structured AnalysisError and spans.
 ///
 /// This bypasses salsa accumulators since ownership diagnostics are emitted
