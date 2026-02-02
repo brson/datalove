@@ -1,9 +1,20 @@
 #!/usr/bin/env bash
 #
-# Launch a sandboxed podman container for running Claude Code in yolo mode.
-# - Only mounts the current directory
-# - No SSH keyring access
-# - Passes git and gh credentials
+# Launch a sandboxed podman container for Claude Code with --dangerously-skip-permissions.
+#
+# Usage: claude-sandbox.sh [--rebuild] [claude|bash]
+#
+# Security:
+#   - Mounts only the current directory (as /workspace)
+#   - No SSH keys (intentionally excluded)
+#
+# Passthrough:
+#   - Git config (~/.gitconfig, ~/.gitignore)
+#   - Claude config/auth (~/.claude, ~/.claude.json)
+#   - Rust toolchain (~/.rustup, ~/.cargo)
+#   - GPU access (/dev/dri for AMD/Intel)
+#   - Wayland display (for GUI apps)
+#   - PipeWire audio (for notification chimes)
 
 set -euo pipefail
 
@@ -33,9 +44,8 @@ die() { echo -e "${RED}[ERROR]${NC} $*" >&2; exit 1; }
 
 command -v podman >/dev/null || die "podman not found"
 
-# Build volume mounts
+# Volume mounts
 mounts=(
-    # Current directory only
     "-v" "$(pwd):${WORKDIR}:Z"
 )
 
@@ -43,20 +53,21 @@ mounts=(
 [[ -f "$HOME/.gitconfig" ]] && mounts+=("-v" "$HOME/.gitconfig:/home/claude/.gitconfig:ro")
 [[ -f "$HOME/.gitignore" ]] && mounts+=("-v" "$HOME/.gitignore:/home/claude/.gitignore:ro")
 
-# gh CLI credentials
-#[[ -d "$HOME/.config/gh" ]] && mounts+=("-v" "$HOME/.config/gh:/home/claude/.config/gh:ro")
-
 # Claude config/auth (read-write for OAuth tokens)
 [[ -d "$HOME/.claude" ]] && mounts+=("-v" "$HOME/.claude:/home/claude/.claude")
+[[ -f "$HOME/.claude.json" ]] && mounts+=("-v" "$HOME/.claude.json:/home/claude/.claude.json")
 # Override settings.json with container-specific paths for hooks
 [[ -f "$SCRIPT_DIR/claude-sandbox-settings.json" ]] && mounts+=("-v" "$SCRIPT_DIR/claude-sandbox-settings.json:/home/claude/.claude/settings.json:ro")
 
 # PipeWire audio socket for notification chimes
 XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
 [[ -S "$XDG_RUNTIME_DIR/pipewire-0" ]] && mounts+=("-v" "$XDG_RUNTIME_DIR/pipewire-0:/run/user/1000/pipewire-0")
-[[ -f "$HOME/.claude.json" ]] && mounts+=("-v" "$HOME/.claude.json:/home/claude/.claude.json")
 
-# Rust toolchain
+# Wayland display socket for GUI apps
+WAYLAND_DISPLAY="${WAYLAND_DISPLAY:-wayland-0}"
+[[ -S "$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY" ]] && mounts+=("-v" "$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY:/run/user/1000/$WAYLAND_DISPLAY")
+
+# Rust toolchain (mask config.toml to avoid host-specific paths)
 [[ -d "$HOME/.rustup" ]] && mounts+=("-v" "$HOME/.rustup:/home/claude/.rustup")
 [[ -d "$HOME/.cargo" ]] && mounts+=("-v" "$HOME/.cargo:/home/claude/.cargo")
 [[ -d "$HOME/.cargo" ]] && mounts+=("-v" "/dev/null:/home/claude/.cargo/config.toml:ro")
@@ -67,19 +78,15 @@ envs=(
     "-e" "RUSTUP_HOME=/home/claude/.rustup"
     "-e" "CARGO_HOME=/home/claude/.cargo"
     "-e" "XDG_RUNTIME_DIR=/run/user/1000"
+    "-e" "WAYLAND_DISPLAY=${WAYLAND_DISPLAY:-wayland-0}"
 )
-[[ -n "${GH_TOKEN:-}" ]] && envs+=("-e" "GH_TOKEN")
-[[ -n "${GITHUB_TOKEN:-}" ]] && envs+=("-e" "GITHUB_TOKEN")
-
 info "Sandbox: $(pwd) -> ${WORKDIR}"
 info "Git config: $([[ -f "$HOME/.gitconfig" ]] && echo "yes" || echo "no")"
-info "gh credentials: $([[ -d "$HOME/.config/gh" ]] && echo "yes" || echo "no")"
 info "Claude config: $([[ -d "$HOME/.claude" ]] && echo "yes" || echo "no")"
-info "Claude auth: $([[ -f "$HOME/.claude.json" ]] && echo "yes" || echo "no")"
 info "Rust toolchain: $([[ -d "$HOME/.rustup" ]] && echo "yes" || echo "no")"
-info "Cargo: $([[ -d "$HOME/.cargo" ]] && echo "yes" || echo "no")"
-info "SSH keys: no (intentionally excluded)"
-info "PipeWire audio: $([[ -S "${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/pipewire-0" ]] && echo "yes" || echo "no")"
+info "GPU: $([[ -e /dev/dri ]] && echo "yes" || echo "no")"
+info "Wayland: $([[ -S "$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY" ]] && echo "yes" || echo "no")"
+info "PipeWire: $([[ -S "$XDG_RUNTIME_DIR/pipewire-0" ]] && echo "yes" || echo "no")"
 
 # Dockerfile for the sandbox image
 HOST_UID=$(id -u)
@@ -94,6 +101,8 @@ ENV NVM_DIR=/home/claude/.nvm
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl git ca-certificates build-essential clang pkg-config libssl-dev nano emacs-nox \
     pipewire pipewire-audio-client-libraries \
+    libwayland-client0 libwayland-cursor0 libwayland-egl1 libxkbcommon0 \
+    mesa-vulkan-drivers libvulkan1 \
     && rm -rf /var/lib/apt/lists/*
 
 # Install gh CLI
@@ -158,6 +167,8 @@ exec podman run -it --rm \
     --user claude \
     --userns=keep-id \
     --security-opt label=disable \
+    --device /dev/dri \
+    --group-add video \
     --cpus=4 \
     --cpu-shares=512 \
     --memory=8g \
