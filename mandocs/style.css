@@ -238,10 +238,18 @@ h3 { font-size: calc(1.25rem * var(--font-size-header-scale)); }
 
 a {
     color: var(--font-text);
-    color: color-mix(in srgb, var(--link), black 70%);
+    color: color-mix(in srgb, var(--link), black 40%);
     text-decoration: none;
     text-decoration: underline dotted;
-    text-decoration-color: var(--link);
+    text-decoration: underline solid;
+    text-decoration-color: color-mix(in srgb, var(--accent), #0000 90%);
+    text-decoration-thickness: 2px;
+}
+
+a:hover {
+    text-decoration: underline dotted;
+    text-decoration: underline solid;
+    text-decoration-color: color-mix(in srgb, var(--accent), #0000 0%);
     text-decoration-thickness: 2px;
 }
 
@@ -295,11 +303,12 @@ blockquote {
 hr {
     border: none;
     border-top: 2px dotted var(--accent);
+    border-top: 2px solid var(--accent);
     height: 0;
     width: 16rem;
     margin: calc(var(--baseline) * 2) auto;
-    -webkit-mask-image: linear-gradient(to right, transparent, black 5%, black 95%, transparent);
-    mask-image: linear-gradient(to right, transparent, black 5%, black 95%, transparent);
+    -webkit-mask-image: linear-gradient(to right, transparent, black 2%, black 98%, transparent);
+    mask-image: linear-gradient(to right, transparent, black 2%, black 98%, transparent);
     /* square wave svg */
     -disabled-background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 30' preserveAspectRatio='none'%3E%3Cpath d='M0,25 H5 V5 H10 V25 H15 V5 H20 V25 H24 V5 H29 V25 H34 V5 H39 V25 H44 V5 H49 V25 H54 V5 H59 V25 H63 V5 H68 V25 H73 V5 H78 V25 H83 V5 H88 V25 H93 V5 H98 V25 H102 V5 H107 V25 H112 V5 H117 V25 H122 V5 H127 V25 H132 V5 H137 V25 H141 V5 H146 V25 H151 V5 H156 V25 H161 V5 H166 V25 H171 V5 H176 V25 H180 V5 H185 V25 H190 V5 H195 V25 H200' stroke='%23ca402b' stroke-width='1.0' fill='none'/%3E%3C/svg%3E") center/100% 100% no-repeat;
 }
@@ -535,6 +544,9 @@ th {
     break-inside: avoid;
     line-height: calc(var(--baseline) * 0.75);
     margin-bottom: calc(var(--baseline) * 0.5);
+    margin-left: 1.5rem;
+    text-indent: -1.5rem;
+    text-wrap: balance;
 }
 
 .toc a::before {
