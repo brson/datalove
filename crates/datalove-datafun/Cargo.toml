@@ -37,6 +37,7 @@ index-64 = [
     "datalove-datafun-inline/index-64",
     "datalove-datafun-compiler/index-64",
     "datalove-datafun-cranelift-aot/index-64",
+    "datalove-datafun-c-aot/index-64",
     "datalove-exampletest/index-64",
 ]
 
@@ -46,6 +47,7 @@ datalove-datalit.path = "../datalove-datalit"
 datalove-diagnostic.path = "../datalove-diagnostic"
 datalove-datafun-cranelift-jit.path = "../datalove-datafun-cranelift-jit"
 datalove-datafun-inline.path = "../datalove-datafun-inline"
+datalove-datafun-c-aot.path = "../datalove-datafun-c-aot"
 datalove-rtdt.path = "../datalove-rtdt"
 regex = "1"
 ron = "0.8"
@@ -129,4 +131,9 @@ harness = false
 [[test]]
 name = "interp_dispatch_chaos_tests"
 path = "tests/interp_dispatch_chaos_tests.rs"
+harness = false
+
+[[test]]
+name = "c_dual_tests"
+path = "tests/c_dual_tests.rs"
 harness = false

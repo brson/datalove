@@ -29,7 +29,7 @@ use std::collections::{HashMap, HashSet};
 use std::fmt::Write;
 
 use datalove_datafun_ir::{
-    CodeRef, CodeUnitId, FunctionRegistry, IrCodeUnit, IrModuleId, IrType,
+    CodeRef, FunctionRegistry, IrCodeUnit, IrModuleId, IrType,
 };
 
 pub use layout::FrameLayout;

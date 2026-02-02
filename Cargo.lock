@@ -1105,6 +1105,7 @@ dependencies = [
  "bcts",
  "datalove-ct",
  "datalove-datafun-ast",
+ "datalove-datafun-c-aot",
  "datalove-datafun-common",
  "datalove-datafun-compiler",
  "datalove-datafun-const",
@@ -1140,6 +1141,17 @@ dependencies = [
  "rustmax",
  "salsa",
  "serde",
+]
+
+[[package]]
+name = "datalove-datafun-c-aot"
+version = "0.1.0"
+dependencies = [
+ "datalove-datafun",
+ "datalove-datafun-intrinsics",
+ "datalove-datafun-ir",
+ "datalove-rtdt",
+ "rustmax",
 ]
 
 [[package]]
