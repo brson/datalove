@@ -151,6 +151,28 @@ Semicolons permit single-line format: `{| x, y; 1, 2; 3, 4 |}`.
 Column projections (e.g., `table.x`) yield a list view that cannot be moved or
 mutated, but can be passed to `ref` parameters.
 
+**Tensor.** A multi-dimensional array with fixed shape.
+
+```
+tensor<T, N>             // type: element type T, rank N
+tensor [3] [1, 2, 3]     // 1D literal with shape [3]
+tensor [2, 3] [1 2 3, 4 5 6]  // 2D literal with shape [2, 3]
+```
+
+Type hints specify element type and rank:
+
+```
+: tensor<u32, 2> / tensor [2, 2] [1 2, 3 4]
+```
+
+In tensor literals, the shape is a comma-separated list of dimensions in
+brackets, followed by the data in brackets. For rank > 1, rows are
+comma-separated and elements within a row are space-separated.
+
+Tensor literals can be created and stored, but element access and tensor
+operations (indexing, transpose, slice, reshape) are not yet exposed to the
+language. The runtime supports these operations internally.
+
 ### 3.3 Aggregate Types
 
 **Tuple.** An ordered sequence of heterogeneous values.
@@ -719,7 +741,8 @@ end fun
 
 The following features appear in design documents but are not yet implemented:
 
-- Tensor operations
+- Tensor element access and operations (indexing, transpose, slice, reshape) -
+  tensor literals work, but manipulation is not exposed
 - Pattern matching (`match` expressions)
 - Arena blocks
 - Memoization
