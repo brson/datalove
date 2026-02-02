@@ -1,4 +1,4 @@
-# The Datalove Guide
+# The Datalove Language Guide
 
 Datalove is an interactive scripting language
 for efficient data modeling and transformation.
@@ -68,7 +68,7 @@ Then we'll add I/O to it &mdash; carefully.
 <br>
 <div id="power">
 
-Datalove is built from <em>3 sublanguages</em> of increasing power.
+Datalove is built from <bold>[<em>| 3 sublanguages |</em>]</bold> of increasing power.
 
 </div>
 <br>
@@ -84,7 +84,6 @@ Datalove is built from <em>3 sublanguages</em> of increasing power.
 
 The tiny and comprehensible foundation of Datalove, a strongly-typed and
 declarative pure-data language for expressing typical data structures.
-
 It includes booleans, fixed integers and bigints, floats;
 anonymous tuples, structs, and enums;
 strings, lists, maps and sets.
