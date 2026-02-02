@@ -229,7 +229,7 @@ h1 {
 h1, h2, h3, h4 {
     font-family: var(--font-header);
     color: var(--accent);
-    margin-top: 2rem;
+    margin-top: calc(var(--baseline) * 2);
 }
 
 h1 { font-size: calc(2rem * var(--font-size-header-scale)); letter-spacing: -0.02em; }
@@ -426,6 +426,15 @@ th {
     .four-things-grid {
         grid-template-columns: 1fr;
     }
+}
+
+#power {
+    text-align: center;
+}
+
+#power em {
+    font-weight: bold;
+    color: var(--accent);
 }
 
 /* Posts feed styles */

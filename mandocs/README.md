@@ -66,16 +66,21 @@ Then we'll add I/O to it &mdash; carefully.
 ---
 
 <br>
+<div id="power">
+
+Datalove is built from <em>3 sublanguages</em> of increasing power.
+
+</div>
+<br>
+
+---
+
+<br>
 
 
 
 
-Datalove is built from three sublanguages of increasing power.
-
-
-
-
-### Datalove Literals
+### [| 1 |] Datalove Literals
 
 The tiny and comprehensible foundation of Datalove, a strongly-typed and
 declarative pure-data language for expressing typical data structures.
@@ -112,14 +117,14 @@ and _tensors_ (multidimensional arrays).
 tensor [3, 3] [
   1 0 0,
   0 1 0,
-  0 0 1
+  0 0 1,
 ]
 ```
 
 
 
 
-### Datalove Functions
+### [| 2 |] Datalove Functions
 
 A simple pure-functional language that feels like an imperative language, built
 on the datalit type system.
@@ -152,7 +157,7 @@ end fun
 
 
 
-### Datalove with Side Effects
+### [| 3 |] Datalove with Side Effects
 
 The complete language with I/O-bearing procedures,
 owned native pointers, objects with identity,
