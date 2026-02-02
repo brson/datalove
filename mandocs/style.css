@@ -508,6 +508,7 @@ th {
     list-style: none;
     padding-left: 0;
     display: grid;
+    grid-template-columns: 1fr 1fr;
     grid-template-rows: repeat(5, auto);
     grid-auto-flow: column;
     column-gap: 2rem;
@@ -532,6 +533,8 @@ th {
     margin: 0 0;
     position: relative;
     break-inside: avoid;
+    line-height: calc(var(--baseline) * 0.75);
+    margin-bottom: calc(var(--baseline) * 0.5);
 }
 
 .toc a::before {
@@ -546,4 +549,12 @@ th {
 
 .toc a:hover::before {
     opacity: 1;
+}
+
+@media (max-width: 500px) {
+    .toc ul {
+        grid-template-columns: 1fr;
+        grid-template-rows: none;
+        grid-auto-flow: row;
+    }
 }
