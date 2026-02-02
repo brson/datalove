@@ -2,7 +2,7 @@
 
 Datalove is an interactive scripting language
 for efficient data modeling and transformation.
-It strongly and statically typed,
+It is strongly and statically typed,
 but with ergonomic coercions
 and an efficient compiler pipeline.
 
