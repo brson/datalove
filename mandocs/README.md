@@ -108,6 +108,14 @@ and _tensors_ (multidimensional arrays).
 |}
 ```
 
+```datalove
+tensor [3, 3] [
+  1 0 0,
+  0 1 0,
+  0 0 1
+]
+```
+
 
 
 
