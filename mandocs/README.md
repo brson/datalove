@@ -96,7 +96,8 @@ strings, lists, maps and sets.
 }
 ```
 
-It includes first-class _tables_ (dataframes / structs-of-arrays).
+It includes first-class _tables_ (dataframes / structs-of-arrays),
+and _tensors_ (multidimensional arrays).
 
 ```datalove
 {|
@@ -106,8 +107,6 @@ It includes first-class _tables_ (dataframes / structs-of-arrays).
   "Fahrenheit 451",   "Bradbury",      1953
 |}
 ```
-
-Also lists, sets, maps, _tensors_ (n-dimensional arrays), typical scalar types.
 
 
 
