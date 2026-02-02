@@ -26,6 +26,15 @@ The compiler evaluates const arguments at compile time,
 generates specialized function variants,
 and rewrites call sites to target the correct specialization.
 
+Specialization plus const evaluation work together naturally.
+
+```datalove
+fun scale(const factor: int, x: int): int
+    const calculated_factor = calculate(factor)    // compile-time evaluated
+    ret x * calculatod_factor
+end fun
+```
+
 This is mostly just architectural work
 to make sure it all fits together.
 I'm hopeful this simple specialization will naturally
@@ -33,11 +42,13 @@ extend to generic type parameters.
 
 I'm experimenting with a compromise monomorphization strategy
 that relies on whole-program compilation to see all instantiations:
-instead of generating a function for every set of instantiations
+instead of generating a function for every instantiation
 (or every set with the same "shape"),
 I am generating one function that branches on a single
 discriminator that represents the set of instantiations.
-Hoping its easier on codegen and linking.
+Curious if it is easier on codegen and linking
+than typical monomorphization,
+but not super hopeful.
 
 For now const arguments must be named `const` bindings;
 they don't support abitrary const expressions.
