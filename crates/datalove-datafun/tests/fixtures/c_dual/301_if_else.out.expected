@@ -1,0 +1,73 @@
+CDualAnalysis(
+    sections: [
+        CDualSectionResult(
+            section_type: "scriptunit-fragment",
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            interp_lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 0u32
+                        store.copy.tracked s0, v0
+                        v1 = const false
+                        branch v1, block1, block2
+                    block1:
+                        v2 = const 1u32
+                        store.copy s0, v2
+                        goto block3
+                    block2:
+                        v3 = const 2u32
+                        store.copy s0, v3
+                        goto block3
+                    block3:
+                        debuglog s0
+                        unit_end
+                """,
+            ),
+            c_aot_lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 0u32
+                        store.copy.tracked s0, v0
+                        v1 = const false
+                        branch v1, block1, block2
+                    block1:
+                        v2 = const 1u32
+                        store.copy s0, v2
+                        goto block3
+                    block2:
+                        v3 = const 2u32
+                        store.copy s0, v3
+                        goto block3
+                    block3:
+                        debuglog s0
+                        unit_end
+                """,
+            ),
+            interp_output: "2\n",
+            c_aot_output: "2\n",
+            output_match: true,
+            c_codegen: Some(CCodegenResult(
+                status: "Success",
+            )),
+            c_compile: Some(CCompileResult(
+                status: "Success",
+            )),
+            link: Some(LinkResult(
+                status: "Success",
+            )),
+            execution: Some(ExecutionResult(
+                status: "Success",
+                exit_code: 0,
+            )),
+        ),
+    ],
+)

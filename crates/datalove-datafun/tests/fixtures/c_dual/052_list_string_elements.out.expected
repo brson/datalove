@@ -1,0 +1,55 @@
+CDualAnalysis(
+    sections: [
+        CDualSectionResult(
+            section_type: "scriptunit-fragment",
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            interp_lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const "hello"
+                        v1 = const "world"
+                        v2 = list [v0, v1]
+                        debuglog v2
+                        unit_end_drop v2
+                        unit_end
+                """,
+            ),
+            c_aot_lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const "hello"
+                        v1 = const "world"
+                        v2 = list [v0, v1]
+                        debuglog v2
+                        unit_end_drop v2
+                        unit_end
+                """,
+            ),
+            interp_output: "[\"hello\", \"world\"]\n",
+            c_aot_output: "[\"hello\", \"world\"]\n",
+            output_match: true,
+            c_codegen: Some(CCodegenResult(
+                status: "Success",
+            )),
+            c_compile: Some(CCompileResult(
+                status: "Success",
+            )),
+            link: Some(LinkResult(
+                status: "Success",
+            )),
+            execution: Some(ExecutionResult(
+                status: "Success",
+                exit_code: 0,
+            )),
+        ),
+    ],
+)

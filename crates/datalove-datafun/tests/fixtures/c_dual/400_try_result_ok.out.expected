@@ -1,0 +1,63 @@
+CDualAnalysis(
+    sections: [
+        CDualSectionResult(
+            section_type: "scriptunit-fragment",
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            interp_lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 42u32
+                        v1 = ok v0
+                        v2, v3, v4 = unwrap_result v1
+                        branch v4, block2, block1
+                    block1:
+                        v5 = err v3
+                        unit_early_return v5
+                    block2:
+                        debuglog v2
+                        unit_end
+                """,
+            ),
+            c_aot_lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 42u32
+                        v1 = ok v0
+                        v2, v3, v4 = unwrap_result v1
+                        branch v4, block2, block1
+                    block1:
+                        v5 = err v3
+                        unit_early_return v5
+                    block2:
+                        debuglog v2
+                        unit_end
+                """,
+            ),
+            interp_output: "42\n",
+            c_aot_output: "42\n",
+            output_match: true,
+            c_codegen: Some(CCodegenResult(
+                status: "Success",
+            )),
+            c_compile: Some(CCompileResult(
+                status: "Success",
+            )),
+            link: Some(LinkResult(
+                status: "Success",
+            )),
+            execution: Some(ExecutionResult(
+                status: "Success",
+                exit_code: 0,
+            )),
+        ),
+    ],
+)
