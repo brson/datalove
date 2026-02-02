@@ -534,9 +534,16 @@ th {
     break-inside: avoid;
 }
 
-.toc li::before {
+.toc a::before {
     content: "\27E1";
+    content: "♥︎";
+    content: "♡";
     position: absolute;
     left: 0;
     color: var(--accent);
+    opacity: 0.0;
+}
+
+.toc a:hover::before {
+    opacity: 1;
 }
