@@ -359,7 +359,7 @@ impl CAotCompiler {
         registry: &FunctionRegistry,
     ) -> Result<(), CAotError> {
         let func_name = format!("__mod_{}_{}", module_id.0, &unit.name);
-        codegen::emit_function(out, &func_name, unit, Some(module_id), self, registry)?;
+        codegen::emit_function(out, &func_name, unit, Some(module_id), None, self, registry)?;
         Ok(())
     }
 
@@ -368,11 +368,12 @@ impl CAotCompiler {
         &mut self,
         out: &mut String,
         unit: &IrCodeUnit,
-        _parent: &IrCodeUnit,
+        parent: &IrCodeUnit,
         registry: &FunctionRegistry,
     ) -> Result<(), CAotError> {
         let func_name = format!("__local_{}", &unit.name);
-        codegen::emit_function(out, &func_name, unit, None, self, registry)?;
+        // Pass parent so local function calls can be resolved.
+        codegen::emit_function(out, &func_name, unit, None, Some(parent), self, registry)?;
         Ok(())
     }
 

@@ -18,6 +18,7 @@ pub fn emit_function(
     func_name: &str,
     unit: &IrCodeUnit,
     module_id: Option<IrModuleId>,
+    parent_unit: Option<&IrCodeUnit>,
     compiler: &mut CAotCompiler,
     registry: &FunctionRegistry,
 ) -> Result<(), CAotError> {
@@ -63,6 +64,7 @@ pub fn emit_function(
     // Create function context for codegen.
     let mut ctx = FunctionCodegenContext {
         unit,
+        parent_unit,
         layout: &layout,
         compiler,
         registry,
@@ -115,8 +117,10 @@ pub fn emit_script_body(
     let _ = script_ctx;
 
     // Create script context for codegen.
+    // Script body uses itself for local function lookup (it contains nested_units).
     let mut ctx = FunctionCodegenContext {
         unit,
+        parent_unit: None,
         layout: &layout,
         compiler,
         registry,
@@ -138,6 +142,8 @@ pub fn emit_script_body(
 /// Context for generating code within a function.
 struct FunctionCodegenContext<'a> {
     unit: &'a IrCodeUnit,
+    /// Parent unit for local function lookup (script unit for nested functions).
+    parent_unit: Option<&'a IrCodeUnit>,
     layout: &'a FrameLayout,
     compiler: &'a mut CAotCompiler,
     registry: &'a FunctionRegistry,
@@ -1399,7 +1405,9 @@ impl<'a> FunctionCodegenContext<'a> {
 
     /// Emit function call.
     fn emit_call(&mut self, out: &mut String, dest: ValueId, func: &CodeRef, args: &[Operand]) -> Result<(), CAotError> {
-        let func_name = self.compiler.resolve_func_name_with_registry(func, self.unit, self.registry);
+        // For local function lookup, use parent_unit if available (for nested functions).
+        let lookup_unit = self.parent_unit.unwrap_or(self.unit);
+        let func_name = self.compiler.resolve_func_name_with_registry(func, lookup_unit, self.registry);
         let dest_ty = self.value_type(dest);
         let uses_sret = types::uses_sret(dest_ty);
 
