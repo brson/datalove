@@ -96,7 +96,6 @@ dockerfile=$(cat <<DOCKERFILE
 FROM docker.io/library/ubuntu:24.04
 
 ENV DEBIAN_FRONTEND=noninteractive
-ENV NVM_DIR=/home/claude/.nvm
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl git ca-certificates build-essential clang pkg-config libssl-dev nano emacs-nox \
@@ -124,16 +123,11 @@ RUN userdel -r ubuntu 2>/dev/null || true \
 COPY --chown=claude:claude claude-chime-notify.sh /home/claude/.local/bin/claude-chime-notify
 COPY --chown=claude:claude chime.wav /home/claude/.local/share/sounds/chime.wav
 
-# Install nvm and node as claude user
+# Install Claude Code native binary
 USER claude
 WORKDIR /home/claude
-RUN curl -fsSL https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | bash \
-    && . "\$NVM_DIR/nvm.sh" \
-    && nvm install 22 \
-    && npm install -g @anthropic-ai/claude-code \
-    && git config --global --add safe.directory /workspace \
-    && echo 'export NVM_DIR="\$HOME/.nvm"' >> ~/.bashrc \
-    && echo '[ -s "\$NVM_DIR/nvm.sh" ] && . "\$NVM_DIR/nvm.sh"' >> ~/.bashrc
+RUN curl -fsSL https://claude.ai/install.sh | bash \
+    && git config --global --add safe.directory /workspace
 
 WORKDIR /workspace
 DOCKERFILE
@@ -175,7 +169,7 @@ exec podman run -it --rm \
     "${mounts[@]}" \
     "${envs[@]}" \
     "$IMAGE_NAME" \
-    bash -c '. ~/.nvm/nvm.sh && export PATH="$HOME/.cargo/bin:$PATH" && '"$(
+    bash -c 'export PATH="$HOME/.local/bin:$HOME/.cargo/bin:$PATH" && '"$(
         case "$COMMAND" in
             claude) echo 'claude --dangerously-skip-permissions' ;;
             bash) echo 'exec bash' ;;
