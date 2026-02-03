@@ -382,11 +382,22 @@ impl<'a> FunctionCodegenContext<'a> {
         }
     }
 
-    /// Get the type of an operand.
+    /// Get the type of an operand (the type after any auto-dereference).
+    ///
+    /// For `ValueRef`, this returns the inner type (what the pointer points to),
+    /// since ValueRef operands are auto-dereferenced when used.
     fn operand_type(&self, op: &Operand) -> &IrType {
         match op {
-            Operand::Value(vid) | Operand::ValueRef(vid) => {
+            Operand::Value(vid) => {
                 &self.unit.value_types[vid.0 as usize]
+            }
+            Operand::ValueRef(vid) => {
+                // ValueRef is auto-dereferenced, so return the inner type.
+                let ref_ty = &self.unit.value_types[vid.0 as usize];
+                match ref_ty {
+                    IrType::Ref(inner) => inner.as_ref(),
+                    _ => ref_ty, // Shouldn't happen, but fallback to the type itself.
+                }
             }
             Operand::Param(pid) => {
                 let func_ctx = self.unit.function_context().unwrap();
@@ -468,7 +479,8 @@ impl<'a> FunctionCodegenContext<'a> {
                         writeln!(out, "    *(float*){} = (-1.0f/0.0f);", dest_addr).unwrap();
                     }
                 } else {
-                    writeln!(out, "    *(float*){} = {}f;", dest_addr, v).unwrap();
+                    // Use {:e} to ensure scientific notation with decimal point.
+                    writeln!(out, "    *(float*){} = {:e}f;", dest_addr, v).unwrap();
                 }
             }
             ConstValue::F64(v) => {
@@ -481,7 +493,8 @@ impl<'a> FunctionCodegenContext<'a> {
                         writeln!(out, "    *(double*){} = (-1.0/0.0);", dest_addr).unwrap();
                     }
                 } else {
-                    writeln!(out, "    *(double*){} = {};", dest_addr, v).unwrap();
+                    // Use {:e} to ensure scientific notation with decimal point.
+                    writeln!(out, "    *(double*){} = {:e};", dest_addr, v).unwrap();
                 }
             }
             ConstValue::Int { limbs, negative } => {
@@ -679,6 +692,60 @@ impl<'a> FunctionCodegenContext<'a> {
         let c_ty = types::ir_type_to_c(lhs_ty);
 
         // Use GCC/Clang builtins for overflow checking.
+        // Index and Offset are platform-dependent sizes.
+        #[cfg(not(feature = "index-64"))]
+        let (index_add, index_sub, index_mul) = (
+            "__builtin_uadd_overflow",
+            "__builtin_usub_overflow",
+            "__builtin_umul_overflow",
+        );
+        #[cfg(feature = "index-64")]
+        let (index_add, index_sub, index_mul) = (
+            "__builtin_uaddll_overflow",
+            "__builtin_usubll_overflow",
+            "__builtin_umulll_overflow",
+        );
+        #[cfg(not(feature = "index-64"))]
+        let (offset_add, offset_sub, offset_mul) = (
+            "__builtin_sadd_overflow",
+            "__builtin_ssub_overflow",
+            "__builtin_smul_overflow",
+        );
+        #[cfg(feature = "index-64")]
+        let (offset_add, offset_sub, offset_mul) = (
+            "__builtin_saddll_overflow",
+            "__builtin_ssubll_overflow",
+            "__builtin_smulll_overflow",
+        );
+
+        // Handle small integer types by widening to 32-bit.
+        let (min_val, max_val): (Option<i64>, Option<i64>) = match lhs_ty {
+            IrType::I8 => (Some(-128), Some(127)),
+            IrType::I16 => (Some(-32768), Some(32767)),
+            IrType::U8 => (Some(0), Some(255)),
+            IrType::U16 => (Some(0), Some(65535)),
+            _ => (None, None),
+        };
+
+        if let (Some(min_val), Some(max_val)) = (min_val, max_val) {
+            // Widen to 32-bit, do operation, check range.
+            let op_str = match op {
+                BinOp::Add => "+",
+                BinOp::Sub => "-",
+                BinOp::Mul => "*",
+                _ => {
+                    // Fall back to unchecked for other ops.
+                    self.emit_binop(out, dest, op, lhs, rhs)?;
+                    writeln!(out, "    *(bool_t*){} = 0;", overflow_addr).unwrap();
+                    return Ok(());
+                }
+            };
+            let is_signed = matches!(lhs_ty, IrType::I8 | IrType::I16);
+            let wide_ty = if is_signed { "int32_t" } else { "uint32_t" };
+            writeln!(out, "    {{ {wide_ty} __tmp = ({wide_ty})*({c_ty}*){lhs_addr} {op_str} ({wide_ty})*({c_ty}*){rhs_addr}; *(bool_t*){overflow_addr} = (__tmp < {min_val} || __tmp > {max_val}); *({c_ty}*){dest_addr} = ({c_ty})__tmp; }}").unwrap();
+            return Ok(());
+        }
+
         let builtin = match (lhs_ty, op) {
             (IrType::I32, BinOp::Add) => "__builtin_sadd_overflow",
             (IrType::I32, BinOp::Sub) => "__builtin_ssub_overflow",
@@ -692,6 +759,25 @@ impl<'a> FunctionCodegenContext<'a> {
             (IrType::U64, BinOp::Add) => "__builtin_uaddll_overflow",
             (IrType::U64, BinOp::Sub) => "__builtin_usubll_overflow",
             (IrType::U64, BinOp::Mul) => "__builtin_umulll_overflow",
+            (IrType::Index, BinOp::Add) => index_add,
+            (IrType::Index, BinOp::Sub) => index_sub,
+            (IrType::Index, BinOp::Mul) => index_mul,
+            (IrType::Offset, BinOp::Add) => offset_add,
+            (IrType::Offset, BinOp::Sub) => offset_sub,
+            (IrType::Offset, BinOp::Mul) => offset_mul,
+            // Division and modulo need explicit zero-check.
+            (_, BinOp::Div) | (_, BinOp::Mod) => {
+                // Check for division by zero.
+                writeln!(out, "    if (*({c_ty}*){rhs_addr} == 0) {{").unwrap();
+                writeln!(out, "        *(bool_t*){overflow_addr} = 1;").unwrap();
+                writeln!(out, "        *({c_ty}*){dest_addr} = 0;").unwrap();
+                writeln!(out, "    }} else {{").unwrap();
+                writeln!(out, "        *(bool_t*){overflow_addr} = 0;").unwrap();
+                writeln!(out, "        *({c_ty}*){dest_addr} = *({c_ty}*){lhs_addr} {} *({c_ty}*){rhs_addr};",
+                    if op == BinOp::Div { "/" } else { "%" }).unwrap();
+                writeln!(out, "    }}").unwrap();
+                return Ok(());
+            }
             _ => {
                 // Fall back to unchecked operation.
                 self.emit_binop(out, dest, op, lhs, rhs)?;
@@ -781,10 +867,15 @@ impl<'a> FunctionCodegenContext<'a> {
         let dest_addr = self.value_addr(dest);
         let dest_ty = self.value_type(dest);
 
+        // Unit is a zero-size type - nothing to pack.
+        if matches!(dest_ty, IrType::Unit) {
+            return Ok(());
+        }
+
         let field_types: Vec<IrType> = match dest_ty {
             IrType::Tuple(tys) => tys.clone(),
             IrType::Struct(fs) => fs.iter().map(|(_, ty)| ty.clone()).collect(),
-            _ => return Err(CAotError::Codegen("pack requires tuple/struct type".into())),
+            _ => return Err(CAotError::Codegen(format!("pack requires tuple/struct type, got {:?}", dest_ty))),
         };
 
         let offsets = types::compute_tuple_field_offsets(&field_types);
