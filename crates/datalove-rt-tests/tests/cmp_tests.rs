@@ -1293,7 +1293,7 @@ fn test_cmp_map_empty_vs_empty() -> AnyResult<()> {
 fn test_cmp_map_empty_vs_nonempty() -> AnyResult<()> {
     let db = Database::default();
     let typechecked_a = compile_str(&db, ": map<string, u32> / map{}")?;
-    let typechecked_b = compile_str(&db, r#"map{"a" = 1}"#)?;
+    let typechecked_b = compile_str(&db, r#": map<string, u32> / map{"a" = 1}"#)?;
 
     let rt = Runtime::new();
     let mut tydesc_table = TyDescTable::new(&db);
@@ -1538,7 +1538,7 @@ fn test_cmp_set_empty_vs_empty() -> AnyResult<()> {
 fn test_cmp_set_empty_vs_nonempty() -> AnyResult<()> {
     let db = Database::default();
     let typechecked_a = compile_str(&db, ": set<u32> / set{}")?;
-    let typechecked_b = compile_str(&db, "set{1}")?;
+    let typechecked_b = compile_str(&db, ": set<u32> / set{1}")?;
 
     let rt = Runtime::new();
     let mut tydesc_table = TyDescTable::new(&db);

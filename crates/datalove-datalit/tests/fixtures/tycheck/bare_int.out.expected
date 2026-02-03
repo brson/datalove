@@ -9,5 +9,5 @@
   },
   "diagnostics": [],
   "errors": [],
-  "root_type": "u32"
+  "root_type": "int"
 }

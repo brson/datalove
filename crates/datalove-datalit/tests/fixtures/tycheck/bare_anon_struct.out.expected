@@ -47,7 +47,7 @@
     "fields": [
       {
         "name": "x",
-        "type": "u32"
+        "type": "int"
       },
       {
         "name": "y",

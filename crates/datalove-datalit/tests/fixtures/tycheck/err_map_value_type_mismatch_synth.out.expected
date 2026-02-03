@@ -49,7 +49,7 @@
       "code": "T021",
       "labels": [
         {
-          "message": "expected `string`, found `u32`",
+          "message": "expected `string`, found `int`",
           "span": [
             19,
             21
@@ -62,7 +62,7 @@
   ],
   "errors": [
     {
-      "actual": "u32",
+      "actual": "int",
       "expected": "string",
       "kind": "TypeMismatch"
     }

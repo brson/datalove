@@ -1514,7 +1514,7 @@ mod tests {
     #[test]
     fn test_instantiate_u32() -> AnyResult<()> {
         let db = Database::default();
-        let typechecked = compile_str(&db, "42")?;
+        let typechecked = compile_str(&db, ": u32 / 42")?;
         let rt = datalove_rt::rust::Runtime::new();
         let guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);
@@ -1601,7 +1601,7 @@ mod tests {
     #[test]
     fn test_instantiate_tuple_simple() -> AnyResult<()> {
         let db = Database::default();
-        let typechecked = compile_str(&db, "(true, 42)")?;
+        let typechecked = compile_str(&db, ": (bool, u32) / (true, 42)")?;
         let rt = datalove_rt::rust::Runtime::new();
         let guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);
@@ -1677,7 +1677,7 @@ mod tests {
     #[test]
     fn test_instantiate_anon_struct() -> AnyResult<()> {
         let db = Database::default();
-        let typechecked = compile_str(&db, "{x = 1, y = 2}")?;
+        let typechecked = compile_str(&db, ": {x: u32, y: u32} / {x = 1, y = 2}")?;
         let rt = datalove_rt::rust::Runtime::new();
         let guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);
@@ -1765,7 +1765,7 @@ mod tests {
     #[test]
     fn test_instantiate_list_u32() -> AnyResult<()> {
         let db = Database::default();
-        let typechecked = compile_str(&db, "[1, 2, 3, 4, 5]")?;
+        let typechecked = compile_str(&db, ": [u32] / [1, 2, 3, 4, 5]")?;
         let rt = datalove_rt::rust::Runtime::new();
         let guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);
@@ -2044,7 +2044,7 @@ mod tests {
     #[test]
     fn test_instantiate_list_of_tuples() -> AnyResult<()> {
         let db = Database::default();
-        let typechecked = compile_str(&db, "[(1, 2), (3, 4), (5, 6)]")?;
+        let typechecked = compile_str(&db, ": [(u32, u32)] / [(1, 2), (3, 4), (5, 6)]")?;
         let rt = datalove_rt::rust::Runtime::new();
         let guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);
@@ -2527,7 +2527,7 @@ mod tests {
     #[test]
     fn test_instantiate_error() -> AnyResult<()> {
         let db = Database::default();
-        let typechecked = compile_str(&db, "error 42")?;
+        let typechecked = compile_str(&db, "error : u32 / 42")?;
         let rt = datalove_rt::rust::Runtime::new();
         let guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);

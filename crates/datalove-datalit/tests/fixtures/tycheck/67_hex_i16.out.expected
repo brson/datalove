@@ -12,7 +12,7 @@
       "code": "T032",
       "labels": [
         {
-          "message": "expected `i16`, found `u32`",
+          "message": "expected `i16`, found `int`",
           "span": [
             0,
             1
@@ -25,7 +25,7 @@
   ],
   "errors": [
     {
-      "actual": "u32",
+      "actual": "int",
       "expected": "i16",
       "kind": "TypeMismatch"
     }

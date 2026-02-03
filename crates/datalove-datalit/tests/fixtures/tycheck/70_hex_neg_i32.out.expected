@@ -7,10 +7,27 @@
     },
     "type_hint": "I32"
   },
-  "diagnostics": [],
+  "diagnostics": [
+    {
+      "code": "T032",
+      "labels": [
+        {
+          "message": "expected `i32`, found `int`",
+          "span": [
+            0,
+            1
+          ],
+          "text": ":"
+        }
+      ],
+      "message": "mismatched types"
+    }
+  ],
   "errors": [
     {
-      "kind": "IntOutOfRange"
+      "actual": "int",
+      "expected": "i32",
+      "kind": "TypeMismatch"
     }
   ],
   "root_type": null

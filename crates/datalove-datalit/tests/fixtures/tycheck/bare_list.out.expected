@@ -51,7 +51,7 @@
   "diagnostics": [],
   "errors": [],
   "root_type": {
-    "element_type": "u32",
+    "element_type": "int",
     "kind": "List"
   }
 }

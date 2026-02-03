@@ -1,1 +1,1 @@
-: (u32, bool) / (42, true)
+: (int, bool) / (42, true)

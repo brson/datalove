@@ -37,7 +37,7 @@
       "code": "T019",
       "labels": [
         {
-          "message": "expected `u32`, found `string`",
+          "message": "expected `int`, found `string`",
           "span": [
             12,
             19
@@ -51,7 +51,7 @@
   "errors": [
     {
       "actual": "string",
-      "expected": "u32",
+      "expected": "int",
       "kind": "TypeMismatch"
     }
   ],

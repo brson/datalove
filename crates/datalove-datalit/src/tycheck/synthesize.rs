@@ -33,43 +33,14 @@ pub fn synthesize<'db>(
         // Rule: Syn-String
         Expr::String(_) => Type::String,
 
-        // Rule: Syn-Int - default to u32 with range check.
-        Expr::Int(i) => {
-            let value_str = i.value.as_str(db);
-            if value_str.parse::<u32>().is_ok() {
-                Type::U32
-            } else {
-                if let Some(ts) = ctx.get_span(expr) {
-                    DiagnosticBuilder::error(db, "integer literal out of range")
-                        .code("T001")
-                        .primary_label(ts.clone(), "value too large for u32")
-                        .note("integer literals default to u32 type, which has a maximum value of 4,294,967,295")
-                        .emit_type();
-                }
-                return Err(TypeError::IntOutOfRange);
-            }
-        }
+        // Rule: Syn-Int - default to int (bigint).
+        Expr::Int(_) => Type::Int,
 
         // Rule: Syn-Float - default to f32.
         Expr::Float(_) => Type::F32,
 
-        // Rule: Syn-Hex - default to u32.
-        Expr::Hex(h) => {
-            let value_str = h.value.as_str(db);
-            let hex_part = value_str.trim_start_matches('-').trim_start_matches("0x").trim_start_matches("0X");
-            if u32::from_str_radix(hex_part, 16).is_ok() && !value_str.starts_with('-') {
-                Type::U32
-            } else {
-                if let Some(ts) = ctx.get_span(expr) {
-                    DiagnosticBuilder::error(db, "hex literal out of range")
-                        .code("T001")
-                        .primary_label(ts.clone(), "value too large for u32")
-                        .note("hex literals default to u32 type; use a type hint for other types")
-                        .emit_type();
-                }
-                return Err(TypeError::IntOutOfRange);
-            }
-        }
+        // Rule: Syn-Hex - default to int (bigint).
+        Expr::Hex(_) => Type::Int,
 
         // Rule: Syn-AnonTuple - synthesize tuple by synthesizing each element.
         Expr::AnonTuple(t) => {

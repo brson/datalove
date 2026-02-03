@@ -65,8 +65,8 @@
   "diagnostics": [],
   "errors": [],
   "root_type": {
-    "key_type": "u32",
+    "key_type": "int",
     "kind": "Map",
-    "value_type": "u32"
+    "value_type": "int"
   }
 }

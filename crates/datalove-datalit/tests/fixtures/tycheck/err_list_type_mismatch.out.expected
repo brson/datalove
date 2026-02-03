@@ -37,7 +37,7 @@
       "code": "T018",
       "labels": [
         {
-          "message": "expected `u32`, found `string`",
+          "message": "expected `int`, found `string`",
           "span": [
             7,
             14
@@ -51,7 +51,7 @@
   "errors": [
     {
       "actual": "string",
-      "expected": "u32",
+      "expected": "int",
       "kind": "TypeMismatch"
     }
   ],

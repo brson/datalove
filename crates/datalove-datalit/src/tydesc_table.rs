@@ -1052,7 +1052,7 @@ mod tests {
     #[test]
     fn test_create_tuple_tydesc() -> AnyResult<()> {
         let db = Database::default();
-        let typechecked = compile(&db, "(true, 42)")?;
+        let typechecked = compile(&db, ": (bool, u32) / (true, 42)")?;
         let root_type = typechecked.root_type(&db).clone().unwrap();
 
         let mut table = TyDescTable::new(&db);
@@ -1080,7 +1080,7 @@ mod tests {
     #[test]
     fn test_create_struct_tydesc() -> AnyResult<()> {
         let db = Database::default();
-        let typechecked = compile(&db, "{x = 1, y = 2}")?;
+        let typechecked = compile(&db, ": {x: u32, y: u32} / {x = 1, y = 2}")?;
         let root_type = typechecked.root_type(&db).clone().unwrap();
 
         let mut table = TyDescTable::new(&db);
@@ -1168,7 +1168,7 @@ mod tests {
     #[test]
     fn test_create_list_tydesc() -> AnyResult<()> {
         let db = Database::default();
-        let typechecked = compile(&db, "[1, 2, 3]")?;
+        let typechecked = compile(&db, ": [u32] / [1, 2, 3]")?;
         let root_type = typechecked.root_type(&db).clone().unwrap();
 
         let mut table = TyDescTable::new(&db);

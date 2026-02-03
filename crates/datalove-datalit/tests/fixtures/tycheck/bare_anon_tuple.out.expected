@@ -33,7 +33,7 @@
   "root_type": {
     "fields": [
       "bool",
-      "u32",
+      "int",
       "f32"
     ],
     "kind": "AnonTuple"
