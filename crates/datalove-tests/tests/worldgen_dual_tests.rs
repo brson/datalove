@@ -169,11 +169,6 @@ fn run_with_chaos_interp(
     }
 }
 
-/// Build the runtime library once and return the path to the lib directory.
-fn ensure_runtime_lib() -> &'static Path {
-    datafun::pipeline::aot::ensure_runtime_lib()
-}
-
 /// Run worldfile with AOT compilation.
 fn run_with_aot(
     db: &datafun::Database,
@@ -325,7 +320,7 @@ fn aot_compile_link_run(
         }
     };
 
-    // Write object to temp file.
+    // Link using shared pipeline function (uses lld if available).
     let dir = match rmx::tempfile::tempdir() {
         Ok(d) => d,
         Err(e) => {
@@ -338,59 +333,13 @@ fn aot_compile_link_run(
         }
     };
 
-    let obj_path = dir.path().join("test.o");
-    if let Err(e) = std::fs::write(&obj_path, &obj_bytes) {
-        return RunResult {
-            compiled: true,
-            debuglog: String::new(),
-            success: false,
-            error: Some(format!("Failed to write object file: {}", e)),
-        };
-    }
-
-    // Find runtime library.
-    let lib_dir = ensure_runtime_lib();
-    let lib_path = lib_dir.join("libdatalove_rt.a");
-
-    if !lib_path.exists() {
-        return RunResult {
-            compiled: true,
-            debuglog: String::new(),
-            success: false,
-            error: Some(format!("Runtime library not found at {:?}", lib_path)),
-        };
-    }
-
-    // Link with cc.
     let exe_path = dir.path().join("test");
-    let link_output = Command::new("cc")
-        .args([
-            obj_path.to_str().unwrap(),
-            lib_path.to_str().unwrap(),
-            "-ldl", "-lpthread", "-lm",
-            "-o", exe_path.to_str().unwrap(),
-        ])
-        .output();
-
-    let link_output = match link_output {
-        Ok(o) => o,
-        Err(e) => {
-            return RunResult {
-                compiled: true,
-                debuglog: String::new(),
-                success: false,
-                error: Some(format!("Failed to run linker: {}", e)),
-            };
-        }
-    };
-
-    if !link_output.status.success() {
-        let stderr = String::from_utf8_lossy(&link_output.stderr);
+    if let Err(e) = datafun::pipeline::aot::link_object_to_path(&obj_bytes, &exe_path) {
         return RunResult {
             compiled: true,
             debuglog: String::new(),
             success: false,
-            error: Some(format!("Linker failed: {}", stderr)),
+            error: Some(format!("{}", e)),
         };
     }
 

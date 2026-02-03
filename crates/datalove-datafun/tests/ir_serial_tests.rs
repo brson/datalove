@@ -100,15 +100,6 @@ pub enum ExecutionResult {
 }
 
 // ============================================================================
-// Runtime Library Setup
-// ============================================================================
-
-/// Build the runtime library once and return the path to the lib directory.
-fn ensure_runtime_lib() -> &'static Path {
-    datafun::pipeline::aot::ensure_runtime_lib()
-}
-
-// ============================================================================
 // Execution Helpers
 // ============================================================================
 
@@ -205,7 +196,7 @@ fn execute_ir_aot(
         }
     };
 
-    // Write object to temp file.
+    // Link using shared pipeline function (uses lld if available).
     let dir = match rmx::tempfile::tempdir() {
         Ok(d) => d,
         Err(e) => {
@@ -222,74 +213,13 @@ fn execute_ir_aot(
         }
     };
 
-    let obj_path = dir.path().join("test.o");
-    if let Err(e) = std::fs::write(&obj_path, &obj_bytes) {
-        return (
-            String::new(),
-            AotCompileResult::Success,
-            LinkResult::Error {
-                message: format!("write obj: {}", e),
-            },
-            ExecutionResult::Skipped {
-                reason: "Link failed".to_string(),
-            },
-        );
-    }
-
-    // Find runtime library.
-    let lib_dir = ensure_runtime_lib();
-    let lib_path = lib_dir.join("libdatalove_rt.a");
-
-    if !lib_path.exists() {
-        return (
-            String::new(),
-            AotCompileResult::Success,
-            LinkResult::Skipped {
-                reason: format!("Runtime library not found at {:?}", lib_path),
-            },
-            ExecutionResult::Skipped {
-                reason: "Link skipped".to_string(),
-            },
-        );
-    }
-
-    // Link with cc.
     let exe_path = dir.path().join("test");
-    let link_output = Command::new("cc")
-        .args([
-            obj_path.to_str().unwrap(),
-            lib_path.to_str().unwrap(),
-            "-ldl",
-            "-lpthread",
-            "-lm",
-            "-o",
-            exe_path.to_str().unwrap(),
-        ])
-        .output();
-
-    let link_output = match link_output {
-        Ok(o) => o,
-        Err(e) => {
-            return (
-                String::new(),
-                AotCompileResult::Success,
-                LinkResult::Error {
-                    message: format!("linker exec: {}", e),
-                },
-                ExecutionResult::Skipped {
-                    reason: "Link failed".to_string(),
-                },
-            );
-        }
-    };
-
-    if !link_output.status.success() {
-        let stderr = String::from_utf8_lossy(&link_output.stderr);
+    if let Err(e) = datafun::pipeline::aot::link_object_to_path(&obj_bytes, &exe_path) {
         return (
             String::new(),
             AotCompileResult::Success,
             LinkResult::Error {
-                message: format!("linker: {}", stderr),
+                message: format!("{}", e),
             },
             ExecutionResult::Skipped {
                 reason: "Link failed".to_string(),
