@@ -13,9 +13,9 @@ DualAnalysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = const 10u32
-                        v1 = const 20u32
-                        v2 = const 30u32
+                        v0 = const 10int
+                        v1 = const 20int
+                        v2 = const 30int
                         v3 = set {v0, v1, v2}
                         debuglog v3
                         unit_end_drop v3
@@ -27,9 +27,9 @@ DualAnalysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = const 10u32
-                        v1 = const 20u32
-                        v2 = const 30u32
+                        v0 = const 10int
+                        v1 = const 20int
+                        v2 = const 30int
                         v3 = set {v0, v1, v2}
                         debuglog v3
                         unit_end_drop v3

@@ -13,17 +13,18 @@ DualAnalysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = const 1u32
-                        v1 = const 2u32
+                        v0 = const 1int
+                        v1 = const 2int
                         v2 = pack Tuple2 {v0, v1}
                         v3 = pack Struct0 {v2}
-                        store.copy.tracked s0, v3
-                        v4 = const 99u32
-                        setfield s0.0.0, v4
-                        v5 = load.copy s0
+                        store.move.tracked s0, v3
+                        v4 = const 99int
+                        setfield.tracked s0.0.0, v4
+                        v5 = load.move.tracked s0
                         v6 = getfield v5.0
                         v7 = getfieldref v6.0
                         debuglog *v7
+                        unit_end_drop.tracked s0
                         unit_end
                 """,
             ),
@@ -32,17 +33,18 @@ DualAnalysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = const 1u32
-                        v1 = const 2u32
+                        v0 = const 1int
+                        v1 = const 2int
                         v2 = pack Tuple2 {v0, v1}
                         v3 = pack Struct0 {v2}
-                        store.copy.tracked s0, v3
-                        v4 = const 99u32
-                        setfield s0.0.0, v4
-                        v5 = load.copy s0
+                        store.move.tracked s0, v3
+                        v4 = const 99int
+                        setfield.tracked s0.0.0, v4
+                        v5 = load.move.tracked s0
                         v6 = getfield v5.0
                         v7 = getfieldref v6.0
                         debuglog *v7
+                        unit_end_drop.tracked s0
                         unit_end
                 """,
             ),

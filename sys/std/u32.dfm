@@ -1,15 +1,15 @@
 // Constants.
 
 fun min_value(): u32
-  ret 0
+  ret : u32 / 0
 end fun
 
 fun max_value(): u32
-  ret 4294967295
+  ret : u32 / 4294967295
 end fun
 
 fun bits(): u32
-  ret 32
+  ret : u32 / 32
 end fun
 
 // Bitwise primitives.
@@ -57,19 +57,19 @@ fun trailing_ones(self: u32): u32
 end fun
 
 fun is_power_of_two(self: u32): bool
-  if self == 0
+  if self == (: u32 / 0)
     ret false
   else
-    ret count_ones(self) == 1
+    ret count_ones(self) == (: u32 / 1)
   end if
 end fun
 
 // Integer log base 2. Returns none if self is zero.
 fun ilog2(self: u32): ?u32
-  if self == 0
+  if self == (: u32 / 0)
     ret none
   else
-    ret some sub_saturating(31, leading_zeros(self))
+    ret some sub_saturating(: u32 / 31, leading_zeros(self))
   end if
 end fun
 
@@ -77,23 +77,23 @@ end fun
 
 // Returns the smallest power of two >= self. Returns none on overflow.
 fun next_power_of_two(self: u32): ?u32
-  if self <= 1
-    ret some 1
+  if self <= (: u32 / 1)
+    ret some (: u32 / 1)
   else
     if is_power_of_two(self)
       ret some self
     else
       // self > 1 and not a power of two, so we need 2^(ilog2(self) + 1).
       if ilog2(self) |log|
-        let next_exp = add_saturating(log, 1)
-        if next_exp >= 32
+        let next_exp = add_saturating(log, : u32 / 1)
+        if next_exp >= (: u32 / 32)
           ret none
         else
-          ret shift_left(1, next_exp)
+          ret shift_left(: u32 / 1, next_exp)
         end if
       else
         // Unreachable: ilog2 only returns none for 0.
-        ret some 1
+        ret some (: u32 / 1)
       end if
     end if
   end if
@@ -101,19 +101,19 @@ end fun
 
 // Binary exponentiation with overflow detection.
 fun pow_checked(self: u32, exp: u32): ?u32
-  var result: u32 = 1
+  var result: u32 = : u32 / 1
   var base: u32 = self
   var e: u32 = exp
-  loop while e .> 0
-    if bitand(e, 1) == 1
+  loop while e .> (: u32 / 0)
+    if bitand(e, : u32 / 1) == (: u32 / 1)
       if mul_checked(result, base) |next_result|
         set result = next_result
       else
         ret none
       end if
     end if
-    set e = shift_right_wrapping(e, 1)
-    if e .> 0
+    set e = shift_right_wrapping(e, : u32 / 1)
+    if e .> (: u32 / 0)
       if mul_checked(base, base) |next_base|
         set base = next_base
       else
@@ -126,20 +126,20 @@ end fun
 
 // Binary exponentiation saturating at max_value on overflow.
 fun pow_saturating(self: u32, exp: u32): u32
-  var result: u32 = 1
+  var result: u32 = : u32 / 1
   var base: u32 = self
   var e: u32 = exp
   var overflow: bool = false
-  loop while e .> 0
-    if bitand(e, 1) == 1
+  loop while e .> (: u32 / 0)
+    if bitand(e, : u32 / 1) == (: u32 / 1)
       if mul_checked(result, base) |next_result|
         set result = next_result
       else
         set overflow = true
       end if
     end if
-    set e = shift_right_wrapping(e, 1)
-    if e .> 0
+    set e = shift_right_wrapping(e, : u32 / 1)
+    if e .> (: u32 / 0)
       if mul_checked(base, base) |next_base|
         set base = next_base
       else
@@ -156,15 +156,15 @@ end fun
 
 // Binary exponentiation with wrapping on overflow.
 fun pow_wrapping(self: u32, exp: u32): u32
-  var result: u32 = 1
+  var result: u32 = : u32 / 1
   var base: u32 = self
   var e: u32 = exp
-  loop while e .> 0
-    if bitand(e, 1) == 1
+  loop while e .> (: u32 / 0)
+    if bitand(e, : u32 / 1) == (: u32 / 1)
       set result = mul_wrapping(result, base)
     end if
-    set e = shift_right_wrapping(e, 1)
-    if e .> 0
+    set e = shift_right_wrapping(e, : u32 / 1)
+    if e .> (: u32 / 0)
       set base = mul_wrapping(base, base)
     end if
   end loop
@@ -228,8 +228,8 @@ end fun
 // Checked arithmetic.
 
 fun neg_checked(self: u32): ?u32
-  if self == 0
-    ret some 0
+  if self == (: u32 / 0)
+    ret some (: u32 / 0)
   else
     ret none
   end if
@@ -252,7 +252,7 @@ fun div_checked(self: u32, other: u32): ?u32
 end fun
 
 fun rem_checked(self: u32, other: u32): ?u32
-  if other == 0
+  if other == (: u32 / 0)
     ret none
   else
     ret some icall rem_u32(self, other)
@@ -299,7 +299,7 @@ fun sub_saturating(self: u32, other: u32): u32
   if sub_checked(self, other) |value|
     ret value
   else
-    ret 0
+    ret : u32 / 0
   end if
 end fun
 
@@ -383,7 +383,7 @@ end fun
 
 // Returns none if shift >= 32.
 fun shift_left(self: u32, n: u32): ?u32
-  if n >= 32
+  if n >= (: u32 / 32)
     ret none
   else
     ret some icall shl_u32(self, n)
@@ -392,7 +392,7 @@ end fun
 
 // Returns none if shift >= 32.
 fun shift_right(self: u32, n: u32): ?u32
-  if n >= 32
+  if n >= (: u32 / 32)
     ret none
   else
     ret some icall shr_u32(self, n)
@@ -400,7 +400,7 @@ fun shift_right(self: u32, n: u32): ?u32
 end fun
 
 fun shift_left_saturating(self: u32, n: u32): u32
-  if n >= 32
+  if n >= (: u32 / 32)
     ret max_value()
   else
     if shift_left(self, n) |value|
@@ -412,49 +412,49 @@ fun shift_left_saturating(self: u32, n: u32): u32
 end fun
 
 fun shift_right_saturating(self: u32, n: u32): u32
-  if n >= 32
-    ret 0
+  if n >= (: u32 / 32)
+    ret : u32 / 0
   else
     if shift_right(self, n) |value|
       ret value
     else
-      ret 0
+      ret : u32 / 0
     end if
   end if
 end fun
 
 fun shift_left_wrapping(self: u32, n: u32): u32
-  let n_mod = bitand(n, 31)
+  let n_mod = bitand(n, : u32 / 31)
   if shift_left(self, n_mod) |value|
     ret value
   else
-    ret 0
+    ret : u32 / 0
   end if
 end fun
 
 fun shift_right_wrapping(self: u32, n: u32): u32
-  let n_mod = bitand(n, 31)
+  let n_mod = bitand(n, : u32 / 31)
   if shift_right(self, n_mod) |value|
     ret value
   else
-    ret 0
+    ret : u32 / 0
   end if
 end fun
 
 // Rotates.
 
 fun rotate_left(self: u32, n: u32): u32
-  let n_mod = bitand(n, 31)
+  let n_mod = bitand(n, : u32 / 31)
   let left_part = shift_left_wrapping(self, n_mod)
-  let right_amount = sub_wrapping(32, n_mod)
+  let right_amount = sub_wrapping(: u32 / 32, n_mod)
   let right_part = shift_right_wrapping(self, right_amount)
   ret bitor(left_part, right_part)
 end fun
 
 fun rotate_right(self: u32, n: u32): u32
-  let n_mod = bitand(n, 31)
+  let n_mod = bitand(n, : u32 / 31)
   let right_part = shift_right_wrapping(self, n_mod)
-  let left_amount = sub_wrapping(32, n_mod)
+  let left_amount = sub_wrapping(: u32 / 32, n_mod)
   let left_part = shift_left_wrapping(self, left_amount)
   ret bitor(left_part, right_part)
 end fun
@@ -462,7 +462,7 @@ end fun
 // Comparisons and utilities.
 
 fun is_zero(self: u32): bool
-  ret self == 0
+  ret self == (: u32 / 0)
 end fun
 
 fun min(self: u32, other: u32): u32
@@ -506,6 +506,6 @@ end fun
 fun midpoint(self: u32, other: u32): u32
   let common = bitand(self, other)
   let diff = bitxor(self, other)
-  let half_diff = shift_right_wrapping(diff, 1)
+  let half_diff = shift_right_wrapping(diff, : u32 / 1)
   ret add_wrapping(common, half_diff)
 end fun

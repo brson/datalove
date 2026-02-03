@@ -4,14 +4,11 @@ DualAnalysis(
             section_type: "module",
             name: Some("local/test/fib"),
             typecheck: TypecheckResult(
-                status: "Error",
-                errors: [
-                    "line 4, col 8: error[F016]: mismatched types: expected `int`, found `u32`",
-                    "line 7, col 13: error[F016]: mismatched types: expected `int`, found `u32`",
-                ],
+                status: "Success",
             ),
             ownership: OwnershipResult(
-                status: "Skipped",
+                status: "Error",
+                message: "Ownership error in fib: InconsistentBranchMove { stmt_idx: 0, name: \"n\", moved_in: \"then\" }, UseAfterMove { local_index: 16401, moved_at: 16400, name: \"n\", recovery_hint: InsertAdapt { description: \"clone `n` before the earlier use\" } }, UseAfterMove { local_index: 16405, moved_at: 16400, name: \"n\", recovery_hint: InsertAdapt { description: \"clone `n` before the earlier use\" } }",
             ),
             interp_lowering: LoweringResult(
                 status: "Skipped",

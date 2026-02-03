@@ -14,7 +14,7 @@ DualAnalysis(
                     scriptunit:
                     block0:
                         v0 = const "Bob"
-                        v1 = const 30u32
+                        v1 = const 30int
                         v2 = pack Struct0 {v0, v1}
                         debuglog v2
                         drop v2
@@ -27,7 +27,7 @@ DualAnalysis(
                     scriptunit:
                     block0:
                         v0 = const "Bob"
-                        v1 = const 30u32
+                        v1 = const 30int
                         v2 = pack Struct0 {v0, v1}
                         debuglog v2
                         drop v2

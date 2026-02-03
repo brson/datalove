@@ -9,14 +9,14 @@
     "eval": {
       "SuccessLet": {
         "name": "nums",
-        "ty": "list<u32>",
+        "ty": "list<int>",
         "value": "[1, 2, 3]"
       }
     },
     "environment": [
       {
         "name": "nums",
-        "ty": "list<u32>",
+        "ty": "list<int>",
         "value": "[1, 2, 3]"
       }
     ]
@@ -31,14 +31,14 @@
     "eval": {
       "SuccessExpr": {
         "expr_kind": "expr",
-        "ty": "list<u32>",
+        "ty": "list<int>",
         "value": "[1, 2, 3]"
       }
     },
     "environment": [
       {
         "name": "nums",
-        "ty": "list<u32>",
+        "ty": "list<int>",
         "value": "<moved>"
       }
     ]
@@ -60,7 +60,7 @@
     "environment": [
       {
         "name": "nums",
-        "ty": "list<u32>",
+        "ty": "list<int>",
         "value": "<moved>"
       },
       {
@@ -87,7 +87,7 @@
     "environment": [
       {
         "name": "nums",
-        "ty": "list<u32>",
+        "ty": "list<int>",
         "value": "<moved>"
       },
       {
@@ -107,19 +107,19 @@
     "eval": {
       "SuccessLet": {
         "name": "bigger",
-        "ty": "list<u32>",
+        "ty": "list<int>",
         "value": "[10, 20, 30, 40, 50]"
       }
     },
     "environment": [
       {
         "name": "bigger",
-        "ty": "list<u32>",
+        "ty": "list<int>",
         "value": "[10, 20, 30, 40, 50]"
       },
       {
         "name": "nums",
-        "ty": "list<u32>",
+        "ty": "list<int>",
         "value": "<moved>"
       },
       {
@@ -139,19 +139,19 @@
     "eval": {
       "SuccessExpr": {
         "expr_kind": "expr",
-        "ty": "list<u32>",
+        "ty": "list<int>",
         "value": "[10, 20, 30, 40, 50]"
       }
     },
     "environment": [
       {
         "name": "bigger",
-        "ty": "list<u32>",
+        "ty": "list<int>",
         "value": "<moved>"
       },
       {
         "name": "nums",
-        "ty": "list<u32>",
+        "ty": "list<int>",
         "value": "<moved>"
       },
       {

@@ -14,9 +14,9 @@ Analysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = const 1u32
-                        v1 = const 2u32
-                        v2 = const 3u32
+                        v0 = const 1int
+                        v1 = const 2int
+                        v2 = const 3int
                         v3 = list [v0, v1, v2]
                         unit_end v3
                 """,

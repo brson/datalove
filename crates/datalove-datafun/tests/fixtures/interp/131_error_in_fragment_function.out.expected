@@ -18,7 +18,7 @@ Analysis(
                     
                     fn get_error():
                     block0:
-                        v0 = const 42u32
+                        v0 = const 42int
                         v1 = error_from v0
                         return v1
                 """,

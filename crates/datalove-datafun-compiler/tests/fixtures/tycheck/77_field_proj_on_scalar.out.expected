@@ -3,14 +3,14 @@
   "errors": [
     {
       "kind": "ProjectionOnNonAggregate",
-      "type": "u32"
+      "type": "int"
     }
   ],
   "judgements": [
     {
       "kind": "variable",
       "name": "x",
-      "type": "u32"
+      "type": "int"
     }
   ]
 }

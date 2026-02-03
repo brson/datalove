@@ -8,14 +8,14 @@ loop
     if done
         break
     end if
-    if x == 0
-        set x = 10
+    if x == :u32/0
+        set x = :u32/10
     end if
-    if x == 10
-        set x = 20
+    if x == :u32/10
+        set x = :u32/20
     end if
-    if x == 20
-        set x = 30
+    if x == :u32/20
+        set x = :u32/30
         set done = true
     end if
 end loop

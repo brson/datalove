@@ -12,7 +12,7 @@
           "text": "42"
         }
       ],
-      "message": "mismatched types: expected `?u32`, found `u32`"
+      "message": "mismatched types: expected `?u32`, found `int`"
     },
     {
       "code": "F001",
@@ -31,7 +31,7 @@
   ],
   "errors": [
     {
-      "actual": "u32",
+      "actual": "int",
       "expected": "?u32",
       "kind": "TypeMismatch"
     },
@@ -44,7 +44,7 @@
     {
       "kind": "variable",
       "name": "a",
-      "type": "u32"
+      "type": "int"
     }
   ]
 }

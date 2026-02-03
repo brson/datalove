@@ -18,8 +18,9 @@ AotAnalysis(
                         v1 = const 2u32
                         v2 = const 3u32
                         v3 = tensor [3] [v0, v1, v2]
-                        v4 = const 42u32
+                        v4 = const 42int
                         debuglog v4
+                        drop v4
                         unit_end_drop v3
                         unit_end
                 """,

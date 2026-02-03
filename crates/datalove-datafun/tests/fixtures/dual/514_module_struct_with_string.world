@@ -14,5 +14,5 @@ scriptunit-fragment
 require module local/test/structops
 import structops.get_id
 
-let user = {score = 100, id = 42}
+let user: {score: u32, id: u32} = {score = 100, id = 42}
 debuglog get_id(user)

@@ -5,11 +5,11 @@ fun min_value(): i8
 end fun
 
 fun max_value(): i8
-  ret 127
+  ret : i8 / 127
 end fun
 
 fun bits(): u8
-  ret 8
+  ret : u8 / 8
 end fun
 
 // Sign functions.
@@ -17,7 +17,7 @@ end fun
 fun signum(self: i8): i8
   let zero = (: i8 / 0)
   if self .> zero
-    ret 1
+    ret : i8 / 1
   else
     if self .< zero
       ret (: i8 / -1)
@@ -414,6 +414,6 @@ end fun
 fun midpoint(self: i8, other: i8): i8
   let common = bitand(self, other)
   let diff = bitxor(self, other)
-  let half_diff = shift_right_wrapping(diff, 1)
+  let half_diff = shift_right_wrapping(diff, : u8 / 1)
   ret add_wrapping(common, half_diff)
 end fun

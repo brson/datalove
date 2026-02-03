@@ -232,17 +232,10 @@ pub fn synthesize_expr<'db>(
                 }
                 return Ok(result_ty);
             }
-            let value_str = int_expr.value.as_str(db);
-            // Parse as u32 by default.
-            if value_str.parse::<u32>().is_ok() {
-                let ty = Type::Datalit(datalit::tycheck::Type::U32);
-                Ok(ty)
-            } else if value_str.parse::<i32>().is_ok() {
-                let ty = Type::Datalit(datalit::tycheck::Type::I32);
-                Ok(ty)
-            } else {
-                Err(ctx.error_cannot_synthesize(expr, "integer literal out of range"))
-            }
+            // Integer literals synthesize to bigint for REPL ergonomics.
+            // Use type hints for fixed-width integers.
+            let ty = Type::Datalit(datalit::tycheck::Type::Int);
+            Ok(ty)
         }
         ExprFunKind::Float(float_expr) => {
             if let Some(type_hint) = float_expr.type_hint.clone() {
@@ -262,14 +255,10 @@ pub fn synthesize_expr<'db>(
                 }
                 return Ok(result_ty);
             }
-            let value_str = hex_expr.value.as_str(db);
-            let hex_part = value_str.trim_start_matches('-').trim_start_matches("0x").trim_start_matches("0X");
-            if u32::from_str_radix(hex_part, 16).is_ok() && !value_str.starts_with('-') {
-                let ty = Type::Datalit(datalit::tycheck::Type::U32);
-                Ok(ty)
-            } else {
-                Err(ctx.error_cannot_synthesize(expr, "hex literal out of range"))
-            }
+            // Hex literals synthesize to bigint for REPL ergonomics.
+            // Use type hints for fixed-width integers.
+            let ty = Type::Datalit(datalit::tycheck::Type::Int);
+            Ok(ty)
         }
         ExprFunKind::String(str_expr) => {
             if let Some(type_hint) = str_expr.type_hint.clone() {

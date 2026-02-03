@@ -14,11 +14,11 @@ DualAnalysis(
                     scriptunit:
                     block0:
                         v0 = const "alice"
-                        v1 = const 30u32
+                        v1 = const 30int
                         v2 = const true
                         v3 = pack Struct0 {v1, v2}
                         v4 = const "bob"
-                        v5 = const 25u32
+                        v5 = const 25int
                         v6 = const false
                         v7 = pack Struct0 {v5, v6}
                         v8 = map {v0: v3, v4: v7}
@@ -33,11 +33,11 @@ DualAnalysis(
                     scriptunit:
                     block0:
                         v0 = const "alice"
-                        v1 = const 30u32
+                        v1 = const 30int
                         v2 = const true
                         v3 = pack Struct0 {v1, v2}
                         v4 = const "bob"
-                        v5 = const 25u32
+                        v5 = const 25int
                         v6 = const false
                         v7 = pack Struct0 {v5, v6}
                         v8 = map {v0: v3, v4: v7}

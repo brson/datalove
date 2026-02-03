@@ -12,12 +12,12 @@
           "text": "n == 0"
         }
       ],
-      "message": "mismatched types: expected `u64`, found `u32`"
+      "message": "mismatched types: expected `u64`, found `int`"
     }
   ],
   "errors": [
     {
-      "actual": "u32",
+      "actual": "int",
       "expected": "u64",
       "kind": "TypeMismatch"
     },

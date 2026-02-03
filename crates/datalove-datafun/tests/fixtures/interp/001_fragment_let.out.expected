@@ -14,7 +14,8 @@ Analysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = const 42u32
+                        v0 = const 42int
+                        unit_end_drop v0
                         unit_end
                 """,
             ),

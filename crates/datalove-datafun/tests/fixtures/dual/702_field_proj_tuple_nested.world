@@ -2,7 +2,7 @@
 scriptunit-fragment
 ----------
 
-let t = ((1, 2), (3, 4))
+let t: ((u32, u32), (u32, u32)) = ((1, 2), (3, 4))
 let elem00 = t.0.0
 let elem01 = t.0.1
 let elem10 = t.1.0

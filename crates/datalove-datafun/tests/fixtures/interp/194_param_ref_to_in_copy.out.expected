@@ -4,25 +4,16 @@ Analysis(
             section_type: "module",
             name: Some("local/test/main"),
             typecheck: TypecheckResult(
-                status: "Success",
+                status: "Error",
+                errors: [
+                    "line 5, col 9: error[F016]: mismatched types: expected `u32`, found `int`",
+                ],
             ),
             ownership: OwnershipResult(
-                status: "Success",
+                status: "Skipped",
             ),
             lowering: LoweringResult(
-                status: "Success",
-                ir: """
-                    fn inner(p0):
-                    block0:
-                        v0 = const 100u32
-                        v1 = eq p0, v0
-                        return v1
-                    
-                    fn outer(p0):
-                    block0:
-                        v0 = call @0 m0.u0(p0)
-                        return v0
-                """,
+                status: "Skipped",
             ),
             output: "",
         ),
@@ -30,41 +21,29 @@ Analysis(
             section_type: "scriptunit-fragment",
             name: None,
             typecheck: TypecheckResult(
-                status: "Success",
+                status: "Skipped",
             ),
             ownership: OwnershipResult(
-                status: "Success",
+                status: "Skipped",
             ),
             lowering: LoweringResult(
-                status: "Success",
-                ir: """
-                    scriptunit:
-                    block0:
-                        unit_end
-                """,
+                status: "Skipped",
             ),
-            output: "(fragment executed)",
+            output: "",
         ),
         SectionResult(
             section_type: "scriptunit-expr",
             name: None,
             typecheck: TypecheckResult(
-                status: "Success",
+                status: "Skipped",
             ),
             ownership: OwnershipResult(
-                status: "Success",
+                status: "Skipped",
             ),
             lowering: LoweringResult(
-                status: "Success",
-                ir: """
-                    scriptunit:
-                    block0:
-                        v0 = const 100u32
-                        v1 = call @0 m0.u1(v0)
-                        unit_end v1
-                """,
+                status: "Skipped",
             ),
-            output: "true",
+            output: "",
         ),
     ],
 )

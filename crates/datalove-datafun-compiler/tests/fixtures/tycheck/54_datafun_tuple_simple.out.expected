@@ -5,17 +5,17 @@
     {
       "kind": "variable",
       "name": "x",
-      "type": "u32"
+      "type": "int"
     },
     {
       "kind": "variable",
       "name": "y",
-      "type": "u32"
+      "type": "int"
     },
     {
       "kind": "variable",
       "name": "output",
-      "type": "(u32, u32)"
+      "type": "(int, int)"
     }
   ]
 }

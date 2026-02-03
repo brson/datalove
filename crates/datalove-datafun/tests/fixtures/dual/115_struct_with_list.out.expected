@@ -14,11 +14,11 @@ DualAnalysis(
                     scriptunit:
                     block0:
                         v0 = const "items"
-                        v1 = const 1u32
-                        v2 = const 2u32
-                        v3 = const 3u32
-                        v4 = const 4u32
-                        v5 = const 5u32
+                        v1 = const 1int
+                        v2 = const 2int
+                        v3 = const 3int
+                        v4 = const 4int
+                        v5 = const 5int
                         v6 = list [v1, v2, v3, v4, v5]
                         v7 = pack Struct0 {v0, v6}
                         v8 = getfieldref v7.0
@@ -35,11 +35,11 @@ DualAnalysis(
                     scriptunit:
                     block0:
                         v0 = const "items"
-                        v1 = const 1u32
-                        v2 = const 2u32
-                        v3 = const 3u32
-                        v4 = const 4u32
-                        v5 = const 5u32
+                        v1 = const 1int
+                        v2 = const 2int
+                        v3 = const 3int
+                        v4 = const 4int
+                        v5 = const 5int
                         v6 = list [v1, v2, v3, v4, v5]
                         v7 = pack Struct0 {v0, v6}
                         v8 = getfieldref v7.0

@@ -15,9 +15,9 @@ DualAnalysis(
                     block0:
                         v0 = const "settings"
                         v1 = const "key1"
-                        v2 = const 100u32
+                        v2 = const 100int
                         v3 = const "key2"
-                        v4 = const 200u32
+                        v4 = const 200int
                         v5 = map {v1: v2, v3: v4}
                         v6 = pack Struct0 {v0, v5}
                         v7 = getfieldref v6.0
@@ -35,9 +35,9 @@ DualAnalysis(
                     block0:
                         v0 = const "settings"
                         v1 = const "key1"
-                        v2 = const 100u32
+                        v2 = const 100int
                         v3 = const "key2"
-                        v4 = const 200u32
+                        v4 = const 200int
                         v5 = map {v1: v2, v3: v4}
                         v6 = pack Struct0 {v0, v5}
                         v7 = getfieldref v6.0

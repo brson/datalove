@@ -14,8 +14,9 @@ AotAnalysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = const 42u32
+                        v0 = const 42int
                         debuglog v0
+                        drop v0
                         unit_end
                 """,
             ),

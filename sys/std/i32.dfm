@@ -5,11 +5,11 @@ fun min_value(): i32
 end fun
 
 fun max_value(): i32
-  ret 2147483647
+  ret : i32 / 2147483647
 end fun
 
 fun bits(): u32
-  ret 32
+  ret : u32 / 32
 end fun
 
 // Sign functions.
@@ -17,7 +17,7 @@ end fun
 fun signum(self: i32): i32
   let zero = (: i32 / 0)
   if self .> zero
-    ret 1
+    ret : i32 / 1
   else
     if self .< zero
       ret (: i32 / -1)
@@ -101,7 +101,7 @@ end fun
 fun count_zeros(self: i32): u32
   let u = icall i32_to_u32(self)
   let ones = icall popcount_u32(u)
-  ret icall sub_wrapping_u32(32, ones)
+  ret icall sub_wrapping_u32(: u32 / 32, ones)
 end fun
 
 fun leading_zeros(self: i32): u32
@@ -254,7 +254,7 @@ end fun
 
 // Checked left shift. Returns none if n >= 32.
 fun shift_left(self: i32, n: u32): ?i32
-  if n >= 32
+  if n >= (: u32 / 32)
     ret none
   else
     let u = icall i32_to_u32(self)
@@ -265,7 +265,7 @@ end fun
 
 // Checked arithmetic right shift. Returns none if n >= 32.
 fun shift_right(self: i32, n: u32): ?i32
-  if n >= 32
+  if n >= (: u32 / 32)
     ret none
   else
     ret some icall sshr_i32(self, n)
@@ -273,7 +273,7 @@ fun shift_right(self: i32, n: u32): ?i32
 end fun
 
 fun shift_left_wrapping(self: i32, n: u32): i32
-  let n_mod = icall bitand_u32(n, 31)
+  let n_mod = icall bitand_u32(n, : u32 / 31)
   if shift_left(self, n_mod) |value|
     ret value
   else
@@ -282,7 +282,7 @@ fun shift_left_wrapping(self: i32, n: u32): i32
 end fun
 
 fun shift_right_wrapping(self: i32, n: u32): i32
-  let n_mod = icall bitand_u32(n, 31)
+  let n_mod = icall bitand_u32(n, : u32 / 31)
   if shift_right(self, n_mod) |value|
     ret value
   else
@@ -291,7 +291,7 @@ fun shift_right_wrapping(self: i32, n: u32): i32
 end fun
 
 fun shift_left_saturating(self: i32, n: u32): i32
-  if n >= 32
+  if n >= (: u32 / 32)
     if is_negative(self)
       ret min_value()
     else
@@ -311,7 +311,7 @@ fun shift_left_saturating(self: i32, n: u32): i32
 end fun
 
 fun shift_right_saturating(self: i32, n: u32): i32
-  if n >= 32
+  if n >= (: u32 / 32)
     // Arithmetic shift fills with sign bit.
     if is_negative(self)
       ret (: i32 / -1)
@@ -334,20 +334,20 @@ end fun
 // Rotations (delegate to u32).
 
 fun rotate_left(self: i32, n: u32): i32
-  let n_mod = icall bitand_u32(n, 31)
+  let n_mod = icall bitand_u32(n, : u32 / 31)
   let u = icall i32_to_u32(self)
   let left_part = icall shl_u32(u, n_mod)
-  let right_amount = icall sub_wrapping_u32(32, n_mod)
+  let right_amount = icall sub_wrapping_u32(: u32 / 32, n_mod)
   let right_part = icall shr_u32(u, right_amount)
   let result = icall bitor_u32(left_part, right_part)
   ret icall u32_to_i32(result)
 end fun
 
 fun rotate_right(self: i32, n: u32): i32
-  let n_mod = icall bitand_u32(n, 31)
+  let n_mod = icall bitand_u32(n, : u32 / 31)
   let u = icall i32_to_u32(self)
   let right_part = icall shr_u32(u, n_mod)
-  let left_amount = icall sub_wrapping_u32(32, n_mod)
+  let left_amount = icall sub_wrapping_u32(: u32 / 32, n_mod)
   let left_part = icall shl_u32(u, left_amount)
   let result = icall bitor_u32(left_part, right_part)
   ret icall u32_to_i32(result)
@@ -458,6 +458,6 @@ end fun
 fun midpoint(self: i32, other: i32): i32
   let common = bitand(self, other)
   let diff = bitxor(self, other)
-  let half_diff = shift_right_wrapping(diff, 1)
+  let half_diff = shift_right_wrapping(diff, : u32 / 1)
   ret add_wrapping(common, half_diff)
 end fun

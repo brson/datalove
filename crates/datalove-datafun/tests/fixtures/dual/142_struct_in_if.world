@@ -3,12 +3,12 @@ scriptunit-fragment
 ----------
 
 // Struct field in if condition.
-let p = {x = 10, y = 20}
+let p: {x: u32, y: u32} = {x = 10, y = 20}
 
-if (p.x .> 5)
+if (p.x .> :u32/5)
     debuglog p.x
 end if
 
-if (p.y .< 100)
+if (p.y .< :u32/100)
     debuglog p.y
 end if

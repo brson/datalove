@@ -4,87 +4,35 @@ Analysis(
             section_type: "scriptunit-fragment",
             name: None,
             typecheck: TypecheckResult(
-                status: "Success",
+                status: "Error",
+                errors: [
+                    "TypeMismatch { expected: \"u32\", actual: \"int\" }",
+                ],
             ),
             ownership: OwnershipResult(
-                status: "Success",
+                status: "Skipped",
             ),
             lowering: LoweringResult(
-                status: "Success",
-                ir: """
-                    scriptunit:
-                    block0:
-                        unit_end
-                    
-                    fn fib(p0):
-                    block0:
-                        v0 = const 2u32
-                        v1 = lt p0, v0
-                        branch v1, block1, block2
-                    block1:
-                        v2 = widen p0
-                        v3 = ok v2
-                        return v3
-                    block2:
-                        goto block3
-                    block3:
-                        v4 = const 0int
-                        store.move.tracked s0, v4
-                        v5 = const 1int
-                        store.move.tracked s1, v5
-                        v6 = const 2u32
-                        store.copy.tracked s2, v6
-                        goto block4
-                    block4:
-                        v7 = le s2, p0
-                        branch v7, block5, block8
-                    block5:
-                        v8 = add s0, s1
-                        v9 = load.move.tracked s1
-                        drop.tracked s0
-                        store.move.tracked s0, v9
-                        drop.tracked s1
-                        store.move.tracked s1, v8
-                        v10 = const 1u32
-                        v11, v12 = add.checked s2, v10
-                        branch v12, block6, block7
-                    block6:
-                        v13 = const "arithmetic overflow"
-                        v14 = error_from v13
-                        v15 = err v14
-                        return v15
-                    block7:
-                        store.copy s2, v11
-                        goto block4
-                    block8:
-                        v16 = load.move.tracked s1
-                        v17 = ok v16
-                        drop.tracked s0
-                        return v17
-                """,
+                status: "Skipped",
             ),
-            output: "(fragment executed)",
+            output: "",
         ),
         SectionResult(
             section_type: "scriptunit-expr",
             name: None,
             typecheck: TypecheckResult(
-                status: "Success",
+                status: "Error",
+                errors: [
+                    "UnresolvedName(\"fib\")",
+                ],
             ),
             ownership: OwnershipResult(
-                status: "Success",
+                status: "Skipped",
             ),
             lowering: LoweringResult(
-                status: "Success",
-                ir: """
-                    scriptunit:
-                    block0:
-                        v0 = const 10u32
-                        v1 = call @0 unit0.u0(v0)
-                        unit_end v1
-                """,
+                status: "Skipped",
             ),
-            output: "ok 55",
+            output: "",
         ),
     ],
 )

@@ -4,14 +4,11 @@ DualAnalysis(
             section_type: "module",
             name: Some("local/test/recur"),
             typecheck: TypecheckResult(
-                status: "Error",
-                errors: [
-                    "line 3, col 8: error[F016]: mismatched types: expected `int`, found `u32`",
-                    "line 6, col 23: error[F016]: mismatched types: expected `int`, found `u32`",
-                ],
+                status: "Success",
             ),
             ownership: OwnershipResult(
-                status: "Skipped",
+                status: "Error",
+                message: "Ownership error in factorial: InconsistentBranchMove { stmt_idx: 0, name: \"n\", moved_in: \"then\" }, UseAfterMove { local_index: 16398, moved_at: 16398, name: \"n\", recovery_hint: InsertAdapt { description: \"clone `n` before the earlier use\" } }, UseAfterMove { local_index: 16399, moved_at: 16399, name: \"n\", recovery_hint: InsertAdapt { description: \"clone `n` before the earlier use\" } }",
             ),
             interp_lowering: LoweringResult(
                 status: "Skipped",

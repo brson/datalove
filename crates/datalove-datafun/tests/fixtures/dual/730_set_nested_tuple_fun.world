@@ -4,8 +4,8 @@ scriptunit-fragment
 
 // Nested set on tuple in function context: set t.0.1 = value
 fun test(): u32
-    var t = ((1, 2), 3)
-    set t.0.1 = 99
+    var t: ((u32, u32), u32) = ((1, 2), 3)
+    set t.0.1 = :u32/99
     ret t.0.1
 end fun
 

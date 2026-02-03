@@ -4,17 +4,23 @@ Analysis(
             section_type: "module",
             name: Some("local/test/binopfunc"),
             typecheck: TypecheckResult(
-                status: "Error",
-                errors: [
-                    "line 4, col 20: error[F026]: invalid operand type `u32` for operator `+`",
-                    "line 5, col 9: error[F001]: cannot find value `A` in this scope",
-                ],
+                status: "Success",
             ),
             ownership: OwnershipResult(
-                status: "Skipped",
+                status: "Success",
             ),
             lowering: LoweringResult(
-                status: "Skipped",
+                status: "Success",
+                ir: """
+                    fn calculate():
+                    block0:
+                        v0 = const 8int
+                        v1 = const 2int
+                        v2 = const 10int
+                        drop v0
+                        drop v1
+                        return v2
+                """,
             ),
             output: "",
         ),
@@ -22,15 +28,24 @@ Analysis(
             section_type: "scriptunit-fragment",
             name: None,
             typecheck: TypecheckResult(
-                status: "Skipped",
+                status: "Success",
             ),
             ownership: OwnershipResult(
-                status: "Skipped",
+                status: "Success",
             ),
             lowering: LoweringResult(
-                status: "Skipped",
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = call @0 m0.u0()
+                        debuglog v0
+                        drop v0
+                        unit_end
+                """,
             ),
-            output: "",
+            output: "(fragment executed)",
+            debug_output: Some("10\n"),
         ),
     ],
 )

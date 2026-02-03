@@ -218,6 +218,21 @@ fn gen_unary_negation<'db, R: Rng>(
     }
 }
 
+/// Check if a type hint is a fixed-width integer type that needs a type hint.
+///
+/// With datafun's `int` synthesis for bare literals, fixed-width integers
+/// need explicit type hints to ensure the correct type.
+fn needs_integer_type_hint(type_hint: &TypeHint<'_>) -> bool {
+    matches!(
+        type_hint,
+        TypeHint::U8 | TypeHint::I8 |
+        TypeHint::U16 | TypeHint::I16 |
+        TypeHint::U32 | TypeHint::I32 |
+        TypeHint::U64 | TypeHint::I64 |
+        TypeHint::Index | TypeHint::Offset
+    )
+}
+
 /// Generate a literal expression matching the given type using datalit.
 fn gen_literal<'db, R: Rng>(
     db: &'db dyn salsa::Database,
@@ -228,12 +243,20 @@ fn gen_literal<'db, R: Rng>(
     let expr = ast_gen::gen_expr_matching_type(
         db,
         rng,
-        type_hint,
+        type_hint.clone(),
         &config.type_config,
         0,
     );
 
-    pretty_expr(db, expr)
+    let expr_str = pretty_expr(db, expr);
+
+    // Fixed-width integers need type hints because bare literals synthesize as `int`.
+    if needs_integer_type_hint(&type_hint) {
+        let type_str = pretty_type_hint(db, type_hint);
+        format!(": {} / {}", type_str, expr_str)
+    } else {
+        expr_str
+    }
 }
 
 /// Generate a function call expression.
@@ -381,8 +404,8 @@ mod tests {
         let ty = TypeHint::U32;
         let expr = gen_expr(db, &mut rng, ty, &config, &mut ctx);
 
-        // Should produce a u32 literal (no sigil).
-        assert!(expr.parse::<u32>().is_ok(), "Should be valid u32: {}", expr);
+        // Should produce a u32 literal with type hint (e.g., ": u32 / 42").
+        assert!(expr.starts_with(": u32 / "), "Should have u32 type hint: {}", expr);
     }
 
     #[test]
@@ -638,7 +661,8 @@ mod tests {
         let ty = TypeHint::U32;
         let expr = gen_expr(db, &mut rng, ty, &config, &mut ctx);
 
-        assert!(expr.parse::<u32>().is_ok(), "Should be valid u32: {}", expr);
+        // Should produce a u32 literal with type hint (e.g., ": u32 / 42").
+        assert!(expr.starts_with(": u32 / "), "Should have u32 type hint: {}", expr);
     }
 
     #[test]

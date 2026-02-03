@@ -74,7 +74,7 @@ fun is_subnormal(self: f64): bool
       let bits = icall f64_to_bits(self)
       let exponent_mask = (: u64 / 0x7FF0000000000000)
       let exponent = icall bitand_u64(bits, exponent_mask)
-      let zero: u64 = 0
+      let zero = : u64 / 0
       ret exponent == zero
     end if
   else
@@ -85,14 +85,14 @@ end fun
 fun is_sign_positive(self: f64): bool
   let bits = icall f64_to_bits(self)
   let sign_bit = (: u64 / 0x8000000000000000)
-  let zero: u64 = 0
+  let zero = : u64 / 0
   ret icall bitand_u64(bits, sign_bit) == zero
 end fun
 
 fun is_sign_negative(self: f64): bool
   let bits = icall f64_to_bits(self)
   let sign_bit = (: u64 / 0x8000000000000000)
-  let zero: u64 = 0
+  let zero = : u64 / 0
   ret icall bitand_u64(bits, sign_bit) != zero
 end fun
 
@@ -186,7 +186,7 @@ fun total_cmp(self: f64, other: f64): i32
 
   // Convert to signed for total ordering.
   let sign_bit = (: u64 / 0x8000000000000000)
-  let zero: u64 = 0
+  let zero = : u64 / 0
   let a_signed = icall u64_to_i64(a_bits)
   let b_signed = icall u64_to_i64(b_bits)
 
@@ -208,9 +208,9 @@ fun total_cmp(self: f64, other: f64): i32
     ret (: i32 / -1)
   else
     if a_ord .> b_ord
-      ret 1
+      ret : i32 / 1
     else
-      ret 0
+      ret : i32 / 0
     end if
   end if
 end fun

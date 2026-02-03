@@ -4,11 +4,11 @@ scriptunit-fragment
 
 // Fibonacci using checked arithmetic.
 fun fib(n: u32): !u32
-    if n .< 2
+    if n .< :u32/2
         ret ok n
     else
-        ret ok (fib(n -! 1)! +! fib(n -! 2)!)
+        ret ok (fib(n -! :u32/1)! +! fib(n -! :u32/2)!)
     end if
 end fun
 
-debuglog fib(10)
+debuglog fib(:u32/10)

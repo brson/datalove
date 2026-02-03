@@ -2,6 +2,6 @@
 scriptunit-fragment
 ----------
 
-let t = (1, 2)
+let t: (u32, u32) = (1, 2)
 let x = t.0
 debuglog x

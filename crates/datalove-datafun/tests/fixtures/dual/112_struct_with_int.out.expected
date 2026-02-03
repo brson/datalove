@@ -13,9 +13,10 @@ DualAnalysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = const 123u32
+                        v0 = const 123int
                         v1 = pack Struct0 {v0}
                         debuglog v1
+                        drop v1
                         unit_end
                 """,
             ),
@@ -24,9 +25,10 @@ DualAnalysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = const 123u32
+                        v0 = const 123int
                         v1 = pack Struct0 {v0}
                         debuglog v1
+                        drop v1
                         unit_end
                 """,
             ),

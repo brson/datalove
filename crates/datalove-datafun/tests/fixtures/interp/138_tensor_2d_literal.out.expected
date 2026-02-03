@@ -14,12 +14,12 @@ Analysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = const 1u32
-                        v1 = const 2u32
-                        v2 = const 3u32
-                        v3 = const 4u32
-                        v4 = const 5u32
-                        v5 = const 6u32
+                        v0 = const 1int
+                        v1 = const 2int
+                        v2 = const 3int
+                        v3 = const 4int
+                        v4 = const 5int
+                        v5 = const 6int
                         v6 = tensor [2, 3] [v0, v1, v2, v3, v4, v5]
                         unit_end v6
                 """,

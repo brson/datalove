@@ -31,8 +31,9 @@ DualAnalysis(
                     block5:
                         goto block6
                     block6:
-                        v4 = const 99u32
+                        v4 = const 99int
                         debuglog v4
+                        drop v4
                         unit_end
                 """,
             ),
@@ -59,8 +60,9 @@ DualAnalysis(
                     block5:
                         goto block6
                     block6:
-                        v4 = const 99u32
+                        v4 = const 99int
                         debuglog v4
+                        drop v4
                         unit_end
                 """,
             ),

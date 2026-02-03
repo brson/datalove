@@ -13,8 +13,8 @@ DualAnalysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = const 100u32
-                        v1 = const 200u32
+                        v0 = const 100int
+                        v1 = const 200int
                         v2 = pack Tuple2 {v0, v1}
                         v3 = data_from v2
                         debuglog v3
@@ -27,8 +27,8 @@ DualAnalysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = const 100u32
-                        v1 = const 200u32
+                        v0 = const 100int
+                        v1 = const 200int
                         v2 = pack Tuple2 {v0, v1}
                         v3 = data_from v2
                         debuglog v3

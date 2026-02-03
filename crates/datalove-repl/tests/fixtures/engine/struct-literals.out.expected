@@ -9,14 +9,14 @@
     "eval": {
       "SuccessLet": {
         "name": "point",
-        "ty": "{x: u32, y: u32}",
+        "ty": "{x: int, y: int}",
         "value": "{x = 10, y = 20}"
       }
     },
     "environment": [
       {
         "name": "point",
-        "ty": "{x: u32, y: u32}",
+        "ty": "{x: int, y: int}",
         "value": "{x = 10, y = 20}"
       }
     ]
@@ -31,15 +31,15 @@
     "eval": {
       "SuccessExpr": {
         "expr_kind": "expr",
-        "ty": "{x: u32, y: u32}",
+        "ty": "{x: int, y: int}",
         "value": "{x = 10, y = 20}"
       }
     },
     "environment": [
       {
         "name": "point",
-        "ty": "{x: u32, y: u32}",
-        "value": "{x = 10, y = 20}"
+        "ty": "{x: int, y: int}",
+        "value": "<moved>"
       }
     ]
   },
@@ -53,20 +53,20 @@
     "eval": {
       "SuccessLet": {
         "name": "person",
-        "ty": "{name: string, age: u32}",
+        "ty": "{name: string, age: int}",
         "value": "{name = \"Alice\", age = 30}"
       }
     },
     "environment": [
       {
         "name": "person",
-        "ty": "{name: string, age: u32}",
+        "ty": "{name: string, age: int}",
         "value": "{name = \"Alice\", age = 30}"
       },
       {
         "name": "point",
-        "ty": "{x: u32, y: u32}",
-        "value": "{x = 10, y = 20}"
+        "ty": "{x: int, y: int}",
+        "value": "<moved>"
       }
     ]
   },
@@ -80,20 +80,20 @@
     "eval": {
       "SuccessExpr": {
         "expr_kind": "expr",
-        "ty": "{name: string, age: u32}",
+        "ty": "{name: string, age: int}",
         "value": "{name = \"Alice\", age = 30}"
       }
     },
     "environment": [
       {
         "name": "person",
-        "ty": "{name: string, age: u32}",
+        "ty": "{name: string, age: int}",
         "value": "<moved>"
       },
       {
         "name": "point",
-        "ty": "{x: u32, y: u32}",
-        "value": "{x = 10, y = 20}"
+        "ty": "{x: int, y: int}",
+        "value": "<moved>"
       }
     ]
   },
@@ -107,25 +107,25 @@
     "eval": {
       "SuccessLet": {
         "name": "multifield",
-        "ty": "{a: u32, b: u32, c: u32, d: u32}",
+        "ty": "{a: int, b: int, c: int, d: int}",
         "value": "{a = 1, b = 2, c = 3, d = 4}"
       }
     },
     "environment": [
       {
         "name": "multifield",
-        "ty": "{a: u32, b: u32, c: u32, d: u32}",
+        "ty": "{a: int, b: int, c: int, d: int}",
         "value": "{a = 1, b = 2, c = 3, d = 4}"
       },
       {
         "name": "person",
-        "ty": "{name: string, age: u32}",
+        "ty": "{name: string, age: int}",
         "value": "<moved>"
       },
       {
         "name": "point",
-        "ty": "{x: u32, y: u32}",
-        "value": "{x = 10, y = 20}"
+        "ty": "{x: int, y: int}",
+        "value": "<moved>"
       }
     ]
   },
@@ -139,25 +139,25 @@
     "eval": {
       "SuccessExpr": {
         "expr_kind": "expr",
-        "ty": "{a: u32, b: u32, c: u32, d: u32}",
+        "ty": "{a: int, b: int, c: int, d: int}",
         "value": "{a = 1, b = 2, c = 3, d = 4}"
       }
     },
     "environment": [
       {
         "name": "multifield",
-        "ty": "{a: u32, b: u32, c: u32, d: u32}",
-        "value": "{a = 1, b = 2, c = 3, d = 4}"
+        "ty": "{a: int, b: int, c: int, d: int}",
+        "value": "<moved>"
       },
       {
         "name": "person",
-        "ty": "{name: string, age: u32}",
+        "ty": "{name: string, age: int}",
         "value": "<moved>"
       },
       {
         "name": "point",
-        "ty": "{x: u32, y: u32}",
-        "value": "{x = 10, y = 20}"
+        "ty": "{x: int, y: int}",
+        "value": "<moved>"
       }
     ]
   }

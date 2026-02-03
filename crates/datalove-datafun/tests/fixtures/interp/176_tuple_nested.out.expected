@@ -14,11 +14,11 @@ Analysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = const 1u32
-                        v1 = const 2u32
+                        v0 = const 1int
+                        v1 = const 2int
                         v2 = pack Tuple2 {v0, v1}
-                        v3 = const 3u32
-                        v4 = const 4u32
+                        v3 = const 3int
+                        v4 = const 4int
                         v5 = pack Tuple2 {v3, v4}
                         v6 = pack Tuple2 {v2, v5}
                         unit_end v6

@@ -21,8 +21,9 @@ AotAnalysis(
                         v4 = const 4u32
                         v5 = pack Tuple2 {v3, v4}
                         v6 = table [v2, v5]
-                        v7 = const 42u32
+                        v7 = const 42int
                         debuglog v7
+                        drop v7
                         unit_end_drop v6
                         unit_end
                 """,

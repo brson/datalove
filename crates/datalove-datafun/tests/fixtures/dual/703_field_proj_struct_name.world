@@ -2,7 +2,7 @@
 scriptunit-fragment
 ----------
 
-let s = {age = 30, count = 5}
+let s: {age: u32, count: u32} = {age = 30, count = 5}
 let a = s.age
 let c = s.count
 debuglog a

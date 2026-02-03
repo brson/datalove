@@ -21,13 +21,14 @@ AotAnalysis(
                         v4 = err v2
                         unit_early_return v4
                     block2:
-                        v5 = const 999u32
+                        v5 = const 999int
                         debuglog v5
+                        drop v5
                         unit_end
                     
                     fn get_err():
                     block0:
-                        v0 = const 99u32
+                        v0 = const 99int
                         v1 = error_from v0
                         v2 = err v1
                         return v2

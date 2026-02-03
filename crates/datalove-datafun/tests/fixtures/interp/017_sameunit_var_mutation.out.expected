@@ -14,10 +14,12 @@ Analysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = const 10u32
-                        store.copy.tracked s0, v0
-                        v1 = const 20u32
-                        store.copy s0, v1
+                        v0 = const 10int
+                        store.move.tracked s0, v0
+                        v1 = const 20int
+                        drop.tracked s0
+                        store.move.tracked s0, v1
+                        unit_end_drop.tracked s0
                         unit_end
                 """,
             ),
@@ -37,7 +39,7 @@ Analysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = copy unit0.s0
+                        v0 = move unit0.s0
                         unit_end v0
                 """,
             ),

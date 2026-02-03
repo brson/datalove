@@ -17,33 +17,6 @@ use crate::types::*;
 pub use crate::{Type, TypeError};
 
 // ============================================================================
-// Element Checking Helper
-// ============================================================================
-
-/// Check an element's type against expected type.
-///
-/// This does type coercion checking for collection elements.
-fn check_element_type<'db>(
-    db: &'db dyn crate::Db,
-    _elem_expr: ExprFun<'db>,
-    elem_ty: Type<'db>,
-    expected_type: &crate::Type<'db>,
-) -> Result<(), TypeError> {
-    // Extract actual datalit type.
-    // Synthesized expression types are always Datalit (Function types only appear in signatures).
-    let actual_datalit_ty = match elem_ty {
-        Type::Datalit(dt) => dt,
-        Type::Function(_) => unreachable!("synthesized expression type is always Datalit"),
-    };
-
-    // Check type compatibility with coercion.
-    check_type_coercion(db, &actual_datalit_ty, expected_type)?;
-
-    Ok(())
-}
-
-
-// ============================================================================
 // Type Checking
 // ============================================================================
 
@@ -244,12 +217,81 @@ pub fn check_expr<'db>(
             }
         }
 
-        // Handle tuple expressions - check elements against expected field types.
+        // Handle tensor expressions - check elements against expected element type.
+        ExprFunKind::Tensor(tensor_expr) => {
+            match expected {
+                Type::Datalit(datalit::tycheck::Type::Tensor(_)) => {
+                    // Check shape and elements against expected type.
+                    check_tensor_shape_and_elements(ctx, tensor_expr.C(), &expected)?;
+                    ctx.store_expr_type(expr, &expected);
+                    Ok(())
+                }
+                Type::Datalit(datalit::tycheck::Type::Data) => {
+                    // Any type can coerce to Data.
+                    ctx.store_expr_type(expr, &expected);
+                    Ok(())
+                }
+                _ => {
+                    let synthesized = ctx.synthesize_expr(expr)?;
+                    let expected_str = type_to_string(db, expected);
+                    let actual_str = type_to_string(db, &synthesized);
+                    Err(ctx.error_type_mismatch(expr, &expected_str, &actual_str, "type mismatch"))
+                }
+            }
+        }
+
+        // Handle tuple expressions (datalit) - check elements against expected field types.
         ExprFunKind::AnonTuple(tuple_expr) => {
             match expected {
                 Type::Datalit(datalit::tycheck::Type::AnonTuple(_)) => {
                     // Check elements against expected field types.
                     check_tuple_elements(ctx, &tuple_expr.elements, &expected)?;
+                    ctx.store_expr_type(expr, &expected);
+                    Ok(())
+                }
+                Type::Datalit(datalit::tycheck::Type::Data) => {
+                    // Any type can coerce to Data.
+                    ctx.store_expr_type(expr, &expected);
+                    Ok(())
+                }
+                _ => {
+                    let synthesized = ctx.synthesize_expr(expr)?;
+                    let expected_str = type_to_string(db, expected);
+                    let actual_str = type_to_string(db, &synthesized);
+                    Err(ctx.error_type_mismatch(expr, &expected_str, &actual_str, "type mismatch"))
+                }
+            }
+        }
+
+        // Handle tuple expressions (datafun) - check elements against expected field types.
+        ExprFunKind::Tuple(tuple_expr) => {
+            match expected {
+                Type::Datalit(datalit::tycheck::Type::AnonTuple(_)) => {
+                    // Check elements against expected field types.
+                    check_tuple_elements(ctx, &tuple_expr.elements, &expected)?;
+                    ctx.store_expr_type(expr, &expected);
+                    Ok(())
+                }
+                Type::Datalit(datalit::tycheck::Type::Data) => {
+                    // Any type can coerce to Data.
+                    ctx.store_expr_type(expr, &expected);
+                    Ok(())
+                }
+                _ => {
+                    let synthesized = ctx.synthesize_expr(expr)?;
+                    let expected_str = type_to_string(db, expected);
+                    let actual_str = type_to_string(db, &synthesized);
+                    Err(ctx.error_type_mismatch(expr, &expected_str, &actual_str, "type mismatch"))
+                }
+            }
+        }
+
+        // Handle struct expressions - check fields against expected field types.
+        ExprFunKind::AnonStruct(struct_expr) => {
+            match expected {
+                Type::Datalit(datalit::tycheck::Type::AnonStruct(_)) => {
+                    // Check fields against expected field types.
+                    check_struct_fields(ctx, &struct_expr.fields, &expected)?;
                     ctx.store_expr_type(expr, &expected);
                     Ok(())
                 }
@@ -512,22 +554,6 @@ pub fn check_expr<'db>(
     }
 }
 
-/// Check if a type can be coerced to an expected type.
-///
-/// Delegates to datalit's check_type_coercion after extracting the expected type.
-fn check_type_coercion<'db>(
-    db: &'db dyn crate::Db,
-    actual: &datalit::tycheck::Type<'db>,
-    expected: &crate::Type<'db>,
-) -> Result<(), TypeError> {
-    match expected {
-        Type::Datalit(expected_dt) => {
-            datalit::tycheck::check_type_coercion(db, actual, expected_dt).map_err(TypeError::from)
-        }
-        Type::Function(_) => unreachable!("expected type in expression context is always Datalit"),
-    }
-}
-
 // ============================================================================
 // Collection Checking Helpers
 // ============================================================================
@@ -649,11 +675,9 @@ pub fn check_tensor_shape_and_elements<'db>(
     datalit::tycheck::check_tensor_element_count(shape, elements.len())?;
 
     // Check each element against expected element type.
-    let expected_elem = Type::Datalit(*elem_type,
-    );
+    let expected_elem = Type::Datalit(*elem_type);
     for elem in elements {
-        let elem_ty = ctx.synthesize_expr(*elem)?;
-        check_element_type(db, *elem, elem_ty, &expected_elem)?;
+        check_expr(ctx, *elem, &expected_elem)?;
     }
 
     Ok(())
@@ -732,9 +756,8 @@ pub fn check_struct_fields<'db>(
             return Err(TypeError::FieldOrderMismatch);
         }
 
-        let expected_ty = Type::Datalit(*expected_field.ty.clone());
-        let field_value_ty = ctx.synthesize_expr(field.value)?;
-        check_element_type(db, field.value, field_value_ty, &expected_ty)?;
+        let expected_field_ty = Type::Datalit(*expected_field.ty.clone());
+        check_expr(ctx, field.value, &expected_field_ty)?;
     }
 
     Ok(())
@@ -775,15 +798,8 @@ pub fn check_enum_variant<'db>(
     // This matches datalit's Check-TypedAnonEnum behavior which compares enum types rather
     // than individual variant payloads.
     if let (Some(payload_expr), Some(expected_payload_ty)) = (payload, expected_variant.payload.as_ref()) {
-        // Synthesize payload type and check against expected.
-        // Synthesized expression types are always Datalit (Function types only appear in signatures).
-        let payload_ty = ctx.synthesize_expr(payload_expr)?;
-        let actual_datalit_ty = match payload_ty {
-            Type::Datalit(dt) => dt,
-            Type::Function(_) => unreachable!("synthesized expression type is always Datalit"),
-        };
         let expected_ty = Type::Datalit((**expected_payload_ty).clone());
-        check_type_coercion(db, &actual_datalit_ty, &expected_ty)?;
+        check_expr(ctx, payload_expr, &expected_ty)?;
     }
 
     Ok(())

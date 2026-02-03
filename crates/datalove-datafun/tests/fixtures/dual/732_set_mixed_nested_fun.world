@@ -4,8 +4,8 @@ scriptunit-fragment
 
 // Mixed nested set in function context: set s.t.0 = value (struct containing tuple)
 fun test(): u32
-    var s = {t = (1, 2)}
-    set s.t.0 = 99
+    var s: {t: (u32, u32)} = {t = (1, 2)}
+    set s.t.0 = :u32/99
     ret s.t.0
 end fun
 

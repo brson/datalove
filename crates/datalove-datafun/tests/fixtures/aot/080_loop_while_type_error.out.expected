@@ -6,7 +6,7 @@ AotAnalysis(
             typecheck: TypecheckResult(
                 status: "Error",
                 errors: [
-                    "TypeMismatch { expected: \"bool\", actual: \"u32\" }",
+                    "TypeMismatch { expected: \"bool\", actual: \"int\" }",
                 ],
             ),
             ownership: OwnershipResult(

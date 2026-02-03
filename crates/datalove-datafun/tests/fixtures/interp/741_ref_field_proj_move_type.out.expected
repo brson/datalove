@@ -4,14 +4,11 @@ Analysis(
             section_type: "scriptunit-fragment",
             name: None,
             typecheck: TypecheckResult(
-                status: "Error",
-                errors: [
-                    "TypeMismatch { expected: \"(int, int)\", actual: \"(u32, u32)\" }",
-                    "UnresolvedName(\"t\")",
-                ],
+                status: "Success",
             ),
             ownership: OwnershipResult(
-                status: "Skipped",
+                status: "Error",
+                message: "takes_ref: error[D003]: cannot move borrowed value: `x`",
             ),
             lowering: LoweringResult(
                 status: "Skipped",

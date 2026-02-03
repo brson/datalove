@@ -9,14 +9,14 @@
     "eval": {
       "SuccessLet": {
         "name": "x",
-        "ty": "u32",
+        "ty": "int",
         "value": "42"
       }
     },
     "environment": [
       {
         "name": "x",
-        "ty": "u32",
+        "ty": "int",
         "value": "42"
       }
     ]
@@ -31,15 +31,15 @@
     "eval": {
       "SuccessExpr": {
         "expr_kind": "expr",
-        "ty": "u32",
+        "ty": "int",
         "value": "42"
       }
     },
     "environment": [
       {
         "name": "x",
-        "ty": "u32",
-        "value": "42"
+        "ty": "int",
+        "value": "<moved>"
       }
     ]
   }

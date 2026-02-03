@@ -4,7 +4,7 @@
       "code": "F026",
       "labels": [
         {
-          "message": "operator `+` cannot be applied to type `(u32, u32)`",
+          "message": "operator `+` cannot be applied to type `(int, int)`",
           "span": [
             38,
             43
@@ -12,26 +12,26 @@
           "text": "a + b"
         }
       ],
-      "message": "invalid operand type `(u32, u32)` for operator `+`"
+      "message": "invalid operand type `(int, int)` for operator `+`"
     }
   ],
   "errors": [
     {
       "kind": "InvalidOperandType",
       "op": "+",
-      "type": "(u32, u32)"
+      "type": "(int, int)"
     }
   ],
   "judgements": [
     {
       "kind": "variable",
       "name": "a",
-      "type": "(u32, u32)"
+      "type": "(int, int)"
     },
     {
       "kind": "variable",
       "name": "b",
-      "type": "(u32, u32)"
+      "type": "(int, int)"
     }
   ]
 }

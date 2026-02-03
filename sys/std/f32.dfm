@@ -72,9 +72,9 @@ fun is_subnormal(self: f32): bool
       ret false
     else
       let bits = icall f32_to_bits(self)
-      let exponent_mask = 0x7F800000
+      let exponent_mask = : u32 / 0x7F800000
       let exponent = icall bitand_u32(bits, exponent_mask)
-      ret exponent == 0
+      ret exponent == (: u32 / 0)
     end if
   else
     ret false
@@ -83,14 +83,14 @@ end fun
 
 fun is_sign_positive(self: f32): bool
   let bits = icall f32_to_bits(self)
-  let sign_bit = 0x80000000
-  ret icall bitand_u32(bits, sign_bit) == 0
+  let sign_bit = : u32 / 0x80000000
+  ret icall bitand_u32(bits, sign_bit) == (: u32 / 0)
 end fun
 
 fun is_sign_negative(self: f32): bool
   let bits = icall f32_to_bits(self)
-  let sign_bit = 0x80000000
-  ret icall bitand_u32(bits, sign_bit) != 0
+  let sign_bit = : u32 / 0x80000000
+  ret icall bitand_u32(bits, sign_bit) != (: u32 / 0)
 end fun
 
 // Sign and absolute value.
@@ -182,7 +182,7 @@ fun total_cmp(self: f32, other: f32): i32
   let b_bits = icall f32_to_bits(other)
 
   // Convert to signed for total ordering.
-  let sign_bit = 0x80000000
+  let sign_bit = : u32 / 0x80000000
   let a_signed = icall u32_to_i32(a_bits)
   let b_signed = icall u32_to_i32(b_bits)
 
@@ -190,13 +190,13 @@ fun total_cmp(self: f32, other: f32): i32
   var a_ord: i32 = a_signed
   var b_ord: i32 = b_signed
 
-  if icall bitand_u32(a_bits, sign_bit) != 0
-    let mask = 0x7FFFFFFF
+  if icall bitand_u32(a_bits, sign_bit) != (: u32 / 0)
+    let mask = : u32 / 0x7FFFFFFF
     set a_ord = icall u32_to_i32(icall bitxor_u32(a_bits, mask))
   end if
 
-  if icall bitand_u32(b_bits, sign_bit) != 0
-    let mask = 0x7FFFFFFF
+  if icall bitand_u32(b_bits, sign_bit) != (: u32 / 0)
+    let mask = : u32 / 0x7FFFFFFF
     set b_ord = icall u32_to_i32(icall bitxor_u32(b_bits, mask))
   end if
 
@@ -204,9 +204,9 @@ fun total_cmp(self: f32, other: f32): i32
     ret (: i32 / -1)
   else
     if a_ord .> b_ord
-      ret 1
+      ret : i32 / 1
     else
-      ret 0
+      ret : i32 / 0
     end if
   end if
 end fun

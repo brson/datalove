@@ -9,14 +9,14 @@
     "eval": {
       "SuccessLet": {
         "name": "pair",
-        "ty": "(u32, string)",
+        "ty": "(int, string)",
         "value": "(42, \"hello\")"
       }
     },
     "environment": [
       {
         "name": "pair",
-        "ty": "(u32, string)",
+        "ty": "(int, string)",
         "value": "(42, \"hello\")"
       }
     ]
@@ -31,14 +31,14 @@
     "eval": {
       "SuccessExpr": {
         "expr_kind": "expr",
-        "ty": "(u32, string)",
+        "ty": "(int, string)",
         "value": "(42, \"hello\")"
       }
     },
     "environment": [
       {
         "name": "pair",
-        "ty": "(u32, string)",
+        "ty": "(int, string)",
         "value": "<moved>"
       }
     ]
@@ -53,19 +53,19 @@
     "eval": {
       "SuccessLet": {
         "name": "triple",
-        "ty": "(u32, u32, u32)",
+        "ty": "(int, int, int)",
         "value": "(1, 2, 3)"
       }
     },
     "environment": [
       {
         "name": "pair",
-        "ty": "(u32, string)",
+        "ty": "(int, string)",
         "value": "<moved>"
       },
       {
         "name": "triple",
-        "ty": "(u32, u32, u32)",
+        "ty": "(int, int, int)",
         "value": "(1, 2, 3)"
       }
     ]
@@ -80,20 +80,20 @@
     "eval": {
       "SuccessExpr": {
         "expr_kind": "expr",
-        "ty": "(u32, u32, u32)",
+        "ty": "(int, int, int)",
         "value": "(1, 2, 3)"
       }
     },
     "environment": [
       {
         "name": "pair",
-        "ty": "(u32, string)",
+        "ty": "(int, string)",
         "value": "<moved>"
       },
       {
         "name": "triple",
-        "ty": "(u32, u32, u32)",
-        "value": "(1, 2, 3)"
+        "ty": "(int, int, int)",
+        "value": "<moved>"
       }
     ]
   },
@@ -107,25 +107,25 @@
     "eval": {
       "SuccessLet": {
         "name": "mixed",
-        "ty": "(u32, string, bool)",
+        "ty": "(int, string, bool)",
         "value": "(100, \"test\", true)"
       }
     },
     "environment": [
       {
         "name": "mixed",
-        "ty": "(u32, string, bool)",
+        "ty": "(int, string, bool)",
         "value": "(100, \"test\", true)"
       },
       {
         "name": "pair",
-        "ty": "(u32, string)",
+        "ty": "(int, string)",
         "value": "<moved>"
       },
       {
         "name": "triple",
-        "ty": "(u32, u32, u32)",
-        "value": "(1, 2, 3)"
+        "ty": "(int, int, int)",
+        "value": "<moved>"
       }
     ]
   },
@@ -139,25 +139,25 @@
     "eval": {
       "SuccessExpr": {
         "expr_kind": "expr",
-        "ty": "(u32, string, bool)",
+        "ty": "(int, string, bool)",
         "value": "(100, \"test\", true)"
       }
     },
     "environment": [
       {
         "name": "mixed",
-        "ty": "(u32, string, bool)",
+        "ty": "(int, string, bool)",
         "value": "<moved>"
       },
       {
         "name": "pair",
-        "ty": "(u32, string)",
+        "ty": "(int, string)",
         "value": "<moved>"
       },
       {
         "name": "triple",
-        "ty": "(u32, u32, u32)",
-        "value": "(1, 2, 3)"
+        "ty": "(int, int, int)",
+        "value": "<moved>"
       }
     ]
   }

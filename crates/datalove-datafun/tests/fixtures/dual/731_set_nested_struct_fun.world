@@ -4,8 +4,8 @@ scriptunit-fragment
 
 // Nested set on struct in function context: set s.inner.x = value
 fun test(): u32
-    var s = {inner = {x = 1, y = 2}}
-    set s.inner.x = 99
+    var s: {inner: {x: u32, y: u32}} = {inner = {x = 1, y = 2}}
+    set s.inner.x = :u32/99
     ret s.inner.x
 end fun
 

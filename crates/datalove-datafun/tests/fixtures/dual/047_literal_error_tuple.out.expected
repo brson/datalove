@@ -13,7 +13,7 @@ DualAnalysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = const 1u32
+                        v0 = const 1int
                         v1 = const true
                         v2 = pack Tuple2 {v0, v1}
                         v3 = error_from v2
@@ -27,7 +27,7 @@ DualAnalysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = const 1u32
+                        v0 = const 1int
                         v1 = const true
                         v2 = pack Tuple2 {v0, v1}
                         v3 = error_from v2

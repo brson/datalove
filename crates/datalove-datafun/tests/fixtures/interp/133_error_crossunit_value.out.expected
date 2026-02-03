@@ -14,7 +14,7 @@ Analysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = const 100u32
+                        v0 = const 100int
                         v1 = error_from v0
                         unit_end_drop v1
                         unit_end

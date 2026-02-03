@@ -19,6 +19,6 @@ require module local/test/structops
 import structops.get_x
 import structops.get_y
 
-let point = {x = 100, y = 200}
+let point: {x: u32, y: u32} = {x = 100, y = 200}
 debuglog get_x(point)
 debuglog get_y(point)

@@ -14,9 +14,10 @@ Analysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = const 10u32
-                        v1 = const 20u32
+                        v0 = const 10int
+                        v1 = const 20int
                         v2 = pack Struct0 {v0, v1}
+                        unit_end_drop v2
                         unit_end
                 """,
             ),
@@ -36,7 +37,7 @@ Analysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = copy unit0.v2
+                        v0 = move unit0.v2
                         unit_end v0
                 """,
             ),

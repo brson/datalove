@@ -9,6 +9,6 @@ fun sum_x(a: {x: u32, y: u32}, b: {x: u32, y: u32}): int
     ret ax + bx
 end fun
 
-let p1 = {x = 1, y = 2}
-let p2 = {x = 10, y = 20}
+let p1: {x: u32, y: u32} = {x = 1, y = 2}
+let p2: {x: u32, y: u32} = {x = 10, y = 20}
 debuglog sum_x(p1, p2)

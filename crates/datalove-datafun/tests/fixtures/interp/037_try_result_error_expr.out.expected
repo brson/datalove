@@ -18,7 +18,7 @@ Analysis(
                     
                     fn get_error():
                     block0:
-                        v0 = const 1u32
+                        v0 = const 1int
                         v1 = error_from v0
                         v2 = err v1
                         return v2

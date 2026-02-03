@@ -4,16 +4,22 @@ Analysis(
             section_type: "module",
             name: Some("local/test/helper"),
             typecheck: TypecheckResult(
-                status: "Error",
-                errors: [
-                    "line 3, col 9: error[F016]: mismatched types: expected `int`, found `u32`",
-                ],
+                status: "Success",
             ),
             ownership: OwnershipResult(
-                status: "Skipped",
+                status: "Success",
             ),
             lowering: LoweringResult(
-                status: "Skipped",
+                status: "Success",
+                ir: """
+                    fn add_one(p0):
+                    block0:
+                        v0 = const 1int
+                        v1 = add p0, v0
+                        drop v0
+                        drop p0
+                        return v1
+                """,
             ),
             output: "",
         ),
@@ -21,21 +27,29 @@ Analysis(
             section_type: "scriptunit-fragment",
             name: None,
             typecheck: TypecheckResult(
-                status: "Skipped",
+                status: "Success",
             ),
             ownership: OwnershipResult(
-                status: "Skipped",
+                status: "Success",
             ),
             lowering: LoweringResult(
-                status: "Skipped",
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        unit_end
+                """,
             ),
-            output: "",
+            output: "(fragment executed)",
         ),
         SectionResult(
             section_type: "scriptunit-expr",
             name: None,
             typecheck: TypecheckResult(
-                status: "Skipped",
+                status: "Error",
+                errors: [
+                    "UnresolvedName(\"add_one\")",
+                ],
             ),
             ownership: OwnershipResult(
                 status: "Skipped",

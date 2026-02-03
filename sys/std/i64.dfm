@@ -5,11 +5,11 @@ fun min_value(): i64
 end fun
 
 fun max_value(): i64
-  ret 9223372036854775807
+  ret : i64 / 9223372036854775807
 end fun
 
 fun bits(): u64
-  ret 64
+  ret : u64 / 64
 end fun
 
 // Sign functions.
@@ -17,7 +17,7 @@ end fun
 fun signum(self: i64): i64
   let zero = (: i64 / 0)
   if self .> zero
-    ret 1
+    ret : i64 / 1
   else
     if self .< zero
       ret (: i64 / -1)
@@ -458,6 +458,6 @@ end fun
 fun midpoint(self: i64, other: i64): i64
   let common = bitand(self, other)
   let diff = bitxor(self, other)
-  let half_diff = shift_right_wrapping(diff, 1)
+  let half_diff = shift_right_wrapping(diff, : u64 / 1)
   ret add_wrapping(common, half_diff)
 end fun

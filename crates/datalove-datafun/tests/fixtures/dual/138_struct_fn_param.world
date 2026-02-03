@@ -9,5 +9,5 @@ fun sum_coords(p: {x: u32, y: u32}): int
     ret x + y
 end fun
 
-let point = {x = 10, y = 20}
+let point: {x: u32, y: u32} = {x = 10, y = 20}
 debuglog sum_coords(point)

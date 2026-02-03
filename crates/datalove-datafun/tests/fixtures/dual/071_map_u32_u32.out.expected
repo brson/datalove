@@ -13,10 +13,10 @@ DualAnalysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = const 1u32
-                        v1 = const 100u32
-                        v2 = const 2u32
-                        v3 = const 200u32
+                        v0 = const 1int
+                        v1 = const 100int
+                        v2 = const 2int
+                        v3 = const 200int
                         v4 = map {v0: v1, v2: v3}
                         debuglog v4
                         unit_end_drop v4
@@ -28,10 +28,10 @@ DualAnalysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = const 1u32
-                        v1 = const 100u32
-                        v2 = const 2u32
-                        v3 = const 200u32
+                        v0 = const 1int
+                        v1 = const 100int
+                        v2 = const 2int
+                        v3 = const 200int
                         v4 = map {v0: v1, v2: v3}
                         debuglog v4
                         unit_end_drop v4

@@ -11,7 +11,7 @@ fun max_value(): index
 end fun
 
 fun bits(): u32
-  ret 32
+  ret : u32 / 32
 end fun
 
 // Bitwise primitives.
@@ -63,7 +63,7 @@ fun is_power_of_two(self: index): bool
   if self == zero
     ret false
   else
-    ret count_ones(self) == 1
+    ret count_ones(self) == (: u32 / 1)
   end if
 end fun
 
@@ -73,7 +73,7 @@ fun ilog2(self: index): ?u32
   if self == zero
     ret none
   else
-    ret some icall sub_wrapping_u32(icall sub_wrapping_u32(bits(), 1), leading_zeros(self))
+    ret some icall sub_wrapping_u32(icall sub_wrapping_u32(bits(), : u32 / 1), leading_zeros(self))
   end if
 end fun
 
@@ -262,7 +262,7 @@ fun shift_right_saturating(self: index, n: u32): index
 end fun
 
 fun shift_left_wrapping(self: index, n: u32): index
-  let n_mod = icall bitand_u32(n, 31)
+  let n_mod = icall bitand_u32(n, : u32 / 31)
   if shift_left(self, n_mod) |value|
     ret value
   else
@@ -271,7 +271,7 @@ fun shift_left_wrapping(self: index, n: u32): index
 end fun
 
 fun shift_right_wrapping(self: index, n: u32): index
-  let n_mod = icall bitand_u32(n, 31)
+  let n_mod = icall bitand_u32(n, : u32 / 31)
   if shift_right(self, n_mod) |value|
     ret value
   else
@@ -282,9 +282,9 @@ end fun
 // Rotates.
 
 fun rotate_left(self: index, n: u32): index
-  let n_mod = icall bitand_u32(n, 31)
+  let n_mod = icall bitand_u32(n, : u32 / 31)
   if shift_left(self, n_mod) |left_part|
-    let right_amount = icall sub_wrapping_u32(32, n_mod)
+    let right_amount = icall sub_wrapping_u32(: u32 / 32, n_mod)
     if shift_right(self, right_amount) |right_part|
       ret bitor(left_part, right_part)
     else
@@ -296,9 +296,9 @@ fun rotate_left(self: index, n: u32): index
 end fun
 
 fun rotate_right(self: index, n: u32): index
-  let n_mod = icall bitand_u32(n, 31)
+  let n_mod = icall bitand_u32(n, : u32 / 31)
   if shift_right(self, n_mod) |right_part|
-    let left_amount = icall sub_wrapping_u32(32, n_mod)
+    let left_amount = icall sub_wrapping_u32(: u32 / 32, n_mod)
     if shift_left(self, left_amount) |left_part|
       ret bitor(left_part, right_part)
     else
@@ -356,6 +356,6 @@ end fun
 fun midpoint(self: index, other: index): index
   let common = bitand(self, other)
   let diff = bitxor(self, other)
-  let half_diff = shift_right_wrapping(diff, 1)
+  let half_diff = shift_right_wrapping(diff, : u32 / 1)
   ret add_wrapping(common, half_diff)
 end fun

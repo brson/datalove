@@ -7,14 +7,14 @@ let b: index = (: index / 0x80000000)
 let mid: index = (: index / 0x00FF0000)
 
 // Shift left.
-debuglog icall shl_index(a, 0)
-debuglog icall shl_index(a, 4)
-debuglog icall shl_index(a, 31)
+debuglog icall shl_index(a, :u32/0)
+debuglog icall shl_index(a, :u32/4)
+debuglog icall shl_index(a, :u32/31)
 
 // Shift right (logical).
-debuglog icall shr_index(b, 0)
-debuglog icall shr_index(b, 4)
-debuglog icall shr_index(b, 31)
+debuglog icall shr_index(b, :u32/0)
+debuglog icall shr_index(b, :u32/4)
+debuglog icall shr_index(b, :u32/31)
 
 // Combined shifts.
-debuglog icall shr_index(icall shl_index(mid, 8), 8)
+debuglog icall shr_index(icall shl_index(mid, :u32/8), :u32/8)

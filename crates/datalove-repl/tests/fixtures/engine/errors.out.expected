@@ -21,14 +21,14 @@
     "eval": {
       "SuccessLet": {
         "name": "x",
-        "ty": "u32",
+        "ty": "int",
         "value": "42"
       }
     },
     "environment": [
       {
         "name": "x",
-        "ty": "u32",
+        "ty": "int",
         "value": "42"
       }
     ]
@@ -46,7 +46,7 @@
     "environment": [
       {
         "name": "x",
-        "ty": "u32",
+        "ty": "int",
         "value": "42"
       }
     ]

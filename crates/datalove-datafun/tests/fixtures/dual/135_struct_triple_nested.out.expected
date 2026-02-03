@@ -13,7 +13,7 @@ DualAnalysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = const 42u32
+                        v0 = const 42int
                         v1 = pack Struct0 {v0}
                         v2 = pack Struct0 {v1}
                         v3 = pack Struct0 {v2}
@@ -21,6 +21,7 @@ DualAnalysis(
                         v5 = getfield v4.0
                         v6 = getfieldref v5.0
                         debuglog *v6
+                        unit_end_drop v3
                         unit_end
                 """,
             ),
@@ -29,7 +30,7 @@ DualAnalysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = const 42u32
+                        v0 = const 42int
                         v1 = pack Struct0 {v0}
                         v2 = pack Struct0 {v1}
                         v3 = pack Struct0 {v2}
@@ -37,6 +38,7 @@ DualAnalysis(
                         v5 = getfield v4.0
                         v6 = getfieldref v5.0
                         debuglog *v6
+                        unit_end_drop v3
                         unit_end
                 """,
             ),

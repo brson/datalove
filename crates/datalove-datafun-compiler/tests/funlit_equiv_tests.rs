@@ -115,11 +115,11 @@ fn test_simple_bool_false() {
 #[test]
 fn test_simple_int() {
     let db = datalove_datafun_compiler::Database::default();
-    test_parse_equiv(&db, "42").unwrap();
-    test_typecheck_equiv(&db, "42").unwrap();
+    // Use type hint so both datalit and datafun produce u32.
+    // Without hint, datafun synthesizes int while datalit synthesizes u32.
+    test_parse_equiv(&db, ": u32 / 42").unwrap();
+    test_typecheck_equiv(&db, ": u32 / 42").unwrap();
 }
-
-// Note: Skipping typed_int test - `: type / value` syntax not supported by datafun parser
 
 #[test]
 fn test_simple_string() {
@@ -131,32 +131,33 @@ fn test_simple_string() {
 #[test]
 fn test_simple_list() {
     let db = datalove_datafun_compiler::Database::default();
-    test_parse_equiv(&db, "[1, 2, 3]").unwrap();
-    test_typecheck_equiv(&db, "[1, 2, 3]").unwrap();
+    // Use type hint so elements are u32, not int.
+    test_parse_equiv(&db, ": [u32] / [1, 2, 3]").unwrap();
+    test_typecheck_equiv(&db, ": [u32] / [1, 2, 3]").unwrap();
 }
-
-// Note: Skipping typed_list - `: type / value` syntax not supported by datafun parser
-// Note: Skipping empty_list - `: type / value` syntax not supported by datafun parser
 
 #[test]
 fn test_nested_list() {
     let db = datalove_datafun_compiler::Database::default();
-    test_parse_equiv(&db, "[[1, 2], [3, 4]]").unwrap();
-    test_typecheck_equiv(&db, "[[1, 2], [3, 4]]").unwrap();
+    // Use type hint so elements are u32, not int.
+    test_parse_equiv(&db, ": [[u32]] / [[1, 2], [3, 4]]").unwrap();
+    test_typecheck_equiv(&db, ": [[u32]] / [[1, 2], [3, 4]]").unwrap();
 }
 
 #[test]
 fn test_anon_tuple() {
     let db = datalove_datafun_compiler::Database::default();
-    test_parse_equiv(&db, "(1, 2, 3)").unwrap();
-    test_typecheck_equiv(&db, "(1, 2, 3)").unwrap();
+    // Use type hint so elements are u32, not int.
+    test_parse_equiv(&db, ": (u32, u32, u32) / (1, 2, 3)").unwrap();
+    test_typecheck_equiv(&db, ": (u32, u32, u32) / (1, 2, 3)").unwrap();
 }
 
 #[test]
 fn test_anon_struct() {
     let db = datalove_datafun_compiler::Database::default();
-    test_parse_equiv(&db, "{x = 1, y = 2}").unwrap();
-    test_typecheck_equiv(&db, "{x = 1, y = 2}").unwrap();
+    // Use type hint so fields are u32, not int.
+    test_parse_equiv(&db, ": {x: u32, y: u32} / {x = 1, y = 2}").unwrap();
+    test_typecheck_equiv(&db, ": {x: u32, y: u32} / {x = 1, y = 2}").unwrap();
 }
 
 // Note: Skipping map test - {1: 10} syntax not supported (datalit uses struct syntax)
