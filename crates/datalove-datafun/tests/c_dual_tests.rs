@@ -556,15 +556,20 @@ fn c_aot_compile_link_run(
 
     // Build compiler arguments: all C files + library + flags.
     let exe_path = dir.path().join("test");
-    let mut args: Vec<&str> = vec!["-std=c11", "-O0", "-g"];
-    for c_path in &c_paths {
-        args.push(c_path.to_str().unwrap());
+    let mut cmd = Command::new("cc");
+    cmd.args(["-std=c11", "-O0", "-g"]);
+    // Use lld for faster linking if available.
+    if datafun::pipeline::aot::use_lld() {
+        cmd.arg("-fuse-ld=lld");
     }
-    args.push(lib_path.to_str().unwrap());
-    args.extend(["-ldl", "-lpthread", "-lm", "-o"]);
-    args.push(exe_path.to_str().unwrap());
+    for c_path in &c_paths {
+        cmd.arg(c_path);
+    }
+    cmd.arg(&lib_path);
+    cmd.args(["-ldl", "-lpthread", "-lm", "-o"]);
+    cmd.arg(&exe_path);
 
-    let compile_output = Command::new("cc").args(&args).output();
+    let compile_output = cmd.output();
 
     let compile_output = match compile_output {
         Ok(o) => o,

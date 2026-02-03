@@ -87,7 +87,7 @@ static RUNTIME_LIB_DIR: OnceLock<PathBuf> = OnceLock::new();
 static USE_LLD: OnceLock<bool> = OnceLock::new();
 
 /// Check if lld linker is available.
-fn use_lld() -> bool {
+pub fn use_lld() -> bool {
     *USE_LLD.get_or_init(|| {
         // Check if lld is available by checking --version output
         Command::new("ld.lld")
