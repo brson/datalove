@@ -25,32 +25,7 @@
 use rmx::prelude::*;
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use std::sync::{OnceLock, atomic::{AtomicU64, Ordering}};
-use std::time::Instant;
-
-// Timing counters for profiling (only in debug builds)
-#[cfg(debug_assertions)]
-pub static COMPILE_TIME_NS: AtomicU64 = AtomicU64::new(0);
-#[cfg(debug_assertions)]
-pub static LINK_TIME_NS: AtomicU64 = AtomicU64::new(0);
-#[cfg(debug_assertions)]
-pub static LINK_CC_TIME_NS: AtomicU64 = AtomicU64::new(0);
-#[cfg(debug_assertions)]
-pub static EXEC_TIME_NS: AtomicU64 = AtomicU64::new(0);
-#[cfg(debug_assertions)]
-pub static COMPILE_COUNT: AtomicU64 = AtomicU64::new(0);
-
-/// Print timing summary (call at end of test run).
-#[cfg(debug_assertions)]
-pub fn print_timing_summary() {
-    let compile_ms = COMPILE_TIME_NS.load(Ordering::Relaxed) / 1_000_000;
-    let link_ms = LINK_TIME_NS.load(Ordering::Relaxed) / 1_000_000;
-    let link_cc_ms = LINK_CC_TIME_NS.load(Ordering::Relaxed) / 1_000_000;
-    let exec_ms = EXEC_TIME_NS.load(Ordering::Relaxed) / 1_000_000;
-    let count = COMPILE_COUNT.load(Ordering::Relaxed);
-    eprintln!("AOT Timing: compile={}ms, link={}ms (cc={}ms), exec={}ms (count={})",
-              compile_ms, link_ms, link_cc_ms, exec_ms, count);
-}
+use std::sync::OnceLock;
 
 use datalove_datafun_cranelift_aot::AotCompiler;
 use datalove_datafun_ir::{IrCodeUnit, FunctionRegistry};
@@ -173,22 +148,12 @@ pub fn compile_script_to_object_with_world<'a>(
     world_units: impl Iterator<Item = &'a IrCodeUnit>,
     registry: &FunctionRegistry,
 ) -> AnyResult<Vec<u8>> {
-    #[cfg(debug_assertions)]
-    let start = Instant::now();
-
     let mut compiler = AotCompiler::new_for_host()
         .map_err(|e| anyhow!("failed to create AOT compiler: {}", e))?;
     let product = compiler.compile_script_unit_with_world_types(unit, world_units, registry)
         .map_err(|e| anyhow!("AOT compilation failed: {}", e))?;
     let obj_bytes = product.emit()
         .map_err(|e| anyhow!("failed to emit object: {}", e))?;
-
-    #[cfg(debug_assertions)]
-    {
-        COMPILE_TIME_NS.fetch_add(start.elapsed().as_nanos() as u64, Ordering::Relaxed);
-        COMPILE_COUNT.fetch_add(1, Ordering::Relaxed);
-    }
-
     Ok(obj_bytes)
 }
 
@@ -204,18 +169,12 @@ pub fn link_object_to_temp_executable(
 
 /// Link object bytes to an executable at the specified path.
 pub fn link_object_to_path(obj_bytes: &[u8], output_path: &Path) -> Result<(), LinkError> {
-    #[cfg(debug_assertions)]
-    let start = Instant::now();
-
     let dir = rmx::tempfile::tempdir().map_err(LinkError::TempDir)?;
     let obj_path = dir.path().join("script.o");
     std::fs::write(&obj_path, obj_bytes).map_err(LinkError::WriteObject)?;
 
     let lib_dir = ensure_runtime_lib();
     let lib_path = lib_dir.join("libdatalove_rt.a");
-
-    #[cfg(debug_assertions)]
-    let cc_start = Instant::now();
 
     // Use lld for faster linking if available
     let mut cmd = Command::new("cc");
@@ -231,25 +190,16 @@ pub fn link_object_to_path(obj_bytes: &[u8], output_path: &Path) -> Result<(), L
 
     let output = cmd.output().map_err(LinkError::LinkerExec)?;
 
-    #[cfg(debug_assertions)]
-    LINK_CC_TIME_NS.fetch_add(cc_start.elapsed().as_nanos() as u64, Ordering::Relaxed);
-
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr).to_string();
         return Err(LinkError::LinkerFailed(stderr));
     }
-
-    #[cfg(debug_assertions)]
-    LINK_TIME_NS.fetch_add(start.elapsed().as_nanos() as u64, Ordering::Relaxed);
 
     Ok(())
 }
 
 /// Run an AOT-compiled executable.
 pub fn run_executable(exe_path: &Path) -> Result<ExecOutput, ExecError> {
-    #[cfg(debug_assertions)]
-    let start = Instant::now();
-
     let output = Command::new(exe_path)
         .output()
         .map_err(ExecError::Exec)?;
@@ -257,9 +207,6 @@ pub fn run_executable(exe_path: &Path) -> Result<ExecOutput, ExecError> {
     let stdout = String::from_utf8_lossy(&output.stdout).to_string();
     let stderr = String::from_utf8_lossy(&output.stderr).to_string();
     let exit_code = output.status.code().unwrap_or(-1);
-
-    #[cfg(debug_assertions)]
-    EXEC_TIME_NS.fetch_add(start.elapsed().as_nanos() as u64, Ordering::Relaxed);
 
     if !output.status.success() {
         return Err(ExecError::ExitCode { code: exit_code, stderr });
