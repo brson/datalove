@@ -18,16 +18,6 @@ pub struct SlotLayout {
     pub tracking_byte: Option<u32>,
 }
 
-/// Sentinel values for tracking bytes.
-pub mod tracking {
-    /// Pre-initialized / never written.
-    pub const UNINIT: u8 = 0x00;
-    /// Currently holds a valid value.
-    pub const LIVE: u8 = 0x01;
-    /// Was moved out / dropped.
-    pub const MOVED: u8 = 0x02;
-}
-
 /// Layout information for a function/unit frame.
 #[derive(Debug)]
 pub struct FrameLayout {

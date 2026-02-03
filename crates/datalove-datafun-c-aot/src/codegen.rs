@@ -71,7 +71,6 @@ pub fn emit_function(
         layout: &layout,
         compiler,
         registry,
-        module_id,
         uses_sret,
     };
 
@@ -127,7 +126,6 @@ pub fn emit_script_body(
         layout: &layout,
         compiler,
         registry,
-        module_id: None,
         uses_sret: false,
     };
 
@@ -150,7 +148,6 @@ struct FunctionCodegenContext<'a> {
     layout: &'a FrameLayout,
     compiler: &'a mut CAotCompiler,
     registry: &'a FunctionRegistry,
-    module_id: Option<IrModuleId>,
     uses_sret: bool,
 }
 

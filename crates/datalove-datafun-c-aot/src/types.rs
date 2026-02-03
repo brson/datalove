@@ -264,26 +264,8 @@ pub fn uses_sret(ty: &IrType) -> bool {
     }
 }
 
-/// Get the size of an IR type in bytes.
-pub fn ir_type_size(ty: &IrType) -> u32 {
-    ir_type_to_crepr(ty).layout().size
-}
-
-/// Get the alignment of an IR type in bytes.
-pub fn ir_type_align(ty: &IrType) -> u32 {
-    ir_type_to_crepr(ty).layout().align
-}
-
 /// Pointer size in bytes.
 pub const PTR_SIZE: u32 = 8;
 
 /// Pointer alignment in bytes.
 pub const PTR_ALIGN: u32 = 8;
-
-/// Get the C type for loading/storing a scalar.
-pub fn scalar_c_type(ty: &IrType) -> Option<String> {
-    match ir_type_to_crepr(ty) {
-        CRepr::Scalar(name) => Some(name),
-        CRepr::Aggregate(_) => None,
-    }
-}
