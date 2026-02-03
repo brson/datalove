@@ -44,6 +44,18 @@ pub enum CAotError {
     Unsupported(String),
 }
 
+/// Output from compiling a world to C.
+///
+/// Contains multiple C source files that should be compiled and linked together.
+#[derive(Debug, Clone)]
+pub struct CompilationOutput {
+    /// List of (filename, content) pairs.
+    /// Files are:
+    /// - `mod_{module_id}_{name}.c` for each module
+    /// - `script.c` for the script (contains local functions, script body, main)
+    pub files: Vec<(String, String)>,
+}
+
 impl std::fmt::Display for CAotError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -80,7 +92,7 @@ impl CAotCompiler {
         }
     }
 
-    /// Compile an IR script unit to C source code.
+    /// Compile an IR script unit to C source code (single file, for backward compatibility).
     ///
     /// Generates:
     /// - `__script_body(void* rt)` - The script body that takes runtime handle
@@ -90,7 +102,7 @@ impl CAotCompiler {
         self.compile_script_unit_with_registry(unit, &empty_registry)
     }
 
-    /// Compile an IR script unit with module functions.
+    /// Compile an IR script unit with module functions (single file, for backward compatibility).
     ///
     /// Use this when compiling in a world with modules.
     pub fn compile_script_unit_with_registry(
@@ -98,35 +110,143 @@ impl CAotCompiler {
         unit: &IrCodeUnit,
         registry: &FunctionRegistry,
     ) -> Result<String, CAotError> {
+        // Use the multi-file API and concatenate all files.
+        let output = self.compile_world(unit, registry)?;
+        let mut combined = String::new();
+        for (filename, content) in output.files {
+            writeln!(&mut combined, "// === {} ===", filename).unwrap();
+            combined.push_str(&content);
+            combined.push('\n');
+        }
+        Ok(combined)
+    }
+
+    /// Compile a world (script + modules) to separate C source files.
+    ///
+    /// Returns a `CompilationOutput` containing:
+    /// - One file per module: `mod_{module_id}_{name}.c`
+    /// - One file for the script: `script.c`
+    pub fn compile_world(
+        &mut self,
+        script_unit: &IrCodeUnit,
+        registry: &FunctionRegistry,
+    ) -> Result<CompilationOutput, CAotError> {
+        let mut files = Vec::new();
+
+        // Group module functions by module ID.
+        let mut modules_by_id: HashMap<IrModuleId, Vec<&IrCodeUnit>> = HashMap::new();
+        for ((module_id, _func_id), ir_unit) in registry.iter_module_code_units_with_ids() {
+            modules_by_id.entry(module_id).or_default().push(ir_unit);
+        }
+
+        // Emit one file per module.
+        for (module_id, units) in &modules_by_id {
+            let module_file = self.compile_module_file(*module_id, units, registry)?;
+            // Use first function name as module name hint.
+            let module_name = units.first().map(|u| u.name.as_str()).unwrap_or("unknown");
+            let filename = format!("mod_{}_{}.c", module_id.0, module_name);
+            files.push((filename, module_file));
+        }
+
+        // Emit script file.
+        let script_file = self.compile_script_file(script_unit, registry, &modules_by_id)?;
+        files.push(("script.c".to_string(), script_file));
+
+        Ok(CompilationOutput { files })
+    }
+
+    /// Compile a single module to a C source file.
+    fn compile_module_file(
+        &mut self,
+        module_id: IrModuleId,
+        units: &[&IrCodeUnit],
+        registry: &FunctionRegistry,
+    ) -> Result<String, CAotError> {
         let mut output = String::new();
 
-        // Emit C header with includes and declarations.
+        // Emit header.
         self.emit_header(&mut output)?;
 
-        // Collect all types used.
+        // Collect types used in this module.
         let mut types = HashSet::new();
-        tydesc::collect_types_from_script_unit(unit, &mut types);
-        for ir_unit in registry.iter_all_code_units() {
-            tydesc::collect_types_from_code_unit(ir_unit, &mut types);
+        for unit in units {
+            tydesc::collect_types_from_code_unit(unit, &mut types);
         }
 
         // Emit type descriptors.
         self.emit_tydescs(&mut output, &types)?;
 
-        // Forward declare all functions.
-        self.emit_function_declarations(&mut output, unit, registry)?;
+        // Forward declare functions in this module.
+        writeln!(output, "// Function declarations").unwrap();
+        for unit in units {
+            let func_name = format!("__mod_{}_{}", module_id.0, &unit.name);
+            let sig = self.build_signature(unit);
+            // Not static - needs to be visible to script.
+            writeln!(output, "{} {}({});", sig.return_type, func_name, sig.params).unwrap();
+        }
+        writeln!(output).unwrap();
 
         // Emit module functions.
-        for ((module_id, _func_id), ir_unit) in registry.iter_module_code_units_with_ids() {
-            self.emit_module_function(&mut output, module_id, ir_unit, registry)?;
+        for unit in units {
+            self.emit_module_function(&mut output, module_id, unit, registry)?;
         }
 
-        // Emit local functions (nested units in the script).
+        Ok(output)
+    }
+
+    /// Compile the script to a C source file.
+    fn compile_script_file(
+        &mut self,
+        unit: &IrCodeUnit,
+        registry: &FunctionRegistry,
+        modules_by_id: &HashMap<IrModuleId, Vec<&IrCodeUnit>>,
+    ) -> Result<String, CAotError> {
+        let mut output = String::new();
+
+        // Emit header.
+        self.emit_header(&mut output)?;
+
+        // Collect types used in script.
+        let mut types = HashSet::new();
+        tydesc::collect_types_from_script_unit(unit, &mut types);
+
+        // Emit type descriptors.
+        self.emit_tydescs(&mut output, &types)?;
+
+        // Extern declarations for module functions.
+        if !modules_by_id.is_empty() {
+            writeln!(output, "// Extern declarations for module functions").unwrap();
+            for (module_id, units) in modules_by_id {
+                for ir_unit in units {
+                    let func_name = format!("__mod_{}_{}", module_id.0, &ir_unit.name);
+                    let sig = self.build_signature(ir_unit);
+                    writeln!(output, "extern {} {}({});", sig.return_type, func_name, sig.params).unwrap();
+                }
+            }
+            writeln!(output).unwrap();
+        }
+
+        // Forward declare local functions.
+        if !unit.nested_units.is_empty() {
+            writeln!(output, "// Local function declarations").unwrap();
+            for nested in &unit.nested_units {
+                let func_name = format!("__local_{}", &nested.name);
+                let sig = self.build_signature(nested);
+                writeln!(output, "static {} {}({});", sig.return_type, func_name, sig.params).unwrap();
+            }
+            writeln!(output).unwrap();
+        }
+
+        // Forward declare script body.
+        writeln!(output, "static void __script_body(void* rt);").unwrap();
+        writeln!(output).unwrap();
+
+        // Emit local functions.
         for nested in &unit.nested_units {
             self.emit_local_function(&mut output, nested, unit, registry)?;
         }
 
-        // Emit the script body.
+        // Emit script body.
         self.emit_script_body(&mut output, unit, registry)?;
 
         // Emit main entry point.

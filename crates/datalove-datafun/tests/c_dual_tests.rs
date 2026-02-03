@@ -20,7 +20,7 @@ use std::path::Path;
 use std::process::Command;
 
 use datalove_datafun as datafun;
-use datalove_datafun_c_aot::CAotCompiler;
+use datalove_datafun_c_aot::{CAotCompiler, CompilationOutput};
 use datalove_datafun_interp::FunctionRegistry;
 use datalove_datafun_pkg::package_load_worldfile::{self, WorldfileSection};
 use datafun::pipeline::ConstInlining;
@@ -422,9 +422,9 @@ fn c_aot_compile_link_run(
     // Create C AOT compiler.
     let mut compiler = CAotCompiler::new();
 
-    // Generate C source code.
-    let c_source = match compiler.compile_script_unit_with_registry(ir_unit, registry) {
-        Ok(src) => src,
+    // Generate C source files (one per module + script).
+    let compilation_output: CompilationOutput = match compiler.compile_world(ir_unit, registry) {
+        Ok(output) => output,
         Err(e) => {
             return (
                 CCodegenResult::Error { message: format!("{}", e) },
@@ -436,7 +436,7 @@ fn c_aot_compile_link_run(
         }
     };
 
-    // Write C source to temp file.
+    // Write C source files to temp directory.
     let dir = match rmx::tempfile::tempdir() {
         Ok(d) => d,
         Err(e) => {
@@ -450,15 +450,23 @@ fn c_aot_compile_link_run(
         }
     };
 
-    let c_path = dir.path().join("test.c");
-    if let Err(e) = std::fs::write(&c_path, &c_source) {
-        return (
-            CCodegenResult::Success,
-            CCompileResult::Error { message: format!("Failed to write C file: {}", e) },
-            LinkResult::Skipped { reason: "C compile failed".to_string() },
-            ExecutionResult::Skipped { reason: "C compile failed".to_string() },
-            String::new(),
-        );
+    // Write all C files and collect paths.
+    let mut c_paths = Vec::new();
+    let mut all_sources = String::new();
+    for (filename, content) in &compilation_output.files {
+        let c_path = dir.path().join(filename);
+        if let Err(e) = std::fs::write(&c_path, content) {
+            return (
+                CCodegenResult::Success,
+                CCompileResult::Error { message: format!("Failed to write C file {}: {}", filename, e) },
+                LinkResult::Skipped { reason: "C compile failed".to_string() },
+                ExecutionResult::Skipped { reason: "C compile failed".to_string() },
+                String::new(),
+            );
+        }
+        c_paths.push(c_path);
+        // Collect all sources for error reporting.
+        all_sources.push_str(&format!("// === {} ===\n{}\n", filename, content));
     }
 
     // Find runtime library.
@@ -475,19 +483,17 @@ fn c_aot_compile_link_run(
         );
     }
 
-    // Compile and link with cc.
+    // Build compiler arguments: all C files + library + flags.
     let exe_path = dir.path().join("test");
-    let compile_output = Command::new("cc")
-        .args([
-            "-std=c11",
-            "-O0",
-            "-g",
-            c_path.to_str().unwrap(),
-            lib_path.to_str().unwrap(),
-            "-ldl", "-lpthread", "-lm",
-            "-o", exe_path.to_str().unwrap(),
-        ])
-        .output();
+    let mut args: Vec<&str> = vec!["-std=c11", "-O0", "-g"];
+    for c_path in &c_paths {
+        args.push(c_path.to_str().unwrap());
+    }
+    args.push(lib_path.to_str().unwrap());
+    args.extend(["-ldl", "-lpthread", "-lm", "-o"]);
+    args.push(exe_path.to_str().unwrap());
+
+    let compile_output = Command::new("cc").args(&args).output();
 
     let compile_output = match compile_output {
         Ok(o) => o,
@@ -504,10 +510,10 @@ fn c_aot_compile_link_run(
 
     if !compile_output.status.success() {
         let stderr = String::from_utf8_lossy(&compile_output.stderr);
-        // Include the C source for debugging.
+        // Include all C sources for debugging.
         return (
             CCodegenResult::Success,
-            CCompileResult::Error { message: format!("Compiler failed:\n{}\n\nC source:\n{}", stderr, c_source) },
+            CCompileResult::Error { message: format!("Compiler failed:\n{}\n\nC sources:\n{}", stderr, all_sources) },
             LinkResult::Skipped { reason: "C compile failed".to_string() },
             ExecutionResult::Skipped { reason: "C compile failed".to_string() },
             String::new(),

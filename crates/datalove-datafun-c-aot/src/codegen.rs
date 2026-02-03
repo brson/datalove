@@ -49,7 +49,10 @@ pub fn emit_function(
         &types::ir_type_to_c(&func_ctx.return_type)
     };
 
-    writeln!(out, "static {} {}({}) {{", return_type, func_name, params).unwrap();
+    // Module functions are not static (they need to be visible across files).
+    // Local functions are static.
+    let static_prefix = if module_id.is_some() { "" } else { "static " };
+    writeln!(out, "{}{} {}({}) {{", static_prefix, return_type, func_name, params).unwrap();
 
     // Emit frame allocation.
     if layout.frame_size > 0 {
