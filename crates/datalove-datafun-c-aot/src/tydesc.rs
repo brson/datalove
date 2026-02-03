@@ -255,6 +255,17 @@ pub fn emit_tydesc(
                 writeln!(out, "static const dtlv_tydesc_t {} = {{ .type_tag = 0x42, .size = {}, .align = {}, .type_info = {{ .enum_ = {{ .variants = NULL, .num_variants = 0 }} }} }};",
                     name, layout.size, layout.align).unwrap();
             } else {
+                // Compute max payload alignment for payload offset calculation.
+                // All variants share the same payload offset, determined by the maximum alignment.
+                let mut max_payload_align = 4u32; // discriminant align
+                for (_, payload) in variants {
+                    if let Some(payload_ty) = payload {
+                        let payload_layout = types::ir_type_to_crepr(payload_ty).layout();
+                        max_payload_align = max_payload_align.max(payload_layout.align);
+                    }
+                }
+                let common_payload_offset = types::align_up(4, max_payload_align);
+
                 // Emit variant array.
                 write!(out, "static const dtlv_enum_variant_t {}[] = {{ ", variants_name).unwrap();
                 for (i, (variant_name, payload)) in variants.iter().enumerate() {
@@ -265,8 +276,8 @@ pub fn emit_tydesc(
                     } else {
                         "NULL".to_string()
                     };
-                    // Discriminant is at offset 0, payload at offset 4 (aligned).
-                    let payload_offset = if payload.is_some() { 4 } else { 0 };
+                    // Payload offset is the same for all variants (based on max alignment).
+                    let payload_offset = if payload.is_some() { common_payload_offset } else { 0 };
                     write!(out, "{{ .name = \"{}\", .name_len = {}, .offset = {}, .payload = {} }}",
                         variant_name, variant_name.len(), payload_offset, payload_ptr).unwrap();
                 }
@@ -304,24 +315,25 @@ pub fn emit_tydesc(
         }
 
         IrType::Table(columns) => {
-            let tydescs_name = format!("{}_col_tydescs", name);
+            let cols_name = format!("{}_cols", name);
             let num_cols = columns.len();
 
             if columns.is_empty() {
-                writeln!(out, "static const dtlv_tydesc_t {} = {{ .type_tag = 0x55, .size = {}, .align = {}, .type_info = {{ .table = {{ .column_tydescs = NULL, .num_columns = 0 }} }} }};",
+                writeln!(out, "static const dtlv_tydesc_t {} = {{ .type_tag = 0x55, .size = {}, .align = {}, .type_info = {{ .table = {{ .num_columns = 0, .columns = NULL }} }} }};",
                     name, layout.size, layout.align).unwrap();
             } else {
-                // Emit column tydesc pointer array.
-                write!(out, "static const dtlv_tydesc_t* {}[] = {{ ", tydescs_name).unwrap();
-                for (i, (_, col_ty)) in columns.iter().enumerate() {
-                    if i > 0 { write!(out, ", ").unwrap(); }
+                // Emit column info array (TyInfoTableColumn: name, name_len, tydesc).
+                writeln!(out, "static const dtlv_table_column_t {}[] = {{", cols_name).unwrap();
+                for (i, (col_name, col_ty)) in columns.iter().enumerate() {
                     let col_tydesc = compiler.get_tydesc_name(col_ty);
-                    write!(out, "&{}", col_tydesc).unwrap();
+                    let comma = if i + 1 < columns.len() { "," } else { "" };
+                    writeln!(out, "    {{ .name = \"{}\", .name_len = {}, .tydesc = &{} }}{}",
+                        col_name, col_name.len(), col_tydesc, comma).unwrap();
                 }
-                writeln!(out, " }};").unwrap();
+                writeln!(out, "}};").unwrap();
 
-                writeln!(out, "static const dtlv_tydesc_t {} = {{ .type_tag = 0x55, .size = {}, .align = {}, .type_info = {{ .table = {{ .column_tydescs = {}, .num_columns = {} }} }} }};",
-                    name, layout.size, layout.align, tydescs_name, num_cols).unwrap();
+                writeln!(out, "static const dtlv_tydesc_t {} = {{ .type_tag = 0x55, .size = {}, .align = {}, .type_info = {{ .table = {{ .num_columns = {}, .columns = {} }} }} }};",
+                    name, layout.size, layout.align, num_cols, cols_name).unwrap();
             }
         }
 

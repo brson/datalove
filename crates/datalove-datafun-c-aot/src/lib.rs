@@ -270,6 +270,7 @@ impl CAotCompiler {
         writeln!(out, "typedef struct {{ uint32_t offset; const dtlv_tydesc_t* tydesc; }} dtlv_tuple_field_t;").unwrap();
         writeln!(out, "typedef struct {{ const char* name; uint32_t name_len; uint32_t offset; const dtlv_tydesc_t* tydesc; }} dtlv_struct_field_t;").unwrap();
         writeln!(out, "typedef struct {{ const char* name; uint32_t name_len; uint32_t offset; const dtlv_tydesc_t* payload; }} dtlv_enum_variant_t;").unwrap();
+        writeln!(out, "typedef struct {{ const char* name; uint32_t name_len; const dtlv_tydesc_t* tydesc; }} dtlv_table_column_t;").unwrap();
         writeln!(out).unwrap();
 
         writeln!(out, "typedef union {{").unwrap();
@@ -281,7 +282,7 @@ impl CAotCompiler {
         writeln!(out, "    struct {{ const dtlv_tydesc_t* key_tydesc; const dtlv_tydesc_t* value_tydesc; }} map;").unwrap();
         writeln!(out, "    struct {{ const dtlv_tydesc_t* element_tydesc; }} set;").unwrap();
         writeln!(out, "    struct {{ const dtlv_tydesc_t* element_tydesc; uint32_t rank; }} tensor;").unwrap();
-        writeln!(out, "    struct {{ const dtlv_tydesc_t* const* column_tydescs; uint32_t num_columns; }} table;").unwrap();
+        writeln!(out, "    struct {{ uint32_t num_columns; const dtlv_table_column_t* columns; }} table;").unwrap();
         writeln!(out, "    struct {{ const dtlv_tydesc_t* inner_tydesc; uint32_t payload_offset; }} option;").unwrap();
         writeln!(out, "    struct {{ const dtlv_tydesc_t* ok_tydesc; uint32_t payload_offset; }} result;").unwrap();
         writeln!(out, "}} dtlv_tyinfo_t;").unwrap();

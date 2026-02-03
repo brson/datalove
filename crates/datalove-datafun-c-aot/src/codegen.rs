@@ -1055,16 +1055,17 @@ impl<'a> FunctionCodegenContext<'a> {
     fn emit_wrap_some(&mut self, out: &mut String, dest: ValueId, inner: &Operand) -> Result<(), CAotError> {
         let dest_addr = self.value_addr(dest);
         let inner_addr = self.operand_addr(inner);
-        let inner_ty = self.operand_type(inner);
-        let inner_layout = types::ir_type_to_crepr(inner_ty).layout();
+        let inner_ty = self.operand_type(inner).clone();
+        let inner_repr = types::ir_type_to_crepr(&inner_ty);
+        let inner_layout = inner_repr.layout();
         let payload_offset = align_up(1, inner_layout.align);
 
         // Set tag to Some (2).
         writeln!(out, "    *(uint8_t*){} = OPTION_SOME;", dest_addr).unwrap();
 
-        // Copy inner value.
+        // Move inner value (copy then zero source for non-copy types).
         let payload_addr = format!("({} + {})", dest_addr, payload_offset);
-        match types::ir_type_to_crepr(inner_ty) {
+        match &inner_repr {
             CRepr::Scalar(c_ty) => {
                 writeln!(out, "    *({c_ty}*){payload_addr} = *({c_ty}*){inner_addr};").unwrap();
             }
@@ -1072,6 +1073,14 @@ impl<'a> FunctionCodegenContext<'a> {
                 if layout.size > 0 {
                     writeln!(out, "    memcpy({}, {}, {});", payload_addr, inner_addr, layout.size).unwrap();
                 }
+            }
+        }
+
+        // Zero source for non-copy types to implement move semantics.
+        if !inner_ty.is_copy() {
+            let size = inner_layout.size;
+            if size > 0 {
+                writeln!(out, "    memset({}, 0, {});", inner_addr, size).unwrap();
             }
         }
         Ok(())
@@ -1089,7 +1098,7 @@ impl<'a> FunctionCodegenContext<'a> {
     fn emit_wrap_ok(&mut self, out: &mut String, dest: ValueId, inner: &Operand) -> Result<(), CAotError> {
         let dest_addr = self.value_addr(dest);
         let inner_addr = self.operand_addr(inner);
-        let inner_ty = self.operand_type(inner);
+        let inner_ty = self.operand_type(inner).clone();
         let dest_ty = self.value_type(dest);
 
         let ok_ty = match dest_ty {
@@ -1105,9 +1114,10 @@ impl<'a> FunctionCodegenContext<'a> {
         // Set tag to Ok (1).
         writeln!(out, "    *(uint8_t*){} = RESULT_OK;", dest_addr).unwrap();
 
-        // Copy inner value.
+        // Move inner value (copy then zero source for non-copy types).
         let payload_addr = format!("({} + {})", dest_addr, payload_offset);
-        match types::ir_type_to_crepr(inner_ty) {
+        let inner_repr = types::ir_type_to_crepr(&inner_ty);
+        match &inner_repr {
             CRepr::Scalar(c_ty) => {
                 writeln!(out, "    *({c_ty}*){payload_addr} = *({c_ty}*){inner_addr};").unwrap();
             }
@@ -1115,6 +1125,14 @@ impl<'a> FunctionCodegenContext<'a> {
                 if layout.size > 0 {
                     writeln!(out, "    memcpy({}, {}, {});", payload_addr, inner_addr, layout.size).unwrap();
                 }
+            }
+        }
+
+        // Zero source for non-copy types to implement move semantics.
+        if !inner_ty.is_copy() {
+            let size = inner_repr.layout().size;
+            if size > 0 {
+                writeln!(out, "    memset({}, 0, {});", inner_addr, size).unwrap();
             }
         }
         Ok(())
@@ -1140,9 +1158,10 @@ impl<'a> FunctionCodegenContext<'a> {
         // Set tag to Err (2).
         writeln!(out, "    *(uint8_t*){} = RESULT_ERR;", dest_addr).unwrap();
 
-        // Copy error value.
+        // Move error value (copy then zero source to prevent double-free).
         let payload_addr = format!("({} + {})", dest_addr, payload_offset);
         writeln!(out, "    memcpy({}, {}, {});", payload_addr, inner_addr, error_size).unwrap();
+        writeln!(out, "    memset({}, 0, {});", inner_addr, error_size).unwrap();
         Ok(())
     }
 
@@ -1256,8 +1275,14 @@ impl<'a> FunctionCodegenContext<'a> {
         let inner_addr = self.operand_addr(inner);
         let inner_ty = self.operand_type(inner).clone();
         let inner_tydesc = self.tydesc_name(&inner_ty);
+        let inner_size = types::ir_type_to_crepr(&inner_ty).layout().size;
 
         writeln!(out, "    dtlv_rti_error_from_local(rt, {}, &{}, {});", inner_addr, inner_tydesc, dest_addr).unwrap();
+
+        // Zero source to implement move semantics (prevents double-free/leak).
+        if inner_size > 0 {
+            writeln!(out, "    memset({}, 0, {});", inner_addr, inner_size).unwrap();
+        }
         Ok(())
     }
 
@@ -1267,8 +1292,14 @@ impl<'a> FunctionCodegenContext<'a> {
         let inner_addr = self.operand_addr(inner);
         let inner_ty = self.operand_type(inner).clone();
         let inner_tydesc = self.tydesc_name(&inner_ty);
+        let inner_size = types::ir_type_to_crepr(&inner_ty).layout().size;
 
         writeln!(out, "    dtlv_rti_data_from_local(rt, {}, &{}, {});", inner_addr, inner_tydesc, dest_addr).unwrap();
+
+        // Zero source to implement move semantics (prevents double-free/leak).
+        if inner_size > 0 {
+            writeln!(out, "    memset({}, 0, {});", inner_addr, inner_size).unwrap();
+        }
         Ok(())
     }
 
@@ -1590,12 +1621,20 @@ impl<'a> FunctionCodegenContext<'a> {
         let ty = &func_ctx.param_types[param.0 as usize];
         let repr = types::ir_type_to_crepr(ty);
 
-        // For tracked params, check if already live and destroy old value.
-        if tracked {
-            if let Some(track_offset) = self.layout.param_tracking_byte(param.0) {
+        // For non-copy types, destroy the old value before overwriting.
+        // - For tracked params (Out), check tracking byte first.
+        // - For non-tracked mut params, always destroy (param is always initialized).
+        if !ty.is_copy() {
+            if tracked {
+                if let Some(track_offset) = self.layout.param_tracking_byte(param.0) {
+                    let tydesc = self.tydesc_name(ty);
+                    writeln!(out, "    if (__frame[{}] == TRACK_LIVE) dtlv_rti_any_destroy_local(rt, {}, &{});",
+                        track_offset, param_addr, tydesc).unwrap();
+                }
+            } else {
+                // Mut param - always has a valid value that needs destruction.
                 let tydesc = self.tydesc_name(ty);
-                writeln!(out, "    if (__frame[{}] == TRACK_LIVE) dtlv_rti_any_destroy_local(rt, {}, &{});",
-                    track_offset, param_addr, tydesc).unwrap();
+                writeln!(out, "    dtlv_rti_any_destroy_local(rt, {}, &{});", param_addr, tydesc).unwrap();
             }
         }
 
@@ -2254,8 +2293,17 @@ impl<'a> FunctionCodegenContext<'a> {
                 self.emit_unit_end(out, result.as_ref())?;
             }
             Terminator::UnitEarlyReturn { value } => {
-                // Early return - just return (script context).
-                let _ = value; // Value would need special handling.
+                // Early return - debuglog the value (to match interpreter behavior), then destroy and return.
+                self.emit_debuglog(out, value)?;
+
+                // Destroy the value if it's non-copy to prevent leaks.
+                let ty = self.operand_type(value).clone();
+                if !ty.is_copy() {
+                    let addr = self.operand_addr(value);
+                    let tydesc = self.tydesc_name(&ty);
+                    writeln!(out, "    dtlv_rti_any_destroy_local(rt, {}, &{});", addr, tydesc).unwrap();
+                }
+
                 writeln!(out, "    return;").unwrap();
             }
         }

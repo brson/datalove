@@ -1,7 +1,7 @@
 //! Dual interpreter/C-AOT comparison tests.
 //!
 //! This test suite runs both the interpreter and C AOT compiler on the same worldfiles,
-//! comparing their debuglog output.
+//! comparing their lowered IR (after normalization) and debuglog output.
 //!
 //! Input fixtures must have:
 //! - Any number of module sections
@@ -11,7 +11,8 @@
 //! The test:
 //! 1. Lowers and executes via interpreter
 //! 2. Lowers, generates C code, compiles, links, and executes via C AOT
-//! 3. Compares debuglog outputs - fails if different
+//! 3. Compares IRs - fails if different
+//! 4. Compares debuglog outputs - fails if different
 
 use datalove_datafun_ir::expand_ir_strings;
 use rmx::prelude::*;
@@ -27,14 +28,14 @@ use datafun::pipeline::ConstInlining;
 
 /// Result of dual analysis.
 #[derive(Debug, Serialize, Deserialize)]
-pub struct CDualAnalysis {
+pub struct DualAnalysis {
     /// Per-section results.
-    pub sections: Vec<CDualSectionResult>,
+    pub sections: Vec<DualSectionResult>,
 }
 
 /// Result of analyzing one section via both pipelines.
 #[derive(Debug, Serialize, Deserialize)]
-pub struct CDualSectionResult {
+pub struct DualSectionResult {
     /// Section type.
     pub section_type: String,
     /// Section name/identifier (for modules).
@@ -46,20 +47,22 @@ pub struct CDualSectionResult {
     pub ownership: datafun::pipeline::OwnershipResult,
     /// Interpreter lowering result.
     pub interp_lowering: datafun::pipeline::LoweringResult,
-    /// C AOT lowering result.
-    pub c_aot_lowering: datafun::pipeline::LoweringResult,
+    /// AOT lowering result.
+    pub aot_lowering: datafun::pipeline::LoweringResult,
+    /// Whether normalized IRs matched.
+    pub ir_match: bool,
+    /// Diff between normalized IRs if they didn't match.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ir_diff: Option<String>,
     /// Debuglog output from interpreter.
     pub interp_output: String,
-    /// Debuglog output from C AOT execution.
-    pub c_aot_output: String,
+    /// Debuglog output from AOT execution.
+    pub aot_output: String,
     /// Whether debuglog outputs matched.
     pub output_match: bool,
-    /// C code generation result.
+    /// AOT compilation result.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub c_codegen: Option<CCodegenResult>,
-    /// C compilation result.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub c_compile: Option<CCompileResult>,
+    pub aot_compile: Option<AotCompileResult>,
     /// Link result.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub link: Option<LinkResult>,
@@ -68,18 +71,10 @@ pub struct CDualSectionResult {
     pub execution: Option<ExecutionResult>,
 }
 
-/// C code generation result.
+/// AOT compilation result.
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(tag = "status")]
-pub enum CCodegenResult {
-    Success,
-    Error { message: String },
-}
-
-/// C compilation result.
-#[derive(Debug, Serialize, Deserialize)]
-#[serde(tag = "status")]
-pub enum CCompileResult {
+pub enum AotCompileResult {
     Success,
     Error { message: String },
 }
@@ -107,8 +102,45 @@ fn ensure_runtime_lib() -> &'static Path {
     datafun::pipeline::aot::ensure_runtime_lib()
 }
 
+/// Normalize IR dump by removing trailing Drop instructions before unit_end.
+///
+/// This strips unit_end_drop/unit_end_drop.tracked instructions to allow
+/// comparison between interpreter and AOT IR (both now emit these uniformly).
+fn normalize_ir(ir: &str) -> String {
+    let mut lines: Vec<&str> = ir.lines().collect();
+
+    // Find the last block and strip drops before unit_end.
+    // IR format: instructions end with "    unit_end" or "    unit_end v0" etc.
+    let mut i = lines.len();
+    while i > 0 {
+        i -= 1;
+        let line = lines[i].trim();
+
+        // Stop at unit_end line (but not unit_end_drop).
+        if line.starts_with("unit_end") && !line.starts_with("unit_end_drop") {
+            // Now go backwards and remove drop instructions (both precise and tracked).
+            while i > 0 {
+                let prev_line = lines[i - 1].trim();
+                if prev_line.starts_with("drop ")
+                    || prev_line.starts_with("drop.tracked ")
+                    || prev_line.starts_with("unit_end_drop ")
+                    || prev_line.starts_with("unit_end_drop.tracked ")
+                {
+                    lines.remove(i - 1);
+                    i -= 1;
+                } else {
+                    break;
+                }
+            }
+            break;
+        }
+    }
+
+    lines.join("\n")
+}
+
 /// Analyze a worldfile using both pipelines.
-fn analyze_worldfile_dual(parsed: package_load_worldfile::ParsedWorldfile) -> CDualAnalysis {
+fn analyze_worldfile_dual(parsed: package_load_worldfile::ParsedWorldfile) -> DualAnalysis {
     let db = datafun::Database::default();
     let mut results = Vec::new();
 
@@ -121,7 +153,7 @@ fn analyze_worldfile_dual(parsed: package_load_worldfile::ParsedWorldfile) -> CD
         .count();
 
     if fragment_count != 1 {
-        results.push(CDualSectionResult {
+        results.push(DualSectionResult {
             section_type: "validation".to_string(),
             name: None,
             typecheck: datafun::pipeline::TypecheckResult::Error {
@@ -129,20 +161,21 @@ fn analyze_worldfile_dual(parsed: package_load_worldfile::ParsedWorldfile) -> CD
             },
             ownership: datafun::pipeline::OwnershipResult::Skipped,
             interp_lowering: datafun::pipeline::LoweringResult::Skipped,
-            c_aot_lowering: datafun::pipeline::LoweringResult::Skipped,
+            aot_lowering: datafun::pipeline::LoweringResult::Skipped,
+            ir_match: false,
+            ir_diff: None,
             interp_output: String::new(),
-            c_aot_output: String::new(),
+            aot_output: String::new(),
             output_match: false,
-            c_codegen: None,
-            c_compile: None,
+            aot_compile: None,
             link: None,
             execution: None,
         });
-        return CDualAnalysis { sections: results };
+        return DualAnalysis { sections: results };
     }
 
     if expr_count > 0 {
-        results.push(CDualSectionResult {
+        results.push(DualSectionResult {
             section_type: "validation".to_string(),
             name: None,
             typecheck: datafun::pipeline::TypecheckResult::Error {
@@ -150,16 +183,17 @@ fn analyze_worldfile_dual(parsed: package_load_worldfile::ParsedWorldfile) -> CD
             },
             ownership: datafun::pipeline::OwnershipResult::Skipped,
             interp_lowering: datafun::pipeline::LoweringResult::Skipped,
-            c_aot_lowering: datafun::pipeline::LoweringResult::Skipped,
+            aot_lowering: datafun::pipeline::LoweringResult::Skipped,
+            ir_match: false,
+            ir_diff: None,
             interp_output: String::new(),
-            c_aot_output: String::new(),
+            aot_output: String::new(),
             output_match: false,
-            c_codegen: None,
-            c_compile: None,
+            aot_compile: None,
             link: None,
             execution: None,
         });
-        return CDualAnalysis { sections: results };
+        return DualAnalysis { sections: results };
     }
 
     // Find the fragment source.
@@ -176,22 +210,23 @@ fn analyze_worldfile_dual(parsed: package_load_worldfile::ParsedWorldfile) -> CD
 
     // Check for resolution errors.
     if let Some(err) = &compiled.resolution_error {
-        results.push(CDualSectionResult {
+        results.push(DualSectionResult {
             section_type: "resolution".to_string(),
             name: None,
             typecheck: datafun::pipeline::TypecheckResult::Error { errors: vec![err.clone()] },
             ownership: datafun::pipeline::OwnershipResult::Skipped,
             interp_lowering: datafun::pipeline::LoweringResult::Skipped,
-            c_aot_lowering: datafun::pipeline::LoweringResult::Skipped,
+            aot_lowering: datafun::pipeline::LoweringResult::Skipped,
+            ir_match: false,
+            ir_diff: None,
             interp_output: String::new(),
-            c_aot_output: String::new(),
+            aot_output: String::new(),
             output_match: false,
-            c_codegen: None,
-            c_compile: None,
+            aot_compile: None,
             link: None,
             execution: None,
         });
-        return CDualAnalysis { sections: results };
+        return DualAnalysis { sections: results };
     }
 
     // Collect module results.
@@ -214,18 +249,19 @@ fn analyze_worldfile_dual(parsed: package_load_worldfile::ParsedWorldfile) -> CD
             let has_ownership_errors = matches!(&ownership, datafun::pipeline::OwnershipResult::Error { .. });
             let lowering = datafun::pipeline::format_lowering_result(ir_dumps, lowering_errs, has_typecheck_errors || has_ownership_errors);
 
-            results.push(CDualSectionResult {
+            results.push(DualSectionResult {
                 section_type: "module".to_string(),
                 name: Some(module_path),
                 typecheck,
                 ownership,
                 interp_lowering: lowering.clone(),
-                c_aot_lowering: lowering,
+                aot_lowering: lowering,
+                ir_match: true,
+                ir_diff: None,
                 interp_output: String::new(),
-                c_aot_output: String::new(),
+                aot_output: String::new(),
                 output_match: true,
-                c_codegen: None,
-                c_compile: None,
+                aot_compile: None,
                 link: None,
                 execution: None,
             });
@@ -234,25 +270,28 @@ fn analyze_worldfile_dual(parsed: package_load_worldfile::ParsedWorldfile) -> CD
 
     // Run interpreter pipeline.
     let Some(mut interp_compiler) = compiled.script_compiler_default(&db) else {
-        results.push(CDualSectionResult {
+        // Module compilation failed, script execution skipped.
+        // Both lowerings are Skipped, so they match.
+        results.push(DualSectionResult {
             section_type: "scriptunit-fragment".to_string(),
             name: None,
             typecheck: datafun::pipeline::TypecheckResult::Skipped,
             ownership: datafun::pipeline::OwnershipResult::Skipped,
             interp_lowering: datafun::pipeline::LoweringResult::Skipped,
-            c_aot_lowering: datafun::pipeline::LoweringResult::Skipped,
+            aot_lowering: datafun::pipeline::LoweringResult::Skipped,
+            ir_match: true,
+            ir_diff: None,
             interp_output: String::new(),
-            c_aot_output: String::new(),
+            aot_output: String::new(),
             output_match: true,
-            c_codegen: None,
-            c_compile: None,
+            aot_compile: None,
             link: None,
             execution: None,
         });
-        return CDualAnalysis { sections: results };
+        return DualAnalysis { sections: results };
     };
     let Some(mut interp_executor) = compiled.script_executor(datalove_rt::c::DebugOutputMode::Buffer, None) else {
-        return CDualAnalysis { sections: results };
+        return DualAnalysis { sections: results };
     };
 
     interp_executor.clear_debug_buffer();
@@ -270,155 +309,191 @@ fn analyze_worldfile_dual(parsed: package_load_worldfile::ParsedWorldfile) -> CD
     let compiled2 = pipeline2.compile_fresh(&db);
 
     // Run C AOT pipeline.
-    let Some(mut c_aot_compiler) = compiled2.script_compiler_default(&db) else {
-        results.push(CDualSectionResult {
+    let Some(mut aot_compiler) = compiled2.script_compiler_default(&db) else {
+        // Module compilation failed for AOT, but interp succeeded.
+        // This shouldn't happen if both use the same input, but handle it.
+        results.push(DualSectionResult {
             section_type: "scriptunit-fragment".to_string(),
             name: None,
             typecheck: datafun::pipeline::TypecheckResult::Skipped,
             ownership: datafun::pipeline::OwnershipResult::Skipped,
             interp_lowering: interp_compiled.lowering,
-            c_aot_lowering: datafun::pipeline::LoweringResult::Skipped,
+            aot_lowering: datafun::pipeline::LoweringResult::Skipped,
+            ir_match: false,
+            ir_diff: None,
             interp_output,
-            c_aot_output: String::new(),
+            aot_output: String::new(),
             output_match: false,
-            c_codegen: None,
-            c_compile: None,
+            aot_compile: None,
             link: None,
             execution: None,
         });
-        return CDualAnalysis { sections: results };
+        return DualAnalysis { sections: results };
     };
-    let c_aot_compiled = c_aot_compiler.compile_fragment(fragment_source);
+    let aot_compiled = aot_compiler.compile_fragment(fragment_source);
     let registry = compiled2.module_registry();
 
     // If typecheck failed, return early.
-    if !matches!(&c_aot_compiled.typecheck, datafun::pipeline::TypecheckResult::Success) {
-        results.push(CDualSectionResult {
+    if !matches!(&aot_compiled.typecheck, datafun::pipeline::TypecheckResult::Success) {
+        results.push(DualSectionResult {
             section_type: "scriptunit-fragment".to_string(),
             name: None,
-            typecheck: c_aot_compiled.typecheck,
-            ownership: c_aot_compiled.ownership,
+            typecheck: aot_compiled.typecheck,
+            ownership: aot_compiled.ownership,
             interp_lowering: interp_compiled.lowering,
-            c_aot_lowering: c_aot_compiled.lowering,
+            aot_lowering: aot_compiled.lowering,
+            ir_match: false,
+            ir_diff: None,
             interp_output,
-            c_aot_output: String::new(),
+            aot_output: String::new(),
             output_match: false,
-            c_codegen: None,
-            c_compile: None,
+            aot_compile: None,
             link: None,
             execution: None,
         });
-        return CDualAnalysis { sections: results };
+        return DualAnalysis { sections: results };
     }
 
     // If ownership analysis failed, return early.
-    if !matches!(&c_aot_compiled.ownership, datafun::pipeline::OwnershipResult::Success) {
-        let output_match = match (&interp_compiled.ownership, &c_aot_compiled.ownership) {
+    // Check if both errors match (same error message = ir_match: true).
+    if !matches!(&aot_compiled.ownership, datafun::pipeline::OwnershipResult::Success) {
+        let ir_match = match (&interp_compiled.ownership, &aot_compiled.ownership) {
             (
                 datafun::pipeline::OwnershipResult::Error { message: m1 },
                 datafun::pipeline::OwnershipResult::Error { message: m2 },
             ) => m1 == m2,
             _ => false,
         };
-        results.push(CDualSectionResult {
+        // If both errors match, consider output_match true (no output to compare).
+        let output_match = ir_match;
+        results.push(DualSectionResult {
             section_type: "scriptunit-fragment".to_string(),
             name: None,
-            typecheck: c_aot_compiled.typecheck,
-            ownership: c_aot_compiled.ownership,
+            typecheck: aot_compiled.typecheck,
+            ownership: aot_compiled.ownership,
             interp_lowering: interp_compiled.lowering,
-            c_aot_lowering: c_aot_compiled.lowering,
+            aot_lowering: aot_compiled.lowering,
+            ir_match,
+            ir_diff: None,
             interp_output,
-            c_aot_output: String::new(),
+            aot_output: String::new(),
             output_match,
-            c_codegen: None,
-            c_compile: None,
+            aot_compile: None,
             link: None,
             execution: None,
         });
-        return CDualAnalysis { sections: results };
+        return DualAnalysis { sections: results };
     }
 
     // If lowering failed, return early.
-    if !matches!(&c_aot_compiled.lowering, datafun::pipeline::LoweringResult::Success { .. }) {
-        let output_match = match (&interp_compiled.lowering, &c_aot_compiled.lowering) {
+    // Check if both errors match (same error message = ir_match: true).
+    if !matches!(&aot_compiled.lowering, datafun::pipeline::LoweringResult::Success { .. }) {
+        let ir_match = match (&interp_compiled.lowering, &aot_compiled.lowering) {
             (
                 datafun::pipeline::LoweringResult::Error { message: m1 },
                 datafun::pipeline::LoweringResult::Error { message: m2 },
             ) => m1 == m2,
             _ => false,
         };
-        results.push(CDualSectionResult {
+        // If both errors match, consider output_match true (no output to compare).
+        let output_match = ir_match;
+        results.push(DualSectionResult {
             section_type: "scriptunit-fragment".to_string(),
             name: None,
-            typecheck: c_aot_compiled.typecheck,
-            ownership: c_aot_compiled.ownership,
+            typecheck: aot_compiled.typecheck,
+            ownership: aot_compiled.ownership,
             interp_lowering: interp_compiled.lowering,
-            c_aot_lowering: c_aot_compiled.lowering,
+            aot_lowering: aot_compiled.lowering,
+            ir_match,
+            ir_diff: None,
             interp_output,
-            c_aot_output: String::new(),
+            aot_output: String::new(),
             output_match,
-            c_codegen: None,
-            c_compile: None,
+            aot_compile: None,
             link: None,
             execution: None,
         });
-        return CDualAnalysis { sections: results };
+        return DualAnalysis { sections: results };
     }
 
+    // Get IR dumps and normalize for comparison.
+    let interp_ir = match &interp_compiled.lowering {
+        datafun::pipeline::LoweringResult::Success { ir } => ir.clone(),
+        _ => String::new(),
+    };
+    let aot_ir = match &aot_compiled.lowering {
+        datafun::pipeline::LoweringResult::Success { ir } => ir.clone(),
+        _ => String::new(),
+    };
+
+    let interp_ir_normalized = normalize_ir(&interp_ir);
+    let aot_ir_normalized = normalize_ir(&aot_ir);
+    let ir_match = interp_ir_normalized == aot_ir_normalized;
+    let ir_diff = if !ir_match {
+        Some(format!(
+            "=== Interpreter IR ===\n{}\n\n=== AOT IR ===\n{}",
+            interp_ir_normalized, aot_ir_normalized
+        ))
+    } else {
+        None
+    };
+
     // Get the IR unit for C AOT compilation.
-    let ir_unit = match c_aot_compiled.ir_unit {
+    let ir_unit = match aot_compiled.ir_unit {
         Some(unit) => unit,
         None => {
-            results.push(CDualSectionResult {
+            results.push(DualSectionResult {
                 section_type: "scriptunit-fragment".to_string(),
                 name: None,
-                typecheck: c_aot_compiled.typecheck,
-                ownership: c_aot_compiled.ownership,
+                typecheck: aot_compiled.typecheck,
+                ownership: aot_compiled.ownership,
                 interp_lowering: interp_compiled.lowering,
-                c_aot_lowering: c_aot_compiled.lowering,
+                aot_lowering: aot_compiled.lowering,
+                ir_match,
+                ir_diff,
                 interp_output,
-                c_aot_output: String::new(),
+                aot_output: String::new(),
                 output_match: false,
-                c_codegen: Some(CCodegenResult::Error {
+                aot_compile: Some(AotCompileResult::Error {
                     message: "IR unit not available".to_string(),
                 }),
-                c_compile: None,
                 link: None,
                 execution: None,
             });
-            return CDualAnalysis { sections: results };
+            return DualAnalysis { sections: results };
         }
     };
 
     // C AOT compile, link, run.
-    let (c_codegen, c_compile, link, execution, c_aot_output) = c_aot_compile_link_run(&ir_unit, &registry);
+    let (aot_compile, link, execution, aot_output) = c_aot_compile_link_run(&ir_unit, &registry);
 
-    let output_match = interp_output == c_aot_output;
+    let output_match = interp_output == aot_output;
 
-    results.push(CDualSectionResult {
+    results.push(DualSectionResult {
         section_type: "scriptunit-fragment".to_string(),
         name: None,
-        typecheck: c_aot_compiled.typecheck,
-        ownership: c_aot_compiled.ownership,
+        typecheck: aot_compiled.typecheck,
+        ownership: aot_compiled.ownership,
         interp_lowering: interp_compiled.lowering,
-        c_aot_lowering: c_aot_compiled.lowering,
+        aot_lowering: aot_compiled.lowering,
+        ir_match,
+        ir_diff,
         interp_output,
-        c_aot_output,
+        aot_output,
         output_match,
-        c_codegen: Some(c_codegen),
-        c_compile: Some(c_compile),
+        aot_compile: Some(aot_compile),
         link: Some(link),
         execution: Some(execution),
     });
 
-    CDualAnalysis { sections: results }
+    DualAnalysis { sections: results }
 }
 
 /// C AOT compile, link, and run an IR unit. Returns results and captured output.
 fn c_aot_compile_link_run(
     ir_unit: &datalove_datafun_ir::IrCodeUnit,
     registry: &FunctionRegistry,
-) -> (CCodegenResult, CCompileResult, LinkResult, ExecutionResult, String) {
+) -> (AotCompileResult, LinkResult, ExecutionResult, String) {
     // Create C AOT compiler.
     let mut compiler = CAotCompiler::new();
 
@@ -427,10 +502,9 @@ fn c_aot_compile_link_run(
         Ok(output) => output,
         Err(e) => {
             return (
-                CCodegenResult::Error { message: format!("{}", e) },
-                CCompileResult::Error { message: "C codegen failed".to_string() },
-                LinkResult::Skipped { reason: "C codegen failed".to_string() },
-                ExecutionResult::Skipped { reason: "C codegen failed".to_string() },
+                AotCompileResult::Error { message: format!("{}", e) },
+                LinkResult::Skipped { reason: "AOT compile failed".to_string() },
+                ExecutionResult::Skipped { reason: "AOT compile failed".to_string() },
                 String::new(),
             );
         }
@@ -441,10 +515,9 @@ fn c_aot_compile_link_run(
         Ok(d) => d,
         Err(e) => {
             return (
-                CCodegenResult::Success,
-                CCompileResult::Error { message: format!("Failed to create temp dir: {}", e) },
-                LinkResult::Skipped { reason: "C compile failed".to_string() },
-                ExecutionResult::Skipped { reason: "C compile failed".to_string() },
+                AotCompileResult::Error { message: format!("Failed to create temp dir: {}", e) },
+                LinkResult::Skipped { reason: "AOT compile failed".to_string() },
+                ExecutionResult::Skipped { reason: "AOT compile failed".to_string() },
                 String::new(),
             );
         }
@@ -457,10 +530,9 @@ fn c_aot_compile_link_run(
         let c_path = dir.path().join(filename);
         if let Err(e) = std::fs::write(&c_path, content) {
             return (
-                CCodegenResult::Success,
-                CCompileResult::Error { message: format!("Failed to write C file {}: {}", filename, e) },
-                LinkResult::Skipped { reason: "C compile failed".to_string() },
-                ExecutionResult::Skipped { reason: "C compile failed".to_string() },
+                AotCompileResult::Error { message: format!("Failed to write C file {}: {}", filename, e) },
+                LinkResult::Skipped { reason: "AOT compile failed".to_string() },
+                ExecutionResult::Skipped { reason: "AOT compile failed".to_string() },
                 String::new(),
             );
         }
@@ -475,10 +547,9 @@ fn c_aot_compile_link_run(
 
     if !lib_path.exists() {
         return (
-            CCodegenResult::Success,
-            CCompileResult::Error { message: format!("Runtime library not found at {:?}", lib_path) },
-            LinkResult::Skipped { reason: "Runtime library missing".to_string() },
-            ExecutionResult::Skipped { reason: "Runtime library missing".to_string() },
+            AotCompileResult::Success,
+            LinkResult::Error { message: format!("Runtime library not found at {:?}", lib_path) },
+            ExecutionResult::Skipped { reason: "Link failed".to_string() },
             String::new(),
         );
     }
@@ -499,10 +570,9 @@ fn c_aot_compile_link_run(
         Ok(o) => o,
         Err(e) => {
             return (
-                CCodegenResult::Success,
-                CCompileResult::Error { message: format!("Failed to run compiler: {}", e) },
-                LinkResult::Skipped { reason: "C compile failed".to_string() },
-                ExecutionResult::Skipped { reason: "C compile failed".to_string() },
+                AotCompileResult::Success,
+                LinkResult::Error { message: format!("Failed to run linker: {}", e) },
+                ExecutionResult::Skipped { reason: "Link failed".to_string() },
                 String::new(),
             );
         }
@@ -512,10 +582,9 @@ fn c_aot_compile_link_run(
         let stderr = String::from_utf8_lossy(&compile_output.stderr);
         // Include all C sources for debugging.
         return (
-            CCodegenResult::Success,
-            CCompileResult::Error { message: format!("Compiler failed:\n{}\n\nC sources:\n{}", stderr, all_sources) },
-            LinkResult::Skipped { reason: "C compile failed".to_string() },
-            ExecutionResult::Skipped { reason: "C compile failed".to_string() },
+            AotCompileResult::Success,
+            LinkResult::Error { message: format!("Linker failed:\n{}\n\nC sources:\n{}", stderr, all_sources) },
+            ExecutionResult::Skipped { reason: "Link failed".to_string() },
             String::new(),
         );
     }
@@ -525,8 +594,7 @@ fn c_aot_compile_link_run(
         Ok(o) => o,
         Err(e) => {
             return (
-                CCodegenResult::Success,
-                CCompileResult::Success,
+                AotCompileResult::Success,
                 LinkResult::Success,
                 ExecutionResult::Error { message: format!("Failed to run executable: {}", e), exit_code: None },
                 String::new(),
@@ -539,17 +607,15 @@ fn c_aot_compile_link_run(
 
     if !run_output.status.success() {
         return (
-            CCodegenResult::Success,
-            CCompileResult::Success,
+            AotCompileResult::Success,
             LinkResult::Success,
-            ExecutionResult::Error { message: format!("Exit code: {}", exit_code), exit_code: Some(exit_code) },
+            ExecutionResult::Error { message: format!("Exit code: {}\n\nC sources:\n{}", exit_code, all_sources), exit_code: Some(exit_code) },
             stderr,
         );
     }
 
     (
-        CCodegenResult::Success,
-        CCompileResult::Success,
+        AotCompileResult::Success,
         LinkResult::Success,
         ExecutionResult::Success { exit_code },
         stderr,
@@ -568,7 +634,7 @@ fn analyze_file(path: &Path) -> Result<String, String> {
     // Analyze using both pipelines.
     let analysis = analyze_worldfile_dual(parsed);
 
-    // Check if any module has typecheck errors.
+    // Check if any module has typecheck errors (AOT can't compile broken modules).
     let has_module_typecheck_errors = analysis.sections.iter().any(|s| {
         s.section_type == "module"
             && matches!(s.typecheck, datafun::pipeline::TypecheckResult::Error { .. })
@@ -576,16 +642,11 @@ fn analyze_file(path: &Path) -> Result<String, String> {
 
     // Check for failures.
     for section in &analysis.sections {
-        // Skip C AOT checks if modules have typecheck errors.
+        // Skip AOT checks if modules have typecheck errors (modules with errors aren't lowered).
         if !has_module_typecheck_errors {
-            // Check C codegen succeeded.
-            if let Some(CCodegenResult::Error { message }) = &section.c_codegen {
-                return Err(format!("C codegen failed: {}", message));
-            }
-
-            // Check C compile succeeded.
-            if let Some(CCompileResult::Error { message }) = &section.c_compile {
-                return Err(format!("C compile failed: {}", message));
+            // Check AOT compilation succeeded.
+            if let Some(AotCompileResult::Error { message }) = &section.aot_compile {
+                return Err(format!("AOT compile failed: {}", message));
             }
 
             // Check link succeeded.
@@ -599,6 +660,7 @@ fn analyze_file(path: &Path) -> Result<String, String> {
                     return Err(format!("Execution failed: {}", message));
                 }
                 Some(ExecutionResult::Skipped { reason }) => {
+                    // Skipped due to earlier failure is already caught above.
                     if !reason.contains("failed") {
                         return Err(format!("Execution skipped: {}", reason));
                     }
@@ -607,10 +669,25 @@ fn analyze_file(path: &Path) -> Result<String, String> {
             }
         }
 
+        if !section.ir_match {
+            // If ir_diff is None, report lowering status for debugging.
+            let detail = section.ir_diff.as_deref().unwrap_or_else(|| {
+                match (&section.interp_lowering, &section.aot_lowering) {
+                    (datafun::pipeline::LoweringResult::Error { message }, _) =>
+                        return Box::leak(format!("interp lowering: {}", message).into_boxed_str()),
+                    (_, datafun::pipeline::LoweringResult::Error { message }) =>
+                        return Box::leak(format!("aot lowering: {}", message).into_boxed_str()),
+                    (datafun::pipeline::LoweringResult::Skipped, datafun::pipeline::LoweringResult::Skipped) =>
+                        return Box::leak(format!("typecheck: {:?}", section.typecheck).into_boxed_str()),
+                    _ => "unknown",
+                }
+            });
+            return Err(format!("IR mismatch: {}", detail));
+        }
         if !section.output_match {
             return Err(format!(
-                "Output mismatch:\n  Interpreter: {:?}\n  C AOT: {:?}",
-                section.interp_output, section.c_aot_output
+                "Output mismatch:\n  Interpreter: {:?}\n  AOT: {:?}",
+                section.interp_output, section.aot_output
             ));
         }
     }
