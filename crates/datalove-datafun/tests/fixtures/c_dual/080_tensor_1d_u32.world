@@ -1,6 +1,0 @@
-----------
-scriptunit-fragment
-----------
-
-let t: tensor<u32, 1> = tensor [3] [1, 2, 3]
-debuglog t
