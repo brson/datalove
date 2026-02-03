@@ -1147,7 +1147,6 @@ dependencies = [
 name = "datalove-datafun-c-aot"
 version = "0.1.0"
 dependencies = [
- "datalove-datafun",
  "datalove-datafun-intrinsics",
  "datalove-datafun-ir",
  "datalove-rtdt",

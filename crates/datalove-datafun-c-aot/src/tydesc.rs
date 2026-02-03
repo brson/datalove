@@ -171,7 +171,7 @@ pub fn emit_tydesc(
     match ty {
         IrType::Unit => {
             // Unit is a zero-field tuple.
-            writeln!(out, "static const dtlv_tydesc_t {} = {{ .type_tag = 0x40, .size = 0, .align = 1, .type_info = {{ .tuple = {{ .num_fields = 0, .fields = NULL }} }} }};", name).unwrap();
+            writeln!(out, "static const dtlv_tydesc_t {} = {{ .type_tag = 0x40, .size = 0, .align = 1, .type_info = {{ .tuple = {{ .num_fields = 0, .fields = DANGLING(dtlv_tuple_field_t) }} }} }};", name).unwrap();
         }
 
         // Primitive types with no type_info.
@@ -207,7 +207,7 @@ pub fn emit_tydesc(
             let fields_name = format!("{}_fields", name);
 
             if fields.is_empty() {
-                writeln!(out, "static const dtlv_tydesc_t {} = {{ .type_tag = 0x40, .size = {}, .align = {}, .type_info = {{ .tuple = {{ .num_fields = 0, .fields = NULL }} }} }};",
+                writeln!(out, "static const dtlv_tydesc_t {} = {{ .type_tag = 0x40, .size = {}, .align = {}, .type_info = {{ .tuple = {{ .num_fields = 0, .fields = DANGLING(dtlv_tuple_field_t) }} }} }};",
                     name, layout.size, layout.align).unwrap();
             } else {
                 // Emit field array.
@@ -230,7 +230,7 @@ pub fn emit_tydesc(
             let fields_name = format!("{}_fields", name);
 
             if fields.is_empty() {
-                writeln!(out, "static const dtlv_tydesc_t {} = {{ .type_tag = 0x41, .size = {}, .align = {}, .type_info = {{ .struct_ = {{ .fields = NULL, .num_fields = 0 }} }} }};",
+                writeln!(out, "static const dtlv_tydesc_t {} = {{ .type_tag = 0x41, .size = {}, .align = {}, .type_info = {{ .struct_ = {{ .fields = DANGLING(dtlv_struct_field_t), .num_fields = 0 }} }} }};",
                     name, layout.size, layout.align).unwrap();
             } else {
                 // Emit field array.
@@ -252,7 +252,7 @@ pub fn emit_tydesc(
             let variants_name = format!("{}_variants", name);
 
             if variants.is_empty() {
-                writeln!(out, "static const dtlv_tydesc_t {} = {{ .type_tag = 0x42, .size = {}, .align = {}, .type_info = {{ .enum_ = {{ .variants = NULL, .num_variants = 0 }} }} }};",
+                writeln!(out, "static const dtlv_tydesc_t {} = {{ .type_tag = 0x42, .size = {}, .align = {}, .type_info = {{ .enum_ = {{ .variants = DANGLING(dtlv_enum_variant_t), .num_variants = 0 }} }} }};",
                     name, layout.size, layout.align).unwrap();
             } else {
                 // Compute max payload alignment for payload offset calculation.
@@ -319,7 +319,7 @@ pub fn emit_tydesc(
             let num_cols = columns.len();
 
             if columns.is_empty() {
-                writeln!(out, "static const dtlv_tydesc_t {} = {{ .type_tag = 0x55, .size = {}, .align = {}, .type_info = {{ .table = {{ .num_columns = 0, .columns = NULL }} }} }};",
+                writeln!(out, "static const dtlv_tydesc_t {} = {{ .type_tag = 0x55, .size = {}, .align = {}, .type_info = {{ .table = {{ .num_columns = 0, .columns = DANGLING(dtlv_table_column_t) }} }} }};",
                     name, layout.size, layout.align).unwrap();
             } else {
                 // Emit column info array (TyInfoTableColumn: name, name_len, tydesc).

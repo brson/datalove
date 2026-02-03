@@ -273,6 +273,11 @@ impl CAotCompiler {
         writeln!(out, "typedef struct {{ const char* name; uint32_t name_len; const dtlv_tydesc_t* tydesc; }} dtlv_table_column_t;").unwrap();
         writeln!(out).unwrap();
 
+        // Dangling pointer macro for empty arrays (Rust expects aligned non-NULL pointer).
+        writeln!(out, "// Dangling pointer for empty arrays (must be aligned, not NULL)").unwrap();
+        writeln!(out, "#define DANGLING(T) ((const T*)_Alignof(T))").unwrap();
+        writeln!(out).unwrap();
+
         writeln!(out, "typedef union {{").unwrap();
         writeln!(out, "    struct {{ }} nothing;").unwrap();
         writeln!(out, "    struct {{ uint32_t num_fields; const dtlv_tuple_field_t* fields; }} tuple;").unwrap();

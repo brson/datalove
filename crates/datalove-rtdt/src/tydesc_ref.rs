@@ -72,12 +72,7 @@ impl<'a> TyDescRef<'a> {
         assert_eq!(self.inner.type_tag, TyTag::Tuple);
         unsafe {
             let info = self.inner.type_info.tuple;
-            // Handle empty tuple (Unit type) where fields is NULL.
-            let fields = if info.fields.is_null() {
-                &[]
-            } else {
-                std::slice::from_raw_parts(info.fields, info.num_fields as usize)
-            };
+            let fields = std::slice::from_raw_parts(info.fields, info.num_fields as usize);
             TupleInfo { fields }
         }
     }
@@ -104,12 +99,7 @@ impl<'a> TyDescRef<'a> {
         assert_eq!(self.inner.type_tag, TyTag::Struct);
         unsafe {
             let info = self.inner.type_info.struct_;
-            // Handle empty struct where fields is NULL.
-            let fields = if info.fields.is_null() {
-                &[]
-            } else {
-                std::slice::from_raw_parts(info.fields, info.num_fields as usize)
-            };
+            let fields = std::slice::from_raw_parts(info.fields, info.num_fields as usize);
             StructInfo { fields }
         }
     }
@@ -136,12 +126,7 @@ impl<'a> TyDescRef<'a> {
         assert_eq!(self.inner.type_tag, TyTag::Enum);
         unsafe {
             let info = self.inner.type_info.enum_;
-            // Handle empty enum where variants is NULL.
-            let variants = if info.variants.is_null() {
-                &[]
-            } else {
-                std::slice::from_raw_parts(info.variants, info.num_variants as usize)
-            };
+            let variants = std::slice::from_raw_parts(info.variants, info.num_variants as usize);
             EnumInfo { variants }
         }
     }
