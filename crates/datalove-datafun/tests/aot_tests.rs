@@ -488,6 +488,16 @@ fn analyze_file(path: &Path) -> Result<String, String> {
 }
 
 fn main() {
+    // Register timing summary to print at exit (for profiling)
+    #[cfg(debug_assertions)]
+    {
+        extern "C" fn print_timing() {
+            datafun::pipeline::aot::print_timing_summary();
+        }
+        // Safety: print_timing is a safe function
+        unsafe { libc::atexit(print_timing); }
+    }
+
     datalove_exampletest::ExampleTestRunner::new(env!("CARGO_MANIFEST_DIR"), analyze_file)
         .fixture_subdir("aot")
         .file_extension("world")

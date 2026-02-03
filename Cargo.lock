@@ -1122,6 +1122,7 @@ dependencies = [
  "datalove-exampletest",
  "datalove-rt",
  "datalove-rtdt",
+ "libc",
  "regex",
  "ron",
  "rustmax",
