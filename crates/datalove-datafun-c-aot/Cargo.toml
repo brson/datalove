@@ -17,5 +17,3 @@ datalove-datafun-ir.path = "../datalove-datafun-ir"
 datalove-datafun-intrinsics.path = "../datalove-datafun-intrinsics"
 datalove-rtdt.path = "../datalove-rtdt"
 
-[dev-dependencies]
-datalove-datafun.path = "../datalove-datafun"
