@@ -92,35 +92,6 @@ impl CAotCompiler {
         }
     }
 
-    /// Compile an IR script unit to C source code (single file, for backward compatibility).
-    ///
-    /// Generates:
-    /// - `__script_body(void* rt)` - The script body that takes runtime handle
-    /// - `main()` - Entry point that initializes runtime, runs body, cleans up
-    pub fn compile_script_unit(&mut self, unit: &IrCodeUnit) -> Result<String, CAotError> {
-        let empty_registry = FunctionRegistry::new();
-        self.compile_script_unit_with_registry(unit, &empty_registry)
-    }
-
-    /// Compile an IR script unit with module functions (single file, for backward compatibility).
-    ///
-    /// Use this when compiling in a world with modules.
-    pub fn compile_script_unit_with_registry(
-        &mut self,
-        unit: &IrCodeUnit,
-        registry: &FunctionRegistry,
-    ) -> Result<String, CAotError> {
-        // Use the multi-file API and concatenate all files.
-        let output = self.compile_world(unit, registry)?;
-        let mut combined = String::new();
-        for (filename, content) in output.files {
-            writeln!(&mut combined, "// === {} ===", filename).unwrap();
-            combined.push_str(&content);
-            combined.push('\n');
-        }
-        Ok(combined)
-    }
-
     /// Compile a world (script + modules) to separate C source files.
     ///
     /// Returns a `CompilationOutput` containing:
@@ -410,36 +381,6 @@ impl CAotCompiler {
     fn emit_tydesc(&mut self, out: &mut String, ty: &IrType) -> Result<(), CAotError> {
         let name = self.get_tydesc_name(ty);
         tydesc::emit_tydesc(out, &name, ty, self)?;
-        Ok(())
-    }
-
-    /// Emit forward declarations for all functions.
-    fn emit_function_declarations(
-        &mut self,
-        out: &mut String,
-        unit: &IrCodeUnit,
-        registry: &FunctionRegistry,
-    ) -> Result<(), CAotError> {
-        writeln!(out, "// Function declarations").unwrap();
-
-        // Module functions.
-        for ((module_id, _func_id), ir_unit) in registry.iter_module_code_units_with_ids() {
-            let func_name = format!("__mod_{}_{}", module_id.0, &ir_unit.name);
-            let sig = self.build_signature(ir_unit);
-            writeln!(out, "static {} {}({});", sig.return_type, func_name, sig.params).unwrap();
-        }
-
-        // Local functions (nested in script).
-        for nested in &unit.nested_units {
-            let func_name = format!("__local_{}", &nested.name);
-            let sig = self.build_signature(nested);
-            writeln!(out, "static {} {}({});", sig.return_type, func_name, sig.params).unwrap();
-        }
-
-        // Script body.
-        writeln!(out, "static void __script_body(void* rt);").unwrap();
-        writeln!(out).unwrap();
-
         Ok(())
     }
 
