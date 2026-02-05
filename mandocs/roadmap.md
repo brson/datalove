@@ -41,18 +41,16 @@
 ## On deck
 
 - new repl
+- rtcalls - waiting for design
+- workspaces - waiting for design
 - match syntax / switch ir instruction
   - use switch during specialization
-- fix rt error/alloc semantics
-- datalit syntax cleanup
-  - map set type syntax
-- workspaces - waiting for design
-- riders - waiting for workspaces
-- rtcalls - waiting for native riders
 - std.string - waiting for rtcalls
 - assert statements - needed for std_tests?
 - fully reactive scripts, undo/redo
 - generics
+- datalit syntax cleanup
+  - map set type syntax
 
 
 
@@ -73,6 +71,8 @@
 
 ## Backburner
 
+- fix rt error/alloc semantics
+- native riders - built-in runtime for now
 - pipeline tools
 - worldfile generator - waiting on pipeline stability
 - closures
