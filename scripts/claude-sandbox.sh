@@ -165,6 +165,7 @@ exec podman run -it --rm \
     --user claude \
     --userns=keep-id \
     --security-opt label=disable \
+    --security-opt "seccomp=$SCRIPT_DIR/claude-sandbox-seccomp.json" \
     --device /dev/dri \
     --group-add video \
     --cpus=4 \
