@@ -190,9 +190,9 @@ Ti is datalit type
 Literals follow the same rules as datalit:
 
 - `true`, `false` => `bool`
-- Integer literals => `u32` by default (or `i32` if negative fits)
+- Integer literals => `int` (arbitrary-precision) by default
 - Float literals => `f32`
-- Hex literals => `u32` by default
+- Hex literals => `int` by default
 - String literals => `string`
 - `none` => cannot synthesize (requires type context)
 - Anonymous enums => cannot synthesize (requires type context)

@@ -149,24 +149,19 @@ Example:
 ### Rule: Syn-Int
 ```
 n : integer literal (as string)
-n fits in u32 range
 --------------------------------
-@n => @u32
-
-n : integer literal (as string)
-n does not fit in u32 range
---------------------------------
-@n => IntOutOfRange error
+@n => @int
 ```
 
-**Note**: Integer literals without type context default to `@u32`. If the value doesn't fit in u32 range, it's a type error. Use explicit type hints for other integer types.
+**Note**: Integer literals without type context synthesize as `@int`
+(arbitrary-precision). Use explicit type hints for fixed-width integer types.
 
 Examples:
 ```
-@42 => @u32                           ok
-@99999999999999999999 => error        FAIL (IntOutOfRange)
-: @int / @99999999999999999999 => @int  ok (explicit type hint)
-: @i32 / @-42 => @i32                   ok (explicit type hint)
+@42 => @int                             ok
+@99999999999999999999 => @int           ok (arbitrary-precision)
+: @u32 / @42 => @u32                     ok (explicit type hint)
+: @i32 / @-42 => @i32                    ok (explicit type hint)
 ```
 
 ### Rule: Syn-Float
@@ -185,22 +180,18 @@ Example:
 ### Rule: Syn-Hex
 ```
 h : hex literal (0x...)
-h fits in u32 range (unsigned)
 --------------------------------
-@h => @u32
-
-h does not fit in u32 range
---------------------------------
-@h => IntOutOfRange error
+@h => @int
 ```
 
-**Note**: Hex literals default to `@u32`. Use type hints for other types.
+**Note**: Hex literals synthesize as `@int`. Use type hints for fixed-width types.
 
 Example:
 ```
-@0xFF => @u32
-@0xFFFFFFFFFF => error  FAIL (out of range for u32)
-: @u64 / @0xFFFFFFFFFF => @u64  ok (explicit type hint)
+@0xFF => @int
+@0xFFFFFFFFFF => @int                   ok (arbitrary-precision)
+: @u64 / @0xFFFFFFFFFF => @u64          ok (explicit type hint)
+: @f32 / @0xABABABAB => @f32            ok (hex as bit pattern)
 ```
 
 ### Rule: Syn-String
@@ -714,13 +705,13 @@ Field order must be correct:
 ### 3. Default numeric types
 
 Bare numeric literals default to concrete types:
-- Integer literals -> `@u32` (with range check)
+- Integer literals -> `@int` (arbitrary-precision)
 - Float literals -> `@f32`
-- Hex literals -> `@u32` (with range check)
+- Hex literals -> `@int` (arbitrary-precision)
 
-Use explicit type hints for other numeric types:
+Use explicit type hints for fixed-width numeric types:
 ```
-: @int / @99999999999999999999  ; arbitrary precision
+: @u32 / @42                    ; unsigned 32-bit
 : @i64 / @-42                   ; signed 64-bit
 : @u8 / @255                    ; unsigned 8-bit
 ```

@@ -67,6 +67,9 @@ xor
 0xFF
 ```
 
+Bare integer literals synthesize as `int` (arbitrary-precision).
+Use a type hint for fixed-width types: `: u32 / 42`.
+
 **Floating-point** numbers use decimal notation:
 
 ```
@@ -708,6 +711,15 @@ variables.
 
 Expressions can *synthesize* types (bottom-up) or *check* against expected
 types (top-down).
+
+**Integer synthesis**: bare integer literals synthesize as `int`
+(arbitrary-precision). When an expected type is available, integers check
+against it instead:
+
+```
+let x = 42              // x: int (synthesized)
+let y: u32 = 42         // y: u32 (checked against binding type)
+```
 
 Checked arithmetic propagates expected types to operands:
 

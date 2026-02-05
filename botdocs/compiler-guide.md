@@ -38,7 +38,7 @@ Reference for the datalove-datafun compiler architecture.
 | `datalove-datafun-parser` | Lexer, parser, bracer |
 | `datalove-datafun-ast` | AST types (`Statement`, `Expr`, etc.) |
 | `datalove-datafun-resolve` | Name resolution (type aliases, function signatures) |
-| `datalove-datafun-tycheck` | Type checking, call resolution |
+| `datalove-datafun-tycheck` | Type checking, call resolution, type synthesis |
 | `datalove-datafun-ownership` | Ownership analysis (move/borrow/drop tracking) |
 | `datalove-datafun-lower` | AST to IR lowering |
 | `datalove-datafun-const` | Const evaluation (CTFE) and const inlining |
@@ -102,6 +102,11 @@ Source Text
 ```
 
 Errors propagate between phases: modules with typecheck errors skip ownership analysis and lowering.
+
+**Integer synthesis**: bare integer and hex literals synthesize as `int` (bigint).
+With an expected type from context (binding annotation, function parameter,
+checked arithmetic operand), the literal checks against that type instead.
+Both `datalove-datafun-tycheck` and `datalove-datalit` follow this rule.
 
 ### Phase 5: IR Lowering Detail
 
