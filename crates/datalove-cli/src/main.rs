@@ -842,7 +842,6 @@ impl TypecheckStdCommand {
 impl DocsCommand {
     fn run(&self, _args: &Args) -> AnyResult<()> {
         use rmx::std::fs;
-        use rmx::tera::{Tera, Context};
 
         let manifest_dir = env!("CARGO_MANIFEST_DIR");
         let manifest_path = PathBuf::from(manifest_dir);
@@ -851,11 +850,45 @@ impl DocsCommand {
             .and_then(|p| p.parent())
             .ok_or_else(|| anyhow!("Failed to find project root"))?;
 
-        let input_dir = project_root.join("mandocs");
-        let output_dir = project_root.join("docs");
+        // Build mandocs -> docs/.
+        let mandocs_dir = project_root.join("mandocs");
+        let mandocs_out = project_root.join("docs");
+        Self::build_docs(&mandocs_dir, &mandocs_out)?;
 
-        // Create output directory.
-        fs::create_dir_all(&output_dir)?;
+        // Generate posts feed for mandocs.
+        let posts_dir = mandocs_dir.join("posts");
+        let posts = feed::parse_posts(&posts_dir)?;
+        if !posts.is_empty() {
+            let mut tera = rmx::tera::Tera::default();
+            let posts_template_path = mandocs_dir.join("posts-template.html");
+            let posts_template_content = fs::read_to_string(&posts_template_path)
+                .with_context(|| format!("Failed to read posts template: {}", posts_template_path.display()))?;
+            tera.add_raw_template("posts-template.html", &posts_template_content)?;
+            feed::generate_feed_page(&posts, &tera, &mandocs_out)?;
+            feed::generate_rss(&posts, &mandocs_out, "https://datalove.dev")?;
+        }
+
+        println!("Documentation generated in {}", mandocs_out.display());
+
+        // Build botdocs -> docs/bot/.
+        let botdocs_dir = project_root.join("botdocs");
+        let botdocs_out = project_root.join("docs").join("bot");
+        Self::build_docs(&botdocs_dir, &botdocs_out)?;
+
+        println!("Documentation generated in {}", botdocs_out.display());
+
+        Ok(())
+    }
+
+    /// Build HTML docs from markdown files in `input_dir`, writing to `output_dir`.
+    ///
+    /// Copies static assets (style.css, template.html, logo, prism.js)
+    /// and converts all .md files (including subdirectories) to HTML.
+    fn build_docs(input_dir: &std::path::Path, output_dir: &std::path::Path) -> AnyResult<()> {
+        use rmx::std::fs;
+        use rmx::tera::{Tera, Context};
+
+        fs::create_dir_all(output_dir)?;
 
         // Load template.
         let template_path = input_dir.join("template.html");
@@ -865,93 +898,84 @@ impl DocsCommand {
         let mut tera = Tera::default();
         tera.add_raw_template("page", &template_content)?;
 
-        // Copy style.css and template.html.
-        let style_src = input_dir.join("style.css");
-        let style_dst = output_dir.join("style.css");
-        fs::copy(&style_src, &style_dst)
-            .with_context(|| format!("Failed to copy style.css"))?;
-        println!("Copied style.css");
-
-        let template_dst = output_dir.join("template.html");
-        fs::copy(&template_path, &template_dst)
-            .with_context(|| format!("Failed to copy template.html"))?;
-        println!("Copied template.html");
-
-        let logo_src = input_dir.join("datalove-logo.svg");
-        let logo_dst = output_dir.join("datalove-logo.svg");
-        fs::copy(&logo_src, &logo_dst)
-            .with_context(|| format!("Failed to copy datalove-logo.svg"))?;
-        println!("Copied datalove-logo.svg");
-
-        let prism_src = input_dir.join("datalove-prism.js");
-        let prism_dst = output_dir.join("datalove-prism.js");
-        fs::copy(&prism_src, &prism_dst)
-            .with_context(|| format!("Failed to copy datalove-prism.js"))?;
-        println!("Copied datalove-prism.js");
-
-        // Process all markdown files.
-        for entry in fs::read_dir(&input_dir)? {
-            let entry = entry?;
-            let path = entry.path();
-
-            if path.extension().map(|e| e == "md").unwrap_or(false) {
-                let file_name = path.file_name().unwrap().to_string_lossy();
-
-                // Determine output filename.
-                let output_name = if file_name == "README.md" {
-                    "index.html".S()
-                } else {
-                    file_name.replace(".md", ".html")
-                };
-
-                // Read and convert markdown.
-                let markdown = fs::read_to_string(&path)?;
-
-                // Replace .md links with .html links.
-                let markdown = Self::rewrite_links(&markdown);
-
-                // Convert to HTML with GFM extensions.
-                let mut options = rmx::comrak::Options::default();
-                options.extension.table = true;
-                options.extension.strikethrough = true;
-                options.extension.autolink = true;
-                options.extension.tasklist = true;
-                options.extension.header_ids = Some("user-content-".S());
-                options.render.unsafe_ = true; // Allow raw HTML in markdown.
-                let html = rmx::comrak::markdown_to_html(&markdown, &options);
-
-                // Extract title from first heading or filename.
-                let title = Self::extract_title(&markdown, &file_name);
-
-                // Render template.
-                let mut context = Context::new();
-                context.insert("title", &title);
-                context.insert("content", &html);
-                let rendered = tera.render("page", &context)?;
-
-                // Write output.
-                let output_path = output_dir.join(&output_name);
-                fs::write(&output_path, rendered)?;
-                println!("{} -> {}", file_name, output_name);
+        // Copy static assets.
+        for asset in &["style.css", "template.html", "datalove-logo.svg", "datalove-prism.js"] {
+            let src = input_dir.join(asset);
+            if src.exists() {
+                let dst = output_dir.join(asset);
+                fs::copy(&src, &dst)
+                    .with_context(|| format!("Failed to copy {}", asset))?;
+                println!("Copied {}", asset);
             }
         }
 
-        // Generate posts feed.
-        let posts_dir = input_dir.join("posts");
-        let posts = feed::parse_posts(&posts_dir)?;
+        // Collect all markdown files, including subdirectories.
+        let mut md_files = Vec::new();
+        Self::collect_markdown_files(input_dir, input_dir, &mut md_files)?;
 
-        if !posts.is_empty() {
-            // Load posts template.
-            let posts_template_path = input_dir.join("posts-template.html");
-            let posts_template_content = fs::read_to_string(&posts_template_path)
-                .with_context(|| format!("Failed to read posts template: {}", posts_template_path.display()))?;
-            tera.add_raw_template("posts-template.html", &posts_template_content)?;
+        // Process all markdown files.
+        for (rel_path, abs_path) in &md_files {
+            let file_name = abs_path.file_name().unwrap().to_string_lossy();
 
-            feed::generate_feed_page(&posts, &tera, &output_dir)?;
-            feed::generate_rss(&posts, &output_dir, "https://datalove.dev")?;
+            // Determine output path, preserving subdirectory structure.
+            let output_rel = if file_name == "README.md" {
+                rel_path.with_file_name("index.html")
+            } else {
+                rel_path.with_extension("html")
+            };
+
+            // Ensure output subdirectory exists.
+            let output_path = output_dir.join(&output_rel);
+            if let Some(parent) = output_path.parent() {
+                fs::create_dir_all(parent)?;
+            }
+
+            // Read and convert markdown.
+            let markdown = fs::read_to_string(abs_path)?;
+            let markdown = Self::rewrite_links(&markdown);
+
+            // Convert to HTML with GFM extensions.
+            let mut options = rmx::comrak::Options::default();
+            options.extension.table = true;
+            options.extension.strikethrough = true;
+            options.extension.autolink = true;
+            options.extension.tasklist = true;
+            options.extension.header_ids = Some("user-content-".S());
+            options.render.unsafe_ = true;
+            let html = rmx::comrak::markdown_to_html(&markdown, &options);
+
+            let title = Self::extract_title(&markdown, &file_name);
+
+            let mut context = Context::new();
+            context.insert("title", &title);
+            context.insert("content", &html);
+            let rendered = tera.render("page", &context)?;
+
+            fs::write(&output_path, rendered)?;
+            println!("{} -> {}", rel_path.display(), output_rel.display());
         }
 
-        println!("Documentation generated in {}", output_dir.display());
+        Ok(())
+    }
+
+    /// Recursively collect .md files under `dir`, recording paths relative to `base`.
+    fn collect_markdown_files(
+        base: &std::path::Path,
+        dir: &std::path::Path,
+        out: &mut Vec<(PathBuf, PathBuf)>,
+    ) -> AnyResult<()> {
+        use rmx::std::fs;
+
+        for entry in fs::read_dir(dir)? {
+            let entry = entry?;
+            let path = entry.path();
+            if path.is_dir() {
+                Self::collect_markdown_files(base, &path, out)?;
+            } else if path.extension().map(|e| e == "md").unwrap_or(false) {
+                let rel = path.strip_prefix(base)?.to_path_buf();
+                out.push((rel, path));
+            }
+        }
         Ok(())
     }
 
