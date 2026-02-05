@@ -77,6 +77,7 @@ envs=(
     "-e" "TERM=${TERM:-xterm-256color}"
     "-e" "RUSTUP_HOME=/home/claude/.rustup"
     "-e" "CARGO_HOME=/home/claude/.cargo"
+    "-e" "JAVA_HOME=/usr/lib/jvm/default-java"
     "-e" "XDG_RUNTIME_DIR=/run/user/1000"
     "-e" "WAYLAND_DISPLAY=${WAYLAND_DISPLAY:-wayland-0}"
 )
@@ -99,10 +100,13 @@ ENV DEBIAN_FRONTEND=noninteractive
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl git ca-certificates build-essential clang pkg-config libssl-dev nano emacs-nox \
+    default-jdk \
     pipewire pipewire-audio-client-libraries \
     libwayland-client0 libwayland-cursor0 libwayland-egl1 libxkbcommon0 \
     mesa-vulkan-drivers libvulkan1 \
     && rm -rf /var/lib/apt/lists/*
+
+ENV JAVA_HOME=/usr/lib/jvm/default-java
 
 # Install gh CLI
 RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
@@ -169,7 +173,7 @@ exec podman run -it --rm \
     "${mounts[@]}" \
     "${envs[@]}" \
     "$IMAGE_NAME" \
-    bash -c 'export PATH="$HOME/.local/bin:$HOME/.cargo/bin:$PATH" && '"$(
+    bash -c 'export PATH="$HOME/.local/bin:$HOME/.cargo/bin:$JAVA_HOME/bin:$PATH" && '"$(
         case "$COMMAND" in
             claude) echo 'claude --dangerously-skip-permissions' ;;
             bash) echo 'exec bash' ;;
