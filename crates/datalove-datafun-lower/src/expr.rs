@@ -157,6 +157,15 @@ pub fn lower_field_proj_as_ref<'db>(
                 }
             }
         }
+        ExprFunKind::FieldProj(inner_proj) => {
+            // Nested field projection - recursively get ref to base field,
+            // then dereference it for the next GetFieldRef.
+            let base_ref = lower_field_proj_as_ref(ctx, proj.base, inner_proj)?;
+            match base_ref {
+                Operand::Value(v) => Operand::ValueRef(v),
+                other => other,
+            }
+        }
         _ => {
             // Compound expression - need to lower it to a value.
             let base_id = lower_expression(ctx, proj.base)?;

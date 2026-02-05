@@ -18,11 +18,11 @@ DualAnalysis(
                         v2 = pack Struct0 {v0, v1}
                         v3 = const "nested"
                         v4 = pack Struct0 {v2, v3}
-                        v5 = getfield v4.0
-                        v6 = getfieldref v5.0
+                        v5 = getfieldref v4.0
+                        v6 = getfieldref *v5.0
                         debuglog *v6
-                        v7 = getfield v4.0
-                        v8 = getfieldref v7.1
+                        v7 = getfieldref v4.0
+                        v8 = getfieldref *v7.1
                         debuglog *v8
                         v9 = getfieldref v4.1
                         debuglog *v9
@@ -40,11 +40,11 @@ DualAnalysis(
                         v2 = pack Struct0 {v0, v1}
                         v3 = const "nested"
                         v4 = pack Struct0 {v2, v3}
-                        v5 = getfield v4.0
-                        v6 = getfieldref v5.0
+                        v5 = getfieldref v4.0
+                        v6 = getfieldref *v5.0
                         debuglog *v6
-                        v7 = getfield v4.0
-                        v8 = getfieldref v7.1
+                        v7 = getfieldref v4.0
+                        v8 = getfieldref *v7.1
                         debuglog *v8
                         v9 = getfieldref v4.1
                         debuglog *v9
