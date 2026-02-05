@@ -100,7 +100,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl git ca-certificates build-essential clang pkg-config libssl-dev nano emacs-nox \
-    default-jdk \
+    default-jdk maven \
     pipewire pipewire-audio-client-libraries \
     libwayland-client0 libwayland-cursor0 libwayland-egl1 libxkbcommon0 \
     mesa-vulkan-drivers libvulkan1 \
