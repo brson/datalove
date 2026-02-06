@@ -4,17 +4,32 @@
 #
 # Usage: claude-sandbox.sh [--rebuild] [claude|bash]
 #
+# Container image (Ubuntu 24.04):
+#   - Build tools: gcc, clang, pkg-config, libssl-dev
+#   - JDK + Maven (default-jdk)
+#   - Editors: nano, emacs-nox
+#   - GitHub CLI (gh)
+#   - Claude Code (native binary via install.sh)
+#   - Notification chime (pw-play / paplay / terminal bell fallback)
+#
 # Security:
+#   - Runs as non-root user "claude" with host UID/GID (--userns=keep-id)
 #   - Mounts only the current directory (as /workspace)
 #   - No SSH keys (intentionally excluded)
+#   - Custom seccomp profile (claude-sandbox-seccomp.json), allows io_uring
+#   - SELinux labels disabled (--security-opt label=disable)
 #
-# Passthrough:
-#   - Git config (~/.gitconfig, ~/.gitignore)
-#   - Claude config/auth (~/.claude, ~/.claude.json)
-#   - Rust toolchain (~/.rustup, ~/.cargo)
-#   - GPU access (/dev/dri for AMD/Intel)
-#   - Wayland display (for GUI apps)
-#   - PipeWire audio (for notification chimes)
+# Resource limits:
+#   - 4 CPUs, cpu-shares=512, 8 GB memory
+#
+# Passthrough (from host, when available):
+#   - Git config (~/.gitconfig, ~/.gitignore) - read-only
+#   - Claude config/auth (~/.claude, ~/.claude.json) - read-write
+#   - Claude settings overridden with claude-sandbox-settings.json (hooks for chime)
+#   - Rust toolchain (~/.rustup, ~/.cargo) - cargo config.toml masked with /dev/null
+#   - GPU access (/dev/dri, video group, Vulkan/Mesa drivers)
+#   - Wayland display socket
+#   - PipeWire audio socket
 
 set -euo pipefail
 
