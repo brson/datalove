@@ -188,6 +188,7 @@ but I do have a [vision](vision.md) about what it will be.
 <div class="toc toc2">
 
 - [Lexical Structure](lexer.md)
+- [Types, Literals, and Destructuring](types-lits-destr.md)
 - [Modules, Functions and Scripts](modules-functions-scripts.md)
 - [Control Flow](control-flow.md)
 - [Operators](operators.md)
