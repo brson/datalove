@@ -92,14 +92,14 @@ let a: Bunny = atom Foo
 
 var b: int = 0
 match a
-  case atom Foo
-    b = 2
-    // no fallthrough
-  case tag Bar c
-    b = 3
+case atom Foo
+  b = 2
+  // no fallthrough
+case tag Bar c
+  b = 3
   // binds a single variable to the contained value
-  case tag Baz d
-    b = 4
+case tag Baz d
+  b = 4
 end match
 ```
 
@@ -112,17 +112,14 @@ use `case default` for catch-all.
 
 ```datalove
 match a
-  case atom Foo
-    // no fallthrough
-  case tag Bar c
-    // no fallthrough
-  case default
-    // no fallthrough
+case atom Foo
+  // no fallthrough
+case tag Bar c
+  // no fallthrough
+case default
+  // no fallthrough
 end match
 ```
-
-Match and other types:
-atom, tag, option, result? todo
 
 
 
