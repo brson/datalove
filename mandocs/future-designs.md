@@ -30,20 +30,21 @@ var c = atom Foo;
 set c = atom Bar;  // XXX error
 ```
 
-Tags are like atoms but carry a typed value.
+Tags are like atoms but carry a typed value,
+parsed as primary expression (no binops).
 
 ```datalove
 // Anonymous tag
-let a = tag Foo (1)
+let a = tag Foo 1
 
-// The name is followed by a single expr
-let a = tag Foo (1)    // tuple
-let a = tag Foo 1      // etc
-var b = tag Bar set { 1 }
+// The name is followed by a single primary expr
+let a = tag Foo (1,)    // tuple
+let a = tag Bar 1       // etc
+let b = tag Baz set { 1 }
 
 // The name and type must match.
-var c = tag Bar [1]
-set c = tag Bar [1, 2]
+var c = tag What [1]
+set c = tag What [1, 2]
 ```
 
 With type hint.
@@ -94,16 +95,34 @@ match a
   case atom Foo
     b = 2
     // no fallthrough
-  case tag Bar b
+  case tag Bar c
     b = 3
   // binds a single variable to the contained value
-  case tag Baz c
+  case tag Baz d
     b = 4
 end match
 ```
 
 There is no deep destructuring,
 just the single binding.
+Matches move out of their input.
+
+Match must be exhaustive,
+use `case default` for catch-all.
+
+```datalove
+match a
+  case atom Foo
+    // no fallthrough
+  case tag Bar c
+    // no fallthrough
+  case default
+    // no fallthrough
+end match
+```
+
+Match and other types:
+atom, tag, option, result? todo
 
 
 
