@@ -70,7 +70,7 @@ let a: MyEnum = enum { atom Foo }
 
 // Can just coerce
 let b: MyEnum = atom Foo@
-let c: MyEnum = (tag Bar 1)@
+let c: MyEnum = tag Bar 1@
 ```
 
 Only `atom` and `tag` types are allowed in enums.
