@@ -31,10 +31,10 @@
 
 ## In progress
 
-- inlining
+- fix primary expression parsing
+- enums and match
 - human docs
 - const args
-
 
 
 
@@ -57,6 +57,7 @@
 
 ## Backlog
 
+- inline/jit tuning
 - tree-sitter
 - 128-bit ints
 - remove data / error keywords - rely on ~ coercion?

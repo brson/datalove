@@ -3,50 +3,92 @@
 
 
 
-## 2026/01/22 - Atoms and enums
+## 2026/01/22 - Atoms, tags, enums, and match
 
-The design of enums is intertwined with the design of named types.
-
-Datalove is mostly structurally typed,
-with a single mechanism to introduce a named version of
-any structural type.
-
-Enum variants are also named types,
-so we treat them as the primary mechanism of naming,
-with enums summing named types.
+Datalove is structurally typed.
+_Atoms_ and _tags_ introduce types with a name component,
+and _enums_ sum them together.
 
 ```datalove
 // Anonymous atom
-let a = atom Foo (1)
+let a = atom Foo
 
-// The name is followed by a single expr
-let a = atom Foo (1)    // tuple
-let a = atom Foo 1      // etc
-var b = atom Bar set { 1 }
-
-// For anonymous enums the name must match
-// for compatibility but the names still don't have
-// (identity?) - any two names match.
-set b = atom Bar set { 2 }
-
-// Named atom
-atom Foo: int
-
-// Anonymous atom coerces to named atom
-let c: Foo = atom Foo 1
+let b: atom Foo = atom Foo;
 ```
 
-Anonymous enums
+Two atoms with the same name are type-compatible.
 
 ```datalove
-let a = atom Foo 1
-
-let b: enum Bunny {
-  Foo: int,
-} = a
+var c = atom Foo;
+set c = atom Foo;
 ```
 
-todo
+Two atoms with different names are not type-compatible.
+
+```datalove
+var c = atom Foo;
+set c = atom Bar;  // XXX error
+```
+
+Tags are like atoms but carry a typed value.
+
+```datalove
+// Anonymous tag
+let a = tag Foo (1)
+
+// The name is followed by a single expr
+let a = tag Foo (1)    // tuple
+let a = tag Foo 1      // etc
+var b = tag Bar set { 1 }
+
+// The name and type must match.
+var c = tag Bar [1]
+set c = tag Bar [1, 2]
+```
+
+With type hint.
+
+```datalove
+let d: tag Foo int = tag Foo 1
+```
+
+
+
+
+Anonymous enums are sets of types,
+either atoms or tags.
+
+```datalove
+type MyEnum: enum {
+  atom Foo,
+  tag Bar int,
+  tag Baz (f32, f32),
+};
+
+// The full enum literal form
+let a: MyEnum = enum { atom Foo }
+
+// Can just coerce
+let b: MyEnum = atom Foo@
+let c: MyEnum = (tag Bar 1)@
+```
+
+Only `atom` and `tag` types are allowed in enums.
+
+Note the "full enum literal form" does not synthesize
+a type; it must be in checking context.
+
+Enums can be destructured in `match` statements.
+
+```datalove
+type Bunny: enum {
+  atom Foo,
+  tag Bar int,
+  tag Baz (f32, f32),
+};
+
+let a = enum { 
+```
 
 
 
