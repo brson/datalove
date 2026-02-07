@@ -158,6 +158,21 @@ fn test_anon_struct() {
 // Note: Skipping set test - {1, 2, 3} syntax not supported (datalit uses `set {...}`)
 // Note: Skipping option_none test - `: type / value` syntax not supported by datafun parser
 
+#[test]
+fn test_1_tuple() {
+    let db = datalove_datafun_compiler::Database::default();
+    test_parse_equiv(&db, "(42,)").unwrap();
+    test_typecheck_equiv(&db, "(42,)").unwrap();
+}
+
+#[test]
+fn test_parens_grouping() {
+    let db = datalove_datafun_compiler::Database::default();
+    // (42) is grouping, not a tuple - both parsers should produce the same result.
+    test_parse_equiv(&db, "(42)").unwrap();
+    test_typecheck_equiv(&db, "(42)").unwrap();
+}
+
 // ============================================================================
 // Keyword payload tests (primary expression parsing)
 // ============================================================================

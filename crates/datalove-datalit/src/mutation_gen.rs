@@ -414,8 +414,10 @@ fn apply_arity_mismatch<'db>(
             let mut type_str = String::new();
             pretty_type_hint(db, type_hint, &mut type_str);
 
-            // Build tuple with fewer elements: `: type / @(elem1, elem2)`
-            let source = format!(": {} / {}({})", type_str, "", elem_strs.join(", "));
+            // Build tuple with fewer elements: `: type / (elem1, elem2)`
+            // Trailing comma for 1-tuples to distinguish from grouping parens.
+            let trailing = if elem_strs.len() == 1 { "," } else { "" };
+            let source = format!(": {} / ({}{})", type_str, elem_strs.join(", "), trailing);
 
             Some(MutationResult {
                 source,
@@ -804,6 +806,9 @@ fn pretty_type_hint<'db>(
                     out.push_str(", ");
                 }
                 pretty_type_hint(db, field.clone(), out);
+            }
+            if t.fields.len() == 1 {
+                out.push(',');
             }
             out.push(')');
         }

@@ -139,6 +139,36 @@ pub trait TokenStreamExt<'db>: TokenStream<'db> {
         }
         items
     }
+
+    /// Parse comma-separated items, reporting whether any comma was seen.
+    ///
+    /// Returns `(items, had_comma)` where `had_comma` is true if at least
+    /// one comma was consumed. This distinguishes `(x)` from `(x,)`.
+    fn parse_comma_separated_with_trailing<T>(
+        &mut self,
+        mut parse_item: impl FnMut(&mut Self) -> T,
+    ) -> (Vec<T>, bool)
+    where
+        Self: Sized,
+    {
+        let mut items = vec![];
+        let mut had_comma = false;
+        if self.peek().is_none() {
+            return (items, had_comma);
+        }
+        loop {
+            items.push(parse_item(self));
+            if !self.eat_sigil(Sigil::Comma) {
+                break;
+            }
+            had_comma = true;
+            // Handle trailing comma.
+            if self.peek().is_none() {
+                break;
+            }
+        }
+        (items, had_comma)
+    }
 }
 
 // Blanket implementation.

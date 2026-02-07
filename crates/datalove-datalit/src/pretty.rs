@@ -136,6 +136,9 @@ fn pretty_type<'db>(
                 }
                 pretty_type(db, field, out);
             }
+            if fields.len() == 1 {
+                out.push(',');
+            }
             out.push(')');
         }
 
@@ -274,6 +277,9 @@ fn pretty_type_hint<'db>(
                     out.push_str(", ");
                 }
                 pretty_type_hint(db, field.clone(), out);
+            }
+            if fields.len() == 1 {
+                out.push(',');
             }
             out.push(')');
         }
@@ -420,6 +426,10 @@ fn pretty_expr<'db>(
                     out.push_str(", ");
                 }
                 pretty_expr_full(db, *elem, out, indent);
+            }
+            // Trailing comma for 1-tuples to distinguish from grouping parens.
+            if elements.len() == 1 {
+                out.push(',');
             }
             out.push(')');
         }

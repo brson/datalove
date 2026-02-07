@@ -395,17 +395,22 @@ impl<'db> Parser<'db> {
                 }
             }
             Some(TreeToken::Branch { sigil: Sigil::ParenOpen, .. }) => {
-                // Tuple.
+                // Parenthesized expression: tuple or grouping.
                 let inner = match self.next() {
                     Some(TreeToken::Branch { inner, .. }) => inner,
                     _ => unreachable!(),
                 };
                 let mut sub_parser = Parser::from_branch(self.db, inner, self.source_text());
-                let elements = sub_parser.parse_comma_separated(|p| p.parse_expr_full());
+                let (elements, had_comma) = sub_parser.parse_comma_separated_with_trailing(|p| p.parse_expr_full());
                 sub_parser.error_if_not_exhausted();
                 // Merge spans from sub-parser.
                 self.expr_spans.extend(sub_parser.expr_spans);
-                ast::Expr::AnonTuple(ast::ExprAnonTuple { elements })
+                // Single element without comma is grouping parens, not a 1-tuple.
+                if elements.len() == 1 && !had_comma {
+                    elements.into_iter().next().unwrap().expr(self.db).clone()
+                } else {
+                    ast::Expr::AnonTuple(ast::ExprAnonTuple { elements })
+                }
             }
             Some(TreeToken::Branch { sigil: Sigil::BraceOpen, .. }) => {
                 // Struct.

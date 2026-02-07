@@ -515,12 +515,12 @@ impl<'db> Parser<'db> {
         };
 
         let mut sub = self.sub_parser(iter, Some((open_span, "in this tuple")));
-        let elements = sub.parse_comma_separated(|p| p.parse_expr_full());
+        let (elements, had_comma) = sub.parse_comma_separated_with_trailing(|p| p.parse_expr_full());
         sub.error_if_not_exhausted();
         self.merge_from_sub(&mut sub);
 
-        // If there's exactly one element, treat as grouping (not tuple).
-        if elements.len() == 1 {
+        // Single element without comma is grouping parens, not a 1-tuple.
+        if elements.len() == 1 && !had_comma {
             elements.into_iter().next().unwrap()
         } else {
             ast::ExprFun::new(
