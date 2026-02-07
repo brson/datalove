@@ -7,6 +7,7 @@ Analysis(
                 status: "Error",
                 errors: [
                     "TypeMismatch { expected: \"u32\", actual: \"int\" }",
+                    "TypeMismatch { expected: \"!int\", actual: \"!u32\" }",
                 ],
             ),
             ownership: OwnershipResult(

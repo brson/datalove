@@ -159,6 +159,94 @@ fn test_anon_struct() {
 // Note: Skipping option_none test - `: type / value` syntax not supported by datafun parser
 
 // ============================================================================
+// Keyword payload tests (primary expression parsing)
+// ============================================================================
+
+#[test]
+fn test_some_integer() {
+    let db = datalove_datafun_compiler::Database::default();
+    test_parse_equiv(&db, "some 42").unwrap();
+    test_typecheck_equiv(&db, "some 42").unwrap();
+}
+
+#[test]
+fn test_some_tuple() {
+    let db = datalove_datafun_compiler::Database::default();
+    test_parse_equiv(&db, "some(1, 2)").unwrap();
+    test_typecheck_equiv(&db, "some(1, 2)").unwrap();
+}
+
+#[test]
+fn test_some_list() {
+    let db = datalove_datafun_compiler::Database::default();
+    test_parse_equiv(&db, "some [1, 2]").unwrap();
+    test_typecheck_equiv(&db, "some [1, 2]").unwrap();
+}
+
+#[test]
+fn test_ok_integer() {
+    let db = datalove_datafun_compiler::Database::default();
+    test_parse_equiv(&db, "ok 42").unwrap();
+    test_typecheck_equiv(&db, "ok 42").unwrap();
+}
+
+#[test]
+fn test_ok_string() {
+    let db = datalove_datafun_compiler::Database::default();
+    test_parse_equiv(&db, r#"ok "hello""#).unwrap();
+    test_typecheck_equiv(&db, r#"ok "hello""#).unwrap();
+}
+
+#[test]
+fn test_er_primary() {
+    let db = datalove_datafun_compiler::Database::default();
+    test_parse_equiv(&db, "er 42").unwrap();
+    test_typecheck_equiv(&db, "er 42").unwrap();
+}
+
+#[test]
+fn test_er_error() {
+    let db = datalove_datafun_compiler::Database::default();
+    test_parse_equiv(&db, r#"er error "msg""#).unwrap();
+    test_typecheck_equiv(&db, r#"er error "msg""#).unwrap();
+}
+
+#[test]
+fn test_data_integer() {
+    let db = datalove_datafun_compiler::Database::default();
+    test_parse_equiv(&db, "data 42").unwrap();
+    test_typecheck_equiv(&db, "data 42").unwrap();
+}
+
+#[test]
+fn test_data_string() {
+    let db = datalove_datafun_compiler::Database::default();
+    test_parse_equiv(&db, r#"data "hello""#).unwrap();
+    test_typecheck_equiv(&db, r#"data "hello""#).unwrap();
+}
+
+#[test]
+fn test_data_list() {
+    let db = datalove_datafun_compiler::Database::default();
+    test_parse_equiv(&db, "data [1, 2]").unwrap();
+    test_typecheck_equiv(&db, "data [1, 2]").unwrap();
+}
+
+#[test]
+fn test_error_string() {
+    let db = datalove_datafun_compiler::Database::default();
+    test_parse_equiv(&db, r#"error "msg""#).unwrap();
+    test_typecheck_equiv(&db, r#"error "msg""#).unwrap();
+}
+
+#[test]
+fn test_none() {
+    let db = datalove_datafun_compiler::Database::default();
+    test_parse_equiv(&db, "none").unwrap();
+    test_typecheck_equiv(&db, "none").unwrap();
+}
+
+// ============================================================================
 // AST-generated tests
 // ============================================================================
 

@@ -207,7 +207,7 @@ enum Some(42)            // variant with payload
 
 ```
 ?T                       // type: value or none
-some expr                // wrap value
+some primary             // wrap value
 none                     // absent value
 ```
 
@@ -215,9 +215,21 @@ none                     // absent value
 
 ```
 !T                       // type: value or error
-ok expr                  // wrap success value
-er expr                  // wrap error value
+ok primary               // wrap success value
+er primary               // wrap error value
 error "message"          // error literal
+```
+
+The `some`, `ok`, `er`, `data`, and `error` keywords take a *primary* expression
+as their payload: a literal, variable, function call, or parenthesized expression.
+Binary operator expressions require parentheses:
+
+```
+some 42                  // ok: literal is primary
+some(a +? b)             // ok: parenthesized expression
+ok result                // ok: variable is primary
+ok(x +! y)              // ok: parenthesized expression
+er(error "msg")          // ok: parenthesized expression
 ```
 
 ### 3.5 Data Type
@@ -227,8 +239,17 @@ The `data` type is a universal container that can hold any value:
 ```
 data 42
 data : int / 100
+data(a + b)              // parenthesized for binop payload
 ```
 
+The `error` type is an existential error value:
+
+```
+error "message"
+error(some_expr)         // parenthesized for non-primary payload
+```
+
+Both `data` and `error` take a primary expression as their payload (see Section 3.4).
 Any type coerces to `data`.
 
 ### 3.6 Type Aliases

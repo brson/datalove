@@ -2,10 +2,10 @@
 scriptunit-fragment
 ----------
 
-// Test that `er` parses the full expression without parens.
-// `ret er error a + b` should parse as `ret (er (error (a + b)))`.
+// Test that `er` parses a primary expression as its payload.
+// `ret er(error(a + b))` should parse as `ret (er (error (a + b)))`.
 fun test_er(a: int, b: int): !int
-    ret er error a + b
+    ret er(error(a + b))
 end fun
 
 let output = test_er(5, 3)

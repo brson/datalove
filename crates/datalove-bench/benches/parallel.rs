@@ -100,7 +100,7 @@ fn generate_module_source(module_idx: usize, num_functions: usize) -> String {
                 source.push_str("  let y = x$ * :int/@3\n");
                 source.push_str("  let z = y$ + :int/@100\n");
                 source.push_str("  if z .> :int/@500\n");
-                source.push_str("    ret some z - :int/@200\n");
+                source.push_str("    ret some(z - :int/@200)\n");
                 source.push_str("  else\n");
                 source.push_str("    ret some z\n");
                 source.push_str("  end if\n");

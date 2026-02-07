@@ -1,11 +1,14 @@
 # Primary vs Full Expression Parsing for Keyword Payloads
 
+**Status: Implemented.** The expr.rs path was switched to `parse_expr_primary`,
+matching literal.rs. Test fixtures updated to parenthesize binop payloads.
+
 ## Summary
 
 Several keywords (`some`, `ok`, `er`, `data`, `error`)
 consume a payload expression.
-There are two code paths that parse these keywords,
-and they already disagree on whether the payload
+There were two code paths that parsed these keywords,
+and they disagreed on whether the payload
 is a primary expression or a full expression.
 
 This matters for the planned `atom`/`tag`/enum design,
@@ -40,15 +43,15 @@ Postfix operators bind to whatever `parse_expr_primary` returned.
 
 In `parse_expr_primary` (expr.rs:306-330), the main expression path:
 
-- `some`, `ok`, `er` call `parse_expr_full()` (line 310)
-- `data`, `error` call `parse_expr_full()` (line 323)
+- `some`, `ok`, `er` call `parse_expr_primary()` (line 310)
+- `data`, `error` call `parse_expr_primary()` (line 323)
 
 In `parse_lit_expr` (literal.rs:120-146), the `: type / expr` path:
 
 - `some`, `ok`, `er` call `parse_expr_primary()` (lines 122, 127, 132)
 - `data`, `error` call `parse_expr_primary()` (lines 138, 144)
 
-The literal path already uses primary-only parsing.
+Both paths now use primary-only parsing.
 
 ## Which keywords are affected
 
@@ -72,7 +75,7 @@ Future `tag` (bare payload) would be affected.
 
 ## Behavioral difference
 
-With `parse_expr_full` (current expr.rs path):
+With `parse_expr_full` (old expr.rs path):
 
 ```
 some x + 1      ->  some(x + 1)       payload includes binop
@@ -81,7 +84,7 @@ ok a +! b       ->  ok(a +! b)
 tag Bar 1@      ->  tag Bar (1@)      @ on the integer, not the tag
 ```
 
-With `parse_expr_primary` (current literal.rs path):
+With `parse_expr_primary` (current behavior in both paths):
 
 ```
 some x + 1      ->  (some x) + 1      binop escapes
@@ -110,10 +113,10 @@ The main case that changes is `some x@` / `ok x@`
 (widen-then-wrap), which would need to become `some(x@)` / `ok(x@)`.
 This is a niche pattern.
 
-## Recommendation
+## Resolution
 
-Reconcile the two paths by switching expr.rs to `parse_expr_primary`,
+The two paths were reconciled by switching expr.rs to `parse_expr_primary`,
 matching what literal.rs already does.
-This is a one-line change per keyword in `parse_expr_primary`.
+This was a one-line change per keyword group in `parse_expr_primary`.
 It makes `tag Bar 1@` work naturally for enum coercion
-and resolves the existing inconsistency between the two code paths.
+and resolves the inconsistency between the two code paths.

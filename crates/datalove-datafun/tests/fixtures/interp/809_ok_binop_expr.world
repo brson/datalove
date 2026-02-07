@@ -2,10 +2,10 @@
 scriptunit-fragment
 ----------
 
-// Test that `ok` parses the full binop expression without parens.
-// `ret ok a +! b` should parse as `ret (ok (a +! b))`.
+// Test that `ok` parses a primary expression as its payload.
+// `ret ok(a +! b)` should parse as `ret (ok (a +! b))`.
 fun test_add(a: u32, b: u32): !u32
-    ret ok a +! b
+    ret ok(a +! b)
 end fun
 
 let output = test_add(5, 3)

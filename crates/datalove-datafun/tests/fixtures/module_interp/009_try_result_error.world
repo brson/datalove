@@ -16,5 +16,5 @@ fun main(): !u32
     let result: !u32 = might_fail()
     let x: u32 = result!
     // Won't reach here.
-    ret ok x + 1u32
+    ret ok(x + 1u32)
 end fun

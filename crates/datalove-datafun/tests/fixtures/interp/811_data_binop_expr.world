@@ -2,10 +2,10 @@
 scriptunit-fragment
 ----------
 
-// Test that `data` parses the full binop expression without parens.
-// `let x: data = data a + b` should parse as `let x: data = data (a + b)`.
+// Test that `data` parses a primary expression as its payload.
+// `ret data(a + b)` should parse as `ret (data (a + b))`.
 fun get_data(a: int, b: int): data
-    ret data a + b
+    ret data(a + b)
 end fun
 
 let output = get_data(5, 3)

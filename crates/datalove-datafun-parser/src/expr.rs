@@ -307,7 +307,7 @@ impl<'db> Parser<'db> {
                                     // Capture span before parsing for diagnostic reporting.
                                     let ts = self.peek_text_span();
                                     self.next(); // consume the keyword
-                                    let payload = self.parse_expr_full();
+                                    let payload = self.parse_expr_primary();
                                     let expr_kind = match word {
                                         "some" => ast::ExprFunKind::Some(ast::ExprSome { type_hint: None, payload }),
                                         "ok" => ast::ExprFunKind::Ok(ast::ExprOk { type_hint: None, payload }),
@@ -320,7 +320,7 @@ impl<'db> Parser<'db> {
                                 "data" | "error" => {
                                     let ts = self.peek_text_span();
                                     self.next(); // consume the keyword
-                                    let value = self.parse_expr_full();
+                                    let value = self.parse_expr_primary();
                                     let expr_kind = match word {
                                         "data" => ast::ExprFunKind::Data(ast::ExprData { type_hint: None, value }),
                                         "error" => ast::ExprFunKind::Error(ast::ExprError { type_hint: None, value }),
