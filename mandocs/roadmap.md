@@ -31,7 +31,6 @@
 
 ## In progress
 
-- fix primary expression parsing
 - enums and match
 - human docs
 - const args
