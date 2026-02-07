@@ -87,8 +87,23 @@ type Bunny: enum {
   tag Baz (f32, f32),
 };
 
-let a = enum { 
+let a: Bunny = atom Foo
+
+var b: int = 0
+match a
+  case atom Foo
+    b = 2
+    // no fallthrough
+  case tag Bar b
+    b = 3
+  // binds a single variable to the contained value
+  case tag Baz c
+    b = 4
+end match
 ```
+
+There is no deep destructuring,
+just the single binding.
 
 
 
