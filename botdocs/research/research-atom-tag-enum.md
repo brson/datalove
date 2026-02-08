@@ -1,6 +1,6 @@
-# Atom / Tag / Enum Design: PL Landscape
+# Atom / Term / Enum Design: PL Landscape
 
-Research on precedents for Datalove's planned atom/tag/enum/match design.
+Research on precedents for Datalove's planned atom/term/enum/match design.
 
 ## The Datalove Design
 
@@ -8,14 +8,14 @@ Three type formers:
 
 - **atom**: named unit type, no payload. `atom Foo` is both value and type.
   Two atoms match by name (structural).
-- **tag**: named wrapper with typed payload. `tag Foo 1` has type `tag Foo int`.
-  Two tags match by name + payload type (structural).
-- **enum**: closed union of atoms and tags.
-  `enum { atom Foo, tag Bar int }` sums them.
+- **term**: named wrapper with typed payload. `term Foo 1` has type `term Foo int`.
+  Two terms match by name + payload type (structural).
+- **enum**: closed union of atoms and terms.
+  `enum { atom Foo, term Bar int }` sums them.
 
-Atoms and tags exist as standalone types.
+Atoms and terms exist as standalone types.
 Enums collect them.
-The `@` operator widens an atom or tag into an enum type.
+The `@` operator widens an atom or term into an enum type.
 `match` destructures enums.
 
 ## 1. Atoms: Precedents
@@ -62,9 +62,9 @@ Datalove atoms are more disciplined than Erlang atoms:
 they participate in a static type system
 and can only appear in enum positions (not as arbitrary values everywhere).
 
-## 2. Tags: Precedents
+## 2. Terms: Precedents
 
-A "tag" is a named constructor carrying a typed payload,
+A "term" is a named constructor carrying a typed payload,
 where the constructor itself is a type.
 
 **OCaml polymorphic variants** --- closest precedent.
@@ -73,7 +73,7 @@ The variant exists independently of any type declaration.
 Structurally typed, open (row-polymorphic).
 Can be combined into unions: `` [`Foo of int | `Bar] ``.
 
-Key differences from Datalove tags:
+Key differences from Datalove terms:
 - OCaml polymorphic variants are open (row variables);
   Datalove enums are closed.
 - OCaml uses backtick syntax, no keyword.
@@ -102,15 +102,15 @@ Uses row polymorphism.
 `Variant (foo :: Int, bar :: String)` gives open tagged unions
 where each label+type is a "tag" in the row.
 
-### Where Datalove's tags sit
+### Where Datalove's terms sit
 
 Most similar to OCaml polymorphic variants
 but with closed rather than open union semantics.
-The `tag` keyword makes the construction explicit
+The `term` keyword makes the construction explicit
 (OCaml uses backtick which is easy to miss).
 
-The key design choice: tags are types, not just constructors.
-`tag Foo int` is a type you can annotate variables with,
+The key design choice: terms are types, not just constructors.
+`term Foo int` is a type you can annotate variables with,
 pass as a type argument, etc.
 This is shared with OCaml polymorphic variants and TypeScript object types,
 but not with Haskell/Rust/OCaml regular variants.
@@ -166,7 +166,7 @@ rather than the nominal/ADT tradition
 The `enum` keyword then acts as a closed union operator,
 like TypeScript's `|` but with exhaustiveness checking.
 
-## 4. Two Kinds of Variant: Atom vs Tag
+## 4. Two Kinds of Variant: Atom vs Term
 
 This is the most unusual aspect of the design.
 
@@ -177,13 +177,13 @@ Foo is nullary, Bar is unary. Same syntax, same concept.
 **Rust** is the closest precedent for distinct variant forms.
 Three syntactic forms: unit (`Foo`), tuple (`Bar(i32)`), struct (`Baz { x: i32 }`).
 But all are "variants" conceptually; the distinction is about payload shape,
-not about a fundamental atom-vs-tag divide.
+not about a fundamental atom-vs-term divide.
 
 **Erlang convention.**
 Bare atoms (`ok`, `error`) vs tagged tuples (`{ok, Value}`).
 Two fundamentally different data shapes used in the same union context.
 This is the cultural precedent ---
-Datalove's atom/tag distinction formalizes what Erlang does by convention.
+Datalove's atom/term distinction formalizes what Erlang does by convention.
 
 **Type theory.**
 Sum types use injections: `inl: A -> A + B`, `inr: B -> A + B`.
@@ -207,18 +207,18 @@ Most languages treat unit variants as a special case of data variants.
 The strongest precedent is Erlang's atom-vs-tagged-tuple idiom,
 which Datalove makes explicit and type-checked.
 
-The practical benefit: `atom Foo` is visually distinct from `tag Bar int`,
+The practical benefit: `atom Foo` is visually distinct from `term Bar int`,
 making it immediately clear whether a variant carries data.
 The cost: two keywords and two concepts where most languages have one.
 
-Note that `atom Foo` is NOT equivalent to `tag Foo ()`.
-An atom has no payload at all; a tag always has exactly one.
+Note that `atom Foo` is NOT equivalent to `term Foo ()`.
+An atom has no payload at all; a term always has exactly one.
 This is a meaningful distinction in a language with move semantics,
 even though type theory would normally equate them.
 
 ## 5. The `@` Coercion Operator
 
-Widening from atom/tag to enum: `atom Foo@` or `tag Bar 1@`.
+Widening from atom/term to enum: `atom Foo@` or `term Bar 1@`.
 
 **TypeScript** does implicit widening (assignability).
 `const x: string | number = "hello"` just works.
@@ -235,7 +235,7 @@ uses an explicit operator for variant-to-union widening.
 The rationale (from report-expr-primary.md):
 explicit coercion keeps the type system simpler
 and interacts well with primary-expression parsing
-(`tag Bar 1@` parses as `(tag Bar 1)@`).
+(`term Bar 1@` parses as `(term Bar 1)@`).
 
 ## 6. Connection to GADTs and Const Specialization
 
@@ -248,9 +248,9 @@ enum Expr<const TAG: TypeTag>
 end enum
 ```
 
-The atom/tag/enum design provides a clean foundation here.
+The atom/term/enum design provides a clean foundation here.
 In a GADT world, the variants of a const-indexed enum
-are still atoms and tags, but with where-clause constraints.
+are still atoms and terms, but with where-clause constraints.
 The `match` statement already refines by variant;
 adding const-index refinement is an orthogonal extension.
 
@@ -265,9 +265,9 @@ the user-facing `enum` type and the compilation strategy.
 | Concept | Closest Precedents | Novelty |
 |---------|-------------------|---------|
 | `atom` as type | Elixir set-theoretic atoms, TypeScript literal types | Low --- well-established |
-| `tag` as type | OCaml polymorphic variants | Low-medium --- variants-as-types is known |
+| `term` as type | OCaml polymorphic variants | Low-medium --- variants-as-types is known |
 | `enum` as closed union of variants-that-are-types | TypeScript discriminated unions, OCaml polyvar unions | Low --- standard union type |
-| Two syntactic variant forms (atom vs tag) | Erlang convention (formalized), Rust 3-form variants | Medium-high --- unusual |
+| Two syntactic variant forms (atom vs term) | Erlang convention (formalized), Rust 3-form variants | Medium-high --- unusual |
 | Explicit `@` coercion | None found | High --- distinctive |
 | Closed (not open/row-polymorphic) variants-as-types | Ceylon, Elixir | Medium --- most variants-as-types systems are open |
 
@@ -276,7 +276,7 @@ The overall design is a synthesis of:
 - OCaml polymorphic variants (but closed, not open)
 - TypeScript discriminated unions (but with dedicated syntax)
 
-The most unusual aspects are the explicit atom/tag distinction
+The most unusual aspects are the explicit atom/term distinction
 and the `@` coercion operator. These are defensible design choices
 that trade some familiarity for clarity and parsing simplicity.
 

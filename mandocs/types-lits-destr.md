@@ -84,8 +84,8 @@ let a: tensor<T, N> = tensor [2, 3] [
 | `?T`                          | `some 1` <br> `none`             | `some a` <br> `none` † |
 | `!T`                          | `ok 1` <br> `er 2`               | `ok a` <br> `er b` † |
 | `atom Foo`                    | `atom Foo`                    | `let atom Foo`                |
-| `tag Foo T`                   | `tag Foo 1`                   | `let tag Foo a`               |
-| `enum { atom A, tag B T }`    | `enum { atom A }`             | †                             |
+| `term Foo T`                   | `term Foo 1`                   | `let term Foo a`               |
+| `enum { atom A, term B T }`    | `enum { atom A }`             | †                             |
 | `data`                        | `data 1` <br> `data : u32 / 2`   | n/a                             |
 | `error`                       | `error 1` <br> `error : u32 / 2` | n/a                             |
 
@@ -107,22 +107,22 @@ let o: ?int = some 1
 // Result
 let r: !int = ok 1
 
-// Atoms and tags
+// Atoms and terms
 let a: atom Foo = atom Foo
-let t: tag Bar int = tag Bar 1
+let t: term Bar int = term Bar 1
 let atom Foo = a
-let tag Bar x = t
+let term Bar x = t
 
 // Enums
 type Shape: enum {
   atom Circle,
-  tag Rect (f32, f32),
+  term Rect (f32, f32),
 }
 
 let s: Shape = enum { atom Circle }
-let s: Shape = enum { tag Rect (1.0, 2.0) }
+let s: Shape = enum { term Rect (1.0, 2.0) }
 let s: Shape = atom Circle@
-let s: Shape = tag Rect (1.0, 2.0)@
+let s: Shape = term Rect (1.0, 2.0)@
 
 // Data and error
 let d: data = data 42
@@ -158,20 +158,20 @@ Enums with `match`.
 ```datalove
 type Shape: enum {
   atom Circle,
-  tag Rect (f32, f32),
-  tag Tri (f32, f32, f32),
+  term Rect (f32, f32),
+  term Tri (f32, f32, f32),
 }
 
-let s: Shape = tag Rect (3.0, 4.0)@
+let s: Shape = term Rect (3.0, 4.0)@
 
 var area: f64 = 0.0
 match s
 case atom Circle
   area = 0.0
-case tag Rect dims
+case term Rect dims
   // dims: (f32, f32), the whole payload bound to one name
   area = 0.0
-case tag Tri sides
+case term Tri sides
   // sides: (f32, f32, f32)
   area = 0.0
 end match

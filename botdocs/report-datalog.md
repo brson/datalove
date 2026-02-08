@@ -1,6 +1,6 @@
-# Datalog-Style Programming with Atoms, Tags, and Enums
+# Datalog-Style Programming with Atoms, Terms, and Enums
 
-Atoms, tags, enums, and sets together form a natural basis
+Atoms, terms, enums, and sets together form a natural basis
 for relational and logic-oriented programming in datalove.
 This document explores the patterns that emerge,
 with a focus on ground Datalog --
@@ -12,7 +12,7 @@ no backtracking or unification.
 
 A recurring pattern across many use cases:
 
-1. Define a domain as an enum of atoms and tags.
+1. Define a domain as an enum of atoms and terms.
 2. Represent knowledge/state as a set of enum values.
 3. Write inference rules as pure functions `set -> set` that grow the set.
 4. Iterate to a fixed point.
@@ -61,20 +61,20 @@ end fun
 Propositional Datalog: monotone set growth to a fixed point.
 
 
-## Pattern: Relational Programming with Tagged Tuples
+## Pattern: Relational Programming with Terms
 
-Tags carry data. A set of tags is a relation.
+Terms carry data. A set of terms is a relation.
 
 ```datalove
 type Fact: enum {
-  tag Parent (string, string),
-  tag Ancestor (string, string),
+  term Parent (string, string),
+  term Ancestor (string, string),
 }
 
 let db: set { Fact } = set {
-  tag Parent ("alice", "bob")@,
-  tag Parent ("alice", "carol")@,
-  tag Parent ("bob", "dave")@,
+  term Parent ("alice", "bob")@,
+  term Parent ("alice", "carol")@,
+  term Parent ("bob", "dave")@,
 }
 
 // Rules:
@@ -86,8 +86,8 @@ fun derive(facts: set { Fact }): set { Fact }
   // Direct: every parent is an ancestor.
   for fact in facts
     match fact
-    case tag Parent pair
-      set result = insert(result, tag Ancestor pair@)
+    case term Parent pair
+      set result = insert(result, term Ancestor pair@)
     case default
     end match
   end for
@@ -96,11 +96,11 @@ fun derive(facts: set { Fact }): set { Fact }
   for f1 in facts
     for f2 in facts
       match f1
-      case tag Parent p
+      case term Parent p
         match f2
-        case tag Ancestor a
+        case term Ancestor a
           if p.1 == a.0
-            set result = insert(result, tag Ancestor (p.0, a.1)@)
+            set result = insert(result, term Ancestor (p.0, a.1)@)
           end if
         case default
         end match
@@ -113,7 +113,7 @@ fun derive(facts: set { Fact }): set { Fact }
 end fun
 ```
 
-Relations are sets of tags,
+Relations are sets of terms,
 rules are functions over those sets,
 evaluation iterates to a fixed point.
 
@@ -237,8 +237,8 @@ exactly what arises in logic programming with negation.
 ```datalove
 type CellValue: enum {
   atom Any,
-  tag Exactly int,
-  tag OneOf set { int },
+  term Exactly int,
+  term OneOf set { int },
   atom Contradiction,
 }
 
@@ -246,20 +246,20 @@ fun constrain(cell: CellValue, must_not_be: int): CellValue
   match cell
   case atom Any
     ret cell
-  case tag Exactly v
+  case term Exactly v
     if v == must_not_be
       ret atom Contradiction@
     end if
     ret cell
-  case tag OneOf candidates
+  case term OneOf candidates
     let remaining = remove(candidates, must_not_be)
     if is_empty(remaining)
       ret atom Contradiction@
     end if
     if size(remaining) == 1
-      ret tag Exactly (first(remaining))@
+      ret term Exactly (first(remaining))@
     end if
-    ret tag OneOf remaining@
+    ret term OneOf remaining@
   case atom Contradiction
     ret cell
   end match
@@ -268,7 +268,7 @@ end fun
 
 The enum represents a cell's domain.
 Atoms mark the extremes (unconstrained, contradictory),
-tags carry domain data.
+terms carry domain data.
 Propagation iterates to a fixed point -- same shape again.
 
 
@@ -278,9 +278,9 @@ Propagation iterates to a fixed point -- same shape again.
 type ConnState: enum {
   atom Idle,
   atom Connecting,
-  tag Connected int,
+  term Connected int,
   atom Closing,
-  tag Failed string,
+  term Failed string,
 }
 
 fun on_event(state: ConnState, event: Event): ConnState
@@ -294,10 +294,10 @@ fun on_event(state: ConnState, event: Event): ConnState
     end match
   case atom Connecting
     match event
-    case tag Success fd
-      ret tag Connected fd@
-    case tag Error reason
-      ret tag Failed reason@
+    case term Success fd
+      ret term Connected fd@
+    case term Error reason
+      ret term Failed reason@
     case default
       ret state
     end match
@@ -307,9 +307,9 @@ fun on_event(state: ConnState, event: Event): ConnState
 end fun
 ```
 
-The atom/tag distinction is visually clear:
+The atom/term distinction is visually clear:
 signal states (Idle, Connecting, Closing) are atoms,
-data-carrying states (Connected, Failed) are tags.
+data-carrying states (Connected, Failed) are terms.
 
 A state machine is also a relation `transition(State, Event, NextState)`.
 Written as a function here,
@@ -318,13 +318,13 @@ but could equivalently be a set of tagged triples (the relational pattern).
 
 ## Pattern: Evidence-Carrying Judgments
 
-Tags carry witnesses alongside conclusions.
+Terms carry witnesses alongside conclusions.
 
 ```datalove
 type Judgment: enum {
-  tag Holds (string, string),
-  tag Refuted (string, string),
-  tag Conditional (string, string),
+  term Holds (string, string),
+  term Refuted (string, string),
+  term Conditional (string, string),
 }
 ```
 
@@ -335,23 +335,23 @@ For deeper proof trees, recursive types or
 a separate proof-tree structure would be needed.
 
 
-## What Atoms/Tags Buy Over Plain Structs
+## What Atoms/Terms Buy Over Plain Structs
 
 The key property: a named, matchable, discriminated value
 that exists as its own type.
 
 - An atom in a set is self-describing by its name.
-- A tag in a set carries both meaning (name) and data (payload).
+- A term in a set carries both meaning (name) and data (payload).
 - Different "shapes" of facts coexist in one set via enums.
 - Match gives exhaustive case analysis -- essential for correct inference rules.
-- The `@` operator lets individual facts (atoms/tags) compose cleanly
+- The `@` operator lets individual facts (atoms/terms) compose cleanly
   into relations (enum sets) without up-front wrapping.
 
 In languages where variants are constructors, not types
 (Haskell, Rust, OCaml regular variants),
 you can't have a standalone `Parent("alice", "bob")` --
 it must be wrapped in its enum type from the start.
-In datalove, `tag Parent ("alice", "bob")` is a type and a value,
+In datalove, `term Parent ("alice", "bob")` is a type and a value,
 and `@` widens it when placed in a set with other fact types.
 That's a real ergonomic win for relational programming.
 
@@ -383,13 +383,13 @@ Basic form -- filter and project (query):
 ```datalove
 // Who are alice's children?
 let children = from facts
-  given tag Parent ("alice", child)
+  given term Parent ("alice", child)
   select child
 end from
 // children: set { string }
 ```
 
-`given` matches elements of the source set against a tag (or atom) pattern.
+`given` matches elements of the source set against a term (or atom) pattern.
 Literal values in the pattern are equality constraints.
 Bare names are binding positions.
 
@@ -401,8 +401,8 @@ Multiple `given` clauses express joins:
 ```datalove
 // Who are common ancestors of alice and bob?
 let common = from facts
-  given tag Ancestor (anc, "alice")
-  given tag Ancestor (anc, "bob")
+  given term Ancestor (anc, "alice")
+  given term Ancestor (anc, "bob")
   select anc
 end from
 ```
@@ -416,15 +416,15 @@ Producing new tagged facts (derive):
 ```datalove
 // Derive direct ancestor facts from parent facts.
 let direct = from facts
-  given tag Parent (x, y)
-  yield tag Ancestor (x, y)@
+  given term Parent (x, y)
+  yield term Ancestor (x, y)@
 end from
 // direct: set { Fact }
 ```
 
 `yield` produces enum values for the output set.
 `select` projects out component values;
-`yield` constructs new atoms/tags.
+`yield` constructs new atoms/terms.
 
 
 #### `from` desugaring
@@ -433,8 +433,8 @@ A single `given`:
 
 ```datalove
 from facts
-  given tag Parent (x, y)
-  yield tag Ancestor (x, y)@
+  given term Parent (x, y)
+  yield term Ancestor (x, y)@
 end from
 ```
 
@@ -444,9 +444,9 @@ Desugars to:
 var __result: set { Fact } = set {}
 for __elem in facts
   match __elem
-  case tag Parent __payload
+  case term Parent __payload
     let (x, y) = __payload
-    set __result = insert(__result, tag Ancestor (x, y)@)
+    set __result = insert(__result, term Ancestor (x, y)@)
   case default
   end match
 end for
@@ -457,9 +457,9 @@ A join (two `given` clauses sharing variable `z`):
 
 ```datalove
 from facts
-  given tag Parent (x, z)
-  given tag Ancestor (z, y)
-  yield tag Ancestor (x, y)@
+  given term Parent (x, z)
+  given term Ancestor (z, y)
+  yield term Ancestor (x, y)@
 end from
 ```
 
@@ -469,14 +469,14 @@ Desugars to:
 var __result: set { Fact } = set {}
 for __e1 in facts
   match __e1
-  case tag Parent __p1
+  case term Parent __p1
     let (x, z) = __p1
     for __e2 in facts
       match __e2
-      case tag Ancestor __p2
+      case term Ancestor __p2
         if __p2.0 == z
           let y = __p2.1
-          set __result = insert(__result, tag Ancestor (x, y)@)
+          set __result = insert(__result, term Ancestor (x, y)@)
         end if
       case default
       end match
@@ -498,9 +498,9 @@ filters on bound variables:
 
 ```datalove
 from facts
-  given tag Age (person, age)
+  given term Age (person, age)
   where age .> 18
-  yield tag Adult person@
+  yield term Adult person@
 end from
 ```
 
@@ -514,9 +514,9 @@ A `given` clause can name a different source set:
 
 ```datalove
 from parents
-  given tag Parent (x, y)
+  given term Parent (x, y)
 from ages
-  given tag Age (y, age)
+  given term Age (y, age)
   where age .> 18
   select (x, y, age)
 end from
@@ -568,13 +568,13 @@ Saturation loops use existing `var`/`set`/`loop`:
 var facts = db
 loop
   let direct = from facts
-    given tag Parent (x, y)
-    yield tag Ancestor (x, y)@
+    given term Parent (x, y)
+    yield term Ancestor (x, y)@
   end from
   let transitive = from facts
-    given tag Parent (x, z)
-    given tag Ancestor (z, y)
-    yield tag Ancestor (x, y)@
+    given term Parent (x, z)
+    given term Ancestor (z, y)
+    yield term Ancestor (x, y)@
   end from
   let next = union(facts, direct, transitive)
   if next == facts
@@ -598,13 +598,13 @@ With carry the loop state is declared, not mutated:
 ```datalove
 loop carry (facts = db)
   let direct = from facts
-    given tag Parent (x, y)
-    yield tag Ancestor (x, y)@
+    given term Parent (x, y)
+    yield term Ancestor (x, y)@
   end from
   let transitive = from facts
-    given tag Parent (x, z)
-    given tag Ancestor (z, y)
-    yield tag Ancestor (x, y)@
+    given term Parent (x, z)
+    given term Ancestor (z, y)
+    yield term Ancestor (x, y)@
   end from
   let next = union(facts, direct, transitive)
   if next == facts
@@ -655,7 +655,7 @@ The termination argument for Datalog saturation:
    the set only grows (monotone).
 3. The break condition is `next == facts` -- exits at fixed point.
 4. If `Fact` is a finite-domain enum
-   (atom-only, or tags over bounded payloads),
+   (atom-only, or terms over bounded payloads),
    the set has a finite upper bound.
 5. Measure: `|max_possible_set| - |facts|`,
    strictly decreasing each non-stable iteration.
@@ -669,8 +669,8 @@ The compiler needs to verify:
   For `union(facts, ...)` this is syntactically obvious.
 - **Finite domain**: the element type has finitely many inhabitants.
   For atom-only enums this is trivial.
-  For tags over fixed-width integers, bounded but large.
-  For tags over `int` or `string`, unbounded -- totality unprovable.
+  For terms over fixed-width integers, bounded but large.
+  For terms over `int` or `string`, unbounded -- totality unprovable.
 
 This gives a clean story:
 `total loop carry` over finite-domain enums
@@ -717,16 +717,16 @@ No new syntax needed beyond `from`:
 ```datalove
 fun direct_ancestors(ref facts: set { Fact }): set { Fact }
   ret from facts
-    given tag Parent (x, y)
-    yield tag Ancestor (x, y)@
+    given term Parent (x, y)
+    yield term Ancestor (x, y)@
   end from
 end fun
 
 fun transitive_ancestors(ref facts: set { Fact }): set { Fact }
   ret from facts
-    given tag Parent (x, z)
-    given tag Ancestor (z, y)
-    yield tag Ancestor (x, y)@
+    given term Parent (x, z)
+    given term Ancestor (z, y)
+    yield term Ancestor (x, y)@
   end from
 end fun
 
@@ -748,13 +748,13 @@ for applying multiple rule functions and unioning the results:
 ```datalove
 ruleset ancestry(facts: set { Fact }): set { Fact }
   from facts
-    given tag Parent (x, y)
-    yield tag Ancestor (x, y)@
+    given term Parent (x, y)
+    yield term Ancestor (x, y)@
   end from
   from facts
-    given tag Parent (x, z)
-    given tag Ancestor (z, y)
-    yield tag Ancestor (x, y)@
+    given term Parent (x, z)
+    given term Ancestor (z, y)
+    yield term Ancestor (x, y)@
   end from
 end ruleset
 ```
@@ -787,9 +787,9 @@ checks that a pattern does NOT match any element:
 
 ```datalove
 from facts
-  given tag Person name
-  unless tag Parent (name, _) in facts
-  yield tag Childless name@
+  given term Person name
+  unless term Parent (name, _) in facts
+  yield term Childless name@
 end from
 ```
 
@@ -800,12 +800,12 @@ equivalent to `not any(...)`:
 ```datalove
 for __elem in facts
   match __elem
-  case tag Person name
+  case term Person name
     let __found = any from facts
-      given tag Parent (name, _)
+      given term Parent (name, _)
     end from
     if not __found
-      set __result = insert(__result, tag Childless name@)
+      set __result = insert(__result, term Childless name@)
     end if
   case default
   end match
@@ -831,21 +831,21 @@ replaces `select`/`yield`:
 ```datalove
 // How many children does alice have?
 let n = from facts
-  given tag Parent ("alice", _)
+  given term Parent ("alice", _)
   count
 end from
 // n: int
 
 // Collect all children into a list.
 let kids = from facts
-  given tag Parent ("alice", child)
+  given term Parent ("alice", child)
   collect child
 end from
 // kids: [string]
 
 // Sum of ages.
 let total = from facts
-  given tag Age (_, age)
+  given term Age (_, age)
   sum age
 end from
 ```
@@ -864,33 +864,33 @@ Putting it all together.
 
 ```datalove
 type Fact: enum {
-  tag Parent (string, string),
-  tag Ancestor (string, string),
-  tag Childless string,
-  tag Person string,
+  term Parent (string, string),
+  term Ancestor (string, string),
+  term Childless string,
+  term Person string,
 }
 
 let db: set { Fact } = set {
-  tag Person "alice"@,
-  tag Person "bob"@,
-  tag Person "carol"@,
-  tag Person "dave"@,
-  tag Parent ("alice", "bob")@,
-  tag Parent ("alice", "carol")@,
-  tag Parent ("bob", "dave")@,
+  term Person "alice"@,
+  term Person "bob"@,
+  term Person "carol"@,
+  term Person "dave"@,
+  term Parent ("alice", "bob")@,
+  term Parent ("alice", "carol")@,
+  term Parent ("bob", "dave")@,
 }
 
 // Saturate: derive all ancestors.
 var kb = db
 loop
   let direct = from kb
-    given tag Parent (x, y)
-    yield tag Ancestor (x, y)@
+    given term Parent (x, y)
+    yield term Ancestor (x, y)@
   end from
   let transitive = from kb
-    given tag Parent (x, z)
-    given tag Ancestor (z, y)
-    yield tag Ancestor (x, y)@
+    given term Parent (x, z)
+    given term Ancestor (z, y)
+    yield term Ancestor (x, y)@
   end from
   let next = union(kb, direct, transitive)
   if next == kb
@@ -901,20 +901,20 @@ end loop
 
 // Query: who are alice's descendants?
 let descendants = from kb
-  given tag Ancestor ("alice", who)
+  given term Ancestor ("alice", who)
   select who
 end from
 // descendants: set { string } = { "bob", "carol", "dave" }
 
 // Query: is alice an ancestor of dave?
 let yes = any from kb
-  given tag Ancestor ("alice", "dave")
+  given term Ancestor ("alice", "dave")
 end from
 // yes: bool = true
 
 // Query: how many descendants does alice have?
 let n = from kb
-  given tag Ancestor ("alice", _)
+  given term Ancestor ("alice", _)
   count
 end from
 // n: int = 3
@@ -927,22 +927,22 @@ The `from` comprehension is natural in a REPL session.
 Incremental exploration of a knowledge base:
 
 ```
-> let db = set { tag Parent ("alice", "bob")@, tag Parent ("bob", "carol")@ }
+> let db = set { term Parent ("alice", "bob")@, term Parent ("bob", "carol")@ }
 
-> from db given tag Parent (x, y) select (x, y)
+> from db given term Parent (x, y) select (x, y)
 => { ("alice", "bob"), ("bob", "carol") }
 
 > var kb = db
 
 > loop
     let next = union(kb,
-      from kb given tag Parent (x, y) yield tag Ancestor (x, y)@ end from,
-      from kb given tag Parent (x, z), tag Ancestor (z, y) yield tag Ancestor (x, y)@ end from)
+      from kb given term Parent (x, y) yield term Ancestor (x, y)@ end from,
+      from kb given term Parent (x, z), term Ancestor (z, y) yield term Ancestor (x, y)@ end from)
     if next == kb; break; end if
     set kb = next
   end loop
 
-> from kb given tag Ancestor ("alice", who) select who
+> from kb given term Ancestor ("alice", who) select who
 => { "bob", "carol" }
 ```
 
@@ -985,7 +985,7 @@ The constructs here are the **bottom-up** (forward-chaining) complement:
 | Implementation | Set iteration + saturation loop | Choice points + stack |
 | Syntax | `from`/`given` + `loop` | `multi`/`nondet`/modes |
 
-Both operate on the same representation layer: atoms, tags, and enums.
+Both operate on the same representation layer: atoms, terms, and enums.
 Bottom-up is simpler to implement and reason about.
 Top-down is more flexible for open-ended search.
 They coexist naturally,
@@ -1025,11 +1025,11 @@ The mapping is almost direct:
 | datalove `from` | LINQ | Operation |
 |---|---|---|
 | `from facts` | `from f in facts` | Source |
-| `given tag Parent (x, y)` | `where f is Parent` + destructure | Filter + bind |
+| `given term Parent (x, y)` | `where f is Parent` + destructure | Filter + bind |
 | multiple `given` with shared var | multiple `from` + `where` on shared | SelectMany + equijoin |
 | `where age .> 18` | `where age > 18` | Filter |
 | `select child` | `select child` | Projection |
-| `yield tag Ancestor (x, y)@` | `select new Ancestor(x, y)` | Construction |
+| `yield term Ancestor (x, y)@` | `select new Ancestor(x, y)` | Construction |
 | `count` | `.Count()` | Aggregation |
 
 Key LINQ design decisions:
@@ -1109,19 +1109,19 @@ Collecting into a set is explicit or inferred from type context.
 
 ```datalove
 // Lazy: iterate without materializing.
-for child in from facts given tag Parent ("alice", child) select child end from
+for child in from facts given term Parent ("alice", child) select child end from
   debuglog child
 end for
 
 // Eager: collected into set by type context.
 let children: set { string } = from facts
-  given tag Parent ("alice", child)
+  given term Parent ("alice", child)
   select child
 end from
 
 // First match only.
 let first_child: ?string = first from facts
-  given tag Parent ("alice", child)
+  given term Parent ("alice", child)
   select child
 end from
 ```
@@ -1165,7 +1165,7 @@ like Python's generator expressions are to generator functions.
 // from IS the generator body.
 fun children_of(ref facts: set { Fact }, name: string) yields string
   from facts
-    given tag Parent (name, child)
+    given term Parent (name, child)
     select child
   end from
 end fun

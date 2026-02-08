@@ -11,11 +11,11 @@ There were two code paths that parsed these keywords,
 and they disagreed on whether the payload
 is a primary expression or a full expression.
 
-This matters for the planned `atom`/`tag` design,
-where postfix `@` would coerce a tag to a tagged union type.
-With full-expression payloads, `tag Bar 1@` parses as `tag Bar (1@)`,
-requiring parentheses: `(tag Bar 1)@`.
-With primary-expression payloads, `tag Bar 1@` parses as `(tag Bar 1)@`,
+This matters for the planned `atom`/`term` design,
+where postfix `@` would coerce a term to a tagged union type.
+With full-expression payloads, `term Bar 1@` parses as `term Bar (1@)`,
+requiring parentheses: `(term Bar 1)@`.
+With primary-expression payloads, `term Bar 1@` parses as `(term Bar 1)@`,
 which is the desired behavior.
 
 ## Primary vs full expressions
@@ -70,7 +70,7 @@ Delimiter-enclosed keywords (`map`, `set`, `tensor`, `icall`)
 are immune because brackets/braces/parens mark the payload boundary.
 
 Future `atom` (no payload) is unaffected.
-Future `tag` (bare payload) would be affected.
+Future `term` (bare payload) would be affected.
 
 ## Behavioral difference
 
@@ -80,7 +80,7 @@ With `parse_expr_full` (old expr.rs path):
 some x + 1      ->  some(x + 1)       payload includes binop
 some x@         ->  some(x@)          postfix is inside payload
 ok a +! b       ->  ok(a +! b)
-tag Bar 1@      ->  tag Bar (1@)      @ on the integer, not the tag
+term Bar 1@      ->  term Bar (1@)      @ on the integer, not the term
 ```
 
 With `parse_expr_primary` (current behavior in both paths):
@@ -89,7 +89,7 @@ With `parse_expr_primary` (current behavior in both paths):
 some x + 1      ->  (some x) + 1      binop escapes
 some x@         ->  (some x)@         postfix escapes
 ok a +! b       ->  (ok a) +! b
-tag Bar 1@      ->  (tag Bar 1)@      @ on the whole tag
+term Bar 1@      ->  (term Bar 1)@      @ on the whole term
 ```
 
 Complex payloads require parentheses under primary-only parsing:
@@ -117,5 +117,5 @@ This is a niche pattern.
 The two paths were reconciled by switching expr.rs to `parse_expr_primary`,
 matching what literal.rs already does.
 This was a one-line change per keyword group in `parse_expr_primary`.
-It makes `tag Bar 1@` work naturally for tag coercion
+It makes `term Bar 1@` work naturally for term coercion
 and resolves the inconsistency between the two code paths.

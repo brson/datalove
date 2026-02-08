@@ -46,13 +46,13 @@ Specifications, research, design documents, implementation plans, and reports.
 - [Old REPL Engine](reports/report-old-repl-engine.md)
 - [Stdlib Blockers](reports/report-stdlib-blockers.md)
 - [Primary vs Full Expression Parsing](report-expr-primary.md)
-- [Datalog-Style Programming with Atoms/Tags/Enums](report-datalog.md)
+- [Datalog-Style Programming with Atoms/Terms/Enums](report-datalog.md)
 
 ---
 
 ### Research
 
-- [Atom / Tag / Enum PL Landscape](research/research-atom-tag-enum.md)
+- [Atom / Term / Enum PL Landscape](research/research-atom-tag-enum.md)
 - [Linear Types](research/research-linear-types.md)
 - [Const Evaluation](research/research-const-eval.md)
 - [Logic Programming](research/research-logic-programming.md)

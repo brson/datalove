@@ -3,10 +3,10 @@
 
 
 
-## 2026/01/22 - Atoms, tags, enums, and match
+## 2026/01/22 - Atoms, terms, enums, and match
 
 Datalove is structurally typed.
-_Atoms_ and _tags_ introduce types with a name component,
+_Atoms_ and _terms_ introduce types with a name component,
 and _enums_ sum them together.
 
 ```datalove
@@ -30,41 +30,41 @@ var c = atom Foo;
 set c = atom Bar;  // XXX error
 ```
 
-Tags are like atoms but carry a typed value,
+Terms are like atoms but carry a typed value,
 parsed as primary expression (no binops).
 
 ```datalove
-// Anonymous tag
-let a = tag Foo 1
+// Anonymous term
+let a = term Foo 1
 
 // The name is followed by a single primary expr
-let a = tag Foo (1,)    // tuple
-let a = tag Bar 1       // etc
-let b = tag Baz set { 1 }
+let a = term Foo (1,)    // tuple
+let a = term Bar 1       // etc
+let b = term Baz set { 1 }
 
 // The name and type must match.
-var c = tag What [1]
-set c = tag What [1, 2]
+var c = term What [1]
+set c = term What [1, 2]
 ```
 
 With type hint.
 
 ```datalove
-let d: tag Foo int = tag Foo 1
+let d: term Foo int = term Foo 1
 ```
 
 
 
 
 Anonymous enums are sets of types,
-either atoms or tags,
-where all the atom and tag names are unique.
+either atoms or terms,
+where all the atom and term names are unique.
 
 ```datalove
 type MyEnum: enum {
   atom Foo,
-  tag Bar int,
-  tag Baz (f32, f32),
+  term Bar int,
+  term Baz (f32, f32),
 };
 
 // The full enum literal form
@@ -72,10 +72,10 @@ let a: MyEnum = enum { atom Foo }
 
 // Can just coerce
 let b: MyEnum = atom Foo@
-let c: MyEnum = tag Bar 1@
+let c: MyEnum = term Bar 1@
 ```
 
-Only `atom` and `tag` types are allowed in enums.
+Only `atom` and `term` types are allowed in enums.
 
 Note the "full enum literal form" does not synthesize
 a type; it must be in checking context.
@@ -85,8 +85,8 @@ Enums can be destructured in `match` statements.
 ```datalove
 type Bunny: enum {
   atom Foo,
-  tag Bar int,
-  tag Baz (f32, f32),
+  term Bar int,
+  term Baz (f32, f32),
 };
 
 let a: Bunny = atom Foo
@@ -96,10 +96,10 @@ match a
 case atom Foo
   b = 2
   // no fallthrough
-case tag Bar c
+case term Bar c
   b = 3
   // binds a single variable to the contained value
-case tag Baz d
+case term Baz d
   b = 4
 end match
 ```
@@ -115,7 +115,7 @@ use `case default` for catch-all.
 match a
 case atom Foo
   // no fallthrough
-case tag Bar c
+case term Bar c
   // no fallthrough
 case default
   // no fallthrough
