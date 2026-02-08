@@ -57,7 +57,8 @@ let d: tag Foo int = tag Foo 1
 
 
 Anonymous enums are sets of types,
-either atoms or tags.
+either atoms or tags,
+where all the atom and tag names are unique.
 
 ```datalove
 type MyEnum: enum {

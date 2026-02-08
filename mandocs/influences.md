@@ -25,7 +25,9 @@
     Modern REPL inspiration.
 - Polars / Pandas.
     Tables.
-
+- Elixir, Erlang, Ruby, Prolog.
+    Atoms.
+    
 
 
 

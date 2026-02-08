@@ -45,11 +45,13 @@ Specifications, research, design documents, implementation plans, and reports.
 - [Interpreter Ownership](reports/report-interp2-impl.md)
 - [Old REPL Engine](reports/report-old-repl-engine.md)
 - [Stdlib Blockers](reports/report-stdlib-blockers.md)
+- [Primary vs Full Expression Parsing](report-expr-primary.md)
 
 ---
 
 ### Research
 
+- [Atom / Tag / Enum PL Landscape](research/research-atom-tag-enum.md)
 - [Linear Types](research/research-linear-types.md)
 - [Const Evaluation](research/research-const-eval.md)
 - [Logic Programming](research/research-logic-programming.md)
