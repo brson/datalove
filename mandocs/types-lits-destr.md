@@ -167,23 +167,3 @@ case tag Tri sides
   area = 0.0
 end match
 ```
-
-Optional and results with `match`.
-
-```datalove
-let s: ?int = some 1
-match s
-case some a
-  ret
-case none
-  ret
-end match
-
-let s: !int = ok 1
-match s
-case ok a
-  ret
-case er a
-  ret
-end match
-```
