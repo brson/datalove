@@ -46,6 +46,7 @@ Specifications, research, design documents, implementation plans, and reports.
 - [Old REPL Engine](reports/report-old-repl-engine.md)
 - [Stdlib Blockers](reports/report-stdlib-blockers.md)
 - [Primary vs Full Expression Parsing](report-expr-primary.md)
+- [Datalog-Style Programming with Atoms/Tags/Enums](report-datalog.md)
 
 ---
 

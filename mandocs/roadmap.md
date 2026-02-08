@@ -90,6 +90,7 @@
 
 ## Far future wants
 
+- datalog rule and reduction sugar
 - gadts
 - heap types and global heap
 - named types
