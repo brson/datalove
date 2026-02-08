@@ -361,8 +361,11 @@ That's a real ergonomic win for relational programming.
 The patterns above work with existing primitives,
 but the nested for/match/if loops are verbose
 and obscure the relational intent.
-Three constructs could make the patterns direct:
-a `from` comprehension, a `fixpoint` loop, and named rules.
+Two constructs could make the patterns direct:
+a `from` comprehension and named rules.
+Fixed-point iteration uses existing loop syntax,
+but loop carry (a removed feature, see `carry-bring.md`)
+would enable termination proofs.
 
 They share a common core:
 **comprehensions over sets with pattern-matching and implicit equijoins.**
@@ -556,13 +559,14 @@ end from
 `none` (or `not any`) for the negative.
 
 
-### The `fixpoint` loop
+### Fixed-point iteration
 
-Iterates a body expression until the result equals the input.
-Uses the same `name = init` pattern as `loop carry`.
+No new syntax needed.
+Saturation loops use existing `var`/`set`/`loop`:
 
 ```datalove
-let all_facts = fixpoint facts = db
+var facts = db
+loop
   let direct = from facts
     given tag Parent (x, y)
     yield tag Ancestor (x, y)@
@@ -572,87 +576,135 @@ let all_facts = fixpoint facts = db
     given tag Ancestor (z, y)
     yield tag Ancestor (x, y)@
   end from
-  union(facts, direct, transitive)
-end fixpoint
-```
-
-Semantics:
-
-1. Bind `facts` to `db`.
-2. Evaluate the body. It returns a new set.
-3. If the new set equals `facts`, return it.
-4. Otherwise, bind `facts` to the new set and repeat from 2.
-
-The body is a block that must return the same type as the initial value.
-It can contain arbitrary statements --
-`let`, `var`, `from` comprehensions, function calls.
-The last expression is the "next" value.
-
-The `fixpoint` form requires `==` on the carried type.
-For sets of atoms/tags, structural equality is natural.
-
-
-#### Monotonicity and termination
-
-Datalog-style fixpoints terminate
-when the step function is **monotone** (only adds, never removes)
-and the domain is **finite**.
-
-For atom-only enums, the domain is always finite --
-there are finitely many atoms.
-Termination is guaranteed for monotone rules.
-
-For tag-carrying enums where the payload domain is finite
-(e.g., tags over fixed-width integers or strings from a known set),
-termination is also guaranteed.
-
-For tags over unbounded types like `int` or `string`,
-termination depends on the rules.
-A non-terminating fixpoint is possible
-if a rule generates unbounded new values.
-
-The `total` annotation could apply:
-
-```datalove
-total fixpoint facts = db
-  // compiler proves termination
-end fixpoint
-```
-
-The compiler would check:
-is the set type finitely bounded?
-Is the body monotone?
-If both, mark as total.
-
-For unbounded domains, a fuel/iteration-limit escape hatch:
-
-```datalove
-fixpoint facts = db limit 1000
-  // aborts (or returns current state) after 1000 iterations
-end fixpoint
-```
-
-
-#### Relation to `loop carry`
-
-`fixpoint` is a specialization of `loop carry`
-where the exit condition is "state didn't change."
-Written manually:
-
-```datalove
-let all_facts = loop carry (facts = db)
-  let next = derive(facts)
+  let next = union(facts, direct, transitive)
   if next == facts
-    break facts
+    break
+  end if
+  set facts = next
+end loop
+```
+
+The pattern: compute `next`, compare to `facts`, break or continue.
+All existing syntax, explicit termination condition.
+
+
+#### With loop carry
+
+Loop carry (see `carry-bring.md`) was removed
+but keeps coming up in design discussions.
+A saturation loop is one of its strongest use cases.
+With carry the loop state is declared, not mutated:
+
+```datalove
+loop carry (facts = db)
+  let direct = from facts
+    given tag Parent (x, y)
+    yield tag Ancestor (x, y)@
+  end from
+  let transitive = from facts
+    given tag Parent (x, z)
+    given tag Ancestor (z, y)
+    yield tag Ancestor (x, y)@
+  end from
+  let next = union(facts, direct, transitive)
+  if next == facts
+    break
   end if
   continue next
 end loop
 ```
 
-`fixpoint` eliminates this boilerplate.
-The two forms coexist --
-use `loop carry` when the termination condition
-is something other than equality.
+The carry version is slightly cleaner (`facts` is immutable within the body,
+`continue next` replaces it atomically),
+but the real payoff is termination analysis.
+
+
+#### Termination proofs via carry
+
+The total-functions design (`mandocs/total-functions.md`)
+proposes proving loops total via linear ranking functions.
+The key requirement: an explicit induction variable
+that the compiler can analyze.
+
+With `var`/`set`, the compiler must figure out
+which variable is the loop state,
+that it changes monotonically,
+and that the domain is bounded.
+This is possible but requires alias analysis
+across mutable state.
+
+With carry, the induction variable is syntactically declared.
+The compiler can directly analyze the carried value:
+
+```datalove
+total fun saturate(db: set { Fact }): set { Fact }
+  total loop carry (facts = db)
+    let next = union(facts, derive(facts))
+    if next == facts
+      break
+    end if
+    continue next
+  end loop
+end fun
+```
+
+The termination argument for Datalog saturation:
+
+1. The carried value is `facts: set { Fact }`.
+2. `continue next` where `next = union(facts, ...)` --
+   the set only grows (monotone).
+3. The break condition is `next == facts` -- exits at fixed point.
+4. If `Fact` is a finite-domain enum
+   (atom-only, or tags over bounded payloads),
+   the set has a finite upper bound.
+5. Measure: `|max_possible_set| - |facts|`,
+   strictly decreasing each non-stable iteration.
+
+This is exactly the shape of ranking function
+that polyhedral analysis can find.
+The compiler needs to verify:
+
+- **Monotonicity**: the `continue` expression
+  is a superset of the current carry value.
+  For `union(facts, ...)` this is syntactically obvious.
+- **Finite domain**: the element type has finitely many inhabitants.
+  For atom-only enums this is trivial.
+  For tags over fixed-width integers, bounded but large.
+  For tags over `int` or `string`, unbounded -- totality unprovable.
+
+This gives a clean story:
+`total loop carry` over finite-domain enums
+with monotone `from`/`yield` rules
+is provably terminating.
+The compiler can check it.
+Datalog saturation becomes a `total` loop.
+
+
+#### Why carry matters here more than elsewhere
+
+Carry was removed because `var`/`set` covers the same ground
+for general-purpose loops.
+But for Datalog-style saturation specifically,
+carry provides something `var`/`set` doesn't:
+a tractable path to totality proofs.
+
+The termination argument depends on seeing:
+(a) what the loop state is,
+(b) that it grows monotonically,
+(c) that it's bounded.
+Carry makes (a) syntactically explicit.
+The `from`/`yield` + `union` pattern makes (b) recognizable.
+The enum type system makes (c) decidable.
+
+With `var`/`set`, the compiler would need to infer all three
+from mutable state flow -- much harder, and fragile.
+
+This is an argument for bringing carry back,
+possibly in a limited form,
+specifically to enable `total` loops.
+Carry without bring (no exit values)
+would be simpler than the original design
+and sufficient for this use case.
 
 
 ### Named rules
@@ -678,9 +730,16 @@ fun transitive_ancestors(ref facts: set { Fact }): set { Fact }
   end from
 end fun
 
-let all_facts = fixpoint facts = db
-  union(facts, direct_ancestors(facts), transitive_ancestors(facts))
-end fixpoint
+var all_facts = db
+loop
+  let next = union(all_facts,
+    direct_ancestors(all_facts),
+    transitive_ancestors(all_facts))
+  if next == all_facts
+    break
+  end if
+  set all_facts = next
+end loop
 ```
 
 A `ruleset` grouping could be sugar
@@ -706,12 +765,17 @@ with all the `from` results.
 This is sugar for a function
 that evaluates each `from` and unions everything.
 
-Then fixpoint becomes:
+Then saturation becomes:
 
 ```datalove
-let all_facts = fixpoint facts = db
-  ancestry(facts)
-end fixpoint
+var facts = db
+loop
+  let next = ancestry(facts)
+  if next == facts
+    break
+  end if
+  set facts = next
+end loop
 ```
 
 
@@ -751,7 +815,7 @@ end for
 Negation creates stratification requirements:
 a rule with `unless` on relation R
 must be in a later stratum than rules that derive R.
-The fixpoint evaluates one stratum at a time, bottom to top.
+Saturation evaluates one stratum at a time, bottom to top.
 
 For the first version, negation could be deferred entirely.
 Positive Datalog (no negation) is already expressive
@@ -817,18 +881,23 @@ let db: set { Fact } = set {
 }
 
 // Saturate: derive all ancestors.
-let kb = fixpoint facts = db
-  let direct = from facts
+var kb = db
+loop
+  let direct = from kb
     given tag Parent (x, y)
     yield tag Ancestor (x, y)@
   end from
-  let transitive = from facts
+  let transitive = from kb
     given tag Parent (x, z)
     given tag Ancestor (z, y)
     yield tag Ancestor (x, y)@
   end from
-  union(facts, direct, transitive)
-end fixpoint
+  let next = union(kb, direct, transitive)
+  if next == kb
+    break
+  end if
+  set kb = next
+end loop
 
 // Query: who are alice's descendants?
 let descendants = from kb
@@ -854,8 +923,7 @@ end from
 
 ## REPL integration
 
-The `from` comprehension and `fixpoint` loop
-are natural in a REPL session.
+The `from` comprehension is natural in a REPL session.
 Incremental exploration of a knowledge base:
 
 ```
@@ -864,10 +932,15 @@ Incremental exploration of a knowledge base:
 > from db given tag Parent (x, y) select (x, y)
 => { ("alice", "bob"), ("bob", "carol") }
 
-> let kb = fixpoint f = db
-    union(f, from f given tag Parent (x,z), tag Ancestor (z,y) yield tag Ancestor (x,y)@ end from,
-              from f given tag Parent (x,y) yield tag Ancestor (x,y)@ end from)
-  end fixpoint
+> var kb = db
+
+> loop
+    let next = union(kb,
+      from kb given tag Parent (x, y) yield tag Ancestor (x, y)@ end from,
+      from kb given tag Parent (x, z), tag Ancestor (z, y) yield tag Ancestor (x, y)@ end from)
+    if next == kb; break; end if
+    set kb = next
+  end loop
 
 > from kb given tag Ancestor ("alice", who) select who
 => { "bob", "carol" }
@@ -888,12 +961,14 @@ Undo/redo works because everything is pure.
 | `from ... given ... count` | Aggregate | `int` | `from`, `given`, `count` |
 | `from ... given ... unless ...` | Negation | (modifies filter) | `unless` |
 | `from ... given ... where ...` | Guard | (modifies filter) | `where` |
-| `fixpoint name = init ... end fixpoint` | Iterate to stability | same as init | `fixpoint` |
 | `ruleset name(...) ... end ruleset` | Group rules | `set { Enum }` | `ruleset` |
+| saturation loop | Iterate to fixed point | (uses existing `loop`) | none |
 
-New keywords: `from`, `given`, `yield`, `fixpoint`.
+New keywords: `from`, `given`, `yield`.
 Optional/deferrable: `unless`, `ruleset`, `count`/`sum`/`min`/`max`/`collect`.
 `select` and `where` are likely already reserved or unambiguous.
+Saturation loops use existing `loop`/`break`/`var`/`set`
+(or `loop carry`/`continue` if carry is reintroduced).
 
 
 ## Relationship to top-down logic programming
@@ -907,8 +982,8 @@ The constructs here are the **bottom-up** (forward-chaining) complement:
 | Strategy | Saturate all facts | Goal-directed search |
 | Termination | Always (finite domains) | Depends on program |
 | Backtracking | None needed | Core mechanism |
-| Implementation | Set iteration + fixpoint | Choice points + stack |
-| Syntax | `from`/`given`/`fixpoint` | `multi`/`nondet`/modes |
+| Implementation | Set iteration + saturation loop | Choice points + stack |
+| Syntax | `from`/`given` + `loop` | `multi`/`nondet`/modes |
 
 Both operate on the same representation layer: atoms, tags, and enums.
 Bottom-up is simpler to implement and reason about.
@@ -925,8 +1000,7 @@ and top-down search for goal-directed queries.
 2. `from` with multiple `given` clauses (joins).
    Enables relational programming.
 3. `from` with `yield` (deriving new facts).
-4. `fixpoint` loop.
-   Enables Datalog saturation.
+4. Saturation via `loop` (existing syntax).
 5. `where` guards.
 6. `any`/`none` wrappers for membership tests.
 7. Aggregation (`count`, `sum`, `collect`).
