@@ -1,8 +1,0 @@
-----------
-scriptunit-fragment
-----------
-
-// Test enum variant with aggregate (string) payload.
-
-let message = : enum { Text(string), Empty } / enum Text("hello world")
-debuglog message

@@ -635,45 +635,7 @@ pub fn lower_expression<'db>(
             ctx.pop_pending_scope();
             Ok(dest)
         }
-        ExprFunKind::AnonEnum(enum_expr) => {
-            // Push a new scope for this enum's pending intermediates.
-            ctx.push_pending_scope();
 
-            // Get the result type - this is IrType::Enum with sorted variants.
-            let result_type = ctx.expr_type(expr);
-            let variant_name = enum_expr.variant_name.text(ctx.db).to_string();
-
-            // Find the variant index in the sorted list.
-            // Typechecker validates enum literals and variant names.
-            let IrType::Enum(variants) = &result_type else {
-                panic!("AnonEnum with non-enum type {:?} - typechecker should catch this", result_type);
-            };
-            let variant_index = variants.iter()
-                .position(|(n, _)| n == &variant_name)
-                .unwrap_or_else(|| panic!("enum variant '{}' not found - typechecker should catch this", variant_name));
-
-            // Lower payload if present, tracking as pending intermediate.
-            let payload = if let Some(p) = enum_expr.payload {
-                let payload_type = match &result_type {
-                    IrType::Enum(variants) => variants.iter()
-                        .find(|(n, _)| n == &variant_name)
-                        .and_then(|(_, opt_ty)| opt_ty.clone())
-                        .unwrap_or(IrType::Unit),
-                    _ => IrType::Unit,
-                };
-                let value = lower_expression(ctx, p)?;
-                ctx.push_pending_intermediate(value, &payload_type);
-                Some(Operand::Value(value))
-            } else {
-                None
-            };
-
-            let dest = ctx.fresh_value(result_type);
-            ctx.emit_enum_variant(dest, variant_index as u32, payload);
-            ctx.clear_pending_intermediates();
-            ctx.pop_pending_scope();
-            Ok(dest)
-        }
         ExprFunKind::Tensor(tensor) => {
             // Push a new scope for this tensor's pending intermediates.
             ctx.push_pending_scope();

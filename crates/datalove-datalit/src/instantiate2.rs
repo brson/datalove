@@ -155,10 +155,6 @@ fn instantiate_expr_into<'db>(
             instantiate_struct(db, rt, &struct_expr.fields, &struct_ty.fields, tydesc_table, tydesc, dest_ptr, resolved)
         }
 
-        (Expr::AnonEnum(enum_expr), Type::AnonEnum(enum_ty)) => {
-            let tydesc = tydesc_table.get_or_create(ty);
-            instantiate_enum(db, rt, enum_expr.variant_name, enum_expr.payload, &enum_ty.variants, tydesc_table, tydesc, dest_ptr, resolved)
-        }
 
         (Expr::List(list_expr), Type::List(list_ty)) => {
             let tydesc = tydesc_table.get_or_create(ty);
@@ -752,39 +748,6 @@ fn instantiate_struct<'db>(
     Ok(dest_ptr as *const u8)
 }
 
-fn instantiate_enum<'db>(
-    db: &'db dyn crate::Db,
-    rt: datalove_rt::c::LocalRtHandle,
-    variant_name: bct::text::InternedText<'db>,
-    payload_expr: Option<ExprFull<'db>>,
-    type_variants: &[TypeEnumVariant<'db>],
-    tydesc_table: &mut TyDescTable<'db>,
-    enum_tydesc: *const rtdt::TyDesc,
-    dest_ptr: *mut u8,
-    resolved: ResolvedExpr<'db>,
-) -> AnyResult<*const u8> {
-    debug_assert!(!dest_ptr.is_null());
-    let variant_name_str = variant_name.as_str(db);
-    let (variant_index, variant_ty) = type_variants
-        .iter()
-        .enumerate()
-        .find(|(_, v)| v.name.as_str(db) == variant_name_str)
-        .ok_or_else(|| anyhow!("Variant not found: {}", variant_name_str))?;
-
-    let layout = unsafe { rtdt::layout::compute_enum_layout(rtdt::TyDescRef::from_ptr(enum_tydesc)) };
-
-    unsafe {
-        *(dest_ptr as *mut u32) = variant_index as u32;
-    }
-
-    if let (Some(payload_expr), Some(payload_ty)) = (payload_expr, variant_ty.payload.clone()) {
-        let payload_offset = layout.variant_offsets[variant_index];
-        let payload_dest = unsafe { dest_ptr.add(payload_offset as usize) };
-        instantiate_expr_into(db, rt, payload_expr, &*payload_ty, tydesc_table, payload_dest, resolved)?;
-    }
-
-    Ok(dest_ptr as *const u8)
-}
 
 fn instantiate_list<'db>(
     db: &'db dyn crate::Db,
@@ -1710,59 +1673,6 @@ mod tests {
     }
 
     #[test]
-    fn test_instantiate_enum_no_payload() -> AnyResult<()> {
-        let db = Database::default();
-        let typechecked = compile_str(&db, ": enum { Ok, Error } / enum Ok")?;
-        let rt = datalove_rt::rust::Runtime::new();
-        let guard = RtGuard::new(rt);
-        let mut tydesc_table = TyDescTable::new(&db);
-        let inst_guard = InstGuard::new(
-            guard.handle(),
-            instantiate_value(&db, guard.handle(), &mut tydesc_table, typechecked)?
-        );
-        let inst = inst_guard.value();
-
-        unsafe {
-            assert_eq!(inst.tydesc.type_tag(), rtdt::TyTag::Enum);
-            let enum_info = inst.tydesc.enum_info();
-            assert_eq!(enum_info.num_variants(), 2);
-
-            let discriminant = *(inst.ptr as *const u32);
-            assert_eq!(discriminant, 0);
-        }
-        Ok(())
-    }
-
-    #[test]
-    fn test_instantiate_enum_with_scalar_payload() -> AnyResult<()> {
-        let db = Database::default();
-        let typechecked = compile_str(&db, ": enum { Ok(u32), Err(string) } / enum Ok(42)")?;
-        let rt = datalove_rt::rust::Runtime::new();
-        let guard = RtGuard::new(rt);
-        let mut tydesc_table = TyDescTable::new(&db);
-        let inst_guard = InstGuard::new(
-            guard.handle(),
-            instantiate_value(&db, guard.handle(), &mut tydesc_table, typechecked)?
-        );
-        let inst = inst_guard.value();
-
-        unsafe {
-            assert_eq!(inst.tydesc.type_tag(), rtdt::TyTag::Enum);
-            let enum_info = inst.tydesc.enum_info();
-            assert_eq!(enum_info.num_variants(), 2);
-
-            let discriminant = *(inst.ptr as *const u32);
-            assert_eq!(discriminant, 0);
-
-            let variants = enum_info.variants();
-            let payload_offset = variants[0].offset;
-            let payload_value = *(inst.ptr.add(payload_offset as usize) as *const u32);
-            assert_eq!(payload_value, 42);
-        }
-        Ok(())
-    }
-
-    #[test]
     fn test_instantiate_list_u32() -> AnyResult<()> {
         let db = Database::default();
         let typechecked = compile_str(&db, ": [u32] / [1, 2, 3, 4, 5]")?;
@@ -1953,90 +1863,6 @@ mod tests {
                 reconstructed |= (limb as u64) << (32 * i);
             }
             assert_eq!(reconstructed, 1234567890123456789);
-        }
-        Ok(())
-    }
-
-    #[test]
-    fn test_instantiate_enum_with_tuple_payload() -> AnyResult<()> {
-        let db = Database::default();
-        let typechecked = compile_str(&db, ": enum { Ok((u32, u32)), Err(string) } / enum Ok((10, 20))")?;
-        let rt = datalove_rt::rust::Runtime::new();
-        let guard = RtGuard::new(rt);
-        let mut tydesc_table = TyDescTable::new(&db);
-        let inst_guard = InstGuard::new(
-            guard.handle(),
-            instantiate_value(&db, guard.handle(), &mut tydesc_table, typechecked)?
-        );
-        let inst = inst_guard.value();
-
-        unsafe {
-            assert_eq!(inst.tydesc.type_tag(), rtdt::TyTag::Enum);
-            let enum_info = inst.tydesc.enum_info();
-            assert_eq!(enum_info.num_variants(), 2);
-
-            let discriminant = *(inst.ptr as *const u32);
-            assert_eq!(discriminant, 0);
-
-            let variants = enum_info.variants();
-            let payload_offset = variants[0].offset;
-            let payload_ptr = inst.ptr.add(payload_offset as usize);
-
-            let payload_tydesc = variants[0].payload;
-            assert!(!payload_tydesc.is_null());
-            assert_eq!((*payload_tydesc).type_tag, rtdt::TyTag::Tuple);
-
-            let tuple_info = &(*payload_tydesc).type_info.tuple;
-            assert_eq!(tuple_info.num_fields, 2);
-
-            let tuple_fields = std::slice::from_raw_parts(tuple_info.fields, 2);
-            let first_value = *(payload_ptr.add(tuple_fields[0].offset as usize) as *const u32);
-            let second_value = *(payload_ptr.add(tuple_fields[1].offset as usize) as *const u32);
-
-            assert_eq!(first_value, 10);
-            assert_eq!(second_value, 20);
-        }
-        Ok(())
-    }
-
-    #[test]
-    fn test_instantiate_enum_with_struct_payload() -> AnyResult<()> {
-        let db = Database::default();
-        let typechecked = compile_str(&db, ": enum { Data({x: u32, y: u32}), None } / enum Data({x = 5, y = 15})")?;
-        let rt = datalove_rt::rust::Runtime::new();
-        let guard = RtGuard::new(rt);
-        let mut tydesc_table = TyDescTable::new(&db);
-        let inst_guard = InstGuard::new(
-            guard.handle(),
-            instantiate_value(&db, guard.handle(), &mut tydesc_table, typechecked)?
-        );
-        let inst = inst_guard.value();
-
-        unsafe {
-            assert_eq!(inst.tydesc.type_tag(), rtdt::TyTag::Enum);
-            let enum_info = inst.tydesc.enum_info();
-            assert_eq!(enum_info.num_variants(), 2);
-
-            let discriminant = *(inst.ptr as *const u32);
-            assert_eq!(discriminant, 0);
-
-            let variants = enum_info.variants();
-            let payload_offset = variants[0].offset;
-            let payload_ptr = inst.ptr.add(payload_offset as usize);
-
-            let payload_tydesc = variants[0].payload;
-            assert!(!payload_tydesc.is_null());
-            assert_eq!((*payload_tydesc).type_tag, rtdt::TyTag::Struct);
-
-            let struct_info = &(*payload_tydesc).type_info.struct_;
-            assert_eq!(struct_info.num_fields, 2);
-
-            let struct_fields = std::slice::from_raw_parts(struct_info.fields, struct_info.num_fields as usize);
-            let x_value = *(payload_ptr.add(struct_fields[0].offset as usize) as *const u32);
-            let y_value = *(payload_ptr.add(struct_fields[1].offset as usize) as *const u32);
-
-            assert_eq!(x_value, 5);
-            assert_eq!(y_value, 15);
         }
         Ok(())
     }
@@ -2306,70 +2132,6 @@ mod tests {
 
             let inner_tydesc = inst.tydesc.option_inner_ty().as_ptr();
             assert_eq!((*inner_tydesc).type_tag, rtdt::TyTag::String);
-        }
-        Ok(())
-    }
-
-    #[test]
-    fn test_instantiate_option_of_enum_none() -> AnyResult<()> {
-        let db = Database::default();
-        let typechecked = compile_str(&db, ": ?enum { Ok, Error } / none")?;
-        let rt = datalove_rt::rust::Runtime::new();
-        let guard = RtGuard::new(rt);
-        let mut tydesc_table = TyDescTable::new(&db);
-        let inst_guard = InstGuard::new(
-            guard.handle(),
-            instantiate_value(&db, guard.handle(), &mut tydesc_table, typechecked)?
-        );
-        let inst = inst_guard.value();
-
-        unsafe {
-            assert_eq!(inst.tydesc.type_tag(), rtdt::TyTag::Option);
-            let tag = *inst.ptr;
-            assert_eq!(tag, rtdt::OptionTag::None as u8);
-
-            let inner_tydesc = inst.tydesc.option_inner_ty().as_ptr();
-            assert_eq!((*inner_tydesc).type_tag, rtdt::TyTag::Enum);
-            let enum_info = &(*inner_tydesc).type_info.enum_;
-            assert_eq!(enum_info.num_variants, 2);
-        }
-        Ok(())
-    }
-
-    #[test]
-    fn test_instantiate_option_of_enum_some() -> AnyResult<()> {
-        let db = Database::default();
-        let typechecked = compile_str(&db, ": ?enum { Ok, Error(string) } / some enum Error(\"failed\")")?;
-        let rt = datalove_rt::rust::Runtime::new();
-        let guard = RtGuard::new(rt);
-        let mut tydesc_table = TyDescTable::new(&db);
-        let inst_guard = InstGuard::new(
-            guard.handle(),
-            instantiate_value(&db, guard.handle(), &mut tydesc_table, typechecked)?
-        );
-        let inst = inst_guard.value();
-
-        unsafe {
-            assert_eq!(inst.tydesc.type_tag(), rtdt::TyTag::Option);
-            let tag = *inst.ptr;
-            assert_eq!(tag, rtdt::OptionTag::Some as u8);
-
-            let layout = rtdt::layout::compute_option_layout(inst.tydesc);
-            let payload_ptr = inst.ptr.add(layout.payload_offset as usize);
-
-            let discriminant = *(payload_ptr as *const u32);
-            assert_eq!(discriminant, 1);
-
-            let inner_tydesc = inst.tydesc.option_inner_ty().as_ptr();
-            let enum_info = &(*inner_tydesc).type_info.enum_;
-            let _variants = std::slice::from_raw_parts(enum_info.variants, enum_info.num_variants as usize);
-            let enum_layout = rtdt::layout::compute_enum_layout(rtdt::TyDescRef::from_ptr(inner_tydesc));
-
-            let enum_payload_ptr = payload_ptr.add(enum_layout.variant_offsets[1] as usize);
-            let string = &*(enum_payload_ptr as *const rtdt::String);
-            assert_eq!(string.size, rtdt::Index(6));
-            let str_slice = std::slice::from_raw_parts(string.data, string.size.as_usize());
-            assert_eq!(str_slice, b"failed");
         }
         Ok(())
     }

@@ -50,7 +50,7 @@ pub enum TypeHint<'db> {
     String,
     AnonTuple(TypeHintAnonTuple<'db>),
     AnonStruct(TypeHintAnonStruct<'db>),
-    AnonEnum(TypeHintAnonEnum<'db>),
+
     List(TypeHintList<'db>),
     Map(TypeHintMap<'db>),
     Set(TypeHintSet<'db>),
@@ -84,18 +84,6 @@ pub struct TypeHintNamedField<'db> {
     pub type_hint: Box<TypeHint<'db>>,
 }
 
-#[derive(Clone, Hash, PartialEq, Eq)]
-#[derive(salsa::Update)]
-pub struct TypeHintAnonEnum<'db> {
-    pub variants: Vec<TypeHintEnumVariant<'db>>,
-}
-
-#[derive(Clone, Hash, PartialEq, Eq)]
-#[derive(salsa::Update)]
-pub struct TypeHintEnumVariant<'db> {
-    pub name: InternedText<'db>,
-    pub payload: Option<Box<TypeHint<'db>>>,
-}
 
 #[derive(Clone, Hash, PartialEq, Eq)]
 #[derive(salsa::Update)]
@@ -155,7 +143,7 @@ pub enum Expr<'db> {
     String(ExprString<'db>),
     AnonTuple(ExprAnonTuple<'db>),
     AnonStruct(ExprAnonStruct<'db>),
-    AnonEnum(ExprAnonEnum<'db>),
+
     List(ExprList<'db>),
     Map(ExprMap<'db>),
     Set(ExprSet<'db>),
@@ -213,12 +201,6 @@ pub struct ExprStructField<'db> {
     pub value: ExprFull<'db>,
 }
 
-#[derive(Clone, Hash, PartialEq, Eq)]
-#[derive(salsa::Update)]
-pub struct ExprAnonEnum<'db> {
-    pub variant_name: InternedText<'db>,
-    pub payload: Option<ExprFull<'db>>,
-}
 
 #[derive(Clone, Hash, PartialEq, Eq)]
 #[derive(salsa::Update)]

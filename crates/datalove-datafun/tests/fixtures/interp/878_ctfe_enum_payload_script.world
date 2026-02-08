@@ -1,7 +1,0 @@
-----------
-scriptunit-fragment
-----------
-
-// CTFE enum payload variant in script unit.
-const R: enum { Ok(u32), Error } = enum Ok(42)
-debuglog R

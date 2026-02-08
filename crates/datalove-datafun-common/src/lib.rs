@@ -403,8 +403,7 @@ pub use datalit::tycheck::{
     TypeAnonTuple,
     TypeAnonStruct,
     TypeNamedField,
-    TypeAnonEnum,
-    TypeEnumVariant,
+
     TypeList,
     TypeMap,
     TypeSet,
@@ -611,25 +610,6 @@ fn convert_type_hint_inner<'db>(
             ))
         }
 
-        TypeHint::AnonEnum(e) => {
-            let variants: Result<Vec<_>, TypeError> = e.variants.iter()
-                .map(|v| {
-                    let name = v.name;
-                    let payload = v.payload.as_ref().map(|p| {
-                        let p_ty = convert_type_hint_inner(db, (**p).clone())?;
-                        // Type hints cannot produce function types.
-                        let Type::Datalit(dt) = p_ty else {
-                            unreachable!("type hint cannot produce function type")
-                        };
-                        Ok::<_, TypeError>(Box::new(dt.clone()))
-                    }).transpose()?;
-                    Ok(datalit::tycheck::TypeEnumVariant { name, payload })
-                })
-                .collect();
-            Type::Datalit(datalit::tycheck::Type::AnonEnum(
-                datalit::tycheck::TypeAnonEnum { variants: variants? }
-            ))
-        }
 
         TypeHint::List(l) => {
             let elem_ty = convert_type_hint_inner(db, (*l.element_type).clone())?;
@@ -813,25 +793,6 @@ fn convert_type_hint_with_aliases_inner<'db>(
             ))
         }
 
-        TypeHint::AnonEnum(e) => {
-            let variants: Result<Vec<_>, TypeError> = e.variants.iter()
-                .map(|v| {
-                    let name = v.name;
-                    let payload = v.payload.as_ref().map(|p| {
-                        let p_ty = convert_type_hint_with_aliases_inner(db, (**p).clone(), aliases)?;
-                        // Type hints cannot produce function types.
-                        let Type::Datalit(dt) = p_ty else {
-                            unreachable!("type hint cannot produce function type")
-                        };
-                        Ok::<_, TypeError>(Box::new(dt.clone()))
-                    }).transpose()?;
-                    Ok(datalit::tycheck::TypeEnumVariant { name, payload })
-                })
-                .collect();
-            Type::Datalit(datalit::tycheck::Type::AnonEnum(
-                datalit::tycheck::TypeAnonEnum { variants: variants? }
-            ))
-        }
 
         TypeHint::List(l) => {
             let elem_ty = convert_type_hint_with_aliases_inner(db, (*l.element_type).clone(), aliases)?;

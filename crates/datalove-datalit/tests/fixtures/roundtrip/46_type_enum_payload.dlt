@@ -1,1 +1,0 @@
-: enum {A, B(u32)} / enum B(42)

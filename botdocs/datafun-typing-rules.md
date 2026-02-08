@@ -195,7 +195,6 @@ Literals follow the same rules as datalit:
 - Hex literals => `int` by default
 - String literals => `string`
 - `none` => cannot synthesize (requires type context)
-- Anonymous enums => cannot synthesize (requires type context)
 
 ### Rule: Syn-Some
 ```
@@ -368,14 +367,6 @@ end fun
 ```
 // ERROR: +? requires Option return, but script returns Result
 let x: u32 = a +? b    // Falls through to synthesis, produces error
-```
-
-### Rule: Check-AnonEnum
-```
-variant V exists in expected enum type
-payload <= expected payload type (if any)
------------------------------------------
-enum V(payload) <= enum{V: T, ...}
 ```
 
 ### Rule: Check-Int
@@ -564,7 +555,6 @@ Try operators (`?`, `!`) and checked/optional arithmetic require:
 - **IntOutOfRange**: Integer literal out of range for target type
 - **ArityMismatch**: Wrong number of tuple/struct fields
 - **FieldOrderMismatch**: Struct fields in wrong order
-- **VariantNotFound**: Enum variant doesn't exist
 - **MissingField/ExtraField**: Struct field errors
 
 ## Numeric Type Hierarchy

@@ -1,9 +1,0 @@
-----------
-scriptunit-fragment
-----------
-
-// CTFE enum testing different variant selection.
-const E1: enum { A, B, C, D } = enum C
-const E2: enum { X(u32), Y(string), Z } = enum Y("test")
-debuglog E1
-debuglog E2

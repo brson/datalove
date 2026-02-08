@@ -50,12 +50,11 @@ The following identifiers are reserved:
 
 ```
 and       break     continue  data      else      end
-enum      error     er        false     for       fun
-icall     if        import    in        let       loop
-map       mut       none      not       ok        or
-out       ref       require   ret       set       some
-table     tensor    true      type      var       while
-xor
+error     er        false     for       fun       icall
+if        import    in        let       loop      map
+mut       none      not       ok        or        out
+ref       require   ret       set       some      table
+tensor    true      type      var       while     xor
 ```
 
 ### 2.2 Literals
@@ -191,14 +190,6 @@ language. The runtime supports these operations internally.
 ```
 { x: f32, y: f32 }       // type
 { x = 1.0, y = 2.0 }     // literal
-```
-
-**Enum.** A tagged union of variants.
-
-```
-enum { None, Some(T) }   // type
-enum None                // variant without payload
-enum Some(42)            // variant with payload
 ```
 
 ### 3.4 Option and Result
@@ -556,7 +547,7 @@ let x = repeat(COUNT, "ab")  // COUNT is a const binding
 - Arguments must be const binding names (e.g., `repeat(N, s)` not `repeat(3, s)`)
 
 **Implementation:** The compiler uses union-branch specialization - a single
-function with dispatch over an enum of known instantiations. See
+function with dispatch over a tag of known instantiations. See
 `const-param-specialization.md` for design details.
 
 ### 7.5 Control Flow

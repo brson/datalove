@@ -56,17 +56,7 @@ fn type_hint_to_string(db: &dyn salsa::Database, type_hint: &datalove_datalit::a
                 .collect();
             format!("{{{}}}", fields.join(", "))
         }
-        TypeHint::AnonEnum(e) => {
-            let variants: Vec<_> = e.variants.iter()
-                .map(|v| {
-                    match &v.payload {
-                        Some(p) => format!("{}({})", v.name.as_str(db), type_hint_to_string(db, p)),
-                        None => v.name.as_str(db).to_string(),
-                    }
-                })
-                .collect();
-            format!("enum {{{}}}", variants.join(", "))
-        }
+
         TypeHint::Tensor(t) => {
             let elem_str = type_hint_to_string(db, &t.element_type);
             format!("tensor<{}, {}>", elem_str, t.rank)

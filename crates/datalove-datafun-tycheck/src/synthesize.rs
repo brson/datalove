@@ -15,7 +15,7 @@ use rmx::prelude::*;
 use datalove_datafun_ast::ast::*;
 use datalove_datalit as datalit;
 use crate::context::TypeContext;
-use crate::check::{check_expr, check_list_elements, check_set_elements, check_map_entries, check_tensor_shape_and_elements, check_tuple_elements, check_struct_fields, check_enum_variant, check_table_rows};
+use crate::check::{check_expr, check_list_elements, check_set_elements, check_map_entries, check_tensor_shape_and_elements, check_tuple_elements, check_struct_fields, check_table_rows};
 use crate::types::*;
 
 pub use crate::{Type, TypeError, is_copy_type};
@@ -324,14 +324,6 @@ pub fn synthesize_expr<'db>(
                 return Ok(expected_ty);
             }
             synthesize_inline_anon_struct(ctx, expr, struct_expr)
-        }
-        ExprFunKind::AnonEnum(enum_expr) => {
-            if let Some(type_hint) = enum_expr.type_hint.clone() {
-                let expected_ty = convert_type_hint(db, type_hint)?;
-                check_enum_variant(ctx, enum_expr.variant_name, enum_expr.payload, &expected_ty)?;
-                return Ok(expected_ty);
-            }
-            Err(ctx.error_cannot_synthesize(expr, "anonymous enum requires type hint"))
         }
 
         // Wrapper types.

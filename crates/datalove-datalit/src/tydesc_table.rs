@@ -31,6 +31,7 @@ pub struct TyDescTable<'db> {
     /// Storage for flexible array members.
     tuple_fields: Vec<Vec<rtdt::TyInfoTupleField>>,
     struct_fields: Vec<Vec<rtdt::TyInfoStructField>>,
+    #[allow(dead_code)]
     enum_variants: Vec<Vec<rtdt::TyInfoEnumVariant>>,
     table_columns: Vec<Vec<rtdt::TyInfoTableColumn>>,
 }
@@ -377,7 +378,7 @@ impl<'db> TyDescTable<'db> {
             }
             Type::AnonTuple(t) => self.create_tuple_tydesc(&t.fields),
             Type::AnonStruct(s) => self.create_struct_tydesc(&s.fields),
-            Type::AnonEnum(e) => self.create_enum_tydesc(&e.variants),
+
             Type::List(l) => self.create_list_tydesc(*l.element_type.clone()),
             Type::Map(m) => self.create_map_tydesc(*m.key_type.clone(), *m.value_type.clone()),
             Type::Set(s) => self.create_set_tydesc(*s.element_type.clone()),
@@ -516,63 +517,6 @@ impl<'db> TyDescTable<'db> {
         })
     }
 
-    /// Create TyDesc for enum (anon or named).
-    fn create_enum_tydesc(&mut self, variants: &[TypeEnumVariant<'db>]) -> Box<rtdt::TyDesc> {
-        // Create variant info array with TyDescs for payloads.
-        let mut variant_info = Vec::new();
-        for variant in variants {
-            let variant_name = variant.name.as_str(self.db);
-            let payload_tydesc = if let Some(payload_ty) = &variant.payload {
-                self.get_or_create(&**payload_ty)
-            } else {
-                std::ptr::null()
-            };
-
-            variant_info.push(rtdt::TyInfoEnumVariant {
-                name: variant_name.as_ptr(),
-                name_len: variant_name.len() as u32,
-                offset: 0, // Will be computed by layout
-                payload: payload_tydesc,
-            });
-        }
-
-        // Compute layout.
-        let layout = unsafe {
-            let temp_tydesc = rtdt::TyDesc {
-                type_tag: rtdt::TyTag::Enum,
-                size: 0,
-                align: 1,
-                type_info: rtdt::TyInfo {
-                    enum_: rtdt::TyInfoEnum {
-                        num_variants: variants.len() as u32,
-                        variants: variant_info.as_ptr(),
-                    },
-                },
-            };
-            rtdt::layout::compute_enum_layout(rtdt::TyDescRef::from_ptr(&temp_tydesc))
-        };
-
-        // Update variant offsets from layout.
-        for (i, variant_entry) in variant_info.iter_mut().enumerate() {
-            variant_entry.offset = layout.variant_offsets[i];
-        }
-
-        // Store variant array and get stable pointer.
-        self.enum_variants.push(variant_info);
-        let variants_ptr = self.enum_variants.last().unwrap().as_ptr();
-
-        Box::new(rtdt::TyDesc {
-            type_tag: rtdt::TyTag::Enum,
-            size: layout.size,
-            align: layout.align,
-            type_info: rtdt::TyInfo {
-                enum_: rtdt::TyInfoEnum {
-                    num_variants: variants.len() as u32,
-                    variants: variants_ptr,
-                },
-            },
-        })
-    }
 
     /// Create TyDesc for list.
     fn create_list_tydesc(&mut self, element_type: Type<'db>) -> Box<rtdt::TyDesc> {
@@ -1107,63 +1051,6 @@ mod tests {
         Ok(())
     }
 
-    #[test]
-    fn test_create_enum_tydesc() -> AnyResult<()> {
-        let db = Database::default();
-        let typechecked = compile(&db, ": enum { Ok, Error } / enum Ok")?;
-        let root_type = typechecked.root_type(&db).clone().unwrap();
-
-        let mut table = TyDescTable::new(&db);
-        let tydesc = table.get_or_create(&root_type);
-
-        unsafe {
-            let td = rtdt::TyDescRef::from_ptr(tydesc);
-            assert_eq!(td.type_tag(), rtdt::TyTag::Enum);
-            let enum_info = td.enum_info();
-            assert_eq!(enum_info.num_variants(), 2);
-
-            let variants = enum_info.variants();
-            let name0 = std::slice::from_raw_parts(variants[0].name, variants[0].name_len as usize);
-            let name1 = std::slice::from_raw_parts(variants[1].name, variants[1].name_len as usize);
-            assert_eq!(name0, b"Ok");
-            assert_eq!(name1, b"Error");
-
-            // No payload variants should have null payload tydesc.
-            assert!(variants[0].payload.is_null());
-            assert!(variants[1].payload.is_null());
-        }
-        Ok(())
-    }
-
-    #[test]
-    fn test_create_enum_with_payload_tydesc() -> AnyResult<()> {
-        let db = Database::default();
-        let typechecked = compile(&db, ": enum { Ok(u32), Err(string) } / enum Ok(42)")?;
-        let root_type = typechecked.root_type(&db).clone().unwrap();
-
-        let mut table = TyDescTable::new(&db);
-        let tydesc = table.get_or_create(&root_type);
-
-        unsafe {
-            let td = rtdt::TyDescRef::from_ptr(tydesc);
-            assert_eq!(td.type_tag(), rtdt::TyTag::Enum);
-            let enum_info = td.enum_info();
-            assert_eq!(enum_info.num_variants(), 2);
-
-            let variants = enum_info.variants();
-
-            // Ok variant has u32 payload.
-            assert!(!variants[0].payload.is_null());
-            let payload0_td = rtdt::TyDescRef::from_ptr(variants[0].payload);
-            assert_eq!(payload0_td.type_tag(), rtdt::TyTag::U32);
-
-            // Err variant has string payload.
-            assert!(!variants[1].payload.is_null());
-            let payload1_td = rtdt::TyDescRef::from_ptr(variants[1].payload);
-            assert_eq!(payload1_td.type_tag(), rtdt::TyTag::String);
-        }
-        Ok(())
-    }
 
     #[test]
     fn test_create_list_tydesc() -> AnyResult<()> {

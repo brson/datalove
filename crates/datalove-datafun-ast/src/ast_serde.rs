@@ -205,7 +205,6 @@ pub enum ExprFunKind {
     // Aggregate expressions.
     AnonTuple(ExprAnonTuple),
     AnonStruct(ExprAnonStruct),
-    AnonEnum(ExprAnonEnum),
 
     // Wrapper expressions.
     Some(ExprSome),
@@ -392,12 +391,6 @@ pub struct ExprStructField {
     pub value: ExprFun,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-pub struct ExprAnonEnum {
-    pub type_hint: Option<datalove_datalit::ast_serde::TypeHint>,
-    pub variant_name: String,
-    pub payload: Option<Box<ExprFun>>,
-}
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct ExprTable {
@@ -699,7 +692,6 @@ impl ExprFunKind {
             // Aggregate expressions.
             crate::ast::ExprFunKind::AnonTuple(e) => ExprFunKind::AnonTuple(ExprAnonTuple::from_ast(db, e)),
             crate::ast::ExprFunKind::AnonStruct(e) => ExprFunKind::AnonStruct(ExprAnonStruct::from_ast(db, e)),
-            crate::ast::ExprFunKind::AnonEnum(e) => ExprFunKind::AnonEnum(ExprAnonEnum::from_ast(db, e)),
 
             // Wrapper expressions.
             crate::ast::ExprFunKind::Some(e) => ExprFunKind::Some(ExprSome::from_ast(db, e)),
@@ -968,15 +960,6 @@ impl ExprStructField {
     }
 }
 
-impl ExprAnonEnum {
-    pub fn from_ast<'db>(db: &'db dyn Db, ast: &crate::ast::ExprAnonEnum<'db>) -> Self {
-        ExprAnonEnum {
-            type_hint: type_hint_from_ast(db, ast.type_hint.clone()),
-            variant_name: ast.variant_name.as_str(db).to_string(),
-            payload: ast.payload.map(|p| Box::new(ExprFun::from_ast(db, p))),
-        }
-    }
-}
 
 impl ExprTable {
     pub fn from_ast<'db>(db: &'db dyn Db, ast: &crate::ast::ExprTable<'db>) -> Self {

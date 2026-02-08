@@ -317,7 +317,6 @@ pub enum ExprFunKind<'db> {
     // Aggregate expressions.
     AnonTuple(ExprAnonTuple<'db>),
     AnonStruct(ExprAnonStruct<'db>),
-    AnonEnum(ExprAnonEnum<'db>),
 
     // Wrapper expressions.
     Some(ExprSome<'db>),
@@ -552,13 +551,6 @@ pub struct ExprStructField<'db> {
     pub value: ExprFun<'db>,
 }
 
-#[derive(Clone, Hash, PartialEq, Eq)]
-#[derive(salsa::Update)]
-pub struct ExprAnonEnum<'db> {
-    pub type_hint: Option<datalit::ast::TypeHint<'db>>,
-    pub variant_name: InternedText<'db>,
-    pub payload: Option<ExprFun<'db>>,
-}
 
 #[derive(Clone, Hash, PartialEq, Eq)]
 #[derive(salsa::Update)]

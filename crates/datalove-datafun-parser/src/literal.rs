@@ -147,9 +147,7 @@ impl<'db> Parser<'db> {
             Some("tensor") => {
                 return self.parse_lit_tensor(type_hint);
             }
-            Some("enum") => {
-                return self.parse_lit_anon_enum(type_hint);
-            }
+
             Some("map") => {
                 return self.parse_lit_map(type_hint);
             }
@@ -362,55 +360,6 @@ impl<'db> Parser<'db> {
         ast::ExprFunKind::Map(ast::ExprMap { type_hint, entries })
     }
 
-    /// Parse anonymous enum: enum Variant or enum Variant(payload)
-    fn parse_lit_anon_enum(
-        &mut self,
-        type_hint: Option<datalit::ast::TypeHint<'db>>,
-    ) -> ast::ExprFunKind<'db> {
-        self.eat_word("enum");
-        let variant_name = match self.eat_name() {
-            Some(n) => n,
-            None => {
-                self.had_error = true;
-                let ts = self.peek_text_span();
-                let message = "expected variant name after 'enum'";
-                DiagnosticBuilder::error(self.db, message)
-                    .code("P021")
-                    .primary_label(ts.clone(), "expected variant name")
-                    .emit_parse();
-                return ast::ExprFunKind::ParseError(ast::ExprFunParseError {
-                    text: ts.text,
-                    span: ts.span.C(),
-                    message: InternedText::new(self.db, message.S()),
-                });
-            }
-        };
-        let payload = self.parse_optional_enum_payload();
-        ast::ExprFunKind::AnonEnum(ast::ExprAnonEnum {
-            type_hint, variant_name, payload
-        })
-    }
-
-    /// Parse optional enum payload: (expr)
-    fn parse_optional_enum_payload(&mut self) -> Option<ast::ExprFun<'db>> {
-        match self.peek() {
-            Some(TreeToken::Branch { sigil: Sigil::ParenOpen, .. }) => {
-                let inner = match self.next() {
-                    Some(TreeToken::Branch { sigil: Sigil::ParenOpen, inner, .. }) => inner,
-                    _ => unreachable!("peek confirmed ParenOpen"),
-                };
-                let mut sub = self.sub_parser(inner, None);
-                if sub.peek().is_none() {
-                    return None;
-                }
-                let expr = sub.parse_expr_full();
-                sub.error_if_not_exhausted();
-                self.merge_from_sub(&mut sub);
-                Some(expr)
-            }
-            _ => None
-        }
-    }
 
     /// Parse tensor: tensor [shape] [data]
     fn parse_lit_tensor(

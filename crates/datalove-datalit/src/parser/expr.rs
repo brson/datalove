@@ -252,33 +252,7 @@ impl<'db> Parser<'db> {
 
                 return ast::Expr::Tensor(ast::ExprTensor { shape, elements });
             }
-            Some("enum") => {
-                let ts = self.peek_text_span();
-                self.eat_word("enum");
-                // Enum expression syntax: enum Variant or enum Variant(...).
-                let variant_name = match self.eat_name() {
-                    Some(n) => n,
-                    None => {
-                        return self.emit_expr_error(ts,
-                            "expected variant name after enum keyword",
-                            "D016",
-                            "expected enum variant name"
-                        );
-                    }
-                };
-                let payload = if let Some(iter) = self.eat_branch(Sigil::ParenOpen) {
-                    // Parse a single expression as payload.
-                    let mut sub_parser = Parser::from_branch(self.db, iter, self.source_text());
-                    let payload_expr = sub_parser.parse_expr_full();
-                    sub_parser.error_if_not_exhausted();
-                    // Merge spans from sub-parser.
-                    self.expr_spans.extend(sub_parser.expr_spans);
-                    Some(payload_expr)
-                } else {
-                    None
-                };
-                return ast::Expr::AnonEnum(ast::ExprAnonEnum { variant_name, payload });
-            }
+
             Some("map") => {
                 let ts = self.peek_text_span();
                 self.eat_word("map");

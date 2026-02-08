@@ -51,22 +51,6 @@ fn type_to_json(db: &datalove_datalit::Database, ty: &datalove_datalit::tycheck:
             })
         }
 
-        Type::AnonEnum(e) => {
-            let variants: Vec<_> = e.variants
-                .iter()
-                .map(|v| {
-                    let payload = v.payload.as_ref().map(|p| type_to_json(db, &**p));
-                    json!({
-                        "name": v.name.as_str(db),
-                        "payload": payload
-                    })
-                })
-                .collect();
-            json!({
-                "kind": "AnonEnum",
-                "variants": variants
-            })
-        }
 
         Type::List(l) => {
             json!({

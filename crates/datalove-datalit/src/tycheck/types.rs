@@ -41,7 +41,7 @@ pub enum Type<'db> {
     String,
     AnonTuple(TypeAnonTuple<'db>),
     AnonStruct(TypeAnonStruct<'db>),
-    AnonEnum(TypeAnonEnum<'db>),
+
     List(TypeList<'db>),
     Map(TypeMap<'db>),
     Set(TypeSet<'db>),
@@ -73,18 +73,6 @@ pub struct TypeNamedField<'db> {
     pub ty: Box<Type<'db>>,
 }
 
-#[derive(Clone, Hash, PartialEq, Eq)]
-#[derive(salsa::Update)]
-pub struct TypeAnonEnum<'db> {
-    pub variants: Vec<TypeEnumVariant<'db>>,
-}
-
-#[derive(Clone, Hash, PartialEq, Eq)]
-#[derive(salsa::Update)]
-pub struct TypeEnumVariant<'db> {
-    pub name: InternedText<'db>,
-    pub payload: Option<Box<Type<'db>>>,
-}
 
 #[derive(Clone, Hash, PartialEq, Eq)]
 #[derive(salsa::Update)]
@@ -241,21 +229,6 @@ pub fn types_equivalent<'db>(db: &'db dyn crate::Db, t1: &Type<'db>, t2: &Type<'
                 })
         }
 
-        (Type::AnonEnum(e1), Type::AnonEnum(e2)) => {
-            let v1 = e1.variants.C();
-            let v2 = e2.variants.C();
-            v1.len() == v2.len()
-                && v1.iter().all(|var1| {
-                    v2.iter().any(|var2| {
-                        var1.name == var2.name
-                            && match (&var1.payload, &var2.payload) {
-                                (Some(p1), Some(p2)) => types_equivalent(db, p1, p2),
-                                (None, None) => true,
-                                _ => false,
-                            }
-                    })
-                })
-        }
 
         (Type::List(l1), Type::List(l2)) => {
             types_equivalent(db, &l1.element_type, &l2.element_type)
@@ -367,22 +340,6 @@ pub fn convert_type_hint<'db>(
             Type::AnonStruct(TypeAnonStruct { fields: fields? })
         }
 
-        TypeHint::AnonEnum(e) => {
-            let variants: Result<Vec<_>, _> = e
-                .variants
-                .iter()
-                .map(|v| {
-                    let name = v.name;
-                    let payload = v
-                        .payload
-                        .as_ref()
-                        .map(|p| convert_type_hint(db, p))
-                        .transpose()?;
-                    Ok(TypeEnumVariant { name, payload: payload.map(Box::new) })
-                })
-                .collect();
-            Type::AnonEnum(TypeAnonEnum { variants: variants? })
-        }
 
         TypeHint::List(l) => {
             let element_type = convert_type_hint(db, &l.element_type)?;
@@ -480,9 +437,7 @@ pub fn type_to_string<'db>(db: &'db dyn crate::Db, ty: &Type<'db>) -> String {
                 .collect();
             format!("{{{}}}", fields.join(", "))
         }
-        Type::AnonEnum(_) => {
-            format!("enum{{...}}")
-        }
+
         Type::List(l) => {
             let ty_str = type_to_string(db, &l.element_type);
             format!("[{}]", ty_str)

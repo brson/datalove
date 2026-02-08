@@ -156,22 +156,6 @@ fn pretty_type<'db>(
             out.push('}');
         }
 
-        Type::AnonEnum(e) => {
-            out.push_str("enum {");
-            let variants = &e.variants;
-            for (i, variant) in variants.iter().enumerate() {
-                if i > 0 {
-                    out.push_str(", ");
-                }
-                out.push_str(variant.name.as_str(db));
-                if let Some(payload) = &variant.payload {
-                    out.push('(');
-                    pretty_type(db, &*payload.clone(), out);
-                    out.push(')');
-                }
-            }
-            out.push('}');
-        }
 
         Type::List(l) => {
             out.push('[');
@@ -298,22 +282,6 @@ fn pretty_type_hint<'db>(
             out.push('}');
         }
 
-        TypeHint::AnonEnum(e) => {
-            out.push_str("enum {");
-            let variants = &e.variants;
-            for (i, variant) in variants.iter().enumerate() {
-                if i > 0 {
-                    out.push_str(", ");
-                }
-                out.push_str(variant.name.as_str(db));
-                if let Some(payload) = &variant.payload {
-                    out.push('(');
-                    pretty_type_hint(db, *payload.clone(), out);
-                    out.push(')');
-                }
-            }
-            out.push('}');
-        }
 
         TypeHint::List(l) => {
             out.push('[');
@@ -448,15 +416,6 @@ fn pretty_expr<'db>(
             out.push('}');
         }
 
-        Expr::AnonEnum(e) => {
-            out.push_str("enum ");
-            out.push_str(e.variant_name.as_str(db));
-            if let Some(payload) = e.payload {
-                out.push('(');
-                pretty_expr_full(db, payload, out, indent);
-                out.push(')');
-            }
-        }
 
         Expr::List(l) => {
             out.push('[');

@@ -186,22 +186,6 @@ fn cmp_expr_inner<'db>(db: &'db dyn salsa::Database, a: &Expr<'db>, b: &Expr<'db
             Ordering::Equal
         }
 
-        // Anonymous enum: compare variant name, then payload.
-        (AnonEnum(a_enum), AnonEnum(b_enum)) => {
-            // Compare variant names first.
-            match a_enum.variant_name.as_str(db).cmp(b_enum.variant_name.as_str(db)) {
-                Ordering::Equal => {}
-                ord => return ord,
-            }
-
-            // Then compare payloads (if any).
-            match (a_enum.payload, b_enum.payload) {
-                (Option::None, Option::None) => Ordering::Equal,
-                (Option::None, Option::Some(_)) => Ordering::Less,
-                (Option::Some(_), Option::None) => Ordering::Greater,
-                (Option::Some(a_payload), Option::Some(b_payload)) => cmp_expr(db, a_payload, b_payload),
-            }
-        }
 
         // Unsupported types - panic for now.
         (ParseError(_), _) | (_, ParseError(_)) => {
@@ -229,7 +213,7 @@ fn expr_type_tag(expr: &Expr) -> u8 {
         Er(_) => 9,
         AnonTuple(_) => 10,
         AnonStruct(_) => 11,
-        AnonEnum(_) => 12,
+
         List(_) => 13,
         Set(_) => 14,
         Map(_) => 15,

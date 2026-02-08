@@ -11,8 +11,8 @@ There were two code paths that parsed these keywords,
 and they disagreed on whether the payload
 is a primary expression or a full expression.
 
-This matters for the planned `atom`/`tag`/enum design,
-where postfix `@` would coerce a tag to an enum type.
+This matters for the planned `atom`/`tag` design,
+where postfix `@` would coerce a tag to a tagged union type.
 With full-expression payloads, `tag Bar 1@` parses as `tag Bar (1@)`,
 requiring parentheses: `(tag Bar 1)@`.
 With primary-expression payloads, `tag Bar 1@` parses as `(tag Bar 1)@`,
@@ -63,11 +63,10 @@ Only keywords with bare (non-delimited) payloads are affected:
 | `data`, `error`    | bare expression     | yes      |
 | `none/true/false`  | none                | no       |
 | `map`, `set`       | `{ ... }` braces    | no       |
-| `enum`             | `Name(payload)`     | no       |
 | `tensor`           | `[shape] [data]`    | no       |
 | `icall`            | `name(args)` parens | no       |
 
-Delimiter-enclosed keywords (`map`, `set`, `enum`, `tensor`, `icall`)
+Delimiter-enclosed keywords (`map`, `set`, `tensor`, `icall`)
 are immune because brackets/braces/parens mark the payload boundary.
 
 Future `atom` (no payload) is unaffected.
@@ -118,5 +117,5 @@ This is a niche pattern.
 The two paths were reconciled by switching expr.rs to `parse_expr_primary`,
 matching what literal.rs already does.
 This was a one-line change per keyword group in `parse_expr_primary`.
-It makes `tag Bar 1@` work naturally for enum coercion
+It makes `tag Bar 1@` work naturally for tag coercion
 and resolves the inconsistency between the two code paths.

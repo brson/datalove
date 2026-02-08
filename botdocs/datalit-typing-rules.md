@@ -7,8 +7,8 @@ It follows a bidirectional typing discipline based on Dunfield & Krishnaswami (2
 
 - **Bidirectional**: Expressions either synthesize (=>) or check (<=) against types
 - **Explicit heaps**: `@` for local, `#` for global, omitted for inferred (defaults to local)
-- **Structural typing**: Anonymous types (tuples, structs, enums) are compatible by structure
-- **Nominal typing**: Named types (`struct Foo`, `enum Bar`, `tuple Pair`) are distinct even with same structure
+- **Structural typing**: Anonymous types (tuples, structs) are compatible by structure
+- **Nominal typing**: Named types (`struct Foo`, `tuple Pair`) are distinct even with same structure
 - **Explicit at boundaries**: The `: type / expr` syntax provides type information at expression boundaries
 
 ## Type Equivalence
@@ -55,19 +55,6 @@ Examples:
 ### Named Types (nominal)
 - `@struct Point{x: T1, y: T2} != @struct Vec2{x: T1, y: T2}` even if fields match
 - `@tuple Pair(T1, T2) != @tuple Point(T1, T2)` even if elements match
-- `@enum Result{...} != @enum Option{...}` even if variants match
-
-### Anonymous Enums (structural)
-- Enum types are equivalent if they have the same set of variants (order-independent)
-- Variant names must match
-- Payload types must match
-
-Examples:
-```
-@enum{Foo, Bar(@u32)} = @enum{Bar(@u32), Foo}  ok (order doesn't matter for enums)
-@enum{Foo} = @enum{Bar}                        FAIL (different variant names)
-```
-
 ### Collections
 - `[@T] = [@T']` iff T = T'
 - `@map<K, V> = @map<K', V'>` iff K = K' and V = V'
@@ -355,20 +342,6 @@ Cannot synthesize type for @none (needs context)
 
 **Note**: `@none` can only be checked, not synthesized.
 
-### Rule: Syn-AnonEnum
-```
------------------
-Cannot synthesize type for anonymous enums (needs context)
-```
-
-**Note**: Anonymous enums cannot be synthesized because we cannot determine the full set of variants from a single variant expression.
-
-Example:
-```
-@enum Foo(@42) => error (CannotSynthesize)
-: @enum{Foo: @u32, Bar} / @enum Foo(@42) => @enum{Foo: @u32, Bar}  ok (with type hint)
-```
-
 ### Rule: Syn-Er
 ```
 -----------------
@@ -477,27 +450,6 @@ for all i: ei <= Ti
 -----------------------------------------
 {f1 = e1, f2 = e2, ...} <= {f1: T1, f2: T2, ...}
 ```
-
-### Rule: Check-AnonEnum
-```
-@enum{V1, V2: T2, ...} is expected type
-variant Vi exists
-If Vi has payload type Ti, then e <= Ti
-If Vi has no payload, then expression has no payload
-------------------------------------------------------
-@enum Vi(...) <= @enum{V1, V2: T2, ...}
-```
-
-### Rule: Check-TypedAnonEnum
-```
-@enum Vi(...) has direct enum type hint T_hint
-T_hint = T_expected
-@enum Vi(...) without hint <= T_expected
-------------------------------------------------------
-: T_hint / @enum Vi(...) <= T_expected
-```
-
-**Note**: When an anonymous enum expression has a type hint, the hinted type must match the expected type exactly.
 
 ### Rule: Check-List
 ```
@@ -654,15 +606,13 @@ The type checker produces the following error codes:
 - **T013**: Cannot infer type for empty list / hex out of range for f32
 - **T014**: Cannot infer type for empty set
 - **T015**: Cannot infer type for empty map
-- **T016**: Cannot synthesize type for anonymous enum, None, or Er
+- **T016**: Cannot synthesize type for None or Er
 - **T017**: Cannot type-check expression with parse errors
 - **T018**: List element type mismatch
 - **T019**: Set element type mismatch
 - **T020**: Map key type mismatch
 - **T021**: Map value type mismatch
 - **T022**: Type mismatch for primitive literal
-- **T024**: Enum variant payload mismatch (has payload, expected none)
-- **T025**: Enum variant payload mismatch (no payload, expected payload)
 - **T032**: General type mismatch (subsumption fallback)
 - **T033**: List element heap mismatch
 - **T034**: Set element heap mismatch
@@ -673,8 +623,6 @@ The type checker produces the following error codes:
 - **T039**: Struct arity mismatch
 - **T040**: Type hint mismatch / er payload must be error
 - **T042**: Struct field order mismatch
-- **T044**: Enum variant not found
-- **T047**: Anonymous enum type hint mismatch
 - **T048**: Tensor rank mismatch
 - **T049**: Tensor element count mismatch
 - **T050**: Cannot infer type for empty tensor
@@ -755,7 +703,7 @@ fn check(ctx, expr: ExprFull, expected: TypeAndHeap) -> Result<(), TypeError>
 
 The `Type` enum in `crates/datalove-datalit/src/tycheck.rs` includes:
 - Primitives: Bool, U8, I8, U16, I16, U32, I32, U64, I64, F32, Int, String
-- Composites: AnonTuple, AnonStruct, AnonEnum
+- Composites: AnonTuple, AnonStruct
 - Collections: List, Map, Set
 - Wrappers: Option, Result
 - Special: Tensor, Data, Error
@@ -768,5 +716,5 @@ Before typechecking:
 3. Run typechecker with resolution context
 
 Typechecker needs:
-- Resolution results to look up types for named structs, tuples, enums
+- Resolution results to look up types for named structs, tuples
 - Type definitions from the type hint in `: type / expr` syntax

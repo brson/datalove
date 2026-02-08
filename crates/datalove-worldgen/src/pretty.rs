@@ -84,15 +84,6 @@ fn write_expr<'db>(
             out.push('}');
         }
 
-        Expr::AnonEnum(e) => {
-            out.push_str("enum ");
-            out.push_str(e.variant_name.as_str(db));
-            if let Some(payload) = e.payload {
-                out.push('(');
-                write_expr_full(db, payload, out);
-                out.push(')');
-            }
-        }
 
         Expr::List(l) => {
             out.push('[');
@@ -262,21 +253,6 @@ fn write_type_hint<'db>(
             out.push('}');
         }
 
-        TypeHint::AnonEnum(e) => {
-            out.push_str("enum {");
-            for (i, variant) in e.variants.iter().enumerate() {
-                if i > 0 {
-                    out.push_str(", ");
-                }
-                out.push_str(variant.name.as_str(db));
-                if let Some(payload) = &variant.payload {
-                    out.push('(');
-                    write_type_hint(db, payload, out);
-                    out.push(')');
-                }
-            }
-            out.push('}');
-        }
 
         TypeHint::List(l) => {
             out.push('[');

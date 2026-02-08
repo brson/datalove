@@ -59,24 +59,7 @@ impl<'db> Parser<'db> {
                     )
                 }
             }
-            Some("enum") => {
-                let ts = self.peek_text_span();
-                self.eat_word("enum");
-                // Check if it's anonymous (starts with {) or named (starts with name).
-                if let Some(iter) = self.eat_branch(Sigil::BraceOpen) {
-                    // Anonymous enum.
-                    let mut sub_parser = Parser::from_branch(self.db, iter, self.source_text());
-                    let variants = sub_parser.parse_comma_separated(|p| p.parse_type_hint_enum_variant());
-                    sub_parser.error_if_not_exhausted_type_hint();
-                    ast::TypeHint::AnonEnum(ast::TypeHintAnonEnum { variants })
-                } else {
-                    self.emit_type_hint_error(ts,
-                        "expected {} after enum keyword",
-                        "D003",
-                        "expected '{' after 'enum'"
-                    )
-                }
-            }
+
             Some("map") => {
                 let ts = self.peek_text_span();
                 self.eat_word("map");
@@ -246,52 +229,5 @@ impl<'db> Parser<'db> {
         ast::TypeHintNamedField { name, type_hint: Box::new(type_hint) }
     }
 
-    fn parse_type_hint_enum_variant(&mut self) -> ast::TypeHintEnumVariant<'db> {
-        use rmx::prelude::*;
-        use bct::diagnostic::DiagnosticBuilder;
-        use datalove_diagnostic::DiagnosticBuilderExt;
 
-        let name = match self.eat_name() {
-            Some(n) => n,
-            None => {
-                // No name found - emit error and create placeholder.
-                self.had_error = true;
-                let ts = self.peek_text_span();
-                DiagnosticBuilder::error(self.db, "expected variant name in enum definition")
-                    .code("D011")
-                    .primary_label(ts, "expected variant name")
-                    .emit_parse();
-                // Create a placeholder name for the error variant.
-                return ast::TypeHintEnumVariant {
-                    name: InternedText::new(self.db, "<error>".S()),
-                    payload: None,
-                };
-            }
-        };
-        let payload = if let Some(iter) = self.eat_branch(Sigil::ParenOpen) {
-            // Parse a single type as payload.
-            let mut sub_parser = Parser::from_branch(self.db, iter, self.source_text());
-            let payload_type = sub_parser.parse_type_hint();
-
-            // Check for unparsed tokens - this indicates a syntax error.
-            if sub_parser.peek().is_some() {
-                // There are extra tokens after the payload type.
-                let ts = sub_parser.peek_text_span();
-                let message = InternedText::new(
-                    self.db,
-                    "enum variant payload must be a single type (use a tuple for multiple values)".S()
-                );
-                let error_type = ast::TypeHint::ParseError(ast::TypeHintParseError { text: ts.text, span: ts.span, message });
-                return ast::TypeHintEnumVariant {
-                    name,
-                    payload: Some(Box::new(error_type)),
-                };
-            }
-
-            Some(Box::new(payload_type))
-        } else {
-            None
-        };
-        ast::TypeHintEnumVariant { name, payload }
-    }
 }

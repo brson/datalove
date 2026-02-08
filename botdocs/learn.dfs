@@ -88,10 +88,6 @@ let unit: () = ()
 // Anonymous structs.
 let point: { x: u32, y: u32 } = { x = 10, y = 20 }
 
-// Anonymous enums.
-let color: @enum { Red, Green, Blue } = @enum Red
-let maybe: @enum { None, Some(u32) } = @enum Some(42)
-
 
 // =========================================================================
 // 5. OPTION AND RESULT TYPES

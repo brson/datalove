@@ -237,11 +237,6 @@ pub fn is_copy_type<'db>(db: &'db dyn salsa::Database, ty: &datalove_datalit::ty
         DatalitType::AnonStruct(struct_ty) => {
             struct_ty.fields.iter().all(|f| is_copy_type(db, &f.ty))
         }
-        DatalitType::AnonEnum(enum_ty) => {
-            enum_ty.variants.iter().all(|v| {
-                v.payload.as_ref().map_or(true, |p| is_copy_type(db, p))
-            })
-        }
 
         // Option/Result are copy if inner type is copy.
         DatalitType::Option(opt) => is_copy_type(db, &opt.inner_type),

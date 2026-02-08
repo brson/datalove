@@ -262,19 +262,7 @@ impl IrType {
                     .collect();
                 IrType::Struct(fields)
             }
-            TypeHint::AnonEnum(enum_) => {
-                let mut variants: Vec<_> = enum_.variants
-                    .iter()
-                    .map(|v| {
-                        let name = v.name.text(db).to_string();
-                        let payload = v.payload.as_ref().map(|p| Self::from_type_hint(db, &**p));
-                        (name, payload)
-                    })
-                    .collect();
-                // Sort variants by name for consistent layout.
-                variants.sort_by(|a, b| a.0.cmp(&b.0));
-                IrType::Enum(variants)
-            }
+
             TypeHint::List(list) => {
                 let elem = Self::from_type_hint(db, &list.element_type);
                 IrType::List(Box::new(elem))
@@ -363,19 +351,7 @@ impl IrType {
                     .collect();
                 IrType::Struct(fields)
             }
-            DlType::AnonEnum(enum_) => {
-                let mut variants: Vec<_> = enum_.variants
-                    .iter()
-                    .map(|v| {
-                        let name = v.name.text(db).to_string();
-                        let payload = v.payload.clone().map(|p| Self::from_datalit(db, &*p));
-                        (name, payload)
-                    })
-                    .collect();
-                // Sort variants by name for consistent layout.
-                variants.sort_by(|a, b| a.0.cmp(&b.0));
-                IrType::Enum(variants)
-            }
+
             DlType::List(list) => {
                 let elem = Self::from_datalit(db, &*list.element_type);
                 IrType::List(Box::new(elem))

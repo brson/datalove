@@ -1,1 +1,0 @@
-: enum Status { Ok, Error } / enum Ok(42)

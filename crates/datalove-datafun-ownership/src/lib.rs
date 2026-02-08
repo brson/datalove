@@ -732,13 +732,7 @@ impl<'db> AnalysisCtx<'db> {
                 self.analyze_expr_moves(e.value, true);
                 None
             }
-            ExprFunKind::AnonEnum(e) => {
-                // Payload is consumed.
-                if let Some(payload) = e.payload {
-                    self.analyze_expr_moves(payload, true);
-                }
-                None
-            }
+
             ExprFunKind::FieldProj(proj) => {
                 // Field projection reads from the base, doesn't consume it.
                 // The base expression may itself consume values (e.g., try operator).

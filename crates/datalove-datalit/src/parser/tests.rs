@@ -88,20 +88,6 @@ fn test_parse_float_with_type() {
     }
 }
 
-#[test]
-fn test_parse_anon_enum_type() {
-    let ref db = crate::Database::default();
-    let source = Source::new(db, S(": enum { Foo, Bar(u32) } / enum Foo"));
-    let ast = parse_for_test(db, source);
-    let type_hint = ast.type_hint(db).unwrap();
-    match type_hint {
-        ast::TypeHint::AnonEnum(e) => {
-            let variants = &e.variants;
-            assert_eq!(variants.len(), 2);
-        }
-        _ => panic!("expected anonymous enum type hint"),
-    }
-}
 
 #[test]
 fn test_parse_string() {
@@ -155,86 +141,9 @@ fn test_parse_set() {
     }
 }
 
-#[test]
-fn test_parse_enum_variant_no_payload() {
-    let ref db = crate::Database::default();
-    let source = Source::new(db, S("enum Foo"));
-    let ast = parse_for_test(db, source);
-    let expr = ast.expr(db).clone();
-    match expr {
-        ast::Expr::AnonEnum(e) => {
-            assert_eq!(e.variant_name.as_str(db), "Foo");
-            assert!(e.payload.is_none());
-        }
-        _ => panic!("expected anonymous enum"),
-    }
-}
 
-#[test]
-fn test_parse_enum_variant_with_payload() {
-    let ref db = crate::Database::default();
-    let source = Source::new(db, S("enum Bar(2)"));
-    let ast = parse_for_test(db, source);
-    let expr = ast.expr(db).clone();
-    match expr {
-        ast::Expr::AnonEnum(e) => {
-            assert_eq!(e.variant_name.as_str(db), "Bar");
-            assert!(e.payload.is_some());
-        }
-        _ => panic!("expected anonymous enum"),
-    }
-}
 
-#[test]
-fn test_parse_enum_variant_with_tuple() {
-    let ref db = crate::Database::default();
-    let source = Source::new(db, S("enum Baz((true, 1))"));
-    let ast = parse_for_test(db, source);
-    let expr = ast.expr(db).clone();
-    match expr {
-        ast::Expr::AnonEnum(e) => {
-            assert_eq!(e.variant_name.as_str(db), "Baz");
-            assert!(e.payload.is_some());
-            // Verify the payload is a tuple.
-            let payload = e.payload.unwrap();
-            match payload.expr(db).clone() {
-                ast::Expr::AnonTuple(t) => assert_eq!(t.elements.len(), 2),
-                _ => panic!("expected tuple payload"),
-            }
-        }
-        _ => panic!("expected anonymous enum"),
-    }
-}
 
-#[test]
-fn test_parse_enum_variant_with_extra_tokens_error() {
-    let ref db = crate::Database::default();
-    // This should error: Ok(u32, string) - multiple types without explicit tuple.
-    let source = Source::new(db, S(": enum { Ok(u32, string) } / enum Ok(1)"));
-    let ast = parse_for_test(db, source);
-    let type_hint = ast.type_hint(db).unwrap();
-    match type_hint {
-        ast::TypeHint::AnonEnum(e) => {
-            let variants = &e.variants;
-            assert_eq!(variants.len(), 1);
-            let variant = &variants[0];
-            assert_eq!(variant.name.as_str(db), "Ok");
-            // Check that the payload contains a parse error.
-            match &variant.payload {
-                Some(payload_type) => {
-                    match &**payload_type {
-                        ast::TypeHint::ParseError(_) => {
-                            // Expected! This is the parse error for extra tokens.
-                        }
-                        _ => panic!("expected parse error for extra tokens in enum variant payload"),
-                    }
-                }
-                None => panic!("expected payload with parse error"),
-            }
-        }
-        _ => panic!("expected anonymous enum type hint"),
-    }
-}
 
 #[test]
 fn test_parse_list_multiline() {

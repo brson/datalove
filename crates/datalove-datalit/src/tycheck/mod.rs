@@ -26,8 +26,7 @@ pub use types::{
     TypeAnonTuple,
     TypeAnonStruct,
     TypeNamedField,
-    TypeAnonEnum,
-    TypeEnumVariant,
+
     TypeList,
     TypeMap,
     TypeSet,

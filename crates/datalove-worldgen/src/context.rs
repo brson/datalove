@@ -316,7 +316,7 @@ pub fn is_linear_type(type_hint: &TypeHint<'_>) -> bool {
         | TypeHint::Result(_)
         | TypeHint::AnonTuple(_)
         | TypeHint::AnonStruct(_)
-        | TypeHint::AnonEnum(_)
+
         | TypeHint::Alias(_)
         | TypeHint::ParseError(_) => true,
     }

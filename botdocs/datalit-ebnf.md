@@ -9,7 +9,7 @@ type_hint      = ":", ws, type, ws, "/" ;
 (* ===== Types ===== *)
 type           = option_type | result_type | list_type | tuple_type
                | struct_type | table_type | map_type | set_type
-               | tensor_type | enum_type | scalar_type | type_alias ;
+               | tensor_type | scalar_type | type_alias ;
 
 scalar_type    = "bool" | "u8" | "u16" | "u32" | "u64"
                | "i8" | "i16" | "i32" | "i64"
@@ -25,20 +25,17 @@ table_type     = "{|", ws, type_field_list, ws, "|}" ;
 map_type       = "map", ws, "<", ws, type, ws, ",", ws, type, ws, ">" ;
 set_type       = "set", ws, "<", ws, type, ws, ">" ;
 tensor_type    = "tensor", ws, "<", ws, type, ws, ",", ws, int_lit, ws, ">" ;
-enum_type      = "enum", ws, "{", ws, variant_decl_list, ws, "}" ;
 type_alias     = ident ;
 
 type_list      = type, { ws, ",", ws, type }, [ ws, "," ] ;
 type_field_list= type_field, { ws, ",", ws, type_field }, [ ws, "," ] ;
 type_field     = ident, ws, ":", ws, type ;
-variant_decl_list = variant_decl, { ws, ",", ws, variant_decl }, [ ws, "," ] ;
-variant_decl   = ident, [ "(", ws, type, ws, ")" ] ;
 
 (* ===== Expressions ===== *)
 expr           = none_lit | bool_lit | numeric_lit | string_lit
                | option_expr | result_expr | existential_expr
                | tuple_expr | list_expr | struct_expr
-               | map_expr | set_expr | enum_expr
+               | map_expr | set_expr
                | tensor_expr | table_expr ;
 
 (* Literals *)
@@ -61,7 +58,6 @@ list_expr      = "[", ws, [ expr_list ], ws, "]" ;
 struct_expr    = "{", ws, [ field_list ], ws, "}" ;
 map_expr       = "map", ws, "{", ws, [ entry_list ], ws, "}" ;
 set_expr       = "set", ws, "{", ws, [ expr_list ], ws, "}" ;
-enum_expr      = "enum", ws, ident, [ "(", ws, expr, ws, ")" ] ;
 
 expr_list      = full_expr, { ws, ",", ws, full_expr }, [ ws, "," ] ;
 full_expr      = [ type_hint ], expr ;
@@ -108,7 +104,7 @@ newline        = "\n" | "\r\n" ;
 
 1. **Type hints precede values**: `: Type / value` syntax annotates the following expression
 2. **Prefix notation for option/result types**: `?T` for Option, `!T` for Result
-3. **Keywords for constructors**: `some`, `ok`, `er`, `none`, `data`, `error`, `enum`, `map`, `set`, `tensor`
+3. **Keywords for constructors**: `some`, `ok`, `er`, `none`, `data`, `error`, `map`, `set`, `tensor`
 4. **Struct fields use `=`** in expressions but `:` in type hints
 5. **Tensors**: shape in first brackets, data in second; rows comma-separated, elements within rows space-separated
 6. **Tables**: pipe-brace delimiters `{| ... |}`, header then data rows

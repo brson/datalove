@@ -1,1 +1,0 @@
-: enum{Ok(u32), Err} / enum Ok(42)

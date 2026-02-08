@@ -288,11 +288,7 @@ fn find_const_refs_inner<'db>(
                 find_const_refs_inner(db, field.value, const_names, name_to_stmt, refs);
             }
         }
-        ExprFunKind::AnonEnum(e) => {
-            if let Some(payload) = e.payload {
-                find_const_refs_inner(db, payload, const_names, name_to_stmt, refs);
-            }
-        }
+
         // Literals and other simple expressions have no references.
         _ => {}
     }

@@ -179,12 +179,12 @@ pub fn synthesize<'db>(
         Expr::Error(_) => Type::Error,
 
         // Cannot synthesize for these - need type context.
-        Expr::AnonEnum(_) | Expr::None | Expr::Er(_) => {
+        Expr::None | Expr::Er(_) => {
             if let Some(ts) = ctx.get_span(expr) {
                 let msg = match &expr_inner {
                     Expr::None => "cannot infer type for None value",
                     Expr::Er(_) => "cannot infer type for Er value",
-                    _ => "cannot infer type for anonymous enum",
+                    _ => "cannot infer type",
                 };
                 DiagnosticBuilder::error(db, msg)
                     .code("T016")

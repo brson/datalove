@@ -53,16 +53,16 @@ pub enum Mutation {
     ArityMismatch,
     /// Remove type hint from None/empty collection.
     RemoveTypeHint,
-    /// Change enum variant to nonexistent name.
-    WrongVariant,
+
+
     /// Duplicate a field name in struct.
     DuplicateField,
     /// Use wrong field name in struct (field not in type hint).
     WrongFieldName,
     /// Remove a closing bracket.
     DeleteClosingBracket,
-    /// Add payload to variant that doesn't expect one, or remove from one that does.
-    WrongPayloadPresence,
+
+
     /// Swap key and value types in map entry.
     SwapMapKeyValue,
 }
@@ -80,10 +80,8 @@ impl Mutation {
             Mutation::WrongElementType,
             Mutation::ArityMismatch,
             Mutation::RemoveTypeHint,
-            Mutation::WrongVariant,
             Mutation::DuplicateField,
             Mutation::WrongFieldName,
-            Mutation::WrongPayloadPresence,
             Mutation::SwapMapKeyValue,
         ]
     }
@@ -106,10 +104,8 @@ impl Mutation {
             Mutation::WrongElementType,
             Mutation::ArityMismatch,
             Mutation::RemoveTypeHint,
-            Mutation::WrongVariant,
             Mutation::DuplicateField,
             Mutation::WrongFieldName,
-            Mutation::WrongPayloadPresence,
             Mutation::SwapMapKeyValue,
         ]
     }
@@ -127,10 +123,8 @@ impl Mutation {
             | Mutation::WrongElementType
             | Mutation::ArityMismatch
             | Mutation::RemoveTypeHint
-            | Mutation::WrongVariant
             | Mutation::DuplicateField
             | Mutation::WrongFieldName
-            | Mutation::WrongPayloadPresence
             | Mutation::SwapMapKeyValue => MutationKind::Ast,
         }
     }
@@ -155,11 +149,9 @@ impl Mutation {
             Mutation::WrongElementType => apply_wrong_element_type(db, expr, rng),
             Mutation::ArityMismatch => apply_arity_mismatch(db, expr, rng),
             Mutation::RemoveTypeHint => apply_remove_type_hint(db, expr),
-            Mutation::WrongVariant => apply_wrong_variant(db, expr, rng),
             Mutation::DuplicateField => apply_duplicate_field(db, expr),
             Mutation::WrongFieldName => apply_wrong_field_name(db, expr),
             Mutation::DeleteClosingBracket => apply_delete_closing_bracket(&source, rng),
-            Mutation::WrongPayloadPresence => apply_wrong_payload_presence(db, expr),
             Mutation::SwapMapKeyValue => apply_swap_map_key_value(db, expr),
         }
     }
@@ -473,7 +465,7 @@ fn apply_remove_type_hint<'db>(
     // Check if this is an expression that requires a type hint.
     let (needs_hint, error_code) = match inner_expr {
         Expr::None => (true, "T016"), // Cannot synthesize type for None.
-        Expr::AnonEnum(_) => (true, "T016"), // Cannot synthesize type for anonymous enum.
+
         Expr::List(l) if l.elements.is_empty() => (true, "T013"), // Cannot synthesize type for empty list.
         Expr::Set(s) if s.elements.is_empty() => (true, "T014"), // Cannot synthesize type for empty set.
         Expr::Map(m) if m.entries.is_empty() => (true, "T015"), // Cannot synthesize type for empty map.
@@ -489,16 +481,7 @@ fn apply_remove_type_hint<'db>(
 
     let source = match inner_expr {
         Expr::None => format!("{}none", ""),
-        Expr::AnonEnum(e) => {
-            // Format: { .VariantName payload }
-            let variant = e.variant_name.as_str(db);
-            if let Some(payload) = e.payload {
-                let payload_str = pretty_print(db, payload);
-                format!("{}{{ .{} {} }}", "", variant, payload_str)
-            } else {
-                format!("{}{{ .{} }}", "", variant)
-            }
-        }
+
         Expr::List(_) => format!("{}[]", ""),
         Expr::Set(_) => format!("{}set {{}}", ""),
         Expr::Map(_) => format!("{}map {{}}", ""),
@@ -512,47 +495,6 @@ fn apply_remove_type_hint<'db>(
     })
 }
 
-/// Change enum variant to nonexistent name.
-///
-/// Uses source-level string manipulation to avoid salsa tracked function issues.
-fn apply_wrong_variant<'db>(
-    db: &'db dyn salsa::Database,
-    expr: ExprFull<'db>,
-    _rng: &mut impl Rng,
-) -> Option<MutationResult> {
-    let type_hint = expr.type_hint(db)?;
-    let inner_expr = expr.expr(db);
-    
-
-    // Build type hint prefix string.
-    
-
-    // Build type hint prefix string.
-    let mut type_hint_str = String::new();
-    type_hint_str.push_str(": ");
-    pretty_type_hint(db, type_hint, &mut type_hint_str);
-    type_hint_str.push_str(" / ");
-
-    match inner_expr {
-        Expr::AnonEnum(e) => {
-            // Build source: `: type / { .NonexistentVariant12345 payload }`
-            let wrong_variant = "NonexistentVariant12345";
-            let source = if let Some(payload) = e.payload {
-                let payload_str = pretty_print(db, payload);
-                format!("{}{}{{ .{} {} }}", type_hint_str, "", wrong_variant, payload_str)
-            } else {
-                format!("{}{}{{ .{} }}", type_hint_str, "", wrong_variant)
-            };
-
-            Some(MutationResult {
-                source,
-                expected_errors: vec!["T044"], // Variant not found.
-                description: "Changed enum variant to nonexistent name".S(),
-            })
-        }
-        _ => None,
-    }
-}
 
 /// Delete a closing bracket from the source.
 fn apply_delete_closing_bracket(source: &str, rng: &mut impl Rng) -> Option<MutationResult> {
@@ -666,49 +608,6 @@ fn apply_wrong_field_name<'db>(
     }
 }
 
-/// Add payload to variant that doesn't expect one, or remove from one that does.
-fn apply_wrong_payload_presence<'db>(
-    db: &'db dyn salsa::Database,
-    expr: ExprFull<'db>,
-) -> Option<MutationResult> {
-    let type_hint = expr.type_hint(db)?;
-    let inner_expr = expr.expr(db);
-    
-
-    
-
-    // Build type hint prefix string.
-    let mut type_hint_str = String::new();
-    type_hint_str.push_str(": ");
-    pretty_type_hint(db, type_hint.clone(), &mut type_hint_str);
-    type_hint_str.push_str(" / ");
-
-    match (type_hint, inner_expr) {
-        (TypeHint::AnonEnum(th_enum), Expr::AnonEnum(e)) => {
-            let variant_name = e.variant_name.as_str(db);
-
-            // Find this variant in the type hint to check expected payload.
-            let variants = &th_enum.variants;
-            let variant_hint = variants.iter().find(|v| v.name.as_str(db) == variant_name)?;
-
-            // Flip payload presence: add if missing, remove if present.
-            let source = if variant_hint.payload.is_some() {
-                // Variant expects payload, but we'll omit it.
-                format!("{}{}{{ .{} }}", type_hint_str, "", variant_name)
-            } else {
-                // Variant doesn't expect payload, but we'll add one.
-                format!("{}{}{{ .{} @42 }}", type_hint_str, "", variant_name)
-            };
-
-            Some(MutationResult {
-                source,
-                expected_errors: vec!["T045"], // Wrong payload presence.
-                description: "Toggled enum variant payload presence".S(),
-            })
-        }
-        _ => None,
-    }
-}
 
 /// Swap key and value types in a map entry.
 fn apply_swap_map_key_value<'db>(
@@ -826,21 +725,6 @@ fn pretty_type_hint<'db>(
             out.push('}');
         }
 
-        TypeHint::AnonEnum(e) => {
-            out.push_str("enum {");
-            for (i, variant) in e.variants.iter().enumerate() {
-                if i > 0 {
-                    out.push_str(", ");
-                }
-                out.push_str(variant.name.as_str(db));
-                if let Some(payload) = &variant.payload {
-                    out.push('(');
-                    pretty_type_hint(db, *payload.clone(), out);
-                    out.push(')');
-                }
-            }
-            out.push('}');
-        }
 
         TypeHint::List(l) => {
             out.push('[');

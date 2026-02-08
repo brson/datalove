@@ -1,6 +1,0 @@
-----------
-scriptunit-fragment
-----------
-
-let e = : enum { None, Some(u32) } / enum None
-debuglog e

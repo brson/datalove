@@ -58,9 +58,7 @@ fn has_datalit_type_hint_parse_error<'db>(
         TypeHint::Result(r) => has_datalit_type_hint_parse_error(db, &r.inner_type),
         TypeHint::AnonTuple(t) => t.fields.iter().any(|f| has_datalit_type_hint_parse_error(db, f)),
         TypeHint::AnonStruct(s) => s.fields.iter().any(|f| has_datalit_type_hint_parse_error(db, &f.type_hint)),
-        TypeHint::AnonEnum(e) => e.variants.iter().any(|v| {
-            v.payload.as_ref().map(|p| has_datalit_type_hint_parse_error(db, p)).unwrap_or(false)
-        }),
+
         TypeHint::Tensor(t) => has_datalit_type_hint_parse_error(db, &t.element_type),
         _ => false,
     }
@@ -89,7 +87,7 @@ fn has_parse_error<'db>(
         }),
         Expr::AnonTuple(t) => t.elements.iter().any(|e| has_parse_error(db, *e)),
         Expr::AnonStruct(s) => s.fields.iter().any(|f| has_parse_error(db, f.value)),
-        Expr::AnonEnum(e) => e.payload.map(|p| has_parse_error(db, p)).unwrap_or(false),
+
         Expr::Data(d) => has_parse_error(db, d.value),
         Expr::Error(e) => has_parse_error(db, e.value),
         Expr::Tensor(t) => t.elements.iter().any(|e| has_parse_error(db, *e)),
@@ -175,10 +173,7 @@ fn has_datafun_parse_error<'db>(
             check_type_hint(s.type_hint.as_ref()) ||
             s.fields.iter().any(|f| has_datafun_parse_error(db, f.value))
         }
-        ExprFunKind::AnonEnum(ref e) => {
-            check_type_hint(e.type_hint.as_ref()) ||
-            e.payload.map(|p| has_datafun_parse_error(db, p)).unwrap_or(false)
-        }
+
         ExprFunKind::Data(ref d) => {
             check_type_hint(d.type_hint.as_ref()) ||
             has_datafun_parse_error(db, d.value)
@@ -237,9 +232,7 @@ fn has_type_hint_parse_error<'db>(
         TypeHint::Result(r) => has_type_hint_parse_error(db, &r.inner_type),
         TypeHint::AnonTuple(t) => t.fields.iter().any(|f| has_type_hint_parse_error(db, f)),
         TypeHint::AnonStruct(s) => s.fields.iter().any(|f| has_type_hint_parse_error(db, &f.type_hint)),
-        TypeHint::AnonEnum(e) => e.variants.iter().any(|v| {
-            v.payload.as_ref().map(|p| has_type_hint_parse_error(db, p)).unwrap_or(false)
-        }),
+
         TypeHint::Tensor(t) => has_type_hint_parse_error(db, &t.element_type),
         _ => false,
     }
@@ -618,36 +611,6 @@ fn test_error_equiv_remove_type_hint_detailed() {
     }
 }
 
-/// Detailed test for WrongVariant mutations.
-#[test]
-fn test_error_equiv_wrong_variant_detailed() {
-    let db = datalove_datafun_compiler::Database::default();
-    let config = make_mutation_config();
-
-    let mut failures = vec![];
-
-    for seed in 0..200 {
-        let expr = datalove_datalit::ast_gen::gen_expr_full_seeded(&db, seed, config.clone());
-        let mut rng = StdRng::seed_from_u64(seed.wrapping_mul(0xdeadbeef));
-
-        if let Some(result) = Mutation::WrongVariant.apply(&db, expr, &mut rng) {
-            if let Err(e) = test_error_equiv(&db, &result) {
-                failures.push((seed, e));
-            }
-        }
-    }
-
-    if !failures.is_empty() {
-        for (seed, err) in &failures[..failures.len().min(10)] {
-            eprintln!("Seed {}: {}\n", seed, err);
-        }
-        if failures.len() > 10 {
-            eprintln!("... and {} more failures", failures.len() - 10);
-        }
-        panic!("{} WrongVariant tests failed", failures.len());
-    }
-}
-
 /// Detailed test for DuplicateField mutations.
 #[test]
 fn test_error_equiv_duplicate_field_detailed() {
@@ -705,36 +668,6 @@ fn test_error_equiv_wrong_field_name_detailed() {
             eprintln!("... and {} more failures", failures.len() - 10);
         }
         panic!("{} WrongFieldName tests failed", failures.len());
-    }
-}
-
-/// Detailed test for WrongPayloadPresence mutations.
-#[test]
-fn test_error_equiv_wrong_payload_presence_detailed() {
-    let db = datalove_datafun_compiler::Database::default();
-    let config = make_mutation_config();
-
-    let mut failures = vec![];
-
-    for seed in 0..200 {
-        let expr = datalove_datalit::ast_gen::gen_expr_full_seeded(&db, seed, config.clone());
-        let mut rng = StdRng::seed_from_u64(seed.wrapping_mul(0xdeadbeef));
-
-        if let Some(result) = Mutation::WrongPayloadPresence.apply(&db, expr, &mut rng) {
-            if let Err(e) = test_error_equiv(&db, &result) {
-                failures.push((seed, e));
-            }
-        }
-    }
-
-    if !failures.is_empty() {
-        for (seed, err) in &failures[..failures.len().min(10)] {
-            eprintln!("Seed {}: {}\n", seed, err);
-        }
-        if failures.len() > 10 {
-            eprintln!("... and {} more failures", failures.len() - 10);
-        }
-        panic!("{} WrongPayloadPresence tests failed", failures.len());
     }
 }
 

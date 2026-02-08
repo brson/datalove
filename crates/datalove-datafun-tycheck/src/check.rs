@@ -97,33 +97,6 @@ pub fn check_expr<'db>(
             }
         }
 
-        // Handle anonymous enum expressions - check against expected enum type.
-        ExprFunKind::AnonEnum(enum_expr) => {
-            match expected {
-                Type::Datalit(datalit::tycheck::Type::AnonEnum(_)) => {
-                    // Check the variant and payload against expected enum type.
-                    check_enum_variant(ctx, enum_expr.variant_name, enum_expr.payload, &expected)?;
-                    ctx.store_expr_type(expr, &expected);
-                    Ok(())
-                }
-                Type::Datalit(datalit::tycheck::Type::Data) => {
-                    // Any type can coerce to Data - but we need a concrete type.
-                    // Try to get the type hint, otherwise synthesize will fail.
-                    if let Some(type_hint) = enum_expr.type_hint {
-                        let enum_ty = convert_type_hint(db, type_hint)?;
-                        check_enum_variant(ctx, enum_expr.variant_name, enum_expr.payload, &enum_ty)?;
-                        ctx.store_expr_type(expr, &expected);
-                        Ok(())
-                    } else {
-                        Err(ctx.error_cannot_synthesize(expr, "anonymous enum requires type hint when coercing to data"))
-                    }
-                }
-                _ => {
-                    let expected_str = type_to_string(db, expected);
-                    Err(ctx.error_type_mismatch(expr, &expected_str, "enum", "expected enum type"))
-                }
-            }
-        }
 
         // Handle table expressions - check rows against expected column types.
         ExprFunKind::Table(table_expr) => {
@@ -763,47 +736,6 @@ pub fn check_struct_fields<'db>(
     Ok(())
 }
 
-/// Check enum variant exists in type hint.
-pub fn check_enum_variant<'db>(
-    ctx: &mut TypeContext<'db>,
-    variant_name: bct::text::InternedText<'db>,
-    payload: Option<ExprFun<'db>>,
-    expected_ty: &Type<'db>,
-) -> Result<(), TypeError> {
-    let db = ctx.db;
-
-    // Unwrap Option/Result wrappers to get the actual enum type.
-    let inner_ty = unwrap_wrapper_types(db, expected_ty);
-
-    // Extract the variants from the enum type.
-    // Callers ensure expected_ty is an Enum type before calling.
-    let expected_variants = match inner_ty {
-        Type::Datalit(datalit::tycheck::Type::AnonEnum(enum_ty)) => {
-            enum_ty.variants.C()
-        }
-        _ => unreachable!("check_enum_variant called with non-enum type"),
-    };
-
-    // Look up the variant by name.
-    let expected_variant = expected_variants
-        .iter()
-        .find(|v| v.name == variant_name)
-        .ok_or_else(|| {
-            TypeError::VariantNotFound(variant_name.as_str(db).S())
-        })?;
-
-    // Check payload type if both have payloads.
-    // If payload presence differs (expression has payload but type hint doesn't, or vice versa),
-    // don't fail here - let the type comparison at a higher level catch the mismatch.
-    // This matches datalit's Check-TypedAnonEnum behavior which compares enum types rather
-    // than individual variant payloads.
-    if let (Some(payload_expr), Some(expected_payload_ty)) = (payload, expected_variant.payload.as_ref()) {
-        let expected_ty = Type::Datalit((**expected_payload_ty).clone());
-        check_expr(ctx, payload_expr, &expected_ty)?;
-    }
-
-    Ok(())
-}
 
 /// Check table rows against expected table type.
 pub fn check_table_rows<'db>(

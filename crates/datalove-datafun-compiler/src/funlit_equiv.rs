@@ -142,19 +142,7 @@ pub fn datafun_expr_to_datalit_serde<'db>(
                 datalit::ast_serde::Expr::AnonStruct(datalit::ast_serde::ExprAnonStruct { fields }),
             )
         }
-        ast::ExprFunKind::AnonEnum(e) => {
-            let payload = e.payload
-                .map(|p| datafun_expr_to_datalit_serde(db, p))
-                .transpose()?
-                .map(Box::new);
-            (
-                e.type_hint,
-                datalit::ast_serde::Expr::AnonEnum(datalit::ast_serde::ExprAnonEnum {
-                    variant_name: e.variant_name.as_str(db).S(),
-                    payload,
-                }),
-            )
-        }
+
         ast::ExprFunKind::Some(e) => {
             let payload = datafun_expr_to_datalit_serde(db, e.payload)?;
             (
@@ -321,7 +309,7 @@ pub enum TypeSerde {
     Bool, U8, I8, U16, I16, U32, I32, U64, I64, Usize, Isize, F32, F64, Int, String,
     AnonTuple { fields: Vec<TypeSerde> },
     AnonStruct { fields: Vec<(String, TypeSerde)> },
-    AnonEnum { variants: Vec<(String, Option<TypeSerde>)> },
+
     List { element: Box<TypeSerde> },
     Map { key: Box<TypeSerde>, value: Box<TypeSerde> },
     Set { element: Box<TypeSerde> },
@@ -406,11 +394,7 @@ fn datalit_type_to_serde<'db>(
                 .map(|f| (f.name.as_str(db).to_string(), datalit_type_to_serde(db, (*f.ty).clone())))
                 .collect(),
         },
-        Type::AnonEnum(t) => TypeSerde::AnonEnum {
-            variants: t.variants.iter()
-                .map(|v| (v.name.as_str(db).to_string(), v.payload.clone().map(|p| datalit_type_to_serde(db, *p))))
-                .collect(),
-        },
+
         Type::List(t) => TypeSerde::List {
             element: Box::new(datalit_type_to_serde(db, (*t.element_type).clone())),
         },

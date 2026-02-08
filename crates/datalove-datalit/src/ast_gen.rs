@@ -349,29 +349,7 @@ pub fn gen_type_hint<'db, R: Rng>(
                 .collect();
             TypeHint::AnonStruct(TypeHintAnonStruct { fields })
         }
-        21 => {
-            let count = rng.gen_range(1..=config.max_collection_size.max(1));
-            let mut used_names = std::collections::HashSet::new();
-            let variants: Vec<_> = (0..count)
-                .map(|_| {
-                    // Generate unique variant name.
-                    let variant_name = loop {
-                        let candidate = gen_identifier(rng);
-                        if used_names.insert(candidate.clone()) {
-                            break InternedText::new(db, &candidate);
-                        }
-                    };
-                    let has_payload = rng.gen_bool(0.5);
-                    let payload = if has_payload {
-                        Some(Box::new(gen_type_hint(db, rng, config, depth + 1)))
-                    } else {
-                        None
-                    };
-                    TypeHintEnumVariant { name: variant_name, payload }
-                })
-                .collect();
-            TypeHint::AnonEnum(TypeHintAnonEnum { variants })
-        }
+
         22 => TypeHint::Data,
         23 => TypeHint::Error,
         24 => TypeHint::Index,
@@ -516,30 +494,7 @@ fn gen_type_hint_inner<'db, R: Rng>(
                 .collect();
             TypeHint::AnonStruct(TypeHintAnonStruct { fields })
         }
-        21 => {
-            let count = rng.gen_range(1..=config.max_collection_size.max(1));
-            let mut used_names = std::collections::HashSet::new();
-            let variants: Vec<_> = (0..count)
-                .map(|_| {
-                    // Generate unique variant name.
-                    let variant_name = loop {
-                        let candidate = gen_identifier(rng);
-                        if used_names.insert(candidate.clone()) {
-                            break InternedText::new(db, &candidate);
-                        }
-                    };
-                    let has_payload = rng.gen_bool(0.5);
-                    let payload = if has_payload {
-                        Some(Box::new(gen_type_hint_inner(db, rng, config, depth + 1)))
-                    } else {
-                        None
-                    };
-                    TypeHintEnumVariant { name: variant_name, payload }
-                })
-                .collect();
-            TypeHint::AnonEnum(TypeHintAnonEnum { variants })
-        }
-        22 => TypeHint::Data,
+        21 => TypeHint::Data,
         23 => TypeHint::Error,
         24 => TypeHint::Index,
         25 => TypeHint::Offset,
@@ -600,21 +555,7 @@ pub fn gen_expr_matching_type<'db, R: Rng>(
                 .collect();
             Expr::AnonStruct(ExprAnonStruct { fields })
         }
-        TypeHint::AnonEnum(th) => {
-            let variants = &th.variants;
-            if variants.is_empty() {
-                return Expr::None;
-            }
-            let variant = &variants[rng.gen_range(0..variants.len())];
-            let variant_name = variant.name;
-            let payload = match &variant.payload {
-                Some(payload_type) => {
-                    Some(gen_expr_full_inner(db, rng, *payload_type.clone(), config, depth + 1))
-                }
-                None => None,
-            };
-            Expr::AnonEnum(ExprAnonEnum { variant_name, payload })
-        }
+
         TypeHint::List(th) => {
             let element_type = *th.element_type.clone();
             let count = rng.gen_range(config.min_collection_size..=config.max_collection_size);
@@ -1041,7 +982,7 @@ fn gen_expr_full_inner<'db, R: Rng>(
     // for typechecking - the typechecker explicitly rejects these without hints.
     let requires_hint = matches!(
         type_hint,
-        TypeHint::Option(_) | TypeHint::Result(_) | TypeHint::AnonEnum(_)
+        TypeHint::Option(_) | TypeHint::Result(_)
     );
 
     let type_hint_opt = if config.include_type_hints || requires_hint {
