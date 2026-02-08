@@ -39,6 +39,7 @@
 
 ## On deck
 
+- rename atom/tag -> atom/term or sym/tag
 - new repl
 - rtcalls - waiting for design
 - workspaces - waiting for design
