@@ -1006,3 +1006,235 @@ and top-down search for goal-directed queries.
 7. Aggregation (`count`, `sum`, `collect`).
 8. `unless` (stratified negation).
 9. `ruleset` sugar.
+
+
+## `from` as iterator: generators, backtracking, LINQ
+
+The `from` comprehension as designed returns a materialized `set`.
+But structurally it's an iterator pipeline:
+iterate source, pattern-match/filter, project.
+Making that explicit connects `from` to generators,
+backtracking search, and LINQ-style query composition.
+
+
+### LINQ precedent
+
+LINQ (C#) is the closest existing design.
+The mapping is almost direct:
+
+| datalove `from` | LINQ | Operation |
+|---|---|---|
+| `from facts` | `from f in facts` | Source |
+| `given tag Parent (x, y)` | `where f is Parent` + destructure | Filter + bind |
+| multiple `given` with shared var | multiple `from` + `where` on shared | SelectMany + equijoin |
+| `where age .> 18` | `where age > 18` | Filter |
+| `select child` | `select child` | Projection |
+| `yield tag Ancestor (x, y)@` | `select new Ancestor(x, y)` | Construction |
+| `count` | `.Count()` | Aggregation |
+
+Key LINQ design decisions:
+
+**Lazy by default.**
+LINQ returns `IEnumerable<T>`, not a list.
+Nothing executes until you iterate.
+Materialization (`ToList()`, `ToHashSet()`) is explicit.
+This is the right default for queries --
+you might only need the first match,
+or you might want to pipeline
+without intermediate allocations.
+
+**Multiple `from` = flatmap.**
+LINQ's multiple `from` clauses desugar to `SelectMany`,
+which is monadic bind for the "zero or more" monad.
+This is exactly what multiple `given` clauses do.
+The shared variable creating an equijoin
+is an optimization of the general cross-product-then-filter.
+
+**Query syntax is sugar for method calls.**
+LINQ comprehensions desugar to `.Where().Select().SelectMany()` chains.
+Any type implementing the right interface participates in query syntax.
+In datalove terms: if `from` desugars to iterator operations,
+any iterable type could be a `from` source, not just sets.
+
+
+### `from` as nondeterminism monad
+
+The deep connection.
+In Haskell, the list monad expresses nondeterministic computation:
+
+```haskell
+solutions = do
+  x <- [1..9]
+  y <- [1..9]
+  guard (x + y == 10)
+  return (x, y)
+```
+
+Each bind (`<-`) is a choice point.
+`guard` prunes. `return` produces a result.
+
+Multiple `given` clauses in a `from` comprehension are exactly this:
+
+- Single `given` = `map` + `filter` (one source, filter by pattern).
+- Multiple `given` = `flatmap` (cross product, filter by shared vars).
+- `where` = `guard`.
+- `select`/`yield` = `return`.
+
+This structure is the same whether the monad is
+"set," "list," "iterator," or "generator."
+The only difference is evaluation strategy (eager vs lazy)
+and collection semantics (set dedup vs list order).
+
+`from` comprehensions are do-notation for the nondeterminism monad.
+
+
+### Eager vs lazy
+
+For Datalog saturation, you need the full materialized set each iteration
+to check equality at the fixed point.
+Lazy doesn't help.
+
+For queries, lazy is better --
+you might only need the first match,
+or want to pipeline without materializing intermediate sets.
+
+For backtracking search, lazy is essential --
+enumerate possibilities on demand, not all at once.
+
+The design could go two ways:
+
+**Option A: lazy default.**
+`from` returns a generator/iterator.
+Collecting into a set is explicit or inferred from type context.
+
+```datalove
+// Lazy: iterate without materializing.
+for child in from facts given tag Parent ("alice", child) select child end from
+  debuglog child
+end for
+
+// Eager: collected into set by type context.
+let children: set { string } = from facts
+  given tag Parent ("alice", child)
+  select child
+end from
+
+// First match only.
+let first_child: ?string = first from facts
+  given tag Parent ("alice", child)
+  select child
+end from
+```
+
+**Option B: eager default.**
+`from` returns a set.
+A separate form (`iter from`, or bare `from` in iterator context)
+is lazy.
+
+Option A is more general.
+The Datalog use case (eagerly collect into set)
+works in either option via type-context coercion.
+
+
+### Connection to generators
+
+The logic programming research doc
+(`research/research-logic-programming.md`)
+proposes a phased generator design:
+
+1. Deterministic iterators (`fun foo() yields T`).
+2. Semidet (0 or 1 result, `?T` return).
+3. Multi generators (yield multiple solutions).
+4. Bidirectional modes.
+5. Nondet with backtracking (choice points).
+
+A lazy `from` covers phases 1-3:
+
+- **Phase 1** (iterator):
+  `from` over a source with `select` is a deterministic iterator pipeline.
+- **Phase 2** (semidet):
+  `first from ...` gives 0 or 1. `any from ...` gives bool.
+- **Phase 3** (multi):
+  `from` with `yield` producing multiple results is a multi generator.
+
+A `from` comprehension could be the body of a `yields` function,
+or it could BE the generator expression directly,
+like Python's generator expressions are to generator functions.
+
+```datalove
+// from IS the generator body.
+fun children_of(ref facts: set { Fact }, name: string) yields string
+  from facts
+    given tag Parent (name, child)
+    select child
+  end from
+end fun
+```
+
+
+### Connection to backtracking
+
+Phase 5 (backtracking) = nested generators
+where failure in an inner generator
+causes the outer to advance and retry.
+
+```datalove
+// For each empty cell, try each valid value.
+from empty_cells(board)
+  given (row, col)
+  from valid_values(board, row, col)
+    given v
+    from solve(place(board, row, col, v))
+      given solution
+      yield solution
+    end from
+  end from
+end from
+```
+
+With eager evaluation this produces all valid placements --
+a flat set, no backtracking, just enumeration.
+
+With lazy evaluation this becomes a choice tree.
+The outer `from` enumerates cells.
+The inner `from` enumerates values.
+If the recursive `solve` yields nothing for a placement,
+that branch dies.
+The `from` over `valid_values` advances to the next value.
+If all values exhausted, that cell's branch dies.
+The nesting IS the choice tree.
+
+The difference between Datalog enumeration
+and Prolog-style backtracking
+isn't in the comprehension syntax --
+it's in the execution strategy:
+
+| | Datalog (bottom-up) | Backtracking (top-down) |
+|---|---|---|
+| `from` evaluation | Eager, collect all | Lazy, yield one at a time |
+| Multiple `given` | Cross product, all matches | Try first, backtrack on failure |
+| Failure | Empty set | Backtrack to previous choice |
+| Result | Complete set | Stream of solutions on demand |
+
+Same syntax. Different evaluation.
+
+
+### Phased implementation
+
+If `from` evolves from eager to lazy:
+
+1. `from` as eager set comprehension.
+   What this report describes.
+   Covers Datalog saturation.
+2. `from` as lazy iterator.
+   Returns a generator instead of a materialized set.
+   Consumer decides: `collect`, `first`, `any`, `for`.
+3. `from` as composable generator value.
+   Can be stored, passed to functions, nested.
+4. Nested lazy `from` for nondeterministic search.
+   Backtracking falls out of lazy nesting.
+   No new syntax needed for choice points.
+
+The Datalog use case is phase 1.
+The logic programming use case is phase 4.
+Same `from` syntax across all phases.
