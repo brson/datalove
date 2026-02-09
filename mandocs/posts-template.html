@@ -19,12 +19,19 @@
     <!-- Header fonts -->
     <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&display=swap" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Vollkorn:wght@400;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="{{ path_prefix }}style.css">
     <link rel="alternate" type="application/rss+xml" title="Datalove Posts" href="posts.xml">
 </head>
 <body>
-    <nav>
-        <a href="index.html"><span class="nav-logo" role="img" aria-label="Datalove"></span></a>
+    <nav id="navbar">
+        <span class="nav-logo" role="img" aria-label="Datalove"
+              onclick="document.getElementById('navbar').classList.toggle('expanded')"></span>
+        <div class="nav-links">
+            {% for page in pages %}
+            <a href="{{ path_prefix }}{{ page.path }}">{{ page.title }}</a>
+            {% endfor %}
+            <a href="{{ path_prefix }}{{ cross_link_url }}" class="nav-toggle">{{ cross_link_label }}</a>
+        </div>
     </nav>
     <main>
         <h1>Posts</h1>
@@ -49,7 +56,7 @@
         </section>
     </main>
     <script data-manual src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
-    <script src="datalove-prism.js"></script>
+    <script src="{{ path_prefix }}datalove-prism.js"></script>
     <script>Prism.highlightAll();</script>
 </body>
 </html>

@@ -146,10 +146,16 @@ body {
     margin: 0;
     padding: 0;
     line-height: var(--line-height);
+    display: flex;
+    min-height: 100vh;
 }
 
 nav {
-    padding: 2rem 2rem 0 2rem;
+    flex-shrink: 0;
+    padding: 2rem 1rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
 }
 
 nav a {
@@ -163,7 +169,7 @@ nav a {
     display: inline-block;
     height: 2rem;
     width: 2rem;
-    vertical-align: middle;
+    cursor: pointer;
     background-color: var(--accent);
     -webkit-mask-image: url('datalove-logo.svg');
     mask-image: url('datalove-logo.svg');
@@ -173,7 +179,40 @@ nav a {
     mask-repeat: no-repeat;
 }
 
+.nav-links {
+    display: none;
+    flex-direction: column;
+    gap: 0.5rem;
+    margin-top: 1.5rem;
+    width: 100%;
+}
+
+nav.expanded .nav-links {
+    display: flex;
+}
+
+nav.expanded {
+    min-width: 220px;
+    align-items: flex-start;
+}
+
+.nav-links a {
+    font-size: 0.95rem;
+    font-weight: normal;
+    white-space: nowrap;
+}
+
+.nav-toggle {
+    margin-top: 1rem;
+    padding: 0.3rem 0.8rem;
+    border: 1px solid var(--accent);
+    border-radius: 3px;
+    text-align: center;
+}
+
 main {
+    flex: 1;
+    min-width: 0;
     max-width: 800px;
     margin: 0 auto;
     padding: 0 2rem 2rem 2rem;
@@ -381,6 +420,21 @@ th {
 
 .toc a:hover::before {
     opacity: 1;
+}
+
+@media (max-width: 768px) {
+    body {
+        flex-direction: column;
+    }
+    nav {
+        flex-direction: row;
+        flex-wrap: wrap;
+        padding: 1rem;
+    }
+    nav.expanded {
+        flex-direction: column;
+        min-width: 0;
+    }
 }
 
 @media (max-width: 500px) {

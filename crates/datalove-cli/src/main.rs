@@ -4,6 +4,12 @@ use datalove_datafun_resolve::{resolve_all_names, resolve_all_exports, build_all
 use rmx::clap::{self, Parser as _};
 use rmx::std::path::PathBuf;
 
+#[derive(Clone, serde::Serialize)]
+struct NavPage {
+    title: String,
+    path: String,
+}
+
 mod feed;
 mod render;
 
@@ -853,7 +859,16 @@ impl DocsCommand {
         // Build mandocs -> docs/.
         let mandocs_dir = project_root.join("mandocs");
         let mandocs_out = project_root.join("docs");
-        Self::build_docs(&mandocs_dir, &mandocs_out)?;
+
+        let mandocs_nav = Self::parse_nav_file(&mandocs_dir)?;
+
+        Self::build_docs(
+            &mandocs_dir,
+            &mandocs_out,
+            &mandocs_nav,
+            "bot/index.html",
+            "Bot Docs",
+        )?;
 
         // Generate posts feed for mandocs.
         let posts_dir = mandocs_dir.join("posts");
@@ -864,7 +879,14 @@ impl DocsCommand {
             let posts_template_content = fs::read_to_string(&posts_template_path)
                 .with_context(|| format!("Failed to read posts template: {}", posts_template_path.display()))?;
             tera.add_raw_template("posts-template.html", &posts_template_content)?;
-            feed::generate_feed_page(&posts, &tera, &mandocs_out)?;
+            feed::generate_feed_page(
+                &posts,
+                &tera,
+                &mandocs_out,
+                &mandocs_nav,
+                "bot/index.html",
+                "Bot Docs",
+            )?;
             feed::generate_rss(&posts, &mandocs_out, "https://datalove.dev")?;
         }
 
@@ -873,7 +895,15 @@ impl DocsCommand {
         // Build botdocs -> docs/bot/.
         let botdocs_dir = project_root.join("botdocs");
         let botdocs_out = project_root.join("docs").join("bot");
-        Self::build_docs(&botdocs_dir, &botdocs_out)?;
+
+        let botdocs_nav = Self::parse_nav_file(&botdocs_dir)?;
+        Self::build_docs(
+            &botdocs_dir,
+            &botdocs_out,
+            &botdocs_nav,
+            "../index.html",
+            "Mandocs",
+        )?;
 
         println!("Documentation generated in {}", botdocs_out.display());
 
@@ -884,7 +914,13 @@ impl DocsCommand {
     ///
     /// Copies static assets (style.css, template.html, logo, prism.js)
     /// and converts all .md files (including subdirectories) to HTML.
-    fn build_docs(input_dir: &std::path::Path, output_dir: &std::path::Path) -> AnyResult<()> {
+    fn build_docs(
+        input_dir: &std::path::Path,
+        output_dir: &std::path::Path,
+        nav_pages: &[NavPage],
+        cross_link_url: &str,
+        cross_link_label: &str,
+    ) -> AnyResult<()> {
         use rmx::std::fs;
         use rmx::tera::{Tera, Context};
 
@@ -946,9 +982,16 @@ impl DocsCommand {
 
             let title = Self::extract_title(&markdown, &file_name);
 
+            // Compute path_prefix from directory depth of output file.
+            let path_prefix = Self::compute_path_prefix(&output_rel);
+
             let mut context = Context::new();
             context.insert("title", &title);
             context.insert("content", &html);
+            context.insert("pages", nav_pages);
+            context.insert("path_prefix", &path_prefix);
+            context.insert("cross_link_url", cross_link_url);
+            context.insert("cross_link_label", cross_link_label);
             let rendered = tera.render("page", &context)?;
 
             fs::write(&output_path, rendered)?;
@@ -972,6 +1015,10 @@ impl DocsCommand {
             if path.is_dir() {
                 Self::collect_markdown_files(base, &path, out)?;
             } else if path.extension().map(|e| e == "md").unwrap_or(false) {
+                // Skip nav.md; it is used for sidebar navigation, not content.
+                if path.file_name().map(|n| n == "nav.md").unwrap_or(false) {
+                    continue;
+                }
                 let rel = path.strip_prefix(base)?.to_path_buf();
                 out.push((rel, path));
             }
@@ -1008,6 +1055,49 @@ impl DocsCommand {
         }
         // Fall back to filename without extension.
         filename.trim_end_matches(".md").S()
+    }
+
+    /// Parse nav pages from a `nav.md` file in the input directory.
+    ///
+    /// Expects markdown links like `[Title](file.md)`. Rewrites `.md`
+    /// extensions to `.html` and `README.md` to `index.html`.
+    fn parse_nav_file(input_dir: &std::path::Path) -> AnyResult<Vec<NavPage>> {
+        use rmx::std::fs;
+        use rmx::regex::Regex;
+
+        let nav_path = input_dir.join("nav.md");
+        let content = fs::read_to_string(&nav_path)
+            .with_context(|| format!("Failed to read {}", nav_path.display()))?;
+
+        let re = Regex::new(r"\[([^\]]+)\]\(([^)]+)\)").unwrap();
+        let mut pages = Vec::new();
+
+        for caps in re.captures_iter(&content) {
+            let title = caps[1].to_string();
+            let mut path = caps[2].to_string();
+
+            // Rewrite .md links to .html output names.
+            if path.ends_with(".md") {
+                let stem = &path[..path.len() - 3];
+                if stem == "README" || stem.ends_with("/README") {
+                    path = format!("{}index.html", &path[..path.len() - "README.md".len()]);
+                } else {
+                    path = format!("{}.html", stem);
+                }
+            }
+
+            pages.push(NavPage { title, path });
+        }
+
+        Ok(pages)
+    }
+
+    /// Compute the path prefix for a file based on its directory depth.
+    ///
+    /// Root-level files get "", one subdir deep gets "../", etc.
+    fn compute_path_prefix(rel_path: &std::path::Path) -> String {
+        let depth = rel_path.parent().map_or(0, |p| p.components().count());
+        "../".repeat(depth)
     }
 }
 
