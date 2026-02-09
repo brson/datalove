@@ -47,7 +47,7 @@ Then we'll add I/O to it &mdash; carefully.
        with a simple but sophisticated <em>linear type system.</em></p>
   </div>
   <div class="thing-box">
-    <p></p>
+    <p>todo</p>
   </div>
   <div class="thing-box">
     <p>Modern compilation and execution architecture with
