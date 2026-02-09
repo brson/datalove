@@ -64,6 +64,7 @@ pub enum Statement<'db> {
     Continue(StmtContinue),
     DebugLog(StmtDebugLog<'db>),
     TypeAlias(StmtTypeAlias<'db>),
+    Match(StmtMatch<'db>),
     ParseError(StmtParseError<'db>),
 }
 
@@ -257,6 +258,31 @@ pub struct StmtTypeAlias<'db> {
     pub local_index: u32,
 }
 
+/// Match statement for exhaustive enum destructuring.
+#[derive(Clone, Hash, PartialEq, Eq)]
+#[derive(salsa::Update)]
+pub struct StmtMatch<'db> {
+    pub input: ExprFun<'db>,
+    pub cases: Vec<MatchCase<'db>>,
+    pub default_body: Option<Vec<Statement<'db>>>,
+}
+
+/// A single case arm in a match statement.
+#[derive(Clone, Hash, PartialEq, Eq)]
+#[derive(salsa::Update)]
+pub struct MatchCase<'db> {
+    pub kind: MatchCaseKind<'db>,
+    pub body: Vec<Statement<'db>>,
+}
+
+/// Kind of match case: atom (no binding) or term (with binding).
+#[derive(Clone, Hash, PartialEq, Eq)]
+#[derive(salsa::Update)]
+pub enum MatchCaseKind<'db> {
+    Atom { name: InternedText<'db> },
+    Term { name: InternedText<'db>, binding: InternedText<'db> },
+}
+
 #[derive(Clone, Hash, PartialEq, Eq)]
 #[derive(salsa::Update)]
 pub struct StmtParseError<'db> {
@@ -327,6 +353,13 @@ pub enum ExprFunKind<'db> {
 
     // Table expression.
     Table(ExprTable<'db>),
+
+    // Atom expression: `atom Foo`.
+    Atom(ExprAtom<'db>),
+    // Term expression: `term Foo payload`.
+    Term(ExprTerm<'db>),
+    // Enum literal expression: `enum { atom Foo }` (checking-only).
+    EnumLiteral(ExprEnumLiteral<'db>),
 
     // Parse error
     ParseError(ExprFunParseError<'db>),
@@ -607,6 +640,28 @@ pub struct ExprFunParseError<'db> {
     pub text: Text<'db>,
     pub span: ByteSpan,
     pub message: InternedText<'db>,
+}
+
+/// Atom expression: `atom Foo`.
+#[derive(Clone, Hash, PartialEq, Eq)]
+#[derive(salsa::Update)]
+pub struct ExprAtom<'db> {
+    pub name: InternedText<'db>,
+}
+
+/// Term expression: `term Foo payload`.
+#[derive(Clone, Hash, PartialEq, Eq)]
+#[derive(salsa::Update)]
+pub struct ExprTerm<'db> {
+    pub name: InternedText<'db>,
+    pub payload: ExprFun<'db>,
+}
+
+/// Enum literal expression: `enum { atom Foo }` (requires type context).
+#[derive(Clone, Hash, PartialEq, Eq)]
+#[derive(salsa::Update)]
+pub struct ExprEnumLiteral<'db> {
+    pub variant: ExprFun<'db>,
 }
 
 /// Intrinsic call expression (icall name(args)).

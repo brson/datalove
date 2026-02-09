@@ -1,0 +1,79 @@
+DualAnalysis(
+    sections: [
+        DualSectionResult(
+            section_type: "scriptunit-fragment",
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            interp_lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = enum_variant 0
+                        v1 = enum_discriminant v0
+                        v2 = const 1u32
+                        v3 = eq v1, v2
+                        branch v3, block1, block2
+                    block1:
+                        drop v0
+                        v4 = const "cat"
+                        debuglog v4
+                        drop v4
+                        goto block3
+                    block2:
+                        drop v0
+                        v5 = const "other"
+                        debuglog v5
+                        drop v5
+                        goto block3
+                    block3:
+                        unit_end
+                """,
+            ),
+            aot_lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = enum_variant 0
+                        v1 = enum_discriminant v0
+                        v2 = const 1u32
+                        v3 = eq v1, v2
+                        branch v3, block1, block2
+                    block1:
+                        drop v0
+                        v4 = const "cat"
+                        debuglog v4
+                        drop v4
+                        goto block3
+                    block2:
+                        drop v0
+                        v5 = const "other"
+                        debuglog v5
+                        drop v5
+                        goto block3
+                    block3:
+                        unit_end
+                """,
+            ),
+            ir_match: true,
+            interp_output: "\"other\"\n",
+            aot_output: "\"other\"\n",
+            output_match: true,
+            aot_compile: Some(AotCompileResult(
+                status: "Success",
+            )),
+            link: Some(LinkResult(
+                status: "Success",
+            )),
+            execution: Some(ExecutionResult(
+                status: "Success",
+                exit_code: 0,
+            )),
+        ),
+    ],
+)

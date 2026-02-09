@@ -787,5 +787,36 @@ fn pretty_type_hint<'db>(
         TypeHint::Alias(name) => {
             out.push_str(name.as_str(db));
         }
+
+        TypeHint::Atom(a) => {
+            out.push_str("atom ");
+            out.push_str(a.name.as_str(db));
+        }
+
+        TypeHint::Term(t) => {
+            out.push_str("term ");
+            out.push_str(t.name.as_str(db));
+            out.push(' ');
+            pretty_type_hint(db, *t.payload.clone(), out);
+        }
+
+        TypeHint::Enum(e) => {
+            out.push_str("enum{");
+            for (i, v) in e.variants.iter().enumerate() {
+                if i > 0 {
+                    out.push_str(", ");
+                }
+                if let Some(payload) = &v.payload {
+                    out.push_str("term ");
+                    out.push_str(v.name.as_str(db));
+                    out.push(' ');
+                    pretty_type_hint(db, *payload.clone(), out);
+                } else {
+                    out.push_str("atom ");
+                    out.push_str(v.name.as_str(db));
+                }
+            }
+            out.push('}');
+        }
     }
 }

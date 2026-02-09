@@ -1,0 +1,86 @@
+{
+  "ast": {
+    "statements": [
+      {
+        "kind": "TypeAlias",
+        "name": "Color",
+        "type_hint": {
+          "Enum": {
+            "variants": [
+              {
+                "name": "Red",
+                "payload": null
+              },
+              {
+                "name": "Blue",
+                "payload": null
+              }
+            ]
+          }
+        }
+      },
+      {
+        "kind": "Let",
+        "name": "c",
+        "type_hint": {
+          "Alias": "Color"
+        },
+        "value": {
+          "expr": {
+            "kind": "Atom",
+            "name": "Red"
+          }
+        }
+      },
+      {
+        "cases": [
+          {
+            "body": [
+              {
+                "kind": "DebugLog",
+                "value": {
+                  "expr": {
+                    "kind": "String",
+                    "type_hint": null,
+                    "value": "\"red\""
+                  }
+                }
+              }
+            ],
+            "kind": {
+              "name": "Red",
+              "variant": "Atom"
+            }
+          },
+          {
+            "body": [
+              {
+                "kind": "DebugLog",
+                "value": {
+                  "expr": {
+                    "kind": "String",
+                    "type_hint": null,
+                    "value": "\"blue\""
+                  }
+                }
+              }
+            ],
+            "kind": {
+              "name": "Blue",
+              "variant": "Atom"
+            }
+          }
+        ],
+        "default_body": null,
+        "input": {
+          "expr": {
+            "kind": "Name",
+            "name": "c"
+          }
+        },
+        "kind": "Match"
+      }
+    ]
+  },
+  "diagnostics": []
+}

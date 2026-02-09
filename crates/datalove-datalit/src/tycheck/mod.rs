@@ -34,6 +34,10 @@ pub use types::{
     TypeResult,
     TypeTensor,
     TypeTable,
+    TypeAtom,
+    TypeTerm,
+    TypeEnum,
+    TypeEnumVariant,
     // Error type.
     TypeError,
     // Type predicates.

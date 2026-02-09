@@ -301,6 +301,26 @@ impl IrType {
                 columns.sort_by(|a, b| a.0.cmp(&b.0));
                 IrType::Table(columns)
             }
+            TypeHint::Atom(a) => {
+                let name = a.name.text(db).to_string();
+                IrType::Enum(vec![(name, None)])
+            }
+            TypeHint::Term(t) => {
+                let name = t.name.text(db).to_string();
+                let payload = Self::from_type_hint(db, &t.payload);
+                IrType::Enum(vec![(name, Some(payload))])
+            }
+            TypeHint::Enum(e) => {
+                let mut variants: Vec<_> = e.variants.iter()
+                    .map(|v| {
+                        let name = v.name.text(db).to_string();
+                        let payload = v.payload.as_ref().map(|p| Self::from_type_hint(db, p));
+                        (name, payload)
+                    })
+                    .collect();
+                variants.sort_by(|a, b| a.0.cmp(&b.0));
+                IrType::Enum(variants)
+            }
             TypeHint::ParseError(_) => {
                 IrType::Error
             }
@@ -389,6 +409,26 @@ impl IrType {
                 // Sort columns by name for consistent layout.
                 columns.sort_by(|a, b| a.0.cmp(&b.0));
                 IrType::Table(columns)
+            }
+            DlType::Atom(a) => {
+                let name = a.name.text(db).to_string();
+                IrType::Enum(vec![(name, None)])
+            }
+            DlType::Term(t) => {
+                let name = t.name.text(db).to_string();
+                let payload = Self::from_datalit(db, &t.payload);
+                IrType::Enum(vec![(name, Some(payload))])
+            }
+            DlType::Enum(e) => {
+                let mut variants: Vec<_> = e.variants.iter()
+                    .map(|v| {
+                        let name = v.name.text(db).to_string();
+                        let payload = v.payload.as_ref().map(|p| Self::from_datalit(db, p));
+                        (name, payload)
+                    })
+                    .collect();
+                variants.sort_by(|a, b| a.0.cmp(&b.0));
+                IrType::Enum(variants)
             }
         }
     }
@@ -936,6 +976,23 @@ pub enum Instruction {
         dest: ValueId,
         variant_index: u32,
         payload: Option<Operand>,
+    },
+
+    /// Read discriminant (u32 tag) from enum value.
+    ///
+    /// **Ownership:** Borrows `src` (does not consume).
+    EnumDiscriminant {
+        dest: ValueId,
+        src: Operand,
+    },
+
+    /// Move payload out of enum into dest.
+    ///
+    /// **Ownership:** Consumes `src`, produces `dest`.
+    EnumPayload {
+        dest: ValueId,
+        src: Operand,
+        variant_index: u32,
     },
 
     // ========================================================================

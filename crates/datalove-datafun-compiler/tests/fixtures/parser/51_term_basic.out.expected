@@ -1,0 +1,30 @@
+{
+  "ast": {
+    "statements": [
+      {
+        "kind": "Let",
+        "name": "t",
+        "type_hint": {
+          "Term": {
+            "name": "Foo",
+            "payload": "Int"
+          }
+        },
+        "value": {
+          "expr": {
+            "kind": "Term",
+            "name": "Foo",
+            "payload": {
+              "expr": {
+                "kind": "Int",
+                "type_hint": null,
+                "value": "42"
+              }
+            }
+          }
+        }
+      }
+    ]
+  },
+  "diagnostics": []
+}

@@ -1,0 +1,1 @@
+let t: term Foo int = term Foo 42

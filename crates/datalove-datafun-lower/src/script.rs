@@ -584,6 +584,9 @@ fn lower_statement_for_script<'db>(
             ctx.body.const_values.push((name, value_id));
             Ok(())
         }
+        Statement::Match(match_stmt) => {
+            super::stmt::lower_match(ctx, match_stmt, stmt_idx)
+        }
         Statement::ParseError(_) => {
             panic!("parse error node reached lowering - callers should check for parse errors before lowering")
         }

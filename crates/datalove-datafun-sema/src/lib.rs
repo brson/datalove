@@ -63,6 +63,7 @@ impl StmtKey {
             Statement::TypeAlias(s) => (12, Some(s.local_index)),
             Statement::ParseError(_) => (13, None),
             Statement::Const(_) => (14, None),
+            Statement::Match(_) => (15, None),
         };
         Self { kind, local_index }
     }
@@ -85,6 +86,7 @@ impl StmtKey {
             12 => "TypeAlias",
             13 => "ParseError",
             14 => "Const",
+            15 => "Match",
             _ => "Unknown",
         }
     }
@@ -324,6 +326,10 @@ pub struct DropSchedule {
 
     /// Drops to emit before continue.
     pub before_continue: BTreeMap<usize, Vec<BindingId>>,
+
+    /// Drops to emit at the end of a match arm before jumping to join.
+    /// Key is (match_stmt_idx, arm_idx).
+    pub match_arm_exit: BTreeMap<(usize, usize), Vec<BindingId>>,
 
     /// Statement keys in allocation order, for verifying lowering traversal.
     /// Only present in debug builds.

@@ -432,6 +432,142 @@ pub fn check_statement<'db>(
             ctx.add_const_binding(stmt.name);
         }
 
+        Statement::Match(stmt) => {
+            // Synthesize input type - must be Enum.
+            let input_ty = match ctx.synthesize_expr(stmt.input) {
+                Ok(ty) => ty,
+                Err(e) => {
+                    ctx.add_error(e);
+                    return;
+                }
+            };
+
+            let enum_ty = match &input_ty {
+                Type::Datalit(datalit::tycheck::Type::Enum(e)) => e.clone(),
+                _ => {
+                    let actual_str = type_to_string(db, &input_ty);
+                    let err = ctx.error_type_mismatch(
+                        stmt.input,
+                        "enum",
+                        &actual_str,
+                        "match input must be an enum type"
+                    );
+                    ctx.add_error(err);
+                    return;
+                }
+            };
+
+            // Track which variant names are covered.
+            let mut covered: Vec<bct::text::InternedText<'db>> = Vec::new();
+
+            for case in &stmt.cases {
+                let variant_name = match &case.kind {
+                    MatchCaseKind::Atom { name } => *name,
+                    MatchCaseKind::Term { name, .. } => *name,
+                };
+
+                // Check for duplicate case.
+                if covered.iter().any(|n| *n == variant_name) {
+                    let err = ctx.error_type_mismatch(
+                        stmt.input,
+                        "unique case",
+                        &format!("duplicate case '{}'", variant_name.as_str(db)),
+                        "duplicate match case"
+                    );
+                    ctx.add_error(err);
+                    continue;
+                }
+
+                // Find variant in enum type.
+                let variant = enum_ty.variants.iter().find(|v| v.name == variant_name);
+                match (&case.kind, variant) {
+                    (MatchCaseKind::Atom { name }, Some(v)) => {
+                        if v.payload.is_some() {
+                            let err = ctx.error_type_mismatch(
+                                stmt.input,
+                                "atom case",
+                                &format!("variant '{}' has a payload", name.as_str(db)),
+                                "use 'case term' to destructure payload"
+                            );
+                            ctx.add_error(err);
+                        }
+                        covered.push(variant_name);
+                    }
+                    (MatchCaseKind::Term { name, binding }, Some(v)) => {
+                        match &v.payload {
+                            Some(payload_ty) => {
+                                // Save variables, add binding, check body, restore.
+                                let saved_variables = ctx.variables.C();
+                                let binding_type = Type::Datalit(*payload_ty.clone());
+                                ctx.add_variable(*binding, binding_type, false);
+
+                                for body_stmt in &case.body {
+                                    check_statement(ctx, body_stmt);
+                                }
+
+                                ctx.variables = saved_variables;
+                                covered.push(variant_name);
+                                continue; // Skip the body check below.
+                            }
+                            None => {
+                                let err = ctx.error_type_mismatch(
+                                    stmt.input,
+                                    "term case",
+                                    &format!("variant '{}' has no payload", name.as_str(db)),
+                                    "use 'case atom' for payloadless variants"
+                                );
+                                ctx.add_error(err);
+                                covered.push(variant_name);
+                            }
+                        }
+                    }
+                    (_, None) => {
+                        let err = ctx.error_type_mismatch(
+                            stmt.input,
+                            "valid variant",
+                            &format!("unknown variant '{}'", variant_name.as_str(db)),
+                            "variant not found in enum type"
+                        );
+                        ctx.add_error(err);
+                        covered.push(variant_name);
+                    }
+                }
+
+                // Check body in saved scope for atom cases.
+                let saved_variables = ctx.variables.C();
+                for body_stmt in &case.body {
+                    check_statement(ctx, body_stmt);
+                }
+                ctx.variables = saved_variables;
+            }
+
+            // Check default body if present.
+            if let Some(default_stmts) = &stmt.default_body {
+                let saved_variables = ctx.variables.C();
+                for body_stmt in default_stmts {
+                    check_statement(ctx, body_stmt);
+                }
+                ctx.variables = saved_variables;
+            }
+
+            // Check exhaustiveness: all variants must be covered or default must exist.
+            if stmt.default_body.is_none() {
+                let uncovered: Vec<_> = enum_ty.variants.iter()
+                    .filter(|v| !covered.iter().any(|c| *c == v.name))
+                    .map(|v| v.name.as_str(db).to_string())
+                    .collect();
+                if !uncovered.is_empty() {
+                    let err = ctx.error_type_mismatch(
+                        stmt.input,
+                        "exhaustive match",
+                        &format!("missing variants: {}", uncovered.join(", ")),
+                        "non-exhaustive match"
+                    );
+                    ctx.add_error(err);
+                }
+            }
+        }
+
         Statement::ParseError(_) => {
             // Skip parse errors.
         }

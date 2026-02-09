@@ -747,6 +747,15 @@ impl RemapContext {
                 variant_index: *variant_index,
                 payload: payload.as_ref().map(|p| self.remap_operand(p)),
             },
+            Instruction::EnumDiscriminant { dest, src } => Instruction::EnumDiscriminant {
+                dest: self.remap_value(*dest),
+                src: self.remap_operand(src),
+            },
+            Instruction::EnumPayload { dest, src, variant_index } => Instruction::EnumPayload {
+                dest: self.remap_value(*dest),
+                src: self.remap_operand(src),
+                variant_index: *variant_index,
+            },
             Instruction::UnwrapOption { dest, is_some, src } => Instruction::UnwrapOption {
                 dest: self.remap_value(*dest),
                 is_some: self.remap_value(*is_some),
@@ -1250,6 +1259,15 @@ fn replace_params_in_instruction(
             dest: *dest,
             variant_index: *variant_index,
             payload: payload.as_ref().map(replace_operand),
+        },
+        Instruction::EnumDiscriminant { dest, src } => Instruction::EnumDiscriminant {
+            dest: *dest,
+            src: replace_operand(src),
+        },
+        Instruction::EnumPayload { dest, src, variant_index } => Instruction::EnumPayload {
+            dest: *dest,
+            src: replace_operand(src),
+            variant_index: *variant_index,
         },
         Instruction::UnwrapOption { dest, is_some, src } => Instruction::UnwrapOption {
             dest: *dest,

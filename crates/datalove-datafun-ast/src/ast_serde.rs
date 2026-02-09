@@ -29,6 +29,7 @@ pub enum Statement {
     Continue(StmtContinue),
     DebugLog(StmtDebugLog),
     TypeAlias(StmtTypeAlias),
+    Match(StmtMatch),
     ParseError(StmtParseError),
 }
 
@@ -165,6 +166,26 @@ pub struct StmtTypeAlias {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct StmtMatch {
+    pub input: ExprFun,
+    pub cases: Vec<MatchCase>,
+    pub default_body: Option<Vec<Statement>>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct MatchCase {
+    pub kind: MatchCaseKind,
+    pub body: Vec<Statement>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(tag = "variant")]
+pub enum MatchCaseKind {
+    Atom { name: String },
+    Term { name: String, binding: String },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct StmtParseError {
     pub message: String,
 }
@@ -215,6 +236,11 @@ pub enum ExprFunKind {
 
     // Table expression.
     Table(ExprTable),
+
+    // Atom/Term/Enum expressions.
+    Atom(ExprAtom),
+    Term(ExprTerm),
+    EnumLiteral(ExprEnumLiteral),
 
     ParseError(ExprFunParseError),
 
@@ -304,6 +330,22 @@ pub struct ExprCloneCoerce {
 pub struct ExprFieldProj {
     pub base: Box<ExprFun>,
     pub field: FieldSelector,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct ExprAtom {
+    pub name: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct ExprTerm {
+    pub name: String,
+    pub payload: Box<ExprFun>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct ExprEnumLiteral {
+    pub variant: Box<ExprFun>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -461,6 +503,7 @@ impl Statement {
             crate::ast::Statement::Continue(_) => Statement::Continue(StmtContinue {}),
             crate::ast::Statement::DebugLog(s) => Statement::DebugLog(StmtDebugLog::from_ast(db, s)),
             crate::ast::Statement::TypeAlias(s) => Statement::TypeAlias(StmtTypeAlias::from_ast(db, s)),
+            crate::ast::Statement::Match(s) => Statement::Match(StmtMatch::from_ast(db, s)),
             crate::ast::Statement::ParseError(s) => Statement::ParseError(StmtParseError::from_ast(db, s)),
         }
     }
@@ -643,6 +686,41 @@ impl StmtLoop {
     }
 }
 
+impl StmtMatch {
+    pub fn from_ast<'db>(db: &'db dyn Db, ast: &crate::ast::StmtMatch<'db>) -> Self {
+        StmtMatch {
+            input: ExprFun::from_ast(db, ast.input),
+            cases: ast.cases.iter().map(|c| MatchCase::from_ast(db, c)).collect(),
+            default_body: ast.default_body.as_ref().map(|stmts| {
+                stmts.iter().map(|s| Statement::from_ast(db, s)).collect()
+            }),
+        }
+    }
+}
+
+impl MatchCase {
+    pub fn from_ast<'db>(db: &'db dyn Db, ast: &crate::ast::MatchCase<'db>) -> Self {
+        MatchCase {
+            kind: MatchCaseKind::from_ast(db, &ast.kind),
+            body: ast.body.iter().map(|s| Statement::from_ast(db, s)).collect(),
+        }
+    }
+}
+
+impl MatchCaseKind {
+    pub fn from_ast<'db>(db: &'db dyn Db, ast: &crate::ast::MatchCaseKind<'db>) -> Self {
+        match ast {
+            crate::ast::MatchCaseKind::Atom { name } => MatchCaseKind::Atom {
+                name: name.as_str(db).to_string(),
+            },
+            crate::ast::MatchCaseKind::Term { name, binding } => MatchCaseKind::Term {
+                name: name.as_str(db).to_string(),
+                binding: binding.as_str(db).to_string(),
+            },
+        }
+    }
+}
+
 impl StmtParseError {
     pub fn from_ast<'db>(db: &'db dyn Db, ast: &crate::ast::StmtParseError<'db>) -> Self {
         StmtParseError {
@@ -702,6 +780,18 @@ impl ExprFunKind {
 
             // Table expression.
             crate::ast::ExprFunKind::Table(e) => ExprFunKind::Table(ExprTable::from_ast(db, e)),
+
+            // Atom/Term/Enum expressions.
+            crate::ast::ExprFunKind::Atom(e) => ExprFunKind::Atom(ExprAtom {
+                name: e.name.as_str(db).to_string(),
+            }),
+            crate::ast::ExprFunKind::Term(e) => ExprFunKind::Term(ExprTerm {
+                name: e.name.as_str(db).to_string(),
+                payload: Box::new(ExprFun::from_ast(db, e.payload)),
+            }),
+            crate::ast::ExprFunKind::EnumLiteral(e) => ExprFunKind::EnumLiteral(ExprEnumLiteral {
+                variant: Box::new(ExprFun::from_ast(db, e.variant)),
+            }),
 
             crate::ast::ExprFunKind::ParseError(e) => ExprFunKind::ParseError(ExprFunParseError::from_ast(db, e)),
             crate::ast::ExprFunKind::IntrinsicCall(e) => ExprFunKind::IntrinsicCall(ExprIntrinsicCall::from_ast(db, e)),

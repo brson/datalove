@@ -1,0 +1,15 @@
+----------
+scriptunit-fragment
+----------
+
+// Dual test: enum match with atoms
+type Color: enum { atom Red, atom Green, atom Blue }
+let c: Color = atom Red
+match c
+case atom Red
+    debuglog "red"
+case atom Green
+    debuglog "green"
+case atom Blue
+    debuglog "blue"
+end match

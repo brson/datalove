@@ -42,6 +42,7 @@ use std::collections::HashMap;
 use salsa::plumbing::AsId;
 use datalove_datafun_ast::ast::{
     Statement, StmtFun, StmtLet, StmtVar, StmtSet, StmtRet, StmtIf, StmtLoop, StmtConst,
+    StmtMatch, MatchCaseKind,
     ExprFun, ExprFunKind, BinOp, UnaryOp, ParamMode, SetTarget,
 };
 use datalove_datafun_ir::IrType;
@@ -147,6 +148,7 @@ enum ScopeKind {
     Loop,
     IfThen,
     IfElse,
+    MatchArm,
 }
 
 impl<'db> AnalysisCtx<'db> {
@@ -1086,6 +1088,9 @@ fn analyze_statements<'db>(ctx: &mut AnalysisCtx<'db>, stmts: &[Statement<'db>])
                 // ownership tracking just like let.
                 analyze_const(ctx, const_stmt, stmt_id);
             }
+            Statement::Match(match_stmt) => {
+                analyze_match(ctx, match_stmt, stmt_id);
+            }
             Statement::Require(_) | Statement::Import(_) | Statement::ParseError(_) => {
                 // No drops.
             }
@@ -1402,6 +1407,116 @@ fn analyze_if<'db>(ctx: &mut AnalysisCtx<'db>, stmt: &StmtIf<'db>, stmt_idx: usi
                 OutParamInitState::Uninitialized
             };
             frame.out_param_init.insert(id, converged);
+        }
+    }
+}
+
+fn analyze_match<'db>(ctx: &mut AnalysisCtx<'db>, stmt: &StmtMatch<'db>, stmt_idx: usize) {
+    // Match consumes its input.
+    ctx.analyze_expr_moves(stmt.input, true);
+
+    // Save state before match arms.
+    let state_before = ctx.scope_stack.last()
+        .map(|f| f.current_state.C())
+        .unwrap_or_default();
+
+    let mut arm_states: Vec<HashMap<BindingId, BindingState>> = Vec::new();
+
+    // Analyze each case arm.
+    for (arm_idx, case) in stmt.cases.iter().enumerate() {
+        // Reset to pre-match state.
+        if let Some(frame) = ctx.scope_stack.last_mut() {
+            frame.current_state = state_before.C();
+        }
+
+        ctx.enter_scope(ScopeKind::MatchArm);
+
+        // For term cases, create the payload binding.
+        if let MatchCaseKind::Term { binding, .. } = &case.kind {
+            let name = binding.text(ctx.db).S();
+            // Get payload type from the input expr type's enum variant.
+            // For now, use a placeholder - the typechecker has validated it.
+            let input_ty = ctx.expr_type(stmt.input);
+            let payload_ty = match &input_ty {
+                IrType::Enum(variants) => {
+                    let variant_name = match &case.kind {
+                        MatchCaseKind::Term { name, .. } => name.text(ctx.db).to_string(),
+                        _ => unreachable!(),
+                    };
+                    variants.iter()
+                        .find(|(n, _)| n == &variant_name)
+                        .and_then(|(_, payload)| payload.clone())
+                        .unwrap_or(IrType::Unit)
+                }
+                _ => IrType::Unit,
+            };
+            ctx.alloc_binding(name, payload_ty, false, None);
+        }
+
+        analyze_statements(ctx, &case.body);
+        let arm_drops = ctx.exit_scope();
+
+        if !arm_drops.is_empty() {
+            ctx.schedule.match_arm_exit.insert((stmt_idx, arm_idx), arm_drops);
+        }
+
+        let state_after = ctx.scope_stack.last()
+            .map(|f| f.current_state.C())
+            .unwrap_or_default();
+        arm_states.push(state_after);
+    }
+
+    // Analyze default arm if present.
+    if let Some(default_body) = &stmt.default_body {
+        // Reset to pre-match state.
+        if let Some(frame) = ctx.scope_stack.last_mut() {
+            frame.current_state = state_before.C();
+        }
+
+        let default_arm_idx = stmt.cases.len();
+        ctx.enter_scope(ScopeKind::MatchArm);
+        analyze_statements(ctx, default_body);
+        let arm_drops = ctx.exit_scope();
+
+        if !arm_drops.is_empty() {
+            ctx.schedule.match_arm_exit.insert((stmt_idx, default_arm_idx), arm_drops);
+        }
+
+        let state_after = ctx.scope_stack.last()
+            .map(|f| f.current_state.C())
+            .unwrap_or_default();
+        arm_states.push(state_after);
+    }
+
+    // Check consistency across all arms.
+    if let Some(first_state) = arm_states.first() {
+        for (_arm_idx, arm_state) in arm_states.iter().enumerate().skip(1) {
+            for (&id, &first_s) in first_state {
+                let other_s = arm_state.get(&id).copied().unwrap_or(BindingState::Live);
+                if first_s != other_s && !ctx.bindings[id.0 as usize].ty.is_copy() {
+                    let name = ctx.bindings[id.0 as usize].name.C();
+                    let moved_in = if first_s == BindingState::Moved { "first match arm" } else { "other match arm" };
+                    ctx.errors.push(AnalysisError::InconsistentBranchMove {
+                        stmt_idx,
+                        name,
+                        moved_in,
+                    });
+                }
+            }
+        }
+    }
+
+    // Update state after match convergence.
+    if let Some(first_state) = arm_states.first() {
+        if let Some(frame) = ctx.scope_stack.last_mut() {
+            for (&id, &state) in first_state {
+                frame.current_state.insert(id, state);
+            }
+        }
+    } else {
+        // No arms - restore pre-match state.
+        if let Some(frame) = ctx.scope_stack.last_mut() {
+            frame.current_state = state_before;
         }
     }
 }

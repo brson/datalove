@@ -61,6 +61,9 @@ pub enum TypeHint<'db> {
     Data,
     Error,
     Alias(InternedText<'db>),
+    Atom(TypeHintAtom<'db>),
+    Term(TypeHintTerm<'db>),
+    Enum(TypeHintEnum<'db>),
     ParseError(TypeHintParseError<'db>),
 }
 
@@ -127,6 +130,32 @@ pub struct TypeHintTensor<'db> {
 #[derive(salsa::Update)]
 pub struct TypeHintTable<'db> {
     pub columns: Vec<TypeHintNamedField<'db>>,
+}
+
+#[derive(Clone, Hash, PartialEq, Eq)]
+#[derive(salsa::Update)]
+pub struct TypeHintAtom<'db> {
+    pub name: InternedText<'db>,
+}
+
+#[derive(Clone, Hash, PartialEq, Eq)]
+#[derive(salsa::Update)]
+pub struct TypeHintTerm<'db> {
+    pub name: InternedText<'db>,
+    pub payload: Box<TypeHint<'db>>,
+}
+
+#[derive(Clone, Hash, PartialEq, Eq)]
+#[derive(salsa::Update)]
+pub struct TypeHintEnum<'db> {
+    pub variants: Vec<TypeHintEnumVariant<'db>>,
+}
+
+#[derive(Clone, Hash, PartialEq, Eq)]
+#[derive(salsa::Update)]
+pub struct TypeHintEnumVariant<'db> {
+    pub name: InternedText<'db>,
+    pub payload: Option<Box<TypeHint<'db>>>,
 }
 
 #[derive(Clone, Hash, PartialEq, Eq)]

@@ -41,6 +41,53 @@ impl<'db> Parser<'db> {
             Some("string") => { self.eat_word("string"); ast::TypeHint::String }
             Some("data") => { self.eat_word("data"); ast::TypeHint::Data }
             Some("error") => { self.eat_word("error"); ast::TypeHint::Error }
+            Some("atom") => {
+                self.eat_word("atom");
+                let name = match self.eat_name() {
+                    Some(n) => n,
+                    None => {
+                        let ts = self.peek_text_span();
+                        return self.emit_type_hint_error(ts,
+                            "expected name after 'atom'",
+                            "D030",
+                            "expected atom name"
+                        );
+                    }
+                };
+                ast::TypeHint::Atom(ast::TypeHintAtom { name })
+            }
+            Some("term") => {
+                self.eat_word("term");
+                let name = match self.eat_name() {
+                    Some(n) => n,
+                    None => {
+                        let ts = self.peek_text_span();
+                        return self.emit_type_hint_error(ts,
+                            "expected name after 'term'",
+                            "D031",
+                            "expected term name"
+                        );
+                    }
+                };
+                let payload = self.parse_type_hint();
+                ast::TypeHint::Term(ast::TypeHintTerm { name, payload: Box::new(payload) })
+            }
+            Some("enum") => {
+                let ts = self.peek_text_span();
+                self.eat_word("enum");
+                if let Some(iter) = self.eat_branch(Sigil::BraceOpen) {
+                    let mut sub_parser = Parser::from_branch(self.db, iter, self.source_text());
+                    let variants = sub_parser.parse_comma_separated(|p| p.parse_enum_variant());
+                    sub_parser.error_if_not_exhausted_type_hint();
+                    ast::TypeHint::Enum(ast::TypeHintEnum { variants })
+                } else {
+                    self.emit_type_hint_error(ts,
+                        "expected '{}' after 'enum'",
+                        "D032",
+                        "expected '{' after 'enum'"
+                    )
+                }
+            }
             Some("tuple") => {
                 let ts = self.peek_text_span();
                 self.eat_word("tuple");
@@ -195,6 +242,46 @@ impl<'db> Parser<'db> {
                         "unexpected token in type hint"
                     )
                 }
+            }
+        }
+    }
+
+    /// Parse a single enum variant: `atom Name` or `term Name Type`.
+    fn parse_enum_variant(&mut self) -> ast::TypeHintEnumVariant<'db> {
+        match self.peek_word() {
+            Some("atom") => {
+                self.eat_word("atom");
+                let name = match self.eat_name() {
+                    Some(n) => n,
+                    None => {
+                        let ts = self.peek_text_span();
+                        self.emit_type_hint_error(ts, "expected name after 'atom'", "D030", "expected atom name");
+                        use rmx::prelude::*;
+                        InternedText::new(self.db, "<error>".S())
+                    }
+                };
+                ast::TypeHintEnumVariant { name, payload: None }
+            }
+            Some("term") => {
+                self.eat_word("term");
+                let name = match self.eat_name() {
+                    Some(n) => n,
+                    None => {
+                        let ts = self.peek_text_span();
+                        self.emit_type_hint_error(ts, "expected name after 'term'", "D031", "expected term name");
+                        use rmx::prelude::*;
+                        InternedText::new(self.db, "<error>".S())
+                    }
+                };
+                let payload = self.parse_type_hint();
+                ast::TypeHintEnumVariant { name, payload: Some(Box::new(payload)) }
+            }
+            _ => {
+                let ts = self.peek_text_span();
+                self.emit_type_hint_error(ts, "expected 'atom' or 'term' in enum variant", "D032", "expected 'atom' or 'term'");
+                use rmx::prelude::*;
+                let name = InternedText::new(self.db, "<error>".S());
+                ast::TypeHintEnumVariant { name, payload: None }
             }
         }
     }

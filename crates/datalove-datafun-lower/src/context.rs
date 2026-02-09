@@ -1240,6 +1240,17 @@ impl<'db> LowerCtx<'db> {
         }
     }
 
+    /// Emit drops scheduled for a match arm exit.
+    pub fn emit_match_arm_drops(&mut self, stmt_idx: usize, arm_idx: usize) {
+        let binding_ids = self.body.drop_schedule.match_arm_exit
+            .get(&(stmt_idx, arm_idx))
+            .cloned()
+            .unwrap_or_default();
+        for id in binding_ids {
+            self.emit_binding_drop(id);
+        }
+    }
+
     /// Get binding IDs to drop at loop body end.
     fn get_scheduled_binding_ids_loop(&self, stmt_idx: usize) -> Vec<BindingId> {
         self.body.drop_schedule.loop_body_end.get(&stmt_idx)

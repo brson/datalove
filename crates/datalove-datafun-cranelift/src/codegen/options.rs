@@ -345,6 +345,76 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         Ok(())
     }
 
+    /// Compile an EnumDiscriminant instruction: dest = discriminant(src).
+    ///
+    /// Reads the u32 tag from the enum value without consuming it.
+    pub(super) fn compile_enum_discriminant(
+        &mut self,
+        builder: &mut FunctionBuilder,
+        dest: ValueId,
+        src: &Operand,
+    ) -> Result<(), CraneliftError> {
+        // Get source address (enum is always aggregate).
+        let src_addr = self.get_operand_ptr(builder, src)?;
+
+        // Load discriminant (u32 at offset 0).
+        let disc = builder.ins().load(cl_types::I32, MemFlags::new(), src_addr, 0);
+        self.values.insert(dest, disc);
+        Ok(())
+    }
+
+    /// Compile an EnumPayload instruction: dest = payload(src, variant_index).
+    ///
+    /// Extracts the payload from the enum value, consuming it.
+    pub(super) fn compile_enum_payload(
+        &mut self,
+        builder: &mut FunctionBuilder,
+        dest: ValueId,
+        src: &Operand,
+        variant_index: u32,
+    ) -> Result<(), CraneliftError> {
+        let src_ty = self.get_operand_type(src)?;
+        let variants = match &src_ty {
+            IrType::Enum(v) => v,
+            _ => {
+                return Err(CraneliftError::Codegen(format!(
+                    "EnumPayload src is not Enum: {:?}", src_ty
+                )));
+            }
+        };
+
+        let payload_ty = variants[variant_index as usize].1.as_ref()
+            .ok_or_else(|| CraneliftError::Codegen("EnumPayload variant has no payload type".into()))?;
+
+        // Compute payload offset.
+        let payload_layout = types::ir_type_to_cranelift(payload_ty).layout();
+        let payload_offset = types::align_up(4, payload_layout.align);
+
+        // Get source address.
+        let src_addr = self.get_operand_ptr(builder, src)?;
+        let payload_addr = builder.ins().iadd_imm(src_addr, payload_offset as i64);
+
+        // Copy payload to dest.
+        let payload_repr = types::ir_type_to_cranelift(payload_ty);
+        match payload_repr {
+            CraneliftRepr::Scalar(cl_ty) => {
+                let val = builder.ins().load(cl_ty, MemFlags::new(), payload_addr, 0);
+                self.values.insert(dest, val);
+            }
+            CraneliftRepr::Aggregate(layout) => {
+                let frame_slot = self.frame_slot.ok_or_else(|| {
+                    CraneliftError::Codegen("no frame slot for EnumPayload".into())
+                })?;
+                let dest_offset = self.layout.value_offset(dest.0);
+                let dest_addr = builder.ins().stack_addr(PTR_TYPE, frame_slot, dest_offset as i32);
+                let size = builder.ins().iconst(PTR_TYPE, layout.size as i64);
+                builder.call_memcpy(self.isa.frontend_config(), dest_addr, payload_addr, size);
+                self.values.insert(dest, dest_addr);
+            }
+        }
+        Ok(())
+    }
+
     /// Compile an UnwrapResult instruction: (ok_dest, err_dest, is_ok) = unwrap(src).
     pub(super) fn compile_unwrap_result(
         &mut self,

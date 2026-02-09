@@ -1,0 +1,8 @@
+type Color: enum { atom Red, atom Blue }
+let c: Color = atom Red
+match c
+case atom Red
+    debuglog "red"
+case atom Blue
+    debuglog "blue"
+end match

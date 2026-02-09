@@ -318,7 +318,10 @@ pub fn is_linear_type(type_hint: &TypeHint<'_>) -> bool {
         | TypeHint::AnonStruct(_)
 
         | TypeHint::Alias(_)
-        | TypeHint::ParseError(_) => true,
+        | TypeHint::ParseError(_)
+        | TypeHint::Atom(_)
+        | TypeHint::Term(_)
+        | TypeHint::Enum(_) => true,
     }
 }
 

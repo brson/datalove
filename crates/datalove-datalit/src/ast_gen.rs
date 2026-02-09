@@ -649,6 +649,9 @@ pub fn gen_expr_matching_type<'db, R: Rng>(
         TypeHint::ParseError(_) => Expr::None,
         TypeHint::Table(_) => todo!("table expression generation not yet implemented"),
         TypeHint::Alias(_) => Expr::None,
+        TypeHint::Atom(_) | TypeHint::Term(_) | TypeHint::Enum(_) => {
+            todo!("atom/term/enum expression generation not yet implemented")
+        }
     }
 }
 

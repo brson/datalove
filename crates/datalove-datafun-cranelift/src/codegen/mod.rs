@@ -699,6 +699,12 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             Instruction::EnumVariant { dest, variant_index, payload } => {
                 self.compile_enum_variant(builder, *dest, *variant_index, payload.as_ref())?;
             }
+            Instruction::EnumDiscriminant { dest, src } => {
+                self.compile_enum_discriminant(builder, *dest, src)?;
+            }
+            Instruction::EnumPayload { dest, src, variant_index } => {
+                self.compile_enum_payload(builder, *dest, src, *variant_index)?;
+            }
             Instruction::ErrorFrom { dest, inner } => {
                 self.compile_error_from(builder, *dest, inner)?;
             }

@@ -1,0 +1,8 @@
+----------
+scriptunit-fragment
+----------
+
+// Dual test: term creation
+type MyTerm: term Foo int
+let t: term Foo int = term Foo 42
+debuglog t

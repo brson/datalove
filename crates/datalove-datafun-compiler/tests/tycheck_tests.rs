@@ -66,6 +66,17 @@ fn type_hint_to_string(db: &dyn salsa::Database, type_hint: &datalove_datalit::a
         TypeHint::ParseError(_) => "?".to_string(),
         TypeHint::Table(_) => "table".to_string(),
         TypeHint::Alias(name) => name.as_str(db).to_string(),
+        TypeHint::Atom(a) => format!("atom {}", a.name.as_str(db)),
+        TypeHint::Term(t) => format!("term {} {}", t.name.as_str(db), type_hint_to_string(db, &t.payload)),
+        TypeHint::Enum(e) => {
+            let variants: Vec<_> = e.variants.iter().map(|v| {
+                match &v.payload {
+                    Some(p) => format!("term {} {}", v.name.as_str(db), type_hint_to_string(db, p)),
+                    None => format!("atom {}", v.name.as_str(db)),
+                }
+            }).collect();
+            format!("enum{{{}}}", variants.join(", "))
+        }
     }
 }
 

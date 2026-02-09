@@ -1,0 +1,8 @@
+----------
+scriptunit-fragment
+----------
+
+// Dual test: atom creation
+type MyAtom: atom Foo
+let a: atom Foo = atom Foo
+debuglog a

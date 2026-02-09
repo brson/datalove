@@ -328,6 +328,71 @@ impl<'db> Parser<'db> {
                                     };
                                     self.create_expr(expr_kind, ts)
                                 }
+                                // Atom expression: `atom Name`.
+                                "atom" => {
+                                    let ts = self.peek_text_span();
+                                    self.next(); // consume "atom"
+                                    let name = match self.peek_word() {
+                                        Some(w) => {
+                                            let n = InternedText::new(self.db, w.S());
+                                            self.next();
+                                            n
+                                        }
+                                        None => {
+                                            return self.emit_expr_error(ts,
+                                                "expected name after 'atom'",
+                                                "P042",
+                                                "expected atom name"
+                                            );
+                                        }
+                                    };
+                                    self.create_expr(
+                                        ast::ExprFunKind::Atom(ast::ExprAtom { name }),
+                                        ts
+                                    )
+                                }
+                                // Term expression: `term Name payload`.
+                                "term" => {
+                                    let ts = self.peek_text_span();
+                                    self.next(); // consume "term"
+                                    let name = match self.peek_word() {
+                                        Some(w) => {
+                                            let n = InternedText::new(self.db, w.S());
+                                            self.next();
+                                            n
+                                        }
+                                        None => {
+                                            return self.emit_expr_error(ts,
+                                                "expected name after 'term'",
+                                                "P043",
+                                                "expected term name"
+                                            );
+                                        }
+                                    };
+                                    let payload = self.parse_expr_primary();
+                                    self.create_expr(
+                                        ast::ExprFunKind::Term(ast::ExprTerm { name, payload }),
+                                        ts
+                                    )
+                                }
+                                // Enum literal expression: `enum { atom Foo }`.
+                                "enum" if self.peek_second_sigil(Sigil::BraceOpen) => {
+                                    let ts = self.peek_text_span();
+                                    self.next(); // consume "enum"
+                                    // Parse the inner variant expression in braces.
+                                    let iter = match self.next() {
+                                        Some(TreeToken::Branch { sigil: Sigil::BraceOpen, inner, .. }) => inner,
+                                        _ => unreachable!(),
+                                    };
+                                    let mut sub = self.sub_parser(iter, None);
+                                    let variant = sub.parse_expr_full();
+                                    sub.error_if_not_exhausted();
+                                    self.merge_from_sub(&mut sub);
+                                    self.create_expr(
+                                        ast::ExprFunKind::EnumLiteral(ast::ExprEnumLiteral { variant }),
+                                        ts
+                                    )
+                                }
                                 // tensor is a keyword followed by shape and data brackets.
                                 "tensor" if self.peek_second_sigil(Sigil::BracketOpen) => {
                                     let ts = self.peek_text_span();

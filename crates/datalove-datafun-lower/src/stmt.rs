@@ -5,7 +5,7 @@
 
 use bct::text::InternedText;
 use datalove_datafun_ast::ast::{self, Statement, ExprFun, ExprFunKind};
-use datalove_datafun_ir::{IrType, Operand, Instruction, Terminator, SlotDest, ParamMode};
+use datalove_datafun_ir::{IrType, Operand, Instruction, Terminator, SlotDest, ParamMode, ConstValue};
 use super::context::LowerCtx;
 use super::expr::{lower_expression, lower_expression_for_ref};
 use super::LowerError;
@@ -193,6 +193,9 @@ fn lower_statement_impl<'db>(
             ctx.record_binding_operand(operand);
             ctx.body.const_values.push((name, value_id));
             Ok(())
+        }
+        Statement::Match(match_stmt) => {
+            lower_match(ctx, match_stmt, stmt_idx)
         }
         Statement::ParseError(_) => {
             panic!("parse error node reached lowering - callers should check for parse errors before lowering")
@@ -717,6 +720,150 @@ pub(super) fn collect_field_path<'db>(
     }
 
     Ok((root_name, path))
+}
+
+/// Lower a match statement.
+///
+/// Compiles enum match to a chain of discriminant comparisons:
+/// 1. Lower input expression
+/// 2. Extract discriminant
+/// 3. For each case arm, compare discriminant and branch
+/// 4. In each arm: extract payload (for term cases), lower body, emit drops
+pub fn lower_match<'db>(
+    ctx: &mut LowerCtx<'db>,
+    match_stmt: &ast::StmtMatch<'db>,
+    stmt_idx: usize,
+) -> Result<(), LowerError> {
+    // Lower the input expression.
+    let input_id = lower_expression(ctx, match_stmt.input)?;
+    let input_type = ctx.expr_type(match_stmt.input);
+
+    let variants = match &input_type {
+        IrType::Enum(v) => v.clone(),
+        _ => panic!("match input must be Enum type"),
+    };
+
+    // Extract discriminant (borrows input, does not consume).
+    let disc_id = ctx.fresh_value(IrType::U32);
+    ctx.emit(Instruction::EnumDiscriminant {
+        dest: disc_id,
+        src: Operand::Value(input_id),
+    });
+
+    let merge_block = ctx.fresh_block();
+
+    // Build case arm blocks.
+    let num_cases = match_stmt.cases.len();
+    let has_default = match_stmt.default_body.is_some();
+
+    // Pre-allocate blocks for each arm body and each check.
+    let arm_blocks: Vec<_> = (0..num_cases).map(|_| ctx.fresh_block()).collect();
+    let default_block = if has_default { Some(ctx.fresh_block()) } else { None };
+    // Check blocks: one for each case except the first (first check is in current block).
+    let mut next_check_blocks: Vec<_> = (1..num_cases).map(|_| ctx.fresh_block()).collect();
+    // After last case, fall through to default or merge (unreachable if exhaustive).
+    let final_else = default_block.unwrap_or(merge_block);
+    next_check_blocks.push(final_else);
+
+    // Emit discriminant checks and branches.
+    for (i, case) in match_stmt.cases.iter().enumerate() {
+        let name_str = match &case.kind {
+            ast::MatchCaseKind::Atom { name } => name.as_str(ctx.db),
+            ast::MatchCaseKind::Term { name, .. } => name.as_str(ctx.db),
+        };
+
+        let variant_index = variants.iter()
+            .position(|(n, _)| n == name_str)
+            .unwrap_or_else(|| panic!("match case '{}' not found in enum", name_str))
+            as u32;
+
+        // Compare discriminant.
+        let vi = ctx.fresh_value(IrType::U32);
+        ctx.emit(Instruction::Const {
+            dest: vi,
+            value: ConstValue::U32(variant_index),
+        });
+        let cmp = ctx.fresh_value(IrType::Bool);
+        ctx.emit(Instruction::BinOp {
+            dest: cmp,
+            op: datalove_datafun_ir::BinOp::Eq,
+            lhs: Operand::Value(disc_id),
+            rhs: Operand::Value(vi),
+        });
+
+        ctx.finish_block(Terminator::Branch {
+            cond: Operand::Value(cmp),
+            then_block: arm_blocks[i],
+            then_args: Vec::new(),
+            else_block: next_check_blocks[i],
+            else_args: Vec::new(),
+        });
+
+        // Start the arm body block.
+        ctx.start_block(arm_blocks[i]);
+
+        // For term cases, extract payload and bind variable.
+        if let ast::MatchCaseKind::Term { name: _, binding } = &case.kind {
+            let payload_type = variants[variant_index as usize].1.as_ref()
+                .unwrap_or_else(|| panic!("term case but variant has no payload type"))
+                .clone();
+            let payload_dest = ctx.fresh_value(payload_type);
+            ctx.emit(Instruction::EnumPayload {
+                dest: payload_dest,
+                src: Operand::Value(input_id),
+                variant_index,
+            });
+            let binding_str = binding.text(ctx.db);
+            ctx.bind_var(binding_str, Operand::Value(payload_dest));
+            ctx.record_binding_operand(Operand::Value(payload_dest));
+        } else {
+            // Atom case: drop the input (no payload to extract).
+            ctx.emit(Instruction::Drop {
+                operand: Operand::Value(input_id),
+            });
+        }
+
+        // Lower arm body.
+        for stmt in &case.body {
+            lower_statement(ctx, stmt)?;
+        }
+
+        // Emit match arm drops and goto merge.
+        let arm_terminated = ctx.is_unreachable();
+        if !arm_terminated {
+            ctx.emit_match_arm_drops(stmt_idx, i);
+            ctx.finish_block(Terminator::Goto { target: merge_block, args: Vec::new() });
+        }
+
+        // Start next check block (unless this is the last case).
+        if i + 1 < num_cases {
+            ctx.start_block(next_check_blocks[i]);
+        }
+    }
+
+    // Handle default arm.
+    if let Some(default_body) = &match_stmt.default_body {
+        ctx.start_block(default_block.unwrap());
+
+        // Drop the input in default arm.
+        ctx.emit(Instruction::Drop {
+            operand: Operand::Value(input_id),
+        });
+
+        for stmt in default_body {
+            lower_statement(ctx, stmt)?;
+        }
+
+        let default_terminated = ctx.is_unreachable();
+        if !default_terminated {
+            ctx.emit_match_arm_drops(stmt_idx, num_cases);
+            ctx.finish_block(Terminator::Goto { target: merge_block, args: Vec::new() });
+        }
+    }
+
+    // Start merge block.
+    ctx.start_block(merge_block);
+    Ok(())
 }
 
 /// Helper to collect all field selectors from a projection chain.

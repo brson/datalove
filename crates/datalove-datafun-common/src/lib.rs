@@ -411,6 +411,11 @@ pub use datalit::tycheck::{
     TypeResult,
     TypeTensor,
     TypeTable,
+
+    TypeAtom,
+    TypeTerm,
+    TypeEnum,
+    TypeEnumVariant,
 };
 
 // ============================================================================
@@ -497,6 +502,19 @@ pub fn can_clone_coerce_to<'db>(from: &Type<'db>, to: &Type<'db>, db: &'db dyn D
         (DT::U8, DT::I16 | DT::I32 | DT::I64 | DT::Int) => true,
         (DT::U16, DT::I32 | DT::I64 | DT::Int) => true,
         (DT::U32, DT::I64 | DT::Int) => true,
+        // Atom -> Enum: atom is a variant of the enum (no payload).
+        (DT::Atom(a), DT::Enum(e)) => {
+            e.variants.iter().any(|v| v.name == a.name && v.payload.is_none())
+        }
+        // Term -> Enum: term is a variant of the enum (with matching payload type).
+        (DT::Term(t), DT::Enum(e)) => {
+            e.variants.iter().any(|v| {
+                v.name == t.name
+                    && v.payload.as_ref().map_or(false, |p| {
+                        datalit::tycheck::types_equivalent(db, &t.payload, p)
+                    })
+            })
+        }
         _ => false,
     }
 }
@@ -696,6 +714,47 @@ fn convert_type_hint_inner<'db>(
             ))
         }
 
+        TypeHint::Atom(a) => {
+            Type::Datalit(datalit::tycheck::Type::Atom(
+                datalit::tycheck::TypeAtom { name: a.name }
+            ))
+        }
+
+        TypeHint::Term(t) => {
+            let payload_ty = convert_type_hint_inner(db, (*t.payload).clone())?;
+            let dt = match payload_ty {
+                Type::Datalit(dt) => dt.clone(),
+                Type::Function(_) => unreachable!("type hint cannot produce function type"),
+            };
+            Type::Datalit(datalit::tycheck::Type::Term(
+                datalit::tycheck::TypeTerm { name: t.name, payload: Box::new(dt) }
+            ))
+        }
+
+        TypeHint::Enum(e) => {
+            let variants: Result<Vec<_>, TypeError> = e.variants.iter()
+                .map(|v| {
+                    let payload = match &v.payload {
+                        Some(p) => {
+                            let p_ty = convert_type_hint_inner(db, (**p).clone())?;
+                            let dt = match p_ty {
+                                Type::Datalit(dt) => dt.clone(),
+                                Type::Function(_) => unreachable!("type hint cannot produce function type"),
+                            };
+                            Some(Box::new(dt))
+                        }
+                        None => None,
+                    };
+                    Ok(datalit::tycheck::TypeEnumVariant { name: v.name, payload })
+                })
+                .collect();
+            let mut variants = variants?;
+            variants.sort_by(|a, b| a.name.as_str(db).cmp(b.name.as_str(db)));
+            Type::Datalit(datalit::tycheck::Type::Enum(
+                datalit::tycheck::TypeEnum { variants }
+            ))
+        }
+
         TypeHint::ParseError(_) => return Err(TypeError::CannotSynthesize),
         TypeHint::Alias(name) => {
             // Type alias cannot be resolved without alias map.
@@ -876,6 +935,47 @@ fn convert_type_hint_with_aliases_inner<'db>(
                     element_type: Box::new(dt),
                     rank: t.rank,
                 }
+            ))
+        }
+
+        TypeHint::Atom(a) => {
+            Type::Datalit(datalit::tycheck::Type::Atom(
+                datalit::tycheck::TypeAtom { name: a.name }
+            ))
+        }
+
+        TypeHint::Term(t) => {
+            let payload_ty = convert_type_hint_with_aliases_inner(db, (*t.payload).clone(), aliases)?;
+            let dt = match payload_ty {
+                Type::Datalit(dt) => dt.clone(),
+                Type::Function(_) => unreachable!("type hint cannot produce function type"),
+            };
+            Type::Datalit(datalit::tycheck::Type::Term(
+                datalit::tycheck::TypeTerm { name: t.name, payload: Box::new(dt) }
+            ))
+        }
+
+        TypeHint::Enum(e) => {
+            let variants: Result<Vec<_>, TypeError> = e.variants.iter()
+                .map(|v| {
+                    let payload = match &v.payload {
+                        Some(p) => {
+                            let p_ty = convert_type_hint_with_aliases_inner(db, (**p).clone(), aliases)?;
+                            let dt = match p_ty {
+                                Type::Datalit(dt) => dt.clone(),
+                                Type::Function(_) => unreachable!("type hint cannot produce function type"),
+                            };
+                            Some(Box::new(dt))
+                        }
+                        None => None,
+                    };
+                    Ok(datalit::tycheck::TypeEnumVariant { name: v.name, payload })
+                })
+                .collect();
+            let mut variants = variants?;
+            variants.sort_by(|a, b| a.name.as_str(db).cmp(b.name.as_str(db)));
+            Type::Datalit(datalit::tycheck::Type::Enum(
+                datalit::tycheck::TypeEnum { variants }
             ))
         }
 

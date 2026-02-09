@@ -1,0 +1,22 @@
+{
+  "ast": {
+    "statements": [
+      {
+        "kind": "Let",
+        "name": "a",
+        "type_hint": {
+          "Atom": {
+            "name": "Foo"
+          }
+        },
+        "value": {
+          "expr": {
+            "kind": "Atom",
+            "name": "Foo"
+          }
+        }
+      }
+    ]
+  },
+  "diagnostics": []
+}

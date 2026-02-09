@@ -438,6 +438,12 @@ impl fmt::Display for Instruction {
                     write!(f, "{} = enum_variant {}", dest, variant_index)
                 }
             }
+            Instruction::EnumDiscriminant { dest, src } => {
+                write!(f, "{} = enum_discriminant {}", dest, src)
+            }
+            Instruction::EnumPayload { dest, src, variant_index } => {
+                write!(f, "{} = enum_payload {} {}", dest, src, variant_index)
+            }
             Instruction::UnwrapOption { dest, is_some, src } => {
                 write!(f, "{}, {} = unwrap_option {}", dest, is_some, src)
             }

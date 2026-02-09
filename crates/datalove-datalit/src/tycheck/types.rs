@@ -51,6 +51,9 @@ pub enum Type<'db> {
     Table(TypeTable<'db>),
     Data,
     Error,
+    Atom(TypeAtom<'db>),
+    Term(TypeTerm<'db>),
+    Enum(TypeEnum<'db>),
 }
 
 
@@ -116,6 +119,32 @@ pub struct TypeTensor<'db> {
 #[derive(salsa::Update)]
 pub struct TypeTable<'db> {
     pub columns: Vec<TypeNamedField<'db>>,
+}
+
+#[derive(Clone, Hash, PartialEq, Eq)]
+#[derive(salsa::Update)]
+pub struct TypeAtom<'db> {
+    pub name: InternedText<'db>,
+}
+
+#[derive(Clone, Hash, PartialEq, Eq)]
+#[derive(salsa::Update)]
+pub struct TypeTerm<'db> {
+    pub name: InternedText<'db>,
+    pub payload: Box<Type<'db>>,
+}
+
+#[derive(Clone, Hash, PartialEq, Eq)]
+#[derive(salsa::Update)]
+pub struct TypeEnum<'db> {
+    pub variants: Vec<TypeEnumVariant<'db>>,
+}
+
+#[derive(Clone, Hash, PartialEq, Eq)]
+#[derive(salsa::Update)]
+pub struct TypeEnumVariant<'db> {
+    pub name: InternedText<'db>,
+    pub payload: Option<Box<Type<'db>>>,
 }
 
 // ============================================================================
@@ -265,6 +294,24 @@ pub fn types_equivalent<'db>(db: &'db dyn crate::Db, t1: &Type<'db>, t2: &Type<'
                 })
         }
 
+        (Type::Atom(a1), Type::Atom(a2)) => a1.name == a2.name,
+
+        (Type::Term(t1), Type::Term(t2)) => {
+            t1.name == t2.name && types_equivalent(db, &t1.payload, &t2.payload)
+        }
+
+        (Type::Enum(e1), Type::Enum(e2)) => {
+            e1.variants.len() == e2.variants.len()
+                && e1.variants.iter().zip(e2.variants.iter()).all(|(a, b)| {
+                    a.name == b.name
+                        && match (&a.payload, &b.payload) {
+                            (None, None) => true,
+                            (Some(p1), Some(p2)) => types_equivalent(db, p1, p2),
+                            _ => false,
+                        }
+                })
+        }
+
         _ => false,
     }
 }
@@ -385,6 +432,30 @@ pub fn convert_type_hint<'db>(
             Type::Table(TypeTable { columns: columns? })
         }
 
+        TypeHint::Atom(a) => {
+            Type::Atom(TypeAtom { name: a.name })
+        }
+
+        TypeHint::Term(t) => {
+            let payload = convert_type_hint(db, &t.payload)?;
+            Type::Term(TypeTerm { name: t.name, payload: Box::new(payload) })
+        }
+
+        TypeHint::Enum(e) => {
+            let variants: Result<Vec<_>, _> = e.variants.iter()
+                .map(|v| {
+                    let payload = match &v.payload {
+                        Some(p) => Some(Box::new(convert_type_hint(db, p)?)),
+                        None => None,
+                    };
+                    Ok(TypeEnumVariant { name: v.name, payload })
+                })
+                .collect();
+            let mut variants = variants?;
+            variants.sort_by(|a, b| a.name.as_str(db).cmp(b.name.as_str(db)));
+            Type::Enum(TypeEnum { variants })
+        }
+
         TypeHint::ParseError(_) => return Err(TypeError::CannotSynthesize),
         TypeHint::Alias(_) => {
             // Type aliases are resolved by datafun typechecker, not datalit.
@@ -473,6 +544,22 @@ pub fn type_to_string<'db>(db: &'db dyn crate::Db, ty: &Type<'db>) -> String {
                 })
                 .collect();
             format!("{{| {} |}}", cols.join(", "))
+        }
+        Type::Atom(a) => {
+            format!("atom {}", a.name.as_str(db))
+        }
+        Type::Term(t) => {
+            format!("term {} {}", t.name.as_str(db), type_to_string(db, &t.payload))
+        }
+        Type::Enum(e) => {
+            let variants: Vec<_> = e.variants.iter().map(|v| {
+                if let Some(payload) = &v.payload {
+                    format!("term {} {}", v.name.as_str(db), type_to_string(db, payload))
+                } else {
+                    format!("atom {}", v.name.as_str(db))
+                }
+            }).collect();
+            format!("enum{{{}}}", variants.join(", "))
         }
     }
 }

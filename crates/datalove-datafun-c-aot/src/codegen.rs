@@ -249,6 +249,12 @@ impl<'a> FunctionCodegenContext<'a> {
             Instruction::EnumVariant { dest, variant_index, payload } => {
                 self.emit_enum_variant(out, *dest, *variant_index, payload.as_ref())?;
             }
+            Instruction::EnumDiscriminant { dest, src } => {
+                self.emit_enum_discriminant(out, *dest, src)?;
+            }
+            Instruction::EnumPayload { dest, src, variant_index } => {
+                self.emit_enum_payload(out, *dest, src, *variant_index)?;
+            }
             Instruction::ErrorFrom { dest, inner } => {
                 self.emit_error_from(out, *dest, inner)?;
             }
@@ -1260,6 +1266,56 @@ impl<'a> FunctionCodegenContext<'a> {
                     if layout.size > 0 {
                         writeln!(out, "    memcpy({}, {}, {});", dest_payload_addr, payload_addr, layout.size).unwrap();
                     }
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// Emit enum discriminant read.
+    fn emit_enum_discriminant(
+        &mut self,
+        out: &mut String,
+        dest: ValueId,
+        src: &Operand,
+    ) -> Result<(), CAotError> {
+        let dest_addr = self.value_addr(dest);
+        let src_addr = self.operand_addr(src);
+        writeln!(out, "    *(uint32_t*){} = *(uint32_t*){};", dest_addr, src_addr).unwrap();
+        Ok(())
+    }
+
+    /// Emit enum payload extraction.
+    fn emit_enum_payload(
+        &mut self,
+        out: &mut String,
+        dest: ValueId,
+        src: &Operand,
+        variant_index: u32,
+    ) -> Result<(), CAotError> {
+        let dest_addr = self.value_addr(dest);
+        let src_addr = self.operand_addr(src);
+
+        // Get the enum type from src to find payload offset.
+        let src_ty = self.operand_type(src).clone();
+        let variants = match &src_ty {
+            IrType::Enum(v) => v,
+            _ => panic!("EnumPayload src must be Enum type"),
+        };
+        let payload_ty = variants[variant_index as usize].1.as_ref()
+            .unwrap_or_else(|| panic!("EnumPayload variant has no payload type"));
+        let payload_layout = types::ir_type_to_crepr(payload_ty).layout();
+        let payload_offset = align_up(4, payload_layout.align);
+
+        match types::ir_type_to_crepr(payload_ty) {
+            CRepr::Scalar(c_ty) => {
+                let src_payload = format!("({} + {})", src_addr, payload_offset);
+                writeln!(out, "    *({c_ty}*){dest_addr} = *({c_ty}*){src_payload};").unwrap();
+            }
+            CRepr::Aggregate(layout) => {
+                if layout.size > 0 {
+                    let src_payload = format!("({} + {})", src_addr, payload_offset);
+                    writeln!(out, "    memcpy({}, {}, {});", dest_addr, src_payload, layout.size).unwrap();
                 }
             }
         }

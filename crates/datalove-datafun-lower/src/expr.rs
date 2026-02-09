@@ -733,6 +733,54 @@ pub fn lower_expression<'db>(
 
             Ok(dest)
         }
+
+        ExprFunKind::Atom(atom) => {
+            // Atom lowers to EnumVariant with no payload.
+            // The expr type is IrType::Enum (single-variant from typechecker).
+            let result_type = ctx.expr_type(expr);
+            let variants = match &result_type {
+                IrType::Enum(v) => v,
+                _ => panic!("atom expr should have Enum IrType"),
+            };
+            let name_str = atom.name.as_str(ctx.db);
+            let variant_index = variants.iter()
+                .position(|(n, _)| n == name_str)
+                .unwrap_or_else(|| panic!("atom variant '{}' not found in enum type", name_str))
+                as u32;
+            let dest = ctx.fresh_value(result_type);
+            ctx.emit(Instruction::EnumVariant {
+                dest,
+                variant_index,
+                payload: None,
+            });
+            Ok(dest)
+        }
+        ExprFunKind::Term(term) => {
+            // Term lowers to EnumVariant with payload.
+            let result_type = ctx.expr_type(expr);
+            let variants = match &result_type {
+                IrType::Enum(v) => v,
+                _ => panic!("term expr should have Enum IrType"),
+            };
+            let name_str = term.name.as_str(ctx.db);
+            let variant_index = variants.iter()
+                .position(|(n, _)| n == name_str)
+                .unwrap_or_else(|| panic!("term variant '{}' not found in enum type", name_str))
+                as u32;
+            let payload_id = lower_expression(ctx, term.payload)?;
+            let dest = ctx.fresh_value(result_type);
+            ctx.emit(Instruction::EnumVariant {
+                dest,
+                variant_index,
+                payload: Some(Operand::Value(payload_id)),
+            });
+            Ok(dest)
+        }
+        ExprFunKind::EnumLiteral(enum_lit) => {
+            // EnumLiteral wraps an atom or term expr checked against target enum type.
+            // Just lower the inner variant expression.
+            lower_expression(ctx, enum_lit.variant)
+        }
     }
 }
 

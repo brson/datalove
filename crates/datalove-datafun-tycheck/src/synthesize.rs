@@ -409,6 +409,37 @@ pub fn synthesize_expr<'db>(
             Err(ctx.error_cannot_synthesize(expr, "table requires type hint"))
         }
 
+        // Atom expression: synthesize standalone Atom type.
+        ExprFunKind::Atom(ref atom_expr) => {
+            let ty = Type::Datalit(datalit::tycheck::Type::Atom(
+                datalit::tycheck::TypeAtom { name: atom_expr.name }
+            ));
+            ctx.store_expr_type(expr, &ty);
+            Ok(ty)
+        }
+
+        // Term expression: synthesize standalone Term type.
+        ExprFunKind::Term(ref term_expr) => {
+            let payload_ty = ctx.synthesize_expr(term_expr.payload)?;
+            let payload_datalit = match payload_ty {
+                Type::Datalit(dt) => dt.clone(),
+                Type::Function(_) => unreachable!("synthesized expression type is always Datalit"),
+            };
+            let ty = Type::Datalit(datalit::tycheck::Type::Term(
+                datalit::tycheck::TypeTerm {
+                    name: term_expr.name,
+                    payload: Box::new(payload_datalit),
+                }
+            ));
+            ctx.store_expr_type(expr, &ty);
+            Ok(ty)
+        }
+
+        // Enum literal: cannot synthesize (requires type context).
+        ExprFunKind::EnumLiteral(_) => {
+            Err(ctx.error_cannot_synthesize(expr, "enum literal requires type context"))
+        }
+
         // Intrinsic call expression.
         ExprFunKind::IntrinsicCall(ref icall) => {
             synthesize_intrinsic_call(ctx, expr, icall)

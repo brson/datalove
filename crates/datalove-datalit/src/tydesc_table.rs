@@ -386,6 +386,9 @@ impl<'db> TyDescTable<'db> {
             Type::Result(r) => self.create_result_tydesc(*r.inner_type.clone()),
             Type::Tensor(t) => self.create_tensor_tydesc(*t.element_type.clone(), t.rank),
             Type::Table(t) => self.create_table_tydesc(&t.columns),
+            Type::Atom(_) | Type::Term(_) | Type::Enum(_) => {
+                todo!("atom/term/enum tydesc creation")
+            }
         }
     }
 

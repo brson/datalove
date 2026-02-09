@@ -314,6 +314,40 @@ fn write_type_hint<'db>(
         TypeHint::Alias(name) => {
             out.push_str(name.as_str(db));
         }
+
+        TypeHint::Atom(a) => {
+            out.push_str("atom ");
+            out.push_str(a.name.as_str(db));
+        }
+
+        TypeHint::Term(t) => {
+            out.push_str("term ");
+            out.push_str(t.name.as_str(db));
+            out.push(' ');
+            write_type_hint(db, &t.payload, out);
+        }
+
+        TypeHint::Enum(e) => {
+            out.push_str("enum{");
+            for (i, v) in e.variants.iter().enumerate() {
+                if i > 0 {
+                    out.push_str(", ");
+                }
+                match &v.payload {
+                    Some(p) => {
+                        out.push_str("term ");
+                        out.push_str(v.name.as_str(db));
+                        out.push(' ');
+                        write_type_hint(db, p, out);
+                    }
+                    None => {
+                        out.push_str("atom ");
+                        out.push_str(v.name.as_str(db));
+                    }
+                }
+            }
+            out.push('}');
+        }
     }
 }
 

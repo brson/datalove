@@ -36,6 +36,7 @@ impl<'db> Parser<'db> {
             Some("continue") => self.parse_continue(),
             Some("debuglog") => self.parse_debuglog(),
             Some("type") => self.parse_type_alias(),
+            Some("match") => self.parse_match(remaining_lines),
             _ => {
                 let ts = self.peek_text_span();
                 self.emit_stmt_error(ts,
@@ -871,6 +872,166 @@ impl<'db> Parser<'db> {
             type_hint,
             local_index,
         })
+    }
+
+    fn parse_match(
+        &mut self,
+        remaining_lines: &mut Peekable<impl Iterator<Item = (usize, Vec<TreeToken<'db>>)>>,
+    ) -> ast::Statement<'db> {
+        self.eat_word("match");
+
+        // Parse input expression.
+        let input = self.parse_expr_full();
+
+        // Parse case arms until "end match".
+        let mut cases = vec![];
+        let mut default_body = None;
+
+        while let Some((_, line)) = remaining_lines.peek() {
+            // Check for "end match".
+            if line.len() >= 2 {
+                if let (Some(TreeToken::Token(t1)), Some(TreeToken::Token(t2))) = (line.get(0), line.get(1)) {
+                    if let (Some("end"), Some("match")) = (t1.word_str(self.db), t2.word_str(self.db)) {
+                        remaining_lines.next(); // consume "end match"
+                        break;
+                    }
+                }
+            }
+
+            // Check for "case" line.
+            if let Some(TreeToken::Token(t1)) = line.get(0) {
+                if let Some("case") = t1.word_str(self.db) {
+                    let (_, case_line) = remaining_lines.next().X();
+                    let case_tokens: Vec<_> = case_line.into_iter().filter_map(|t| t.without_space(self.db)).collect();
+                    let mut case_sub = Parser::new(self.db, case_tokens, self.source_text(), self.module_id());
+                    case_sub.eat_word("case");
+
+                    match case_sub.peek_word() {
+                        Some("atom") => {
+                            case_sub.next(); // consume "atom"
+                            let name = match case_sub.eat_name() {
+                                Some(n) => n,
+                                None => {
+                                    self.had_error = true;
+                                    let ts = case_sub.peek_text_span();
+                                    DiagnosticBuilder::error(self.db, "expected name after 'case atom'")
+                                        .code("P044")
+                                        .primary_label(ts, "expected atom name")
+                                        .emit_parse();
+                                    InternedText::new(self.db, "<error>".S())
+                                }
+                            };
+                            case_sub.error_if_not_exhausted();
+                            self.had_error |= case_sub.had_error;
+
+                            // Parse body until next case/default/end match.
+                            let body = self.parse_match_arm_body(remaining_lines);
+                            cases.push(ast::MatchCase {
+                                kind: ast::MatchCaseKind::Atom { name },
+                                body,
+                            });
+                        }
+                        Some("term") => {
+                            case_sub.next(); // consume "term"
+                            let name = match case_sub.eat_name() {
+                                Some(n) => n,
+                                None => {
+                                    self.had_error = true;
+                                    let ts = case_sub.peek_text_span();
+                                    DiagnosticBuilder::error(self.db, "expected name after 'case term'")
+                                        .code("P045")
+                                        .primary_label(ts, "expected term name")
+                                        .emit_parse();
+                                    InternedText::new(self.db, "<error>".S())
+                                }
+                            };
+                            let binding = match case_sub.eat_name() {
+                                Some(n) => n,
+                                None => {
+                                    self.had_error = true;
+                                    let ts = case_sub.peek_text_span();
+                                    DiagnosticBuilder::error(self.db, "expected binding name after term name")
+                                        .code("P046")
+                                        .primary_label(ts, "expected binding name")
+                                        .emit_parse();
+                                    InternedText::new(self.db, "<error>".S())
+                                }
+                            };
+                            case_sub.error_if_not_exhausted();
+                            self.had_error |= case_sub.had_error;
+
+                            // Parse body until next case/default/end match.
+                            let body = self.parse_match_arm_body(remaining_lines);
+                            cases.push(ast::MatchCase {
+                                kind: ast::MatchCaseKind::Term { name, binding },
+                                body,
+                            });
+                        }
+                        Some("default") => {
+                            case_sub.next(); // consume "default"
+                            case_sub.error_if_not_exhausted();
+                            self.had_error |= case_sub.had_error;
+
+                            let body = self.parse_match_arm_body(remaining_lines);
+                            default_body = Some(body);
+                        }
+                        _ => {
+                            self.had_error = true;
+                            let ts = case_sub.peek_text_span();
+                            DiagnosticBuilder::error(self.db, "expected 'atom', 'term', or 'default' after 'case'")
+                                .code("P047")
+                                .primary_label(ts, "expected 'atom', 'term', or 'default'")
+                                .emit_parse();
+                            self.had_error |= case_sub.had_error;
+                            // Skip to next case/end match.
+                            let body = self.parse_match_arm_body(remaining_lines);
+                            let _ = body;
+                        }
+                    }
+                    continue;
+                }
+            }
+
+            // Unexpected line inside match - skip it.
+            let (_, _line) = remaining_lines.next().X();
+        }
+
+        ast::Statement::Match(ast::StmtMatch {
+            input,
+            cases,
+            default_body,
+        })
+    }
+
+    /// Parse match arm body lines until the next case/default/end match.
+    fn parse_match_arm_body(
+        &mut self,
+        remaining_lines: &mut Peekable<impl Iterator<Item = (usize, Vec<TreeToken<'db>>)>>,
+    ) -> Vec<ast::Statement<'db>> {
+        let mut body = vec![];
+        while let Some((_, line)) = remaining_lines.peek() {
+            // Check for "end match".
+            if line.len() >= 2 {
+                if let (Some(TreeToken::Token(t1)), Some(TreeToken::Token(t2))) = (line.get(0), line.get(1)) {
+                    if let (Some("end"), Some("match")) = (t1.word_str(self.db), t2.word_str(self.db)) {
+                        break;
+                    }
+                }
+            }
+            // Check for next "case".
+            if let Some(TreeToken::Token(t1)) = line.get(0) {
+                if let Some("case") = t1.word_str(self.db) {
+                    break;
+                }
+            }
+
+            let (_, line) = remaining_lines.next().X();
+            if !line.is_empty() {
+                let stmt = self.parse_line_statement(line, remaining_lines);
+                body.push(stmt);
+            }
+        }
+        body
     }
 
     /// Delegate to datalit parser for type hints.

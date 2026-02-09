@@ -505,6 +505,109 @@ pub fn check_expr<'db>(
             ctx.check_type_mismatch_or_adapt(expr, expected, &synthesized, "type mismatch")
         }
 
+        // Handle atom expressions - check against expected Atom or Enum type.
+        ExprFunKind::Atom(ref atom_expr) => {
+            match expected {
+                Type::Datalit(datalit::tycheck::Type::Atom(expected_atom)) => {
+                    if atom_expr.name == expected_atom.name {
+                        ctx.store_expr_type(expr, expected);
+                        Ok(())
+                    } else {
+                        let expected_str = type_to_string(db, expected);
+                        let actual_str = format!("atom {}", atom_expr.name.as_str(db));
+                        Err(ctx.error_type_mismatch(expr, &expected_str, &actual_str, "atom name mismatch"))
+                    }
+                }
+                Type::Datalit(datalit::tycheck::Type::Enum(enum_ty)) => {
+                    // Check that atom name exists as a variant with no payload.
+                    let found = enum_ty.variants.iter().any(|v| {
+                        v.name == atom_expr.name && v.payload.is_none()
+                    });
+                    if found {
+                        ctx.store_expr_type(expr, expected);
+                        Ok(())
+                    } else {
+                        let expected_str = type_to_string(db, expected);
+                        let actual_str = format!("atom {}", atom_expr.name.as_str(db));
+                        Err(ctx.error_type_mismatch(expr, &expected_str, &actual_str, "atom not a variant of this enum"))
+                    }
+                }
+                _ => {
+                    let synthesized = ctx.synthesize_expr(expr)?;
+                    let expected_str = type_to_string(db, expected);
+                    let actual_str = type_to_string(db, &synthesized);
+                    Err(ctx.error_type_mismatch(expr, &expected_str, &actual_str, "type mismatch"))
+                }
+            }
+        }
+
+        // Handle term expressions - check against expected Term or Enum type.
+        ExprFunKind::Term(ref term_expr) => {
+            match expected {
+                Type::Datalit(datalit::tycheck::Type::Term(expected_term)) => {
+                    if term_expr.name == expected_term.name {
+                        // Check payload against expected payload type.
+                        let expected_payload = Type::Datalit(*expected_term.payload.clone());
+                        check_expr(ctx, term_expr.payload, &expected_payload)?;
+                        ctx.store_expr_type(expr, expected);
+                        Ok(())
+                    } else {
+                        let expected_str = type_to_string(db, expected);
+                        let actual_str = format!("term {}", term_expr.name.as_str(db));
+                        Err(ctx.error_type_mismatch(expr, &expected_str, &actual_str, "term name mismatch"))
+                    }
+                }
+                Type::Datalit(datalit::tycheck::Type::Enum(enum_ty)) => {
+                    // Find variant by name with payload.
+                    let variant = enum_ty.variants.iter().find(|v| v.name == term_expr.name);
+                    match variant {
+                        Some(v) => {
+                            match &v.payload {
+                                Some(payload_ty) => {
+                                    let expected_payload = Type::Datalit(*payload_ty.clone());
+                                    check_expr(ctx, term_expr.payload, &expected_payload)?;
+                                    ctx.store_expr_type(expr, expected);
+                                    Ok(())
+                                }
+                                None => {
+                                    let expected_str = type_to_string(db, expected);
+                                    let actual_str = format!("term {}", term_expr.name.as_str(db));
+                                    Err(ctx.error_type_mismatch(expr, &expected_str, &actual_str, "variant has no payload but term expression has one"))
+                                }
+                            }
+                        }
+                        None => {
+                            let expected_str = type_to_string(db, expected);
+                            let actual_str = format!("term {}", term_expr.name.as_str(db));
+                            Err(ctx.error_type_mismatch(expr, &expected_str, &actual_str, "term not a variant of this enum"))
+                        }
+                    }
+                }
+                _ => {
+                    let synthesized = ctx.synthesize_expr(expr)?;
+                    let expected_str = type_to_string(db, expected);
+                    let actual_str = type_to_string(db, &synthesized);
+                    Err(ctx.error_type_mismatch(expr, &expected_str, &actual_str, "type mismatch"))
+                }
+            }
+        }
+
+        // Handle enum literal expressions - check inner variant against expected enum.
+        ExprFunKind::EnumLiteral(ref enum_lit) => {
+            match expected {
+                Type::Datalit(datalit::tycheck::Type::Enum(_)) => {
+                    // Check the inner variant expression against the expected enum type.
+                    check_expr(ctx, enum_lit.variant, expected)?;
+                    ctx.store_expr_type(expr, expected);
+                    Ok(())
+                }
+                _ => {
+                    let expected_str = type_to_string(db, expected);
+                    Err(ctx.error_type_mismatch(expr, &expected_str, "enum literal", "enum literal requires Enum type"))
+                }
+            }
+        }
+
         // For other non-datalit expressions, use synthesis + comparison.
         // No implicit widening - numeric conversions require @.
         _ => {

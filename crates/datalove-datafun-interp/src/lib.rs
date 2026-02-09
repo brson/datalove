@@ -824,6 +824,21 @@ impl IrInterpreter {
                     Self::mark_source_dropped_local(p, frame);
                 }
             }
+            Instruction::EnumDiscriminant { dest, src } => {
+                let src_val = self.read_operand(src, frame, frames);
+                let dest_slot = frame.value_dest(*dest);
+                self.execute_enum_discriminant(&src_val, dest_slot);
+                frame.mark_value_live(*dest);
+                // Does not consume src (borrows only).
+            }
+            Instruction::EnumPayload { dest, src, variant_index } => {
+                let src_val = self.read_operand(src, frame, frames);
+                let dest_slot = frame.value_dest(*dest);
+                self.execute_enum_payload(&src_val, dest_slot, *variant_index);
+                frame.mark_value_live(*dest);
+                // Consumes src.
+                Self::mark_source_dropped_local(src, frame);
+            }
             Instruction::UnwrapOption { dest, is_some, src } => {
                 let src_val = self.read_operand(src, frame, frames);
                 let dest_slot = frame.value_dest(*dest);

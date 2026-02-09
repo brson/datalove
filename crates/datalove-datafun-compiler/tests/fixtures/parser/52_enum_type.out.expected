@@ -1,0 +1,25 @@
+{
+  "ast": {
+    "statements": [
+      {
+        "kind": "TypeAlias",
+        "name": "E",
+        "type_hint": {
+          "Enum": {
+            "variants": [
+              {
+                "name": "Foo",
+                "payload": null
+              },
+              {
+                "name": "Bar",
+                "payload": "Int"
+              }
+            ]
+          }
+        }
+      }
+    ]
+  },
+  "diagnostics": []
+}

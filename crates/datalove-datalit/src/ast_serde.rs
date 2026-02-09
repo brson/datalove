@@ -42,7 +42,32 @@ pub enum TypeHint {
     Data,
     Error,
     Alias(String),
+    Atom(TypeHintAtom),
+    Term(TypeHintTerm),
+    Enum(TypeHintEnum),
     ParseError(TypeHintParseError),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct TypeHintAtom {
+    pub name: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct TypeHintTerm {
+    pub name: String,
+    pub payload: Box<TypeHint>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct TypeHintEnum {
+    pub variants: Vec<TypeHintEnumVariant>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct TypeHintEnumVariant {
+    pub name: String,
+    pub payload: Option<Box<TypeHint>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -275,6 +300,17 @@ impl TypeHint {
             crate::ast::TypeHint::Data => TypeHint::Data,
             crate::ast::TypeHint::Error => TypeHint::Error,
             crate::ast::TypeHint::Alias(name) => TypeHint::Alias(name.as_str(db).to_string()),
+            crate::ast::TypeHint::Atom(a) => TypeHint::Atom(TypeHintAtom { name: a.name.as_str(db).to_string() }),
+            crate::ast::TypeHint::Term(t) => TypeHint::Term(TypeHintTerm {
+                name: t.name.as_str(db).to_string(),
+                payload: Box::new(TypeHint::from_ast(db, *t.payload.clone())),
+            }),
+            crate::ast::TypeHint::Enum(e) => TypeHint::Enum(TypeHintEnum {
+                variants: e.variants.iter().map(|v| TypeHintEnumVariant {
+                    name: v.name.as_str(db).to_string(),
+                    payload: v.payload.as_ref().map(|p| Box::new(TypeHint::from_ast(db, *p.clone()))),
+                }).collect(),
+            }),
             crate::ast::TypeHint::ParseError(e) => TypeHint::ParseError(TypeHintParseError::from_ast(db, e)),
         }
     }

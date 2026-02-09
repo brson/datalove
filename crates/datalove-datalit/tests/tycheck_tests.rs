@@ -108,6 +108,34 @@ fn type_to_json(db: &datalove_datalit::Database, ty: &datalove_datalit::tycheck:
                 "columns": columns
             })
         }
+
+        Type::Atom(a) => {
+            json!({
+                "kind": "Atom",
+                "name": a.name.as_str(db)
+            })
+        }
+
+        Type::Term(t) => {
+            json!({
+                "kind": "Term",
+                "name": t.name.as_str(db),
+                "payload": type_to_json(db, &t.payload)
+            })
+        }
+
+        Type::Enum(e) => {
+            let variants: Vec<_> = e.variants.iter().map(|v| {
+                json!({
+                    "name": v.name.as_str(db),
+                    "payload": v.payload.as_ref().map(|p| type_to_json(db, p))
+                })
+            }).collect();
+            json!({
+                "kind": "Enum",
+                "variants": variants
+            })
+        }
     }
 }
 

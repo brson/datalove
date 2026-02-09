@@ -87,6 +87,42 @@ impl IrInterpreter {
         }
     }
 
+    /// Read the discriminant (u32 tag) from an enum value.
+    ///
+    /// Borrows the source; does not consume.
+    pub(crate) fn execute_enum_discriminant(
+        &self,
+        src: &Value,
+        dest: Destination,
+    ) {
+        unsafe {
+            let disc = *(src.ptr as *const u32);
+            *(dest.ptr as *mut u32) = disc;
+        }
+    }
+
+    /// Extract the payload from an enum value.
+    ///
+    /// Consumes the source. The caller marks the source as moved.
+    pub(crate) fn execute_enum_payload(
+        &self,
+        src: &Value,
+        dest: Destination,
+        variant_index: u32,
+    ) {
+        unsafe {
+            let enum_info = (*src.tydesc).type_info.enum_;
+            let variant_info = &*enum_info.variants.add(variant_index as usize);
+            let payload_offset = variant_info.offset as usize;
+            let payload_size = (*dest.tydesc).size as usize;
+            std::ptr::copy_nonoverlapping(
+                src.ptr.add(payload_offset),
+                dest.ptr,
+                payload_size,
+            );
+        }
+    }
+
     /// Unwrap an Option, producing (inner_value, is_some).
     ///
     /// This is a destructive operation - the source Option is consumed.

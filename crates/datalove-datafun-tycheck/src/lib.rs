@@ -244,6 +244,22 @@ pub fn is_copy_type<'db>(db: &'db dyn salsa::Database, ty: &datalove_datalit::ty
 
         // Tables are not copy (they contain heap-allocated data).
         DatalitType::Table(_) => false,
+
+        // Atom is always copy (no payload).
+        DatalitType::Atom(_) => true,
+
+        // Term is copy if payload is copy.
+        DatalitType::Term(t) => is_copy_type(db, &t.payload),
+
+        // Enum is copy if all variant payloads are copy.
+        DatalitType::Enum(e) => {
+            e.variants.iter().all(|v| {
+                match &v.payload {
+                    Some(p) => is_copy_type(db, p),
+                    None => true,
+                }
+            })
+        }
     }
 }
 

@@ -50,6 +50,8 @@ pub fn instruction_dest(instr: &Instruction) -> Option<ValueId> {
 
         // Enum construction
         Instruction::EnumVariant { dest, .. } => Some(*dest),
+        Instruction::EnumDiscriminant { dest, .. } => Some(*dest),
+        Instruction::EnumPayload { dest, .. } => Some(*dest),
 
         // Option/Result unwrapping (primary dest)
         Instruction::UnwrapOption { dest, .. } => Some(*dest),
@@ -349,6 +351,10 @@ fn collect_instruction_operands(instr: &Instruction, used: &mut HashSet<ValueId>
                 add_operand_value(p, used);
             }
         }
+
+        // Enum discriminant/payload extraction.
+        Instruction::EnumDiscriminant { src, .. }
+        | Instruction::EnumPayload { src, .. } => add_operand_value(src, used),
 
         // Function call with args.
         Instruction::Call { args, .. } => {

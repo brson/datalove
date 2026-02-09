@@ -278,6 +278,9 @@ pub fn datafun_expr_to_datalit_serde<'db>(
         ast::ExprFunKind::IntrinsicCall(_) => {
             return Err(ConversionError::NotPureDatalit("IntrinsicCall".to_string()));
         }
+        ast::ExprFunKind::Atom(_) | ast::ExprFunKind::Term(_) | ast::ExprFunKind::EnumLiteral(_) => {
+            return Err(ConversionError::NotPureDatalit("Atom/Term/Enum".to_string()));
+        }
     };
 
     // Convert type hint to serde format.
@@ -318,6 +321,9 @@ pub enum TypeSerde {
     Tensor { element: Box<TypeSerde>, rank: u32 },
     Data,
     Error,
+    Atom { name: String },
+    Term { name: String, payload: Box<TypeSerde> },
+    Enum { variants: Vec<(String, Option<TypeSerde>)> },
 }
 
 /// Serializable type error (common subset).
@@ -418,6 +424,19 @@ fn datalit_type_to_serde<'db>(
         Type::Data => TypeSerde::Data,
         Type::Error => TypeSerde::Error,
         Type::Table(_) => todo!("table types not yet supported in funlit equiv"),
+        Type::Atom(a) => TypeSerde::Atom {
+            name: a.name.as_str(db).to_string(),
+        },
+        Type::Term(t) => TypeSerde::Term {
+            name: t.name.as_str(db).to_string(),
+            payload: Box::new(datalit_type_to_serde(db, (*t.payload).clone())),
+        },
+        Type::Enum(e) => TypeSerde::Enum {
+            variants: e.variants.iter().map(|v| (
+                v.name.as_str(db).to_string(),
+                v.payload.as_ref().map(|p| datalit_type_to_serde(db, (**p).clone())),
+            )).collect(),
+        },
     }
 }
 

@@ -1,0 +1,1 @@
+type E: enum { atom Foo, term Bar int }
