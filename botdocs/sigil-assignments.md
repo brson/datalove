@@ -79,7 +79,7 @@ Sigils are defined in the `bcts` crate (`lexer.rs`).
   - Maps: `map { 1 = 10, 2 = 20 }`
   - Sets: `set { 1, 2, 3 }`
   - Structs: `{ x = 1, y = 2 }`
-  - Enum type hints: `enum { A, B(u32) }`
+  - Enum type hints: `enum { atom A, term B u32 }`
   - Anonymous struct type hints: `{ x: u32 }`
 
 - `[` `]` - BracketOpen, BracketClose

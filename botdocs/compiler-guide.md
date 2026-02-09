@@ -270,6 +270,23 @@ IR instructions for parameters:
 
 For `out` params, the **caller** destroys the existing value before the call via `DropViaRef`.
 
+### Enum Instructions
+
+```rust
+// Read u32 discriminant tag from enum value. Borrows src (does not consume).
+EnumDiscriminant { dest: ValueId, src: Operand }
+
+// Move payload out of enum into dest. Consumes src.
+EnumPayload { dest: ValueId, src: Operand, variant_index: u32 }
+
+// Construct enum value with given variant and optional payload.
+EnumVariant { dest: ValueId, variant_index: u32, payload: Option<Operand> }
+```
+
+Match lowering emits `EnumDiscriminant` to read the tag, then a chain of
+comparisons branching to arm blocks. Atom arms `Drop` the input; term arms
+use `EnumPayload` to extract the binding.
+
 ## Salsa Patterns
 
 See [salsa-patterns.md](salsa-patterns.md) for detailed type categories.
@@ -356,6 +373,9 @@ pub enum TrackingCategory {
 
 Tracked bindings: exports, `out` params, conditional moves, mutable slots.
 
+Match arms use `ScopeKind::MatchArm`. Branch consistency (D008) is generalized
+across all match arms: if a value is moved in one arm, it must be moved in all.
+
 ### Error Codes
 
 | Code | Error | Trigger |
@@ -383,6 +403,7 @@ pub struct DropSchedule {
     pub loop_body_end: BTreeMap<usize, Vec<BindingId>>,
     pub before_break: BTreeMap<usize, Vec<BindingId>>,
     pub before_continue: BTreeMap<usize, Vec<BindingId>>,
+    pub match_arm_exit: BTreeMap<(usize, usize), Vec<BindingId>>,
 }
 ```
 

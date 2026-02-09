@@ -49,12 +49,13 @@ In syntax descriptions, the following conventions apply:
 The following identifiers are reserved:
 
 ```
-and       break     continue  data      else      end
-error     er        false     for       fun       icall
-if        import    in        let       loop      map
-mut       none      not       ok        or        out
-ref       require   ret       set       some      table
-tensor    true      type      var       while     xor
+and       atom      break     case      continue  data
+default   else      end       enum      error     er
+false     for       fun       icall     if        import
+in        let       loop      map       match     mut
+none      not       ok        or        out       ref
+require   ret       set       some      table     tensor
+term      true      type      var       while     xor
 ```
 
 ### 2.2 Literals
@@ -243,7 +244,45 @@ error(some_expr)         // parenthesized for non-primary payload
 Both `data` and `error` take a primary expression as their payload (see Section 3.4).
 Any type coerces to `data`.
 
-### 3.6 Type Aliases
+### 3.6 Atom, Term, and Enum Types
+
+**Atom.** A named unit type with no payload.
+
+```
+atom Red                 // type and value
+```
+
+An atom is both a type and a value. Two atoms are the same type if they have
+the same name.
+
+**Term.** A named type with a typed payload.
+
+```
+term Foo int             // type
+term Foo 42              // value
+```
+
+Two terms are the same type if they have the same name and payload type.
+
+**Enum.** A closed union of atom and term variants.
+
+```
+enum { atom Red, atom Blue, term Custom string }   // type
+```
+
+Enum variants are matched by name. Atoms and terms can stand alone as types,
+or combine into enums.
+
+**Coercion.** The `@` operator widens an atom or term into a compatible enum
+type:
+
+```
+let c: enum { atom Red, atom Blue } = (atom Red)@
+```
+
+**Match.** Enums are destructured with `match` (see Section 7.5).
+
+### 3.7 Type Aliases
 
 Type aliases provide names for structural types:
 
@@ -252,7 +291,12 @@ type Point: { x: f32, y: f32 }
 type Age: u32
 ```
 
-Aliases are purely syntactic; they introduce no new types.
+Aliases are purely syntactic; they introduce no new types. Enum types are
+commonly given aliases:
+
+```
+type Color: enum { atom Red, atom Blue, term Custom string }
+```
 
 ## 4. Type Hints
 
@@ -276,9 +320,11 @@ Types are classified as *copy* or *linear*.
 
 **Copy types** can be freely duplicated: `bool`, fixed-width integers (`u8`
 through `u64`, `i8` through `i64`), `index`, `offset`, `f32`, `f64`.
+Atoms are always copy. Terms are copy if their payload type is copy.
+Enums are copy if all variant payloads are copy.
 
 **Linear types** have move semantics: `int`, `string`, `list`, `map`, `set`,
-`table`, `data`, `error`.
+`table`, `data`, `error`. Terms and enums with linear payloads are linear.
 
 A linear value can be used exactly once. After a value is moved, subsequent
 uses are compile-time errors:
@@ -441,6 +487,13 @@ let n: u8 = 255
 let x: i16 = n@         // u8 widens to i16 (value fits)
 ```
 
+**Atom/term to enum**: An atom or term widens to a compatible enum type:
+
+```
+type Color: enum { atom Red, atom Blue }
+let c: Color = (atom Red)@   // atom widens to enum
+```
+
 Valid widening chains:
 
 - Same-sign: `u8` -> `u16` -> `u32` -> `u64` -> `int`
@@ -589,6 +642,34 @@ end loop
 ```
 
 `break` exits the innermost loop. `continue` jumps to the next iteration.
+
+**Match** destructures an enum value:
+
+```
+match c
+case atom Red
+    debuglog "red"
+case atom Blue
+    debuglog "blue"
+end match
+```
+
+Term cases bind the payload to a variable:
+
+```
+match shape
+case atom Circle
+    debuglog "circle"
+case term Rect dims
+    debuglog dims
+end match
+```
+
+A `case default` arm matches any unmatched variant. Without a default, the
+match must be exhaustive (all enum variants must be covered). Duplicate cases
+are an error.
+
+The input expression is consumed (moved) by the match.
 
 ### 7.6 Return
 
@@ -767,7 +848,6 @@ The following features appear in design documents but are not yet implemented:
 
 - Tensor element access and operations (indexing, transpose, slice, reshape) -
   tensor literals work, but manipulation is not exposed
-- Pattern matching (`match` expressions)
 - Arena blocks
 - Memoization
 - Type introspection (`@type`)

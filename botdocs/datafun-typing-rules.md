@@ -230,6 +230,31 @@ e => T (any type)
 error(e) => error
 ```
 
+### Rule: Syn-Atom
+```
+---------------------
+atom Name => Atom(Name)
+```
+
+Atom expressions synthesize a standalone atom type.
+
+### Rule: Syn-Term
+```
+e => T
+---------------------
+term Name e => Term(Name, T)
+```
+
+Term expressions synthesize a standalone term type from the payload.
+
+### Rule: Syn-EnumLiteral
+```
+---------------------
+Cannot synthesize type for enum literal (requires type context)
+```
+
+Enum literals (`enum { atom Foo }`) can only be checked, not synthesized.
+
 ### Collection Synthesis
 
 Collections follow datalit rules with element type inference:
@@ -369,6 +394,38 @@ end fun
 let x: u32 = a +? b    // Falls through to synthesis, produces error
 ```
 
+### Rule: Check-Atom
+```
+expected is Atom(Name) with same name
+--------------------------------------
+atom Name <= Atom(Name)
+
+expected is Enum(variants) and Name is atom variant in variants
+---------------------------------------------------------------
+atom Name <= Enum(variants)
+```
+
+### Rule: Check-Term
+```
+expected is Term(Name, T) with same name
+e <= T
+--------------------------------------
+term Name e <= Term(Name, T)
+
+expected is Enum(variants) and Name is term variant with payload T
+e <= T
+------------------------------------------------------------------
+term Name e <= Enum(variants)
+```
+
+### Rule: Check-EnumLiteral
+```
+expected is Enum(variants)
+inner variant checks against expected
+--------------------------------------
+enum { variant } <= Enum(variants)
+```
+
 ### Rule: Check-Int
 ```
 n fits in expected integer type
@@ -506,6 +563,29 @@ for all i: vi <= Ti
 continue v1, v2, ...
 ```
 
+### Statement: Match
+```
+input => Enum(variants)
+for each case:
+  atom Name: Name is atom variant in variants
+  term Name binding: Name is term variant with payload T, binding : T in body scope
+all variant names covered (or default present)
+no duplicate cases
+------------------------------------------------------
+match input
+case atom Name
+    body
+case term Name binding
+    body
+case default
+    body
+end match
+```
+
+The input must synthesize an enum type. Each case arm must name a variant in
+the enum. Term arms bind the payload to a variable in scope for the arm body.
+Without a default arm, the match must be exhaustive.
+
 ### Statement: DebugLog
 ```
 e => T (any type)
@@ -540,6 +620,12 @@ Try operators (`?`, `!`) and checked/optional arithmetic require:
 - **F047**: Try operator used outside function
 - **F048**: Try operator operand type mismatch
 - **F049**: Try operator return type mismatch
+
+### Match Errors (reported as F016 type mismatches)
+- Non-exhaustive match: missing variant names without default arm
+- Unknown variant name in match case
+- Atom case used for term variant (or vice versa)
+- Match input is not an enum type
 
 ### Control Flow Errors
 - **BreakOutsideLoop**: Break statement outside loop

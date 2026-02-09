@@ -1,5 +1,10 @@
 # Research: Destructuring and Pattern Matching for Datalove
 
+**Status:** Enum match (Option A) is implemented. The `match`/`case`/`end match`
+syntax works with atom and term variants, exhaustiveness checking, and default
+arms. The open questions below about `@data` downcast, `let` destructuring, and
+nested patterns remain unimplemented.
+
 ## Current State
 
 Datalove has:

@@ -9,7 +9,8 @@ type_hint      = ":", ws, type, ws, "/" ;
 (* ===== Types ===== *)
 type           = option_type | result_type | list_type | tuple_type
                | struct_type | table_type | map_type | set_type
-               | tensor_type | scalar_type | type_alias ;
+               | tensor_type | atom_type | term_type | enum_type
+               | scalar_type | type_alias ;
 
 scalar_type    = "bool" | "u8" | "u16" | "u32" | "u64"
                | "i8" | "i16" | "i32" | "i64"
@@ -25,6 +26,11 @@ table_type     = "{|", ws, type_field_list, ws, "|}" ;
 map_type       = "map", ws, "<", ws, type, ws, ",", ws, type, ws, ">" ;
 set_type       = "set", ws, "<", ws, type, ws, ">" ;
 tensor_type    = "tensor", ws, "<", ws, type, ws, ",", ws, int_lit, ws, ">" ;
+atom_type      = "atom", ws, ident ;
+term_type      = "term", ws, ident, ws, type ;
+enum_type      = "enum", ws, "{", ws, enum_variant_list, ws, "}" ;
+enum_variant_list = enum_variant, { ws, ",", ws, enum_variant }, [ ws, "," ] ;
+enum_variant   = atom_type | term_type ;
 type_alias     = ident ;
 
 type_list      = type, { ws, ",", ws, type }, [ ws, "," ] ;

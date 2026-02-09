@@ -1,6 +1,10 @@
 # Atom / Term / Enum Design: PL Landscape
 
-Research on precedents for Datalove's planned atom/term/enum/match design.
+**Status:** Implemented. Atom, term, enum types and match statement are fully
+functional across all compiler phases (parsing, typechecking, ownership,
+lowering, interpreter, C-AOT, Cranelift).
+
+Research on precedents for Datalove's atom/term/enum/match design.
 
 ## The Datalove Design
 

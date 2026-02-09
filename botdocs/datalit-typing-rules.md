@@ -67,6 +67,13 @@ Examples:
 ### Tensor
 - `@tensor<T, R> = @tensor<T', R'>` iff T = T' and R = R' (same element type and rank)
 
+### Atom, Term, and Enum
+- `atom A = atom A'` iff A and A' have the same name
+- `term T(P) = term T'(P')` iff T = T' (same name) and P = P' (payload types equivalent)
+- `enum { v1, v2, ... } = enum { v1', v2', ... }` iff variants match (sorted by name)
+
+Each enum variant is either an atom (no payload) or a term (with payload type).
+
 ### Data and Error types
 - `@data = @data`
 - `@error = @error`
@@ -701,11 +708,12 @@ fn check(ctx, expr: ExprFull, expected: TypeAndHeap) -> Result<(), TypeError>
 
 ### Type representation
 
-The `Type` enum in `crates/datalove-datalit/src/tycheck.rs` includes:
+The `Type` enum in `crates/datalove-datalit/src/tycheck/types.rs` includes:
 - Primitives: Bool, U8, I8, U16, I16, U32, I32, U64, I64, F32, Int, String
 - Composites: AnonTuple, AnonStruct
 - Collections: List, Map, Set
 - Wrappers: Option, Result
+- Tagged: Atom, Term, Enum
 - Special: Tensor, Data, Error
 
 ### Interaction with name resolution
