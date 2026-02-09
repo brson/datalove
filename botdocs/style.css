@@ -328,8 +328,8 @@ hr {
     height: 0;
     width: 16rem;
     margin: calc(var(--baseline) * 2) auto;
-    -webkit-mask-image: linear-gradient(to right, transparent, black 2%, black 98%, transparent);
-    mask-image: linear-gradient(to right, transparent, black 2%, black 98%, transparent);
+    -webkit-mask-image: linear-gradient(to right, transparent, black 1%, black 99%, transparent);
+    mask-image: linear-gradient(to right, transparent, black 1%, black 99%, transparent);
 }
 
 ul, ol {
