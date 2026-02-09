@@ -135,7 +135,7 @@ type Book: {
   year: i32,
   rating: f32,
   available: bool,
-  genres: [enum { Fiction, Reality }],
+  genres: [enum { atom Fiction, atom Reality }],
 }
 
 fun reserve_book(mut db: set<Book>, ref book: Book): !()
