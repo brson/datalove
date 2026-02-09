@@ -19,8 +19,8 @@ square braces `[ ]` are for arrayish types, etc.
 | Type              | Literal          | Destructuring    |
 |-------------------|------------------|------------------|
 | `bool`            | `true`, `false`  | n/a (copy)       |
-| `f32`, `f64`      | `3.14`           | n/a (copy)       |
 | `int`             | `42`             | n/a (move)       |
+| `f32`, `f64`      | `3.14`           | n/a (copy)       |
 | `string`          | `"hello"`        | n/a (move)       |
 | `u8` .. `u64`     | `: u32 / 42`     | n/a (copy)       |
 | `i8` .. `i64`     | `: i32 / -1`     | n/a (copy)       |
@@ -34,14 +34,6 @@ Fixed-width integers require a type hint or checking context.
 
 
 ## Collections
-
-| Type                             | Literal                          | Destructuring                    |
-|----------------------------------|----------------------------------|----------------------------------|
-| `[T]`                            | `[1, 2, 3]`                      | n/a                              |
-| `map<K, V>`                      | `map { 0 = 5, 1 = 2 }`           | n/a                              |
-| `set<T>`                         | `set { 1, 2, 3 }`                | n/a                              |
-| `{\| col1: T1, col2: T2 \|}`     | `{\| col1, col2; 1, 2; 3, 4 \|}` | n/a                              |
-| `tensor<T, N>`                   | `tensor [2, 3] [1 2 3, 4 5 6]`   | n/a                              |
 
 | Type                             | Literal                          | Destructuring                    |
 |----------------------------------|----------------------------------|----------------------------------|

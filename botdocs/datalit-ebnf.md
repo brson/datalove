@@ -54,9 +54,9 @@ hex_lit        = [ "-" ], "0", ( "x" | "X" ), hex_digit, { hex_digit } ;
 string_lit     = '"', { string_char }, '"' ;
 
 (* Option/Result/Existential constructors *)
-option_expr    = "some", ws, expr ;
-result_expr    = ( "ok" | "er" ), ws, expr ;
-existential_expr = ( "data" | "error" ), ws, expr ;
+option_expr    = "some", ws, full_expr ;
+result_expr    = ( "ok" | "er" ), ws, full_expr ;
+existential_expr = ( "data" | "error" ), ws, full_expr ;
 
 (* Container expressions *)
 tuple_expr     = "(", ws, [ expr_list ], ws, ")" ;
@@ -110,7 +110,7 @@ newline        = "\n" | "\r\n" ;
 
 1. **Type hints precede values**: `: Type / value` syntax annotates the following expression
 2. **Prefix notation for option/result types**: `?T` for Option, `!T` for Result
-3. **Keywords for constructors**: `some`, `ok`, `er`, `none`, `data`, `error`, `map`, `set`, `tensor`
+3. **Keywords for constructors**: `some`, `ok`, `er`, `none`, `data`, `error`, `map`, `set`, `tensor`. Constructor payloads are `full_expr` (may include inline type hints, e.g. `some : u32 / 42`)
 4. **Struct fields use `=`** in expressions but `:` in type hints
 5. **Tensors**: shape in first brackets, data in second; rows comma-separated, elements within rows space-separated
 6. **Tables**: pipe-brace delimiters `{| ... |}`, header then data rows
