@@ -138,7 +138,7 @@ type Book: {
   genres: [enum { atom Fiction, atom Reality }],
 }
 
-fun reserve_book(mut db: set<Book>, ref book: Book): !()
+fun reserve_book(mut db: #{Book}, ref book: Book): !()
   for mut db_book in db
     if db_book.title == book.title
       if db_book.available

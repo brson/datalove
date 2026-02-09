@@ -1,3 +1,12 @@
+## Replace `=`
+
+Current usage in maps is awkward,
+also in struct field destructuring.
+Maybe use arrows instead.
+
+
+
+
 ## Less than and equals
 
 The dots are visually confusing with method/field dots:

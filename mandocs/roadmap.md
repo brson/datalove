@@ -31,13 +31,15 @@
 
 ## In progress
 
+- datalit syntax cleanup
+  - map set type syntax
 - human docs
-- const args
 
 
 
 ## On deck
 
+- datalit synthesis for enums, etc.
 - new repl
 - rtcalls - waiting for design
 - workspaces - waiting for design
@@ -46,9 +48,8 @@
 - std.string - waiting for rtcalls
 - assert statements - needed for std_tests?
 - fully reactive scripts, undo/redo
+- const param specialization fixes
 - generics
-- datalit syntax cleanup
-  - map set type syntax
 
 
 

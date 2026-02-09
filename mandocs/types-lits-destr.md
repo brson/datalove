@@ -3,6 +3,14 @@
 Quick reference for type syntax, literal expression syntax,
 and destructuring syntax for all datalove types.
 
+Goals are for type syntax to look visually similar to literal syntax,
+and for destructuring syntax to look identical to literal syntax;
+and for all types to use sigils and braces that are both visually distinct
+but also evocative of other types that use the same sigils and braces.
+
+Curly braces `{ }` are for structish types,
+square braces `[ ]` are for arrayish types, etc.
+
 
 
 
@@ -38,20 +46,20 @@ Fixed-width integers require a type hint or checking context.
 | Type                             | Literal                          | Destructuring                    |
 |----------------------------------|----------------------------------|----------------------------------|
 | `[T]`                            | `[1, 2, 3]`                      | n/a                              |
-| `map { K = V }`                  | `map { 0 = 5, 1 = 2 }`           | n/a                              |
-| `set { K }`                         | `set { 1, 2, 3 }`                | n/a                              |
+| `%{ K = V }`                     | `%{ 0 = 5, 1 = 2 }`              | n/a                              |
+| `#{ K }`                         | `#{ 1, 2, 3 }`                   | n/a                              |
 | `{\| col1: T1, col2: T2 \|}`     | `{\| col1, col2; 1, 2; 3, 4 \|}` | n/a                              |
-| `[\|T, N\|]`                   | `[\| 1 2 3, 4 5 6 \|]`   | n/a                              |
+| `[\|T, N\|]`                     | `[\| 1 2 3, 4 5 6 \|]`           | n/a                              |
 
 ```datalove
 // Lists
 let a: [int] = [1, 2, 3]
 
 // Maps
-let a: map<int, int> = map { 0 = 5, 1 = 2 }
+let a: %{int=int} = %{ 0 = 5, 1 = 2 }
 
 // Sets
-let a: set<int> = set { 1, 2, 3 }
+let a: #{int} = #{ 1, 2, 3 }
 
 // Tables
 let a: {|
@@ -64,10 +72,10 @@ let a: {|
 |}
 
 // Tensors
-let a: tensor<T, N> = tensor [2, 3] [
+let a: [|T, N|] = [|
   1 2 3,
   4 5 6,
-]
+|]
 ```
 
 
@@ -81,13 +89,13 @@ let a: tensor<T, N> = tensor [2, 3] [
 | `(T1,)`                       | `(true,)`                     | `let (a,)`                    |
 | `(T1, T2)`                    | `(true, 42)`                  | `let (a, b)`                  |
 | `{ x: T1, y: T2}`             | `{x = 1, y = 2}`              | `let {x, y}` <br> `let {x = my_x, y = my_y}` |
-| `?T`                          | `some 1` <br> `none`             | `some a` <br> `none` † |
-| `!T`                          | `ok 1` <br> `er 2`               | `ok a` <br> `er b` † |
+| `?T`                          | `some 1` <br> `none`          | `some a` <br> `none` †        |
+| `!T`                          | `ok 1` <br> `er 2`            | `ok a` <br> `er b` †          |
 | `atom Foo`                    | `atom Foo`                    | `let atom Foo`                |
-| `term Foo T`                   | `term Foo 1`                   | `let term Foo a`               |
-| `enum { atom A, term B T }`    | `enum { atom A }`             | †                             |
-| `data`                        | `data 1` <br> `data : u32 / 2`   | n/a                             |
-| `error`                       | `error 1` <br> `error : u32 / 2` | n/a                             |
+| `term Foo T`                  | `term Foo 1`                  | `let term Foo a`              |
+| `enum { atom A, term B T }`   | `enum { atom A }`             | †                             |
+| `data`                        | `data 1` <br> `data : u32 / 2`   | n/a                        |
+| `error`                       | `error 1` <br> `error : u32 / 2` | n/a                        |
 
 † Sum types need to use `match` or `if` for destructuring. See below.
 
