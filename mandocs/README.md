@@ -38,23 +38,23 @@ Then we'll add I/O to it &mdash; carefully.
 <div class="four-things-grid">
   <div class="thing-box">
     <p>Part <em>data serialization, configuration and interchange format</em>
-       for common <em>modern</em> data types,
-       with a focus on <em>numerical correctness.</em></p>
+       for common <em>modern</em> data types.</p>
   </div>
   <div class="thing-box">
     <p>Part <em>pure-functional language</em>
        that reads like an imperative language,
-       with a simple but sophisticated <em>linear type system.</em></p>
+       with a simple but sophisticated <em>linear type system</em>,
+       and a focus on <em>numerical correctness.</em></p>
   </div>
   <div class="thing-box">
     <p>todo</p>
   </div>
   <div class="thing-box">
     <p>Modern compilation and execution architecture with
-       <em>fully-memoized recompilation</em> and <em>rapid script iteration</em>,
-       <em>fully-parallelized compiler pipeline</em>,
+       <em>fully memoized and parallelized</em> compilation,
+       <em>rapid script iteration</em>,
        interactive (<em>REPL</em>) interpreter with <em>JIT</em>,
-       <em>compiles</em> to <em>staticly-linked</em> binaries.</p>
+       compiles to <em>staticly-linked binaries</em>.</p>
   </div>
 </div>
 
