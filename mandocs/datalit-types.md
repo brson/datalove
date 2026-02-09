@@ -7,7 +7,8 @@ completeness, numerical correctness, and predictability.
 Datalove Literals is a declarative
 typed language for describing pure data —
 it has no first-class pointers or object identity.
-It includes scalar values
+It includes scalar values,
+tuples, structs, and enums,
 and a rich set of collection types:
 _lists_, _maps_, _sets_,
 _tensors_ (multi-dimensional arrays),
@@ -18,7 +19,7 @@ and we call them _datalit types_.
 In some languages they might be called "plain old data".
 
 Datalit types are value types and stored inline.
-Datalit structs, tuples and enums are structurally-typed.
+Datalit types are structurally typed.
 
 
 
