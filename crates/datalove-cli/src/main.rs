@@ -883,7 +883,7 @@ impl DocsCommand {
             &mandocs_out,
             &mandocs_nav,
             "bot/index.html",
-            "Bot Docs",
+            "Botdocs",
         )?;
 
         // Generate posts feed for mandocs.
@@ -901,7 +901,7 @@ impl DocsCommand {
                 &mandocs_out,
                 &mandocs_nav,
                 "bot/index.html",
-                "Bot Docs",
+                "Botdocs",
             )?;
             feed::generate_rss(&posts, &mandocs_out, "https://datalove.dev")?;
         }

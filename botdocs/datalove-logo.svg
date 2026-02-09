@@ -25,8 +25,8 @@
      inkscape:document-units="px"
      showgrid="true"
      inkscape:zoom="1.7"
-     inkscape:cx="199.41176"
-     inkscape:cy="200"
+     inkscape:cx="199.70588"
+     inkscape:cy="72.352941"
      inkscape:window-width="1503"
      inkscape:window-height="933"
      inkscape:window-x="0"
@@ -54,41 +54,23 @@
      inkscape:label="Layer 1"
      inkscape:groupmode="layer"
      id="layer1">
-    <text
-       xml:space="preserve"
-       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:semi-condensed;font-size:363.468px;font-family:Symbola;-inkscape-font-specification:'Symbola Semi-Condensed';writing-mode:lr-tb;direction:ltr;fill:#000000;stroke-width:4.86787"
-       x="-4.8044233"
-       y="283.62439"
+    <path
+       d="m 96.533575,338.46404 q 0,7.27646 -12.068273,7.27646 H 15.072732 V 14.927841 h 69.39257 q 12.068273,0 12.068273,7.098984 0,7.276458 -12.068273,7.276458 H 29.62565 V 331.18758 h 54.839652 q 12.068273,0 12.068273,7.27646 z"
        id="text12"
-       transform="scale(0.99517333,1.0048501)"><tspan
-         sodipodi:role="line"
-         id="tspan12"
-         style="stroke-width:4.86787"
-         x="-4.8044233"
-         y="283.62439">[</tspan></text>
-    <text
-       xml:space="preserve"
-       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:semi-condensed;font-size:363.468px;font-family:Symbola;-inkscape-font-specification:'Symbola Semi-Condensed';writing-mode:lr-tb;direction:ltr;fill:#000000;stroke-width:4.86787"
-       x="285.70667"
-       y="283.62439"
+       style="font-stretch:semi-condensed;font-size:363.468px;font-family:Symbola;-inkscape-font-specification:'Symbola Semi-Condensed';stroke-width:4.86787"
+       transform="scale(0.99517333,1.0048501)"
+       aria-label="[" />
+    <path
+       d="m 386.86719,345.7405 h -69.39257 q -12.06827,0 -12.06827,-7.27646 0,-7.27646 12.06827,-7.27646 h 54.83965 V 29.303283 h -54.83965 q -12.06827,0 -12.06827,-7.276458 0,-7.098984 12.06827,-7.098984 h 69.39257 z"
        id="text13"
-       transform="scale(0.99517333,1.0048501)"><tspan
-         sodipodi:role="line"
-         id="tspan13"
-         style="stroke-width:4.86787"
-         x="285.70667"
-         y="283.62439">]</tspan></text>
-    <text
-       xml:space="preserve"
-       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:356.584px;font-family:'Noto Emoji';-inkscape-font-specification:'Noto Emoji';writing-mode:lr-tb;direction:ltr;fill:#000000;stroke-width:4.77568"
-       x="32.264977"
-       y="299.94849"
+       style="font-stretch:semi-condensed;font-size:363.468px;font-family:Symbola;-inkscape-font-specification:'Symbola Semi-Condensed';stroke-width:4.86787"
+       transform="scale(0.99517333,1.0048501)"
+       aria-label="]" />
+    <path
+       style="font-stretch:semi-condensed;font-size:356.584px;font-family:Symbola;-inkscape-font-specification:'Symbola Semi-Condensed';stroke-width:4.77568"
+       d="m 374.91993,134.54086 q 0,28.38047 -16.88899,57.28327 -13.23261,22.28651 -39.3496,48.92584 -21.93828,21.06771 -43.87655,42.30953 -36.73791,36.04145 -64.24781,81.48502 -27.5099,-45.44357 -64.2478,-81.48502 Q 124.37091,261.81768 102.43263,240.74997 76.315638,214.11064 63.083029,191.82413 46.19404,162.92133 46.19404,134.54086 q 0,-40.394281 21.415934,-65.466594 22.634728,-26.46522 62.506666,-26.46522 44.57301,0 80.44034,39.17549 35.86734,-39.17549 80.44034,-39.17549 39.87195,0 62.50667,26.46522 21.41594,25.072313 21.41594,65.466594 z m -16.71488,0 q 0,-33.60386 -16.54076,-53.626891 -17.93367,-21.590047 -50.66697,-21.590047 -25.24642,0 -45.79179,14.103176 -14.4514,9.750344 -34.64855,33.952092 -20.19714,-24.201748 -34.64854,-33.952092 -20.54537,-14.103176 -45.7918,-14.103176 -32.733294,0 -50.666962,21.590047 -16.540763,20.023031 -16.540763,53.626891 0,35.17089 32.907412,73.99815 12.362043,14.62552 59.198513,60.59142 37.60848,36.56379 55.54214,63.72547 17.93367,-27.16168 55.54214,-63.72547 46.83648,-45.9659 59.19852,-60.59142 32.90741,-38.82726 32.90741,-73.99815 z"
        id="text15"
-       transform="scale(0.94686887,1.0561124)"><tspan
-         id="tspan15"
-         style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:semi-condensed;font-family:Symbola;-inkscape-font-specification:'Symbola Semi-Condensed';stroke-width:4.77568"
-         x="32.264977"
-         y="299.94849"
-         sodipodi:role="line">♡</tspan></text>
+       transform="scale(0.94686887,1.0561124)"
+       aria-label="♡" />
   </g>
 </svg>
