@@ -81,19 +81,19 @@ let a: [|int, 3|] = [|
 
 ## Aggregates
 
-| Type                          | Literal                       | Destructuring                 |
-|-------------------------------|-------------------------------|-------------------------------|
-| `()`                          | `()`                          | `let ()`                      |
-| `(T1,)`                       | `(true,)`                     | `let (a,)`                    |
-| `(T1, T2)`                    | `(true, 42)`                  | `let (a, b)`                  |
-| `{ x: T1, y: T2}`             | `{x = 1, y = 2}`              | `let {x, y}` <br> `let {x = my_x, y = my_y}` |
-| `?T`                          | `some 1` <br> `none`          | `some a` <br> `none` †        |
-| `!T`                          | `ok 1` <br> `er 2`            | `ok a` <br> `er b` †          |
-| `atom Foo`                    | `atom Foo`                    | `let atom Foo`                |
-| `term Foo T`                  | `term Foo 1`                  | `let term Foo a`              |
-| `enum { atom A, term B T }`   | `enum { atom A }`             | †                             |
-| `data`                        | `data 1` <br> `data : u32 / 2`   | n/a                        |
-| `error`                       | `error 1` <br> `error : u32 / 2` | n/a                        |
+| Type                          | Literal                        | Destructuring                 |
+|-------------------------------|--------------------------------|-------------------------------|
+| `()`                          | `()`                           | `let ()`                      |
+| `(T1,)`                       | `(true,)`                      | `let (a,)`                    |
+| `(T1, T2)`                    | `(true, 42)`                   | `let (a, b)`                  |
+| `{ x: T1, y: T2}`             | `{x = 1, y = 2}`               | `let {x, y}` <br> `let {x = my_x, y = my_y}` |
+| `?T`                          | `some 1` <br> `none`           | `some a` <br> `none` †        |
+| `!T`                          | `ok 1` <br> `er 2`             | `ok a` <br> `er b` †          |
+| `atom Foo`                    | `atom Foo`                     | `let atom Foo`                |
+| `term Foo T`                  | `term Foo 1`                   | `let term Foo a`              |
+| `enum { atom A, term B T }`   | `enum { atom A }`              | †                             |
+| `data`                        | `data 1` <br> `data : u32 / 2` | n/a                           |
+| `error`                       | `error 1` <br> `error "oops"`  | n/a                           |
 
 † Sum types need to use `match` or `if` for destructuring. See below.
 
