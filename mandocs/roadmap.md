@@ -31,7 +31,6 @@
 
 ## In progress
 
-- enums and match
 - human docs
 - const args
 
@@ -39,7 +38,6 @@
 
 ## On deck
 
-- rename atom/tag -> atom/term (done in docs, pending in compiler)
 - new repl
 - rtcalls - waiting for design
 - workspaces - waiting for design

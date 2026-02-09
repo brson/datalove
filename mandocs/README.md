@@ -52,7 +52,7 @@ Then we'll add I/O to it &mdash; carefully.
   <div class="thing-box">
     <p>Modern compilation and execution architecture with
        <em>fully-memoized recompilation</em> and <em>rapid script iteration</em>,
-       <em>fully-parallelized compiler pipelinie</em>,
+       <em>fully-parallelized compiler pipeline</em>,
        interactive (<em>REPL</em>) interpreter with <em>JIT</em>,
        <em>compiles</em> to <em>staticly-linked</em> binaries.</p>
   </div>
@@ -95,7 +95,7 @@ strings, lists, maps and sets.
   year = 1949,
   rating = 4.7,
   available = true,
-  genres = [enum Fiction, enum Reality],
+  genres = [atom Fiction, atom Reality],
   subtitle = none,
 }
 ```
@@ -113,11 +113,11 @@ and _tensors_ (multidimensional arrays).
 ```
 
 ```datalove
-tensor [3, 3] [
+[|
   1 0 0,
   0 1 0,
   0 0 1,
-]
+|]
 ```
 
 
