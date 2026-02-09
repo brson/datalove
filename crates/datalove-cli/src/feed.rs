@@ -7,7 +7,7 @@ use rmx::regex::Regex;
 use rmx::tera;
 use serde::{Serialize, Deserialize};
 
-use crate::NavPage;
+use crate::prefix_nav_links;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Post {
@@ -168,13 +168,15 @@ pub fn generate_feed_page(
     posts: &[Post],
     tera: &tera::Tera,
     out_dir: &Path,
-    nav_pages: &[NavPage],
+    nav_html: &str,
     cross_link_url: &str,
     cross_link_label: &str,
 ) -> AnyResult<()> {
+    let prefixed_nav = prefix_nav_links(nav_html, "");
+
     let mut context = tera::Context::new();
     context.insert("posts", posts);
-    context.insert("pages", nav_pages);
+    context.insert("nav_html", &prefixed_nav);
     context.insert("path_prefix", "");
     context.insert("cross_link_url", cross_link_url);
     context.insert("cross_link_label", cross_link_label);

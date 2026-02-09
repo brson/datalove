@@ -27,9 +27,7 @@
         <span class="nav-logo" role="img" aria-label="Datalove"
               onclick="document.getElementById('navbar').classList.toggle('expanded')"></span>
         <div class="nav-links">
-            {% for page in pages %}
-            <a href="{{ path_prefix }}{{ page.path }}">{{ page.title }}</a>
-            {% endfor %}
+            {{ nav_html | safe }}
             <a href="{{ path_prefix }}{{ cross_link_url }}" class="nav-toggle">{{ cross_link_label }}</a>
         </div>
     </nav>

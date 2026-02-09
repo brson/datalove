@@ -4,10 +4,26 @@ use datalove_datafun_resolve::{resolve_all_names, resolve_all_exports, build_all
 use rmx::clap::{self, Parser as _};
 use rmx::std::path::PathBuf;
 
-#[derive(Clone, serde::Serialize)]
-struct NavPage {
-    title: String,
-    path: String,
+/// Prefix relative links in rendered nav HTML with a path prefix.
+///
+/// Leaves absolute URLs, anchors, and root-relative links unchanged.
+fn prefix_nav_links(nav_html: &str, path_prefix: &str) -> String {
+    if path_prefix.is_empty() {
+        return nav_html.to_string();
+    }
+    let re = rmx::regex::Regex::new(r#"href="([^"]+)""#).unwrap();
+    re.replace_all(nav_html, |caps: &rmx::regex::Captures| {
+        let link = &caps[1];
+        if link.starts_with("http://")
+            || link.starts_with("https://")
+            || link.starts_with('#')
+            || link.starts_with('/')
+        {
+            caps[0].to_string()
+        } else {
+            format!(r#"href="{path_prefix}{link}""#)
+        }
+    }).into_owned()
 }
 
 mod feed;
@@ -860,7 +876,7 @@ impl DocsCommand {
         let mandocs_dir = project_root.join("mandocs");
         let mandocs_out = project_root.join("docs");
 
-        let mandocs_nav = Self::parse_nav_file(&mandocs_dir)?;
+        let mandocs_nav = Self::render_nav_file(&mandocs_dir)?;
 
         Self::build_docs(
             &mandocs_dir,
@@ -896,7 +912,7 @@ impl DocsCommand {
         let botdocs_dir = project_root.join("botdocs");
         let botdocs_out = project_root.join("docs").join("bot");
 
-        let botdocs_nav = Self::parse_nav_file(&botdocs_dir)?;
+        let botdocs_nav = Self::render_nav_file(&botdocs_dir)?;
         Self::build_docs(
             &botdocs_dir,
             &botdocs_out,
@@ -917,7 +933,7 @@ impl DocsCommand {
     fn build_docs(
         input_dir: &std::path::Path,
         output_dir: &std::path::Path,
-        nav_pages: &[NavPage],
+        nav_html: &str,
         cross_link_url: &str,
         cross_link_label: &str,
     ) -> AnyResult<()> {
@@ -985,10 +1001,12 @@ impl DocsCommand {
             // Compute path_prefix from directory depth of output file.
             let path_prefix = Self::compute_path_prefix(&output_rel);
 
+            let prefixed_nav = prefix_nav_links(nav_html, &path_prefix);
+
             let mut context = Context::new();
             context.insert("title", &title);
             context.insert("content", &html);
-            context.insert("pages", nav_pages);
+            context.insert("nav_html", &prefixed_nav);
             context.insert("path_prefix", &path_prefix);
             context.insert("cross_link_url", cross_link_url);
             context.insert("cross_link_label", cross_link_label);
@@ -1057,39 +1075,23 @@ impl DocsCommand {
         filename.trim_end_matches(".md").S()
     }
 
-    /// Parse nav pages from a `nav.md` file in the input directory.
+    /// Render `nav.md` from the input directory to HTML.
     ///
-    /// Expects markdown links like `[Title](file.md)`. Rewrites `.md`
-    /// extensions to `.html` and `README.md` to `index.html`.
-    fn parse_nav_file(input_dir: &std::path::Path) -> AnyResult<Vec<NavPage>> {
+    /// Rewrites `.md` links to `.html` and renders the markdown with comrak.
+    fn render_nav_file(input_dir: &std::path::Path) -> AnyResult<String> {
         use rmx::std::fs;
-        use rmx::regex::Regex;
 
         let nav_path = input_dir.join("nav.md");
         let content = fs::read_to_string(&nav_path)
             .with_context(|| format!("Failed to read {}", nav_path.display()))?;
 
-        let re = Regex::new(r"\[([^\]]+)\]\(([^)]+)\)").unwrap();
-        let mut pages = Vec::new();
+        let content = Self::rewrite_links(&content);
 
-        for caps in re.captures_iter(&content) {
-            let title = caps[1].to_string();
-            let mut path = caps[2].to_string();
+        let mut options = rmx::comrak::Options::default();
+        options.render.unsafe_ = true;
+        let html = rmx::comrak::markdown_to_html(&content, &options);
 
-            // Rewrite .md links to .html output names.
-            if path.ends_with(".md") {
-                let stem = &path[..path.len() - 3];
-                if stem == "README" || stem.ends_with("/README") {
-                    path = format!("{}index.html", &path[..path.len() - "README.md".len()]);
-                } else {
-                    path = format!("{}.html", stem);
-                }
-            }
-
-            pages.push(NavPage { title, path });
-        }
-
-        Ok(pages)
+        Ok(html)
     }
 
     /// Compute the path prefix for a file based on its directory depth.
