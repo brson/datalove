@@ -24,7 +24,7 @@
 - [ ] core->runtime calls
 - [ ] intrinsics and core functions
 - [x] field projections
-- [ ] match for enums
+- [x] match for enums
 
 
 
