@@ -27,12 +27,12 @@ Analysis(
                         v3 = const 2u32
                         v4 = const 30u32
                         v5 = const 3u32
-                        v6 = const map {10u32 = 1u32, 20u32 = 2u32, 30u32 = 3u32}
+                        v6 = const %{10u32 = 1u32, 20u32 = 2u32, 30u32 = 3u32}
                         return v6
                 """,
             ),
             output: "(fragment executed)",
-            debug_output: Some("map {10 = 1, 20 = 2, 30 = 3}\n"),
+            debug_output: Some("%{10 = 1, 20 = 2, 30 = 3}\n"),
         ),
     ],
 )

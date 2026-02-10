@@ -455,6 +455,38 @@ pub fn bracer<'db>(
                             close_sigil: Sigil::AnglePipeClose,
                         });
                         parent_brace_map.append(brace_map);
+                    } else if open_sigil == Sigil::PercentBraceOpen {
+                        brace_map.inserted_closes.push((index, Sigil::BraceClose));
+                        brace_map.errors.push((
+                            open_index..index,
+                            Sigil::PercentBraceOpen,
+                        ));
+                        parent_brace_map.branches.push(Branch {
+                            real_token_range: open_index..index,
+                            branches: brace_map.branches.len(),
+                            inserted_closes: brace_map.inserted_closes.len(),
+                            removed_closes: brace_map.removed_closes.len(),
+                            errors: brace_map.errors.len(),
+                            open_sigil: Sigil::PercentBraceOpen,
+                            close_sigil: Sigil::BraceClose,
+                        });
+                        parent_brace_map.append(brace_map);
+                    } else if open_sigil == Sigil::HashBraceOpen {
+                        brace_map.inserted_closes.push((index, Sigil::BraceClose));
+                        brace_map.errors.push((
+                            open_index..index,
+                            Sigil::HashBraceOpen,
+                        ));
+                        parent_brace_map.branches.push(Branch {
+                            real_token_range: open_index..index,
+                            branches: brace_map.branches.len(),
+                            inserted_closes: brace_map.inserted_closes.len(),
+                            removed_closes: brace_map.removed_closes.len(),
+                            errors: brace_map.errors.len(),
+                            open_sigil: Sigil::HashBraceOpen,
+                            close_sigil: Sigil::BraceClose,
+                        });
+                        parent_brace_map.append(brace_map);
                     } else {
                         bug!()
                     }
@@ -494,11 +526,23 @@ pub fn bracer<'db>(
             TokenKind::Sigil(Sigil::AnglePipeOpen) => {
                 stack.push((index, Sigil::AnglePipeOpen, default()));
             }
+            TokenKind::Sigil(Sigil::PercentBraceOpen) => {
+                stack.push((index, Sigil::PercentBraceOpen, default()));
+            }
+            TokenKind::Sigil(Sigil::HashBraceOpen) => {
+                stack.push((index, Sigil::HashBraceOpen, default()));
+            }
             TokenKind::Sigil(Sigil::ParenClose) => {
                 close_brace(&mut stack, index, Sigil::ParenOpen, Sigil::ParenClose);
             }
             TokenKind::Sigil(Sigil::BraceClose) => {
-                close_brace(&mut stack, index, Sigil::BraceOpen, Sigil::BraceClose);
+                let open_s = stack.iter().rev()
+                    .find_map(|(_, s, _)| match s {
+                        Sigil::BraceOpen | Sigil::PercentBraceOpen | Sigil::HashBraceOpen => Some(*s),
+                        _ => None,
+                    })
+                    .unwrap_or(Sigil::BraceOpen);
+                close_brace(&mut stack, index, open_s, Sigil::BraceClose);
             }
             TokenKind::Sigil(Sigil::BracketClose) => {
                 close_brace(&mut stack, index, Sigil::BracketOpen, Sigil::BracketClose);
@@ -938,4 +982,20 @@ fn test_earmuff_braces() {
     assert_eq!(dbglex("a|}b"), "a b");
     assert_eq!(dbglex("a|]b"), "a b");
     assert_eq!(dbglex("a|>b"), "a b");
+
+    // Sigil-brace opens: %{ and #{.
+    assert_eq!(dbglex("%{a}"), "%{ a }");
+    assert_eq!(dbglex("#{a}"), "#{ a }");
+    assert_eq!(dbglex("%{}"), "%{ }");
+    assert_eq!(dbglex("#{}"), "#{ }");
+    assert_eq!(dbglex("%{#{a}}"), "%{ #{ a } }");
+    assert_eq!(dbglex("#{%{a}}"), "#{ %{ a } }");
+
+    // Unclosed sigil-brace opens.
+    assert_eq!(dbglex("%{a"), "%{ a }");
+    assert_eq!(dbglex("#{a"), "#{ a }");
+
+    // Nested with regular braces.
+    assert_eq!(dbglex("%{{a}}"), "%{ { a } }");
+    assert_eq!(dbglex("{%{a}}"), "{ %{ a } }");
 }

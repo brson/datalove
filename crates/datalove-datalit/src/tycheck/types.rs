@@ -514,13 +514,13 @@ pub fn type_to_string<'db>(db: &'db dyn crate::Db, ty: &Type<'db>) -> String {
             format!("[{}]", ty_str)
         }
         Type::Map(m) => {
-            format!("map<{}, {}>",
+            format!("%{{{} = {}}}",
                 type_to_string(db, &m.key_type),
                 type_to_string(db, &m.value_type))
         }
         Type::Set(s) => {
             let ty_str = type_to_string(db, &s.element_type);
-            format!("set<{}>", ty_str)
+            format!("#{{{}}}", ty_str)
         }
         Type::Option(o) => {
             let ty_str = type_to_string(db, &o.inner_type);

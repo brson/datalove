@@ -62,6 +62,10 @@ pub enum Sigil {
     AnglePipeOpen,    // "<|"
     AnglePipeClose,   // "|>"
 
+    // Sigil-brace opens (two-character, before single-char variants).
+    PercentBraceOpen, // "%{"
+    HashBraceOpen,    // "#{"
+
     // Two-character sigils (must come before single-character variants).
     ColonDash,
     PlusQuestion,
@@ -414,6 +418,10 @@ impl Sigil {
             Sigil::AnglePipeOpen => "<|",
             Sigil::AnglePipeClose => "|>",
 
+            // Sigil-brace opens.
+            Sigil::PercentBraceOpen => "%{",
+            Sigil::HashBraceOpen => "#{",
+
             // Two-character sigils.
             Sigil::ColonDash => ":-",
             Sigil::PlusQuestion => "+?",
@@ -485,6 +493,8 @@ impl Sigil {
             Sigil::BracePipeOpen => Sigil::BracePipeClose,
             Sigil::BracketPipeOpen => Sigil::BracketPipeClose,
             Sigil::AnglePipeOpen => Sigil::AnglePipeClose,
+            Sigil::PercentBraceOpen => Sigil::BraceClose,
+            Sigil::HashBraceOpen => Sigil::BraceClose,
             _ => bug!(),
         }
     }
@@ -581,6 +591,24 @@ fn test_lex_chunk() {
     assert_eq!(
         dbglex("a#b"),
         "a # b",
+    );
+
+    // Sigil-brace opens.
+    assert_eq!(
+        dbglex("%{a}"),
+        "%{ a }",
+    );
+    assert_eq!(
+        dbglex("#{a}"),
+        "#{ a }",
+    );
+    assert_eq!(
+        dbglex("%{}"),
+        "%{ }",
+    );
+    assert_eq!(
+        dbglex("#{}"),
+        "#{ }",
     );
 
     // Basic arithmetic operators.

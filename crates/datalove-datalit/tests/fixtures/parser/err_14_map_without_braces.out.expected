@@ -2,17 +2,17 @@
   "ast": {
     "expr": {
       "ParseError": {
-        "message": "expected {} after map keyword"
+        "message": "unexpected identifier 'map'"
       }
     },
     "type_hint": null
   },
   "diagnostics": [
     {
-      "code": "D016",
+      "code": "D019",
       "labels": [
         {
-          "message": "expected '{' after 'map'",
+          "message": "unexpected identifier",
           "span": [
             0,
             3
@@ -20,7 +20,7 @@
           "text": "map"
         }
       ],
-      "message": "expected {} after map keyword"
+      "message": "unexpected identifier 'map'"
     }
   ]
 }

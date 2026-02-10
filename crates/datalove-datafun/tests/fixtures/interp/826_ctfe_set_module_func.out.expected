@@ -17,7 +17,7 @@ Analysis(
                         v0 = const 9u32
                         v1 = const 7u32
                         v2 = const 8u32
-                        v3 = const set {7u32, 8u32, 9u32}
+                        v3 = const #{7u32, 8u32, 9u32}
                         return v3
                 """,
             ),
@@ -60,7 +60,7 @@ Analysis(
                         unit_end v0
                 """,
             ),
-            output: "set {7, 8, 9}",
+            output: "#{7, 8, 9}",
         ),
     ],
 )

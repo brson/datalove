@@ -295,13 +295,6 @@ impl<'db> Parser<'db> {
                                     let expr_kind = self.parse_lit_expr(None);
                                     self.create_expr(expr_kind, ts)
                                 }
-                                // Collection keywords - only treat as keywords if followed by `{`.
-                                "map" | "set" if self.peek_second_sigil(Sigil::BraceOpen) => {
-                                    // Capture span before parsing for diagnostic reporting.
-                                    let ts = self.peek_text_span();
-                                    let expr_kind = self.parse_lit_expr(None);
-                                    self.create_expr(expr_kind, ts)
-                                }
                                 // some/ok/er are always keywords - they require a payload expression.
                                 "some" | "ok" | "er" => {
                                     // Capture span before parsing for diagnostic reporting.

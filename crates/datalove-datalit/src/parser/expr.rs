@@ -147,56 +147,6 @@ impl<'db> Parser<'db> {
                 let value = self.parse_expr_full();
                 return ast::Expr::Error(ast::ExprError { value });
             }
-            Some("map") => {
-                let ts = self.peek_text_span();
-                self.eat_word("map");
-                if let Some(iter) = self.eat_branch(Sigil::BraceOpen) {
-                    let mut sub_parser = Parser::from_branch(self.db, iter, self.source_text());
-                    let entries = sub_parser.parse_comma_separated(|p| {
-                        let key = p.parse_expr_full();
-                        if !p.eat_sigil(Sigil::Equals) {
-                            let ts = p.peek_text_span();
-                            let error_expr = p.emit_expr_error(ts,
-                                "expected '=' between map key and value",
-                                "D017",
-                                "expected '=' after key"
-                            );
-                            let error_value = ast::ExprFull::new(p.db, None, error_expr);
-                            return ast::ExprMapEntry { key, value: error_value };
-                        }
-                        let value = p.parse_expr_full();
-                        ast::ExprMapEntry { key, value }
-                    });
-                    sub_parser.error_if_not_exhausted();
-                    // Merge spans from sub-parser.
-                    self.expr_spans.extend(sub_parser.expr_spans);
-                    return ast::Expr::Map(ast::ExprMap { entries });
-                } else {
-                    return self.emit_expr_error(ts,
-                        "expected {} after map keyword",
-                        "D016",
-                        "expected '{' after 'map'"
-                    );
-                }
-            }
-            Some("set") => {
-                let ts = self.peek_text_span();
-                self.eat_word("set");
-                if let Some(iter) = self.eat_branch(Sigil::BraceOpen) {
-                    let mut sub_parser = Parser::from_branch(self.db, iter, self.source_text());
-                    let elements = sub_parser.parse_comma_separated(|p| p.parse_expr_full());
-                    sub_parser.error_if_not_exhausted();
-                    // Merge spans from sub-parser.
-                    self.expr_spans.extend(sub_parser.expr_spans);
-                    return ast::Expr::Set(ast::ExprSet { elements });
-                } else {
-                    return self.emit_expr_error(ts,
-                        "expected {} after set keyword",
-                        "D017",
-                        "expected '{' after 'set'"
-                    );
-                }
-            }
             _ => {}
         }
 
@@ -305,6 +255,44 @@ impl<'db> Parser<'db> {
                 // Merge spans from sub-parser.
                 self.expr_spans.extend(sub_parser.expr_spans);
                 ast::Expr::List(ast::ExprList { elements })
+            }
+            Some(TreeToken::Branch { sigil: Sigil::PercentBraceOpen, .. }) => {
+                // Map: %{k = v, ...}
+                let inner = match self.next() {
+                    Some(TreeToken::Branch { inner, .. }) => inner,
+                    _ => unreachable!(),
+                };
+                let mut sub_parser = Parser::from_branch(self.db, inner, self.source_text());
+                let entries = sub_parser.parse_comma_separated(|p| {
+                    let key = p.parse_expr_full();
+                    if !p.eat_sigil(Sigil::Equals) {
+                        let ts = p.peek_text_span();
+                        let error_expr = p.emit_expr_error(ts,
+                            "expected '=' between map key and value",
+                            "D017",
+                            "expected '=' after key"
+                        );
+                        let error_value = ast::ExprFull::new(p.db, None, error_expr);
+                        return ast::ExprMapEntry { key, value: error_value };
+                    }
+                    let value = p.parse_expr_full();
+                    ast::ExprMapEntry { key, value }
+                });
+                sub_parser.error_if_not_exhausted();
+                self.expr_spans.extend(sub_parser.expr_spans);
+                ast::Expr::Map(ast::ExprMap { entries })
+            }
+            Some(TreeToken::Branch { sigil: Sigil::HashBraceOpen, .. }) => {
+                // Set: #{e, ...}
+                let inner = match self.next() {
+                    Some(TreeToken::Branch { inner, .. }) => inner,
+                    _ => unreachable!(),
+                };
+                let mut sub_parser = Parser::from_branch(self.db, inner, self.source_text());
+                let elements = sub_parser.parse_comma_separated(|p| p.parse_expr_full());
+                sub_parser.error_if_not_exhausted();
+                self.expr_spans.extend(sub_parser.expr_spans);
+                ast::Expr::Set(ast::ExprSet { elements })
             }
             Some(TreeToken::Branch { sigil: Sigil::BracePipeOpen, .. }) => {
                 // Table.

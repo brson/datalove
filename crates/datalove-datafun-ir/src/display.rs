@@ -212,7 +212,7 @@ impl fmt::Display for ConstValue {
                 write!(f, "]")
             }
             ConstValue::Set(elems) => {
-                write!(f, "set {{")?;
+                write!(f, "#{{")?;
                 for (i, e) in elems.iter().enumerate() {
                     if i > 0 { write!(f, ", ")?; }
                     write!(f, "{}", e)?;
@@ -220,7 +220,7 @@ impl fmt::Display for ConstValue {
                 write!(f, "}}")
             }
             ConstValue::Map(entries) => {
-                write!(f, "map {{")?;
+                write!(f, "%{{")?;
                 for (i, (k, v)) in entries.iter().enumerate() {
                     if i > 0 { write!(f, ", ")?; }
                     write!(f, "{} = {}", k, v)?;
@@ -467,7 +467,7 @@ impl fmt::Display for Instruction {
                 write!(f, "]")
             }
             Instruction::SetNew { dest, elements } => {
-                write!(f, "{} = set {{", dest)?;
+                write!(f, "{} = #{{", dest)?;
                 for (i, elem) in elements.iter().enumerate() {
                     if i > 0 {
                         write!(f, ", ")?;
@@ -477,7 +477,7 @@ impl fmt::Display for Instruction {
                 write!(f, "}}")
             }
             Instruction::MapNew { dest, entries } => {
-                write!(f, "{} = map {{", dest)?;
+                write!(f, "{} = %{{", dest)?;
                 for (i, (k, v)) in entries.iter().enumerate() {
                     if i > 0 {
                         write!(f, ", ")?;

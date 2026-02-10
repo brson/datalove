@@ -6,25 +6,8 @@
       }
     },
     "type_hint": {
-      "ParseError": {
-        "message": "expected <> after map keyword"
-      }
+      "Alias": "map"
     }
   },
-  "diagnostics": [
-    {
-      "code": "D005",
-      "labels": [
-        {
-          "message": "expected '<' after 'map'",
-          "span": [
-            2,
-            5
-          ],
-          "text": "map"
-        }
-      ],
-      "message": "expected <> after map keyword"
-    }
-  ]
+  "diagnostics": []
 }

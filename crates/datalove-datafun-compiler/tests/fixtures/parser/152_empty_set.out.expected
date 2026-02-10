@@ -5,19 +5,47 @@
         "kind": "Let",
         "name": "x",
         "type_hint": {
-          "Set": {
-            "element_type": "U32"
+          "ParseError": {
+            "message": "unexpected tokens in type hint"
           }
         },
         "value": {
           "expr": {
-            "elements": [],
-            "kind": "Set",
-            "type_hint": null
+            "kind": "Name",
+            "name": "set"
           }
         }
       }
     ]
   },
-  "diagnostics": []
+  "diagnostics": [
+    {
+      "code": "D021",
+      "labels": [
+        {
+          "message": "unexpected tokens",
+          "span": [
+            0,
+            1
+          ],
+          "text": "l"
+        }
+      ],
+      "message": "unexpected tokens in type hint"
+    },
+    {
+      "code": "P021",
+      "labels": [
+        {
+          "message": "unexpected token",
+          "span": [
+            22,
+            24
+          ],
+          "text": "{}"
+        }
+      ],
+      "message": "unexpected token after expression"
+    }
+  ]
 }

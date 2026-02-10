@@ -51,8 +51,8 @@
         {
           "message": "parse error occurred here",
           "span": [
-            19,
-            20
+            16,
+            17
           ],
           "text": "#"
         }

@@ -106,7 +106,7 @@ fn test_parse_string() {
 #[test]
 fn test_parse_map() {
     let ref db = crate::Database::default();
-    let source = Source::new(db, S(": map <u32, u32> / map { 0 = 5, 2 = 2 }"));
+    let source = Source::new(db, S(": %{u32 = u32} / %{ 0 = 5, 2 = 2 }"));
     let ast = parse_for_test(db, source);
     let type_hint = ast.type_hint(db).unwrap();
     match type_hint {
@@ -125,7 +125,7 @@ fn test_parse_map() {
 #[test]
 fn test_parse_set() {
     let ref db = crate::Database::default();
-    let source = Source::new(db, S(": set <u32> / set { 1, 2, 3 }"));
+    let source = Source::new(db, S(": #{u32} / #{ 1, 2, 3 }"));
     let ast = parse_for_test(db, source);
     let type_hint = ast.type_hint(db).unwrap();
     match type_hint {

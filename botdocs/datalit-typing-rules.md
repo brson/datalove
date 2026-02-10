@@ -54,8 +54,8 @@ Examples:
 
 ### Collections
 - `[T] = [T']` iff T = T'
-- `map<K, V> = map<K', V'>` iff K = K' and V = V'
-- `set<T> = set<T'>` iff T = T'
+- `%{K = V} = %{K' = V'}` iff K = K' and V = V'
+- `#{T} = #{T'}` iff T = T'
 
 ### Option and Result
 - `?T = ?T'` iff T = T'
@@ -252,16 +252,16 @@ n >= 1
 e1 => T
 for all i in [2..n]: ei => T' where T = T'
 -------------------------------------------
-set {e1, e2, ..., en} => set<T>
+#{e1, e2, ..., en} => #{T}
 ```
 
 Sets are synthesized by synthesizing all elements and ensuring they have
-the same type. Empty sets synthesize as `set<()>`.
+the same type. Empty sets synthesize as `#{()}`.
 
 Example:
 ```
-set {true, false} => set<bool>
-set {} => set<()>                       (empty set, unit element type)
+#{true, false} => #{bool}
+#{} => #{()}                       (empty set, unit element type)
 ```
 
 ### Rule: Syn-Map
@@ -271,16 +271,16 @@ k1 => K, v1 => V
 for all i in [2..n]: ki => K' where K = K'
 for all i in [2..n]: vi => V' where V = V'
 --------------------------------------------
-map {k1 = v1, k2 = v2, ...} => map<K, V>
+%{k1 = v1, k2 = v2, ...} => %{K = V}
 ```
 
 Maps are synthesized by synthesizing all keys and values. Empty maps
-synthesize as `map<(), ()>`.
+synthesize as `%{() = ()}`.
 
 Example:
 ```
-map {1 = 10, 2 = 20} => map<int, int>
-map {} => map<(), ()>                   (empty map, unit key/value types)
+%{1 = 10, 2 = 20} => %{int = int}
+%{} => %{() = ()}                   (empty map, unit key/value types)
 ```
 
 ### Rule: Syn-Tensor
@@ -511,18 +511,18 @@ Empty lists check against any list type.
 
 ### Rule: Check-Map
 ```
-map<K, V> is expected type
+%{K = V} is expected type
 for all (ki, vi) in entries: ki <= K and vi <= V
 ------------------------------------------------
-map {k1 = v1, k2 = v2, ...} <= map<K, V>
+%{k1 = v1, k2 = v2, ...} <= %{K = V}
 ```
 
 ### Rule: Check-Set
 ```
-set<T> is expected type
+#{T} is expected type
 for all ei in elements: ei <= T
 ------------------------------
-set {e1, e2, ...} <= set<T>
+#{e1, e2, ...} <= #{T}
 ```
 
 ### Rule: Check-Tensor
@@ -655,10 +655,10 @@ Empty collections synthesize with unit element type, and check against any eleme
 ```
 [] => [()]                   (synthesis: unit element type)
 : [u32] / []                 ok (checking: any element type)
-set {} => set<()>            (synthesis)
-: set<u32> / set {}          ok (checking)
-map {} => map<(), ()>        (synthesis)
-: map<u32, string> / map {}  ok (checking)
+#{} => #{()}            (synthesis)
+: #{u32} / #{}          ok (checking)
+%{} => %{() = ()}        (synthesis)
+: %{u32 = string} / %{}  ok (checking)
 ```
 
 ### 2. Field order in anonymous structs
@@ -699,8 +699,8 @@ Anonymous composite types can be synthesized when all their components can be sy
 - **Tuples**: `(true, 42)` synthesizes as `(bool, int)`
 - **Structs**: `{x = 42}` synthesizes as `{x: int}`
 - **Lists**: `[1, 2, 3]` synthesizes as `[int]`
-- **Sets**: `set {true, false}` synthesizes as `set<bool>`
-- **Maps**: `map {1 = 10}` synthesizes as `map<int, int>`
+- **Sets**: `#{true, false}` synthesizes as `#{bool}`
+- **Maps**: `%{1 = 10}` synthesizes as `%{int = int}`
 
 For collections (lists, sets, maps), all elements/keys/values must have the
 same type. The first element determines the expected type for the rest.

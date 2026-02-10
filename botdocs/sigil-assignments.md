@@ -18,12 +18,13 @@ Sigils are defined in the `bcts` crate (`lexer.rs`).
 - `;` - Semicolon
   - Statement separator (alternative to newline)
 
-### Reserved (Previously Heap Allocation)
+### Adapt / Clone / Widen
 - `@` - At
-  - Currently unused (previously local heap sigil)
+  - Postfix adapt operator: clone, widen, or coerce
 
+### Hash
 - `#` - Hash
-  - Currently unused (previously global heap sigil)
+  - Part of `#{` set open sigil
 
 ### Type Constructors / Modifiers
 - `?` - Question
@@ -60,7 +61,8 @@ Sigils are defined in the `bcts` crate (`lexer.rs`).
 - `=` - Equals
   - Assignment in let statements: `let x = value`
   - Struct field assignment: `{ x = 1 }`
-  - Map entry assignment: `map { 1 = 10 }`
+  - Map entry assignment: `%{ 1 = 10 }`
+  - Map type key-value separator: `%{K = V}`
   - Carry binding: `loop carry (x = 0)`
 
 - `|` - Pipe
@@ -76,20 +78,17 @@ Sigils are defined in the `bcts` crate (`lexer.rs`).
   - Carry/bring clauses: `loop carry (x = 0)`
 
 - `{` `}` - BraceOpen, BraceClose
-  - Maps: `map { 1 = 10, 2 = 20 }`
-  - Sets: `set { 1, 2, 3 }`
   - Structs: `{ x = 1, y = 2 }`
   - Enum type hints: `enum { atom A, term B u32 }`
   - Anonymous struct type hints: `{ x: u32 }`
+  - Closes `%{` and `#{` sigils
 
 - `[` `]` - BracketOpen, BracketClose
   - Lists: `[1, 2, 3]`
   - List types: `[u32]`
 
 - `<` `>` - AngleOpen, AngleClose
-  - Type parameters for collections
-  - Map types: `map <key_type, value_type>`
-  - Set types: `set <element_type>`
+  - Comparison operators: `.<`, `.>`
 
 ### Earmuff Braces (Pipe-Delimited)
 
@@ -98,6 +97,15 @@ Sigils are defined in the `bcts` crate (`lexer.rs`).
   - Tensor literals: `[| 1 2 3, 4 5 6 |]`
 - `{|` `|}` - BracePipeOpen, BracePipeClose
   - Table types and literals: `{| x: u32, y: u32 |}`
+
+### Asymmetric Braces (close with `}`)
+
+- `%{` - PercentBraceOpen (closes with `}`)
+  - Map types: `%{K = V}`
+  - Map literals: `%{ 1 = 10, 2 = 20 }`
+- `#{` - HashBraceOpen (closes with `}`)
+  - Set types: `#{T}`
+  - Set literals: `#{ 1, 2, 3 }`
 
 ## Two-Character Sigils
 
@@ -175,7 +183,7 @@ Reserved, not yet used in parser.
 Characters not currently assigned as sigil start characters:
 
 ```
-$ % & \ ^ ` ~
+$ & \ ^ ` ~
 ```
 
 Note: `_` is considered a word character (identifier start).

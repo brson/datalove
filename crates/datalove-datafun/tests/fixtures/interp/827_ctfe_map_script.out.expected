@@ -14,14 +14,14 @@ Analysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v6 = const map {1u32 = 100u32, 2u32 = 200u32, 3u32 = 300u32}
+                        v6 = const %{1u32 = 100u32, 2u32 = 200u32, 3u32 = 300u32}
                         debuglog v6
                         unit_end_drop v6
                         unit_end
                 """,
             ),
             output: "(fragment executed)",
-            debug_output: Some("map {1 = 100, 2 = 200, 3 = 300}\n"),
+            debug_output: Some("%{1 = 100, 2 = 200, 3 = 300}\n"),
         ),
     ],
 )

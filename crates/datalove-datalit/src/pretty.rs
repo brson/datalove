@@ -164,17 +164,17 @@ fn pretty_type<'db>(
         }
 
         Type::Map(m) => {
-            out.push_str("map<");
+            out.push_str("%{");
             pretty_type(db, &*m.key_type.clone(), out);
-            out.push_str(", ");
+            out.push_str(" = ");
             pretty_type(db, &*m.value_type.clone(), out);
-            out.push('>');
+            out.push('}');
         }
 
         Type::Set(s) => {
-            out.push_str("set<");
+            out.push_str("#{");
             pretty_type(db, &*s.element_type.clone(), out);
-            out.push('>');
+            out.push('}');
         }
 
         Type::Option(o) => {
@@ -321,17 +321,17 @@ fn pretty_type_hint<'db>(
         }
 
         TypeHint::Map(m) => {
-            out.push_str("map<");
+            out.push_str("%{");
             pretty_type_hint(db, *m.key_type.clone(), out);
-            out.push_str(", ");
+            out.push_str(" = ");
             pretty_type_hint(db, *m.value_type.clone(), out);
-            out.push('>');
+            out.push('}');
         }
 
         TypeHint::Set(s) => {
-            out.push_str("set<");
+            out.push_str("#{");
             pretty_type_hint(db, *s.element_type.clone(), out);
-            out.push('>');
+            out.push('}');
         }
 
         TypeHint::Option(o) => {
@@ -492,7 +492,7 @@ fn pretty_expr<'db>(
         }
 
         Expr::Map(m) => {
-            out.push_str("map {");
+            out.push_str("%{");
             let entries = &m.entries;
             for (i, entry) in entries.iter().enumerate() {
                 if i > 0 {
@@ -506,7 +506,7 @@ fn pretty_expr<'db>(
         }
 
         Expr::Set(s) => {
-            out.push_str("set {");
+            out.push_str("#{");
             let elements = &s.elements;
             for (i, elem) in elements.iter().enumerate() {
                 if i > 0 {

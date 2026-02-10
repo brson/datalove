@@ -1,1 +1,1 @@
-: set<string> / set {"apple", "banana"}
+: #{string} / #{"apple", "banana"}

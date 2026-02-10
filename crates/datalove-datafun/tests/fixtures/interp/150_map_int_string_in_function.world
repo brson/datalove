@@ -3,8 +3,8 @@ scriptunit-fragment
 ----------
 
 // Map with int keys and string values in a function.
-fun make_map(): map<int, string>
-    ret map { 1 = "one", 2 = "two", 3 = "three" }
+fun make_map(): %{int = string}
+    ret %{ 1 = "one", 2 = "two", 3 = "three" }
 end fun
 
 ----------

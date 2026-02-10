@@ -1,1 +1,1 @@
-: map <u32, (string, bool)> / map { 1 = ("a", true), 2 = ("b", false) }
+: %{u32 = (string, bool)} / %{ 1 = ("a", true), 2 = ("b", false) }

@@ -1,11 +1,9 @@
 {
   "diagnostics": [],
-  "errors": [],
-  "judgements": [
+  "errors": [
     {
-      "kind": "variable",
-      "name": "x",
-      "type": "set<set<u32>>"
+      "kind": "CannotSynthesize"
     }
-  ]
+  ],
+  "judgements": []
 }

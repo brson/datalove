@@ -483,8 +483,8 @@ fn apply_remove_type_hint<'db>(
         Expr::None => format!("{}none", ""),
 
         Expr::List(_) => format!("{}[]", ""),
-        Expr::Set(_) => format!("{}set {{}}", ""),
-        Expr::Map(_) => format!("{}map {{}}", ""),
+        Expr::Set(_) => "#{}".S(),
+        Expr::Map(_) => "%{}".S(),
         _ => return None,
     };
 
@@ -651,7 +651,7 @@ fn apply_swap_map_key_value<'db>(
         // Build type prefix.
         
 
-        let map_body = format!("{}map {{ {} }}", "", entry_strs.join(", "));
+        let map_body = format!("%{{ {} }}", entry_strs.join(", "));
 
         // Build type hint string.
         let mut type_str = String::new();
@@ -733,17 +733,17 @@ fn pretty_type_hint<'db>(
         }
 
         TypeHint::Map(m) => {
-            out.push_str("map<");
+            out.push_str("%{");
             pretty_type_hint(db, *m.key_type.clone(), out);
-            out.push_str(", ");
+            out.push_str(" = ");
             pretty_type_hint(db, *m.value_type.clone(), out);
-            out.push('>');
+            out.push('}');
         }
 
         TypeHint::Set(s) => {
-            out.push_str("set<");
+            out.push_str("#{");
             pretty_type_hint(db, *s.element_type.clone(), out);
-            out.push('>');
+            out.push('}');
         }
 
         TypeHint::Option(o) => {

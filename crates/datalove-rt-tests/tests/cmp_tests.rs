@@ -1152,8 +1152,8 @@ fn test_cmp_type_mismatch() -> AnyResult<()> {
 #[test]
 fn test_cmp_map_empty_vs_empty() -> AnyResult<()> {
     let db = Database::default();
-    let typechecked_a = compile_str(&db, ": map<string, u32> / map{}")?;
-    let typechecked_b = compile_str(&db, ": map<string, u32> / map{}")?;
+    let typechecked_a = compile_str(&db, ": %{string = u32} / %{}")?;
+    let typechecked_b = compile_str(&db, ": %{string = u32} / %{}")?;
 
     let rt = Runtime::new();
     let mut tydesc_table = TyDescTable::new(&db);
@@ -1187,8 +1187,8 @@ fn test_cmp_map_empty_vs_empty() -> AnyResult<()> {
 #[test]
 fn test_cmp_map_empty_vs_nonempty() -> AnyResult<()> {
     let db = Database::default();
-    let typechecked_a = compile_str(&db, ": map<string, u32> / map{}")?;
-    let typechecked_b = compile_str(&db, r#": map<string, u32> / map{"a" = 1}"#)?;
+    let typechecked_a = compile_str(&db, ": %{string = u32} / %{}")?;
+    let typechecked_b = compile_str(&db, r#": %{string = u32} / %{"a" = 1}"#)?;
 
     let rt = Runtime::new();
     let mut tydesc_table = TyDescTable::new(&db);
@@ -1222,8 +1222,8 @@ fn test_cmp_map_empty_vs_nonempty() -> AnyResult<()> {
 #[test]
 fn test_cmp_map_equal() -> AnyResult<()> {
     let db = Database::default();
-    let typechecked_a = compile_str(&db, r#"map{"a" = 1, "b" = 2}"#)?;
-    let typechecked_b = compile_str(&db, r#"map{"a" = 1, "b" = 2}"#)?;
+    let typechecked_a = compile_str(&db, r#"%{"a" = 1, "b" = 2}"#)?;
+    let typechecked_b = compile_str(&db, r#"%{"a" = 1, "b" = 2}"#)?;
 
     let rt = Runtime::new();
     let mut tydesc_table = TyDescTable::new(&db);
@@ -1257,8 +1257,8 @@ fn test_cmp_map_equal() -> AnyResult<()> {
 #[test]
 fn test_cmp_map_less_by_key() -> AnyResult<()> {
     let db = Database::default();
-    let typechecked_a = compile_str(&db, r#"map{"a" = 1, "b" = 2}"#)?;
-    let typechecked_b = compile_str(&db, r#"map{"a" = 1, "c" = 2}"#)?;
+    let typechecked_a = compile_str(&db, r#"%{"a" = 1, "b" = 2}"#)?;
+    let typechecked_b = compile_str(&db, r#"%{"a" = 1, "c" = 2}"#)?;
 
     let rt = Runtime::new();
     let mut tydesc_table = TyDescTable::new(&db);
@@ -1292,8 +1292,8 @@ fn test_cmp_map_less_by_key() -> AnyResult<()> {
 #[test]
 fn test_cmp_map_less_by_value() -> AnyResult<()> {
     let db = Database::default();
-    let typechecked_a = compile_str(&db, r#"map{"a" = 1, "b" = 2}"#)?;
-    let typechecked_b = compile_str(&db, r#"map{"a" = 1, "b" = 3}"#)?;
+    let typechecked_a = compile_str(&db, r#"%{"a" = 1, "b" = 2}"#)?;
+    let typechecked_b = compile_str(&db, r#"%{"a" = 1, "b" = 3}"#)?;
 
     let rt = Runtime::new();
     let mut tydesc_table = TyDescTable::new(&db);
@@ -1327,8 +1327,8 @@ fn test_cmp_map_less_by_value() -> AnyResult<()> {
 #[test]
 fn test_cmp_map_less_by_length() -> AnyResult<()> {
     let db = Database::default();
-    let typechecked_a = compile_str(&db, r#"map{"a" = 1}"#)?;
-    let typechecked_b = compile_str(&db, r#"map{"a" = 1, "b" = 2}"#)?;
+    let typechecked_a = compile_str(&db, r#"%{"a" = 1}"#)?;
+    let typechecked_b = compile_str(&db, r#"%{"a" = 1, "b" = 2}"#)?;
 
     let rt = Runtime::new();
     let mut tydesc_table = TyDescTable::new(&db);
@@ -1362,8 +1362,8 @@ fn test_cmp_map_less_by_length() -> AnyResult<()> {
 #[test]
 fn test_cmp_map_greater_by_key() -> AnyResult<()> {
     let db = Database::default();
-    let typechecked_a = compile_str(&db, r#"map{"a" = 1, "c" = 2}"#)?;
-    let typechecked_b = compile_str(&db, r#"map{"a" = 1, "b" = 2}"#)?;
+    let typechecked_a = compile_str(&db, r#"%{"a" = 1, "c" = 2}"#)?;
+    let typechecked_b = compile_str(&db, r#"%{"a" = 1, "b" = 2}"#)?;
 
     let rt = Runtime::new();
     let mut tydesc_table = TyDescTable::new(&db);
@@ -1397,8 +1397,8 @@ fn test_cmp_map_greater_by_key() -> AnyResult<()> {
 #[test]
 fn test_cmp_set_empty_vs_empty() -> AnyResult<()> {
     let db = Database::default();
-    let typechecked_a = compile_str(&db, ": set<u32> / set{}")?;
-    let typechecked_b = compile_str(&db, ": set<u32> / set{}")?;
+    let typechecked_a = compile_str(&db, ": #{u32} / #{}")?;
+    let typechecked_b = compile_str(&db, ": #{u32} / #{}")?;
 
     let rt = Runtime::new();
     let mut tydesc_table = TyDescTable::new(&db);
@@ -1432,8 +1432,8 @@ fn test_cmp_set_empty_vs_empty() -> AnyResult<()> {
 #[test]
 fn test_cmp_set_empty_vs_nonempty() -> AnyResult<()> {
     let db = Database::default();
-    let typechecked_a = compile_str(&db, ": set<u32> / set{}")?;
-    let typechecked_b = compile_str(&db, ": set<u32> / set{1}")?;
+    let typechecked_a = compile_str(&db, ": #{u32} / #{}")?;
+    let typechecked_b = compile_str(&db, ": #{u32} / #{1}")?;
 
     let rt = Runtime::new();
     let mut tydesc_table = TyDescTable::new(&db);
@@ -1467,8 +1467,8 @@ fn test_cmp_set_empty_vs_nonempty() -> AnyResult<()> {
 #[test]
 fn test_cmp_set_equal() -> AnyResult<()> {
     let db = Database::default();
-    let typechecked_a = compile_str(&db, "set{1, 2, 3}")?;
-    let typechecked_b = compile_str(&db, "set{1, 2, 3}")?;
+    let typechecked_a = compile_str(&db, "#{1, 2, 3}")?;
+    let typechecked_b = compile_str(&db, "#{1, 2, 3}")?;
 
     let rt = Runtime::new();
     let mut tydesc_table = TyDescTable::new(&db);
@@ -1502,8 +1502,8 @@ fn test_cmp_set_equal() -> AnyResult<()> {
 #[test]
 fn test_cmp_set_less_by_element() -> AnyResult<()> {
     let db = Database::default();
-    let typechecked_a = compile_str(&db, "set{1, 2}")?;
-    let typechecked_b = compile_str(&db, "set{1, 3}")?;
+    let typechecked_a = compile_str(&db, "#{1, 2}")?;
+    let typechecked_b = compile_str(&db, "#{1, 3}")?;
 
     let rt = Runtime::new();
     let mut tydesc_table = TyDescTable::new(&db);
@@ -1537,8 +1537,8 @@ fn test_cmp_set_less_by_element() -> AnyResult<()> {
 #[test]
 fn test_cmp_set_less_by_length() -> AnyResult<()> {
     let db = Database::default();
-    let typechecked_a = compile_str(&db, "set{1, 2}")?;
-    let typechecked_b = compile_str(&db, "set{1, 2, 3}")?;
+    let typechecked_a = compile_str(&db, "#{1, 2}")?;
+    let typechecked_b = compile_str(&db, "#{1, 2, 3}")?;
 
     let rt = Runtime::new();
     let mut tydesc_table = TyDescTable::new(&db);
@@ -1572,8 +1572,8 @@ fn test_cmp_set_less_by_length() -> AnyResult<()> {
 #[test]
 fn test_cmp_set_greater_by_element() -> AnyResult<()> {
     let db = Database::default();
-    let typechecked_a = compile_str(&db, "set{1, 3}")?;
-    let typechecked_b = compile_str(&db, "set{1, 2}")?;
+    let typechecked_a = compile_str(&db, "#{1, 3}")?;
+    let typechecked_b = compile_str(&db, "#{1, 2}")?;
 
     let rt = Runtime::new();
     let mut tydesc_table = TyDescTable::new(&db);
@@ -1607,8 +1607,8 @@ fn test_cmp_set_greater_by_element() -> AnyResult<()> {
 #[test]
 fn test_cmp_set_with_strings() -> AnyResult<()> {
     let db = Database::default();
-    let typechecked_a = compile_str(&db, r#"set{"apple", "banana"}"#)?;
-    let typechecked_b = compile_str(&db, r#"set{"apple", "cherry"}"#)?;
+    let typechecked_a = compile_str(&db, r#"#{"apple", "banana"}"#)?;
+    let typechecked_b = compile_str(&db, r#"#{"apple", "cherry"}"#)?;
 
     let rt = Runtime::new();
     let mut tydesc_table = TyDescTable::new(&db);

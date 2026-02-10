@@ -16,7 +16,7 @@ DualAnalysis(
                         v0 = const 10int
                         v1 = const 20int
                         v2 = const 30int
-                        v3 = set {v0, v1, v2}
+                        v3 = #{v0, v1, v2}
                         debuglog v3
                         unit_end_drop v3
                         unit_end
@@ -30,15 +30,15 @@ DualAnalysis(
                         v0 = const 10int
                         v1 = const 20int
                         v2 = const 30int
-                        v3 = set {v0, v1, v2}
+                        v3 = #{v0, v1, v2}
                         debuglog v3
                         unit_end_drop v3
                         unit_end
                 """,
             ),
             ir_match: true,
-            interp_output: "set {10, 20, 30}\n",
-            aot_output: "set {10, 20, 30}\n",
+            interp_output: "#{10, 20, 30}\n",
+            aot_output: "#{10, 20, 30}\n",
             output_match: true,
             aot_compile: Some(AotCompileResult(
                 status: "Success",

@@ -2,17 +2,17 @@
   "ast": {
     "expr": {
       "ParseError": {
-        "message": "expected {} after set keyword"
+        "message": "unexpected identifier 'set'"
       }
     },
     "type_hint": null
   },
   "diagnostics": [
     {
-      "code": "D017",
+      "code": "D019",
       "labels": [
         {
-          "message": "expected '{' after 'set'",
+          "message": "unexpected identifier",
           "span": [
             0,
             3
@@ -20,7 +20,7 @@
           "text": "set"
         }
       ],
-      "message": "expected {} after set keyword"
+      "message": "unexpected identifier 'set'"
     }
   ]
 }

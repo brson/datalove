@@ -23,8 +23,8 @@ list_type      = "[", ws, type, ws, "]" ;
 tuple_type     = "(", ws, [ type_list ], ws, ")" ;
 struct_type    = "{", ws, [ type_field_list ], ws, "}" ;
 table_type     = "{|", ws, type_field_list, ws, "|}" ;
-map_type       = "map", ws, "<", ws, type, ws, ",", ws, type, ws, ">" ;
-set_type       = "set", ws, "<", ws, type, ws, ">" ;
+map_type       = "%{", ws, type, ws, "=", ws, type, ws, "}" ;
+set_type       = "#{", ws, type, ws, "}" ;
 tensor_type    = "[|", ws, type, ws, ",", ws, int_lit, ws, "|]" ;
 atom_type      = "atom", ws, ident ;
 term_type      = "term", ws, ident, ws, type ;
@@ -62,8 +62,8 @@ existential_expr = ( "data" | "error" ), ws, full_expr ;
 tuple_expr     = "(", ws, [ expr_list ], ws, ")" ;
 list_expr      = "[", ws, [ expr_list ], ws, "]" ;
 struct_expr    = "{", ws, [ field_list ], ws, "}" ;
-map_expr       = "map", ws, "{", ws, [ entry_list ], ws, "}" ;
-set_expr       = "set", ws, "{", ws, [ expr_list ], ws, "}" ;
+map_expr       = "%{", ws, [ entry_list ], ws, "}" ;
+set_expr       = "#{", ws, [ expr_list ], ws, "}" ;
 
 expr_list      = full_expr, { ws, ",", ws, full_expr }, [ ws, "," ] ;
 full_expr      = [ type_hint ], expr ;
@@ -109,7 +109,7 @@ newline        = "\n" | "\r\n" ;
 
 1. **Type hints precede values**: `: Type / value` syntax annotates the following expression
 2. **Prefix notation for option/result types**: `?T` for Option, `!T` for Result
-3. **Keywords for constructors**: `some`, `ok`, `er`, `none`, `data`, `error`, `map`, `set`. Constructor payloads are `full_expr` (may include inline type hints, e.g. `some : u32 / 42`)
+3. **Keywords for constructors**: `some`, `ok`, `er`, `none`, `data`, `error`. Sigil constructors: `%{` for maps, `#{` for sets. Constructor payloads are `full_expr` (may include inline type hints, e.g. `some : u32 / 42`)
 4. **Struct fields use `=`** in expressions but `:` in type hints
 5. **Tensors**: `[| data |]` with multi-comma separators; spaces separate innermost elements, `,` separates rows, `,,` separates slabs, etc. Shape is inferred from structure. Trailing commas preserve rank when outermost dimension is 1.
 6. **Tables**: pipe-brace delimiters `{| ... |}`, header then data rows

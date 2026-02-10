@@ -52,9 +52,9 @@ The following identifiers are reserved:
 and       atom      break     case      continue  data
 default   else      end       enum      error     er
 false     for       fun       icall     if        import
-in        let       loop      map       match     mut
-none      not       ok        or        out       ref
-require   ret       set       some      table     term
+in        let       loop      match     mut       none
+not       ok        or        out       ref       require
+ret       some      table     term
 true      type      var       while     xor
 ```
 
@@ -122,15 +122,15 @@ The size of `index` is less than or equal to the platform pointer size.
 **Map.** A key-value mapping.
 
 ```
-map<K, V>        // type
-map { 0 = 5 }    // literal
+%{K = V}         // type
+%{ 0 = 5 }       // literal
 ```
 
 **Set.** An unordered collection of unique elements.
 
 ```
-set<T>           // type
-set { 1, 2, 3 }  // literal
+#{T}             // type
+#{ 1, 2, 3 }     // literal
 ```
 
 **Table.** A columnar data structure with named columns.
@@ -326,8 +326,9 @@ through `u64`, `i8` through `i64`), `index`, `offset`, `f32`, `f64`.
 Atoms are always copy. Terms are copy if their payload type is copy.
 Enums are copy if all variant payloads are copy.
 
-**Linear types** have move semantics: `int`, `string`, `list`, `map`, `set`,
-`table`, `data`, `error`. Terms and enums with linear payloads are linear.
+**Linear types** have move semantics: `int`, `string`, `[T]`, `%{K = V}`,
+`#{T}`, `{| ... |}`, `[|T, N|]`, `data`, `error`. Terms and enums with
+linear payloads are linear.
 
 A linear value can be used exactly once. After a value is moved, subsequent
 uses are compile-time errors:

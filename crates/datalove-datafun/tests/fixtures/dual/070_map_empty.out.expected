@@ -13,7 +13,7 @@ DualAnalysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = map {}
+                        v0 = %{}
                         debuglog v0
                         unit_end_drop v0
                         unit_end
@@ -24,15 +24,15 @@ DualAnalysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = map {}
+                        v0 = %{}
                         debuglog v0
                         unit_end_drop v0
                         unit_end
                 """,
             ),
             ir_match: true,
-            interp_output: "map {}\n",
-            aot_output: "map {}\n",
+            interp_output: "%{}\n",
+            aot_output: "%{}\n",
             output_match: true,
             aot_compile: Some(AotCompileResult(
                 status: "Success",

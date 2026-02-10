@@ -26,7 +26,7 @@ where the parser knows where they end without lookahead:
 - Literals: `42`, `"hello"`, `true`, `false`
 - Names and calls: `x`, `foo(a, b)`
 - Parenthesized: `(anything)`
-- Collection literals: `[1, 2]`, `{ x = 1 }`, `set { 1 }`
+- Collection literals: `[1, 2]`, `{ x = 1 }`, `#{ 1 }`
 - Type hints: `: u32 / expr`
 
 Full expressions add binary operators: `x + 1`, `a .> b and c`.
@@ -62,11 +62,11 @@ Only keywords with bare (non-delimited) payloads are affected:
 | `some`, `ok`, `er` | bare expression     | yes      |
 | `data`, `error`    | bare expression     | yes      |
 | `none/true/false`  | none                | no       |
-| `map`, `set`       | `{ ... }` braces    | no       |
+| `%{`, `#{`         | `}` close brace     | no       |
 | `icall`            | `name(args)` parens | no       |
 | `[| ... |]`        | tensor literal       | no       |
 
-Delimiter-enclosed keywords (`map`, `set`, `icall`) and sigil-delimited
+Delimiter-enclosed constructs (`%{`, `#{`, `icall`) and sigil-delimited
 literals (`[| |]` tensors) are immune because brackets/braces/parens mark
 the payload boundary.
 

@@ -28,7 +28,7 @@ expr$
 | Linear type  | Same type, cloned value |
 | Copy type    | **Error**: cannot clone copy type |
 
-Linear types: `int`, `string`, `[@T]`, `@map<K,V>`, `@set<T>`, `@[|T, N|]`, `{| ... |}`, `@data`
+Linear types: `int`, `string`, `[T]`, `%{K = V}`, `#{T}`, `[|T, N|]`, `{| ... |}`, `data`
 
 Copy types: `bool`, `u8`-`u64`, `i8`-`i64`, `f32`
 

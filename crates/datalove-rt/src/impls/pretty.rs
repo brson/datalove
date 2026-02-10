@@ -436,7 +436,7 @@ unsafe fn pretty_map(
         let key_ty = tydesc.map_key_ty();
         let value_ty = tydesc.map_value_ty();
 
-        push_str(rt, string_mut, string_tydesc, b"map {")?;
+        push_str(rt, string_mut, string_tydesc, b"%{")?;
 
         if !map.root.is_null() && map.len > rtdt::Index::ZERO {
             let key_size = key_ty.size() as usize;
@@ -488,7 +488,7 @@ unsafe fn pretty_set(
         let set = &*(value_ref as *const rtdt::Set);
         let elem_ty = tydesc.set_element_ty();
 
-        push_str(rt, string_mut, string_tydesc, b"set {")?;
+        push_str(rt, string_mut, string_tydesc, b"#{")?;
 
         if !set.root.is_null() && set.len > rtdt::Index::ZERO {
             let elem_size = elem_ty.size() as usize;

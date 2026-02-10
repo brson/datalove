@@ -339,25 +339,25 @@ fn test_pretty_list_strings() -> AnyResult<()> {
 
 #[test]
 fn test_pretty_set_empty() -> AnyResult<()> {
-    test_pretty(": set <u32> / set {}", "set {}")
+    test_pretty(": #{u32} / #{}", "#{}")
 }
 
 #[test]
 fn test_pretty_set_single() -> AnyResult<()> {
-    test_pretty(": set <u32> / set { 42 }", "set {42}")
+    test_pretty(": #{u32} / #{42}", "#{42}")
 }
 
 #[test]
 fn test_pretty_set_multiple() -> AnyResult<()> {
     // Sets are ordered, so output should be sorted.
-    test_pretty(": set <u32> / set { 3, 1, 2 }", "set {1, 2, 3}")
+    test_pretty(": #{u32} / #{3, 1, 2}", "#{1, 2, 3}")
 }
 
 #[test]
 fn test_pretty_set_strings() -> AnyResult<()> {
     test_pretty(
-        ": set <string> / set { \"banana\", \"apple\" }",
-        "set {\"apple\", \"banana\"}",
+        ": #{string} / #{\"banana\", \"apple\"}",
+        "#{\"apple\", \"banana\"}",
     )
 }
 
@@ -365,14 +365,14 @@ fn test_pretty_set_strings() -> AnyResult<()> {
 
 #[test]
 fn test_pretty_map_empty() -> AnyResult<()> {
-    test_pretty(": map <u32, string> / map {}", "map {}")
+    test_pretty(": %{u32 = string} / %{}", "%{}")
 }
 
 #[test]
 fn test_pretty_map_single() -> AnyResult<()> {
     test_pretty(
-        ": map <u32, string> / map { 1 = \"one\" }",
-        "map {1 = \"one\"}",
+        ": %{u32 = string} / %{1 = \"one\"}",
+        "%{1 = \"one\"}",
     )
 }
 
@@ -380,16 +380,16 @@ fn test_pretty_map_single() -> AnyResult<()> {
 fn test_pretty_map_multiple() -> AnyResult<()> {
     // Maps are ordered by key.
     test_pretty(
-        ": map <u32, string> / map { 2 = \"two\", 1 = \"one\" }",
-        "map {1 = \"one\", 2 = \"two\"}",
+        ": %{u32 = string} / %{2 = \"two\", 1 = \"one\"}",
+        "%{1 = \"one\", 2 = \"two\"}",
     )
 }
 
 #[test]
 fn test_pretty_map_string_keys() -> AnyResult<()> {
     test_pretty(
-        ": map <string, u32> / map { \"b\" = 2, \"a\" = 1 }",
-        "map {\"a\" = 1, \"b\" = 2}",
+        ": %{string = u32} / %{\"b\" = 2, \"a\" = 1}",
+        "%{\"a\" = 1, \"b\" = 2}",
     )
 }
 
@@ -406,16 +406,16 @@ fn test_pretty_list_of_tuples() -> AnyResult<()> {
 #[test]
 fn test_pretty_map_of_lists() -> AnyResult<()> {
     test_pretty(
-        ": map<string, [u32]> / map{\"nums\" = [1, 2, 3]}",
-        "map {\"nums\" = [1, 2, 3]}",
+        ": %{string = [u32]} / %{\"nums\" = [1, 2, 3]}",
+        "%{\"nums\" = [1, 2, 3]}",
     )
 }
 
 #[test]
 fn test_pretty_set_of_tuples() -> AnyResult<()> {
     test_pretty(
-        ": set<(u32, u32)> / set{(1, 2), (3, 4)}",
-        "set {(1, 2), (3, 4)}",
+        ": #{(u32, u32)} / #{(1, 2), (3, 4)}",
+        "#{(1, 2), (3, 4)}",
     )
 }
 
@@ -430,8 +430,8 @@ fn test_pretty_option_of_list() -> AnyResult<()> {
 #[test]
 fn test_pretty_deeply_nested() -> AnyResult<()> {
     test_pretty(
-        ": map<string, ?[(u32, bool)]> / map{\"data\" = some [(1, true)]}",
-        "map {\"data\" = some [(1, true)]}",
+        ": %{string = ?[(u32, bool)]} / %{\"data\" = some [(1, true)]}",
+        "%{\"data\" = some [(1, true)]}",
     )
 }
 

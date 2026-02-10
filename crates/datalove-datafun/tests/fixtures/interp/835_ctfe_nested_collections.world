@@ -3,5 +3,5 @@ scriptunit-fragment
 ----------
 
 // CTFE nested collections: struct containing a set.
-const X: { nums: set<u32>, val: u32 } = { nums: set { 1, 2, 3 }, val: 42 }
+const X: { nums: #{u32}, val: u32 } = { nums: #{ 1, 2, 3 }, val: 42 }
 debuglog X

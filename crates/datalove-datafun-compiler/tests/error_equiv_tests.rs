@@ -863,7 +863,7 @@ fn test_debug_specific_bracket_cases() {
     // Case 2: ExtraClosingBracket seed 39
     // Type hint in second map entry: {y)7: u8, y0: u8}
     // After bracer removes unmatched ): {y7: u8, y0: u8}
-    let source2 = ": map<i32, {y7: u8, y0: u8}> / map {: i32 / 108 = : {y7: u8, y0: u8} / {y7 = : u8 / 88, y0 = : u8 / 237}, : i32 / 73 = : {y)7: u8, y0: u8} / {y7 = : u8 / 44, y0 = : u8 / 168}}";
+    let source2 = ": %{i32 = {y7: u8, y0: u8}} / %{: i32 / 108 = : {y7: u8, y0: u8} / {y7 = : u8 / 88, y0 = : u8 / 237}, : i32 / 73 = : {y)7: u8, y0: u8} / {y7 = : u8 / 44, y0 = : u8 / 168}}";
     eprintln!("=== Case 2: ExtraClosingBracket ===");
     eprintln!("Source: {}", source2);
 

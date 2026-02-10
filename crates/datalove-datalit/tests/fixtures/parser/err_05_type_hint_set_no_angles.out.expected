@@ -6,25 +6,8 @@
       }
     },
     "type_hint": {
-      "ParseError": {
-        "message": "expected <> after set keyword"
-      }
+      "Alias": "set"
     }
   },
-  "diagnostics": [
-    {
-      "code": "D006",
-      "labels": [
-        {
-          "message": "expected '<' after 'set'",
-          "span": [
-            2,
-            5
-          ],
-          "text": "set"
-        }
-      ],
-      "message": "expected <> after set keyword"
-    }
-  ]
+  "diagnostics": []
 }

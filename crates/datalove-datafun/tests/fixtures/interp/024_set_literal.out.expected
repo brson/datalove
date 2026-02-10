@@ -17,11 +17,11 @@ Analysis(
                         v0 = const 5int
                         v1 = const 10int
                         v2 = const 15int
-                        v3 = set {v0, v1, v2}
+                        v3 = #{v0, v1, v2}
                         unit_end v3
                 """,
             ),
-            output: "set {5, 10, 15}",
+            output: "#{5, 10, 15}",
         ),
     ],
 )

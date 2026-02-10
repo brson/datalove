@@ -1,13 +1,24 @@
 {
   "ast": {
     "expr": {
-      "ParseError": {
-        "message": "expected '/' after type hint"
+      "Set": {
+        "elements": [
+          {
+            "expr": {
+              "ParseError": {
+                "message": "unexpected identifier 'x'"
+              }
+            },
+            "type_hint": null
+          }
+        ]
       }
     },
     "type_hint": {
-      "ParseError": {
-        "message": "unexpected token in type hint"
+      "Set": {
+        "element_type": {
+          "Alias": "x"
+        }
       }
     }
   },

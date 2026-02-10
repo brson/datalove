@@ -1,11 +1,25 @@
 {
-  "diagnostics": [],
-  "errors": [],
-  "judgements": [
+  "diagnostics": [
     {
-      "kind": "variable",
-      "name": "x",
-      "type": "set<int>"
+      "code": "F001",
+      "labels": [
+        {
+          "message": "not found in this scope",
+          "span": [
+            8,
+            11
+          ],
+          "text": "set"
+        }
+      ],
+      "message": "cannot find value `set` in this scope"
     }
-  ]
+  ],
+  "errors": [
+    {
+      "kind": "UnresolvedName",
+      "name": "set"
+    }
+  ],
+  "judgements": []
 }

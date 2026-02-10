@@ -144,12 +144,6 @@ impl<'db> Parser<'db> {
                 let value = self.parse_expr_primary();
                 return ast::ExprFunKind::Error(ast::ExprError { type_hint, value });
             }
-            Some("map") => {
-                return self.parse_lit_map(type_hint);
-            }
-            Some("set") => {
-                return self.parse_lit_set(type_hint);
-            }
             _ => {}
         }
 
@@ -231,6 +225,24 @@ impl<'db> Parser<'db> {
             Some(TreeToken::Branch { sigil: Sigil::BracketOpen, .. }) => {
                 // List.
                 return self.parse_lit_list(type_hint);
+            }
+            Some(TreeToken::Branch { sigil: Sigil::PercentBraceOpen, .. }) => {
+                // Map: %{k = v, ...}
+                let inner = match self.next() {
+                    Some(TreeToken::Branch { sigil: Sigil::PercentBraceOpen, inner, .. }) => inner,
+                    _ => unreachable!(),
+                };
+                let entries = self.parse_comma_separated_map_entries(inner);
+                return ast::ExprFunKind::Map(ast::ExprMap { type_hint, entries });
+            }
+            Some(TreeToken::Branch { sigil: Sigil::HashBraceOpen, .. }) => {
+                // Set: #{e, ...}
+                let inner = match self.next() {
+                    Some(TreeToken::Branch { sigil: Sigil::HashBraceOpen, inner, .. }) => inner,
+                    _ => unreachable!(),
+                };
+                let elements = self.parse_comma_separated_exprs(inner);
+                return ast::ExprFunKind::Set(ast::ExprSet { type_hint, elements });
             }
             Some(TreeToken::Branch { sigil: Sigil::BracePipeOpen, .. }) => {
                 // Table.
@@ -321,49 +333,6 @@ impl<'db> Parser<'db> {
         let elements = self.parse_comma_separated_exprs(inner);
         ast::ExprFunKind::List(ast::ExprList { type_hint, elements })
     }
-
-    /// Parse set: set { expr, expr, ... }
-    fn parse_lit_set(
-        &mut self,
-        type_hint: Option<datalit::ast::TypeHint<'db>>,
-    ) -> ast::ExprFunKind<'db> {
-        self.eat_word("set");
-        let inner = match self.next() {
-            Some(TreeToken::Branch { sigil: Sigil::BraceOpen, inner, .. }) => inner,
-            _ => {
-                let ts = self.peek_text_span();
-                return ast::ExprFunKind::ParseError(ast::ExprFunParseError {
-                    text: ts.text, span: ts.span.C(),
-                    message: InternedText::new(self.db, "expected '{' after 'set'".S()),
-                });
-            }
-        };
-
-        let elements = self.parse_comma_separated_exprs(inner);
-        ast::ExprFunKind::Set(ast::ExprSet { type_hint, elements })
-    }
-
-    /// Parse map: map { key = value, ... }
-    fn parse_lit_map(
-        &mut self,
-        type_hint: Option<datalit::ast::TypeHint<'db>>,
-    ) -> ast::ExprFunKind<'db> {
-        self.eat_word("map");
-        let inner = match self.next() {
-            Some(TreeToken::Branch { sigil: Sigil::BraceOpen, inner, .. }) => inner,
-            _ => {
-                let ts = self.peek_text_span();
-                return ast::ExprFunKind::ParseError(ast::ExprFunParseError {
-                    text: ts.text, span: ts.span.C(),
-                    message: InternedText::new(self.db, "expected '{' after 'map'".S()),
-                });
-            }
-        };
-
-        let entries = self.parse_comma_separated_map_entries(inner);
-        ast::ExprFunKind::Map(ast::ExprMap { type_hint, entries })
-    }
-
 
     /// Parse tensor with multi-comma syntax: [| data |]
     fn parse_lit_tensor_multicomma(

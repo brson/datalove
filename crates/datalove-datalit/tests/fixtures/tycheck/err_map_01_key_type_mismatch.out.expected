@@ -38,8 +38,8 @@
         {
           "message": "expected `u32`, found `string`",
           "span": [
-            28,
-            33
+            23,
+            28
           ],
           "text": "\"bad\""
         }

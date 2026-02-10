@@ -4,21 +4,33 @@ AotAnalysis(
             section_type: "scriptunit-fragment",
             name: None,
             typecheck: TypecheckResult(
-                status: "ParseError",
-                errors: [
-                    "unclosed \'<\'",
-                    "unmatched \']\'",
-                    "unexpected token after type",
-                    "expected \'=\' after let binding",
-                ],
+                status: "Success",
             ),
             ownership: OwnershipResult(
-                status: "Skipped",
+                status: "Success",
             ),
             lowering: LoweringResult(
-                status: "Skipped",
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = #{}
+                        debuglog v0
+                        unit_end_drop v0
+                        unit_end
+                """,
             ),
-            output: "",
+            aot_compile: Some(AotCompileResult(
+                status: "Success",
+            )),
+            link: Some(LinkResult(
+                status: "Success",
+            )),
+            execution: Some(ExecutionResult(
+                status: "Success",
+                exit_code: 0,
+            )),
+            output: "#{}\n",
         ),
     ],
 )

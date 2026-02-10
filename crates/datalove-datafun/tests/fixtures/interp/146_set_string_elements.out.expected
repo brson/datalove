@@ -17,7 +17,7 @@ Analysis(
                         v0 = const "alice"
                         v1 = const "bob"
                         v2 = const "charlie"
-                        v3 = set {v0, v1, v2}
+                        v3 = #{v0, v1, v2}
                         unit_end_drop v3
                         unit_end
                 """,
@@ -42,7 +42,7 @@ Analysis(
                         unit_end v0
                 """,
             ),
-            output: "set {\"alice\", \"bob\", \"charlie\"}",
+            output: "#{\"alice\", \"bob\", \"charlie\"}",
         ),
     ],
 )
