@@ -181,6 +181,22 @@ case term Tri sides
 end match
 ```
 
+There is no deep destructuring,
+just a single binding for the whole payload.
+Matches move out of their input.
+
+Match must be exhaustive;
+use `case default` for a catch-all.
+
+```datalove
+match s
+case atom Circle
+  area = 0.0
+case default
+  area = 1.0
+end match
+```
+
 
 
 

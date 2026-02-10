@@ -1,4 +1,4 @@
-## The Datatypes of Datalove Literals
+# The Datatypes of Datalove Literals
 
 Datalove's datatypes, their representation,
 and semantics are focused on readability,
@@ -168,7 +168,69 @@ to any other types.
 
 ## Anonymous structs
 
+## Atoms
+
+Atoms are named unit values that introduce a name component to the structural type system.
+
+Two atoms with the same name are type-compatible;
+two atoms with different names are not.
+
+```datalove
+let a = atom Foo
+let b: atom Foo = atom Foo
+
+var c = atom Foo
+set c = atom Foo     // ok - same name
+set c = atom Bar     // error - different name
+```
+
+
+## Terms
+
+Terms are like atoms but carry a typed value,
+parsed as a primary expression (no binops).
+
+The name and the inner type must both match for type compatibility.
+
+```datalove
+let a = term Foo 1
+let a = term Foo (1,)     // tuple payload
+let a = term Bar 1
+let b = term Baz #{ 1 }
+
+let d: term Foo int = term Foo 1
+
+// The name and type must match.
+var c = term What [1]
+set c = term What [1, 2]
+```
+
+
 ## Anonymous enums
+
+Anonymous enums are sets of atom and term types
+where all the names are unique.
+
+```datalove
+type MyEnum: enum {
+  atom Foo,
+  term Bar int,
+  term Baz (f32, f32),
+}
+
+// Full enum literal form (requires checking context)
+let a: MyEnum = enum { atom Foo }
+
+// Coercion with @
+let b: MyEnum = atom Foo@
+let c: MyEnum = term Bar 1@
+```
+
+Only `atom` and `term` types are allowed in enums.
+The full enum literal form does not synthesize a type;
+it must be in a checking context.
+
+Enums are destructured with `match`; see types-lits-destr.md.
 
 ## Strings
 
