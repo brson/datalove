@@ -967,6 +967,11 @@ impl RemapContext {
                     args: value.iter().map(|v| self.remap_operand(v)).collect(),
                 }
             }
+            Terminator::Switch { discriminant, cases, default } => Terminator::Switch {
+                discriminant: self.remap_operand(discriminant),
+                cases: cases.iter().map(|(v, b)| (*v, self.remap_block(*b))).collect(),
+                default: self.remap_block(*default),
+            },
             // UnitEnd/UnitEarlyReturn shouldn't appear in function bodies being inlined.
             Terminator::UnitEnd { result } => Terminator::UnitEnd {
                 result: result.as_ref().map(|v| self.remap_operand(v)),

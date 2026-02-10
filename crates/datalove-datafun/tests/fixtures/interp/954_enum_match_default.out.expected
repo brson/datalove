@@ -16,20 +16,18 @@ Analysis(
                     block0:
                         v0 = enum_variant 0
                         v1 = enum_discriminant v0
-                        v2 = const 1u32
-                        v3 = eq v1, v2
-                        branch v3, block1, block2
+                        switch v1, [1 => block1], default => block2
                     block1:
                         drop v0
-                        v4 = const "cat"
-                        debuglog v4
-                        drop v4
+                        v2 = const "cat"
+                        debuglog v2
+                        drop v2
                         goto block3
                     block2:
                         drop v0
-                        v5 = const "other"
-                        debuglog v5
-                        drop v5
+                        v3 = const "other"
+                        debuglog v3
+                        drop v3
                         goto block3
                     block3:
                         unit_end

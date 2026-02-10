@@ -2359,6 +2359,15 @@ impl<'a> FunctionCodegenContext<'a> {
 
                 writeln!(out, "    return;").unwrap();
             }
+            Terminator::Switch { discriminant, cases, default } => {
+                let disc_addr = self.operand_addr(discriminant);
+                writeln!(out, "    switch (*(uint32_t*){}) {{", disc_addr).unwrap();
+                for (val, target) in cases {
+                    writeln!(out, "    case {}: goto __block_{};", val, target.0).unwrap();
+                }
+                writeln!(out, "    default: goto __block_{};", default.0).unwrap();
+                writeln!(out, "    }}").unwrap();
+            }
         }
         Ok(())
     }

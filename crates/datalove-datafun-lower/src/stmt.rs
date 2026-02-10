@@ -5,7 +5,7 @@
 
 use bct::text::InternedText;
 use datalove_datafun_ast::ast::{self, Statement, ExprFun, ExprFunKind};
-use datalove_datafun_ir::{IrType, Operand, Instruction, Terminator, SlotDest, ParamMode, ConstValue};
+use datalove_datafun_ir::{IrType, Operand, Instruction, Terminator, SlotDest, ParamMode};
 use super::context::LowerCtx;
 use super::expr::{lower_expression, lower_expression_for_ref};
 use super::LowerError;
@@ -724,10 +724,10 @@ pub(super) fn collect_field_path<'db>(
 
 /// Lower a match statement.
 ///
-/// Compiles enum match to a chain of discriminant comparisons:
+/// Compiles enum match to a switch on the discriminant:
 /// 1. Lower input expression
 /// 2. Extract discriminant
-/// 3. For each case arm, compare discriminant and branch
+/// 3. Emit a single Switch terminator dispatching to arm blocks
 /// 4. In each arm: extract payload (for term cases), lower body, emit drops
 pub fn lower_match<'db>(
     ctx: &mut LowerCtx<'db>,
@@ -756,16 +756,13 @@ pub fn lower_match<'db>(
     let num_cases = match_stmt.cases.len();
     let has_default = match_stmt.default_body.is_some();
 
-    // Pre-allocate blocks for each arm body and each check.
+    // Pre-allocate blocks for each arm body.
     let arm_blocks: Vec<_> = (0..num_cases).map(|_| ctx.fresh_block()).collect();
     let default_block = if has_default { Some(ctx.fresh_block()) } else { None };
-    // Check blocks: one for each case except the first (first check is in current block).
-    let mut next_check_blocks: Vec<_> = (1..num_cases).map(|_| ctx.fresh_block()).collect();
-    // After last case, fall through to default or merge (unreachable if exhaustive).
-    let final_else = default_block.unwrap_or(merge_block);
-    next_check_blocks.push(final_else);
+    let fallthrough = default_block.unwrap_or(merge_block);
 
-    // Emit discriminant checks and branches.
+    // Build switch cases: (variant_index, arm_block).
+    let mut switch_cases = Vec::new();
     for (i, case) in match_stmt.cases.iter().enumerate() {
         let name_str = match &case.kind {
             ast::MatchCaseKind::Atom { name } => name.as_str(ctx.db),
@@ -777,29 +774,28 @@ pub fn lower_match<'db>(
             .unwrap_or_else(|| panic!("match case '{}' not found in enum", name_str))
             as u32;
 
-        // Compare discriminant.
-        let vi = ctx.fresh_value(IrType::U32);
-        ctx.emit(Instruction::Const {
-            dest: vi,
-            value: ConstValue::U32(variant_index),
-        });
-        let cmp = ctx.fresh_value(IrType::Bool);
-        ctx.emit(Instruction::BinOp {
-            dest: cmp,
-            op: datalove_datafun_ir::BinOp::Eq,
-            lhs: Operand::Value(disc_id),
-            rhs: Operand::Value(vi),
-        });
+        switch_cases.push((variant_index, arm_blocks[i]));
+    }
 
-        ctx.finish_block(Terminator::Branch {
-            cond: Operand::Value(cmp),
-            then_block: arm_blocks[i],
-            then_args: Vec::new(),
-            else_block: next_check_blocks[i],
-            else_args: Vec::new(),
-        });
+    // Emit a single switch terminator.
+    ctx.finish_block(Terminator::Switch {
+        discriminant: Operand::Value(disc_id),
+        cases: switch_cases,
+        default: fallthrough,
+    });
 
-        // Start the arm body block.
+    // Emit arm body blocks.
+    for (i, case) in match_stmt.cases.iter().enumerate() {
+        let name_str = match &case.kind {
+            ast::MatchCaseKind::Atom { name } => name.as_str(ctx.db),
+            ast::MatchCaseKind::Term { name, .. } => name.as_str(ctx.db),
+        };
+
+        let variant_index = variants.iter()
+            .position(|(n, _)| n == name_str)
+            .unwrap_or_else(|| panic!("match case '{}' not found in enum", name_str))
+            as u32;
+
         ctx.start_block(arm_blocks[i]);
 
         // For term cases, extract payload and bind variable.
@@ -833,11 +829,6 @@ pub fn lower_match<'db>(
         if !arm_terminated {
             ctx.emit_match_arm_drops(stmt_idx, i);
             ctx.finish_block(Terminator::Goto { target: merge_block, args: Vec::new() });
-        }
-
-        // Start next check block (unless this is the last case).
-        if i + 1 < num_cases {
-            ctx.start_block(next_check_blocks[i]);
         }
     }
 

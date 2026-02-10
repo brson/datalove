@@ -660,6 +660,14 @@ impl fmt::Display for Terminator {
             Terminator::UnitEarlyReturn { value } => {
                 write!(f, "unit_early_return {}", value)
             }
+            Terminator::Switch { discriminant, cases, default } => {
+                write!(f, "switch {}, [", discriminant)?;
+                for (i, (val, block)) in cases.iter().enumerate() {
+                    if i > 0 { write!(f, ", ")?; }
+                    write!(f, "{} => {}", val, block)?;
+                }
+                write!(f, "], default => {}", default)
+            }
         }
     }
 }

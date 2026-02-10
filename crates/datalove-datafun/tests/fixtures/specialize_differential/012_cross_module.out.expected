@@ -16,7 +16,7 @@ Analysis(
                 ir: """
                     fn scale(p0, p1):
                     block0:
-                        goto block1
+                        switch p0, [0 => block1], default => block1
                     block1:
                         drop p0
                         v1 = const 3int

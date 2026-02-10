@@ -15,36 +15,26 @@ DualAnalysis(
                     block0:
                         v0 = enum_variant 2
                         v1 = enum_discriminant v0
-                        v2 = const 2u32
-                        v3 = eq v1, v2
-                        branch v3, block1, block2
+                        switch v1, [2 => block1, 1 => block2, 0 => block3], default => block4
                     block1:
                         drop v0
-                        v4 = const "red"
-                        debuglog v4
-                        drop v4
-                        goto block6
+                        v2 = const "red"
+                        debuglog v2
+                        drop v2
+                        goto block4
                     block2:
-                        v5 = const 1u32
-                        v6 = eq v1, v5
-                        branch v6, block3, block4
+                        drop v0
+                        v3 = const "green"
+                        debuglog v3
+                        drop v3
+                        goto block4
                     block3:
                         drop v0
-                        v7 = const "green"
-                        debuglog v7
-                        drop v7
-                        goto block6
+                        v4 = const "blue"
+                        debuglog v4
+                        drop v4
+                        goto block4
                     block4:
-                        v8 = const 0u32
-                        v9 = eq v1, v8
-                        branch v9, block5, block6
-                    block5:
-                        drop v0
-                        v10 = const "blue"
-                        debuglog v10
-                        drop v10
-                        goto block6
-                    block6:
                         unit_end
                 """,
             ),
@@ -55,36 +45,26 @@ DualAnalysis(
                     block0:
                         v0 = enum_variant 2
                         v1 = enum_discriminant v0
-                        v2 = const 2u32
-                        v3 = eq v1, v2
-                        branch v3, block1, block2
+                        switch v1, [2 => block1, 1 => block2, 0 => block3], default => block4
                     block1:
                         drop v0
-                        v4 = const "red"
-                        debuglog v4
-                        drop v4
-                        goto block6
+                        v2 = const "red"
+                        debuglog v2
+                        drop v2
+                        goto block4
                     block2:
-                        v5 = const 1u32
-                        v6 = eq v1, v5
-                        branch v6, block3, block4
+                        drop v0
+                        v3 = const "green"
+                        debuglog v3
+                        drop v3
+                        goto block4
                     block3:
                         drop v0
-                        v7 = const "green"
-                        debuglog v7
-                        drop v7
-                        goto block6
+                        v4 = const "blue"
+                        debuglog v4
+                        drop v4
+                        goto block4
                     block4:
-                        v8 = const 0u32
-                        v9 = eq v1, v8
-                        branch v9, block5, block6
-                    block5:
-                        drop v0
-                        v10 = const "blue"
-                        debuglog v10
-                        drop v10
-                        goto block6
-                    block6:
                         unit_end
                 """,
             ),

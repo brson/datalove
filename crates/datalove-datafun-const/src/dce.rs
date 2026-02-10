@@ -162,6 +162,12 @@ pub fn eliminate_dead_blocks_func(func: &mut IrCodeUnit) {
                     worklist.push(*then_block);
                     worklist.push(*else_block);
                 }
+                Terminator::Switch { cases, default, .. } => {
+                    for (_, target) in cases {
+                        worklist.push(*target);
+                    }
+                    worklist.push(*default);
+                }
                 Terminator::Return { .. }
                 | Terminator::UnitEnd { .. }
                 | Terminator::UnitEarlyReturn { .. } => {
@@ -202,6 +208,12 @@ pub fn eliminate_dead_blocks_func(func: &mut IrCodeUnit) {
             Terminator::Branch { then_block, else_block, .. } => {
                 *then_block = *old_to_new.get(then_block).unwrap();
                 *else_block = *old_to_new.get(else_block).unwrap();
+            }
+            Terminator::Switch { cases, default, .. } => {
+                for (_, target) in cases.iter_mut() {
+                    *target = *old_to_new.get(target).unwrap();
+                }
+                *default = *old_to_new.get(default).unwrap();
             }
             Terminator::Return { .. }
             | Terminator::UnitEnd { .. }
@@ -293,6 +305,9 @@ fn collect_block_used_values(block: &IrBlock, used: &mut HashSet<ValueId>) {
         }
         Terminator::UnitEarlyReturn { value } => {
             add_operand_value(value, used);
+        }
+        Terminator::Switch { discriminant, .. } => {
+            add_operand_value(discriminant, used);
         }
         _ => {}
     }

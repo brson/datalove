@@ -1318,6 +1318,15 @@ pub enum Terminator {
         else_args: Vec<Operand>,
     },
 
+    /// Multi-way branch on an integer discriminant.
+    ///
+    /// Maps directly to jump tables in backends. No block args.
+    Switch {
+        discriminant: Operand,
+        cases: Vec<(u32, BlockId)>,
+        default: BlockId,
+    },
+
     /// Return from a function.
     Return { value: Option<Operand> },
 

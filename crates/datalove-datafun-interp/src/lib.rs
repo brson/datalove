@@ -418,6 +418,15 @@ impl IrInterpreter {
                         current_block = *else_block;
                     }
                 }
+                Terminator::Switch { discriminant, cases, default } => {
+                    let disc_val = self.read_operand(discriminant, frame, frames);
+                    let disc_u32 = unsafe { *(disc_val.ptr as *const u32) };
+                    let target = cases.iter()
+                        .find(|(v, _)| *v == disc_u32)
+                        .map(|(_, b)| *b)
+                        .unwrap_or(*default);
+                    current_block = target;
+                }
                 Terminator::Return { value } => {
                     if let Some(op) = value {
                         let val = self.read_operand(op, frame, frames);

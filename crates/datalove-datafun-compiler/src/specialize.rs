@@ -46,7 +46,7 @@
 use std::collections::HashMap;
 use datalove_datafun_ir::{
     ConstValue, IrCodeUnit, IrBlock, Instruction, Terminator, Operand,
-    ValueId, BlockId, FuncId, CodeRef, IrType, BinOp, ParamMode, ParamId,
+    ValueId, BlockId, FuncId, CodeRef, IrType, ParamMode, ParamId,
     IrModuleId, CallSiteId, CodeUnitContext, FunctionContext, SymbolTable,
 };
 use datalove_datafun_common::ComptimeCallSiteRegistry;
@@ -268,7 +268,6 @@ fn build_dispatch_blocks(
 
     let mut blocks = Vec::new();
     let mut next_value = original.value_count;
-    let mut next_block_id = 0u32;
     let mut value_types = original.value_types.clone();
 
     // Helper to allocate a fresh value.
@@ -280,72 +279,31 @@ fn build_dispatch_blocks(
     };
 
     // Block IDs:
-    // 0..num_variants-1: dispatch chain
-    // num_variants..: body blocks for each variant
+    // 0: dispatch block (switch)
+    // 1..: body blocks for each variant
 
     let num_original_blocks = original.blocks.len();
-    let body_base_offset = num_variants as u32;
+    let body_base_offset = 1u32;
 
-    // Create dispatch chain.
-    // For n variants, we need n-1 comparison blocks, plus direct jumps.
-    for variant_idx in 0..num_variants {
-        let block_id = BlockId(next_block_id);
-        next_block_id += 1;
+    // Create single dispatch block with Switch terminator.
+    let dispatch_block_id = BlockId(0);
 
-        if variant_idx == num_variants - 1 {
-            // Last variant: no comparison needed, just jump to its body.
-            blocks.push(IrBlock {
-                id: block_id,
-                params: Vec::new(),
-                instructions: Vec::new(),
-                terminator: Terminator::Goto {
-                    target: BlockId(body_base_offset + (variant_idx as u32) * (num_original_blocks as u32)),
-                    args: Vec::new(),
-                },
-            });
-        } else {
-            // Compare discriminant (param 0) with variant index.
-            let cmp_val = fresh_value(IrType::Bool);
-            let variant_const_val = fresh_value(IrType::I32);
+    let cases: Vec<(u32, BlockId)> = (0..num_variants)
+        .map(|vi| (vi as u32, BlockId(body_base_offset + (vi as u32) * (num_original_blocks as u32))))
+        .collect();
+    // Default goes to last variant (should be unreachable for well-typed code).
+    let default_target = BlockId(body_base_offset + ((num_variants - 1) as u32) * (num_original_blocks as u32));
 
-            let instructions = vec![
-                // Load constant for this variant index
-                Instruction::Const {
-                    dest: variant_const_val,
-                    value: ConstValue::I32(variant_idx as i32),
-                },
-                // Compare: discriminant (param 0) == variant index
-                // Use BinOp instruction for comparison
-                Instruction::BinOp {
-                    dest: cmp_val,
-                    op: BinOp::Eq,
-                    lhs: Operand::Param(ParamId(0)), // Discriminant is param 0
-                    rhs: Operand::Value(variant_const_val),
-                },
-                // Drop the comparison constant after use
-                Instruction::Drop {
-                    operand: Operand::Value(variant_const_val),
-                },
-            ];
-
-            // Branch: if discriminant matches, go to body; else continue chain.
-            let then_block = BlockId(body_base_offset + (variant_idx as u32) * (num_original_blocks as u32));
-            let else_block = BlockId((variant_idx + 1) as u32); // Next dispatch block
-
-            blocks.push(IrBlock {
-                id: block_id,
-                params: if variant_idx == 0 { original.blocks[0].params.clone() } else { Vec::new() },
-                instructions,
-                terminator: Terminator::Branch {
-                    cond: Operand::Value(cmp_val),
-                    then_block,
-                    then_args: Vec::new(),
-                    else_block,
-                    else_args: Vec::new(),
-                },
-            });
-        }
-    }
+    blocks.push(IrBlock {
+        id: dispatch_block_id,
+        params: original.blocks[0].params.clone(),
+        instructions: Vec::new(),
+        terminator: Terminator::Switch {
+            discriminant: Operand::Param(ParamId(0)),
+            cases,
+            default: default_target,
+        },
+    });
 
     // Clone body blocks for each variant.
     for (variant_idx, values) in spec.instantiations.iter().enumerate() {
@@ -422,6 +380,11 @@ fn remap_terminator_blocks(term: &Terminator, block_offset: u32, _num_blocks: u3
                 else_args: else_args.clone(),
             }
         }
+        Terminator::Switch { discriminant, cases, default } => Terminator::Switch {
+            discriminant: discriminant.clone(),
+            cases: cases.iter().map(|(v, b)| (*v, BlockId(block_offset + b.0))).collect(),
+            default: BlockId(block_offset + default.0),
+        },
         Terminator::Return { value } => Terminator::Return { value: value.clone() },
         Terminator::UnitEnd { result } => Terminator::UnitEnd { result: result.clone() },
         Terminator::UnitEarlyReturn { value } => Terminator::UnitEarlyReturn { value: value.clone() },
@@ -562,6 +525,11 @@ fn rewrite_comptime_params_in_terminator(
             then_args: then_args.iter().map(rewrite_operand).collect(),
             else_block: *else_block,
             else_args: else_args.iter().map(rewrite_operand).collect(),
+        },
+        Terminator::Switch { discriminant, cases, default } => Terminator::Switch {
+            discriminant: rewrite_operand(discriminant),
+            cases: cases.clone(),
+            default: *default,
         },
     }
 }

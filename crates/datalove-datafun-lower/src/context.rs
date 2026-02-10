@@ -1321,6 +1321,12 @@ impl<'db> LowerCtx<'db> {
                     *then_block = BlockId(id_map[then_block.0 as usize]);
                     *else_block = BlockId(id_map[else_block.0 as usize]);
                 }
+                Terminator::Switch { cases, default, .. } => {
+                    for (_, block) in cases.iter_mut() {
+                        *block = BlockId(id_map[block.0 as usize]);
+                    }
+                    *default = BlockId(id_map[default.0 as usize]);
+                }
                 Terminator::Return { .. }
                 | Terminator::UnitEnd { .. }
                 | Terminator::UnitEarlyReturn { .. } => {}

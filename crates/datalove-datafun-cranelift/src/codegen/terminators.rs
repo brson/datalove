@@ -1,7 +1,7 @@
 //! Terminator instruction compilation.
 
 use cranelift_codegen::ir::InstBuilder;
-use cranelift_frontend::FunctionBuilder;
+use cranelift_frontend::{FunctionBuilder, Switch};
 use cranelift_module::Module;
 
 use datalove_datafun_ir::Terminator;
@@ -73,6 +73,15 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 self.compile_debuglog(builder, value)?;
                 self.compile_drop(builder, value)?;
                 builder.ins().return_(&[]);
+            }
+            Terminator::Switch { discriminant, cases, default } => {
+                let disc_val = self.get_operand_value(builder, discriminant)?;
+                let default_block = self.blocks[default];
+                let mut switch = Switch::new();
+                for (val, target) in cases {
+                    switch.set_entry(*val as u128, self.blocks[target]);
+                }
+                switch.emit(builder, disc_val, default_block);
             }
         }
         Ok(())

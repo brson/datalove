@@ -173,17 +173,32 @@ fn inline_block_consts(block: &mut IrBlock, value_to_const: &HashMap<ValueId, Co
         if let Operand::Value(cond_vid) = cond {
             if let Some(&cond_value) = const_bools.get(cond_vid) {
                 block.terminator = if cond_value {
-                    // Condition is true, go to then_block.
                     Terminator::Goto {
                         target: *then_block,
                         args: then_args.clone(),
                     }
                 } else {
-                    // Condition is false, go to else_block.
                     Terminator::Goto {
                         target: *else_block,
                         args: else_args.clone(),
                     }
+                };
+            }
+        }
+    }
+
+    // Simplify constant switches: if the discriminant is a known constant,
+    // replace with Goto to the matching case or default.
+    if let Terminator::Switch { discriminant, cases, default } = &block.terminator {
+        if let Operand::Value(disc_vid) = discriminant {
+            if let Some(ConstValue::U32(disc_val)) = value_to_const.get(disc_vid) {
+                let target = cases.iter()
+                    .find(|(v, _)| v == disc_val)
+                    .map(|(_, b)| *b)
+                    .unwrap_or(*default);
+                block.terminator = Terminator::Goto {
+                    target,
+                    args: Vec::new(),
                 };
             }
         }
