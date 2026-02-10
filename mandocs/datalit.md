@@ -5,6 +5,11 @@ a typed declarative expression language for
 serializing, storing and transmitting
 common data types.
 
+
+
+
+## Datalove literal expressions
+
 All expressions
 may be prefixed with a type hint,
 `: type / expr`.
@@ -17,6 +22,26 @@ All Datalove literal expressions
 synthesize some type in absence of type hints,
 though in some cases it may be required
 to use type hints to reliably produce a desired type.
+
+```ebnf
+datalit        = ws, full_expr, ws ;
+full_expr      = [ type_hint ], expr ;
+type_hint      = ":", ws, type, ws, "/" ;
+expr           =
+               | bool_lit
+               | numeric_lit
+               | string_lit
+               | tuple_expr
+               | struct_expr
+               | option_expr
+               | result_expr
+               | list_expr
+               | map_expr
+               | set_expr
+               | table_expr
+               | tensor_expr
+               | existential_expr ;
+```
 
 
 
@@ -45,7 +70,8 @@ both 32-bit by default.
 Integers and floats can be created from hex literals.
 Hex literals synthesize `int`, but check
 as unsigned fixed ints or floats if provided a type hint.
-This is the only way to provide bit-exact floats, including NaN patterns.
+This is the only way to write bit-exact floats,
+NaNs and infinity.
 
 ```datalove
 : {
@@ -55,7 +81,7 @@ This is the only way to provide bit-exact floats, including NaN patterns.
 } / {
   foo = 0x01,
   bar = 0x02,
-  baz = 0x03,
+  baz = 0x03000000, // float hex literals must have correct # digits
 }
 ```
 
