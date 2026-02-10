@@ -63,11 +63,12 @@ Only keywords with bare (non-delimited) payloads are affected:
 | `data`, `error`    | bare expression     | yes      |
 | `none/true/false`  | none                | no       |
 | `map`, `set`       | `{ ... }` braces    | no       |
-| `tensor`           | `[shape] [data]`    | no       |
 | `icall`            | `name(args)` parens | no       |
+| `[| ... |]`        | tensor literal       | no       |
 
-Delimiter-enclosed keywords (`map`, `set`, `tensor`, `icall`)
-are immune because brackets/braces/parens mark the payload boundary.
+Delimiter-enclosed keywords (`map`, `set`, `icall`) and sigil-delimited
+literals (`[| |]` tensors) are immune because brackets/braces/parens mark
+the payload boundary.
 
 Future `atom` (no payload) is unaffected.
 Future `term` (bare payload) would be affected.

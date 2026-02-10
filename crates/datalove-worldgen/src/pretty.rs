@@ -121,37 +121,11 @@ fn write_expr<'db>(
         }
 
         Expr::Tensor(t) => {
-            out.push_str("tensor [");
-            for (i, &dim) in t.shape.iter().enumerate() {
-                if i > 0 {
-                    out.push_str(", ");
-                }
-                out.push_str(&dim.to_string());
-            }
-            out.push_str("] [");
-            let rank = t.shape.len();
-            if rank == 1 {
-                for (i, elem) in t.elements.iter().enumerate() {
-                    if i > 0 {
-                        out.push_str(", ");
-                    }
-                    write_expr_full(db, *elem, out);
-                }
-            } else {
-                let row_size = *t.shape.last().unwrap() as usize;
-                for (row_idx, row) in t.elements.chunks(row_size).enumerate() {
-                    if row_idx > 0 {
-                        out.push_str(", ");
-                    }
-                    for (elem_idx, elem) in row.iter().enumerate() {
-                        if elem_idx > 0 {
-                            out.push(' ');
-                        }
-                        write_expr_full(db, *elem, out);
-                    }
-                }
-            }
-            out.push(']');
+            out.push_str("[| ");
+            let shape = &t.shape;
+            let elements = &t.elements;
+            write_tensor_elements(db, shape, elements, out);
+            out.push_str(" |]");
         }
 
         Expr::Data(d) => {
@@ -285,11 +259,11 @@ fn write_type_hint<'db>(
         }
 
         TypeHint::Tensor(t) => {
-            out.push_str("tensor<");
+            out.push_str("[|");
             write_type_hint(db, &t.element_type, out);
             out.push_str(", ");
             out.push_str(&t.rank.to_string());
-            out.push('>');
+            out.push_str("|]");
         }
 
         TypeHint::Table(t) => {
@@ -348,6 +322,63 @@ fn write_type_hint<'db>(
             }
             out.push('}');
         }
+    }
+}
+
+/// Write tensor elements with multi-comma layout.
+fn write_tensor_elements<'db>(
+    db: &'db dyn datalove_datalit::Db,
+    shape: &[u32],
+    elements: &[ExprFull<'db>],
+    out: &mut String,
+) {
+    if elements.is_empty() || shape.is_empty() {
+        return;
+    }
+    let rank = shape.len();
+    write_tensor_group(db, shape, elements, 0, out);
+
+    // When the outermost dimension is 1, the highest comma level (rank - 1)
+    // never appears as a separator. Emit trailing commas so the parser can
+    // infer the correct rank.
+    if rank > 1 && shape[0] == 1 {
+        for _ in 0..(rank - 1) {
+            out.push(',');
+        }
+    }
+}
+
+fn write_tensor_group<'db>(
+    db: &'db dyn datalove_datalit::Db,
+    shape: &[u32],
+    elements: &[ExprFull<'db>],
+    dim: usize,
+    out: &mut String,
+) {
+    let rank = shape.len();
+
+    if dim == rank - 1 {
+        for (i, elem) in elements.iter().enumerate() {
+            if i > 0 {
+                out.push(' ');
+            }
+            write_expr_full(db, *elem, out);
+        }
+        return;
+    }
+
+    let group_size: usize = shape[dim + 1..].iter().map(|&d| d as usize).product();
+    let num_groups = shape[dim] as usize;
+    let comma_count = rank - dim - 1;
+
+    for (i, chunk) in elements.chunks(group_size).enumerate().take(num_groups) {
+        if i > 0 {
+            for _ in 0..comma_count {
+                out.push(',');
+            }
+            out.push(' ');
+        }
+        write_tensor_group(db, shape, chunk, dim + 1, out);
     }
 }
 

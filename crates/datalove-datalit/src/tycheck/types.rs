@@ -532,7 +532,7 @@ pub fn type_to_string<'db>(db: &'db dyn crate::Db, ty: &Type<'db>) -> String {
         }
         Type::Tensor(t) => {
             let ty_str = type_to_string(db, &t.element_type);
-            format!("tensor<{}, {}>", ty_str, t.rank)
+            format!("[|{}, {}|]", ty_str, t.rank)
         }
         Type::Table(t) => {
             let cols: Vec<_> = t.columns.C()

@@ -554,7 +554,7 @@ pub fn is_primitive_name(name: &str) -> bool {
     matches!(name,
         "bool" | "u8" | "i8" | "u16" | "i16" | "u32" | "i32" | "u64" | "i64" |
         "index" | "offset" | "f32" | "f64" | "int" | "string" | "data" | "error" |
-        "tuple" | "enum" | "map" | "set" | "tensor"
+        "tuple" | "enum" | "map" | "set"
     )
 }
 

@@ -19,7 +19,7 @@
     },
     "type_hint": {
       "ParseError": {
-        "message": "expected <> after tensor keyword"
+        "message": "expected comma between tensor element type and rank"
       }
     }
   },
@@ -28,15 +28,15 @@
       "code": "D009",
       "labels": [
         {
-          "message": "expected '<' after 'tensor'",
+          "message": "expected ',' after element type",
           "span": [
-            2,
-            8
+            0,
+            0
           ],
-          "text": "tensor"
+          "text": ""
         }
       ],
-      "message": "expected <> after tensor keyword"
+      "message": "expected comma between tensor element type and rank"
     }
   ]
 }

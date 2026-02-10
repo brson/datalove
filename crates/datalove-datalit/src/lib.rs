@@ -14,7 +14,7 @@ pub mod ast_gen;
 pub mod spans;
 pub mod mutation_gen;
 
-use salsa::Database as Db;
+pub use salsa::Database as Db;
 
 #[salsa::db]
 #[derive(Default, Clone)]

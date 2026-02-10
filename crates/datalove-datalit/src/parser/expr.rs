@@ -147,112 +147,6 @@ impl<'db> Parser<'db> {
                 let value = self.parse_expr_full();
                 return ast::Expr::Error(ast::ExprError { value });
             }
-            Some("tensor") => {
-                self.eat_word("tensor");
-
-                // Parse shape: [dim1, dim2, ...]
-                let shape = if let Some(iter) = self.eat_branch(Sigil::BracketOpen) {
-                    let mut sub_parser = Parser::from_branch(self.db, iter, self.source_text());
-                    let shape = sub_parser.parse_comma_separated(|p| {
-                        match p.parse_u32_literal() {
-                            Some(dim) => dim,
-                            None => {
-                                p.had_error = true;
-                                let ts = p.peek_text_span();
-                                DiagnosticBuilder::error(p.db, "expected dimension value in tensor shape")
-                                    .code("D023")
-                                    .primary_label(ts, "expected integer")
-                                    .emit_parse();
-                                0 // Placeholder dimension.
-                            }
-                        }
-                    });
-                    sub_parser.error_if_not_exhausted();
-                    shape
-                } else {
-                    let ts = self.peek_text_span();
-                    return self.emit_expr_error(ts,
-                        "expected shape [...] after tensor keyword",
-                        "D010",
-                        "expected '[' for tensor shape"
-                    );
-                };
-
-                // Parse data: For rank 1, comma-separated elements; for rank 2+, comma-separated rows with space-separated elements.
-                let elements = if let Some(iter) = self.eat_branch(Sigil::BracketOpen) {
-                    let rank = shape.len();
-                    if rank == 0 {
-                        let ts = self.peek_text_span();
-                        return self.emit_expr_error(ts,
-                            "tensor rank must be at least 1",
-                            "D012",
-                            "invalid rank"
-                        );
-                    }
-
-                    if rank == 1 {
-                        // 1D tensor: comma-separated elements [1, 2, 3, 4, 5].
-                        let mut sub_parser = Parser::from_branch(self.db, iter, self.source_text());
-                        let elements = sub_parser.parse_comma_separated(|p| p.parse_expr_full());
-                        sub_parser.error_if_not_exhausted();
-                        // Merge spans from sub-parser.
-                        self.expr_spans.extend(sub_parser.expr_spans);
-                        elements
-                    } else {
-                        // 2D+ tensor: comma-separated rows, space-separated elements [1 2 3, 4 5 6].
-                        let row_size = *shape.last().unwrap() as usize;
-                        let all_tokens: Vec<_> = iter.collect();
-
-                        // Split tokens by commas to get rows.
-                        let rows = self.split_tokens_by_comma(&all_tokens);
-                        let mut all_elements = Vec::new();
-
-                        for row_tokens in rows {
-                            // Filter spaces within the row to get individual element tokens.
-                            let elem_tokens: Vec<_> = row_tokens.into_iter()
-                                .filter_map(|t| t.without_space(self.db))
-                                .collect();
-
-                            // Parse each element in the row.
-                            let mut row_parser = Parser::new(self.db, elem_tokens.clone(), self.source_text());
-
-                            let mut row_elements = Vec::new();
-                            while row_parser.peek().is_some() {
-                                row_elements.push(row_parser.parse_expr_full());
-                            }
-
-                            // Merge spans from row sub-parser.
-                            self.expr_spans.extend(row_parser.expr_spans);
-
-                            // Validate row size matches the last dimension.
-                            if row_elements.len() != row_size {
-                                let ts = self.peek_text_span();
-                                let detailed_message = format!("expected {} elements per row but got {}", row_size, row_elements.len());
-
-                                return self.emit_expr_error(ts,
-                                    &detailed_message,
-                                    "D013",
-                                    &format!("expected {} elements", row_size)
-                                );
-                            }
-
-                            all_elements.extend(row_elements);
-                        }
-
-                        all_elements
-                    }
-                } else {
-                    let ts = self.peek_text_span();
-                    return self.emit_expr_error(ts,
-                        "expected data [...] after tensor shape",
-                        "D011",
-                        "expected '[' for tensor data"
-                    );
-                };
-
-                return ast::Expr::Tensor(ast::ExprTensor { shape, elements });
-            }
-
             Some("map") => {
                 let ts = self.peek_text_span();
                 self.eat_word("map");
@@ -420,6 +314,14 @@ impl<'db> Parser<'db> {
                 };
                 self.parse_table_expr(inner)
             }
+            Some(TreeToken::Branch { sigil: Sigil::BracketPipeOpen, .. }) => {
+                // Tensor: [| data |] with multi-comma separators.
+                let inner = match self.next() {
+                    Some(TreeToken::Branch { inner, .. }) => inner,
+                    _ => unreachable!(),
+                };
+                self.parse_tensor_expr(inner)
+            }
             _ => {
                 let ts = self.peek_text_span();
                 self.next(); // Consume unexpected token to prevent infinite loop.
@@ -488,6 +390,195 @@ impl<'db> Parser<'db> {
         }
 
         rows
+    }
+
+    /// Parse tensor expression with multi-comma syntax: [| data |]
+    ///
+    /// Spaces separate elements along innermost axis.
+    /// `,` separates rows (2nd axis).
+    /// `,,` separates slabs (3rd axis).
+    /// `,,,` separates blocks (4th axis), etc.
+    fn parse_tensor_expr(&mut self, iter: bct::bracer::BracerIter<'db>) -> ast::Expr<'db> {
+        let all_tokens: Vec<_> = iter.collect();
+
+        // Filter to non-whitespace tokens for comma-level scanning.
+        let tokens_no_ws: Vec<_> = all_tokens.iter()
+            .filter_map(|t| t.clone().without_space(self.db))
+            .collect();
+
+        if tokens_no_ws.is_empty() {
+            // Empty tensor: [| |] - rank 1, no elements.
+            return ast::Expr::Tensor(ast::ExprTensor { shape: vec![0], elements: vec![] });
+        }
+
+        // Scan for max consecutive comma count to determine rank.
+        let max_comma_level = self.scan_max_comma_level(&tokens_no_ws);
+        let rank = max_comma_level + 1;
+
+        // Recursively split by comma levels and parse.
+        let (shape, elements) = self.parse_tensor_multicomma(&tokens_no_ws, rank as u32);
+
+        ast::Expr::Tensor(ast::ExprTensor { shape, elements })
+    }
+
+    /// Scan tokens to find the maximum consecutive comma count.
+    fn scan_max_comma_level(&self, tokens: &[TreeToken<'db>]) -> usize {
+        let mut max_level = 0usize;
+        let mut current_commas = 0usize;
+
+        for token in tokens {
+            if let TreeToken::Token(tok) = token {
+                if tok.kind(self.db) == TokenKind::Sigil(Sigil::Comma) {
+                    current_commas += 1;
+                    max_level = max_level.max(current_commas);
+                } else {
+                    current_commas = 0;
+                }
+            } else {
+                current_commas = 0;
+            }
+        }
+
+        max_level
+    }
+
+    /// Parse tensor data from tokens with multi-comma structure.
+    ///
+    /// Returns (shape, flat_elements).
+    fn parse_tensor_multicomma(
+        &mut self,
+        tokens: &[TreeToken<'db>],
+        rank: u32,
+    ) -> (Vec<u32>, Vec<ast::ExprFull<'db>>) {
+        if rank == 1 {
+            // Innermost level: space-separated elements (no commas).
+            let mut parser = Parser::new(self.db, tokens.to_vec(), self.source_text());
+            let mut elements = Vec::new();
+            while parser.peek().is_some() {
+                elements.push(parser.parse_expr_full());
+            }
+            self.expr_spans.extend(parser.expr_spans);
+            let shape = vec![elements.len() as u32];
+            return (shape, elements);
+        }
+
+        // Split by (rank-1) consecutive commas.
+        let split_level = rank - 1;
+        let groups = self.split_by_comma_level(tokens, split_level as usize);
+
+        if groups.is_empty() {
+            return (vec![0; rank as usize], vec![]);
+        }
+
+        let mut all_elements = Vec::new();
+        let mut inner_shape: Option<Vec<u32>> = None;
+
+        for (group_idx, group) in groups.iter().enumerate() {
+            let (sub_shape, sub_elements) = self.parse_tensor_multicomma(group, rank - 1);
+            // Validate all groups have the same inner shape.
+            match &inner_shape {
+                None => inner_shape = Some(sub_shape),
+                Some(expected) => {
+                    if *expected != sub_shape {
+                        let ts = self.peek_text_span();
+                        DiagnosticBuilder::error(self.db,
+                            &format!("inconsistent tensor shape at group {}: expected {:?} but got {:?}",
+                                group_idx, expected, sub_shape))
+                            .code("D023")
+                            .primary_label(ts, "shape mismatch")
+                            .emit_parse();
+                    }
+                }
+            }
+            all_elements.extend(sub_elements);
+        }
+
+        let mut shape = vec![groups.len() as u32];
+        if let Some(inner) = inner_shape {
+            shape.extend(inner);
+        }
+
+        (shape, all_elements)
+    }
+
+    /// Split tokens by N consecutive commas.
+    ///
+    /// Commas of exactly `level` consecutive commas are treated as separators.
+    /// Commas with fewer consecutive occurrences are kept within groups.
+    fn split_by_comma_level(&self, tokens: &[TreeToken<'db>], level: usize) -> Vec<Vec<TreeToken<'db>>> {
+        // First, identify runs of consecutive commas and their positions.
+        let mut groups: Vec<Vec<TreeToken<'db>>> = Vec::new();
+        let mut current_group: Vec<TreeToken<'db>> = Vec::new();
+        let mut i = 0;
+
+        while i < tokens.len() {
+            // Count consecutive commas starting at i.
+            let mut comma_count = 0;
+            let mut j = i;
+            while j < tokens.len() {
+                if let TreeToken::Token(tok) = &tokens[j] {
+                    if tok.kind(self.db) == TokenKind::Sigil(Sigil::Comma) {
+                        comma_count += 1;
+                        j += 1;
+                    } else {
+                        break;
+                    }
+                } else {
+                    break;
+                }
+            }
+
+            if comma_count >= level {
+                // This is a split point. End current group.
+                if !current_group.is_empty() {
+                    groups.push(std::mem::take(&mut current_group));
+                }
+                // If comma_count > level, keep the extras as lower-level separators
+                // in the next group. The extras go at the start of the next group.
+                let extras = comma_count - level;
+                // Skip all the commas that were consumed as the separator.
+                i = j;
+                // Push any remaining commas back as part of the next group.
+                for _ in 0..extras {
+                    // Re-insert comma tokens for lower-level processing.
+                    // We need to go back and grab the actual comma tokens.
+                    // Actually, the commas after the separator level belong to
+                    // the next group's internal structure. But this gets complex.
+                    // Simpler: re-examine. A run of N commas where N >= level:
+                    // treat as one split at this level. Any remainder (N - level)
+                    // commas should NOT be kept - they are consumed.
+                    // Actually, the plan says: fewer commas bind tighter.
+                    // So ,, means split at level 2. A run of ,,, means split at
+                    // level 3. A run of ,, does NOT split at level 3.
+                    // We need exact level match, not >=.
+                }
+                // Actually, let me reconsider. The semantics should be:
+                // Split by runs of exactly `level` consecutive commas.
+                // But runs of MORE commas should be split at a higher level.
+                // Since we process top-down (highest level first), a run of
+                // `level` commas is a separator at this level.
+                // A run of more than `level` commas would have been caught by
+                // a higher-level split already. So at this level, we should
+                // only see runs of exactly `level` or fewer.
+                // Let's just treat >= level as a split.
+            } else if comma_count > 0 {
+                // Fewer commas than needed - keep them in the current group.
+                for k in i..j {
+                    current_group.push(tokens[k].clone());
+                }
+                i = j;
+            } else {
+                // Not a comma - add to current group.
+                current_group.push(tokens[i].clone());
+                i += 1;
+            }
+        }
+
+        if !current_group.is_empty() {
+            groups.push(current_group);
+        }
+
+        groups
     }
 
     fn parse_table_expr(&mut self, iter: bct::bracer::BracerIter<'db>) -> ast::Expr<'db> {

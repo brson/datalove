@@ -150,44 +150,7 @@ impl<'db> Parser<'db> {
                     )
                 }
             }
-            Some("tensor") => {
-                let ts = self.peek_text_span();
-                self.eat_word("tensor");
-                // Expect angle bracket with <element_type, rank, optional_layout>.
-                if let Some(iter) = self.eat_branch(Sigil::AngleOpen) {
-                    let mut sub_parser = Parser::from_branch(self.db, iter, self.source_text());
-                    let element_type = sub_parser.parse_type_hint();
-                    if !sub_parser.eat_sigil(Sigil::Comma) {
-                        let ts = sub_parser.peek_text_span();
-                        return self.emit_type_hint_error(ts,
-                            "expected comma between tensor element type and rank",
-                            "D009",
-                            "expected ',' after element type"
-                        );
-                    }
-
-                    let rank = match sub_parser.parse_u32_literal() {
-                        Some(r) => r,
-                        None => {
-                            let ts = sub_parser.peek_text_span();
-                            return self.emit_type_hint_error(ts,
-                                "expected rank (positive integer)",
-                                "D008",
-                                "expected rank"
-                            );
-                        }
-                    };
-
-                    sub_parser.error_if_not_exhausted_type_hint();
-                    ast::TypeHint::Tensor(ast::TypeHintTensor { element_type: Box::new(element_type), rank })
-                } else {
-                    self.emit_type_hint_error(ts,
-                        "expected <> after tensor keyword",
-                        "D009",
-                        "expected '<' after 'tensor'"
-                    )
-                }
-            }
+            // tensor keyword no longer valid as type hint; handled via [| |] branch below.
             _ => {
                 // Check for branches: parentheses for tuples, brackets for lists, braces for structs.
                 if let Some(iter) = self.eat_branch(Sigil::ParenOpen) {
@@ -214,6 +177,31 @@ impl<'db> Parser<'db> {
                     let columns = sub_parser.parse_comma_separated(|p| p.parse_type_hint_named_field());
                     sub_parser.error_if_not_exhausted_type_hint();
                     ast::TypeHint::Table(ast::TypeHintTable { columns })
+                } else if let Some(iter) = self.eat_branch(Sigil::BracketPipeOpen) {
+                    // Tensor type hint: [|T, N|]
+                    let mut sub_parser = Parser::from_branch(self.db, iter, self.source_text());
+                    let element_type = sub_parser.parse_type_hint();
+                    if !sub_parser.eat_sigil(Sigil::Comma) {
+                        let ts = sub_parser.peek_text_span();
+                        return self.emit_type_hint_error(ts,
+                            "expected comma between tensor element type and rank",
+                            "D009",
+                            "expected ',' after element type"
+                        );
+                    }
+                    let rank = match sub_parser.parse_u32_literal() {
+                        Some(r) => r,
+                        None => {
+                            let ts = sub_parser.peek_text_span();
+                            return self.emit_type_hint_error(ts,
+                                "expected rank (positive integer)",
+                                "D008",
+                                "expected rank"
+                            );
+                        }
+                    };
+                    sub_parser.error_if_not_exhausted_type_hint();
+                    ast::TypeHint::Tensor(ast::TypeHintTensor { element_type: Box::new(element_type), rank })
                 } else if let Some(word) = self.peek_word() {
                     // Unknown identifier - could be a type alias.
                     // Check if it looks like a mis-cased primitive first.

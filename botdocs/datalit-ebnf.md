@@ -25,7 +25,7 @@ struct_type    = "{", ws, [ type_field_list ], ws, "}" ;
 table_type     = "{|", ws, type_field_list, ws, "|}" ;
 map_type       = "map", ws, "<", ws, type, ws, ",", ws, type, ws, ">" ;
 set_type       = "set", ws, "<", ws, type, ws, ">" ;
-tensor_type    = "tensor", ws, "<", ws, type, ws, ",", ws, int_lit, ws, ">" ;
+tensor_type    = "[|", ws, type, ws, ",", ws, int_lit, ws, "|]" ;
 atom_type      = "atom", ws, ident ;
 term_type      = "term", ws, ident, ws, type ;
 enum_type      = "enum", ws, "{", ws, enum_variant_list, ws, "}" ;
@@ -72,13 +72,12 @@ field          = ident, ws, "=", ws, full_expr ;
 entry_list     = entry, { ws, ",", ws, entry }, [ ws, "," ] ;
 entry          = full_expr, ws, "=", ws, full_expr ;
 
-(* Tensor: shape followed by elements *)
-tensor_expr    = "tensor", ws, shape, ws, tensor_data ;
-shape          = "[", ws, [ dim_list ], ws, "]" ;
-dim_list       = int_lit, { ws, ",", ws, int_lit }, [ ws, "," ] ;
-tensor_data    = "[", ws, tensor_elements, ws, "]" ;
-tensor_elements= tensor_row, { ws, ",", ws, tensor_row } ;
+(* Tensor: [| data |] with multi-comma separators *)
+tensor_expr    = "[|", ws, [ tensor_body ], ws, "|]" ;
+tensor_body    = tensor_group, { multi_comma, ws, tensor_group }, [ multi_comma ] ;
+tensor_group   = tensor_row, { ws, ",", ws, tensor_row } ;
 tensor_row     = full_expr, { ws, full_expr } ;  (* space-separated within row *)
+multi_comma    = ",", ",", { "," } ;  (* ,, for 3D, ,,, for 4D, etc. *)
 
 (* Table: header row + data rows *)
 table_expr     = "{|", ws, table_header, table_rows, ws, "|}" ;
@@ -110,9 +109,9 @@ newline        = "\n" | "\r\n" ;
 
 1. **Type hints precede values**: `: Type / value` syntax annotates the following expression
 2. **Prefix notation for option/result types**: `?T` for Option, `!T` for Result
-3. **Keywords for constructors**: `some`, `ok`, `er`, `none`, `data`, `error`, `map`, `set`, `tensor`. Constructor payloads are `full_expr` (may include inline type hints, e.g. `some : u32 / 42`)
+3. **Keywords for constructors**: `some`, `ok`, `er`, `none`, `data`, `error`, `map`, `set`. Constructor payloads are `full_expr` (may include inline type hints, e.g. `some : u32 / 42`)
 4. **Struct fields use `=`** in expressions but `:` in type hints
-5. **Tensors**: shape in first brackets, data in second; rows comma-separated, elements within rows space-separated
+5. **Tensors**: `[| data |]` with multi-comma separators; spaces separate innermost elements, `,` separates rows, `,,` separates slabs, etc. Shape is inferred from structure. Trailing commas preserve rank when outermost dimension is 1.
 6. **Tables**: pipe-brace delimiters `{| ... |}`, header then data rows
 7. **Trailing commas** allowed everywhere
 8. **Block comments** can nest

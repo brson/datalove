@@ -85,14 +85,19 @@ Sigils are defined in the `bcts` crate (`lexer.rs`).
 - `[` `]` - BracketOpen, BracketClose
   - Lists: `[1, 2, 3]`
   - List types: `[u32]`
-  - Tensor shape: `tensor [2, 3] [...]`
-  - Tensor data: `tensor [...] [1, 2, 3, 4]`
 
 - `<` `>` - AngleOpen, AngleClose
   - Type parameters for collections
   - Map types: `map <key_type, value_type>`
   - Set types: `set <element_type>`
-  - Tensor types: `tensor <element_type, rank>`
+
+### Earmuff Braces (Pipe-Delimited)
+
+- `[|` `|]` - BracketPipeOpen, BracketPipeClose
+  - Tensor types: `[|u32, 2|]`
+  - Tensor literals: `[| 1 2 3, 4 5 6 |]`
+- `{|` `|}` - BracePipeOpen, BracePipeClose
+  - Table types and literals: `{| x: u32, y: u32 |}`
 
 ## Two-Character Sigils
 
@@ -178,5 +183,5 @@ Note: `_` is considered a word character (identifier start).
 
 # Open design questions
 
-`;` is nice for tensor constructor row separators,
-but we use them for line-separators.
+Tensor constructors use multi-comma separators (`[| 1 2, 3 4,, 5 6, 7 8 |]`)
+instead of semicolons, since `;` is used as a line separator.

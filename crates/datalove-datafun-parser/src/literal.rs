@@ -144,10 +144,6 @@ impl<'db> Parser<'db> {
                 let value = self.parse_expr_primary();
                 return ast::ExprFunKind::Error(ast::ExprError { type_hint, value });
             }
-            Some("tensor") => {
-                return self.parse_lit_tensor(type_hint);
-            }
-
             Some("map") => {
                 return self.parse_lit_map(type_hint);
             }
@@ -243,6 +239,14 @@ impl<'db> Parser<'db> {
                     _ => unreachable!(),
                 };
                 return self.parse_lit_table(type_hint, inner);
+            }
+            Some(TreeToken::Branch { sigil: Sigil::BracketPipeOpen, .. }) => {
+                // Tensor: [| data |] with multi-comma separators.
+                let inner = match self.next() {
+                    Some(TreeToken::Branch { sigil: Sigil::BracketPipeOpen, inner, .. }) => inner,
+                    _ => unreachable!(),
+                };
+                return self.parse_lit_tensor_multicomma(type_hint, inner);
             }
             _ => {
                 let ts = self.peek_text_span();
@@ -361,59 +365,155 @@ impl<'db> Parser<'db> {
     }
 
 
-    /// Parse tensor: tensor [shape] [data]
-    fn parse_lit_tensor(
+    /// Parse tensor with multi-comma syntax: [| data |]
+    fn parse_lit_tensor_multicomma(
         &mut self,
         type_hint: Option<datalit::ast::TypeHint<'db>>,
+        iter: BracerIter<'db>,
     ) -> ast::ExprFunKind<'db> {
-        self.eat_word("tensor");
+        let all_tokens: Vec<_> = iter.collect();
 
-        // Parse shape: [dim1, dim2, ...]
-        let shape = match self.next() {
-            Some(TreeToken::Branch { sigil: Sigil::BracketOpen, inner, .. }) => {
-                self.parse_tensor_shape(inner)
-            }
-            _ => {
-                let ts = self.peek_text_span();
-                return ast::ExprFunKind::ParseError(ast::ExprFunParseError {
-                    text: ts.text, span: ts.span.C(),
-                    message: InternedText::new(self.db, "expected '[' for tensor shape".S()),
-                });
-            }
-        };
+        // Filter to non-whitespace tokens for comma-level scanning.
+        let tokens_no_ws: Vec<_> = all_tokens.iter()
+            .filter_map(|t| t.C().without_space(self.db))
+            .collect();
 
-        let rank = shape.len();
+        if tokens_no_ws.is_empty() {
+            return ast::ExprFunKind::Tensor(ast::ExprTensor {
+                type_hint, shape: vec![0], elements: vec![],
+            });
+        }
 
-        // Parse data: [elements]
-        // For rank 1: comma-separated elements.
-        // For rank 2+: comma-separated rows, space-separated elements within each row.
-        let elements = match self.next() {
-            Some(TreeToken::Branch { sigil: Sigil::BracketOpen, inner, .. }) => {
-                if rank <= 1 {
-                    self.parse_comma_separated_exprs(inner)
-                } else {
-                    let row_size = *shape.last().unwrap_or(&1) as usize;
-                    let (elems, has_error) = self.parse_tensor_data_2d_plus(inner, row_size);
-                    if has_error {
-                        let ts = self.peek_text_span();
-                        return ast::ExprFunKind::ParseError(ast::ExprFunParseError {
-                            text: ts.text, span: ts.span.C(),
-                            message: InternedText::new(self.db, format!("expected {} elements per row", row_size).S()),
-                        });
-                    }
-                    elems
-                }
-            }
-            _ => {
-                let ts = self.peek_text_span();
-                return ast::ExprFunKind::ParseError(ast::ExprFunParseError {
-                    text: ts.text, span: ts.span.C(),
-                    message: InternedText::new(self.db, "expected '[' for tensor data".S()),
-                });
-            }
-        };
+        // Scan for max consecutive comma count to determine rank.
+        let max_comma_level = self.scan_max_comma_level(&tokens_no_ws);
+        let rank = max_comma_level + 1;
+
+        // Recursively split by comma levels and parse.
+        let (shape, elements) = self.parse_tensor_multicomma_inner(&tokens_no_ws, rank as u32);
 
         ast::ExprFunKind::Tensor(ast::ExprTensor { type_hint, shape, elements })
+    }
+
+    /// Scan tokens to find the maximum consecutive comma count.
+    fn scan_max_comma_level(&self, tokens: &[TreeToken<'db>]) -> usize {
+        let mut max_level = 0usize;
+        let mut current_commas = 0usize;
+
+        for token in tokens {
+            if let TreeToken::Token(tok) = token {
+                if tok.kind(self.db) == TokenKind::Sigil(Sigil::Comma) {
+                    current_commas += 1;
+                    max_level = max_level.max(current_commas);
+                } else {
+                    current_commas = 0;
+                }
+            } else {
+                current_commas = 0;
+            }
+        }
+
+        max_level
+    }
+
+    /// Parse tensor data from tokens with multi-comma structure.
+    fn parse_tensor_multicomma_inner(
+        &mut self,
+        tokens: &[TreeToken<'db>],
+        rank: u32,
+    ) -> (Vec<u32>, Vec<ast::ExprFun<'db>>) {
+        if rank == 1 {
+            // Innermost level: space-separated elements.
+            let mut sub = Parser::new(self.db, tokens.to_vec(), self.source_text(), self.module_id());
+            let mut elements = Vec::new();
+            while sub.peek().is_some() {
+                elements.push(sub.parse_expr_full());
+            }
+            self.merge_from_sub(&mut sub);
+            let shape = vec![elements.len() as u32];
+            return (shape, elements);
+        }
+
+        // Split by (rank-1) consecutive commas.
+        let split_level = rank - 1;
+        let groups = self.split_by_comma_level(tokens, split_level as usize);
+
+        if groups.is_empty() {
+            return (vec![0; rank as usize], vec![]);
+        }
+
+        let mut all_elements = Vec::new();
+        let mut inner_shape: Option<Vec<u32>> = None;
+
+        for (group_idx, group) in groups.iter().enumerate() {
+            let (sub_shape, sub_elements) = self.parse_tensor_multicomma_inner(group, rank - 1);
+            match &inner_shape {
+                None => inner_shape = Some(sub_shape),
+                Some(expected) => {
+                    if *expected != sub_shape {
+                        let ts = self.peek_text_span();
+                        DiagnosticBuilder::error(self.db,
+                            &format!("inconsistent tensor shape at group {}: expected {:?} but got {:?}",
+                                group_idx, expected, sub_shape))
+                            .code("D023")
+                            .primary_label(ts, "shape mismatch")
+                            .emit_parse();
+                    }
+                }
+            }
+            all_elements.extend(sub_elements);
+        }
+
+        let mut shape = vec![groups.len() as u32];
+        if let Some(inner) = inner_shape {
+            shape.extend(inner);
+        }
+
+        (shape, all_elements)
+    }
+
+    /// Split tokens by N consecutive commas.
+    fn split_by_comma_level(&self, tokens: &[TreeToken<'db>], level: usize) -> Vec<Vec<TreeToken<'db>>> {
+        let mut groups: Vec<Vec<TreeToken<'db>>> = Vec::new();
+        let mut current_group: Vec<TreeToken<'db>> = Vec::new();
+        let mut i = 0;
+
+        while i < tokens.len() {
+            let mut comma_count = 0;
+            let mut j = i;
+            while j < tokens.len() {
+                if let TreeToken::Token(tok) = &tokens[j] {
+                    if tok.kind(self.db) == TokenKind::Sigil(Sigil::Comma) {
+                        comma_count += 1;
+                        j += 1;
+                    } else {
+                        break;
+                    }
+                } else {
+                    break;
+                }
+            }
+
+            if comma_count >= level {
+                if !current_group.is_empty() {
+                    groups.push(std::mem::take(&mut current_group));
+                }
+                i = j;
+            } else if comma_count > 0 {
+                for k in i..j {
+                    current_group.push(tokens[k].clone());
+                }
+                i = j;
+            } else {
+                current_group.push(tokens[i].clone());
+                i += 1;
+            }
+        }
+
+        if !current_group.is_empty() {
+            groups.push(current_group);
+        }
+
+        groups
     }
 
     /// Parse table: {| header; row1; row2 |}
@@ -573,107 +673,6 @@ impl<'db> Parser<'db> {
         }
 
         groups
-    }
-
-    /// Parse tensor data for 2D+ tensors: comma-separated rows, space-separated elements.
-    fn parse_tensor_data_2d_plus(&mut self, iter: BracerIter<'db>, row_size: usize) -> (Vec<ast::ExprFun<'db>>, bool) {
-        let all_tokens: Vec<_> = iter.collect();
-        if all_tokens.is_empty() {
-            return (vec![], false);
-        }
-
-        // Split by comma to get rows.
-        let rows = self.split_tokens_by_comma_with_spaces(&all_tokens);
-        let mut elements = Vec::new();
-        let mut has_error = false;
-
-        for row_tokens in rows {
-            // Each row contains space-separated elements.
-            // Filter spaces to get element tokens, then parse greedily.
-            let elem_tokens: Vec<_> = row_tokens.into_iter()
-                .filter_map(|t| t.without_space(self.db))
-                .collect();
-
-            // Parse all elements in the row using a sub-parser.
-            let mut sub = Parser::new(self.db, elem_tokens, self.source_text(), self.module_id());
-            let mut row_elements = Vec::new();
-            while sub.peek().is_some() {
-                row_elements.push(sub.parse_expr_full());
-            }
-            self.had_error |= sub.had_error;
-
-            // Validate row size matches the last dimension.
-            if row_elements.len() != row_size {
-                has_error = true;
-            }
-
-            elements.extend(row_elements);
-        }
-
-        (elements, has_error)
-    }
-
-    /// Split tokens by comma, preserving spaces within groups (for tensor row parsing).
-    fn split_tokens_by_comma_with_spaces(&self, tokens: &[TreeToken<'db>]) -> Vec<Vec<TreeToken<'db>>> {
-        let mut groups = Vec::new();
-        let mut current = Vec::new();
-
-        for token in tokens {
-            if let TreeToken::Token(t) = token {
-                if matches!(t.kind(self.db), TokenKind::Sigil(Sigil::Comma)) {
-                    if !current.is_empty() {
-                        groups.push(std::mem::take(&mut current));
-                    }
-                    continue;
-                }
-            }
-            current.push(token.C());
-        }
-
-        if !current.is_empty() {
-            groups.push(current);
-        }
-
-        groups
-    }
-
-    /// Parse tensor shape dimensions.
-    fn parse_tensor_shape(&mut self, iter: BracerIter<'db>) -> Vec<u32> {
-        let mut sub = Parser::from_branch(self.db, iter, self.source_text());
-        let shape = sub.parse_comma_separated(|p| p.parse_shape_dimension());
-        sub.error_if_not_exhausted();
-        self.had_error |= sub.had_error;
-        shape
-    }
-
-    /// Parse a single tensor shape dimension.
-    fn parse_shape_dimension(&mut self) -> u32 {
-        match self.peek_word() {
-            Some(word) => {
-                if let Ok(dim) = word.parse::<u32>() {
-                    self.next();
-                    dim
-                } else {
-                    self.had_error = true;
-                    let ts = self.peek_text_span();
-                    DiagnosticBuilder::error(self.db, "expected dimension number in tensor shape")
-                        .code("D030")
-                        .primary_label(ts, "expected number")
-                        .emit_parse();
-                    self.next(); // consume the invalid token
-                    0
-                }
-            }
-            None => {
-                self.had_error = true;
-                let ts = self.peek_text_span();
-                DiagnosticBuilder::error(self.db, "expected dimension in tensor shape")
-                    .code("D030")
-                    .primary_label(ts, "expected dimension")
-                    .emit_parse();
-                0
-            }
-        }
     }
 
     /// Helper to parse comma-separated expressions from a branch.

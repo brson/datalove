@@ -487,21 +487,9 @@ impl fmt::Display for Instruction {
                 write!(f, "}}")
             }
             Instruction::TensorNew { dest, shape, elements } => {
-                write!(f, "{} = tensor [", dest)?;
-                for (i, dim) in shape.iter().enumerate() {
-                    if i > 0 {
-                        write!(f, ", ")?;
-                    }
-                    write!(f, "{}", dim)?;
-                }
-                write!(f, "] [")?;
-                for (i, elem) in elements.iter().enumerate() {
-                    if i > 0 {
-                        write!(f, ", ")?;
-                    }
-                    write!(f, "{}", elem)?;
-                }
-                write!(f, "]")
+                write!(f, "{} = [| ", dest)?;
+                write_tensor_elements_ir(f, shape, elements)?;
+                write!(f, " |]")
             }
             Instruction::TableNew { dest, rows } => {
                 write!(f, "{} = table [", dest)?;
@@ -748,5 +736,65 @@ impl fmt::Display for ExportBinding {
             ExportBinding::Function(id) => write!(f, "{}", id),
         }
     }
+}
+
+/// Write tensor elements with multi-comma layout for IR display.
+fn write_tensor_elements_ir(
+    f: &mut fmt::Formatter<'_>,
+    shape: &[u32],
+    elements: &[Operand],
+) -> fmt::Result {
+    if elements.is_empty() || shape.is_empty() {
+        return Ok(());
+    }
+    let rank = shape.len();
+    write_tensor_group_ir(f, shape, elements, 0)?;
+
+    // When the outermost dimension is 1, the highest comma level (rank - 1)
+    // never appears as a separator. Emit trailing commas so the parser can
+    // infer the correct rank.
+    if rank > 1 && shape[0] == 1 {
+        for _ in 0..(rank - 1) {
+            write!(f, ",")?;
+        }
+    }
+    Ok(())
+}
+
+/// Recursively write a tensor group at the given dimension level.
+fn write_tensor_group_ir(
+    f: &mut fmt::Formatter<'_>,
+    shape: &[u32],
+    elements: &[Operand],
+    dim: usize,
+) -> fmt::Result {
+    let rank = shape.len();
+
+    if dim == rank - 1 {
+        // Innermost dimension: space-separated elements.
+        for (i, elem) in elements.iter().enumerate() {
+            if i > 0 {
+                write!(f, " ")?;
+            }
+            write!(f, "{}", elem)?;
+        }
+        return Ok(());
+    }
+
+    let group_size: usize = shape[dim + 1..].iter().map(|&d| d as usize).product();
+    let num_groups = shape[dim] as usize;
+    let comma_count = rank - dim - 1;
+
+    for (i, chunk) in elements.chunks(group_size).enumerate().take(num_groups) {
+        if i > 0 {
+            for _ in 0..comma_count {
+                write!(f, ",")?;
+            }
+            write!(f, " ")?;
+        }
+        write_tensor_group_ir(f, shape, chunk, dim + 1)?;
+    }
+
+    Ok(())
 }
 

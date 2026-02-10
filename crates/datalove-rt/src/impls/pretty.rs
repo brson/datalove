@@ -633,67 +633,83 @@ unsafe fn pretty_tensor(
         let rank = tydesc.tensor_rank() as usize;
         let elem_size = elem_ty.size() as usize;
 
-        push_str(rt, string_mut, string_tydesc, b"tensor [")?;
-
-        // Print shape.
-        if rank > 0 && !tensor.shape.is_null() {
-            for i in 0..rank {
-                if i > 0 {
-                    push_str(rt, string_mut, string_tydesc, b", ")?;
-                }
-                let dim = (*tensor.shape.add(i)).0;
-                let s = dim.to_string();
-                push_str(rt, string_mut, string_tydesc, s.as_bytes())?;
-            }
-        }
-
-        push_str(rt, string_mut, string_tydesc, b"] [")?;
-
-        // Calculate total elements.
-        let total_elems: usize = if rank > 0 && !tensor.shape.is_null() {
-            (0..rank).map(|i| (*tensor.shape.add(i)).as_usize()).product()
+        // Read shape into a Vec for recursive processing.
+        let shape: Vec<usize> = if rank > 0 && !tensor.shape.is_null() {
+            (0..rank).map(|i| (*tensor.shape.add(i)).as_usize()).collect()
         } else {
-            0
+            vec![]
         };
 
-        // Print elements.
-        if total_elems > 0 && !tensor.ptr_base.is_null() {
-            if rank == 1 {
-                // 1D: comma-separated elements.
-                for i in 0..total_elems {
-                    if i > 0 {
-                        push_str(rt, string_mut, string_tydesc, b", ")?;
-                    }
-                    let elem_ptr = tensor.ptr_base.add(i * elem_size);
-                    pretty_value(rt, elem_ptr, elem_ty, string_mut, string_tydesc)?;
-                }
-            } else {
-                // 2D+: comma-separated rows, space-separated elements within rows.
-                // For row-major layout, the last dimension is contiguous.
-                let row_size = if rank > 0 && !tensor.shape.is_null() {
-                    (*tensor.shape.add(rank - 1)).as_usize()
-                } else {
-                    1
-                };
-                let num_rows = total_elems / row_size;
+        let total_elems: usize = shape.iter().product();
 
-                for row in 0..num_rows {
-                    if row > 0 {
-                        push_str(rt, string_mut, string_tydesc, b", ")?;
-                    }
-                    for col in 0..row_size {
-                        if col > 0 {
-                            push_str(rt, string_mut, string_tydesc, b" ")?;
-                        }
-                        let elem_idx = row * row_size + col;
-                        let elem_ptr = tensor.ptr_base.add(elem_idx * elem_size);
-                        pretty_value(rt, elem_ptr, elem_ty, string_mut, string_tydesc)?;
-                    }
-                }
+        if total_elems > 0 && !tensor.ptr_base.is_null() {
+            push_str(rt, string_mut, string_tydesc, b"[| ")?;
+            pretty_tensor_group(
+                rt, tensor.ptr_base, elem_ty, elem_size,
+                &shape, 0, 0, total_elems,
+                string_mut, string_tydesc,
+            )?;
+
+            // When the outermost dimension is 1, the highest comma level
+            // never appears as a separator. Emit trailing commas so the
+            // parser can infer the correct rank.
+            if rank > 1 && shape.first() == Some(&1) {
+                let commas: Vec<u8> = core::iter::repeat(b',').take(rank - 1).collect();
+                push_str(rt, string_mut, string_tydesc, &commas)?;
             }
+            push_str(rt, string_mut, string_tydesc, b" |]")
+        } else {
+            push_str(rt, string_mut, string_tydesc, b"[| |]")
+        }
+    }
+}
+
+/// Recursively print tensor elements with multi-comma separators.
+unsafe fn pretty_tensor_group(
+    rt: LocalRtHandle,
+    ptr_base: *const u8,
+    elem_ty: rtdt::TyDescRef,
+    elem_size: usize,
+    shape: &[usize],
+    dim: usize,
+    offset: usize,
+    count: usize,
+    string_mut: *mut u8,
+    string_tydesc: *const rtdt::TyDesc,
+) -> Result<(), ()> {
+    unsafe {
+        let rank = shape.len();
+
+        if dim == rank - 1 {
+            // Innermost dimension: space-separated elements.
+            for i in 0..count {
+                if i > 0 {
+                    push_str(rt, string_mut, string_tydesc, b" ")?;
+                }
+                let elem_ptr = ptr_base.add((offset + i) * elem_size);
+                pretty_value(rt, elem_ptr, elem_ty, string_mut, string_tydesc)?;
+            }
+            return Ok(());
         }
 
-        push_str(rt, string_mut, string_tydesc, b"]")
+        let group_size: usize = shape[dim + 1..].iter().product();
+        let num_groups = shape[dim];
+        let comma_count = rank - dim - 1;
+
+        for i in 0..num_groups {
+            if i > 0 {
+                // Write comma_count commas followed by a space.
+                let commas: Vec<u8> = core::iter::repeat(b',').take(comma_count).chain(core::iter::once(b' ')).collect();
+                push_str(rt, string_mut, string_tydesc, &commas)?;
+            }
+            pretty_tensor_group(
+                rt, ptr_base, elem_ty, elem_size,
+                shape, dim + 1, offset + i * group_size, group_size,
+                string_mut, string_tydesc,
+            )?;
+        }
+
+        Ok(())
     }
 }
 

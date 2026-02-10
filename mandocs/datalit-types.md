@@ -179,10 +179,8 @@ to any other types.
 
 ## Tensors
 
-Current syntax:
-
 ```datalove
-let data: tensor<f32, 2> = tensor [2 2] [1 2, 3 4]
+let data: [|f32, 2|] = [| 1 2, 3 4 |]
 ```
 
 

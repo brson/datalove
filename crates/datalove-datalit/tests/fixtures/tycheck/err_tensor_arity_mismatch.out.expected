@@ -1,31 +1,62 @@
 {
   "ast": {
     "expr": {
-      "ParseError": {
-        "message": "expected 2 elements per row but got 1"
+      "Tensor": {
+        "elements": [
+          {
+            "expr": {
+              "Int": {
+                "value": "1"
+              }
+            },
+            "type_hint": null
+          },
+          {
+            "expr": {
+              "Int": {
+                "value": "2"
+              }
+            },
+            "type_hint": null
+          },
+          {
+            "expr": {
+              "Int": {
+                "value": "3"
+              }
+            },
+            "type_hint": null
+          }
+        ],
+        "shape": [
+          2,
+          2
+        ]
       }
     },
     "type_hint": null
   },
   "diagnostics": [
     {
-      "code": "T017",
+      "code": "T051",
       "labels": [
         {
-          "message": "parse error occurred here",
+          "message": "expected 4 element(s), found 3",
           "span": [
             0,
-            6
+            12
           ],
-          "text": "tensor"
+          "text": "[| 1 2, 3 |]"
         }
       ],
-      "message": "cannot type-check expression with parse errors"
+      "message": "tensor has wrong number of elements"
     }
   ],
   "errors": [
     {
-      "kind": "CannotSynthesize"
+      "actual": 3,
+      "expected": 4,
+      "kind": "ArityMismatch"
     }
   ],
   "root_type": null

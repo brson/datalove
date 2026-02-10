@@ -62,7 +62,7 @@ Examples:
 - `!T = !T'` iff T = T'
 
 ### Tensor
-- `tensor<T, R> = tensor<T', R'>` iff T = T' and R = R' (same element type and rank)
+- `[|T, R|] = [|T', R'|]` iff T = T' and R = R' (same element type and rank)
 
 ### Table
 - `{| c1: T1, c2: T2, ... |} = {| c1': T1', c2': T2', ... |}` iff column names and types match in order
@@ -289,7 +289,7 @@ shape = [d1, d2, ..., dn]
 elements.len() == d1 * d2 * ... * dn
 all elements synthesize to same type T
 -----------------------------------------
-tensor [d1, d2, ...] [e1, e2, ...] => tensor<T, n>
+[| e1 e2 ... |] => [|T, n|]
 ```
 
 Tensors are synthesized if non-empty and all elements have the same type.
@@ -527,12 +527,12 @@ set {e1, e2, ...} <= set<T>
 
 ### Rule: Check-Tensor
 ```
-tensor<T, R> is expected type
+[|T, R|] is expected type
 rank matches R
 element count matches product of shape dimensions
 for all ei: ei <= T
 -----------------------------------------------
-tensor [d1, ...] [e1, ...] <= tensor<T, R>
+[| e1 ... |] <= [|T, R|]
 ```
 
 ### Rule: Check-Table

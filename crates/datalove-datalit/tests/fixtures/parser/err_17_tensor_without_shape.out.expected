@@ -1,18 +1,63 @@
 {
   "ast": {
     "expr": {
-      "ParseError": {
-        "message": "expected shape [...] after tensor keyword"
+      "Tensor": {
+        "elements": [
+          {
+            "expr": {
+              "Int": {
+                "value": "1"
+              }
+            },
+            "type_hint": null
+          },
+          {
+            "expr": {
+              "Int": {
+                "value": "2"
+              }
+            },
+            "type_hint": null
+          },
+          {
+            "expr": {
+              "Int": {
+                "value": "3"
+              }
+            },
+            "type_hint": null
+          },
+          {
+            "expr": {
+              "Int": {
+                "value": "4"
+              }
+            },
+            "type_hint": null
+          },
+          {
+            "expr": {
+              "Int": {
+                "value": "5"
+              }
+            },
+            "type_hint": null
+          }
+        ],
+        "shape": [
+          2,
+          3
+        ]
       }
     },
     "type_hint": null
   },
   "diagnostics": [
     {
-      "code": "D010",
+      "code": "D023",
       "labels": [
         {
-          "message": "expected '[' for tensor shape",
+          "message": "shape mismatch",
           "span": [
             0,
             0
@@ -20,7 +65,7 @@
           "text": ""
         }
       ],
-      "message": "expected shape [...] after tensor keyword"
+      "message": "inconsistent tensor shape at group 1: expected [3] but got [2]"
     }
   ]
 }

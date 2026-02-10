@@ -188,11 +188,11 @@ fn pretty_type<'db>(
         }
 
         Type::Tensor(t) => {
-            out.push_str("tensor<");
+            out.push_str("[|");
             pretty_type(db, &*t.element_type.clone(), out);
             out.push_str(", ");
             out.push_str(&t.rank.S());
-            out.push('>');
+            out.push_str("|]");
         }
 
         Type::Table(t) => {
@@ -345,11 +345,11 @@ fn pretty_type_hint<'db>(
         }
 
         TypeHint::Tensor(t) => {
-            out.push_str("tensor<");
+            out.push_str("[|");
             pretty_type_hint(db, *t.element_type.clone(), out);
             out.push_str(", ");
             out.push_str(&t.rank.S());
-            out.push('>');
+            out.push_str("|]");
         }
 
         TypeHint::Table(t) => {
@@ -518,43 +518,11 @@ fn pretty_expr<'db>(
         }
 
         Expr::Tensor(t) => {
-            out.push_str("tensor [");
+            out.push_str("[| ");
             let shape = &t.shape;
-            for (i, &dim) in shape.iter().enumerate() {
-                if i > 0 {
-                    out.push_str(", ");
-                }
-                out.push_str(&dim.S());
-            }
-            out.push_str("] [");
             let elements = &t.elements;
-            let rank = shape.len();
-
-            if rank == 1 {
-                // 1D tensor: comma-separated elements.
-                for (i, elem) in elements.iter().enumerate() {
-                    if i > 0 {
-                        out.push_str(", ");
-                    }
-                    pretty_expr_full(db, *elem, out, indent);
-                }
-            } else {
-                // 2D+ tensor: comma-separated rows, space-separated elements.
-                let row_size = *shape.last().unwrap() as usize;
-                for (row_idx, row) in elements.chunks(row_size).enumerate() {
-                    if row_idx > 0 {
-                        out.push_str(", ");
-                    }
-                    for (elem_idx, elem) in row.iter().enumerate() {
-                        if elem_idx > 0 {
-                            out.push(' ');
-                        }
-                        pretty_expr_full(db, *elem, out, indent);
-                    }
-                }
-            }
-
-            out.push(']');
+            pretty_tensor_elements(db, shape, elements, out, indent);
+            out.push_str(" |]");
         }
 
         Expr::Data(d) => {
@@ -594,5 +562,81 @@ fn pretty_expr<'db>(
             }
             out.push_str(" |}");
         }
+    }
+}
+
+/// Pretty-print tensor elements with multi-comma layout derived from shape.
+///
+/// 1D: space-separated elements.
+/// 2D: single-comma between rows, space-separated within rows.
+/// 3D: double-comma between slabs, single-comma between rows.
+/// etc.
+fn pretty_tensor_elements<'db>(
+    db: &'db dyn crate::Db,
+    shape: &[u32],
+    elements: &[ExprFull<'db>],
+    out: &mut String,
+    indent: usize,
+) {
+    if elements.is_empty() {
+        return;
+    }
+
+    let rank = shape.len();
+    if rank == 0 {
+        return;
+    }
+
+    // Recursively print groups with appropriate comma separators.
+    pretty_tensor_group(db, shape, elements, 0, out, indent);
+
+    // When the outermost dimension is 1, the highest comma level (rank - 1)
+    // never appears as a separator. Emit trailing commas so the parser can
+    // infer the correct rank.
+    if rank > 1 && shape[0] == 1 {
+        for _ in 0..(rank - 1) {
+            out.push(',');
+        }
+    }
+}
+
+/// Recursively print a tensor group at the given dimension level.
+///
+/// `dim` is the current dimension index (0 = outermost).
+fn pretty_tensor_group<'db>(
+    db: &'db dyn crate::Db,
+    shape: &[u32],
+    elements: &[ExprFull<'db>],
+    dim: usize,
+    out: &mut String,
+    indent: usize,
+) {
+    let rank = shape.len();
+
+    if dim == rank - 1 {
+        // Innermost dimension: space-separated elements.
+        for (i, elem) in elements.iter().enumerate() {
+            if i > 0 {
+                out.push(' ');
+            }
+            pretty_expr_full(db, *elem, out, indent);
+        }
+        return;
+    }
+
+    // Calculate the number of elements per group at this level.
+    let group_size: usize = shape[dim + 1..].iter().map(|&d| d as usize).product();
+    let num_groups = shape[dim] as usize;
+    // Comma count for this level: rank - dim - 1 commas.
+    let comma_count = rank - dim - 1;
+
+    for (i, chunk) in elements.chunks(group_size).enumerate().take(num_groups) {
+        if i > 0 {
+            for _ in 0..comma_count {
+                out.push(',');
+            }
+            out.push(' ');
+        }
+        pretty_tensor_group(db, shape, chunk, dim + 1, out, indent);
     }
 }

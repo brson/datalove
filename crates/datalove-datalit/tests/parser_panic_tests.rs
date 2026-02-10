@@ -67,10 +67,10 @@ fn type_hint_map_missing_comma() {
 }
 
 /// Tensor type hint missing comma between element type and rank.
-/// `tensor<T, N>` expects a comma.
+/// `[|T, N|]` expects a comma.
 #[test]
 fn type_hint_tensor_missing_comma() {
-    let json = parse(": tensor<i32 2> / @42");
+    let json = parse(": [|i32 2|] / 42");
     assert_parse_error(&json, "tensor missing comma");
 }
 

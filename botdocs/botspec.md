@@ -54,8 +54,8 @@ default   else      end       enum      error     er
 false     for       fun       icall     if        import
 in        let       loop      map       match     mut
 none      not       ok        or        out       ref
-require   ret       set       some      table     tensor
-term      true      type      var       while     xor
+require   ret       set       some      table     term
+true      type      var       while     xor
 ```
 
 ### 2.2 Literals
@@ -157,20 +157,23 @@ mutated, but can be passed to `ref` parameters.
 **Tensor.** A multi-dimensional array with fixed shape.
 
 ```
-tensor<T, N>             // type: element type T, rank N
-tensor [3] [1, 2, 3]     // 1D literal with shape [3]
-tensor [2, 3] [1 2 3, 4 5 6]  // 2D literal with shape [2, 3]
+[|T, N|]                 // type: element type T, rank N
+[| 1 2 3 |]             // 1D literal (shape inferred: [3])
+[| 1 2 3, 4 5 6 |]      // 2D literal (shape inferred: [2, 3])
+[| 1 2, 3 4,, 5 6, 7 8 |]  // 3D literal (shape inferred: [2, 2, 2])
 ```
 
 Type hints specify element type and rank:
 
 ```
-: tensor<u32, 2> / tensor [2, 2] [1 2, 3 4]
+: [|u32, 2|] / [| 1 2, 3 4 |]
 ```
 
-In tensor literals, the shape is a comma-separated list of dimensions in
-brackets, followed by the data in brackets. For rank > 1, rows are
-comma-separated and elements within a row are space-separated.
+Shape is inferred from the multi-comma structure: spaces separate elements
+along the innermost axis, `,` separates rows (2nd axis), `,,` separates
+slabs (3rd axis), `,,,` separates blocks (4th axis), etc. When the outermost
+dimension is 1, a trailing comma run preserves rank: `[| 1 2 3, |]` is a
+rank-2 tensor with shape [1, 3].
 
 Tensor literals can be created and stored, but element access and tensor
 operations (indexing, transpose, slice, reshape) are not yet exposed to the

@@ -393,12 +393,6 @@ impl<'db> Parser<'db> {
                                         ts
                                     )
                                 }
-                                // tensor is a keyword followed by shape and data brackets.
-                                "tensor" if self.peek_second_sigil(Sigil::BracketOpen) => {
-                                    let ts = self.peek_text_span();
-                                    let expr_kind = self.parse_lit_expr(None);
-                                    self.create_expr(expr_kind, ts)
-                                }
                                 // Intrinsic call: icall name(args)
                                 "icall" => {
                                     let ts = self.peek_text_span();

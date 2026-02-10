@@ -202,7 +202,7 @@ impl std::fmt::Display for IrType {
             IrType::Map(k, v) => write!(f, "map<{}, {}>", k, v),
             IrType::Option(inner) => write!(f, "option<{}>", inner),
             IrType::Result(ok) => write!(f, "result<{}>", ok),
-            IrType::Tensor(elem, rank) => write!(f, "tensor<{}, {}>", elem, rank),
+            IrType::Tensor(elem, rank) => write!(f, "[|{}, {}|]", elem, rank),
             IrType::Ref(inner) => write!(f, "ref<{}>", inner),
             IrType::Table(cols) => {
                 write!(f, "{{| ")?;

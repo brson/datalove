@@ -757,11 +757,11 @@ fn pretty_type_hint<'db>(
         }
 
         TypeHint::Tensor(t) => {
-            out.push_str("tensor<");
+            out.push_str("[|");
             pretty_type_hint(db, *t.element_type.clone(), out);
             out.push_str(", ");
             out.push_str(&t.rank.S());
-            out.push('>');
+            out.push_str("|]");
         }
 
         TypeHint::ParseError(e) => {

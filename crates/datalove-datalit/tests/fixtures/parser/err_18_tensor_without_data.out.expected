@@ -1,26 +1,14 @@
 {
   "ast": {
     "expr": {
-      "ParseError": {
-        "message": "expected data [...] after tensor shape"
+      "Tensor": {
+        "elements": [],
+        "shape": [
+          0
+        ]
       }
     },
     "type_hint": null
   },
-  "diagnostics": [
-    {
-      "code": "D011",
-      "labels": [
-        {
-          "message": "expected '[' for tensor data",
-          "span": [
-            0,
-            0
-          ],
-          "text": ""
-        }
-      ],
-      "message": "expected data [...] after tensor shape"
-    }
-  ]
+  "diagnostics": []
 }
