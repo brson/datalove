@@ -10,7 +10,7 @@
 ---
 
 - [Lexical Structure](lexer.md)
-- [Datalove Literals Types](datalit-types.md)
+- [Datalove Types](types.md)
 - [Types, Literals, and Destructuring](types-lits-destr.md)
 - [Modules, Functions and Scripts](modules-functions-scripts.md)
 - [Control Flow](control-flow.md)

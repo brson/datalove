@@ -1,4 +1,4 @@
-# The Datatypes of Datalove Literals
+# The Datatypes of Datalove
 
 Datalove's datatypes, their representation,
 and semantics are focused on readability,
