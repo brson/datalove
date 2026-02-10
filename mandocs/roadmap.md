@@ -3,15 +3,14 @@
 
 
 
-## Next checkpoint
+## Checkpoint 1 - Compiler Architecture
 
 Initial prototype.
 Thorough compiler architecture, bare language.
 
 - [ ] documentation
 - [x] diagnostics
-- [ ] module and script compile reactivity
-- [ ] script interpreter reactivity
+- [ ] workspaces
 - [x] tensors and tables
 - [ ] indexing
 - [ ] table column projections
@@ -40,6 +39,7 @@ Thorough compiler architecture, bare language.
 
 
 
+
 ## On deck
 
 - datalit synthesis for enums, etc.
@@ -48,8 +48,8 @@ Thorough compiler architecture, bare language.
 - workspaces - waiting for design
 - match syntax / switch ir instruction
   - use switch during specialization
+- native riders - built-in runtime for now
 - std.string - waiting for rtcalls
-- assert statements - needed for std_tests?
 - fully reactive scripts, undo/redo
 - const param specialization fixes
 - generics
@@ -59,27 +59,35 @@ Thorough compiler architecture, bare language.
 
 ## Backlog
 
-- inline/jit tuning
-- tree-sitter
-- 128-bit ints
-- remove data / error keywords - rely on ~ coercion?
-- testable docs
-- multiple scripts
-- analysis caching
-- type declarations
-- simple multithreading
+
+
+
+## Checkpoint 2 - REPL
+
+Focus on ergonomic REPL experience.
+
+- [ ] module and script compile reactivity
+- [ ] script interpreter reactivity
+- [ ] assert statements - needed for std_tests?
+
 
 
 
 
 ## Backburner
 
-- fix rt error/alloc semantics
-- native riders - built-in runtime for now
+- multiple scripts
 - pipeline tools
+- analysis caching
+- simple multithreading
+- testable docs
+- tree-sitter
+- 128-bit ints
+- fix rt error/alloc semantics
 - worldfile generator - waiting on pipeline stability
 - closures
 - const parameter specialization
+- inline/jit tuning
 - allocation statistics
 - jit statistics
 - cleanup and specify bidirectional typechecking
@@ -88,6 +96,7 @@ Thorough compiler architecture, bare language.
 - deterministic builds - compiler pipeline is already deterministic
 - wasm-component backend
 - improve runtime implementation unsafety
+
 
 
 

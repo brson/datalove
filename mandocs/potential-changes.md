@@ -1,3 +1,12 @@
+## Remove error data data keywords etc
+
+remove data / error keywords - rely on ~ coercion?
+
+similar coercion for "er error"
+
+
+
+
 ## Replace `=`
 
 Current usage in maps is awkward,
