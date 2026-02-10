@@ -1,19 +1,24 @@
 # Datalove Roadmap
 
 
+
+
 ## Next checkpoint
 
-- [ ] top-level documentation
+Initial prototype.
+Thorough compiler architecture, bare language.
+
+- [ ] documentation
 - [x] diagnostics
 - [ ] module and script compile reactivity
 - [ ] script interpreter reactivity
 - [x] tensors and tables
+- [ ] indexing
 - [ ] table column projections
 - [x] adapt opt / clone and coerce / @
 - [x] logic ops
 - [x] type aliases
 - [x] ctfe
-- [ ] const argument specialization
 - [ ] generic functions for built-in generic types
 - [ ] basic repl,
 - [x] script runner
@@ -31,8 +36,6 @@
 
 ## In progress
 
-- datalit syntax cleanup
-  - map set type syntax
 - human docs
 
 
