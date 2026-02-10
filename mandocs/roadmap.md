@@ -68,8 +68,11 @@ Focus on ergonomic REPL experience.
 
 - [ ] module and script compile reactivity
 - [ ] script interpreter reactivity
+- [ ] script unit undo/redo
 - [ ] assert statements - needed for std_tests?
-
+- [ ] int auto-clones
+- [ ] type sythesis for all literal forms
+- [ ] enum subtyping
 
 
 
