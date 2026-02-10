@@ -1,24 +1,103 @@
 # Future designs
 
 
+## 2026/02/10 - Workspaces, the package world, and native riders
 
 
 
-## 2026/01/21 - Ergonomic switches
 
-- fixed int math op widening to int
-- auto-@ operator
+## 2026/02/10 - Metadata syntax
 
-merge former into @.
+It'll be plain old data using
+datalit types and either a restricted expression syntax
+or more likely const-evaluated expressions;
+all statements and expressions annotatable.
 
-Add "auto-coerce" feature,
-off for modules,
-on for scripts.
+Sketches:
+
+```datalove
+# "data"
+fun foo()
+  let a = : int / 2
+
+  let b = # "data" / 2
+  let b = # "data" : int / 2
+end fun
+
+# term Linkage #{
+  atom NoMangle,
+  term SymbolName "foobar",
+}
+fun foo()
+  let a = : int / 2
+
+  let b = # term DebugInfo #{
+    term Span (0, 0)
+  } / 2
+  let b = # term DebugInfo #{
+    term Span (0, 0)
+  } : int / 2
+end fun
+
+// Multiple attributes.
+# "a"
+# "b"
+fun foo()
+  let foo = # "a" # "b" # "c" / 2
+end fun
+```
+
+Could try to enforce "inner" function attributes.
+
+```datalove
+fun foo()
+  #^ term Linkage #{
+    atom NoMangle,
+    term SymbolName "foobar",
+  }
+
+  ret
+end fun
+```
+
+Parameters and return values:
+
+```datalove
+fun foo(
+  # "foo" ref a: int,
+
+  // A single argument with multiple attributes.
+  # "foo" # "bar" ;
+  # "baz" ;
+  b: int
+) # "a" : int
+
+  ret 2
+end fun
+```
+
+
+
+
+## 2026/02/10 - Ergonomic switches for repl / scripts
+
+Definitely need more ergonomics and less suprises in the repl.
+Scripts may or may not need ergonomic support.
+Onboarding repl -> script -> modules,
+can get stricter with prhogress.
+
+Needed:
+
+- auto-coerce (auto-@ insertion).
+  exists but not surfaced.
+- auto clone, at least for script unit exports,
+  bigints, strings, maybe not all types
 
 Could be toggleable:
 
 ```datalove
 feature auto_coerce off
+feature auto_export_clone
 ```
 
 Comparison to visual basic modes that I've forgotten, js strict mode.

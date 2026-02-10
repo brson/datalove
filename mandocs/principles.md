@@ -71,12 +71,20 @@ early-return checked operations and widening to ease the burden.
 
 Datalove reserves some symbols to strongly mean one thing.
 
+| When you see | it means                  |
+|--------------|---------------------------|
+| `:`          | type                      |
+| `?`          | option                    |
+| `!`          | result                    |
+| `@`          | adapt                     |
+| `;`          | statement break / newline |
+
+Likewise some bracket pairs are for one thing.
+
 | When you see | it means |
 |--------------|----------|
-| `:`          | type     |
-| `?`          | option   |
-| `!`          | result   |
 | `{|` … `|}`  | table    |
+| `[|` … `|]`  | tensor   |
 
 
 
