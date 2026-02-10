@@ -9,8 +9,7 @@ The result type is a language type,
 and is dedicated the `!` sigil &mdash;
 if you see `!` you are looking at error handling.
 
-The error type is a dynamic type that can hold
-any type (an existential type).
+The error type is a dynamic type that holds a value of any type.
 
 
 

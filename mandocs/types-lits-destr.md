@@ -92,8 +92,6 @@ let a: [|int, 3|] = [|
 | `atom Foo`                    | `atom Foo`                     | `let atom Foo`                |
 | `term Foo T`                  | `term Foo 1`                   | `let term Foo a`              |
 | `enum { atom A, term B T }`   | `enum { atom A }`              | †                             |
-| `data`                        | `data 1` <br> `data : u32 / 2` | n/a                           |
-| `error`                       | `error 1` <br> `error "oops"`  | n/a                           |
 
 † Sum types need to use `match` or `if` for destructuring. See below.
 
@@ -182,3 +180,13 @@ case term Tri sides
   area = 0.0
 end match
 ```
+
+
+
+
+## Dynamic types
+
+| Type                          | Literal                        | Destructuring                 |
+|-------------------------------|--------------------------------|-------------------------------|
+| `data`                        | `data 1` <br> `data : u32 / 2` | n/a                           |
+| `error`                       | `error 1` <br> `error "oops"`  | n/a                           |

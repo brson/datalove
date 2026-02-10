@@ -40,7 +40,7 @@ expr           =
                | set_expr
                | table_expr
                | tensor_expr
-               | existential_expr ;
+               | dynamic_expr ;
 ```
 
 
