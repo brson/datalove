@@ -8,7 +8,7 @@ common data types.
 
 
 
-## Datalove literal expressions
+## Expressions
 
 All expressions
 may be prefixed with a type hint,
@@ -23,14 +23,27 @@ synthesize some type in absence of type hints,
 though in some cases it may be required
 to use type hints to reliably produce a desired type.
 
+### EBNF · Expressions
+
 ```ebnf
 datalit        = ws, full_expr, ws ;
 full_expr      = [ type_hint ], expr ;
 type_hint      = ":", ws, type, ws, "/" ;
-expr           =
-               | bool_lit
-               | numeric_lit
-               | string_lit
+type           = primitive_type
+               | tuple_type
+               | struct_type
+               | option_type
+               | result_type
+               | list_type
+               | map_type
+               | set_type
+               | table_type
+               | tensor_type
+               | atom_type
+               | term_type
+               | enum_type
+               | dynamic_type ;
+expr           = primitive_lit
                | tuple_expr
                | struct_expr
                | option_expr
@@ -83,6 +96,25 @@ NaNs and infinity.
   bar = 0x02,
   baz = 0x03000000, // float hex literals must have correct # digits
 }
+```
+
+### EBNF · Primitive types
+
+```ebnf
+primitive_type = "bool"
+               | "u8" | "u16" | "u32" | "u64"
+               | "i8" | "i16" | "i32" | "i64"
+               | "index" | "offset"
+               | "f32" | "f64"
+               | "int" | "string" ;
+
+primitive_lit  = bool_lit | numeric_lit | string_lit
+bool_lit       = "true" | "false" ;
+numeric_lit    = int_lit | float_lit | hex_lit ;
+int_lit        = [ "-" ], digit, { digit } ;
+float_lit      = [ "-" ], digit, { digit }, ".", digit, { digit } ;
+hex_lit        = [ "-" ], "0", ( "x" | "X" ), hex_digit, { hex_digit } ;
+string_lit     = '"', { string_char }, '"' ;
 ```
 
 
