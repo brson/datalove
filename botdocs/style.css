@@ -138,6 +138,10 @@
 }
 
 body {
+  filter: saturate(50%);
+}
+
+body {
     font-family: var(--font-text);
     font-size: var(--font-size-text);
     font-feature-settings: "onum" 1, "kern" 1;
