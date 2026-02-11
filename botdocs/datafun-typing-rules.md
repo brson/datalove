@@ -35,7 +35,7 @@ TypeFunction {
 Function type syntax: `(T1, T2, ...) -> R`
 
 Examples:
-```
+```datalove
 (u32, u32) -> u32       // Two u32 params, returns u32
 (string) -> bool        // One string param, returns bool
 () -> ()                // No params, returns unit (void)
@@ -374,7 +374,7 @@ e <= T
 ```
 
 **Example - Type Propagation:**
-```
+```datalove
 fun add(): !u32
     ret ok (1 +! 2)    // 1 and 2 check against u32 from ok wrapper
 end fun
@@ -389,7 +389,7 @@ end fun
 7. Expression type is `u32`
 
 **Example - Return Type Validation:**
-```
+```datalove
 // ERROR: +? requires Option return, but script returns Result
 let x: u32 = a +? b    // Falls through to synthesis, produces error
 ```
@@ -645,7 +645,7 @@ Try operators (`?`, `!`) and checked/optional arithmetic require:
 
 ## Numeric Type Hierarchy
 
-```
+```datalove
 Unsigned: u8 -> u16 -> u32 -> u64 -> int
 Signed:   i8 -> i16 -> i32 -> i64 -> int
 Float:    f32 (no widening)

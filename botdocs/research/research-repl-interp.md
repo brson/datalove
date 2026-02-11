@@ -1242,7 +1242,7 @@ impl ReplHistory {
 **Problem**: Simple undo/redo doesn't account for dependencies
 
 **Example**:
-```
+```datalove
 > let x = 5
 > let y = x * 2
 > y

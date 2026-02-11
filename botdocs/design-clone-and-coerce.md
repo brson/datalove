@@ -17,7 +17,7 @@ Creates a deep copy of a linear value. Original remains valid after cloning.
 
 ### Syntax
 
-```
+```datalove
 expr$
 ```
 
@@ -42,7 +42,7 @@ Copy types already duplicate implicitly. Explicit `$` on a copy type likely indi
 
 ### Examples
 
-```
+```datalove
 let x: int = 42
 let y = x$              // OK: clone linear type
 let z = x               // OK: x still valid
@@ -53,7 +53,7 @@ let m = n$              // ERROR: cannot clone copy type u32
 
 Loop usage (linear values cannot be moved in loops):
 
-```
+```datalove
 fun sum_n_times(val: int, n: u32): int
     var acc: int = 0
     var i: u32 = @0
@@ -71,13 +71,13 @@ Lossless numeric coercion to a wider type in the same signedness family.
 
 ### Syntax
 
-```
+```datalove
 expr~
 ```
 
 ### Valid Widening Chains
 
-```
+```datalove
 u8 -> u16 -> u32 -> u64 -> int
 i8 -> i16 -> i32 -> i64 -> int
 ```
@@ -102,13 +102,13 @@ Target type propagates from:
 
 Binary operators propagate expected type to both operands:
 
-```
+```datalove
 let sum: u32 = a~ + b~      // + propagates u32 to both ~ operators
 ```
 
 ### Examples
 
-```
+```datalove
 let a: u8 = @10
 let b: u32 = a~             // OK: u8 -> u32
 
@@ -119,7 +119,7 @@ let e: i32 = a~             // ERROR: crosses sign boundary
 
 Function parameter propagation:
 
-```
+```datalove
 fun process(n: u64): u64
     ret n
 end fun
@@ -137,14 +137,14 @@ Typechecking: right-to-left
 
 ### Valid Chains
 
-```
+```datalove
 let a: u8 = @10
 let b: int = a~$        // widen u8 -> int, then clone int
 ```
 
 ### Invalid Chains
 
-```
+```datalove
 let a: u8 = @10
 let b: int = a$~        // ERROR at $: cannot clone copy type u8
 ```

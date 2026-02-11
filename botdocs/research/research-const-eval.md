@@ -31,13 +31,13 @@ The interpreter already executes IR; const eval reuses it with constraints.
 Two places where const evaluation applies:
 
 1. **Const declarations** - New statement type:
-   ```
+   ```datalove
    const PI: f32 = @3.14159
    const MAX_SIZE: u32 = compute_max()
    ```
 
 2. **Comptime arguments** - Function arguments marked `comptime`:
-   ```
+   ```datalove
    fun make_buffer(comptime size: u32): [@u8]
        ...
    end fun
@@ -154,7 +154,7 @@ Const functions from imported modules:
 
 ## Example Usage
 
-```datafun
+```datalove
 // Const function computing factorial
 fun factorial_const(n: u32): u32
     loop carry (acc: u32 = @1, i = n)

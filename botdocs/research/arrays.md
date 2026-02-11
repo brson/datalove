@@ -11,7 +11,7 @@ but shape, layout, and stride are dynamic.
 - layout - row-major, column-major, RM transposed, CM transposed, maybe exotic layouts
 - stride - rows/columns to skip in a particular view
 
-```
+```datalove
 : [|u32, 2|] / [|
   1 2 3,
   4 5 6
@@ -30,7 +30,7 @@ Hash suggests matrixes. Could _also_ save this far actual matrix type.
 
 Outer percent also good:
 
-```
+```datalove
 : %[u32, 2]% / %[
   1 2 3,
   4 5 6
@@ -42,7 +42,7 @@ Outer percent also good:
 
 ### `|[ ]|` (pipe prefix)
 
-```
+```datalove
 : |[u32, 2]| / |[
   1 2 3,
   4 5 6
@@ -59,7 +59,7 @@ end fun
 
 ### `[| |]` (pipe postfix)
 
-```
+```datalove
 : [|u32, 2|] / [|
   1 2 3,
   4 5 6
@@ -93,7 +93,7 @@ end fun
 
 ### `[# #]` (hash postfix)
 
-```
+```datalove
 : [#u32, 2#] / [#
   1 2 3,
   4 5 6
@@ -110,7 +110,7 @@ end fun
 
 ### `:[ ]:` (colon prefix)
 
-```
+```datalove
 : :[u32, 2]: / :[
   1 2 3,
   4 5 6
@@ -127,7 +127,7 @@ end fun
 
 ### `[: :]` (colon postfix)
 
-```
+```datalove
 : [:u32, 2:] / [:
   1 2 3,
   4 5 6
@@ -144,7 +144,7 @@ end fun
 
 ### `~[ ]~` (tilde prefix)
 
-```
+```datalove
 : ~[u32, 2]~ / ~[
   1 2 3,
   4 5 6
@@ -161,7 +161,7 @@ end fun
 
 ### `[~ ~]` (tilde postfix)
 
-```
+```datalove
 : [~u32, 2~] / [~
   1 2 3,
   4 5 6
@@ -178,7 +178,7 @@ end fun
 
 ### `@[ ]@` (at prefix)
 
-```
+```datalove
 : @[u32, 2]@ / @[
   1 2 3,
   4 5 6
@@ -195,7 +195,7 @@ end fun
 
 ### `[@ @]` (at postfix)
 
-```
+```datalove
 : [@u32, 2@] / [@
   1 2 3,
   4 5 6
@@ -212,7 +212,7 @@ end fun
 
 ### `*[ ]*` (star prefix)
 
-```
+```datalove
 : *[u32, 2]* / *[
   1 2 3,
   4 5 6
@@ -229,7 +229,7 @@ end fun
 
 ### `[* *]` (star postfix)
 
-```
+```datalove
 : [*u32, 2*] / [*
   1 2 3,
   4 5 6
@@ -246,7 +246,7 @@ end fun
 
 ### `%[ ]%` (percent prefix)
 
-```
+```datalove
 : %[u32, 2]% / %[
   1 2 3,
   4 5 6
@@ -263,7 +263,7 @@ end fun
 
 ### `[% %]` (percent postfix)
 
-```
+```datalove
 : [%u32, 2%] / [%
   1 2 3,
   4 5 6
@@ -280,7 +280,7 @@ end fun
 
 ### `=[ ]=` (equals prefix)
 
-```
+```datalove
 : =[u32, 2]= / =[
   1 2 3,
   4 5 6
@@ -297,7 +297,7 @@ end fun
 
 ### `[= =]` (equals postfix)
 
-```
+```datalove
 : [=u32, 2=] / [=
   1 2 3,
   4 5 6
@@ -314,7 +314,7 @@ end fun
 
 ### `.[ ].` (dot prefix)
 
-```
+```datalove
 : .[u32, 2]. / .[
   1 2 3,
   4 5 6
@@ -331,7 +331,7 @@ end fun
 
 ### `[. .]` (dot postfix)
 
-```
+```datalove
 : [.u32, 2.] / [.
   1 2 3,
   4 5 6
@@ -348,7 +348,7 @@ end fun
 
 ### `^[ ]^` (caret prefix)
 
-```
+```datalove
 : ^[u32, 2]^ / ^[
   1 2 3,
   4 5 6
@@ -365,7 +365,7 @@ end fun
 
 ### `[^ ^]` (caret postfix)
 
-```
+```datalove
 : [^u32, 2^] / [^
   1 2 3,
   4 5 6
@@ -383,7 +383,7 @@ end fun
 
 Compare to lists:
 
-```
+```datalove
 : [int] / [1]
 ```
 
@@ -392,7 +392,7 @@ Compare to lists:
 Single-character modifiers:
 
 ### Hash/Pound `#`
-```
+```datalove
 #[ ]#    #( )#    #{ }#
 [# #]    (# #)    {# #}
 ```
@@ -400,7 +400,7 @@ Pros: Grid-like appearance, keyboard accessible, not heavily overloaded in most 
 Cons: Used for comments/directives in some contexts
 
 ### Colon `:`
-```
+```datalove
 :[ ]:    :( ):    :{ }:
 [: :]    (: :)    {: :}
 ```
@@ -408,7 +408,7 @@ Pros: Already associated with slicing/indexing, clean appearance
 Cons: Might conflict with type annotations, range syntax
 
 ### Tilde `~`
-```
+```datalove
 ~[ ]~    ~( )~    ~{ }~
 [~ ~]    (~ ~)    {~ ~}
 ```
@@ -416,7 +416,7 @@ Pros: Wavy/undulating suggests multi-dimensionality, rarely used for core syntax
 Cons: Less familiar, might look decorative rather than structural
 
 ### At sign `@`
-```
+```datalove
 @[ ]@    @( )@    @{ }@
 [@ @]    (@ @)    {@ @}
 ```
@@ -424,7 +424,7 @@ Pros: Round, matrix-like appearance, distinct
 Cons: Heavily used for decorators/annotations in Python/Java/etc
 
 ### Asterisk/Star `*`
-```
+```datalove
 *[ ]*    *( )*    *{ }*
 [* *]    (* *)    {* *}
 ```
@@ -432,7 +432,7 @@ Pros: Suggests multiplication/cartesian products, pointer-like (memory-backed)
 Cons: Very overloaded (multiplication, pointers, wildcards, unpacking)
 
 ### Percent `%`
-```
+```datalove
 %[ ]%    %( )%    %{ }%
 [% %]    (% %)    {% %}
 ```
@@ -440,7 +440,7 @@ Pros: Two circles suggest dimensionality, distinct
 Cons: Modulo operator, string formatting in some languages
 
 ### Equals `=`
-```
+```datalove
 =[ ]=    =( )=    ={ }=
 [= =]    (= =)    {= =}
 ```
@@ -448,7 +448,7 @@ Pros: Horizontal lines suggest rows/grids
 Cons: Too strongly suggests assignment/equality
 
 ### Dot `.`
-```
+```datalove
 .[ ].    .( ).    .{ }.
 [. .]    (. .)    {. .}
 ```
@@ -456,7 +456,7 @@ Pros: Minimal, unobtrusive, suggests elements
 Cons: Might be too subtle, conflicts with member access
 
 ### Caret `^`
-```
+```datalove
 ^[ ]^    ^( )^    ^{ }^
 [^ ^]    (^ ^)    {^ ^}
 ```
@@ -466,14 +466,14 @@ Cons: XOR operator, sometimes line-start anchor in regex
 Double-character modifiers:
 
 ### Double colon `::`
-```
+```datalove
 ::[ ]::    ::[  ]::
 ```
 Pros: Namespace separator feel, suggests "different kind of"
 Cons: More verbose, might be too heavy
 
 ### Double hash `##`
-```
+```datalove
 ##[ ]##
 ```
 Pros: Very distinct, strong visual signal

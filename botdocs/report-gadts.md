@@ -14,7 +14,7 @@ Design exploration for adding GADTs to Datalove while maintaining phase separati
 
 Type parameters that must be const-known, using const values as type indices:
 
-```
+```datalove
 enum TypeTag
     TInt
     TBool
@@ -34,7 +34,7 @@ Where clauses constrain which const values are valid for each constructor. Patte
 
 Const functions returning TypeTag enable computed return types:
 
-```
+```datalove
 const fun ExprResult(tag: TypeTag): TypeTag
     ret tag
 end fun
@@ -44,7 +44,7 @@ end fun
 
 Maps TypeTag values to actual types (evaluated at compile time):
 
-```
+```datalove
 type Reify<const TAG: TypeTag> =
     match TAG
         TInt => i64
@@ -54,7 +54,7 @@ type Reify<const TAG: TypeTag> =
 
 ## Complete Evaluator Example
 
-```
+```datalove
 fun eval<const T: TypeTag>(e: Expr<T>): Reify<T>
     match e
         LitInt(n) =>
@@ -79,7 +79,7 @@ end fun
 
 Constructors become unreachable when their where clause contradicts known constraints:
 
-```
+```datalove
 fun negate(e: Expr<TBool>): Expr<TBool>
     match e
         LitBool(b) => ret LitBool(not b)
@@ -93,7 +93,7 @@ end fun
 
 For heterogeneous collections, pack the index existentially with a runtime witness:
 
-```
+```datalove
 enum TypeWitness<const T: TypeTag>
     WitInt  where T == TInt
     WitBool where T == TBool
@@ -110,7 +110,7 @@ The witness enables runtime dispatch to recover type information.
 
 Const arithmetic in indices:
 
-```
+```datalove
 enum Vec<const N: u64, T>
     Nil                    where N == 0
     Cons(T, Vec<N - 1, T>) where N > 0
@@ -129,7 +129,7 @@ end fun
 
 ## State Machine Types
 
-```
+```datalove
 enum ConnState
     Closed
     Open

@@ -175,7 +175,7 @@ pattern-matched, the structure isn't freed here. The caller's
 ## Ownership Flow Example
 
 Consider:
-```
+```datalove
 let ok1: !u32 = @42
 let result = is_ok(ok1)
 ```

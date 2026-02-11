@@ -503,7 +503,7 @@ ExampleTestRunner::new(env!("CARGO_MANIFEST_DIR"), analyze_file)
 
 ### Worldfile Format
 
-```
+```datalove
 ----------
 module local/pkg/main
 ----------

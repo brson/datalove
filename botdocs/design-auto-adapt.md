@@ -16,7 +16,7 @@ See `botdocs/report-adapt-cases.md` for the catalog of all `@`-recoverable error
 When a recoverable error occurs, emit a diagnostic with a "help" note suggesting
 the `@` fix:
 
-```
+```datalove
 error[F016]: mismatched types
   --> example.dfs:5:20
    |
@@ -525,7 +525,7 @@ fn auto_adapt_examples() {
 Based on `report-adapt-cases.md`, create these test files:
 
 #### Widening Cases
-```
+```datalove
 001_widen_u8_to_u16.dfs      - u8 -> u16
 002_widen_u8_to_int.dfs      - u8 -> int
 003_widen_i8_to_i32.dfs      - i8 -> i32
@@ -549,7 +549,7 @@ Based on `report-adapt-cases.md`, create these test files:
 ```
 
 #### Ownership Cases
-```
+```datalove
 030_use_after_move.dfs           - D001: use after move
 031_double_move.dfs              - D002: double move in expression
 032_move_in_loop.dfs             - D007: move in loop body

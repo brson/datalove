@@ -77,7 +77,7 @@ Future `term` (bare payload) would be affected.
 
 With `parse_expr_full` (old expr.rs path):
 
-```
+```datalove
 some x + 1      ->  some(x + 1)       payload includes binop
 some x@         ->  some(x@)          postfix is inside payload
 ok a +! b       ->  ok(a +! b)
@@ -86,7 +86,7 @@ term Bar 1@      ->  term Bar (1@)      @ on the integer, not the term
 
 With `parse_expr_primary` (current behavior in both paths):
 
-```
+```datalove
 some x + 1      ->  (some x) + 1      binop escapes
 some x@         ->  (some x)@         postfix escapes
 ok a +! b       ->  (ok a) +! b
@@ -95,7 +95,7 @@ term Bar 1@      ->  (term Bar 1)@      @ on the whole term
 
 Complex payloads require parentheses under primary-only parsing:
 
-```
+```datalove
 some(x + 1)     ->  some((x + 1))     works either way
 ok(a +! b)      ->  ok((a +! b))      works either way
 ```

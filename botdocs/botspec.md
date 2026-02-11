@@ -48,7 +48,7 @@ In syntax descriptions, the following conventions apply:
 
 The following identifiers are reserved:
 
-```
+```datalove
 and       atom      break     case      continue  data
 default   else      end       enum      error     er
 false     for       fun       icall     if        import
@@ -62,7 +62,7 @@ true      type      var       while     xor
 
 **Integers** may be written in decimal or hexadecimal:
 
-```
+```datalove
 42
 0xFF
 ```
@@ -72,13 +72,13 @@ Use a type hint for fixed-width types: `: u32 / 42`.
 
 **Floating-point** numbers use decimal notation:
 
-```
+```datalove
 3.14
 ```
 
 **Strings** are enclosed in double quotes:
 
-```
+```datalove
 "hello, world"
 ```
 
@@ -114,34 +114,34 @@ The size of `index` is less than or equal to the platform pointer size.
 
 **List.** An ordered sequence of elements.
 
-```
+```datalove
 [T]              // type
 [1, 2, 3]        // literal
 ```
 
 **Map.** A key-value mapping.
 
-```
+```datalove
 %{K = V}         // type
 %{ 0 = 5 }       // literal
 ```
 
 **Set.** An unordered collection of unique elements.
 
-```
+```datalove
 #{T}             // type
 #{ 1, 2, 3 }     // literal
 ```
 
 **Table.** A columnar data structure with named columns.
 
-```
+```datalove
 {| col1: T1, col2: T2 |}    // type
 ```
 
 Table literals use a line-oriented syntax:
 
-```
+```datalove
 {|
   x, y           // column names
   1, 2           // row 1
@@ -156,7 +156,7 @@ mutated, but can be passed to `ref` parameters.
 
 **Tensor.** A multi-dimensional array with fixed shape.
 
-```
+```datalove
 [|T, N|]                 // type: element type T, rank N
 [| 1 2 3 |]             // 1D literal (shape inferred: [3])
 [| 1 2 3, 4 5 6 |]      // 2D literal (shape inferred: [2, 3])
@@ -165,7 +165,7 @@ mutated, but can be passed to `ref` parameters.
 
 Type hints specify element type and rank:
 
-```
+```datalove
 : [|u32, 2|] / [| 1 2, 3 4 |]
 ```
 
@@ -183,7 +183,7 @@ language. The runtime supports these operations internally.
 
 **Tuple.** An ordered sequence of heterogeneous values.
 
-```
+```datalove
 (bool, u32)              // type
 (true, 42)               // literal
 ()                       // unit type and value
@@ -191,7 +191,7 @@ language. The runtime supports these operations internally.
 
 **Struct.** A collection of named fields.
 
-```
+```datalove
 { x: f32, y: f32 }       // type
 { x = 1.0, y = 2.0 }     // literal
 ```
@@ -200,7 +200,7 @@ language. The runtime supports these operations internally.
 
 **Option** represents an optional value:
 
-```
+```datalove
 ?T                       // type: value or none
 some primary             // wrap value
 none                     // absent value
@@ -208,7 +208,7 @@ none                     // absent value
 
 **Result** represents success or failure:
 
-```
+```datalove
 !T                       // type: value or error
 ok primary               // wrap success value
 er primary               // wrap error value
@@ -219,7 +219,7 @@ The `some`, `ok`, `er`, `data`, and `error` keywords take a *primary* expression
 as their payload: a literal, variable, function call, or parenthesized expression.
 Binary operator expressions require parentheses:
 
-```
+```datalove
 some 42                  // ok: literal is primary
 some(a +? b)             // ok: parenthesized expression
 ok result                // ok: variable is primary
@@ -231,7 +231,7 @@ er(error "msg")          // ok: parenthesized expression
 
 The `data` type is a universal container that can hold any value:
 
-```
+```datalove
 data 42
 data : int / 100
 data(a + b)              // parenthesized for binop payload
@@ -239,7 +239,7 @@ data(a + b)              // parenthesized for binop payload
 
 The `error` type is an existential error value:
 
-```
+```datalove
 error "message"
 error(some_expr)         // parenthesized for non-primary payload
 ```
@@ -251,7 +251,7 @@ Any type coerces to `data`.
 
 **Atom.** A named unit type with no payload.
 
-```
+```datalove
 atom Red                 // type and value
 ```
 
@@ -260,7 +260,7 @@ the same name.
 
 **Term.** A named type with a typed payload.
 
-```
+```datalove
 term Foo int             // type
 term Foo 42              // value
 ```
@@ -269,7 +269,7 @@ Two terms are the same type if they have the same name and payload type.
 
 **Enum.** A closed union of atom and term variants.
 
-```
+```datalove
 enum { atom Red, atom Blue, term Custom string }   // type
 ```
 
@@ -279,7 +279,7 @@ or combine into enums.
 **Coercion.** The `@` operator widens an atom or term into a compatible enum
 type:
 
-```
+```datalove
 let c: enum { atom Red, atom Blue } = (atom Red)@
 ```
 
@@ -289,7 +289,7 @@ let c: enum { atom Red, atom Blue } = (atom Red)@
 
 Type aliases provide names for structural types:
 
-```
+```datalove
 type Point: { x: f32, y: f32 }
 type Age: u32
 ```
@@ -297,7 +297,7 @@ type Age: u32
 Aliases are purely syntactic; they introduce no new types. Enum types are
 commonly given aliases:
 
-```
+```datalove
 type Color: enum { atom Red, atom Blue, term Custom string }
 ```
 
@@ -305,13 +305,13 @@ type Color: enum { atom Red, atom Blue, term Custom string }
 
 Type hints specify expected types for expressions:
 
-```
+```datalove
 : type / expression
 ```
 
 Examples:
 
-```
+```datalove
 : u32 / 42
 : [i32] / [1, 2, 3]
 : f32 / 0xABABABAB     // hex as bit pattern
@@ -333,7 +333,7 @@ linear payloads are linear.
 A linear value can be used exactly once. After a value is moved, subsequent
 uses are compile-time errors:
 
-```
+```datalove
 let x: int = 42
 let y = x              // x is moved
 let z = x              // error: use of moved value
@@ -371,7 +371,7 @@ Operators listed from highest to lowest precedence:
 returns a result type. On overflow or division by zero, the function
 early-returns an error:
 
-```
+```datalove
 fun add(a: u32, b: u32): !u32
     ret ok (a +! b)
 end fun
@@ -383,7 +383,7 @@ Bigint division `/!` returns `!int`.
 returns an option type. On overflow or division by zero, the function
 early-returns `none`:
 
-```
+```datalove
 fun add(a: u32, b: u32): ?u32
     ret some (a +? b)
 end fun
@@ -394,7 +394,7 @@ fixed integers.
 
 ### 6.3 Comparison
 
-```
+```datalove
 .<    less than
 .>    greater than
 <=    less than or equal
@@ -407,7 +407,7 @@ All comparison operators return `bool`.
 
 ### 6.4 Logical Operators
 
-```
+```datalove
 and   logical AND
 or    logical OR
 xor   logical XOR
@@ -420,7 +420,7 @@ All require `bool` operands and return `bool`.
 
 The postfix `?` operator unwraps an option, early-returning `none` on failure:
 
-```
+```datalove
 fun get_value(opt: ?i32): ?i32
     let x = opt?           // early-return if none
     ret some (x + 1)
@@ -430,7 +430,7 @@ end fun
 The postfix `!` operator unwraps a result, early-returning the error on
 failure:
 
-```
+```datalove
 fun parse(s: string): !i32
     let n = do_parse(s)!   // early-return if error
     ret ok n
@@ -442,7 +442,7 @@ end fun
 All operators treat their operands as immutable references. Operands are not
 consumed:
 
-```
+```datalove
 let x: int = 42
 let a = x + 1       // x is cloned for the operation
 let b = x + 2       // x can be used again
@@ -453,7 +453,7 @@ ret x               // x is still valid
 
 Intrinsics are low-level operations that compile to machine instructions:
 
-```
+```datalove
 icall intrinsic_name(args)
 ```
 
@@ -471,7 +471,7 @@ It requires a type context (expected type) to determine the target type.
 
 **Clone**: For linear types, `@` creates a deep copy:
 
-```
+```datalove
 let msg = "hello"
 let a = consume(msg@)   // clone msg, original stays valid
 let b = consume(msg)    // msg is still available
@@ -479,21 +479,21 @@ let b = consume(msg)    // msg is still available
 
 **Widen**: For fixed integers, `@` widens to a larger type:
 
-```
+```datalove
 let n: u8 = 42
 let x: int = n@         // widen u8 to int
 ```
 
 **Cross-sign widen**: Unsigned integers can widen to larger signed types:
 
-```
+```datalove
 let n: u8 = 255
 let x: i16 = n@         // u8 widens to i16 (value fits)
 ```
 
 **Atom/term to enum**: An atom or term widens to a compatible enum type:
 
-```
+```datalove
 type Color: enum { atom Red, atom Blue }
 let c: Color = (atom Red)@   // atom widens to enum
 ```
@@ -517,21 +517,21 @@ return position, etc.).
 
 **Let** binds an immutable value:
 
-```
+```datalove
 let x: u32 = 42
 let y = compute()      // type inferred
 ```
 
 **Var** binds a mutable slot:
 
-```
+```datalove
 var x: u32 = 0
 var y: i32             // uninitialized; must set before use
 ```
 
 **Set** mutates a var binding or mutable parameter:
 
-```
+```datalove
 set x = x + 1
 ```
 
@@ -539,7 +539,7 @@ set x = x + 1
 
 Function definition:
 
-```
+```datalove
 fun name(param1: T1, param2: T2): ReturnType
     // body
     ret value
@@ -548,7 +548,7 @@ end fun
 
 Void functions omit the return type and may omit `ret`:
 
-```
+```datalove
 fun log(msg: string)
     // body
 end fun
@@ -577,7 +577,7 @@ operations:
 The `const` modifier declares a parameter whose value must be known at compile
 time:
 
-```
+```datalove
 fun repeat(const n: i32, s: string): string
     var result = ""
     var i: i32 = 0
@@ -611,7 +611,7 @@ function with dispatch over a tag of known instantiations. See
 
 **If statement:**
 
-```
+```datalove
 if condition
     // then branch
 else
@@ -621,7 +621,7 @@ end if
 
 **If with binding** unwraps an option or result:
 
-```
+```datalove
 if opt |value|
     // value is bound here
 end if
@@ -629,7 +629,7 @@ end if
 
 **Loop:**
 
-```
+```datalove
 loop
     if done
         break
@@ -639,7 +639,7 @@ end loop
 
 **Conditional loop:**
 
-```
+```datalove
 loop while condition
     // body
 end loop
@@ -649,7 +649,7 @@ end loop
 
 **Match** destructures an enum value:
 
-```
+```datalove
 match c
 case atom Red
     debuglog "red"
@@ -660,7 +660,7 @@ end match
 
 Term cases bind the payload to a variable:
 
-```
+```datalove
 match shape
 case atom Circle
     debuglog "circle"
@@ -679,13 +679,13 @@ The input expression is consumed (moved) by the match.
 
 `ret` returns a value from a function:
 
-```
+```datalove
 ret 42
 ```
 
 Void functions may use bare `ret` for early exit:
 
-```
+```datalove
 ret
 ```
 
@@ -699,7 +699,7 @@ The module system has three levels: library, package, module.
 
 `require` loads a module:
 
-```
+```datalove
 require module sys/std/u32
 ```
 
@@ -707,7 +707,7 @@ require module sys/std/u32
 
 `import` brings a name into scope:
 
-```
+```datalove
 import u32.negate
 ```
 
@@ -719,7 +719,7 @@ require the explicit `@` operator.
 Fixed integers cannot use bare arithmetic operators. To perform arithmetic,
 either widen to `int` using `@`, or use checked/optional operators:
 
-```
+```datalove
 let a: u32 = 10
 let b: u32 = 20
 let c: int = a@ + b@    // widen to int, then add
@@ -728,7 +728,7 @@ let d: u32 = (a +! b)   // checked add, returns same type
 
 Valid widening chains for `@`:
 
-```
+```datalove
 u8 -> u16 -> u32 -> u64 -> int
 i8 -> i16 -> i32 -> i64 -> int
 u8 -> i16 -> i32 -> i64 -> int   (cross-sign)
@@ -740,7 +740,7 @@ offset -> int
 
 Example requiring explicit widening:
 
-```
+```datalove
 fun process(x: int): int
     ret x
 
@@ -772,7 +772,7 @@ values.
 
 Moving an outer-scoped linear value inside a loop is an error:
 
-```
+```datalove
 var b: int = 5
 loop
     set a = b      // error: cannot move 'b' in loop
@@ -785,7 +785,7 @@ Copy types and operator operands (which are borrowed) are exempt.
 
 If a value is moved in one branch, it must be moved in all branches:
 
-```
+```datalove
 if cond
     consume(x)     // moves x
 else
@@ -813,14 +813,14 @@ types (top-down).
 (arbitrary-precision). When an expected type is available, integers check
 against it instead:
 
-```
+```datalove
 let x = 42              // x: int (synthesized)
 let y: u32 = 42         // y: u32 (checked against binding type)
 ```
 
 Checked arithmetic propagates expected types to operands:
 
-```
+```datalove
 fun add(): !u32
     ret ok (1 +! 2)    // 1 and 2 infer u32 from context
 end fun
@@ -828,7 +828,7 @@ end fun
 
 Float literals infer their precision from context:
 
-```
+```datalove
 fun pi(): f64
     ret 3.14159        // infers f64
 end fun

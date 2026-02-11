@@ -29,7 +29,7 @@ to datalove using the **union-branch specialization** strategy.
 
 Add `const` parameter modifier enabling compile-time known arguments:
 
-```
+```datalove
 fun repeat(const n: i32, s: string) -> string
     // n is known at compile time, enabling optimization
 end fun
@@ -42,7 +42,7 @@ let x = repeat(N, "ab")  // N is a const binding, value looked up
 
 To avoid complexity with CTFE ordering, const parameter specialization must be **const binding names**:
 
-```
+```datalove
 const N = 5
 const MODE = 2
 
@@ -62,7 +62,7 @@ look up already-evaluated const values from `ResolvedConsts`.
 Instead of generating N separate functions (full monomorphization), generate **one function
 with N branches**, dispatching on an enum tag:
 
-```
+```datalove
 // Generated internal representation
 enum Comptime_repeat_n { V0, V1, V2 }  // variants for N=3, N=5, N=10
 
@@ -251,7 +251,7 @@ fn parse_fun_param(&mut self) -> Result<FunParam<'db>, ParseError> {
 ```
 
 **Syntax examples**:
-```
+```datalove
 fun foo(const n: i32)              // const by-value
 fun bar(const ref data: [i32])     // const reference (less common)
 fun baz(n: i32, const mode: i32)   // mixed params
@@ -842,7 +842,7 @@ From `compiler-guide.md`, the lowering phase already:
 
 The union-branch transformation produces code like:
 
-```
+```datalove
 // Before CTFE (conceptual IR):
 if discriminant(n_tag) == 0
     const n = 3          // <- normal const binding
@@ -1069,7 +1069,7 @@ similar to the existing `skip_const_inlining` option.
 
 Add `ConstValue::Type(IrType)` for Zig-style type parameters:
 
-```
+```datalove
 fun identity(const T: type, x: T) -> T
     x
 end fun
@@ -1079,7 +1079,7 @@ end fun
 
 Enable functions returning types:
 
-```
+```datalove
 fun Pair(const A: type, const B: type) -> type
     {first: A, second: B}
 end fun
@@ -1089,7 +1089,7 @@ end fun
 
 Arbitrary compile-time execution:
 
-```
+```datalove
 fun foo()
     comptime
         // Arbitrary code here, executed at compile time

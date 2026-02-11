@@ -185,7 +185,7 @@ Your system needs at minimum:
 
 ### 2. Ownership and Moves
 
-```
+```datalove
 let x: !Database = connect();
 let y = x;  // x is moved, now invalid
 // use(x);  // ERROR: x was moved
@@ -194,7 +194,7 @@ let y = x;  // x is moved, now invalid
 ### 3. Explicit Destructors
 
 Linear types require named destructor functions:
-```
+```datalove
 x.close()           // explicit destruction
 drop(x)             // or generic drop function
 x.into_destructor() // or conversion to destructor
@@ -258,7 +258,7 @@ From your `typing-rules.md`:
 ### 10. Scope and Lifetime
 
 Linear values must be consumed before scope ends:
-```
+```datalove
 {
     let x: !Database = connect();
     // ... use x ...
@@ -322,7 +322,7 @@ Options:
 ### 4. Error Messages
 
 Critical for usability:
-```
+```datalove
 error: linear value `db` not used
   --> main.dl:5:9
    |

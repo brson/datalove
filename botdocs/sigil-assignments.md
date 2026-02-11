@@ -182,7 +182,7 @@ Reserved, not yet used in parser.
 
 Characters not currently assigned as sigil start characters:
 
-```
+```datalove
 $ & \ ^ ` ~
 ```
 

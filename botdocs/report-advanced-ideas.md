@@ -19,7 +19,7 @@ Pairs naturally with existing `in`/`ref`/`mut`/`out` modes.
 ### 2. Refinement Types / Liquid Types
 
 SMT-backed predicates on types:
-```
+```datalove
 type NonZero: { n: u32 | n != 0 }
 type Sorted: { xs: [@int] | is_sorted(xs) }
 ```
@@ -28,7 +28,7 @@ Purity makes refinement checking tractable - no side effects to invalidate predi
 ### 3. Sized Types for Termination
 
 Agda-style sized types track structural recursion:
-```
+```datalove
 type List<A, s: Size> = @enum { Nil, Cons(A, List<A, s-1>) }
 ```
 Combined with the "almost-total" goal, gives provable termination for many functions. Infinite loops become opt-in via a `diverge` annotation.
@@ -79,7 +79,7 @@ Linear types make effect handlers safer:
 ### 9. Row Polymorphism for Structs/Enums
 
 Anonymous structs/enums could gain row polymorphism:
-```
+```datalove
 fun add_field<R>(x: { R }): { new_field: u32, R }
 ```
 Enables extensible records without nominal types.
@@ -98,7 +98,7 @@ With pure functions and parameter modes, first-class optics:
 ### 11. Proof-Carrying Code
 
 Embed simple proofs in types, verify at compile time:
-```
+```datalove
 fun binary_search(xs: Sorted, target: int): ?usize
   // compiler knows xs is sorted, can verify algorithm correctness
 ```
@@ -113,7 +113,7 @@ Linear types map well to AD:
 ### 13. Capability-Safe I/O (for Full Datalove layer)
 
 When adding effects, use capabilities:
-```
+```datalove
 fun read_file(cap: FileRead, path: string): !string
 ```
 Capability is linear - can't duplicate access rights.

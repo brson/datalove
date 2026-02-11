@@ -926,7 +926,7 @@ end from
 The `from` comprehension is natural in a REPL session.
 Incremental exploration of a knowledge base:
 
-```
+```datalove
 > let db = set { term Parent ("alice", "bob")@, term Parent ("bob", "carol")@ }
 
 > from db given term Parent (x, y) select (x, y)

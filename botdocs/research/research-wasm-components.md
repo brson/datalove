@@ -103,7 +103,7 @@ interface datafun-collections {
 
 Given `ModuleExports`, generate WIT:
 
-```datafun
+```datalove
 // local/test/utils
 fun add(a: u32, b: u32): u32 ... end fun
 fun greet(name: String): String ... end fun
@@ -126,7 +126,7 @@ world utils-world {
 
 ### 5. Cross-Module Imports
 
-```datafun
+```datalove
 // local/test/main
 require module local/test/utils
 import utils.add

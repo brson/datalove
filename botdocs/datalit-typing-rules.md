@@ -33,7 +33,7 @@ Two types are equivalent (T = T') when:
 - Length must match
 
 Examples:
-```
+```datalove
 (u32, bool) = (u32, bool)  ok
 (u32, bool) = (bool, u32)  FAIL (different order)
 (u32, bool) = (u32)        FAIL (different length)
@@ -46,7 +46,7 @@ Examples:
   - Ti = Ti' for all i
 
 Examples:
-```
+```datalove
 {x: u32, y: bool} = {x: u32, y: bool}  ok
 {x: u32, y: bool} = {y: bool, x: u32}  FAIL (different order)
 {x: u32} = {x: u32, y: bool}           FAIL (different fields)
@@ -83,17 +83,17 @@ Within the datalit type checker, same-sign widening is applied when checking
 typed integer expressions against an expected type:
 
 Unsigned integers:
-```
+```datalove
 u8 -> u16 -> u32 -> u64 -> int
 ```
 
 Signed integers:
-```
+```datalove
 i8 -> i16 -> i32 -> i64 -> int
 ```
 
 Index/offset:
-```
+```datalove
 index -> int
 offset -> int
 ```
@@ -102,7 +102,7 @@ Cross-sign widening (e.g. u8 -> i16) is NOT supported in the datalit type
 checker. It requires the `@` operator in the full language.
 
 Example:
-```
+```datalove
 : [u16] / [: u8 / 42]                  ok (u8 widens to u16)
 : [u32] / [: u8 / 10]                  ok (u8 widens to u32)
 : [i32] / [: u32 / 100]                FAIL (cross-sign, not supported)
@@ -121,7 +121,7 @@ e => T
 ```
 
 Example:
-```
+```datalove
 : u32 / 42 => u32
 ```
 
@@ -145,7 +145,7 @@ Integer literals without type context synthesize as `int` (arbitrary-precision).
 Use explicit type hints for fixed-width integer types.
 
 Examples:
-```
+```datalove
 42 => int                              ok
 99999999999999999999 => int            ok (arbitrary-precision)
 : u32 / 42 => u32                      ok (explicit type hint)
@@ -163,7 +163,7 @@ Float literals without type context synthesize as `f32`.
 Use a type hint for `f64`: `: f64 / 3.14`.
 
 Example:
-```
+```datalove
 1.0 => f32
 3.14159 => f32
 : f64 / 3.14 => f64
@@ -179,7 +179,7 @@ h => int
 Hex literals synthesize as `int`. Use type hints for fixed-width types.
 
 Example:
-```
+```datalove
 0xFF => int
 0xFFFFFFFFFF => int                    ok (arbitrary-precision)
 : u64 / 0xFFFFFFFFFF => u64           ok (explicit type hint)
@@ -209,7 +209,7 @@ for all i: ei => Ti
 Anonymous tuples are synthesized by synthesizing each element independently.
 
 Example:
-```
+```datalove
 (true, 42, 3.14) => (bool, int, f32)
 ```
 
@@ -223,7 +223,7 @@ for all i: ei => Ti (for field fi = ei)
 Anonymous structs are synthesized by synthesizing each field value independently.
 
 Example:
-```
+```datalove
 {x = 42, y = 3.14} => {x: int, y: f32}
 ```
 
@@ -241,7 +241,7 @@ the same type. The first element determines the expected type. Empty lists
 synthesize as `[()]` (list of unit).
 
 Example:
-```
+```datalove
 [1, 2, 3] => [int]
 [] => [()]                              (empty list, unit element type)
 ```
@@ -278,7 +278,7 @@ Maps are synthesized by synthesizing all keys and values. Empty maps
 synthesize as `%{() = ()}`.
 
 Example:
-```
+```datalove
 %{1 = 10, 2 = 20} => %{int = int}
 %{} => %{() = ()}                   (empty map, unit key/value types)
 ```
@@ -313,7 +313,7 @@ some e => ?T
 The `some` constructor synthesizes an Option type.
 
 Example:
-```
+```datalove
 some 42 => ?int
 some "hello" => ?string
 ```
@@ -350,7 +350,7 @@ error msg => error
 Error values always synthesize as `error` type.
 
 Example:
-```
+```datalove
 error "oops" => error
 ```
 
@@ -404,7 +404,7 @@ n <= int
 ```
 
 Examples:
-```
+```datalove
 : u32 / 42                              ok
 : int / 42                              ok
 : u32 / -1                              FAIL (negative, out of range for u32)
@@ -427,7 +427,7 @@ When an integer literal has a type hint, the hint is respected. The hinted
 type must either match or widen (same-sign) to the expected type.
 
 Example:
-```
+```datalove
 : [u16] / [: u8 / 10]                  ok (u8 widens to u16)
 : [u8] / [: u32 / 10]                  FAIL (u32 cannot narrow to u8)
 ```
@@ -471,7 +471,7 @@ Hex literals can check against unsigned integer types, `int`, and float
 types (as bit patterns). They cannot check against signed integer types.
 
 Examples:
-```
+```datalove
 : u8 / 0xFF                             ok
 : u32 / 0xFFFFFFFF                      ok
 : int / 0xFFFFFFFFFF                    ok
@@ -590,7 +590,7 @@ error "msg" <= !T
 Error expressions can check against any Result type as implicit Err wrapping.
 
 Example:
-```
+```datalove
 : !u32 / error "failed"
            |
       error "failed" <= error  ok
@@ -652,7 +652,7 @@ The type checker produces the following diagnostic codes:
 
 Empty collections synthesize with unit element type, and check against any element type:
 
-```
+```datalove
 [] => [()]                   (synthesis: unit element type)
 : [u32] / []                 ok (checking: any element type)
 #{} => #{()}            (synthesis)
@@ -665,7 +665,7 @@ Empty collections synthesize with unit element type, and check against any eleme
 
 Field order must match:
 
-```
+```datalove
 {x: u32, y: bool} != {y: bool, x: u32}
 ```
 
@@ -677,7 +677,7 @@ Bare numeric literals synthesize to concrete types:
 - Hex literals -> `int` (arbitrary-precision)
 
 Use explicit type hints for fixed-width numeric types:
-```
+```datalove
 : u32 / 42                              unsigned 32-bit
 : i64 / -42                             signed 64-bit
 : u8 / 255                              unsigned 8-bit

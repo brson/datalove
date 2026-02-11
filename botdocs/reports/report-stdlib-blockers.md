@@ -23,7 +23,7 @@ The highest-impact fixes are the linear type analysis bugs, which block result c
 **Problem:** The move analysis incorrectly flagged valid patterns where a linear parameter is used in different branches of an `if` statement.
 
 **Example (result.dfm):**
-```datafun
+```datalove
 fun or_result(self: !u32, other: !u32): !u32
   if self |value|
     ret self      // <-- Was incorrectly flagged as UseAfterMove
@@ -44,7 +44,7 @@ end fun
 **Problem:** The `int` type (bigint) is linear, meaning comparisons consume the value.
 
 **Example:**
-```datafun
+```datalove
 fun abs(self: int): int
   if self .< 0      // <-- self is moved here
     ret -self       // <-- Error: self already moved
@@ -89,7 +89,7 @@ end fun
 **Impact:** Can't implement tuple utilities like `first`, `second`, `swap`.
 
 **Example (not currently possible):**
-```datafun
+```datalove
 fun first(self: (u32, u32)): u32
   ret self.0    // No syntax for this
 end fun
@@ -113,7 +113,7 @@ end fun
 **Problem:** `@error "message"` doesn't coerce to `!T` in script contexts.
 
 **Example:**
-```datafun
+```datalove
 // In script (not inside a function):
 let err: !u32 = @error "test"   // Type error: can't coerce @error to !u32
 ```
@@ -212,7 +212,7 @@ The language has `+!` and `+?` operators that return Result/Option, but the stdl
 ## Appendix: Specific Code Patterns
 
 ### A. or_result pattern - FIXED
-```datafun
+```datalove
 fun or_result(self: !u32, other: !u32): !u32
   if self |value|
     ret self      // Now works correctly
@@ -223,7 +223,7 @@ end fun
 ```
 
 ### B. int comparison pattern (linear move)
-```datafun
+```datalove
 fun is_negative(self: int): bool
   ret self .< 0   // self moved by comparison, can't return bool
 end fun
@@ -238,7 +238,7 @@ end fun
 ```
 
 ### C. Error literal in script
-```datafun
+```datalove
 // test script
 let err: !u32 = @error "test"   // Type error
 let result = is_err(err)

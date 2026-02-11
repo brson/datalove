@@ -380,7 +380,7 @@ For each error, determine if it's adapt-recoverable:
 
 Generate a diagnostic note suggesting `@`:
 
-```
+```datalove
 error[D001]: use after move
   --> example.dfs:5:20
    |

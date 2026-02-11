@@ -81,7 +81,7 @@ All require `bool` operands and return `bool`.
 
 ## Examples
 
-```datafun
+```datalove
 // Precedence demonstration
 not a or b          // (not a) or b
 a and b or c        // (a and b) or c

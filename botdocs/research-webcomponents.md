@@ -300,7 +300,7 @@ Stack frame layout (same as Cranelift backend):
 ### 3.7 WIT Generation Example
 
 Given a datafun module:
-```datafun
+```datalove
 fun add(a: u32, b: u32): u32
   ret a + b
 end fun

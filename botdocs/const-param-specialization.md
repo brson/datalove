@@ -6,7 +6,7 @@ This document analyzes the feasibility of adding Zig-style const parameter speci
 using `const` as the argument modifier. Const parameters are function parameters whose
 values must be known at compile time, enabling function specialization based on those values.
 
-```
+```datalove
 fun repeat(const n: i32, s: string) -> string
     let result = ""
     let i = 0
@@ -161,7 +161,7 @@ This location:
 ### Example Transformation
 
 Input:
-```
+```datalove
 fun format_width(const width: i32, s: string) -> string
     // ... use width ...
 end fun
@@ -171,7 +171,7 @@ let b = format_width(20, "hello")
 ```
 
 After specialization:
-```
+```datalove
 fun format_width$$10(s: string) -> string
     const width = 10
     // ... use width ...
@@ -195,7 +195,7 @@ let b = format_width$$20("hello")
 - `datafun-parser/src/statement.rs`: Parse `const` keyword before param name
 
 **Syntax:**
-```
+```datalove
 fun example(const n: i32, ref data: T) -> R
 ```
 
@@ -319,7 +319,7 @@ Limit specialization to avoid compile-time blowup:
 
 The `const` mechanism naturally extends to type parameters:
 
-```
+```datalove
 fun identity(const T: type, x: T) -> T
     x
 end fun
@@ -414,7 +414,7 @@ typecase T of
 than types. Instead of `typecase` over type structure, we `match` over a closed enum of
 known compile-time values:
 
-```
+```datalove
 match comptime_arg of
   Value1 => ... const-fold with Value1 ...
   Value2 => ... const-fold with Value2 ...
@@ -472,7 +472,7 @@ compiler specializing hot paths.
 transforms higher-order programs into first-order ones by replacing function values with
 data constructors:
 
-```
+```datalove
 -- Higher-order
 let f = if cond then add1 else mul2
 f(x)
@@ -500,7 +500,7 @@ elimination, and loop unrolling within that branch.
 
 Given a function with const parametereter:
 
-```
+```datalove
 fun f(const c: T, x: U) -> R
     ... body using c ...
 end fun
@@ -508,7 +508,7 @@ end fun
 
 And call sites with values `{v1, v2, ..., vn}`, the **union-branch transformation** produces:
 
-```
+```datalove
 enum ComptimeC { V1, V2, ..., Vn }
 
 fun f_unified(c_tag: ComptimeC, x: U) -> R
@@ -644,7 +644,7 @@ fn swap<T>(x: T, y: T) -> (T, T) { (y, x) }
 The union-branch approach generalizes naturally. Instead of defunctionalizing *values*
 into an enum, we defunctionalize *types* into a type-level enum:
 
-```
+```datalove
 // Source
 fun swap<T>(x: T, y: T) -> (T, T)
     (y, x)
@@ -689,7 +689,7 @@ intensional polymorphism does—the type tag tells you how to interpret the bits
 
 **Option 1b: Pointer + Size Descriptor**
 
-```
+```datalove
 // All args passed as (pointer, size, alignment)
 fun swap_unified(
     type_tag: TypeTag_swap,
@@ -702,7 +702,7 @@ The type tag determines how to copy/move the bytes. This is closer to Go's appro
 
 **Option 1c: Boxed Representation**
 
-```
+```datalove
 // All args boxed to uniform representation
 fun swap_unified(type_tag: TypeTag_swap, x: Box<Any>, y: Box<Any>) -> Box<Any>
 ```
@@ -713,7 +713,7 @@ Defeats much of the purpose, but simplest. Only viable if you're okay with alloc
 
 The harder problem: what if the function body *uses* type-specific operations?
 
-```
+```datalove
 fun process<T>(x: T) -> i32
     x.size()  // T must have a size() method
 end fun
@@ -721,7 +721,7 @@ end fun
 
 This requires **trait bounds** (Rust) or **concepts** (C++). With union-branch:
 
-```
+```datalove
 enum TypeTag_process { Vec_i32, String, MyCollection }
 
 fun process_unified(type_tag: TypeTag_process, x: ???) -> i32
@@ -764,7 +764,7 @@ the same comptime machinery as integer values.
 
 Since types are values, they're handled identically to const integers:
 
-```
+```datalove
 // Source
 fun swap(const T: type, x: T, y: T) -> (T, T)
     (y, x)
@@ -824,14 +824,14 @@ Richer but more complex. Needed for reflection/introspection.
 
 const parameter types create a form of dependent typing:
 
-```
+```datalove
 fun make_array(const T: type, const N: i32) -> [T; N]
     // Return type depends on const values T and N
 ```
 
 With union-branch, this "just works":
 
-```
+```datalove
 enum ComptimeT { Type_i32, Type_bool }
 enum ComptimeN { N_4, N_8, N_16 }
 
@@ -869,7 +869,7 @@ With union-branch + CTFE:
 2. **Union-branch collects** all type-returning comptime calls
 3. **Type values substituted** into dependent positions
 
-```
+```datalove
 // After specialization
 const MyPair: type = {first: i32, second: bool}  // CTFE result
 var x: {first: i32, second: bool} = ...          // MyPair substituted
@@ -913,7 +913,7 @@ the `comptime T: type` model is learnable and arguably clearer.
 ### Implementation Roadmap
 
 **Phase A: Const Values (Current Focus)**
-```
+```datalove
 fun repeat(const n: i32, s: string) -> string
 ```
 - Union-branch over value enums
@@ -929,7 +929,7 @@ const MyType: type = i32
 - Type aliases via const bindings
 
 **Phase C: Comptime Type Parameters**
-```
+```datalove
 fun identity(const T: type, x: T) -> T
 ```
 - Parameter type `T` depends on const arg
@@ -937,7 +937,7 @@ fun identity(const T: type, x: T) -> T
 - Per-branch type substitution
 
 **Phase D: Type Computation**
-```
+```datalove
 fun Pair(const A: type, const B: type) -> type
     {first: A, second: B}
 end fun

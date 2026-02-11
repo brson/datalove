@@ -509,7 +509,7 @@ Clear left-to-right reading: "check that expr has type"
 
 #### 2. Bidirectional Alignment
 Natural fit for bidirectional type checking:
-```
+```datalove
 Checking mode (⇐):  : T / e    (check e against T)
 Synthesis mode (⇒):  e         (infer type of e)
 ```
@@ -550,7 +550,7 @@ Compared to OCaml's parentheses:
 ```
 
 **Datalove**:
-```
+```datalove
 : t4 / : t3 / : t2 / : t1 / x
 ```
 
@@ -671,7 +671,7 @@ Your syntax is **pedagogically perfect** for teaching bidirectional typing:
 - The `/`: visually represents the mode switch
 
 **Comparison**:
-```
+```datalove
 Bidirectional typing paper:  Γ ⊢ e ⇐ T
 Datalove concrete syntax:    : T / e
 ```
@@ -810,7 +810,7 @@ When documenting or discussing this syntax, emphasize:
 
 **Response**:
 - Nesting is explicit and readable:
-  ```
+  ```datalove
   : outer / : inner / expr
   ```
 
@@ -856,19 +856,19 @@ The error can point directly to the problematic expression after the `/`.
 ### Tutorial Progression
 
 1. **Start without annotations**: Show type inference working
-   ```
+   ```datalove
    @42        // inferred as @u32
    @true      // inferred as @bool
    ```
 
 2. **Introduce simple annotations**: Clarify intent
-   ```
+   ```datalove
    : @u32 / @42     // explicit
    : @bool / @true  // documented intent
    ```
 
 3. **Show disambiguation**: Where annotations are necessary
-   ```
+   ```datalove
    []                  // error - cannot infer element type
    : [@u32] / []       // explicit empty list of u32
    ```
