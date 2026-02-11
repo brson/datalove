@@ -4,8 +4,12 @@ Datalove literals is
 a typed declarative expression language for
 serializing, storing and transmitting
 common data types.
+We often refer to it as _datalit_,
+and its types and datalit types.
 
-
+```datalove
+todo example here
+```
 
 
 ## Expressions
@@ -14,14 +18,14 @@ All expressions
 may be prefixed with a type hint,
 `: type / expr`.
 
-Datalove literals are typechecked
+Expressions are typechecked
 with a simple bidirectional discipline,
 either checking against a type hint,
 or synthesizing a type.
-All Datalove literal expressions
-synthesize some type in absence of type hints,
-though in some cases it may be required
-to use type hints to reliably produce a desired type.
+All expressions
+synthesize some type in absence of type hints.
+For many uses datalit expressions are checked
+against an external type context.
 
 ### EBNF · Expressions
 
