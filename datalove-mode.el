@@ -30,20 +30,22 @@
 
 (defvar datalove-font-lock-keywords
   (let* ((keywords
-          '("let" "var" "set"
+          '("let" "var"
             "fun" "ret"
-            "require" "module" "data" "import"
+            "require" "data" "import"
             "if" "else" "end"
-            "loop" "while" "break" "continue"
+            "loop" "while" "for" "break" "continue"
+            "match" "case" "default"
+            "atom" "term"
             "not" "and" "or" "xor"
-            "some" "ok" "er"
-            "ref" "mut" "out"
+            "some" "ok" "er" "none"
+            "ref" "mut" "out" "in"
             ;; Types.
             "bool" "true" "false"
             "u8" "u16" "u32" "u64" "i8" "i16" "i32" "i64"
             "f32" "int"
             "string" "opt" "error" "tuple" "enum"
-            "map" "list" "tensor" "table"))
+            "list" "tensor" "table"))
          (keyword-regexp (regexp-opt keywords 'words)))
 
     `(
@@ -51,16 +53,20 @@
       (,keyword-regexp . font-lock-keyword-face)
 
       ;; Multi-word keywords.
-      ("\\<end\s+\\(fun\\|if\\|loop\\)\\>" . font-lock-keyword-face)
-      ("\\<require\s+\\(module\\|data\\)\\>" . font-lock-keyword-face)
+      ("\\<end\s+\\(fun\\|if\\|loop\\|match\\)\\>" . font-lock-keyword-face)
+      ("\\<require\s+\\(data\\)\\>" . font-lock-keyword-face)
       ("\\<loop\s+while\\>" . font-lock-keyword-face)
+      ("\\<case\s+\\(atom\\|term\\|default\\)\\>" . font-lock-keyword-face)
 
       ;; Function definitions.
       ("\\<fun\s+\\([a-zA-Z_][a-zA-Z0-9_]*\\)" 1 font-lock-function-name-face)
 
+      ;; Atom and term variant names.
+      ("\\<atom\s+\\([A-Z][a-zA-Z0-9_]*\\)" 1 font-lock-type-face)
+      ("\\<term\s+\\([A-Z][a-zA-Z0-9_]*\\)" 1 font-lock-type-face)
+
       ;; Type annotations and enum names.
-      ("\\<enum\s+\\([A-Z][a-zA-Z0-9_]*\\)" 1 font-lock-type-face)
-      ("@\\(enum\\)\s+\\([A-Z][a-zA-Z0-9_]*\\)" 2 font-lock-type-face)
+      ("\\<enum\s+{" . font-lock-keyword-face)
 
       ;; Type names in type positions.
       ("@\\(u8\\|u16\\|u32\\|u64\\|i8\\|i16\\|i32\\|i64\\|f32\\|int\\|bool\\|string\\)\\>" 1 font-lock-type-face)
@@ -71,8 +77,12 @@
       ;; Numeric literals (decimal and hex).
       ("@\\(0x[0-9a-fA-F]+\\|[0-9]+\\(?:\\.[0-9]+\\)?\\)" . font-lock-constant-face)
 
-      ;; @data, @error, @set, @map, @tensor constructors.
-      ("@\\(data\\|error\\|set\\|map\\|tensor\\)\\>" . font-lock-builtin-face)
+      ;; @data, @error, @tensor constructors.
+      ("@\\(data\\|error\\|tensor\\)\\>" . font-lock-builtin-face)
+
+      ;; Map (%{) and set (#{) sigils.
+      ("%{" . font-lock-builtin-face)
+      ("#{" . font-lock-builtin-face)
 
       ;; Table delimiters.
       ("{|\\||}" . font-lock-builtin-face)

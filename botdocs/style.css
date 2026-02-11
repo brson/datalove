@@ -91,6 +91,9 @@
         --syn-type-colon: var(--lake-cyan);
         --syn-type-hint-slash: var(--lake-cyan);
         --syn-brace-table: var(--lake-orange);
+        --syn-brace-tensor: var(--lake-orange);
+        --syn-brace-map: var(--lake-cyan);
+        --syn-brace-set: var(--lake-cyan);
         --syn-punctuation: var(--lake-base02);
 
         --accent-1: var(--lake-cyan);
@@ -129,6 +132,9 @@
         --syn-type-colon: var(--lake-cyan);
         --syn-type-hint-slash: var(--lake-cyan);
         --syn-brace-table: var(--lake-orange);
+        --syn-brace-tensor: var(--lake-orange);
+        --syn-brace-map: var(--lake-cyan);
+        --syn-brace-set: var(--lake-cyan);
         --syn-punctuation: var(--lake-base05);
     }
 }
@@ -385,6 +391,9 @@ th {
 .token.type-colon { color: var(--syn-type-colon); }
 .token.type-hint-slash { color: var(--syn-type-hint-slash); }
 .token.brace-table { color: var(--syn-brace-table); }
+.token.brace-tensor { color: var(--syn-brace-tensor); }
+.token.brace-map { color: var(--syn-brace-map); }
+.token.brace-set { color: var(--syn-brace-set); }
 .token.punctuation { color: var(--syn-punctuation); }
 
 /* Admonition boxes */

@@ -171,13 +171,13 @@ let s: Shape = term Rect (3.0, 4.0)@
 var area: f64 = 0.0
 match s
 case atom Circle
-  area = 0.0
+  set area = 0.0
 case term Rect dims
   // dims: (f32, f32), the whole payload bound to one name
-  area = 0.0
+  set area = 0.0
 case term Tri sides
   // sides: (f32, f32, f32)
-  area = 0.0
+  set area = 0.0
 end match
 ```
 
@@ -191,9 +191,9 @@ use `case default` for a catch-all.
 ```datalove
 match s
 case atom Circle
-  area = 0.0
+  set area = 0.0
 case default
-  area = 1.0
+  set area = 1.0
 end match
 ```
 

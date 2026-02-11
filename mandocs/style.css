@@ -130,6 +130,9 @@
         --syn-type-colon: var(--cave-cyan);
         --syn-type-hint-slash: var(--cave-cyan);
         --syn-brace-table: var(--cave-orange);
+        --syn-brace-tensor: var(--cave-orange);
+        --syn-brace-map: var(--cave-cyan);
+        --syn-brace-set: var(--cave-cyan);
         --syn-punctuation: var(--cave-base02);
 
         --accent-1: var(--cave-cyan);
@@ -168,6 +171,9 @@
         --syn-type-colon: var(--cave-cyan);
         --syn-type-hint-slash: var(--cave-cyan);
         --syn-brace-table: var(--cave-orange);
+        --syn-brace-tensor: var(--cave-orange);
+        --syn-brace-map: var(--cave-cyan);
+        --syn-brace-set: var(--cave-cyan);
         --syn-punctuation: var(--cave-base05);
     }
 }
@@ -425,6 +431,9 @@ th {
 .token.type-colon { color: var(--syn-type-colon); }
 .token.type-hint-slash { color: var(--syn-type-hint-slash); }
 .token.brace-table { color: var(--syn-brace-table); }
+.token.brace-tensor { color: var(--syn-brace-tensor); }
+.token.brace-map { color: var(--syn-brace-map); }
+.token.brace-set { color: var(--syn-brace-set); }
 .token.punctuation { color: var(--syn-punctuation); }
 
 /* Admonition boxes */
