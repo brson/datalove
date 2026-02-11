@@ -1,6 +1,6 @@
 //! Terminator instruction compilation.
 
-use cranelift_codegen::ir::InstBuilder;
+use cranelift_codegen::ir::{BlockArg, InstBuilder};
 use cranelift_frontend::{FunctionBuilder, Switch};
 use cranelift_module::Module;
 
@@ -22,8 +22,8 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             Terminator::Goto { target, args } => {
                 let block = self.blocks[target];
                 // Collect block argument values.
-                let cl_args: Vec<_> = args.iter()
-                    .map(|op| self.get_operand_value(builder, op))
+                let cl_args: Vec<BlockArg> = args.iter()
+                    .map(|op| self.get_operand_value(builder, op).map(BlockArg::from))
                     .collect::<Result<_, _>>()?;
                 builder.ins().jump(block, &cl_args);
             }
@@ -32,11 +32,11 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 let then_blk = self.blocks[then_block];
                 let else_blk = self.blocks[else_block];
                 // Collect block argument values for each branch.
-                let cl_then_args: Vec<_> = then_args.iter()
-                    .map(|op| self.get_operand_value(builder, op))
+                let cl_then_args: Vec<BlockArg> = then_args.iter()
+                    .map(|op| self.get_operand_value(builder, op).map(BlockArg::from))
                     .collect::<Result<_, _>>()?;
-                let cl_else_args: Vec<_> = else_args.iter()
-                    .map(|op| self.get_operand_value(builder, op))
+                let cl_else_args: Vec<BlockArg> = else_args.iter()
+                    .map(|op| self.get_operand_value(builder, op).map(BlockArg::from))
                     .collect::<Result<_, _>>()?;
                 builder.ins().brif(cond_val, then_blk, &cl_then_args, else_blk, &cl_else_args);
             }
