@@ -60,7 +60,7 @@ else
 end if
 ```
 
-Booleans support logic operators `and`, `or`, `xor`, `implies` and `not`.
+Booleans support logic operators `and`, `or`, `xor`, and `not`.
 
 ```datalove
 let a = true
@@ -68,19 +68,8 @@ let b = false
 let c = a or b
 let d = a and  b
 let e = a xor b
-let f = a implies b
-let g = not a
+let f = not a
 ```
-
-`implies` being logical implication,
-rarely given a first-class operator but common in logic:
-
-| a     | b     | a implies b |
-|-------|-------|-------------|
-| false | false | true        |
-| false | true  | true        |
-| true  | false | false       |
-| true  | true  | true        |
 
 
 
