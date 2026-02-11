@@ -30,7 +30,7 @@
 
 (defvar datalove-font-lock-keywords
   (let* ((keywords
-          '("let" "var"
+          '("let" "var" "set"
             "fun" "ret"
             "require" "data" "import"
             "if" "else" "end"
