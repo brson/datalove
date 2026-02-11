@@ -118,10 +118,7 @@
         --syn-variant: var(--cave-violet);
         --syn-comment: var(--cave-base03);
         --syn-function: var(--cave-blue);
-        --syn-brace-curly: var(--cave-base02);
-        --syn-brace-paren: var(--cave-base02);
-        --syn-brace-angle: var(--cave-base02);
-        --syn-brace-square: var(--cave-base02);
+        --syn-brace: var(--cave-orange);
         --syn-op-cmp: var(--cave-red);
         --syn-op-result: var(--cave-orange);
         --syn-op-option: var(--cave-violet);
@@ -129,10 +126,6 @@
         --syn-op-arith: var(--cave-blue);
         --syn-type-colon: var(--cave-cyan);
         --syn-type-hint-slash: var(--cave-cyan);
-        --syn-brace-table: var(--cave-orange);
-        --syn-brace-tensor: var(--cave-orange);
-        --syn-brace-map: var(--cave-cyan);
-        --syn-brace-set: var(--cave-cyan);
         --syn-punctuation: var(--cave-base02);
 
         --accent-1: var(--cave-cyan);
@@ -159,10 +152,7 @@
         --syn-variant: var(--cave-violet);
         --syn-comment: var(--cave-base03);
         --syn-function: var(--cave-blue);
-        --syn-brace-curly: var(--cave-base05);
-        --syn-brace-paren: var(--cave-base05);
-        --syn-brace-angle: var(--cave-base05);
-        --syn-brace-square: var(--cave-base05);
+        --syn-brace: var(--cave-orange);
         --syn-op-cmp: var(--cave-red);
         --syn-op-result: var(--cave-orange);
         --syn-op-option: var(--cave-violet);
@@ -170,10 +160,6 @@
         --syn-op-arith: var(--cave-blue);
         --syn-type-colon: var(--cave-cyan);
         --syn-type-hint-slash: var(--cave-cyan);
-        --syn-brace-table: var(--cave-orange);
-        --syn-brace-tensor: var(--cave-orange);
-        --syn-brace-map: var(--cave-cyan);
-        --syn-brace-set: var(--cave-cyan);
         --syn-punctuation: var(--cave-base05);
     }
 }
@@ -419,10 +405,18 @@ th {
 .token.variant { color: var(--syn-variant); }
 .token.comment { color: var(--syn-comment); font-style: italic; }
 .token.function { color: var(--syn-function); }
-.token.brace-curly { color: var(--syn-brace-curly); }
-.token.brace-paren { color: var(--syn-brace-paren); }
-.token.brace-angle { color: var(--syn-brace-angle); }
-.token.brace-square { color: var(--syn-brace-square); }
+.token.brace-curly,
+.token.brace-paren,
+.token.brace-angle,
+.token.brace-square,
+.token.brace-table,
+.token.brace-tensor,
+.token.brace-map,
+.token.brace-set {
+    color: color-mix(in srgb, var(--syn-brace), yellow 10%);
+    opacity: 0.8;
+    text-shadow: 0 0 2px color-mix(in srgb, var(--syn-brace), yellow 90%);
+}
 .token.op-cmp { color: var(--syn-op-cmp); }
 .token.op-result { color: var(--syn-op-result); }
 .token.op-option { color: var(--syn-op-option); }
@@ -430,10 +424,6 @@ th {
 .token.op-arith { color: var(--syn-op-arith); }
 .token.type-colon { color: var(--syn-type-colon); }
 .token.type-hint-slash { color: var(--syn-type-hint-slash); }
-.token.brace-table { color: var(--syn-brace-table); }
-.token.brace-tensor { color: var(--syn-brace-tensor); }
-.token.brace-map { color: var(--syn-brace-map); }
-.token.brace-set { color: var(--syn-brace-set); }
 .token.punctuation { color: var(--syn-punctuation); }
 
 /* Admonition boxes */

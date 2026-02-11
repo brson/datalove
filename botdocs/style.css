@@ -79,10 +79,7 @@
         --syn-variant: var(--lake-violet);
         --syn-comment: var(--lake-base03);
         --syn-function: var(--lake-magenta);
-        --syn-brace-curly: var(--lake-base02);
-        --syn-brace-paren: var(--lake-base02);
-        --syn-brace-angle: var(--lake-base02);
-        --syn-brace-square: var(--lake-base02);
+        --syn-brace: var(--lake-orange);
         --syn-op-cmp: var(--lake-red);
         --syn-op-result: var(--lake-orange);
         --syn-op-option: var(--lake-violet);
@@ -90,10 +87,6 @@
         --syn-op-arith: var(--lake-blue);
         --syn-type-colon: var(--lake-cyan);
         --syn-type-hint-slash: var(--lake-cyan);
-        --syn-brace-table: var(--lake-orange);
-        --syn-brace-tensor: var(--lake-orange);
-        --syn-brace-map: var(--lake-cyan);
-        --syn-brace-set: var(--lake-cyan);
         --syn-punctuation: var(--lake-base02);
 
         --accent-1: var(--lake-cyan);
@@ -120,10 +113,7 @@
         --syn-variant: var(--lake-violet);
         --syn-comment: var(--lake-base03);
         --syn-function: var(--lake-magenta);
-        --syn-brace-curly: var(--lake-base05);
-        --syn-brace-paren: var(--lake-base05);
-        --syn-brace-angle: var(--lake-base05);
-        --syn-brace-square: var(--lake-base05);
+        --syn-brace: var(--lake-orange);
         --syn-op-cmp: var(--lake-red);
         --syn-op-result: var(--lake-orange);
         --syn-op-option: var(--lake-violet);
@@ -131,10 +121,6 @@
         --syn-op-arith: var(--lake-blue);
         --syn-type-colon: var(--lake-cyan);
         --syn-type-hint-slash: var(--lake-cyan);
-        --syn-brace-table: var(--lake-orange);
-        --syn-brace-tensor: var(--lake-orange);
-        --syn-brace-map: var(--lake-cyan);
-        --syn-brace-set: var(--lake-cyan);
         --syn-punctuation: var(--lake-base05);
     }
 }
@@ -379,10 +365,18 @@ th {
 .token.variant { color: var(--syn-variant); }
 .token.comment { color: var(--syn-comment); font-style: italic; }
 .token.function { color: var(--syn-function); }
-.token.brace-curly { color: var(--syn-brace-curly); }
-.token.brace-paren { color: var(--syn-brace-paren); }
-.token.brace-angle { color: var(--syn-brace-angle); }
-.token.brace-square { color: var(--syn-brace-square); }
+.token.brace-curly,
+.token.brace-paren,
+.token.brace-angle,
+.token.brace-square,
+.token.brace-table,
+.token.brace-tensor,
+.token.brace-map,
+.token.brace-set {
+    color: color-mix(in srgb, var(--syn-brace), yellow 10%);
+    opacity: 0.8;
+    text-shadow: 0 0 2px color-mix(in srgb, var(--syn-brace), yellow 90%);
+}
 .token.op-cmp { color: var(--syn-op-cmp); }
 .token.op-result { color: var(--syn-op-result); }
 .token.op-option { color: var(--syn-op-option); }
@@ -390,10 +384,6 @@ th {
 .token.op-arith { color: var(--syn-op-arith); }
 .token.type-colon { color: var(--syn-type-colon); }
 .token.type-hint-slash { color: var(--syn-type-hint-slash); }
-.token.brace-table { color: var(--syn-brace-table); }
-.token.brace-tensor { color: var(--syn-brace-tensor); }
-.token.brace-map { color: var(--syn-brace-map); }
-.token.brace-set { color: var(--syn-brace-set); }
 .token.punctuation { color: var(--syn-punctuation); }
 
 /* Admonition boxes */
