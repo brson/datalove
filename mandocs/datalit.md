@@ -256,7 +256,7 @@ Rows are delimited by newlines or semicolons.
 ```
 
 Table literals always require a type hint &mdash;
-they cannot synthesize a type (fixme).
+they cannot synthesize a type.
 Column names in the literal must match the type hint in order.
 Each data row must have exactly as many values as there are columns.
 
@@ -280,6 +280,22 @@ spaces separate elements along the innermost axis,
 `,,` separates slabs (3rd axis),
 `,,,` separates blocks (4th axis), and so on.
 The element count must equal the product of the shape dimensions.
+
+Higher-dimensional tensors benefit from multiline layout,
+using blank lines to visually separate the higher axes:
+
+```datalove
+// 3D tensor with shape [2, 3, 3]
+: [|f64, 3|] / [|
+  1.0 0.0 0.0,
+  0.0 1.0 0.0,
+  0.0 0.0 1.0,,
+
+  2.0 0.0 0.0,
+  0.0 2.0 0.0,
+  0.0 0.0 2.0,
+|]
+```
 
 When the outermost dimension is 1,
 the highest comma level never appears as a separator.
