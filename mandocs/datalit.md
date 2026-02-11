@@ -8,7 +8,53 @@ We often refer to it as _datalit_,
 and its types and datalit types.
 
 ```datalove
-todo example here
+: {
+  name: string,
+  version: (u32, u32, u32),
+  tag: (bool,),
+  unit: (),
+  enabled: bool,
+  score: f64,
+  flags: u32,
+  offset: i32,
+  tags: [string],
+  counts: %{string = int},
+  ids: #{int},
+  matrix: [|f64, 2|],
+  cube: [|int, 3|],
+  metrics: {| name: string, value: f64 |},
+  config: ?{ retries: u32, timeout: f64 },
+  backup: ?string,
+  status: !string,
+  failure: !u32,
+  state: atom Ready,
+  event: term Click (int, int),
+  kind: enum { atom Normal, atom Debug, term Custom string },
+  payload: data,
+} / {
+  name = "datalove",
+  version = (0, 1, 0),
+  tag = (true,),
+  unit = (),
+  enabled = true,
+  score = 99.5,
+  flags = 0xFF,
+  offset = -1,
+  tags = ["fast", "typed", "portable"],
+  counts = %{ "a" = 1, "b" = 2, "c" = 3 },
+  ids = #{ 10, 20, 30 },
+  matrix = [| 1.0 0.0, 0.0 1.0 |],
+  cube = [| 1 2, 3 4,, 5 6, 7 8 |],
+  metrics = {| name, value; "latency", 0.5; "throughput", 1000.0 |},
+  config = some { retries = 3, timeout = 30.0 },
+  backup = none,
+  status = ok "healthy",
+  failure = error "oops",
+  state = atom Ready,
+  event = term Click (100, 200),
+  kind = enum { term Custom "experiment" },
+  payload = data [1, 2, 3],
+}
 ```
 
 
@@ -23,7 +69,8 @@ with a simple bidirectional discipline,
 either checking against a type hint,
 or synthesizing a type.
 All expressions
-synthesize some type in absence of type hints.
+synthesize some type in absence of type hints
+(ideally, not currently true).
 For many uses datalit expressions are checked
 against an external type context.
 
@@ -153,7 +200,7 @@ An ordered sequence of homogeneous elements.
 
 All elements must have the same type.
 The first element's type determines the expected type for the rest.
-Bare integer elements synthesize as `int`;
+Bare integer elements synthesize as `int;`
 use a type hint for fixed-width element types.
 
 
@@ -167,7 +214,6 @@ An ordered key-value mapping.
 %{}                            // %{() = ()}, empty map
 ```
 
-The `%{` sigil distinguishes maps from structs.
 Entries use `=` to separate keys from values,
 same as struct field assignment.
 All keys must have the same type,
@@ -185,7 +231,6 @@ A collection of unique elements.
 #{}                            // #{()}, empty set
 ```
 
-The `#{` sigil distinguishes sets from structs.
 All elements must have the same type.
 All keys have a [total ordering].
 
@@ -204,17 +249,14 @@ A data structure with named, typed columns.
 
 The first row names the columns;
 subsequent rows provide data.
-Rows are delimited by newlines or semicolons,
-allowing a compact single-line form:
+Rows are delimited by newlines or semicolons.
 
 ```datalove
 : {| x: int, y: int |} / {| x, y; 1, 2; 3, 4 |}
 ```
 
-Table literals always require a type hint --
-they cannot synthesize a type.
-The type hint specifies column names and types
-with colon syntax: `{| col: T, ... |}`.
+Table literals always require a type hint &mdash;
+they cannot synthesize a type (fixme).
 Column names in the literal must match the type hint in order.
 Each data row must have exactly as many values as there are columns.
 
@@ -247,7 +289,7 @@ not a rank-1 tensor with shape [3].
 The number of trailing commas equals rank minus one.
 
 The type specifies element type and rank: `[|T, N|]`.
-Shape is not part of the type --
+Shape is not part of the type &mdash;
 two tensors of the same element type and rank
 but different shapes have the same type.
 All elements must have the same type.
