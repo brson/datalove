@@ -1,6 +1,68 @@
 # Future designs
 
 
+## 2026/02/10 - Indexing and querying
+
+All datalit aggregate and collection types have some way of
+indexing or querying,
+such that querying a node of any document can be done in one line.
+
+```
+// Tuples
+let a = (0, 1)
+let x = a.0
+let y = a.1
+
+// Structs
+let a = { b: 0, c: 1 }
+let x = a.b
+let y = a.c
+
+// List
+let a = [0, 1]
+let x = a[0]
+let y = a[1]
+
+
+// Map
+let a = %{ 100 = 1 }
+let x = a[100]
+
+
+// Set
+let a = #{ 100 }
+let x = a[100]
+
+
+// Table
+let a = {| b, c ; 0, 1 ; 2, 3 }
+let x = a.b@   // column projection then clone
+let y = a.b[0] // column projection then index
+
+// Tensor
+let a = [| 0 1, 2 3 |]
+let x = a[0]@ // row projection then clone
+let y = a[0][] // row projection, row projection
+
+// Term
+let a = term Foo 0
+let x = a.0
+
+// Option
+let a = some 0
+let b = 
+
+// Result
+// Enum
+```
+
+Indexes are passed by reference.
+Results are returned by reference,
+mutability determined by context.
+
+
+
+
 ## 2026/02/10 - Workspaces, the package world, and native riders
 
 
