@@ -71,6 +71,9 @@ mounts=(
 # Claude config/auth (read-write for OAuth tokens)
 [[ -d "$HOME/.claude" ]] && mounts+=("-v" "$HOME/.claude:/home/claude/.claude")
 [[ -f "$HOME/.claude.json" ]] && mounts+=("-v" "$HOME/.claude.json:/home/claude/.claude.json")
+# Claude binary (share host install so upgrades persist)
+[[ -L "$HOME/.local/bin/claude" ]] && mounts+=("-v" "$HOME/.local/bin/claude:/home/claude/.local/bin/claude")
+[[ -d "$HOME/.local/share/claude" ]] && mounts+=("-v" "$HOME/.local/share/claude:/home/claude/.local/share/claude")
 # Override settings.json with container-specific paths for hooks
 [[ -f "$SCRIPT_DIR/claude-sandbox-settings.json" ]] && mounts+=("-v" "$SCRIPT_DIR/claude-sandbox-settings.json:/home/claude/.claude/settings.json:ro")
 
