@@ -3480,9 +3480,9 @@ dependencies = [
 
 [[package]]
 name = "rustmax"
-version = "0.0.7"
+version = "0.0.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6f1d2253aea4749467d841f63b32f9bccd142b920a0a73bf59b975d42a0d2e79"
+checksum = "5c5e430d93947ee9097963bf4a39e993d9d110e9ae27dc24a7ebd961f6eb482e"
 dependencies = [
  "ahash",
  "anyhow",
@@ -3539,6 +3539,8 @@ dependencies = [
  "tower",
  "unicode-segmentation",
  "url",
+ "walkdir",
+ "zip",
 ]
 
 [[package]]
@@ -4320,6 +4322,12 @@ name = "typed-arena"
 version = "2.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6af6ae20167a9ece4bcb41af5b80f8a1f1df981f6391189ce00fd257af04126a"
+
+[[package]]
+name = "typed-path"
+version = "0.12.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8e28f89b80c87b8fb0cf04ab448d5dd0dd0ade2f8891bae878de66a75a28600e"
 
 [[package]]
 name = "typenum"
@@ -5104,4 +5112,16 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn",
+]
+
+[[package]]
+name = "zip"
+version = "7.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cc12baa6db2b15a140161ce53d72209dacea594230798c24774139b54ecaa980"
+dependencies = [
+ "crc32fast",
+ "indexmap",
+ "memchr",
+ "typed-path",
 ]
