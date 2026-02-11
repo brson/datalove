@@ -10,5 +10,3 @@ index-64 = []
 
 [dependencies]
 rmx.workspace = true
-termcolor = "1.4.1"
-rayon = "1.11"

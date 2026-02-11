@@ -187,7 +187,7 @@ fn basic_parse_comment(text: &str) -> Option<Result<usize, usize>> {
     let bytes = text.as_bytes();
     match *bytes {
         [b'/', b'/', ..] => {
-            let newline = memchr::memchr(b'\n', bytes);
+            let newline = rmx::memchr::memchr(b'\n', bytes);
             match newline {
                 Some(newline) => {
                     Some(Ok(newline))

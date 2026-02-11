@@ -510,7 +510,7 @@ pub fn typecheck_module_graph_parallel<'db>(
     all_function_asts: AllModuleFunctionAsts<'db>,
     auto_adapt_mode: crate::AutoAdaptMode,
 ) -> ModuleGraphTypecheckResult<'db> {
-    use rayon::prelude::*;
+    use rmx::rayon::prelude::*;
 
     let db_salsa = db.as_salsa_db();
     let prep = prepare_typecheck(db_salsa, parsed_graph);

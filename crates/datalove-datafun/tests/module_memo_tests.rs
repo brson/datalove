@@ -14,7 +14,7 @@ fn analyze_file(path: &Path) -> Result<String, String> {
     let analysis = memo_analysis::analyze_memo_worldfile(&content)
         .map_err(|e| format!("Analysis failed: {}", e))?;
 
-    serde_json::to_string_pretty(&analysis)
+    rmx::serde_json::to_string_pretty(&analysis)
         .map_err(|e| format!("Failed to serialize to JSON: {}", e))
 }
 

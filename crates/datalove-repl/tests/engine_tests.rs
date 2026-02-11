@@ -71,7 +71,7 @@ fn analyze_file(path: &Path) -> Result<String, String> {
     }
 
     // Serialize results to pretty JSON.
-    serde_json::to_string_pretty(&results)
+    rmx::serde_json::to_string_pretty(&results)
         .map_err(|e| format!("Failed to serialize results: {}", e))
 }
 

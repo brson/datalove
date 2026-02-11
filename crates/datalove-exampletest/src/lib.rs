@@ -15,11 +15,11 @@
 //! This runs only tests whose names contain "foo". Multiple filters can be
 //! provided and a test runs if it matches any filter.
 
-use rayon::prelude::*;
+use rmx::rayon::prelude::*;
 use rmx::prelude::*;
 use std::io::Write;
 use std::path::{Path, PathBuf};
-use termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
+use rmx::termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
 
 /// Parse command-line arguments for test filtering.
 ///

@@ -213,7 +213,7 @@ pub fn resolve_all_names_parallel<'db>(
     db: &'db dyn DbClone,
     parsed_graph: ParsedModuleGraph<'db>,
 ) -> AllModuleNameResolutions<'db> {
-    use rayon::prelude::*;
+    use rmx::rayon::prelude::*;
 
     let db_salsa = db.as_salsa_db();
     let graph = parsed_graph.graph(db_salsa);

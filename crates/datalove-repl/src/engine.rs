@@ -315,13 +315,13 @@ impl<'db> Engine<'db> {
                 _ => None,
             };
 
-            let output = serde_json::json!({
+            let output = rmx::serde_json::json!({
                 "input": line,
                 "parse": parse_result,
                 "eval": eval_result,
             });
 
-            println!("{}", serde_json::to_string(&output)?);
+            println!("{}", rmx::serde_json::to_string(&output)?);
         }
 
         // Engine's Drop impl will call destroy_all().

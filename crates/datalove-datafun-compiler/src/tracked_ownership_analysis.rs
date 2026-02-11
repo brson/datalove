@@ -236,7 +236,7 @@ pub fn analyze_module_graph_parallel<'db>(
     typecheck_result: ModuleGraphTypecheckResult<'db>,
     auto_adapt_mode: AutoAdaptMode,
 ) -> ModuleGraphAnalysis<'db> {
-    use rayon::prelude::*;
+    use rmx::rayon::prelude::*;
 
     let db_salsa = db.as_salsa_db();
     let graph = parsed_graph.graph(db_salsa);

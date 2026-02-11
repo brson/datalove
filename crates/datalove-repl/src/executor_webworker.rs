@@ -59,7 +59,7 @@ impl ReplExecutor for WebWorkerExecutor {
             };
 
             // Deserialize the response.
-            let response: WorkerResponse = match serde_json::from_str(&json_str) {
+            let response: WorkerResponse = match rmx::serde_json::from_str(&json_str) {
                 Ok(resp) => resp,
                 Err(e) => {
                     web_sys::console::error_1(&format!("Main: Failed to parse worker response: {}", e).into());
@@ -94,7 +94,7 @@ impl ReplExecutor for WebWorkerExecutor {
         web_sys::console::log_1(&format!("WebWorkerExecutor: Submitting parse request id={}", id).into());
 
         let request = WorkerRequest::Parse { id, input };
-        let json = serde_json::to_string(&request)
+        let json = rmx::serde_json::to_string(&request)
             .expect("Failed to serialize request");
 
         if let Err(e) = self.worker.post_message(&JsValue::from_str(&json)) {
@@ -106,7 +106,7 @@ impl ReplExecutor for WebWorkerExecutor {
         web_sys::console::log_1(&format!("WebWorkerExecutor: Submitting eval request id={}", id).into());
 
         let request = WorkerRequest::Eval { id, command };
-        let json = serde_json::to_string(&request)
+        let json = rmx::serde_json::to_string(&request)
             .expect("Failed to serialize request");
 
         if let Err(e) = self.worker.post_message(&JsValue::from_str(&json)) {

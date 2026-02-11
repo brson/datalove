@@ -53,7 +53,7 @@ pub fn worker_main() -> Result<(), JsValue> {
         };
 
         // Deserialize the request.
-        let request: WorkerRequest = match serde_json::from_str(&json_str) {
+        let request: WorkerRequest = match rmx::serde_json::from_str(&json_str) {
             Ok(req) => req,
             Err(e) => {
                 web_sys::console::error_1(&format!("Worker: Failed to parse request: {}", e).into());
@@ -73,7 +73,7 @@ pub fn worker_main() -> Result<(), JsValue> {
                 };
 
                 // Send parse result back to main thread.
-                let parse_json = serde_json::to_string(&parse_response).unwrap();
+                let parse_json = rmx::serde_json::to_string(&parse_response).unwrap();
                 if let Err(e) = post_message(&parse_json) {
                     web_sys::console::error_1(&format!("Worker: Failed to send parse result: {:?}", e).into());
                 }
@@ -94,7 +94,7 @@ pub fn worker_main() -> Result<(), JsValue> {
                     environment,
                 };
 
-                let eval_json = serde_json::to_string(&eval_response).unwrap();
+                let eval_json = rmx::serde_json::to_string(&eval_response).unwrap();
                 if let Err(e) = post_message(&eval_json) {
                     web_sys::console::error_1(&format!("Worker: Failed to send eval result: {:?}", e).into());
                 }

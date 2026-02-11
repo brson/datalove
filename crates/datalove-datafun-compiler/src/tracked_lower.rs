@@ -913,7 +913,7 @@ fn assemble_module_graph_parallel<'db>(
     lowered_functions: &HashMap<ModuleId, ModuleLoweredFunctions>,
     skip_const_inlining: bool,
 ) -> ModuleGraphLoweringResult<'db> {
-    use rayon::prelude::*;
+    use rmx::rayon::prelude::*;
 
     let db_salsa = db.as_salsa_db();
     let graph = parsed_graph.graph(db_salsa);

@@ -6,7 +6,7 @@ use rmx::prelude::*;
 use rmx::std::collections::BTreeMap;
 use rmx::std::hash::{Hash, Hasher};
 use rmx::std::collections::hash_map::DefaultHasher;
-use rayon::prelude::*;
+use rmx::rayon::prelude::*;
 use bct::text::InternedText;
 use datalove_ct::query_log::{log_query, QueryPhase};
 use datalove_datafun_tycheck::DbClone;

@@ -15,5 +15,4 @@ doctest = false
 rmx.workspace = true
 salsa.workspace = true
 serde.workspace = true
-memchr.workspace = true
 enum-iterator.workspace = true

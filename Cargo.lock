@@ -267,7 +267,6 @@ name = "bcts"
 version = "0.4.0"
 dependencies = [
  "enum-iterator",
- "memchr",
  "rustmax",
  "salsa",
  "serde",
@@ -1128,7 +1127,6 @@ dependencies = [
  "rustmax",
  "salsa",
  "serde",
- "serde_json",
 ]
 
 [[package]]
@@ -1190,7 +1188,6 @@ dependencies = [
  "datalove-rt",
  "datalove-rtdt",
  "rand 0.8.5",
- "rayon",
  "ron",
  "rustmax",
  "salsa",
@@ -1352,7 +1349,6 @@ dependencies = [
  "datalove-datafun-ast",
  "datalove-datafun-common",
  "datalove-datalit",
- "rayon",
  "rustmax",
  "salsa",
 ]
@@ -1381,7 +1377,6 @@ dependencies = [
  "datalove-datafun-sema",
  "datalove-datalit",
  "datalove-diagnostic",
- "rayon",
  "rustmax",
  "salsa",
 ]
@@ -1415,9 +1410,7 @@ dependencies = [
 name = "datalove-exampletest"
 version = "0.1.0"
 dependencies = [
- "rayon",
  "rustmax",
- "termcolor",
 ]
 
 [[package]]
@@ -1433,7 +1426,6 @@ dependencies = [
  "rustmax",
  "salsa",
  "serde",
- "serde_json",
  "wasm-bindgen",
  "web-sys",
 ]
@@ -1450,8 +1442,6 @@ dependencies = [
  "ratatui",
  "rustmax",
  "serde",
- "serde_json",
- "termcolor",
  "tui-textarea",
  "wasm-bindgen",
  "web-sys",
@@ -3533,6 +3523,7 @@ dependencies = [
  "sha2",
  "tempfile",
  "tera",
+ "termcolor",
  "thiserror 2.0.14",
  "tokio",
  "toml",
