@@ -107,6 +107,13 @@ undo is accomplished with memoization.
 
 
 
+## Enum variant types
+
+Enum variants are themselves types.
+
+
+
+
 ## Worldfiles
 
 
