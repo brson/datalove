@@ -50,10 +50,17 @@ let x = a.0
 
 // Option
 let a = some 0
-let b = 
+let b = a?
+let a = some (1, 2)
+let c = grab { a?.0 }?  // grab intercepts early returns?
 
 // Result
+
 // Enum
+let a = enum { term A 1, term B 2 }
+let b = a.extract { term A }?
+
+
 ```
 
 Indexes are passed by reference.
