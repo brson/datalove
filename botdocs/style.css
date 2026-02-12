@@ -71,12 +71,14 @@
         --code-bg: color-mix(in srgb, var(--lake-base03), white 94%);
         --table-header-bg: var(--lake-base06);
         --link: color-mix(in srgb, var(--lake-violet), black 0%);
-        --syn-keyword: var(--lake-blue);
-        --syn-type-name: var(--lake-cyan);
+        --syn-keyword: var(--lake-violet);
+        --syn-binding-modifier: var(--lake-red);
+        --syn-item-keyword: var(--lake-blue);
+        --syn-type-name: var(--lake-yellow);
         --syn-string: var(--lake-yellow);
         --syn-number: var(--lake-green);
         --syn-boolean: var(--lake-orange);
-        --syn-variant: var(--lake-violet);
+        --syn-variant: var(--lake-cyan);
         --syn-comment: var(--lake-base03);
         --syn-function: var(--lake-magenta);
         --syn-brace: var(--lake-orange);
@@ -105,12 +107,14 @@
         --code-bg: var(--lake-base00);
         --table-header-bg: var(--lake-base01);
         --link: var(--lake-violet);
-        --syn-keyword: var(--lake-blue);
-        --syn-type-name: var(--lake-cyan);
+        --syn-keyword: var(--lake-violet);
+        --syn-binding-modifier: var(--lake-red);
+        --syn-item-keyword: var(--lake-blue);
+        --syn-type-name: var(--lake-yellow);
         --syn-string: var(--lake-yellow);
         --syn-number: var(--lake-green);
         --syn-boolean: var(--lake-orange);
-        --syn-variant: var(--lake-violet);
+        --syn-variant: var(--lake-cyan);
         --syn-comment: var(--lake-base03);
         --syn-function: var(--lake-magenta);
         --syn-brace: var(--lake-orange);
@@ -358,6 +362,8 @@ th {
 
 /* Syntax highlighting */
 .token.keyword { color: var(--syn-keyword); }
+.token.binding-modifier { color: var(--syn-binding-modifier); }
+.token.item-keyword { color: var(--syn-item-keyword); }
 .token.type-name { color: var(--syn-type-name); }
 .token.string { color: var(--syn-string); }
 .token.number { color: var(--syn-number); }
