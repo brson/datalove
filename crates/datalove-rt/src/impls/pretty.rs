@@ -422,9 +422,8 @@ unsafe fn pretty_term(
         let (name, payload_ty) = tydesc.term_info();
         push_str(rt, string_mut, string_tydesc, b"term ")?;
         push_str(rt, string_mut, string_tydesc, name.as_bytes())?;
-        push_str(rt, string_mut, string_tydesc, b"(")?;
-        pretty_value(rt, value_ref, payload_ty, string_mut, string_tydesc)?;
-        push_str(rt, string_mut, string_tydesc, b")")
+        push_str(rt, string_mut, string_tydesc, b" ")?;
+        pretty_value(rt, value_ref, payload_ty, string_mut, string_tydesc)
     }
 }
 

@@ -22,7 +22,7 @@ Analysis(
                 """,
             ),
             output: "(fragment executed)",
-            debug_output: Some("term Foo(42)\n"),
+            debug_output: Some("term Foo 42\n"),
         ),
     ],
 )

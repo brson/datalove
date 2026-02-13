@@ -211,7 +211,7 @@ impl std::fmt::Display for IrType {
                 write!(f, "}}")
             }
             IrType::Atom(name) => write!(f, "atom {}", name),
-            IrType::Term(name, payload) => write!(f, "term {}({})", name, payload),
+            IrType::Term(name, payload) => write!(f, "term {} {}", name, payload),
             IrType::List(elem) => write!(f, "list<{}>", elem),
             IrType::Set(elem) => write!(f, "set<{}>", elem),
             IrType::Map(k, v) => write!(f, "map<{}, {}>", k, v),

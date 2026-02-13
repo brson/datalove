@@ -33,8 +33,8 @@ DualAnalysis(
                 """,
             ),
             ir_match: true,
-            interp_output: "term Foo(42)\n",
-            aot_output: "term Foo(42)\n",
+            interp_output: "term Foo 42\n",
+            aot_output: "term Foo 42\n",
             output_match: true,
             aot_compile: Some(AotCompileResult(
                 status: "Success",
