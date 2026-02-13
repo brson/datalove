@@ -49,65 +49,86 @@ its container (that would leave a hole). The rules mirror
 This is consistent with the rest of the language -- moves are always
 visible, clones require `@`.
 
-## Fallible Indexing and `?place<T>`
+## Fallible Indexing
 
 The `[]` operator is fallible: out of bounds, missing key, etc.
-It must return something optional. But the result is a reference,
-not a value, and optional references aren't a first-class type.
+The result is a reference, not a value, and neither optional
+references nor result references are first-class types.
 
-Resolution: `[]` produces an ephemeral `?place<T>`. The `?` operator
-is overloaded to unwrap it to `place<T>`, which then resolves by
-destination context. Neither `?place<T>` nor `place<T>` appear in
-the type system -- they are compiler-internal concepts.
+### The `fallible_place<T>` Model
+
+`[]` produces an ephemeral `fallible_place<T>` -- a compiler-internal
+concept representing "this lookup might fail." The `?` or `!` postfix
+operator resolves the failure strategy:
 
 ```
-a[i]       // produces ?place<T>
-a[i]?      // unwraps to place<T>, early-returns none if absent
+a[i]       // produces fallible_place<T> -- must be resolved
+a[i]?      // option path: unwraps to place<T>, early-returns none
+a[i]!      // result path: unwraps to place<T>, early-returns error
 ```
 
-At runtime, `?` on a `?place<T>` performs a bounds/existence check
-(not a discriminant check like `?` on a `?T` value). From the
-programmer's perspective the semantics are identical: "bail if absent."
+Neither `fallible_place<T>` nor `place<T>` appear in the type system.
+Bare `a[i]` without `?` or `!` is a type error -- the fallible place
+must be resolved. (Exception: map upsert in `set` LHS context, see
+Map Indexing below.)
 
-The enclosing function must return `?R` (or `!R`) for the
-early-return to be valid, same as existing `?`.
+At runtime, `?` and `!` on a `fallible_place<T>` perform a
+bounds/existence check (not a discriminant check like `?`/`!` on
+`?T`/`!T` values). From the programmer's perspective the semantics
+are identical: "try this, bail on failure."
+
+### Parallel with Checked Arithmetic
+
+This mirrors how checked arithmetic works: `+?` and `+!` are two
+error strategies for the same operation (addition that might overflow).
+`[]?` and `[]!` are two error strategies for the same operation
+(lookup that might miss).
+
+| Operation | `?` variant | `!` variant |
+|-----------|-------------|-------------|
+| Arithmetic | `a +? b` returns `?T` | `a +! b` returns `!T` |
+| Indexing | `a[i]?` early-returns `none` | `a[i]!` early-returns `error` |
+
+The enclosing function's return type determines which variant is
+valid: `?` requires the function to return `?R`, `!` requires `!R`.
+
+### The `!` Error Value
+
+For the `!` path, what error is produced on failure? Open question.
+Options:
+- A fixed error per collection type: lists/tensors produce
+  `error atom IndexOutOfBounds`, maps produce `error atom KeyNotFound`.
+- A generic `error atom IndexFailed`.
+- An error carrying context: `error term IndexOutOfBounds i`.
+
+Should follow the same convention as `+!` overflow errors.
 
 ### Examples
 
 ```datalove
-// Read (copy type).
+// Option path (function returns ?T).
 let x = a[0]?
+let x = a[0]?@            // linear type, explicit clone
+foo(ref a[0]?)             // borrow
+set a[0]? = 5              // mutation
 
-// Read (linear type, explicit clone).
-let x = a[0]?@
-
-// Borrow.
-foo(ref a[0]?)
-
-// Mutable borrow. a must be var.
-foo(mut a[0]?)
-
-// Mutation. a must be var.
-set a[0]? = 5
+// Result path (function returns !T).
+let x = a[0]!
+foo(ref a[0]!)
+set a[0]! = 5
 
 // Binop operands (implicit borrow).
 let sum = a[0]? + a[1]?
 
 // Chained place expression.
 set a[0]?.field? = 5
+set a[0]!.field! = 5
 ```
 
 ### Fallible vs Infallible
 
 All `[]` indexing is fallible. There is no infallible/panicking
-variant -- datalove does not have panics. Bare `a[i]` without `?`
-or `!` is a type error because `?place<T>` is not a valid
-expression in any destination context; it must be unwrapped first.
-
-### The `!` Variant
-
-`a[i]!` unwraps the index result as `!place<T>`, early-returning
-an error on failure. Same mechanics, result-flavored.
+variant -- datalove does not have panics.
 
 ## Mutability Propagation Through Chains
 
@@ -136,9 +157,9 @@ behave this way:
 Indexing and field access extend the set of things that can appear
 on the source side. The destination-context resolution is the same.
 
-The `?` overloading for `?place<T>` parallels how `@` is already
-overloaded: it means "clone" for linear types and "widen" for integers,
-resolved by context.
+The `?`/`!` overloading for fallible places parallels how `@` is
+already overloaded: it means "clone" for linear types and "widen"
+for integers, resolved by context.
 
 ## `set` with Chained Place Expressions
 
@@ -267,9 +288,9 @@ set m[key]? = v    // update: overwrite existing, early-return none if absent
 set m[key] = v     // upsert: insert if absent, overwrite if present
 ```
 
-The `?` consistently means "fail if absent." Without `?`, `set`
-creates the slot if needed. The upsert form always succeeds -- it
-produces a `place<V>` directly, not a `?place<V>`.
+The `?`/`!` consistently means "fail if absent." Without `?`/`!`,
+`set` creates the slot if needed. The upsert form always succeeds --
+it produces a `place<V>` directly, not a `fallible_place<V>`.
 
 The bare `m[key]` form (without `?`) is **only valid in `set` LHS
 context for maps**. In read context, bare `m[key]` is still a type
@@ -277,8 +298,8 @@ error -- there's no value to produce when the key is absent.
 
 ### Collection behavior of bare `[]` on `set` LHS
 
-| Collection | `set x[k] = v` | `set x[k]? = v` |
-|------------|----------------|-----------------|
+| Collection | `set x[k] = v` | `set x[k]?/! = v` |
+|------------|----------------|--------------------|
 | List | type error | overwrite existing element |
 | Map | upsert | overwrite existing value |
 | Tensor | type error | overwrite existing element |
