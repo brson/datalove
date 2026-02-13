@@ -14,6 +14,7 @@
 
 ---
 
+- [Place Expressions and Ephemeral References](places.md)
 - [Clone and Coerce Operators](design-clone-and-coerce.md)
 - [Auto-Adapt Mode](design-auto-adapt.md)
 - [Const Parameter Specialization](const-param-specialization.md)
