@@ -20,29 +20,29 @@ let y = a.c
 
 // List
 let a = [0, 1]
-let x = a[0]
-let y = a[1]
+let x = a[0]?
+let y = a[1]?
 
 
 // Map
 let a = %{ 100 = 1 }
-let x = a[100]
+let x = a[100]?
 
 
 // Set
 let a = #{ 100 }
-let x = a[100]
+let x = a[100]?
 
 
 // Table
 let a = {| b, c ; 0, 1 ; 2, 3 }
 let x = a.b@   // column projection then clone
-let y = a.b[0] // column projection then index
+let y = a.b[0]? // column projection then index
 
 // Tensor
 let a = [| 0 1, 2 3 |]
 let x = a[0]@ // row projection then clone
-let y = a[0][] // row projection, row projection
+let y = a[0]?[]? // row projection, row projection
 
 // Term
 let a = term Foo 0
@@ -66,6 +66,8 @@ let b = a.extract { term A }?
 Indexes are passed by reference.
 Results are returned by reference,
 mutability determined by context.
+
+Indexing operations return an option.
 
 
 
