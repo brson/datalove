@@ -143,17 +143,19 @@ type Book: {
   translations: %{string = bool},
 }
 
-fun reserve_book(mut db: #{Book}, ref book: Book): !()
-  for mut db_book in db
-    if db_book.title == book.title
-      if db_book.available
-        set db_book.available = false
+fun reserve_book(mut db: [Book], ref title: string): !()
+  var i: index = 0
+  loop while i .< db.len
+    if db[i]!.title == title
+      if db[i]!.available
+        set db[i]!.available = false
         ret ok ()
       else
         ret er error atom BookNotAvailable
       end if
     end if
-  end for
+    set i = i +! 1
+  end loop
   ret er error atom BookNotFound
 end fun
 ```

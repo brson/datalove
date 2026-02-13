@@ -12,7 +12,7 @@ Prism.languages.datalove = {
     'keyword': /\b(?:ret|let|var|set|require|import|default|and|or|xor|not|icall|debuglog|data)\b/,
     'binding-modifier': /\b(?:ref|mut|out)\b/,
     'item-keyword': /\b(?:type|fun|end fun)\b/,
-    'control-flow': /\b(?:if|else|end if|break|continue|loop|while|for|end for|match|end match|case)\b/,
+    'control-flow': /\b(?:if|else|end if|break|continue|loop|end loop|while|for|end for|match|end match|case)\b/,
     'function': /\b[a-z_][a-z0-9_]*(?=\s*\()/,
     'op-cmp': /\.\<|\.\>|<=|>=|==|!=/,
     'op-result': /[+\-*\/]!|!/,
