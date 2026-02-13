@@ -148,6 +148,12 @@ impl TyDescEmitter {
             IrType::Enum(variants) => {
                 return self.emit_enum_tydesc(module, ty, variants);
             }
+            IrType::Atom(name) => {
+                return self.emit_atom_tydesc(module, ty, name);
+            }
+            IrType::Term(name, payload) => {
+                return self.emit_term_tydesc(module, ty, name, payload);
+            }
             IrType::Ref(inner_ty) => {
                 // Ref is a pointer to the inner type. Emit the inner type's tydesc
                 // first (for when reading through the ref), then emit a pointer-sized
@@ -1031,6 +1037,136 @@ impl TyDescEmitter {
         Ok(data_id)
     }
 
+    /// Emit a TyDesc for an Atom type (zero-sized named type).
+    fn emit_atom_tydesc<M: Module>(
+        &mut self,
+        module: &mut M,
+        original_ty: &IrType,
+        name: &str,
+    ) -> Result<DataId, CraneliftError> {
+        if let Some(&id) = self.tydescs.get(original_ty) {
+            return Ok(id);
+        }
+
+        // Create static data for the atom name.
+        let name_bytes = name.as_bytes();
+        let name_data_name = format!("__atom_name_{}", self.counter);
+        self.counter += 1;
+
+        let name_data_id = module
+            .declare_data(&name_data_name, Linkage::Local, false, false)
+            .map_err(|e| CraneliftError::Module(format!("declare atom name: {}", e)))?;
+        let mut name_desc = DataDescription::new();
+        name_desc.define(name_bytes.to_vec().into_boxed_slice());
+        name_desc.set_align(1);
+        module
+            .define_data(name_data_id, &name_desc)
+            .map_err(|e| CraneliftError::Module(format!("define atom name: {}", e)))?;
+
+        // Build TyDesc bytes.
+        let mut bytes = vec![0u8; TYDESC_SIZE];
+        bytes[OFFSET_TYPE_TAG] = TyTag::Atom as u8;
+        bytes[OFFSET_SIZE..OFFSET_SIZE + 4].copy_from_slice(&0u32.to_le_bytes());
+        bytes[OFFSET_ALIGN..OFFSET_ALIGN + 4].copy_from_slice(&1u32.to_le_bytes());
+
+        // TyInfoAtom: name (*const u8) at +0, name_len (u32) at +8.
+        let name_len = name.len() as u32;
+        let name_len_offset = OFFSET_TYPE_INFO + 8;
+        bytes[name_len_offset..name_len_offset + 4].copy_from_slice(&name_len.to_le_bytes());
+
+        let tydesc_name = format!("__tydesc_{}", self.counter);
+        self.counter += 1;
+
+        let data_id = module
+            .declare_data(&tydesc_name, Linkage::Local, false, false)
+            .map_err(|e| CraneliftError::Module(format!("declare atom tydesc: {}", e)))?;
+
+        let mut data_desc = DataDescription::new();
+        data_desc.define(bytes.into_boxed_slice());
+        data_desc.set_align(TYDESC_ALIGN as u64);
+
+        // Relocation for name pointer at OFFSET_TYPE_INFO + 0.
+        let name_gv = module.declare_data_in_data(name_data_id, &mut data_desc);
+        data_desc.write_data_addr(OFFSET_TYPE_INFO as u32, name_gv, 0);
+
+        module
+            .define_data(data_id, &data_desc)
+            .map_err(|e| CraneliftError::Module(format!("define atom tydesc: {}", e)))?;
+
+        self.tydescs.insert(original_ty.clone(), data_id);
+        Ok(data_id)
+    }
+
+    /// Emit a TyDesc for a Term type (named wrapper around payload).
+    fn emit_term_tydesc<M: Module>(
+        &mut self,
+        module: &mut M,
+        original_ty: &IrType,
+        name: &str,
+        payload: &IrType,
+    ) -> Result<DataId, CraneliftError> {
+        if let Some(&id) = self.tydescs.get(original_ty) {
+            return Ok(id);
+        }
+
+        // Emit payload tydesc first.
+        let payload_tydesc_id = self.emit(module, payload)?;
+
+        // Create static data for the term name.
+        let name_bytes = name.as_bytes();
+        let name_data_name = format!("__term_name_{}", self.counter);
+        self.counter += 1;
+
+        let name_data_id = module
+            .declare_data(&name_data_name, Linkage::Local, false, false)
+            .map_err(|e| CraneliftError::Module(format!("declare term name: {}", e)))?;
+        let mut name_desc = DataDescription::new();
+        name_desc.define(name_bytes.to_vec().into_boxed_slice());
+        name_desc.set_align(1);
+        module
+            .define_data(name_data_id, &name_desc)
+            .map_err(|e| CraneliftError::Module(format!("define term name: {}", e)))?;
+
+        // Build TyDesc bytes.
+        let layout = crate::types::ir_type_to_cranelift(original_ty).layout();
+        let mut bytes = vec![0u8; TYDESC_SIZE];
+        bytes[OFFSET_TYPE_TAG] = TyTag::Term as u8;
+        bytes[OFFSET_SIZE..OFFSET_SIZE + 4].copy_from_slice(&layout.size.to_le_bytes());
+        bytes[OFFSET_ALIGN..OFFSET_ALIGN + 4].copy_from_slice(&layout.align.to_le_bytes());
+
+        // TyInfoTerm: name (*const u8) at +0, name_len (u32) at +8, payload (*const TyDesc) at +16.
+        let name_len = name.len() as u32;
+        let name_len_offset = OFFSET_TYPE_INFO + 8;
+        bytes[name_len_offset..name_len_offset + 4].copy_from_slice(&name_len.to_le_bytes());
+        // payload pointer at +16 will be a relocation.
+
+        let tydesc_name = format!("__tydesc_{}", self.counter);
+        self.counter += 1;
+
+        let data_id = module
+            .declare_data(&tydesc_name, Linkage::Local, false, false)
+            .map_err(|e| CraneliftError::Module(format!("declare term tydesc: {}", e)))?;
+
+        let mut data_desc = DataDescription::new();
+        data_desc.define(bytes.into_boxed_slice());
+        data_desc.set_align(TYDESC_ALIGN as u64);
+
+        // Relocation for name pointer at OFFSET_TYPE_INFO + 0.
+        let name_gv = module.declare_data_in_data(name_data_id, &mut data_desc);
+        data_desc.write_data_addr(OFFSET_TYPE_INFO as u32, name_gv, 0);
+
+        // Relocation for payload tydesc pointer at OFFSET_TYPE_INFO + 16.
+        let payload_gv = module.declare_data_in_data(payload_tydesc_id, &mut data_desc);
+        data_desc.write_data_addr((OFFSET_TYPE_INFO + 16) as u32, payload_gv, 0);
+
+        module
+            .define_data(data_id, &data_desc)
+            .map_err(|e| CraneliftError::Module(format!("define term tydesc: {}", e)))?;
+
+        self.tydescs.insert(original_ty.clone(), data_id);
+        Ok(data_id)
+    }
+
     /// Emit a TyDesc for a Table type with column info.
     fn emit_table_tydesc<M: Module>(
         &mut self,
@@ -1235,6 +1371,10 @@ impl TyDescEmitter {
             IrType::Enum(variants) => variants.iter().all(|(_, payload)| {
                 payload.as_ref().map_or(true, |t| self.can_emit(t))
             }),
+            // Atom has no payload, always emittable.
+            IrType::Atom(_) => true,
+            // Term can emit if payload can be emitted.
+            IrType::Term(_, payload) => self.can_emit(payload),
 
             // Ref types - can emit if inner type can be emitted.
             IrType::Ref(inner_ty) => self.can_emit(inner_ty),

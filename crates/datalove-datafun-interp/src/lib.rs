@@ -1674,34 +1674,52 @@ impl IrInterpreter {
                     }
                 }
                 ConstValue::Enum { variant, payload } => {
-                    // Enum layout: discriminant (u32) at offset 0, payload at variant offset.
                     let tydesc_ref = rtdt::TyDescRef::from_ptr(dest.tydesc);
-                    let enum_info = tydesc_ref.enum_info();
-
-                    // Find the variant index by name.
-                    let mut variant_index = None;
-                    for (i, v) in tydesc_ref.iter_enum_variants().enumerate() {
-                        if v.name() == variant {
-                            variant_index = Some(i);
-                            break;
+                    match tydesc_ref.type_tag() {
+                        rtdt::TyTag::Atom => {
+                            // Atom is zero-sized. Nothing to write.
                         }
-                    }
-                    let variant_idx = variant_index.expect("enum variant not found");
+                        rtdt::TyTag::Term => {
+                            // Term has same layout as payload.
+                            if let Some(payload_value) = payload {
+                                let (_, payload_tydesc) = tydesc_ref.term_info();
+                                let payload_dest = Destination {
+                                    ptr: dest.ptr,
+                                    tydesc: payload_tydesc.as_ptr(),
+                                };
+                                self.write_const(payload_value, payload_dest);
+                            }
+                        }
+                        _ => {
+                            // Enum layout: discriminant (u32) at offset 0, payload at variant offset.
+                            let enum_info = tydesc_ref.enum_info();
 
-                    // Write discriminant.
-                    *(dest.ptr as *mut u32) = variant_idx as u32;
+                            // Find the variant index by name.
+                            let mut variant_index = None;
+                            for (i, v) in tydesc_ref.iter_enum_variants().enumerate() {
+                                if v.name() == variant {
+                                    variant_index = Some(i);
+                                    break;
+                                }
+                            }
+                            let variant_idx = variant_index.expect("enum variant not found");
 
-                    // Write payload if present.
-                    if let Some(payload_value) = payload {
-                        let variant_ref = enum_info.variant(variant_idx).expect("variant out of bounds");
-                        let payload_tydesc = variant_ref.payload().expect("variant has no payload");
-                        let payload_offset = variant_ref.offset();
-                        let payload_ptr = dest.ptr.add(payload_offset as usize);
-                        let payload_dest = Destination {
-                            ptr: payload_ptr,
-                            tydesc: payload_tydesc.as_ptr(),
-                        };
-                        self.write_const(payload_value, payload_dest);
+                            // Write discriminant.
+                            *(dest.ptr as *mut u32) = variant_idx as u32;
+
+                            // Write payload if present.
+                            if let Some(payload_value) = payload {
+                                let variant_ref = enum_info.variant(variant_idx).expect("variant out of bounds");
+                                let payload_tydesc = variant_ref.payload().expect("variant has no payload");
+                                let payload_offset = variant_ref.offset();
+                                let payload_ptr = dest.ptr.add(payload_offset as usize);
+                                let payload_dest = Destination {
+                                    ptr: payload_ptr,
+                                    tydesc: payload_tydesc.as_ptr(),
+                                };
+                                self.write_const(payload_value, payload_dest);
+                            }
+                        }
                     }
                 }
                 ConstValue::ResultOk(inner) => {

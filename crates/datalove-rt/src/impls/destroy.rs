@@ -28,7 +28,8 @@ pub unsafe fn any_destroy_local(
             | rtdt::TyTag::Index
             | rtdt::TyTag::Offset
             | rtdt::TyTag::F32
-            | rtdt::TyTag::F64 => RtStatus::Ok,
+            | rtdt::TyTag::F64
+            | rtdt::TyTag::Atom => RtStatus::Ok,
 
             // Int has allocations.
             rtdt::TyTag::Int => {
@@ -180,6 +181,12 @@ pub unsafe fn any_destroy_local(
                 }
 
                 RtStatus::Ok
+            }
+
+            // Term - destroy the payload (same layout).
+            rtdt::TyTag::Term => {
+                let (_, payload_ty) = ty.term_info();
+                any_destroy_local(rt, value_in, payload_ty.as_ptr())
             }
 
             // Enum - check tag and destroy payload.

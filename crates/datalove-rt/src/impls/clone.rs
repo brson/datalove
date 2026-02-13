@@ -40,7 +40,8 @@ unsafe fn clone_impl(
         TyTag::Bool | TyTag::U8 | TyTag::I8 | TyTag::U16 | TyTag::I16 |
         TyTag::U32 | TyTag::I32 | TyTag::U64 | TyTag::I64 |
         TyTag::Index | TyTag::Offset |
-        TyTag::F32 | TyTag::F64 => {
+        TyTag::F32 | TyTag::F64 |
+        TyTag::Atom => {
             unsafe {
                 std::ptr::copy_nonoverlapping(value_in, value_out, ty.size() as usize);
             }
@@ -149,6 +150,12 @@ unsafe fn clone_impl(
             }
 
             RtStatus::Ok
+        }
+
+        // Term - clone the payload (same layout).
+        TyTag::Term => {
+            let (_, payload_ty) = ty.term_info();
+            unsafe { clone_impl(rt, value_in, payload_ty, value_out) }
         }
 
         // Enum - copy discriminant and clone payload if present.

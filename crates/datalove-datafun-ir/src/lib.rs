@@ -126,6 +126,10 @@ pub enum IrType {
     Struct(Vec<(String, IrType)>),
     /// Anonymous enum with variants (name and optional payload type, sorted by name).
     Enum(Vec<(String, Option<IrType>)>),
+    /// Named atom (unit-like tag with no payload).
+    Atom(String),
+    /// Named term (tag with a payload).
+    Term(String, Box<IrType>),
     /// List with element type.
     List(Box<IrType>),
     /// Set with element type.
@@ -147,6 +151,15 @@ pub enum IrType {
     Table(Vec<(String, Box<IrType>)>),
 }
 
+impl IrType {
+    /// Returns enum variants for Enum types only.
+    pub fn enum_variants(&self) -> Option<&Vec<(String, Option<IrType>)>> {
+        match self {
+            IrType::Enum(v) => Some(v),
+            _ => None,
+        }
+    }
+}
 
 impl std::fmt::Display for IrType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -197,6 +210,8 @@ impl std::fmt::Display for IrType {
                 }
                 write!(f, "}}")
             }
+            IrType::Atom(name) => write!(f, "atom {}", name),
+            IrType::Term(name, payload) => write!(f, "term {}({})", name, payload),
             IrType::List(elem) => write!(f, "list<{}>", elem),
             IrType::Set(elem) => write!(f, "set<{}>", elem),
             IrType::Map(k, v) => write!(f, "map<{}, {}>", k, v),
@@ -303,12 +318,12 @@ impl IrType {
             }
             TypeHint::Atom(a) => {
                 let name = a.name.text(db).to_string();
-                IrType::Enum(vec![(name, None)])
+                IrType::Atom(name)
             }
             TypeHint::Term(t) => {
                 let name = t.name.text(db).to_string();
                 let payload = Self::from_type_hint(db, &t.payload);
-                IrType::Enum(vec![(name, Some(payload))])
+                IrType::Term(name, Box::new(payload))
             }
             TypeHint::Enum(e) => {
                 let mut variants: Vec<_> = e.variants.iter()
@@ -412,12 +427,12 @@ impl IrType {
             }
             DlType::Atom(a) => {
                 let name = a.name.text(db).to_string();
-                IrType::Enum(vec![(name, None)])
+                IrType::Atom(name)
             }
             DlType::Term(t) => {
                 let name = t.name.text(db).to_string();
                 let payload = Self::from_datalit(db, &t.payload);
-                IrType::Enum(vec![(name, Some(payload))])
+                IrType::Term(name, Box::new(payload))
             }
             DlType::Enum(e) => {
                 let mut variants: Vec<_> = e.variants.iter()
@@ -457,6 +472,10 @@ impl IrType {
             IrType::Enum(variants) => variants.iter().all(|(_, payload)| {
                 payload.as_ref().map(|p| p.is_copy()).unwrap_or(true)
             }),
+            // Atom has no payload, always copy.
+            IrType::Atom(_) => true,
+            // Term is copy if payload is copy.
+            IrType::Term(_, payload) => payload.is_copy(),
 
             // Option is copy if inner is copy.
             IrType::Option(inner) => inner.is_copy(),

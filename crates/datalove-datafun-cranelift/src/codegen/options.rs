@@ -289,16 +289,13 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
     ) -> Result<(), CraneliftError> {
         let dest_ty = &self.func.value_types[dest.0 as usize];
 
-        // Get variant info from Enum type.
-        let variants = match dest_ty {
-            IrType::Enum(v) => v,
-            _ => {
-                return Err(CraneliftError::Codegen(format!(
-                    "EnumVariant dest is not Enum: {:?}",
-                    dest_ty
-                )));
-            }
-        };
+        // Get variant info from enum-like type.
+        let variants = dest_ty.enum_variants().ok_or_else(|| {
+            CraneliftError::Codegen(format!(
+                "EnumVariant dest is not enum-like: {:?}",
+                dest_ty
+            ))
+        })?;
 
         // Compute payload offset for this variant.
         let payload_offset = if let Some(payload_ty) = &variants[variant_index as usize].1 {
@@ -374,14 +371,11 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         variant_index: u32,
     ) -> Result<(), CraneliftError> {
         let src_ty = self.get_operand_type(src)?;
-        let variants = match &src_ty {
-            IrType::Enum(v) => v,
-            _ => {
-                return Err(CraneliftError::Codegen(format!(
-                    "EnumPayload src is not Enum: {:?}", src_ty
-                )));
-            }
-        };
+        let variants = src_ty.enum_variants().ok_or_else(|| {
+            CraneliftError::Codegen(format!(
+                "EnumPayload src is not enum-like: {:?}", src_ty
+            ))
+        })?;
 
         let payload_ty = variants[variant_index as usize].1.as_ref()
             .ok_or_else(|| CraneliftError::Codegen("EnumPayload variant has no payload type".into()))?;

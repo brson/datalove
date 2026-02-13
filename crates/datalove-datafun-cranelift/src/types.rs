@@ -133,6 +133,8 @@ pub fn ir_type_to_cranelift(ty: &IrType) -> CraneliftRepr {
             let layout = compute_enum_layout(variants);
             CraneliftRepr::Aggregate(layout)
         }
+        IrType::Atom(_) => CraneliftRepr::Aggregate(TypeLayout { size: 0, align: 1 }),
+        IrType::Term(_, payload) => ir_type_to_cranelift(payload),
         IrType::Option(inner) => {
             let layout = compute_option_layout(inner);
             CraneliftRepr::Aggregate(layout)

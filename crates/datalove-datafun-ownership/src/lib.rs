@@ -1437,17 +1437,18 @@ fn analyze_match<'db>(ctx: &mut AnalysisCtx<'db>, stmt: &StmtMatch<'db>, stmt_id
             // Get payload type from the input expr type's enum variant.
             // For now, use a placeholder - the typechecker has validated it.
             let input_ty = ctx.expr_type(stmt.input);
+            let variant_name = match &case.kind {
+                MatchCaseKind::Term { name, .. } => name.text(ctx.db).to_string(),
+                _ => unreachable!(),
+            };
             let payload_ty = match &input_ty {
                 IrType::Enum(variants) => {
-                    let variant_name = match &case.kind {
-                        MatchCaseKind::Term { name, .. } => name.text(ctx.db).to_string(),
-                        _ => unreachable!(),
-                    };
                     variants.iter()
                         .find(|(n, _)| n == &variant_name)
                         .and_then(|(_, payload)| payload.clone())
                         .unwrap_or(IrType::Unit)
                 }
+                IrType::Term(_, payload) => *payload.clone(),
                 _ => IrType::Unit,
             };
             ctx.alloc_binding(name, payload_ty, false, None);

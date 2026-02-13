@@ -15,14 +15,14 @@ Analysis(
                     scriptunit:
                     block0:
                         v0 = const 42int
-                        v1 = enum_variant 0 v0
+                        v1 = move v0
                         debuglog v1
                         unit_end_drop v1
                         unit_end
                 """,
             ),
             output: "(fragment executed)",
-            debug_output: Some("enum Foo(42)\n"),
+            debug_output: Some("term Foo(42)\n"),
         ),
     ],
 )

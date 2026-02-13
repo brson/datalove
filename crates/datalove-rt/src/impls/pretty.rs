@@ -65,6 +65,8 @@ unsafe fn pretty_value(
             rtdt::TyTag::Tuple => pretty_tuple(rt, value_ref, tydesc, string_mut, string_tydesc),
             rtdt::TyTag::Struct => pretty_struct(rt, value_ref, tydesc, string_mut, string_tydesc),
             rtdt::TyTag::Enum => pretty_enum(rt, value_ref, tydesc, string_mut, string_tydesc),
+            rtdt::TyTag::Atom => pretty_atom(rt, tydesc, string_mut, string_tydesc),
+            rtdt::TyTag::Term => pretty_term(rt, value_ref, tydesc, string_mut, string_tydesc),
 
             rtdt::TyTag::List => pretty_list(rt, value_ref, tydesc, string_mut, string_tydesc),
             rtdt::TyTag::Map => pretty_map(rt, value_ref, tydesc, string_mut, string_tydesc),
@@ -393,6 +395,36 @@ unsafe fn pretty_enum(
         }
 
         Ok(())
+    }
+}
+
+unsafe fn pretty_atom(
+    rt: LocalRtHandle,
+    tydesc: rtdt::TyDescRef,
+    string_mut: *mut u8,
+    string_tydesc: *const rtdt::TyDesc,
+) -> Result<(), ()> {
+    unsafe {
+        let (name, _) = tydesc.atom_info();
+        push_str(rt, string_mut, string_tydesc, b"atom ")?;
+        push_str(rt, string_mut, string_tydesc, name.as_bytes())
+    }
+}
+
+unsafe fn pretty_term(
+    rt: LocalRtHandle,
+    value_ref: *const u8,
+    tydesc: rtdt::TyDescRef,
+    string_mut: *mut u8,
+    string_tydesc: *const rtdt::TyDesc,
+) -> Result<(), ()> {
+    unsafe {
+        let (name, payload_ty) = tydesc.term_info();
+        push_str(rt, string_mut, string_tydesc, b"term ")?;
+        push_str(rt, string_mut, string_tydesc, name.as_bytes())?;
+        push_str(rt, string_mut, string_tydesc, b"(")?;
+        pretty_value(rt, value_ref, payload_ty, string_mut, string_tydesc)?;
+        push_str(rt, string_mut, string_tydesc, b")")
     }
 }
 

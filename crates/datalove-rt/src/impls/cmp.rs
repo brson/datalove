@@ -128,7 +128,8 @@ fn eq_tydesc(
             rtdt::TyTag::U16 | rtdt::TyTag::I16 | rtdt::TyTag::U32 | rtdt::TyTag::I32 |
             rtdt::TyTag::U64 | rtdt::TyTag::I64 | rtdt::TyTag::Index | rtdt::TyTag::Offset |
             rtdt::TyTag::F32 | rtdt::TyTag::F64 |
-            rtdt::TyTag::Int | rtdt::TyTag::String | rtdt::TyTag::Data | rtdt::TyTag::Error => {
+            rtdt::TyTag::Int | rtdt::TyTag::String | rtdt::TyTag::Data | rtdt::TyTag::Error |
+            rtdt::TyTag::Atom => {
                 true
             }
             rtdt::TyTag::Tuple => {
@@ -177,6 +178,11 @@ fn eq_tydesc(
                     }
                 }
                 true
+            }
+            rtdt::TyTag::Term => {
+                let (name_a, payload_a) = td_a.term_info();
+                let (name_b, payload_b) = td_b.term_info();
+                name_a == name_b && eq_tydesc(payload_a, payload_b)
             }
             rtdt::TyTag::Enum => {
                 let info_a = td_a.enum_info();
@@ -416,6 +422,11 @@ unsafe fn eq_value(
                     }
                 }
                 true
+            }
+            rtdt::TyTag::Atom => true,
+            rtdt::TyTag::Term => {
+                let (_, payload_ty) = td.term_info();
+                eq_value(value_a, value_b, payload_ty, float_policy)
             }
             rtdt::TyTag::Enum => {
                 let enum_info = td.enum_info();
@@ -1047,6 +1058,11 @@ unsafe fn cmp_value(
                     }
                 }
                 crate::c::RtOrdering::Equal
+            }
+            rtdt::TyTag::Atom => crate::c::RtOrdering::Equal,
+            rtdt::TyTag::Term => {
+                let (_, payload_ty) = td.term_info();
+                cmp_value(value_a, value_b, payload_ty, float_policy)
             }
             rtdt::TyTag::Enum => {
                 let enum_info = td.enum_info();

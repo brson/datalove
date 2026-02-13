@@ -134,6 +134,8 @@ fn align_of_ir_type(ir_type: &IrType) -> u32 {
         IrType::Tuple(fields) => fields.iter().map(align_of_ir_type).max().unwrap_or(1),
         IrType::Struct(fields) => fields.iter().map(|(_, ty)| align_of_ir_type(ty)).max().unwrap_or(1),
         IrType::Enum(_) => 8,
+        IrType::Atom(_) => 1,
+        IrType::Term(_, payload) => align_of_ir_type(payload),
         IrType::Option(inner) => align_of_ir_type(inner).max(1),
         IrType::Result(inner) => align_of_ir_type(inner).max(8), // Error is pointer-sized
         IrType::Tensor(_, _) => 8,
@@ -182,6 +184,8 @@ fn size_of_ir_type(ir_type: &IrType) -> u32 {
             }
         }
         IrType::Enum(_) => 16, // tag + max variant
+        IrType::Atom(_) => 0,
+        IrType::Term(_, payload) => size_of_ir_type(payload),
         IrType::Option(inner) => {
             let inner_align = align_of_ir_type(inner);
             let payload_offset = datalove_rtdt::layout::option_payload_offset(inner_align);
@@ -362,7 +366,6 @@ fn extract_const_value(ptr: *const u8, ir_type: &IrType) -> Result<ConstValue, C
                 let (variant_name, payload_type) = &variants[variant_index];
 
                 if let Some(payload_ty) = payload_type {
-                    // Variant has payload - compute offset and extract.
                     let payload_align = align_of_ir_type(payload_ty);
                     let payload_offset = datalove_rtdt::layout::align_up(4, payload_align);
                     let payload_ptr = ptr.add(payload_offset as usize);
@@ -372,12 +375,26 @@ fn extract_const_value(ptr: *const u8, ir_type: &IrType) -> Result<ConstValue, C
                         payload: Some(Box::new(payload_value)),
                     })
                 } else {
-                    // Unit variant - no payload.
                     Ok(ConstValue::Enum {
                         variant: variant_name.clone(),
                         payload: None,
                     })
                 }
+            }
+            IrType::Atom(name) => {
+                // Atom is zero-sized.
+                Ok(ConstValue::Enum {
+                    variant: name.clone(),
+                    payload: None,
+                })
+            }
+            IrType::Term(name, payload_ty) => {
+                // Term has same layout as payload.
+                let payload_value = extract_const_value(ptr, payload_ty)?;
+                Ok(ConstValue::Enum {
+                    variant: name.clone(),
+                    payload: Some(Box::new(payload_value)),
+                })
             }
             IrType::String => {
                 // String layout: data ptr, size, capacity.

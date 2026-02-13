@@ -14,13 +14,13 @@ Analysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = enum_variant 0
+                        v0 = const enum Foo
                         debuglog v0
                         unit_end
                 """,
             ),
             output: "(fragment executed)",
-            debug_output: Some("enum Foo\n"),
+            debug_output: Some("atom Foo\n"),
         ),
     ],
 )

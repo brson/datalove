@@ -139,6 +139,8 @@ pub fn ir_type_to_crepr(ty: &IrType) -> CRepr {
             let layout = compute_enum_layout(variants);
             CRepr::Aggregate(layout)
         }
+        IrType::Atom(_) => CRepr::Aggregate(TypeLayout { size: 0, align: 1 }),
+        IrType::Term(_, payload) => ir_type_to_crepr(payload),
         IrType::Option(inner) => {
             let layout = compute_option_layout(inner);
             CRepr::Aggregate(layout)

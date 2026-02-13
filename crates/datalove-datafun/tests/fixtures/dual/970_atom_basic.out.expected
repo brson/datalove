@@ -13,7 +13,7 @@ DualAnalysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = enum_variant 0
+                        v0 = const enum Foo
                         debuglog v0
                         unit_end
                 """,
@@ -23,14 +23,14 @@ DualAnalysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = enum_variant 0
+                        v0 = const enum Foo
                         debuglog v0
                         unit_end
                 """,
             ),
             ir_match: true,
-            interp_output: "enum Foo\n",
-            aot_output: "enum Foo\n",
+            interp_output: "atom Foo\n",
+            aot_output: "atom Foo\n",
             output_match: true,
             aot_compile: Some(AotCompileResult(
                 status: "Success",

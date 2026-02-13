@@ -65,6 +65,10 @@ fn collect_type_recursive(ty: &IrType, types: &mut HashSet<IrType>) {
                 }
             }
         }
+        IrType::Atom(_) => {}
+        IrType::Term(_, payload) => {
+            collect_type_recursive(payload, types);
+        }
         IrType::Option(inner) => {
             collect_type_recursive(inner, types);
         }
@@ -113,6 +117,8 @@ pub fn type_depth(ty: &IrType) -> u32 {
                 .max()
                 .unwrap_or(0)
         }
+        IrType::Atom(_) => 0,
+        IrType::Term(_, payload) => 1 + type_depth(payload),
         IrType::Option(inner) => 1 + type_depth(inner),
         IrType::Result(ok) => 1 + type_depth(ok),
         IrType::Tensor(elem, _) => 1 + type_depth(elem),
@@ -144,6 +150,8 @@ fn type_tag(ty: &IrType) -> u8 {
         IrType::Tuple(_) => 0x40,
         IrType::Struct(_) => 0x41,
         IrType::Enum(_) => 0x42,
+        IrType::Atom(_) => 0x43,
+        IrType::Term(_, _) => 0x44,
         IrType::List(_) => 0x50,
         IrType::String => 0x51,
         IrType::Map(_, _) => 0x52,
@@ -286,6 +294,17 @@ pub fn emit_tydesc(
                 writeln!(out, "static const dtlv_tydesc_t {} = {{ .type_tag = 0x42, .size = {}, .align = {}, .type_info = {{ .enum_ = {{ .variants = {}, .num_variants = {} }} }} }};",
                     name, layout.size, layout.align, variants_name, variants.len()).unwrap();
             }
+        }
+
+        IrType::Atom(atom_name) => {
+            writeln!(out, "static const dtlv_tydesc_t {} = {{ .type_tag = 0x43, .size = 0, .align = 1, .type_info = {{ .atom = {{ .name = \"{}\", .name_len = {} }} }} }};",
+                name, atom_name, atom_name.len()).unwrap();
+        }
+
+        IrType::Term(term_name, payload_ty) => {
+            let payload_tydesc = compiler.get_tydesc_name(payload_ty);
+            writeln!(out, "static const dtlv_tydesc_t {} = {{ .type_tag = 0x44, .size = {}, .align = {}, .type_info = {{ .term = {{ .name = \"{}\", .name_len = {}, .payload = &{} }} }} }};",
+                name, layout.size, layout.align, term_name, term_name.len(), payload_tydesc).unwrap();
         }
 
         IrType::Option(inner) => {

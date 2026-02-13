@@ -735,46 +735,72 @@ pub fn lower_expression<'db>(
         }
 
         ExprFunKind::Atom(atom) => {
-            // Atom lowers to EnumVariant with no payload.
-            // The expr type is IrType::Enum (single-variant from typechecker).
             let result_type = ctx.expr_type(expr);
-            let variants = match &result_type {
-                IrType::Enum(v) => v,
-                _ => panic!("atom expr should have Enum IrType"),
-            };
-            let name_str = atom.name.as_str(ctx.db);
-            let variant_index = variants.iter()
-                .position(|(n, _)| n == name_str)
-                .unwrap_or_else(|| panic!("atom variant '{}' not found in enum type", name_str))
-                as u32;
-            let dest = ctx.fresh_value(result_type);
-            ctx.emit(Instruction::EnumVariant {
-                dest,
-                variant_index,
-                payload: None,
-            });
-            Ok(dest)
+            match &result_type {
+                IrType::Atom(name) => {
+                    // Atom is zero-sized. Emit a const to define the value.
+                    let variant_name = name.clone();
+                    let dest = ctx.fresh_value(result_type);
+                    ctx.emit(Instruction::Const {
+                        dest,
+                        value: ConstValue::Enum {
+                            variant: variant_name,
+                            payload: None,
+                        },
+                    });
+                    Ok(dest)
+                }
+                IrType::Enum(_) => {
+                    // Atom used in enum context - emit EnumVariant.
+                    let name_str = atom.name.as_str(ctx.db);
+                    let variants = result_type.enum_variants().unwrap();
+                    let variant_index = variants.iter()
+                        .position(|(n, _)| n == name_str)
+                        .unwrap_or_else(|| panic!("atom variant '{}' not found in type", name_str))
+                        as u32;
+                    let dest = ctx.fresh_value(result_type);
+                    ctx.emit(Instruction::EnumVariant {
+                        dest,
+                        variant_index,
+                        payload: None,
+                    });
+                    Ok(dest)
+                }
+                _ => panic!("atom expr has unexpected IrType: {:?}", result_type),
+            }
         }
         ExprFunKind::Term(term) => {
-            // Term lowers to EnumVariant with payload.
             let result_type = ctx.expr_type(expr);
-            let variants = match &result_type {
-                IrType::Enum(v) => v,
-                _ => panic!("term expr should have Enum IrType"),
-            };
-            let name_str = term.name.as_str(ctx.db);
-            let variant_index = variants.iter()
-                .position(|(n, _)| n == name_str)
-                .unwrap_or_else(|| panic!("term variant '{}' not found in enum type", name_str))
-                as u32;
-            let payload_id = lower_expression(ctx, term.payload)?;
-            let dest = ctx.fresh_value(result_type);
-            ctx.emit(Instruction::EnumVariant {
-                dest,
-                variant_index,
-                payload: Some(Operand::Value(payload_id)),
-            });
-            Ok(dest)
+            match &result_type {
+                IrType::Term(_, _) => {
+                    // Term has same layout as payload. Lower payload then move.
+                    let payload_id = lower_expression(ctx, term.payload)?;
+                    let dest = ctx.fresh_value(result_type);
+                    ctx.emit(Instruction::Move {
+                        dest,
+                        src: Operand::Value(payload_id),
+                    });
+                    Ok(dest)
+                }
+                IrType::Enum(_) => {
+                    // Term used in enum context - emit EnumVariant with payload.
+                    let name_str = term.name.as_str(ctx.db);
+                    let variants = result_type.enum_variants().unwrap();
+                    let variant_index = variants.iter()
+                        .position(|(n, _)| n == name_str)
+                        .unwrap_or_else(|| panic!("term variant '{}' not found in type", name_str))
+                        as u32;
+                    let payload_id = lower_expression(ctx, term.payload)?;
+                    let dest = ctx.fresh_value(result_type);
+                    ctx.emit(Instruction::EnumVariant {
+                        dest,
+                        variant_index,
+                        payload: Some(Operand::Value(payload_id)),
+                    });
+                    Ok(dest)
+                }
+                _ => panic!("term expr has unexpected IrType: {:?}", result_type),
+            }
         }
         ExprFunKind::EnumLiteral(enum_lit) => {
             // EnumLiteral wraps an atom or term expr checked against target enum type.

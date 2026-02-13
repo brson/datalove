@@ -143,6 +143,37 @@ impl<'a> TyDescRef<'a> {
         }
     }
 
+    // Atom/Term accessors.
+
+    /// Returns the atom name.
+    ///
+    /// # Panics
+    /// Panics if this is not an Atom type.
+    pub fn atom_info(&self) -> (&'a str, u32) {
+        assert_eq!(self.inner.type_tag, TyTag::Atom);
+        unsafe {
+            let info = self.inner.type_info.atom;
+            let name_bytes = std::slice::from_raw_parts(info.name, info.name_len as usize);
+            let name = std::str::from_utf8_unchecked(name_bytes);
+            (name, info.name_len)
+        }
+    }
+
+    /// Returns the term name and payload type descriptor.
+    ///
+    /// # Panics
+    /// Panics if this is not a Term type.
+    pub fn term_info(&self) -> (&'a str, TyDescRef<'a>) {
+        assert_eq!(self.inner.type_tag, TyTag::Term);
+        unsafe {
+            let info = self.inner.type_info.term;
+            let name_bytes = std::slice::from_raw_parts(info.name, info.name_len as usize);
+            let name = std::str::from_utf8_unchecked(name_bytes);
+            let payload = TyDescRef::from_ptr(info.payload);
+            (name, payload)
+        }
+    }
+
     // Collection accessors.
 
     /// Returns the element type descriptor for a List type.

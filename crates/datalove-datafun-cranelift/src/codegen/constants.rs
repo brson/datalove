@@ -416,6 +416,8 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
     /// Compile an Enum constant.
     ///
     /// Enum layout: discriminant (u32) at offset 0, payload at aligned offset.
+    /// For Atom types: zero-sized, nothing to write.
+    /// For Term types: same layout as payload.
     fn compile_enum_const(
         &mut self,
         builder: &mut FunctionBuilder,
@@ -423,41 +425,63 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         variant: &str,
         payload: Option<&ConstValue>,
     ) -> Result<(), CraneliftError> {
-        // Get frame slot and destination address.
-        let frame_slot = self.frame_slot.ok_or_else(|| {
-            CraneliftError::Codegen("no frame slot for Enum constant".into())
-        })?;
-        let dest_offset = self.layout.value_offset(dest.0);
-        let base = builder.ins().stack_addr(PTR_TYPE, frame_slot, dest_offset as i32);
-
-        // Get enum type from function to find variant index.
         let ir_type = self.func.value_types.get(dest.0 as usize).ok_or_else(|| {
             CraneliftError::Codegen("no type for Enum constant".into())
         })?;
-        let variants = match ir_type {
-            IrType::Enum(v) => v,
-            _ => return Err(CraneliftError::Codegen("expected Enum type".into())),
-        };
 
-        // Find variant index.
-        let variant_index = variants.iter().position(|(name, _)| name == variant)
-            .ok_or_else(|| CraneliftError::Codegen(format!("enum variant '{}' not found", variant)))?;
+        match ir_type {
+            IrType::Atom(_) => {
+                // Atom is zero-sized. Allocate address for debuglog.
+                let frame_slot = self.frame_slot.ok_or_else(|| {
+                    CraneliftError::Codegen("no frame slot for Atom constant".into())
+                })?;
+                let dest_offset = self.layout.value_offset(dest.0);
+                let base = builder.ins().stack_addr(PTR_TYPE, frame_slot, dest_offset as i32);
+                self.values.insert(dest, base);
+                Ok(())
+            }
+            IrType::Term(_, _) => {
+                // Term has same layout as payload.
+                let frame_slot = self.frame_slot.ok_or_else(|| {
+                    CraneliftError::Codegen("no frame slot for Term constant".into())
+                })?;
+                let dest_offset = self.layout.value_offset(dest.0);
+                let base = builder.ins().stack_addr(PTR_TYPE, frame_slot, dest_offset as i32);
+                if let Some(payload_value) = payload {
+                    self.write_const_value_to_addr(builder, base, payload_value)?;
+                }
+                self.values.insert(dest, base);
+                Ok(())
+            }
+            _ => {
+                // Standard enum with discriminant.
+                let frame_slot = self.frame_slot.ok_or_else(|| {
+                    CraneliftError::Codegen("no frame slot for Enum constant".into())
+                })?;
+                let dest_offset = self.layout.value_offset(dest.0);
+                let base = builder.ins().stack_addr(PTR_TYPE, frame_slot, dest_offset as i32);
 
-        // Write discriminant (u32) at offset 0.
-        let discriminant = builder.ins().iconst(cl_types::I32, variant_index as i64);
-        builder.ins().store(cranelift_codegen::ir::MemFlags::trusted(), discriminant, base, 0);
+                let variants = ir_type.enum_variants().ok_or_else(|| {
+                    CraneliftError::Codegen("expected enum type".into())
+                })?;
 
-        // Write payload if present.
-        if let Some(payload_value) = payload {
-            let payload_align = self.align_of_const_value(payload_value);
-            let payload_offset = datalove_rtdt::layout::align_up(4, payload_align);
-            let payload_addr = builder.ins().iadd_imm(base, payload_offset as i64);
-            self.write_const_value_to_addr(builder, payload_addr, payload_value)?;
+                let variant_index = variants.iter().position(|(name, _)| name == variant)
+                    .ok_or_else(|| CraneliftError::Codegen(format!("enum variant '{}' not found", variant)))?;
+
+                let discriminant = builder.ins().iconst(cl_types::I32, variant_index as i64);
+                builder.ins().store(cranelift_codegen::ir::MemFlags::trusted(), discriminant, base, 0);
+
+                if let Some(payload_value) = payload {
+                    let payload_align = self.align_of_const_value(payload_value);
+                    let payload_offset = datalove_rtdt::layout::align_up(4, payload_align);
+                    let payload_addr = builder.ins().iadd_imm(base, payload_offset as i64);
+                    self.write_const_value_to_addr(builder, payload_addr, payload_value)?;
+                }
+
+                self.values.insert(dest, base);
+                Ok(())
+            }
         }
-
-        // Store base pointer for this value.
-        self.values.insert(dest, base);
-        Ok(())
     }
 
     /// Compile a Result Ok constant.
@@ -1195,6 +1219,8 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                     .unwrap_or(1);
                 4u32.max(payload_align)
             }
+            IrType::Atom(_) => 1,
+            IrType::Term(_, payload) => self.align_of_ir_type(payload),
             IrType::List(_) | IrType::Set(_) | IrType::Map(_, _) | IrType::Table(_) => 8,
             IrType::Tensor(_, _) => 8,
             IrType::Ref(_) => std::mem::size_of::<*const ()>() as u32,

@@ -171,6 +171,8 @@ impl IrTyDescTable {
             IrType::Tuple(fields) => self.create_tuple_tydesc(fields),
             IrType::Struct(fields) => self.create_struct_tydesc(fields),
             IrType::Enum(variants) => self.create_enum_tydesc(variants),
+            IrType::Atom(name) => self.create_atom_tydesc(name),
+            IrType::Term(name, payload) => self.create_term_tydesc(name, payload),
             IrType::List(elem) => self.create_list_tydesc(elem),
             IrType::Set(elem) => self.create_set_tydesc(elem),
             IrType::Map(key, val) => self.create_map_tydesc(key, val),
@@ -374,6 +376,44 @@ impl IrTyDescTable {
                 enum_: rtdt::TyInfoEnum {
                     num_variants: variants.len() as u32,
                     variants: variants_ptr,
+                },
+            },
+        })
+    }
+
+    fn create_atom_tydesc(&mut self, name: &str) -> Box<TyDesc> {
+        self.field_names.push(name.to_string());
+        let name_ref = self.field_names.last().unwrap();
+        Box::new(TyDesc {
+            type_tag: rtdt::TyTag::Atom,
+            size: 0,
+            align: 1,
+            type_info: rtdt::TyInfo {
+                atom: rtdt::TyInfoAtom {
+                    name: name_ref.as_ptr(),
+                    name_len: name_ref.len() as u32,
+                },
+            },
+        })
+    }
+
+    fn create_term_tydesc(&mut self, name: &str, payload: &IrType) -> Box<TyDesc> {
+        let payload_tydesc = self.get_or_create(payload);
+        let payload_layout = unsafe { &*payload_tydesc };
+        let size = payload_layout.size;
+        let align = payload_layout.align;
+
+        self.field_names.push(name.to_string());
+        let name_ref = self.field_names.last().unwrap();
+        Box::new(TyDesc {
+            type_tag: rtdt::TyTag::Term,
+            size,
+            align,
+            type_info: rtdt::TyInfo {
+                term: rtdt::TyInfoTerm {
+                    name: name_ref.as_ptr(),
+                    name_len: name_ref.len() as u32,
+                    payload: payload_tydesc,
                 },
             },
         })

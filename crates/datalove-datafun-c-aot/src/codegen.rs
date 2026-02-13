@@ -1298,10 +1298,8 @@ impl<'a> FunctionCodegenContext<'a> {
 
         // Get the enum type from src to find payload offset.
         let src_ty = self.operand_type(src).clone();
-        let variants = match &src_ty {
-            IrType::Enum(v) => v,
-            _ => panic!("EnumPayload src must be Enum type"),
-        };
+        let variants = src_ty.enum_variants()
+            .expect("EnumPayload src must be enum-like type");
         let payload_ty = variants[variant_index as usize].1.as_ref()
             .unwrap_or_else(|| panic!("EnumPayload variant has no payload type"));
         let payload_layout = types::ir_type_to_crepr(payload_ty).layout();

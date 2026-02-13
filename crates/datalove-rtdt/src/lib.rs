@@ -707,6 +707,8 @@ pub enum TyTag {
     Tuple = 0x40,
     Struct = 0x41,
     Enum = 0x42,
+    Atom = 0x43,
+    Term = 0x44,
 
     List = 0x50,
     String = 0x51,
@@ -737,6 +739,8 @@ pub union TyInfo {
     pub table: TyInfoTable,
     pub option: TyInfoOption,
     pub result: TyInfoResult,
+    pub atom: TyInfoAtom,
+    pub term: TyInfoTerm,
 }
 
 #[repr(C)]
@@ -844,4 +848,21 @@ pub struct TyInfoOption {
 #[derive(Copy, Clone)]
 pub struct TyInfoResult {
     pub ok_tydesc: *const TyDesc,
+}
+
+/// Type information for Atom (named zero-sized type).
+#[repr(C)]
+#[derive(Copy, Clone)]
+pub struct TyInfoAtom {
+    pub name: *const u8,
+    pub name_len: u32,
+}
+
+/// Type information for Term (named wrapper around a payload type).
+#[repr(C)]
+#[derive(Copy, Clone)]
+pub struct TyInfoTerm {
+    pub name: *const u8,
+    pub name_len: u32,
+    pub payload: *const TyDesc,
 }

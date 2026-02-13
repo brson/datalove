@@ -739,8 +739,8 @@ pub fn lower_match<'db>(
     let input_type = ctx.expr_type(match_stmt.input);
 
     let variants = match &input_type {
-        IrType::Enum(v) => v.clone(),
-        _ => panic!("match input must be Enum type"),
+        IrType::Enum(v) => v,
+        _ => panic!("match input must be Enum type, got: {:?}", input_type),
     };
 
     // Extract discriminant (borrows input, does not consume).
