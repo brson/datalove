@@ -14,7 +14,7 @@
 #
 # Security:
 #   - Runs as non-root user "claude" with host UID/GID (--userns=keep-id)
-#   - Mounts only the current directory (as /workspace)
+#   - Mounts only the current directory (at host path, for unique project identity)
 #   - No SSH keys (intentionally excluded)
 #   - Custom seccomp profile (claude-sandbox-seccomp.json), allows io_uring
 #   - SELinux labels disabled (--security-opt label=disable)
@@ -46,7 +46,9 @@ while [[ $# -gt 0 ]]; do
 done
 
 CONTAINER_NAME="claude-sandbox-$$"
-WORKDIR="/workspace"
+# Use the host path as the container mount point so Claude Code derives a
+# unique project identity per directory (instead of everything being "/workspace").
+WORKDIR="$(pwd)"
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -149,9 +151,9 @@ COPY --chown=claude:claude chime.wav /home/claude/.local/share/sounds/chime.wav
 USER claude
 WORKDIR /home/claude
 RUN curl -fsSL https://claude.ai/install.sh | bash \
-    && git config --global --add safe.directory /workspace
+    && git config --global --add safe.directory '*'
 
-WORKDIR /workspace
+WORKDIR /home/claude
 DOCKERFILE
 )
 
