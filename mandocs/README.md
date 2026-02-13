@@ -95,8 +95,10 @@ strings, lists, maps and sets.
   year = 1949,
   rating = 4.7,
   available = true,
-  genres = [atom Fiction, atom Reality],
+  genres = #{ atom Fiction, atom Dystopia },
   subtitle = none,
+  status = atom InPrint,
+  translations = %{ "fr" = true, "de" = true, "jp" = false },
 }
 ```
 
@@ -135,7 +137,10 @@ type Book: {
   year: i32,
   rating: f32,
   available: bool,
-  genres: [enum { atom Fiction, atom Reality }],
+  genres: #{enum { atom Fiction, atom Dystopia, atom SciFi }},
+  subtitle: ?string,
+  status: enum { atom InPrint, atom OutOfPrint },
+  translations: %{string = bool},
 }
 
 fun reserve_book(mut db: #{Book}, ref book: Book): !()
