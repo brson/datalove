@@ -74,11 +74,12 @@
         --syn-keyword: var(--lake-violet);
         --syn-binding-modifier: var(--lake-red);
         --syn-item-keyword: var(--lake-blue);
+        --syn-control-flow: var(--lake-cyan);
         --syn-type-name: var(--lake-yellow);
         --syn-string: var(--lake-yellow);
         --syn-number: var(--lake-green);
         --syn-boolean: var(--lake-orange);
-        --syn-variant: var(--lake-cyan);
+        --syn-variant: var(--lake-green);
         --syn-comment: var(--lake-base03);
         --syn-function: var(--lake-magenta);
         --syn-brace: var(--lake-orange);
@@ -87,7 +88,7 @@
         --syn-op-option: var(--lake-violet);
         --syn-op-clone: var(--lake-cyan);
         --syn-op-arith: var(--lake-blue);
-        --syn-type-colon: var(--lake-cyan);
+        --syn-type-colon: var(--lake-red);
         --syn-type-hint-slash: var(--lake-cyan);
         --syn-punctuation: var(--lake-base02);
 
@@ -110,11 +111,12 @@
         --syn-keyword: var(--lake-violet);
         --syn-binding-modifier: var(--lake-red);
         --syn-item-keyword: var(--lake-blue);
+        --syn-control-flow: var(--lake-cyan);
         --syn-type-name: var(--lake-yellow);
         --syn-string: var(--lake-yellow);
         --syn-number: var(--lake-green);
         --syn-boolean: var(--lake-orange);
-        --syn-variant: var(--lake-cyan);
+        --syn-variant: var(--lake-green);
         --syn-comment: var(--lake-base03);
         --syn-function: var(--lake-magenta);
         --syn-brace: var(--lake-orange);
@@ -123,7 +125,7 @@
         --syn-op-option: var(--lake-violet);
         --syn-op-clone: var(--lake-cyan);
         --syn-op-arith: var(--lake-blue);
-        --syn-type-colon: var(--lake-cyan);
+        --syn-type-colon: var(--lake-red);
         --syn-type-hint-slash: var(--lake-cyan);
         --syn-punctuation: var(--lake-base05);
     }
@@ -364,6 +366,7 @@ th {
 .token.keyword { color: var(--syn-keyword); }
 .token.binding-modifier { color: var(--syn-binding-modifier); }
 .token.item-keyword { color: var(--syn-item-keyword); }
+.token.control-flow { color: var(--syn-control-flow); }
 .token.type-name { color: var(--syn-type-name); }
 .token.string { color: var(--syn-string); }
 .token.number { color: var(--syn-number); }
@@ -388,7 +391,10 @@ th {
 .token.op-option { color: var(--syn-op-option); }
 .token.op-clone { color: var(--syn-op-clone); }
 .token.op-arith { color: var(--syn-op-arith); }
-.token.type-colon { color: var(--syn-type-colon); }
+.token.type-colon {
+    color: var(--syn-type-colon);
+    text-shadow: 0 0 2px color-mix(in srgb, var(--syn-type-colon), red 90%);
+}
 .token.type-hint-slash { color: var(--syn-type-hint-slash); }
 .token.punctuation { color: var(--syn-punctuation); }
 

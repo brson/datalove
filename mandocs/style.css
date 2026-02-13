@@ -113,11 +113,12 @@
         --syn-keyword: var(--cave-violet);
         --syn-binding-modifier: var(--cave-red);
         --syn-item-keyword: var(--cave-magenta);
+        --syn-control-flow: var(--cave-cyan);
         --syn-type-name: var(--cave-yellow);
         --syn-string: var(--cave-yellow);
         --syn-number: var(--cave-green);
         --syn-boolean: var(--cave-orange);
-        --syn-variant: var(--cave-cyan);
+        --syn-variant: var(--cave-green);
         --syn-comment: var(--cave-base03);
         --syn-function: var(--cave-blue);
         --syn-brace: var(--cave-orange);
@@ -126,7 +127,7 @@
         --syn-op-option: var(--cave-violet);
         --syn-op-clone: var(--cave-cyan);
         --syn-op-arith: var(--cave-blue);
-        --syn-type-colon: var(--cave-cyan);
+        --syn-type-colon: var(--cave-red);
         --syn-type-hint-slash: var(--cave-cyan);
         --syn-punctuation: var(--cave-base02);
 
@@ -149,11 +150,12 @@
         --syn-keyword: var(--cave-violet);
         --syn-binding-modifier: var(--cave-red);
         --syn-item-keyword: var(--cave-magenta);
+        --syn-control-flow: var(--cave-cyan);
         --syn-type-name: var(--cave-yellow);
         --syn-string: var(--cave-yellow);
         --syn-number: var(--cave-green);
         --syn-boolean: var(--cave-orange);
-        --syn-variant: var(--cave-cyan);
+        --syn-variant: var(--cave-green);
         --syn-comment: var(--cave-base03);
         --syn-function: var(--cave-blue);
         --syn-brace: var(--cave-orange);
@@ -162,7 +164,7 @@
         --syn-op-option: var(--cave-violet);
         --syn-op-clone: var(--cave-cyan);
         --syn-op-arith: var(--cave-blue);
-        --syn-type-colon: var(--cave-cyan);
+        --syn-type-colon: var(--cave-red);
         --syn-type-hint-slash: var(--cave-cyan);
         --syn-punctuation: var(--cave-base05);
     }
@@ -404,6 +406,7 @@ th {
 .token.keyword { color: var(--syn-keyword); }
 .token.binding-modifier { color: var(--syn-binding-modifier); }
 .token.item-keyword { color: var(--syn-item-keyword); }
+.token.control-flow { color: var(--syn-control-flow); }
 .token.type-name { color: var(--syn-type-name); }
 .token.string { color: var(--syn-string); }
 .token.number { color: var(--syn-number); }
@@ -428,7 +431,10 @@ th {
 .token.op-option { color: var(--syn-op-option); }
 .token.op-clone { color: var(--syn-op-clone); }
 .token.op-arith { color: var(--syn-op-arith); }
-.token.type-colon { color: var(--syn-type-colon); }
+.token.type-colon {
+    color: var(--syn-type-colon);
+    text-shadow: 0 0 2px color-mix(in srgb, var(--syn-type-colon), red 90%);
+}
 .token.type-hint-slash { color: var(--syn-type-hint-slash); }
 .token.punctuation { color: var(--syn-punctuation); }
 
