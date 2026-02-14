@@ -1,0 +1,14 @@
+----------
+scriptunit-fragment
+----------
+
+// Set field of list element where field is a string — old string dropped.
+fun set_name(a: [{name: string, age: u32}], i: index, v: string): ?[{name: string, age: u32}]
+    var b = a
+    set b[i]?.name = v
+    ret some b
+end fun
+
+debuglog set_name([{name = "alice", age = 30}, {name = "bob", age = 25}], (: index / 0), "carol")
+debuglog set_name([{name = "alice", age = 30}, {name = "bob", age = 25}], (: index / 1), "dave")
+debuglog set_name([{name = "alice", age = 30}, {name = "bob", age = 25}], (: index / 5), "gone")

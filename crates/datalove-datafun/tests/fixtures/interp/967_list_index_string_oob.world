@@ -1,0 +1,10 @@
+----------
+scriptunit-fragment
+----------
+
+// Index into list of strings OOB — linear elements must not leak.
+fun get_str(a: [string], i: index): ?string
+    ret some (a[i]?)
+end fun
+
+debuglog get_str(["hello", "world"], (: index / 5))

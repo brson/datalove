@@ -1,0 +1,12 @@
+----------
+scriptunit-fragment
+----------
+
+// Index into list of structs containing string fields — linear aggregate.
+fun get_person(a: [{name: string, age: u32}], i: index): ?{name: string, age: u32}
+    ret some (a[i]?)
+end fun
+
+debuglog get_person([{name = "alice", age = 30}, {name = "bob", age = 25}], (: index / 0))
+debuglog get_person([{name = "alice", age = 30}, {name = "bob", age = 25}], (: index / 1))
+debuglog get_person([{name = "alice", age = 30}, {name = "bob", age = 25}], (: index / 5))

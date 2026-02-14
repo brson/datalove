@@ -694,6 +694,7 @@ fn emit_index_oob_early_return(ctx: &mut LowerCtx, error_mode: ast::IndexErrorMo
             let none_value = ctx.fresh_value(return_type);
             ctx.emit_wrap_none(none_value);
             ctx.emit_pending_intermediate_drops();
+            ctx.emit_before_set_target_early_return_drops();
             ctx.emit_before_try_return_drops();
             if ctx.is_script_unit {
                 ctx.finish_block(Terminator::UnitEarlyReturn {
@@ -713,6 +714,7 @@ fn emit_index_oob_early_return(ctx: &mut LowerCtx, error_mode: ast::IndexErrorMo
             let wrapped_err = ctx.fresh_value(return_type);
             ctx.emit_wrap_err(wrapped_err, Operand::Value(err_value));
             ctx.emit_pending_intermediate_drops();
+            ctx.emit_before_set_target_early_return_drops();
             ctx.emit_before_try_return_drops();
             if ctx.is_script_unit {
                 ctx.finish_block(Terminator::UnitEarlyReturn {

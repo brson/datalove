@@ -1,0 +1,60 @@
+Analysis(
+    sections: [
+        SectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const "hello"
+                        v1 = const "world"
+                        v2 = list [v0, v1]
+                        v3 = const 0index
+                        v4 = const "replaced"
+                        v5 = call @0 u0(v2, v3, v4)
+                        debuglog v5
+                        drop v5
+                        v6 = const "hello"
+                        v7 = const "world"
+                        v8 = list [v6, v7]
+                        v9 = const 5index
+                        v10 = const "gone"
+                        v11 = call @1 u0(v8, v9, v10)
+                        debuglog v11
+                        drop v11
+                        unit_end
+                    
+                    fn set_str(p0, p1, p2):
+                    block0:
+                        v0 = move p0
+                        store.move.tracked s0, v0
+                        v1 = listboundscheck s0[p1]
+                        branch v1, block2, block1
+                    block1:
+                        v2 = const "index out of bounds"
+                        v3 = error_from v2
+                        v4 = err v3
+                        drop p2
+                        drop.tracked s0
+                        return v4
+                    block2:
+                        v5 = move p2
+                        listset s0[p1] = v5
+                        v6 = load.move.tracked s0
+                        v7 = ok v6
+                        return v7
+                """,
+            ),
+            output: "(fragment executed)",
+            debug_output: Some("ok [\"replaced\", \"world\"]\nerror \"index out of bounds\"\n"),
+        ),
+    ],
+)

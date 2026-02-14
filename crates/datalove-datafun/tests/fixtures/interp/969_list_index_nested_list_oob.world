@@ -1,0 +1,10 @@
+----------
+scriptunit-fragment
+----------
+
+// Index into list of lists OOB — inner lists must not leak.
+fun get_inner(a: [[u32]], i: index): ?[u32]
+    ret some (a[i]?)
+end fun
+
+debuglog get_inner([[1, 2], [3, 4, 5]], (: index / 5))

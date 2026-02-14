@@ -1,0 +1,13 @@
+----------
+scriptunit-fragment
+----------
+
+// Set element in list of lists — old inner list must be dropped.
+fun set_inner(a: [[u32]], i: index, v: [u32]): ?[[u32]]
+    var b = a
+    set b[i]? = v
+    ret some b
+end fun
+
+debuglog set_inner([[1, 2], [3, 4]], (: index / 0), [99, 88])
+debuglog set_inner([[1, 2], [3, 4]], (: index / 1), [77])

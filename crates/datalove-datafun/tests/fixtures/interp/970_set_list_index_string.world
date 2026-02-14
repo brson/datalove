@@ -1,0 +1,13 @@
+----------
+scriptunit-fragment
+----------
+
+// Set list element where element is a string — old value must be dropped.
+fun set_str(a: [string], i: index, v: string): ?[string]
+    var b = a
+    set b[i]? = v
+    ret some b
+end fun
+
+debuglog set_str(["hello", "world"], (: index / 0), "replaced")
+debuglog set_str(["hello", "world"], (: index / 1), "changed")

@@ -1,0 +1,11 @@
+----------
+scriptunit-fragment
+----------
+
+// Index into list of strings with ? — linear element type.
+fun get_str(a: [string], i: index): ?string
+    ret some (a[i]?)
+end fun
+
+debuglog get_str(["hello", "world", "foo"], (: index / 0))
+debuglog get_str(["hello", "world", "foo"], (: index / 2))

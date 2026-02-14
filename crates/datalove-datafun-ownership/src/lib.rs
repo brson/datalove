@@ -1189,16 +1189,24 @@ fn analyze_set<'db>(ctx: &mut AnalysisCtx<'db>, stmt: &StmtSet<'db>, stmt_idx: u
     // Analyze moves in index sub-expressions of the target (if any).
     analyze_set_target_moves(ctx, &stmt.target);
 
+    // If the target can early-return (index OOB), compute drops NOW before
+    // the RHS is analyzed. The RHS hasn't been evaluated yet at that point,
+    // so its bindings are still live and need dropping.
+    if set_target_may_early_return(&stmt.target) {
+        let drops = ctx.live_bindings_for_return();
+        if !drops.is_empty() {
+            ctx.schedule.before_set_target_early_return.insert(stmt_idx, drops);
+        }
+    }
+
     let expr = stmt.value;
-    let may_early_return = ctx.expr_may_early_return(expr)
-        || set_target_may_early_return(&stmt.target);
 
     // Analyze moves in the expression. The value is moved into the slot.
     ctx.analyze_expr_moves(expr, true);
 
-    // Check for early return operators AFTER analyzing moves.
-    // This ensures bindings consumed by the expression itself aren't dropped.
-    if may_early_return {
+    // Check for early return operators in the RHS expression AFTER analyzing
+    // moves. This ensures bindings consumed by the expression aren't dropped.
+    if ctx.expr_may_early_return(expr) {
         let drops = ctx.live_bindings_for_return();
         if !drops.is_empty() {
             ctx.schedule.before_try_return.insert(stmt_idx, drops);

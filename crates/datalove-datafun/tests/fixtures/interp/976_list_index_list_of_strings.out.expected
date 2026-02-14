@@ -1,0 +1,67 @@
+Analysis(
+    sections: [
+        SectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const "hello"
+                        v1 = const "world"
+                        v2 = list [v0, v1]
+                        v3 = const "foo"
+                        v4 = list [v3]
+                        v5 = list [v2, v4]
+                        v6 = const 0index
+                        v7 = call @0 u0(v5, v6)
+                        debuglog v7
+                        drop v7
+                        v8 = const "hello"
+                        v9 = const "world"
+                        v10 = list [v8, v9]
+                        v11 = const "foo"
+                        v12 = list [v11]
+                        v13 = list [v10, v12]
+                        v14 = const 1index
+                        v15 = call @1 u0(v13, v14)
+                        debuglog v15
+                        drop v15
+                        v16 = const "hello"
+                        v17 = const "world"
+                        v18 = list [v16, v17]
+                        v19 = const "foo"
+                        v20 = list [v19]
+                        v21 = list [v18, v20]
+                        v22 = const 5index
+                        v23 = call @2 u0(v21, v22)
+                        debuglog v23
+                        drop v23
+                        unit_end
+                    
+                    fn get_inner(p0, p1):
+                    block0:
+                        v0, v1 = listget p0[p1]
+                        branch v1, block2, block1
+                    block1:
+                        v2 = none
+                        drop p0
+                        return v2
+                    block2:
+                        v3 = some v0
+                        drop p0
+                        return v3
+                """,
+            ),
+            output: "(fragment executed)",
+            debug_output: Some("some [\"hello\", \"world\"]\nsome [\"foo\"]\nnone\n"),
+        ),
+    ],
+)

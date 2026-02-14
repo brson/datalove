@@ -1,0 +1,53 @@
+Analysis(
+    sections: [
+        SectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const "hello"
+                        v1 = const "world"
+                        v2 = list [v0, v1]
+                        v3 = const 0index
+                        v4 = call @0 u0(v2, v3)
+                        debuglog v4
+                        drop v4
+                        v5 = const "hello"
+                        v6 = const "world"
+                        v7 = list [v5, v6]
+                        v8 = const 5index
+                        v9 = call @1 u0(v7, v8)
+                        debuglog v9
+                        drop v9
+                        unit_end
+                    
+                    fn get_str(p0, p1):
+                    block0:
+                        v0, v1 = listget p0[p1]
+                        branch v1, block2, block1
+                    block1:
+                        v2 = const "index out of bounds"
+                        v3 = error_from v2
+                        v4 = err v3
+                        drop p0
+                        return v4
+                    block2:
+                        v5 = ok v0
+                        drop p0
+                        return v5
+                """,
+            ),
+            output: "(fragment executed)",
+            debug_output: Some("ok \"hello\"\nerror \"index out of bounds\"\n"),
+        ),
+    ],
+)

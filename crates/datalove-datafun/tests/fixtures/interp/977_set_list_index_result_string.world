@@ -1,0 +1,13 @@
+----------
+scriptunit-fragment
+----------
+
+// Set string list element with ! mode — old value dropped.
+fun set_str(a: [string], i: index, v: string): ![string]
+    var b = a
+    set b[i]! = v
+    ret ok b
+end fun
+
+debuglog set_str(["hello", "world"], (: index / 0), "replaced")
+debuglog set_str(["hello", "world"], (: index / 5), "gone")

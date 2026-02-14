@@ -1,0 +1,12 @@
+----------
+scriptunit-fragment
+----------
+
+// Set string list element OOB — new value must be dropped, list preserved.
+fun set_str(a: [string], i: index, v: string): ?[string]
+    var b = a
+    set b[i]? = v
+    ret some b
+end fun
+
+debuglog set_str(["hello", "world"], (: index / 5), "gone")

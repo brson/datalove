@@ -318,6 +318,12 @@ pub struct DropSchedule {
     /// Key is the statement index containing the expression with try.
     pub before_try_return: BTreeMap<usize, Vec<BindingId>>,
 
+    /// Drops to emit on early return from a set-index bounds check.
+    ///
+    /// Computed before RHS moves are analyzed, so includes the RHS binding
+    /// (which is still live when the bounds check fails).
+    pub before_set_target_early_return: BTreeMap<usize, Vec<BindingId>>,
+
     /// Drops to emit at end of loop body before looping back.
     pub loop_body_end: BTreeMap<usize, Vec<BindingId>>,
 

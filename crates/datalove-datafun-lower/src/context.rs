@@ -1188,6 +1188,22 @@ impl<'db> LowerCtx<'db> {
         }
     }
 
+    /// Emit drops scheduled before a set-target early return (index OOB).
+    ///
+    /// These drops include bindings that are still live because the RHS
+    /// expression has not been evaluated yet when the bounds check fails.
+    pub fn emit_before_set_target_early_return_drops(&mut self) {
+        if let Some(stmt_idx) = self.body.current_stmt_idx {
+            let binding_ids = self.body.drop_schedule.before_set_target_early_return
+                .get(&stmt_idx)
+                .cloned()
+                .unwrap_or_default();
+            for id in binding_ids {
+                self.emit_binding_drop(id);
+            }
+        }
+    }
+
     /// Get binding IDs to drop for then-branch exit.
     fn get_scheduled_binding_ids_then(&self, stmt_idx: usize) -> Vec<BindingId> {
         self.body.drop_schedule.then_branch_exit.get(&stmt_idx)
