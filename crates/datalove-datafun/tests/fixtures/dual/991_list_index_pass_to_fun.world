@@ -1,0 +1,17 @@
+----------
+scriptunit-fragment
+----------
+
+// Index into list, then pass the value to another function.
+fun double(v: u32): u32
+    ret icall add_wrapping_u32(v, v)
+end fun
+
+fun get_doubled(a: [u32], i: index): ?u32
+    let elem: u32 = a[i]?
+    ret some double(elem)
+end fun
+
+debuglog get_doubled([10, 20, 30], (: index / 0))
+debuglog get_doubled([10, 20, 30], (: index / 1))
+debuglog get_doubled([10, 20, 30], (: index / 2))

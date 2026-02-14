@@ -1,0 +1,14 @@
+----------
+scriptunit-fragment
+----------
+
+// Set element of nested list: set a[j]?[i]? = v (index then index).
+fun set_nested(a: [[u32]], j: index, i: index, v: u32): ?[[u32]]
+    var b = a
+    set b[j]?[i]? = v
+    ret some b
+end fun
+
+debuglog set_nested([[1, 2], [3, 4, 5]], (: index / 0), (: index / 1), 99)
+debuglog set_nested([[1, 2], [3, 4, 5]], (: index / 1), (: index / 2), 77)
+debuglog set_nested([[1, 2], [3, 4, 5]], (: index / 5), (: index / 0), 77)

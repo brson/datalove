@@ -1,0 +1,12 @@
+----------
+scriptunit-fragment
+----------
+
+// Set list element with ! — OOB returns error.
+fun set_elem(a: [u32], i: index, v: u32): ![u32]
+    var b = a
+    set b[i]! = v
+    ret ok b
+end fun
+
+debuglog set_elem([10, 20, 30], (: index / 5), 99)

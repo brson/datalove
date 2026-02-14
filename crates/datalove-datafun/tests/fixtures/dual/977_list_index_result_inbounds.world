@@ -1,0 +1,11 @@
+----------
+scriptunit-fragment
+----------
+
+// List index with ! — in-bounds returns ok(element).
+fun get_elem(a: [u32], i: index): !u32
+    ret ok (a[i]!)
+end fun
+
+debuglog get_elem([10, 20, 30], (: index / 0))
+debuglog get_elem([10, 20, 30], (: index / 2))

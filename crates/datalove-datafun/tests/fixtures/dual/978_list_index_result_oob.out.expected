@@ -1,0 +1,89 @@
+DualAnalysis(
+    sections: [
+        DualSectionResult(
+            section_type: "scriptunit-fragment",
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            interp_lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 10u32
+                        v1 = const 20u32
+                        v2 = const 30u32
+                        v3 = list [v0, v1, v2]
+                        v4 = const 5index
+                        v5 = call @0 u0(v3, v4)
+                        debuglog v5
+                        drop v5
+                        unit_end
+                    
+                    fn get_elem(p0, p1):
+                    block0:
+                        v0, v1 = listget p0[p1]
+                        branch v1, block2, block1
+                    block1:
+                        v2 = const "index out of bounds"
+                        v3 = error_from v2
+                        v4 = err v3
+                        drop p0
+                        return v4
+                    block2:
+                        v5 = ok v0
+                        drop p0
+                        return v5
+                """,
+            ),
+            aot_lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 10u32
+                        v1 = const 20u32
+                        v2 = const 30u32
+                        v3 = list [v0, v1, v2]
+                        v4 = const 5index
+                        v5 = call @0 u0(v3, v4)
+                        debuglog v5
+                        drop v5
+                        unit_end
+                    
+                    fn get_elem(p0, p1):
+                    block0:
+                        v0, v1 = listget p0[p1]
+                        branch v1, block2, block1
+                    block1:
+                        v2 = const "index out of bounds"
+                        v3 = error_from v2
+                        v4 = err v3
+                        drop p0
+                        return v4
+                    block2:
+                        v5 = ok v0
+                        drop p0
+                        return v5
+                """,
+            ),
+            ir_match: true,
+            interp_output: "error \"index out of bounds\"\n",
+            aot_output: "error \"index out of bounds\"\n",
+            output_match: true,
+            aot_compile: Some(AotCompileResult(
+                status: "Success",
+            )),
+            link: Some(LinkResult(
+                status: "Success",
+            )),
+            execution: Some(ExecutionResult(
+                status: "Success",
+                exit_code: 0,
+            )),
+        ),
+    ],
+)

@@ -1,0 +1,14 @@
+----------
+scriptunit-fragment
+----------
+
+// Deeply nested set: set a.items[i]?.x = v (field, then index, then field).
+fun set_deep(a: {items: [{x: u32, y: u32}], len: u32}, i: index, v: u32): ?{items: [{x: u32, y: u32}], len: u32}
+    var b = a
+    set b.items[i]?.x = v
+    ret some b
+end fun
+
+debuglog set_deep({items = [{x = 1, y = 2}, {x = 3, y = 4}], len = 2}, (: index / 0), 99)
+debuglog set_deep({items = [{x = 1, y = 2}, {x = 3, y = 4}], len = 2}, (: index / 1), 77)
+debuglog set_deep({items = [{x = 1, y = 2}, {x = 3, y = 4}], len = 2}, (: index / 5), 77)

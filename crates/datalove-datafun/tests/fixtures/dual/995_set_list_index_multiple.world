@@ -1,0 +1,13 @@
+----------
+scriptunit-fragment
+----------
+
+// Multiple set operations on different indices of the same list.
+fun set_two(a: [u32], i: index, j: index, vi: u32, vj: u32): ?[u32]
+    var b = a
+    set b[i]? = vi
+    set b[j]? = vj
+    ret some b
+end fun
+
+debuglog set_two([10, 20, 30], (: index / 0), (: index / 2), 99, 77)

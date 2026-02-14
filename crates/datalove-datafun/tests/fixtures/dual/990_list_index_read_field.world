@@ -1,0 +1,12 @@
+----------
+scriptunit-fragment
+----------
+
+// Index into list of structs at script level, bind and read fields.
+let points: [{x: u32, y: u32}] = [{x = 10, y = 20}, {x = 30, y = 40}]
+let p0: {x: u32, y: u32} = points[(: index / 0)]!
+debuglog p0.x
+debuglog p0.y
+let p1: {x: u32, y: u32} = points[(: index / 1)]!
+debuglog p1.x
+debuglog p1.y

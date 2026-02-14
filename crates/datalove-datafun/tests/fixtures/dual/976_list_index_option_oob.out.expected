@@ -1,0 +1,97 @@
+DualAnalysis(
+    sections: [
+        DualSectionResult(
+            section_type: "scriptunit-fragment",
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            interp_lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 10u32
+                        v1 = const 20u32
+                        v2 = const 30u32
+                        v3 = list [v0, v1, v2]
+                        v4 = const 3index
+                        v5 = call @0 u0(v3, v4)
+                        debuglog v5
+                        v6 = const 10u32
+                        v7 = const 20u32
+                        v8 = const 30u32
+                        v9 = list [v6, v7, v8]
+                        v10 = const 100index
+                        v11 = call @1 u0(v9, v10)
+                        debuglog v11
+                        unit_end
+                    
+                    fn get_elem(p0, p1):
+                    block0:
+                        v0, v1 = listget p0[p1]
+                        branch v1, block2, block1
+                    block1:
+                        v2 = none
+                        drop p0
+                        return v2
+                    block2:
+                        v3 = some v0
+                        drop p0
+                        return v3
+                """,
+            ),
+            aot_lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 10u32
+                        v1 = const 20u32
+                        v2 = const 30u32
+                        v3 = list [v0, v1, v2]
+                        v4 = const 3index
+                        v5 = call @0 u0(v3, v4)
+                        debuglog v5
+                        v6 = const 10u32
+                        v7 = const 20u32
+                        v8 = const 30u32
+                        v9 = list [v6, v7, v8]
+                        v10 = const 100index
+                        v11 = call @1 u0(v9, v10)
+                        debuglog v11
+                        unit_end
+                    
+                    fn get_elem(p0, p1):
+                    block0:
+                        v0, v1 = listget p0[p1]
+                        branch v1, block2, block1
+                    block1:
+                        v2 = none
+                        drop p0
+                        return v2
+                    block2:
+                        v3 = some v0
+                        drop p0
+                        return v3
+                """,
+            ),
+            ir_match: true,
+            interp_output: "none\nnone\n",
+            aot_output: "none\nnone\n",
+            output_match: true,
+            aot_compile: Some(AotCompileResult(
+                status: "Success",
+            )),
+            link: Some(LinkResult(
+                status: "Success",
+            )),
+            execution: Some(ExecutionResult(
+                status: "Success",
+                exit_code: 0,
+            )),
+        ),
+    ],
+)

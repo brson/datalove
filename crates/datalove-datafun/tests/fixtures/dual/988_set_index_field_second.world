@@ -1,0 +1,13 @@
+----------
+scriptunit-fragment
+----------
+
+// Set second field of a list element: set a[i]?.y = v.
+fun set_elem_y(a: [{x: u32, y: u32}], i: index, v: u32): ?[{x: u32, y: u32}]
+    var b = a
+    set b[i]?.y = v
+    ret some b
+end fun
+
+debuglog set_elem_y([{x = 1, y = 2}, {x = 3, y = 4}], (: index / 0), 99)
+debuglog set_elem_y([{x = 1, y = 2}, {x = 3, y = 4}], (: index / 1), 77)

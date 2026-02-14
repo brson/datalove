@@ -1,0 +1,12 @@
+----------
+scriptunit-fragment
+----------
+
+// Index into list of structs, read element.
+fun get_point(a: [{x: u32, y: u32}], i: index): ?{x: u32, y: u32}
+    ret some (a[i]?)
+end fun
+
+debuglog get_point([{x = 1, y = 2}, {x = 3, y = 4}, {x = 5, y = 6}], (: index / 0))
+debuglog get_point([{x = 1, y = 2}, {x = 3, y = 4}, {x = 5, y = 6}], (: index / 2))
+debuglog get_point([{x = 1, y = 2}, {x = 3, y = 4}, {x = 5, y = 6}], (: index / 5))

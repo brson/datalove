@@ -1,0 +1,13 @@
+----------
+scriptunit-fragment
+----------
+
+// Chained index set with ! error mode: set a[j]![i]! = v.
+fun set_nested(a: [[u32]], j: index, i: index, v: u32): ![[u32]]
+    var b = a
+    set b[j]![i]! = v
+    ret ok b
+end fun
+
+debuglog set_nested([[1, 2], [3, 4, 5]], (: index / 0), (: index / 1), 99)
+debuglog set_nested([[1, 2], [3, 4, 5]], (: index / 5), (: index / 0), 77)
