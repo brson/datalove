@@ -347,14 +347,14 @@ impl<'a> FunctionCodegenContext<'a> {
             Instruction::Intrinsic { dest, intrinsic, args } => {
                 self.emit_intrinsic(out, *dest, *intrinsic, args)?;
             }
-            Instruction::ListGet { .. } => {
-                todo!("C AOT codegen for ListGet")
+            Instruction::ListGet { dest, is_valid, list, index } => {
+                self.emit_list_get(out, *dest, *is_valid, list, index)?;
             }
-            Instruction::ListBoundsCheck { .. } => {
-                todo!("C AOT codegen for ListBoundsCheck")
+            Instruction::ListBoundsCheck { is_valid, list, index } => {
+                self.emit_list_bounds_check(out, *is_valid, list, index)?;
             }
-            Instruction::ListSet { .. } => {
-                todo!("C AOT codegen for ListSet")
+            Instruction::ListSet { list, index, value } => {
+                self.emit_list_set(out, list, index, value)?;
             }
             Instruction::Nop => {}
         }
@@ -1886,6 +1886,134 @@ impl<'a> FunctionCodegenContext<'a> {
         let tydesc = self.tydesc_name(&ty);
 
         writeln!(out, "    dtlv_rti_debuglog_local(rt, {}, &{});", addr, tydesc).unwrap();
+        Ok(())
+    }
+
+    /// Emit a ListBoundsCheck instruction.
+    fn emit_list_bounds_check(
+        &mut self,
+        out: &mut String,
+        is_valid: ValueId,
+        list: &Operand,
+        index: &Operand,
+    ) -> Result<(), CAotError> {
+        let is_valid_addr = self.value_addr(is_valid);
+        let list_addr = self.operand_addr(list);
+        let index_addr = self.operand_addr(index);
+        let size_offset = std::mem::offset_of!(datalove_rtdt::List, size);
+
+        writeln!(out, "    *(bool_t*){} = (*(index_t*){} < *(index_t*)({} + {}));",
+            is_valid_addr, index_addr, list_addr, size_offset).unwrap();
+        Ok(())
+    }
+
+    /// Emit a ListGet instruction.
+    fn emit_list_get(
+        &mut self,
+        out: &mut String,
+        dest: ValueId,
+        is_valid: ValueId,
+        list: &Operand,
+        index: &Operand,
+    ) -> Result<(), CAotError> {
+        let dest_addr = self.value_addr(dest);
+        let is_valid_addr = self.value_addr(is_valid);
+        let list_addr = self.operand_addr(list);
+        let index_addr = self.operand_addr(index);
+        let size_offset = std::mem::offset_of!(datalove_rtdt::List, size);
+
+        // Get element type.
+        let list_ty = self.operand_type(list).clone();
+        let elem_ty = match &list_ty {
+            IrType::List(e) => e.as_ref().clone(),
+            _ => return Err(CAotError::Codegen(format!(
+                "ListGet on non-list type: {:?}", list_ty
+            ))),
+        };
+        let elem_repr = types::ir_type_to_crepr(&elem_ty);
+        let elem_size = elem_repr.layout().size;
+
+        // Bounds check.
+        writeln!(out, "    *(bool_t*){} = (*(index_t*){} < *(index_t*)({} + {}));",
+            is_valid_addr, index_addr, list_addr, size_offset).unwrap();
+
+        // Conditional load.
+        writeln!(out, "    if (*(bool_t*){}) {{", is_valid_addr).unwrap();
+
+        // Compute element address: data_ptr + index * elem_size.
+        writeln!(out, "        void* __elem = *(void**){} + (size_t)*(index_t*){} * {};",
+            list_addr, index_addr, elem_size).unwrap();
+
+        // Clone element to dest.
+        match &elem_repr {
+            CRepr::Scalar(c_ty) => {
+                writeln!(out, "        *({c_ty}*){dest_addr} = *({c_ty}*)__elem;").unwrap();
+            }
+            CRepr::Aggregate(layout) => {
+                if layout.size > 0 {
+                    let tydesc = self.tydesc_name(&elem_ty);
+                    writeln!(out, "        dtlv_rti_clone_local(rt, __elem, &{}, {}, &{});",
+                        tydesc, dest_addr, tydesc).unwrap();
+                }
+            }
+        }
+
+        writeln!(out, "    }}").unwrap();
+
+        // Conditional tracking byte.
+        if let Some(track_offset) = self.layout.value_tracking_byte(dest.0) {
+            writeln!(out, "    __frame[{}] = *(bool_t*){} ? TRACK_LIVE : TRACK_UNINIT;",
+                track_offset, is_valid_addr).unwrap();
+        }
+
+        Ok(())
+    }
+
+    /// Emit a ListSet instruction.
+    fn emit_list_set(
+        &mut self,
+        out: &mut String,
+        list: &Operand,
+        index: &Operand,
+        value: &Operand,
+    ) -> Result<(), CAotError> {
+        let list_addr = self.operand_addr(list);
+        let index_addr = self.operand_addr(index);
+        let value_addr = self.operand_addr(value);
+
+        // Get element type.
+        let list_ty = self.operand_type(list).clone();
+        let elem_ty = match &list_ty {
+            IrType::List(e) => e.as_ref().clone(),
+            _ => return Err(CAotError::Codegen(format!(
+                "ListSet on non-list type: {:?}", list_ty
+            ))),
+        };
+        let elem_repr = types::ir_type_to_crepr(&elem_ty);
+        let elem_size = elem_repr.layout().size;
+        let elem_tydesc = self.tydesc_name(&elem_ty);
+
+        // Compute element address.
+        writeln!(out, "    {{ void* __elem = *(void**){} + (size_t)*(index_t*){} * {};",
+            list_addr, index_addr, elem_size).unwrap();
+
+        // Destroy old element.
+        writeln!(out, "    dtlv_rti_any_destroy_local(rt, __elem, &{});", elem_tydesc).unwrap();
+
+        // Store new value.
+        match &elem_repr {
+            CRepr::Scalar(c_ty) => {
+                writeln!(out, "    *({c_ty}*)__elem = *({c_ty}*){value_addr};").unwrap();
+            }
+            CRepr::Aggregate(layout) => {
+                if layout.size > 0 {
+                    writeln!(out, "    dtlv_rti_move_value_local(rt, {}, &{}, __elem);",
+                        value_addr, elem_tydesc).unwrap();
+                }
+            }
+        }
+
+        writeln!(out, "    }}").unwrap();
         Ok(())
     }
 
