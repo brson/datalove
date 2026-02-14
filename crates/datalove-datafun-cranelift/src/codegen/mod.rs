@@ -47,6 +47,8 @@ mod collections;
 mod constants;
 /// Intrinsic function codegen.
 mod intrinsics;
+/// List indexing operations.
+mod lists;
 /// Binary and unary operations.
 mod ops;
 /// Option and Result operations.
@@ -590,14 +592,14 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 self.compile_set_field(builder, slot, field_path, value)?;
             }
             Instruction::Nop => {}
-            Instruction::ListGet { .. } => {
-                todo!("AOT codegen for ListGet")
+            Instruction::ListGet { dest, is_valid, list, index } => {
+                self.compile_list_get(builder, *dest, *is_valid, list, index)?;
             }
-            Instruction::ListBoundsCheck { .. } => {
-                todo!("AOT codegen for ListBoundsCheck")
+            Instruction::ListBoundsCheck { is_valid, list, index } => {
+                self.compile_list_bounds_check(builder, *is_valid, list, index)?;
             }
-            Instruction::ListSet { .. } => {
-                todo!("AOT codegen for ListSet")
+            Instruction::ListSet { list, index, value } => {
+                self.compile_list_set(builder, list, index, value)?;
             }
             Instruction::DebugLog { operand } => {
                 self.compile_debuglog(builder, operand)?;
