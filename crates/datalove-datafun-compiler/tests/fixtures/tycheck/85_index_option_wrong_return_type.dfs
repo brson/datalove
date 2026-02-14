@@ -1,0 +1,4 @@
+// Using ? in a function that doesn't return Option is an error.
+fun get(a: [u32], i: index): u32
+    ret a[i]?
+end fun

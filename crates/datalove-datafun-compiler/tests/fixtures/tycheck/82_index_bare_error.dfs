@@ -1,0 +1,4 @@
+// Bare a[i] without ? or ! is a type error.
+fun get(a: [u32], i: index): u32
+    ret a[i]
+end fun

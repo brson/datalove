@@ -1,0 +1,4 @@
+// Valid list index with ! in function returning !u32.
+fun get(a: [u32], i: index): !u32
+    ret ok (a[i]!)
+end fun

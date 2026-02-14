@@ -1,0 +1,4 @@
+// Indexing a non-list type is an error.
+fun get(a: u32, i: index): ?u32
+    ret some (a[i]?)
+end fun

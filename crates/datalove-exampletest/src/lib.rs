@@ -62,6 +62,7 @@ pub struct ExampleTestRunner<F> {
     file_extension: String,
     analyzer: F,
     allow_errors: bool,
+    skip_names: Vec<String>,
 }
 
 impl<F> ExampleTestRunner<F>
@@ -87,6 +88,7 @@ where
             file_extension: String::new(),
             analyzer,
             allow_errors: false,
+            skip_names: Vec::new(),
         }
     }
 
@@ -105,6 +107,12 @@ where
     /// Allow tests that return errors (adds Error variant to results).
     pub fn allow_errors(mut self, allow: bool) -> Self {
         self.allow_errors = allow;
+        self
+    }
+
+    /// Skip tests whose stem matches any of the given names.
+    pub fn skip_names(mut self, names: &[&str]) -> Self {
+        self.skip_names = names.iter().map(|s| s.to_string()).collect();
         self
     }
 
@@ -209,11 +217,14 @@ where
             std::process::exit(1);
         }
 
-        // Filter fixtures based on command-line arguments.
+        // Filter fixtures based on command-line arguments and skip list.
         let fixtures: Vec<_> = all_fixtures
             .into_iter()
             .filter(|f| {
                 let name = f.file_stem().and_then(|s| s.to_str()).unwrap_or("");
+                if self.skip_names.iter().any(|s| s == name) {
+                    return false;
+                }
                 matches_filters(name, &filters)
             })
             .collect();

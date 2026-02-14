@@ -1,0 +1,4 @@
+// Using a non-index type as index is an error.
+fun get(a: [u32], i: u32): ?u32
+    ret some (a[i]?)
+end fun

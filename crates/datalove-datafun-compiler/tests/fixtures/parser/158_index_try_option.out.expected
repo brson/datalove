@@ -1,0 +1,34 @@
+{
+  "ast": {
+    "statements": [
+      {
+        "kind": "Let",
+        "name": "x",
+        "type_hint": null,
+        "value": {
+          "expr": {
+            "kind": "TryOption",
+            "operand": {
+              "expr": {
+                "base": {
+                  "expr": {
+                    "kind": "Name",
+                    "name": "a"
+                  }
+                },
+                "index": {
+                  "expr": {
+                    "kind": "Name",
+                    "name": "i"
+                  }
+                },
+                "kind": "Index"
+              }
+            }
+          }
+        }
+      }
+    ]
+  },
+  "diagnostics": []
+}

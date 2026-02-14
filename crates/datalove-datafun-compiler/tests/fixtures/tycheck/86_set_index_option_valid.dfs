@@ -1,0 +1,6 @@
+// Valid set with index ? in function returning ?().
+fun set_elem(a: [u32], i: index): ?[u32]
+    var b = a
+    set b[i]? = 42
+    ret some b
+end fun

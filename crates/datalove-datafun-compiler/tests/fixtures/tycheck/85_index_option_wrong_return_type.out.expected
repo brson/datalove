@@ -1,0 +1,45 @@
+{
+  "diagnostics": [
+    {
+      "code": "F049",
+      "labels": [
+        {
+          "message": "try operator here",
+          "span": [
+            110,
+            111
+          ],
+          "text": "?"
+        }
+      ],
+      "message": "try operator `?` requires function to return Option, found `u32`",
+      "notes": [
+        "function must return Option to use `?` operator"
+      ]
+    }
+  ],
+  "errors": [
+    {
+      "kind": "TryReturnTypeMismatch",
+      "operator": "?",
+      "return_type": "u32"
+    }
+  ],
+  "judgements": [
+    {
+      "kind": "function",
+      "name": "get",
+      "params": [
+        {
+          "name": "a",
+          "type": "[u32]"
+        },
+        {
+          "name": "i",
+          "type": "index"
+        }
+      ],
+      "return_type": "u32"
+    }
+  ]
+}
