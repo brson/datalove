@@ -65,12 +65,26 @@ pub struct StmtSet {
 pub enum SetTarget {
     Name { name: String },
     Proj(SetTargetProj),
+    Index(SetTargetIndex),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct SetTargetProj {
     pub base: Box<SetTarget>,
     pub field: FieldSelector,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct SetTargetIndex {
+    pub base: Box<SetTarget>,
+    pub index: ExprFun,
+    pub error_mode: IndexErrorMode,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub enum IndexErrorMode {
+    Option,
+    Result,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -242,6 +256,9 @@ pub enum ExprFunKind {
     Term(ExprTerm),
     EnumLiteral(ExprEnumLiteral),
 
+    // Index expression.
+    Index(ExprIndex),
+
     ParseError(ExprFunParseError),
 
     // Intrinsic call expression.
@@ -330,6 +347,12 @@ pub struct ExprCloneCoerce {
 pub struct ExprFieldProj {
     pub base: Box<ExprFun>,
     pub field: FieldSelector,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct ExprIndex {
+    pub base: Box<ExprFun>,
+    pub index: Box<ExprFun>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -572,6 +595,7 @@ impl SetTarget {
                 name: name.as_str(db).to_string(),
             },
             crate::ast::SetTarget::Proj(proj) => SetTarget::Proj(SetTargetProj::from_ast(db, proj)),
+            crate::ast::SetTarget::Index(idx) => SetTarget::Index(SetTargetIndex::from_ast(db, idx)),
         }
     }
 }
@@ -581,6 +605,19 @@ impl SetTargetProj {
         SetTargetProj {
             base: Box::new(SetTarget::from_ast(db, &*ast.base)),
             field: FieldSelector::from_ast(db, &ast.field),
+        }
+    }
+}
+
+impl SetTargetIndex {
+    pub fn from_ast<'db>(db: &'db dyn Db, ast: &crate::ast::SetTargetIndex<'db>) -> Self {
+        SetTargetIndex {
+            base: Box::new(SetTarget::from_ast(db, &*ast.base)),
+            index: ExprFun::from_ast(db, ast.index),
+            error_mode: match ast.error_mode {
+                crate::ast::IndexErrorMode::Option => IndexErrorMode::Option,
+                crate::ast::IndexErrorMode::Result => IndexErrorMode::Result,
+            },
         }
     }
 }
@@ -793,6 +830,8 @@ impl ExprFunKind {
                 variant: Box::new(ExprFun::from_ast(db, e.variant)),
             }),
 
+            crate::ast::ExprFunKind::Index(e) => ExprFunKind::Index(ExprIndex::from_ast(db, e)),
+
             crate::ast::ExprFunKind::ParseError(e) => ExprFunKind::ParseError(ExprFunParseError::from_ast(db, e)),
             crate::ast::ExprFunKind::IntrinsicCall(e) => ExprFunKind::IntrinsicCall(ExprIntrinsicCall::from_ast(db, e)),
         }
@@ -912,6 +951,15 @@ impl ExprFieldProj {
         ExprFieldProj {
             base: Box::new(ExprFun::from_ast(db, ast.base)),
             field: FieldSelector::from_ast(db, &ast.field),
+        }
+    }
+}
+
+impl ExprIndex {
+    pub fn from_ast<'db>(db: &'db dyn Db, ast: &crate::ast::ExprIndex<'db>) -> Self {
+        ExprIndex {
+            base: Box::new(ExprFun::from_ast(db, ast.base)),
+            index: Box::new(ExprFun::from_ast(db, ast.index)),
         }
     }
 }

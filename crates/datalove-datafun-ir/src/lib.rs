@@ -1290,6 +1290,44 @@ pub enum Instruction {
     UnitEndDropTracked { operand: Operand },
 
     // ========================================================================
+    // List Indexing
+    // ========================================================================
+
+    /// Get a list element by index.
+    ///
+    /// Copies the element at `index` from `list` to `dest`.
+    /// Sets `is_valid` to true if index was in bounds.
+    /// If out of bounds, `dest` is undefined and must not be used.
+    ///
+    /// **Ownership:** Borrows `list` and `index`, produces `dest` (only valid if is_valid).
+    ListGet {
+        dest: ValueId,
+        is_valid: ValueId,
+        list: Operand,
+        index: Operand,
+    },
+
+    /// Check if a list index is in bounds.
+    ///
+    /// **Ownership:** Borrows `list` and `index`, produces `is_valid`.
+    ListBoundsCheck {
+        is_valid: ValueId,
+        list: Operand,
+        index: Operand,
+    },
+
+    /// Set a list element (assumes bounds already checked).
+    ///
+    /// Destroys old element, stores new value.
+    ///
+    /// **Ownership:** Borrows `list` mutably, borrows `index`, consumes `value`.
+    ListSet {
+        list: Operand,
+        index: Operand,
+        value: Operand,
+    },
+
+    // ========================================================================
     // Miscellaneous
     // ========================================================================
 

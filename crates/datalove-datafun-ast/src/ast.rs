@@ -119,6 +119,8 @@ pub enum SetTarget<'db> {
     Name(InternedText<'db>),
     /// Field projection: `set a.x = ...` or `set a.0 = ...`
     Proj(SetTargetProj<'db>),
+    /// Index access: `set a[i]? = ...` or `set a[i]! = ...`
+    Index(SetTargetIndex<'db>),
 }
 
 /// Projection chain for set target.
@@ -127,6 +129,25 @@ pub enum SetTarget<'db> {
 pub struct SetTargetProj<'db> {
     pub base: Box<SetTarget<'db>>,
     pub field: FieldSelector<'db>,
+}
+
+/// Index access in set target position.
+#[derive(Clone, Hash, PartialEq, Eq)]
+#[derive(salsa::Update)]
+pub struct SetTargetIndex<'db> {
+    pub base: Box<SetTarget<'db>>,
+    pub index: ExprFun<'db>,
+    pub error_mode: IndexErrorMode,
+}
+
+/// How index failure is handled.
+#[derive(Clone, Copy, Hash, PartialEq, Eq, Debug)]
+#[derive(salsa::Update)]
+pub enum IndexErrorMode {
+    /// `?` — early-return none on failure.
+    Option,
+    /// `!` — early-return error on failure.
+    Result,
 }
 
 #[salsa::tracked]
@@ -361,6 +382,9 @@ pub enum ExprFunKind<'db> {
     // Enum literal expression: `enum { atom Foo }` (checking-only).
     EnumLiteral(ExprEnumLiteral<'db>),
 
+    // Index expression: base[index].
+    Index(ExprIndex<'db>),
+
     // Parse error
     ParseError(ExprFunParseError<'db>),
 
@@ -480,6 +504,17 @@ pub struct ExprCloneCoerce<'db> {
 pub struct ExprFieldProj<'db> {
     pub base: ExprFun<'db>,
     pub field: FieldSelector<'db>,
+}
+
+/// Index expression: `base[index]`.
+///
+/// Produces a fallible place — must be resolved by postfix `?` or `!`.
+/// Bare `a[i]` is a type error.
+#[derive(Clone, Hash, PartialEq, Eq)]
+#[derive(salsa::Update)]
+pub struct ExprIndex<'db> {
+    pub base: ExprFun<'db>,
+    pub index: ExprFun<'db>,
 }
 
 /// Selector for field projection.

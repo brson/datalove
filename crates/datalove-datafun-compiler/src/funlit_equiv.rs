@@ -281,6 +281,9 @@ pub fn datafun_expr_to_datalit_serde<'db>(
         ast::ExprFunKind::Atom(_) | ast::ExprFunKind::Term(_) | ast::ExprFunKind::EnumLiteral(_) => {
             return Err(ConversionError::NotPureDatalit("Atom/Term/Enum".to_string()));
         }
+        ast::ExprFunKind::Index(_) => {
+            return Err(ConversionError::NotPureDatalit("Index".to_string()));
+        }
     };
 
     // Convert type hint to serde format.

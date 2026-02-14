@@ -1053,6 +1053,88 @@ impl IrInterpreter {
                 }
                 // Note: no mark_dropped - we're borrowing, not consuming.
             }
+            Instruction::ListGet { dest, is_valid, list, index } => {
+                let list_val = self.read_operand(list, frame, frames);
+                let idx_val = self.read_operand(index, frame, frames);
+                let idx = unsafe { *(idx_val.ptr as *const rtdt::IndexRepr) };
+
+                // Access list struct and element type directly.
+                let list_struct = unsafe { &*(list_val.ptr as *const rtdt::List) };
+                let list_size = list_struct.size.0;
+                let element_tydesc = unsafe { (*list_val.tydesc).type_info.list.element_tydesc };
+                let element_size = unsafe { (*element_tydesc).size as usize };
+
+                let valid = idx < list_size;
+                let is_valid_dest = frame.value_dest(*is_valid);
+                unsafe { *(is_valid_dest.ptr as *mut bool) = valid; }
+                frame.mark_value_live(*is_valid);
+
+                if valid {
+                    // Clone element to dest.
+                    let element_ptr = unsafe { list_struct.data.add(idx as usize * element_size) };
+                    let dest_slot = frame.value_dest(*dest);
+                    let rt_handle = self.runtime.handle();
+                    let status = unsafe {
+                        datalove_rt::c::dtlv_rti_clone_local(
+                            rt_handle,
+                            element_ptr,
+                            element_tydesc,
+                            dest_slot.ptr,
+                            element_tydesc,
+                        )
+                    };
+                    assert_eq!(status, datalove_rt::c::RtStatus::Ok, "ListGet clone failed");
+                    frame.mark_value_live(*dest);
+                }
+                // If invalid, dest is uninitialized — caller must not use it.
+            }
+            Instruction::ListBoundsCheck { is_valid, list, index } => {
+                let list_val = self.read_operand(list, frame, frames);
+                let idx_val = self.read_operand(index, frame, frames);
+                let idx = unsafe { *(idx_val.ptr as *const rtdt::IndexRepr) };
+
+                let list_struct = unsafe { &*(list_val.ptr as *const rtdt::List) };
+                let list_size = list_struct.size.0;
+
+                let valid = idx < list_size;
+                let is_valid_dest = frame.value_dest(*is_valid);
+                unsafe { *(is_valid_dest.ptr as *mut bool) = valid; }
+                frame.mark_value_live(*is_valid);
+            }
+            Instruction::ListSet { list, index, value } => {
+                let list_val = self.read_operand(list, frame, frames);
+                let idx_val = self.read_operand(index, frame, frames);
+                let value_val = self.read_operand(value, frame, frames);
+                let idx = unsafe { *(idx_val.ptr as *const rtdt::IndexRepr) };
+
+                let list_struct = unsafe { &*(list_val.ptr as *const rtdt::List) };
+                let element_tydesc = unsafe { (*list_val.tydesc).type_info.list.element_tydesc };
+                let element_size = unsafe { (*element_tydesc).size as usize };
+
+                // Compute element pointer.
+                let element_ptr = unsafe { (list_struct.data as *mut u8).add(idx as usize * element_size) };
+
+                // Destroy old element.
+                let rt_handle = self.runtime.handle();
+                let status = unsafe {
+                    datalove_rt::c::dtlv_rti_any_destroy_local(
+                        rt_handle,
+                        element_ptr,
+                        element_tydesc,
+                    )
+                };
+                assert_eq!(status, datalove_rt::c::RtStatus::Ok, "ListSet destroy old failed");
+
+                // Copy new element in.
+                unsafe {
+                    std::ptr::copy_nonoverlapping(value_val.ptr, element_ptr, element_size);
+                }
+
+                // Mark value operand as consumed (moved into list).
+                if let Operand::Value(v) = value {
+                    frame.mark_value_dropped(*v);
+                }
+            }
             Instruction::Widen { dest, src } => {
                 // Widen a fixed-width integer to Int.
                 let src_val = self.read_operand(src, frame, frames);

@@ -140,6 +140,53 @@ pub fn check_statement<'db>(
                         Err(e) => ctx.add_error(e),
                     }
                 }
+                SetTarget::Index(idx_target) => {
+                    // Check that the root variable is mutable.
+                    let root_name = get_set_target_root_name(&idx_target.base);
+                    if let Some(false) = ctx.lookup_variable_mutability(root_name) {
+                        let err = ctx.error_variable_not_mutable(stmt, root_name.text(db).as_str());
+                        ctx.add_error(err);
+                    }
+                    // Typecheck the base target — must be List<T>.
+                    match typecheck_set_target(ctx, &idx_target.base) {
+                        Ok(base_ty) => {
+                            let element_ty = match &base_ty {
+                                Type::Datalit(datalit::tycheck::Type::List(list)) => {
+                                    Type::Datalit(*list.element_type.clone())
+                                }
+                                _ => {
+                                    ctx.add_error(TypeError::DatalitError(
+                                        format!("indexing requires list type, got {}", type_to_string(db, &base_ty)),
+                                    ));
+                                    return;
+                                }
+                            };
+                            // Check index expression against `index` type.
+                            let index_type = Type::Datalit(datalit::tycheck::Type::Index);
+                            if let Err(e) = check_expr(ctx, idx_target.index, &index_type) {
+                                ctx.add_error(e);
+                            }
+                            // Check RHS value matches element type.
+                            if let Err(e) = check_expr(ctx, value, &element_ty) {
+                                ctx.add_error(e);
+                            }
+                            // Verify function returns Option or Result depending on error_mode.
+                            match idx_target.error_mode {
+                                IndexErrorMode::Option => {
+                                    if let Err(e) = require_option_return_type_for_set(ctx, stmt) {
+                                        ctx.add_error(e);
+                                    }
+                                }
+                                IndexErrorMode::Result => {
+                                    if let Err(e) = require_result_return_type_for_set(ctx, stmt) {
+                                        ctx.add_error(e);
+                                    }
+                                }
+                            }
+                        }
+                        Err(e) => ctx.add_error(e),
+                    }
+                }
             }
         }
 
@@ -648,9 +695,15 @@ fn typecheck_set_target_proj<'db>(
 
 /// Get the root variable name from a projection chain.
 fn get_proj_root_name<'db>(proj: &SetTargetProj<'db>) -> bct::text::InternedText<'db> {
-    match proj.base.as_ref() {
+    get_set_target_root_name(&proj.base)
+}
+
+/// Get the root variable name from any set target.
+fn get_set_target_root_name<'db>(target: &SetTarget<'db>) -> bct::text::InternedText<'db> {
+    match target {
         SetTarget::Name(name) => *name,
-        SetTarget::Proj(inner_proj) => get_proj_root_name(inner_proj),
+        SetTarget::Proj(proj) => get_set_target_root_name(&proj.base),
+        SetTarget::Index(idx) => get_set_target_root_name(&idx.base),
     }
 }
 
@@ -668,5 +721,53 @@ fn typecheck_set_target<'db>(
             })
         }
         SetTarget::Proj(proj) => typecheck_set_target_proj(ctx, proj),
+        SetTarget::Index(idx) => {
+            // Resolve base type, which should be List<T>. Return element type T.
+            let base_ty = typecheck_set_target(ctx, &idx.base)?;
+            match &base_ty {
+                Type::Datalit(datalit::tycheck::Type::List(list)) => {
+                    Ok(Type::Datalit(*list.element_type.clone()))
+                }
+                _ => Err(TypeError::DatalitError(
+                    format!("indexing requires list type, got {}", type_to_string(db, &base_ty)),
+                )),
+            }
+        }
+    }
+}
+
+/// Require function returns Option type for `set a[i]? = v`.
+fn require_option_return_type_for_set<'db>(
+    ctx: &mut TypeContext<'db>,
+    _stmt: &StmtSet<'db>,
+) -> Result<(), TypeError> {
+    let expected_return = ctx.expected_return_type.clone()
+        .expect("set with ? used outside function context");
+    match expected_return {
+        Type::Datalit(datalit::tycheck::Type::Option(_)) => Ok(()),
+        _ => Err(TypeError::DatalitError(
+            format!(
+                "set with `?` index requires function to return Option type, got {}",
+                type_to_string(ctx.db, &expected_return)
+            ),
+        )),
+    }
+}
+
+/// Require function returns Result type for `set a[i]! = v`.
+fn require_result_return_type_for_set<'db>(
+    ctx: &mut TypeContext<'db>,
+    _stmt: &StmtSet<'db>,
+) -> Result<(), TypeError> {
+    let expected_return = ctx.expected_return_type.clone()
+        .expect("set with ! used outside function context");
+    match expected_return {
+        Type::Datalit(datalit::tycheck::Type::Result(_)) => Ok(()),
+        _ => Err(TypeError::DatalitError(
+            format!(
+                "set with `!` index requires function to return Result type, got {}",
+                type_to_string(ctx.db, &expected_return)
+            ),
+        )),
     }
 }

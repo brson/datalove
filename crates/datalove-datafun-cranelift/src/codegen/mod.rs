@@ -590,6 +590,15 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 self.compile_set_field(builder, slot, field_path, value)?;
             }
             Instruction::Nop => {}
+            Instruction::ListGet { .. } => {
+                todo!("AOT codegen for ListGet")
+            }
+            Instruction::ListBoundsCheck { .. } => {
+                todo!("AOT codegen for ListBoundsCheck")
+            }
+            Instruction::ListSet { .. } => {
+                todo!("AOT codegen for ListSet")
+            }
             Instruction::DebugLog { operand } => {
                 self.compile_debuglog(builder, operand)?;
             }

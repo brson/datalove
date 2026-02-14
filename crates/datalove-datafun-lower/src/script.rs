@@ -24,7 +24,7 @@ use crate::ScriptFunctionAnalyses;
 use super::context::{LowerCtx, ScriptLowerContext, FrameState};
 use super::expr::{lower_expression, lower_expression_for_ref};
 use super::func::lower_function_body;
-use super::stmt::collect_field_path;
+use super::stmt::{collect_field_path, lower_set_index};
 use super::LowerError;
 
 /// Check if a set statement is a self-assignment (set v0 = v0) for script context.
@@ -443,6 +443,9 @@ fn lower_statement_for_script<'db>(
                         }
                         _ => panic!("assignment to field of immutable variable '{}' - typechecker should catch this", root_name_str),
                     }
+                }
+                ast::SetTarget::Index(idx_target) => {
+                    lower_set_index(ctx, set_stmt, idx_target)
                 }
             }
         }

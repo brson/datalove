@@ -706,6 +706,9 @@ pub fn lower_expression<'db>(
             ctx.pop_pending_scope();
             Ok(dest)
         }
+        ExprFunKind::Index(_) => {
+            panic!("bare index expression reached lowering - typechecker should reject bare a[i] without ? or !")
+        }
         ExprFunKind::ParseError(_) => {
             panic!("parse error node reached lowering - callers should check for parse errors before lowering")
         }
@@ -1197,6 +1200,11 @@ fn lower_try_option<'db>(
     expr: ExprFun<'db>,
     try_expr: ast::ExprTryOption<'db>,
 ) -> Result<ValueId, LowerError> {
+    // Special case: a[i]? — list index with option early-return.
+    if let ExprFunKind::Index(ref index_expr) = try_expr.operand.expr(ctx.db) {
+        return lower_list_index_option(ctx, expr, index_expr);
+    }
+
     let src_id = lower_expression(ctx, try_expr.operand)?;
     let result_type = ctx.expr_type(expr);
     let dest = ctx.fresh_value(result_type.clone());
@@ -1249,6 +1257,11 @@ fn lower_try_result<'db>(
     expr: ExprFun<'db>,
     try_expr: ast::ExprTryResult<'db>,
 ) -> Result<ValueId, LowerError> {
+    // Special case: a[i]! — list index with result early-return.
+    if let ExprFunKind::Index(ref index_expr) = try_expr.operand.expr(ctx.db) {
+        return lower_list_index_result(ctx, expr, index_expr);
+    }
+
     let src_id = lower_expression(ctx, try_expr.operand)?;
     let result_type = ctx.expr_type(expr);
     let ok_dest = ctx.fresh_value(result_type.clone());
@@ -1295,6 +1308,122 @@ fn lower_try_result<'db>(
     // Continue block: ok_dest has the unwrapped Ok value.
     ctx.start_block(continue_block);
     Ok(ok_dest)
+}
+
+/// Lower `a[i]?` — list index with option early-return on OOB.
+fn lower_list_index_option<'db>(
+    ctx: &mut LowerCtx<'db>,
+    expr: ExprFun<'db>,
+    index_expr: &ast::ExprIndex<'db>,
+) -> Result<ValueId, LowerError> {
+    let list_op = lower_operand(ctx, index_expr.base)?;
+    let idx_op = lower_operand(ctx, index_expr.index)?;
+    let result_type = ctx.expr_type(expr);
+    let dest = ctx.fresh_value(result_type);
+    let is_valid = ctx.fresh_value(IrType::Bool);
+
+    ctx.emit(Instruction::ListGet {
+        dest,
+        is_valid,
+        list: list_op,
+        index: idx_op,
+    });
+
+    // Branch on is_valid: continue or early-return none.
+    let early_return_block = ctx.fresh_block();
+    let continue_block = ctx.fresh_block();
+    ctx.finish_block(Terminator::Branch {
+        cond: Operand::Value(is_valid),
+        then_block: continue_block,
+        then_args: Vec::new(),
+        else_block: early_return_block,
+        else_args: Vec::new(),
+    });
+
+    // Early return: wrap None and return.
+    ctx.start_block(early_return_block);
+    let return_type = ctx.return_type.clone()
+        .expect("? requires return type");
+    let none_value = ctx.fresh_value(return_type);
+    ctx.emit_wrap_none(none_value);
+    ctx.emit_pending_intermediate_drops();
+    ctx.emit_before_try_return_drops();
+    if ctx.is_script_unit {
+        ctx.finish_block(Terminator::UnitEarlyReturn {
+            value: Operand::Value(none_value),
+        });
+    } else {
+        ctx.finish_block(Terminator::Return {
+            value: Some(Operand::Value(none_value)),
+        });
+    }
+
+    // Continue block: dest has the element value.
+    ctx.start_block(continue_block);
+    Ok(dest)
+}
+
+/// Lower `a[i]!` — list index with result early-return on OOB.
+fn lower_list_index_result<'db>(
+    ctx: &mut LowerCtx<'db>,
+    expr: ExprFun<'db>,
+    index_expr: &ast::ExprIndex<'db>,
+) -> Result<ValueId, LowerError> {
+    let list_op = lower_operand(ctx, index_expr.base)?;
+    let idx_op = lower_operand(ctx, index_expr.index)?;
+    let result_type = ctx.expr_type(expr);
+    let dest = ctx.fresh_value(result_type);
+    let is_valid = ctx.fresh_value(IrType::Bool);
+
+    ctx.emit(Instruction::ListGet {
+        dest,
+        is_valid,
+        list: list_op,
+        index: idx_op,
+    });
+
+    // Branch on is_valid: continue or early-return error.
+    let early_return_block = ctx.fresh_block();
+    let continue_block = ctx.fresh_block();
+    ctx.finish_block(Terminator::Branch {
+        cond: Operand::Value(is_valid),
+        then_block: continue_block,
+        then_args: Vec::new(),
+        else_block: early_return_block,
+        else_args: Vec::new(),
+    });
+
+    // Early return: construct IndexOutOfBounds error and return.
+    ctx.start_block(early_return_block);
+    let return_type = ctx.return_type.clone()
+        .expect("! requires return type");
+
+    // Create error message string.
+    let err_msg = ctx.fresh_value(IrType::String);
+    ctx.emit_const(err_msg, ConstValue::String("index out of bounds".to_string()));
+
+    // Create Error from string.
+    let err_value = ctx.fresh_value(IrType::Error);
+    ctx.emit_error_from(err_value, Operand::Value(err_msg));
+
+    // Wrap in Err.
+    let wrapped_err = ctx.fresh_value(return_type);
+    ctx.emit_wrap_err(wrapped_err, Operand::Value(err_value));
+    ctx.emit_pending_intermediate_drops();
+    ctx.emit_before_try_return_drops();
+    if ctx.is_script_unit {
+        ctx.finish_block(Terminator::UnitEarlyReturn {
+            value: Operand::Value(wrapped_err),
+        });
+    } else {
+        ctx.finish_block(Terminator::Return {
+            value: Some(Operand::Value(wrapped_err)),
+        });
+    }
+
+    // Continue block: dest has the element value.
+    ctx.start_block(continue_block);
+    Ok(dest)
 }
 
 /// Lower clone/coerce operator (`@`).

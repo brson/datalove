@@ -347,6 +347,15 @@ impl<'a> FunctionCodegenContext<'a> {
             Instruction::Intrinsic { dest, intrinsic, args } => {
                 self.emit_intrinsic(out, *dest, *intrinsic, args)?;
             }
+            Instruction::ListGet { .. } => {
+                todo!("C AOT codegen for ListGet")
+            }
+            Instruction::ListBoundsCheck { .. } => {
+                todo!("C AOT codegen for ListBoundsCheck")
+            }
+            Instruction::ListSet { .. } => {
+                todo!("C AOT codegen for ListSet")
+            }
             Instruction::Nop => {}
         }
         Ok(())

@@ -591,6 +591,15 @@ impl fmt::Display for Instruction {
             Instruction::UnitEndDropTracked { operand } => {
                 write!(f, "unit_end_drop.tracked {}", operand)
             }
+            Instruction::ListGet { dest, is_valid, list, index } => {
+                write!(f, "{}, {} = listget {}[{}]", dest, is_valid, list, index)
+            }
+            Instruction::ListBoundsCheck { is_valid, list, index } => {
+                write!(f, "{} = listboundscheck {}[{}]", is_valid, list, index)
+            }
+            Instruction::ListSet { list, index, value } => {
+                write!(f, "listset {}[{}] = {}", list, index, value)
+            }
             Instruction::DebugLog { operand } => {
                 write!(f, "debuglog {}", operand)
             }

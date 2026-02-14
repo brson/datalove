@@ -7,7 +7,7 @@ use bct::text::InternedText;
 use datalove_datafun_ast::ast::{self, Statement, ExprFun, ExprFunKind};
 use datalove_datafun_ir::{IrType, Operand, Instruction, Terminator, SlotDest, ParamMode};
 use super::context::LowerCtx;
-use super::expr::{lower_expression, lower_expression_for_ref};
+use super::expr::{lower_expression, lower_expression_for_ref, lower_operand};
 use super::LowerError;
 
 /// Check if a set statement is a self-assignment (set v0 = v0).
@@ -667,6 +667,116 @@ fn lower_set<'db>(
                 _ => panic!("assignment to field of immutable variable '{}' - typechecker should catch this", root_name_str),
             }
         }
+        ast::SetTarget::Index(idx_target) => {
+            lower_set_index(ctx, set_stmt, idx_target)
+        }
+    }
+}
+
+/// Lower `set a[i]? = v` or `set a[i]! = v`.
+///
+/// Evaluation order: evaluate index, bounds check, early-return if OOB,
+/// evaluate RHS, ListSet (which destroys old element internally).
+pub(super) fn lower_set_index<'db>(
+    ctx: &mut LowerCtx<'db>,
+    set_stmt: &ast::StmtSet<'db>,
+    idx_target: &ast::SetTargetIndex<'db>,
+) -> Result<(), LowerError> {
+    // Resolve the base to a slot operand.
+    let list_op = lower_set_target_to_operand(ctx, &idx_target.base)?;
+
+    // Lower the index expression.
+    let idx_op = lower_operand(ctx, idx_target.index)?;
+
+    // Bounds check.
+    let is_valid = ctx.fresh_value(IrType::Bool);
+    ctx.emit(Instruction::ListBoundsCheck {
+        is_valid,
+        list: list_op,
+        index: idx_op,
+    });
+
+    // Branch: if in bounds, continue; else early return.
+    let early_return_block = ctx.fresh_block();
+    let continue_block = ctx.fresh_block();
+    ctx.finish_block(Terminator::Branch {
+        cond: Operand::Value(is_valid),
+        then_block: continue_block,
+        then_args: Vec::new(),
+        else_block: early_return_block,
+        else_args: Vec::new(),
+    });
+
+    // Early return block.
+    ctx.start_block(early_return_block);
+    let return_type = ctx.return_type.clone()
+        .expect("set with index requires return type");
+    match idx_target.error_mode {
+        ast::IndexErrorMode::Option => {
+            let none_value = ctx.fresh_value(return_type);
+            ctx.emit_wrap_none(none_value);
+            ctx.emit_pending_intermediate_drops();
+            ctx.emit_before_try_return_drops();
+            if ctx.is_script_unit {
+                ctx.finish_block(Terminator::UnitEarlyReturn {
+                    value: Operand::Value(none_value),
+                });
+            } else {
+                ctx.finish_block(Terminator::Return {
+                    value: Some(Operand::Value(none_value)),
+                });
+            }
+        }
+        ast::IndexErrorMode::Result => {
+            // Create error message string.
+            let err_msg = ctx.fresh_value(IrType::String);
+            ctx.emit_const(err_msg, datalove_datafun_ir::ConstValue::String("index out of bounds".to_string()));
+
+            // Create Error from string.
+            let err_value = ctx.fresh_value(IrType::Error);
+            ctx.emit_error_from(err_value, Operand::Value(err_msg));
+
+            // Wrap in Err.
+            let wrapped_err = ctx.fresh_value(return_type);
+            ctx.emit_wrap_err(wrapped_err, Operand::Value(err_value));
+            ctx.emit_pending_intermediate_drops();
+            ctx.emit_before_try_return_drops();
+            if ctx.is_script_unit {
+                ctx.finish_block(Terminator::UnitEarlyReturn {
+                    value: Operand::Value(wrapped_err),
+                });
+            } else {
+                ctx.finish_block(Terminator::Return {
+                    value: Some(Operand::Value(wrapped_err)),
+                });
+            }
+        }
+    }
+
+    // Continue block: bounds check passed, now evaluate RHS and set.
+    ctx.start_block(continue_block);
+    let value_id = lower_expression(ctx, set_stmt.value)?;
+    ctx.emit(Instruction::ListSet {
+        list: list_op,
+        index: idx_op,
+        value: Operand::Value(value_id),
+    });
+
+    Ok(())
+}
+
+/// Resolve a set target to an operand (slot or param) for the base of an index.
+fn lower_set_target_to_operand<'db>(
+    ctx: &mut LowerCtx<'db>,
+    target: &ast::SetTarget<'db>,
+) -> Result<Operand, LowerError> {
+    match target {
+        ast::SetTarget::Name(name) => {
+            let name_str = name.text(ctx.db).to_string();
+            Ok(ctx.lookup_var(&name_str)
+                .unwrap_or_else(|| panic!("variable '{}' not found - typechecker should catch this", name_str)))
+        }
+        _ => todo!("nested index/proj targets in set"),
     }
 }
 
@@ -865,6 +975,7 @@ fn collect_selectors<'db>(
     let (root_name, mut selectors) = match proj.base.as_ref() {
         ast::SetTarget::Name(name) => (*name, Vec::new()),
         ast::SetTarget::Proj(base_proj) => collect_selectors(db, base_proj),
+        ast::SetTarget::Index(_) => todo!("chained index in projection path"),
     };
     selectors.push(proj.field.clone());
     (root_name, selectors)

@@ -444,6 +444,11 @@ pub fn synthesize_expr<'db>(
         ExprFunKind::IntrinsicCall(ref icall) => {
             synthesize_intrinsic_call(ctx, expr, icall)
         }
+
+        // Bare index expression is a type error — must be wrapped in ? or !.
+        ExprFunKind::Index(_) => {
+            Err(ctx.error_cannot_synthesize(expr, "bare index `a[i]` requires `?` or `!` suffix"))
+        }
     }
 }
 
@@ -891,6 +896,11 @@ fn synthesize_try_option<'db>(
 ) -> Result<Type<'db>, TypeError> {
     let db = ctx.db;
 
+    // Special case: a[i]? — list index with option early-return.
+    if let ExprFunKind::Index(ref index_expr) = try_op.operand.expr(db) {
+        return synthesize_index_try_option(ctx, expr, index_expr);
+    }
+
     // Synthesize operand type first (to report operand errors before context errors).
     let operand_ty = ctx.synthesize_expr(try_op.operand)?;
 
@@ -923,6 +933,11 @@ fn synthesize_try_result<'db>(
 ) -> Result<Type<'db>, TypeError> {
     let db = ctx.db;
 
+    // Special case: a[i]! — list index with result early-return.
+    if let ExprFunKind::Index(ref index_expr) = try_op.operand.expr(db) {
+        return synthesize_index_try_result(ctx, expr, index_expr);
+    }
+
     // Synthesize operand type first (to report operand errors before context errors).
     let operand_ty = ctx.synthesize_expr(try_op.operand)?;
 
@@ -945,6 +960,71 @@ fn synthesize_try_result<'db>(
     // Return the unwrapped type T.
     let ty = Type::Datalit(*inner_ty);
     Ok(ty)
+}
+
+// ============================================================================
+// Index Synthesis (for list indexing via ? and !)
+// ============================================================================
+
+/// Synthesize type for `a[i]?` — list index with option early-return.
+fn synthesize_index_try_option<'db>(
+    ctx: &mut TypeContext<'db>,
+    expr: ExprFun<'db>,
+    index_expr: &ExprIndex<'db>,
+) -> Result<Type<'db>, TypeError> {
+    let element_ty = synthesize_index_common(ctx, expr, index_expr)?;
+
+    // Verify function returns Option type.
+    require_option_return_type(ctx, expr, "?")?;
+
+    Ok(element_ty)
+}
+
+/// Synthesize type for `a[i]!` — list index with result early-return.
+fn synthesize_index_try_result<'db>(
+    ctx: &mut TypeContext<'db>,
+    expr: ExprFun<'db>,
+    index_expr: &ExprIndex<'db>,
+) -> Result<Type<'db>, TypeError> {
+    let element_ty = synthesize_index_common(ctx, expr, index_expr)?;
+
+    // Verify function returns Result type.
+    require_result_return_type(ctx, expr, "!")?;
+
+    Ok(element_ty)
+}
+
+/// Common index validation: base must be List<T>, index must be `index` type.
+///
+/// Returns the element type T.
+fn synthesize_index_common<'db>(
+    ctx: &mut TypeContext<'db>,
+    expr: ExprFun<'db>,
+    index_expr: &ExprIndex<'db>,
+) -> Result<Type<'db>, TypeError> {
+    let db = ctx.db;
+
+    // Synthesize base type — must be List<T>.
+    let base_ty = ctx.synthesize_expr(index_expr.base)?;
+    let element_ty = match &base_ty {
+        Type::Datalit(datalit::tycheck::Type::List(list)) => {
+            Type::Datalit(*list.element_type.clone())
+        }
+        _ => {
+            return Err(ctx.error_cannot_synthesize(
+                expr,
+                &format!("indexing requires list type, got {}", type_to_string(db, &base_ty)),
+            ));
+        }
+    };
+
+    // Check index expression against `index` type.
+    let index_type = Type::Datalit(datalit::tycheck::Type::Index);
+    if let Err(e) = check_expr(ctx, index_expr.index, &index_type) {
+        ctx.add_error(e);
+    }
+
+    Ok(element_ty)
 }
 
 // ============================================================================

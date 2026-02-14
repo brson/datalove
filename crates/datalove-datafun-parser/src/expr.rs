@@ -60,7 +60,7 @@ impl<'db> Parser<'db> {
         lhs
     }
 
-    /// Parse postfix operators (?, !, @, and field projections).
+    /// Parse postfix operators (?, !, @, field projections, and index).
     ///
     /// Handles:
     /// - `?` - unwrap Option with early return
@@ -68,6 +68,7 @@ impl<'db> Parser<'db> {
     /// - `@` - clone/coerce (widen or clone to fit target type)
     /// - `.field` - struct field projection
     /// - `.0` - tuple index projection
+    /// - `[expr]` - index expression (produces fallible place)
     fn parse_postfix_try_operators(&mut self, mut expr: ast::ExprFun<'db>) -> ast::ExprFun<'db> {
         loop {
             match self.peek() {
@@ -115,6 +116,25 @@ impl<'db> Parser<'db> {
                         }
                         _ => break,
                     }
+                }
+                Some(TreeToken::Branch { sigil: Sigil::BracketOpen, .. }) => {
+                    // Index access: expr[index_expr]
+                    let text = self.source_text();
+                    let start_pos = self.current_byte_pos();
+                    let inner = match self.next() {
+                        Some(TreeToken::Branch { sigil: Sigil::BracketOpen, inner, .. }) => inner,
+                        _ => unreachable!(),
+                    };
+                    let mut sub = self.sub_parser(inner, None);
+                    let index = sub.parse_expr_full();
+                    sub.error_if_not_exhausted();
+                    self.merge_from_sub(&mut sub);
+                    let end_pos = self.last_byte_end();
+                    let span = start_pos..end_pos;
+                    expr = self.create_expr(
+                        ast::ExprFunKind::Index(ast::ExprIndex { base: expr, index }),
+                        TextSpan::new(text, span),
+                    );
                 }
                 _ => break,
             }

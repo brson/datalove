@@ -99,6 +99,11 @@ pub fn instruction_dest(instr: &Instruction) -> Option<ValueId> {
         Instruction::UnitEndDrop { .. } => None,
         Instruction::UnitEndDropTracked { .. } => None,
 
+        // List indexing
+        Instruction::ListGet { dest, .. } => Some(*dest),
+        Instruction::ListBoundsCheck { is_valid, .. } => Some(*is_valid),
+        Instruction::ListSet { .. } => None,
+
         // Misc
         Instruction::DebugLog { .. } => None,
         Instruction::Nop => None,
@@ -459,6 +464,21 @@ fn collect_instruction_operands(instr: &Instruction, used: &mut HashSet<ValueId>
                 add_operand_value(arg, used);
             }
         }
+
+        // List indexing.
+        Instruction::ListGet { list, index, .. } => {
+            add_operand_value(list, used);
+            add_operand_value(index, used);
+        }
+        Instruction::ListBoundsCheck { list, index, .. } => {
+            add_operand_value(list, used);
+            add_operand_value(index, used);
+        }
+        Instruction::ListSet { list, index, value } => {
+            add_operand_value(list, used);
+            add_operand_value(index, used);
+            add_operand_value(value, used);
+        }
     }
 }
 
@@ -525,6 +545,8 @@ fn has_side_effects(instr: &Instruction) -> bool {
         Instruction::DebugLog { .. } => true,
         // Intrinsics may have side effects.
         Instruction::Intrinsic { .. } => true,
+        // List set has side effects (mutates list).
+        Instruction::ListSet { .. } => true,
         // Everything else is pure.
         _ => false,
     }

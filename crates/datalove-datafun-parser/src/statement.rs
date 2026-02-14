@@ -242,7 +242,7 @@ impl<'db> Parser<'db> {
         })
     }
 
-    /// Parse optional field projections for set targets (e.g., `.x.0.y`).
+    /// Parse optional projections and indexing for set targets (e.g., `.x.0.y`, `[i]?`).
     fn parse_set_target_projections(&mut self, mut target: ast::SetTarget<'db>) -> ast::SetTarget<'db> {
         loop {
             if self.peek_sigil(Sigil::Dot) {
@@ -251,6 +251,31 @@ impl<'db> Parser<'db> {
                 target = ast::SetTarget::Proj(ast::SetTargetProj {
                     base: Box::new(target),
                     field,
+                });
+            } else if let Some(inner) = self.eat_branch(Sigil::BracketOpen) {
+                // Index access: [expr]? or [expr]!
+                let mut sub = self.sub_parser(inner, None);
+                let index = sub.parse_expr_full();
+                sub.error_if_not_exhausted();
+                self.merge_from_sub(&mut sub);
+                // Must be followed by ? or !
+                let error_mode = if self.eat_sigil(Sigil::Question) {
+                    ast::IndexErrorMode::Option
+                } else if self.eat_sigil(Sigil::Exclamation) {
+                    ast::IndexErrorMode::Result
+                } else {
+                    let ts = self.error_span();
+                    DiagnosticBuilder::error(self.db, "index in set target must be followed by '?' or '!'")
+                        .code("P030")
+                        .primary_label(ts, "expected '?' or '!'")
+                        .emit_parse();
+                    self.had_error = true;
+                    ast::IndexErrorMode::Option // recovery default
+                };
+                target = ast::SetTarget::Index(ast::SetTargetIndex {
+                    base: Box::new(target),
+                    index,
+                    error_mode,
                 });
             } else {
                 break;

@@ -937,6 +937,22 @@ impl RemapContext {
                 intrinsic: intrinsic.clone(),
                 args: args.iter().map(|a| self.remap_operand(a)).collect(),
             },
+            Instruction::ListGet { dest, is_valid, list, index } => Instruction::ListGet {
+                dest: self.remap_value(*dest),
+                is_valid: self.remap_value(*is_valid),
+                list: self.remap_operand(list),
+                index: self.remap_operand(index),
+            },
+            Instruction::ListBoundsCheck { is_valid, list, index } => Instruction::ListBoundsCheck {
+                is_valid: self.remap_value(*is_valid),
+                list: self.remap_operand(list),
+                index: self.remap_operand(index),
+            },
+            Instruction::ListSet { list, index, value } => Instruction::ListSet {
+                list: self.remap_operand(list),
+                index: self.remap_operand(index),
+                value: self.remap_operand(value),
+            },
             Instruction::Nop => Instruction::Nop,
         }
     }
@@ -1482,6 +1498,22 @@ fn replace_params_in_instruction(
         | Instruction::UnitEndDrop { .. }
         | Instruction::UnitEndDropTracked { .. }
         | Instruction::Nop => instr.clone(),
+        Instruction::ListGet { dest, is_valid, list, index } => Instruction::ListGet {
+            dest: *dest,
+            is_valid: *is_valid,
+            list: replace_operand(list),
+            index: replace_operand(index),
+        },
+        Instruction::ListBoundsCheck { is_valid, list, index } => Instruction::ListBoundsCheck {
+            is_valid: *is_valid,
+            list: replace_operand(list),
+            index: replace_operand(index),
+        },
+        Instruction::ListSet { list, index, value } => Instruction::ListSet {
+            list: replace_operand(list),
+            index: replace_operand(index),
+            value: replace_operand(value),
+        },
     }
 }
 

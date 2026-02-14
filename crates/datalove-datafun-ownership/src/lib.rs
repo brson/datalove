@@ -741,6 +741,12 @@ impl<'db> AnalysisCtx<'db> {
                 self.analyze_expr_moves(proj.base, false);
                 None
             }
+            ExprFunKind::Index(ref idx) => {
+                // Index borrows base (like field projection), consumes index.
+                self.analyze_expr_moves(idx.base, false);
+                self.analyze_expr_moves(idx.index, true);
+                None
+            }
             // Literals don't move anything.
             _ => None,
         }
@@ -1180,8 +1186,12 @@ fn analyze_var<'db>(ctx: &mut AnalysisCtx<'db>, stmt: &StmtVar<'db>, stmt_idx: u
 }
 
 fn analyze_set<'db>(ctx: &mut AnalysisCtx<'db>, stmt: &StmtSet<'db>, stmt_idx: usize) {
+    // Analyze moves in index sub-expressions of the target (if any).
+    analyze_set_target_moves(ctx, &stmt.target);
+
     let expr = stmt.value;
-    let may_early_return = ctx.expr_may_early_return(expr);
+    let may_early_return = ctx.expr_may_early_return(expr)
+        || set_target_may_early_return(&stmt.target);
 
     // Analyze moves in the expression. The value is moved into the slot.
     ctx.analyze_expr_moves(expr, true);
@@ -1198,12 +1208,12 @@ fn analyze_set<'db>(ctx: &mut AnalysisCtx<'db>, stmt: &StmtSet<'db>, stmt_idx: u
     // Set doesn't create a new binding, but the slot is now live again.
     let name = match &stmt.target {
         SetTarget::Name(n) => n.text(ctx.db),
-        SetTarget::Proj(_) => {
-            // Find root name of projection chain.
+        SetTarget::Proj(_) | SetTarget::Index(_) => {
+            // Find root name of projection/index chain.
             let root_name = set_target_root_name(ctx.db, &stmt.target);
             if let Some(root) = root_name {
                 if let Some(id) = ctx.lookup(root) {
-                    // Disallow partial field writes to uninitialized bindings (Out params or uninitialized vars).
+                    // Disallow partial field/index writes to uninitialized bindings.
                     if ctx.get_out_param_init(id) == Some(OutParamInitState::Uninitialized) {
                         ctx.errors.push(AnalysisError::OutParamPartialWrite {
                             local_index: stmt.local_index,
@@ -1227,10 +1237,33 @@ fn analyze_set<'db>(ctx: &mut AnalysisCtx<'db>, stmt: &StmtSet<'db>, stmt_idx: u
 }
 
 /// Extract the root name from a set target projection chain.
+/// Analyze moves in set target sub-expressions (index expressions).
+fn analyze_set_target_moves<'db>(ctx: &mut AnalysisCtx<'db>, target: &SetTarget<'db>) {
+    match target {
+        SetTarget::Name(_) => {}
+        SetTarget::Proj(proj) => analyze_set_target_moves(ctx, &proj.base),
+        SetTarget::Index(idx) => {
+            analyze_set_target_moves(ctx, &idx.base);
+            // Index expression is consumed.
+            ctx.analyze_expr_moves(idx.index, true);
+        }
+    }
+}
+
+/// Check if a set target contains early-return operators (index with ? or !).
+fn set_target_may_early_return<'db>(target: &SetTarget<'db>) -> bool {
+    match target {
+        SetTarget::Name(_) => false,
+        SetTarget::Proj(proj) => set_target_may_early_return(&proj.base),
+        SetTarget::Index(_) => true,
+    }
+}
+
 fn set_target_root_name<'a, 'db>(db: &'db dyn salsa::Database, target: &'a SetTarget<'db>) -> Option<&'a str> {
     match target {
         SetTarget::Name(n) => Some(n.text(db)),
         SetTarget::Proj(proj) => set_target_root_name(db, &proj.base),
+        SetTarget::Index(idx) => set_target_root_name(db, &idx.base),
     }
 }
 
