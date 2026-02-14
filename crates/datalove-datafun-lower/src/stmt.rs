@@ -640,35 +640,89 @@ fn lower_set<'db>(
             }
         }
         ast::SetTarget::Proj(proj) => {
-            // Walk the projection chain to find root and collect field path.
-            let (root_name, field_path) = collect_field_path(ctx, proj)?;
-            let root_name_str = root_name.text(ctx.db).to_string();
+            if target_contains_index(&set_stmt.target) {
+                // Chain contains an index — use ref-based approach.
+                let ref_op = lower_set_target_to_operand(ctx, &set_stmt.target)?;
+                let value_id = lower_expression(ctx, set_stmt.value)?;
+                ctx.emit(Instruction::RefStore {
+                    dest: ref_op,
+                    value: Operand::Value(value_id),
+                });
+                Ok(())
+            } else {
+                // Simple field path — use existing approach.
+                let (root_name, field_path) = collect_field_path(ctx, proj)?;
+                let root_name_str = root_name.text(ctx.db).to_string();
 
-            // Lower the value expression.
-            let value_id = lower_expression(ctx, set_stmt.value)?;
+                // Lower the value expression.
+                let value_id = lower_expression(ctx, set_stmt.value)?;
 
-            // Look up the root slot.
-            match ctx.lookup_var(&root_name_str) {
-                Some(Operand::Slot(slot)) => {
-                    // Emit SetField instruction.
-                    ctx.emit_set_field(SlotDest::Local(slot), field_path, Operand::Value(value_id));
-                    Ok(())
-                }
-                Some(Operand::Param(param)) => {
-                    // Mut/Out params can have field projections set.
-                    let mode = ctx.param_mode(param);
-                    if mode == Some(ParamMode::Mut) || mode == Some(ParamMode::Out) {
-                        ctx.emit_param_set_field(param, field_path, Operand::Value(value_id));
+                // Look up the root slot.
+                match ctx.lookup_var(&root_name_str) {
+                    Some(Operand::Slot(slot)) => {
+                        ctx.emit_set_field(SlotDest::Local(slot), field_path, Operand::Value(value_id));
                         Ok(())
-                    } else {
-                        panic!("assignment to field of immutable param '{}' - typechecker should catch this", root_name_str)
                     }
+                    Some(Operand::Param(param)) => {
+                        let mode = ctx.param_mode(param);
+                        if mode == Some(ParamMode::Mut) || mode == Some(ParamMode::Out) {
+                            ctx.emit_param_set_field(param, field_path, Operand::Value(value_id));
+                            Ok(())
+                        } else {
+                            panic!("assignment to field of immutable param '{}' - typechecker should catch this", root_name_str)
+                        }
+                    }
+                    _ => panic!("assignment to field of immutable variable '{}' - typechecker should catch this", root_name_str),
                 }
-                _ => panic!("assignment to field of immutable variable '{}' - typechecker should catch this", root_name_str),
             }
         }
         ast::SetTarget::Index(idx_target) => {
             lower_set_index(ctx, set_stmt, idx_target)
+        }
+    }
+}
+
+/// Emit the early return block for an out-of-bounds index in a set statement.
+///
+/// Must be called with the early return block already started. Emits the
+/// appropriate None or Err value and terminates the block with a return.
+fn emit_index_oob_early_return(ctx: &mut LowerCtx, error_mode: ast::IndexErrorMode) {
+    let return_type = ctx.return_type.clone()
+        .expect("set with index requires return type");
+    match error_mode {
+        ast::IndexErrorMode::Option => {
+            let none_value = ctx.fresh_value(return_type);
+            ctx.emit_wrap_none(none_value);
+            ctx.emit_pending_intermediate_drops();
+            ctx.emit_before_try_return_drops();
+            if ctx.is_script_unit {
+                ctx.finish_block(Terminator::UnitEarlyReturn {
+                    value: Operand::Value(none_value),
+                });
+            } else {
+                ctx.finish_block(Terminator::Return {
+                    value: Some(Operand::Value(none_value)),
+                });
+            }
+        }
+        ast::IndexErrorMode::Result => {
+            let err_msg = ctx.fresh_value(IrType::String);
+            ctx.emit_const(err_msg, datalove_datafun_ir::ConstValue::String("index out of bounds".to_string()));
+            let err_value = ctx.fresh_value(IrType::Error);
+            ctx.emit_error_from(err_value, Operand::Value(err_msg));
+            let wrapped_err = ctx.fresh_value(return_type);
+            ctx.emit_wrap_err(wrapped_err, Operand::Value(err_value));
+            ctx.emit_pending_intermediate_drops();
+            ctx.emit_before_try_return_drops();
+            if ctx.is_script_unit {
+                ctx.finish_block(Terminator::UnitEarlyReturn {
+                    value: Operand::Value(wrapped_err),
+                });
+            } else {
+                ctx.finish_block(Terminator::Return {
+                    value: Some(Operand::Value(wrapped_err)),
+                });
+            }
         }
     }
 }
@@ -709,49 +763,7 @@ pub(super) fn lower_set_index<'db>(
 
     // Early return block.
     ctx.start_block(early_return_block);
-    let return_type = ctx.return_type.clone()
-        .expect("set with index requires return type");
-    match idx_target.error_mode {
-        ast::IndexErrorMode::Option => {
-            let none_value = ctx.fresh_value(return_type);
-            ctx.emit_wrap_none(none_value);
-            ctx.emit_pending_intermediate_drops();
-            ctx.emit_before_try_return_drops();
-            if ctx.is_script_unit {
-                ctx.finish_block(Terminator::UnitEarlyReturn {
-                    value: Operand::Value(none_value),
-                });
-            } else {
-                ctx.finish_block(Terminator::Return {
-                    value: Some(Operand::Value(none_value)),
-                });
-            }
-        }
-        ast::IndexErrorMode::Result => {
-            // Create error message string.
-            let err_msg = ctx.fresh_value(IrType::String);
-            ctx.emit_const(err_msg, datalove_datafun_ir::ConstValue::String("index out of bounds".to_string()));
-
-            // Create Error from string.
-            let err_value = ctx.fresh_value(IrType::Error);
-            ctx.emit_error_from(err_value, Operand::Value(err_msg));
-
-            // Wrap in Err.
-            let wrapped_err = ctx.fresh_value(return_type);
-            ctx.emit_wrap_err(wrapped_err, Operand::Value(err_value));
-            ctx.emit_pending_intermediate_drops();
-            ctx.emit_before_try_return_drops();
-            if ctx.is_script_unit {
-                ctx.finish_block(Terminator::UnitEarlyReturn {
-                    value: Operand::Value(wrapped_err),
-                });
-            } else {
-                ctx.finish_block(Terminator::Return {
-                    value: Some(Operand::Value(wrapped_err)),
-                });
-            }
-        }
-    }
+    emit_index_oob_early_return(ctx, idx_target.error_mode);
 
     // Continue block: bounds check passed, now evaluate RHS and set.
     ctx.start_block(continue_block);
@@ -765,7 +777,11 @@ pub(super) fn lower_set_index<'db>(
     Ok(())
 }
 
-/// Resolve a set target to an operand (slot or param) for the base of an index.
+/// Resolve a set target to an operand referencing the target location.
+///
+/// For simple names, returns the slot/param operand. For projections and
+/// index accesses, emits GetFieldRef/ListElementRef instructions and returns
+/// a ValueRef operand pointing to the target location.
 fn lower_set_target_to_operand<'db>(
     ctx: &mut LowerCtx<'db>,
     target: &ast::SetTarget<'db>,
@@ -776,7 +792,109 @@ fn lower_set_target_to_operand<'db>(
             Ok(ctx.lookup_var(&name_str)
                 .unwrap_or_else(|| panic!("variable '{}' not found - typechecker should catch this", name_str)))
         }
-        _ => todo!("nested index/proj targets in set"),
+        ast::SetTarget::Proj(proj) => {
+            let base_op = lower_set_target_to_operand(ctx, &proj.base)?;
+            let base_type = set_target_operand_type(ctx, &base_op);
+
+            // Resolve field selector to index.
+            let field_index = match &proj.field {
+                ast::FieldSelector::Index(idx) => *idx,
+                ast::FieldSelector::Name(name) => {
+                    let name_str = name.text(ctx.db);
+                    let IrType::Struct(fields) = &base_type else {
+                        panic!("named field on non-struct type {:?} - typechecker should catch this", base_type);
+                    };
+                    fields.iter().position(|(n, _)| n == name_str)
+                        .unwrap_or_else(|| panic!("field '{}' not found in struct - typechecker should catch this", name_str)) as u32
+                }
+            };
+
+            // Get field type.
+            let field_type = match &base_type {
+                IrType::Struct(fields) => fields[field_index as usize].1.clone(),
+                IrType::Tuple(fields) => fields[field_index as usize].clone(),
+                _ => panic!("field access on non-struct/tuple type {:?} - typechecker should catch this", base_type),
+            };
+
+            let dest = ctx.fresh_value(IrType::Ref(Box::new(field_type)));
+            ctx.emit(Instruction::GetFieldRef {
+                dest,
+                src: base_op,
+                field_index,
+            });
+            Ok(Operand::ValueRef(dest))
+        }
+        ast::SetTarget::Index(idx_target) => {
+            let list_op = lower_set_target_to_operand(ctx, &idx_target.base)?;
+            let idx_op = lower_operand(ctx, idx_target.index)?;
+
+            // Bounds check.
+            let is_valid = ctx.fresh_value(IrType::Bool);
+            ctx.emit(Instruction::ListBoundsCheck {
+                is_valid,
+                list: list_op,
+                index: idx_op,
+            });
+
+            // Branch: if in bounds, continue; else early return.
+            let early_return_block = ctx.fresh_block();
+            let continue_block = ctx.fresh_block();
+            ctx.finish_block(Terminator::Branch {
+                cond: Operand::Value(is_valid),
+                then_block: continue_block,
+                then_args: Vec::new(),
+                else_block: early_return_block,
+                else_args: Vec::new(),
+            });
+
+            // Early return block.
+            ctx.start_block(early_return_block);
+            emit_index_oob_early_return(ctx, idx_target.error_mode);
+
+            // Continue block: emit ListElementRef.
+            ctx.start_block(continue_block);
+            let list_type = set_target_operand_type(ctx, &list_op);
+            let elem_type = match &list_type {
+                IrType::List(e) => e.as_ref().clone(),
+                _ => panic!("index on non-list type {:?} - typechecker should catch this", list_type),
+            };
+
+            let dest = ctx.fresh_value(IrType::Ref(Box::new(elem_type)));
+            ctx.emit(Instruction::ListElementRef {
+                dest,
+                list: list_op,
+                index: idx_op,
+            });
+            Ok(Operand::ValueRef(dest))
+        }
+    }
+}
+
+/// Check if a set target contains an index access anywhere in the chain.
+fn target_contains_index(target: &ast::SetTarget) -> bool {
+    match target {
+        ast::SetTarget::Name(_) => false,
+        ast::SetTarget::Index(_) => true,
+        ast::SetTarget::Proj(proj) => target_contains_index(&proj.base),
+    }
+}
+
+/// Get the type of an operand returned by `lower_set_target_to_operand`.
+///
+/// For Slot/Param, returns the stored type directly. For ValueRef, unwraps
+/// the Ref to return the pointed-to type.
+fn set_target_operand_type(ctx: &LowerCtx, operand: &Operand) -> IrType {
+    match operand {
+        Operand::Slot(s) => ctx.body.slot_types[s.0 as usize].clone(),
+        Operand::Param(p) => ctx.body.param_types[p.0 as usize].clone(),
+        Operand::ValueRef(v) => {
+            let ref_ty = &ctx.body.value_types[v.0 as usize];
+            match ref_ty {
+                IrType::Ref(inner) => inner.as_ref().clone(),
+                _ => panic!("ValueRef has non-Ref type: {:?}", ref_ty),
+            }
+        }
+        _ => panic!("unexpected operand in set target: {:?}", operand),
     }
 }
 
@@ -975,7 +1093,7 @@ fn collect_selectors<'db>(
     let (root_name, mut selectors) = match proj.base.as_ref() {
         ast::SetTarget::Name(name) => (*name, Vec::new()),
         ast::SetTarget::Proj(base_proj) => collect_selectors(db, base_proj),
-        ast::SetTarget::Index(_) => todo!("chained index in projection path"),
+        ast::SetTarget::Index(_) => unreachable!("index in projection chain handled by ref-based lowering path"),
     };
     selectors.push(proj.field.clone());
     (root_name, selectors)

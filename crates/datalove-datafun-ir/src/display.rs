@@ -600,6 +600,9 @@ impl fmt::Display for Instruction {
             Instruction::ListSet { list, index, value } => {
                 write!(f, "listset {}[{}] = {}", list, index, value)
             }
+            Instruction::ListElementRef { dest, list, index } => {
+                write!(f, "{} = listelementref {}[{}]", dest, list, index)
+            }
             Instruction::DebugLog { operand } => {
                 write!(f, "debuglog {}", operand)
             }

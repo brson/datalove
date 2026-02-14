@@ -601,6 +601,9 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             Instruction::ListSet { list, index, value } => {
                 self.compile_list_set(builder, list, index, value)?;
             }
+            Instruction::ListElementRef { dest, list, index } => {
+                self.compile_list_element_ref(builder, *dest, list, index)?;
+            }
             Instruction::DebugLog { operand } => {
                 self.compile_debuglog(builder, operand)?;
             }

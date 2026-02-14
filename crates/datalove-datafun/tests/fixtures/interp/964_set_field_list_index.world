@@ -1,0 +1,13 @@
+----------
+scriptunit-fragment
+----------
+
+// Set list element through a field: set a.field[i]? = v (field then index).
+fun set_field_elem(a: {items: [u32], count: u32}, i: index, v: u32): ?{items: [u32], count: u32}
+    var b = a
+    set b.items[i]? = v
+    ret some b
+end fun
+
+debuglog set_field_elem({items = [10, 20, 30], count = 3}, (: index / 1), 99)
+debuglog set_field_elem({items = [10, 20, 30], count = 3}, (: index / 5), 99)

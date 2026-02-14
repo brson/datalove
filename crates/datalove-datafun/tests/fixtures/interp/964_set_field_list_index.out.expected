@@ -1,0 +1,64 @@
+Analysis(
+    sections: [
+        SectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 10u32
+                        v1 = const 20u32
+                        v2 = const 30u32
+                        v3 = list [v0, v1, v2]
+                        v4 = const 3u32
+                        v5 = pack Struct0 {v3, v4}
+                        v6 = const 1index
+                        v7 = const 99u32
+                        v8 = call @0 u0(v5, v6, v7)
+                        debuglog v8
+                        drop v8
+                        v9 = const 10u32
+                        v10 = const 20u32
+                        v11 = const 30u32
+                        v12 = list [v9, v10, v11]
+                        v13 = const 3u32
+                        v14 = pack Struct0 {v12, v13}
+                        v15 = const 5index
+                        v16 = const 99u32
+                        v17 = call @1 u0(v14, v15, v16)
+                        debuglog v17
+                        drop v17
+                        unit_end
+                    
+                    fn set_field_elem(p0, p1, p2):
+                    block0:
+                        v0 = move p0
+                        store.move.tracked s0, v0
+                        v1 = getfieldref s0.0
+                        v2 = listboundscheck *v1[p1]
+                        branch v2, block2, block1
+                    block1:
+                        v3 = none
+                        drop.tracked s0
+                        return v3
+                    block2:
+                        v4 = copy p2
+                        listset *v1[p1] = v4
+                        v5 = load.move.tracked s0
+                        v6 = some v5
+                        return v6
+                """,
+            ),
+            output: "(fragment executed)",
+            debug_output: Some("some {items = [10, 99, 30], count = 3}\nnone\n"),
+        ),
+    ],
+)

@@ -103,6 +103,7 @@ pub fn instruction_dest(instr: &Instruction) -> Option<ValueId> {
         Instruction::ListGet { dest, .. } => Some(*dest),
         Instruction::ListBoundsCheck { is_valid, .. } => Some(*is_valid),
         Instruction::ListSet { .. } => None,
+        Instruction::ListElementRef { dest, .. } => Some(*dest),
 
         // Misc
         Instruction::DebugLog { .. } => None,
@@ -478,6 +479,10 @@ fn collect_instruction_operands(instr: &Instruction, used: &mut HashSet<ValueId>
             add_operand_value(list, used);
             add_operand_value(index, used);
             add_operand_value(value, used);
+        }
+        Instruction::ListElementRef { list, index, .. } => {
+            add_operand_value(list, used);
+            add_operand_value(index, used);
         }
     }
 }

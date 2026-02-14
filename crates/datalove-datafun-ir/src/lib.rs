@@ -1327,6 +1327,19 @@ pub enum Instruction {
         value: Operand,
     },
 
+    /// Get a reference (pointer) to an element in a list.
+    ///
+    /// Computes element address without copying. Used for nested set targets
+    /// where we need to modify a list element's fields in place.
+    ///
+    /// **Ownership:** Borrows `list`, produces `dest` (Ref type, always Copy).
+    /// Bounds must be checked before use.
+    ListElementRef {
+        dest: ValueId,
+        list: Operand,
+        index: Operand,
+    },
+
     // ========================================================================
     // Miscellaneous
     // ========================================================================

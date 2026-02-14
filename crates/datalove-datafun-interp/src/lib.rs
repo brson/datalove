@@ -1135,6 +1135,25 @@ impl IrInterpreter {
                     frame.mark_value_dropped(*v);
                 }
             }
+            Instruction::ListElementRef { dest, list, index } => {
+                let list_val = self.read_operand(list, frame, frames);
+                let idx_val = self.read_operand(index, frame, frames);
+                let idx = unsafe { *(idx_val.ptr as *const rtdt::IndexRepr) };
+
+                let list_struct = unsafe { &*(list_val.ptr as *const rtdt::List) };
+                let element_tydesc = unsafe { (*list_val.tydesc).type_info.list.element_tydesc };
+                let element_size = unsafe { (*element_tydesc).size as usize };
+
+                // Compute element pointer.
+                let element_ptr = unsafe { (list_struct.data as *mut u8).add(idx as usize * element_size) };
+
+                // Store pointer in dest (ref value stores pointer, not data).
+                let dest_slot = frame.value_dest(*dest);
+                unsafe {
+                    *(dest_slot.ptr as *mut *mut u8) = element_ptr;
+                }
+                frame.mark_value_live(*dest);
+            }
             Instruction::Widen { dest, src } => {
                 // Widen a fixed-width integer to Int.
                 let src_val = self.read_operand(src, frame, frames);

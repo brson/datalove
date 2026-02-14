@@ -953,6 +953,11 @@ impl RemapContext {
                 index: self.remap_operand(index),
                 value: self.remap_operand(value),
             },
+            Instruction::ListElementRef { dest, list, index } => Instruction::ListElementRef {
+                dest: self.remap_value(*dest),
+                list: self.remap_operand(list),
+                index: self.remap_operand(index),
+            },
             Instruction::Nop => Instruction::Nop,
         }
     }
@@ -1513,6 +1518,11 @@ fn replace_params_in_instruction(
             list: replace_operand(list),
             index: replace_operand(index),
             value: replace_operand(value),
+        },
+        Instruction::ListElementRef { dest, list, index } => Instruction::ListElementRef {
+            dest: *dest,
+            list: replace_operand(list),
+            index: replace_operand(index),
         },
     }
 }

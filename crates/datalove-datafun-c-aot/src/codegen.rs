@@ -356,6 +356,9 @@ impl<'a> FunctionCodegenContext<'a> {
             Instruction::ListSet { list, index, value } => {
                 self.emit_list_set(out, list, index, value)?;
             }
+            Instruction::ListElementRef { dest, list, index } => {
+                self.emit_list_element_ref(out, *dest, list, index)?;
+            }
             Instruction::Nop => {}
         }
         Ok(())
@@ -2014,6 +2017,34 @@ impl<'a> FunctionCodegenContext<'a> {
         }
 
         writeln!(out, "    }}").unwrap();
+        Ok(())
+    }
+
+    /// Emit a ListElementRef instruction.
+    fn emit_list_element_ref(
+        &mut self,
+        out: &mut String,
+        dest: ValueId,
+        list: &Operand,
+        index: &Operand,
+    ) -> Result<(), CAotError> {
+        let dest_addr = self.value_addr(dest);
+        let list_addr = self.operand_addr(list);
+        let index_addr = self.operand_addr(index);
+
+        let list_ty = self.operand_type(list).clone();
+        let elem_ty = match &list_ty {
+            IrType::List(e) => e.as_ref().clone(),
+            _ => return Err(CAotError::Codegen(format!(
+                "ListElementRef on non-list type: {:?}", list_ty
+            ))),
+        };
+        let elem_repr = types::ir_type_to_crepr(&elem_ty);
+        let elem_size = elem_repr.layout().size;
+
+        // Store pointer to element: dest = &list.data[index].
+        writeln!(out, "    *(void**){} = *(void**){} + (size_t)*(index_t*){} * {};",
+            dest_addr, list_addr, index_addr, elem_size).unwrap();
         Ok(())
     }
 

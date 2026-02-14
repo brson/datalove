@@ -261,4 +261,33 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
 
         Ok(())
     }
+
+    /// Compile a ListElementRef instruction.
+    ///
+    /// Computes a pointer to the element at the given index. Bounds must
+    /// already be checked. Stores the pointer directly as the dest value.
+    pub(super) fn compile_list_element_ref(
+        &mut self,
+        builder: &mut FunctionBuilder,
+        dest: ValueId,
+        list: &Operand,
+        index: &Operand,
+    ) -> Result<(), CraneliftError> {
+        let list_ty = self.get_operand_type(list)?;
+        let elem_ty = match &list_ty {
+            IrType::List(e) => e.as_ref().clone(),
+            _ => return Err(CraneliftError::Codegen(format!(
+                "ListElementRef on non-list type: {:?}", list_ty
+            ))),
+        };
+        let elem_repr = types::ir_type_to_cranelift(&elem_ty);
+        let elem_size = elem_repr.layout().size;
+
+        let list_ptr = self.get_operand_ptr(builder, list)?;
+        let idx = self.get_operand_value(builder, index)?;
+
+        let elem_addr = self.compute_element_addr(builder, list_ptr, idx, elem_size);
+        self.values.insert(dest, elem_addr);
+        Ok(())
+    }
 }
