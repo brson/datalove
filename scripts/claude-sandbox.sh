@@ -61,6 +61,10 @@ die() { echo -e "${RED}[ERROR]${NC} $*" >&2; exit 1; }
 
 command -v podman >/dev/null || die "podman not found"
 
+# Mounting $HOME as the workspace conflicts with individual home directory mounts
+# (.claude, .cargo, .rustup, etc.) and causes podman to hang.
+[[ "$(pwd)" == "$HOME" ]] && die "refusing to run from home directory -- cd into a project first"
+
 # Volume mounts
 mounts=(
     "-v" "$(pwd):${WORKDIR}:Z"
