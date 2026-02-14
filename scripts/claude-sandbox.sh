@@ -5,7 +5,7 @@
 # Usage: claude-sandbox.sh [--rebuild] [claude|bash]
 #
 # Container image (Ubuntu 24.04):
-#   - Build tools: gcc, clang, pkg-config, libssl-dev
+#   - Build tools: gcc, clang, cmake, pkg-config, libssl-dev
 #   - JDK + Maven (default-jdk)
 #   - Editors: nano, emacs-nox
 #   - GitHub CLI (gh)
@@ -119,7 +119,7 @@ FROM docker.io/library/ubuntu:24.04
 ENV DEBIAN_FRONTEND=noninteractive
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    curl git ca-certificates build-essential clang pkg-config libssl-dev nano emacs-nox \
+    curl git ca-certificates build-essential clang cmake pkg-config libssl-dev nano emacs-nox \
     default-jdk maven \
     pipewire pipewire-audio-client-libraries \
     libwayland-client0 libwayland-cursor0 libwayland-egl1 libxkbcommon0 \
