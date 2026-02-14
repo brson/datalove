@@ -473,8 +473,9 @@ fn register_runtime_symbols(jit_builder: &mut JITBuilder) {
     jit_builder.symbol("dtlv_rti_int_from_limbs", c::dtlv_rti_int_from_limbs as *const u8);
     jit_builder.symbol("dtlv_rti_cmp_local", c::dtlv_rti_cmp_local as *const u8);
 
-    // Value move function.
+    // Value move and clone functions.
     jit_builder.symbol("dtlv_rti_move_value_local", c::dtlv_rti_move_value_local as *const u8);
+    jit_builder.symbol("dtlv_rti_clone_local", c::dtlv_rti_clone_local as *const u8);
 
     // Boxing functions.
     jit_builder.symbol("dtlv_rti_error_from_local", c::dtlv_rti_error_from_local as *const u8);
