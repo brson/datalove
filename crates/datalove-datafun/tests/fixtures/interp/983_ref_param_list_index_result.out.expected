@@ -1,0 +1,62 @@
+Analysis(
+    sections: [
+        SectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 10u32
+                        v1 = const 20u32
+                        v2 = const 30u32
+                        v3 = list [v0, v1, v2]
+                        v4 = const 2index
+                        v5 = call @0 u1(v3, v4)
+                        debuglog v5
+                        drop v5
+                        v6 = const 10u32
+                        v7 = const 20u32
+                        v8 = const 30u32
+                        v9 = list [v6, v7, v8]
+                        v10 = const 5index
+                        v11 = call @1 u1(v9, v10)
+                        debuglog v11
+                        drop v11
+                        unit_end
+                    
+                    fn read_ref(p0):
+                    block0:
+                        v0 = copy p0
+                        v1 = ok v0
+                        return v1
+                    
+                    fn test(p0, p1):
+                    block0:
+                        v0 = listboundscheck p0[p1]
+                        branch v0, block2, block1
+                    block1:
+                        v1 = const "index out of bounds"
+                        v2 = error_from v1
+                        v3 = err v2
+                        drop p0
+                        return v3
+                    block2:
+                        v4 = listelementref p0[p1]
+                        v5 = call @0 u0(*v4)
+                        drop p0
+                        return v5
+                """,
+            ),
+            output: "(fragment executed)",
+            debug_output: Some("ok 30\nerror \"index out of bounds\"\n"),
+        ),
+    ],
+)

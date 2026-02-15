@@ -1,0 +1,51 @@
+Analysis(
+    sections: [
+        SectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 10u32
+                        v1 = const 20u32
+                        v2 = const 30u32
+                        v3 = list [v0, v1, v2]
+                        v4 = const 5index
+                        v5 = call @0 u1(v3, v4)
+                        debuglog v5
+                        unit_end
+                    
+                    fn read_ref(p0):
+                    block0:
+                        v0 = copy p0
+                        v1 = some v0
+                        return v1
+                    
+                    fn test(p0, p1):
+                    block0:
+                        v0 = listboundscheck p0[p1]
+                        branch v0, block2, block1
+                    block1:
+                        v1 = none
+                        drop p0
+                        return v1
+                    block2:
+                        v2 = listelementref p0[p1]
+                        v3 = call @0 u0(*v2)
+                        drop p0
+                        return v3
+                """,
+            ),
+            output: "(fragment executed)",
+            debug_output: Some("none\n"),
+        ),
+    ],
+)

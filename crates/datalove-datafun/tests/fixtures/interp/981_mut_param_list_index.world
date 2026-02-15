@@ -1,0 +1,17 @@
+----------
+scriptunit-fragment
+----------
+
+// Pass a[i]? to mut param; mutation visible in list.
+fun set_val(mut x: u32): ?bool
+    set x = 99
+    ret some true
+end fun
+
+fun test(): ?[u32]
+    var a: [u32] = [10, 20, 30]
+    let _ok = set_val(a[(: index / 1)]?)
+    ret some a
+end fun
+
+debuglog test()

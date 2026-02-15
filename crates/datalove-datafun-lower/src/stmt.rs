@@ -682,11 +682,11 @@ fn lower_set<'db>(
     }
 }
 
-/// Emit the early return block for an out-of-bounds index in a set statement.
+/// Emit the early return block for an out-of-bounds index.
 ///
 /// Must be called with the early return block already started. Emits the
 /// appropriate None or Err value and terminates the block with a return.
-fn emit_index_oob_early_return(ctx: &mut LowerCtx, error_mode: ast::IndexErrorMode) {
+pub(crate) fn emit_index_oob_early_return(ctx: &mut LowerCtx, error_mode: ast::IndexErrorMode) {
     let return_type = ctx.return_type.clone()
         .expect("set with index requires return type");
     match error_mode {

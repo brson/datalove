@@ -70,8 +70,12 @@ fn lower_call_arg<'db>(
     mode: ParamMode,
     arg_type: Option<&IrType>,
 ) -> Result<Operand, LowerError> {
-    // Check if this is a ref context AND the arg is a field projection.
+    // Check if this is a ref context AND the arg is a field projection or index.
     if matches!(mode, ParamMode::Ref | ParamMode::Mut | ParamMode::Out) {
+        // Index expression: a[i]? or a[i]!
+        if let Some(operand) = try_lower_arg_index_as_ref(ctx, arg, mode, arg_type)? {
+            return Ok(operand);
+        }
         if let ExprFunKind::FieldProj(proj) = arg.expr(ctx.db) {
             let operand = lower_field_proj_as_ref(ctx, arg, proj)?;
             // For out params, destroy existing field value before call.
@@ -117,6 +121,102 @@ fn lower_call_arg<'db>(
             Ok(Operand::Value(value_id))
         }
     }
+}
+
+/// Try to lower a function argument as a list index reference.
+///
+/// Returns `Some(operand)` if the argument is `a[i]?` or `a[i]!`, emitting
+/// ListBoundsCheck + ListElementRef. Returns `None` if not an index pattern.
+fn try_lower_arg_index_as_ref<'db>(
+    ctx: &mut LowerCtx<'db>,
+    arg: ExprFun<'db>,
+    mode: ParamMode,
+    arg_type: Option<&IrType>,
+) -> Result<Option<Operand>, LowerError> {
+    let (index_expr, error_mode) = match arg.expr(ctx.db) {
+        ExprFunKind::TryOption(try_op) => {
+            if let ExprFunKind::Index(index_expr) = try_op.operand.expr(ctx.db) {
+                (index_expr, ast::IndexErrorMode::Option)
+            } else {
+                return Ok(None);
+            }
+        }
+        ExprFunKind::TryResult(try_op) => {
+            if let ExprFunKind::Index(index_expr) = try_op.operand.expr(ctx.db) {
+                (index_expr, ast::IndexErrorMode::Result)
+            } else {
+                return Ok(None);
+            }
+        }
+        _ => return Ok(None),
+    };
+
+    let operand = lower_index_as_ref(ctx, &index_expr, error_mode)?;
+
+    // For out params, destroy existing element value before call.
+    if mode == ParamMode::Out {
+        if let Operand::Value(ref_value) = operand {
+            if let Some(ty) = arg_type {
+                if !ty.is_copy() {
+                    ctx.emit(Instruction::DropViaRef { ref_value });
+                }
+            }
+        }
+    }
+
+    Ok(Some(ctx.deref_if_ref(operand)))
+}
+
+/// Lower `a[i]?` or `a[i]!` as a reference (pointer to list element).
+///
+/// Emits ListBoundsCheck + ListElementRef instead of ListGet, returning a
+/// reference operand suitable for passing to ref/mut/out params.
+fn lower_index_as_ref<'db>(
+    ctx: &mut LowerCtx<'db>,
+    index_expr: &ast::ExprIndex<'db>,
+    error_mode: ast::IndexErrorMode,
+) -> Result<Operand, LowerError> {
+    let list_op = lower_operand(ctx, index_expr.base)?;
+    let idx_op = lower_operand(ctx, index_expr.index)?;
+
+    // Bounds check.
+    let is_valid = ctx.fresh_value(IrType::Bool);
+    ctx.emit(Instruction::ListBoundsCheck {
+        is_valid,
+        list: list_op,
+        index: idx_op,
+    });
+
+    // Branch: if in bounds, continue; else early return.
+    let early_return_block = ctx.fresh_block();
+    let continue_block = ctx.fresh_block();
+    ctx.finish_block(Terminator::Branch {
+        cond: Operand::Value(is_valid),
+        then_block: continue_block,
+        then_args: Vec::new(),
+        else_block: early_return_block,
+        else_args: Vec::new(),
+    });
+
+    // Early return block.
+    ctx.start_block(early_return_block);
+    super::stmt::emit_index_oob_early_return(ctx, error_mode);
+
+    // Continue block: emit ListElementRef.
+    ctx.start_block(continue_block);
+    let list_type = ctx.expr_type(index_expr.base);
+    let elem_type = match &list_type {
+        IrType::List(e) => e.as_ref().clone(),
+        _ => panic!("index on non-list type {:?} - typechecker should catch this", list_type),
+    };
+
+    let dest = ctx.fresh_value(IrType::Ref(Box::new(elem_type)));
+    ctx.emit(Instruction::ListElementRef {
+        dest,
+        list: list_op,
+        index: idx_op,
+    });
+    Ok(Operand::Value(dest))
 }
 
 /// Lower a field projection as a reference (pointer to field).
@@ -166,6 +266,32 @@ pub fn lower_field_proj_as_ref<'db>(
                 other => other,
             }
         }
+        ExprFunKind::TryOption(try_op) => {
+            if let ExprFunKind::Index(index_expr) = try_op.operand.expr(ctx.db) {
+                // a[i]?.field — get ref to list element, then field ref from that.
+                let ref_op = lower_index_as_ref(ctx, &index_expr, ast::IndexErrorMode::Option)?;
+                match ref_op {
+                    Operand::Value(v) => Operand::ValueRef(v),
+                    other => other,
+                }
+            } else {
+                let base_id = lower_expression(ctx, proj.base)?;
+                Operand::Value(base_id)
+            }
+        }
+        ExprFunKind::TryResult(try_op) => {
+            if let ExprFunKind::Index(index_expr) = try_op.operand.expr(ctx.db) {
+                // a[i]!.field — get ref to list element, then field ref from that.
+                let ref_op = lower_index_as_ref(ctx, &index_expr, ast::IndexErrorMode::Result)?;
+                match ref_op {
+                    Operand::Value(v) => Operand::ValueRef(v),
+                    other => other,
+                }
+            } else {
+                let base_id = lower_expression(ctx, proj.base)?;
+                Operand::Value(base_id)
+            }
+        }
         _ => {
             // Compound expression - need to lower it to a value.
             let base_id = lower_expression(ctx, proj.base)?;
@@ -203,6 +329,28 @@ pub fn lower_expression_for_ref<'db>(
         ExprFunKind::FieldProj(proj) => {
             // Field projections use GetFieldRef to borrow without copying.
             lower_field_proj_as_ref(ctx, expr, proj)
+        }
+        ExprFunKind::TryOption(try_op) => {
+            if let ExprFunKind::Index(index_expr) = try_op.operand.expr(ctx.db) {
+                // a[i]? — borrow list element by reference.
+                lower_index_as_ref(ctx, &index_expr, ast::IndexErrorMode::Option)
+            } else {
+                let expr_type = ctx.expr_type(expr);
+                let value_id = lower_expression(ctx, expr)?;
+                ctx.record_expr_temp(value_id, expr_type);
+                Ok(Operand::Value(value_id))
+            }
+        }
+        ExprFunKind::TryResult(try_op) => {
+            if let ExprFunKind::Index(index_expr) = try_op.operand.expr(ctx.db) {
+                // a[i]! — borrow list element by reference.
+                lower_index_as_ref(ctx, &index_expr, ast::IndexErrorMode::Result)
+            } else {
+                let expr_type = ctx.expr_type(expr);
+                let value_id = lower_expression(ctx, expr)?;
+                ctx.record_expr_temp(value_id, expr_type);
+                Ok(Operand::Value(value_id))
+            }
         }
         ExprFunKind::Name(name) => {
             // For named values/params, return the operand directly to borrow.

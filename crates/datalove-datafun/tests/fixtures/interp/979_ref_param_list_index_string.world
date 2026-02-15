@@ -1,0 +1,14 @@
+----------
+scriptunit-fragment
+----------
+
+// Pass a[i]? to ref param with string (linear type), just read.
+fun has_str(ref x: string): ?bool
+    ret some true
+end fun
+
+fun test(a: [string], i: index): ?bool
+    ret has_str(a[i]?)
+end fun
+
+debuglog test(["hello", "world"], (: index / 0))

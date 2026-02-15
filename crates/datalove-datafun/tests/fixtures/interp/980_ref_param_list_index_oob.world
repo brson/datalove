@@ -1,0 +1,14 @@
+----------
+scriptunit-fragment
+----------
+
+// OOB index with ref param returns none; list is intact.
+fun read_ref(ref x: u32): ?u32
+    ret some x
+end fun
+
+fun test(a: [u32], i: index): ?u32
+    ret read_ref(a[i]?)
+end fun
+
+debuglog test([10, 20, 30], (: index / 5))

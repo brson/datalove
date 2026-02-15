@@ -1,0 +1,15 @@
+----------
+scriptunit-fragment
+----------
+
+// Chained place: a[i]?.field passed to ref param.
+fun read_ref(ref x: u32): ?u32
+    ret some x
+end fun
+
+fun test(): ?u32
+    var a: [(u32, u32)] = [(10, 20), (30, 40)]
+    ret read_ref(a[(: index / 0)]?.0)
+end fun
+
+debuglog test()

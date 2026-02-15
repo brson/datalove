@@ -1,0 +1,56 @@
+Analysis(
+    sections: [
+        SectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = call @0 u1()
+                        debuglog v0
+                        unit_end
+                    
+                    fn list_len(p0):
+                    block0:
+                        v0 = const 0u32
+                        v1 = some v0
+                        return v1
+                    
+                    fn test():
+                    block0:
+                        v0 = const 1u32
+                        v1 = const 2u32
+                        v2 = list [v0, v1]
+                        v3 = const 3u32
+                        v4 = const 4u32
+                        v5 = const 5u32
+                        v6 = list [v3, v4, v5]
+                        v7 = list [v2, v6]
+                        store.move.tracked s0, v7
+                        v8 = const 1index
+                        v9 = listboundscheck s0[v8]
+                        branch v9, block2, block1
+                    block1:
+                        v10 = none
+                        drop.tracked s0
+                        return v10
+                    block2:
+                        v11 = listelementref s0[v8]
+                        v12 = call @0 u0(*v11)
+                        drop.tracked s0
+                        return v12
+                """,
+            ),
+            output: "(fragment executed)",
+            debug_output: Some("some 0\n"),
+        ),
+    ],
+)

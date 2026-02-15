@@ -1,0 +1,15 @@
+----------
+scriptunit-fragment
+----------
+
+// Pass a[i]? where element is [u32] (linear type), ref borrow.
+fun list_len(ref x: [u32]): ?u32
+    ret some :u32/0
+end fun
+
+fun test(): ?u32
+    var a: [[u32]] = [[1, 2], [3, 4, 5]]
+    ret list_len(a[(: index / 1)]?)
+end fun
+
+debuglog test()

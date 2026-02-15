@@ -1,0 +1,17 @@
+----------
+scriptunit-fragment
+----------
+
+// Pass a[i]? to mut param with string, replace string in list.
+fun replace(mut x: string): ?bool
+    set x = "replaced"
+    ret some true
+end fun
+
+fun test(): ?[string]
+    var a: [string] = ["hello", "world"]
+    let _ok = replace(a[(: index / 1)]?)
+    ret some a
+end fun
+
+debuglog test()

@@ -1,0 +1,15 @@
+----------
+scriptunit-fragment
+----------
+
+// Pass a[i]! to ref param (result error mode).
+fun read_ref(ref x: u32): !u32
+    ret ok x
+end fun
+
+fun test(a: [u32], i: index): !u32
+    ret read_ref(a[i]!)
+end fun
+
+debuglog test([10, 20, 30], (: index / 2))
+debuglog test([10, 20, 30], (: index / 5))
