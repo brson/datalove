@@ -321,6 +321,7 @@ impl<'db> Parser<'db> {
                                     let ts = self.peek_text_span();
                                     self.next(); // consume the keyword
                                     let payload = self.parse_expr_primary();
+                                    let payload = self.parse_postfix_try_operators(payload);
                                     let expr_kind = match word {
                                         "some" => ast::ExprFunKind::Some(ast::ExprSome { type_hint: None, payload }),
                                         "ok" => ast::ExprFunKind::Ok(ast::ExprOk { type_hint: None, payload }),
@@ -334,6 +335,7 @@ impl<'db> Parser<'db> {
                                     let ts = self.peek_text_span();
                                     self.next(); // consume the keyword
                                     let value = self.parse_expr_primary();
+                                    let value = self.parse_postfix_try_operators(value);
                                     let expr_kind = match word {
                                         "data" => ast::ExprFunKind::Data(ast::ExprData { type_hint: None, value }),
                                         "error" => ast::ExprFunKind::Error(ast::ExprError { type_hint: None, value }),

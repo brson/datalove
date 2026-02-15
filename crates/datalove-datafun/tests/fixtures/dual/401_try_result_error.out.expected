@@ -23,14 +23,14 @@ DualAnalysis(
                         v0 = const 1int
                         v1 = error_from v0
                         v2 = err v1
-                        v3 = ok v2
-                        v4, v5, v6 = unwrap_result v3
-                        branch v6, block2, block1
+                        v3, v4, v5 = unwrap_result v2
+                        branch v5, block2, block1
                     block1:
-                        v7 = err v5
-                        return v7
+                        v6 = err v4
+                        return v6
                     block2:
-                        return v4
+                        v7 = ok v3
+                        return v7
                 """,
             ),
             aot_lowering: LoweringResult(
@@ -48,14 +48,14 @@ DualAnalysis(
                         v0 = const 1int
                         v1 = error_from v0
                         v2 = err v1
-                        v3 = ok v2
-                        v4, v5, v6 = unwrap_result v3
-                        branch v6, block2, block1
+                        v3, v4, v5 = unwrap_result v2
+                        branch v5, block2, block1
                     block1:
-                        v7 = err v5
-                        return v7
+                        v6 = err v4
+                        return v6
                     block2:
-                        return v4
+                        v7 = ok v3
+                        return v7
                 """,
             ),
             ir_match: true,

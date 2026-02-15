@@ -1,0 +1,10 @@
+----------
+scriptunit-fragment
+----------
+
+// Clone a ref param string via postfix @ inside some.
+fun clone_str(ref x: string): ?string
+    ret some x@
+end fun
+
+debuglog clone_str("hello")
