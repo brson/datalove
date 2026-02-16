@@ -34,7 +34,7 @@ Analysis(
                         v5 = pack Tuple2 {v3, v4}
                         v6 = list [v2, v5]
                         store.move.tracked s0, v6
-                        v7 = const 0index
+                        v7 = const 5index
                         v8 = listboundscheck s0[v7]
                         branch v8, block2, block1
                     block1:
@@ -50,7 +50,7 @@ Analysis(
                 """,
             ),
             output: "(fragment executed)",
-            debug_output: Some("some 10\n"),
+            debug_output: Some("none\n"),
         ),
     ],
 )

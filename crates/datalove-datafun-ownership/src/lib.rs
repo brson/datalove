@@ -530,6 +530,11 @@ impl<'db> AnalysisCtx<'db> {
             ExprFunKind::Er(e) => self.expr_may_early_return(e.payload),
             ExprFunKind::Data(d) => self.expr_may_early_return(d.value),
             ExprFunKind::Error(e) => self.expr_may_early_return(e.value),
+            ExprFunKind::FieldProj(proj) => self.expr_may_early_return(proj.base),
+            ExprFunKind::Index(ref idx) => {
+                self.expr_may_early_return(idx.base)
+                    || self.expr_may_early_return(idx.index)
+            }
             _ => false,
         }
     }
