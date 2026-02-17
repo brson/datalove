@@ -1341,6 +1341,52 @@ pub enum Instruction {
     },
 
     // ========================================================================
+    // Map Indexing
+    // ========================================================================
+
+    /// Get a value from a map by key (returns cloned value + validity flag).
+    ///
+    /// **Ownership:** Borrows `map` and `key`, produces `dest` and `is_valid`.
+    MapGet {
+        dest: ValueId,
+        is_valid: ValueId,
+        map: Operand,
+        key: Operand,
+    },
+
+    /// Check if a map contains a given key.
+    ///
+    /// **Ownership:** Borrows `map` and `key`, produces `is_valid`.
+    MapContainsKey {
+        is_valid: ValueId,
+        map: Operand,
+        key: Operand,
+    },
+
+    /// Set the value for an existing key in a map.
+    ///
+    /// Destroys old value, stores new value. Key must exist (caller checks).
+    ///
+    /// **Ownership:** Borrows `map` mutably, borrows `key`, consumes `value`.
+    MapSetValue {
+        map: Operand,
+        key: Operand,
+        value: Operand,
+    },
+
+    /// Get a reference (pointer) to a value in a map by key.
+    ///
+    /// Used for ref/mut params and chained field access. Key must exist
+    /// (caller checks with MapContainsKey).
+    ///
+    /// **Ownership:** Borrows `map`, borrows `key`, produces `dest` (Ref type).
+    MapValueRef {
+        dest: ValueId,
+        map: Operand,
+        key: Operand,
+    },
+
+    // ========================================================================
     // Miscellaneous
     // ========================================================================
 

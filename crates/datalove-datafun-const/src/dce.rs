@@ -105,6 +105,12 @@ pub fn instruction_dest(instr: &Instruction) -> Option<ValueId> {
         Instruction::ListSet { .. } => None,
         Instruction::ListElementRef { dest, .. } => Some(*dest),
 
+        // Map indexing
+        Instruction::MapGet { dest, .. } => Some(*dest),
+        Instruction::MapContainsKey { is_valid, .. } => Some(*is_valid),
+        Instruction::MapSetValue { .. } => None,
+        Instruction::MapValueRef { dest, .. } => Some(*dest),
+
         // Misc
         Instruction::DebugLog { .. } => None,
         Instruction::Nop => None,
@@ -483,6 +489,23 @@ fn collect_instruction_operands(instr: &Instruction, used: &mut HashSet<ValueId>
         Instruction::ListElementRef { list, index, .. } => {
             add_operand_value(list, used);
             add_operand_value(index, used);
+        }
+        Instruction::MapGet { map, key, .. } => {
+            add_operand_value(map, used);
+            add_operand_value(key, used);
+        }
+        Instruction::MapContainsKey { map, key, .. } => {
+            add_operand_value(map, used);
+            add_operand_value(key, used);
+        }
+        Instruction::MapSetValue { map, key, value } => {
+            add_operand_value(map, used);
+            add_operand_value(key, used);
+            add_operand_value(value, used);
+        }
+        Instruction::MapValueRef { map, key, .. } => {
+            add_operand_value(map, used);
+            add_operand_value(key, used);
         }
     }
 }

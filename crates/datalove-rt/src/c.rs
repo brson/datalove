@@ -895,6 +895,101 @@ pub unsafe extern "C-unwind" fn dtlv_rti_btreemap_clear_local(
     }
 }
 
+#[unsafe(no_mangle)]
+pub unsafe extern "C-unwind" fn dtlv_rti_btreemap_contains_key_local(
+    _rt: LocalRtHandle,
+    btreemap_value_ref: *const u8,
+    btreemap_tydesc: *const rtdt::TyDesc,
+    key_ref: *const u8,
+    key_tydesc: *const rtdt::TyDesc,
+    result_out: *mut bool,
+) -> RtStatus {
+    debug_assert!(!btreemap_value_ref.is_null(), "btreemap_value_ref is null");
+    debug_assert!(!btreemap_tydesc.is_null(), "btreemap_tydesc is null");
+    debug_assert!(!key_ref.is_null(), "key_ref is null");
+    debug_assert!(!key_tydesc.is_null(), "key_tydesc is null");
+    debug_assert!(!result_out.is_null(), "result_out is null");
+    debug_assert_aligned(btreemap_value_ref, btreemap_tydesc, "btreemap_contains_key:map");
+    debug_assert_aligned(key_ref, key_tydesc, "btreemap_contains_key:key");
+    unsafe {
+        let btreemap_tydesc_ref = rtdt::TyDescRef::from_ptr(btreemap_tydesc);
+        let key_tydesc_ref = rtdt::TyDescRef::from_ptr(key_tydesc);
+        crate::impls::btreemap::btreemap_contains_key_impl(
+            btreemap_value_ref,
+            btreemap_tydesc_ref,
+            key_ref,
+            key_tydesc_ref,
+            result_out,
+        )
+    }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C-unwind" fn dtlv_rti_btreemap_get_value_ref_local(
+    _rt: LocalRtHandle,
+    btreemap_value_ref: *const u8,
+    btreemap_tydesc: *const rtdt::TyDesc,
+    key_ref: *const u8,
+    key_tydesc: *const rtdt::TyDesc,
+    value_ptr_out: *mut *mut u8,
+) -> RtStatus {
+    debug_assert!(!btreemap_value_ref.is_null(), "btreemap_value_ref is null");
+    debug_assert!(!btreemap_tydesc.is_null(), "btreemap_tydesc is null");
+    debug_assert!(!key_ref.is_null(), "key_ref is null");
+    debug_assert!(!key_tydesc.is_null(), "key_tydesc is null");
+    debug_assert!(!value_ptr_out.is_null(), "value_ptr_out is null");
+    debug_assert_aligned(btreemap_value_ref, btreemap_tydesc, "btreemap_get_value_ref:map");
+    debug_assert_aligned(key_ref, key_tydesc, "btreemap_get_value_ref:key");
+    unsafe {
+        let btreemap_tydesc_ref = rtdt::TyDescRef::from_ptr(btreemap_tydesc);
+        let key_tydesc_ref = rtdt::TyDescRef::from_ptr(key_tydesc);
+        crate::impls::btreemap::btreemap_get_value_ref_impl(
+            btreemap_value_ref,
+            btreemap_tydesc_ref,
+            key_ref,
+            key_tydesc_ref,
+            value_ptr_out,
+        )
+    }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C-unwind" fn dtlv_rti_btreemap_set_value_local(
+    rt: LocalRtHandle,
+    btreemap_value_mut: *mut u8,
+    btreemap_tydesc: *const rtdt::TyDesc,
+    key_ref: *const u8,
+    key_tydesc: *const rtdt::TyDesc,
+    value_in: *const u8,
+    value_tydesc: *const rtdt::TyDesc,
+) -> RtStatus {
+    debug_assert!(!rt.is_null(), "rt is null");
+    debug_assert!(!btreemap_value_mut.is_null(), "btreemap_value_mut is null");
+    debug_assert!(!btreemap_tydesc.is_null(), "btreemap_tydesc is null");
+    debug_assert!(!key_ref.is_null(), "key_ref is null");
+    debug_assert!(!key_tydesc.is_null(), "key_tydesc is null");
+    debug_assert!(!value_in.is_null(), "value_in is null");
+    debug_assert!(!value_tydesc.is_null(), "value_tydesc is null");
+    debug_assert_aligned(btreemap_value_mut, btreemap_tydesc, "btreemap_set_value:map");
+    debug_assert_aligned(key_ref, key_tydesc, "btreemap_set_value:key");
+    debug_assert_aligned(value_in, value_tydesc, "btreemap_set_value:value");
+    unsafe {
+        let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
+        let btreemap_tydesc_ref = rtdt::TyDescRef::from_ptr(btreemap_tydesc);
+        let key_tydesc_ref = rtdt::TyDescRef::from_ptr(key_tydesc);
+        let value_tydesc_ref = rtdt::TyDescRef::from_ptr(value_tydesc);
+        crate::impls::btreemap::btreemap_set_value_impl(
+            rt_ref,
+            btreemap_value_mut,
+            btreemap_tydesc_ref,
+            key_ref,
+            key_tydesc_ref,
+            value_in,
+            value_tydesc_ref,
+        )
+    }
+}
+
 // BTreeSet operations.
 
 #[unsafe(no_mangle)]

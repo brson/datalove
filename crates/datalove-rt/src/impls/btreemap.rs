@@ -1121,6 +1121,202 @@ pub unsafe fn btreemap_get_impl(
     }
 }
 
+/// Check if a map contains a given key.
+///
+/// Writes `true` to `result_out` if the key is found, `false` otherwise.
+pub unsafe fn btreemap_contains_key_impl(
+    btreemap_value_ref: *const u8,
+    btreemap_tydesc: rtdt::TyDescRef,
+    key_ref: *const u8,
+    key_tydesc: rtdt::TyDescRef,
+    result_out: *mut bool,
+) -> RtStatus {
+    unsafe {
+        if btreemap_value_ref.is_null()
+            || key_ref.is_null()
+            || result_out.is_null() {
+            return RtStatus::Error;
+        }
+
+        let map_key_ty = btreemap_tydesc.map_key_ty();
+        let map_value_ty = btreemap_tydesc.map_value_ty();
+
+        let map_ptr = btreemap_value_ref as *const Map;
+        let root = (*map_ptr).root as *mut MapNode;
+
+        if root.is_null() {
+            *result_out = false;
+            return RtStatus::Ok;
+        }
+
+        let leaf = find_leaf_for_key(root, key_ref, map_key_ty, map_value_ty);
+        let len = read_node_len(leaf);
+        let keys_ptr = leaf_keys_ptr(leaf, map_key_ty, map_value_ty);
+        let key_size = map_key_ty.size() as usize;
+
+        for i in 0..len as usize {
+            let node_key = keys_ptr.add(i * key_size);
+            let cmp_result = super::cmp::cmp_total(
+                key_ref,
+                key_tydesc.as_ptr(),
+                node_key,
+                map_key_ty.as_ptr(),
+            );
+
+            match cmp_result {
+                crate::c::RtOrdering::Equal => {
+                    *result_out = true;
+                    return RtStatus::Ok;
+                }
+                crate::c::RtOrdering::Greater => continue,
+                crate::c::RtOrdering::Less | crate::c::RtOrdering::Error => break,
+            }
+        }
+
+        *result_out = false;
+        RtStatus::Ok
+    }
+}
+
+/// Get a pointer to a value in a map by key.
+///
+/// Writes the pointer to `value_ptr_out`. If the key is not found,
+/// writes null.
+pub unsafe fn btreemap_get_value_ref_impl(
+    btreemap_value_ref: *const u8,
+    btreemap_tydesc: rtdt::TyDescRef,
+    key_ref: *const u8,
+    key_tydesc: rtdt::TyDescRef,
+    value_ptr_out: *mut *mut u8,
+) -> RtStatus {
+    unsafe {
+        if btreemap_value_ref.is_null()
+            || key_ref.is_null()
+            || value_ptr_out.is_null() {
+            return RtStatus::Error;
+        }
+
+        let map_key_ty = btreemap_tydesc.map_key_ty();
+        let map_value_ty = btreemap_tydesc.map_value_ty();
+
+        let map_ptr = btreemap_value_ref as *const Map;
+        let root = (*map_ptr).root as *mut MapNode;
+
+        if root.is_null() {
+            *value_ptr_out = std::ptr::null_mut();
+            return RtStatus::Ok;
+        }
+
+        let leaf = find_leaf_for_key(root, key_ref, map_key_ty, map_value_ty);
+        let len = read_node_len(leaf);
+        let keys_ptr = leaf_keys_ptr(leaf, map_key_ty, map_value_ty);
+        let values_ptr = leaf_values_ptr(leaf, map_key_ty, map_value_ty);
+        let key_size = map_key_ty.size() as usize;
+        let value_size = map_value_ty.size() as usize;
+
+        for i in 0..len as usize {
+            let node_key = keys_ptr.add(i * key_size);
+            let cmp_result = super::cmp::cmp_total(
+                key_ref,
+                key_tydesc.as_ptr(),
+                node_key,
+                map_key_ty.as_ptr(),
+            );
+
+            match cmp_result {
+                crate::c::RtOrdering::Equal => {
+                    *value_ptr_out = values_ptr.add(i * value_size);
+                    return RtStatus::Ok;
+                }
+                crate::c::RtOrdering::Greater => continue,
+                crate::c::RtOrdering::Less | crate::c::RtOrdering::Error => break,
+            }
+        }
+
+        *value_ptr_out = std::ptr::null_mut();
+        RtStatus::Ok
+    }
+}
+
+/// Set the value for an existing key in a map.
+///
+/// Finds the key, destroys the old value, and stores the new value.
+/// Returns `Error` if the key is not found.
+pub unsafe fn btreemap_set_value_impl(
+    rt: &mut RtLocal,
+    btreemap_value_ref: *mut u8,
+    btreemap_tydesc: rtdt::TyDescRef,
+    key_ref: *const u8,
+    key_tydesc: rtdt::TyDescRef,
+    value_in: *const u8,
+    value_tydesc: rtdt::TyDescRef,
+) -> RtStatus {
+    unsafe {
+        if btreemap_value_ref.is_null()
+            || key_ref.is_null()
+            || value_in.is_null() {
+            return RtStatus::Error;
+        }
+
+        let map_key_ty = btreemap_tydesc.map_key_ty();
+        let map_value_ty = btreemap_tydesc.map_value_ty();
+
+        let map_ptr = btreemap_value_ref as *const Map;
+        let root = (*map_ptr).root as *mut MapNode;
+
+        if root.is_null() {
+            return RtStatus::Error;
+        }
+
+        let leaf = find_leaf_for_key(root, key_ref, map_key_ty, map_value_ty);
+        let len = read_node_len(leaf);
+        let keys_ptr = leaf_keys_ptr(leaf, map_key_ty, map_value_ty);
+        let values_ptr = leaf_values_ptr(leaf, map_key_ty, map_value_ty);
+        let key_size = map_key_ty.size() as usize;
+        let value_size = map_value_ty.size() as usize;
+
+        for i in 0..len as usize {
+            let node_key = keys_ptr.add(i * key_size);
+            let cmp_result = super::cmp::cmp_total(
+                key_ref,
+                key_tydesc.as_ptr(),
+                node_key,
+                map_key_ty.as_ptr(),
+            );
+
+            match cmp_result {
+                crate::c::RtOrdering::Equal => {
+                    let value_slot = values_ptr.add(i * value_size);
+
+                    // Destroy old value.
+                    let rt_handle = rt as *mut RtLocal as crate::c::LocalRtHandle;
+                    let status = crate::impls::destroy::any_destroy_local(
+                        rt_handle,
+                        value_slot,
+                        value_tydesc.as_ptr(),
+                    );
+                    if status != RtStatus::Ok {
+                        return status;
+                    }
+
+                    // Copy new value in.
+                    std::ptr::copy_nonoverlapping(
+                        value_in,
+                        value_slot,
+                        value_size,
+                    );
+
+                    return RtStatus::Ok;
+                }
+                crate::c::RtOrdering::Greater => continue,
+                crate::c::RtOrdering::Less | crate::c::RtOrdering::Error => break,
+            }
+        }
+
+        RtStatus::Error
+    }
+}
+
 /// Minimum number of keys a non-root node must have.
 const MIN_KEYS: u32 = MAP_NODE_B - 1;
 

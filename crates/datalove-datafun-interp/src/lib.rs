@@ -1154,6 +1154,143 @@ impl IrInterpreter {
                 }
                 frame.mark_value_live(*dest);
             }
+            Instruction::MapGet { dest, is_valid, map, key } => {
+                let map_val = self.read_operand(map, frame, frames);
+                let key_val = self.read_operand(key, frame, frames);
+
+                let map_tydesc = map_val.tydesc;
+                let key_tydesc = unsafe { (*map_tydesc).type_info.map.key_tydesc };
+                let value_tydesc = unsafe { (*map_tydesc).type_info.map.value_tydesc };
+
+                // Check if key exists.
+                let mut found = false;
+                let rt_handle = self.runtime.handle();
+                let status = unsafe {
+                    datalove_rt::c::dtlv_rti_btreemap_contains_key_local(
+                        rt_handle,
+                        map_val.ptr,
+                        map_tydesc,
+                        key_val.ptr,
+                        key_tydesc,
+                        &mut found,
+                    )
+                };
+                assert_eq!(status, datalove_rt::c::RtStatus::Ok, "MapGet contains_key failed");
+
+                let is_valid_dest = frame.value_dest(*is_valid);
+                unsafe { *(is_valid_dest.ptr as *mut bool) = found; }
+                frame.mark_value_live(*is_valid);
+
+                if found {
+                    // Get pointer to value and clone it.
+                    let mut value_ptr: *mut u8 = std::ptr::null_mut();
+                    let status = unsafe {
+                        datalove_rt::c::dtlv_rti_btreemap_get_value_ref_local(
+                            rt_handle,
+                            map_val.ptr,
+                            map_tydesc,
+                            key_val.ptr,
+                            key_tydesc,
+                            &mut value_ptr,
+                        )
+                    };
+                    assert_eq!(status, datalove_rt::c::RtStatus::Ok, "MapGet get_value_ref failed");
+
+                    let dest_slot = frame.value_dest(*dest);
+                    let status = unsafe {
+                        datalove_rt::c::dtlv_rti_clone_local(
+                            rt_handle,
+                            value_ptr,
+                            value_tydesc,
+                            dest_slot.ptr,
+                            value_tydesc,
+                        )
+                    };
+                    assert_eq!(status, datalove_rt::c::RtStatus::Ok, "MapGet clone failed");
+                    frame.mark_value_live(*dest);
+                }
+            }
+            Instruction::MapContainsKey { is_valid, map, key } => {
+                let map_val = self.read_operand(map, frame, frames);
+                let key_val = self.read_operand(key, frame, frames);
+
+                let map_tydesc = map_val.tydesc;
+                let key_tydesc = unsafe { (*map_tydesc).type_info.map.key_tydesc };
+
+                let mut found = false;
+                let rt_handle = self.runtime.handle();
+                let status = unsafe {
+                    datalove_rt::c::dtlv_rti_btreemap_contains_key_local(
+                        rt_handle,
+                        map_val.ptr,
+                        map_tydesc,
+                        key_val.ptr,
+                        key_tydesc,
+                        &mut found,
+                    )
+                };
+                assert_eq!(status, datalove_rt::c::RtStatus::Ok, "MapContainsKey failed");
+
+                let is_valid_dest = frame.value_dest(*is_valid);
+                unsafe { *(is_valid_dest.ptr as *mut bool) = found; }
+                frame.mark_value_live(*is_valid);
+            }
+            Instruction::MapSetValue { map, key, value } => {
+                let map_val = self.read_operand(map, frame, frames);
+                let key_val = self.read_operand(key, frame, frames);
+                let value_val = self.read_operand(value, frame, frames);
+
+                let map_tydesc = map_val.tydesc;
+                let key_tydesc = unsafe { (*map_tydesc).type_info.map.key_tydesc };
+                let value_tydesc = unsafe { (*map_tydesc).type_info.map.value_tydesc };
+
+                let rt_handle = self.runtime.handle();
+                let status = unsafe {
+                    datalove_rt::c::dtlv_rti_btreemap_set_value_local(
+                        rt_handle,
+                        map_val.ptr as *mut u8,
+                        map_tydesc,
+                        key_val.ptr,
+                        key_tydesc,
+                        value_val.ptr,
+                        value_tydesc,
+                    )
+                };
+                assert_eq!(status, datalove_rt::c::RtStatus::Ok, "MapSetValue failed");
+
+                // Mark value operand as consumed (moved into map).
+                if let Operand::Value(v) = value {
+                    frame.mark_value_dropped(*v);
+                }
+            }
+            Instruction::MapValueRef { dest, map, key } => {
+                let map_val = self.read_operand(map, frame, frames);
+                let key_val = self.read_operand(key, frame, frames);
+
+                let map_tydesc = map_val.tydesc;
+                let key_tydesc = unsafe { (*map_tydesc).type_info.map.key_tydesc };
+
+                let mut value_ptr: *mut u8 = std::ptr::null_mut();
+                let rt_handle = self.runtime.handle();
+                let status = unsafe {
+                    datalove_rt::c::dtlv_rti_btreemap_get_value_ref_local(
+                        rt_handle,
+                        map_val.ptr,
+                        map_tydesc,
+                        key_val.ptr,
+                        key_tydesc,
+                        &mut value_ptr,
+                    )
+                };
+                assert_eq!(status, datalove_rt::c::RtStatus::Ok, "MapValueRef failed");
+
+                // Store pointer in dest.
+                let dest_slot = frame.value_dest(*dest);
+                unsafe {
+                    *(dest_slot.ptr as *mut *mut u8) = value_ptr;
+                }
+                frame.mark_value_live(*dest);
+            }
             Instruction::Widen { dest, src } => {
                 // Widen a fixed-width integer to Int.
                 let src_val = self.read_operand(src, frame, frames);

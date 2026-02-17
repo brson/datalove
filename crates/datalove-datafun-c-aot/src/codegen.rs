@@ -359,6 +359,18 @@ impl<'a> FunctionCodegenContext<'a> {
             Instruction::ListElementRef { dest, list, index } => {
                 self.emit_list_element_ref(out, *dest, list, index)?;
             }
+            Instruction::MapGet { dest, is_valid, map, key } => {
+                self.emit_map_get(out, *dest, *is_valid, map, key)?;
+            }
+            Instruction::MapContainsKey { is_valid, map, key } => {
+                self.emit_map_contains_key(out, *is_valid, map, key)?;
+            }
+            Instruction::MapSetValue { map, key, value } => {
+                self.emit_map_set_value(out, map, key, value)?;
+            }
+            Instruction::MapValueRef { dest, map, key } => {
+                self.emit_map_value_ref(out, *dest, map, key)?;
+            }
             Instruction::Nop => {}
         }
         Ok(())
@@ -2045,6 +2057,154 @@ impl<'a> FunctionCodegenContext<'a> {
         // Store pointer to element: dest = &list.data[index].
         writeln!(out, "    *(void**){} = *(void**){} + (size_t)*(index_t*){} * {};",
             dest_addr, list_addr, index_addr, elem_size).unwrap();
+        Ok(())
+    }
+
+    /// Emit a MapContainsKey instruction.
+    fn emit_map_contains_key(
+        &mut self,
+        out: &mut String,
+        is_valid: ValueId,
+        map: &Operand,
+        key: &Operand,
+    ) -> Result<(), CAotError> {
+        let is_valid_addr = self.value_addr(is_valid);
+        let map_addr = self.operand_addr(map);
+        let key_addr = self.operand_addr(key);
+
+        let map_ty = self.operand_type(map).clone();
+        let key_ty = match &map_ty {
+            IrType::Map(k, _) => k.as_ref().clone(),
+            _ => return Err(CAotError::Codegen(format!(
+                "MapContainsKey on non-map type: {:?}", map_ty
+            ))),
+        };
+
+        let map_tydesc = self.tydesc_name(&map_ty);
+        let key_tydesc = self.tydesc_name(&key_ty);
+
+        writeln!(out, "    dtlv_rti_btreemap_contains_key_local(rt, {}, &{}, {}, &{}, (bool_t*){});",
+            map_addr, map_tydesc, key_addr, key_tydesc, is_valid_addr).unwrap();
+        Ok(())
+    }
+
+    /// Emit a MapGet instruction.
+    fn emit_map_get(
+        &mut self,
+        out: &mut String,
+        dest: ValueId,
+        is_valid: ValueId,
+        map: &Operand,
+        key: &Operand,
+    ) -> Result<(), CAotError> {
+        let dest_addr = self.value_addr(dest);
+        let is_valid_addr = self.value_addr(is_valid);
+        let map_addr = self.operand_addr(map);
+        let key_addr = self.operand_addr(key);
+
+        let map_ty = self.operand_type(map).clone();
+        let (key_ty, value_ty) = match &map_ty {
+            IrType::Map(k, v) => (k.as_ref().clone(), v.as_ref().clone()),
+            _ => return Err(CAotError::Codegen(format!(
+                "MapGet on non-map type: {:?}", map_ty
+            ))),
+        };
+        let value_repr = types::ir_type_to_crepr(&value_ty);
+
+        let map_tydesc = self.tydesc_name(&map_ty);
+        let key_tydesc = self.tydesc_name(&key_ty);
+        let value_tydesc = self.tydesc_name(&value_ty);
+
+        // Check if key exists.
+        writeln!(out, "    dtlv_rti_btreemap_contains_key_local(rt, {}, &{}, {}, &{}, (bool_t*){});",
+            map_addr, map_tydesc, key_addr, key_tydesc, is_valid_addr).unwrap();
+
+        // Conditionally load value.
+        writeln!(out, "    if (*(bool_t*){}) {{", is_valid_addr).unwrap();
+
+        // Get pointer to value.
+        writeln!(out, "        void* __vptr;").unwrap();
+        writeln!(out, "        dtlv_rti_btreemap_get_value_ref_local(rt, {}, &{}, {}, &{}, &__vptr);",
+            map_addr, map_tydesc, key_addr, key_tydesc).unwrap();
+
+        // Clone value to dest.
+        match &value_repr {
+            CRepr::Scalar(c_ty) => {
+                writeln!(out, "        *({c_ty}*){dest_addr} = *({c_ty}*)__vptr;").unwrap();
+            }
+            CRepr::Aggregate(layout) => {
+                if layout.size > 0 {
+                    writeln!(out, "        dtlv_rti_clone_local(rt, __vptr, &{}, {}, &{});",
+                        value_tydesc, dest_addr, value_tydesc).unwrap();
+                }
+            }
+        }
+
+        writeln!(out, "    }}").unwrap();
+
+        // Conditional tracking byte.
+        if let Some(track_offset) = self.layout.value_tracking_byte(dest.0) {
+            writeln!(out, "    __frame[{}] = *(bool_t*){} ? TRACK_LIVE : TRACK_UNINIT;",
+                track_offset, is_valid_addr).unwrap();
+        }
+
+        Ok(())
+    }
+
+    /// Emit a MapSetValue instruction.
+    fn emit_map_set_value(
+        &mut self,
+        out: &mut String,
+        map: &Operand,
+        key: &Operand,
+        value: &Operand,
+    ) -> Result<(), CAotError> {
+        let map_addr = self.operand_addr(map);
+        let key_addr = self.operand_addr(key);
+        let value_addr = self.operand_addr(value);
+
+        let map_ty = self.operand_type(map).clone();
+        let (key_ty, value_ty) = match &map_ty {
+            IrType::Map(k, v) => (k.as_ref().clone(), v.as_ref().clone()),
+            _ => return Err(CAotError::Codegen(format!(
+                "MapSetValue on non-map type: {:?}", map_ty
+            ))),
+        };
+
+        let map_tydesc = self.tydesc_name(&map_ty);
+        let key_tydesc = self.tydesc_name(&key_ty);
+        let value_tydesc = self.tydesc_name(&value_ty);
+
+        writeln!(out, "    dtlv_rti_btreemap_set_value_local(rt, {}, &{}, {}, &{}, {}, &{});",
+            map_addr, map_tydesc, key_addr, key_tydesc, value_addr, value_tydesc).unwrap();
+        Ok(())
+    }
+
+    /// Emit a MapValueRef instruction.
+    fn emit_map_value_ref(
+        &mut self,
+        out: &mut String,
+        dest: ValueId,
+        map: &Operand,
+        key: &Operand,
+    ) -> Result<(), CAotError> {
+        let dest_addr = self.value_addr(dest);
+        let map_addr = self.operand_addr(map);
+        let key_addr = self.operand_addr(key);
+
+        let map_ty = self.operand_type(map).clone();
+        let key_ty = match &map_ty {
+            IrType::Map(k, _) => k.as_ref().clone(),
+            _ => return Err(CAotError::Codegen(format!(
+                "MapValueRef on non-map type: {:?}", map_ty
+            ))),
+        };
+
+        let map_tydesc = self.tydesc_name(&map_ty);
+        let key_tydesc = self.tydesc_name(&key_ty);
+
+        writeln!(out, "    dtlv_rti_btreemap_get_value_ref_local(rt, {}, &{}, {}, &{}, (void**){});",
+            map_addr, map_tydesc, key_addr, key_tydesc, dest_addr).unwrap();
         Ok(())
     }
 

@@ -167,11 +167,25 @@ fn try_lower_arg_index_as_ref<'db>(
     Ok(Some(ctx.deref_if_ref(operand)))
 }
 
-/// Lower `a[i]?` or `a[i]!` as a reference (pointer to list element).
+/// Lower `a[i]?` / `m[k]?` as a reference (pointer to element/value).
 ///
-/// Emits ListBoundsCheck + ListElementRef instead of ListGet, returning a
-/// reference operand suitable for passing to ref/mut/out params.
+/// For lists: emits ListBoundsCheck + ListElementRef.
+/// For maps: emits MapContainsKey + MapValueRef.
+/// Returns a reference operand suitable for passing to ref/mut/out params.
 fn lower_index_as_ref<'db>(
+    ctx: &mut LowerCtx<'db>,
+    index_expr: &ast::ExprIndex<'db>,
+    error_mode: ast::IndexErrorMode,
+) -> Result<Operand, LowerError> {
+    let base_ty = ctx.expr_type(index_expr.base);
+    match &base_ty {
+        IrType::Map(_, _) => lower_map_index_as_ref(ctx, index_expr, error_mode),
+        _ => lower_list_index_as_ref(ctx, index_expr, error_mode),
+    }
+}
+
+/// Lower list index as a reference.
+fn lower_list_index_as_ref<'db>(
     ctx: &mut LowerCtx<'db>,
     index_expr: &ast::ExprIndex<'db>,
     error_mode: ast::IndexErrorMode,
@@ -215,6 +229,55 @@ fn lower_index_as_ref<'db>(
         dest,
         list: list_op,
         index: idx_op,
+    });
+    Ok(Operand::Value(dest))
+}
+
+/// Lower map index as a reference.
+fn lower_map_index_as_ref<'db>(
+    ctx: &mut LowerCtx<'db>,
+    index_expr: &ast::ExprIndex<'db>,
+    error_mode: ast::IndexErrorMode,
+) -> Result<Operand, LowerError> {
+    let map_op = lower_operand(ctx, index_expr.base)?;
+    let key_op = lower_operand(ctx, index_expr.index)?;
+
+    // Check if key exists.
+    let is_valid = ctx.fresh_value(IrType::Bool);
+    ctx.emit(Instruction::MapContainsKey {
+        is_valid,
+        map: map_op,
+        key: key_op,
+    });
+
+    // Branch: if found, continue; else early return.
+    let early_return_block = ctx.fresh_block();
+    let continue_block = ctx.fresh_block();
+    ctx.finish_block(Terminator::Branch {
+        cond: Operand::Value(is_valid),
+        then_block: continue_block,
+        then_args: Vec::new(),
+        else_block: early_return_block,
+        else_args: Vec::new(),
+    });
+
+    // Early return block.
+    ctx.start_block(early_return_block);
+    super::stmt::emit_index_oob_early_return(ctx, error_mode);
+
+    // Continue block: emit MapValueRef.
+    ctx.start_block(continue_block);
+    let map_type = ctx.expr_type(index_expr.base);
+    let value_type = match &map_type {
+        IrType::Map(_, v) => v.as_ref().clone(),
+        _ => panic!("map index on non-map type {:?}", map_type),
+    };
+
+    let dest = ctx.fresh_value(IrType::Ref(Box::new(value_type)));
+    ctx.emit(Instruction::MapValueRef {
+        dest,
+        map: map_op,
+        key: key_op,
     });
     Ok(Operand::Value(dest))
 }
@@ -1348,9 +1411,13 @@ fn lower_try_option<'db>(
     expr: ExprFun<'db>,
     try_expr: ast::ExprTryOption<'db>,
 ) -> Result<ValueId, LowerError> {
-    // Special case: a[i]? — list index with option early-return.
+    // Special case: a[i]? / m[k]? — index with option early-return.
     if let ExprFunKind::Index(ref index_expr) = try_expr.operand.expr(ctx.db) {
-        return lower_list_index_option(ctx, expr, index_expr);
+        let base_ty = ctx.expr_type(index_expr.base);
+        return match &base_ty {
+            IrType::Map(_, _) => lower_map_index_option(ctx, expr, index_expr),
+            _ => lower_list_index_option(ctx, expr, index_expr),
+        };
     }
 
     let src_id = lower_expression(ctx, try_expr.operand)?;
@@ -1405,9 +1472,13 @@ fn lower_try_result<'db>(
     expr: ExprFun<'db>,
     try_expr: ast::ExprTryResult<'db>,
 ) -> Result<ValueId, LowerError> {
-    // Special case: a[i]! — list index with result early-return.
+    // Special case: a[i]! / m[k]! — index with result early-return.
     if let ExprFunKind::Index(ref index_expr) = try_expr.operand.expr(ctx.db) {
-        return lower_list_index_result(ctx, expr, index_expr);
+        let base_ty = ctx.expr_type(index_expr.base);
+        return match &base_ty {
+            IrType::Map(_, _) => lower_map_index_result(ctx, expr, index_expr),
+            _ => lower_list_index_result(ctx, expr, index_expr),
+        };
     }
 
     let src_id = lower_expression(ctx, try_expr.operand)?;
@@ -1570,6 +1641,119 @@ fn lower_list_index_result<'db>(
     }
 
     // Continue block: dest has the element value.
+    ctx.start_block(continue_block);
+    Ok(dest)
+}
+
+/// Lower `m[k]?` — map index with option early-return on miss.
+fn lower_map_index_option<'db>(
+    ctx: &mut LowerCtx<'db>,
+    expr: ExprFun<'db>,
+    index_expr: &ast::ExprIndex<'db>,
+) -> Result<ValueId, LowerError> {
+    let map_op = lower_operand(ctx, index_expr.base)?;
+    let key_op = lower_operand(ctx, index_expr.index)?;
+    let result_type = ctx.expr_type(expr);
+    let dest = ctx.fresh_value(result_type);
+    let is_valid = ctx.fresh_value(IrType::Bool);
+
+    ctx.emit(Instruction::MapGet {
+        dest,
+        is_valid,
+        map: map_op,
+        key: key_op,
+    });
+
+    // Branch on is_valid: continue or early-return none.
+    let early_return_block = ctx.fresh_block();
+    let continue_block = ctx.fresh_block();
+    ctx.finish_block(Terminator::Branch {
+        cond: Operand::Value(is_valid),
+        then_block: continue_block,
+        then_args: Vec::new(),
+        else_block: early_return_block,
+        else_args: Vec::new(),
+    });
+
+    // Early return: wrap None and return.
+    ctx.start_block(early_return_block);
+    let return_type = ctx.return_type.clone()
+        .expect("? requires return type");
+    let none_value = ctx.fresh_value(return_type);
+    ctx.emit_wrap_none(none_value);
+    ctx.emit_pending_intermediate_drops();
+    ctx.emit_before_try_return_drops();
+    if ctx.is_script_unit {
+        ctx.finish_block(Terminator::UnitEarlyReturn {
+            value: Operand::Value(none_value),
+        });
+    } else {
+        ctx.finish_block(Terminator::Return {
+            value: Some(Operand::Value(none_value)),
+        });
+    }
+
+    // Continue block: dest has the value.
+    ctx.start_block(continue_block);
+    Ok(dest)
+}
+
+/// Lower `m[k]!` — map index with result early-return on miss.
+fn lower_map_index_result<'db>(
+    ctx: &mut LowerCtx<'db>,
+    expr: ExprFun<'db>,
+    index_expr: &ast::ExprIndex<'db>,
+) -> Result<ValueId, LowerError> {
+    let map_op = lower_operand(ctx, index_expr.base)?;
+    let key_op = lower_operand(ctx, index_expr.index)?;
+    let result_type = ctx.expr_type(expr);
+    let dest = ctx.fresh_value(result_type);
+    let is_valid = ctx.fresh_value(IrType::Bool);
+
+    ctx.emit(Instruction::MapGet {
+        dest,
+        is_valid,
+        map: map_op,
+        key: key_op,
+    });
+
+    // Branch on is_valid: continue or early-return error.
+    let early_return_block = ctx.fresh_block();
+    let continue_block = ctx.fresh_block();
+    ctx.finish_block(Terminator::Branch {
+        cond: Operand::Value(is_valid),
+        then_block: continue_block,
+        then_args: Vec::new(),
+        else_block: early_return_block,
+        else_args: Vec::new(),
+    });
+
+    // Early return: construct key-not-found error and return.
+    ctx.start_block(early_return_block);
+    let return_type = ctx.return_type.clone()
+        .expect("! requires return type");
+
+    let err_msg = ctx.fresh_value(IrType::String);
+    ctx.emit_const(err_msg, ConstValue::String("key not found".to_string()));
+
+    let err_value = ctx.fresh_value(IrType::Error);
+    ctx.emit_error_from(err_value, Operand::Value(err_msg));
+
+    let wrapped_err = ctx.fresh_value(return_type);
+    ctx.emit_wrap_err(wrapped_err, Operand::Value(err_value));
+    ctx.emit_pending_intermediate_drops();
+    ctx.emit_before_try_return_drops();
+    if ctx.is_script_unit {
+        ctx.finish_block(Terminator::UnitEarlyReturn {
+            value: Operand::Value(wrapped_err),
+        });
+    } else {
+        ctx.finish_block(Terminator::Return {
+            value: Some(Operand::Value(wrapped_err)),
+        });
+    }
+
+    // Continue block: dest has the value.
     ctx.start_block(continue_block);
     Ok(dest)
 }

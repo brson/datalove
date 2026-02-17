@@ -603,6 +603,18 @@ impl fmt::Display for Instruction {
             Instruction::ListElementRef { dest, list, index } => {
                 write!(f, "{} = listelementref {}[{}]", dest, list, index)
             }
+            Instruction::MapGet { dest, is_valid, map, key } => {
+                write!(f, "{}, {} = mapget {}[{}]", dest, is_valid, map, key)
+            }
+            Instruction::MapContainsKey { is_valid, map, key } => {
+                write!(f, "{} = mapcontainskey {}[{}]", is_valid, map, key)
+            }
+            Instruction::MapSetValue { map, key, value } => {
+                write!(f, "mapsetvalue {}[{}] = {}", map, key, value)
+            }
+            Instruction::MapValueRef { dest, map, key } => {
+                write!(f, "{} = mapvalueref {}[{}]", dest, map, key)
+            }
             Instruction::DebugLog { operand } => {
                 write!(f, "debuglog {}", operand)
             }

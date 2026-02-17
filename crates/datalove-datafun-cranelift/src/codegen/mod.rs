@@ -49,6 +49,8 @@ mod constants;
 mod intrinsics;
 /// List indexing operations.
 mod lists;
+/// Map indexing operations.
+mod maps;
 /// Binary and unary operations.
 mod ops;
 /// Option and Result operations.
@@ -603,6 +605,18 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             }
             Instruction::ListElementRef { dest, list, index } => {
                 self.compile_list_element_ref(builder, *dest, list, index)?;
+            }
+            Instruction::MapGet { dest, is_valid, map, key } => {
+                self.compile_map_get(builder, *dest, *is_valid, map, key)?;
+            }
+            Instruction::MapContainsKey { is_valid, map, key } => {
+                self.compile_map_contains_key(builder, *is_valid, map, key)?;
+            }
+            Instruction::MapSetValue { map, key, value } => {
+                self.compile_map_set_value(builder, map, key, value)?;
+            }
+            Instruction::MapValueRef { dest, map, key } => {
+                self.compile_map_value_ref(builder, *dest, map, key)?;
             }
             Instruction::DebugLog { operand } => {
                 self.compile_debuglog(builder, operand)?;

@@ -147,22 +147,29 @@ pub fn check_statement<'db>(
                         let err = ctx.error_variable_not_mutable(stmt, root_name.text(db).as_str());
                         ctx.add_error(err);
                     }
-                    // Typecheck the base target — must be List<T>.
+                    // Typecheck the base target — must be List<T> or Map<K,V>.
                     match typecheck_set_target(ctx, &idx_target.base) {
                         Ok(base_ty) => {
-                            let element_ty = match &base_ty {
+                            let (element_ty, index_type) = match &base_ty {
                                 Type::Datalit(datalit::tycheck::Type::List(list)) => {
-                                    Type::Datalit(*list.element_type.clone())
+                                    (
+                                        Type::Datalit(*list.element_type.clone()),
+                                        Type::Datalit(datalit::tycheck::Type::Index),
+                                    )
+                                }
+                                Type::Datalit(datalit::tycheck::Type::Map(map)) => {
+                                    (
+                                        Type::Datalit(*map.value_type.clone()),
+                                        Type::Datalit(*map.key_type.clone()),
+                                    )
                                 }
                                 _ => {
                                     ctx.add_error(TypeError::DatalitError(
-                                        format!("indexing requires list type, got {}", type_to_string(db, &base_ty)),
+                                        format!("indexing requires list or map type, got {}", type_to_string(db, &base_ty)),
                                     ));
                                     return;
                                 }
                             };
-                            // Check index expression against `index` type.
-                            let index_type = Type::Datalit(datalit::tycheck::Type::Index);
                             if let Err(e) = check_expr(ctx, idx_target.index, &index_type) {
                                 ctx.add_error(e);
                             }
@@ -722,14 +729,17 @@ fn typecheck_set_target<'db>(
         }
         SetTarget::Proj(proj) => typecheck_set_target_proj(ctx, proj),
         SetTarget::Index(idx) => {
-            // Resolve base type, which should be List<T>. Return element type T.
+            // Resolve base type, which should be List<T> or Map<K,V>.
             let base_ty = typecheck_set_target(ctx, &idx.base)?;
             match &base_ty {
                 Type::Datalit(datalit::tycheck::Type::List(list)) => {
                     Ok(Type::Datalit(*list.element_type.clone()))
                 }
+                Type::Datalit(datalit::tycheck::Type::Map(map)) => {
+                    Ok(Type::Datalit(*map.value_type.clone()))
+                }
                 _ => Err(TypeError::DatalitError(
-                    format!("indexing requires list type, got {}", type_to_string(db, &base_ty)),
+                    format!("indexing requires list or map type, got {}", type_to_string(db, &base_ty)),
                 )),
             }
         }

@@ -85,6 +85,14 @@ pub struct RuntimeImports {
     /// `dtlv_rti_clone_local(rt, src_ref, src_tydesc, dst_out, dst_tydesc) -> RtStatus`
     pub clone_local: FuncId,
 
+    // Map indexing functions.
+    /// `dtlv_rti_btreemap_contains_key_local(rt, map_ref, map_tydesc, key_ref, key_tydesc, result_out) -> RtStatus`
+    pub map_contains_key: FuncId,
+    /// `dtlv_rti_btreemap_get_value_ref_local(rt, map_ref, map_tydesc, key_ref, key_tydesc, value_ptr_out) -> RtStatus`
+    pub map_get_value_ref: FuncId,
+    /// `dtlv_rti_btreemap_set_value_local(rt, map_mut, map_tydesc, key_ref, key_tydesc, value_in, value_tydesc) -> RtStatus`
+    pub map_set_value: FuncId,
+
     // Boxing functions.
     /// `dtlv_rti_error_from_local(rt, inner_in, inner_tydesc, dest_out) -> RtStatus`
     pub error_from: FuncId,
@@ -330,6 +338,52 @@ impl RuntimeImports {
                 .map_err(|e| CraneliftError::Module(format!("declare dtlv_rti_btreemap_build_from_sorted_slices_local: {}", e)))?
         };
 
+        // dtlv_rti_btreemap_contains_key_local(rt, map_ref, map_tydesc, key_ref, key_tydesc, result_out) -> u8
+        let map_contains_key = {
+            let mut sig = cl_ir::Signature::new(call_conv);
+            sig.params.push(AbiParam::new(PTR_TYPE)); // rt handle
+            sig.params.push(AbiParam::new(PTR_TYPE)); // map_ref
+            sig.params.push(AbiParam::new(PTR_TYPE)); // map_tydesc
+            sig.params.push(AbiParam::new(PTR_TYPE)); // key_ref
+            sig.params.push(AbiParam::new(PTR_TYPE)); // key_tydesc
+            sig.params.push(AbiParam::new(PTR_TYPE)); // result_out
+            sig.returns.push(AbiParam::new(cl_types::I8));
+            module
+                .declare_function("dtlv_rti_btreemap_contains_key_local", Linkage::Import, &sig)
+                .map_err(|e| CraneliftError::Module(format!("declare dtlv_rti_btreemap_contains_key_local: {}", e)))?
+        };
+
+        // dtlv_rti_btreemap_get_value_ref_local(rt, map_ref, map_tydesc, key_ref, key_tydesc, value_ptr_out) -> u8
+        let map_get_value_ref = {
+            let mut sig = cl_ir::Signature::new(call_conv);
+            sig.params.push(AbiParam::new(PTR_TYPE)); // rt handle
+            sig.params.push(AbiParam::new(PTR_TYPE)); // map_ref
+            sig.params.push(AbiParam::new(PTR_TYPE)); // map_tydesc
+            sig.params.push(AbiParam::new(PTR_TYPE)); // key_ref
+            sig.params.push(AbiParam::new(PTR_TYPE)); // key_tydesc
+            sig.params.push(AbiParam::new(PTR_TYPE)); // value_ptr_out
+            sig.returns.push(AbiParam::new(cl_types::I8));
+            module
+                .declare_function("dtlv_rti_btreemap_get_value_ref_local", Linkage::Import, &sig)
+                .map_err(|e| CraneliftError::Module(format!("declare dtlv_rti_btreemap_get_value_ref_local: {}", e)))?
+        };
+
+        // dtlv_rti_btreemap_set_value_local(rt, map_mut, map_tydesc, key_ref, key_tydesc, value_in, value_tydesc) -> u8
+        let map_set_value = {
+            let mut sig = cl_ir::Signature::new(call_conv);
+            sig.params.push(AbiParam::new(PTR_TYPE)); // rt handle
+            sig.params.push(AbiParam::new(PTR_TYPE)); // map_mut
+            sig.params.push(AbiParam::new(PTR_TYPE)); // map_tydesc
+            sig.params.push(AbiParam::new(PTR_TYPE)); // key_ref
+            sig.params.push(AbiParam::new(PTR_TYPE)); // key_tydesc
+            sig.params.push(AbiParam::new(PTR_TYPE)); // value_in
+            sig.params.push(AbiParam::new(PTR_TYPE)); // value_tydesc
+            sig.returns.push(AbiParam::new(cl_types::I8));
+            module
+                .declare_function("dtlv_rti_btreemap_set_value_local", Linkage::Import, &sig)
+                .map_err(|e| CraneliftError::Module(format!("declare dtlv_rti_btreemap_set_value_local: {}", e)))?
+        };
+
         // dtlv_rti_tensor_init_local(rt, element_data_in, element_count, element_tydesc, shape_ptr, rank, tensor_out, tensor_tydesc) -> u8
         let tensor_init = {
             let mut sig = cl_ir::Signature::new(call_conv);
@@ -533,6 +587,9 @@ impl RuntimeImports {
             map_create,
             map_insert,
             map_build_from_sorted,
+            map_contains_key,
+            map_get_value_ref,
+            map_set_value,
             tensor_init,
             table_create,
             table_push_row,

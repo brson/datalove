@@ -1,0 +1,12 @@
+----------
+scriptunit-fragment
+----------
+
+// Set map value with ? — key not found, returns none.
+fun set_val(m: %{u32 = u32}, k: u32, v: u32): ?%{u32 = u32}
+    var b = m
+    set b[k]? = v
+    ret some b
+end fun
+
+debuglog set_val(%{ 1 = 100, 2 = 200 }, 5, 999)

@@ -958,6 +958,27 @@ impl RemapContext {
                 list: self.remap_operand(list),
                 index: self.remap_operand(index),
             },
+            Instruction::MapGet { dest, is_valid, map, key } => Instruction::MapGet {
+                dest: self.remap_value(*dest),
+                is_valid: self.remap_value(*is_valid),
+                map: self.remap_operand(map),
+                key: self.remap_operand(key),
+            },
+            Instruction::MapContainsKey { is_valid, map, key } => Instruction::MapContainsKey {
+                is_valid: self.remap_value(*is_valid),
+                map: self.remap_operand(map),
+                key: self.remap_operand(key),
+            },
+            Instruction::MapSetValue { map, key, value } => Instruction::MapSetValue {
+                map: self.remap_operand(map),
+                key: self.remap_operand(key),
+                value: self.remap_operand(value),
+            },
+            Instruction::MapValueRef { dest, map, key } => Instruction::MapValueRef {
+                dest: self.remap_value(*dest),
+                map: self.remap_operand(map),
+                key: self.remap_operand(key),
+            },
             Instruction::Nop => Instruction::Nop,
         }
     }
@@ -1523,6 +1544,27 @@ fn replace_params_in_instruction(
             dest: *dest,
             list: replace_operand(list),
             index: replace_operand(index),
+        },
+        Instruction::MapGet { dest, is_valid, map, key } => Instruction::MapGet {
+            dest: *dest,
+            is_valid: *is_valid,
+            map: replace_operand(map),
+            key: replace_operand(key),
+        },
+        Instruction::MapContainsKey { is_valid, map, key } => Instruction::MapContainsKey {
+            is_valid: *is_valid,
+            map: replace_operand(map),
+            key: replace_operand(key),
+        },
+        Instruction::MapSetValue { map, key, value } => Instruction::MapSetValue {
+            map: replace_operand(map),
+            key: replace_operand(key),
+            value: replace_operand(value),
+        },
+        Instruction::MapValueRef { dest, map, key } => Instruction::MapValueRef {
+            dest: *dest,
+            map: replace_operand(map),
+            key: replace_operand(key),
         },
     }
 }

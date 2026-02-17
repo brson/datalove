@@ -1,0 +1,52 @@
+Analysis(
+    sections: [
+        SectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 1u32
+                        v1 = const 100u32
+                        v2 = const 2u32
+                        v3 = const 200u32
+                        v4 = %{v0: v1, v2: v3}
+                        v5 = const 2u32
+                        v6 = call @0 u1(v4, v5)
+                        debuglog v6
+                        unit_end
+                    
+                    fn read_ref(p0):
+                    block0:
+                        v0 = copy p0
+                        v1 = some v0
+                        return v1
+                    
+                    fn test(p0, p1):
+                    block0:
+                        v0 = mapcontainskey p0[p1]
+                        branch v0, block2, block1
+                    block1:
+                        v1 = none
+                        drop p0
+                        return v1
+                    block2:
+                        v2 = mapvalueref p0[p1]
+                        v3 = call @0 u0(*v2)
+                        drop p0
+                        return v3
+                """,
+            ),
+            output: "(fragment executed)",
+            debug_output: Some("some 200\n"),
+        ),
+    ],
+)

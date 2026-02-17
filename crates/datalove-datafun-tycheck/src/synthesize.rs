@@ -994,9 +994,10 @@ fn synthesize_index_try_result<'db>(
     Ok(element_ty)
 }
 
-/// Common index validation: base must be List<T>, index must be `index` type.
+/// Common index validation: base must be List<T> or Map<K,V>.
 ///
-/// Returns the element type T.
+/// For lists, index must be `index` type, returns element type T.
+/// For maps, index must match key type K, returns value type V.
 fn synthesize_index_common<'db>(
     ctx: &mut TypeContext<'db>,
     expr: ExprFun<'db>,
@@ -1004,22 +1005,28 @@ fn synthesize_index_common<'db>(
 ) -> Result<Type<'db>, TypeError> {
     let db = ctx.db;
 
-    // Synthesize base type — must be List<T>.
     let base_ty = ctx.synthesize_expr(index_expr.base)?;
-    let element_ty = match &base_ty {
+    let (element_ty, index_type) = match &base_ty {
         Type::Datalit(datalit::tycheck::Type::List(list)) => {
-            Type::Datalit(*list.element_type.clone())
+            (
+                Type::Datalit(*list.element_type.clone()),
+                Type::Datalit(datalit::tycheck::Type::Index),
+            )
+        }
+        Type::Datalit(datalit::tycheck::Type::Map(map)) => {
+            (
+                Type::Datalit(*map.value_type.clone()),
+                Type::Datalit(*map.key_type.clone()),
+            )
         }
         _ => {
             return Err(ctx.error_cannot_synthesize(
                 expr,
-                &format!("indexing requires list type, got {}", type_to_string(db, &base_ty)),
+                &format!("indexing requires list or map type, got {}", type_to_string(db, &base_ty)),
             ));
         }
     };
 
-    // Check index expression against `index` type.
-    let index_type = Type::Datalit(datalit::tycheck::Type::Index);
     if let Err(e) = check_expr(ctx, index_expr.index, &index_type) {
         ctx.add_error(e);
     }

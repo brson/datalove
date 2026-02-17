@@ -12,7 +12,7 @@
           "text": "?"
         }
       ],
-      "message": "indexing requires list type, got u32"
+      "message": "indexing requires list or map type, got u32"
     }
   ],
   "errors": [

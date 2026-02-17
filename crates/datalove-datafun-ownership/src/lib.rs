@@ -747,9 +747,9 @@ impl<'db> AnalysisCtx<'db> {
                 None
             }
             ExprFunKind::Index(ref idx) => {
-                // Index borrows base (like field projection), consumes index.
+                // Index borrows base (like field projection), borrows index.
                 self.analyze_expr_moves(idx.base, false);
-                self.analyze_expr_moves(idx.index, true);
+                self.analyze_expr_moves(idx.index, false);
                 None
             }
             // Literals don't move anything.
@@ -1257,8 +1257,8 @@ fn analyze_set_target_moves<'db>(ctx: &mut AnalysisCtx<'db>, target: &SetTarget<
         SetTarget::Proj(proj) => analyze_set_target_moves(ctx, &proj.base),
         SetTarget::Index(idx) => {
             analyze_set_target_moves(ctx, &idx.base);
-            // Index expression is consumed.
-            ctx.analyze_expr_moves(idx.index, true);
+            // Index expression is borrowed.
+            ctx.analyze_expr_moves(idx.index, false);
         }
     }
 }

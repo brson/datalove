@@ -1,0 +1,10 @@
+----------
+scriptunit-fragment
+----------
+
+// Map index with ? — key not found returns none.
+fun get_val(m: %{u32 = u32}, k: u32): ?u32
+    ret some (m[k]?)
+end fun
+
+debuglog get_val(%{ 1 = 100, 2 = 200 }, 5)
