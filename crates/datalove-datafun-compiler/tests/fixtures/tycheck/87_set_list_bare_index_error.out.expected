@@ -1,0 +1,30 @@
+{
+  "diagnostics": [],
+  "errors": [
+    {
+      "kind": "DatalitError",
+      "message": "bare index in set requires map type, got [u32]; use '?' or '!' for list indexing"
+    }
+  ],
+  "judgements": [
+    {
+      "kind": "function",
+      "name": "set_elem",
+      "params": [
+        {
+          "name": "a",
+          "type": "[u32]"
+        },
+        {
+          "name": "i",
+          "type": "index"
+        },
+        {
+          "name": "v",
+          "type": "u32"
+        }
+      ],
+      "return_type": "[u32]"
+    }
+  ]
+}

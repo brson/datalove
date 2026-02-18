@@ -1291,6 +1291,37 @@ impl IrInterpreter {
                 }
                 frame.mark_value_live(*dest);
             }
+            Instruction::MapUpsert { map, key, value } => {
+                let map_val = self.read_operand(map, frame, frames);
+                let key_val = self.read_operand(key, frame, frames);
+                let value_val = self.read_operand(value, frame, frames);
+
+                let map_tydesc = map_val.tydesc;
+                let key_tydesc = unsafe { (*map_tydesc).type_info.map.key_tydesc };
+                let value_tydesc = unsafe { (*map_tydesc).type_info.map.value_tydesc };
+
+                let rt_handle = self.runtime.handle();
+                let status = unsafe {
+                    datalove_rt::c::dtlv_rti_btreemap_insert_local(
+                        rt_handle,
+                        map_val.ptr as *mut u8,
+                        map_tydesc,
+                        key_val.ptr,
+                        key_tydesc,
+                        value_val.ptr,
+                        value_tydesc,
+                    )
+                };
+                assert_eq!(status, datalove_rt::c::RtStatus::Ok, "MapUpsert failed");
+
+                // Mark key and value operands as consumed.
+                if let Operand::Value(v) = key {
+                    frame.mark_value_dropped(*v);
+                }
+                if let Operand::Value(v) = value {
+                    frame.mark_value_dropped(*v);
+                }
+            }
             Instruction::Widen { dest, src } => {
                 // Widen a fixed-width integer to Int.
                 let src_val = self.read_operand(src, frame, frames);

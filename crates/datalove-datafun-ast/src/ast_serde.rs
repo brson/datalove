@@ -78,7 +78,7 @@ pub struct SetTargetProj {
 pub struct SetTargetIndex {
     pub base: Box<SetTarget>,
     pub index: ExprFun,
-    pub error_mode: IndexErrorMode,
+    pub error_mode: Option<IndexErrorMode>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -614,10 +614,10 @@ impl SetTargetIndex {
         SetTargetIndex {
             base: Box::new(SetTarget::from_ast(db, &*ast.base)),
             index: ExprFun::from_ast(db, ast.index),
-            error_mode: match ast.error_mode {
+            error_mode: ast.error_mode.map(|m| match m {
                 crate::ast::IndexErrorMode::Option => IndexErrorMode::Option,
                 crate::ast::IndexErrorMode::Result => IndexErrorMode::Result,
-            },
+            }),
         }
     }
 }

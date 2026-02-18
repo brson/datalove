@@ -110,6 +110,7 @@ pub fn instruction_dest(instr: &Instruction) -> Option<ValueId> {
         Instruction::MapContainsKey { is_valid, .. } => Some(*is_valid),
         Instruction::MapSetValue { .. } => None,
         Instruction::MapValueRef { dest, .. } => Some(*dest),
+        Instruction::MapUpsert { .. } => None,
 
         // Misc
         Instruction::DebugLog { .. } => None,
@@ -507,6 +508,11 @@ fn collect_instruction_operands(instr: &Instruction, used: &mut HashSet<ValueId>
             add_operand_value(map, used);
             add_operand_value(key, used);
         }
+        Instruction::MapUpsert { map, key, value } => {
+            add_operand_value(map, used);
+            add_operand_value(key, used);
+            add_operand_value(value, used);
+        }
     }
 }
 
@@ -575,6 +581,8 @@ fn has_side_effects(instr: &Instruction) -> bool {
         Instruction::Intrinsic { .. } => true,
         // List set has side effects (mutates list).
         Instruction::ListSet { .. } => true,
+        // Map upsert has side effects (mutates map).
+        Instruction::MapUpsert { .. } => true,
         // Everything else is pure.
         _ => false,
     }

@@ -979,6 +979,11 @@ impl RemapContext {
                 map: self.remap_operand(map),
                 key: self.remap_operand(key),
             },
+            Instruction::MapUpsert { map, key, value } => Instruction::MapUpsert {
+                map: self.remap_operand(map),
+                key: self.remap_operand(key),
+                value: self.remap_operand(value),
+            },
             Instruction::Nop => Instruction::Nop,
         }
     }
@@ -1565,6 +1570,11 @@ fn replace_params_in_instruction(
             dest: *dest,
             map: replace_operand(map),
             key: replace_operand(key),
+        },
+        Instruction::MapUpsert { map, key, value } => Instruction::MapUpsert {
+            map: replace_operand(map),
+            key: replace_operand(key),
+            value: replace_operand(value),
         },
     }
 }

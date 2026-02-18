@@ -150,43 +150,71 @@ pub fn check_statement<'db>(
                     // Typecheck the base target — must be List<T> or Map<K,V>.
                     match typecheck_set_target(ctx, &idx_target.base) {
                         Ok(base_ty) => {
-                            let (element_ty, index_type) = match &base_ty {
-                                Type::Datalit(datalit::tycheck::Type::List(list)) => {
-                                    (
-                                        Type::Datalit(*list.element_type.clone()),
-                                        Type::Datalit(datalit::tycheck::Type::Index),
-                                    )
-                                }
-                                Type::Datalit(datalit::tycheck::Type::Map(map)) => {
-                                    (
-                                        Type::Datalit(*map.value_type.clone()),
-                                        Type::Datalit(*map.key_type.clone()),
-                                    )
-                                }
-                                _ => {
-                                    ctx.add_error(TypeError::DatalitError(
-                                        format!("indexing requires list or map type, got {}", type_to_string(db, &base_ty)),
-                                    ));
-                                    return;
-                                }
-                            };
-                            if let Err(e) = check_expr(ctx, idx_target.index, &index_type) {
-                                ctx.add_error(e);
-                            }
-                            // Check RHS value matches element type.
-                            if let Err(e) = check_expr(ctx, value, &element_ty) {
-                                ctx.add_error(e);
-                            }
-                            // Verify function returns Option or Result depending on error_mode.
                             match idx_target.error_mode {
-                                IndexErrorMode::Option => {
-                                    if let Err(e) = require_option_return_type_for_set(ctx, stmt) {
-                                        ctx.add_error(e);
+                                None => {
+                                    // Bare index (upsert): only valid for maps.
+                                    match &base_ty {
+                                        Type::Datalit(datalit::tycheck::Type::Map(map)) => {
+                                            let key_type = Type::Datalit(*map.key_type.clone());
+                                            let value_type = Type::Datalit(*map.value_type.clone());
+                                            if let Err(e) = check_expr(ctx, idx_target.index, &key_type) {
+                                                ctx.add_error(e);
+                                            }
+                                            if let Err(e) = check_expr(ctx, value, &value_type) {
+                                                ctx.add_error(e);
+                                            }
+                                            // Upsert always succeeds — no return type requirement.
+                                        }
+                                        _ => {
+                                            ctx.add_error(TypeError::DatalitError(
+                                                format!(
+                                                    "bare index in set requires map type, got {}; use '?' or '!' for list indexing",
+                                                    type_to_string(db, &base_ty)
+                                                ),
+                                            ));
+                                            return;
+                                        }
                                     }
                                 }
-                                IndexErrorMode::Result => {
-                                    if let Err(e) = require_result_return_type_for_set(ctx, stmt) {
+                                Some(error_mode) => {
+                                    let (element_ty, index_type) = match &base_ty {
+                                        Type::Datalit(datalit::tycheck::Type::List(list)) => {
+                                            (
+                                                Type::Datalit(*list.element_type.clone()),
+                                                Type::Datalit(datalit::tycheck::Type::Index),
+                                            )
+                                        }
+                                        Type::Datalit(datalit::tycheck::Type::Map(map)) => {
+                                            (
+                                                Type::Datalit(*map.value_type.clone()),
+                                                Type::Datalit(*map.key_type.clone()),
+                                            )
+                                        }
+                                        _ => {
+                                            ctx.add_error(TypeError::DatalitError(
+                                                format!("indexing requires list or map type, got {}", type_to_string(db, &base_ty)),
+                                            ));
+                                            return;
+                                        }
+                                    };
+                                    if let Err(e) = check_expr(ctx, idx_target.index, &index_type) {
                                         ctx.add_error(e);
+                                    }
+                                    if let Err(e) = check_expr(ctx, value, &element_ty) {
+                                        ctx.add_error(e);
+                                    }
+                                    // Verify function returns Option or Result depending on error_mode.
+                                    match error_mode {
+                                        IndexErrorMode::Option => {
+                                            if let Err(e) = require_option_return_type_for_set(ctx, stmt) {
+                                                ctx.add_error(e);
+                                            }
+                                        }
+                                        IndexErrorMode::Result => {
+                                            if let Err(e) = require_result_return_type_for_set(ctx, stmt) {
+                                                ctx.add_error(e);
+                                            }
+                                        }
                                     }
                                 }
                             }
@@ -729,6 +757,14 @@ fn typecheck_set_target<'db>(
         }
         SetTarget::Proj(proj) => typecheck_set_target_proj(ctx, proj),
         SetTarget::Index(idx) => {
+            // Bare index (error_mode: None) is only valid as the terminal set
+            // target. In intermediate position it would need to create a value
+            // for an absent key, which has no way to know what value to use.
+            if idx.error_mode.is_none() {
+                return Err(TypeError::DatalitError(
+                    "bare index (upsert) cannot appear in intermediate set target position".to_string(),
+                ));
+            }
             // Resolve base type, which should be List<T> or Map<K,V>.
             let base_ty = typecheck_set_target(ctx, &idx.base)?;
             match &base_ty {

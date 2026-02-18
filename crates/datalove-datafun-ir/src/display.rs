@@ -615,6 +615,9 @@ impl fmt::Display for Instruction {
             Instruction::MapValueRef { dest, map, key } => {
                 write!(f, "{} = mapvalueref {}[{}]", dest, map, key)
             }
+            Instruction::MapUpsert { map, key, value } => {
+                write!(f, "mapupsert {}[{}] = {}", map, key, value)
+            }
             Instruction::DebugLog { operand } => {
                 write!(f, "debuglog {}", operand)
             }

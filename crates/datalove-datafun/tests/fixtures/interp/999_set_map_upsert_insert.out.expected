@@ -1,0 +1,44 @@
+Analysis(
+    sections: [
+        SectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 1u32
+                        v1 = const 100u32
+                        v2 = const 2u32
+                        v3 = const 200u32
+                        v4 = %{v0: v1, v2: v3}
+                        v5 = const 3u32
+                        v6 = const 300u32
+                        v7 = call @0 u0(v4, v5, v6)
+                        debuglog v7
+                        drop v7
+                        unit_end
+                    
+                    fn upsert(p0, p1, p2):
+                    block0:
+                        v0 = move p0
+                        store.move.tracked s0, v0
+                        v1 = copy p1
+                        v2 = copy p2
+                        mapupsert s0[v1] = v2
+                        v3 = load.move.tracked s0
+                        return v3
+                """,
+            ),
+            output: "(fragment executed)",
+            debug_output: Some("%{1 = 100, 2 = 200, 3 = 300}\n"),
+        ),
+    ],
+)

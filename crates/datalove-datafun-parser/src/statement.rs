@@ -258,19 +258,13 @@ impl<'db> Parser<'db> {
                 let index = sub.parse_expr_full();
                 sub.error_if_not_exhausted();
                 self.merge_from_sub(&mut sub);
-                // Must be followed by ? or !
+                // Optional ? or ! suffix. Bare index means upsert for maps.
                 let error_mode = if self.eat_sigil(Sigil::Question) {
-                    ast::IndexErrorMode::Option
+                    Some(ast::IndexErrorMode::Option)
                 } else if self.eat_sigil(Sigil::Exclamation) {
-                    ast::IndexErrorMode::Result
+                    Some(ast::IndexErrorMode::Result)
                 } else {
-                    let ts = self.error_span();
-                    DiagnosticBuilder::error(self.db, "index in set target must be followed by '?' or '!'")
-                        .code("P030")
-                        .primary_label(ts, "expected '?' or '!'")
-                        .emit_parse();
-                    self.had_error = true;
-                    ast::IndexErrorMode::Option // recovery default
+                    None
                 };
                 target = ast::SetTarget::Index(ast::SetTargetIndex {
                     base: Box::new(target),

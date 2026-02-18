@@ -371,6 +371,9 @@ impl<'a> FunctionCodegenContext<'a> {
             Instruction::MapValueRef { dest, map, key } => {
                 self.emit_map_value_ref(out, *dest, map, key)?;
             }
+            Instruction::MapUpsert { map, key, value } => {
+                self.emit_map_upsert(out, map, key, value)?;
+            }
             Instruction::Nop => {}
         }
         Ok(())
@@ -2176,6 +2179,38 @@ impl<'a> FunctionCodegenContext<'a> {
         let value_tydesc = self.tydesc_name(&value_ty);
 
         writeln!(out, "    dtlv_rti_btreemap_set_value_local(rt, {}, &{}, {}, &{}, {}, &{});",
+            map_addr, map_tydesc, key_addr, key_tydesc, value_addr, value_tydesc).unwrap();
+        Ok(())
+    }
+
+    /// Emit a MapUpsert instruction.
+    ///
+    /// Calls `dtlv_rti_btreemap_insert_local` which inserts if absent or
+    /// overwrites if present.
+    fn emit_map_upsert(
+        &mut self,
+        out: &mut String,
+        map: &Operand,
+        key: &Operand,
+        value: &Operand,
+    ) -> Result<(), CAotError> {
+        let map_addr = self.operand_addr(map);
+        let key_addr = self.operand_addr(key);
+        let value_addr = self.operand_addr(value);
+
+        let map_ty = self.operand_type(map).clone();
+        let (key_ty, value_ty) = match &map_ty {
+            IrType::Map(k, v) => (k.as_ref().clone(), v.as_ref().clone()),
+            _ => return Err(CAotError::Codegen(format!(
+                "MapUpsert on non-map type: {:?}", map_ty
+            ))),
+        };
+
+        let map_tydesc = self.tydesc_name(&map_ty);
+        let key_tydesc = self.tydesc_name(&key_ty);
+        let value_tydesc = self.tydesc_name(&value_ty);
+
+        writeln!(out, "    dtlv_rti_btreemap_insert_local(rt, {}, &{}, {}, &{}, {}, &{});",
             map_addr, map_tydesc, key_addr, key_tydesc, value_addr, value_tydesc).unwrap();
         Ok(())
     }

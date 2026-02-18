@@ -132,12 +132,16 @@ pub struct SetTargetProj<'db> {
 }
 
 /// Index access in set target position.
+///
+/// When `error_mode` is `None`, this is a bare index (`set m[k] = v`) which
+/// represents an upsert on maps: insert if absent, overwrite if present.
+/// Bare index is only valid for maps; lists require `?` or `!`.
 #[derive(Clone, Hash, PartialEq, Eq)]
 #[derive(salsa::Update)]
 pub struct SetTargetIndex<'db> {
     pub base: Box<SetTarget<'db>>,
     pub index: ExprFun<'db>,
-    pub error_mode: IndexErrorMode,
+    pub error_mode: Option<IndexErrorMode>,
 }
 
 /// How index failure is handled.

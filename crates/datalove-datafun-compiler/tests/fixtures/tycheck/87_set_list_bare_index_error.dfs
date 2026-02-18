@@ -1,0 +1,6 @@
+// Bare index on list in set target is a type error — only maps support upsert.
+fun set_elem(a: [u32], i: index, v: u32): [u32]
+    var b = a
+    set b[i] = v
+    ret b
+end fun

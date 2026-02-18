@@ -729,10 +729,11 @@ pub(crate) fn emit_index_oob_early_return(ctx: &mut LowerCtx, error_mode: ast::I
     }
 }
 
-/// Lower `set a[i]? = v` or `set a[i]! = v`.
+/// Lower `set a[i]? = v`, `set a[i]! = v`, or `set m[k] = v`.
 ///
-/// Evaluation order: evaluate index, bounds check, early-return if OOB,
-/// evaluate RHS, ListSet (which destroys old element internally).
+/// For `?`/`!` modes: evaluate index, bounds check, early-return if OOB,
+/// evaluate RHS, ListSet/MapSetValue.
+/// For bare index (upsert): evaluate key, evaluate value, MapUpsert.
 pub(super) fn lower_set_index<'db>(
     ctx: &mut LowerCtx<'db>,
     set_stmt: &ast::StmtSet<'db>,
@@ -742,10 +743,30 @@ pub(super) fn lower_set_index<'db>(
     let base_op = lower_set_target_to_operand(ctx, &idx_target.base)?;
     let base_type = set_target_operand_type(ctx, &base_op);
 
-    match &base_type {
-        IrType::Map(_, _) => lower_set_map_index(ctx, set_stmt, idx_target, base_op),
+    match (&idx_target.error_mode, &base_type) {
+        (None, IrType::Map(_, _)) => lower_set_map_upsert(ctx, set_stmt, idx_target, base_op),
+        (Some(_), IrType::Map(_, _)) => lower_set_map_index(ctx, set_stmt, idx_target, base_op),
         _ => lower_set_list_index(ctx, set_stmt, idx_target, base_op),
     }
+}
+
+/// Lower `set m[k] = v` (upsert) for maps.
+///
+/// No branching, no early return. Key and value are consumed.
+fn lower_set_map_upsert<'db>(
+    ctx: &mut LowerCtx<'db>,
+    set_stmt: &ast::StmtSet<'db>,
+    idx_target: &ast::SetTargetIndex<'db>,
+    map_op: Operand,
+) -> Result<(), LowerError> {
+    let key_id = lower_expression(ctx, idx_target.index)?;
+    let value_id = lower_expression(ctx, set_stmt.value)?;
+    ctx.emit(Instruction::MapUpsert {
+        map: map_op,
+        key: Operand::Value(key_id),
+        value: Operand::Value(value_id),
+    });
+    Ok(())
 }
 
 /// Lower `set a[i]? = v` for lists.
@@ -778,7 +799,9 @@ fn lower_set_list_index<'db>(
 
     // Early return block.
     ctx.start_block(early_return_block);
-    emit_index_oob_early_return(ctx, idx_target.error_mode);
+    let error_mode = idx_target.error_mode
+        .expect("list index set requires error mode (typechecker guarantees Some)");
+    emit_index_oob_early_return(ctx, error_mode);
 
     // Continue block: bounds check passed, now evaluate RHS and set.
     ctx.start_block(continue_block);
@@ -822,7 +845,9 @@ fn lower_set_map_index<'db>(
 
     // Early return block.
     ctx.start_block(early_return_block);
-    emit_index_oob_early_return(ctx, idx_target.error_mode);
+    let error_mode = idx_target.error_mode
+        .expect("map index set with early return requires error mode (typechecker guarantees Some)");
+    emit_index_oob_early_return(ctx, error_mode);
 
     // Continue block: key exists, now evaluate RHS and set value.
     ctx.start_block(continue_block);
@@ -884,6 +909,9 @@ fn lower_set_target_to_operand<'db>(
             Ok(Operand::ValueRef(dest))
         }
         ast::SetTarget::Index(idx_target) => {
+            // Bare index (upsert) cannot appear as an intermediate target.
+            let error_mode = idx_target.error_mode
+                .expect("bare index (upsert) cannot appear in intermediate set target position");
             let base_op = lower_set_target_to_operand(ctx, &idx_target.base)?;
             let base_type = set_target_operand_type(ctx, &base_op);
             let key_op = lower_operand(ctx, idx_target.index)?;
@@ -920,7 +948,7 @@ fn lower_set_target_to_operand<'db>(
 
             // Early return block.
             ctx.start_block(early_return_block);
-            emit_index_oob_early_return(ctx, idx_target.error_mode);
+            emit_index_oob_early_return(ctx, error_mode);
 
             // Continue block: emit element/value ref.
             ctx.start_block(continue_block);

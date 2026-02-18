@@ -618,6 +618,9 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             Instruction::MapValueRef { dest, map, key } => {
                 self.compile_map_value_ref(builder, *dest, map, key)?;
             }
+            Instruction::MapUpsert { map, key, value } => {
+                self.compile_map_upsert(builder, map, key, value)?;
+            }
             Instruction::DebugLog { operand } => {
                 self.compile_debuglog(builder, operand)?;
             }

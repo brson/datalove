@@ -1,0 +1,83 @@
+DualAnalysis(
+    sections: [
+        DualSectionResult(
+            section_type: "scriptunit-fragment",
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            interp_lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 1u32
+                        v1 = const 100u32
+                        v2 = const 2u32
+                        v3 = const 200u32
+                        v4 = %{v0: v1, v2: v3}
+                        v5 = const 3u32
+                        v6 = const 300u32
+                        v7 = call @0 u0(v4, v5, v6)
+                        debuglog v7
+                        drop v7
+                        unit_end
+                    
+                    fn upsert(p0, p1, p2):
+                    block0:
+                        v0 = move p0
+                        store.move.tracked s0, v0
+                        v1 = copy p1
+                        v2 = copy p2
+                        mapupsert s0[v1] = v2
+                        v3 = load.move.tracked s0
+                        return v3
+                """,
+            ),
+            aot_lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 1u32
+                        v1 = const 100u32
+                        v2 = const 2u32
+                        v3 = const 200u32
+                        v4 = %{v0: v1, v2: v3}
+                        v5 = const 3u32
+                        v6 = const 300u32
+                        v7 = call @0 u0(v4, v5, v6)
+                        debuglog v7
+                        drop v7
+                        unit_end
+                    
+                    fn upsert(p0, p1, p2):
+                    block0:
+                        v0 = move p0
+                        store.move.tracked s0, v0
+                        v1 = copy p1
+                        v2 = copy p2
+                        mapupsert s0[v1] = v2
+                        v3 = load.move.tracked s0
+                        return v3
+                """,
+            ),
+            ir_match: true,
+            interp_output: "%{1 = 100, 2 = 200, 3 = 300}\n",
+            aot_output: "%{1 = 100, 2 = 200, 3 = 300}\n",
+            output_match: true,
+            aot_compile: Some(AotCompileResult(
+                status: "Success",
+            )),
+            link: Some(LinkResult(
+                status: "Success",
+            )),
+            execution: Some(ExecutionResult(
+                status: "Success",
+                exit_code: 0,
+            )),
+        ),
+    ],
+)

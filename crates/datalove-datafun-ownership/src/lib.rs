@@ -1257,18 +1257,23 @@ fn analyze_set_target_moves<'db>(ctx: &mut AnalysisCtx<'db>, target: &SetTarget<
         SetTarget::Proj(proj) => analyze_set_target_moves(ctx, &proj.base),
         SetTarget::Index(idx) => {
             analyze_set_target_moves(ctx, &idx.base);
-            // Index expression is borrowed.
-            ctx.analyze_expr_moves(idx.index, false);
+            // Bare index (upsert): key is consumed (moved into map if absent).
+            // With ? or !: key is borrowed (only used for lookup).
+            let is_consumed = idx.error_mode.is_none();
+            ctx.analyze_expr_moves(idx.index, is_consumed);
         }
     }
 }
 
 /// Check if a set target contains early-return operators (index with ? or !).
+///
+/// Bare index (upsert, error_mode: None) never early-returns because it
+/// always succeeds. Only `?` and `!` indices can early-return.
 fn set_target_may_early_return<'db>(target: &SetTarget<'db>) -> bool {
     match target {
         SetTarget::Name(_) => false,
         SetTarget::Proj(proj) => set_target_may_early_return(&proj.base),
-        SetTarget::Index(_) => true,
+        SetTarget::Index(idx) => idx.error_mode.is_some(),
     }
 }
 

@@ -1386,6 +1386,19 @@ pub enum Instruction {
         key: Operand,
     },
 
+    /// Upsert a key-value pair into a map.
+    ///
+    /// If the key exists: destroys old value, stores new value, destroys
+    /// provided key. If the key is absent: inserts both key and value.
+    /// Always succeeds — no early return, no branching.
+    ///
+    /// **Ownership:** Borrows `map` mutably, consumes `key`, consumes `value`.
+    MapUpsert {
+        map: Operand,
+        key: Operand,
+        value: Operand,
+    },
+
     // ========================================================================
     // Miscellaneous
     // ========================================================================

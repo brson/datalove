@@ -405,4 +405,66 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         self.values.insert(dest, value_ptr);
         Ok(())
     }
+
+    /// Compile a MapUpsert instruction.
+    ///
+    /// Insert key-value if absent, overwrite value if present. Calls
+    /// `dtlv_rti_btreemap_insert_local` which has full upsert semantics.
+    pub(super) fn compile_map_upsert(
+        &mut self,
+        builder: &mut FunctionBuilder,
+        map: &Operand,
+        key: &Operand,
+        value: &Operand,
+    ) -> Result<(), CraneliftError> {
+        let map_ty = self.get_operand_type(map)?;
+        let (key_ty, value_ty) = match &map_ty {
+            IrType::Map(k, v) => (k.as_ref().clone(), v.as_ref().clone()),
+            _ => return Err(CraneliftError::Codegen(format!(
+                "MapUpsert on non-map type: {:?}", map_ty
+            ))),
+        };
+
+        let runtime = self.runtime.ok_or_else(|| {
+            CraneliftError::Codegen("MapUpsert requires runtime imports".into())
+        })?;
+        let rt_handle = self.rt_handle_param.ok_or_else(|| {
+            CraneliftError::Codegen("MapUpsert requires runtime handle".into())
+        })?;
+
+        let map_ptr = self.get_operand_ptr(builder, map)?;
+        let key_ptr = self.get_operand_ptr(builder, key)?;
+        let value_ptr = self.get_operand_ptr(builder, value)?;
+
+        let map_tydesc_id = self.tydesc_emitter.get(&map_ty).ok_or_else(|| {
+            CraneliftError::Codegen(format!("TyDesc not found for map type {:?}", map_ty))
+        })?;
+        let map_tydesc_gv = self.module.declare_data_in_func(map_tydesc_id, builder.func);
+        let map_tydesc_ptr = builder.ins().global_value(PTR_TYPE, map_tydesc_gv);
+
+        let key_tydesc_id = self.tydesc_emitter.get(&key_ty).ok_or_else(|| {
+            CraneliftError::Codegen(format!("TyDesc not found for key type {:?}", key_ty))
+        })?;
+        let key_tydesc_gv = self.module.declare_data_in_func(key_tydesc_id, builder.func);
+        let key_tydesc_ptr = builder.ins().global_value(PTR_TYPE, key_tydesc_gv);
+
+        let value_tydesc_id = self.tydesc_emitter.get(&value_ty).ok_or_else(|| {
+            CraneliftError::Codegen(format!("TyDesc not found for value type {:?}", value_ty))
+        })?;
+        let value_tydesc_gv = self.module.declare_data_in_func(value_tydesc_id, builder.func);
+        let value_tydesc_ptr = builder.ins().global_value(PTR_TYPE, value_tydesc_gv);
+
+        let func_ref = self.module.declare_func_in_func(runtime.map_insert, builder.func);
+        builder.ins().call(func_ref, &[
+            rt_handle,
+            map_ptr,
+            map_tydesc_ptr,
+            key_ptr,
+            key_tydesc_ptr,
+            value_ptr,
+            value_tydesc_ptr,
+        ]);
+
+        Ok(())
+    }
 }
