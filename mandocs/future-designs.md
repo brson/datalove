@@ -1,13 +1,30 @@
 # Future designs
 
 
+
+## 2026/02/18 - Generics
+
+```datalove
+
+fun push(self: mut [T], v: T) where {
+  T is move,
+}
+  rtcall dlrt_list_push(self, v)
+end fun
+
+
+```
+
+
+
+
 ## 2026/02/10 - Indexing and querying
 
 All datalit aggregate and collection types have some way of
 indexing or querying,
 such that querying a node of any document can be done in one line.
 
-```
+```datalove
 // Tuples
 let a = (0, 1)
 let x = a.0
