@@ -169,116 +169,18 @@ fn try_lower_arg_index_as_ref<'db>(
 
 /// Lower `a[i]?` / `m[k]?` as a reference (pointer to element/value).
 ///
-/// For lists: emits ListBoundsCheck + ListElementRef.
-/// For maps: emits MapContainsKey + MapValueRef.
+/// Emits validity check + early-return scaffolding, then ListElementRef or MapValueRef.
 /// Returns a reference operand suitable for passing to ref/mut/out params.
 fn lower_index_as_ref<'db>(
     ctx: &mut LowerCtx<'db>,
     index_expr: &ast::ExprIndex<'db>,
     error_mode: ast::IndexErrorMode,
 ) -> Result<Operand, LowerError> {
-    let base_ty = ctx.expr_type(index_expr.base);
-    match &base_ty {
-        IrType::Map(_, _) => lower_map_index_as_ref(ctx, index_expr, error_mode),
-        _ => lower_list_index_as_ref(ctx, index_expr, error_mode),
-    }
-}
-
-/// Lower list index as a reference.
-fn lower_list_index_as_ref<'db>(
-    ctx: &mut LowerCtx<'db>,
-    index_expr: &ast::ExprIndex<'db>,
-    error_mode: ast::IndexErrorMode,
-) -> Result<Operand, LowerError> {
-    let list_op = lower_operand(ctx, index_expr.base)?;
-    let idx_op = lower_operand(ctx, index_expr.index)?;
-
-    // Bounds check.
-    let is_valid = ctx.fresh_value(IrType::Bool);
-    ctx.emit(Instruction::ListBoundsCheck {
-        is_valid,
-        list: list_op,
-        index: idx_op,
-    });
-
-    // Branch: if in bounds, continue; else early return.
-    let early_return_block = ctx.fresh_block();
-    let continue_block = ctx.fresh_block();
-    ctx.finish_block(Terminator::Branch {
-        cond: Operand::Value(is_valid),
-        then_block: continue_block,
-        then_args: Vec::new(),
-        else_block: early_return_block,
-        else_args: Vec::new(),
-    });
-
-    // Early return block.
-    ctx.start_block(early_return_block);
-    super::stmt::emit_index_oob_early_return(ctx, error_mode);
-
-    // Continue block: emit ListElementRef.
-    ctx.start_block(continue_block);
-    let list_type = ctx.expr_type(index_expr.base);
-    let elem_type = match &list_type {
-        IrType::List(e) => e.as_ref().clone(),
-        _ => panic!("index on non-list type {:?} - typechecker should catch this", list_type),
-    };
-
-    let dest = ctx.fresh_value(IrType::Ref(Box::new(elem_type)));
-    ctx.emit(Instruction::ListElementRef {
-        dest,
-        list: list_op,
-        index: idx_op,
-    });
-    Ok(Operand::Value(dest))
-}
-
-/// Lower map index as a reference.
-fn lower_map_index_as_ref<'db>(
-    ctx: &mut LowerCtx<'db>,
-    index_expr: &ast::ExprIndex<'db>,
-    error_mode: ast::IndexErrorMode,
-) -> Result<Operand, LowerError> {
-    let map_op = lower_operand(ctx, index_expr.base)?;
+    let base_op = lower_operand(ctx, index_expr.base)?;
     let key_op = lower_operand(ctx, index_expr.index)?;
-
-    // Check if key exists.
-    let is_valid = ctx.fresh_value(IrType::Bool);
-    ctx.emit(Instruction::MapContainsKey {
-        is_valid,
-        map: map_op,
-        key: key_op,
-    });
-
-    // Branch: if found, continue; else early return.
-    let early_return_block = ctx.fresh_block();
-    let continue_block = ctx.fresh_block();
-    ctx.finish_block(Terminator::Branch {
-        cond: Operand::Value(is_valid),
-        then_block: continue_block,
-        then_args: Vec::new(),
-        else_block: early_return_block,
-        else_args: Vec::new(),
-    });
-
-    // Early return block.
-    ctx.start_block(early_return_block);
-    super::stmt::emit_index_oob_early_return(ctx, error_mode);
-
-    // Continue block: emit MapValueRef.
-    ctx.start_block(continue_block);
-    let map_type = ctx.expr_type(index_expr.base);
-    let value_type = match &map_type {
-        IrType::Map(_, v) => v.as_ref().clone(),
-        _ => panic!("map index on non-map type {:?}", map_type),
-    };
-
-    let dest = ctx.fresh_value(IrType::Ref(Box::new(value_type)));
-    ctx.emit(Instruction::MapValueRef {
-        dest,
-        map: map_op,
-        key: key_op,
-    });
+    let base_type = ctx.expr_type(index_expr.base);
+    super::stmt::emit_fallible_index_check(ctx, base_op, &base_type, key_op, error_mode)?;
+    let dest = super::stmt::emit_collection_element_ref(ctx, base_op, &base_type, key_op);
     Ok(Operand::Value(dest))
 }
 
@@ -1413,11 +1315,7 @@ fn lower_try_option<'db>(
 ) -> Result<ValueId, LowerError> {
     // Special case: a[i]? / m[k]? — index with option early-return.
     if let ExprFunKind::Index(ref index_expr) = try_expr.operand.expr(ctx.db) {
-        let base_ty = ctx.expr_type(index_expr.base);
-        return match &base_ty {
-            IrType::Map(_, _) => lower_map_index_option(ctx, expr, index_expr),
-            _ => lower_list_index_option(ctx, expr, index_expr),
-        };
+        return lower_collection_index_value(ctx, expr, index_expr, ast::IndexErrorMode::Option);
     }
 
     let src_id = lower_expression(ctx, try_expr.operand)?;
@@ -1474,11 +1372,7 @@ fn lower_try_result<'db>(
 ) -> Result<ValueId, LowerError> {
     // Special case: a[i]! / m[k]! — index with result early-return.
     if let ExprFunKind::Index(ref index_expr) = try_expr.operand.expr(ctx.db) {
-        let base_ty = ctx.expr_type(index_expr.base);
-        return match &base_ty {
-            IrType::Map(_, _) => lower_map_index_result(ctx, expr, index_expr),
-            _ => lower_list_index_result(ctx, expr, index_expr),
-        };
+        return lower_collection_index_value(ctx, expr, index_expr, ast::IndexErrorMode::Result);
     }
 
     let src_id = lower_expression(ctx, try_expr.operand)?;
@@ -1529,142 +1423,39 @@ fn lower_try_result<'db>(
     Ok(ok_dest)
 }
 
-/// Lower `a[i]?` — list index with option early-return on OOB.
-fn lower_list_index_option<'db>(
+/// Lower `a[i]?` / `a[i]!` / `m[k]?` / `m[k]!` — collection index with early-return.
+///
+/// Emits ListGet or MapGet, branches on validity, early-returns on failure.
+fn lower_collection_index_value<'db>(
     ctx: &mut LowerCtx<'db>,
     expr: ExprFun<'db>,
     index_expr: &ast::ExprIndex<'db>,
+    error_mode: ast::IndexErrorMode,
 ) -> Result<ValueId, LowerError> {
-    let list_op = lower_operand(ctx, index_expr.base)?;
-    let idx_op = lower_operand(ctx, index_expr.index)?;
-    let result_type = ctx.expr_type(expr);
-    let dest = ctx.fresh_value(result_type);
-    let is_valid = ctx.fresh_value(IrType::Bool);
-
-    ctx.emit(Instruction::ListGet {
-        dest,
-        is_valid,
-        list: list_op,
-        index: idx_op,
-    });
-
-    // Branch on is_valid: continue or early-return none.
-    let early_return_block = ctx.fresh_block();
-    let continue_block = ctx.fresh_block();
-    ctx.finish_block(Terminator::Branch {
-        cond: Operand::Value(is_valid),
-        then_block: continue_block,
-        then_args: Vec::new(),
-        else_block: early_return_block,
-        else_args: Vec::new(),
-    });
-
-    // Early return: wrap None and return.
-    ctx.start_block(early_return_block);
-    let return_type = ctx.return_type.clone()
-        .expect("? requires return type");
-    let none_value = ctx.fresh_value(return_type);
-    ctx.emit_wrap_none(none_value);
-    ctx.emit_pending_intermediate_drops();
-    ctx.emit_before_try_return_drops();
-    if ctx.is_script_unit {
-        ctx.finish_block(Terminator::UnitEarlyReturn {
-            value: Operand::Value(none_value),
-        });
-    } else {
-        ctx.finish_block(Terminator::Return {
-            value: Some(Operand::Value(none_value)),
-        });
-    }
-
-    // Continue block: dest has the element value.
-    ctx.start_block(continue_block);
-    Ok(dest)
-}
-
-/// Lower `a[i]!` — list index with result early-return on OOB.
-fn lower_list_index_result<'db>(
-    ctx: &mut LowerCtx<'db>,
-    expr: ExprFun<'db>,
-    index_expr: &ast::ExprIndex<'db>,
-) -> Result<ValueId, LowerError> {
-    let list_op = lower_operand(ctx, index_expr.base)?;
-    let idx_op = lower_operand(ctx, index_expr.index)?;
-    let result_type = ctx.expr_type(expr);
-    let dest = ctx.fresh_value(result_type);
-    let is_valid = ctx.fresh_value(IrType::Bool);
-
-    ctx.emit(Instruction::ListGet {
-        dest,
-        is_valid,
-        list: list_op,
-        index: idx_op,
-    });
-
-    // Branch on is_valid: continue or early-return error.
-    let early_return_block = ctx.fresh_block();
-    let continue_block = ctx.fresh_block();
-    ctx.finish_block(Terminator::Branch {
-        cond: Operand::Value(is_valid),
-        then_block: continue_block,
-        then_args: Vec::new(),
-        else_block: early_return_block,
-        else_args: Vec::new(),
-    });
-
-    // Early return: construct IndexOutOfBounds error and return.
-    ctx.start_block(early_return_block);
-    let return_type = ctx.return_type.clone()
-        .expect("! requires return type");
-
-    // Create error message string.
-    let err_msg = ctx.fresh_value(IrType::String);
-    ctx.emit_const(err_msg, ConstValue::String("index out of bounds".to_string()));
-
-    // Create Error from string.
-    let err_value = ctx.fresh_value(IrType::Error);
-    ctx.emit_error_from(err_value, Operand::Value(err_msg));
-
-    // Wrap in Err.
-    let wrapped_err = ctx.fresh_value(return_type);
-    ctx.emit_wrap_err(wrapped_err, Operand::Value(err_value));
-    ctx.emit_pending_intermediate_drops();
-    ctx.emit_before_try_return_drops();
-    if ctx.is_script_unit {
-        ctx.finish_block(Terminator::UnitEarlyReturn {
-            value: Operand::Value(wrapped_err),
-        });
-    } else {
-        ctx.finish_block(Terminator::Return {
-            value: Some(Operand::Value(wrapped_err)),
-        });
-    }
-
-    // Continue block: dest has the element value.
-    ctx.start_block(continue_block);
-    Ok(dest)
-}
-
-/// Lower `m[k]?` — map index with option early-return on miss.
-fn lower_map_index_option<'db>(
-    ctx: &mut LowerCtx<'db>,
-    expr: ExprFun<'db>,
-    index_expr: &ast::ExprIndex<'db>,
-) -> Result<ValueId, LowerError> {
-    let map_op = lower_operand(ctx, index_expr.base)?;
+    let base_op = lower_operand(ctx, index_expr.base)?;
     let key_op = lower_operand(ctx, index_expr.index)?;
+    let base_type = ctx.expr_type(index_expr.base);
+    let is_map = matches!(&base_type, IrType::Map(_, _));
     let result_type = ctx.expr_type(expr);
     let dest = ctx.fresh_value(result_type);
     let is_valid = ctx.fresh_value(IrType::Bool);
 
-    ctx.emit(Instruction::MapGet {
-        dest,
-        is_valid,
-        map: map_op,
-        key: key_op,
-    });
+    if is_map {
+        ctx.emit(Instruction::MapGet {
+            dest,
+            is_valid,
+            map: base_op,
+            key: key_op,
+        });
+    } else {
+        ctx.emit(Instruction::ListGet {
+            dest,
+            is_valid,
+            list: base_op,
+            index: key_op,
+        });
+    }
 
-    // Branch on is_valid: continue or early-return none.
     let early_return_block = ctx.fresh_block();
     let continue_block = ctx.fresh_block();
     ctx.finish_block(Terminator::Branch {
@@ -1675,85 +1466,9 @@ fn lower_map_index_option<'db>(
         else_args: Vec::new(),
     });
 
-    // Early return: wrap None and return.
     ctx.start_block(early_return_block);
-    let return_type = ctx.return_type.clone()
-        .expect("? requires return type");
-    let none_value = ctx.fresh_value(return_type);
-    ctx.emit_wrap_none(none_value);
-    ctx.emit_pending_intermediate_drops();
-    ctx.emit_before_try_return_drops();
-    if ctx.is_script_unit {
-        ctx.finish_block(Terminator::UnitEarlyReturn {
-            value: Operand::Value(none_value),
-        });
-    } else {
-        ctx.finish_block(Terminator::Return {
-            value: Some(Operand::Value(none_value)),
-        });
-    }
+    super::stmt::emit_index_value_early_return(ctx, error_mode, is_map);
 
-    // Continue block: dest has the value.
-    ctx.start_block(continue_block);
-    Ok(dest)
-}
-
-/// Lower `m[k]!` — map index with result early-return on miss.
-fn lower_map_index_result<'db>(
-    ctx: &mut LowerCtx<'db>,
-    expr: ExprFun<'db>,
-    index_expr: &ast::ExprIndex<'db>,
-) -> Result<ValueId, LowerError> {
-    let map_op = lower_operand(ctx, index_expr.base)?;
-    let key_op = lower_operand(ctx, index_expr.index)?;
-    let result_type = ctx.expr_type(expr);
-    let dest = ctx.fresh_value(result_type);
-    let is_valid = ctx.fresh_value(IrType::Bool);
-
-    ctx.emit(Instruction::MapGet {
-        dest,
-        is_valid,
-        map: map_op,
-        key: key_op,
-    });
-
-    // Branch on is_valid: continue or early-return error.
-    let early_return_block = ctx.fresh_block();
-    let continue_block = ctx.fresh_block();
-    ctx.finish_block(Terminator::Branch {
-        cond: Operand::Value(is_valid),
-        then_block: continue_block,
-        then_args: Vec::new(),
-        else_block: early_return_block,
-        else_args: Vec::new(),
-    });
-
-    // Early return: construct key-not-found error and return.
-    ctx.start_block(early_return_block);
-    let return_type = ctx.return_type.clone()
-        .expect("! requires return type");
-
-    let err_msg = ctx.fresh_value(IrType::String);
-    ctx.emit_const(err_msg, ConstValue::String("key not found".to_string()));
-
-    let err_value = ctx.fresh_value(IrType::Error);
-    ctx.emit_error_from(err_value, Operand::Value(err_msg));
-
-    let wrapped_err = ctx.fresh_value(return_type);
-    ctx.emit_wrap_err(wrapped_err, Operand::Value(err_value));
-    ctx.emit_pending_intermediate_drops();
-    ctx.emit_before_try_return_drops();
-    if ctx.is_script_unit {
-        ctx.finish_block(Terminator::UnitEarlyReturn {
-            value: Operand::Value(wrapped_err),
-        });
-    } else {
-        ctx.finish_block(Terminator::Return {
-            value: Some(Operand::Value(wrapped_err)),
-        });
-    }
-
-    // Continue block: dest has the value.
     ctx.start_block(continue_block);
     Ok(dest)
 }
