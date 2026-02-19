@@ -85,7 +85,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
 
     /// Compile a MapGet instruction.
     ///
-    /// Calls contains_key, then conditionally calls get_value_ref + clone.
+    /// Calls get_value_ref unconditionally, derives is_valid from null check.
     pub(super) fn compile_map_get(
         &mut self,
         builder: &mut FunctionBuilder,
@@ -132,29 +132,30 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         let value_tydesc_gv = self.module.declare_data_in_func(value_tydesc_id, builder.func);
         let value_tydesc_ptr = builder.ins().global_value(PTR_TYPE, value_tydesc_gv);
 
-        // Check if key exists.
-        let result_slot = builder.create_sized_stack_slot(cl_ir::StackSlotData::new(
+        // Get pointer to value (returns null on miss).
+        let vref_slot = builder.create_sized_stack_slot(cl_ir::StackSlotData::new(
             cl_ir::StackSlotKind::ExplicitSlot,
-            1,
+            std::mem::size_of::<*mut u8>() as u32,
             0,
         ));
-        let result_addr = builder.ins().stack_addr(PTR_TYPE, result_slot, 0);
+        let vref_addr = builder.ins().stack_addr(PTR_TYPE, vref_slot, 0);
 
-        let contains_ref = self.module.declare_func_in_func(runtime.map_contains_key, builder.func);
-        builder.ins().call(contains_ref, &[
+        let getref_ref = self.module.declare_func_in_func(runtime.map_get_value_ref, builder.func);
+        builder.ins().call(getref_ref, &[
             rt_handle,
             map_ptr,
             map_tydesc_ptr,
             key_ptr,
             key_tydesc_ptr,
-            result_addr,
+            vref_addr,
         ]);
 
-        let result_val = builder.ins().load(cl_types::I8, MemFlags::new(), result_addr, 0);
-        let is_valid_val = builder.ins().icmp_imm(
+        let value_ptr = builder.ins().load(PTR_TYPE, MemFlags::new(), vref_addr, 0);
+        let null_ptr = builder.ins().iconst(PTR_TYPE, 0);
+        let is_valid_val = builder.ins().icmp(
             cl_ir::condcodes::IntCC::NotEqual,
-            result_val,
-            0,
+            value_ptr,
+            null_ptr,
         );
         self.values.insert(is_valid, is_valid_val);
 
@@ -169,29 +170,10 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
 
                 builder.ins().brif(is_valid_val, load_block, &[], skip_block, &[]);
 
-                // Load block: get value ref, load scalar value.
+                // Load block: load scalar value from already-retrieved pointer.
                 builder.switch_to_block(load_block);
                 builder.seal_block(load_block);
 
-                // Get pointer to value.
-                let vref_slot = builder.create_sized_stack_slot(cl_ir::StackSlotData::new(
-                    cl_ir::StackSlotKind::ExplicitSlot,
-                    std::mem::size_of::<*mut u8>() as u32,
-                    0,
-                ));
-                let vref_addr = builder.ins().stack_addr(PTR_TYPE, vref_slot, 0);
-
-                let getref_ref = self.module.declare_func_in_func(runtime.map_get_value_ref, builder.func);
-                builder.ins().call(getref_ref, &[
-                    rt_handle,
-                    map_ptr,
-                    map_tydesc_ptr,
-                    key_ptr,
-                    key_tydesc_ptr,
-                    vref_addr,
-                ]);
-
-                let value_ptr = builder.ins().load(PTR_TYPE, MemFlags::new(), vref_addr, 0);
                 let val = builder.ins().load(cl_ty, MemFlags::new(), value_ptr, 0);
                 builder.ins().jump(merge_block, &[BlockArg::from(val)]);
 
@@ -221,28 +203,9 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
 
                 builder.ins().brif(is_valid_val, load_block, &[], skip_block, &[]);
 
-                // Load block: get value ref, clone to dest.
+                // Load block: clone from already-retrieved pointer to dest.
                 builder.switch_to_block(load_block);
                 builder.seal_block(load_block);
-
-                let vref_slot = builder.create_sized_stack_slot(cl_ir::StackSlotData::new(
-                    cl_ir::StackSlotKind::ExplicitSlot,
-                    std::mem::size_of::<*mut u8>() as u32,
-                    0,
-                ));
-                let vref_addr = builder.ins().stack_addr(PTR_TYPE, vref_slot, 0);
-
-                let getref_ref = self.module.declare_func_in_func(runtime.map_get_value_ref, builder.func);
-                builder.ins().call(getref_ref, &[
-                    rt_handle,
-                    map_ptr,
-                    map_tydesc_ptr,
-                    key_ptr,
-                    key_tydesc_ptr,
-                    vref_addr,
-                ]);
-
-                let value_ptr = builder.ins().load(PTR_TYPE, MemFlags::new(), vref_addr, 0);
 
                 let clone_ref = self.module.declare_func_in_func(runtime.clone_local, builder.func);
                 builder.ins().call(clone_ref, &[

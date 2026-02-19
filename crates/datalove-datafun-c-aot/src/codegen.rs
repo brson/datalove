@@ -2118,31 +2118,30 @@ impl<'a> FunctionCodegenContext<'a> {
         let key_tydesc = self.tydesc_name(&key_ty);
         let value_tydesc = self.tydesc_name(&value_ty);
 
-        // Check if key exists.
-        writeln!(out, "    dtlv_rti_btreemap_contains_key_local(rt, {}, &{}, {}, &{}, (bool_t*){});",
-            map_addr, map_tydesc, key_addr, key_tydesc, is_valid_addr).unwrap();
-
-        // Conditionally load value.
-        writeln!(out, "    if (*(bool_t*){}) {{", is_valid_addr).unwrap();
-
-        // Get pointer to value.
+        // Get pointer to value (returns null on miss).
+        writeln!(out, "    {{").unwrap();
         writeln!(out, "        void* __vptr;").unwrap();
         writeln!(out, "        dtlv_rti_btreemap_get_value_ref_local(rt, {}, &{}, {}, &{}, &__vptr);",
             map_addr, map_tydesc, key_addr, key_tydesc).unwrap();
+        writeln!(out, "        *(bool_t*){} = __vptr != NULL;", is_valid_addr).unwrap();
+
+        // Conditionally clone value.
+        writeln!(out, "        if (__vptr != NULL) {{").unwrap();
 
         // Clone value to dest.
         match &value_repr {
             CRepr::Scalar(c_ty) => {
-                writeln!(out, "        *({c_ty}*){dest_addr} = *({c_ty}*)__vptr;").unwrap();
+                writeln!(out, "            *({c_ty}*){dest_addr} = *({c_ty}*)__vptr;").unwrap();
             }
             CRepr::Aggregate(layout) => {
                 if layout.size > 0 {
-                    writeln!(out, "        dtlv_rti_clone_local(rt, __vptr, &{}, {}, &{});",
+                    writeln!(out, "            dtlv_rti_clone_local(rt, __vptr, &{}, {}, &{});",
                         value_tydesc, dest_addr, value_tydesc).unwrap();
                 }
             }
         }
 
+        writeln!(out, "        }}").unwrap();
         writeln!(out, "    }}").unwrap();
 
         // Conditional tracking byte.

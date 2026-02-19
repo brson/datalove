@@ -1162,40 +1162,27 @@ impl IrInterpreter {
                 let key_tydesc = unsafe { (*map_tydesc).type_info.map.key_tydesc };
                 let value_tydesc = unsafe { (*map_tydesc).type_info.map.value_tydesc };
 
-                // Check if key exists.
-                let mut found = false;
+                // Get pointer to value (returns null on miss).
+                let mut value_ptr: *mut u8 = std::ptr::null_mut();
                 let rt_handle = self.runtime.handle();
                 let status = unsafe {
-                    datalove_rt::c::dtlv_rti_btreemap_contains_key_local(
+                    datalove_rt::c::dtlv_rti_btreemap_get_value_ref_local(
                         rt_handle,
                         map_val.ptr,
                         map_tydesc,
                         key_val.ptr,
                         key_tydesc,
-                        &mut found,
+                        &mut value_ptr,
                     )
                 };
-                assert_eq!(status, datalove_rt::c::RtStatus::Ok, "MapGet contains_key failed");
+                assert_eq!(status, datalove_rt::c::RtStatus::Ok, "MapGet get_value_ref failed");
 
+                let found = !value_ptr.is_null();
                 let is_valid_dest = frame.value_dest(*is_valid);
                 unsafe { *(is_valid_dest.ptr as *mut bool) = found; }
                 frame.mark_value_live(*is_valid);
 
                 if found {
-                    // Get pointer to value and clone it.
-                    let mut value_ptr: *mut u8 = std::ptr::null_mut();
-                    let status = unsafe {
-                        datalove_rt::c::dtlv_rti_btreemap_get_value_ref_local(
-                            rt_handle,
-                            map_val.ptr,
-                            map_tydesc,
-                            key_val.ptr,
-                            key_tydesc,
-                            &mut value_ptr,
-                        )
-                    };
-                    assert_eq!(status, datalove_rt::c::RtStatus::Ok, "MapGet get_value_ref failed");
-
                     let dest_slot = frame.value_dest(*dest);
                     let status = unsafe {
                         datalove_rt::c::dtlv_rti_clone_local(
