@@ -40,23 +40,16 @@ enables quick development.
 
 ## No first-class references
 
-Datalove has a linear type system like Rust,
+Datalove has a linear type system
 but it does not have first-class reference types.
-There is no `&T` or `&mut T` in the type grammar,
-no lifetime annotations, no reborrowing rules.
+Borrowing is difficult to reason about.
 
-The compiler has an internal notion of places and performs borrowing analysis,
-and parameter modes (`ref`, `mut`, `out`) control how functions access values,
-but these are calling conventions, not types that users compose or store.
-A `ref` parameter is not a type you can put in a list or return from a function.
+We'll instead push other techniques as far as we can,
+argument modes and other reference bindings,
+Gleam-style `use` expressions,
+making some cloning easy and idiomatic.
 
-References are a major source of conceptual complexity in Rust:
-lifetimes, lifetime elision, higher-ranked trait bounds,
-variance, reborrowing, and the interactions between them.
-By keeping borrowing internal to the compiler
-and not exposing it as a type-level concept,
-Datalove avoids this entire category of complexity
-while still enforcing ownership safety at compile time.
+
 
 
 ## Minimal syntax sugar
