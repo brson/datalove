@@ -128,12 +128,6 @@ pub fn synthesize_expr<'db>(
     let expr_kind = expr.expr(db);
 
     match expr_kind {
-        ExprFunKind::Name(name) => {
-            // F001: Undefined variable.
-            ctx.lookup_variable(name)
-                .ok_or_else(|| ctx.error_undefined_variable(expr, name))
-        }
-
         ExprFunKind::BinOp(ref binop) => {
             synthesize_binop(ctx, expr, binop)
         }
@@ -797,7 +791,8 @@ fn validate_comptime_arg<'db>(
 
     // The argument must be a simple Name expression.
     match arg.expr(db) {
-        ExprFunKind::Name(name) => {
+        ExprFunKind::Place(ref place) if place.steps.is_empty() => {
+            let name = place.root;
             // Must be a const binding, not a let/var/parameter.
             if ctx.is_const_binding(name) {
                 Ok(Some(name))
@@ -1060,8 +1055,15 @@ fn synthesize_place<'db>(
                 current_ty = synthesize_place_field_step(ctx, expr, &current_ty, field)?;
             }
             PlaceStep::Index(idx) => {
-                let error_mode = idx.error_mode
-                    .expect("Place expression index steps always have error mode");
+                let error_mode = match idx.error_mode {
+                    Some(mode) => mode,
+                    None => {
+                        return Err(ctx.error_cannot_synthesize(
+                            expr,
+                            "bare index `a[i]` requires `?` or `!` suffix",
+                        ));
+                    }
+                };
                 current_ty = synthesize_place_index_step(ctx, expr, &current_ty, idx)?;
                 // Verify return type matches error mode.
                 match error_mode {

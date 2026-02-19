@@ -472,12 +472,13 @@ impl<'db> AnalysisCtx<'db> {
 
     /// If the expression is a simple name, return its binding ID.
     fn expr_to_binding(&self, expr: ExprFun<'db>) -> Option<BindingId> {
-        if let ExprFunKind::Name(name_text) = expr.expr(self.db) {
-            let name: &str = name_text.text(self.db).as_ref();
-            self.name_to_binding.get(name).copied()
-        } else {
-            None
+        if let ExprFunKind::Place(ref place) = expr.expr(self.db) {
+            if place.steps.is_empty() {
+                let name: &str = place.root.text(self.db).as_ref();
+                return self.name_to_binding.get(name).copied();
+            }
         }
+        None
     }
 
     /// Check if an expression contains early-return operators.
@@ -554,38 +555,6 @@ impl<'db> AnalysisCtx<'db> {
         // Use salsa ID index for span lookup (not the AST sequential local_index).
         let local_index = expr.as_id().index() as u32;
         match expr.expr(self.db) {
-            ExprFunKind::Name(name) => {
-                let name_str = name.text(self.db);
-                if let Some(id) = self.lookup(name_str) {
-                    // Check for reading uninitialized binding (Out param or uninitialized var).
-                    if self.get_out_param_init(id) == Some(OutParamInitState::Uninitialized) {
-                        let name = self.bindings[id.0 as usize].name.C();
-                        self.errors.push(AnalysisError::ReadUninitialized { local_index, name });
-                        return None;
-                    }
-                    // Check for use after move - can be recovered by cloning before first use.
-                    if self.get_state(id) == Some(BindingState::Moved) {
-                        if self.auto_adapt_mode.is_enabled() {
-                            // Auto-adapt: treat as if the original move was a clone+move.
-                            // Allow this use by continuing (value was implicitly cloned).
-                        } else {
-                            let name = self.bindings[id.0 as usize].name.C();
-                            let moved_at = self.get_moved_at(id).unwrap_or(local_index);
-                            let recovery_hint = OwnershipRecoveryHint::InsertAdapt {
-                                description: format!("clone `{}` before the earlier use", name),
-                            };
-                            self.errors.push(AnalysisError::UseAfterMove { local_index, moved_at, name, recovery_hint });
-                            return None;
-                        }
-                    }
-                    if is_consumed && !self.bindings[id.0 as usize].ty.is_copy() {
-                        // This is a move.
-                        self.mark_moved(id, local_index);
-                        return Some(id);
-                    }
-                }
-                None
-            }
             ExprFunKind::BinOp(binop) => {
                 // Binary ops read their operands, not consume them.
                 self.analyze_expr_moves(binop.lhs, false);
@@ -757,27 +726,58 @@ impl<'db> AnalysisCtx<'db> {
                 None
             }
             ExprFunKind::Place(ref place) => {
-                // Place expression: root is borrowed, index sub-expressions are borrowed.
-                let root_name = place.root.text(self.db);
-                if let Some(id) = self.lookup(root_name) {
-                    // Check for use-after-move on the root.
-                    if self.get_state(id) == Some(BindingState::Moved) {
-                        if !self.auto_adapt_mode.is_enabled() {
+                if place.steps.is_empty() {
+                    // Zero-step Place: same as old Name — full move tracking.
+                    let root_name = place.root.text(self.db);
+                    if let Some(id) = self.lookup(root_name) {
+                        // Check for reading uninitialized binding (Out param or uninitialized var).
+                        if self.get_out_param_init(id) == Some(OutParamInitState::Uninitialized) {
                             let name = self.bindings[id.0 as usize].name.C();
-                            let moved_at = self.get_moved_at(id).unwrap_or(local_index);
-                            let recovery_hint = OwnershipRecoveryHint::InsertAdapt {
-                                description: format!("clone `{}` before the earlier use", name),
-                            };
-                            self.errors.push(AnalysisError::UseAfterMove { local_index, moved_at, name, recovery_hint });
+                            self.errors.push(AnalysisError::ReadUninitialized { local_index, name });
+                            return None;
+                        }
+                        // Check for use after move.
+                        if self.get_state(id) == Some(BindingState::Moved) {
+                            if self.auto_adapt_mode.is_enabled() {
+                                // Auto-adapt: treat as if the original move was a clone+move.
+                            } else {
+                                let name = self.bindings[id.0 as usize].name.C();
+                                let moved_at = self.get_moved_at(id).unwrap_or(local_index);
+                                let recovery_hint = OwnershipRecoveryHint::InsertAdapt {
+                                    description: format!("clone `{}` before the earlier use", name),
+                                };
+                                self.errors.push(AnalysisError::UseAfterMove { local_index, moved_at, name, recovery_hint });
+                                return None;
+                            }
+                        }
+                        if is_consumed && !self.bindings[id.0 as usize].ty.is_copy() {
+                            self.mark_moved(id, local_index);
+                            return Some(id);
                         }
                     }
-                }
-                for step in &place.steps {
-                    if let datalove_datafun_ast::ast::PlaceStep::Index(idx) = step {
-                        self.analyze_expr_moves(idx.index, false);
+                    None
+                } else {
+                    // Non-zero steps: root is borrowed, index sub-expressions are borrowed.
+                    let root_name = place.root.text(self.db);
+                    if let Some(id) = self.lookup(root_name) {
+                        if self.get_state(id) == Some(BindingState::Moved) {
+                            if !self.auto_adapt_mode.is_enabled() {
+                                let name = self.bindings[id.0 as usize].name.C();
+                                let moved_at = self.get_moved_at(id).unwrap_or(local_index);
+                                let recovery_hint = OwnershipRecoveryHint::InsertAdapt {
+                                    description: format!("clone `{}` before the earlier use", name),
+                                };
+                                self.errors.push(AnalysisError::UseAfterMove { local_index, moved_at, name, recovery_hint });
+                            }
+                        }
                     }
+                    for step in &place.steps {
+                        if let datalove_datafun_ast::ast::PlaceStep::Index(idx) = step {
+                            self.analyze_expr_moves(idx.index, false);
+                        }
+                    }
+                    None
                 }
-                None
             }
             // Literals don't move anything.
             _ => None,

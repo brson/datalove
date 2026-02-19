@@ -26,8 +26,9 @@
                     "kind": "BinOp",
                     "lhs": {
                       "expr": {
-                        "kind": "Name",
-                        "name": "n"
+                        "kind": "Place",
+                        "root": "n",
+                        "steps": []
                       }
                     },
                     "op": "Add",
@@ -47,8 +48,9 @@
                     "kind": "BinOp",
                     "lhs": {
                       "expr": {
-                        "kind": "Name",
-                        "name": "n"
+                        "kind": "Place",
+                        "root": "n",
+                        "steps": []
                       }
                     },
                     "op": "Ge",
@@ -76,8 +78,9 @@
             "kind": "Ret",
             "value": {
               "expr": {
-                "kind": "Name",
-                "name": "n"
+                "kind": "Place",
+                "root": "n",
+                "steps": []
               }
             }
           }

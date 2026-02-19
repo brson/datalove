@@ -74,8 +74,9 @@
         "default_body": null,
         "input": {
           "expr": {
-            "kind": "Name",
-            "name": "c"
+            "kind": "Place",
+            "root": "c",
+            "steps": []
           }
         },
         "kind": "Match"

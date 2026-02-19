@@ -13,8 +13,9 @@
                 "kind": "TryOption",
                 "operand": {
                   "expr": {
-                    "kind": "Name",
-                    "name": "a"
+                    "kind": "Place",
+                    "root": "a",
+                    "steps": []
                   }
                 }
               }

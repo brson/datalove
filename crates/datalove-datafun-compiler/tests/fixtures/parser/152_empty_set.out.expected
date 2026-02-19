@@ -11,8 +11,9 @@
         },
         "value": {
           "expr": {
-            "kind": "Name",
-            "name": "set"
+            "kind": "Place",
+            "root": "set",
+            "steps": []
           }
         }
       }

@@ -227,14 +227,6 @@ fn find_const_refs_inner<'db>(
     refs: &mut Vec<ConstStmtId>,
 ) {
     match expr.expr(db) {
-        ExprFunKind::Name(name) => {
-            let name_str = name.text(db);
-            if const_names.contains(name_str) {
-                if let Some(stmt_id) = name_to_stmt.get(name_str) {
-                    refs.push(*stmt_id);
-                }
-            }
-        }
         ExprFunKind::BinOp(binop) => {
             find_const_refs_inner(db, binop.lhs, const_names, name_to_stmt, refs);
             find_const_refs_inner(db, binop.rhs, const_names, name_to_stmt, refs);
@@ -289,6 +281,15 @@ fn find_const_refs_inner<'db>(
             }
         }
         ExprFunKind::Place(ref place) => {
+            // Zero-step Place is a bare variable reference — check for const ref.
+            if place.steps.is_empty() {
+                let name_str = place.root.text(db);
+                if const_names.contains(name_str) {
+                    if let Some(stmt_id) = name_to_stmt.get(name_str) {
+                        refs.push(*stmt_id);
+                    }
+                }
+            }
             // Walk index sub-expressions for const refs.
             for step in &place.steps {
                 if let datalove_datafun_ast::ast::PlaceStep::Index(idx) = step {

@@ -7,8 +7,9 @@
         "type_hint": null,
         "value": {
           "expr": {
-            "kind": "Name",
-            "name": "map"
+            "kind": "Place",
+            "root": "map",
+            "steps": []
           }
         }
       }

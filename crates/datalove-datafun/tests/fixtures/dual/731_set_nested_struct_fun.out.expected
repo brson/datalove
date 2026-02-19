@@ -26,10 +26,9 @@ DualAnalysis(
                         store.copy.tracked s0, v3
                         v4 = const 99u32
                         setfield s0.0.0, v4
-                        v5 = load.copy s0
+                        v5 = getfield s0.0
                         v6 = getfield v5.0
-                        v7 = getfield v6.0
-                        return v7
+                        return v6
                 """,
             ),
             aot_lowering: LoweringResult(
@@ -50,10 +49,9 @@ DualAnalysis(
                         store.copy.tracked s0, v3
                         v4 = const 99u32
                         setfield s0.0.0, v4
-                        v5 = load.copy s0
+                        v5 = getfield s0.0
                         v6 = getfield v5.0
-                        v7 = getfield v6.0
-                        return v7
+                        return v6
                 """,
             ),
             ir_match: true,

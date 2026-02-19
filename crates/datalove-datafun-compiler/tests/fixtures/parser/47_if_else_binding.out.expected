@@ -4,8 +4,9 @@
       {
         "condition": {
           "expr": {
-            "kind": "Name",
-            "name": "cond"
+            "kind": "Place",
+            "root": "cond",
+            "steps": []
           }
         },
         "else_body": [
@@ -15,8 +16,9 @@
             "type_hint": null,
             "value": {
               "expr": {
-                "kind": "Name",
-                "name": "val"
+                "kind": "Place",
+                "root": "val",
+                "steps": []
               }
             }
           }

@@ -38,8 +38,11 @@ fn is_self_assignment_script<'db>(
     value_expr: ExprFun<'db>,
 ) -> bool {
     // Check if the value expression is just a name reference.
-    if let ExprFunKind::Name(name) = value_expr.expr(ctx.db) {
-        let value_name = name.text(ctx.db);
+    if let ExprFunKind::Place(ref place) = value_expr.expr(ctx.db) {
+        if !place.steps.is_empty() {
+            return false;
+        }
+        let value_name = place.root.text(ctx.db);
         // Check if it's the same name as the target.
         if value_name == target_name {
             // Check if target is bound to a slot (mutable variable).

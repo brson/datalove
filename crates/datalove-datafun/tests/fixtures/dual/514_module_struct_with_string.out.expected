@@ -14,9 +14,8 @@ DualAnalysis(
                 ir: """
                     fn get_id(p0):
                     block0:
-                        v0 = copy p0
-                        v1 = getfield v0.1
-                        return v1
+                        v0 = getfield p0.1
+                        return v0
                 """,
             ),
             aot_lowering: LoweringResult(
@@ -24,9 +23,8 @@ DualAnalysis(
                 ir: """
                     fn get_id(p0):
                     block0:
-                        v0 = copy p0
-                        v1 = getfield v0.1
-                        return v1
+                        v0 = getfield p0.1
+                        return v0
                 """,
             ),
             ir_match: true,

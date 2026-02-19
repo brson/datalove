@@ -14,8 +14,9 @@
                 "error_mode": "Option",
                 "index": {
                   "expr": {
-                    "kind": "Name",
-                    "name": "i"
+                    "kind": "Place",
+                    "root": "i",
+                    "steps": []
                   }
                 },
                 "variant": "Index"

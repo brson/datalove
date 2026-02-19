@@ -1,20 +1,21 @@
 {
   "diagnostics": [],
-  "errors": [
-    {
-      "field_type": "int",
-      "kind": "NonCopyFieldProjection"
-    },
-    {
-      "field_type": "int",
-      "kind": "NonCopyFieldProjection"
-    }
-  ],
+  "errors": [],
   "judgements": [
     {
       "kind": "variable",
       "name": "t",
       "type": "(int, int)"
+    },
+    {
+      "kind": "variable",
+      "name": "x",
+      "type": "int"
+    },
+    {
+      "kind": "variable",
+      "name": "y",
+      "type": "int"
     }
   ]
 }

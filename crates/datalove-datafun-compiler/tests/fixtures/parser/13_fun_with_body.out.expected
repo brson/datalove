@@ -10,15 +10,17 @@
                 "kind": "BinOp",
                 "lhs": {
                   "expr": {
-                    "kind": "Name",
-                    "name": "accum"
+                    "kind": "Place",
+                    "root": "accum",
+                    "steps": []
                   }
                 },
                 "op": "AddChecked",
                 "rhs": {
                   "expr": {
-                    "kind": "Name",
-                    "name": "amount"
+                    "kind": "Place",
+                    "root": "amount",
+                    "steps": []
                   }
                 }
               }

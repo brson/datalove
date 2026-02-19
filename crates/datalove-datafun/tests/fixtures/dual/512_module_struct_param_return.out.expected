@@ -14,33 +14,29 @@ DualAnalysis(
                 ir: """
                     fn double_coords(p0):
                     block0:
-                        v0 = copy p0
-                        v1 = getfield v0.0
-                        v2 = copy p0
-                        v3 = getfield v2.0
-                        v4, v5 = add.checked v1, v3
-                        branch v5, block1, block2
+                        v0 = getfield p0.0
+                        v1 = getfield p0.0
+                        v2, v3 = add.checked v0, v1
+                        branch v3, block1, block2
                     block1:
-                        v6 = const "arithmetic overflow"
-                        v7 = error_from v6
-                        v8 = err v7
-                        return v8
+                        v4 = const "arithmetic overflow"
+                        v5 = error_from v4
+                        v6 = err v5
+                        return v6
                     block2:
-                        v9 = copy p0
-                        v10 = getfield v9.1
-                        v11 = copy p0
-                        v12 = getfield v11.1
-                        v13, v14 = add.checked v10, v12
-                        branch v14, block3, block4
+                        v7 = getfield p0.1
+                        v8 = getfield p0.1
+                        v9, v10 = add.checked v7, v8
+                        branch v10, block3, block4
                     block3:
-                        v15 = const "arithmetic overflow"
-                        v16 = error_from v15
-                        v17 = err v16
-                        return v17
+                        v11 = const "arithmetic overflow"
+                        v12 = error_from v11
+                        v13 = err v12
+                        return v13
                     block4:
-                        v18 = pack Struct0 {v4, v13}
-                        v19 = ok v18
-                        return v19
+                        v14 = pack Struct0 {v2, v9}
+                        v15 = ok v14
+                        return v15
                 """,
             ),
             aot_lowering: LoweringResult(
@@ -48,33 +44,29 @@ DualAnalysis(
                 ir: """
                     fn double_coords(p0):
                     block0:
-                        v0 = copy p0
-                        v1 = getfield v0.0
-                        v2 = copy p0
-                        v3 = getfield v2.0
-                        v4, v5 = add.checked v1, v3
-                        branch v5, block1, block2
+                        v0 = getfield p0.0
+                        v1 = getfield p0.0
+                        v2, v3 = add.checked v0, v1
+                        branch v3, block1, block2
                     block1:
-                        v6 = const "arithmetic overflow"
-                        v7 = error_from v6
-                        v8 = err v7
-                        return v8
+                        v4 = const "arithmetic overflow"
+                        v5 = error_from v4
+                        v6 = err v5
+                        return v6
                     block2:
-                        v9 = copy p0
-                        v10 = getfield v9.1
-                        v11 = copy p0
-                        v12 = getfield v11.1
-                        v13, v14 = add.checked v10, v12
-                        branch v14, block3, block4
+                        v7 = getfield p0.1
+                        v8 = getfield p0.1
+                        v9, v10 = add.checked v7, v8
+                        branch v10, block3, block4
                     block3:
-                        v15 = const "arithmetic overflow"
-                        v16 = error_from v15
-                        v17 = err v16
-                        return v17
+                        v11 = const "arithmetic overflow"
+                        v12 = error_from v11
+                        v13 = err v12
+                        return v13
                     block4:
-                        v18 = pack Struct0 {v4, v13}
-                        v19 = ok v18
-                        return v19
+                        v14 = pack Struct0 {v2, v9}
+                        v15 = ok v14
+                        return v15
                 """,
             ),
             ir_match: true,

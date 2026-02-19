@@ -25,12 +25,10 @@ DualAnalysis(
                     
                     fn swap_coords(p0):
                     block0:
-                        v0 = copy p0
-                        v1 = getfield v0.1
-                        v2 = copy p0
-                        v3 = getfield v2.0
-                        v4 = pack Struct0 {v1, v3}
-                        return v4
+                        v0 = getfield p0.1
+                        v1 = getfield p0.0
+                        v2 = pack Struct0 {v0, v1}
+                        return v2
                 """,
             ),
             aot_lowering: LoweringResult(
@@ -50,12 +48,10 @@ DualAnalysis(
                     
                     fn swap_coords(p0):
                     block0:
-                        v0 = copy p0
-                        v1 = getfield v0.1
-                        v2 = copy p0
-                        v3 = getfield v2.0
-                        v4 = pack Struct0 {v1, v3}
-                        return v4
+                        v0 = getfield p0.1
+                        v1 = getfield p0.0
+                        v2 = pack Struct0 {v0, v1}
+                        return v2
                 """,
             ),
             ir_match: true,

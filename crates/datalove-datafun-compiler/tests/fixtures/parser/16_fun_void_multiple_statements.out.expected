@@ -12,15 +12,17 @@
                 "kind": "BinOp",
                 "lhs": {
                   "expr": {
-                    "kind": "Name",
-                    "name": "a"
+                    "kind": "Place",
+                    "root": "a",
+                    "steps": []
                   }
                 },
                 "op": "Add",
                 "rhs": {
                   "expr": {
-                    "kind": "Name",
-                    "name": "b"
+                    "kind": "Place",
+                    "root": "b",
+                    "steps": []
                   }
                 }
               }
@@ -35,8 +37,9 @@
                 "kind": "BinOp",
                 "lhs": {
                   "expr": {
-                    "kind": "Name",
-                    "name": "x"
+                    "kind": "Place",
+                    "root": "x",
+                    "steps": []
                   }
                 },
                 "op": "Mul",

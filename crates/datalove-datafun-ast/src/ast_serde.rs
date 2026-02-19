@@ -210,7 +210,6 @@ pub struct ExprFun {
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(tag = "kind")]
 pub enum ExprFunKind {
-    Name { name: String },
     BinOp(ExprBinOp),
     FunctionCall(ExprFunctionCall),
     Tuple(ExprTuple),
@@ -774,9 +773,6 @@ impl ExprFun {
 impl ExprFunKind {
     pub fn from_ast<'db>(db: &'db dyn Db, ast: &crate::ast::ExprFunKind<'db>) -> Self {
         match ast {
-            crate::ast::ExprFunKind::Name(n) => ExprFunKind::Name {
-                name: n.as_str(db).to_string(),
-            },
             crate::ast::ExprFunKind::BinOp(b) => ExprFunKind::BinOp(ExprBinOp::from_ast(db, b)),
             crate::ast::ExprFunKind::FunctionCall(f) => ExprFunKind::FunctionCall(ExprFunctionCall::from_ast(db, *f)),
             crate::ast::ExprFunKind::Tuple(t) => ExprFunKind::Tuple(ExprTuple::from_ast(db, t)),

@@ -17,17 +17,14 @@
                         "kind": "TryOption",
                         "operand": {
                           "expr": {
-                            "base": {
-                              "expr": {
-                                "kind": "Name",
-                                "name": "a"
+                            "kind": "Place",
+                            "root": "a",
+                            "steps": [
+                              {
+                                "name": "b",
+                                "variant": "Name"
                               }
-                            },
-                            "field": {
-                              "name": "b",
-                              "variant": "Name"
-                            },
-                            "kind": "FieldProj"
+                            ]
                           }
                         }
                       }

@@ -7,19 +7,21 @@
         "type_hint": null,
         "value": {
           "expr": {
-            "base": {
-              "expr": {
-                "kind": "Name",
-                "name": "a"
+            "kind": "Place",
+            "root": "a",
+            "steps": [
+              {
+                "error_mode": null,
+                "index": {
+                  "expr": {
+                    "kind": "Place",
+                    "root": "i",
+                    "steps": []
+                  }
+                },
+                "variant": "Index"
               }
-            },
-            "index": {
-              "expr": {
-                "kind": "Name",
-                "name": "i"
-              }
-            },
-            "kind": "Index"
+            ]
           }
         }
       }

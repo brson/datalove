@@ -9,8 +9,9 @@
                 "kind": "BinOp",
                 "lhs": {
                   "expr": {
-                    "kind": "Name",
-                    "name": "n"
+                    "kind": "Place",
+                    "root": "n",
+                    "steps": []
                   }
                 },
                 "op": "Gt",
@@ -40,8 +41,9 @@
                 "kind": "Ret",
                 "value": {
                   "expr": {
-                    "kind": "Name",
-                    "name": "zero"
+                    "kind": "Place",
+                    "root": "zero",
+                    "steps": []
                   }
                 }
               }
@@ -57,8 +59,9 @@
                     "kind": "BinOp",
                     "lhs": {
                       "expr": {
-                        "kind": "Name",
-                        "name": "n"
+                        "kind": "Place",
+                        "root": "n",
+                        "steps": []
                       }
                     },
                     "op": "Mul",
@@ -76,8 +79,9 @@
                 "kind": "Ret",
                 "value": {
                   "expr": {
-                    "kind": "Name",
-                    "name": "doubled"
+                    "kind": "Place",
+                    "root": "doubled",
+                    "steps": []
                   }
                 }
               }

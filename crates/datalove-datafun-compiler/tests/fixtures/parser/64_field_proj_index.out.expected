@@ -7,17 +7,14 @@
         "type_hint": null,
         "value": {
           "expr": {
-            "base": {
-              "expr": {
-                "kind": "Name",
-                "name": "a"
+            "kind": "Place",
+            "root": "a",
+            "steps": [
+              {
+                "index": 0,
+                "variant": "Index"
               }
-            },
-            "field": {
-              "index": 0,
-              "variant": "Index"
-            },
-            "kind": "FieldProj"
+            ]
           }
         }
       }

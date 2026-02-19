@@ -254,9 +254,6 @@ pub fn datafun_expr_to_datalit_serde<'db>(
         }
 
         // Datafun-only constructs - return error.
-        ast::ExprFunKind::Name(_) => {
-            return Err(ConversionError::NotPureDatalit("Name".to_string()));
-        }
         ast::ExprFunKind::BinOp(_) => {
             return Err(ConversionError::NotPureDatalit("BinOp".to_string()));
         }

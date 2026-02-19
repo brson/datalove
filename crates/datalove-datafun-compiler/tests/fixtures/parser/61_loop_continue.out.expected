@@ -38,8 +38,9 @@
                     "kind": "BinOp",
                     "lhs": {
                       "expr": {
-                        "kind": "Name",
-                        "name": "i"
+                        "kind": "Place",
+                        "root": "i",
+                        "steps": []
                       }
                     },
                     "op": "Add",
@@ -59,8 +60,9 @@
                     "kind": "BinOp",
                     "lhs": {
                       "expr": {
-                        "kind": "Name",
-                        "name": "i"
+                        "kind": "Place",
+                        "root": "i",
+                        "steps": []
                       }
                     },
                     "op": "Gt",
@@ -87,8 +89,9 @@
                     "kind": "BinOp",
                     "lhs": {
                       "expr": {
-                        "kind": "Name",
-                        "name": "i"
+                        "kind": "Place",
+                        "root": "i",
+                        "steps": []
                       }
                     },
                     "op": "Eq",
@@ -115,8 +118,9 @@
                     "kind": "BinOp",
                     "lhs": {
                       "expr": {
-                        "kind": "Name",
-                        "name": "i"
+                        "kind": "Place",
+                        "root": "i",
+                        "steps": []
                       }
                     },
                     "op": "Eq",
@@ -146,8 +150,9 @@
                     "kind": "BinOp",
                     "lhs": {
                       "expr": {
-                        "kind": "Name",
-                        "name": "count"
+                        "kind": "Place",
+                        "root": "count",
+                        "steps": []
                       }
                     },
                     "op": "Add",
@@ -168,8 +173,9 @@
             "kind": "Ret",
             "value": {
               "expr": {
-                "kind": "Name",
-                "name": "count"
+                "kind": "Place",
+                "root": "count",
+                "steps": []
               }
             }
           }

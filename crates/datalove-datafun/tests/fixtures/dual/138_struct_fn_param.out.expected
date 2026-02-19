@@ -23,16 +23,14 @@ DualAnalysis(
                     
                     fn sum_coords(p0):
                     block0:
-                        v0 = copy p0
-                        v1 = getfield v0.0
-                        v2 = widen v1
-                        v3 = copy p0
-                        v4 = getfield v3.1
-                        v5 = widen v4
-                        v6 = add v2, v5
-                        drop v2
-                        drop v5
-                        return v6
+                        v0 = getfield p0.0
+                        v1 = widen v0
+                        v2 = getfield p0.1
+                        v3 = widen v2
+                        v4 = add v1, v3
+                        drop v1
+                        drop v3
+                        return v4
                 """,
             ),
             aot_lowering: LoweringResult(
@@ -50,16 +48,14 @@ DualAnalysis(
                     
                     fn sum_coords(p0):
                     block0:
-                        v0 = copy p0
-                        v1 = getfield v0.0
-                        v2 = widen v1
-                        v3 = copy p0
-                        v4 = getfield v3.1
-                        v5 = widen v4
-                        v6 = add v2, v5
-                        drop v2
-                        drop v5
-                        return v6
+                        v0 = getfield p0.0
+                        v1 = widen v0
+                        v2 = getfield p0.1
+                        v3 = widen v2
+                        v4 = add v1, v3
+                        drop v1
+                        drop v3
+                        return v4
                 """,
             ),
             ir_match: true,

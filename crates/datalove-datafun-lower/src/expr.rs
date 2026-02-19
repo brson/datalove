@@ -15,16 +15,15 @@ use super::LowerError;
 /// Lower an operand for borrowing contexts (binop, unaryop).
 ///
 /// Returns an Operand directly:
-/// - For Names bound to slots: returns Operand::Slot (no load, just borrow)
-/// - For Names bound to values: returns Operand::Value
+/// - For zero-step Places (variables): returns Operand::Slot/Value/Param
 /// - For compound expressions: evaluates and returns Operand::Value(result)
 pub fn lower_operand<'db>(
     ctx: &mut LowerCtx<'db>,
     expr: ExprFun<'db>,
 ) -> Result<Operand, LowerError> {
     match expr.expr(ctx.db) {
-        ExprFunKind::Name(name) => {
-            let name_str = name.text(ctx.db);
+        ExprFunKind::Place(ref place) if place.steps.is_empty() => {
+            let name_str = place.root.text(ctx.db);
             // Check for const binding first.
             if let Some((const_type, const_value)) = ctx.lookup_const(name_str) {
                 // Clone to release borrow on ctx.
@@ -76,6 +75,22 @@ fn lower_call_arg<'db>(
         if let Some(operand) = try_lower_arg_index_as_ref(ctx, arg, mode, arg_type)? {
             return Ok(operand);
         }
+        // Place with steps: lower as ref.
+        if let ExprFunKind::Place(ref place) = arg.expr(ctx.db) {
+            if !place.steps.is_empty() {
+                let operand = lower_place_as_ref(ctx, place)?;
+                if mode == ParamMode::Out {
+                    if let Operand::Value(ref_value) = operand {
+                        if let Some(ty) = arg_type {
+                            if !ty.is_copy() {
+                                ctx.emit(Instruction::DropViaRef { ref_value });
+                            }
+                        }
+                    }
+                }
+                return Ok(ctx.deref_if_ref(operand));
+            }
+        }
         if let ExprFunKind::FieldProj(proj) = arg.expr(ctx.db) {
             let operand = lower_field_proj_as_ref(ctx, arg, proj)?;
             // For out params, destroy existing field value before call.
@@ -107,9 +122,9 @@ fn lower_call_arg<'db>(
 
     // For 'in' mode: function consumes the argument, so don't record temps.
     match arg.expr(ctx.db) {
-        ExprFunKind::Name(name) => {
+        ExprFunKind::Place(ref place) if place.steps.is_empty() => {
             // Return the operand directly (Value, Slot, or Param).
-            let name_str = name.text(ctx.db);
+            let name_str = place.root.text(ctx.db);
             let operand = ctx.lookup_var(name_str)
                 .unwrap_or_else(|| panic!("variable '{}' not found - typechecker should catch this", name_str));
             Ok(operand)
@@ -200,27 +215,18 @@ pub fn lower_field_proj_as_ref<'db>(
     // For mut/out params, we need to reference the original slot/param directly,
     // not a copy. Check if base is a simple variable name bound to a slot or param.
     let src = match proj.base.expr(ctx.db) {
-        ExprFunKind::Name(name) => {
-            let name_str = name.text(ctx.db);
+        ExprFunKind::Place(ref place) if place.steps.is_empty() => {
+            let name_str = place.root.text(ctx.db);
             let operand = ctx.lookup_var(name_str)
                 .unwrap_or_else(|| panic!("variable '{}' not found - typechecker should catch this", name_str));
-            match operand {
-                Operand::Slot(_) | Operand::Param(_) => {
-                    // Use the slot/param directly - no copy needed.
-                    operand
-                }
-                Operand::Value(v) => {
-                    // SSA value - use as-is.
-                    Operand::Value(v)
-                }
-                Operand::ValueRef(v) => {
-                    // Ref value (from GetFieldRef) - use as-is.
-                    Operand::ValueRef(v)
-                }
-                Operand::ExternalValue { .. } | Operand::ExternalSlot { .. } => {
-                    // External references - use as-is.
-                    operand
-                }
+            operand
+        }
+        ExprFunKind::Place(ref place) => {
+            // Place base with steps — get ref.
+            let ref_op = lower_place_as_ref(ctx, place)?;
+            match ref_op {
+                Operand::Value(v) => Operand::ValueRef(v),
+                other => other,
             }
         }
         ExprFunKind::FieldProj(inner_proj) => {
@@ -256,14 +262,6 @@ pub fn lower_field_proj_as_ref<'db>(
             } else {
                 let base_id = lower_expression(ctx, proj.base)?;
                 Operand::Value(base_id)
-            }
-        }
-        ExprFunKind::Place(ref place) => {
-            // Place base (e.g., `a[i]?.field` where base is the Place).
-            let ref_op = lower_place_as_ref(ctx, place)?;
-            match ref_op {
-                Operand::Value(v) => Operand::ValueRef(v),
-                other => other,
             }
         }
         _ => {
@@ -326,15 +324,9 @@ pub fn lower_expression_for_ref<'db>(
                 Ok(Operand::Value(value_id))
             }
         }
-        ExprFunKind::Place(ref place) => {
-            // Place expression — borrow by reference.
-            lower_place_as_ref(ctx, place)
-        }
-        ExprFunKind::Name(name) => {
+        ExprFunKind::Place(ref place) if place.steps.is_empty() => {
             // For named values/params, return the operand directly to borrow.
-            // This avoids the Move that lower_expression would emit for Params,
-            // which would transfer ownership and leave the Param empty.
-            let name_str = name.text(ctx.db);
+            let name_str = place.root.text(ctx.db);
             // Check const bindings first - these are compile-time values.
             if let Some((const_type, const_value)) = ctx.lookup_const(name_str).cloned() {
                 let dest = ctx.fresh_value(const_type.clone());
@@ -348,6 +340,10 @@ pub fn lower_expression_for_ref<'db>(
             let operand = ctx.lookup_var(name_str)
                 .unwrap_or_else(|| panic!("variable '{}' not found - typechecker should catch this", name_str));
             Ok(operand)
+        }
+        ExprFunKind::Place(ref place) => {
+            // Place expression with steps — borrow by reference.
+            lower_place_as_ref(ctx, place)
         }
         _ => {
             // All other expressions: use standard lowering.
@@ -365,8 +361,8 @@ pub fn lower_expression<'db>(
     expr: ExprFun<'db>,
 ) -> Result<ValueId, LowerError> {
     match expr.expr(ctx.db) {
-        ExprFunKind::Name(name) => {
-            let name_str = name.text(ctx.db);
+        ExprFunKind::Place(ref place) if place.steps.is_empty() => {
+            let name_str = place.root.text(ctx.db);
             // Check const bindings first - these are compile-time values.
             if let Some((const_type, const_value)) = ctx.lookup_const(name_str).cloned() {
                 let dest = ctx.fresh_value(const_type);
@@ -399,7 +395,6 @@ pub fn lower_expression<'db>(
                 }
                 Operand::Param(_) => {
                     // For params, emit Copy or Move from the param.
-                    // The interpreter will read through the param pointer.
                     let param_type = ctx.expr_type(expr);
                     let dest = ctx.fresh_value(param_type.clone());
                     if param_type.is_copy() {
@@ -411,7 +406,6 @@ pub fn lower_expression<'db>(
                 }
                 Operand::ExternalValue { .. } | Operand::ExternalSlot { .. } => {
                     // External operands from previous script units.
-                    // Copy types use Copy, non-copy types use Move.
                     let ext_type = ctx.expr_type(expr);
                     let dest = ctx.fresh_value(ext_type.clone());
                     if ext_type.is_copy() {
@@ -1506,6 +1500,9 @@ fn lower_place_expression<'db>(
     let mut current_op = ctx.lookup_var(root_name_str)
         .unwrap_or_else(|| panic!("variable '{}' not found - typechecker should catch this", root_name_str));
 
+    // Check if there are any index steps to determine lowering strategy.
+    let has_index_steps = place.steps.iter().any(|s| matches!(s, ast::PlaceStep::Index(_)));
+
     // Process all steps. For intermediate steps, we get refs. For the final
     // index step, we use ListGet/MapGet to get a value.
     let last_idx = place.steps.len() - 1;
@@ -1514,14 +1511,29 @@ fn lower_place_expression<'db>(
             ast::PlaceStep::Field(field) => {
                 let base_type = operand_type(ctx, &current_op);
                 let field_index = resolve_field_index(field, &base_type, ctx.db)?;
-                let field_type = field_type_from_base(&base_type, field_index);
-                let dest = ctx.fresh_value(IrType::Ref(Box::new(field_type)));
-                ctx.emit(Instruction::GetFieldRef {
-                    dest,
-                    src: current_op,
-                    field_index,
-                });
-                current_op = Operand::ValueRef(dest);
+                if has_index_steps {
+                    // Use GetFieldRef when index steps follow — they need refs.
+                    let field_type = field_type_from_base(&base_type, field_index);
+                    let dest = ctx.fresh_value(IrType::Ref(Box::new(field_type)));
+                    ctx.emit(Instruction::GetFieldRef {
+                        dest,
+                        src: current_op,
+                        field_index,
+                    });
+                    current_op = Operand::ValueRef(dest);
+                } else if i == last_idx {
+                    // Final field step with no index steps — produce value directly.
+                    let result_type = ctx.expr_type(expr);
+                    let dest = ctx.fresh_value(result_type);
+                    ctx.emit_get_field(dest, current_op, field_index);
+                    return Ok(dest);
+                } else {
+                    // Intermediate field step, no index steps — use GetField to walk.
+                    let field_type = field_type_from_base(&base_type, field_index);
+                    let dest = ctx.fresh_value(field_type);
+                    ctx.emit_get_field(dest, current_op, field_index);
+                    current_op = Operand::Value(dest);
+                }
             }
             ast::PlaceStep::Index(idx) => {
                 let error_mode = idx.error_mode
@@ -1577,8 +1589,9 @@ fn lower_place_expression<'db>(
         }
     }
 
-    // If we get here, there were no index steps (shouldn't happen for Place expressions).
-    panic!("Place expression must contain at least one index step");
+    // Field-only Places return early from the loop above.
+    // Zero-step Places are handled by the caller before reaching here.
+    panic!("Place expression ended without returning — missing index or field steps");
 }
 
 /// Lower a Place expression to a reference (for ref/mut/out params and debuglog).
@@ -1618,10 +1631,11 @@ fn lower_place_as_ref<'db>(
         }
     }
 
-    Ok(Operand::Value(match current_op {
-        Operand::ValueRef(v) => v,
-        _ => panic!("expected ValueRef from place ref lowering"),
-    }))
+    match current_op {
+        Operand::ValueRef(v) => Ok(Operand::Value(v)),
+        // Zero-step Place or field-only steps that end on a slot/param — pass through.
+        other => Ok(other),
+    }
 }
 
 /// Get type of an operand for place lowering.

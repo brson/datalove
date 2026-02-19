@@ -10,8 +10,9 @@
             "kind": "BinOp",
             "lhs": {
               "expr": {
-                "kind": "Name",
-                "name": "a"
+                "kind": "Place",
+                "root": "a",
+                "steps": []
               }
             },
             "op": "Add",
@@ -20,15 +21,17 @@
                 "kind": "BinOp",
                 "lhs": {
                   "expr": {
-                    "kind": "Name",
-                    "name": "b"
+                    "kind": "Place",
+                    "root": "b",
+                    "steps": []
                   }
                 },
                 "op": "Mul",
                 "rhs": {
                   "expr": {
-                    "kind": "Name",
-                    "name": "c"
+                    "kind": "Place",
+                    "root": "c",
+                    "steps": []
                   }
                 }
               }

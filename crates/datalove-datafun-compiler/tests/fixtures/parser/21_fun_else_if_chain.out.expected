@@ -9,8 +9,9 @@
                 "kind": "BinOp",
                 "lhs": {
                   "expr": {
-                    "kind": "Name",
-                    "name": "score"
+                    "kind": "Place",
+                    "root": "score",
+                    "steps": []
                   }
                 },
                 "op": "Ge",
@@ -30,8 +31,9 @@
                     "kind": "BinOp",
                     "lhs": {
                       "expr": {
-                        "kind": "Name",
-                        "name": "score"
+                        "kind": "Place",
+                        "root": "score",
+                        "steps": []
                       }
                     },
                     "op": "Ge",
@@ -51,8 +53,9 @@
                         "kind": "BinOp",
                         "lhs": {
                           "expr": {
-                            "kind": "Name",
-                            "name": "score"
+                            "kind": "Place",
+                            "root": "score",
+                            "steps": []
                           }
                         },
                         "op": "Ge",

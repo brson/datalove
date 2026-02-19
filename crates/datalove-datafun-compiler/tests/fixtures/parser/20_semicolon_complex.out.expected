@@ -47,15 +47,17 @@
             "kind": "BinOp",
             "lhs": {
               "expr": {
-                "kind": "Name",
-                "name": "x"
+                "kind": "Place",
+                "root": "x",
+                "steps": []
               }
             },
             "op": "AddChecked",
             "rhs": {
               "expr": {
-                "kind": "Name",
-                "name": "y"
+                "kind": "Place",
+                "root": "y",
+                "steps": []
               }
             }
           }

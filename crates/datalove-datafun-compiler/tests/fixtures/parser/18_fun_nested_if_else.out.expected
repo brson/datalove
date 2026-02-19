@@ -9,8 +9,9 @@
                 "kind": "BinOp",
                 "lhs": {
                   "expr": {
-                    "kind": "Name",
-                    "name": "n"
+                    "kind": "Place",
+                    "root": "n",
+                    "steps": []
                   }
                 },
                 "op": "Lt",
@@ -43,8 +44,9 @@
                     "kind": "BinOp",
                     "lhs": {
                       "expr": {
-                        "kind": "Name",
-                        "name": "n"
+                        "kind": "Place",
+                        "root": "n",
+                        "steps": []
                       }
                     },
                     "op": "Lt",

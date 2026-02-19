@@ -35,15 +35,17 @@ pub fn eval_const_expr<'db>(
     expr: ExprFun<'db>,
 ) -> Result<ConstValue, LowerError> {
     // For const references, look up the previously computed value.
-    if let ExprFunKind::Name(name) = expr.expr(ctx.db) {
-        let name_str = name.text(ctx.db);
-        if let Some((_, value)) = ctx.lookup_const(name_str) {
-            return Ok(value.clone());
+    if let ExprFunKind::Place(ref place) = expr.expr(ctx.db) {
+        if place.steps.is_empty() {
+            let name_str = place.root.text(ctx.db);
+            if let Some((_, value)) = ctx.lookup_const(name_str) {
+                return Ok(value.clone());
+            }
+            return Err(LowerError::NotImplemented(format!(
+                "non-const variable '{}' in const expression",
+                name_str
+            )));
         }
-        return Err(LowerError::NotImplemented(format!(
-            "non-const variable '{}' in const expression",
-            name_str
-        )));
     }
 
     // Lower to IR and use the evaluator.
@@ -257,12 +259,13 @@ pub fn lower_const_binding<'db>(
     }
 
     // Check for const references - substitute with already-evaluated values.
-    if let ExprFunKind::Name(name) = expr.expr(db) {
-        let name_str = name.text(db);
-        if let Some((_, value)) = resolved_consts.get(name_str) {
-            return Ok((None, Some(value.clone())));
+    if let ExprFunKind::Place(ref place) = expr.expr(db) {
+        if place.steps.is_empty() {
+            let name_str = place.root.text(db);
+            if let Some((_, value)) = resolved_consts.get(name_str) {
+                return Ok((None, Some(value.clone())));
+            }
         }
-        // Not a const reference we've evaluated - fall through to lowering.
     }
 
     // Use provided module func_id_map or empty one.

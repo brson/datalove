@@ -113,8 +113,9 @@ pub struct StmtSet<'db> {
 
 /// A place: a root variable plus navigation steps to a storage location.
 ///
-/// Used for set-statement targets and for expression-context places
-/// that involve index operations (e.g., `a[i]?`, `a[i]?.field`).
+/// All variable references are Places. A bare variable `x` is
+/// `Place { root: "x", steps: [] }`. Field chains like `x.a.b` have
+/// Field steps. Index operations like `a[i]?` have Index steps.
 #[derive(Clone, Hash, PartialEq, Eq)]
 #[derive(salsa::Update)]
 pub struct Place<'db> {
@@ -331,8 +332,6 @@ pub struct ExprFun<'db> {
 #[derive(Clone, Hash, PartialEq, Eq)]
 #[derive(salsa::Update)]
 pub enum ExprFunKind<'db> {
-    // Bare name/identifier (for variables)
-    Name(InternedText<'db>),
     // Binary operation
     BinOp(ExprBinOp<'db>),
     // Function call
