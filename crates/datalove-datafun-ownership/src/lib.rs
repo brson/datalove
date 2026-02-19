@@ -43,7 +43,7 @@ use salsa::plumbing::AsId;
 use datalove_datafun_ast::ast::{
     Statement, StmtFun, StmtLet, StmtVar, StmtSet, StmtRet, StmtIf, StmtLoop, StmtConst,
     StmtMatch, MatchCaseKind,
-    ExprFun, ExprFunKind, BinOp, UnaryOp, ParamMode, SetTarget,
+    ExprFun, ExprFunKind, BinOp, UnaryOp, ParamMode,
 };
 use datalove_datafun_ir::IrType;
 
@@ -535,6 +535,10 @@ impl<'db> AnalysisCtx<'db> {
                 self.expr_may_early_return(idx.base)
                     || self.expr_may_early_return(idx.index)
             }
+            ExprFunKind::Place(ref place) => {
+                // Place expressions with index steps always may early-return.
+                place.steps.iter().any(|s| matches!(s, datalove_datafun_ast::ast::PlaceStep::Index(_)))
+            }
             _ => false,
         }
     }
@@ -750,6 +754,29 @@ impl<'db> AnalysisCtx<'db> {
                 // Index borrows base (like field projection), borrows index.
                 self.analyze_expr_moves(idx.base, false);
                 self.analyze_expr_moves(idx.index, false);
+                None
+            }
+            ExprFunKind::Place(ref place) => {
+                // Place expression: root is borrowed, index sub-expressions are borrowed.
+                let root_name = place.root.text(self.db);
+                if let Some(id) = self.lookup(root_name) {
+                    // Check for use-after-move on the root.
+                    if self.get_state(id) == Some(BindingState::Moved) {
+                        if !self.auto_adapt_mode.is_enabled() {
+                            let name = self.bindings[id.0 as usize].name.C();
+                            let moved_at = self.get_moved_at(id).unwrap_or(local_index);
+                            let recovery_hint = OwnershipRecoveryHint::InsertAdapt {
+                                description: format!("clone `{}` before the earlier use", name),
+                            };
+                            self.errors.push(AnalysisError::UseAfterMove { local_index, moved_at, name, recovery_hint });
+                        }
+                    }
+                }
+                for step in &place.steps {
+                    if let datalove_datafun_ast::ast::PlaceStep::Index(idx) = step {
+                        self.analyze_expr_moves(idx.index, false);
+                    }
+                }
                 None
             }
             // Literals don't move anything.
@@ -1191,13 +1218,24 @@ fn analyze_var<'db>(ctx: &mut AnalysisCtx<'db>, stmt: &StmtVar<'db>, stmt_idx: u
 }
 
 fn analyze_set<'db>(ctx: &mut AnalysisCtx<'db>, stmt: &StmtSet<'db>, stmt_idx: usize) {
-    // Analyze moves in index sub-expressions of the target (if any).
-    analyze_set_target_moves(ctx, &stmt.target);
+    let place = &stmt.target;
 
-    // If the target can early-return (index OOB), compute drops NOW before
-    // the RHS is analyzed. The RHS hasn't been evaluated yet at that point,
-    // so its bindings are still live and need dropping.
-    if set_target_may_early_return(&stmt.target) {
+    // Analyze moves in index sub-expressions of the target (if any).
+    for step in &place.steps {
+        if let datalove_datafun_ast::ast::PlaceStep::Index(idx) = step {
+            // Bare index (upsert): key is consumed (moved into map if absent).
+            // With ? or !: key is borrowed (only used for lookup).
+            let is_consumed = idx.error_mode.is_none();
+            ctx.analyze_expr_moves(idx.index, is_consumed);
+        }
+    }
+
+    // If the target can early-return (index with ? or !), compute drops NOW before
+    // the RHS is analyzed.
+    let may_early_return = place.steps.iter().any(|s| {
+        matches!(s, datalove_datafun_ast::ast::PlaceStep::Index(idx) if idx.error_mode.is_some())
+    });
+    if may_early_return {
         let drops = ctx.live_bindings_for_return();
         if !drops.is_empty() {
             ctx.schedule.before_set_target_early_return.insert(stmt_idx, drops);
@@ -1219,69 +1257,26 @@ fn analyze_set<'db>(ctx: &mut AnalysisCtx<'db>, stmt: &StmtSet<'db>, stmt_idx: u
     }
 
     // Set doesn't create a new binding, but the slot is now live again.
-    let name = match &stmt.target {
-        SetTarget::Name(n) => n.text(ctx.db),
-        SetTarget::Proj(_) | SetTarget::Index(_) => {
-            // Find root name of projection/index chain.
-            let root_name = set_target_root_name(ctx.db, &stmt.target);
-            if let Some(root) = root_name {
-                if let Some(id) = ctx.lookup(root) {
-                    // Disallow partial field/index writes to uninitialized bindings.
-                    if ctx.get_out_param_init(id) == Some(OutParamInitState::Uninitialized) {
-                        ctx.errors.push(AnalysisError::OutParamPartialWrite {
-                            local_index: stmt.local_index,
-                            name: root.to_string(),
-                        });
-                    }
-                }
+    if place.steps.is_empty() {
+        // Simple name assignment.
+        let name = place.root.text(ctx.db);
+        if let Some(id) = ctx.lookup(name) {
+            ctx.set_state(id, BindingState::Live);
+            if ctx.get_out_param_init(id).is_some() {
+                ctx.set_out_param_init(id, OutParamInitState::Initialized);
             }
-            return;
         }
-    };
-    if let Some(id) = ctx.lookup(name) {
-        ctx.set_state(id, BindingState::Live);
-
-        // Mark binding as initialized (Out param or uninitialized var).
-        // Only set if the binding has init tracking (is in out_param_init map).
-        if ctx.get_out_param_init(id).is_some() {
-            ctx.set_out_param_init(id, OutParamInitState::Initialized);
+    } else {
+        // Projection/index chain — check root for partial write to uninit.
+        let root_name = place.root.text(ctx.db);
+        if let Some(id) = ctx.lookup(root_name) {
+            if ctx.get_out_param_init(id) == Some(OutParamInitState::Uninitialized) {
+                ctx.errors.push(AnalysisError::OutParamPartialWrite {
+                    local_index: stmt.local_index,
+                    name: root_name.to_string(),
+                });
+            }
         }
-    }
-}
-
-/// Extract the root name from a set target projection chain.
-/// Analyze moves in set target sub-expressions (index expressions).
-fn analyze_set_target_moves<'db>(ctx: &mut AnalysisCtx<'db>, target: &SetTarget<'db>) {
-    match target {
-        SetTarget::Name(_) => {}
-        SetTarget::Proj(proj) => analyze_set_target_moves(ctx, &proj.base),
-        SetTarget::Index(idx) => {
-            analyze_set_target_moves(ctx, &idx.base);
-            // Bare index (upsert): key is consumed (moved into map if absent).
-            // With ? or !: key is borrowed (only used for lookup).
-            let is_consumed = idx.error_mode.is_none();
-            ctx.analyze_expr_moves(idx.index, is_consumed);
-        }
-    }
-}
-
-/// Check if a set target contains early-return operators (index with ? or !).
-///
-/// Bare index (upsert, error_mode: None) never early-returns because it
-/// always succeeds. Only `?` and `!` indices can early-return.
-fn set_target_may_early_return<'db>(target: &SetTarget<'db>) -> bool {
-    match target {
-        SetTarget::Name(_) => false,
-        SetTarget::Proj(proj) => set_target_may_early_return(&proj.base),
-        SetTarget::Index(idx) => idx.error_mode.is_some(),
-    }
-}
-
-fn set_target_root_name<'a, 'db>(db: &'db dyn salsa::Database, target: &'a SetTarget<'db>) -> Option<&'a str> {
-    match target {
-        SetTarget::Name(n) => Some(n.text(db)),
-        SetTarget::Proj(proj) => set_target_root_name(db, &proj.base),
-        SetTarget::Index(idx) => set_target_root_name(db, &idx.base),
     }
 }
 

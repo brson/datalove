@@ -56,27 +56,25 @@ pub struct StmtConst {
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct StmtSet {
-    pub target: SetTarget,
+    pub target: Place,
     pub value: ExprFun,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct Place {
+    pub root: String,
+    pub steps: Vec<PlaceStep>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(tag = "variant")]
-pub enum SetTarget {
-    Name { name: String },
-    Proj(SetTargetProj),
-    Index(SetTargetIndex),
+pub enum PlaceStep {
+    Field(FieldSelector),
+    Index(PlaceIndex),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-pub struct SetTargetProj {
-    pub base: Box<SetTarget>,
-    pub field: FieldSelector,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-pub struct SetTargetIndex {
-    pub base: Box<SetTarget>,
+pub struct PlaceIndex {
     pub index: ExprFun,
     pub error_mode: Option<IndexErrorMode>,
 }
@@ -258,6 +256,9 @@ pub enum ExprFunKind {
 
     // Index expression.
     Index(ExprIndex),
+
+    // Place expression.
+    Place(Place),
 
     ParseError(ExprFunParseError),
 
@@ -582,37 +583,33 @@ impl StmtConst {
 impl StmtSet {
     pub fn from_ast<'db>(db: &'db dyn Db, ast: &crate::ast::StmtSet<'db>) -> Self {
         StmtSet {
-            target: SetTarget::from_ast(db, &ast.target),
+            target: Place::from_ast(db, &ast.target),
             value: ExprFun::from_ast(db, ast.value),
         }
     }
 }
 
-impl SetTarget {
-    pub fn from_ast<'db>(db: &'db dyn Db, ast: &crate::ast::SetTarget<'db>) -> Self {
+impl Place {
+    pub fn from_ast<'db>(db: &'db dyn Db, ast: &crate::ast::Place<'db>) -> Self {
+        Place {
+            root: ast.root.as_str(db).to_string(),
+            steps: ast.steps.iter().map(|s| PlaceStep::from_ast(db, s)).collect(),
+        }
+    }
+}
+
+impl PlaceStep {
+    pub fn from_ast<'db>(db: &'db dyn Db, ast: &crate::ast::PlaceStep<'db>) -> Self {
         match ast {
-            crate::ast::SetTarget::Name(name) => SetTarget::Name {
-                name: name.as_str(db).to_string(),
-            },
-            crate::ast::SetTarget::Proj(proj) => SetTarget::Proj(SetTargetProj::from_ast(db, proj)),
-            crate::ast::SetTarget::Index(idx) => SetTarget::Index(SetTargetIndex::from_ast(db, idx)),
+            crate::ast::PlaceStep::Field(field) => PlaceStep::Field(FieldSelector::from_ast(db, field)),
+            crate::ast::PlaceStep::Index(idx) => PlaceStep::Index(PlaceIndex::from_ast(db, idx)),
         }
     }
 }
 
-impl SetTargetProj {
-    pub fn from_ast<'db>(db: &'db dyn Db, ast: &crate::ast::SetTargetProj<'db>) -> Self {
-        SetTargetProj {
-            base: Box::new(SetTarget::from_ast(db, &*ast.base)),
-            field: FieldSelector::from_ast(db, &ast.field),
-        }
-    }
-}
-
-impl SetTargetIndex {
-    pub fn from_ast<'db>(db: &'db dyn Db, ast: &crate::ast::SetTargetIndex<'db>) -> Self {
-        SetTargetIndex {
-            base: Box::new(SetTarget::from_ast(db, &*ast.base)),
+impl PlaceIndex {
+    pub fn from_ast<'db>(db: &'db dyn Db, ast: &crate::ast::PlaceIndex<'db>) -> Self {
+        PlaceIndex {
             index: ExprFun::from_ast(db, ast.index),
             error_mode: ast.error_mode.map(|m| match m {
                 crate::ast::IndexErrorMode::Option => IndexErrorMode::Option,
@@ -831,6 +828,7 @@ impl ExprFunKind {
             }),
 
             crate::ast::ExprFunKind::Index(e) => ExprFunKind::Index(ExprIndex::from_ast(db, e)),
+            crate::ast::ExprFunKind::Place(p) => ExprFunKind::Place(Place::from_ast(db, p)),
 
             crate::ast::ExprFunKind::ParseError(e) => ExprFunKind::ParseError(ExprFunParseError::from_ast(db, e)),
             crate::ast::ExprFunKind::IntrinsicCall(e) => ExprFunKind::IntrinsicCall(ExprIntrinsicCall::from_ast(db, e)),

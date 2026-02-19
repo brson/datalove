@@ -219,8 +219,9 @@ impl<'db> Parser<'db> {
             }
         };
 
-        // Parse optional field projections: set a.x.y = value
-        let target = self.parse_set_target_projections(ast::SetTarget::Name(name));
+        // Parse optional field projections and index steps.
+        let steps = self.parse_place_steps();
+        let target = ast::Place { root: name, steps };
 
         // Need `=` sigil.
         if !self.eat_sigil(Sigil::Equals) {
@@ -242,16 +243,14 @@ impl<'db> Parser<'db> {
         })
     }
 
-    /// Parse optional projections and indexing for set targets (e.g., `.x.0.y`, `[i]?`).
-    fn parse_set_target_projections(&mut self, mut target: ast::SetTarget<'db>) -> ast::SetTarget<'db> {
+    /// Parse place steps for set targets (e.g., `.x.0.y`, `[i]?`).
+    fn parse_place_steps(&mut self) -> Vec<ast::PlaceStep<'db>> {
+        let mut steps = Vec::new();
         loop {
             if self.peek_sigil(Sigil::Dot) {
                 self.next(); // consume .
                 let field = self.parse_set_field_selector();
-                target = ast::SetTarget::Proj(ast::SetTargetProj {
-                    base: Box::new(target),
-                    field,
-                });
+                steps.push(ast::PlaceStep::Field(field));
             } else if let Some(inner) = self.eat_branch(Sigil::BracketOpen) {
                 // Index access: [expr]? or [expr]!
                 let mut sub = self.sub_parser(inner, None);
@@ -266,16 +265,15 @@ impl<'db> Parser<'db> {
                 } else {
                     None
                 };
-                target = ast::SetTarget::Index(ast::SetTargetIndex {
-                    base: Box::new(target),
+                steps.push(ast::PlaceStep::Index(ast::PlaceIndex {
                     index,
                     error_mode,
-                });
+                }));
             } else {
                 break;
             }
         }
-        target
+        steps
     }
 
     /// Parse a field selector for set target (name or index).

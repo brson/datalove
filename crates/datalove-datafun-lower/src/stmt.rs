@@ -593,91 +593,116 @@ fn lower_set<'db>(
     ctx: &mut LowerCtx<'db>,
     set_stmt: &ast::StmtSet<'db>,
 ) -> Result<(), LowerError> {
-    match &set_stmt.target {
-        ast::SetTarget::Name(name) => {
-            let name_str = name.text(ctx.db).to_string();
+    let place = &set_stmt.target;
+    let root_name_str = place.root.text(ctx.db).to_string();
 
-            // Check for self-assignment (set v0 = v0). This is a no-op but would
-            // cause incorrect behavior because SlotLoad returns a pointer to the
-            // slot's memory, and Drop would destroy that memory before SlotStore
-            // copies from it.
-            if is_self_assignment(ctx, &name_str, set_stmt.value) {
-                return Ok(());
-            }
-
-            let value_id = lower_expression(ctx, set_stmt.value)?;
-            match ctx.lookup_var(&name_str) {
-                Some(Operand::Slot(slot)) => {
-                    // Drop old value before storing new one.
-                    let is_copy = ctx.slot_type(slot).map(|t| t.is_copy()).unwrap_or(false);
-                    if !is_copy {
-                        // Use DropTracked for tracked slots, Drop for precise.
-                        let operand = Operand::Slot(slot);
-                        if ctx.is_operand_tracked(operand) {
-                            ctx.emit(Instruction::DropTracked { operand });
-                        } else {
-                            ctx.emit(Instruction::Drop { operand });
-                        }
-                    }
-                    if is_copy {
-                        ctx.emit_slot_store_copy(SlotDest::Local(slot), Operand::Value(value_id));
-                    } else {
-                        ctx.emit_slot_store_move(SlotDest::Local(slot), Operand::Value(value_id));
-                    }
-                    Ok(())
-                }
-                Some(Operand::Param(param)) => {
-                    // Only Mut/Out params can be assigned.
-                    let mode = ctx.param_mode(param);
-                    if mode == Some(ParamMode::Mut) || mode == Some(ParamMode::Out) {
-                        ctx.emit_param_store(param, Operand::Value(value_id));
-                        Ok(())
-                    } else {
-                        panic!("assignment to immutable param '{}' - typechecker should catch this", name_str)
-                    }
-                }
-                _ => panic!("assignment to immutable variable '{}' - typechecker should catch this", name_str),
-            }
+    if place.steps.is_empty() {
+        // Simple name assignment: `set x = v`.
+        if is_self_assignment(ctx, &root_name_str, set_stmt.value) {
+            return Ok(());
         }
-        ast::SetTarget::Proj(proj) => {
-            if target_contains_index(&set_stmt.target) {
-                // Chain contains an index — use ref-based approach.
-                let ref_op = lower_set_target_to_operand(ctx, &set_stmt.target)?;
+        let value_id = lower_expression(ctx, set_stmt.value)?;
+        match ctx.lookup_var(&root_name_str) {
+            Some(Operand::Slot(slot)) => {
+                let is_copy = ctx.slot_type(slot).map(|t| t.is_copy()).unwrap_or(false);
+                if !is_copy {
+                    let operand = Operand::Slot(slot);
+                    if ctx.is_operand_tracked(operand) {
+                        ctx.emit(Instruction::DropTracked { operand });
+                    } else {
+                        ctx.emit(Instruction::Drop { operand });
+                    }
+                }
+                if is_copy {
+                    ctx.emit_slot_store_copy(SlotDest::Local(slot), Operand::Value(value_id));
+                } else {
+                    ctx.emit_slot_store_move(SlotDest::Local(slot), Operand::Value(value_id));
+                }
+                Ok(())
+            }
+            Some(Operand::Param(param)) => {
+                let mode = ctx.param_mode(param);
+                if mode == Some(ParamMode::Mut) || mode == Some(ParamMode::Out) {
+                    ctx.emit_param_store(param, Operand::Value(value_id));
+                    Ok(())
+                } else {
+                    panic!("assignment to immutable param '{}' - typechecker should catch this", root_name_str)
+                }
+            }
+            _ => panic!("assignment to immutable variable '{}' - typechecker should catch this", root_name_str),
+        }
+    } else if place_contains_index(place) {
+        // Place contains an index step.
+        // Check if the last step is the (only) index — that's the terminal index case.
+        let last_step = place.steps.last().unwrap();
+        if let ast::PlaceStep::Index(idx) = last_step {
+            // Terminal index step.
+            if idx.error_mode.is_none() {
+                // Bare index (upsert) for maps.
+                let base_op = lower_place_steps_to_operand(ctx, place, place.steps.len() - 1)?;
+                let key_id = lower_expression(ctx, idx.index)?;
                 let value_id = lower_expression(ctx, set_stmt.value)?;
-                ctx.emit(Instruction::RefStore {
-                    dest: ref_op,
+                ctx.emit(Instruction::MapUpsert {
+                    map: base_op,
+                    key: Operand::Value(key_id),
                     value: Operand::Value(value_id),
                 });
                 Ok(())
             } else {
-                // Simple field path — use existing approach.
-                let (root_name, field_path) = collect_field_path(ctx, proj)?;
-                let root_name_str = root_name.text(ctx.db).to_string();
-
-                // Lower the value expression.
+                // Fallible index: set a[i]? = v / set a[i]! = v.
+                let error_mode = idx.error_mode.unwrap();
+                let base_op = lower_place_steps_to_operand(ctx, place, place.steps.len() - 1)?;
+                let base_type = set_target_operand_type(ctx, &base_op);
+                let key_op = lower_operand(ctx, idx.index)?;
+                emit_fallible_index_check(ctx, base_op, &base_type, key_op, error_mode)?;
                 let value_id = lower_expression(ctx, set_stmt.value)?;
-
-                // Look up the root slot.
-                match ctx.lookup_var(&root_name_str) {
-                    Some(Operand::Slot(slot)) => {
-                        ctx.emit_set_field(SlotDest::Local(slot), field_path, Operand::Value(value_id));
-                        Ok(())
+                match &base_type {
+                    IrType::Map(_, _) => {
+                        ctx.emit(Instruction::MapSetValue {
+                            map: base_op,
+                            key: key_op,
+                            value: Operand::Value(value_id),
+                        });
                     }
-                    Some(Operand::Param(param)) => {
-                        let mode = ctx.param_mode(param);
-                        if mode == Some(ParamMode::Mut) || mode == Some(ParamMode::Out) {
-                            ctx.emit_param_set_field(param, field_path, Operand::Value(value_id));
-                            Ok(())
-                        } else {
-                            panic!("assignment to field of immutable param '{}' - typechecker should catch this", root_name_str)
-                        }
+                    _ => {
+                        ctx.emit(Instruction::ListSet {
+                            list: base_op,
+                            index: key_op,
+                            value: Operand::Value(value_id),
+                        });
                     }
-                    _ => panic!("assignment to field of immutable variable '{}' - typechecker should catch this", root_name_str),
+                }
+                Ok(())
+            }
+        } else {
+            // Last step is a field, but chain contains index — use ref-based approach.
+            let ref_op = lower_place_steps_to_operand(ctx, place, place.steps.len())?;
+            let value_id = lower_expression(ctx, set_stmt.value)?;
+            ctx.emit(Instruction::RefStore {
+                dest: ref_op,
+                value: Operand::Value(value_id),
+            });
+            Ok(())
+        }
+    } else {
+        // Pure field projections — use field path approach.
+        let field_path = collect_field_path_from_place(ctx, place)?;
+        let value_id = lower_expression(ctx, set_stmt.value)?;
+        match ctx.lookup_var(&root_name_str) {
+            Some(Operand::Slot(slot)) => {
+                ctx.emit_set_field(SlotDest::Local(slot), field_path, Operand::Value(value_id));
+                Ok(())
+            }
+            Some(Operand::Param(param)) => {
+                let mode = ctx.param_mode(param);
+                if mode == Some(ParamMode::Mut) || mode == Some(ParamMode::Out) {
+                    ctx.emit_param_set_field(param, field_path, Operand::Value(value_id));
+                    Ok(())
+                } else {
+                    panic!("assignment to field of immutable param '{}' - typechecker should catch this", root_name_str)
                 }
             }
-        }
-        ast::SetTarget::Index(idx_target) => {
-            lower_set_index(ctx, set_stmt, idx_target)
+            _ => panic!("assignment to field of immutable variable '{}' - typechecker should catch this", root_name_str),
         }
     }
 }
@@ -862,132 +887,66 @@ pub(crate) fn emit_index_value_early_return(
     }
 }
 
-/// Lower `set a[i]? = v`, `set a[i]! = v`, or `set m[k] = v`.
+/// Lower place steps to an operand referencing a location within the place.
 ///
-/// For `?`/`!` modes: evaluate index, bounds check, early-return if OOB,
-/// evaluate RHS, ListSet/MapSetValue.
-/// For bare index (upsert): evaluate key, evaluate value, MapUpsert.
-pub(super) fn lower_set_index<'db>(
+/// Processes `step_count` steps from the place, returning the operand for
+/// the resulting location. For the root, returns the slot/param operand.
+/// For field/index steps, emits GetFieldRef/ListElementRef and returns ValueRef.
+fn lower_place_steps_to_operand<'db>(
     ctx: &mut LowerCtx<'db>,
-    set_stmt: &ast::StmtSet<'db>,
-    idx_target: &ast::SetTargetIndex<'db>,
-) -> Result<(), LowerError> {
-    // Resolve the base to a slot operand.
-    let base_op = lower_set_target_to_operand(ctx, &idx_target.base)?;
-    let base_type = set_target_operand_type(ctx, &base_op);
-
-    if idx_target.error_mode.is_none() {
-        return lower_set_map_upsert(ctx, set_stmt, idx_target, base_op);
-    }
-    let error_mode = idx_target.error_mode.unwrap();
-    let key_op = lower_operand(ctx, idx_target.index)?;
-    emit_fallible_index_check(ctx, base_op, &base_type, key_op, error_mode)?;
-    let value_id = lower_expression(ctx, set_stmt.value)?;
-    match &base_type {
-        IrType::Map(_, _) => {
-            ctx.emit(Instruction::MapSetValue {
-                map: base_op,
-                key: key_op,
-                value: Operand::Value(value_id),
-            });
-        }
-        _ => {
-            ctx.emit(Instruction::ListSet {
-                list: base_op,
-                index: key_op,
-                value: Operand::Value(value_id),
-            });
-        }
-    }
-    Ok(())
-}
-
-/// Lower `set m[k] = v` (upsert) for maps.
-///
-/// No branching, no early return. Key and value are consumed.
-fn lower_set_map_upsert<'db>(
-    ctx: &mut LowerCtx<'db>,
-    set_stmt: &ast::StmtSet<'db>,
-    idx_target: &ast::SetTargetIndex<'db>,
-    map_op: Operand,
-) -> Result<(), LowerError> {
-    let key_id = lower_expression(ctx, idx_target.index)?;
-    let value_id = lower_expression(ctx, set_stmt.value)?;
-    ctx.emit(Instruction::MapUpsert {
-        map: map_op,
-        key: Operand::Value(key_id),
-        value: Operand::Value(value_id),
-    });
-    Ok(())
-}
-
-/// Resolve a set target to an operand referencing the target location.
-///
-/// For simple names, returns the slot/param operand. For projections and
-/// index accesses, emits GetFieldRef/ListElementRef instructions and returns
-/// a ValueRef operand pointing to the target location.
-fn lower_set_target_to_operand<'db>(
-    ctx: &mut LowerCtx<'db>,
-    target: &ast::SetTarget<'db>,
+    place: &ast::Place<'db>,
+    step_count: usize,
 ) -> Result<Operand, LowerError> {
-    match target {
-        ast::SetTarget::Name(name) => {
-            let name_str = name.text(ctx.db).to_string();
-            Ok(ctx.lookup_var(&name_str)
-                .unwrap_or_else(|| panic!("variable '{}' not found - typechecker should catch this", name_str)))
-        }
-        ast::SetTarget::Proj(proj) => {
-            let base_op = lower_set_target_to_operand(ctx, &proj.base)?;
-            let base_type = set_target_operand_type(ctx, &base_op);
+    let root_name_str = place.root.text(ctx.db).to_string();
+    let mut current_op = ctx.lookup_var(&root_name_str)
+        .unwrap_or_else(|| panic!("variable '{}' not found - typechecker should catch this", root_name_str));
 
-            // Resolve field selector to index.
-            let field_index = match &proj.field {
-                ast::FieldSelector::Index(idx) => *idx,
-                ast::FieldSelector::Name(name) => {
-                    let name_str = name.text(ctx.db);
-                    let IrType::Struct(fields) = &base_type else {
-                        panic!("named field on non-struct type {:?} - typechecker should catch this", base_type);
-                    };
-                    fields.iter().position(|(n, _)| n == name_str)
-                        .unwrap_or_else(|| panic!("field '{}' not found in struct - typechecker should catch this", name_str)) as u32
-                }
-            };
-
-            // Get field type.
-            let field_type = match &base_type {
-                IrType::Struct(fields) => fields[field_index as usize].1.clone(),
-                IrType::Tuple(fields) => fields[field_index as usize].clone(),
-                _ => panic!("field access on non-struct/tuple type {:?} - typechecker should catch this", base_type),
-            };
-
-            let dest = ctx.fresh_value(IrType::Ref(Box::new(field_type)));
-            ctx.emit(Instruction::GetFieldRef {
-                dest,
-                src: base_op,
-                field_index,
-            });
-            Ok(Operand::ValueRef(dest))
-        }
-        ast::SetTarget::Index(idx_target) => {
-            let error_mode = idx_target.error_mode
-                .expect("bare index (upsert) cannot appear in intermediate set target position");
-            let base_op = lower_set_target_to_operand(ctx, &idx_target.base)?;
-            let base_type = set_target_operand_type(ctx, &base_op);
-            let key_op = lower_operand(ctx, idx_target.index)?;
-            emit_fallible_index_check(ctx, base_op, &base_type, key_op, error_mode)?;
-            let dest = emit_collection_element_ref(ctx, base_op, &base_type, key_op);
-            Ok(Operand::ValueRef(dest))
+    for step in &place.steps[..step_count] {
+        match step {
+            ast::PlaceStep::Field(field) => {
+                let base_type = set_target_operand_type(ctx, &current_op);
+                let field_index = match field {
+                    ast::FieldSelector::Index(idx) => *idx,
+                    ast::FieldSelector::Name(name) => {
+                        let name_str = name.text(ctx.db);
+                        let IrType::Struct(fields) = &base_type else {
+                            panic!("named field on non-struct type {:?} - typechecker should catch this", base_type);
+                        };
+                        fields.iter().position(|(n, _)| n == name_str)
+                            .unwrap_or_else(|| panic!("field '{}' not found in struct - typechecker should catch this", name_str)) as u32
+                    }
+                };
+                let field_type = match &base_type {
+                    IrType::Struct(fields) => fields[field_index as usize].1.clone(),
+                    IrType::Tuple(fields) => fields[field_index as usize].clone(),
+                    _ => panic!("field access on non-struct/tuple type {:?} - typechecker should catch this", base_type),
+                };
+                let dest = ctx.fresh_value(IrType::Ref(Box::new(field_type)));
+                ctx.emit(Instruction::GetFieldRef {
+                    dest,
+                    src: current_op,
+                    field_index,
+                });
+                current_op = Operand::ValueRef(dest);
+            }
+            ast::PlaceStep::Index(idx) => {
+                let error_mode = idx.error_mode
+                    .expect("bare index (upsert) cannot appear in intermediate set target position");
+                let base_type = set_target_operand_type(ctx, &current_op);
+                let key_op = lower_operand(ctx, idx.index)?;
+                emit_fallible_index_check(ctx, current_op, &base_type, key_op, error_mode)?;
+                let dest = emit_collection_element_ref(ctx, current_op, &base_type, key_op);
+                current_op = Operand::ValueRef(dest);
+            }
         }
     }
+
+    Ok(current_op)
 }
 
-/// Check if a set target contains an index access anywhere in the chain.
-fn target_contains_index(target: &ast::SetTarget) -> bool {
-    match target {
-        ast::SetTarget::Name(_) => false,
-        ast::SetTarget::Index(_) => true,
-        ast::SetTarget::Proj(proj) => target_contains_index(&proj.base),
-    }
+/// Check if a place contains an index step.
+fn place_contains_index(place: &ast::Place) -> bool {
+    place.steps.iter().any(|s| matches!(s, ast::PlaceStep::Index(_)))
 }
 
 /// Get the type of an operand returned by `lower_set_target_to_operand`.
@@ -1009,46 +968,40 @@ fn set_target_operand_type(ctx: &LowerCtx, operand: &Operand) -> IrType {
     }
 }
 
-/// Collect the field path from a projection target, resolving named fields to indices.
+/// Collect the field path from a place with only field steps.
 ///
-/// Returns (root_name, field_indices) where field_indices is the chain of
-/// field indices from root to target.
-pub(super) fn collect_field_path<'db>(
+/// Returns the field indices from root to target.
+pub(super) fn collect_field_path_from_place<'db>(
     ctx: &LowerCtx<'db>,
-    proj: &ast::SetTargetProj<'db>,
-) -> Result<(InternedText<'db>, Vec<u32>), LowerError> {
-    // First, collect all the field selectors from root to leaf.
-    let (root_name, selectors) = collect_selectors(ctx.db, proj);
-
-    // Look up the root variable's type (works for slots and params).
-    let root_name_str = root_name.text(ctx.db).to_string();
+    place: &ast::Place<'db>,
+) -> Result<Vec<u32>, LowerError> {
+    let root_name_str = place.root.text(ctx.db).to_string();
     let root_type = ctx.var_type_by_name(&root_name_str)
         .unwrap_or_else(|| panic!("variable '{}' not found - typechecker should catch this", root_name_str));
 
-    // Now resolve each selector to a field index by walking through the types.
-    // Typechecker validates all field accesses.
     let mut path = Vec::new();
     let mut current_type = root_type.clone();
 
-    for selector in selectors {
+    for step in &place.steps {
+        let ast::PlaceStep::Field(selector) = step else {
+            panic!("collect_field_path_from_place called on place with index step");
+        };
         match selector {
             ast::FieldSelector::Index(idx) => {
-                // Verify the index is valid and get the field type.
                 let IrType::Tuple(fields) = &current_type else {
                     panic!("tuple index on non-tuple type {:?} - typechecker should catch this", current_type);
                 };
-                if (idx as usize) >= fields.len() {
+                if (*idx as usize) >= fields.len() {
                     panic!("tuple index {} out of bounds (tuple has {} fields) - typechecker should catch this", idx, fields.len());
                 }
-                current_type = fields[idx as usize].clone();
-                path.push(idx);
+                current_type = fields[*idx as usize].clone();
+                path.push(*idx);
             }
             ast::FieldSelector::Name(name) => {
                 let name_str = name.text(ctx.db);
                 let IrType::Struct(fields) = &current_type else {
                     panic!("field access on non-struct type {:?} - typechecker should catch this", current_type);
                 };
-                // Find the field by name.
                 let field_idx = fields.iter()
                     .position(|(n, _)| n == name_str)
                     .unwrap_or_else(|| panic!("field '{}' not found in struct - typechecker should catch this", name_str));
@@ -1058,7 +1011,7 @@ pub(super) fn collect_field_path<'db>(
         }
     }
 
-    Ok((root_name, path))
+    Ok(path)
 }
 
 /// Lower a match statement.
@@ -1196,16 +1149,3 @@ pub fn lower_match<'db>(
     Ok(())
 }
 
-/// Helper to collect all field selectors from a projection chain.
-fn collect_selectors<'db>(
-    db: &'db dyn salsa::Database,
-    proj: &ast::SetTargetProj<'db>,
-) -> (InternedText<'db>, Vec<ast::FieldSelector<'db>>) {
-    let (root_name, mut selectors) = match proj.base.as_ref() {
-        ast::SetTarget::Name(name) => (*name, Vec::new()),
-        ast::SetTarget::Proj(base_proj) => collect_selectors(db, base_proj),
-        ast::SetTarget::Index(_) => unreachable!("index in projection chain handled by ref-based lowering path"),
-    };
-    selectors.push(proj.field.clone());
-    (root_name, selectors)
-}

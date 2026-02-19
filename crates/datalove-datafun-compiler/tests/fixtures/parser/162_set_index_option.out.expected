@@ -16,18 +16,19 @@
       {
         "kind": "Set",
         "target": {
-          "base": {
-            "name": "a",
-            "variant": "Name"
-          },
-          "error_mode": "Option",
-          "index": {
-            "expr": {
-              "kind": "Name",
-              "name": "i"
+          "root": "a",
+          "steps": [
+            {
+              "error_mode": "Option",
+              "index": {
+                "expr": {
+                  "kind": "Name",
+                  "name": "i"
+                }
+              },
+              "variant": "Index"
             }
-          },
-          "variant": "Index"
+          ]
         },
         "value": {
           "expr": {

@@ -16,29 +16,21 @@
       {
         "kind": "Set",
         "target": {
-          "base": {
-            "base": {
-              "base": {
-                "name": "a",
-                "variant": "Name"
-              },
-              "field": {
-                "name": "x",
-                "variant": "Name"
-              },
-              "variant": "Proj"
+          "root": "a",
+          "steps": [
+            {
+              "name": "x",
+              "variant": "Name"
             },
-            "field": {
+            {
               "index": 0,
               "variant": "Index"
             },
-            "variant": "Proj"
-          },
-          "field": {
-            "name": "y",
-            "variant": "Name"
-          },
-          "variant": "Proj"
+            {
+              "name": "y",
+              "variant": "Name"
+            }
+          ]
         },
         "value": {
           "expr": {

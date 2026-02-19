@@ -105,41 +105,40 @@ pub struct StmtConst<'db> {
 #[derive(Clone, Hash, PartialEq, Eq)]
 #[derive(salsa::Update)]
 pub struct StmtSet<'db> {
-    pub target: SetTarget<'db>,
+    pub target: Place<'db>,
     pub value: ExprFun<'db>,
     /// Index for span lookup in DatafunSpans.
     pub local_index: u32,
 }
 
-/// Target of a set statement.
-#[derive(Clone, Hash, PartialEq, Eq)]
-#[derive(salsa::Update)]
-pub enum SetTarget<'db> {
-    /// Simple variable: `set x = ...`
-    Name(InternedText<'db>),
-    /// Field projection: `set a.x = ...` or `set a.0 = ...`
-    Proj(SetTargetProj<'db>),
-    /// Index access: `set a[i]? = ...` or `set a[i]! = ...`
-    Index(SetTargetIndex<'db>),
-}
-
-/// Projection chain for set target.
-#[derive(Clone, Hash, PartialEq, Eq)]
-#[derive(salsa::Update)]
-pub struct SetTargetProj<'db> {
-    pub base: Box<SetTarget<'db>>,
-    pub field: FieldSelector<'db>,
-}
-
-/// Index access in set target position.
+/// A place: a root variable plus navigation steps to a storage location.
 ///
-/// When `error_mode` is `None`, this is a bare index (`set m[k] = v`) which
-/// represents an upsert on maps: insert if absent, overwrite if present.
-/// Bare index is only valid for maps; lists require `?` or `!`.
+/// Used for set-statement targets and for expression-context places
+/// that involve index operations (e.g., `a[i]?`, `a[i]?.field`).
 #[derive(Clone, Hash, PartialEq, Eq)]
 #[derive(salsa::Update)]
-pub struct SetTargetIndex<'db> {
-    pub base: Box<SetTarget<'db>>,
+pub struct Place<'db> {
+    pub root: InternedText<'db>,
+    pub steps: Vec<PlaceStep<'db>>,
+}
+
+/// A navigation step within a place.
+#[derive(Clone, Hash, PartialEq, Eq)]
+#[derive(salsa::Update)]
+pub enum PlaceStep<'db> {
+    /// Field or tuple-element projection: `.field` or `.0`.
+    Field(FieldSelector<'db>),
+    /// Index operation: `[expr]` with optional error mode.
+    ///
+    /// `error_mode` is `None` for bare index (map upsert in set context),
+    /// `Some(Option)` for `?`, `Some(Result)` for `!`.
+    Index(PlaceIndex<'db>),
+}
+
+/// Index step in a place.
+#[derive(Clone, Hash, PartialEq, Eq)]
+#[derive(salsa::Update)]
+pub struct PlaceIndex<'db> {
     pub index: ExprFun<'db>,
     pub error_mode: Option<IndexErrorMode>,
 }
@@ -388,6 +387,9 @@ pub enum ExprFunKind<'db> {
 
     // Index expression: base[index].
     Index(ExprIndex<'db>),
+
+    /// Place expression with index steps (e.g., `a[i]?`, `a[i]?.field`).
+    Place(Place<'db>),
 
     // Parse error
     ParseError(ExprFunParseError<'db>),

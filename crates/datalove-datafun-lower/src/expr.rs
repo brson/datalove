@@ -133,25 +133,26 @@ fn try_lower_arg_index_as_ref<'db>(
     mode: ParamMode,
     arg_type: Option<&IrType>,
 ) -> Result<Option<Operand>, LowerError> {
-    let (index_expr, error_mode) = match arg.expr(ctx.db) {
+    let operand = match arg.expr(ctx.db) {
         ExprFunKind::TryOption(try_op) => {
             if let ExprFunKind::Index(index_expr) = try_op.operand.expr(ctx.db) {
-                (index_expr, ast::IndexErrorMode::Option)
+                lower_index_as_ref(ctx, &index_expr, ast::IndexErrorMode::Option)?
             } else {
                 return Ok(None);
             }
         }
         ExprFunKind::TryResult(try_op) => {
             if let ExprFunKind::Index(index_expr) = try_op.operand.expr(ctx.db) {
-                (index_expr, ast::IndexErrorMode::Result)
+                lower_index_as_ref(ctx, &index_expr, ast::IndexErrorMode::Result)?
             } else {
                 return Ok(None);
             }
         }
+        ExprFunKind::Place(ref place) => {
+            lower_place_as_ref(ctx, place)?
+        }
         _ => return Ok(None),
     };
-
-    let operand = lower_index_as_ref(ctx, &index_expr, error_mode)?;
 
     // For out params, destroy existing element value before call.
     if mode == ParamMode::Out {
@@ -257,6 +258,14 @@ pub fn lower_field_proj_as_ref<'db>(
                 Operand::Value(base_id)
             }
         }
+        ExprFunKind::Place(ref place) => {
+            // Place base (e.g., `a[i]?.field` where base is the Place).
+            let ref_op = lower_place_as_ref(ctx, place)?;
+            match ref_op {
+                Operand::Value(v) => Operand::ValueRef(v),
+                other => other,
+            }
+        }
         _ => {
             // Compound expression - need to lower it to a value.
             let base_id = lower_expression(ctx, proj.base)?;
@@ -316,6 +325,10 @@ pub fn lower_expression_for_ref<'db>(
                 ctx.record_expr_temp(value_id, expr_type);
                 Ok(Operand::Value(value_id))
             }
+        }
+        ExprFunKind::Place(ref place) => {
+            // Place expression — borrow by reference.
+            lower_place_as_ref(ctx, place)
         }
         ExprFunKind::Name(name) => {
             // For named values/params, return the operand directly to borrow.
@@ -818,6 +831,9 @@ pub fn lower_expression<'db>(
             ctx.clear_pending_intermediates();
             ctx.pop_pending_scope();
             Ok(dest)
+        }
+        ExprFunKind::Place(ref place) => {
+            lower_place_expression(ctx, expr, place)
         }
         ExprFunKind::Index(_) => {
             panic!("bare index expression reached lowering - typechecker should reject bare a[i] without ? or !")
@@ -1471,6 +1487,172 @@ fn lower_collection_index_value<'db>(
 
     ctx.start_block(continue_block);
     Ok(dest)
+}
+
+// ============================================================================
+// Place Expression Lowering
+// ============================================================================
+
+/// Lower a Place expression to a value.
+///
+/// Walks the place steps, emitting index checks and field accesses.
+/// The last index step produces the final value via ListGet/MapGet.
+fn lower_place_expression<'db>(
+    ctx: &mut LowerCtx<'db>,
+    expr: ExprFun<'db>,
+    place: &ast::Place<'db>,
+) -> Result<ValueId, LowerError> {
+    let root_name_str = place.root.text(ctx.db);
+    let mut current_op = ctx.lookup_var(root_name_str)
+        .unwrap_or_else(|| panic!("variable '{}' not found - typechecker should catch this", root_name_str));
+
+    // Process all steps. For intermediate steps, we get refs. For the final
+    // index step, we use ListGet/MapGet to get a value.
+    let last_idx = place.steps.len() - 1;
+    for (i, step) in place.steps.iter().enumerate() {
+        match step {
+            ast::PlaceStep::Field(field) => {
+                let base_type = operand_type(ctx, &current_op);
+                let field_index = resolve_field_index(field, &base_type, ctx.db)?;
+                let field_type = field_type_from_base(&base_type, field_index);
+                let dest = ctx.fresh_value(IrType::Ref(Box::new(field_type)));
+                ctx.emit(Instruction::GetFieldRef {
+                    dest,
+                    src: current_op,
+                    field_index,
+                });
+                current_op = Operand::ValueRef(dest);
+            }
+            ast::PlaceStep::Index(idx) => {
+                let error_mode = idx.error_mode
+                    .expect("Place expression index steps always have error mode");
+                let base_type = operand_type(ctx, &current_op);
+                let key_op = lower_operand(ctx, idx.index)?;
+                let is_map = matches!(&base_type, IrType::Map(_, _));
+
+                if i == last_idx {
+                    // Final step — produce a value via ListGet/MapGet.
+                    let result_type = ctx.expr_type(expr);
+                    let dest = ctx.fresh_value(result_type);
+                    let is_valid = ctx.fresh_value(IrType::Bool);
+
+                    if is_map {
+                        ctx.emit(Instruction::MapGet {
+                            dest,
+                            is_valid,
+                            map: current_op,
+                            key: key_op,
+                        });
+                    } else {
+                        ctx.emit(Instruction::ListGet {
+                            dest,
+                            is_valid,
+                            list: current_op,
+                            index: key_op,
+                        });
+                    }
+
+                    let early_return_block = ctx.fresh_block();
+                    let continue_block = ctx.fresh_block();
+                    ctx.finish_block(Terminator::Branch {
+                        cond: Operand::Value(is_valid),
+                        then_block: continue_block,
+                        then_args: Vec::new(),
+                        else_block: early_return_block,
+                        else_args: Vec::new(),
+                    });
+
+                    ctx.start_block(early_return_block);
+                    super::stmt::emit_index_value_early_return(ctx, error_mode, is_map);
+
+                    ctx.start_block(continue_block);
+                    return Ok(dest);
+                } else {
+                    // Intermediate index — get ref to element.
+                    super::stmt::emit_fallible_index_check(ctx, current_op, &base_type, key_op, error_mode)?;
+                    let dest = super::stmt::emit_collection_element_ref(ctx, current_op, &base_type, key_op);
+                    current_op = Operand::ValueRef(dest);
+                }
+            }
+        }
+    }
+
+    // If we get here, there were no index steps (shouldn't happen for Place expressions).
+    panic!("Place expression must contain at least one index step");
+}
+
+/// Lower a Place expression to a reference (for ref/mut/out params and debuglog).
+///
+/// Returns a ref operand pointing to the final element.
+fn lower_place_as_ref<'db>(
+    ctx: &mut LowerCtx<'db>,
+    place: &ast::Place<'db>,
+) -> Result<Operand, LowerError> {
+    let root_name_str = place.root.text(ctx.db);
+    let mut current_op = ctx.lookup_var(root_name_str)
+        .unwrap_or_else(|| panic!("variable '{}' not found - typechecker should catch this", root_name_str));
+
+    for step in &place.steps {
+        match step {
+            ast::PlaceStep::Field(field) => {
+                let base_type = operand_type(ctx, &current_op);
+                let field_index = resolve_field_index(field, &base_type, ctx.db)?;
+                let field_type = field_type_from_base(&base_type, field_index);
+                let dest = ctx.fresh_value(IrType::Ref(Box::new(field_type)));
+                ctx.emit(Instruction::GetFieldRef {
+                    dest,
+                    src: current_op,
+                    field_index,
+                });
+                current_op = Operand::ValueRef(dest);
+            }
+            ast::PlaceStep::Index(idx) => {
+                let error_mode = idx.error_mode
+                    .expect("Place expression index steps always have error mode");
+                let base_type = operand_type(ctx, &current_op);
+                let key_op = lower_operand(ctx, idx.index)?;
+                super::stmt::emit_fallible_index_check(ctx, current_op, &base_type, key_op, error_mode)?;
+                let dest = super::stmt::emit_collection_element_ref(ctx, current_op, &base_type, key_op);
+                current_op = Operand::ValueRef(dest);
+            }
+        }
+    }
+
+    Ok(Operand::Value(match current_op {
+        Operand::ValueRef(v) => v,
+        _ => panic!("expected ValueRef from place ref lowering"),
+    }))
+}
+
+/// Get type of an operand for place lowering.
+fn operand_type(ctx: &LowerCtx, op: &Operand) -> IrType {
+    match op {
+        Operand::Slot(s) => ctx.body.slot_types[s.0 as usize].clone(),
+        Operand::Param(p) => ctx.body.param_types[p.0 as usize].clone(),
+        Operand::Value(v) => ctx.body.value_types[v.0 as usize].clone(),
+        Operand::ValueRef(v) => {
+            let ref_ty = &ctx.body.value_types[v.0 as usize];
+            match ref_ty {
+                IrType::Ref(inner) => inner.as_ref().clone(),
+                _ => panic!("ValueRef has non-Ref type: {:?}", ref_ty),
+            }
+        }
+        Operand::ExternalSlot { .. } => {
+            todo!("external slot type in place lowering")
+        }
+        Operand::ExternalValue { .. } => {
+            todo!("external value type in place lowering")
+        }
+    }
+}
+
+/// Get the type of a field from a base type.
+fn field_type_from_base(base_type: &IrType, field_index: u32) -> IrType {
+    match base_type {
+        IrType::Struct(fields) => fields[field_index as usize].1.clone(),
+        IrType::Tuple(fields) => fields[field_index as usize].clone(),
+        _ => panic!("field access on non-struct/tuple type {:?}", base_type),
+    }
 }
 
 /// Lower clone/coerce operator (`@`).

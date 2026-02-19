@@ -7,33 +7,24 @@
         "type_hint": null,
         "value": {
           "expr": {
-            "base": {
-              "expr": {
-                "kind": "TryOption",
-                "operand": {
+            "kind": "Place",
+            "root": "a",
+            "steps": [
+              {
+                "error_mode": "Option",
+                "index": {
                   "expr": {
-                    "base": {
-                      "expr": {
-                        "kind": "Name",
-                        "name": "a"
-                      }
-                    },
-                    "index": {
-                      "expr": {
-                        "kind": "Name",
-                        "name": "i"
-                      }
-                    },
-                    "kind": "Index"
+                    "kind": "Name",
+                    "name": "i"
                   }
-                }
+                },
+                "variant": "Index"
+              },
+              {
+                "name": "field",
+                "variant": "Name"
               }
-            },
-            "field": {
-              "name": "field",
-              "variant": "Name"
-            },
-            "kind": "FieldProj"
+            ]
           }
         }
       }

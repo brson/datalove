@@ -449,6 +449,11 @@ pub fn synthesize_expr<'db>(
         ExprFunKind::Index(_) => {
             Err(ctx.error_cannot_synthesize(expr, "bare index `a[i]` requires `?` or `!` suffix"))
         }
+
+        // Place expression with index steps (e.g., `a[i]?`, `a[i]?.field`).
+        ExprFunKind::Place(ref place) => {
+            synthesize_place(ctx, expr, place)
+        }
     }
 }
 
@@ -1028,6 +1033,142 @@ fn synthesize_index_common<'db>(
     };
 
     if let Err(e) = check_expr(ctx, index_expr.index, &index_type) {
+        ctx.add_error(e);
+    }
+
+    Ok(element_ty)
+}
+
+// ============================================================================
+// Place Expression Synthesis
+// ============================================================================
+
+/// Synthesize type for a place expression (root + steps with index operations).
+fn synthesize_place<'db>(
+    ctx: &mut TypeContext<'db>,
+    expr: ExprFun<'db>,
+    place: &Place<'db>,
+) -> Result<Type<'db>, TypeError> {
+    // Look up root variable type.
+    let mut current_ty = ctx.lookup_variable(place.root)
+        .ok_or_else(|| ctx.error_undefined_variable(expr, place.root))?;
+
+    // Walk each step.
+    for step in &place.steps {
+        match step {
+            PlaceStep::Field(field) => {
+                current_ty = synthesize_place_field_step(ctx, expr, &current_ty, field)?;
+            }
+            PlaceStep::Index(idx) => {
+                let error_mode = idx.error_mode
+                    .expect("Place expression index steps always have error mode");
+                current_ty = synthesize_place_index_step(ctx, expr, &current_ty, idx)?;
+                // Verify return type matches error mode.
+                match error_mode {
+                    IndexErrorMode::Option => {
+                        require_option_return_type(ctx, expr, "?")?;
+                    }
+                    IndexErrorMode::Result => {
+                        require_result_return_type(ctx, expr, "!")?;
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(current_ty)
+}
+
+/// Synthesize type through a field step in a place expression.
+fn synthesize_place_field_step<'db>(
+    ctx: &mut TypeContext<'db>,
+    _expr: ExprFun<'db>,
+    base_ty: &Type<'db>,
+    field: &FieldSelector<'db>,
+) -> Result<Type<'db>, TypeError> {
+    let db = ctx.db;
+
+    let base_datalit_ty = match base_ty {
+        Type::Datalit(dt) => dt,
+        _ => {
+            return Err(TypeError::ProjectionOnNonAggregate {
+                ty: type_to_string(db, base_ty),
+            });
+        }
+    };
+
+    match field {
+        FieldSelector::Index(idx) => {
+            match base_datalit_ty {
+                datalit::tycheck::Type::AnonTuple(tuple) => {
+                    let idx_usize = *idx as usize;
+                    if idx_usize >= tuple.fields.len() {
+                        return Err(TypeError::FieldIndexOutOfBounds {
+                            index: *idx,
+                            tuple_size: tuple.fields.len(),
+                        });
+                    }
+                    Ok(Type::Datalit(tuple.fields[idx_usize].clone()))
+                }
+                _ => Err(TypeError::ProjectionOnNonAggregate {
+                    ty: type_to_string(db, base_ty),
+                }),
+            }
+        }
+        FieldSelector::Name(name) => {
+            match base_datalit_ty {
+                datalit::tycheck::Type::AnonStruct(struct_ty) => {
+                    let name_str = name.text(db);
+                    for f in &struct_ty.fields {
+                        if f.name.text(db) == name_str {
+                            // Place expressions are always in ref context.
+                            return Ok(Type::Datalit((*f.ty).clone()));
+                        }
+                    }
+                    Err(TypeError::FieldNotFound {
+                        field_name: name_str.S(),
+                        ty: type_to_string(db, base_ty),
+                    })
+                }
+                _ => Err(TypeError::ProjectionOnNonAggregate {
+                    ty: type_to_string(db, base_ty),
+                }),
+            }
+        }
+    }
+}
+
+/// Synthesize type through an index step in a place expression.
+fn synthesize_place_index_step<'db>(
+    ctx: &mut TypeContext<'db>,
+    expr: ExprFun<'db>,
+    base_ty: &Type<'db>,
+    idx: &PlaceIndex<'db>,
+) -> Result<Type<'db>, TypeError> {
+    let db = ctx.db;
+
+    let (element_ty, index_type) = match base_ty {
+        Type::Datalit(datalit::tycheck::Type::List(list)) => {
+            (
+                Type::Datalit(*list.element_type.clone()),
+                Type::Datalit(datalit::tycheck::Type::Index),
+            )
+        }
+        Type::Datalit(datalit::tycheck::Type::Map(map)) => {
+            (
+                Type::Datalit(*map.value_type.clone()),
+                Type::Datalit(*map.key_type.clone()),
+            )
+        }
+        _ => {
+            return Err(ctx.error_cannot_synthesize(
+                expr,
+                &format!("indexing requires list or map type, got {}", type_to_string(db, base_ty)),
+            ));
+        }
+    };
+
+    if let Err(e) = check_expr(ctx, idx.index, &index_type) {
         ctx.add_error(e);
     }
 

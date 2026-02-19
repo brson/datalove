@@ -98,130 +98,28 @@ pub fn check_statement<'db>(
 
         Statement::Set(stmt) => {
             let value = stmt.value;
+            let place = &stmt.target;
 
-            // Handle set target.
-            match &stmt.target {
-                SetTarget::Name(name) => {
-                    // Look up the variable type.
-                    match ctx.lookup_variable(*name) {
-                        Some(expected_type) => {
-                            // Check mutability - reject assignment to immutable variables.
-                            if let Some(false) = ctx.lookup_variable_mutability(*name) {
-                                let err = ctx.error_variable_not_mutable(stmt, name.text(db).as_str());
-                                ctx.add_error(err);
-                            }
-                            // Check that value matches the variable's type.
-                            if let Err(e) = check_expr(ctx, value, &expected_type) {
-                                ctx.add_error(e);
-                            }
-                        }
-                        None => {
-                            // Variable not found.
-                            let err = ctx.error_undefined_variable_set(stmt, name.text(db).as_str());
-                            ctx.add_error(err);
-                        }
-                    }
-                }
-                SetTarget::Proj(proj) => {
-                    // Check that the root variable is mutable.
-                    let root_name = get_proj_root_name(proj);
+            // Check that the root variable exists and is mutable.
+            let root_name = place.root;
+            match ctx.lookup_variable(root_name) {
+                Some(_) => {
                     if let Some(false) = ctx.lookup_variable_mutability(root_name) {
                         let err = ctx.error_variable_not_mutable(stmt, root_name.text(db).as_str());
                         ctx.add_error(err);
                     }
-                    // Typecheck projection target.
-                    match typecheck_set_target_proj(ctx, proj) {
-                        Ok(expected_type) => {
-                            // Check that value matches the field's type.
-                            if let Err(e) = check_expr(ctx, value, &expected_type) {
-                                ctx.add_error(e);
-                            }
-                        }
-                        Err(e) => ctx.add_error(e),
-                    }
                 }
-                SetTarget::Index(idx_target) => {
-                    // Check that the root variable is mutable.
-                    let root_name = get_set_target_root_name(&idx_target.base);
-                    if let Some(false) = ctx.lookup_variable_mutability(root_name) {
-                        let err = ctx.error_variable_not_mutable(stmt, root_name.text(db).as_str());
-                        ctx.add_error(err);
-                    }
-                    // Typecheck the base target — must be List<T> or Map<K,V>.
-                    match typecheck_set_target(ctx, &idx_target.base) {
-                        Ok(base_ty) => {
-                            match idx_target.error_mode {
-                                None => {
-                                    // Bare index (upsert): only valid for maps.
-                                    match &base_ty {
-                                        Type::Datalit(datalit::tycheck::Type::Map(map)) => {
-                                            let key_type = Type::Datalit(*map.key_type.clone());
-                                            let value_type = Type::Datalit(*map.value_type.clone());
-                                            if let Err(e) = check_expr(ctx, idx_target.index, &key_type) {
-                                                ctx.add_error(e);
-                                            }
-                                            if let Err(e) = check_expr(ctx, value, &value_type) {
-                                                ctx.add_error(e);
-                                            }
-                                            // Upsert always succeeds — no return type requirement.
-                                        }
-                                        _ => {
-                                            ctx.add_error(TypeError::DatalitError(
-                                                format!(
-                                                    "bare index in set requires map type, got {}; use '?' or '!' for list indexing",
-                                                    type_to_string(db, &base_ty)
-                                                ),
-                                            ));
-                                            return;
-                                        }
-                                    }
-                                }
-                                Some(error_mode) => {
-                                    let (element_ty, index_type) = match &base_ty {
-                                        Type::Datalit(datalit::tycheck::Type::List(list)) => {
-                                            (
-                                                Type::Datalit(*list.element_type.clone()),
-                                                Type::Datalit(datalit::tycheck::Type::Index),
-                                            )
-                                        }
-                                        Type::Datalit(datalit::tycheck::Type::Map(map)) => {
-                                            (
-                                                Type::Datalit(*map.value_type.clone()),
-                                                Type::Datalit(*map.key_type.clone()),
-                                            )
-                                        }
-                                        _ => {
-                                            ctx.add_error(TypeError::DatalitError(
-                                                format!("indexing requires list or map type, got {}", type_to_string(db, &base_ty)),
-                                            ));
-                                            return;
-                                        }
-                                    };
-                                    if let Err(e) = check_expr(ctx, idx_target.index, &index_type) {
-                                        ctx.add_error(e);
-                                    }
-                                    if let Err(e) = check_expr(ctx, value, &element_ty) {
-                                        ctx.add_error(e);
-                                    }
-                                    // Verify function returns Option or Result depending on error_mode.
-                                    match error_mode {
-                                        IndexErrorMode::Option => {
-                                            if let Err(e) = require_option_return_type_for_set(ctx, stmt) {
-                                                ctx.add_error(e);
-                                            }
-                                        }
-                                        IndexErrorMode::Result => {
-                                            if let Err(e) = require_result_return_type_for_set(ctx, stmt) {
-                                                ctx.add_error(e);
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                        Err(e) => ctx.add_error(e),
-                    }
+                None => {
+                    let err = ctx.error_undefined_variable_set(stmt, root_name.text(db).as_str());
+                    ctx.add_error(err);
+                    return;
                 }
+            }
+
+            // Walk the place steps to determine the target type.
+            match typecheck_place_for_set(ctx, stmt, place, value) {
+                Ok(()) => {}
+                Err(e) => ctx.add_error(e),
             }
         }
 
@@ -656,32 +554,70 @@ pub fn check_statement<'db>(
     }
 }
 
-/// Typecheck a projection target in a set statement.
-///
-/// Returns the expected type of the final field being set.
-fn typecheck_set_target_proj<'db>(
+/// Typecheck a place in a set statement: root + steps, including the terminal step.
+fn typecheck_place_for_set<'db>(
     ctx: &mut TypeContext<'db>,
-    proj: &SetTargetProj<'db>,
+    stmt: &StmtSet<'db>,
+    place: &Place<'db>,
+    value: ExprFun<'db>,
+) -> Result<(), TypeError> {
+    let db = ctx.db;
+
+    // Start with the root variable type.
+    let mut current_ty = ctx.lookup_variable(place.root).ok_or_else(|| {
+        TypeError::DatalitError(format!("undefined variable: {}", place.root.text(db)))
+    })?;
+
+    let steps = &place.steps;
+    for (i, step) in steps.iter().enumerate() {
+        let is_last = i == steps.len() - 1;
+        match step {
+            PlaceStep::Field(field) => {
+                current_ty = typecheck_field_step(ctx, &current_ty, field)?;
+            }
+            PlaceStep::Index(idx) => {
+                if is_last {
+                    // Terminal index — handle key/value checking.
+                    typecheck_set_index(ctx, stmt, &current_ty, idx, value);
+                    return Ok(());
+                }
+                // Intermediate index — must have error mode.
+                if idx.error_mode.is_none() {
+                    return Err(TypeError::DatalitError(
+                        "bare index (upsert) cannot appear in intermediate set target position".to_string(),
+                    ));
+                }
+                current_ty = typecheck_index_step(ctx, &current_ty, idx)?;
+            }
+        }
+    }
+
+    // No index steps — simple assignment or field projection.
+    if let Err(e) = check_expr(ctx, value, &current_ty) {
+        ctx.add_error(e);
+    }
+    Ok(())
+}
+
+/// Typecheck a field step, returning the field's type.
+fn typecheck_field_step<'db>(
+    ctx: &mut TypeContext<'db>,
+    base_ty: &Type<'db>,
+    field: &FieldSelector<'db>,
 ) -> Result<Type<'db>, TypeError> {
     let db = ctx.db;
 
-    // First, resolve the base to get the starting type.
-    let base_ty = typecheck_set_target(ctx, &proj.base)?;
-
-    // Base must be a datalit type (tuple or struct).
-    let base_datalit_ty = match &base_ty {
+    let base_datalit_ty = match base_ty {
         Type::Datalit(dt) => dt,
         _ => {
             return Err(TypeError::ProjectionOnNonAggregate {
-                ty: type_to_string(db, &base_ty),
+                ty: type_to_string(db, base_ty),
             });
         }
     };
 
-    // Extract field type based on selector.
-    match &proj.field {
+    match field {
         FieldSelector::Index(idx) => {
-            // Index projection: base must be tuple.
             match base_datalit_ty {
                 datalit::tycheck::Type::AnonTuple(tuple) => {
                     let idx_usize = *idx as usize;
@@ -691,92 +627,143 @@ fn typecheck_set_target_proj<'db>(
                             tuple_size: tuple.fields.len(),
                         });
                     }
-                    let field_ty = &tuple.fields[idx_usize];
-                    let ty = Type::Datalit(field_ty.clone());
-                    Ok(ty)
+                    Ok(Type::Datalit(tuple.fields[idx_usize].clone()))
                 }
-                _ => {
-                    Err(TypeError::ProjectionOnNonAggregate {
-                        ty: type_to_string(db, &base_ty),
-                    })
-                }
+                _ => Err(TypeError::ProjectionOnNonAggregate {
+                    ty: type_to_string(db, base_ty),
+                }),
             }
         }
         FieldSelector::Name(name) => {
-            // Named projection: base must be struct.
             match base_datalit_ty {
                 datalit::tycheck::Type::AnonStruct(struct_ty) => {
                     let name_str = name.text(db);
-                    for field in &struct_ty.fields {
-                        if field.name.text(db) == name_str {
-                            let ty = Type::Datalit((*field.ty).clone());
-                            return Ok(ty);
+                    for f in &struct_ty.fields {
+                        if f.name.text(db) == name_str {
+                            return Ok(Type::Datalit((*f.ty).clone()));
                         }
                     }
                     Err(TypeError::FieldNotFound {
                         field_name: name_str.S(),
-                        ty: type_to_string(db, &base_ty),
+                        ty: type_to_string(db, base_ty),
                     })
                 }
-                _ => {
-                    Err(TypeError::ProjectionOnNonAggregate {
-                        ty: type_to_string(db, &base_ty),
-                    })
-                }
+                _ => Err(TypeError::ProjectionOnNonAggregate {
+                    ty: type_to_string(db, base_ty),
+                }),
             }
         }
     }
 }
 
-/// Get the root variable name from a projection chain.
-fn get_proj_root_name<'db>(proj: &SetTargetProj<'db>) -> bct::text::InternedText<'db> {
-    get_set_target_root_name(&proj.base)
-}
-
-/// Get the root variable name from any set target.
-fn get_set_target_root_name<'db>(target: &SetTarget<'db>) -> bct::text::InternedText<'db> {
-    match target {
-        SetTarget::Name(name) => *name,
-        SetTarget::Proj(proj) => get_set_target_root_name(&proj.base),
-        SetTarget::Index(idx) => get_set_target_root_name(&idx.base),
-    }
-}
-
-/// Typecheck a set target, returning its type.
-fn typecheck_set_target<'db>(
+/// Typecheck an intermediate index step, returning the element/value type.
+fn typecheck_index_step<'db>(
     ctx: &mut TypeContext<'db>,
-    target: &SetTarget<'db>,
+    base_ty: &Type<'db>,
+    idx: &PlaceIndex<'db>,
 ) -> Result<Type<'db>, TypeError> {
     let db = ctx.db;
 
-    match target {
-        SetTarget::Name(name) => {
-            ctx.lookup_variable(*name).ok_or_else(|| {
-                TypeError::DatalitError(format!("undefined variable: {}", name.text(db)))
-            })
+    let (element_ty, index_type) = match base_ty {
+        Type::Datalit(datalit::tycheck::Type::List(list)) => {
+            (
+                Type::Datalit(*list.element_type.clone()),
+                Type::Datalit(datalit::tycheck::Type::Index),
+            )
         }
-        SetTarget::Proj(proj) => typecheck_set_target_proj(ctx, proj),
-        SetTarget::Index(idx) => {
-            // Bare index (error_mode: None) is only valid as the terminal set
-            // target. In intermediate position it would need to create a value
-            // for an absent key, which has no way to know what value to use.
-            if idx.error_mode.is_none() {
-                return Err(TypeError::DatalitError(
-                    "bare index (upsert) cannot appear in intermediate set target position".to_string(),
-                ));
+        Type::Datalit(datalit::tycheck::Type::Map(map)) => {
+            (
+                Type::Datalit(*map.value_type.clone()),
+                Type::Datalit(*map.key_type.clone()),
+            )
+        }
+        _ => {
+            return Err(TypeError::DatalitError(
+                format!("indexing requires list or map type, got {}", type_to_string(db, base_ty)),
+            ));
+        }
+    };
+
+    if let Err(e) = check_expr(ctx, idx.index, &index_type) {
+        ctx.add_error(e);
+    }
+
+    Ok(element_ty)
+}
+
+/// Typecheck the terminal index step of a set target.
+fn typecheck_set_index<'db>(
+    ctx: &mut TypeContext<'db>,
+    stmt: &StmtSet<'db>,
+    base_ty: &Type<'db>,
+    idx_step: &PlaceIndex<'db>,
+    value: ExprFun<'db>,
+) {
+    let db = ctx.db;
+
+    match idx_step.error_mode {
+        None => {
+            // Bare index (upsert): only valid for maps.
+            match base_ty {
+                Type::Datalit(datalit::tycheck::Type::Map(map)) => {
+                    let key_type = Type::Datalit(*map.key_type.clone());
+                    let value_type = Type::Datalit(*map.value_type.clone());
+                    if let Err(e) = check_expr(ctx, idx_step.index, &key_type) {
+                        ctx.add_error(e);
+                    }
+                    if let Err(e) = check_expr(ctx, value, &value_type) {
+                        ctx.add_error(e);
+                    }
+                }
+                _ => {
+                    ctx.add_error(TypeError::DatalitError(
+                        format!(
+                            "bare index in set requires map type, got {}; use '?' or '!' for list indexing",
+                            type_to_string(db, base_ty)
+                        ),
+                    ));
+                }
             }
-            // Resolve base type, which should be List<T> or Map<K,V>.
-            let base_ty = typecheck_set_target(ctx, &idx.base)?;
-            match &base_ty {
+        }
+        Some(error_mode) => {
+            let (element_ty, index_type) = match base_ty {
                 Type::Datalit(datalit::tycheck::Type::List(list)) => {
-                    Ok(Type::Datalit(*list.element_type.clone()))
+                    (
+                        Type::Datalit(*list.element_type.clone()),
+                        Type::Datalit(datalit::tycheck::Type::Index),
+                    )
                 }
                 Type::Datalit(datalit::tycheck::Type::Map(map)) => {
-                    Ok(Type::Datalit(*map.value_type.clone()))
+                    (
+                        Type::Datalit(*map.value_type.clone()),
+                        Type::Datalit(*map.key_type.clone()),
+                    )
                 }
-                _ => Err(TypeError::DatalitError(
-                    format!("indexing requires list or map type, got {}", type_to_string(db, &base_ty)),
-                )),
+                _ => {
+                    ctx.add_error(TypeError::DatalitError(
+                        format!("indexing requires list or map type, got {}", type_to_string(db, base_ty)),
+                    ));
+                    return;
+                }
+            };
+            if let Err(e) = check_expr(ctx, idx_step.index, &index_type) {
+                ctx.add_error(e);
+            }
+            if let Err(e) = check_expr(ctx, value, &element_ty) {
+                ctx.add_error(e);
+            }
+            // Verify function returns Option or Result depending on error_mode.
+            match error_mode {
+                IndexErrorMode::Option => {
+                    if let Err(e) = require_option_return_type_for_set(ctx, stmt) {
+                        ctx.add_error(e);
+                    }
+                }
+                IndexErrorMode::Result => {
+                    if let Err(e) = require_result_return_type_for_set(ctx, stmt) {
+                        ctx.add_error(e);
+                    }
+                }
             }
         }
     }

@@ -284,6 +284,9 @@ pub fn datafun_expr_to_datalit_serde<'db>(
         ast::ExprFunKind::Index(_) => {
             return Err(ConversionError::NotPureDatalit("Index".to_string()));
         }
+        ast::ExprFunKind::Place(_) => {
+            return Err(ConversionError::NotPureDatalit("Place".to_string()));
+        }
     };
 
     // Convert type hint to serde format.

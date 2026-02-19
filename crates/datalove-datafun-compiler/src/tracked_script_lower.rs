@@ -288,6 +288,14 @@ fn find_const_refs_inner<'db>(
                 find_const_refs_inner(db, field.value, const_names, name_to_stmt, refs);
             }
         }
+        ExprFunKind::Place(ref place) => {
+            // Walk index sub-expressions for const refs.
+            for step in &place.steps {
+                if let datalove_datafun_ast::ast::PlaceStep::Index(idx) = step {
+                    find_const_refs_inner(db, idx.index, const_names, name_to_stmt, refs);
+                }
+            }
+        }
 
         // Literals and other simple expressions have no references.
         _ => {}

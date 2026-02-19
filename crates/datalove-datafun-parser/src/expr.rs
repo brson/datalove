@@ -69,6 +69,10 @@ impl<'db> Parser<'db> {
     /// - `.field` - struct field projection
     /// - `.0` - tuple index projection
     /// - `[expr]` - index expression (produces fallible place)
+    ///
+    /// When an index `[expr]` is followed by `?` or `!` and the base expression
+    /// can be decomposed into a root name + field steps, produces
+    /// `ExprFunKind::Place` instead of `TryOption(Index(...))`.
     fn parse_postfix_try_operators(&mut self, mut expr: ast::ExprFun<'db>) -> ast::ExprFun<'db> {
         loop {
             match self.peek() {
@@ -129,17 +133,131 @@ impl<'db> Parser<'db> {
                     let index = sub.parse_expr_full();
                     sub.error_if_not_exhausted();
                     self.merge_from_sub(&mut sub);
-                    let end_pos = self.last_byte_end();
-                    let span = start_pos..end_pos;
-                    expr = self.create_expr(
-                        ast::ExprFunKind::Index(ast::ExprIndex { base: expr, index }),
-                        TextSpan::new(text, span),
-                    );
+
+                    // Check for ? or ! following the index.
+                    let error_mode = if self.peek_sigil(Sigil::Question) {
+                        self.next(); // consume ?
+                        Some(ast::IndexErrorMode::Option)
+                    } else if self.peek_sigil(Sigil::Exclamation) {
+                        self.next(); // consume !
+                        Some(ast::IndexErrorMode::Result)
+                    } else {
+                        None
+                    };
+
+                    if let Some(error_mode) = error_mode {
+                        // Try to decompose base expr into a Place.
+                        if let Some((root, mut steps)) = Self::try_decompose_to_place(self.db, expr) {
+                            steps.push(ast::PlaceStep::Index(ast::PlaceIndex {
+                                index,
+                                error_mode: Some(error_mode),
+                            }));
+                            // Enter place mode: continue collecting steps.
+                            expr = self.finish_place_mode(root, steps, text, start_pos);
+                            continue;
+                        }
+                        // Decomposition failed — fall back to TryOption/TryResult wrapping Index.
+                        let end_pos = self.last_byte_end();
+                        let span = start_pos..end_pos;
+                        let index_expr = self.create_expr(
+                            ast::ExprFunKind::Index(ast::ExprIndex { base: expr, index }),
+                            TextSpan::new(text, span.clone()),
+                        );
+                        expr = self.create_expr(
+                            match error_mode {
+                                ast::IndexErrorMode::Option =>
+                                    ast::ExprFunKind::TryOption(ast::ExprTryOption { operand: index_expr }),
+                                ast::IndexErrorMode::Result =>
+                                    ast::ExprFunKind::TryResult(ast::ExprTryResult { operand: index_expr }),
+                            },
+                            TextSpan::new(text, span),
+                        );
+                    } else {
+                        // Bare index (no ? or !) — produce Index node as before.
+                        let end_pos = self.last_byte_end();
+                        let span = start_pos..end_pos;
+                        expr = self.create_expr(
+                            ast::ExprFunKind::Index(ast::ExprIndex { base: expr, index }),
+                            TextSpan::new(text, span),
+                        );
+                    }
                 }
                 _ => break,
             }
         }
         expr
+    }
+
+    /// Try to decompose an expression into a Place root + field steps.
+    ///
+    /// Walks the expression tree: `Name` -> root; `FieldProj` -> prepend Field step.
+    /// Returns `None` if the expression contains non-decomposable nodes
+    /// (function calls, arithmetic, etc.).
+    fn try_decompose_to_place(
+        db: &'db dyn salsa::Database,
+        expr: ast::ExprFun<'db>,
+    ) -> Option<(bct::text::InternedText<'db>, Vec<ast::PlaceStep<'db>>)> {
+        match expr.expr(db) {
+            ast::ExprFunKind::Name(name) => {
+                Some((name, Vec::new()))
+            }
+            ast::ExprFunKind::FieldProj(proj) => {
+                let (root, mut steps) = Self::try_decompose_to_place(db, proj.base)?;
+                steps.push(ast::PlaceStep::Field(proj.field.clone()));
+                Some((root, steps))
+            }
+            _ => None,
+        }
+    }
+
+    /// Continue parsing in place mode, collecting field and index steps.
+    ///
+    /// Returns the finalized Place expression.
+    fn finish_place_mode(
+        &mut self,
+        root: bct::text::InternedText<'db>,
+        mut steps: Vec<ast::PlaceStep<'db>>,
+        text: bct::text::Text<'db>,
+        start_pos: usize,
+    ) -> ast::ExprFun<'db> {
+        loop {
+            if self.peek_sigil(Sigil::Dot) {
+                self.next(); // consume .
+                let field = self.parse_field_selector();
+                steps.push(ast::PlaceStep::Field(field));
+            } else if let Some(TreeToken::Branch { sigil: Sigil::BracketOpen, .. }) = self.peek() {
+                let inner = match self.next() {
+                    Some(TreeToken::Branch { sigil: Sigil::BracketOpen, inner, .. }) => inner,
+                    _ => unreachable!(),
+                };
+                let mut sub = self.sub_parser(inner, None);
+                let index = sub.parse_expr_full();
+                sub.error_if_not_exhausted();
+                self.merge_from_sub(&mut sub);
+
+                let error_mode = if self.peek_sigil(Sigil::Question) {
+                    self.next();
+                    Some(ast::IndexErrorMode::Option)
+                } else if self.peek_sigil(Sigil::Exclamation) {
+                    self.next();
+                    Some(ast::IndexErrorMode::Result)
+                } else {
+                    None
+                };
+                steps.push(ast::PlaceStep::Index(ast::PlaceIndex {
+                    index,
+                    error_mode,
+                }));
+            } else {
+                break;
+            }
+        }
+        let end_pos = self.last_byte_end();
+        let span = start_pos..end_pos;
+        self.create_expr(
+            ast::ExprFunKind::Place(ast::Place { root, steps }),
+            TextSpan::new(text, span),
+        )
     }
 
     /// Parse a field selector (name or index) after a dot.

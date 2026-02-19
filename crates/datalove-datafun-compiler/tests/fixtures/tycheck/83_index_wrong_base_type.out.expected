@@ -6,10 +6,10 @@
         {
           "message": "cannot infer type",
           "span": [
-            91,
+            88,
             92
           ],
-          "text": "?"
+          "text": "[i]?"
         }
       ],
       "message": "indexing requires list or map type, got u32"

@@ -6,10 +6,10 @@
         {
           "message": "try operator here",
           "span": [
-            110,
+            107,
             111
           ],
-          "text": "?"
+          "text": "[i]?"
         }
       ],
       "message": "try operator `?` requires function to return Option, found `u32`",

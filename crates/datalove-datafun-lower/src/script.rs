@@ -24,7 +24,7 @@ use crate::ScriptFunctionAnalyses;
 use super::context::{LowerCtx, ScriptLowerContext, FrameState};
 use super::expr::{lower_expression, lower_expression_for_ref};
 use super::func::lower_function_body;
-use super::stmt::{collect_field_path, lower_set_index};
+use super::stmt::{collect_field_path_from_place, lower_statement};
 use super::LowerError;
 
 /// Check if a set statement is a self-assignment (set v0 = v0) for script context.
@@ -367,85 +367,69 @@ fn lower_statement_for_script<'db>(
         }
         Statement::Set(set_stmt) => {
             // No export needed for assignment.
-            match &set_stmt.target {
-                ast::SetTarget::Name(n) => {
-                    let name = n.text(ctx.db).to_string();
+            let place = &set_stmt.target;
+            let root_name_str = place.root.text(ctx.db).to_string();
 
-                    // Check for self-assignment (set v0 = v0). This is a no-op but would
-                    // cause incorrect behavior because SlotLoad returns a pointer to the
-                    // slot's memory, and Drop would destroy that memory before SlotStore
-                    // copies from it.
-                    if is_self_assignment_script(ctx, &name, set_stmt.value) {
-                        return Ok(());
-                    }
-
-                    let value_id = lower_expression(ctx, set_stmt.value)?;
-                    let operand = ctx.lookup_var(&name)
-                        .unwrap_or_else(|| panic!("variable '{}' not found - typechecker should catch this", name));
-                    match operand {
-                        Operand::Slot(slot) => {
-                            // Drop old value before storing new one.
-                            let is_copy = ctx.slot_type(slot).map(|t| t.is_copy()).unwrap_or(false);
-                            if !is_copy {
-                                // Use DropTracked for tracked slots, Drop for precise.
-                                let operand = Operand::Slot(slot);
-                                if ctx.is_operand_tracked(operand) {
-                                    ctx.emit(Instruction::DropTracked { operand });
-                                } else {
-                                    ctx.emit(Instruction::Drop { operand });
-                                }
-                            }
-                            if is_copy {
-                                ctx.emit_slot_store_copy(SlotDest::Local(slot), Operand::Value(value_id));
-                            } else {
-                                ctx.emit_slot_store_move(SlotDest::Local(slot), Operand::Value(value_id));
-                            }
-                            Ok(())
-                        }
-                        Operand::ExternalSlot { unit, slot } => {
-                            // Drop old value before storing new one.
-                            // Use DropTracked: external slots are script-level bindings, always tracked.
-                            let is_copy = ctx.external_slot_type(&name).map(|t| t.is_copy()).unwrap_or(false);
-                            if !is_copy {
-                                ctx.emit(Instruction::DropTracked {
-                                    operand: Operand::ExternalSlot { unit, slot },
-                                });
-                            }
-                            if is_copy {
-                                ctx.emit_slot_store_copy(SlotDest::External { unit, slot }, Operand::Value(value_id));
-                            } else {
-                                ctx.emit_slot_store_move(SlotDest::External { unit, slot }, Operand::Value(value_id));
-                            }
-                            Ok(())
-                        }
-                        _ => panic!("assignment to immutable variable '{}' - typechecker should catch this", name),
-                    }
+            if place.steps.is_empty() {
+                // Simple name assignment.
+                if is_self_assignment_script(ctx, &root_name_str, set_stmt.value) {
+                    return Ok(());
                 }
-                ast::SetTarget::Proj(proj) => {
-                    // Walk the projection chain to find root and collect field path.
-                    let (root_name, field_path) = collect_field_path(ctx, proj)?;
-                    let root_name_str = root_name.text(ctx.db).to_string();
 
-                    // Lower the value expression.
-                    let value_id = lower_expression(ctx, set_stmt.value)?;
-
-                    // Look up the root slot.
-                    match ctx.lookup_var(&root_name_str) {
-                        Some(Operand::Slot(slot)) => {
-                            // Emit SetField instruction.
-                            ctx.emit_set_field(SlotDest::Local(slot), field_path, Operand::Value(value_id));
-                            Ok(())
+                let value_id = lower_expression(ctx, set_stmt.value)?;
+                let operand = ctx.lookup_var(&root_name_str)
+                    .unwrap_or_else(|| panic!("variable '{}' not found - typechecker should catch this", root_name_str));
+                match operand {
+                    Operand::Slot(slot) => {
+                        let is_copy = ctx.slot_type(slot).map(|t| t.is_copy()).unwrap_or(false);
+                        if !is_copy {
+                            let operand = Operand::Slot(slot);
+                            if ctx.is_operand_tracked(operand) {
+                                ctx.emit(Instruction::DropTracked { operand });
+                            } else {
+                                ctx.emit(Instruction::Drop { operand });
+                            }
                         }
-                        Some(Operand::ExternalSlot { unit, slot }) => {
-                            // Emit SetField instruction for external slot.
-                            ctx.emit_set_field(SlotDest::External { unit, slot }, field_path, Operand::Value(value_id));
-                            Ok(())
+                        if is_copy {
+                            ctx.emit_slot_store_copy(SlotDest::Local(slot), Operand::Value(value_id));
+                        } else {
+                            ctx.emit_slot_store_move(SlotDest::Local(slot), Operand::Value(value_id));
                         }
-                        _ => panic!("assignment to field of immutable variable '{}' - typechecker should catch this", root_name_str),
+                        Ok(())
                     }
+                    Operand::ExternalSlot { unit, slot } => {
+                        let is_copy = ctx.external_slot_type(&root_name_str).map(|t| t.is_copy()).unwrap_or(false);
+                        if !is_copy {
+                            ctx.emit(Instruction::DropTracked {
+                                operand: Operand::ExternalSlot { unit, slot },
+                            });
+                        }
+                        if is_copy {
+                            ctx.emit_slot_store_copy(SlotDest::External { unit, slot }, Operand::Value(value_id));
+                        } else {
+                            ctx.emit_slot_store_move(SlotDest::External { unit, slot }, Operand::Value(value_id));
+                        }
+                        Ok(())
+                    }
+                    _ => panic!("assignment to immutable variable '{}' - typechecker should catch this", root_name_str),
                 }
-                ast::SetTarget::Index(idx_target) => {
-                    lower_set_index(ctx, set_stmt, idx_target)
+            } else if place.steps.iter().any(|s| matches!(s, ast::PlaceStep::Index(_))) {
+                // Contains index — delegate to the general lowering in stmt.rs.
+                lower_statement(ctx, stmt)
+            } else {
+                // Pure field projections.
+                let field_path = collect_field_path_from_place(ctx, place)?;
+                let value_id = lower_expression(ctx, set_stmt.value)?;
+                match ctx.lookup_var(&root_name_str) {
+                    Some(Operand::Slot(slot)) => {
+                        ctx.emit_set_field(SlotDest::Local(slot), field_path, Operand::Value(value_id));
+                        Ok(())
+                    }
+                    Some(Operand::ExternalSlot { unit, slot }) => {
+                        ctx.emit_set_field(SlotDest::External { unit, slot }, field_path, Operand::Value(value_id));
+                        Ok(())
+                    }
+                    _ => panic!("assignment to field of immutable variable '{}' - typechecker should catch this", root_name_str),
                 }
             }
         }
