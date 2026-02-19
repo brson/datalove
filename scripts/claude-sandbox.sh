@@ -80,6 +80,7 @@ mounts=(
 # Claude binary (share host install so upgrades persist)
 [[ -d "$HOME/.local/bin" ]] && mounts+=("-v" "$HOME/.local/bin:/home/claude/.local/bin")
 [[ -d "$HOME/.local/share/claude" ]] && mounts+=("-v" "$HOME/.local/share/claude:/home/claude/.local/share/claude")
+[[ -d "$HOME/.local/share/claude" ]] && mounts+=("-v" "$HOME/.local/share/claude:$HOME/.local/share/claude")
 # Override settings.json with container-specific paths for hooks
 [[ -f "$SCRIPT_DIR/claude-sandbox-settings.json" ]] && mounts+=("-v" "$SCRIPT_DIR/claude-sandbox-settings.json:/home/claude/.claude/settings.json:ro")
 
