@@ -9,9 +9,87 @@ use datalove_datafun_ir::{IrType, Operand, ValueId};
 use crate::types::{self, CraneliftRepr, PTR_TYPE};
 use crate::CraneliftError;
 
+use crate::runtime::RuntimeImports;
+
 use super::FunctionCompiler;
 
+/// Pre-computed values shared across map instruction compilation.
+struct MapSetup {
+    map_ptr: cl_ir::Value,
+    key_ptr: cl_ir::Value,
+    map_tydesc_ptr: cl_ir::Value,
+    key_tydesc_ptr: cl_ir::Value,
+    value_ty: IrType,
+    runtime: RuntimeImports,
+    rt_handle: cl_ir::Value,
+}
+
 impl<'a, M: Module> FunctionCompiler<'a, M> {
+    /// Prepare common values needed by all map operations.
+    ///
+    /// Extracts key/value types, runtime imports, operand pointers, and tydesc
+    /// global values. Each `compile_map_*` method calls this then uses the result.
+    fn prepare_map_op(
+        &mut self,
+        builder: &mut FunctionBuilder,
+        op_name: &str,
+        map: &Operand,
+        key: &Operand,
+    ) -> Result<MapSetup, CraneliftError> {
+        let map_ty = self.get_operand_type(map)?;
+        let (key_ty, value_ty) = match &map_ty {
+            IrType::Map(k, v) => (k.as_ref().clone(), v.as_ref().clone()),
+            _ => return Err(CraneliftError::Codegen(format!(
+                "{} on non-map type: {:?}", op_name, map_ty
+            ))),
+        };
+
+        let runtime = self.runtime.ok_or_else(|| {
+            CraneliftError::Codegen(format!("{} requires runtime imports", op_name))
+        })?;
+        let rt_handle = self.rt_handle_param.ok_or_else(|| {
+            CraneliftError::Codegen(format!("{} requires runtime handle", op_name))
+        })?;
+
+        let map_ptr = self.get_operand_ptr(builder, map)?;
+        let key_ptr = self.get_operand_ptr(builder, key)?;
+
+        let map_tydesc_id = self.tydesc_emitter.get(&map_ty).ok_or_else(|| {
+            CraneliftError::Codegen(format!("TyDesc not found for map type {:?}", map_ty))
+        })?;
+        let map_tydesc_gv = self.module.declare_data_in_func(map_tydesc_id, builder.func);
+        let map_tydesc_ptr = builder.ins().global_value(PTR_TYPE, map_tydesc_gv);
+
+        let key_tydesc_id = self.tydesc_emitter.get(&key_ty).ok_or_else(|| {
+            CraneliftError::Codegen(format!("TyDesc not found for key type {:?}", key_ty))
+        })?;
+        let key_tydesc_gv = self.module.declare_data_in_func(key_tydesc_id, builder.func);
+        let key_tydesc_ptr = builder.ins().global_value(PTR_TYPE, key_tydesc_gv);
+
+        Ok(MapSetup {
+            map_ptr,
+            key_ptr,
+            map_tydesc_ptr,
+            key_tydesc_ptr,
+            value_ty,
+            runtime,
+            rt_handle,
+        })
+    }
+
+    /// Resolve a value tydesc global value from an IrType.
+    fn resolve_tydesc_ptr(
+        &mut self,
+        builder: &mut FunctionBuilder,
+        ty: &IrType,
+    ) -> Result<cl_ir::Value, CraneliftError> {
+        let tydesc_id = self.tydesc_emitter.get(ty).ok_or_else(|| {
+            CraneliftError::Codegen(format!("TyDesc not found for type {:?}", ty))
+        })?;
+        let tydesc_gv = self.module.declare_data_in_func(tydesc_id, builder.func);
+        Ok(builder.ins().global_value(PTR_TYPE, tydesc_gv))
+    }
+
     /// Compile a MapContainsKey instruction.
     ///
     /// Calls the runtime contains_key function and stores the boolean result.
@@ -22,37 +100,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         map: &Operand,
         key: &Operand,
     ) -> Result<(), CraneliftError> {
-        let map_ty = self.get_operand_type(map)?;
-        let (key_ty, _value_ty) = match &map_ty {
-            IrType::Map(k, v) => (k.as_ref().clone(), v.as_ref().clone()),
-            _ => return Err(CraneliftError::Codegen(format!(
-                "MapContainsKey on non-map type: {:?}", map_ty
-            ))),
-        };
-
-        let runtime = self.runtime.ok_or_else(|| {
-            CraneliftError::Codegen("MapContainsKey requires runtime imports".into())
-        })?;
-        let rt_handle = self.rt_handle_param.ok_or_else(|| {
-            CraneliftError::Codegen("MapContainsKey requires runtime handle".into())
-        })?;
-
-        let map_ptr = self.get_operand_ptr(builder, map)?;
-        let key_ptr = self.get_operand_ptr(builder, key)?;
-
-        // Get map tydesc.
-        let map_tydesc_id = self.tydesc_emitter.get(&map_ty).ok_or_else(|| {
-            CraneliftError::Codegen(format!("TyDesc not found for map type {:?}", map_ty))
-        })?;
-        let map_tydesc_gv = self.module.declare_data_in_func(map_tydesc_id, builder.func);
-        let map_tydesc_ptr = builder.ins().global_value(PTR_TYPE, map_tydesc_gv);
-
-        // Get key tydesc.
-        let key_tydesc_id = self.tydesc_emitter.get(&key_ty).ok_or_else(|| {
-            CraneliftError::Codegen(format!("TyDesc not found for key type {:?}", key_ty))
-        })?;
-        let key_tydesc_gv = self.module.declare_data_in_func(key_tydesc_id, builder.func);
-        let key_tydesc_ptr = builder.ins().global_value(PTR_TYPE, key_tydesc_gv);
+        let s = self.prepare_map_op(builder, "MapContainsKey", map, key)?;
 
         // Allocate stack slot for bool result.
         let result_slot = builder.create_sized_stack_slot(cl_ir::StackSlotData::new(
@@ -62,13 +110,13 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         ));
         let result_addr = builder.ins().stack_addr(PTR_TYPE, result_slot, 0);
 
-        let func_ref = self.module.declare_func_in_func(runtime.map_contains_key, builder.func);
+        let func_ref = self.module.declare_func_in_func(s.runtime.map_contains_key, builder.func);
         builder.ins().call(func_ref, &[
-            rt_handle,
-            map_ptr,
-            map_tydesc_ptr,
-            key_ptr,
-            key_tydesc_ptr,
+            s.rt_handle,
+            s.map_ptr,
+            s.map_tydesc_ptr,
+            s.key_ptr,
+            s.key_tydesc_ptr,
             result_addr,
         ]);
 
@@ -94,43 +142,9 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         map: &Operand,
         key: &Operand,
     ) -> Result<(), CraneliftError> {
-        let map_ty = self.get_operand_type(map)?;
-        let (key_ty, value_ty) = match &map_ty {
-            IrType::Map(k, v) => (k.as_ref().clone(), v.as_ref().clone()),
-            _ => return Err(CraneliftError::Codegen(format!(
-                "MapGet on non-map type: {:?}", map_ty
-            ))),
-        };
-        let value_repr = types::ir_type_to_cranelift(&value_ty);
-
-        let runtime = self.runtime.ok_or_else(|| {
-            CraneliftError::Codegen("MapGet requires runtime imports".into())
-        })?;
-        let rt_handle = self.rt_handle_param.ok_or_else(|| {
-            CraneliftError::Codegen("MapGet requires runtime handle".into())
-        })?;
-
-        let map_ptr = self.get_operand_ptr(builder, map)?;
-        let key_ptr = self.get_operand_ptr(builder, key)?;
-
-        // Get tydescs.
-        let map_tydesc_id = self.tydesc_emitter.get(&map_ty).ok_or_else(|| {
-            CraneliftError::Codegen(format!("TyDesc not found for map type {:?}", map_ty))
-        })?;
-        let map_tydesc_gv = self.module.declare_data_in_func(map_tydesc_id, builder.func);
-        let map_tydesc_ptr = builder.ins().global_value(PTR_TYPE, map_tydesc_gv);
-
-        let key_tydesc_id = self.tydesc_emitter.get(&key_ty).ok_or_else(|| {
-            CraneliftError::Codegen(format!("TyDesc not found for key type {:?}", key_ty))
-        })?;
-        let key_tydesc_gv = self.module.declare_data_in_func(key_tydesc_id, builder.func);
-        let key_tydesc_ptr = builder.ins().global_value(PTR_TYPE, key_tydesc_gv);
-
-        let value_tydesc_id = self.tydesc_emitter.get(&value_ty).ok_or_else(|| {
-            CraneliftError::Codegen(format!("TyDesc not found for value type {:?}", value_ty))
-        })?;
-        let value_tydesc_gv = self.module.declare_data_in_func(value_tydesc_id, builder.func);
-        let value_tydesc_ptr = builder.ins().global_value(PTR_TYPE, value_tydesc_gv);
+        let s = self.prepare_map_op(builder, "MapGet", map, key)?;
+        let value_repr = types::ir_type_to_cranelift(&s.value_ty);
+        let value_tydesc_ptr = self.resolve_tydesc_ptr(builder, &s.value_ty)?;
 
         // Get pointer to value (returns null on miss).
         let vref_slot = builder.create_sized_stack_slot(cl_ir::StackSlotData::new(
@@ -140,13 +154,13 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         ));
         let vref_addr = builder.ins().stack_addr(PTR_TYPE, vref_slot, 0);
 
-        let getref_ref = self.module.declare_func_in_func(runtime.map_get_value_ref, builder.func);
+        let getref_ref = self.module.declare_func_in_func(s.runtime.map_get_value_ref, builder.func);
         builder.ins().call(getref_ref, &[
-            rt_handle,
-            map_ptr,
-            map_tydesc_ptr,
-            key_ptr,
-            key_tydesc_ptr,
+            s.rt_handle,
+            s.map_ptr,
+            s.map_tydesc_ptr,
+            s.key_ptr,
+            s.key_tydesc_ptr,
             vref_addr,
         ]);
 
@@ -180,13 +194,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 // Skip block: dummy value.
                 builder.switch_to_block(skip_block);
                 builder.seal_block(skip_block);
-                let zero = if cl_ty == cl_types::F32 {
-                    builder.ins().f32const(0.0f32)
-                } else if cl_ty == cl_types::F64 {
-                    builder.ins().f64const(0.0f64)
-                } else {
-                    builder.ins().iconst(cl_ty, 0)
-                };
+                let zero = Self::emit_scalar_zero(builder, cl_ty);
                 builder.ins().jump(merge_block, &[BlockArg::from(zero)]);
 
                 builder.switch_to_block(merge_block);
@@ -207,9 +215,9 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 builder.switch_to_block(load_block);
                 builder.seal_block(load_block);
 
-                let clone_ref = self.module.declare_func_in_func(runtime.clone_local, builder.func);
+                let clone_ref = self.module.declare_func_in_func(s.runtime.clone_local, builder.func);
                 builder.ins().call(clone_ref, &[
-                    rt_handle,
+                    s.rt_handle,
                     value_ptr,
                     value_tydesc_ptr,
                     dest_addr,
@@ -229,16 +237,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         }
 
         // Conditional tracking byte.
-        if let Some(track_offset) = self.layout.values[dest.0 as usize].tracking_byte {
-            use crate::layout::tracking;
-            let frame_slot = self.frame_slot.expect("tracking requires frame slot");
-            let frame_addr = builder.ins().stack_addr(PTR_TYPE, frame_slot, 0);
-            let live_val = builder.ins().iconst(cl_types::I8, tracking::LIVE as i64);
-            let uninit_val = builder.ins().iconst(cl_types::I8, tracking::UNINIT as i64);
-            let track_addr = builder.ins().iadd_imm(frame_addr, track_offset as i64);
-            let track_val = builder.ins().select(is_valid_val, live_val, uninit_val);
-            builder.ins().store(MemFlags::new(), track_val, track_addr, 0);
-        }
+        self.emit_conditional_tracking(builder, dest, is_valid_val);
 
         Ok(())
     }
@@ -254,50 +253,17 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         key: &Operand,
         value: &Operand,
     ) -> Result<(), CraneliftError> {
-        let map_ty = self.get_operand_type(map)?;
-        let (key_ty, value_ty) = match &map_ty {
-            IrType::Map(k, v) => (k.as_ref().clone(), v.as_ref().clone()),
-            _ => return Err(CraneliftError::Codegen(format!(
-                "MapSetValue on non-map type: {:?}", map_ty
-            ))),
-        };
-
-        let runtime = self.runtime.ok_or_else(|| {
-            CraneliftError::Codegen("MapSetValue requires runtime imports".into())
-        })?;
-        let rt_handle = self.rt_handle_param.ok_or_else(|| {
-            CraneliftError::Codegen("MapSetValue requires runtime handle".into())
-        })?;
-
-        let map_ptr = self.get_operand_ptr(builder, map)?;
-        let key_ptr = self.get_operand_ptr(builder, key)?;
+        let s = self.prepare_map_op(builder, "MapSetValue", map, key)?;
         let value_ptr = self.get_operand_ptr(builder, value)?;
+        let value_tydesc_ptr = self.resolve_tydesc_ptr(builder, &s.value_ty)?;
 
-        let map_tydesc_id = self.tydesc_emitter.get(&map_ty).ok_or_else(|| {
-            CraneliftError::Codegen(format!("TyDesc not found for map type {:?}", map_ty))
-        })?;
-        let map_tydesc_gv = self.module.declare_data_in_func(map_tydesc_id, builder.func);
-        let map_tydesc_ptr = builder.ins().global_value(PTR_TYPE, map_tydesc_gv);
-
-        let key_tydesc_id = self.tydesc_emitter.get(&key_ty).ok_or_else(|| {
-            CraneliftError::Codegen(format!("TyDesc not found for key type {:?}", key_ty))
-        })?;
-        let key_tydesc_gv = self.module.declare_data_in_func(key_tydesc_id, builder.func);
-        let key_tydesc_ptr = builder.ins().global_value(PTR_TYPE, key_tydesc_gv);
-
-        let value_tydesc_id = self.tydesc_emitter.get(&value_ty).ok_or_else(|| {
-            CraneliftError::Codegen(format!("TyDesc not found for value type {:?}", value_ty))
-        })?;
-        let value_tydesc_gv = self.module.declare_data_in_func(value_tydesc_id, builder.func);
-        let value_tydesc_ptr = builder.ins().global_value(PTR_TYPE, value_tydesc_gv);
-
-        let func_ref = self.module.declare_func_in_func(runtime.map_set_value, builder.func);
+        let func_ref = self.module.declare_func_in_func(s.runtime.map_set_value, builder.func);
         builder.ins().call(func_ref, &[
-            rt_handle,
-            map_ptr,
-            map_tydesc_ptr,
-            key_ptr,
-            key_tydesc_ptr,
+            s.rt_handle,
+            s.map_ptr,
+            s.map_tydesc_ptr,
+            s.key_ptr,
+            s.key_tydesc_ptr,
             value_ptr,
             value_tydesc_ptr,
         ]);
@@ -316,35 +282,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         map: &Operand,
         key: &Operand,
     ) -> Result<(), CraneliftError> {
-        let map_ty = self.get_operand_type(map)?;
-        let (key_ty, _value_ty) = match &map_ty {
-            IrType::Map(k, v) => (k.as_ref().clone(), v.as_ref().clone()),
-            _ => return Err(CraneliftError::Codegen(format!(
-                "MapValueRef on non-map type: {:?}", map_ty
-            ))),
-        };
-
-        let runtime = self.runtime.ok_or_else(|| {
-            CraneliftError::Codegen("MapValueRef requires runtime imports".into())
-        })?;
-        let rt_handle = self.rt_handle_param.ok_or_else(|| {
-            CraneliftError::Codegen("MapValueRef requires runtime handle".into())
-        })?;
-
-        let map_ptr = self.get_operand_ptr(builder, map)?;
-        let key_ptr = self.get_operand_ptr(builder, key)?;
-
-        let map_tydesc_id = self.tydesc_emitter.get(&map_ty).ok_or_else(|| {
-            CraneliftError::Codegen(format!("TyDesc not found for map type {:?}", map_ty))
-        })?;
-        let map_tydesc_gv = self.module.declare_data_in_func(map_tydesc_id, builder.func);
-        let map_tydesc_ptr = builder.ins().global_value(PTR_TYPE, map_tydesc_gv);
-
-        let key_tydesc_id = self.tydesc_emitter.get(&key_ty).ok_or_else(|| {
-            CraneliftError::Codegen(format!("TyDesc not found for key type {:?}", key_ty))
-        })?;
-        let key_tydesc_gv = self.module.declare_data_in_func(key_tydesc_id, builder.func);
-        let key_tydesc_ptr = builder.ins().global_value(PTR_TYPE, key_tydesc_gv);
+        let s = self.prepare_map_op(builder, "MapValueRef", map, key)?;
 
         // Allocate stack slot for the value pointer result.
         let vref_slot = builder.create_sized_stack_slot(cl_ir::StackSlotData::new(
@@ -354,13 +292,13 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         ));
         let vref_addr = builder.ins().stack_addr(PTR_TYPE, vref_slot, 0);
 
-        let func_ref = self.module.declare_func_in_func(runtime.map_get_value_ref, builder.func);
+        let func_ref = self.module.declare_func_in_func(s.runtime.map_get_value_ref, builder.func);
         builder.ins().call(func_ref, &[
-            rt_handle,
-            map_ptr,
-            map_tydesc_ptr,
-            key_ptr,
-            key_tydesc_ptr,
+            s.rt_handle,
+            s.map_ptr,
+            s.map_tydesc_ptr,
+            s.key_ptr,
+            s.key_tydesc_ptr,
             vref_addr,
         ]);
 
@@ -380,50 +318,17 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         key: &Operand,
         value: &Operand,
     ) -> Result<(), CraneliftError> {
-        let map_ty = self.get_operand_type(map)?;
-        let (key_ty, value_ty) = match &map_ty {
-            IrType::Map(k, v) => (k.as_ref().clone(), v.as_ref().clone()),
-            _ => return Err(CraneliftError::Codegen(format!(
-                "MapUpsert on non-map type: {:?}", map_ty
-            ))),
-        };
-
-        let runtime = self.runtime.ok_or_else(|| {
-            CraneliftError::Codegen("MapUpsert requires runtime imports".into())
-        })?;
-        let rt_handle = self.rt_handle_param.ok_or_else(|| {
-            CraneliftError::Codegen("MapUpsert requires runtime handle".into())
-        })?;
-
-        let map_ptr = self.get_operand_ptr(builder, map)?;
-        let key_ptr = self.get_operand_ptr(builder, key)?;
+        let s = self.prepare_map_op(builder, "MapUpsert", map, key)?;
         let value_ptr = self.get_operand_ptr(builder, value)?;
+        let value_tydesc_ptr = self.resolve_tydesc_ptr(builder, &s.value_ty)?;
 
-        let map_tydesc_id = self.tydesc_emitter.get(&map_ty).ok_or_else(|| {
-            CraneliftError::Codegen(format!("TyDesc not found for map type {:?}", map_ty))
-        })?;
-        let map_tydesc_gv = self.module.declare_data_in_func(map_tydesc_id, builder.func);
-        let map_tydesc_ptr = builder.ins().global_value(PTR_TYPE, map_tydesc_gv);
-
-        let key_tydesc_id = self.tydesc_emitter.get(&key_ty).ok_or_else(|| {
-            CraneliftError::Codegen(format!("TyDesc not found for key type {:?}", key_ty))
-        })?;
-        let key_tydesc_gv = self.module.declare_data_in_func(key_tydesc_id, builder.func);
-        let key_tydesc_ptr = builder.ins().global_value(PTR_TYPE, key_tydesc_gv);
-
-        let value_tydesc_id = self.tydesc_emitter.get(&value_ty).ok_or_else(|| {
-            CraneliftError::Codegen(format!("TyDesc not found for value type {:?}", value_ty))
-        })?;
-        let value_tydesc_gv = self.module.declare_data_in_func(value_tydesc_id, builder.func);
-        let value_tydesc_ptr = builder.ins().global_value(PTR_TYPE, value_tydesc_gv);
-
-        let func_ref = self.module.declare_func_in_func(runtime.map_insert, builder.func);
+        let func_ref = self.module.declare_func_in_func(s.runtime.map_insert, builder.func);
         builder.ins().call(func_ref, &[
-            rt_handle,
-            map_ptr,
-            map_tydesc_ptr,
-            key_ptr,
-            key_tydesc_ptr,
+            s.rt_handle,
+            s.map_ptr,
+            s.map_tydesc_ptr,
+            s.key_ptr,
+            s.key_tydesc_ptr,
             value_ptr,
             value_tydesc_ptr,
         ]);

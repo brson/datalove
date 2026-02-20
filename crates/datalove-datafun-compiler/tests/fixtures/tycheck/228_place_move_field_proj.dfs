@@ -1,0 +1,6 @@
+// Test that Place expressions reject move-type field projections.
+// `a[i]?.0` where field 0 is `int` (move type) should fail with NonCopyFieldProjection.
+
+fun get_field(a: [(int, u32)], i: index): ?int
+    ret a[i]?.0
+end fun

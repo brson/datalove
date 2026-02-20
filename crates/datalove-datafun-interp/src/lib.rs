@@ -90,6 +90,26 @@ pub enum UnitCompletion {
     EarlyReturn,
 }
 
+/// Extract list struct pointer, element type descriptor, and element size from a list value.
+unsafe fn list_element_info(list_val: &Value) -> (&rtdt::List, *const rtdt::TyDesc, usize) {
+    unsafe {
+        let list_struct = &*(list_val.ptr as *const rtdt::List);
+        let element_tydesc = (*list_val.tydesc).type_info.list.element_tydesc;
+        let element_size = (*element_tydesc).size as usize;
+        (list_struct, element_tydesc, element_size)
+    }
+}
+
+/// Extract map, key, and value type descriptors from a map value.
+unsafe fn map_tydesc_info(map_val: &Value) -> (*const rtdt::TyDesc, *const rtdt::TyDesc, *const rtdt::TyDesc) {
+    unsafe {
+        let map_tydesc = map_val.tydesc;
+        let key_tydesc = (*map_tydesc).type_info.map.key_tydesc;
+        let value_tydesc = (*map_tydesc).type_info.map.value_tydesc;
+        (map_tydesc, key_tydesc, value_tydesc)
+    }
+}
+
 /// IR function interpreter.
 pub struct IrInterpreter {
     runtime: datalove_rt::rust::Runtime,
@@ -1058,11 +1078,9 @@ impl IrInterpreter {
                 let idx_val = self.read_operand(index, frame, frames);
                 let idx = unsafe { *(idx_val.ptr as *const rtdt::IndexRepr) };
 
-                // Access list struct and element type directly.
-                let list_struct = unsafe { &*(list_val.ptr as *const rtdt::List) };
+                let (list_struct, element_tydesc, element_size) =
+                    unsafe { list_element_info(&list_val) };
                 let list_size = list_struct.size.0;
-                let element_tydesc = unsafe { (*list_val.tydesc).type_info.list.element_tydesc };
-                let element_size = unsafe { (*element_tydesc).size as usize };
 
                 let valid = idx < list_size;
                 let is_valid_dest = frame.value_dest(*is_valid);
@@ -1107,9 +1125,8 @@ impl IrInterpreter {
                 let value_val = self.read_operand(value, frame, frames);
                 let idx = unsafe { *(idx_val.ptr as *const rtdt::IndexRepr) };
 
-                let list_struct = unsafe { &*(list_val.ptr as *const rtdt::List) };
-                let element_tydesc = unsafe { (*list_val.tydesc).type_info.list.element_tydesc };
-                let element_size = unsafe { (*element_tydesc).size as usize };
+                let (list_struct, element_tydesc, element_size) =
+                    unsafe { list_element_info(&list_val) };
 
                 // Compute element pointer.
                 let element_ptr = unsafe { (list_struct.data as *mut u8).add(idx as usize * element_size) };
@@ -1140,9 +1157,8 @@ impl IrInterpreter {
                 let idx_val = self.read_operand(index, frame, frames);
                 let idx = unsafe { *(idx_val.ptr as *const rtdt::IndexRepr) };
 
-                let list_struct = unsafe { &*(list_val.ptr as *const rtdt::List) };
-                let element_tydesc = unsafe { (*list_val.tydesc).type_info.list.element_tydesc };
-                let element_size = unsafe { (*element_tydesc).size as usize };
+                let (list_struct, _element_tydesc, element_size) =
+                    unsafe { list_element_info(&list_val) };
 
                 // Compute element pointer.
                 let element_ptr = unsafe { (list_struct.data as *mut u8).add(idx as usize * element_size) };
@@ -1158,9 +1174,8 @@ impl IrInterpreter {
                 let map_val = self.read_operand(map, frame, frames);
                 let key_val = self.read_operand(key, frame, frames);
 
-                let map_tydesc = map_val.tydesc;
-                let key_tydesc = unsafe { (*map_tydesc).type_info.map.key_tydesc };
-                let value_tydesc = unsafe { (*map_tydesc).type_info.map.value_tydesc };
+                let (map_tydesc, key_tydesc, value_tydesc) =
+                    unsafe { map_tydesc_info(&map_val) };
 
                 // Get pointer to value (returns null on miss).
                 let mut value_ptr: *mut u8 = std::ptr::null_mut();
@@ -1201,8 +1216,8 @@ impl IrInterpreter {
                 let map_val = self.read_operand(map, frame, frames);
                 let key_val = self.read_operand(key, frame, frames);
 
-                let map_tydesc = map_val.tydesc;
-                let key_tydesc = unsafe { (*map_tydesc).type_info.map.key_tydesc };
+                let (map_tydesc, key_tydesc, _) =
+                    unsafe { map_tydesc_info(&map_val) };
 
                 let mut found = false;
                 let rt_handle = self.runtime.handle();
@@ -1227,9 +1242,8 @@ impl IrInterpreter {
                 let key_val = self.read_operand(key, frame, frames);
                 let value_val = self.read_operand(value, frame, frames);
 
-                let map_tydesc = map_val.tydesc;
-                let key_tydesc = unsafe { (*map_tydesc).type_info.map.key_tydesc };
-                let value_tydesc = unsafe { (*map_tydesc).type_info.map.value_tydesc };
+                let (map_tydesc, key_tydesc, value_tydesc) =
+                    unsafe { map_tydesc_info(&map_val) };
 
                 let rt_handle = self.runtime.handle();
                 let status = unsafe {
@@ -1254,8 +1268,8 @@ impl IrInterpreter {
                 let map_val = self.read_operand(map, frame, frames);
                 let key_val = self.read_operand(key, frame, frames);
 
-                let map_tydesc = map_val.tydesc;
-                let key_tydesc = unsafe { (*map_tydesc).type_info.map.key_tydesc };
+                let (map_tydesc, key_tydesc, _) =
+                    unsafe { map_tydesc_info(&map_val) };
 
                 let mut value_ptr: *mut u8 = std::ptr::null_mut();
                 let rt_handle = self.runtime.handle();
@@ -1283,9 +1297,8 @@ impl IrInterpreter {
                 let key_val = self.read_operand(key, frame, frames);
                 let value_val = self.read_operand(value, frame, frames);
 
-                let map_tydesc = map_val.tydesc;
-                let key_tydesc = unsafe { (*map_tydesc).type_info.map.key_tydesc };
-                let value_tydesc = unsafe { (*map_tydesc).type_info.map.value_tydesc };
+                let (map_tydesc, key_tydesc, value_tydesc) =
+                    unsafe { map_tydesc_info(&map_val) };
 
                 let rt_handle = self.runtime.handle();
                 let status = unsafe {

@@ -7,7 +7,7 @@ use bct::text::InternedText;
 use datalove_datafun_ast::ast::{self, Statement, ExprFun, ExprFunKind};
 use datalove_datafun_ir::{IrType, Operand, ValueId, Instruction, Terminator, SlotDest, ParamMode};
 use super::context::LowerCtx;
-use super::expr::{lower_expression, lower_expression_for_ref, lower_operand};
+use super::expr::{lower_expression, lower_expression_for_ref, lower_operand, operand_type, field_type_from_base};
 use super::LowerError;
 
 /// Check if a set statement is a self-assignment (set v0 = v0).
@@ -525,7 +525,7 @@ pub fn lower_loop<'db>(
     ctx.start_block(loop_header);
 
     // Handle while condition if present.
-    let body_block = if let Some(cond_expr) = condition {
+    let _body_block = if let Some(cond_expr) = condition {
         let body_block = ctx.fresh_block();
 
         // Lower the condition expression.
@@ -576,7 +576,6 @@ pub fn lower_loop<'db>(
     // Start loop exit block.
     ctx.start_block(loop_exit);
 
-    let _ = body_block; // Silence unused warning.
     Ok(())
 }
 
@@ -661,7 +660,7 @@ fn lower_set_indexed<'db>(
             // Fallible index: set a[i]? = v / set a[i]! = v.
             let error_mode = idx.error_mode.unwrap();
             let base_op = lower_place_steps_to_operand(ctx, place, place.steps.len() - 1)?;
-            let base_type = set_target_operand_type(ctx, &base_op);
+            let base_type = operand_type(ctx, &base_op);
             let key_op = lower_operand(ctx, idx.index)?;
             emit_fallible_index_check(ctx, base_op, &base_type, key_op, error_mode)?;
             let value_id = lower_expression(ctx, value_expr)?;
@@ -827,7 +826,7 @@ fn lower_place_steps_to_operand<'db>(
     for step in &place.steps[..step_count] {
         match step {
             ast::PlaceStep::Field(field) => {
-                let base_type = set_target_operand_type(ctx, &current_op);
+                let base_type = operand_type(ctx, &current_op);
                 let field_index = match field {
                     ast::FieldSelector::Index(idx) => *idx,
                     ast::FieldSelector::Name(name) => {
@@ -839,11 +838,7 @@ fn lower_place_steps_to_operand<'db>(
                             .unwrap_or_else(|| panic!("field '{}' not found in struct - typechecker should catch this", name_str)) as u32
                     }
                 };
-                let field_type = match &base_type {
-                    IrType::Struct(fields) => fields[field_index as usize].1.clone(),
-                    IrType::Tuple(fields) => fields[field_index as usize].clone(),
-                    _ => panic!("field access on non-struct/tuple type {:?} - typechecker should catch this", base_type),
-                };
+                let field_type = field_type_from_base(&base_type, field_index);
                 let dest = ctx.fresh_value(IrType::Ref(Box::new(field_type)));
                 ctx.emit(Instruction::GetFieldRef {
                     dest,
@@ -855,7 +850,7 @@ fn lower_place_steps_to_operand<'db>(
             ast::PlaceStep::Index(idx) => {
                 let error_mode = idx.error_mode
                     .expect("bare index (upsert) cannot appear in intermediate set target position");
-                let base_type = set_target_operand_type(ctx, &current_op);
+                let base_type = operand_type(ctx, &current_op);
                 let key_op = lower_operand(ctx, idx.index)?;
                 emit_fallible_index_check(ctx, current_op, &base_type, key_op, error_mode)?;
                 let dest = emit_collection_element_ref(ctx, current_op, &base_type, key_op);
@@ -870,25 +865,6 @@ fn lower_place_steps_to_operand<'db>(
 /// Check if a place contains an index step.
 fn place_contains_index(place: &ast::Place) -> bool {
     place.steps.iter().any(|s| matches!(s, ast::PlaceStep::Index(_)))
-}
-
-/// Get the type of an operand returned by `lower_place_steps_to_operand`.
-///
-/// For Slot/Param, returns the stored type directly. For ValueRef, unwraps
-/// the Ref to return the pointed-to type.
-fn set_target_operand_type(ctx: &LowerCtx, operand: &Operand) -> IrType {
-    match operand {
-        Operand::Slot(s) => ctx.body.slot_types[s.0 as usize].clone(),
-        Operand::Param(p) => ctx.body.param_types[p.0 as usize].clone(),
-        Operand::ValueRef(v) => {
-            let ref_ty = &ctx.body.value_types[v.0 as usize];
-            match ref_ty {
-                IrType::Ref(inner) => inner.as_ref().clone(),
-                _ => panic!("ValueRef has non-Ref type: {:?}", ref_ty),
-            }
-        }
-        _ => panic!("unexpected operand in set target: {:?}", operand),
-    }
 }
 
 /// Collect the field path from a place with only field steps.

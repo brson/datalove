@@ -1149,7 +1149,20 @@ fn synthesize_place_field_step<'db>(
     base_ty: &Type<'db>,
     field: &FieldSelector<'db>,
 ) -> Result<Type<'db>, TypeError> {
-    resolve_field_type(ctx.db, base_ty, field)
+    let db = ctx.db;
+    let field_ty = resolve_field_type(db, base_ty, field)?;
+
+    // Check that field is a copy type or we're in ref context.
+    // Move-type field projections are allowed in ref context.
+    if let Type::Datalit(ref dt) = field_ty {
+        if !is_copy_type(db, dt) && !ctx.ref_context {
+            return Err(TypeError::NonCopyFieldProjection {
+                field_ty: datalit::tycheck::type_to_string(db, dt),
+            });
+        }
+    }
+
+    Ok(field_ty)
 }
 
 /// Synthesize type through an index step in a place expression.
@@ -1209,7 +1222,8 @@ fn synthesize_inline_list<'db>(
     _expr: ExprFun<'db>,
     list_expr: &ExprList<'db>,
 ) -> Result<Type<'db>, TypeError> {
-    let db = ctx.db;    let elements = &list_expr.elements;
+    let db = ctx.db;
+    let elements = &list_expr.elements;
 
     if elements.is_empty() {
         let ty = Type::Datalit(datalit::tycheck::empty_list_type());
@@ -1241,7 +1255,8 @@ fn synthesize_inline_set<'db>(
     _expr: ExprFun<'db>,
     set_expr: &ExprSet<'db>,
 ) -> Result<Type<'db>, TypeError> {
-    let db = ctx.db;    let elements = &set_expr.elements;
+    let db = ctx.db;
+    let elements = &set_expr.elements;
 
     if elements.is_empty() {
         let ty = Type::Datalit(datalit::tycheck::empty_set_type());
@@ -1272,7 +1287,8 @@ fn synthesize_inline_map<'db>(
     _expr: ExprFun<'db>,
     map_expr: &ExprMap<'db>,
 ) -> Result<Type<'db>, TypeError> {
-    let db = ctx.db;    let entries = &map_expr.entries;
+    let db = ctx.db;
+    let entries = &map_expr.entries;
 
     if entries.is_empty() {
         let ty = Type::Datalit(datalit::tycheck::empty_map_type());
@@ -1310,7 +1326,8 @@ fn synthesize_inline_tensor<'db>(
     _expr: ExprFun<'db>,
     tensor_expr: &ExprTensor<'db>,
 ) -> Result<Type<'db>, TypeError> {
-    let db = ctx.db;    let shape = &tensor_expr.shape;
+    let db = ctx.db;
+    let shape = &tensor_expr.shape;
     let elements = &tensor_expr.elements;
 
     // Rank is the number of dimensions in the shape.

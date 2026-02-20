@@ -1489,7 +1489,7 @@ fn lower_place_as_ref<'db>(
 }
 
 /// Get type of an operand for place lowering.
-fn operand_type(ctx: &LowerCtx, op: &Operand) -> IrType {
+pub(crate) fn operand_type(ctx: &LowerCtx, op: &Operand) -> IrType {
     match op {
         Operand::Slot(s) => ctx.body.slot_types[s.0 as usize].clone(),
         Operand::Param(p) => ctx.body.param_types[p.0 as usize].clone(),
@@ -1511,7 +1511,7 @@ fn operand_type(ctx: &LowerCtx, op: &Operand) -> IrType {
 }
 
 /// Get the type of a field from a base type.
-fn field_type_from_base(base_type: &IrType, field_index: u32) -> IrType {
+pub(crate) fn field_type_from_base(base_type: &IrType, field_index: u32) -> IrType {
     match base_type {
         IrType::Struct(fields) => fields[field_index as usize].1.clone(),
         IrType::Tuple(fields) => fields[field_index as usize].clone(),

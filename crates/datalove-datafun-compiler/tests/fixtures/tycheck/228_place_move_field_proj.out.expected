@@ -1,0 +1,26 @@
+{
+  "diagnostics": [],
+  "errors": [
+    {
+      "field_type": "int",
+      "kind": "NonCopyFieldProjection"
+    }
+  ],
+  "judgements": [
+    {
+      "kind": "function",
+      "name": "get_field",
+      "params": [
+        {
+          "name": "a",
+          "type": "[(int, u32)]"
+        },
+        {
+          "name": "i",
+          "type": "index"
+        }
+      ],
+      "return_type": "?int"
+    }
+  ]
+}

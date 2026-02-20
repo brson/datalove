@@ -1,21 +1,20 @@
 {
   "diagnostics": [],
-  "errors": [],
+  "errors": [
+    {
+      "field_type": "(int, int)",
+      "kind": "NonCopyFieldProjection"
+    },
+    {
+      "field_type": "(int, int)",
+      "kind": "NonCopyFieldProjection"
+    }
+  ],
   "judgements": [
     {
       "kind": "variable",
       "name": "nested",
       "type": "((int, int), (int, int))"
-    },
-    {
-      "kind": "variable",
-      "name": "inner",
-      "type": "(int, int)"
-    },
-    {
-      "kind": "variable",
-      "name": "elem",
-      "type": "int"
     }
   ]
 }

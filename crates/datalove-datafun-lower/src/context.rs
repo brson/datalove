@@ -834,20 +834,6 @@ impl<'db> LowerCtx<'db> {
             .unwrap_or(true) // Default to tracked if not found (safe fallback).
     }
 
-    /// Check if a destination value needs tracking when produced.
-    ///
-    /// Use this to decide between precise vs tracked variants for instructions
-    /// that produce values:
-    /// - `Const` vs `ConstTracked`
-    /// - `Call` vs `CallTracked`
-    /// - `Pack` vs `PackTracked`
-    /// - `WrapSome` vs `WrapSomeTracked`
-    /// - etc.
-    ///
-    // Note: is_dest_tracked was removed because all values are now precise.
-    // Values are always dropped at known points via explicit Drop instructions.
-    // Only slots (var bindings) need runtime tracking.
-
     /// Check if a slot needs tracking when written.
     ///
     /// Use this to decide between precise vs tracked variants for instructions
@@ -1154,7 +1140,8 @@ impl<'db> LowerCtx<'db> {
 
     /// Emit drops scheduled for a then-branch exit.
     pub fn emit_then_branch_drops(&mut self, stmt_idx: usize) {
-        let binding_ids = self.get_scheduled_binding_ids_then(stmt_idx);
+        let binding_ids = self.body.drop_schedule.then_branch_exit
+            .get(&stmt_idx).cloned().unwrap_or_default();
         for id in binding_ids {
             self.emit_binding_drop(id);
         }
@@ -1162,7 +1149,8 @@ impl<'db> LowerCtx<'db> {
 
     /// Emit drops scheduled for an else-branch exit.
     pub fn emit_else_branch_drops(&mut self, stmt_idx: usize) {
-        let binding_ids = self.get_scheduled_binding_ids_else(stmt_idx);
+        let binding_ids = self.body.drop_schedule.else_branch_exit
+            .get(&stmt_idx).cloned().unwrap_or_default();
         for id in binding_ids {
             self.emit_binding_drop(id);
         }
@@ -1170,7 +1158,8 @@ impl<'db> LowerCtx<'db> {
 
     /// Emit drops scheduled before a return statement.
     pub fn emit_before_return_drops(&mut self, stmt_idx: usize) {
-        let binding_ids = self.get_scheduled_binding_ids_return(stmt_idx);
+        let binding_ids = self.body.drop_schedule.before_return
+            .get(&stmt_idx).cloned().unwrap_or_default();
         for id in binding_ids {
             self.emit_binding_drop(id);
         }
@@ -1181,7 +1170,8 @@ impl<'db> LowerCtx<'db> {
     /// Uses current_stmt_idx since TryReturn happens within expression lowering.
     pub fn emit_before_try_return_drops(&mut self) {
         if let Some(stmt_idx) = self.body.current_stmt_idx {
-            let binding_ids = self.get_scheduled_binding_ids_try(stmt_idx);
+            let binding_ids = self.body.drop_schedule.before_try_return
+                .get(&stmt_idx).cloned().unwrap_or_default();
             for id in binding_ids {
                 self.emit_binding_drop(id);
             }
@@ -1257,37 +1247,10 @@ impl<'db> LowerCtx<'db> {
         self.finish_block(terminator);
     }
 
-    /// Get binding IDs to drop for then-branch exit.
-    fn get_scheduled_binding_ids_then(&self, stmt_idx: usize) -> Vec<BindingId> {
-        self.body.drop_schedule.then_branch_exit.get(&stmt_idx)
-            .cloned()
-            .unwrap_or_default()
-    }
-
-    /// Get binding IDs to drop for else-branch exit.
-    fn get_scheduled_binding_ids_else(&self, stmt_idx: usize) -> Vec<BindingId> {
-        self.body.drop_schedule.else_branch_exit.get(&stmt_idx)
-            .cloned()
-            .unwrap_or_default()
-    }
-
-    /// Get binding IDs to drop before return.
-    fn get_scheduled_binding_ids_return(&self, stmt_idx: usize) -> Vec<BindingId> {
-        self.body.drop_schedule.before_return.get(&stmt_idx)
-            .cloned()
-            .unwrap_or_default()
-    }
-
-    /// Get binding IDs to drop before TryReturn.
-    fn get_scheduled_binding_ids_try(&self, stmt_idx: usize) -> Vec<BindingId> {
-        self.body.drop_schedule.before_try_return.get(&stmt_idx)
-            .cloned()
-            .unwrap_or_default()
-    }
-
     /// Emit drops scheduled for loop body end.
     pub fn emit_loop_body_end_drops(&mut self, stmt_idx: usize) {
-        let binding_ids = self.get_scheduled_binding_ids_loop(stmt_idx);
+        let binding_ids = self.body.drop_schedule.loop_body_end
+            .get(&stmt_idx).cloned().unwrap_or_default();
         for id in binding_ids {
             self.emit_binding_drop(id);
         }
@@ -1295,7 +1258,8 @@ impl<'db> LowerCtx<'db> {
 
     /// Emit drops scheduled before a break statement.
     pub fn emit_before_break_drops(&mut self, stmt_idx: usize) {
-        let binding_ids = self.get_scheduled_binding_ids_break(stmt_idx);
+        let binding_ids = self.body.drop_schedule.before_break
+            .get(&stmt_idx).cloned().unwrap_or_default();
         for id in binding_ids {
             self.emit_binding_drop(id);
         }
@@ -1303,7 +1267,8 @@ impl<'db> LowerCtx<'db> {
 
     /// Emit drops scheduled before a continue statement.
     pub fn emit_before_continue_drops(&mut self, stmt_idx: usize) {
-        let binding_ids = self.get_scheduled_binding_ids_continue(stmt_idx);
+        let binding_ids = self.body.drop_schedule.before_continue
+            .get(&stmt_idx).cloned().unwrap_or_default();
         for id in binding_ids {
             self.emit_binding_drop(id);
         }
@@ -1318,27 +1283,6 @@ impl<'db> LowerCtx<'db> {
         for id in binding_ids {
             self.emit_binding_drop(id);
         }
-    }
-
-    /// Get binding IDs to drop at loop body end.
-    fn get_scheduled_binding_ids_loop(&self, stmt_idx: usize) -> Vec<BindingId> {
-        self.body.drop_schedule.loop_body_end.get(&stmt_idx)
-            .cloned()
-            .unwrap_or_default()
-    }
-
-    /// Get binding IDs to drop before break.
-    fn get_scheduled_binding_ids_break(&self, stmt_idx: usize) -> Vec<BindingId> {
-        self.body.drop_schedule.before_break.get(&stmt_idx)
-            .cloned()
-            .unwrap_or_default()
-    }
-
-    /// Get binding IDs to drop before continue.
-    fn get_scheduled_binding_ids_continue(&self, stmt_idx: usize) -> Vec<BindingId> {
-        self.body.drop_schedule.before_continue.get(&stmt_idx)
-            .cloned()
-            .unwrap_or_default()
     }
 
     /// Emit UnitEndDrop/UnitEndDropTracked instructions for script-level bindings.
