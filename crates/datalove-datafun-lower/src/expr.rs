@@ -1352,8 +1352,17 @@ fn lower_place_expression<'db>(
             ast::PlaceStep::Field(field) => {
                 let base_type = operand_type(ctx, &current_op);
                 let field_index = resolve_field_index(field, &base_type, ctx.db)?;
-                if has_index_steps {
-                    // Use GetFieldRef when index steps follow — they need refs.
+                if i == last_idx {
+                    // Final field step — produce value via GetField.
+                    // Works whether current_op is Value (no index steps)
+                    // or ValueRef (after index steps that produced a ref).
+                    let result_type = ctx.expr_type(expr);
+                    let dest = ctx.fresh_value(result_type);
+                    ctx.emit_get_field(dest, current_op, field_index);
+                    return Ok(dest);
+                } else if has_index_steps {
+                    // Intermediate field step with index steps — use GetFieldRef
+                    // to keep navigating via refs.
                     let field_type = field_type_from_base(&base_type, field_index);
                     let dest = ctx.fresh_value(IrType::Ref(Box::new(field_type)));
                     ctx.emit(Instruction::GetFieldRef {
@@ -1362,12 +1371,6 @@ fn lower_place_expression<'db>(
                         field_index,
                     });
                     current_op = Operand::ValueRef(dest);
-                } else if i == last_idx {
-                    // Final field step with no index steps — produce value directly.
-                    let result_type = ctx.expr_type(expr);
-                    let dest = ctx.fresh_value(result_type);
-                    ctx.emit_get_field(dest, current_op, field_index);
-                    return Ok(dest);
                 } else {
                     // Intermediate field step, no index steps — use GetField to walk.
                     let field_type = field_type_from_base(&base_type, field_index);

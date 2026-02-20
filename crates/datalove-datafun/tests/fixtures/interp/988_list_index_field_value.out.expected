@@ -1,0 +1,94 @@
+Analysis(
+    sections: [
+        SectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 10u32
+                        v1 = const 20u32
+                        v2 = pack Struct0 {v0, v1}
+                        v3 = const 30u32
+                        v4 = const 40u32
+                        v5 = pack Struct0 {v3, v4}
+                        v6 = list [v2, v5]
+                        v7 = const 0index
+                        v8 = call @0 u0(v6, v7)
+                        debuglog v8
+                        v9 = const 10u32
+                        v10 = const 20u32
+                        v11 = pack Struct0 {v9, v10}
+                        v12 = const 30u32
+                        v13 = const 40u32
+                        v14 = pack Struct0 {v12, v13}
+                        v15 = list [v11, v14]
+                        v16 = const 0index
+                        v17 = call @1 u1(v15, v16)
+                        debuglog v17
+                        v18 = const 10u32
+                        v19 = const 20u32
+                        v20 = pack Struct0 {v18, v19}
+                        v21 = const 30u32
+                        v22 = const 40u32
+                        v23 = pack Struct0 {v21, v22}
+                        v24 = list [v20, v23]
+                        v25 = const 1index
+                        v26 = call @2 u0(v24, v25)
+                        debuglog v26
+                        v27 = const 10u32
+                        v28 = const 20u32
+                        v29 = pack Struct0 {v27, v28}
+                        v30 = const 30u32
+                        v31 = const 40u32
+                        v32 = pack Struct0 {v30, v31}
+                        v33 = list [v29, v32]
+                        v34 = const 5index
+                        v35 = call @3 u0(v33, v34)
+                        debuglog v35
+                        unit_end
+                    
+                    fn get_x(p0, p1):
+                    block0:
+                        v0 = listboundscheck p0[p1]
+                        branch v0, block2, block1
+                    block1:
+                        v1 = none
+                        drop p0
+                        return v1
+                    block2:
+                        v2 = listelementref p0[p1]
+                        v3 = getfield *v2.0
+                        v4 = some v3
+                        drop p0
+                        return v4
+                    
+                    fn get_y(p0, p1):
+                    block0:
+                        v0 = listboundscheck p0[p1]
+                        branch v0, block2, block1
+                    block1:
+                        v1 = none
+                        drop p0
+                        return v1
+                    block2:
+                        v2 = listelementref p0[p1]
+                        v3 = getfield *v2.1
+                        v4 = some v3
+                        drop p0
+                        return v4
+                """,
+            ),
+            output: "(fragment executed)",
+            debug_output: Some("some 10\nsome 20\nsome 30\nnone\n"),
+        ),
+    ],
+)
