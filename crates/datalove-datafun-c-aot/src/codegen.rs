@@ -1787,11 +1787,14 @@ impl<'a> FunctionCodegenContext<'a> {
     fn emit_ref_store(&mut self, out: &mut String, dest: &Operand, value: &Operand, tracked: bool) -> Result<(), CAotError> {
         let dest_addr = self.operand_addr(dest);
         let src_addr = self.operand_addr(value);
-        let ty = self.operand_type(value);
-        let repr = types::ir_type_to_crepr(ty);
+        let ty = self.operand_type(value).clone();
+        let repr = types::ir_type_to_crepr(&ty);
 
-        // For tracked, we'd need external tracking byte - not fully supported yet.
-        let _ = tracked;
+        if !tracked && !ty.is_copy() {
+            // Non-tracked: destination has a valid value, destroy it first.
+            let tydesc = self.tydesc_name(&ty);
+            writeln!(out, "    dtlv_rti_any_destroy_local(rt, {}, &{});", dest_addr, tydesc).unwrap();
+        }
 
         match repr {
             CRepr::Scalar(c_ty) => {
@@ -1802,6 +1805,12 @@ impl<'a> FunctionCodegenContext<'a> {
                     writeln!(out, "    memcpy({}, {}, {});", dest_addr, src_addr, layout.size).unwrap();
                 }
             }
+        }
+
+        if tracked {
+            // Tracked (RefStoreTracked): destination was uninitialized, no destroy needed.
+            // Mark tracking byte as LIVE.
+            todo!("RefStoreTracked tracking byte write not yet implemented in C AOT");
         }
         Ok(())
     }
@@ -1838,8 +1847,11 @@ impl<'a> FunctionCodegenContext<'a> {
         let src_addr = self.operand_addr(value);
         let repr = types::ir_type_to_crepr(&current_ty);
 
-        // Tracked handling would need external tracking - not fully supported.
-        let _ = tracked;
+        if !tracked && !current_ty.is_copy() {
+            // Non-tracked: field has a valid value, destroy it first.
+            let tydesc = self.tydesc_name(&current_ty);
+            writeln!(out, "    dtlv_rti_any_destroy_local(rt, {}, &{});", current_addr, tydesc).unwrap();
+        }
 
         match repr {
             CRepr::Scalar(c_ty) => {
@@ -1850,6 +1862,12 @@ impl<'a> FunctionCodegenContext<'a> {
                     writeln!(out, "    memcpy({}, {}, {});", current_addr, src_addr, layout.size).unwrap();
                 }
             }
+        }
+
+        if tracked {
+            // Tracked (RefSetFieldTracked): destination was uninitialized, no destroy needed.
+            // Mark tracking byte as LIVE.
+            todo!("RefSetFieldTracked tracking byte write not yet implemented in C AOT");
         }
         Ok(())
     }
@@ -1882,7 +1900,6 @@ impl<'a> FunctionCodegenContext<'a> {
 
     /// Emit drop via ref.
     fn emit_drop_via_ref(&mut self, out: &mut String, ref_value: ValueId) -> Result<(), CAotError> {
-        let ref_addr = self.value_addr(ref_value);
         let ref_ty = self.value_type(ref_value).clone();
 
         let inner_ty = match &ref_ty {
@@ -1890,6 +1907,12 @@ impl<'a> FunctionCodegenContext<'a> {
             _ => return Err(CAotError::Codegen("drop_via_ref requires Ref type".into())),
         };
 
+        // Copy types don't need drops.
+        if inner_ty.is_copy() {
+            return Ok(());
+        }
+
+        let ref_addr = self.value_addr(ref_value);
         let inner_tydesc = self.tydesc_name(&inner_ty);
 
         // The ref_addr contains a pointer - dereference and destroy.

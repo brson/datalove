@@ -924,6 +924,13 @@ pub unsafe extern "C-unwind" fn dtlv_rti_btreemap_contains_key_local(
     }
 }
 
+/// Returns a mutable pointer to a map value for in-place update.
+///
+/// # Safety
+///
+/// The returned pointer is an interior pointer into the BTreeMap. It is
+/// invalidated by any insert, remove, or clear on the map. The caller must
+/// ensure no such mutations occur between obtaining and using the pointer.
 #[unsafe(no_mangle)]
 pub unsafe extern "C-unwind" fn dtlv_rti_btreemap_get_value_ref_local(
     _rt: LocalRtHandle,
@@ -976,6 +983,14 @@ pub unsafe extern "C-unwind" fn dtlv_rti_btreemap_set_value_local(
     unsafe {
         let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
         let btreemap_tydesc_ref = rtdt::TyDescRef::from_ptr(btreemap_tydesc);
+        debug_assert_eq!(
+            btreemap_tydesc_ref.map_key_ty().as_ptr(), key_tydesc,
+            "btreemap_set_value: key_tydesc doesn't match map's key type"
+        );
+        debug_assert_eq!(
+            btreemap_tydesc_ref.map_value_ty().as_ptr(), value_tydesc,
+            "btreemap_set_value: value_tydesc doesn't match map's value type"
+        );
         let key_tydesc_ref = rtdt::TyDescRef::from_ptr(key_tydesc);
         let value_tydesc_ref = rtdt::TyDescRef::from_ptr(value_tydesc);
         crate::impls::btreemap::btreemap_set_value_impl(

@@ -12,6 +12,31 @@ use super::context::LowerCtx;
 use super::literal::{parse_int_const, parse_hex_const, parse_float_const, try_parse_negated_int_const};
 use super::LowerError;
 
+/// Look up a variable by name, checking const bindings first.
+///
+/// For const bindings, emits a Const instruction and returns the new value
+/// with `is_fresh_const = true`. For regular variables, returns the
+/// Slot/Param/Value operand with `is_fresh_const = false`.
+///
+/// Callers that need drop tracking should call `record_expr_temp` only
+/// when `is_fresh_const` is true, since regular `let` bindings bound to
+/// `Operand::Value` are already managed by the drop schedule.
+fn lower_var_operand(ctx: &mut LowerCtx, name: &str) -> (Operand, bool) {
+    if let Some((const_type, const_value)) = ctx.lookup_const(name) {
+        let const_type = const_type.clone();
+        let const_value = const_value.clone();
+        let dest = ctx.fresh_value(const_type);
+        ctx.emit(Instruction::Const {
+            dest,
+            value: const_value,
+        });
+        return (Operand::Value(dest), true);
+    }
+    let op = ctx.lookup_var(name)
+        .unwrap_or_else(|| panic!("variable '{}' not found - typechecker should catch this", name));
+    (op, false)
+}
+
 /// Lower an operand for borrowing contexts (binop, unaryop).
 ///
 /// Returns an Operand directly:
@@ -24,22 +49,13 @@ pub fn lower_operand<'db>(
     match expr.expr(ctx.db) {
         ExprFunKind::Place(ref place) if place.steps.is_empty() => {
             let name_str = place.root.text(ctx.db);
-            // Check for const binding first.
-            if let Some((const_type, const_value)) = ctx.lookup_const(name_str) {
-                // Clone to release borrow on ctx.
-                let const_type = const_type.clone();
-                let const_value = const_value.clone();
-                // Emit a Const instruction with the evaluated value.
-                let dest = ctx.fresh_value(const_type.clone());
-                ctx.emit(Instruction::Const {
-                    dest,
-                    value: const_value,
-                });
-                ctx.record_expr_temp(dest, const_type);
-                return Ok(Operand::Value(dest));
+            let (operand, is_fresh_const) = lower_var_operand(ctx, name_str);
+            if is_fresh_const {
+                if let Operand::Value(vid) = operand {
+                    let ty = ctx.body.value_types[vid.0 as usize].clone();
+                    ctx.record_expr_temp(vid, ty);
+                }
             }
-            let operand = ctx.lookup_var(name_str)
-                .unwrap_or_else(|| panic!("variable '{}' not found - typechecker should catch this", name_str));
             Ok(operand)
         }
         _ => {
@@ -123,10 +139,8 @@ fn lower_call_arg<'db>(
     // For 'in' mode: function consumes the argument, so don't record temps.
     match arg.expr(ctx.db) {
         ExprFunKind::Place(ref place) if place.steps.is_empty() => {
-            // Return the operand directly (Value, Slot, or Param).
             let name_str = place.root.text(ctx.db);
-            let operand = ctx.lookup_var(name_str)
-                .unwrap_or_else(|| panic!("variable '{}' not found - typechecker should catch this", name_str));
+            let (operand, _) = lower_var_operand(ctx, name_str);
             Ok(operand)
         }
         _ => {
@@ -212,69 +226,41 @@ pub fn lower_field_proj_as_ref<'db>(
 ) -> Result<Operand, LowerError> {
     let base_type = ctx.expr_type(proj.base);
 
-    // For mut/out params, we need to reference the original slot/param directly,
-    // not a copy. Check if base is a simple variable name bound to a slot or param.
+    // When the base is a Place (with or without steps), build an extended
+    // Place with the field step appended and delegate to lower_place_as_ref.
+    if let ExprFunKind::Place(ref place) = proj.base.expr(ctx.db) {
+        let mut extended = place.clone();
+        extended.steps.push(ast::PlaceStep::Field(proj.field));
+        return lower_place_as_ref(ctx, &extended);
+    }
+
+    // When the base is a nested FieldProj, recurse to get a ref, then
+    // apply GetFieldRef on top.
     let src = match proj.base.expr(ctx.db) {
-        ExprFunKind::Place(ref place) if place.steps.is_empty() => {
-            let name_str = place.root.text(ctx.db);
-            let operand = ctx.lookup_var(name_str)
-                .unwrap_or_else(|| panic!("variable '{}' not found - typechecker should catch this", name_str));
-            operand
-        }
-        ExprFunKind::Place(ref place) => {
-            // Place base with steps — get ref.
-            let ref_op = lower_place_as_ref(ctx, place)?;
-            match ref_op {
-                Operand::Value(v) => Operand::ValueRef(v),
-                other => other,
-            }
-        }
         ExprFunKind::FieldProj(inner_proj) => {
-            // Nested field projection - recursively get ref to base field,
-            // then dereference it for the next GetFieldRef.
             let base_ref = lower_field_proj_as_ref(ctx, proj.base, inner_proj)?;
-            match base_ref {
-                Operand::Value(v) => Operand::ValueRef(v),
-                other => other,
-            }
+            operand_as_value_ref(base_ref)
         }
         ExprFunKind::TryOption(try_op) => {
             if let ExprFunKind::Index(index_expr) = try_op.operand.expr(ctx.db) {
-                // a[i]?.field — get ref to list element, then field ref from that.
-                let ref_op = lower_index_as_ref(ctx, &index_expr, ast::IndexErrorMode::Option)?;
-                match ref_op {
-                    Operand::Value(v) => Operand::ValueRef(v),
-                    other => other,
-                }
+                operand_as_value_ref(lower_index_as_ref(ctx, &index_expr, ast::IndexErrorMode::Option)?)
             } else {
-                let base_id = lower_expression(ctx, proj.base)?;
-                Operand::Value(base_id)
+                Operand::Value(lower_expression(ctx, proj.base)?)
             }
         }
         ExprFunKind::TryResult(try_op) => {
             if let ExprFunKind::Index(index_expr) = try_op.operand.expr(ctx.db) {
-                // a[i]!.field — get ref to list element, then field ref from that.
-                let ref_op = lower_index_as_ref(ctx, &index_expr, ast::IndexErrorMode::Result)?;
-                match ref_op {
-                    Operand::Value(v) => Operand::ValueRef(v),
-                    other => other,
-                }
+                operand_as_value_ref(lower_index_as_ref(ctx, &index_expr, ast::IndexErrorMode::Result)?)
             } else {
-                let base_id = lower_expression(ctx, proj.base)?;
-                Operand::Value(base_id)
+                Operand::Value(lower_expression(ctx, proj.base)?)
             }
         }
         _ => {
-            // Compound expression - need to lower it to a value.
-            let base_id = lower_expression(ctx, proj.base)?;
-            Operand::Value(base_id)
+            Operand::Value(lower_expression(ctx, proj.base)?)
         }
     };
 
-    // Get the field index.
     let field_index = resolve_field_index(&proj.field, &base_type, ctx.db)?;
-
-    // Get the field type and wrap in Ref.
     let field_type = ctx.expr_type(expr);
     let ref_type = IrType::Ref(Box::new(field_type));
     let dest = ctx.fresh_value(ref_type);
@@ -285,6 +271,17 @@ pub fn lower_field_proj_as_ref<'db>(
         field_index,
     });
     Ok(Operand::Value(dest))
+}
+
+/// Convert a Value operand to a ValueRef operand.
+///
+/// Ref-returning functions return `Operand::Value(ref_value_id)` where the
+/// value has Ref type. To chain GetFieldRef, we need `Operand::ValueRef`.
+fn operand_as_value_ref(op: Operand) -> Operand {
+    match op {
+        Operand::Value(v) => Operand::ValueRef(v),
+        other => other,
+    }
 }
 
 /// Lower an expression for reference context (borrowing).
@@ -325,20 +322,14 @@ pub fn lower_expression_for_ref<'db>(
             }
         }
         ExprFunKind::Place(ref place) if place.steps.is_empty() => {
-            // For named values/params, return the operand directly to borrow.
             let name_str = place.root.text(ctx.db);
-            // Check const bindings first - these are compile-time values.
-            if let Some((const_type, const_value)) = ctx.lookup_const(name_str).cloned() {
-                let dest = ctx.fresh_value(const_type.clone());
-                ctx.emit(Instruction::Const {
-                    dest,
-                    value: const_value,
-                });
-                ctx.record_expr_temp(dest, const_type);
-                return Ok(Operand::Value(dest));
+            let (operand, is_fresh_const) = lower_var_operand(ctx, name_str);
+            if is_fresh_const {
+                if let Operand::Value(vid) = operand {
+                    let ty = ctx.body.value_types[vid.0 as usize].clone();
+                    ctx.record_expr_temp(vid, ty);
+                }
             }
-            let operand = ctx.lookup_var(name_str)
-                .unwrap_or_else(|| panic!("variable '{}' not found - typechecker should catch this", name_str));
             Ok(operand)
         }
         ExprFunKind::Place(ref place) => {
@@ -363,17 +354,7 @@ pub fn lower_expression<'db>(
     match expr.expr(ctx.db) {
         ExprFunKind::Place(ref place) if place.steps.is_empty() => {
             let name_str = place.root.text(ctx.db);
-            // Check const bindings first - these are compile-time values.
-            if let Some((const_type, const_value)) = ctx.lookup_const(name_str).cloned() {
-                let dest = ctx.fresh_value(const_type);
-                ctx.emit(Instruction::Const {
-                    dest,
-                    value: const_value,
-                });
-                return Ok(dest);
-            }
-            let operand = ctx.lookup_var(name_str)
-                .unwrap_or_else(|| panic!("variable '{}' not found - typechecker should catch this", name_str));
+            let (operand, _) = lower_var_operand(ctx, name_str);
             match operand {
                 Operand::Value(v) | Operand::ValueRef(v) => {
                     // For SSA values, just return the existing ValueId.
@@ -558,52 +539,10 @@ pub fn lower_expression<'db>(
             lower_field_proj(ctx, expr, proj)
         }
         ExprFunKind::Tuple(tuple) => {
-            // Push a new scope for this tuple's pending intermediates.
-            ctx.push_pending_scope();
-
-            let result_type = ctx.expr_type(expr);
-            let element_types: Vec<IrType> = match &result_type {
-                IrType::Tuple(types) => types.clone(),
-                _ => vec![],
-            };
-            // Lower each element and track as pending intermediate.
-            let mut fields = Vec::new();
-            for (i, e) in tuple.elements.iter().enumerate() {
-                let value = lower_expression(ctx, *e)?;
-                if let Some(elem_ty) = element_types.get(i) {
-                    ctx.push_pending_intermediate(value, elem_ty);
-                }
-                fields.push(Operand::Value(value));
-            }
-            let dest = ctx.fresh_value(result_type);
-            ctx.emit_pack(dest, TypeRef::Tuple(fields.len() as u32), fields);
-            ctx.clear_pending_intermediates();
-            ctx.pop_pending_scope();
-            Ok(dest)
+            lower_tuple_elements(ctx, expr, &tuple.elements)
         }
         ExprFunKind::AnonTuple(tuple) => {
-            // Push a new scope for this tuple's pending intermediates.
-            ctx.push_pending_scope();
-
-            let result_type = ctx.expr_type(expr);
-            let element_types: Vec<IrType> = match &result_type {
-                IrType::Tuple(types) => types.clone(),
-                _ => vec![],
-            };
-            // Lower each element and track as pending intermediate.
-            let mut fields = Vec::new();
-            for (i, e) in tuple.elements.iter().enumerate() {
-                let value = lower_expression(ctx, *e)?;
-                if let Some(elem_ty) = element_types.get(i) {
-                    ctx.push_pending_intermediate(value, elem_ty);
-                }
-                fields.push(Operand::Value(value));
-            }
-            let dest = ctx.fresh_value(result_type);
-            ctx.emit_pack(dest, TypeRef::Tuple(fields.len() as u32), fields);
-            ctx.clear_pending_intermediates();
-            ctx.pop_pending_scope();
-            Ok(dest)
+            lower_tuple_elements(ctx, expr, &tuple.elements)
         }
         ExprFunKind::List(list) => {
             // Push a new scope for this list's pending intermediates.
@@ -612,7 +551,7 @@ pub fn lower_expression<'db>(
             let result_type = ctx.expr_type(expr);
             let elem_type = match &result_type {
                 IrType::List(t) => (**t).clone(),
-                _ => IrType::Unit,
+                _ => panic!("expected List type from typechecker"),
             };
             // Lower each element and track as pending intermediate.
             let mut elements = Vec::new();
@@ -634,7 +573,7 @@ pub fn lower_expression<'db>(
             let result_type = ctx.expr_type(expr);
             let elem_type = match &result_type {
                 IrType::Set(t) => (**t).clone(),
-                _ => IrType::Unit,
+                _ => panic!("expected Set type from typechecker"),
             };
             // Lower each element and track as pending intermediate.
             let mut elements = Vec::new();
@@ -656,7 +595,7 @@ pub fn lower_expression<'db>(
             let result_type = ctx.expr_type(expr);
             let (key_type, val_type) = match &result_type {
                 IrType::Map(k, v) => ((**k).clone(), (**v).clone()),
-                _ => (IrType::Unit, IrType::Unit),
+                _ => panic!("expected Map type from typechecker"),
             };
             // Lower each entry and track keys/values as pending intermediates.
             let mut entries = Vec::new();
@@ -763,7 +702,7 @@ pub fn lower_expression<'db>(
             let result_type = ctx.expr_type(expr);
             let elem_type = match &result_type {
                 IrType::Tensor(t, _) => (**t).clone(),
-                _ => IrType::Unit,
+                _ => panic!("expected Tensor type from typechecker"),
             };
             let shape = tensor.shape.clone();
             // Lower each element and track as pending intermediate.
@@ -1100,21 +1039,7 @@ fn lower_optional_binop<'db>(
 
     // Early return block: wrap None and return.
     ctx.start_block(early_return_block);
-    let return_type = ctx.return_type.clone()
-        .expect("optional arithmetic requires return type");
-    let none_value = ctx.fresh_value(return_type);
-    ctx.emit_wrap_none(none_value);
-    ctx.emit_pending_intermediate_drops();
-    ctx.emit_before_try_return_drops();
-    if ctx.is_script_unit {
-        ctx.finish_block(Terminator::UnitEarlyReturn {
-            value: Operand::Value(none_value),
-        });
-    } else {
-        ctx.finish_block(Terminator::Return {
-            value: Some(Operand::Value(none_value)),
-        });
-    }
+    ctx.emit_early_return_none(false);
 
     // Continue block: dest already has the computed value.
     ctx.start_block(continue_block);
@@ -1160,31 +1085,7 @@ fn lower_checked_result_binop<'db>(
 
     // Early return block: create error and return Err.
     ctx.start_block(early_return_block);
-
-    // Create error message constant.
-    let err_msg = ctx.fresh_value(IrType::String);
-    ctx.emit_const(err_msg, ConstValue::String("arithmetic overflow".to_string()));
-
-    // Create Error from string.
-    let err_value = ctx.fresh_value(IrType::Error);
-    ctx.emit_error_from(err_value, Operand::Value(err_msg));
-
-    // Wrap in Err.
-    let return_type = ctx.return_type.clone()
-        .expect("checked result arithmetic requires return type");
-    let wrapped_err = ctx.fresh_value(return_type);
-    ctx.emit_wrap_err(wrapped_err, Operand::Value(err_value));
-    ctx.emit_pending_intermediate_drops();
-    ctx.emit_before_try_return_drops();
-    if ctx.is_script_unit {
-        ctx.finish_block(Terminator::UnitEarlyReturn {
-            value: Operand::Value(wrapped_err),
-        });
-    } else {
-        ctx.finish_block(Terminator::Return {
-            value: Some(Operand::Value(wrapped_err)),
-        });
-    }
+    ctx.emit_early_return_err_message("arithmetic overflow", false);
 
     // Continue block: dest already has the computed value.
     ctx.start_block(continue_block);
@@ -1228,21 +1129,7 @@ fn lower_optional_unaryop<'db>(
 
     // Early return block: wrap None and return.
     ctx.start_block(early_return_block);
-    let return_type = ctx.return_type.clone()
-        .expect("optional arithmetic requires return type");
-    let none_value = ctx.fresh_value(return_type);
-    ctx.emit_wrap_none(none_value);
-    ctx.emit_pending_intermediate_drops();
-    ctx.emit_before_try_return_drops();
-    if ctx.is_script_unit {
-        ctx.finish_block(Terminator::UnitEarlyReturn {
-            value: Operand::Value(none_value),
-        });
-    } else {
-        ctx.finish_block(Terminator::Return {
-            value: Some(Operand::Value(none_value)),
-        });
-    }
+    ctx.emit_early_return_none(false);
 
     // Continue block: dest already has the computed value.
     ctx.start_block(continue_block);
@@ -1286,31 +1173,7 @@ fn lower_checked_result_unaryop<'db>(
 
     // Early return block: create error and return Err.
     ctx.start_block(early_return_block);
-
-    // Create error message constant.
-    let err_msg = ctx.fresh_value(IrType::String);
-    ctx.emit_const(err_msg, ConstValue::String("negation overflow".to_string()));
-
-    // Create Error from string.
-    let err_value = ctx.fresh_value(IrType::Error);
-    ctx.emit_error_from(err_value, Operand::Value(err_msg));
-
-    // Wrap in Err.
-    let return_type = ctx.return_type.clone()
-        .expect("checked result arithmetic requires return type");
-    let wrapped_err = ctx.fresh_value(return_type);
-    ctx.emit_wrap_err(wrapped_err, Operand::Value(err_value));
-    ctx.emit_pending_intermediate_drops();
-    ctx.emit_before_try_return_drops();
-    if ctx.is_script_unit {
-        ctx.finish_block(Terminator::UnitEarlyReturn {
-            value: Operand::Value(wrapped_err),
-        });
-    } else {
-        ctx.finish_block(Terminator::Return {
-            value: Some(Operand::Value(wrapped_err)),
-        });
-    }
+    ctx.emit_early_return_err_message("negation overflow", false);
 
     // Continue block: dest already has the computed value.
     ctx.start_block(continue_block);
@@ -1353,21 +1216,7 @@ fn lower_try_option<'db>(
 
     // Early return block: wrap None and return.
     ctx.start_block(early_return_block);
-    let return_type = ctx.return_type.clone()
-        .expect("try operator requires return type");
-    let none_value = ctx.fresh_value(return_type);
-    ctx.emit_wrap_none(none_value);
-    ctx.emit_pending_intermediate_drops();
-    ctx.emit_before_try_return_drops();
-    if ctx.is_script_unit {
-        ctx.finish_block(Terminator::UnitEarlyReturn {
-            value: Operand::Value(none_value),
-        });
-    } else {
-        ctx.finish_block(Terminator::Return {
-            value: Some(Operand::Value(none_value)),
-        });
-    }
+    ctx.emit_early_return_none(false);
 
     // Continue block: dest already has the unwrapped value.
     ctx.start_block(continue_block);
@@ -1412,21 +1261,7 @@ fn lower_try_result<'db>(
 
     // Early return block: wrap error and return.
     ctx.start_block(early_return_block);
-    let return_type = ctx.return_type.clone()
-        .expect("try operator requires return type");
-    let wrapped_err = ctx.fresh_value(return_type);
-    ctx.emit_wrap_err(wrapped_err, Operand::Value(err_dest));
-    ctx.emit_pending_intermediate_drops();
-    ctx.emit_before_try_return_drops();
-    if ctx.is_script_unit {
-        ctx.finish_block(Terminator::UnitEarlyReturn {
-            value: Operand::Value(wrapped_err),
-        });
-    } else {
-        ctx.finish_block(Terminator::Return {
-            value: Some(Operand::Value(wrapped_err)),
-        });
-    }
+    ctx.emit_early_return_err(Operand::Value(err_dest), false);
 
     // Continue block: ok_dest has the unwrapped Ok value.
     ctx.start_block(continue_block);
@@ -1477,7 +1312,13 @@ fn lower_collection_index_value<'db>(
     });
 
     ctx.start_block(early_return_block);
-    super::stmt::emit_index_value_early_return(ctx, error_mode, is_map);
+    match error_mode {
+        ast::IndexErrorMode::Option => ctx.emit_early_return_none(false),
+        ast::IndexErrorMode::Result => {
+            let msg = if is_map { "key not found" } else { "index out of bounds" };
+            ctx.emit_early_return_err_message(msg, false);
+        }
+    }
 
     ctx.start_block(continue_block);
     Ok(dest)
@@ -1575,7 +1416,13 @@ fn lower_place_expression<'db>(
                     });
 
                     ctx.start_block(early_return_block);
-                    super::stmt::emit_index_value_early_return(ctx, error_mode, is_map);
+                    match error_mode {
+                        ast::IndexErrorMode::Option => ctx.emit_early_return_none(false),
+                        ast::IndexErrorMode::Result => {
+                            let msg = if is_map { "key not found" } else { "index out of bounds" };
+                            ctx.emit_early_return_err_message(msg, false);
+                        }
+                    }
 
                     ctx.start_block(continue_block);
                     return Ok(dest);
@@ -1782,4 +1629,35 @@ fn is_fixed_width_int(ty: &IrType) -> bool {
             | IrType::I32
             | IrType::I64
     )
+}
+
+/// Lower tuple elements into a packed tuple value.
+///
+/// Shared by Tuple and AnonTuple lowering.
+fn lower_tuple_elements<'db>(
+    ctx: &mut LowerCtx<'db>,
+    expr: ExprFun<'db>,
+    elements: &[ExprFun<'db>],
+) -> Result<ValueId, LowerError> {
+    ctx.push_pending_scope();
+
+    let result_type = ctx.expr_type(expr);
+    let element_types: Vec<IrType> = match &result_type {
+        IrType::Tuple(types) => types.clone(),
+        // Single-element parens like `(x)` have the element's type, not a Tuple.
+        _ => vec![],
+    };
+    let mut fields = Vec::new();
+    for (i, e) in elements.iter().enumerate() {
+        let value = lower_expression(ctx, *e)?;
+        if let Some(elem_ty) = element_types.get(i) {
+            ctx.push_pending_intermediate(value, elem_ty);
+        }
+        fields.push(Operand::Value(value));
+    }
+    let dest = ctx.fresh_value(result_type);
+    ctx.emit_pack(dest, TypeRef::Tuple(fields.len() as u32), fields);
+    ctx.clear_pending_intermediates();
+    ctx.pop_pending_scope();
+    Ok(dest)
 }

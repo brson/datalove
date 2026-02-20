@@ -17,7 +17,7 @@ use datalove_datafun_ir::{
 };
 use datalove_datafun_sema::FunctionAnalysis;
 use super::context::LowerCtx;
-use super::stmt::lower_statement_indexed;
+use super::stmt::lower_statement;
 use super::LowerError;
 
 /// Lower a function to IR with available module functions in scope.
@@ -128,7 +128,7 @@ pub fn lower_function_body<'db>(
     let body = func.body(ctx.db);
     for (idx, stmt) in body.iter().enumerate() {
         ctx.body.current_stmt_idx = Some(idx);
-        lower_statement_indexed(ctx, stmt, idx)?;
+        lower_statement(ctx, stmt)?;
     }
     ctx.body.current_stmt_idx = None;
 

@@ -37,21 +37,10 @@ fn is_self_assignment<'db>(
     false
 }
 
-/// Lower a statement (without index tracking, for compatibility).
+/// Lower a statement.
 pub fn lower_statement<'db>(
     ctx: &mut LowerCtx<'db>,
     stmt: &Statement<'db>,
-) -> Result<(), LowerError> {
-    lower_statement_impl(ctx, stmt)
-}
-
-/// Lower a statement with index tracking for drop schedule.
-///
-/// DEPRECATED: Use lower_statement_impl instead. The stmt_idx parameter is ignored.
-pub fn lower_statement_indexed<'db>(
-    ctx: &mut LowerCtx<'db>,
-    stmt: &Statement<'db>,
-    _stmt_idx: usize,
 ) -> Result<(), LowerError> {
     lower_statement_impl(ctx, stmt)
 }
@@ -275,8 +264,8 @@ fn lower_if_bool<'db>(
 
     // Lower then branch.
     ctx.start_block(then_block);
-    for (idx, stmt) in if_stmt.then_body.iter().enumerate() {
-        lower_statement_indexed(ctx, stmt, idx)?;
+    for stmt in if_stmt.then_body.iter() {
+        lower_statement(ctx, stmt)?;
     }
     // Only emit Goto if branch didn't terminate early.
     let then_terminated = ctx.is_unreachable();
@@ -288,8 +277,8 @@ fn lower_if_bool<'db>(
     // Lower else branch.
     ctx.start_block(else_block);
     if let Some(else_body) = &if_stmt.else_body {
-        for (idx, stmt) in else_body.iter().enumerate() {
-            lower_statement_indexed(ctx, stmt, idx)?;
+        for stmt in else_body.iter() {
+            lower_statement(ctx, stmt)?;
         }
     }
     // Only emit Goto if branch didn't terminate early.
@@ -562,9 +551,9 @@ pub fn lower_loop<'db>(
         exit: loop_exit,
     });
 
-    // Lower loop body with proper statement indexing.
-    for (idx, stmt) in loop_stmt.body.iter().enumerate() {
-        lower_statement_indexed(ctx, stmt, idx)?;
+    // Lower loop body.
+    for stmt in loop_stmt.body.iter() {
+        lower_statement(ctx, stmt)?;
     }
 
     // Only emit loop-back if the body didn't terminate early (via break/return).
@@ -597,116 +586,138 @@ fn lower_set<'db>(
     set_stmt: &ast::StmtSet<'db>,
 ) -> Result<(), LowerError> {
     let place = &set_stmt.target;
-    let root_name_str = place.root.text(ctx.db).to_string();
 
     if place.steps.is_empty() {
-        // Simple name assignment: `set x = v`.
-        if is_self_assignment(ctx, &root_name_str, set_stmt.value) {
-            return Ok(());
-        }
-        let value_id = lower_expression(ctx, set_stmt.value)?;
-        match ctx.lookup_var(&root_name_str) {
-            Some(Operand::Slot(slot)) => {
-                let is_copy = ctx.slot_type(slot).map(|t| t.is_copy()).unwrap_or(false);
-                if !is_copy {
-                    let operand = Operand::Slot(slot);
-                    if ctx.is_operand_tracked(operand) {
-                        ctx.emit(Instruction::DropTracked { operand });
-                    } else {
-                        ctx.emit(Instruction::Drop { operand });
-                    }
-                }
-                if is_copy {
-                    ctx.emit_slot_store_copy(SlotDest::Local(slot), Operand::Value(value_id));
-                } else {
-                    ctx.emit_slot_store_move(SlotDest::Local(slot), Operand::Value(value_id));
-                }
-                Ok(())
-            }
-            Some(Operand::Param(param)) => {
-                let mode = ctx.param_mode(param);
-                if mode == Some(ParamMode::Mut) || mode == Some(ParamMode::Out) {
-                    ctx.emit_param_store(param, Operand::Value(value_id));
-                    Ok(())
-                } else {
-                    panic!("assignment to immutable param '{}' - typechecker should catch this", root_name_str)
-                }
-            }
-            _ => panic!("assignment to immutable variable '{}' - typechecker should catch this", root_name_str),
-        }
+        lower_set_simple(ctx, place, set_stmt.value)
     } else if place_contains_index(place) {
-        // Place contains an index step.
-        // Check if the last step is the (only) index — that's the terminal index case.
-        let last_step = place.steps.last().unwrap();
-        if let ast::PlaceStep::Index(idx) = last_step {
-            // Terminal index step.
-            if idx.error_mode.is_none() {
-                // Bare index (upsert) for maps.
-                let base_op = lower_place_steps_to_operand(ctx, place, place.steps.len() - 1)?;
-                let key_id = lower_expression(ctx, idx.index)?;
-                let value_id = lower_expression(ctx, set_stmt.value)?;
-                ctx.emit(Instruction::MapUpsert {
-                    map: base_op,
-                    key: Operand::Value(key_id),
-                    value: Operand::Value(value_id),
-                });
-                Ok(())
-            } else {
-                // Fallible index: set a[i]? = v / set a[i]! = v.
-                let error_mode = idx.error_mode.unwrap();
-                let base_op = lower_place_steps_to_operand(ctx, place, place.steps.len() - 1)?;
-                let base_type = set_target_operand_type(ctx, &base_op);
-                let key_op = lower_operand(ctx, idx.index)?;
-                emit_fallible_index_check(ctx, base_op, &base_type, key_op, error_mode)?;
-                let value_id = lower_expression(ctx, set_stmt.value)?;
-                match &base_type {
-                    IrType::Map(_, _) => {
-                        ctx.emit(Instruction::MapSetValue {
-                            map: base_op,
-                            key: key_op,
-                            value: Operand::Value(value_id),
-                        });
-                    }
-                    _ => {
-                        ctx.emit(Instruction::ListSet {
-                            list: base_op,
-                            index: key_op,
-                            value: Operand::Value(value_id),
-                        });
-                    }
+        lower_set_indexed(ctx, place, set_stmt.value)
+    } else {
+        lower_set_field_path(ctx, place, set_stmt.value)
+    }
+}
+
+/// Lower simple variable assignment: `set x = v`.
+fn lower_set_simple<'db>(
+    ctx: &mut LowerCtx<'db>,
+    place: &ast::Place<'db>,
+    value_expr: ExprFun<'db>,
+) -> Result<(), LowerError> {
+    let root_name_str = place.root.text(ctx.db).to_string();
+
+    if is_self_assignment(ctx, &root_name_str, value_expr) {
+        return Ok(());
+    }
+    let value_id = lower_expression(ctx, value_expr)?;
+    match ctx.lookup_var(&root_name_str) {
+        Some(Operand::Slot(slot)) => {
+            let is_copy = ctx.slot_type(slot).expect("slot must have a type").is_copy();
+            if !is_copy {
+                let operand = Operand::Slot(slot);
+                if ctx.is_operand_tracked(operand) {
+                    ctx.emit(Instruction::DropTracked { operand });
+                } else {
+                    ctx.emit(Instruction::Drop { operand });
                 }
-                Ok(())
             }
-        } else {
-            // Last step is a field, but chain contains index — use ref-based approach.
-            let ref_op = lower_place_steps_to_operand(ctx, place, place.steps.len())?;
-            let value_id = lower_expression(ctx, set_stmt.value)?;
-            ctx.emit(Instruction::RefStore {
-                dest: ref_op,
-                value: Operand::Value(value_id),
-            });
+            if is_copy {
+                ctx.emit_slot_store_copy(SlotDest::Local(slot), Operand::Value(value_id));
+            } else {
+                ctx.emit_slot_store_move(SlotDest::Local(slot), Operand::Value(value_id));
+            }
             Ok(())
         }
-    } else {
-        // Pure field projections — use field path approach.
-        let field_path = collect_field_path_from_place(ctx, place)?;
-        let value_id = lower_expression(ctx, set_stmt.value)?;
-        match ctx.lookup_var(&root_name_str) {
-            Some(Operand::Slot(slot)) => {
-                ctx.emit_set_field(SlotDest::Local(slot), field_path, Operand::Value(value_id));
+        Some(Operand::Param(param)) => {
+            let mode = ctx.param_mode(param);
+            if mode == Some(ParamMode::Mut) || mode == Some(ParamMode::Out) {
+                ctx.emit_param_store(param, Operand::Value(value_id));
                 Ok(())
+            } else {
+                panic!("assignment to immutable param '{}' - typechecker should catch this", root_name_str)
             }
-            Some(Operand::Param(param)) => {
-                let mode = ctx.param_mode(param);
-                if mode == Some(ParamMode::Mut) || mode == Some(ParamMode::Out) {
-                    ctx.emit_param_set_field(param, field_path, Operand::Value(value_id));
-                    Ok(())
-                } else {
-                    panic!("assignment to field of immutable param '{}' - typechecker should catch this", root_name_str)
+        }
+        _ => panic!("assignment to immutable variable '{}' - typechecker should catch this", root_name_str),
+    }
+}
+
+/// Lower set with index steps: `set a[i] = v`, `set a[i]? = v`, etc.
+fn lower_set_indexed<'db>(
+    ctx: &mut LowerCtx<'db>,
+    place: &ast::Place<'db>,
+    value_expr: ExprFun<'db>,
+) -> Result<(), LowerError> {
+    let last_step = place.steps.last().unwrap();
+    if let ast::PlaceStep::Index(idx) = last_step {
+        if idx.error_mode.is_none() {
+            // Bare index (upsert) for maps.
+            let base_op = lower_place_steps_to_operand(ctx, place, place.steps.len() - 1)?;
+            let key_id = lower_expression(ctx, idx.index)?;
+            let value_id = lower_expression(ctx, value_expr)?;
+            ctx.emit(Instruction::MapUpsert {
+                map: base_op,
+                key: Operand::Value(key_id),
+                value: Operand::Value(value_id),
+            });
+        } else {
+            // Fallible index: set a[i]? = v / set a[i]! = v.
+            let error_mode = idx.error_mode.unwrap();
+            let base_op = lower_place_steps_to_operand(ctx, place, place.steps.len() - 1)?;
+            let base_type = set_target_operand_type(ctx, &base_op);
+            let key_op = lower_operand(ctx, idx.index)?;
+            emit_fallible_index_check(ctx, base_op, &base_type, key_op, error_mode)?;
+            let value_id = lower_expression(ctx, value_expr)?;
+            match &base_type {
+                IrType::Map(_, _) => {
+                    ctx.emit(Instruction::MapSetValue {
+                        map: base_op,
+                        key: key_op,
+                        value: Operand::Value(value_id),
+                    });
+                }
+                _ => {
+                    ctx.emit(Instruction::ListSet {
+                        list: base_op,
+                        index: key_op,
+                        value: Operand::Value(value_id),
+                    });
                 }
             }
-            _ => panic!("assignment to field of immutable variable '{}' - typechecker should catch this", root_name_str),
         }
+    } else {
+        // Last step is a field, but chain contains index -- use ref-based approach.
+        let ref_op = lower_place_steps_to_operand(ctx, place, place.steps.len())?;
+        let value_id = lower_expression(ctx, value_expr)?;
+        ctx.emit(Instruction::RefStore {
+            dest: ref_op,
+            value: Operand::Value(value_id),
+        });
+    }
+    Ok(())
+}
+
+/// Lower set with pure field projections: `set x.a.b = v`.
+fn lower_set_field_path<'db>(
+    ctx: &mut LowerCtx<'db>,
+    place: &ast::Place<'db>,
+    value_expr: ExprFun<'db>,
+) -> Result<(), LowerError> {
+    let root_name_str = place.root.text(ctx.db).to_string();
+    let field_path = collect_field_path_from_place(ctx, place)?;
+    let value_id = lower_expression(ctx, value_expr)?;
+    match ctx.lookup_var(&root_name_str) {
+        Some(Operand::Slot(slot)) => {
+            ctx.emit_set_field(SlotDest::Local(slot), field_path, Operand::Value(value_id));
+            Ok(())
+        }
+        Some(Operand::Param(param)) => {
+            let mode = ctx.param_mode(param);
+            if mode == Some(ParamMode::Mut) || mode == Some(ParamMode::Out) {
+                ctx.emit_param_set_field(param, field_path, Operand::Value(value_id));
+                Ok(())
+            } else {
+                panic!("assignment to field of immutable param '{}' - typechecker should catch this", root_name_str)
+            }
+        }
+        _ => panic!("assignment to field of immutable variable '{}' - typechecker should catch this", root_name_str),
     }
 }
 
@@ -714,54 +725,10 @@ fn lower_set<'db>(
 ///
 /// Must be called with the early return block already started. Emits the
 /// appropriate None or Err value and terminates the block with a return.
-pub(crate) fn emit_index_oob_early_return(ctx: &mut LowerCtx, error_mode: ast::IndexErrorMode) {
-    let return_type = ctx.return_type.clone()
-        .expect("set with index requires return type");
-    match error_mode {
-        ast::IndexErrorMode::Option => {
-            let none_value = ctx.fresh_value(return_type);
-            ctx.emit_wrap_none(none_value);
-            ctx.emit_pending_intermediate_drops();
-            ctx.emit_before_set_target_early_return_drops();
-            ctx.emit_before_try_return_drops();
-            if ctx.is_script_unit {
-                ctx.finish_block(Terminator::UnitEarlyReturn {
-                    value: Operand::Value(none_value),
-                });
-            } else {
-                ctx.finish_block(Terminator::Return {
-                    value: Some(Operand::Value(none_value)),
-                });
-            }
-        }
-        ast::IndexErrorMode::Result => {
-            let err_msg = ctx.fresh_value(IrType::String);
-            ctx.emit_const(err_msg, datalove_datafun_ir::ConstValue::String("index out of bounds".to_string()));
-            let err_value = ctx.fresh_value(IrType::Error);
-            ctx.emit_error_from(err_value, Operand::Value(err_msg));
-            let wrapped_err = ctx.fresh_value(return_type);
-            ctx.emit_wrap_err(wrapped_err, Operand::Value(err_value));
-            ctx.emit_pending_intermediate_drops();
-            ctx.emit_before_set_target_early_return_drops();
-            ctx.emit_before_try_return_drops();
-            if ctx.is_script_unit {
-                ctx.finish_block(Terminator::UnitEarlyReturn {
-                    value: Operand::Value(wrapped_err),
-                });
-            } else {
-                ctx.finish_block(Terminator::Return {
-                    value: Some(Operand::Value(wrapped_err)),
-                });
-            }
-        }
-    }
-}
-
 /// Emit the validity check and early-return scaffolding for fallible index operations.
 ///
 /// Emits ListBoundsCheck or MapContainsKey based on collection type,
-/// branches on the result, emits an early-return block via `emit_index_oob_early_return`,
-/// and starts the continue block.
+/// branches on the result, emits an early-return block, and starts the continue block.
 pub(crate) fn emit_fallible_index_check(
     ctx: &mut LowerCtx,
     collection_op: Operand,
@@ -798,7 +765,10 @@ pub(crate) fn emit_fallible_index_check(
     });
 
     ctx.start_block(early_return_block);
-    emit_index_oob_early_return(ctx, error_mode);
+    match error_mode {
+        ast::IndexErrorMode::Option => ctx.emit_early_return_none(true),
+        ast::IndexErrorMode::Result => ctx.emit_early_return_err_message("index out of bounds", true),
+    }
 
     ctx.start_block(continue_block);
     Ok(())
@@ -836,56 +806,6 @@ pub(crate) fn emit_collection_element_ref(
                 index: key_op,
             });
             dest
-        }
-    }
-}
-
-/// Emit early return for value-context index operations.
-///
-/// Like `emit_index_oob_early_return` but without `emit_before_set_target_early_return_drops`
-/// and with "key not found" error message for maps.
-pub(crate) fn emit_index_value_early_return(
-    ctx: &mut LowerCtx,
-    error_mode: ast::IndexErrorMode,
-    is_map: bool,
-) {
-    let return_type = ctx.return_type.clone()
-        .expect("index with early return requires return type");
-    match error_mode {
-        ast::IndexErrorMode::Option => {
-            let none_value = ctx.fresh_value(return_type);
-            ctx.emit_wrap_none(none_value);
-            ctx.emit_pending_intermediate_drops();
-            ctx.emit_before_try_return_drops();
-            if ctx.is_script_unit {
-                ctx.finish_block(Terminator::UnitEarlyReturn {
-                    value: Operand::Value(none_value),
-                });
-            } else {
-                ctx.finish_block(Terminator::Return {
-                    value: Some(Operand::Value(none_value)),
-                });
-            }
-        }
-        ast::IndexErrorMode::Result => {
-            let err_msg_str = if is_map { "key not found" } else { "index out of bounds" };
-            let err_msg = ctx.fresh_value(IrType::String);
-            ctx.emit_const(err_msg, datalove_datafun_ir::ConstValue::String(err_msg_str.to_string()));
-            let err_value = ctx.fresh_value(IrType::Error);
-            ctx.emit_error_from(err_value, Operand::Value(err_msg));
-            let wrapped_err = ctx.fresh_value(return_type);
-            ctx.emit_wrap_err(wrapped_err, Operand::Value(err_value));
-            ctx.emit_pending_intermediate_drops();
-            ctx.emit_before_try_return_drops();
-            if ctx.is_script_unit {
-                ctx.finish_block(Terminator::UnitEarlyReturn {
-                    value: Operand::Value(wrapped_err),
-                });
-            } else {
-                ctx.finish_block(Terminator::Return {
-                    value: Some(Operand::Value(wrapped_err)),
-                });
-            }
         }
     }
 }
@@ -952,7 +872,7 @@ fn place_contains_index(place: &ast::Place) -> bool {
     place.steps.iter().any(|s| matches!(s, ast::PlaceStep::Index(_)))
 }
 
-/// Get the type of an operand returned by `lower_set_target_to_operand`.
+/// Get the type of an operand returned by `lower_place_steps_to_operand`.
 ///
 /// For Slot/Param, returns the stored type directly. For ValueRef, unwraps
 /// the Ref to return the pointed-to type.

@@ -1003,29 +1003,9 @@ fn synthesize_index_common<'db>(
     expr: ExprFun<'db>,
     index_expr: &ExprIndex<'db>,
 ) -> Result<Type<'db>, TypeError> {
-    let db = ctx.db;
-
     let base_ty = ctx.synthesize_expr(index_expr.base)?;
-    let (element_ty, index_type) = match &base_ty {
-        Type::Datalit(datalit::tycheck::Type::List(list)) => {
-            (
-                Type::Datalit(*list.element_type.clone()),
-                Type::Datalit(datalit::tycheck::Type::Index),
-            )
-        }
-        Type::Datalit(datalit::tycheck::Type::Map(map)) => {
-            (
-                Type::Datalit(*map.value_type.clone()),
-                Type::Datalit(*map.key_type.clone()),
-            )
-        }
-        _ => {
-            return Err(ctx.error_cannot_synthesize(
-                expr,
-                &format!("indexing requires list or map type, got {}", type_to_string(db, &base_ty)),
-            ));
-        }
-    };
+    let (element_ty, index_type) = resolve_index_types(ctx.db, &base_ty)
+        .map_err(|msg| ctx.error_cannot_synthesize(expr, &msg))?;
 
     if let Err(e) = check_expr(ctx, index_expr.index, &index_type) {
         ctx.add_error(e);
@@ -1081,15 +1061,14 @@ fn synthesize_place<'db>(
     Ok(current_ty)
 }
 
-/// Synthesize type through a field step in a place expression.
-fn synthesize_place_field_step<'db>(
-    ctx: &mut TypeContext<'db>,
-    _expr: ExprFun<'db>,
+/// Resolve the type of a field selector on a base type.
+///
+/// Shared logic for place field steps and field projections.
+pub(crate) fn resolve_field_type<'db>(
+    db: &'db dyn crate::Db,
     base_ty: &Type<'db>,
-    field: &FieldSelector<'db>,
+    selector: &FieldSelector<'db>,
 ) -> Result<Type<'db>, TypeError> {
-    let db = ctx.db;
-
     let base_datalit_ty = match base_ty {
         Type::Datalit(dt) => dt,
         _ => {
@@ -1099,7 +1078,7 @@ fn synthesize_place_field_step<'db>(
         }
     };
 
-    match field {
+    match selector {
         FieldSelector::Index(idx) => {
             match base_datalit_ty {
                 datalit::tycheck::Type::AnonTuple(tuple) => {
@@ -1123,7 +1102,6 @@ fn synthesize_place_field_step<'db>(
                     let name_str = name.text(db);
                     for f in &struct_ty.fields {
                         if f.name.text(db) == name_str {
-                            // Place expressions are always in ref context.
                             return Ok(Type::Datalit((*f.ty).clone()));
                         }
                     }
@@ -1140,6 +1118,40 @@ fn synthesize_place_field_step<'db>(
     }
 }
 
+/// Resolve element type and expected index type for a collection.
+///
+/// Returns `(element_type, expected_index_type)`.
+pub(crate) fn resolve_index_types<'db>(
+    db: &'db dyn crate::Db,
+    base_ty: &Type<'db>,
+) -> Result<(Type<'db>, Type<'db>), String> {
+    match base_ty {
+        Type::Datalit(datalit::tycheck::Type::List(list)) => {
+            Ok((
+                Type::Datalit(*list.element_type.clone()),
+                Type::Datalit(datalit::tycheck::Type::Index),
+            ))
+        }
+        Type::Datalit(datalit::tycheck::Type::Map(map)) => {
+            Ok((
+                Type::Datalit(*map.value_type.clone()),
+                Type::Datalit(*map.key_type.clone()),
+            ))
+        }
+        _ => Err(format!("indexing requires list or map type, got {}", type_to_string(db, base_ty))),
+    }
+}
+
+/// Synthesize type through a field step in a place expression.
+fn synthesize_place_field_step<'db>(
+    ctx: &mut TypeContext<'db>,
+    _expr: ExprFun<'db>,
+    base_ty: &Type<'db>,
+    field: &FieldSelector<'db>,
+) -> Result<Type<'db>, TypeError> {
+    resolve_field_type(ctx.db, base_ty, field)
+}
+
 /// Synthesize type through an index step in a place expression.
 fn synthesize_place_index_step<'db>(
     ctx: &mut TypeContext<'db>,
@@ -1147,28 +1159,8 @@ fn synthesize_place_index_step<'db>(
     base_ty: &Type<'db>,
     idx: &PlaceIndex<'db>,
 ) -> Result<Type<'db>, TypeError> {
-    let db = ctx.db;
-
-    let (element_ty, index_type) = match base_ty {
-        Type::Datalit(datalit::tycheck::Type::List(list)) => {
-            (
-                Type::Datalit(*list.element_type.clone()),
-                Type::Datalit(datalit::tycheck::Type::Index),
-            )
-        }
-        Type::Datalit(datalit::tycheck::Type::Map(map)) => {
-            (
-                Type::Datalit(*map.value_type.clone()),
-                Type::Datalit(*map.key_type.clone()),
-            )
-        }
-        _ => {
-            return Err(ctx.error_cannot_synthesize(
-                expr,
-                &format!("indexing requires list or map type, got {}", type_to_string(db, base_ty)),
-            ));
-        }
-    };
+    let (element_ty, index_type) = resolve_index_types(ctx.db, base_ty)
+        .map_err(|msg| ctx.error_cannot_synthesize(expr, &msg))?;
 
     if let Err(e) = check_expr(ctx, idx.index, &index_type) {
         ctx.add_error(e);
@@ -1192,81 +1184,19 @@ fn synthesize_field_proj<'db>(
     // Synthesize base type.
     let base_ty = ctx.synthesize_expr(proj.base)?;
 
-    // Base must be a datalit type (tuple or struct).
-    let base_datalit_ty = match &base_ty {
-        Type::Datalit(dt) => dt,
-        _ => {
-            return Err(TypeError::ProjectionOnNonAggregate {
-                ty: type_to_string(db, &base_ty),
+    let field_ty = resolve_field_type(db, &base_ty, &proj.field)?;
+
+    // Check that field is a copy type or we're in ref context.
+    // Move-type field projections are allowed in ref context.
+    if let Type::Datalit(ref dt) = field_ty {
+        if !is_copy_type(db, dt) && !ctx.ref_context {
+            return Err(TypeError::NonCopyFieldProjection {
+                field_ty: datalit::tycheck::type_to_string(db, dt),
             });
         }
-    };
-
-    // Extract field type based on selector.
-    match &proj.field {
-        FieldSelector::Index(idx) => {
-            // Index projection: base must be tuple.
-            match base_datalit_ty {
-                datalit::tycheck::Type::AnonTuple(tuple) => {
-                    let idx_usize = *idx as usize;
-                    if idx_usize >= tuple.fields.len() {
-                        return Err(TypeError::FieldIndexOutOfBounds {
-                            index: *idx,
-                            tuple_size: tuple.fields.len(),
-                        });
-                    }
-                    let field_ty = &tuple.fields[idx_usize];
-
-                    // Check that field is a copy type or we're in ref context.
-                    // Move-type field projections are allowed in ref context.
-                    if !is_copy_type(db, field_ty) && !ctx.ref_context {
-                        return Err(TypeError::NonCopyFieldProjection {
-                            field_ty: datalit::tycheck::type_to_string(db, field_ty),
-                        });
-                    }
-
-                    let ty = Type::Datalit(field_ty.clone());
-                    Ok(ty)
-                }
-                _ => {
-                    Err(TypeError::ProjectionOnNonAggregate {
-                        ty: type_to_string(db, &base_ty),
-                    })
-                }
-            }
-        }
-        FieldSelector::Name(name) => {
-            // Named projection: base must be struct.
-            match base_datalit_ty {
-                datalit::tycheck::Type::AnonStruct(struct_ty) => {
-                    let name_str = name.text(db);
-                    for field in &struct_ty.fields {
-                        if field.name.text(db) == name_str {
-                            // Check that field is a copy type or we're in ref context.
-                            // Move-type field projections are allowed in ref context.
-                            if !is_copy_type(db, &field.ty) && !ctx.ref_context {
-                                return Err(TypeError::NonCopyFieldProjection {
-                                    field_ty: datalit::tycheck::type_to_string(db, &field.ty),
-                                });
-                            }
-
-                            let ty = Type::Datalit((*field.ty).clone());
-                            return Ok(ty);
-                        }
-                    }
-                    Err(TypeError::FieldNotFound {
-                        field_name: name_str.S(),
-                        ty: type_to_string(db, &base_ty),
-                    })
-                }
-                _ => {
-                    Err(TypeError::ProjectionOnNonAggregate {
-                        ty: type_to_string(db, &base_ty),
-                    })
-                }
-            }
-        }
     }
+
+    Ok(field_ty)
 }
 
 // ============================================================================

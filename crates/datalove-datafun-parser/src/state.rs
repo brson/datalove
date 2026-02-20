@@ -489,6 +489,16 @@ impl<'db> Parser<'db> {
         index
     }
 
+    /// Check if a line starts with "end <keyword>".
+    pub(super) fn line_is_end_keyword(&self, line: &[TreeToken<'db>], keyword: &str) -> bool {
+        if line.len() >= 2 {
+            if let (Some(TreeToken::Token(t1)), Some(TreeToken::Token(t2))) = (line.get(0), line.get(1)) {
+                return t1.word_str(self.db) == Some("end") && t2.word_str(self.db) == Some(keyword);
+            }
+        }
+        false
+    }
+
     /// Emit error if tokens remain unconsumed after a successful parse.
     pub(super) fn error_if_not_exhausted(&mut self) {
         if self.peek().is_some() && !self.had_error {

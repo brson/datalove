@@ -257,50 +257,35 @@ pub fn check_statement<'db>(
                 let inner_type = Type::Datalit((*inner_ty).clone());
                 let binding_ty = inner_type;
 
-                // Save all variables before entering then branch.
-                let saved_variables = ctx.variables.C();
-
-                // Add binding to context for then body (immutable binding from destructuring).
-                ctx.variables.insert(binding_name, (binding_ty, false));
-
-                // Type check then body.
-                for stmt in then_body {
-                    check_statement(ctx, stmt);
-                }
-
-                // Restore all variables after then branch.
-                ctx.variables = saved_variables;
-
-                // Type check else body if present.
-                if let Some(else_stmts) = else_body {
-                    // Save all variables before entering else branch.
-                    let saved_variables = ctx.variables.C();
-
-                    // If there's an else binding, bind error type for Result.
-                    if let Some(else_binding_name) = else_binding {
-                        if let Type::Datalit(datalit::tycheck::Type::Result(_)) = condition_ty {
-                            // Bind Error type (immutable binding from destructuring).
-                            let error_ty = Type::Datalit(datalit::tycheck::Type::Error,
-                            );
-                            ctx.variables.insert(else_binding_name, (error_ty, false));
-                        } else {
-                            let actual_type = type_to_string(db, &condition_ty);
-                            let err = ctx.error_type_mismatch(
-                                condition,
-                                "Result",
-                                &actual_type,
-                                "else binding requires Result type"
-                            );
-                            ctx.add_error(err);
-                        }
-                    }
-
-                    for stmt in else_stmts {
+                ctx.with_scope(|ctx| {
+                    ctx.variables.insert(binding_name, (binding_ty, false));
+                    for stmt in then_body {
                         check_statement(ctx, stmt);
                     }
+                });
 
-                    // Restore all variables after else branch.
-                    ctx.variables = saved_variables;
+                if let Some(else_stmts) = else_body {
+                    ctx.with_scope(|ctx| {
+                        if let Some(else_binding_name) = else_binding {
+                            if let Type::Datalit(datalit::tycheck::Type::Result(_)) = condition_ty {
+                                let error_ty = Type::Datalit(datalit::tycheck::Type::Error);
+                                ctx.variables.insert(else_binding_name, (error_ty, false));
+                            } else {
+                                let actual_type = type_to_string(db, &condition_ty);
+                                let err = ctx.error_type_mismatch(
+                                    condition,
+                                    "Result",
+                                    &actual_type,
+                                    "else binding requires Result type"
+                                );
+                                ctx.add_error(err);
+                            }
+                        }
+
+                        for stmt in else_stmts {
+                            check_statement(ctx, stmt);
+                        }
+                    });
                 }
             } else {
                 // No binding: check condition is bool type.
@@ -311,28 +296,18 @@ pub fn check_statement<'db>(
                     ctx.add_error(e);
                 }
 
-                // Save variables before entering then branch.
-                let saved_variables = ctx.variables.C();
-
-                // Type check then body.
-                for stmt in then_body {
-                    check_statement(ctx, stmt);
-                }
-
-                // Restore variables after then branch.
-                ctx.variables = saved_variables;
-
-                // Type check else body if present.
-                if let Some(else_stmts) = else_body {
-                    // Save variables before entering else branch.
-                    let saved_variables = ctx.variables.C();
-
-                    for stmt in else_stmts {
+                ctx.with_scope(|ctx| {
+                    for stmt in then_body {
                         check_statement(ctx, stmt);
                     }
+                });
 
-                    // Restore variables after else branch.
-                    ctx.variables = saved_variables;
+                if let Some(else_stmts) = else_body {
+                    ctx.with_scope(|ctx| {
+                        for stmt in else_stmts {
+                            check_statement(ctx, stmt);
+                        }
+                    });
                 }
             }
         }
@@ -352,16 +327,11 @@ pub fn check_statement<'db>(
                 }
             }
 
-            // Save variables before entering loop body.
-            let saved_variables = ctx.variables.C();
-
-            // Type check loop body.
-            for body_stmt in body {
-                check_statement(ctx, body_stmt);
-            }
-
-            // Restore variables after loop body.
-            ctx.variables = saved_variables;
+            ctx.with_scope(|ctx| {
+                for body_stmt in body {
+                    check_statement(ctx, body_stmt);
+                }
+            });
 
             // Decrement loop depth.
             ctx.loop_depth -= 1;
@@ -476,16 +446,13 @@ pub fn check_statement<'db>(
                     (MatchCaseKind::Term { name, binding }, Some(v)) => {
                         match &v.payload {
                             Some(payload_ty) => {
-                                // Save variables, add binding, check body, restore.
-                                let saved_variables = ctx.variables.C();
                                 let binding_type = Type::Datalit(*payload_ty.clone());
-                                ctx.add_variable(*binding, binding_type, false);
-
-                                for body_stmt in &case.body {
-                                    check_statement(ctx, body_stmt);
-                                }
-
-                                ctx.variables = saved_variables;
+                                ctx.with_scope(|ctx| {
+                                    ctx.add_variable(*binding, binding_type, false);
+                                    for body_stmt in &case.body {
+                                        check_statement(ctx, body_stmt);
+                                    }
+                                });
                                 covered.push(variant_name);
                                 continue; // Skip the body check below.
                             }
@@ -513,21 +480,19 @@ pub fn check_statement<'db>(
                     }
                 }
 
-                // Check body in saved scope for atom cases.
-                let saved_variables = ctx.variables.C();
-                for body_stmt in &case.body {
-                    check_statement(ctx, body_stmt);
-                }
-                ctx.variables = saved_variables;
+                ctx.with_scope(|ctx| {
+                    for body_stmt in &case.body {
+                        check_statement(ctx, body_stmt);
+                    }
+                });
             }
 
-            // Check default body if present.
             if let Some(default_stmts) = &stmt.default_body {
-                let saved_variables = ctx.variables.C();
-                for body_stmt in default_stmts {
-                    check_statement(ctx, body_stmt);
-                }
-                ctx.variables = saved_variables;
+                ctx.with_scope(|ctx| {
+                    for body_stmt in default_stmts {
+                        check_statement(ctx, body_stmt);
+                    }
+                });
             }
 
             // Check exhaustiveness: all variants must be covered or default must exist.
@@ -605,55 +570,7 @@ fn typecheck_field_step<'db>(
     base_ty: &Type<'db>,
     field: &FieldSelector<'db>,
 ) -> Result<Type<'db>, TypeError> {
-    let db = ctx.db;
-
-    let base_datalit_ty = match base_ty {
-        Type::Datalit(dt) => dt,
-        _ => {
-            return Err(TypeError::ProjectionOnNonAggregate {
-                ty: type_to_string(db, base_ty),
-            });
-        }
-    };
-
-    match field {
-        FieldSelector::Index(idx) => {
-            match base_datalit_ty {
-                datalit::tycheck::Type::AnonTuple(tuple) => {
-                    let idx_usize = *idx as usize;
-                    if idx_usize >= tuple.fields.len() {
-                        return Err(TypeError::FieldIndexOutOfBounds {
-                            index: *idx,
-                            tuple_size: tuple.fields.len(),
-                        });
-                    }
-                    Ok(Type::Datalit(tuple.fields[idx_usize].clone()))
-                }
-                _ => Err(TypeError::ProjectionOnNonAggregate {
-                    ty: type_to_string(db, base_ty),
-                }),
-            }
-        }
-        FieldSelector::Name(name) => {
-            match base_datalit_ty {
-                datalit::tycheck::Type::AnonStruct(struct_ty) => {
-                    let name_str = name.text(db);
-                    for f in &struct_ty.fields {
-                        if f.name.text(db) == name_str {
-                            return Ok(Type::Datalit((*f.ty).clone()));
-                        }
-                    }
-                    Err(TypeError::FieldNotFound {
-                        field_name: name_str.S(),
-                        ty: type_to_string(db, base_ty),
-                    })
-                }
-                _ => Err(TypeError::ProjectionOnNonAggregate {
-                    ty: type_to_string(db, base_ty),
-                }),
-            }
-        }
-    }
+    crate::synthesize::resolve_field_type(ctx.db, base_ty, field)
 }
 
 /// Typecheck an intermediate index step, returning the element/value type.
@@ -662,27 +579,8 @@ fn typecheck_index_step<'db>(
     base_ty: &Type<'db>,
     idx: &PlaceIndex<'db>,
 ) -> Result<Type<'db>, TypeError> {
-    let db = ctx.db;
-
-    let (element_ty, index_type) = match base_ty {
-        Type::Datalit(datalit::tycheck::Type::List(list)) => {
-            (
-                Type::Datalit(*list.element_type.clone()),
-                Type::Datalit(datalit::tycheck::Type::Index),
-            )
-        }
-        Type::Datalit(datalit::tycheck::Type::Map(map)) => {
-            (
-                Type::Datalit(*map.value_type.clone()),
-                Type::Datalit(*map.key_type.clone()),
-            )
-        }
-        _ => {
-            return Err(TypeError::DatalitError(
-                format!("indexing requires list or map type, got {}", type_to_string(db, base_ty)),
-            ));
-        }
-    };
+    let (element_ty, index_type) = crate::synthesize::resolve_index_types(ctx.db, base_ty)
+        .map_err(TypeError::DatalitError)?;
 
     if let Err(e) = check_expr(ctx, idx.index, &index_type) {
         ctx.add_error(e);
@@ -726,23 +624,10 @@ fn typecheck_set_index<'db>(
             }
         }
         Some(error_mode) => {
-            let (element_ty, index_type) = match base_ty {
-                Type::Datalit(datalit::tycheck::Type::List(list)) => {
-                    (
-                        Type::Datalit(*list.element_type.clone()),
-                        Type::Datalit(datalit::tycheck::Type::Index),
-                    )
-                }
-                Type::Datalit(datalit::tycheck::Type::Map(map)) => {
-                    (
-                        Type::Datalit(*map.value_type.clone()),
-                        Type::Datalit(*map.key_type.clone()),
-                    )
-                }
-                _ => {
-                    ctx.add_error(TypeError::DatalitError(
-                        format!("indexing requires list or map type, got {}", type_to_string(db, base_ty)),
-                    ));
+            let (element_ty, index_type) = match crate::synthesize::resolve_index_types(db, base_ty) {
+                Ok(types) => types,
+                Err(msg) => {
+                    ctx.add_error(TypeError::DatalitError(msg));
                     return;
                 }
             };

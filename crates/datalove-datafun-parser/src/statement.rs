@@ -249,7 +249,7 @@ impl<'db> Parser<'db> {
         loop {
             if self.peek_sigil(Sigil::Dot) {
                 self.next(); // consume .
-                let field = self.parse_set_field_selector();
+                let field = self.parse_field_selector();
                 steps.push(ast::PlaceStep::Field(field));
             } else if let Some(inner) = self.eat_branch(Sigil::BracketOpen) {
                 // Index access: [expr]? or [expr]!
@@ -276,33 +276,7 @@ impl<'db> Parser<'db> {
         steps
     }
 
-    /// Parse a field selector for set target (name or index).
-    fn parse_set_field_selector(&mut self) -> ast::FieldSelector<'db> {
-        match self.peek_word() {
-            Some(word) => {
-                self.next(); // consume word
-                // Check if all digits (tuple index).
-                if word.chars().all(|c| c.is_ascii_digit()) && !word.is_empty() {
-                    match word.parse::<u32>() {
-                        Ok(idx) => ast::FieldSelector::Index(idx),
-                        Err(_) => {
-                            // Too large for u32, treat as name.
-                            let name = InternedText::new(self.db, word.S());
-                            ast::FieldSelector::Name(name)
-                        }
-                    }
-                } else {
-                    let name = InternedText::new(self.db, word.S());
-                    ast::FieldSelector::Name(name)
-                }
-            }
-            None => {
-                // No valid field selector - create error name.
-                let name = InternedText::new(self.db, "<error>".S());
-                ast::FieldSelector::Name(name)
-            }
-        }
-    }
+
 
     fn parse_fun(
         &mut self,
@@ -356,14 +330,10 @@ impl<'db> Parser<'db> {
         let mut body = vec![];
         let mut found_end_fun = false;
         while let Some((_, line)) = remaining_lines.peek() {
-            if line.len() >= 2 {
-                if let (Some(TreeToken::Token(t1)), Some(TreeToken::Token(t2))) = (line.get(0), line.get(1)) {
-                    if let (Some("end"), Some("fun")) = (t1.word_str(self.db), t2.word_str(self.db)) {
-                        remaining_lines.next(); // consume "end fun" line
-                        found_end_fun = true;
-                        break;
-                    }
-                }
+            if self.line_is_end_keyword(line, "fun") {
+                remaining_lines.next(); // consume "end fun" line
+                found_end_fun = true;
+                break;
             }
 
             let (_, line) = remaining_lines.next().X();
@@ -698,13 +668,9 @@ impl<'db> Parser<'db> {
         let mut found_else = false;
 
         while let Some((_, line)) = remaining_lines.peek() {
-            if line.len() >= 2 {
-                if let (Some(TreeToken::Token(t1)), Some(TreeToken::Token(t2))) = (line.get(0), line.get(1)) {
-                    if let (Some("end"), Some("if")) = (t1.word_str(self.db), t2.word_str(self.db)) {
-                        remaining_lines.next(); // consume "end if" line
-                        break;
-                    }
-                }
+            if self.line_is_end_keyword(line, "if") {
+                remaining_lines.next(); // consume "end if" line
+                break;
             }
 
             if line.len() >= 1 {
@@ -766,13 +732,9 @@ impl<'db> Parser<'db> {
             let mut body = vec![];
 
             while let Some((_, line)) = remaining_lines.peek() {
-                if line.len() >= 2 {
-                    if let (Some(TreeToken::Token(t1)), Some(TreeToken::Token(t2))) = (line.get(0), line.get(1)) {
-                        if let (Some("end"), Some("if")) = (t1.word_str(self.db), t2.word_str(self.db)) {
-                            remaining_lines.next(); // consume "end if" line
-                            break;
-                        }
-                    }
+                if self.line_is_end_keyword(line, "if") {
+                    remaining_lines.next(); // consume "end if" line
+                    break;
                 }
 
                 let (_, line) = remaining_lines.next().X();
@@ -813,15 +775,9 @@ impl<'db> Parser<'db> {
         // Parse body until we hit "end loop".
         let mut body = vec![];
         while let Some((_, line)) = remaining_lines.peek() {
-            // Check for "end loop".
-            if line.len() >= 2 {
-                if let (Some(TreeToken::Token(t1)), Some(TreeToken::Token(t2))) = (line.get(0), line.get(1)) {
-                    if let (Some("end"), Some("loop")) = (t1.word_str(self.db), t2.word_str(self.db)) {
-                        // Consume "end loop" line.
-                        remaining_lines.next();
-                        break;
-                    }
-                }
+            if self.line_is_end_keyword(line, "loop") {
+                remaining_lines.next();
+                break;
             }
 
             let (_, line) = remaining_lines.next().X();
@@ -905,14 +861,9 @@ impl<'db> Parser<'db> {
         let mut default_body = None;
 
         while let Some((_, line)) = remaining_lines.peek() {
-            // Check for "end match".
-            if line.len() >= 2 {
-                if let (Some(TreeToken::Token(t1)), Some(TreeToken::Token(t2))) = (line.get(0), line.get(1)) {
-                    if let (Some("end"), Some("match")) = (t1.word_str(self.db), t2.word_str(self.db)) {
-                        remaining_lines.next(); // consume "end match"
-                        break;
-                    }
-                }
+            if self.line_is_end_keyword(line, "match") {
+                remaining_lines.next(); // consume "end match"
+                break;
             }
 
             // Check for "case" line.
@@ -1027,13 +978,8 @@ impl<'db> Parser<'db> {
     ) -> Vec<ast::Statement<'db>> {
         let mut body = vec![];
         while let Some((_, line)) = remaining_lines.peek() {
-            // Check for "end match".
-            if line.len() >= 2 {
-                if let (Some(TreeToken::Token(t1)), Some(TreeToken::Token(t2))) = (line.get(0), line.get(1)) {
-                    if let (Some("end"), Some("match")) = (t1.word_str(self.db), t2.word_str(self.db)) {
-                        break;
-                    }
-                }
+            if self.line_is_end_keyword(line, "match") {
+                break;
             }
             // Check for next "case".
             if let Some(TreeToken::Token(t1)) = line.get(0) {

@@ -488,6 +488,17 @@ impl<'db> TypeContext<'db> {
         self.function_asts.insert(name, (func_ast, Some(source_module_id)));
     }
 
+    /// Execute a closure in a new variable scope.
+    ///
+    /// Saves and restores the variable bindings around the closure,
+    /// so any variables added inside are not visible outside.
+    pub fn with_scope<R>(&mut self, f: impl FnOnce(&mut Self) -> R) -> R {
+        let saved = self.variables.clone();
+        let result = f(self);
+        self.variables = saved;
+        result
+    }
+
     pub fn lookup_variable(&self, name: InternedText<'db>) -> Option<Type<'db>> {
         self.variables.get(&name).map(|(ty, _)| ty.clone())
     }

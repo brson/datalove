@@ -581,6 +581,8 @@ fn has_side_effects(instr: &Instruction) -> bool {
         Instruction::Intrinsic { .. } => true,
         // List set has side effects (mutates list).
         Instruction::ListSet { .. } => true,
+        // Map set value has side effects (mutates map).
+        Instruction::MapSetValue { .. } => true,
         // Map upsert has side effects (mutates map).
         Instruction::MapUpsert { .. } => true,
         // Everything else is pure.

@@ -204,37 +204,27 @@ impl<'db> Parser<'db> {
     }
 
     /// Parse a field selector (name or index) after a dot.
-    fn parse_field_selector(&mut self) -> ast::FieldSelector<'db> {
-        match self.peek() {
-            Some(TreeToken::Token(token)) => {
-                match token.kind(self.db) {
-                    TokenKind::Word => {
-                        let word = token.word_str(self.db).unwrap_or("");
-                        self.next(); // consume word
-                        // Check if all digits (tuple index).
-                        if word.chars().all(|c| c.is_ascii_digit()) && !word.is_empty() {
-                            match word.parse::<u32>() {
-                                Ok(idx) => ast::FieldSelector::Index(idx),
-                                Err(_) => {
-                                    // Too large for u32, treat as name.
-                                    let name = InternedText::new(self.db, word.S());
-                                    ast::FieldSelector::Name(name)
-                                }
-                            }
-                        } else {
+    pub(super) fn parse_field_selector(&mut self) -> ast::FieldSelector<'db> {
+        match self.peek_word() {
+            Some(word) => {
+                self.next(); // consume word
+                // Check if all digits (tuple index).
+                if word.chars().all(|c| c.is_ascii_digit()) && !word.is_empty() {
+                    match word.parse::<u32>() {
+                        Ok(idx) => ast::FieldSelector::Index(idx),
+                        Err(_) => {
+                            // Too large for u32, treat as name.
                             let name = InternedText::new(self.db, word.S());
                             ast::FieldSelector::Name(name)
                         }
                     }
-                    _ => {
-                        // No valid field selector - create error name.
-                        let name = InternedText::new(self.db, "<error>".S());
-                        ast::FieldSelector::Name(name)
-                    }
+                } else {
+                    let name = InternedText::new(self.db, word.S());
+                    ast::FieldSelector::Name(name)
                 }
             }
-            _ => {
-                // No token after dot - create error name.
+            None => {
+                // No valid field selector - create error name.
                 let name = InternedText::new(self.db, "<error>".S());
                 ast::FieldSelector::Name(name)
             }

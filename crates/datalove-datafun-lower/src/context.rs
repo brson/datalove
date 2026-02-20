@@ -1204,6 +1204,59 @@ impl<'db> LowerCtx<'db> {
         }
     }
 
+    /// Emit a None early-return block body.
+    ///
+    /// Caller must have already called `start_block` on the early-return block.
+    pub fn emit_early_return_none(&mut self, set_target_drops: bool) {
+        let return_type = self.return_type.clone()
+            .expect("early return requires function context");
+        let none_value = self.fresh_value(return_type);
+        self.emit_wrap_none(none_value);
+        self.emit_pending_intermediate_drops();
+        if set_target_drops {
+            self.emit_before_set_target_early_return_drops();
+        }
+        self.emit_before_try_return_drops();
+        let terminator = if self.is_script_unit {
+            Terminator::UnitEarlyReturn { value: Operand::Value(none_value) }
+        } else {
+            Terminator::Return { value: Some(Operand::Value(none_value)) }
+        };
+        self.finish_block(terminator);
+    }
+
+    /// Emit an Err early-return block body with a string error message.
+    ///
+    /// Caller must have already called `start_block` on the early-return block.
+    pub fn emit_early_return_err_message(&mut self, message: &str, set_target_drops: bool) {
+        let err_msg = self.fresh_value(IrType::String);
+        self.emit_const(err_msg, ConstValue::String(message.to_string()));
+        let err_value = self.fresh_value(IrType::Error);
+        self.emit_error_from(err_value, Operand::Value(err_msg));
+        self.emit_early_return_err(Operand::Value(err_value), set_target_drops);
+    }
+
+    /// Emit an Err early-return block body with an existing error operand.
+    ///
+    /// Caller must have already called `start_block` on the early-return block.
+    pub fn emit_early_return_err(&mut self, err_operand: Operand, set_target_drops: bool) {
+        let return_type = self.return_type.clone()
+            .expect("early return requires function context");
+        let wrapped = self.fresh_value(return_type);
+        self.emit_wrap_err(wrapped, err_operand);
+        self.emit_pending_intermediate_drops();
+        if set_target_drops {
+            self.emit_before_set_target_early_return_drops();
+        }
+        self.emit_before_try_return_drops();
+        let terminator = if self.is_script_unit {
+            Terminator::UnitEarlyReturn { value: Operand::Value(wrapped) }
+        } else {
+            Terminator::Return { value: Some(Operand::Value(wrapped)) }
+        };
+        self.finish_block(terminator);
+    }
+
     /// Get binding IDs to drop for then-branch exit.
     fn get_scheduled_binding_ids_then(&self, stmt_idx: usize) -> Vec<BindingId> {
         self.body.drop_schedule.then_branch_exit.get(&stmt_idx)
