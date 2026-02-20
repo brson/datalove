@@ -2,6 +2,46 @@
 
 
 
+
+## 2026/02/19 - Pretty symbols
+
+In a future where AI is writing most code and I'm just reviewing,
+we can think about having the code use non-ascii symbols
+where it makes it more readable.
+
+```
+// structs
+{
+  foo: int,
+}
+
+// tuples
+(int, int)
+
+// lists
+[1, 2, 3]
+
+// maps
+%{ int = int }
+map { int -> int }
+⟪ int → int ⟫
+
+// sets
+#{ int }
+set { int }
+⟨ int ⟩
+
+// tables
+[| a, b ; 1, 2 |]
+⟦ a, b ; 1, 2 ⟧
+
+// tensors
+(| int, 2 |)
+⟬ int, 2 ⟭
+```
+
+
+
 ## 2026/02/18 - Generics
 
 ```datalove
