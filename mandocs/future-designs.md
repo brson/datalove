@@ -3,6 +3,27 @@
 
 
 
+## 2026/02/20 - Workspaces, the package world, and native riders
+
+The workspace contains all the resources the compiler incorporates into a single
+interactive compilation session.
+
+It consists of:
+
+- an optional "workspace.dlt" manifest, otherwise inferred.
+- any number of scripts, typically from on disk files, ".dfs" extension
+- any number of interactive script sessions with chains of script units
+- any number of package libraries, containing packages,
+  containing a flat list of modules, ".dfm" extension
+- each module may declare one accompanying _native rider_,
+  a Rust crate that is compiled and linked specifically to support the module,
+  and whose interface is defined by an _interface file_, ".dli" extension.
+  The rider lives with the package.
+- the optional system package library and its package's riders.
+
+
+
+
 ## 2026/02/19 - Pretty symbols
 
 In a future where AI is writing most code and I'm just reviewing,
@@ -125,11 +146,6 @@ Results are returned by reference,
 mutability determined by context.
 
 Indexing operations return an option.
-
-
-
-
-## 2026/02/10 - Workspaces, the package world, and native riders
 
 
 
