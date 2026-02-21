@@ -1292,6 +1292,13 @@ fn lower_collection_index_value<'db>(
             map: base_op,
             key: key_op,
         });
+    } else if matches!(&base_type, IrType::Tensor(_, _)) {
+        ctx.emit(Instruction::TensorGet {
+            dest,
+            is_valid,
+            tensor: base_op,
+            index: key_op,
+        });
     } else {
         ctx.emit(Instruction::ListGet {
             dest,
@@ -1385,9 +1392,10 @@ fn lower_place_expression<'db>(
                 let base_type = operand_type(ctx, &current_op);
                 let key_op = lower_operand(ctx, idx.index)?;
                 let is_map = matches!(&base_type, IrType::Map(_, _));
+                let is_tensor = matches!(&base_type, IrType::Tensor(_, _));
 
                 if i == last_idx {
-                    // Final step — produce a value via ListGet/MapGet.
+                    // Final step — produce a value via ListGet/MapGet/TensorGet.
                     let result_type = ctx.expr_type(expr);
                     let dest = ctx.fresh_value(result_type);
                     let is_valid = ctx.fresh_value(IrType::Bool);
@@ -1398,6 +1406,13 @@ fn lower_place_expression<'db>(
                             is_valid,
                             map: current_op,
                             key: key_op,
+                        });
+                    } else if is_tensor {
+                        ctx.emit(Instruction::TensorGet {
+                            dest,
+                            is_valid,
+                            tensor: current_op,
+                            index: key_op,
                         });
                     } else {
                         ctx.emit(Instruction::ListGet {

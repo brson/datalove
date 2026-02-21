@@ -1,0 +1,145 @@
+DualAnalysis(
+    sections: [
+        DualSectionResult(
+            section_type: "scriptunit-fragment",
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            interp_lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 10u32
+                        v1 = const 20u32
+                        v2 = const 30u32
+                        v3 = const 40u32
+                        v4 = const 50u32
+                        v5 = const 60u32
+                        v6 = [| v0 v1 v2, v3 v4 v5 |]
+                        v7 = const 0index
+                        v8 = const 1index
+                        v9 = const 99u32
+                        v10 = call @0 u0(v6, v7, v8, v9)
+                        debuglog v10
+                        drop v10
+                        v11 = const 10u32
+                        v12 = const 20u32
+                        v13 = const 30u32
+                        v14 = const 40u32
+                        v15 = const 50u32
+                        v16 = const 60u32
+                        v17 = [| v11 v12 v13, v14 v15 v16 |]
+                        v18 = const 1index
+                        v19 = const 2index
+                        v20 = const 88u32
+                        v21 = call @1 u0(v17, v18, v19, v20)
+                        debuglog v21
+                        drop v21
+                        unit_end
+                    
+                    fn set_elem(p0, p1, p2, p3):
+                    block0:
+                        v0 = move p0
+                        store.move.tracked s0, v0
+                        v1 = tensorboundscheck s0[p1]
+                        branch v1, block2, block1
+                    block1:
+                        v2 = none
+                        drop.tracked s0
+                        return v2
+                    block2:
+                        v3 = tensorindexref s0[p1]
+                        v4 = tensorboundscheck *v3[p2]
+                        branch v4, block4, block3
+                    block3:
+                        v5 = none
+                        drop.tracked s0
+                        return v5
+                    block4:
+                        v6 = copy p3
+                        tensorset *v3[p2] = v6
+                        v7 = load.move.tracked s0
+                        v8 = some v7
+                        return v8
+                """,
+            ),
+            aot_lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 10u32
+                        v1 = const 20u32
+                        v2 = const 30u32
+                        v3 = const 40u32
+                        v4 = const 50u32
+                        v5 = const 60u32
+                        v6 = [| v0 v1 v2, v3 v4 v5 |]
+                        v7 = const 0index
+                        v8 = const 1index
+                        v9 = const 99u32
+                        v10 = call @0 u0(v6, v7, v8, v9)
+                        debuglog v10
+                        drop v10
+                        v11 = const 10u32
+                        v12 = const 20u32
+                        v13 = const 30u32
+                        v14 = const 40u32
+                        v15 = const 50u32
+                        v16 = const 60u32
+                        v17 = [| v11 v12 v13, v14 v15 v16 |]
+                        v18 = const 1index
+                        v19 = const 2index
+                        v20 = const 88u32
+                        v21 = call @1 u0(v17, v18, v19, v20)
+                        debuglog v21
+                        drop v21
+                        unit_end
+                    
+                    fn set_elem(p0, p1, p2, p3):
+                    block0:
+                        v0 = move p0
+                        store.move.tracked s0, v0
+                        v1 = tensorboundscheck s0[p1]
+                        branch v1, block2, block1
+                    block1:
+                        v2 = none
+                        drop.tracked s0
+                        return v2
+                    block2:
+                        v3 = tensorindexref s0[p1]
+                        v4 = tensorboundscheck *v3[p2]
+                        branch v4, block4, block3
+                    block3:
+                        v5 = none
+                        drop.tracked s0
+                        return v5
+                    block4:
+                        v6 = copy p3
+                        tensorset *v3[p2] = v6
+                        v7 = load.move.tracked s0
+                        v8 = some v7
+                        return v8
+                """,
+            ),
+            ir_match: true,
+            interp_output: "some [| 10 99 30, 40 50 60 |]\nsome [| 10 20 30, 40 50 88 |]\n",
+            aot_output: "some [| 10 99 30, 40 50 60 |]\nsome [| 10 20 30, 40 50 88 |]\n",
+            output_match: true,
+            aot_compile: Some(AotCompileResult(
+                status: "Success",
+            )),
+            link: Some(LinkResult(
+                status: "Success",
+            )),
+            execution: Some(ExecutionResult(
+                status: "Success",
+                exit_code: 0,
+            )),
+        ),
+    ],
+)

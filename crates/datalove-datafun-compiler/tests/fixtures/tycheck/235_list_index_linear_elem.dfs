@@ -1,0 +1,4 @@
+// List index with linear element in consume context is NonCopyIndexProjection.
+fun get(a: [string], i: index): ?string
+    ret some (a[i]?)
+end fun

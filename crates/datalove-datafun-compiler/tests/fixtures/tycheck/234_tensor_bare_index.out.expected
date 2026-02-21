@@ -1,0 +1,40 @@
+{
+  "diagnostics": [
+    {
+      "code": "F011",
+      "labels": [
+        {
+          "message": "cannot infer type",
+          "span": [
+            92,
+            95
+          ],
+          "text": "[i]"
+        }
+      ],
+      "message": "bare index `a[i]` requires `?` or `!` suffix"
+    }
+  ],
+  "errors": [
+    {
+      "kind": "CannotSynthesize"
+    }
+  ],
+  "judgements": [
+    {
+      "kind": "function",
+      "name": "get",
+      "params": [
+        {
+          "name": "t",
+          "type": "[|u32, 1|]"
+        },
+        {
+          "name": "i",
+          "type": "index"
+        }
+      ],
+      "return_type": "u32"
+    }
+  ]
+}

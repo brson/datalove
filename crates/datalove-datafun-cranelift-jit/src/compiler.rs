@@ -462,6 +462,7 @@ fn register_runtime_symbols(jit_builder: &mut JITBuilder) {
     jit_builder.symbol("dtlv_rti_btreemap_get_value_ref_local", c::dtlv_rti_btreemap_get_value_ref_local as *const u8);
     jit_builder.symbol("dtlv_rti_btreemap_set_value_local", c::dtlv_rti_btreemap_set_value_local as *const u8);
     jit_builder.symbol("dtlv_rti_tensor_init_local", c::dtlv_rti_tensor_init_local as *const u8);
+    jit_builder.symbol("dtlv_rti_tensor_hyperplane_clone_local", c::dtlv_rti_tensor_hyperplane_clone_local as *const u8);
     jit_builder.symbol("dtlv_rti_table_create_local", c::dtlv_rti_table_create_local as *const u8);
     jit_builder.symbol("dtlv_rti_table_push_row_local", c::dtlv_rti_table_push_row_local as *const u8);
     jit_builder.symbol("dtlv_rti_table_build_from_rows_local", c::dtlv_rti_table_build_from_rows_local as *const u8);

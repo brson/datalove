@@ -4,7 +4,7 @@ scriptunit-fragment
 
 // Index into list of lists of strings — doubly linear.
 fun get_inner(a: [[string]], i: index): ?[string]
-    ret some (a[i]?)
+    ret some (a[i]?@)
 end fun
 
 debuglog get_inner([["hello", "world"], ["foo"]], (: index / 0))

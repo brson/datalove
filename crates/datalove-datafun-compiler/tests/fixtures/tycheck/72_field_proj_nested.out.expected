@@ -6,7 +6,7 @@
       "kind": "NonCopyFieldProjection"
     },
     {
-      "field_type": "(int, int)",
+      "field_type": "int",
       "kind": "NonCopyFieldProjection"
     }
   ],

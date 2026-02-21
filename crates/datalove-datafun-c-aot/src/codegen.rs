@@ -374,6 +374,18 @@ impl<'a> FunctionCodegenContext<'a> {
             Instruction::MapUpsert { map, key, value } => {
                 self.emit_map_upsert(out, map, key, value)?;
             }
+            Instruction::TensorGet { dest, is_valid, tensor, index } => {
+                self.emit_tensor_get(out, *dest, *is_valid, tensor, index)?;
+            }
+            Instruction::TensorBoundsCheck { is_valid, tensor, index } => {
+                self.emit_tensor_bounds_check(out, *is_valid, tensor, index)?;
+            }
+            Instruction::TensorSet { tensor, index, value } => {
+                self.emit_tensor_set(out, tensor, index, value)?;
+            }
+            Instruction::TensorIndexRef { dest, tensor, index } => {
+                self.emit_tensor_index_ref(out, *dest, tensor, index)?;
+            }
             Instruction::Nop => {}
         }
         Ok(())
@@ -2881,6 +2893,221 @@ impl<'a> FunctionCodegenContext<'a> {
     fn emit_unit_end(&mut self, out: &mut String, _result: Option<&Operand>) -> Result<(), CAotError> {
         // Script ends here.
         writeln!(out, "    return;").unwrap();
+        Ok(())
+    }
+
+    // ========================================================================
+    // Tensor Indexing
+    // ========================================================================
+
+    /// Emit a TensorBoundsCheck instruction.
+    fn emit_tensor_bounds_check(
+        &mut self,
+        out: &mut String,
+        is_valid: ValueId,
+        tensor: &Operand,
+        index: &Operand,
+    ) -> Result<(), CAotError> {
+        let is_valid_addr = self.value_addr(is_valid);
+        let tensor_addr = self.operand_addr(tensor);
+        let index_addr = self.operand_addr(index);
+        let shape_offset = std::mem::offset_of!(datalove_rtdt::Tensor, shape);
+
+        // shape_ptr = tensor.shape; dim0 = *shape_ptr; valid = index < dim0
+        writeln!(out, "    {{ index_t* __shape = *(index_t**)({} + {});", tensor_addr, shape_offset).unwrap();
+        writeln!(out, "    *(bool_t*){} = (*(index_t*){} < *__shape); }}", is_valid_addr, index_addr).unwrap();
+        Ok(())
+    }
+
+    /// Emit a TensorGet instruction.
+    fn emit_tensor_get(
+        &mut self,
+        out: &mut String,
+        dest: ValueId,
+        is_valid: ValueId,
+        tensor: &Operand,
+        index: &Operand,
+    ) -> Result<(), CAotError> {
+        let dest_addr = self.value_addr(dest);
+        let is_valid_addr = self.value_addr(is_valid);
+        let tensor_addr = self.operand_addr(tensor);
+        let index_addr = self.operand_addr(index);
+
+        let tensor_ty = self.operand_type(tensor).clone();
+        let (elem_ty, rank) = match &tensor_ty {
+            IrType::Tensor(e, r) => (e.as_ref().clone(), *r),
+            _ => return Err(CAotError::Codegen(format!(
+                "TensorGet on non-tensor type: {:?}", tensor_ty
+            ))),
+        };
+
+        let shape_offset = std::mem::offset_of!(datalove_rtdt::Tensor, shape);
+
+        // Bounds check.
+        writeln!(out, "    {{ index_t* __shape = *(index_t**)({} + {});", tensor_addr, shape_offset).unwrap();
+        writeln!(out, "    *(bool_t*){} = (*(index_t*){} < *__shape);", is_valid_addr, index_addr).unwrap();
+        writeln!(out, "    if (*(bool_t*){}) {{", is_valid_addr).unwrap();
+
+        if rank == 1 {
+            let elem_repr = types::ir_type_to_crepr(&elem_ty);
+            let elem_size = elem_repr.layout().size;
+            let ptr_base_offset = std::mem::offset_of!(datalove_rtdt::Tensor, ptr_base);
+            let offset_elems_offset = std::mem::offset_of!(datalove_rtdt::Tensor, offset_elems);
+            let strides_offset = std::mem::offset_of!(datalove_rtdt::Tensor, strides);
+
+            // elem_addr = ptr_base + (offset + index * strides[0]) * elem_size
+            writeln!(out, "        void* __elem = *(void**)({t} + {pb}) + (size_t)(*(index_t*)({t} + {oe}) + *(index_t*){idx} * **(index_t**)({t} + {st})) * {es};",
+                t = tensor_addr, pb = ptr_base_offset, oe = offset_elems_offset,
+                idx = index_addr, st = strides_offset, es = elem_size).unwrap();
+
+            match &elem_repr {
+                CRepr::Scalar(c_ty) => {
+                    writeln!(out, "        *({c_ty}*){dest_addr} = *({c_ty}*)__elem;").unwrap();
+                }
+                CRepr::Aggregate(layout) => {
+                    if layout.size > 0 {
+                        let tydesc = self.tydesc_name(&elem_ty);
+                        writeln!(out, "        dtlv_rti_clone_local(rt, __elem, &{}, {}, &{});",
+                            tydesc, dest_addr, tydesc).unwrap();
+                    }
+                }
+            }
+        } else {
+            // Rank > 1: call hyperplane_clone.
+            let tensor_tydesc = self.tydesc_name(&tensor_ty);
+            writeln!(out, "        dtlv_rti_tensor_hyperplane_clone_local(rt, {}, &{}, *(index_t*){}, {});",
+                tensor_addr, tensor_tydesc, index_addr, dest_addr).unwrap();
+        }
+
+        writeln!(out, "    }} }}").unwrap();
+
+        // Conditional tracking byte.
+        if let Some(track_offset) = self.layout.value_tracking_byte(dest.0) {
+            writeln!(out, "    __frame[{}] = *(bool_t*){} ? TRACK_LIVE : TRACK_UNINIT;",
+                track_offset, is_valid_addr).unwrap();
+        }
+
+        Ok(())
+    }
+
+    /// Emit a TensorSet instruction.
+    fn emit_tensor_set(
+        &mut self,
+        out: &mut String,
+        tensor: &Operand,
+        index: &Operand,
+        value: &Operand,
+    ) -> Result<(), CAotError> {
+        let tensor_addr = self.operand_addr(tensor);
+        let index_addr = self.operand_addr(index);
+        let value_addr = self.operand_addr(value);
+
+        let tensor_ty = self.operand_type(tensor).clone();
+        let elem_ty = match &tensor_ty {
+            IrType::Tensor(e, _) => e.as_ref().clone(),
+            _ => return Err(CAotError::Codegen(format!(
+                "TensorSet on non-tensor type: {:?}", tensor_ty
+            ))),
+        };
+        let elem_repr = types::ir_type_to_crepr(&elem_ty);
+        let elem_size = elem_repr.layout().size;
+        let elem_tydesc = self.tydesc_name(&elem_ty);
+
+        let ptr_base_offset = std::mem::offset_of!(datalove_rtdt::Tensor, ptr_base);
+        let offset_elems_offset = std::mem::offset_of!(datalove_rtdt::Tensor, offset_elems);
+        let strides_offset = std::mem::offset_of!(datalove_rtdt::Tensor, strides);
+
+        writeln!(out, "    {{ void* __elem = *(void**)({t} + {pb}) + (size_t)(*(index_t*)({t} + {oe}) + *(index_t*){idx} * **(index_t**)({t} + {st})) * {es};",
+            t = tensor_addr, pb = ptr_base_offset, oe = offset_elems_offset,
+            idx = index_addr, st = strides_offset, es = elem_size).unwrap();
+
+        // Destroy old element.
+        writeln!(out, "    dtlv_rti_any_destroy_local(rt, __elem, &{});", elem_tydesc).unwrap();
+
+        // Store new value.
+        match &elem_repr {
+            CRepr::Scalar(c_ty) => {
+                writeln!(out, "    *({c_ty}*)__elem = *({c_ty}*){value_addr};").unwrap();
+            }
+            CRepr::Aggregate(layout) => {
+                if layout.size > 0 {
+                    writeln!(out, "    dtlv_rti_move_value_local(rt, {}, &{}, __elem);",
+                        value_addr, elem_tydesc).unwrap();
+                }
+            }
+        }
+
+        writeln!(out, "    }}").unwrap();
+        Ok(())
+    }
+
+    /// Emit a TensorIndexRef instruction.
+    fn emit_tensor_index_ref(
+        &mut self,
+        out: &mut String,
+        dest: ValueId,
+        tensor: &Operand,
+        index: &Operand,
+    ) -> Result<(), CAotError> {
+        let dest_addr = self.value_addr(dest);
+        let tensor_addr = self.operand_addr(tensor);
+        let index_addr = self.operand_addr(index);
+
+        let tensor_ty = self.operand_type(tensor).clone();
+        let (elem_ty, rank) = match &tensor_ty {
+            IrType::Tensor(e, r) => (e.as_ref().clone(), *r),
+            _ => return Err(CAotError::Codegen(format!(
+                "TensorIndexRef on non-tensor type: {:?}", tensor_ty
+            ))),
+        };
+
+        let ptr_base_offset = std::mem::offset_of!(datalove_rtdt::Tensor, ptr_base);
+        let offset_elems_offset = std::mem::offset_of!(datalove_rtdt::Tensor, offset_elems);
+        let strides_offset = std::mem::offset_of!(datalove_rtdt::Tensor, strides);
+
+        if rank == 1 {
+            let elem_repr = types::ir_type_to_crepr(&elem_ty);
+            let elem_size = elem_repr.layout().size;
+
+            // Element pointer.
+            writeln!(out, "    *(void**){} = *(void**)({t} + {pb}) + (size_t)(*(index_t*)({t} + {oe}) + *(index_t*){idx} * **(index_t**)({t} + {st})) * {es};",
+                dest_addr,
+                t = tensor_addr, pb = ptr_base_offset, oe = offset_elems_offset,
+                idx = index_addr, st = strides_offset, es = elem_size).unwrap();
+        } else {
+            // Rank > 1: construct view tensor at dest.
+            // For C AOT, the dest is a Ref (pointer), so we need stack storage for the view.
+            let shape_offset = std::mem::offset_of!(datalove_rtdt::Tensor, shape);
+            let layout_offset = std::mem::offset_of!(datalove_rtdt::Tensor, layout);
+            let capacity_offset = std::mem::offset_of!(datalove_rtdt::Tensor, capacity_elems);
+            let index_size = std::mem::size_of::<datalove_rtdt::Index>();
+            let tensor_size = std::mem::size_of::<datalove_rtdt::Tensor>();
+
+            writeln!(out, "    {{ /* TensorIndexRef rank > 1: construct view */").unwrap();
+            // Allocate view tensor on C stack as a local variable.
+            writeln!(out, "    static _Alignas(8) uint8_t __view[{}];", tensor_size).unwrap();
+            // Copy ptr_base.
+            writeln!(out, "    *(void**)(__view + {}) = *(void**)({} + {});",
+                ptr_base_offset, tensor_addr, ptr_base_offset).unwrap();
+            // Set capacity_elems = 0.
+            writeln!(out, "    *(index_t*)(__view + {}) = 0;", capacity_offset).unwrap();
+            // new_offset = offset + idx * strides[0].
+            writeln!(out, "    *(index_t*)(__view + {oe}) = *(index_t*)({t} + {oe}) + *(index_t*){idx} * **(index_t**)({t} + {st});",
+                oe = offset_elems_offset, t = tensor_addr, idx = index_addr, st = strides_offset).unwrap();
+            // shape = parent.shape + 1.
+            writeln!(out, "    *(void**)(__view + {}) = (void*)(*(index_t**)({} + {}) + 1);",
+                shape_offset, tensor_addr, shape_offset).unwrap();
+            // strides = parent.strides + 1.
+            writeln!(out, "    *(void**)(__view + {}) = (void*)(*(index_t**)({} + {}) + 1);",
+                strides_offset, tensor_addr, strides_offset).unwrap();
+            let _ = index_size; // Pointer arithmetic on index_t* already handles element size.
+            // layout = parent.layout.
+            writeln!(out, "    *(uint8_t*)(__view + {}) = *(uint8_t*)({} + {});",
+                layout_offset, tensor_addr, layout_offset).unwrap();
+            // Store pointer to view as the ref.
+            writeln!(out, "    *(void**){} = __view; }}", dest_addr).unwrap();
+        }
+
         Ok(())
     }
 }

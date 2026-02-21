@@ -209,6 +209,12 @@ fn error_to_json(error: &datalove_datafun_tycheck::TypeError) -> rmx::serde_json
                 "field_type": field_ty
             })
         }
+        TypeError::NonCopyIndexProjection { elem_ty } => {
+            json!({
+                "kind": "NonCopyIndexProjection",
+                "element_type": elem_ty
+            })
+        }
         TypeError::VoidFunctionReturnsValue => {
             json!({
                 "kind": "VoidFunctionReturnsValue"

@@ -41,9 +41,11 @@ Analysis(
                         drop p0
                         return v4
                     block2:
-                        v5 = ok v0
+                        v5 = clone v0
+                        drop v0
+                        v6 = ok v5
                         drop p0
-                        return v5
+                        return v6
                 """,
             ),
             output: "(fragment executed)",

@@ -353,6 +353,8 @@ pub enum TypeError {
     ProjectionOnNonAggregate { ty: String },
     /// Field projection on move-type field (not allowed outside ref context).
     NonCopyFieldProjection { field_ty: String },
+    /// Index projection on move-type element (not allowed outside ref context).
+    NonCopyIndexProjection { elem_ty: String },
     /// Void function returning a value.
     VoidFunctionReturnsValue,
     /// Non-void function with bare return (missing return value).

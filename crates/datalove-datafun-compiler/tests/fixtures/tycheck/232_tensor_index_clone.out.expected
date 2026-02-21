@@ -1,0 +1,21 @@
+{
+  "diagnostics": [],
+  "errors": [],
+  "judgements": [
+    {
+      "kind": "function",
+      "name": "get",
+      "params": [
+        {
+          "name": "t",
+          "type": "[|u32, 2|]"
+        },
+        {
+          "name": "i",
+          "type": "index"
+        }
+      ],
+      "return_type": "?[|u32, 1|]"
+    }
+  ]
+}

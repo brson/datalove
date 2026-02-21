@@ -1,0 +1,26 @@
+{
+  "diagnostics": [],
+  "errors": [
+    {
+      "element_type": "string",
+      "kind": "NonCopyIndexProjection"
+    }
+  ],
+  "judgements": [
+    {
+      "kind": "function",
+      "name": "get",
+      "params": [
+        {
+          "name": "a",
+          "type": "[string]"
+        },
+        {
+          "name": "i",
+          "type": "index"
+        }
+      ],
+      "return_type": "?string"
+    }
+  ]
+}

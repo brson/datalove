@@ -984,6 +984,27 @@ impl RemapContext {
                 key: self.remap_operand(key),
                 value: self.remap_operand(value),
             },
+            Instruction::TensorGet { dest, is_valid, tensor, index } => Instruction::TensorGet {
+                dest: self.remap_value(*dest),
+                is_valid: self.remap_value(*is_valid),
+                tensor: self.remap_operand(tensor),
+                index: self.remap_operand(index),
+            },
+            Instruction::TensorBoundsCheck { is_valid, tensor, index } => Instruction::TensorBoundsCheck {
+                is_valid: self.remap_value(*is_valid),
+                tensor: self.remap_operand(tensor),
+                index: self.remap_operand(index),
+            },
+            Instruction::TensorSet { tensor, index, value } => Instruction::TensorSet {
+                tensor: self.remap_operand(tensor),
+                index: self.remap_operand(index),
+                value: self.remap_operand(value),
+            },
+            Instruction::TensorIndexRef { dest, tensor, index } => Instruction::TensorIndexRef {
+                dest: self.remap_value(*dest),
+                tensor: self.remap_operand(tensor),
+                index: self.remap_operand(index),
+            },
             Instruction::Nop => Instruction::Nop,
         }
     }
@@ -1575,6 +1596,27 @@ fn replace_params_in_instruction(
             map: replace_operand(map),
             key: replace_operand(key),
             value: replace_operand(value),
+        },
+        Instruction::TensorGet { dest, is_valid, tensor, index } => Instruction::TensorGet {
+            dest: *dest,
+            is_valid: *is_valid,
+            tensor: replace_operand(tensor),
+            index: replace_operand(index),
+        },
+        Instruction::TensorBoundsCheck { is_valid, tensor, index } => Instruction::TensorBoundsCheck {
+            is_valid: *is_valid,
+            tensor: replace_operand(tensor),
+            index: replace_operand(index),
+        },
+        Instruction::TensorSet { tensor, index, value } => Instruction::TensorSet {
+            tensor: replace_operand(tensor),
+            index: replace_operand(index),
+            value: replace_operand(value),
+        },
+        Instruction::TensorIndexRef { dest, tensor, index } => Instruction::TensorIndexRef {
+            dest: *dest,
+            tensor: replace_operand(tensor),
+            index: replace_operand(index),
         },
     }
 }

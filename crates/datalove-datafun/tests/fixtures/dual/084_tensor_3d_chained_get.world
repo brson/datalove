@@ -1,0 +1,11 @@
+----------
+scriptunit-fragment
+----------
+
+// 3D tensor chained index to reach copy element.
+fun get(t: [|u32, 3|], i: index, j: index, k: index): ?u32
+    ret some (t[i]?[j]?[k]?)
+end fun
+
+debuglog get([| 1 2, 3 4,, 5 6, 7 8 |], (: index / 0), (: index / 1), (: index / 0))
+debuglog get([| 1 2, 3 4,, 5 6, 7 8 |], (: index / 1), (: index / 0), (: index / 1))

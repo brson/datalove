@@ -415,8 +415,12 @@ pub fn check_expr<'db>(
 
         // Handle clone/coerce operator (@) - explicit lossless conversion.
         ExprFunKind::CloneCoerce(ref cc_expr) => {
-            // Synthesize the operand's type.
-            let operand_ty = ctx.synthesize_expr(cc_expr.operand)?;
+            // @ borrows its operand, so set ref_context to allow non-copy projections.
+            let old_ref_context = ctx.ref_context;
+            ctx.ref_context = true;
+            let operand_ty = ctx.synthesize_expr(cc_expr.operand);
+            ctx.ref_context = old_ref_context;
+            let operand_ty = operand_ty?;
 
             // Check if the conversion is valid using can_clone_coerce_to.
             if can_clone_coerce_to(&operand_ty, expected, db) {

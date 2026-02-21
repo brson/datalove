@@ -117,6 +117,9 @@ pub struct IrInterpreter {
     /// Optional call dispatcher for JIT integration.
     /// Uses RefCell to allow passing &mut self to dispatch_call.
     call_dispatcher: RefCell<Option<Box<dyn CallDispatcher>>>,
+    /// Temporary view tensors (capacity_elems=0) created by TensorIndexRef.
+    /// Kept alive for the duration of the ref's usage.
+    temp_view_tensors: Vec<Box<rtdt::Tensor>>,
 }
 
 impl IrInterpreter {
@@ -139,6 +142,7 @@ impl IrInterpreter {
             runtime: datalove_rt::rust::Runtime::new_with_debug_mode(debug_mode),
             tydesc_table: IrTyDescTable::new(),
             call_dispatcher: RefCell::new(call_dispatcher),
+            temp_view_tensors: Vec::new(),
         }
     }
 
@@ -1321,6 +1325,159 @@ impl IrInterpreter {
                 if let Operand::Value(v) = value {
                     frame.mark_value_dropped(*v);
                 }
+            }
+            Instruction::TensorBoundsCheck { is_valid, tensor, index } => {
+                let tensor_val = self.read_operand(tensor, frame, frames);
+                let idx_val = self.read_operand(index, frame, frames);
+                let idx = unsafe { *(idx_val.ptr as *const rtdt::IndexRepr) };
+
+                let tensor_struct = unsafe { &*(tensor_val.ptr as *const rtdt::Tensor) };
+                let shape_ptr = tensor_struct.shape;
+                assert!(!shape_ptr.is_null(), "TensorBoundsCheck: shape is null");
+                let dim0 = unsafe { (*shape_ptr).0 };
+
+                let valid = idx < dim0;
+                let is_valid_dest = frame.value_dest(*is_valid);
+                unsafe { *(is_valid_dest.ptr as *mut bool) = valid; }
+                frame.mark_value_live(*is_valid);
+            }
+            Instruction::TensorGet { dest, is_valid, tensor, index } => {
+                let tensor_val = self.read_operand(tensor, frame, frames);
+                let idx_val = self.read_operand(index, frame, frames);
+                let idx = unsafe { *(idx_val.ptr as *const rtdt::IndexRepr) };
+
+                let tensor_struct = unsafe { &*(tensor_val.ptr as *const rtdt::Tensor) };
+                let tensor_tydesc = tensor_val.tydesc;
+                let rank = unsafe { (*tensor_tydesc).type_info.tensor.rank };
+                let element_tydesc = unsafe { (*tensor_tydesc).type_info.tensor.element_tydesc };
+                let shape_ptr = tensor_struct.shape;
+                assert!(!shape_ptr.is_null(), "TensorGet: shape is null");
+                let dim0 = unsafe { (*shape_ptr).0 };
+
+                let valid = idx < dim0;
+                let is_valid_dest = frame.value_dest(*is_valid);
+                unsafe { *(is_valid_dest.ptr as *mut bool) = valid; }
+                frame.mark_value_live(*is_valid);
+
+                if valid {
+                    if rank == 1 {
+                        // Rank 1: clone element at strided offset.
+                        let strides_ptr = tensor_struct.strides;
+                        let offset = tensor_struct.offset_elems.0;
+                        let stride0 = unsafe { (*strides_ptr).0 };
+                        let linear_offset = offset.saturating_add(idx.saturating_mul(stride0));
+                        let element_size = unsafe { (*element_tydesc).size as usize };
+                        let element_ptr = unsafe {
+                            tensor_struct.ptr_base.add(linear_offset as usize * element_size)
+                        };
+                        let dest_slot = frame.value_dest(*dest);
+                        let rt_handle = self.runtime.handle();
+                        let status = unsafe {
+                            datalove_rt::c::dtlv_rti_clone_local(
+                                rt_handle,
+                                element_ptr,
+                                element_tydesc,
+                                dest_slot.ptr,
+                                element_tydesc,
+                            )
+                        };
+                        assert_eq!(status, datalove_rt::c::RtStatus::Ok, "TensorGet clone failed");
+                    } else {
+                        // Rank > 1: hyperplane clone via runtime.
+                        let dest_slot = frame.value_dest(*dest);
+                        let rt_handle = self.runtime.handle();
+                        let status = unsafe {
+                            datalove_rt::c::dtlv_rti_tensor_hyperplane_clone_local(
+                                rt_handle,
+                                tensor_val.ptr,
+                                tensor_tydesc,
+                                idx,
+                                dest_slot.ptr,
+                            )
+                        };
+                        assert_eq!(status, datalove_rt::c::RtStatus::Ok, "TensorGet hyperplane_clone failed");
+                    }
+                    frame.mark_value_live(*dest);
+                }
+            }
+            Instruction::TensorSet { tensor, index, value } => {
+                let tensor_val = self.read_operand(tensor, frame, frames);
+                let idx_val = self.read_operand(index, frame, frames);
+                let value_val = self.read_operand(value, frame, frames);
+                let idx = unsafe { *(idx_val.ptr as *const rtdt::IndexRepr) };
+
+                let tensor_struct = unsafe { &*(tensor_val.ptr as *const rtdt::Tensor) };
+                let element_tydesc = unsafe { (*tensor_val.tydesc).type_info.tensor.element_tydesc };
+                let element_size = unsafe { (*element_tydesc).size as usize };
+
+                // Compute element address (rank 1 only, bounds already checked).
+                let strides_ptr = tensor_struct.strides;
+                let offset = tensor_struct.offset_elems.0;
+                let stride0 = unsafe { (*strides_ptr).0 };
+                let linear_offset = offset.saturating_add(idx.saturating_mul(stride0));
+                let element_ptr = unsafe {
+                    (tensor_struct.ptr_base as *mut u8).add(linear_offset as usize * element_size)
+                };
+
+                // Destroy old element.
+                let rt_handle = self.runtime.handle();
+                let status = unsafe {
+                    datalove_rt::c::dtlv_rti_any_destroy_local(
+                        rt_handle,
+                        element_ptr,
+                        element_tydesc,
+                    )
+                };
+                assert_eq!(status, datalove_rt::c::RtStatus::Ok, "TensorSet destroy old failed");
+
+                // Copy new element in.
+                unsafe {
+                    std::ptr::copy_nonoverlapping(value_val.ptr, element_ptr, element_size);
+                }
+
+                // Mark value operand as consumed.
+                if let Operand::Value(v) = value {
+                    frame.mark_value_dropped(*v);
+                }
+            }
+            Instruction::TensorIndexRef { dest, tensor, index } => {
+                let tensor_val = self.read_operand(tensor, frame, frames);
+                let idx_val = self.read_operand(index, frame, frames);
+                let idx = unsafe { *(idx_val.ptr as *const rtdt::IndexRepr) };
+
+                let tensor_struct = unsafe { &*(tensor_val.ptr as *const rtdt::Tensor) };
+                let rank = unsafe { (*tensor_val.tydesc).type_info.tensor.rank };
+                let element_tydesc = unsafe { (*tensor_val.tydesc).type_info.tensor.element_tydesc };
+
+                let strides_ptr = tensor_struct.strides;
+                let offset = tensor_struct.offset_elems.0;
+                let stride0 = unsafe { (*strides_ptr).0 };
+                let linear_offset = offset.saturating_add(idx.saturating_mul(stride0));
+
+                if rank == 1 {
+                    // Rank 1: ref to element.
+                    let element_size = unsafe { (*element_tydesc).size as usize };
+                    let element_ptr = unsafe {
+                        (tensor_struct.ptr_base as *mut u8).add(linear_offset as usize * element_size)
+                    };
+                    let dest_slot = frame.value_dest(*dest);
+                    unsafe { *(dest_slot.ptr as *mut *mut u8) = element_ptr; }
+                } else {
+                    // Rank > 1: construct view Tensor on heap, store pointer.
+                    let view = Box::new(rtdt::Tensor {
+                        ptr_base: tensor_struct.ptr_base,
+                        offset_elems: rtdt::Index(linear_offset),
+                        capacity_elems: rtdt::Index::ZERO,
+                        shape: unsafe { tensor_struct.shape.add(1) },
+                        strides: unsafe { tensor_struct.strides.add(1) },
+                        layout: tensor_struct.layout,
+                    });
+                    let view_ptr = &*view as *const rtdt::Tensor as *mut u8;
+                    let dest_slot = frame.value_dest(*dest);
+                    unsafe { *(dest_slot.ptr as *mut *mut u8) = view_ptr; }
+                    self.temp_view_tensors.push(view);
+                }
+                frame.mark_value_live(*dest);
             }
             Instruction::Widen { dest, src } => {
                 // Widen a fixed-width integer to Int.

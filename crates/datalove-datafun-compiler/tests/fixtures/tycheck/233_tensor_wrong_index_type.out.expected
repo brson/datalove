@@ -1,0 +1,42 @@
+{
+  "diagnostics": [
+    {
+      "code": "F016",
+      "labels": [
+        {
+          "message": "type mismatch",
+          "span": [
+            107,
+            108
+          ],
+          "text": "i"
+        }
+      ],
+      "message": "mismatched types: expected `index`, found `u32`"
+    }
+  ],
+  "errors": [
+    {
+      "actual": "u32",
+      "expected": "index",
+      "kind": "TypeMismatch"
+    }
+  ],
+  "judgements": [
+    {
+      "kind": "function",
+      "name": "get",
+      "params": [
+        {
+          "name": "t",
+          "type": "[|u32, 1|]"
+        },
+        {
+          "name": "i",
+          "type": "u32"
+        }
+      ],
+      "return_type": "?u32"
+    }
+  ]
+}

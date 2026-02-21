@@ -52,6 +52,8 @@ pub struct RuntimeImports {
     pub map_build_from_sorted: FuncId,
     /// `dtlv_rti_tensor_init_local(rt, element_data_in, element_count, element_tydesc, shape_ptr, rank, tensor_out, tensor_tydesc) -> RtStatus`
     pub tensor_init: FuncId,
+    /// `dtlv_rti_tensor_hyperplane_clone_local(rt, tensor_ref, tensor_tydesc, axis0_index, sub_tensor_out) -> RtStatus`
+    pub tensor_hyperplane_clone: FuncId,
     /// `dtlv_rti_table_create_local(rt, value_out, tydesc) -> RtStatus`
     pub table_create: FuncId,
     /// `dtlv_rti_table_push_row_local(rt, table_mut, table_tydesc, row_ref, row_tydesc) -> RtStatus`
@@ -401,6 +403,20 @@ impl RuntimeImports {
                 .map_err(|e| CraneliftError::Module(format!("declare dtlv_rti_tensor_init_local: {}", e)))?
         };
 
+        // dtlv_rti_tensor_hyperplane_clone_local(rt, tensor_ref, tensor_tydesc, axis0_index, sub_tensor_out) -> u8
+        let tensor_hyperplane_clone = {
+            let mut sig = cl_ir::Signature::new(call_conv);
+            sig.params.push(AbiParam::new(PTR_TYPE));   // rt handle
+            sig.params.push(AbiParam::new(PTR_TYPE));   // tensor_ref
+            sig.params.push(AbiParam::new(PTR_TYPE));   // tensor_tydesc
+            sig.params.push(AbiParam::new(INDEX_TYPE)); // axis0_index
+            sig.params.push(AbiParam::new(PTR_TYPE));   // sub_tensor_out
+            sig.returns.push(AbiParam::new(cl_types::I8));
+            module
+                .declare_function("dtlv_rti_tensor_hyperplane_clone_local", Linkage::Import, &sig)
+                .map_err(|e| CraneliftError::Module(format!("declare dtlv_rti_tensor_hyperplane_clone_local: {}", e)))?
+        };
+
         // dtlv_rti_table_create_local(rt, value_out, tydesc) -> u8
         let table_create = {
             let mut sig = cl_ir::Signature::new(call_conv);
@@ -591,6 +607,7 @@ impl RuntimeImports {
             map_get_value_ref,
             map_set_value,
             tensor_init,
+            tensor_hyperplane_clone,
             table_create,
             table_push_row,
             table_build_from_rows,

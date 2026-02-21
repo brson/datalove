@@ -1028,8 +1028,20 @@ fn synthesize_place<'db>(
     let mut current_ty = ctx.lookup_variable(place.root)
         .ok_or_else(|| ctx.error_undefined_variable(expr, place.root))?;
 
-    // Walk each step.
-    for step in &place.steps {
+    let old_ref_context = ctx.ref_context;
+    let step_count = place.steps.len();
+
+    // Walk each step. Intermediate steps (all but last) are in ref context
+    // because they only navigate to a location; only the final step's result
+    // is consumed/borrowed per the destination context.
+    for (i, step) in place.steps.iter().enumerate() {
+        let is_final = i == step_count - 1;
+        if !is_final {
+            ctx.ref_context = true;
+        } else {
+            ctx.ref_context = old_ref_context;
+        }
+
         match step {
             PlaceStep::Field(field) => {
                 current_ty = synthesize_place_field_step(ctx, expr, &current_ty, field)?;
@@ -1038,6 +1050,7 @@ fn synthesize_place<'db>(
                 let error_mode = match idx.error_mode {
                     Some(mode) => mode,
                     None => {
+                        ctx.ref_context = old_ref_context;
                         return Err(ctx.error_cannot_synthesize(
                             expr,
                             "bare index `a[i]` requires `?` or `!` suffix",
@@ -1058,6 +1071,7 @@ fn synthesize_place<'db>(
         }
     }
 
+    ctx.ref_context = old_ref_context;
     Ok(current_ty)
 }
 
@@ -1138,7 +1152,21 @@ pub(crate) fn resolve_index_types<'db>(
                 Type::Datalit(*map.key_type.clone()),
             ))
         }
-        _ => Err(format!("indexing requires list or map type, got {}", type_to_string(db, base_ty))),
+        Type::Datalit(datalit::tycheck::Type::Tensor(tensor)) => {
+            let element_ty = if tensor.rank > 1 {
+                Type::Datalit(datalit::tycheck::Type::Tensor(datalit::tycheck::TypeTensor {
+                    element_type: tensor.element_type.clone(),
+                    rank: tensor.rank - 1,
+                }))
+            } else {
+                Type::Datalit(*tensor.element_type.clone())
+            };
+            Ok((
+                element_ty,
+                Type::Datalit(datalit::tycheck::Type::Index),
+            ))
+        }
+        _ => Err(format!("indexing requires list, map, or tensor type, got {}", type_to_string(db, base_ty))),
     }
 }
 
@@ -1172,11 +1200,22 @@ fn synthesize_place_index_step<'db>(
     base_ty: &Type<'db>,
     idx: &PlaceIndex<'db>,
 ) -> Result<Type<'db>, TypeError> {
-    let (element_ty, index_type) = resolve_index_types(ctx.db, base_ty)
+    let db = ctx.db;
+    let (element_ty, index_type) = resolve_index_types(db, base_ty)
         .map_err(|msg| ctx.error_cannot_synthesize(expr, &msg))?;
 
     if let Err(e) = check_expr(ctx, idx.index, &index_type) {
         ctx.add_error(e);
+    }
+
+    // Non-copy guard: indexing into a collection with non-copy element type
+    // requires ref context (e.g. via @, ref param, or intermediate step).
+    if let Type::Datalit(ref dt) = element_ty {
+        if !is_copy_type(db, dt) && !ctx.ref_context {
+            return Err(TypeError::NonCopyIndexProjection {
+                elem_ty: datalit::tycheck::type_to_string(db, dt),
+            });
+        }
     }
 
     Ok(element_ty)

@@ -1917,6 +1917,36 @@ pub unsafe extern "C-unwind" fn dtlv_rti_tensor_init_local(
     }
 }
 
+/// Deep-clone a hyperplane (axis-0 slice) of a tensor into a new owned tensor.
+///
+/// Given a tensor reference and an axis-0 index, produces an owned sub-tensor
+/// with rank-1 dimensions, contiguous row-major layout.
+#[unsafe(no_mangle)]
+pub unsafe extern "C-unwind" fn dtlv_rti_tensor_hyperplane_clone_local(
+    rt: LocalRtHandle,
+    tensor_value_ref: *const u8,
+    tensor_tydesc: *const rtdt::TyDesc,
+    axis0_index: rtdt::IndexRepr,
+    sub_tensor_out: *mut u8,
+) -> RtStatus {
+    debug_assert!(!rt.is_null(), "rt is null");
+    debug_assert!(!tensor_value_ref.is_null(), "tensor_value_ref is null");
+    debug_assert!(!tensor_tydesc.is_null(), "tensor_tydesc is null");
+    debug_assert!(!sub_tensor_out.is_null(), "sub_tensor_out is null");
+    debug_assert_aligned(tensor_value_ref, tensor_tydesc, "tensor_hyperplane_clone:tensor");
+    unsafe {
+        let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
+        let tensor_tydesc_ref = rtdt::TyDescRef::from_ptr(tensor_tydesc);
+        crate::impls::tensor::tensor_hyperplane_clone_impl(
+            rt_ref,
+            tensor_value_ref,
+            tensor_tydesc_ref,
+            axis0_index,
+            sub_tensor_out,
+        )
+    }
+}
+
 // ============================================================================
 // Table Operations
 // ============================================================================

@@ -566,15 +566,16 @@ Copy-type fields (bool, fixed integers, floats) are freely extracted.
 
 ### 7.3 Fallible Indexing
 
-The `[]` operator on lists and maps is fallible: the index may be out of
-bounds or the key may be absent. The `?` or `!` postfix resolves the failure
-strategy:
+The `[]` operator on lists, maps, and tensors is fallible: the index may be
+out of bounds or the key may be absent. The `?` or `!` postfix resolves the
+failure strategy:
 
 ```datalove
 a[i]?      // early-return none on out-of-bounds
 a[i]!      // early-return error on out-of-bounds
 m[key]?    // early-return none on missing key
 m[key]!    // early-return error on missing key
+t[i]?      // early-return none on out-of-bounds (tensor axis-0)
 ```
 
 Bare `a[i]` without `?` or `!` is a type error in read context. There is no
@@ -593,7 +594,11 @@ fun get_elem_r(a: [u32], i: index): !u32
 end fun
 ```
 
-Lists are indexed by `index`. Maps are indexed by their key type.
+Lists and tensors are indexed by `index`. Maps are indexed by their key type.
+For tensors, each `[i]?` indexes along axis 0, reducing rank by 1.
+A rank-1 tensor indexed produces the element type; a rank-N (N>1) tensor
+indexed produces a rank-(N-1) sub-tensor. Indexing into a non-copy element
+in consume context requires `@` (clone): `t[i]?@`.
 
 ### 7.4 Index and Field Chains
 
@@ -996,9 +1001,9 @@ end fun
 
 The following features appear in design documents but are not yet implemented:
 
-- Tensor indexing and operations (indexing, transpose, slice, reshape) --
-  tensor literals work, but element access and manipulation are not exposed.
-  List and map indexing are implemented (see Section 7).
+- Tensor operations (transpose, slice, reshape) --
+  tensor literals and axis-0 indexing work (`t[i]?`/`t[i]!`),
+  but higher-level manipulation operations are not exposed.
 - Set membership operations (contains, insert, remove) -- sets exist as a
   type but have no element-level operations beyond literals
 - Arena blocks

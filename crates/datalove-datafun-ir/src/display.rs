@@ -618,6 +618,18 @@ impl fmt::Display for Instruction {
             Instruction::MapUpsert { map, key, value } => {
                 write!(f, "mapupsert {}[{}] = {}", map, key, value)
             }
+            Instruction::TensorGet { dest, is_valid, tensor, index } => {
+                write!(f, "{}, {} = tensorget {}[{}]", dest, is_valid, tensor, index)
+            }
+            Instruction::TensorBoundsCheck { is_valid, tensor, index } => {
+                write!(f, "{} = tensorboundscheck {}[{}]", is_valid, tensor, index)
+            }
+            Instruction::TensorSet { tensor, index, value } => {
+                write!(f, "tensorset {}[{}] = {}", tensor, index, value)
+            }
+            Instruction::TensorIndexRef { dest, tensor, index } => {
+                write!(f, "{} = tensorindexref {}[{}]", dest, tensor, index)
+            }
             Instruction::DebugLog { operand } => {
                 write!(f, "debuglog {}", operand)
             }

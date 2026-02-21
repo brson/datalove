@@ -1,0 +1,5 @@
+// Tensor rank-2 index in consume context is NonCopyIndexProjection.
+// Result of t[i]? is [|u32, 1|] which is not copy.
+fun get(t: [|u32, 2|], i: index): ?[|u32, 1|]
+    ret some (t[i]?)
+end fun

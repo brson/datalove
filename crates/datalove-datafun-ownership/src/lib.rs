@@ -540,6 +540,7 @@ impl<'db> AnalysisCtx<'db> {
                 // Place expressions with index steps always may early-return.
                 place.steps.iter().any(|s| matches!(s, datalove_datafun_ast::ast::PlaceStep::Index(_)))
             }
+            ExprFunKind::CloneCoerce(cc) => self.expr_may_early_return(cc.operand),
             _ => false,
         }
     }

@@ -1,0 +1,13 @@
+----------
+scriptunit-fragment
+----------
+
+// Set element via chained index in 2D tensor.
+fun set_elem(t: [|u32, 2|], i: index, j: index, v: u32): ?[|u32, 2|]
+    var b = t
+    set b[i]?[j]? = v
+    ret some b
+end fun
+
+debuglog set_elem([| 10 20 30, 40 50 60 |], (: index / 0), (: index / 1), 99)
+debuglog set_elem([| 10 20 30, 40 50 60 |], (: index / 1), (: index / 2), 88)

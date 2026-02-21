@@ -51,6 +51,8 @@ mod intrinsics;
 mod lists;
 /// Map indexing operations.
 mod maps;
+/// Tensor indexing operations.
+mod tensors;
 /// Binary and unary operations.
 mod ops;
 /// Option and Result operations.
@@ -620,6 +622,18 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             }
             Instruction::MapUpsert { map, key, value } => {
                 self.compile_map_upsert(builder, map, key, value)?;
+            }
+            Instruction::TensorGet { dest, is_valid, tensor, index } => {
+                self.compile_tensor_get(builder, *dest, *is_valid, tensor, index)?;
+            }
+            Instruction::TensorBoundsCheck { is_valid, tensor, index } => {
+                self.compile_tensor_bounds_check(builder, *is_valid, tensor, index)?;
+            }
+            Instruction::TensorSet { tensor, index, value } => {
+                self.compile_tensor_set(builder, tensor, index, value)?;
+            }
+            Instruction::TensorIndexRef { dest, tensor, index } => {
+                self.compile_tensor_index_ref(builder, *dest, tensor, index)?;
             }
             Instruction::DebugLog { operand } => {
                 self.compile_debuglog(builder, operand)?;

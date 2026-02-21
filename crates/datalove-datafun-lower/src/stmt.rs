@@ -672,6 +672,13 @@ fn lower_set_indexed<'db>(
                         value: Operand::Value(value_id),
                     });
                 }
+                IrType::Tensor(_, _) => {
+                    ctx.emit(Instruction::TensorSet {
+                        tensor: base_op,
+                        index: key_op,
+                        value: Operand::Value(value_id),
+                    });
+                }
                 _ => {
                     ctx.emit(Instruction::ListSet {
                         list: base_op,
@@ -744,6 +751,13 @@ pub(crate) fn emit_fallible_index_check(
                 key: key_op,
             });
         }
+        IrType::Tensor(_, _) => {
+            ctx.emit(Instruction::TensorBoundsCheck {
+                is_valid,
+                tensor: collection_op,
+                index: key_op,
+            });
+        }
         _ => {
             ctx.emit(Instruction::ListBoundsCheck {
                 is_valid,
@@ -793,10 +807,24 @@ pub(crate) fn emit_collection_element_ref(
             });
             dest
         }
+        IrType::Tensor(elem, rank) => {
+            let inner_type = if *rank > 1 {
+                IrType::Tensor(elem.clone(), rank - 1)
+            } else {
+                elem.as_ref().clone()
+            };
+            let dest = ctx.fresh_value(IrType::Ref(Box::new(inner_type)));
+            ctx.emit(Instruction::TensorIndexRef {
+                dest,
+                tensor: collection_op,
+                index: key_op,
+            });
+            dest
+        }
         _ => {
             let elem_type = match collection_type {
                 IrType::List(e) => e.as_ref().clone(),
-                _ => panic!("index on non-list/map type {:?}", collection_type),
+                _ => panic!("index on non-list/map/tensor type {:?}", collection_type),
             };
             let dest = ctx.fresh_value(IrType::Ref(Box::new(elem_type)));
             ctx.emit(Instruction::ListElementRef {

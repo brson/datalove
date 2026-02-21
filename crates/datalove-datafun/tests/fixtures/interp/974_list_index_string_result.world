@@ -4,7 +4,7 @@ scriptunit-fragment
 
 // Index into list of strings with ! mode — linear element type.
 fun get_str(a: [string], i: index): !string
-    ret ok (a[i]!)
+    ret ok (a[i]!@)
 end fun
 
 debuglog get_str(["hello", "world"], (: index / 0))

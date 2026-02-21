@@ -1400,6 +1400,57 @@ pub enum Instruction {
     },
 
     // ========================================================================
+    // Tensor Indexing
+    // ========================================================================
+
+    /// Get a tensor element or sub-tensor by axis-0 index.
+    ///
+    /// Rank 1: clones element to dest. Rank > 1: calls hyperplane_clone
+    /// to produce owned sub-tensor. Sets `is_valid` to true if index is
+    /// in bounds; if out of bounds, `dest` is undefined.
+    ///
+    /// **Ownership:** Borrows `tensor` and `index`, produces `dest` (only valid if is_valid).
+    TensorGet {
+        dest: ValueId,
+        is_valid: ValueId,
+        tensor: Operand,
+        index: Operand,
+    },
+
+    /// Check if a tensor axis-0 index is in bounds.
+    ///
+    /// **Ownership:** Borrows `tensor` and `index`, produces `is_valid`.
+    TensorBoundsCheck {
+        is_valid: ValueId,
+        tensor: Operand,
+        index: Operand,
+    },
+
+    /// Set a tensor element at axis-0 index (rank 1 only, bounds already checked).
+    ///
+    /// Destroys old element, stores new value.
+    ///
+    /// **Ownership:** Borrows `tensor` mutably, borrows `index`, consumes `value`.
+    TensorSet {
+        tensor: Operand,
+        index: Operand,
+        value: Operand,
+    },
+
+    /// Get a reference to a tensor element or sub-tensor view at axis-0 index.
+    ///
+    /// Rank 1: dest is pointer to element. Rank > 1: constructs a view
+    /// Tensor (capacity=0) on the stack and returns pointer to it.
+    /// Bounds must be checked before use.
+    ///
+    /// **Ownership:** Borrows `tensor`, produces `dest` (Ref type, always Copy).
+    TensorIndexRef {
+        dest: ValueId,
+        tensor: Operand,
+        index: Operand,
+    },
+
+    // ========================================================================
     // Miscellaneous
     // ========================================================================
 

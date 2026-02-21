@@ -112,6 +112,12 @@ pub fn instruction_dest(instr: &Instruction) -> Option<ValueId> {
         Instruction::MapValueRef { dest, .. } => Some(*dest),
         Instruction::MapUpsert { .. } => None,
 
+        // Tensor indexing
+        Instruction::TensorGet { dest, .. } => Some(*dest),
+        Instruction::TensorBoundsCheck { is_valid, .. } => Some(*is_valid),
+        Instruction::TensorSet { .. } => None,
+        Instruction::TensorIndexRef { dest, .. } => Some(*dest),
+
         // Misc
         Instruction::DebugLog { .. } => None,
         Instruction::Nop => None,
@@ -513,6 +519,23 @@ fn collect_instruction_operands(instr: &Instruction, used: &mut HashSet<ValueId>
             add_operand_value(key, used);
             add_operand_value(value, used);
         }
+        Instruction::TensorGet { tensor, index, .. } => {
+            add_operand_value(tensor, used);
+            add_operand_value(index, used);
+        }
+        Instruction::TensorBoundsCheck { tensor, index, .. } => {
+            add_operand_value(tensor, used);
+            add_operand_value(index, used);
+        }
+        Instruction::TensorSet { tensor, index, value } => {
+            add_operand_value(tensor, used);
+            add_operand_value(index, used);
+            add_operand_value(value, used);
+        }
+        Instruction::TensorIndexRef { tensor, index, .. } => {
+            add_operand_value(tensor, used);
+            add_operand_value(index, used);
+        }
     }
 }
 
@@ -585,6 +608,8 @@ fn has_side_effects(instr: &Instruction) -> bool {
         Instruction::MapSetValue { .. } => true,
         // Map upsert has side effects (mutates map).
         Instruction::MapUpsert { .. } => true,
+        // Tensor set has side effects (mutates tensor).
+        Instruction::TensorSet { .. } => true,
         // Everything else is pure.
         _ => false,
     }
