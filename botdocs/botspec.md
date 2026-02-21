@@ -8,11 +8,12 @@
 - [4. Type Hints](#user-content-4-type-hints)
 - [5. Copy and Linear Types](#user-content-5-copy-and-linear-types)
 - [6. Expressions](#user-content-6-expressions)
-- [7. Statements](#user-content-7-statements)
-- [8. Module System](#user-content-8-module-system)
-- [9. Numeric Widening](#user-content-9-numeric-widening)
-- [10. Ownership Analysis](#user-content-10-ownership-analysis)
-- [11. Bidirectional Type Inference](#user-content-11-bidirectional-type-inference)
+- [7. Place Expressions and Indexing](#user-content-7-place-expressions-and-indexing)
+- [8. Statements](#user-content-8-statements)
+- [9. Module System](#user-content-9-module-system)
+- [10. Numeric Widening](#user-content-10-numeric-widening)
+- [11. Ownership Analysis](#user-content-11-ownership-analysis)
+- [12. Bidirectional Type Inference](#user-content-12-bidirectional-type-inference)
 - [Appendix A. Command-Line Interface](#user-content-appendix-a-command-line-interface)
 - [Appendix B. Unimplemented Features](#user-content-appendix-b-unimplemented-features)
 
@@ -283,7 +284,7 @@ type:
 let c: enum { atom Red, atom Blue } = (atom Red)@
 ```
 
-**Match.** Enums are destructured with `match` (see Section 7.5).
+**Match.** Enums are destructured with `match` (see Section 8.5).
 
 ### 3.7 Type Aliases
 
@@ -348,8 +349,8 @@ Operators listed from highest to lowest precedence:
 | Precedence | Operators | Description |
 |------------|-----------|-------------|
 | 1 | `()` | Grouping |
-| 2 | `-` `-?` `-!` `not` | Unary prefix |
-| 3 | `@` `?` `!` | Postfix (adapt, try) |
+| 2 | `-` `-?` `-!` `not` `some` `ok` `er` `data` `error` | Unary prefix |
+| 3 | `.field` `.0` `[i]` `@` `?` `!` | Postfix (field, index, adapt, try) |
 | 4 | `*` `/` `*!` `/!` `*?` `/?` | Multiplicative |
 | 5 | `+` `-` `+!` `-!` `+?` `-?` | Additive |
 | 6 | `.<` `.>` `<=` `>=` `==` `!=` | Comparison |
@@ -511,9 +512,131 @@ The `@` operator cannot synthesize a type; it must appear in a context where
 the expected type is known (function argument, let binding with annotation,
 return position, etc.).
 
-## 7. Statements
+## 7. Place Expressions and Indexing
 
-### 7.1 Bindings
+### 7.1 Place vs Value Expressions
+
+Expressions are either **place expressions** (denoting a storage location) or
+**value expressions** (producing a fresh owned value).
+
+Place expressions:
+- Variables: `x`
+- Field access: `x.field`
+- Tuple element: `x.0`
+- Index: `a[i]?`, `a[i]!`, `m[key]?`, `m[key]!`
+- Chains: `a[i]?.field`, `a.b[0]?`
+
+Value expressions:
+- Literals, function calls, arithmetic results, constructors, `@` clones
+
+Field access and indexing can also follow value expressions (`f(x).field`,
+`f(x)[i]?`), but these produce values, not places -- the result cannot be
+used as a `set` target or `mut` argument.
+
+### 7.2 Field Access
+
+Struct fields and tuple elements are accessed with dot notation:
+
+```datalove
+let p = { x = 1.0, y = 2.0 }
+let a = p.x                    // struct field
+
+let t = (true, 42)
+let b = t.0                    // tuple element by index
+```
+
+Chained access navigates nested structures:
+
+```datalove
+let inner = outer.a.b.c
+```
+
+Field access on a linear-type field requires the place to be in a reference
+context (`ref` param, `mut` param, binop operand, `set` LHS). In consume
+context (`let`, `ret`, `in` param), linear fields require explicit `@` clone:
+
+```datalove
+let t = (1, 2)
+let x = t.0                   // error: int is linear
+let x = t.0@                  // ok: explicit clone
+foo(ref t.0)                   // ok: borrow
+```
+
+Copy-type fields (bool, fixed integers, floats) are freely extracted.
+
+### 7.3 Fallible Indexing
+
+The `[]` operator on lists and maps is fallible: the index may be out of
+bounds or the key may be absent. The `?` or `!` postfix resolves the failure
+strategy:
+
+```datalove
+a[i]?      // early-return none on out-of-bounds
+a[i]!      // early-return error on out-of-bounds
+m[key]?    // early-return none on missing key
+m[key]!    // early-return error on missing key
+```
+
+Bare `a[i]` without `?` or `!` is a type error in read context. There is no
+infallible/panicking index variant.
+
+The enclosing function's return type determines which variant is valid: `?`
+requires the function to return `?R`, `!` requires `!R`.
+
+```datalove
+fun get_elem(a: [u32], i: index): ?u32
+    ret some (a[i]?)
+end fun
+
+fun get_elem_r(a: [u32], i: index): !u32
+    ret ok (a[i]!)
+end fun
+```
+
+Lists are indexed by `index`. Maps are indexed by their key type.
+
+### 7.4 Index and Field Chains
+
+Index and field steps can be chained:
+
+```datalove
+a[i]?.field           // index into list, then access field
+m[key]?.0             // index into map, then access tuple element
+a[i]?.b[j]?           // index, field, index again
+```
+
+Each `?` or `!` in the chain is an independent early-return point, checked
+left to right. If any check fails, the function early-returns immediately
+with no mutation.
+
+### 7.5 Destination Contexts
+
+A place expression's behavior depends on its destination context:
+
+| Context | Behavior | Example |
+|---------|----------|---------|
+| `let` / `ret` / `in` param | Copy or clone value out | `let x = a[i]?` |
+| `ref` param | Immutable borrow | `foo(ref a[i]?)` |
+| `mut` param | Mutable borrow | `foo(mut a[i]?)` |
+| `set` LHS | Mutation target | `set a[i]? = 5` |
+| binop operand | Immutable borrow | `a[i]? + 1` |
+
+In consume context (`let`, `ret`, `in` param), copy-type elements are copied
+out freely. Linear-type elements require explicit `@` clone -- moving an
+element out of its container would leave a hole.
+
+### 7.6 Parallel with Checked Arithmetic
+
+Fallible indexing mirrors checked arithmetic:
+
+| Operation | `?` variant | `!` variant |
+|-----------|-------------|-------------|
+| Arithmetic | `a +? b` returns `?T` | `a +! b` returns `!T` |
+| Indexing | `a[i]?` early-returns `none` | `a[i]!` early-returns `error` |
+
+## 8. Statements
+
+### 8.1 Bindings
 
 **Let** binds an immutable value:
 
@@ -529,13 +652,36 @@ var x: u32 = 0
 var y: i32             // uninitialized; must set before use
 ```
 
-**Set** mutates a var binding or mutable parameter:
+**Set** mutates a var binding, mutable parameter, or indexed/chained target:
 
 ```datalove
 set x = x + 1
+set a[i]? = 5
+set a[i]?.field = 10
+set m[key]? = v            // update: fail if key absent
+set m[key] = v             // upsert: insert or overwrite
 ```
 
-### 7.2 Functions
+The `set` target is a place expression (see Section 7). The root must be
+`var` or `mut`. For indexed targets, the `?` or `!` on each index step
+provides early-return on failure; the write only happens if all checks pass.
+
+**Map upsert.** Bare `set m[key] = v` (without `?` or `!`) is valid only for
+maps. It inserts if the key is absent, overwrites if present. Lists reject
+bare index on `set` LHS -- list elements must exist to be overwritten.
+
+**Evaluation order** for `set` with indexed targets:
+
+1. Navigate the LHS chain -- evaluate index subexpressions, perform
+   bounds/existence checks, early-return on failure.
+2. Evaluate the RHS.
+3. Drop the old value at the target (if linear type).
+4. Store the new value.
+
+The RHS can ref-borrow the same collection (e.g., `set a[0]? = a[1]?@`)
+but cannot take mutable or consuming access to it.
+
+### 8.2 Functions
 
 Function definition:
 
@@ -554,7 +700,7 @@ fun log(msg: string)
 end fun
 ```
 
-### 7.3 Parameter Modes
+### 8.3 Parameter Modes
 
 All parameters are passed by reference. The mode determines permitted
 operations:
@@ -572,7 +718,7 @@ operations:
 - `ref` parameters cannot be passed to `mut` parameters.
 - `out` parameters must be written as a whole, not field-by-field.
 
-### 7.4 Const Parameters
+### 8.4 Const Parameters
 
 The `const` modifier declares a parameter whose value must be known at compile
 time:
@@ -607,7 +753,7 @@ let x = repeat(COUNT, "ab")  // COUNT is a const binding
 function with dispatch over a tag of known instantiations. See
 `const-param-specialization.md` for design details.
 
-### 7.5 Control Flow
+### 8.5 Control Flow
 
 **If statement:**
 
@@ -675,7 +821,7 @@ are an error.
 
 The input expression is consumed (moved) by the match.
 
-### 7.6 Return
+### 8.6 Return
 
 `ret` returns a value from a function:
 
@@ -689,13 +835,13 @@ Void functions may use bare `ret` for early exit:
 ret
 ```
 
-## 8. Module System
+## 9. Module System
 
-### 8.1 Hierarchy
+### 9.1 Hierarchy
 
 The module system has three levels: library, package, module.
 
-### 8.2 Require
+### 9.2 Require
 
 `require` loads a module:
 
@@ -703,7 +849,7 @@ The module system has three levels: library, package, module.
 require module sys/std/u32
 ```
 
-### 8.3 Import
+### 9.3 Import
 
 `import` brings a name into scope:
 
@@ -711,7 +857,7 @@ require module sys/std/u32
 import u32.negate
 ```
 
-## 9. Numeric Widening
+## 10. Numeric Widening
 
 There is no implicit numeric widening in the language. All numeric conversions
 require the explicit `@` operator.
@@ -749,12 +895,12 @@ fun example(): int
     ret process(n@)     // explicit widen u32 to int
 ```
 
-## 10. Ownership Analysis
+## 11. Ownership Analysis
 
 Ownership analysis runs after type checking to verify correct use of linear
 values.
 
-### 10.1 Errors
+### 11.1 Errors
 
 | Code | Name | Description |
 |------|------|-------------|
@@ -768,7 +914,7 @@ values.
 | D008 | InconsistentBranchMove | Moved in one branch but not another |
 | D009 | OutParamPartialWrite | Writing fields of `out` param individually |
 
-### 10.2 Loop Restrictions
+### 11.2 Loop Restrictions
 
 Moving an outer-scoped linear value inside a loop is an error:
 
@@ -781,7 +927,7 @@ end loop
 
 Copy types and operator operands (which are borrowed) are exempt.
 
-### 10.3 Branch Consistency
+### 11.3 Branch Consistency
 
 If a value is moved in one branch, it must be moved in all branches:
 
@@ -793,7 +939,7 @@ else
 end if
 ```
 
-### 10.4 Tracking Categories
+### 11.4 Tracking Categories
 
 Bindings are categorized for drop scheduling:
 
@@ -804,7 +950,7 @@ Bindings are categorized for drop scheduling:
 Tracked bindings include `var` bindings, `out` parameters, and uninitialized
 variables.
 
-## 11. Bidirectional Type Inference
+## 12. Bidirectional Type Inference
 
 Expressions can *synthesize* types (bottom-up) or *check* against expected
 types (top-down).
@@ -850,8 +996,11 @@ end fun
 
 The following features appear in design documents but are not yet implemented:
 
-- Tensor element access and operations (indexing, transpose, slice, reshape) -
-  tensor literals work, but manipulation is not exposed
+- Tensor indexing and operations (indexing, transpose, slice, reshape) --
+  tensor literals work, but element access and manipulation are not exposed.
+  List and map indexing are implemented (see Section 7).
+- Set membership operations (contains, insert, remove) -- sets exist as a
+  type but have no element-level operations beyond literals
 - Arena blocks
 - Memoization
 - Type introspection (`@type`)

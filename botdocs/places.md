@@ -94,14 +94,10 @@ valid: `?` requires the function to return `?R`, `!` requires `!R`.
 
 ### The `!` Error Value
 
-For the `!` path, what error is produced on failure? Open question.
-Options:
-- A fixed error per collection type: lists/tensors produce
-  `error atom IndexOutOfBounds`, maps produce `error atom KeyNotFound`.
-- A generic `error atom IndexFailed`.
-- An error carrying context: `error term IndexOutOfBounds i`.
-
-Should follow the same convention as `+!` overflow errors.
+For the `!` path, the error produced on failure is a fixed string error
+per collection type:
+- Lists produce `error "index out of bounds"`.
+- Maps produce `error "key not found"`.
 
 ### Examples
 
@@ -302,12 +298,12 @@ error -- there's no value to produce when the key is absent.
 |------------|----------------|--------------------|
 | List | type error | overwrite existing element |
 | Map | upsert | overwrite existing value |
-| Tensor | type error | overwrite existing element |
-| Set | N/A | N/A |
 
-Lists and tensors have a fixed index space determined by their
-length/shape. You can't conjure a new index. Maps have a dynamic
-key space, so bare `[]` on `set` LHS is meaningful.
+Lists have a fixed index space determined by their length. You can't
+conjure a new index. Maps have a dynamic key space, so bare `[]` on
+`set` LHS is meaningful.
+
+Tensor and set indexing are not yet implemented.
 
 ### Key Ownership on Upsert
 
