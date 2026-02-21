@@ -128,7 +128,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     default-jdk maven \
     pipewire pipewire-audio-client-libraries \
     libwayland-client0 libwayland-cursor0 libwayland-egl1 libxkbcommon0 \
-    mesa-vulkan-drivers libvulkan1 \
+    mesa-vulkan-drivers libvulkan1 libasound2-dev \
     && rm -rf /var/lib/apt/lists/*
 
 ENV JAVA_HOME=/usr/lib/jvm/default-java
