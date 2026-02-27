@@ -760,13 +760,15 @@ fn synthesize_function_call<'db>(
         }
     }
 
-    // Check each argument type, setting ref context for ref/mut/out params.
+    // Check each argument type, setting ref/mut context for ref/mut/out params.
     for ((arg, expected_param_ty), mode) in args.iter().zip(param_types.iter()).zip(param_modes.iter()) {
-        // Set ref context for reference parameter modes.
         let old_ref_context = ctx.ref_context;
+        let old_mut_context = ctx.mut_context;
         ctx.ref_context = matches!(mode, ParamMode::Ref | ParamMode::Mut | ParamMode::Out);
+        ctx.mut_context = matches!(mode, ParamMode::Mut | ParamMode::Out);
         let result = check_expr(ctx, *arg, expected_param_ty);
         ctx.ref_context = old_ref_context;
+        ctx.mut_context = old_mut_context;
         result?;
     }
 
@@ -1011,6 +1013,13 @@ fn synthesize_index_common<'db>(
         ctx.add_error(e);
     }
 
+    // Reject view-producing index in mut/out context.
+    if ctx.mut_context && is_view_producing_index(&base_ty) {
+        return Err(TypeError::ViewTypeMutBinding {
+            view_ty: type_to_string(ctx.db, &element_ty),
+        });
+    }
+
     Ok(element_ty)
 }
 
@@ -1029,6 +1038,7 @@ fn synthesize_place<'db>(
         .ok_or_else(|| ctx.error_undefined_variable(expr, place.root))?;
 
     let old_ref_context = ctx.ref_context;
+    let old_mut_context = ctx.mut_context;
     let step_count = place.steps.len();
 
     // Walk each step. Intermediate steps (all but last) are in ref context
@@ -1038,8 +1048,10 @@ fn synthesize_place<'db>(
         let is_final = i == step_count - 1;
         if !is_final {
             ctx.ref_context = true;
+            ctx.mut_context = false;
         } else {
             ctx.ref_context = old_ref_context;
+            ctx.mut_context = old_mut_context;
         }
 
         match step {
@@ -1051,6 +1063,7 @@ fn synthesize_place<'db>(
                     Some(mode) => mode,
                     None => {
                         ctx.ref_context = old_ref_context;
+                        ctx.mut_context = old_mut_context;
                         return Err(ctx.error_cannot_synthesize(
                             expr,
                             "bare index `a[i]` requires `?` or `!` suffix",
@@ -1072,6 +1085,7 @@ fn synthesize_place<'db>(
     }
 
     ctx.ref_context = old_ref_context;
+    ctx.mut_context = old_mut_context;
     Ok(current_ty)
 }
 
@@ -1170,6 +1184,12 @@ pub(crate) fn resolve_index_types<'db>(
     }
 }
 
+/// Returns true when indexing this type produces a view rather than
+/// a direct reference. Today: only tensor with rank > 1.
+pub(crate) fn is_view_producing_index(base_ty: &Type) -> bool {
+    matches!(base_ty, Type::Datalit(datalit::tycheck::Type::Tensor(t)) if t.rank > 1)
+}
+
 /// Synthesize type through a field step in a place expression.
 fn synthesize_place_field_step<'db>(
     ctx: &mut TypeContext<'db>,
@@ -1206,6 +1226,13 @@ fn synthesize_place_index_step<'db>(
 
     if let Err(e) = check_expr(ctx, idx.index, &index_type) {
         ctx.add_error(e);
+    }
+
+    // Reject view-producing index in mut/out context.
+    if ctx.mut_context && is_view_producing_index(base_ty) {
+        return Err(TypeError::ViewTypeMutBinding {
+            view_ty: type_to_string(ctx.db, &element_ty),
+        });
     }
 
     // Non-copy guard: indexing into a collection with non-copy element type

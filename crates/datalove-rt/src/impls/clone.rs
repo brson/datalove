@@ -310,15 +310,25 @@ unsafe fn clone_impl(
             let elem_size = element_ty.size();
             let elem_align = element_ty.align();
 
-            // Empty tensor or null pointer.
-            if tensor_in.capacity_elems == rtdt::Index::ZERO || tensor_in.ptr_base.is_null() {
+            // Null pointer means genuinely empty tensor.
+            if tensor_in.ptr_base.is_null() {
                 tensor_out.ptr_base = std::ptr::null_mut();
                 tensor_out.offset_elems = rtdt::Index::ZERO;
                 tensor_out.capacity_elems = rtdt::Index::ZERO;
                 tensor_out.shape = std::ptr::null();
                 tensor_out.strides = std::ptr::null();
                 tensor_out.layout = tensor_in.layout;
+            } else if tensor_in.capacity_elems == rtdt::Index::ZERO {
+                // View tensor (capacity_elems == 0, ptr_base non-null).
+                // Clone into a new owned contiguous tensor using strided iteration.
+                let status = unsafe {
+                    clone_view_tensor(rt, tensor_in, tensor_out, element_ty, rank, elem_size, elem_align)
+                };
+                if status != RtStatus::Ok {
+                    return status;
+                }
             } else {
+                // Owned tensor: clone contiguous data buffer.
                 let rt_ref = unsafe { &mut *(rt as *mut rt_local::RtLocal) };
 
                 // Allocate new data buffer.
@@ -693,6 +703,152 @@ unsafe fn clone_impl(
             }
         }
     }
+}
+
+/// Clones a view tensor into a new owned contiguous tensor.
+///
+/// Views have `capacity_elems == 0` and share `ptr_base` with the parent.
+/// This function computes total elements from the shape, allocates fresh
+/// buffers, and clones elements by walking the source strides.
+unsafe fn clone_view_tensor(
+    rt: LocalRtHandle,
+    tensor_in: &rtdt::Tensor,
+    tensor_out: &mut rtdt::Tensor,
+    element_ty: rtdt::TyDescRef,
+    rank: u32,
+    elem_size: u32,
+    elem_align: u32,
+) -> RtStatus {
+    assert!(!tensor_in.ptr_base.is_null());
+    assert!(!tensor_in.shape.is_null());
+    assert!(!tensor_in.strides.is_null());
+
+    let rt_ref = unsafe { &mut *(rt as *mut rt_local::RtLocal) };
+
+    // Compute total elements from shape.
+    let mut total_elems: rtdt::IndexRepr = 1;
+    for i in 0..rank as usize {
+        total_elems = total_elems.saturating_mul(unsafe { (*tensor_in.shape.add(i)).0 });
+    }
+
+    if total_elems == 0 {
+        tensor_out.ptr_base = std::ptr::null_mut();
+        tensor_out.offset_elems = rtdt::Index::ZERO;
+        tensor_out.capacity_elems = rtdt::Index::ZERO;
+        tensor_out.shape = std::ptr::null();
+        tensor_out.strides = std::ptr::null();
+        tensor_out.layout = tensor_in.layout;
+        return RtStatus::Ok;
+    }
+
+    // Allocate data buffer.
+    let new_data = unsafe { rt_ref.alloc.alloc(elem_size, elem_align, total_elems) };
+    if new_data.is_null() {
+        return RtStatus::Error;
+    }
+
+    // Allocate shape array.
+    let new_shape = unsafe {
+        rt_ref.alloc.alloc(rtdt::INDEX_SIZE, rtdt::INDEX_ALIGN, rank.into())
+    } as *mut rtdt::Index;
+    if new_shape.is_null() {
+        unsafe { rt_ref.alloc.free(elem_size, elem_align, total_elems, new_data) };
+        return RtStatus::Error;
+    }
+
+    // Allocate strides array.
+    let new_strides = unsafe {
+        rt_ref.alloc.alloc(rtdt::INDEX_SIZE, rtdt::INDEX_ALIGN, rank.into())
+    } as *mut rtdt::Index;
+    if new_strides.is_null() {
+        unsafe {
+            rt_ref.alloc.free(elem_size, elem_align, total_elems, new_data);
+            rt_ref.alloc.free(rtdt::INDEX_SIZE, rtdt::INDEX_ALIGN, rank.into(), new_shape as *mut u8);
+        }
+        return RtStatus::Error;
+    }
+
+    // Copy shape and compute row-major strides.
+    unsafe {
+        for i in 0..rank as usize {
+            *new_shape.add(i) = *tensor_in.shape.add(i);
+        }
+        for i in 0..rank as usize {
+            let mut stride: rtdt::IndexRepr = 1;
+            for j in (i + 1)..rank as usize {
+                stride = stride.saturating_mul((*new_shape.add(j)).0);
+            }
+            *new_strides.add(i) = rtdt::Index(stride);
+        }
+    }
+
+    // Clone elements by walking source strides.
+    let src_shape: Vec<rtdt::IndexRepr> = (0..rank as usize)
+        .map(|i| unsafe { (*tensor_in.shape.add(i)).0 })
+        .collect();
+    let src_strides: Vec<rtdt::IndexRepr> = (0..rank as usize)
+        .map(|i| unsafe { (*tensor_in.strides.add(i)).0 })
+        .collect();
+
+    let elem_size_usize = elem_size as usize;
+    let base_offset = tensor_in.offset_elems.0;
+    let mut dest_idx: rtdt::IndexRepr = 0;
+    let mut indices: Vec<rtdt::IndexRepr> = vec![0; rank as usize];
+
+    loop {
+        // Compute source linear offset for current multi-index.
+        let mut src_offset = base_offset;
+        for d in 0..rank as usize {
+            src_offset = src_offset.saturating_add(indices[d].saturating_mul(src_strides[d]));
+        }
+
+        let src_ptr = unsafe { tensor_in.ptr_base.add(src_offset as usize * elem_size_usize) };
+        let dst_ptr = unsafe { new_data.add(dest_idx as usize * elem_size_usize) };
+
+        let status = unsafe { clone_impl(rt, src_ptr, element_ty, dst_ptr) };
+        if status != RtStatus::Ok {
+            // Clean up partially cloned elements.
+            for j in 0..dest_idx {
+                let elem_ptr = unsafe { new_data.add(j as usize * elem_size_usize) };
+                unsafe {
+                    let _ = crate::impls::destroy::any_destroy_local(rt, elem_ptr, element_ty.as_ptr());
+                }
+            }
+            unsafe {
+                rt_ref.alloc.free(elem_size, elem_align, total_elems, new_data);
+                rt_ref.alloc.free(rtdt::INDEX_SIZE, rtdt::INDEX_ALIGN, rank.into(), new_shape as *mut u8);
+                rt_ref.alloc.free(rtdt::INDEX_SIZE, rtdt::INDEX_ALIGN, rank.into(), new_strides as *mut u8);
+            }
+            return status;
+        }
+
+        dest_idx += 1;
+
+        // Advance multi-index (row-major order).
+        let mut carry = true;
+        for d in (0..rank as usize).rev() {
+            if carry {
+                indices[d] += 1;
+                if indices[d] < src_shape[d] {
+                    carry = false;
+                } else {
+                    indices[d] = 0;
+                }
+            }
+        }
+        if carry {
+            break;
+        }
+    }
+
+    tensor_out.ptr_base = new_data;
+    tensor_out.offset_elems = rtdt::Index::ZERO;
+    tensor_out.capacity_elems = rtdt::Index(total_elems);
+    tensor_out.shape = new_shape;
+    tensor_out.strides = new_strides;
+    tensor_out.layout = rtdt::TensorLayout::RowMajor;
+
+    RtStatus::Ok
 }
 
 #[cfg(test)]

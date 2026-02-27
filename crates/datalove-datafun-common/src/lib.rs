@@ -355,6 +355,9 @@ pub enum TypeError {
     NonCopyFieldProjection { field_ty: String },
     /// Index projection on move-type element (not allowed outside ref context).
     NonCopyIndexProjection { elem_ty: String },
+    /// View type cannot be bound to mut/out parameter.
+    /// Views alias parent data; whole-value replacement would leak or corrupt.
+    ViewTypeMutBinding { view_ty: String },
     /// Void function returning a value.
     VoidFunctionReturnsValue,
     /// Non-void function with bare return (missing return value).

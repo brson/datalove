@@ -1,0 +1,10 @@
+// Passing rank-2 tensor sub-view to mut param for element mutation is also rejected.
+// The typechecker can't distinguish element-level vs whole-value mutation at the call site.
+fun set_first(mut row: [|u32, 1|]): ?bool
+    set row[(: index / 0)]? = 99
+    ret some true
+end fun
+
+fun test(t: [|u32, 2|]): ?bool
+    ret set_first(t[(: index / 1)]?)
+end fun

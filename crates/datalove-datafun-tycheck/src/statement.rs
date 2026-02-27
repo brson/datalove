@@ -631,6 +631,14 @@ fn typecheck_set_index<'db>(
                     return;
                 }
             };
+            // Reject set on view-producing index (e.g. `set t[i]? = new_row`
+            // on rank > 1 tensor would replace the view, not the parent data).
+            if crate::synthesize::is_view_producing_index(base_ty) {
+                ctx.add_error(TypeError::ViewTypeMutBinding {
+                    view_ty: type_to_string(db, &element_ty),
+                });
+                return;
+            }
             if let Err(e) = check_expr(ctx, idx_step.index, &index_type) {
                 ctx.add_error(e);
             }

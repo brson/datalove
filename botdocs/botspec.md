@@ -597,8 +597,18 @@ end fun
 Lists and tensors are indexed by `index`. Maps are indexed by their key type.
 For tensors, each `[i]?` indexes along axis 0, reducing rank by 1.
 A rank-1 tensor indexed produces the element type; a rank-N (N>1) tensor
-indexed produces a rank-(N-1) sub-tensor. Indexing into a non-copy element
-in consume context requires `@` (clone): `t[i]?@`.
+indexed produces a rank-(N-1) sub-tensor **view**. A view is a non-owning
+tensor struct that aliases the parent tensor's data buffer. Indexing into
+a non-copy element in consume context requires `@` (clone): `t[i]?@`.
+
+**View type restrictions:** Views can be passed to `ref` params but not to
+`mut` or `out` params. Whole-value replacement of a view (`set row = ...`)
+would overwrite the view struct without affecting the parent's data, causing
+leaks. The `set t[i]? = new_row` form is likewise rejected for rank > 1
+tensors. Element-level mutation through views (e.g. `set row[j]? = val`)
+is semantically correct but currently also rejected because the typechecker
+cannot distinguish it from whole-view replacement at the call site. The view
+concept is general; tensor sub-views are the only instance today.
 
 ### 7.4 Index and Field Chains
 

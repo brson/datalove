@@ -1,0 +1,8 @@
+// Passing rank-2 tensor sub-view to ref param is allowed.
+fun read_row(ref row: [|u32, 1|]): [|u32, 1|]
+    ret row@
+end fun
+
+fun test(t: [|u32, 2|]): ?[|u32, 1|]
+    ret some read_row(t[(: index / 0)]?)
+end fun

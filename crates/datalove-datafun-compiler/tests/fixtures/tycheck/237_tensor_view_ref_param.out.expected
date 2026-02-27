@@ -1,0 +1,28 @@
+{
+  "diagnostics": [],
+  "errors": [],
+  "judgements": [
+    {
+      "kind": "function",
+      "name": "read_row",
+      "params": [
+        {
+          "name": "row",
+          "type": "[|u32, 1|]"
+        }
+      ],
+      "return_type": "[|u32, 1|]"
+    },
+    {
+      "kind": "function",
+      "name": "test",
+      "params": [
+        {
+          "name": "t",
+          "type": "[|u32, 2|]"
+        }
+      ],
+      "return_type": "?[|u32, 1|]"
+    }
+  ]
+}

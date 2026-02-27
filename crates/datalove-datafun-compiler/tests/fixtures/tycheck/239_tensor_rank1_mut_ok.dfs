@@ -1,0 +1,9 @@
+// Passing rank-1 tensor element to mut param is fine (no view).
+fun set_val(mut x: u32): ?bool
+    set x = 99
+    ret some true
+end fun
+
+fun test(t: [|u32, 1|]): ?bool
+    ret set_val(t[(: index / 0)]?)
+end fun

@@ -158,6 +158,12 @@ fn error_to_json(error: &datalove_datafun_tycheck::TypeError) -> rmx::serde_json
                 "element_type": elem_ty
             })
         }
+        TypeError::ViewTypeMutBinding { view_ty } => {
+            json!({
+                "kind": "ViewTypeMutBinding",
+                "view_type": view_ty
+            })
+        }
         TypeError::VoidFunctionReturnsValue => {
             json!({
                 "kind": "VoidFunctionReturnsValue"

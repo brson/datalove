@@ -1,0 +1,17 @@
+{
+  "diagnostics": [],
+  "errors": [
+    {
+      "kind": "ViewTypeMutBinding",
+      "view_type": "[|u32, 1|]"
+    }
+  ],
+  "judgements": [
+    {
+      "kind": "function",
+      "name": "test",
+      "params": [],
+      "return_type": "?bool"
+    }
+  ]
+}

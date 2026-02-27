@@ -1,0 +1,15 @@
+----------
+scriptunit-fragment
+----------
+
+// Pass 1D tensor element to ref param; read value.
+fun read_val(ref x: u32): u32
+    ret x
+end fun
+
+fun test(): ?u32
+    let t: [|u32, 1|] = [| 10 20 30 |]
+    ret some read_val(t[(: index / 1)]?)
+end fun
+
+debuglog test()

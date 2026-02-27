@@ -61,6 +61,9 @@ pub struct TypeContext<'db> {
     /// Whether we're in a reference context (ref/mut/out param or binop operand).
     /// Move-type field projections are allowed in ref context.
     pub(crate) ref_context: bool,
+    /// Whether we're in a mutable binding context (mut/out param).
+    /// View types (e.g. tensor sub-views) are not allowed in mut context.
+    pub(crate) mut_context: bool,
     /// Resolved intrinsic targets, indexed by ExprFun ID.
     pub(crate) intrinsic_targets: Vec<Option<IntrinsicId>>,
     /// Auto-adapt mode for this context.
@@ -124,6 +127,7 @@ impl<'db> TypeContext<'db> {
             call_targets: Vec::new(),
             loop_depth: 0,
             ref_context: false,
+            mut_context: false,
             intrinsic_targets: Vec::new(),
             auto_adapt_mode,
             auto_adaptations: Vec::new(),

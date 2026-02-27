@@ -1,0 +1,33 @@
+{
+  "diagnostics": [],
+  "errors": [
+    {
+      "kind": "ViewTypeMutBinding",
+      "view_type": "[|u32, 2|]"
+    }
+  ],
+  "judgements": [
+    {
+      "kind": "function",
+      "name": "set_elem",
+      "params": [
+        {
+          "name": "mat",
+          "type": "[|u32, 2|]"
+        }
+      ],
+      "return_type": "?bool"
+    },
+    {
+      "kind": "function",
+      "name": "test",
+      "params": [
+        {
+          "name": "t",
+          "type": "[|u32, 3|]"
+        }
+      ],
+      "return_type": "?bool"
+    }
+  ]
+}

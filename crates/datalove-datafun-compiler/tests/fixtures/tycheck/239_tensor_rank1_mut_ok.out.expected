@@ -1,0 +1,28 @@
+{
+  "diagnostics": [],
+  "errors": [],
+  "judgements": [
+    {
+      "kind": "function",
+      "name": "set_val",
+      "params": [
+        {
+          "name": "x",
+          "type": "u32"
+        }
+      ],
+      "return_type": "?bool"
+    },
+    {
+      "kind": "function",
+      "name": "test",
+      "params": [
+        {
+          "name": "t",
+          "type": "[|u32, 1|]"
+        }
+      ],
+      "return_type": "?bool"
+    }
+  ]
+}
