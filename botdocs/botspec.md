@@ -632,8 +632,8 @@ A place expression's behavior depends on its destination context:
 |---------|----------|---------|
 | `let` / `ret` / `in` param | Copy or clone value out | `let x = a[i]?` |
 | `ref` param | Immutable borrow | `foo(ref a[i]?)` |
-| `mut` param | Mutable borrow | `foo(mut a[i]?)` |
-| `set` LHS | Mutation target | `set a[i]? = 5` |
+| `mut` param | Mutable borrow (no views) | `foo(mut a[i]?)` |
+| `set` LHS | Mutation target (no views) | `set a[i]? = 5` |
 | binop operand | Immutable borrow | `a[i]? + 1` |
 
 In consume context (`let`, `ret`, `in` param), copy-type elements are copied
@@ -732,6 +732,8 @@ operations:
 - `out` parameters must be initialized before the function returns.
 - `ref` parameters cannot be passed to `mut` parameters.
 - `out` parameters must be written as a whole, not field-by-field.
+- View types (e.g. tensor sub-views from rank > 1 indexing) cannot be
+  passed to `mut` or `out` parameters. Use `ref` instead.
 
 ### 8.4 Const Parameters
 
@@ -1014,6 +1016,9 @@ The following features appear in design documents but are not yet implemented:
 - Tensor operations (transpose, slice, reshape) --
   tensor literals and axis-0 indexing work (`t[i]?`/`t[i]!`),
   but higher-level manipulation operations are not exposed.
+  Mutation of sub-tensor views via `mut` params is rejected;
+  element-level mutation through a view requires direct `set` on the
+  original tensor with chained indexing.
 - Set membership operations (contains, insert, remove) -- sets exist as a
   type but have no element-level operations beyond literals
 - Arena blocks
