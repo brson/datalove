@@ -181,6 +181,13 @@ elif ! podman image exists "$IMAGE_NAME" 2>/dev/null; then
     build_image
 fi
 
+# Install chime assets into host ~/.local so they survive the bind-mount
+# (the ~/.local/bin mount overrides what the Dockerfile COPYs into the image)
+mkdir -p "$HOME/.local/bin" "$HOME/.local/share/sounds"
+cp "$SCRIPT_DIR/claude-chime-notify.sh" "$HOME/.local/bin/claude-chime-notify"
+chmod +x "$HOME/.local/bin/claude-chime-notify"
+cp "$SCRIPT_DIR/assets/chime.wav" "$HOME/.local/share/sounds/chime.wav"
+
 info "Starting sandbox..."
 
 exec podman run -it --rm \
