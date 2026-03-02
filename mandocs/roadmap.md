@@ -12,7 +12,7 @@ Thorough compiler architecture, bare language.
 - [x] diagnostics
 - [ ] workspaces
 - [x] tensors and tables
-- [ ] indexing
+- [x] indexing
 - [ ] table column projections
 - [x] adapt opt / clone and coerce / @
 - [x] logic ops
