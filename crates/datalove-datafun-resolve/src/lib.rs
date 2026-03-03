@@ -87,53 +87,60 @@ pub fn resolve_names_impl<'db>(
     let mut function_asts = Vec::new();
 
     for statement in statements {
-        if let Statement::Fun(stmt) = statement {
-            let name = stmt.name(db);
-            let params = stmt.params(db);
-            let return_type = stmt.return_type(db);
+        // Extract function signature from either regular or native fun.
+        let (name, params, return_type, func_ast) = match statement {
+            Statement::Fun(stmt) => {
+                (stmt.name(db), stmt.params(db).clone(), stmt.return_type(db), Some(*stmt))
+            }
+            Statement::NativeFun(stmt) => {
+                (stmt.name, stmt.params.clone(), stmt.return_type.clone(), None)
+            }
+            _ => continue,
+        };
 
-            // Convert parameter types and collect modes/comptime flags.
-            let mut param_types = Vec::new();
-            let mut param_modes = Vec::new();
-            let mut param_comptime = Vec::new();
-            let mut has_error = false;
-            for param in params {
-                match convert_type_hint_with_aliases(db, param.type_hint.clone(), &type_aliases_map) {
-                    Ok(ty) => {
-                        param_types.push(ty);
-                        param_modes.push(param.mode);
-                        param_comptime.push(param.is_comptime);
-                    }
+        // Convert parameter types and collect modes/comptime flags.
+        let mut param_types = Vec::new();
+        let mut param_modes = Vec::new();
+        let mut param_comptime = Vec::new();
+        let mut has_error = false;
+        for param in &params {
+            match convert_type_hint_with_aliases(db, param.type_hint.clone(), &type_aliases_map) {
+                Ok(ty) => {
+                    param_types.push(ty);
+                    param_modes.push(param.mode);
+                    param_comptime.push(param.is_comptime);
+                }
+                Err(e) => {
+                    errors.push(e);
+                    has_error = true;
+                    break;
+                }
+            }
+        }
+
+        if has_error {
+            continue;
+        }
+
+        // Convert return type (default to unit if not specified).
+        let ret_ty = match return_type {
+            Some(type_hint) => {
+                match convert_type_hint_with_aliases(db, type_hint, &type_aliases_map) {
+                    Ok(ty) => ty,
                     Err(e) => {
                         errors.push(e);
-                        has_error = true;
-                        break;
+                        continue;
                     }
                 }
             }
+            None => unit_type(db),
+        };
 
-            if has_error {
-                continue;
-            }
-
-            // Convert return type (default to unit if not specified).
-            let ret_ty = match return_type {
-                Some(type_hint) => {
-                    match convert_type_hint_with_aliases(db, type_hint, &type_aliases_map) {
-                        Ok(ty) => ty,
-                        Err(e) => {
-                            errors.push(e);
-                            continue;
-                        }
-                    }
-                }
-                None => unit_type(db),
-            };
-
-            // Create function type and collect AST.
-            let func_type = TypeFunction::new(db, param_types, param_modes, param_comptime, ret_ty);
-            functions.push((name, func_type));
-            function_asts.push((name, *stmt));
+        // Create function type. Only collect AST for regular functions (not native).
+        let func_type = TypeFunction::new(db, param_types, param_modes, param_comptime, ret_ty);
+        functions.push((name, func_type));
+        if let Some(ast) = func_ast {
+            function_asts.push((name, ast));
         }
     }
 

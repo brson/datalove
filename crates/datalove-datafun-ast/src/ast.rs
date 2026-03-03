@@ -64,6 +64,7 @@ pub enum Statement<'db> {
     Continue(StmtContinue),
     DebugLog(StmtDebugLog<'db>),
     TypeAlias(StmtTypeAlias<'db>),
+    NativeFun(StmtNativeFun<'db>),
     Match(StmtMatch<'db>),
     ParseError(StmtParseError<'db>),
 }
@@ -205,6 +206,7 @@ pub struct StmtRet<'db> {
 pub enum StmtRequire<'db> {
     Module(StmtRequireModule<'db>),
     Data(StmtRequireData<'db>),
+    Rider(StmtRequireRider<'db>),
 }
 
 #[derive(Clone, Hash, PartialEq, Eq)]
@@ -220,6 +222,13 @@ pub struct StmtRequireModule<'db> {
 pub struct StmtRequireData<'db> {
     pub name: InternedText<'db>,
     pub type_hint: Option<datalit::ast::TypeHint<'db>>,
+}
+
+/// Rider requirement: `require rider <name>`.
+#[derive(Clone, Hash, PartialEq, Eq)]
+#[derive(salsa::Update)]
+pub struct StmtRequireRider<'db> {
+    pub name: InternedText<'db>,
 }
 
 #[derive(Clone, Hash, PartialEq, Eq)]
@@ -281,6 +290,18 @@ pub struct StmtTypeAlias<'db> {
     pub name: InternedText<'db>,
     pub type_hint: datalit::ast::TypeHint<'db>,
     pub local_index: u32,
+}
+
+/// Native function declaration: `native fun name(params): ret_type`.
+///
+/// Declares a function signature without a body. Used in `.dli` rider
+/// interface files to describe functions implemented in Rust.
+#[derive(Clone, Hash, PartialEq, Eq)]
+#[derive(salsa::Update)]
+pub struct StmtNativeFun<'db> {
+    pub name: InternedText<'db>,
+    pub params: Vec<FunParam<'db>>,
+    pub return_type: Option<datalit::ast::TypeHint<'db>>,
 }
 
 /// Match statement for exhaustive enum destructuring.

@@ -652,6 +652,13 @@ fn resolve_module_imports_internal<'db>(
         .map(|(alias, target_id)| (*alias, *target_id))
         .collect();
 
+    // Build rider alias map from pre-resolved riders.
+    use datalove_datafun_common::RiderInterface;
+    let resolved_riders = parsed_graph.get_riders(db, module_id);
+    let rider_alias_map: HashMap<InternedText<'db>, &RiderInterface<'db>> = resolved_riders.iter()
+        .map(|(alias, rider)| (*alias, rider))
+        .collect();
+
     let mut resolved_imports = Vec::new();
     let mut import_errors = Vec::new();
 
@@ -661,14 +668,13 @@ fn resolve_module_imports_internal<'db>(
             let item_name = import.item_name;
 
             if let Some(&source_module_id) = alias_map.get(&module_name) {
-                // Look up the function in pre-computed exports.
+                // Module import path.
                 if let Some(exports) = all_exports.get(&source_module_id) {
                     let func_opt = exports.iter()
                         .find(|(name, _)| *name == item_name)
                         .map(|(_, func_type)| *func_type);
 
                     if let Some(func_type) = func_opt {
-                        // Look up the function AST (linear search, n is small).
                         let func_ast = module_function_asts
                             .get(&source_module_id)
                             .and_then(|funcs| funcs.iter().find(|(n, _)| *n == item_name))
@@ -683,6 +689,23 @@ fn resolve_module_imports_internal<'db>(
                 } else {
                     import_errors.push(TypeError::UnresolvedName(
                         format!("module {} (exports not found)", module_name.as_str(db))
+                    ));
+                }
+            } else if let Some(rider) = rider_alias_map.get(&module_name) {
+                // Rider import path.
+                let func_opt = rider.functions.iter()
+                    .find(|(name, _)| *name == item_name)
+                    .map(|(_, func_type)| *func_type);
+
+                if let Some(func_type) = func_opt {
+                    // Create synthetic ModuleId for the rider.
+                    let rider_path = format!("@rider/{}", module_name.as_str(db));
+                    let synthetic_module_id = ModuleId::new(db, rider_path);
+                    // Native functions have no AST body.
+                    resolved_imports.push((item_name, func_type, None, synthetic_module_id));
+                } else {
+                    import_errors.push(TypeError::UnresolvedName(
+                        format!("{}.{} (not found in rider)", module_name.as_str(db), item_name.as_str(db))
                     ));
                 }
             } else {

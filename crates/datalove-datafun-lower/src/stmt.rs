@@ -189,6 +189,10 @@ fn lower_statement_impl<'db>(
         Statement::Match(match_stmt) => {
             lower_match(ctx, match_stmt, stmt_idx)
         }
+        Statement::NativeFun(_) => {
+            // Native function declarations have no body to lower.
+            Ok(())
+        }
         Statement::ParseError(_) => {
             panic!("parse error node reached lowering - callers should check for parse errors before lowering")
         }

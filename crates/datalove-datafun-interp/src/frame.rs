@@ -69,6 +69,9 @@ impl Frame {
                     param_initialized: Vec::new(),
                 }
             }
+            CodeUnitContext::Native(ctx) => {
+                panic!("native function not yet supported: {}", ctx.symbol)
+            }
         }
     }
 

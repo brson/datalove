@@ -130,7 +130,7 @@ pub fn parse_module_graph<'db>(
     // Compute recursive content hashes based on AST (not source text).
     let module_content_hashes = compute_module_content_hashes(db, &graph, &statements_map, &resolved_requires);
 
-    ParsedModuleGraph::new(db, graph, statements_only, spans_list, resolved_requires, module_content_hashes)
+    ParsedModuleGraph::new(db, graph, statements_only, spans_list, resolved_requires, module_content_hashes, BTreeMap::new())
 }
 
 /// Parse all modules in a graph with resolved requires, using parallel execution.

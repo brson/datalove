@@ -64,6 +64,7 @@ impl StmtKey {
             Statement::ParseError(_) => (13, None),
             Statement::Const(_) => (14, None),
             Statement::Match(_) => (15, None),
+            Statement::NativeFun(_) => (16, None),
         };
         Self { kind, local_index }
     }
@@ -87,6 +88,7 @@ impl StmtKey {
             13 => "ParseError",
             14 => "Const",
             15 => "Match",
+            16 => "NativeFun",
             _ => "Unknown",
         }
     }

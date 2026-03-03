@@ -36,13 +36,14 @@ impl<'db> Parser<'db> {
             Some("continue") => self.parse_continue(),
             Some("debuglog") => self.parse_debuglog(),
             Some("type") => self.parse_type_alias(),
+            Some("native") => self.parse_native_fun(),
             Some("match") => self.parse_match(remaining_lines),
             _ => {
                 let ts = self.peek_text_span();
                 self.emit_stmt_error(ts,
                     "unexpected statement",
                     "P001",
-                    "expected 'let', 'var', 'const', 'set', 'fun', 'ret', 'require', 'import', 'if', 'loop', 'break', 'continue', 'debuglog', or 'type'"
+                    "expected 'let', 'var', 'const', 'set', 'fun', 'ret', 'require', 'import', 'if', 'loop', 'break', 'continue', 'debuglog', 'type', or 'native'"
                 )
             }
         };
@@ -565,12 +566,31 @@ impl<'db> Parser<'db> {
                     }
                 ))
             }
+            Some("rider") => {
+                self.eat_word("rider");
+
+                let name = match self.eat_name() {
+                    Some(n) => n,
+                    None => {
+                        let ts = self.peek_text_span();
+                        return self.emit_stmt_error(ts,
+                            "expected rider name after 'require rider'",
+                            "P027",
+                            "expected rider name",
+                        );
+                    }
+                };
+
+                ast::Statement::Require(ast::StmtRequire::Rider(
+                    ast::StmtRequireRider { name }
+                ))
+            }
             _ => {
                 let ts = self.peek_text_span();
                 self.emit_stmt_error(ts,
-                    "expected 'module' or 'data' after 'require'",
+                    "expected 'module', 'data', or 'rider' after 'require'",
                     "P005",
-                    "expected 'module' or 'data'"
+                    "expected 'module', 'data', or 'rider'"
                 )
             }
         }
@@ -844,6 +864,62 @@ impl<'db> Parser<'db> {
             name,
             type_hint,
             local_index,
+        })
+    }
+
+    fn parse_native_fun(&mut self) -> ast::Statement<'db> {
+        self.eat_word("native");
+
+        if self.peek_word() != Some("fun") {
+            let ts = self.peek_text_span();
+            return self.emit_stmt_error(ts,
+                "expected 'fun' after 'native'",
+                "P028",
+                "expected 'fun'",
+            );
+        }
+        self.eat_word("fun");
+
+        let name = match self.eat_name() {
+            Some(n) => n,
+            None => {
+                let ts = self.peek_text_span();
+                return self.emit_stmt_error(ts,
+                    "expected function name after 'native fun'",
+                    "P029",
+                    "expected function name",
+                );
+            }
+        };
+
+        // Parse parameters in parentheses.
+        let params = match self.next() {
+            Some(TreeToken::Branch { sigil: Sigil::ParenOpen, open, inner, .. }) => {
+                let open_span = TextSpan::new(self.source_text(), open.span(self.db));
+                self.parse_fun_params(inner, Some((open_span, "in this parameter list")))
+            }
+            _ => {
+                let ts = self.error_span();
+                return self.emit_stmt_error(ts,
+                    "expected parameter list for native fun",
+                    "P030",
+                    "expected '(' to start parameter list",
+                );
+            }
+        };
+
+        // Check for return type: `: type`.
+        let return_type = if self.peek_sigil(Sigil::Colon) {
+            self.eat_sigil(Sigil::Colon);
+            Some(self.parse_type_hint())
+        } else {
+            None
+        };
+
+        ast::Statement::NativeFun(ast::StmtNativeFun {
+            name,
+            params,
+            return_type,
         })
     }
 

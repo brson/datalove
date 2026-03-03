@@ -96,6 +96,23 @@ impl AutoAdaptMode {
 }
 
 // ============================================================================
+// Rider Interface
+// ============================================================================
+
+/// A parsed rider interface from a `.dli` file.
+///
+/// Contains native function signatures and type aliases exported by a rider.
+/// Plain data, not salsa::tracked. Flows through the pipeline as part of
+/// `ParsedModuleGraph`.
+#[derive(Clone, PartialEq, Eq, Hash)]
+#[derive(salsa::Update)]
+pub struct RiderInterface<'db> {
+    pub name: InternedText<'db>,
+    pub functions: Vec<(InternedText<'db>, TypeFunction<'db>)>,
+    pub type_aliases: Vec<(InternedText<'db>, Type<'db>)>,
+}
+
+// ============================================================================
 // Parsed Module Graph
 // ============================================================================
 
@@ -136,6 +153,14 @@ pub struct ParsedModuleGraph<'db> {
     #[tracked]
     #[returns(ref)]
     pub module_content_hashes: BTreeMap<ModuleId, u64>,
+
+    /// Resolved rider interfaces per module.
+    ///
+    /// Maps each module to its resolved rider aliases: (alias, rider_interface).
+    /// Populated by the compiler driver from `require rider` statements.
+    #[tracked]
+    #[returns(ref)]
+    pub resolved_riders: BTreeMap<ModuleId, Vec<(InternedText<'db>, RiderInterface<'db>)>>,
 }
 
 impl<'db> ParsedModuleGraph<'db> {
@@ -159,6 +184,17 @@ impl<'db> ParsedModuleGraph<'db> {
     /// `require module` statements in this module resolved to.
     pub fn get_requires(&self, db: &'db dyn Db, module_id: ModuleId) -> &[(InternedText<'db>, ModuleId)] {
         self.resolved_requires(db)
+            .get(&module_id)
+            .map(|v| v.as_slice())
+            .unwrap_or(&[])
+    }
+
+    /// Get the resolved rider interfaces for a module.
+    ///
+    /// Returns a slice of (alias, rider_interface) pairs representing what
+    /// `require rider` statements in this module resolved to.
+    pub fn get_riders(&self, db: &'db dyn Db, module_id: ModuleId) -> &[(InternedText<'db>, RiderInterface<'db>)] {
+        self.resolved_riders(db)
             .get(&module_id)
             .map(|v| v.as_slice())
             .unwrap_or(&[])

@@ -1592,6 +1592,22 @@ pub struct ScriptContext {
     pub exports: Vec<(String, ExportBinding)>,
 }
 
+/// Context for a native function implemented in Rust.
+///
+/// Has a signature and linker symbol but no blocks. The interpreter panics
+/// on native calls until step 3 (native dispatch) is implemented.
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct NativeContext {
+    /// Parameter modes (In, Out, Ref, Mut).
+    pub param_modes: Vec<ParamMode>,
+    /// Type for each parameter.
+    pub param_types: Vec<IrType>,
+    /// Return type.
+    pub return_type: IrType,
+    /// Linker symbol, e.g. "dlr_std__list_push".
+    pub symbol: String,
+}
+
 /// Context determining how a code unit executes.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum CodeUnitContext {
@@ -1599,6 +1615,8 @@ pub enum CodeUnitContext {
     Function(FunctionContext),
     /// A script unit with captures and exports.
     Script(ScriptContext),
+    /// A native function with no blocks.
+    Native(NativeContext),
 }
 
 /// Unified IR representation for executable code.

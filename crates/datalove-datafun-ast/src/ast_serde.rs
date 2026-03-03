@@ -29,6 +29,7 @@ pub enum Statement {
     Continue(StmtContinue),
     DebugLog(StmtDebugLog),
     TypeAlias(StmtTypeAlias),
+    NativeFun(StmtNativeFun),
     Match(StmtMatch),
     ParseError(StmtParseError),
 }
@@ -127,6 +128,7 @@ pub struct StmtRet {
 pub enum StmtRequire {
     Module(StmtRequireModule),
     Data(StmtRequireData),
+    Rider(StmtRequireRider),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -140,6 +142,11 @@ pub struct StmtRequireModule {
 pub struct StmtRequireData {
     pub name: String,
     pub type_hint: Option<datalove_datalit::ast_serde::TypeHint>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct StmtRequireRider {
+    pub name: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -175,6 +182,13 @@ pub struct StmtDebugLog {
 pub struct StmtTypeAlias {
     pub name: String,
     pub type_hint: datalove_datalit::ast_serde::TypeHint,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct StmtNativeFun {
+    pub name: String,
+    pub params: Vec<FunParam>,
+    pub return_type: Option<datalove_datalit::ast_serde::TypeHint>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -526,6 +540,7 @@ impl Statement {
             crate::ast::Statement::Continue(_) => Statement::Continue(StmtContinue {}),
             crate::ast::Statement::DebugLog(s) => Statement::DebugLog(StmtDebugLog::from_ast(db, s)),
             crate::ast::Statement::TypeAlias(s) => Statement::TypeAlias(StmtTypeAlias::from_ast(db, s)),
+            crate::ast::Statement::NativeFun(s) => Statement::NativeFun(StmtNativeFun::from_ast(db, s)),
             crate::ast::Statement::Match(s) => Statement::Match(StmtMatch::from_ast(db, s)),
             crate::ast::Statement::ParseError(s) => Statement::ParseError(StmtParseError::from_ast(db, s)),
         }
@@ -537,6 +552,16 @@ impl StmtTypeAlias {
         StmtTypeAlias {
             name: ast.name.as_str(db).to_string(),
             type_hint: datalove_datalit::ast_serde::TypeHint::from_ast(db, ast.type_hint.clone()),
+        }
+    }
+}
+
+impl StmtNativeFun {
+    pub fn from_ast<'db>(db: &'db dyn Db, ast: &crate::ast::StmtNativeFun<'db>) -> Self {
+        StmtNativeFun {
+            name: ast.name.as_str(db).to_string(),
+            params: ast.params.iter().map(|p| FunParam::from_ast(db, p)).collect(),
+            return_type: ast.return_type.clone().map(|th| datalove_datalit::ast_serde::TypeHint::from_ast(db, th)),
         }
     }
 }
@@ -684,6 +709,11 @@ impl StmtRequire {
                 StmtRequire::Data(StmtRequireData {
                     name: d.name.as_str(db).to_string(),
                     type_hint: d.type_hint.clone().map(|th| datalove_datalit::ast_serde::TypeHint::from_ast(db, th)),
+                })
+            }
+            crate::ast::StmtRequire::Rider(r) => {
+                StmtRequire::Rider(StmtRequireRider {
+                    name: r.name.as_str(db).to_string(),
                 })
             }
         }

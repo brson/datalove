@@ -3,7 +3,7 @@
     "statements": [
       {
         "kind": "ParseError",
-        "message": "expected 'module' or 'data' after 'require'"
+        "message": "expected 'module', 'data', or 'rider' after 'require'"
       }
     ]
   },
@@ -12,7 +12,7 @@
       "code": "P005",
       "labels": [
         {
-          "message": "expected 'module' or 'data'",
+          "message": "expected 'module', 'data', or 'rider'",
           "span": [
             8,
             11
@@ -20,7 +20,7 @@
           "text": "foo"
         }
       ],
-      "message": "expected 'module' or 'data' after 'require'"
+      "message": "expected 'module', 'data', or 'rider' after 'require'"
     }
   ]
 }

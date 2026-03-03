@@ -1130,7 +1130,7 @@ fn analyze_statements<'db>(ctx: &mut AnalysisCtx<'db>, stmts: &[Statement<'db>])
             Statement::Match(match_stmt) => {
                 analyze_match(ctx, match_stmt, stmt_id);
             }
-            Statement::Require(_) | Statement::Import(_) | Statement::ParseError(_) => {
+            Statement::Require(_) | Statement::Import(_) | Statement::NativeFun(_) | Statement::ParseError(_) => {
                 // No drops.
             }
         }

@@ -368,6 +368,11 @@ pub fn check_statement<'db>(
             // Nothing to do here.
         }
 
+        Statement::NativeFun(_) => {
+            // Native function signatures are collected in name resolution.
+            // Nothing to typecheck — no body.
+        }
+
         Statement::Const(stmt) => {
             // Reject const at module level - const is only allowed in scripts and function bodies.
             if ctx.is_module_top_level() {
