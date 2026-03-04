@@ -1,0 +1,26 @@
+{
+  "ast": {
+    "statements": [
+      {
+        "kind": "ParseError",
+        "message": "expected rider name after 'require rider'"
+      }
+    ]
+  },
+  "diagnostics": [
+    {
+      "code": "P027",
+      "labels": [
+        {
+          "message": "expected rider name",
+          "span": [
+            0,
+            0
+          ],
+          "text": ""
+        }
+      ],
+      "message": "expected rider name after 'require rider'"
+    }
+  ]
+}

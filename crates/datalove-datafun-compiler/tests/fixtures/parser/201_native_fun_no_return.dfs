@@ -1,0 +1,1 @@
+native fun list_push(mut self: [data], elem: data)

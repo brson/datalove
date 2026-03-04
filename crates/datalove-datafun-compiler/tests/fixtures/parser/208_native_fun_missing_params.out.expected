@@ -1,0 +1,26 @@
+{
+  "ast": {
+    "statements": [
+      {
+        "kind": "ParseError",
+        "message": "expected parameter list for native fun"
+      }
+    ]
+  },
+  "diagnostics": [
+    {
+      "code": "P030",
+      "labels": [
+        {
+          "message": "expected '(' to start parameter list",
+          "span": [
+            19,
+            19
+          ],
+          "text": ""
+        }
+      ],
+      "message": "expected parameter list for native fun"
+    }
+  ]
+}

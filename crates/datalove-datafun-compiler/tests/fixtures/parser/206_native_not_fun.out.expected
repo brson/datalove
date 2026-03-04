@@ -1,0 +1,26 @@
+{
+  "ast": {
+    "statements": [
+      {
+        "kind": "ParseError",
+        "message": "expected 'fun' after 'native'"
+      }
+    ]
+  },
+  "diagnostics": [
+    {
+      "code": "P028",
+      "labels": [
+        {
+          "message": "expected 'fun'",
+          "span": [
+            7,
+            12
+          ],
+          "text": "thing"
+        }
+      ],
+      "message": "expected 'fun' after 'native'"
+    }
+  ]
+}

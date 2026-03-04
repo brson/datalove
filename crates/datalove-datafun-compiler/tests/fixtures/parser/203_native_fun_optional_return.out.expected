@@ -1,0 +1,34 @@
+{
+  "ast": {
+    "statements": [
+      {
+        "kind": "NativeFun",
+        "name": "list_get",
+        "params": [
+          {
+            "is_comptime": false,
+            "mode": "Ref",
+            "name": "self",
+            "type_hint": {
+              "List": {
+                "element_type": "Data"
+              }
+            }
+          },
+          {
+            "is_comptime": false,
+            "mode": "In",
+            "name": "i",
+            "type_hint": "Index"
+          }
+        ],
+        "return_type": {
+          "Option": {
+            "inner_type": "Data"
+          }
+        }
+      }
+    ]
+  },
+  "diagnostics": []
+}

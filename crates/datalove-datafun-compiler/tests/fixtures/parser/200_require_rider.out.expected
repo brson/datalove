@@ -1,0 +1,12 @@
+{
+  "ast": {
+    "statements": [
+      {
+        "kind": "Require",
+        "name": "std",
+        "variant": "Rider"
+      }
+    ]
+  },
+  "diagnostics": []
+}

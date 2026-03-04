@@ -1,0 +1,26 @@
+{
+  "ast": {
+    "statements": [
+      {
+        "kind": "ParseError",
+        "message": "expected function name after 'native fun'"
+      }
+    ]
+  },
+  "diagnostics": [
+    {
+      "code": "P029",
+      "labels": [
+        {
+          "message": "expected function name",
+          "span": [
+            11,
+            13
+          ],
+          "text": "()"
+        }
+      ],
+      "message": "expected function name after 'native fun'"
+    }
+  ]
+}

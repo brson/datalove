@@ -1,0 +1,1 @@
+native fun list_len(ref self: [data]): index
