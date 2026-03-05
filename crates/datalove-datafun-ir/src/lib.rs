@@ -1712,6 +1712,33 @@ impl IrCodeUnit {
         }
     }
 
+    /// Create a native function code unit (no blocks, just signature + symbol).
+    pub fn native(id: CodeUnitId, name: String, ctx: NativeContext) -> Self {
+        Self {
+            id,
+            name,
+            blocks: Vec::new(),
+            value_count: 0,
+            slot_count: 0,
+            call_site_count: 0,
+            value_types: Vec::new(),
+            slot_types: Vec::new(),
+            tracked_slots: Vec::new(),
+            const_values: Vec::new(),
+            symbols: SymbolTable::default(),
+            context: CodeUnitContext::Native(ctx),
+            nested_units: Vec::new(),
+        }
+    }
+
+    /// Get native context if this is a native function.
+    pub fn native_context(&self) -> Option<&NativeContext> {
+        match &self.context {
+            CodeUnitContext::Native(ctx) => Some(ctx),
+            _ => None,
+        }
+    }
+
     /// Get return type (for functions).
     pub fn return_type(&self) -> Option<&IrType> {
         self.function_context().map(|c| &c.return_type)

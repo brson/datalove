@@ -64,6 +64,7 @@ pub fn compute_func_id_map<'db>(
     parsed_graph: ParsedModuleGraph<'db>,
 ) -> FuncIdMap<'db> {
     let mut entries = Vec::new();
+    let regular_module_count = parsed_graph.statements_only(db).len();
 
     for (ir_module_idx, (module_id, parsed)) in parsed_graph.statements_only(db).iter().enumerate() {
         let ir_module_id = IrModuleId(ir_module_idx as u32);
@@ -75,6 +76,31 @@ pub fn compute_func_id_map<'db>(
                 let func_id = FuncId(next_func_id);
                 next_func_id += 1;
                 entries.push(((*module_id, func_name), (ir_module_id, func_id)));
+            }
+        }
+    }
+
+    // Add rider functions. Each unique rider alias gets its own IrModuleId.
+    let mut rider_module_idx = regular_module_count;
+    let mut seen_riders: std::collections::BTreeMap<String, IrModuleId> = std::collections::BTreeMap::new();
+
+    for (_module_id, riders) in parsed_graph.resolved_riders(db).iter() {
+        for (alias, rider) in riders {
+            let rider_path = format!("@rider/{}", alias.text(db));
+            let rider_ir_module_id = *seen_riders.entry(rider_path.clone()).or_insert_with(|| {
+                let id = IrModuleId(rider_module_idx as u32);
+                rider_module_idx += 1;
+                id
+            });
+
+            let synthetic_module_id = rider.module_id;
+            for (func_idx, (func_name, _func_type)) in rider.functions.iter().enumerate() {
+                let name = func_name.text(db).S();
+                let key = (synthetic_module_id, name);
+                // Avoid duplicates if the same rider is required by multiple modules.
+                if !entries.iter().any(|(k, _)| *k == key) {
+                    entries.push((key, (rider_ir_module_id, FuncId(func_idx as u32))));
+                }
             }
         }
     }

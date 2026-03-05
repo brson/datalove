@@ -180,7 +180,8 @@ fn analyze_worldfile_aot(parsed: package_load_worldfile::ParsedWorldfile) -> Aot
             | WorldfileSection::ModuleChangeWs { .. }
             | WorldfileSection::ModuleChangeAst { .. }
             | WorldfileSection::ModuleChangeTy { .. }
-            | WorldfileSection::InlineDirectives { .. } => {
+            | WorldfileSection::InlineDirectives { .. }
+            | WorldfileSection::Rider { .. } => {
                 // Already handled above (or not relevant for AOT tests).
             }
             WorldfileSection::ScriptFragment { source } => {

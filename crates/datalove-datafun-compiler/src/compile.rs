@@ -83,13 +83,18 @@ impl<'db> ModuleCompilationOutput<'db> {
 pub fn compile_modules<'db>(
     db: &'db dyn DbClone,
     input: ModuleCompilationInput,
+    rider_sources: Vec<(String, String)>,
     mode: ParallelMode,
 ) -> ModuleCompilationOutput<'db> {
     // Phase 1: Parse
+    // Rider sources are passed through as raw strings; RiderInterface creation
+    // happens inside the tracked parse_module_graph function where salsa tracked
+    // struct creation (TypeFunction) is allowed.
     let parsed_graph = parse_module_graph_with_mode(
         db,
         input.graph.clone(),
         input.resolved_requires,
+        rider_sources,
         mode,
     );
 

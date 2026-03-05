@@ -70,7 +70,7 @@ impl Frame {
                 }
             }
             CodeUnitContext::Native(ctx) => {
-                panic!("native function not yet supported: {}", ctx.symbol)
+                panic!("native functions are dispatched directly, not via Frame: {}", ctx.symbol)
             }
         }
     }

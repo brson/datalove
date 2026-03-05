@@ -85,6 +85,7 @@ pub fn parse_module_graph<'db>(
     db: &'db dyn salsa::Database,
     graph: ModuleGraph,
     resolved_requires_str: BTreeMap<ModuleId, Vec<(String, ModuleId)>>,
+    rider_sources: Vec<(String, String)>,
 ) -> ParsedModuleGraph<'db> {
     // Sequential implementation for salsa tracking.
     let mut statements_only = Vec::new();
@@ -130,7 +131,11 @@ pub fn parse_module_graph<'db>(
     // Compute recursive content hashes based on AST (not source text).
     let module_content_hashes = compute_module_content_hashes(db, &graph, &statements_map, &resolved_requires);
 
-    ParsedModuleGraph::new(db, graph, statements_only, spans_list, resolved_requires, module_content_hashes, BTreeMap::new())
+    // Build RiderInterfaces from rider sources inside this tracked function,
+    // where salsa tracked struct creation (TypeFunction) is allowed.
+    let resolved_riders = build_resolved_riders_from_sources(db, &rider_sources, &graph);
+
+    ParsedModuleGraph::new(db, graph, statements_only, spans_list, resolved_requires, module_content_hashes, resolved_riders)
 }
 
 /// Parse all modules in a graph with resolved requires, using parallel execution.
@@ -142,6 +147,7 @@ pub fn parse_module_graph_parallel<'db>(
     db: &'db dyn DbClone,
     graph: ModuleGraph,
     resolved_requires_str: BTreeMap<ModuleId, Vec<(String, ModuleId)>>,
+    rider_sources: Vec<(String, String)>,
 ) -> ParsedModuleGraph<'db> {
     let db_salsa = db.as_salsa_db();
 
@@ -163,7 +169,7 @@ pub fn parse_module_graph_parallel<'db>(
 
     // Delegate to tracked function which can create ParsedModuleGraph.
     // All parse_module_full calls will be cache hits from the parallel phase.
-    parse_module_graph(db_salsa, graph, resolved_requires_str)
+    parse_module_graph(db_salsa, graph, resolved_requires_str, rider_sources)
 }
 
 /// Parse module graph with configurable parallelism.
@@ -175,12 +181,69 @@ pub fn parse_module_graph_with_mode<'db>(
     db: &'db dyn DbClone,
     graph: ModuleGraph,
     resolved_requires_str: BTreeMap<ModuleId, Vec<(String, ModuleId)>>,
+    rider_sources: Vec<(String, String)>,
     mode: ParallelMode,
 ) -> ParsedModuleGraph<'db> {
     match mode {
-        ParallelMode::Sequential => parse_module_graph(db.as_salsa_db(), graph, resolved_requires_str),
-        ParallelMode::Parallel => parse_module_graph_parallel(db, graph, resolved_requires_str),
+        ParallelMode::Sequential => parse_module_graph(db.as_salsa_db(), graph, resolved_requires_str, rider_sources),
+        ParallelMode::Parallel => parse_module_graph_parallel(db, graph, resolved_requires_str, rider_sources),
     }
+}
+
+/// Build resolved riders from raw source strings inside a tracked context.
+///
+/// Parses each rider source, extracts function signatures via name resolution,
+/// then scans module sources for `require rider X` to map riders to modules.
+fn build_resolved_riders_from_sources<'db>(
+    db: &'db dyn salsa::Database,
+    rider_sources: &[(String, String)],
+    graph: &ModuleGraph,
+) -> BTreeMap<ModuleId, Vec<(InternedText<'db>, datalove_datafun_common::RiderInterface<'db>)>> {
+    use datalove_datafun_common::RiderInterface;
+    use rmx::std::collections::HashMap;
+
+    if rider_sources.is_empty() {
+        return BTreeMap::new();
+    }
+
+    // Parse each rider source to build RiderInterface.
+    let mut rider_interfaces: HashMap<String, RiderInterface<'db>> = HashMap::new();
+    for (name, source) in rider_sources {
+        let source_input = bct::input::Source::new(db, source.clone());
+        let parse_result = datalove_datafun_parser::parse(db, source_input);
+        let collected = datalove_datafun_resolve::resolve_names_impl(db, &parse_result.parsed.statements);
+        let rider_name = InternedText::new(db, name.clone());
+        let rider_path = format!("@rider/{}", name);
+        let module_id = ModuleId::new(db, rider_path);
+        rider_interfaces.insert(name.clone(), RiderInterface {
+            name: rider_name,
+            module_id,
+            functions: collected.functions,
+            type_aliases: collected.type_aliases,
+        });
+    }
+
+    // Scan each module's source for `require rider X` statements.
+    let mut result: BTreeMap<ModuleId, Vec<(InternedText<'db>, RiderInterface<'db>)>> = BTreeMap::new();
+    for module in graph.iter_modules(db) {
+        let module_id = module.id(db);
+        let source_text = module.source(db).text(db);
+
+        for line in source_text.lines() {
+            let trimmed = line.trim();
+            if let Some(rider_name) = trimmed.strip_prefix("require rider ") {
+                let rider_name = rider_name.trim();
+                if let Some(interface) = rider_interfaces.get(rider_name) {
+                    let interned_alias = InternedText::new(db, rider_name.to_string());
+                    result.entry(module_id)
+                        .or_default()
+                        .push((interned_alias, interface.clone()));
+                }
+            }
+        }
+    }
+
+    result
 }
 
 /// Compute recursive content hashes for each module in the graph.
@@ -320,12 +383,12 @@ mod tests {
 
         // Create a single module.
         let (graph1, ids1) = build_graph(&db, &[("a", "let x = 1")]);
-        let parsed1 = parse_module_graph(&db, graph1, BTreeMap::new());
+        let parsed1 = parse_module_graph(&db, graph1, BTreeMap::new(), Vec::new());
         let hash1 = parsed1.module_content_hashes(&db)[&ids1[0]];
 
         // Create same module with different source.
         let (graph2, ids2) = build_graph(&db, &[("a", "let x = 2")]);
-        let parsed2 = parse_module_graph(&db, graph2, BTreeMap::new());
+        let parsed2 = parse_module_graph(&db, graph2, BTreeMap::new(), Vec::new());
         let hash2 = parsed2.module_content_hashes(&db)[&ids2[0]];
 
         assert_ne!(hash1, hash2, "hash should change when source changes");
@@ -336,11 +399,11 @@ mod tests {
         let db = Database::default();
 
         let (graph1, ids1) = build_graph(&db, &[("a", "let x = 1")]);
-        let parsed1 = parse_module_graph(&db, graph1, BTreeMap::new());
+        let parsed1 = parse_module_graph(&db, graph1, BTreeMap::new(), Vec::new());
         let hash1 = parsed1.module_content_hashes(&db)[&ids1[0]];
 
         let (graph2, ids2) = build_graph(&db, &[("a", "let x = 1")]);
-        let parsed2 = parse_module_graph(&db, graph2, BTreeMap::new());
+        let parsed2 = parse_module_graph(&db, graph2, BTreeMap::new(), Vec::new());
         let hash2 = parsed2.module_content_hashes(&db)[&ids2[0]];
 
         assert_eq!(hash1, hash2, "identical source should produce identical hash");
@@ -357,7 +420,7 @@ mod tests {
         ]);
         let mut requires1 = BTreeMap::new();
         requires1.insert(ids1[1], vec![("b".to_string(), ids1[0])]);
-        let parsed1 = parse_module_graph(&db, graph1, requires1);
+        let parsed1 = parse_module_graph(&db, graph1, requires1, Vec::new());
         let hash_a1 = parsed1.module_content_hashes(&db)[&ids1[1]];
         let hash_b1 = parsed1.module_content_hashes(&db)[&ids1[0]];
 
@@ -368,7 +431,7 @@ mod tests {
         ]);
         let mut requires2 = BTreeMap::new();
         requires2.insert(ids2[1], vec![("b".to_string(), ids2[0])]);
-        let parsed2 = parse_module_graph(&db, graph2, requires2);
+        let parsed2 = parse_module_graph(&db, graph2, requires2, Vec::new());
         let hash_a2 = parsed2.module_content_hashes(&db)[&ids2[1]];
         let hash_b2 = parsed2.module_content_hashes(&db)[&ids2[0]];
 
@@ -391,7 +454,7 @@ mod tests {
         ]);
         let mut requires1 = BTreeMap::new();
         requires1.insert(ids1[1], vec![("c".to_string(), ids1[0])]);
-        let parsed1 = parse_module_graph(&db, graph1, requires1);
+        let parsed1 = parse_module_graph(&db, graph1, requires1, Vec::new());
         let hash_a1 = parsed1.module_content_hashes(&db)[&ids1[2]];
 
         // Change C's source.
@@ -402,7 +465,7 @@ mod tests {
         ]);
         let mut requires2 = BTreeMap::new();
         requires2.insert(ids2[1], vec![("c".to_string(), ids2[0])]);
-        let parsed2 = parse_module_graph(&db, graph2, requires2);
+        let parsed2 = parse_module_graph(&db, graph2, requires2, Vec::new());
         let hash_a2 = parsed2.module_content_hashes(&db)[&ids2[2]];
 
         // A's hash should be unchanged (A doesn't depend on C).
@@ -422,7 +485,7 @@ mod tests {
         let mut requires1 = BTreeMap::new();
         requires1.insert(ids1[1], vec![("c".to_string(), ids1[0])]);
         requires1.insert(ids1[2], vec![("b".to_string(), ids1[1])]);
-        let parsed1 = parse_module_graph(&db, graph1, requires1);
+        let parsed1 = parse_module_graph(&db, graph1, requires1, Vec::new());
         let hash_a1 = parsed1.module_content_hashes(&db)[&ids1[2]];
         let hash_b1 = parsed1.module_content_hashes(&db)[&ids1[1]];
         let hash_c1 = parsed1.module_content_hashes(&db)[&ids1[0]];
@@ -436,7 +499,7 @@ mod tests {
         let mut requires2 = BTreeMap::new();
         requires2.insert(ids2[1], vec![("c".to_string(), ids2[0])]);
         requires2.insert(ids2[2], vec![("b".to_string(), ids2[1])]);
-        let parsed2 = parse_module_graph(&db, graph2, requires2);
+        let parsed2 = parse_module_graph(&db, graph2, requires2, Vec::new());
         let hash_a2 = parsed2.module_content_hashes(&db)[&ids2[2]];
         let hash_b2 = parsed2.module_content_hashes(&db)[&ids2[1]];
         let hash_c2 = parsed2.module_content_hashes(&db)[&ids2[0]];
@@ -462,7 +525,7 @@ mod tests {
             ("b".to_string(), ids1[0]),
             ("c".to_string(), ids1[1]),
         ]);
-        let parsed1 = parse_module_graph(&db, graph1, requires1);
+        let parsed1 = parse_module_graph(&db, graph1, requires1, Vec::new());
         let hash_a1 = parsed1.module_content_hashes(&db)[&ids1[2]];
 
         // Change only C.
@@ -476,7 +539,7 @@ mod tests {
             ("b".to_string(), ids2[0]),
             ("c".to_string(), ids2[1]),
         ]);
-        let parsed2 = parse_module_graph(&db, graph2, requires2);
+        let parsed2 = parse_module_graph(&db, graph2, requires2, Vec::new());
         let hash_a2 = parsed2.module_content_hashes(&db)[&ids2[2]];
 
         assert_ne!(hash_a1, hash_a2, "A's hash should change when any dependency changes");
@@ -493,7 +556,7 @@ mod tests {
         ]);
         let mut requires1 = BTreeMap::new();
         requires1.insert(ids1[1], vec![("b".to_string(), ids1[0])]);
-        let parsed1 = parse_module_graph(&db, graph1, requires1);
+        let parsed1 = parse_module_graph(&db, graph1, requires1, Vec::new());
         let hash_a1 = parsed1.module_content_hashes(&db)[&ids1[1]];
 
         // Same dependency but with different alias "c".
@@ -503,7 +566,7 @@ mod tests {
         ]);
         let mut requires2 = BTreeMap::new();
         requires2.insert(ids2[1], vec![("c".to_string(), ids2[0])]);
-        let parsed2 = parse_module_graph(&db, graph2, requires2);
+        let parsed2 = parse_module_graph(&db, graph2, requires2, Vec::new());
         let hash_a2 = parsed2.module_content_hashes(&db)[&ids2[1]];
 
         // Different alias should produce different hash (module configuration differs).
@@ -532,7 +595,7 @@ mod tests {
 
         // First parse.
         let (graph, _ids) = build_graph_logging(&db, &[("a", "let x = 1")]);
-        let _parsed1 = parse_module_graph(&db, graph.clone(), BTreeMap::new());
+        let _parsed1 = parse_module_graph(&db, graph.clone(), BTreeMap::new(), Vec::new());
 
         let first_run_queries = db.executed_queries();
         assert!(!first_run_queries.is_empty(), "first run should execute queries");
@@ -540,7 +603,7 @@ mod tests {
         db.clear_events();
 
         // Second parse with same inputs - should be cached.
-        let _parsed2 = parse_module_graph(&db, graph, BTreeMap::new());
+        let _parsed2 = parse_module_graph(&db, graph, BTreeMap::new(), Vec::new());
 
         let second_run_queries = db.executed_queries();
         assert!(
@@ -556,13 +619,13 @@ mod tests {
 
         // First parse.
         let (graph1, _ids1) = build_graph_logging(&db, &[("a", "let x = 1")]);
-        let _parsed1 = parse_module_graph(&db, graph1, BTreeMap::new());
+        let _parsed1 = parse_module_graph(&db, graph1, BTreeMap::new(), Vec::new());
 
         db.clear_events();
 
         // Second parse with different source.
         let (graph2, _ids2) = build_graph_logging(&db, &[("a", "let x = 2")]);
-        let _parsed2 = parse_module_graph(&db, graph2, BTreeMap::new());
+        let _parsed2 = parse_module_graph(&db, graph2, BTreeMap::new(), Vec::new());
 
         let recompute_queries = db.executed_queries();
         assert!(
@@ -582,7 +645,7 @@ mod tests {
         ]);
         let mut requires1 = BTreeMap::new();
         requires1.insert(ids1[1], vec![("b".to_string(), ids1[0])]);
-        let parsed1 = parse_module_graph(&db, graph1, requires1);
+        let parsed1 = parse_module_graph(&db, graph1, requires1, Vec::new());
         let hash_a1 = parsed1.module_content_hashes(&db)[&ids1[1]];
         let hash_b1 = parsed1.module_content_hashes(&db)[&ids1[0]];
 
@@ -595,7 +658,7 @@ mod tests {
         ]);
         let mut requires2 = BTreeMap::new();
         requires2.insert(ids2[1], vec![("b".to_string(), ids2[0])]);
-        let parsed2 = parse_module_graph(&db, graph2, requires2);
+        let parsed2 = parse_module_graph(&db, graph2, requires2, Vec::new());
         let hash_a2 = parsed2.module_content_hashes(&db)[&ids2[1]];
         let hash_b2 = parsed2.module_content_hashes(&db)[&ids2[0]];
 
@@ -635,7 +698,7 @@ mod tests {
         requires.insert(ids[2], vec![("b".to_string(), ids[1])]);
 
         enable_query_logging();
-        let _parsed = parse_module_graph(&db, graph, requires);
+        let _parsed = parse_module_graph(&db, graph, requires, Vec::new());
         let log = disable_query_logging();
 
         // All 3 modules should have been parsed.
@@ -654,7 +717,7 @@ mod tests {
         let (graph, _ids) = build_graph(&db, &[("a", "let x = 1")]);
 
         enable_query_logging();
-        let _parsed1 = parse_module_graph(&db, graph.clone(), BTreeMap::new());
+        let _parsed1 = parse_module_graph(&db, graph.clone(), BTreeMap::new(), Vec::new());
         let log1 = disable_query_logging();
 
         let first_parsed = get_executed_modules(&log1, "parse");
@@ -663,7 +726,7 @@ mod tests {
         // Second run with same inputs.
         // The outer parse_module_graph is cached, so the loop doesn't run.
         enable_query_logging();
-        let _parsed2 = parse_module_graph(&db, graph, BTreeMap::new());
+        let _parsed2 = parse_module_graph(&db, graph, BTreeMap::new(), Vec::new());
         let log2 = disable_query_logging();
 
         let second_parsed = get_executed_modules(&log2, "parse");
@@ -689,7 +752,7 @@ mod tests {
 
         // First run: both modules should be parsed.
         enable_query_logging();
-        let parsed1 = parse_module_graph(&db, graph.clone(), requires.clone());
+        let parsed1 = parse_module_graph(&db, graph.clone(), requires.clone(), Vec::new());
         let log1 = disable_query_logging();
 
         let first_parsed = get_executed_modules(&log1, "parse");
@@ -705,7 +768,7 @@ mod tests {
 
         // Second run: only B should be re-parsed, A should be cached.
         enable_query_logging();
-        let parsed2 = parse_module_graph(&db, graph, requires);
+        let parsed2 = parse_module_graph(&db, graph, requires, Vec::new());
         let log2 = disable_query_logging();
 
         let second_parsed = get_executed_modules(&log2, "parse");
@@ -916,7 +979,7 @@ mod tests {
         let mut requires = BTreeMap::new();
         requires.insert(ids[1], vec![("b".to_string(), ids[0])]);
 
-        let parsed = parse_module_graph(&db, graph, requires);
+        let parsed = parse_module_graph(&db, graph, requires, Vec::new());
 
         enable_query_logging();
         let _result = resolve_and_typecheck(&db, parsed);
@@ -947,7 +1010,7 @@ mod tests {
         requires.insert(id_a, vec![("b".to_string(), id_b)]);
 
         // First run: both modules should typecheck.
-        let parsed1 = parse_module_graph(&db, graph.clone(), requires.clone());
+        let parsed1 = parse_module_graph(&db, graph.clone(), requires.clone(), Vec::new());
         enable_query_logging();
         let _result1 = resolve_and_typecheck(&db, parsed1);
         let log1 = disable_query_logging();
@@ -964,7 +1027,7 @@ mod tests {
         source_b.set_text(&mut db).to("fun helper(): i32\n  ret 999\nend fun".to_string());
 
         // Second run: only B should re-typecheck.
-        let parsed2 = parse_module_graph(&db, graph, requires);
+        let parsed2 = parse_module_graph(&db, graph, requires, Vec::new());
         enable_query_logging();
         let _result2 = resolve_and_typecheck(&db, parsed2);
         let log2 = disable_query_logging();
@@ -996,14 +1059,14 @@ mod tests {
         let graph = builder.build();
 
         // First run.
-        let parsed1 = parse_module_graph(&db, graph.clone(), BTreeMap::new());
+        let parsed1 = parse_module_graph(&db, graph.clone(), BTreeMap::new(), Vec::new());
         let _result1 = resolve_and_typecheck(&db, parsed1);
 
         // Capture content hash after first run.
         let hash_a1 = parsed1.module_content_hashes(&db)[&id_a];
 
         // Second run with no changes.
-        let parsed2 = parse_module_graph(&db, graph, BTreeMap::new());
+        let parsed2 = parse_module_graph(&db, graph, BTreeMap::new(), Vec::new());
         enable_query_logging();
         let _result2 = resolve_and_typecheck(&db, parsed2);
         let log = disable_query_logging();
@@ -1036,7 +1099,7 @@ mod tests {
         requires.insert(id_a, vec![("b".to_string(), id_b)]);
 
         // First run.
-        let parsed1 = parse_module_graph(&db, graph.clone(), requires.clone());
+        let parsed1 = parse_module_graph(&db, graph.clone(), requires.clone(), Vec::new());
         enable_query_logging();
         let _result1 = resolve_and_typecheck(&db, parsed1);
         let log1 = disable_query_logging();
@@ -1054,7 +1117,7 @@ mod tests {
             "require module /test/b\nimport b.helper\nfun main(): i32\n  ret 42\nend fun".to_string());
 
         // Second run: only A should re-typecheck.
-        let parsed2 = parse_module_graph(&db, graph, requires);
+        let parsed2 = parse_module_graph(&db, graph, requires, Vec::new());
         enable_query_logging();
         let _result2 = resolve_and_typecheck(&db, parsed2);
         let log2 = disable_query_logging();
@@ -1090,7 +1153,7 @@ mod tests {
         requires.insert(id_a, vec![("b".to_string(), id_b)]);
 
         // First run: both modules should have imports resolved.
-        let parsed1 = parse_module_graph(&db, graph.clone(), requires.clone());
+        let parsed1 = parse_module_graph(&db, graph.clone(), requires.clone(), Vec::new());
         enable_query_logging();
         let _result1 = resolve_and_typecheck(&db, parsed1);
         let log1 = disable_query_logging();
@@ -1100,7 +1163,7 @@ mod tests {
         assert_eq!(first_resolved.len(), 2, "first run should resolve imports for both modules");
 
         // Second run with same inputs: should be fully cached.
-        let parsed2 = parse_module_graph(&db, graph, requires);
+        let parsed2 = parse_module_graph(&db, graph, requires, Vec::new());
         enable_query_logging();
         let _result2 = resolve_and_typecheck(&db, parsed2);
         let log2 = disable_query_logging();
@@ -1127,14 +1190,14 @@ mod tests {
         requires.insert(ids[1], vec![("b".to_string(), ids[0])]);
 
         // First: parallel typecheck populates cache (including import resolution).
-        let parsed = parse_module_graph(&db, graph.clone(), requires.clone());
+        let parsed = parse_module_graph(&db, graph.clone(), requires.clone(), Vec::new());
         let _result1 = resolve_and_typecheck_parallel(&db, parsed);
 
         // Clear events after parallel phase.
         db.clear_events();
 
         // Second: sequential should hit cache for everything.
-        let parsed2 = parse_module_graph(&db, graph, requires);
+        let parsed2 = parse_module_graph(&db, graph, requires, Vec::new());
         let _result2 = resolve_and_typecheck(&db, parsed2);
 
         let executed = db.executed_queries();
@@ -1158,18 +1221,18 @@ mod tests {
         let (graph, _ids) = build_graph_logging(&db, &[("a", "let x = 1")]);
 
         // Parse with original db.
-        let _parsed1 = parse_module_graph(&db, graph.clone(), BTreeMap::new());
+        let _parsed1 = parse_module_graph(&db, graph.clone(), BTreeMap::new(), Vec::new());
         let first_queries = db.executed_queries();
         assert!(!first_queries.is_empty(), "first parse should execute queries");
         db.clear_events();
 
         // Clone the db and parse with clone.
         let db_clone = db.clone();
-        let _parsed2 = parse_module_graph(&db_clone, graph.clone(), BTreeMap::new());
+        let _parsed2 = parse_module_graph(&db_clone, graph.clone(), BTreeMap::new(), Vec::new());
 
         // Check if original db sees the clone's work as cached.
         db.clear_events();
-        let _parsed3 = parse_module_graph(&db, graph, BTreeMap::new());
+        let _parsed3 = parse_module_graph(&db, graph, BTreeMap::new(), Vec::new());
         let third_queries = db.executed_queries();
         eprintln!("Third parse queries: {:?}", third_queries);
     }
@@ -1197,7 +1260,7 @@ mod tests {
         eprintln!("Parallel phase complete, trying to use original db...");
 
         // Now try to use the original db.
-        let _parsed = parse_module_graph(&db, graph, BTreeMap::new());
+        let _parsed = parse_module_graph(&db, graph, BTreeMap::new(), Vec::new());
         eprintln!("Original db still works after parallel phase");
     }
 
@@ -1213,7 +1276,7 @@ mod tests {
         ]);
 
         // First parallel parse populates cache.
-        let _parsed1 = parse_module_graph_parallel(&db, graph.clone(), BTreeMap::new());
+        let _parsed1 = parse_module_graph_parallel(&db, graph.clone(), BTreeMap::new(), Vec::new());
 
         // Record which queries executed during first parse.
         let first_executed = db.executed_queries();
@@ -1227,7 +1290,7 @@ mod tests {
         db.clear_events();
 
         // Second parse should be fully memoized.
-        let _parsed2 = parse_module_graph_parallel(&db, graph.clone(), BTreeMap::new());
+        let _parsed2 = parse_module_graph_parallel(&db, graph.clone(), BTreeMap::new(), Vec::new());
 
         let second_executed = db.executed_queries();
         // Filter to just parse_module_full queries (not input lookups).
@@ -1298,7 +1361,7 @@ mod tests {
         ]);
 
         // First: parallel typecheck populates cache.
-        let parsed = parse_module_graph(&db, graph.clone(), BTreeMap::new());
+        let parsed = parse_module_graph(&db, graph.clone(), BTreeMap::new(), Vec::new());
         let _result1 = resolve_and_typecheck_parallel(&db, parsed);
 
         // Clear events after parallel phase.
@@ -1306,7 +1369,7 @@ mod tests {
 
         // Second: sequential typecheck should hit cache (warmed by parallel).
         // If parallel didn't populate the cache, this would show typecheck_module executions.
-        let parsed2 = parse_module_graph(&db, graph, BTreeMap::new());
+        let parsed2 = parse_module_graph(&db, graph, BTreeMap::new(), Vec::new());
         let _result2 = resolve_and_typecheck(&db, parsed2);
 
         let executed = db.executed_queries();
@@ -1336,7 +1399,7 @@ mod tests {
         let mut requires = BTreeMap::new();
         requires.insert(ids[1], vec![("b".to_string(), ids[0])]);
 
-        let parsed = parse_module_graph(&db, graph, requires);
+        let parsed = parse_module_graph(&db, graph, requires, Vec::new());
 
         // Typecheck sequentially.
         let result_seq = resolve_and_typecheck_with_mode(&db, parsed, TypecheckParallelMode::Sequential);
@@ -1349,7 +1412,7 @@ mod tests {
         ]);
         let mut requires2 = BTreeMap::new();
         requires2.insert(ids2[1], vec![("b".to_string(), ids2[0])]);
-        let parsed2 = parse_module_graph(&db2, graph2, requires2);
+        let parsed2 = parse_module_graph(&db2, graph2, requires2, Vec::new());
         let result_par = resolve_and_typecheck_with_mode(&db2, parsed2, TypecheckParallelMode::Parallel);
 
         // Compare results.
@@ -1393,7 +1456,7 @@ mod tests {
         requires.insert(id_a, vec![("b".to_string(), id_b)]);
 
         // First run with sequential to establish baseline (parallel doesn't log queries).
-        let parsed1 = parse_module_graph(&db, graph.clone(), requires.clone());
+        let parsed1 = parse_module_graph(&db, graph.clone(), requires.clone(), Vec::new());
         enable_query_logging();
         let _result1 = resolve_and_typecheck(&db, parsed1);
         let log1 = disable_query_logging();
@@ -1407,7 +1470,7 @@ mod tests {
 
         // Second run with parallel: only B should re-typecheck.
         // Using sequential typecheck for verification since parallel doesn't log to query_log.
-        let parsed2 = parse_module_graph(&db, graph, requires);
+        let parsed2 = parse_module_graph(&db, graph, requires, Vec::new());
         enable_query_logging();
         let _result2 = resolve_and_typecheck(&db, parsed2);
         let log2 = disable_query_logging();

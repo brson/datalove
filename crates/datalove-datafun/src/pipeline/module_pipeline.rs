@@ -61,6 +61,9 @@ pub struct ModuleCompilationPipeline {
     world: IncrementalModuleWorld,
     const_inlining: ConstInlining,
     skip_specialization: bool,
+    /// Rider interfaces parsed from worldfile rider sections.
+    /// Maps rider name to source text for deferred parsing.
+    rider_sources: Vec<(String, String)>,
 }
 
 impl ModuleCompilationPipeline {
@@ -70,6 +73,7 @@ impl ModuleCompilationPipeline {
             world: IncrementalModuleWorld::new(),
             const_inlining,
             skip_specialization: false,
+            rider_sources: Vec::new(),
         }
     }
 
@@ -117,8 +121,14 @@ impl ModuleCompilationPipeline {
         sections: &[WorldfileSection],
     ) {
         for section in sections {
-            if let WorldfileSection::Module { library, package, module, source } = section {
-                self.add_module(db, library, package, module, source);
+            match section {
+                WorldfileSection::Module { library, package, module, source } => {
+                    self.add_module(db, library, package, module, source);
+                }
+                WorldfileSection::Rider { name, source } => {
+                    self.rider_sources.push((name.clone(), source.clone()));
+                }
+                _ => {}
             }
         }
     }
@@ -269,7 +279,7 @@ impl ModuleCompilationPipeline {
             graph: module_graph,
             resolved_requires,
         };
-        let output = compiler_compile_modules(db, input, mode);
+        let output = compiler_compile_modules(db, input, self.rider_sources.clone(), mode);
 
         // Only run lowering if analysis succeeded.
         let lowering_result = if output.is_successful() {
@@ -333,6 +343,11 @@ impl ModuleCompilationPipeline {
                     }
                 }
 
+                // Emit native code units for rider functions.
+                Self::add_native_rider_units(
+                    db.as_salsa_db(), &output, &func_id_map, &mut registry,
+                );
+
                 (func_id_map, registry, lowering_errors, module_ir_dumps)
             } else {
                 // No lowering - use empty structures.
@@ -360,6 +375,75 @@ impl ModuleCompilationPipeline {
             ownership_errors: output.ownership_errors,
             lowering_errors,
             module_ir_dumps,
+        }
+    }
+}
+
+impl ModuleCompilationPipeline {
+    /// Create native IrCodeUnits for rider functions and add them to the registry.
+    ///
+    /// Linker symbols are generated here at the backend boundary, not in the compiler core.
+    fn add_native_rider_units<'db>(
+        db: &'db dyn salsa::Database,
+        output: &ModuleCompilationOutput<'db>,
+        func_id_map: &HashMap<(ModuleId, String), (IrModuleId, FuncId)>,
+        registry: &mut ModuleFunctionRegistry,
+    ) {
+        use datalove_datafun_ir::{IrType, CodeUnitId, NativeContext};
+        use datalove_datafun_compiler::IrTypeExt;
+        use std::collections::BTreeSet;
+
+        let mut seen_riders: BTreeSet<String> = BTreeSet::new();
+
+        for (_module_id, riders) in output.parsed_graph.resolved_riders(db).iter() {
+            for (alias, rider) in riders {
+                let alias_str = alias.text(db);
+                if !seen_riders.insert(alias_str.S()) {
+                    continue; // Already processed this rider.
+                }
+
+                let synthetic_module_id = rider.module_id;
+
+                for (func_name, func_type) in &rider.functions {
+                    let name = func_name.text(db).S();
+                    let symbol = format!("dlr_{}__{}", alias_str, name);
+
+                    // Look up the assigned IrModuleId and FuncId.
+                    let Some(&(ir_module_id, func_id)) = func_id_map.get(&(synthetic_module_id, name.clone())) else {
+                        continue;
+                    };
+
+                    // Convert types from tycheck to IR.
+                    let param_types: Vec<IrType> = func_type.param_types(db)
+                        .iter()
+                        .map(|ty| IrType::from_tycheck(db, ty))
+                        .collect();
+                    // Convert AST ParamMode to IR ParamMode.
+                    let param_modes: Vec<datalove_datafun_ir::ParamMode> = func_type.param_modes(db)
+                        .iter()
+                        .map(|m| match m {
+                            datalove_datafun_ast::ast::ParamMode::In => datalove_datafun_ir::ParamMode::In,
+                            datalove_datafun_ast::ast::ParamMode::Out => datalove_datafun_ir::ParamMode::Out,
+                            datalove_datafun_ast::ast::ParamMode::Ref => datalove_datafun_ir::ParamMode::Ref,
+                            datalove_datafun_ast::ast::ParamMode::Mut => datalove_datafun_ir::ParamMode::Mut,
+                        })
+                        .collect();
+                    let return_type = IrType::from_tycheck(db, &func_type.return_type(db));
+
+                    let native_ctx = NativeContext {
+                        param_modes,
+                        param_types,
+                        return_type,
+                        symbol,
+                    };
+                    let code_unit = datalove_datafun_ir::IrCodeUnit::native(
+                        CodeUnitId(func_id.0),
+                        name,
+                        native_ctx,
+                    );
+                    registry.add_module_code_unit(ir_module_id, code_unit.id, code_unit);
+                }
+            }
         }
     }
 }

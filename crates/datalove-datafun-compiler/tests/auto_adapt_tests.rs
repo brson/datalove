@@ -88,7 +88,7 @@ fn typecheck_sections_with_mode(
         } else {
             let pkg_graph = result.ok().unwrap();
             let graph_with_requires = to_module_graph(&db, package_world, pkg_graph);
-            let parsed_graph = module_graph::parse_module_graph(&db, graph_with_requires.graph, graph_with_requires.resolved_requires);
+            let parsed_graph = module_graph::parse_module_graph(&db, graph_with_requires.graph, graph_with_requires.resolved_requires, Vec::new());
             let all_names = resolve_all_names(&db, parsed_graph);
             let all_exports = resolve_all_exports(&db, parsed_graph);
             let all_function_asts = build_all_function_ast_maps(&db, parsed_graph);

@@ -50,6 +50,7 @@ mod dispatch;
 mod dynamic;
 mod intrinsics;
 mod ctfe;
+mod native;
 
 #[cfg(test)]
 mod tests;
@@ -63,6 +64,7 @@ pub use env::{FunctionRegistry, ModuleFunctionRegistry, UnitFunctionRegistry, Sc
 pub use dispatch::{CallDispatcher, CallSiteInfo, DispatchCallContext, DispatchResult};
 pub use dynamic::{DynamicInliner, DynamicInlinerConfig, InlinerStats};
 pub use ctfe::InterpCtfeEvaluator;
+pub use native::{NativeFunctionTable, NativeFnImpl};
 pub use datalove_rt::c::DebugOutputMode;
 
 use std::cell::RefCell;
@@ -76,9 +78,15 @@ use datalove_datafun_ir::{
 
 /// Get param mode for argument at index, defaulting to In.
 fn param_mode(callee: &IrCodeUnit, i: usize) -> ParamMode {
-    callee.function_context()
-        .and_then(|ctx| ctx.param_modes.get(i).copied())
-        .unwrap_or(ParamMode::In)
+    match &callee.context {
+        datalove_datafun_ir::CodeUnitContext::Function(ctx) => {
+            ctx.param_modes.get(i).copied().unwrap_or(ParamMode::In)
+        }
+        datalove_datafun_ir::CodeUnitContext::Native(ctx) => {
+            ctx.param_modes.get(i).copied().unwrap_or(ParamMode::In)
+        }
+        datalove_datafun_ir::CodeUnitContext::Script(_) => ParamMode::In,
+    }
 }
 
 /// Result of executing a script unit.
@@ -120,6 +128,8 @@ pub struct IrInterpreter {
     /// Temporary view tensors (capacity_elems=0) created by TensorIndexRef.
     /// Kept alive for the duration of the ref's usage.
     temp_view_tensors: Vec<Box<rtdt::Tensor>>,
+    /// Native function dispatch table for rider functions.
+    native_table: NativeFunctionTable,
 }
 
 impl IrInterpreter {
@@ -143,7 +153,13 @@ impl IrInterpreter {
             tydesc_table: IrTyDescTable::new(),
             call_dispatcher: RefCell::new(call_dispatcher),
             temp_view_tensors: Vec::new(),
+            native_table: NativeFunctionTable::new(),
         }
+    }
+
+    /// Get a mutable reference to the native function table.
+    pub fn native_table_mut(&mut self) -> &mut NativeFunctionTable {
+        &mut self.native_table
     }
 
     /// Get the runtime handle for memory management.
@@ -924,23 +940,30 @@ impl IrInterpreter {
                 let dest_slot = frame.value_dest(*dest);
                 Self::mark_consumed_call_args(callee, args, frame);
 
-                // Build call site info for dispatcher if we have caller context.
-                let call_site_info = current_func.map(|caller| {
-                    dispatch::CallSiteInfo {
-                        caller: caller.clone(),
-                        call_site_id: *site_id,
-                    }
-                });
-
-                // Try dispatcher first, fall back to interpreter.
-                let call_result = if let Some(result) = self.try_dispatch_call(
-                    func, callee, &arg_vals, dest_slot, ctx, registry, frames, call_site_info
-                ) {
-                    result
+                if let datalove_datafun_ir::CodeUnitContext::Native(native_ctx) = &callee.context {
+                    // Native function dispatch.
+                    self.native_table.call(
+                        &native_ctx.symbol, self.runtime.handle(), &arg_vals, dest_slot,
+                    )?;
                 } else {
-                    self.execute_call(callee, func, arg_vals, dest_slot, ctx, registry, frames)
-                };
-                call_result?;
+                    // Build call site info for dispatcher if we have caller context.
+                    let call_site_info = current_func.map(|caller| {
+                        dispatch::CallSiteInfo {
+                            caller: caller.clone(),
+                            call_site_id: *site_id,
+                        }
+                    });
+
+                    // Try dispatcher first, fall back to interpreter.
+                    let call_result = if let Some(result) = self.try_dispatch_call(
+                        func, callee, &arg_vals, dest_slot, ctx, registry, frames, call_site_info
+                    ) {
+                        result
+                    } else {
+                        self.execute_call(callee, func, arg_vals, dest_slot, ctx, registry, frames)
+                    };
+                    call_result?;
+                }
 
                 frame.mark_value_live(*dest);
                 Self::mark_out_params_initialized(callee, args, frame);
@@ -954,16 +977,23 @@ impl IrInterpreter {
                 let dest_slot = frame.value_dest(*dest);
                 Self::mark_consumed_call_args(callee, args, frame);
 
-                // Try dispatcher first, fall back to interpreter.
-                // ComptimeCall doesn't have site_id, so no call_site_info.
-                let call_result = if let Some(result) = self.try_dispatch_call(
-                    func, callee, &arg_vals, dest_slot, ctx, registry, frames, None
-                ) {
-                    result
+                if let datalove_datafun_ir::CodeUnitContext::Native(native_ctx) = &callee.context {
+                    // Native function dispatch.
+                    self.native_table.call(
+                        &native_ctx.symbol, self.runtime.handle(), &arg_vals, dest_slot,
+                    )?;
                 } else {
-                    self.execute_call(callee, func, arg_vals, dest_slot, ctx, registry, frames)
-                };
-                call_result?;
+                    // Try dispatcher first, fall back to interpreter.
+                    // ComptimeCall doesn't have site_id, so no call_site_info.
+                    let call_result = if let Some(result) = self.try_dispatch_call(
+                        func, callee, &arg_vals, dest_slot, ctx, registry, frames, None
+                    ) {
+                        result
+                    } else {
+                        self.execute_call(callee, func, arg_vals, dest_slot, ctx, registry, frames)
+                    };
+                    call_result?;
+                }
 
                 frame.mark_value_live(*dest);
                 Self::mark_out_params_initialized(callee, args, frame);
@@ -1877,7 +1907,11 @@ impl IrInterpreter {
     /// - In params with Copy types: copied, caller retains ownership
     /// - In params with non-Copy types: moved, mark as dropped
     fn mark_consumed_call_args(callee: &IrCodeUnit, args: &[Operand], frame: &mut Frame) {
-        let param_types = callee.function_context().map(|c| &c.param_types[..]).unwrap_or(&[]);
+        let param_types: &[datalove_datafun_ir::IrType] = match &callee.context {
+            datalove_datafun_ir::CodeUnitContext::Function(ctx) => &ctx.param_types,
+            datalove_datafun_ir::CodeUnitContext::Native(ctx) => &ctx.param_types,
+            datalove_datafun_ir::CodeUnitContext::Script(_) => &[],
+        };
         for (i, arg) in args.iter().enumerate() {
             let mode = param_mode(callee, i);
             if matches!(mode, ParamMode::Ref | ParamMode::Mut | ParamMode::Out) {

@@ -208,6 +208,11 @@ pub enum WorldfileSection {
     InlineDirectives {
         source: String,
     },
+    /// Rider interface definition (native function signatures).
+    Rider {
+        name: String,
+        source: String,
+    },
 }
 
 impl WorldfileSection {
@@ -234,7 +239,8 @@ impl WorldfileSection {
             }
             WorldfileSection::ScriptFragment { .. }
             | WorldfileSection::ScriptExpr { .. }
-            | WorldfileSection::InlineDirectives { .. } => None,
+            | WorldfileSection::InlineDirectives { .. }
+            | WorldfileSection::Rider { .. } => None,
         }
     }
 
@@ -248,7 +254,8 @@ impl WorldfileSection {
             | WorldfileSection::ModuleChangeTy { source, .. }
             | WorldfileSection::ScriptFragment { source }
             | WorldfileSection::ScriptExpr { source }
-            | WorldfileSection::InlineDirectives { source } => Some(source),
+            | WorldfileSection::InlineDirectives { source }
+            | WorldfileSection::Rider { source, .. } => Some(source),
             WorldfileSection::ModuleRemove { .. } => None,
         }
     }
@@ -264,7 +271,8 @@ impl WorldfileSection {
             WorldfileSection::ModuleChangeTy { .. } => Some(ModuleSectionKind::ChangeTy),
             WorldfileSection::ScriptFragment { .. }
             | WorldfileSection::ScriptExpr { .. }
-            | WorldfileSection::InlineDirectives { .. } => None,
+            | WorldfileSection::InlineDirectives { .. }
+            | WorldfileSection::Rider { .. } => None,
         }
     }
 
@@ -280,6 +288,7 @@ impl WorldfileSection {
             WorldfileSection::ScriptFragment { .. } => "scriptunit-fragment",
             WorldfileSection::ScriptExpr { .. } => "scriptunit-expr",
             WorldfileSection::InlineDirectives { .. } => "inline-directives",
+            WorldfileSection::Rider { .. } => "rider",
         }
     }
 
@@ -291,6 +300,11 @@ impl WorldfileSection {
     /// Returns true if this is a script-related section.
     pub fn is_script_section(&self) -> bool {
         matches!(self, WorldfileSection::ScriptFragment { .. } | WorldfileSection::ScriptExpr { .. })
+    }
+
+    /// Returns true if this is a rider section.
+    pub fn is_rider_section(&self) -> bool {
+        matches!(self, WorldfileSection::Rider { .. })
     }
 }
 
@@ -531,6 +545,13 @@ impl<'a> Parser<'a> {
             return Ok(WorldfileSection::InlineDirectives { source });
         }
 
+        // Rider sections.
+        if let Some(name) = header.strip_prefix("rider ") {
+            let name = name.trim().to_string();
+            let source = self.read_content();
+            return Ok(WorldfileSection::Rider { name, source });
+        }
+
         // Module sections.
         if let Some((kind, path)) = parse_module_header(header) {
             let source = self.read_content();
@@ -541,7 +562,7 @@ impl<'a> Parser<'a> {
         bail!(
             "unknown section type '{}' (expected 'module', 'module-add', 'module-remove', \
              'module-change-ws', 'module-change-ast', 'module-change-ty', 'scriptunit-fragment', \
-             'scriptunit-expr', or 'inline-directives')",
+             'scriptunit-expr', 'inline-directives', or 'rider <name>')",
             header
         );
     }

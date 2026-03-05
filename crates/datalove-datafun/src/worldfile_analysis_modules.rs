@@ -41,10 +41,11 @@ pub fn analyze_modules_worldfile(
     db: &mut crate::Database,
     parsed: ParsedWorldfile,
 ) -> AnyResult<ModulesAnalysis> {
-    // Validate: only module sections allowed.
+    // Validate: only module and rider sections allowed.
     for section in &parsed.sections {
         match section {
             WorldfileSection::Module { .. } => {}
+            WorldfileSection::Rider { .. } => {}
             WorldfileSection::ModuleAdd { .. }
             | WorldfileSection::ModuleRemove { .. }
             | WorldfileSection::ModuleChangeWs { .. }

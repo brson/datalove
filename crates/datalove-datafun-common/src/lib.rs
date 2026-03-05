@@ -108,6 +108,8 @@ impl AutoAdaptMode {
 #[derive(salsa::Update)]
 pub struct RiderInterface<'db> {
     pub name: InternedText<'db>,
+    /// Synthetic ModuleId for this rider (e.g. `@rider/testlib`).
+    pub module_id: ModuleId,
     pub functions: Vec<(InternedText<'db>, TypeFunction<'db>)>,
     pub type_aliases: Vec<(InternedText<'db>, Type<'db>)>,
 }

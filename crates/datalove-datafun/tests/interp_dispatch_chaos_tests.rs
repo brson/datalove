@@ -87,7 +87,8 @@ fn run_worldfile_with_stats(
             | WorldfileSection::ModuleChangeWs { .. }
             | WorldfileSection::ModuleChangeAst { .. }
             | WorldfileSection::ModuleChangeTy { .. }
-            | WorldfileSection::InlineDirectives { .. } => {}
+            | WorldfileSection::InlineDirectives { .. }
+            | WorldfileSection::Rider { .. } => {}
             WorldfileSection::ScriptFragment { source } => {
                 executor.clear_debug_buffer();
                 let compiled_unit = compiler.compile_fragment(source);
@@ -187,7 +188,8 @@ fn run_worldfile(
             | WorldfileSection::ModuleChangeWs { .. }
             | WorldfileSection::ModuleChangeAst { .. }
             | WorldfileSection::ModuleChangeTy { .. }
-            | WorldfileSection::InlineDirectives { .. } => {}
+            | WorldfileSection::InlineDirectives { .. }
+            | WorldfileSection::Rider { .. } => {}
             WorldfileSection::ScriptFragment { source } => {
                 executor.clear_debug_buffer();
                 let compiled_unit = compiler.compile_fragment(source);

@@ -152,8 +152,9 @@ fn parse_sections(content: &str) -> AnyResult<Vec<ParsedSection>> {
             WorldfileSection::ScriptFragment { .. } | WorldfileSection::ScriptExpr { .. } => {
                 bail!("module_memo only supports module sections, not script sections");
             }
-            WorldfileSection::InlineDirectives { .. } => {
-                // Inline directives are not relevant for memoization tests, skip.
+            WorldfileSection::InlineDirectives { .. }
+            | WorldfileSection::Rider { .. } => {
+                // Not relevant for memoization tests, skip.
                 continue;
             }
         };
@@ -333,7 +334,7 @@ pub fn analyze_memo_worldfile(content: &str) -> AnyResult<MemoAnalysis> {
         let (graph, resolved_requires) = world.prepare_for_compile(&mut db, &path_deps);
 
         enable_query_logging();
-        let parsed_graph = parse_module_graph(&db, graph, resolved_requires);
+        let parsed_graph = parse_module_graph(&db, graph, resolved_requires, Vec::new());
         let parse_log = disable_query_logging();
         let parsed_modules: BTreeSet<String> = get_executed_modules(&parse_log, "parse")
             .into_iter().collect();

@@ -698,11 +698,19 @@ fn resolve_module_imports_internal<'db>(
                     .map(|(_, func_type)| *func_type);
 
                 if let Some(func_type) = func_opt {
-                    // Create synthetic ModuleId for the rider.
-                    let rider_path = format!("@rider/{}", module_name.as_str(db));
-                    let synthetic_module_id = ModuleId::new(db, rider_path);
-                    // Native functions have no AST body.
-                    resolved_imports.push((item_name, func_type, None, synthetic_module_id));
+                    // Use the rider's pre-created synthetic ModuleId.
+                    let synthetic_module_id = rider.module_id;
+                    // Create synthetic StmtFun so store_call_target gets called during synthesis.
+                    let synthetic_fun = StmtFun::new(
+                        db,
+                        Some(synthetic_module_id),
+                        item_name,
+                        vec![],
+                        None,
+                        vec![],
+                        0,
+                    );
+                    resolved_imports.push((item_name, func_type, Some(synthetic_fun), synthetic_module_id));
                 } else {
                     import_errors.push(TypeError::UnresolvedName(
                         format!("{}.{} (not found in rider)", module_name.as_str(db), item_name.as_str(db))

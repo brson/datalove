@@ -155,7 +155,8 @@ pub fn analyze_worldfile_with_jit(
             | WorldfileSection::ModuleChangeWs { .. }
             | WorldfileSection::ModuleChangeAst { .. }
             | WorldfileSection::ModuleChangeTy { .. }
-            | WorldfileSection::InlineDirectives { .. } => {
+            | WorldfileSection::InlineDirectives { .. }
+            | WorldfileSection::Rider { .. } => {
                 // Module action sections and inline directives are not relevant here.
             }
             WorldfileSection::ScriptFragment { source } => {
