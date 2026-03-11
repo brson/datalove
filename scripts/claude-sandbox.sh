@@ -77,10 +77,10 @@ mounts=(
 # Claude config/auth (read-write for OAuth tokens)
 [[ -d "$HOME/.claude" ]] && mounts+=("-v" "$HOME/.claude:/home/claude/.claude")
 [[ -f "$HOME/.claude.json" ]] && mounts+=("-v" "$HOME/.claude.json:/home/claude/.claude.json")
-# Claude binary (share host install so upgrades persist)
-[[ -d "$HOME/.local/bin" ]] && mounts+=("-v" "$HOME/.local/bin:/home/claude/.local/bin")
-[[ -d "$HOME/.local/share/claude" ]] && mounts+=("-v" "$HOME/.local/share/claude:/home/claude/.local/share/claude")
-[[ -d "$HOME/.local/share/claude" ]] && mounts+=("-v" "$HOME/.local/share/claude:$HOME/.local/share/claude")
+# Claude binary (read-only to prevent in-sandbox upgrades from breaking host symlink)
+[[ -d "$HOME/.local/bin" ]] && mounts+=("-v" "$HOME/.local/bin:/home/claude/.local/bin:ro")
+[[ -d "$HOME/.local/share/claude" ]] && mounts+=("-v" "$HOME/.local/share/claude:/home/claude/.local/share/claude:ro")
+[[ -d "$HOME/.local/share/claude" ]] && mounts+=("-v" "$HOME/.local/share/claude:$HOME/.local/share/claude:ro")
 # Override settings.json with container-specific paths for hooks
 [[ -f "$SCRIPT_DIR/claude-sandbox-settings.json" ]] && mounts+=("-v" "$SCRIPT_DIR/claude-sandbox-settings.json:/home/claude/.claude/settings.json:ro")
 
@@ -190,7 +190,7 @@ cp "$SCRIPT_DIR/assets/chime.wav" "$HOME/.local/share/sounds/chime.wav"
 
 info "Starting sandbox..."
 
-exec podman run -it --rm \
+podman run -it --rm \
     --name "$CONTAINER_NAME" \
     --hostname "claude-sandbox" \
     --workdir "$WORKDIR" \
@@ -212,3 +212,15 @@ exec podman run -it --rm \
             bash) echo 'exec bash' ;;
         esac
     )"
+container_exit=$?
+
+# Attempt to upgrade Claude Code on the host after exiting the sandbox.
+# The in-sandbox install is read-only, so upgrades must happen here.
+info "Checking for Claude Code updates..."
+if command -v claude >/dev/null 2>&1; then
+    claude update 2>/dev/null && info "Claude Code updated." || info "Already up to date (or update unavailable)."
+else
+    warn "claude not found on host PATH; skipping update."
+fi
+
+exit $container_exit
