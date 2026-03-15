@@ -379,6 +379,7 @@ pub fn extract_dependencies(
             .or_insert_with(|| Package {
                 name: package_name.S(),
                 modules: BTreeMap::new(),
+                rider_source: None,
             });
 
         let pkg_module = PackageModule {

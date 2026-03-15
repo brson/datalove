@@ -23,9 +23,26 @@ pub struct PackageWorld {
     pub pkglib_local: BTreeMap<PackageName, Package>,
 }
 
+impl PackageWorld {
+    /// Collect rider sources from all packages in both libraries.
+    ///
+    /// Returns (rider_name, source_text) pairs for each package that has a `rider.dli`.
+    pub fn rider_sources(&self) -> Vec<(String, String)> {
+        let mut riders = Vec::new();
+        for pkg in self.pkglib_system.values().chain(self.pkglib_local.values()) {
+            if let Some(ref source) = pkg.rider_source {
+                riders.push((pkg.name.clone(), source.clone()));
+            }
+        }
+        riders
+    }
+}
+
 pub struct Package {
     pub name: PackageName,
     pub modules: BTreeMap<ModuleName, PackageModule>,
+    /// Source text of `rider.dli` if present in the package directory.
+    pub rider_source: Option<String>,
 }
 
 #[derive(Eq, PartialEq, Ord, PartialOrd)]
@@ -90,6 +107,15 @@ pub async fn package_from_source_files(
     dir: PathBuf,
     package_name: PackageName,
 ) -> AnyResult<Package> {
+    // Check for rider.dli before spawning the module-loading thread.
+    let rider_path = dir.join("rider.dli");
+    let rider_source = if rider_path.is_file() {
+        Some(fs::read_to_string(&rider_path)
+            .context(fmt!("unable to read rider file {}", rider_path.display()))?)
+    } else {
+        None
+    };
+
     let (tx, mut rx) = mpsc::channel(1);
     {
         thread::spawn(move || {
@@ -115,6 +141,7 @@ pub async fn package_from_source_files(
     Ok(Package {
         name: package_name,
         modules,
+        rider_source,
     })
 }
 

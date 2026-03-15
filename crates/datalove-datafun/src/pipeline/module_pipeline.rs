@@ -148,6 +148,9 @@ impl ModuleCompilationPipeline {
 
         let package_world_raw = package_load::load_world(config).await?;
 
+        // Extract rider sources from loaded packages.
+        self.rider_sources.extend(package_world_raw.rider_sources());
+
         for (pkg_name, pkg) in &package_world_raw.pkglib_system {
             for (mod_name, pkg_module) in &pkg.modules {
                 self.add_module(db, "sys", pkg_name, mod_name, &pkg_module.text);

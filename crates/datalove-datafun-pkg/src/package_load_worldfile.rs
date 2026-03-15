@@ -407,6 +407,7 @@ fn insert_module(
         .or_insert_with(|| Package {
             name: package.S(),
             modules: BTreeMap::new(),
+            rider_source: None,
         });
 
     let path_str = format!("{}/{}/{}", library, package, module);

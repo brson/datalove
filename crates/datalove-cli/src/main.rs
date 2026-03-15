@@ -825,6 +825,9 @@ impl TypecheckStdCommand {
             datafun::package_load::load_world(config)
         )?;
 
+        // Extract rider sources before converting to Salsa types.
+        let rider_sources = package_world_raw.rider_sources();
+
         let package_world = datafun::package::import_from_loader(&db, package_world_raw);
 
         // Resolve and convert to ModuleGraph.
@@ -837,7 +840,7 @@ impl TypecheckStdCommand {
         // Convert to package-agnostic ModuleGraph, parse, and typecheck.
         let graph_with_requires = datafun::to_module_graph(&db, package_world, pkg_graph);
         let module_graph = graph_with_requires.graph;
-        let parsed_graph = datafun::module_graph::parse_module_graph(&db, module_graph, graph_with_requires.resolved_requires, Vec::new());
+        let parsed_graph = datafun::module_graph::parse_module_graph(&db, module_graph, graph_with_requires.resolved_requires, rider_sources);
         let all_names = resolve_all_names(&db, parsed_graph);
         let all_exports = resolve_all_exports(&db, parsed_graph);
         let all_function_asts = build_all_function_ast_maps(&db, parsed_graph);
