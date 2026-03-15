@@ -64,6 +64,8 @@ pub struct ModuleCompilationPipeline {
     /// Rider interfaces parsed from worldfile rider sections.
     /// Maps rider name to source text for deferred parsing.
     rider_sources: Vec<(String, String)>,
+    /// Rider crate directories discovered from package loading.
+    rider_crate_dirs: Vec<(String, std::path::PathBuf)>,
 }
 
 impl ModuleCompilationPipeline {
@@ -74,6 +76,7 @@ impl ModuleCompilationPipeline {
             const_inlining,
             skip_specialization: false,
             rider_sources: Vec::new(),
+            rider_crate_dirs: Vec::new(),
         }
     }
 
@@ -148,8 +151,9 @@ impl ModuleCompilationPipeline {
 
         let package_world_raw = package_load::load_world(config).await?;
 
-        // Extract rider sources from loaded packages.
+        // Extract rider sources and crate directories from loaded packages.
         self.rider_sources.extend(package_world_raw.rider_sources());
+        self.rider_crate_dirs.extend(package_world_raw.rider_crate_dirs());
 
         for (pkg_name, pkg) in &package_world_raw.pkglib_system {
             for (mod_name, pkg_module) in &pkg.modules {
@@ -171,6 +175,11 @@ impl ModuleCompilationPipeline {
         let sys_dir = grandparent.join("sys");
 
         self.load_sys_library_from_dir(db, sys_dir).await
+    }
+
+    /// Get discovered rider crate directories.
+    pub fn rider_crate_dirs(&self) -> &[(String, std::path::PathBuf)] {
+        &self.rider_crate_dirs
     }
 
     /// Check if a module exists.

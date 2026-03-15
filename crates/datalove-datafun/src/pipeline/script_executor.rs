@@ -295,6 +295,11 @@ impl ScriptExecutor {
         self.env.destroy_live_values(self.interp.runtime_handle());
     }
 
+    /// Get mutable access to the native function table for registering native functions.
+    pub fn native_table_mut(&mut self) -> &mut datalove_datafun_interp::NativeFunctionTable {
+        self.interp.native_table_mut()
+    }
+
     /// Take the call dispatcher from the interpreter.
     ///
     /// Returns the dispatcher if one was set, leaving None in its place.

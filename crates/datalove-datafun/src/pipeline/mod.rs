@@ -54,6 +54,8 @@ mod script_compiler;
 mod script_executor;
 mod module_pipeline;
 pub mod aot;
+pub mod rider_build;
+pub mod rider_load;
 
 // Re-export main types.
 pub use result::{

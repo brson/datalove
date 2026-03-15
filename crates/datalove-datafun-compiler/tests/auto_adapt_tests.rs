@@ -60,6 +60,7 @@ fn typecheck_sections_with_mode(
                     name: pkg.C(),
                     modules: std::collections::BTreeMap::new(),
                     rider_source: None,
+                    rider_crate_dir: None,
                 });
 
             let module_path_str = format!("{}/{}/{}", library, pkg, module);

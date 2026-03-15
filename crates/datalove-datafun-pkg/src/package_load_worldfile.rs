@@ -408,6 +408,7 @@ fn insert_module(
             name: package.S(),
             modules: BTreeMap::new(),
             rider_source: None,
+            rider_crate_dir: None,
         });
 
     let path_str = format!("{}/{}/{}", library, package, module);

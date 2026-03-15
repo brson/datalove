@@ -36,6 +36,19 @@ impl PackageWorld {
         }
         riders
     }
+
+    /// Collect rider crate directories from all packages in both libraries.
+    ///
+    /// Returns (rider_name, crate_dir) pairs for each package that has a `rider/` Cargo crate.
+    pub fn rider_crate_dirs(&self) -> Vec<(String, PathBuf)> {
+        let mut dirs = Vec::new();
+        for pkg in self.pkglib_system.values().chain(self.pkglib_local.values()) {
+            if let Some(ref dir) = pkg.rider_crate_dir {
+                dirs.push((pkg.name.clone(), dir.clone()));
+            }
+        }
+        dirs
+    }
 }
 
 pub struct Package {
@@ -43,6 +56,8 @@ pub struct Package {
     pub modules: BTreeMap<ModuleName, PackageModule>,
     /// Source text of `rider.dli` if present in the package directory.
     pub rider_source: Option<String>,
+    /// Path to `rider/` Cargo crate if present alongside `rider.dli`.
+    pub rider_crate_dir: Option<PathBuf>,
 }
 
 #[derive(Eq, PartialEq, Ord, PartialOrd)]
@@ -107,13 +122,21 @@ pub async fn package_from_source_files(
     dir: PathBuf,
     package_name: PackageName,
 ) -> AnyResult<Package> {
-    // Check for rider.dli before spawning the module-loading thread.
+    // Check for rider.dli and rider/ crate before spawning the module-loading thread.
     let rider_path = dir.join("rider.dli");
     let rider_source = if rider_path.is_file() {
         Some(fs::read_to_string(&rider_path)
             .context(fmt!("unable to read rider file {}", rider_path.display()))?)
     } else {
         None
+    };
+    let rider_crate_dir = {
+        let crate_dir = dir.join("rider");
+        if crate_dir.join("Cargo.toml").is_file() {
+            Some(crate_dir)
+        } else {
+            None
+        }
     };
 
     let (tx, mut rx) = mpsc::channel(1);
@@ -142,6 +165,7 @@ pub async fn package_from_source_files(
         name: package_name,
         modules,
         rider_source,
+        rider_crate_dir,
     })
 }
 

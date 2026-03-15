@@ -118,6 +118,20 @@ impl<'db> CompiledModules<'db> {
             .collect()
     }
 
+    /// Collect native function symbols from the module registry.
+    ///
+    /// Returns the linker symbols (e.g. `dlr_std__list_push`) for all code units
+    /// with `NativeContext`, which need to be loaded from rider shared libraries.
+    pub fn native_symbols(&self) -> Vec<String> {
+        let mut symbols = Vec::new();
+        for unit in self.shared.module_registry.iter_module_code_units() {
+            if let Some(ctx) = unit.native_context() {
+                symbols.push(ctx.symbol.clone());
+            }
+        }
+        symbols
+    }
+
     /// Get module type diagnostics with spans for rendering.
     pub fn get_module_type_diagnostics(&self, db: &'db dyn salsa::Database) -> Vec<&'db datalove_diagnostic::TypeDiagnostic> {
         // Recompute resolve results (memoized, will be cache hits).

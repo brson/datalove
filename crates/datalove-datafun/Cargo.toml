@@ -24,6 +24,7 @@ datalove-datafun-pkg.path = "../datalove-datafun-pkg"
 datalove-rt.path = "../datalove-rt"
 datalove-diagnostic.path = "../datalove-diagnostic"
 datalove-datafun-cranelift-aot.path = "../datalove-datafun-cranelift-aot"
+libloading = "0.8"
 
 [features]
 default = []

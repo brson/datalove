@@ -29,6 +29,50 @@ fn prefix_nav_links(nav_html: &str, path_prefix: &str) -> String {
 mod feed;
 mod render;
 
+/// Build and load rider shared libraries, registering native symbols in the executor.
+///
+/// Returns the loaded rider handles, which must be kept alive for the duration of execution.
+fn build_and_load_riders(
+    pipeline: &datalove_datafun::pipeline::ModuleCompilationPipeline,
+    compiled: &datalove_datafun::pipeline::CompiledModules,
+    executor: &mut datalove_datafun::pipeline::ScriptExecutor,
+) -> AnyResult<Vec<datalove_datafun::pipeline::rider_load::LoadedRider>> {
+    use datalove_datafun::pipeline::{rider_build, rider_load};
+
+    let rider_crate_dirs = pipeline.rider_crate_dirs();
+    if rider_crate_dirs.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let native_symbols = compiled.native_symbols();
+    let mut loaded_riders = Vec::new();
+
+    for (rider_name, crate_dir) in rider_crate_dirs {
+        // Build the rider crate.
+        let build_result = rider_build::build_rider_crate(crate_dir, rider_name)
+            .map_err(|e| anyhow!("{}", e))?;
+
+        // Filter symbols belonging to this rider (prefix `dlr_{rider}__`).
+        let prefix = format!("dlr_{}__", rider_name);
+        let rider_symbols: Vec<String> = native_symbols.iter()
+            .filter(|s| s.starts_with(&prefix))
+            .cloned()
+            .collect();
+
+        if !rider_symbols.is_empty() {
+            let loaded = rider_load::load_rider_library(
+                &build_result.lib_path,
+                rider_name,
+                &rider_symbols,
+                executor.native_table_mut(),
+            )?;
+            loaded_riders.push(loaded);
+        }
+    }
+
+    Ok(loaded_riders)
+}
+
 fn main() -> AnyResult<()> {
     rmx::extras::init_crate_name(env!("CARGO_CRATE_NAME"));
 
@@ -440,6 +484,9 @@ impl ScriptCommand {
         let mut executor = compiled.script_executor(datafun::DebugOutputMode::Stderr, call_dispatcher)
             .expect("script_executor should succeed after error check");
 
+        // Build and load rider shared libraries.
+        let _loaded_riders = build_and_load_riders(&pipeline, &compiled, &mut executor)?;
+
         // Read the script file.
         let script_source = rmx::std::fs::read_to_string(file_path)
             .with_context(|| format!("Failed to read script file: {}", file_path.display()))?;
@@ -727,6 +774,9 @@ impl ScriptWorldCommand {
             .expect("script_compiler should succeed after error check");
         let mut executor = compiled.script_executor(datafun::DebugOutputMode::Stderr, None)
             .expect("script_executor should succeed after error check");
+
+        // Build and load rider shared libraries.
+        let _loaded_riders = build_and_load_riders(&pipeline, &compiled, &mut executor)?;
 
         // Compile and execute the script section.
         let script_section = script_sections[0];

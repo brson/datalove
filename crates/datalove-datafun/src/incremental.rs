@@ -380,6 +380,7 @@ pub fn extract_dependencies(
                 name: package_name.S(),
                 modules: BTreeMap::new(),
                 rider_source: None,
+                rider_crate_dir: None,
             });
 
         let pkg_module = PackageModule {
