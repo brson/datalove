@@ -130,7 +130,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libwayland-client0 libwayland-cursor0 libwayland-egl1 libxkbcommon0 \
     mesa-vulkan-drivers libvulkan1 libasound2-dev \
     xvfb imagemagick mesa-utils libgl1-mesa-dri libegl-mesa0 \
-    libgl1-mesa-dev xorg-dev unzip \
+    libgl1-mesa-dev xorg-dev libx11-xcb-dev unzip \
     && rm -rf /var/lib/apt/lists/*
 
 ENV JAVA_HOME=/usr/lib/jvm/default-java
