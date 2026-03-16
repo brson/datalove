@@ -5,3 +5,4 @@ crates/datalove-repl-egui/worker-dist
 crates/datalove-repl-worker/dist
 crates/datalove-web/dist
 docs/
+sys/*/rider/Cargo.lock
