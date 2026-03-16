@@ -1,18 +1,22 @@
 // String module for UTF-8 strings.
 // Based on Rust's str/String APIs.
-//
-// Most functions require string intrinsics which are not yet implemented.
-// Functions are stubbed with todo!() or commented out pending intrinsic support.
-//
-// Required intrinsic types: need to add String to IntrinsicType enum.
+
+require rider std
+import std.string_len
+import std.string_char_count
+import std.string_is_ascii
+import std.string_contains
+import std.string_starts_with
+import std.string_ends_with
+import std.string_eq
+import std.string_cmp
+import std.string_eq_ignore_ascii_case
 
 // --- Basic Properties ---
 
 // Returns the length in bytes.
-// intrinsic needed: string_len(ref string) -> index
 fun len(ref self: string): index
-  // TODO: icall string_len(self)
-  ret (: index / 0)
+  ret string_len(self)
 end fun
 
 // Returns true if the string is empty.
@@ -23,19 +27,16 @@ end fun
 // --- Byte Access ---
 
 // Returns the byte at the given index, or none if out of bounds.
-// intrinsic needed: string_get_byte(ref string, index) -> ?u8
+// TODO: needs native rider support for option returns.
 fun get_byte(ref self: string, index: index): ?u8
-  // TODO: icall string_get_byte(self, index)
   ret none
 end fun
 
 // --- Character Access ---
 
 // Returns the number of Unicode characters.
-// intrinsic needed: string_char_count(ref string) -> index
 fun char_count(ref self: string): index
-  // TODO: icall string_char_count(self)
-  ret (: index / 0)
+  ret string_char_count(self)
 end fun
 
 // Returns the character (codepoint) at the given character index, or none if out of bounds.
@@ -78,61 +79,47 @@ end fun
 // --- Searching ---
 
 // Returns true if the string contains the given substring.
-// intrinsic needed: string_contains(ref string, ref string) -> bool
 fun contains(ref self: string, ref pattern: string): bool
-  // TODO: icall string_contains(self, pattern)
-  ret false
+  ret string_contains(self, pattern)
 end fun
 
 // Returns true if the string starts with the given prefix.
-// intrinsic needed: string_starts_with(ref string, ref string) -> bool
 fun starts_with(ref self: string, ref prefix: string): bool
-  // TODO: icall string_starts_with(self, prefix)
-  ret false
+  ret string_starts_with(self, prefix)
 end fun
 
 // Returns true if the string ends with the given suffix.
-// intrinsic needed: string_ends_with(ref string, ref string) -> bool
 fun ends_with(ref self: string, ref suffix: string): bool
-  // TODO: icall string_ends_with(self, suffix)
-  ret false
+  ret string_ends_with(self, suffix)
 end fun
 
 // Returns the byte index of the first occurrence of pattern, or none.
-// intrinsic needed: string_find(ref string, ref string) -> ?index
+// TODO: needs native rider support for option returns.
 fun find(ref self: string, ref pattern: string): ?index
-  // TODO: icall string_find(self, pattern)
   ret none
 end fun
 
 // Returns the byte index of the last occurrence of pattern, or none.
-// intrinsic needed: string_rfind(ref string, ref string) -> ?index
+// TODO: needs native rider support for option returns.
 fun rfind(ref self: string, ref pattern: string): ?index
-  // TODO: icall string_rfind(self, pattern)
   ret none
 end fun
 
 // --- Comparison ---
 
 // Returns true if two strings are equal.
-// intrinsic needed: string_eq(ref string, ref string) -> bool
 fun eq(ref self: string, ref other: string): bool
-  // TODO: icall string_eq(self, other)
-  ret false
+  ret string_eq(self, other)
 end fun
 
 // Compares two strings lexicographically. Returns -1, 0, or 1.
-// intrinsic needed: string_cmp(ref string, ref string) -> i32
 fun cmp(ref self: string, ref other: string): i32
-  // TODO: icall string_cmp(self, other)
-  ret (: i32 / 0)
+  ret string_cmp(self, other)
 end fun
 
 // Case-insensitive equality (ASCII only).
-// intrinsic needed: string_eq_ignore_ascii_case(ref string, ref string) -> bool
 fun eq_ignore_ascii_case(ref self: string, ref other: string): bool
-  // TODO: icall string_eq_ignore_ascii_case(self, other)
-  ret false
+  ret string_eq_ignore_ascii_case(self, other)
 end fun
 
 // --- Case Conversion ---
@@ -341,10 +328,8 @@ end fun
 // --- Character Predicates ---
 
 // Returns true if all characters are ASCII.
-// intrinsic needed: string_is_ascii(ref string) -> bool
 fun is_ascii(ref self: string): bool
-  // TODO: icall string_is_ascii(self)
-  ret true
+  ret string_is_ascii(self)
 end fun
 
 // Returns true if all bytes are ASCII alphabetic. Returns false if empty.

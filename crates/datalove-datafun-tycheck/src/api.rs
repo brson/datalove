@@ -700,12 +700,26 @@ fn resolve_module_imports_internal<'db>(
                 if let Some(func_type) = func_opt {
                     // Use the rider's pre-created synthetic ModuleId.
                     let synthetic_module_id = rider.module_id;
-                    // Create synthetic StmtFun so store_call_target gets called during synthesis.
+                    // Build synthetic params with correct modes so the ownership checker
+                    // knows which parameters are ref/mut/in/out.
+                    let synthetic_params: Vec<_> = func_type.param_modes(db)
+                        .iter()
+                        .enumerate()
+                        .map(|(i, mode)| {
+                            let name = InternedText::new(db, &format!("_p{}", i));
+                            FunParam {
+                                name,
+                                mode: *mode,
+                                is_comptime: false,
+                                type_hint: datalit::ast::TypeHint::AnonTuple(datalit::ast::TypeHintAnonTuple { fields: vec![] }),
+                            }
+                        })
+                        .collect();
                     let synthetic_fun = StmtFun::new(
                         db,
                         Some(synthetic_module_id),
                         item_name,
-                        vec![],
+                        synthetic_params,
                         None,
                         vec![],
                         0,

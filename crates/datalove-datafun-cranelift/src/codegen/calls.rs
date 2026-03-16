@@ -95,8 +95,8 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
     /// Compile a call to a native rider function.
     ///
     /// Native functions use C ABI: `fn(rt: *mut u8, arg0: i64, ...) -> i64`.
-    /// This loads each arg from its pointer, widens to i64, calls the native
-    /// function, then truncates the i64 result to the destination type.
+    /// Scalar args are loaded from their pointers and widened to i64.
+    /// Ref/aggregate args pass their pointer directly as i64.
     fn compile_native_call(
         &mut self,
         builder: &mut FunctionBuilder,
@@ -104,6 +104,8 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         code_ref: &CodeRef,
         args: &[Operand],
     ) -> Result<(), CraneliftError> {
+        use datalove_datafun_ir::IrType;
+
         let rt_handle = self.rt_handle_param.ok_or_else(|| {
             CraneliftError::Codegen("Call requires runtime handle".into())
         })?;
@@ -115,35 +117,35 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         call_args.push(rt_handle);
 
         for (i, arg) in args.iter().enumerate() {
-            // Get the arg's IR type.
             let arg_ty = self.get_operand_type(arg)?;
-
-            // Get a pointer to the arg value.
             let arg_ptr = self.get_operand_ptr(builder, arg)?;
 
-            // Load the scalar value from the pointer.
-            let scalar_ty = match types::ir_type_to_cranelift(&arg_ty) {
-                CraneliftRepr::Scalar(ty) => ty,
-                CraneliftRepr::Aggregate(_) => {
-                    return Err(CraneliftError::Unsupported(format!(
-                        "native call arg {} has aggregate type {:?}", i, arg_ty
-                    )));
+            // Ref types: the pointer IS the value, pass it directly.
+            if matches!(&arg_ty, IrType::Ref(_)) {
+                call_args.push(arg_ptr);
+                continue;
+            }
+
+            match types::ir_type_to_cranelift(&arg_ty) {
+                CraneliftRepr::Scalar(scalar_ty) => {
+                    // Load scalar from pointer and widen to i64.
+                    let loaded = builder.ins().load(scalar_ty, MemFlags::new(), arg_ptr, 0);
+                    let as_i64 = if scalar_ty == cl_types::I64 {
+                        loaded
+                    } else if scalar_ty.is_int() {
+                        builder.ins().uextend(cl_types::I64, loaded)
+                    } else {
+                        return Err(CraneliftError::Unsupported(format!(
+                            "native call arg {} has non-integer type {:?}", i, arg_ty
+                        )));
+                    };
+                    call_args.push(as_i64);
                 }
-            };
-            let loaded = builder.ins().load(scalar_ty, MemFlags::new(), arg_ptr, 0);
-
-            // Widen to i64.
-            let as_i64 = if scalar_ty == cl_types::I64 {
-                loaded
-            } else if scalar_ty.is_int() {
-                builder.ins().uextend(cl_types::I64, loaded)
-            } else {
-                return Err(CraneliftError::Unsupported(format!(
-                    "native call arg {} has non-integer type {:?}", i, arg_ty
-                )));
-            };
-
-            call_args.push(as_i64);
+                CraneliftRepr::Aggregate(_) => {
+                    // Aggregate: pass pointer as i64.
+                    call_args.push(arg_ptr);
+                }
+            }
         }
 
         // Declare callee and emit call.

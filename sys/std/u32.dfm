@@ -1,9 +1,3 @@
-require rider std
-import std.bitnot_u32
-import std.bitand_u32
-import std.bitor_u32
-import std.bitxor_u32
-
 // Constants.
 
 fun min_value(): u32
@@ -21,19 +15,19 @@ end fun
 // Bitwise primitives.
 
 fun bitnot(self: u32): u32
-  ret bitnot_u32(self)
+  ret icall bitnot_u32(self)
 end fun
 
 fun bitand(self: u32, n: u32): u32
-  ret bitand_u32(self, n)
+  ret icall bitand_u32(self, n)
 end fun
 
 fun bitor(self: u32, n: u32): u32
-  ret bitor_u32(self, n)
+  ret icall bitor_u32(self, n)
 end fun
 
 fun bitxor(self: u32, n: u32): u32
-  ret bitxor_u32(self, n)
+  ret icall bitxor_u32(self, n)
 end fun
 
 // Bit counting.

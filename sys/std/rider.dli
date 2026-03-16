@@ -1,6 +1,16 @@
-// Native bitwise operations for u32.
+// Native string operations for sys/std.
 
-native fun bitnot_u32(a: u32): u32
-native fun bitand_u32(a: u32, b: u32): u32
-native fun bitor_u32(a: u32, b: u32): u32
-native fun bitxor_u32(a: u32, b: u32): u32
+// Basic properties.
+native fun string_len(ref self: string): index
+native fun string_char_count(ref self: string): index
+native fun string_is_ascii(ref self: string): bool
+
+// Searching.
+native fun string_contains(ref self: string, ref pattern: string): bool
+native fun string_starts_with(ref self: string, ref prefix: string): bool
+native fun string_ends_with(ref self: string, ref suffix: string): bool
+
+// Comparison.
+native fun string_eq(ref self: string, ref other: string): bool
+native fun string_cmp(ref self: string, ref other: string): i32
+native fun string_eq_ignore_ascii_case(ref self: string, ref other: string): bool
