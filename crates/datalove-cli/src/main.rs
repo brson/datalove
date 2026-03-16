@@ -29,6 +29,29 @@ fn prefix_nav_links(nav_html: &str, path_prefix: &str) -> String {
 mod feed;
 mod render;
 
+/// Build rider crates and return their shared library paths.
+///
+/// Used by AOT compilation to pass rider libraries to the linker.
+fn build_rider_libs(
+    pipeline: &datalove_datafun::pipeline::ModuleCompilationPipeline,
+) -> AnyResult<Vec<std::path::PathBuf>> {
+    use datalove_datafun::pipeline::rider_build;
+
+    let rider_crate_dirs = pipeline.rider_crate_dirs();
+    if rider_crate_dirs.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let mut lib_paths = Vec::new();
+    for (rider_name, crate_dir) in rider_crate_dirs {
+        let build_result = rider_build::build_rider_crate(crate_dir, rider_name)
+            .map_err(|e| anyhow!("{}", e))?;
+        lib_paths.push(build_result.lib_path);
+    }
+
+    Ok(lib_paths)
+}
+
 /// Build and load rider shared libraries, registering native symbols in the executor.
 ///
 /// Returns the loaded rider handles, which must be kept alive for the duration of execution.
@@ -660,6 +683,9 @@ impl AotCompileCommand {
         let ir_unit = compiled_unit.ir_unit
             .ok_or_else(|| anyhow!("IR unit not available after lowering"))?;
 
+        // Build rider crates for linking.
+        let rider_libs = build_rider_libs(&pipeline)?;
+
         // Compile to object bytes using pipeline::aot.
         let obj_bytes = aot::compile_script_to_object_with_world(
             &ir_unit,
@@ -684,8 +710,8 @@ impl AotCompileCommand {
         };
 
         if should_link {
-            // Link into executable using pipeline::aot.
-            aot::link_object_to_path(&obj_bytes, &output_path)
+            // Link into executable using pipeline::aot, including rider libraries.
+            aot::link_object_to_path_with_libs(&obj_bytes, &output_path, &rider_libs)
                 .map_err(|e| anyhow!("{}", e))?;
             println!("Linked executable: {}", output_path.display());
 

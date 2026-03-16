@@ -177,6 +177,12 @@ impl ModuleCompilationPipeline {
         self.load_sys_library_from_dir(db, sys_dir).await
     }
 
+    /// Add rider sources and crate directories from a loaded package world.
+    pub fn add_riders_from_package_world(&mut self, world: &datalove_datafun_pkg::package_load::PackageWorld) {
+        self.rider_sources.extend(world.rider_sources());
+        self.rider_crate_dirs.extend(world.rider_crate_dirs());
+    }
+
     /// Get discovered rider crate directories.
     pub fn rider_crate_dirs(&self) -> &[(String, std::path::PathBuf)] {
         &self.rider_crate_dirs

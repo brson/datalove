@@ -80,7 +80,7 @@ use cranelift_module::{FuncId, Linkage, Module};
 
 use datalove_datafun_ir::{
     BlockId, FunctionContext, FunctionRegistry, IrCodeUnit,
-    IrModuleId, IrType, Instruction, Operand, ParamId, SlotDest, SlotId,
+    IrModuleId, IrType, Instruction, NativeContext, Operand, ParamId, SlotDest, SlotId,
     ValueId,
 };
 
@@ -140,6 +140,31 @@ pub fn build_signature_for_func(
             }
         }
     }
+
+    sig
+}
+
+/// Build a Cranelift signature for a native rider function.
+///
+/// Native functions use the C ABI: `fn(rt: *mut u8, arg0: i64, ...) -> i64`.
+/// All scalar args are widened to i64. Return is always i64.
+pub fn build_native_signature(
+    ctx: &NativeContext,
+    isa: &dyn TargetIsa,
+) -> cl_ir::Signature {
+    let call_conv = isa.default_call_conv();
+    let mut sig = cl_ir::Signature::new(call_conv);
+
+    // Runtime handle as first parameter.
+    sig.params.push(cl_ir::AbiParam::new(PTR_TYPE));
+
+    // All scalar args as i64.
+    for _ in &ctx.param_types {
+        sig.params.push(cl_ir::AbiParam::new(cl_ir::types::I64));
+    }
+
+    // Scalar return as i64.
+    sig.returns.push(cl_ir::AbiParam::new(cl_ir::types::I64));
 
     sig
 }

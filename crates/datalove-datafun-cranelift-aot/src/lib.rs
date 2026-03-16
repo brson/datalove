@@ -197,8 +197,18 @@ impl AotCompiler {
         }
 
         // Pass 2: Declare all module functions to get Cranelift FuncIds.
+        // Native code units are declared as imports with their linker symbol.
         let mut module_funcs: HashMap<(IrModuleId, datalove_datafun_ir::CodeUnitId), FuncId> = HashMap::new();
         for ((module_id, func_id), ir_unit) in registry.iter_module_code_units_with_ids() {
+            if let Some(ctx) = ir_unit.native_context() {
+                // Native function: declare as import with C ABI signature.
+                let sig = codegen::build_native_signature(ctx, self.isa.as_ref());
+                let cl_func_id = obj_module
+                    .declare_function(&ctx.symbol, Linkage::Import, &sig)
+                    .map_err(|e| AotError::Module(format!("declare native import {}: {}", ctx.symbol, e)))?;
+                module_funcs.insert((module_id, func_id), cl_func_id);
+                continue;
+            }
             let name = format!("__mod_{}_{}", module_id.0, ir_unit.name);
             let sig = codegen::build_signature_for_func(ir_unit, self.isa.as_ref());
             let cl_func_id = obj_module
@@ -225,9 +235,13 @@ impl AotCompiler {
         }
 
         // Pass 3b: Compile all module functions with pre-declared FuncIds.
+        // Skip native code units — they have no blocks (resolved by the linker).
         for ((module_id, func_id), &cl_func_id) in &module_funcs {
             let ir_unit = registry.get_module_function_as_unit(*module_id, *func_id)
                 .ok_or_else(|| AotError::Module(format!("module function not found: {:?}, {:?}", module_id, func_id)))?;
+            if ir_unit.native_context().is_some() {
+                continue;
+            }
 
             let mut compiler = codegen::FunctionCompiler::new_with_runtime_and_tydescs(
                 ir_unit,

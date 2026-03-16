@@ -32,6 +32,9 @@ fn analyze_file(path: &Path) -> Result<String, String> {
     // Build pipeline with loaded packages.
     let mut pipeline = ModuleCompilationPipeline::default();
 
+    // Add rider sources and crate directories from the loaded package world.
+    pipeline.add_riders_from_package_world(&package_world_raw);
+
     // Add all modules from the loaded package world.
     for (pkg_name, pkg) in &package_world_raw.pkglib_system {
         for (mod_name, pkg_mod) in &pkg.modules {
@@ -61,6 +64,28 @@ fn analyze_file(path: &Path) -> Result<String, String> {
     let Some(mut executor) = compiled.script_executor(datafun::DebugOutputMode::Disabled, None) else {
         return Err("Module compilation failed".to_string());
     };
+
+    // Build and load rider shared libraries.
+    let native_symbols = compiled.native_symbols();
+    let mut _loaded_riders = Vec::new();
+    for (rider_name, crate_dir) in pipeline.rider_crate_dirs() {
+        let build_result = datafun::pipeline::rider_build::build_rider_crate(crate_dir, rider_name)
+            .map_err(|e| format!("rider build error: {}", e))?;
+        let prefix = format!("dlr_{}__", rider_name);
+        let rider_symbols: Vec<String> = native_symbols.iter()
+            .filter(|s| s.starts_with(&prefix))
+            .cloned()
+            .collect();
+        if !rider_symbols.is_empty() {
+            let loaded = datafun::pipeline::rider_load::load_rider_library(
+                &build_result.lib_path,
+                rider_name,
+                &rider_symbols,
+                executor.native_table_mut(),
+            ).map_err(|e| format!("rider load error: {}", e))?;
+            _loaded_riders.push(loaded);
+        }
+    }
 
     // Compile the script as a fragment.
     let result = compiler.compile_fragment(&script_text);

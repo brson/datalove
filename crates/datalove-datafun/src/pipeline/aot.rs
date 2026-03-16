@@ -169,6 +169,18 @@ pub fn link_object_to_temp_executable(
 
 /// Link object bytes to an executable at the specified path.
 pub fn link_object_to_path(obj_bytes: &[u8], output_path: &Path) -> Result<(), LinkError> {
+    link_object_to_path_with_libs(obj_bytes, output_path, &[])
+}
+
+/// Link object bytes to an executable, including extra shared libraries.
+///
+/// The `extra_libs` parameter provides paths to shared libraries (e.g. rider
+/// `.so` files) that should be linked into the executable.
+pub fn link_object_to_path_with_libs(
+    obj_bytes: &[u8],
+    output_path: &Path,
+    extra_libs: &[PathBuf],
+) -> Result<(), LinkError> {
     let dir = rmx::tempfile::tempdir().map_err(LinkError::TempDir)?;
     let obj_path = dir.path().join("script.o");
     std::fs::write(&obj_path, obj_bytes).map_err(LinkError::WriteObject)?;
@@ -176,7 +188,7 @@ pub fn link_object_to_path(obj_bytes: &[u8], output_path: &Path) -> Result<(), L
     let lib_dir = ensure_runtime_lib();
     let lib_path = lib_dir.join("libdatalove_rt.a");
 
-    // Use lld for faster linking if available
+    // Use lld for faster linking if available.
     let mut cmd = Command::new("cc");
     if use_lld() {
         cmd.arg("-fuse-ld=lld");
@@ -187,6 +199,11 @@ pub fn link_object_to_path(obj_bytes: &[u8], output_path: &Path) -> Result<(), L
         "-ldl", "-lpthread", "-lm",
         "-o", output_path.to_str().unwrap(),
     ]);
+
+    // Add rider shared libraries.
+    for lib in extra_libs {
+        cmd.arg(lib.to_str().unwrap());
+    }
 
     let output = cmd.output().map_err(LinkError::LinkerExec)?;
 

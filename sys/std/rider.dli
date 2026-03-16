@@ -1,0 +1,6 @@
+// Native bitwise operations for u32.
+
+native fun bitnot_u32(a: u32): u32
+native fun bitand_u32(a: u32, b: u32): u32
+native fun bitor_u32(a: u32, b: u32): u32
+native fun bitxor_u32(a: u32, b: u32): u32
