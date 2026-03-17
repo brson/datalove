@@ -22,10 +22,8 @@ pub struct LoadedRider {
 ///
 /// For each symbol, looks up the raw function pointer via `dlsym` and wraps it in
 /// a closure that bridges from the interpreter's `(LocalRtHandle, &[Value], Destination)`
-/// calling convention to a C ABI function `fn(LocalRtHandle, i64, i64, ...) -> i64`.
-///
-/// Currently supports scalar-only functions (i32, i64, bool, etc.) where values
-/// are stored as raw integers in the interpreter's value slots.
+/// calling convention to the rider C ABI:
+/// `fn(rt, arg0_ptr, arg0_tydesc, ..., result_out, result_tydesc) -> RtStatus`
 pub fn load_rider_library(
     lib_path: &Path,
     rider_name: &str,
@@ -43,13 +41,10 @@ pub fn load_rider_library(
             *sym
         };
 
-        // Create a bridge closure that calls the raw pointer.
-        // The closure captures the raw pointer (which remains valid as long as
-        // LoadedRider keeps the library alive).
         let symbol_name = symbol.clone();
         let bridge: Box<dyn Fn(LocalRtHandle, &[Value], Destination) -> Result<(), InterpError>> =
             Box::new(move |rt, args, dest| {
-                call_native_scalar(fn_ptr, rt, args, dest, &symbol_name)
+                call_native_bridge(fn_ptr, rt, args, dest, &symbol_name)
             });
 
         native_table.register(symbol.clone(), bridge);
@@ -61,83 +56,69 @@ pub fn load_rider_library(
     })
 }
 
-/// Bridge from interpreter values to a C ABI scalar function call.
+/// Bridge from interpreter values to rider C ABI.
 ///
-/// Reads each argument as a raw `i64` from the value's pointer, calls the
-/// C function with those i64 args + the runtime handle, and writes the i64
-/// result to the destination. This works for integer types (i32, i64, etc.)
-/// where the interpreter stores values inline in appropriately-sized slots.
+/// Builds a flat array of pointer-sized args: `[rt, arg0_ptr, arg0_tydesc, ..., result_out, result_tydesc]`
+/// and calls the native function via `libffi`-style dispatch.
 ///
 /// The C function signature is:
-/// `extern "C-unwind" fn(LocalRtHandle, arg0: i64, arg1: i64, ...) -> i64`
-fn call_native_scalar(
+/// `extern "C-unwind" fn(rt, ptr, tydesc, ptr, tydesc, ..., out_ptr, out_tydesc) -> u8`
+fn call_native_bridge(
     fn_ptr: *const (),
     rt: LocalRtHandle,
     args: &[Value],
     dest: Destination,
     _symbol: &str,
 ) -> Result<(), InterpError> {
-    // Read argument values as i64.
-    let mut arg_vals: Vec<i64> = Vec::with_capacity(args.len());
+    // Build flat arg array: [rt, arg0_ptr, arg0_tydesc, ..., dest_ptr, dest_tydesc]
+    let mut c_args: Vec<usize> = Vec::with_capacity(1 + args.len() * 2 + 2);
+    c_args.push(rt as usize);
     for arg in args {
-        let val = unsafe {
-            // Read up to 8 bytes from the value pointer.
-            let size = (*arg.tydesc).size as usize;
-            let mut buf = [0i64; 1];
-            std::ptr::copy_nonoverlapping(
-                arg.ptr,
-                &mut buf as *mut _ as *mut u8,
-                size.min(8),
-            );
-            buf[0]
-        };
-        arg_vals.push(val);
+        c_args.push(arg.ptr as usize);
+        c_args.push(arg.tydesc as usize);
     }
+    c_args.push(dest.ptr as usize);
+    c_args.push(dest.tydesc as usize);
 
-    // Call the C function. We dispatch based on argument count.
-    // Each arm casts fn_ptr to the appropriate C function signature.
-    let result: i64 = unsafe {
-        match arg_vals.len() {
-            0 => {
-                let f: extern "C-unwind" fn(LocalRtHandle) -> i64 =
-                    std::mem::transmute(fn_ptr);
-                f(rt)
-            }
-            1 => {
-                let f: extern "C-unwind" fn(LocalRtHandle, i64) -> i64 =
-                    std::mem::transmute(fn_ptr);
-                f(rt, arg_vals[0])
-            }
-            2 => {
-                let f: extern "C-unwind" fn(LocalRtHandle, i64, i64) -> i64 =
-                    std::mem::transmute(fn_ptr);
-                f(rt, arg_vals[0], arg_vals[1])
-            }
+    // Call the C function. Dispatch based on total C arg count.
+    let _status: u8 = unsafe {
+        type Ptr = usize;
+        match c_args.len() {
+            // 0 args + result = rt, out, out_td
             3 => {
-                let f: extern "C-unwind" fn(LocalRtHandle, i64, i64, i64) -> i64 =
+                let f: extern "C-unwind" fn(Ptr, Ptr, Ptr) -> u8 =
                     std::mem::transmute(fn_ptr);
-                f(rt, arg_vals[0], arg_vals[1], arg_vals[2])
+                f(c_args[0], c_args[1], c_args[2])
             }
-            4 => {
-                let f: extern "C-unwind" fn(LocalRtHandle, i64, i64, i64, i64) -> i64 =
+            // 1 arg + result = rt, p, td, out, out_td
+            5 => {
+                let f: extern "C-unwind" fn(Ptr, Ptr, Ptr, Ptr, Ptr) -> u8 =
                     std::mem::transmute(fn_ptr);
-                f(rt, arg_vals[0], arg_vals[1], arg_vals[2], arg_vals[3])
+                f(c_args[0], c_args[1], c_args[2], c_args[3], c_args[4])
+            }
+            // 2 args + result = rt, p, td, p, td, out, out_td
+            7 => {
+                let f: extern "C-unwind" fn(Ptr, Ptr, Ptr, Ptr, Ptr, Ptr, Ptr) -> u8 =
+                    std::mem::transmute(fn_ptr);
+                f(c_args[0], c_args[1], c_args[2], c_args[3], c_args[4], c_args[5], c_args[6])
+            }
+            // 3 args + result
+            9 => {
+                let f: extern "C-unwind" fn(Ptr, Ptr, Ptr, Ptr, Ptr, Ptr, Ptr, Ptr, Ptr) -> u8 =
+                    std::mem::transmute(fn_ptr);
+                f(c_args[0], c_args[1], c_args[2], c_args[3], c_args[4], c_args[5], c_args[6], c_args[7], c_args[8])
+            }
+            // 4 args + result
+            11 => {
+                let f: extern "C-unwind" fn(Ptr, Ptr, Ptr, Ptr, Ptr, Ptr, Ptr, Ptr, Ptr, Ptr, Ptr) -> u8 =
+                    std::mem::transmute(fn_ptr);
+                f(c_args[0], c_args[1], c_args[2], c_args[3], c_args[4], c_args[5], c_args[6], c_args[7], c_args[8], c_args[9], c_args[10])
             }
             n => {
-                todo!("native functions with {} args not yet supported", n);
+                todo!("native functions with {} C args not yet supported", n);
             }
         }
     };
-
-    // Write the result to the destination.
-    unsafe {
-        let size = (*dest.tydesc).size as usize;
-        std::ptr::copy_nonoverlapping(
-            &result as *const _ as *const u8,
-            dest.ptr,
-            size.min(8),
-        );
-    }
 
     Ok(())
 }

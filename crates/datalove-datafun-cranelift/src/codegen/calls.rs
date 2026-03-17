@@ -94,9 +94,10 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
 
     /// Compile a call to a native rider function.
     ///
-    /// Native functions use C ABI: `fn(rt: *mut u8, arg0: i64, ...) -> i64`.
-    /// Scalar args are loaded from their pointers and widened to i64.
-    /// Ref/aggregate args pass their pointer directly as i64.
+    /// Matches the runtime C ABI: each arg is a `(ptr, tydesc)` pair,
+    /// return value via out-param, function returns RtStatus.
+    ///
+    /// `fn(rt, arg0_ptr, arg0_tydesc, ..., result_out, result_tydesc) -> i8`
     fn compile_native_call(
         &mut self,
         builder: &mut FunctionBuilder,
@@ -112,72 +113,66 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
 
         let callee_func_id = self.resolve_code_ref(code_ref)?;
 
-        // Build call arguments: [rt_handle, arg0_as_i64, arg1_as_i64, ...]
-        let mut call_args = Vec::with_capacity(1 + args.len());
+        // Build call arguments: [rt_handle, (ptr, tydesc)..., result_out, result_tydesc]
+        let mut call_args = Vec::with_capacity(1 + args.len() * 2 + 2);
         call_args.push(rt_handle);
 
-        for (i, arg) in args.iter().enumerate() {
+        for arg in args.iter() {
             let arg_ty = self.get_operand_type(arg)?;
             let arg_ptr = self.get_operand_ptr(builder, arg)?;
 
-            // Ref types: the pointer IS the value, pass it directly.
-            if matches!(&arg_ty, IrType::Ref(_)) {
-                call_args.push(arg_ptr);
-                continue;
-            }
+            // Resolve the actual type for tydesc (strip Ref wrapper).
+            let tydesc_ty = match &arg_ty {
+                IrType::Ref(inner) => inner.as_ref().clone(),
+                other => other.clone(),
+            };
 
-            match types::ir_type_to_cranelift(&arg_ty) {
-                CraneliftRepr::Scalar(scalar_ty) => {
-                    // Load scalar from pointer and widen to i64.
-                    let loaded = builder.ins().load(scalar_ty, MemFlags::new(), arg_ptr, 0);
-                    let as_i64 = if scalar_ty == cl_types::I64 {
-                        loaded
-                    } else if scalar_ty.is_int() {
-                        builder.ins().uextend(cl_types::I64, loaded)
-                    } else {
-                        return Err(CraneliftError::Unsupported(format!(
-                            "native call arg {} has non-integer type {:?}", i, arg_ty
-                        )));
-                    };
-                    call_args.push(as_i64);
-                }
-                CraneliftRepr::Aggregate(_) => {
-                    // Aggregate: pass pointer as i64.
-                    call_args.push(arg_ptr);
-                }
-            }
+            let tydesc_id = self.tydesc_emitter.get(&tydesc_ty).ok_or_else(|| {
+                CraneliftError::Codegen(format!(
+                    "TyDesc not found for type {:?} in native call", tydesc_ty
+                ))
+            })?;
+            let tydesc_gv = self.module.declare_data_in_func(tydesc_id, builder.func);
+            let tydesc_addr = builder.ins().global_value(PTR_TYPE, tydesc_gv);
+
+            call_args.push(arg_ptr);
+            call_args.push(tydesc_addr);
         }
+
+        // Result out-param: pointer to dest slot + tydesc.
+        let dest_ty = &self.func.value_types[dest.0 as usize];
+        let frame_slot = self.frame_slot.ok_or_else(|| {
+            CraneliftError::Codegen("no frame slot for native call result".into())
+        })?;
+        let dest_offset = self.layout.value_offset(dest.0);
+        let dest_ptr = builder.ins().stack_addr(PTR_TYPE, frame_slot, dest_offset as i32);
+
+        let dest_tydesc_id = self.tydesc_emitter.get(dest_ty).ok_or_else(|| {
+            CraneliftError::Codegen(format!(
+                "TyDesc not found for return type {:?} in native call", dest_ty
+            ))
+        })?;
+        let dest_tydesc_gv = self.module.declare_data_in_func(dest_tydesc_id, builder.func);
+        let dest_tydesc_addr = builder.ins().global_value(PTR_TYPE, dest_tydesc_gv);
+
+        call_args.push(dest_ptr);
+        call_args.push(dest_tydesc_addr);
 
         // Declare callee and emit call.
         let callee_ref = self.module.declare_func_in_func(callee_func_id, builder.func);
-        let call_inst = builder.ins().call(callee_ref, &call_args);
+        let _call_inst = builder.ins().call(callee_ref, &call_args);
 
-        // Get the i64 return value.
-        let results = builder.inst_results(call_inst);
-        let ret_i64 = results[0];
-
-        // Truncate to destination type.
-        let dest_ty = &self.func.value_types[dest.0 as usize];
-        let dest_scalar = match types::ir_type_to_cranelift(dest_ty) {
-            CraneliftRepr::Scalar(ty) => ty,
-            CraneliftRepr::Aggregate(_) => {
-                return Err(CraneliftError::Unsupported(format!(
-                    "native call return has aggregate type {:?}", dest_ty
-                )));
+        // Result was written to dest_ptr by the callee.
+        // For scalars, load the value; for aggregates, use the pointer.
+        match types::ir_type_to_cranelift(dest_ty) {
+            CraneliftRepr::Scalar(scalar_ty) => {
+                let loaded = builder.ins().load(scalar_ty, MemFlags::new(), dest_ptr, 0);
+                self.values.insert(dest, loaded);
             }
-        };
-
-        let result = if dest_scalar == cl_types::I64 {
-            ret_i64
-        } else if dest_scalar.is_int() {
-            builder.ins().ireduce(dest_scalar, ret_i64)
-        } else {
-            return Err(CraneliftError::Unsupported(format!(
-                "native call return has non-integer type {:?}", dest_ty
-            )));
-        };
-
-        self.values.insert(dest, result);
+            CraneliftRepr::Aggregate(_) => {
+                self.values.insert(dest, dest_ptr);
+            }
+        }
 
         Ok(())
     }

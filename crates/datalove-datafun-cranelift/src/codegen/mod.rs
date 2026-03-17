@@ -146,8 +146,11 @@ pub fn build_signature_for_func(
 
 /// Build a Cranelift signature for a native rider function.
 ///
-/// Native functions use the C ABI: `fn(rt: *mut u8, arg0: i64, ...) -> i64`.
-/// All scalar args are widened to i64. Return is always i64.
+/// Matches the runtime C ABI: each parameter is a `(ptr, tydesc)` pair,
+/// the return value is passed via an out-param `(ptr, tydesc)` pair,
+/// and the function returns `RtStatus` (i8).
+///
+/// `fn(rt, arg0_ptr, arg0_tydesc, ..., result_out, result_tydesc) -> i8`
 pub fn build_native_signature(
     ctx: &NativeContext,
     isa: &dyn TargetIsa,
@@ -158,13 +161,18 @@ pub fn build_native_signature(
     // Runtime handle as first parameter.
     sig.params.push(cl_ir::AbiParam::new(PTR_TYPE));
 
-    // All scalar args as i64.
+    // Each arg is a (ptr, tydesc) pair.
     for _ in &ctx.param_types {
-        sig.params.push(cl_ir::AbiParam::new(cl_ir::types::I64));
+        sig.params.push(cl_ir::AbiParam::new(PTR_TYPE)); // value ptr
+        sig.params.push(cl_ir::AbiParam::new(PTR_TYPE)); // tydesc ptr
     }
 
-    // Scalar return as i64.
-    sig.returns.push(cl_ir::AbiParam::new(cl_ir::types::I64));
+    // Return value as out-param (ptr, tydesc) pair.
+    sig.params.push(cl_ir::AbiParam::new(PTR_TYPE)); // result out ptr
+    sig.params.push(cl_ir::AbiParam::new(PTR_TYPE)); // result tydesc ptr
+
+    // RtStatus return (i8).
+    sig.returns.push(cl_ir::AbiParam::new(cl_ir::types::I8));
 
     sig
 }

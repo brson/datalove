@@ -1448,6 +1448,14 @@ pub fn collect_types_from_code_unit(unit: &IrCodeUnit, types: &mut HashSet<IrTyp
         }
     }
 
+    // Collect from native context if present.
+    if let Some(native_ctx) = unit.native_context() {
+        for ty in &native_ctx.param_types {
+            types.insert(ty.clone());
+        }
+        types.insert(native_ctx.return_type.clone());
+    }
+
     // Recursively collect from nested units.
     for nested in &unit.nested_units {
         collect_types_from_code_unit(nested, types);

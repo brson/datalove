@@ -1,19 +1,22 @@
 //! Native rider for sys/std: string operations.
 //!
-//! Each function follows the rider C ABI convention:
-//! `extern "C-unwind" fn(rt: *mut u8, args...: i64) -> i64`
+//! Each function follows the runtime C ABI convention:
+//! `extern "C-unwind" fn(rt, arg0_ptr, arg0_tydesc, ..., result_out, result_tydesc) -> u8`
 //!
-//! For `ref string` parameters, the i64 value is a pointer to an `rtdt::String` struct.
-//! The runtime handle is unused for pure read-only string operations.
+//! For `ref string` parameters, the value pointer points to an `rtdt::String` struct.
+//! Return values are written to the `result_out` pointer.
+//! Returns 1 (Ok) on success, 2 (Error) on failure.
 
 use datalove_rtdt as rtdt;
 
-/// Convert a rider i64 arg (pointer to rtdt::String) to a Rust &str.
+const OK: u8 = 1;
+
+/// Convert a value pointer to `rtdt::String` into a Rust `&str`.
 ///
 /// # Safety
 ///
 /// The pointer must be valid and point to a live `rtdt::String`.
-unsafe fn as_str<'a>(ptr: i64) -> &'a str {
+unsafe fn as_str<'a>(ptr: *const u8) -> &'a str {
     let s = &*(ptr as *const rtdt::String);
     if s.data.is_null() || s.size.0 == 0 {
         ""
@@ -23,72 +26,134 @@ unsafe fn as_str<'a>(ptr: i64) -> &'a str {
     }
 }
 
+/// Write a scalar result to the out pointer.
+///
+/// # Safety
+///
+/// The out pointer must be valid and have enough space for `size_of::<T>()` bytes.
+unsafe fn write_result<T: Copy>(out: *mut u8, val: T) {
+    std::ptr::write(out as *mut T, val);
+}
+
 // --- Basic properties ---
 
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__string_len(_rt: *mut u8, s: i64) -> i64 {
-    let s = unsafe { &*(s as *const rtdt::String) };
-    s.size.0 as i64
+pub extern "C-unwind" fn dlr_std__string_len(
+    _rt: *mut u8,
+    s_ptr: *const u8, _s_td: *const u8,
+    out: *mut u8, _out_td: *const u8,
+) -> u8 {
+    let s = unsafe { &*(s_ptr as *const rtdt::String) };
+    unsafe { write_result(out, s.size) };
+    OK
 }
 
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__string_char_count(_rt: *mut u8, s: i64) -> i64 {
-    let s = unsafe { as_str(s) };
-    s.chars().count() as i64
+pub extern "C-unwind" fn dlr_std__string_char_count(
+    _rt: *mut u8,
+    s_ptr: *const u8, _s_td: *const u8,
+    out: *mut u8, _out_td: *const u8,
+) -> u8 {
+    let s = unsafe { as_str(s_ptr) };
+    let count = rtdt::Index::new(s.chars().count() as rtdt::IndexRepr);
+    unsafe { write_result(out, count) };
+    OK
 }
 
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__string_is_ascii(_rt: *mut u8, s: i64) -> i64 {
-    let s = unsafe { as_str(s) };
-    s.is_ascii() as i64
+pub extern "C-unwind" fn dlr_std__string_is_ascii(
+    _rt: *mut u8,
+    s_ptr: *const u8, _s_td: *const u8,
+    out: *mut u8, _out_td: *const u8,
+) -> u8 {
+    let s = unsafe { as_str(s_ptr) };
+    unsafe { write_result(out, s.is_ascii() as u8) };
+    OK
 }
 
 // --- Searching ---
 
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__string_contains(_rt: *mut u8, s: i64, pattern: i64) -> i64 {
-    let s = unsafe { as_str(s) };
-    let pattern = unsafe { as_str(pattern) };
-    s.contains(pattern) as i64
+pub extern "C-unwind" fn dlr_std__string_contains(
+    _rt: *mut u8,
+    s_ptr: *const u8, _s_td: *const u8,
+    pat_ptr: *const u8, _pat_td: *const u8,
+    out: *mut u8, _out_td: *const u8,
+) -> u8 {
+    let s = unsafe { as_str(s_ptr) };
+    let pat = unsafe { as_str(pat_ptr) };
+    unsafe { write_result(out, s.contains(pat) as u8) };
+    OK
 }
 
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__string_starts_with(_rt: *mut u8, s: i64, prefix: i64) -> i64 {
-    let s = unsafe { as_str(s) };
-    let prefix = unsafe { as_str(prefix) };
-    s.starts_with(prefix) as i64
+pub extern "C-unwind" fn dlr_std__string_starts_with(
+    _rt: *mut u8,
+    s_ptr: *const u8, _s_td: *const u8,
+    prefix_ptr: *const u8, _prefix_td: *const u8,
+    out: *mut u8, _out_td: *const u8,
+) -> u8 {
+    let s = unsafe { as_str(s_ptr) };
+    let prefix = unsafe { as_str(prefix_ptr) };
+    unsafe { write_result(out, s.starts_with(prefix) as u8) };
+    OK
 }
 
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__string_ends_with(_rt: *mut u8, s: i64, suffix: i64) -> i64 {
-    let s = unsafe { as_str(s) };
-    let suffix = unsafe { as_str(suffix) };
-    s.ends_with(suffix) as i64
+pub extern "C-unwind" fn dlr_std__string_ends_with(
+    _rt: *mut u8,
+    s_ptr: *const u8, _s_td: *const u8,
+    suffix_ptr: *const u8, _suffix_td: *const u8,
+    out: *mut u8, _out_td: *const u8,
+) -> u8 {
+    let s = unsafe { as_str(s_ptr) };
+    let suffix = unsafe { as_str(suffix_ptr) };
+    unsafe { write_result(out, s.ends_with(suffix) as u8) };
+    OK
 }
 
 // --- Comparison ---
 
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__string_eq(_rt: *mut u8, a: i64, b: i64) -> i64 {
-    let a = unsafe { as_str(a) };
-    let b = unsafe { as_str(b) };
-    (a == b) as i64
+pub extern "C-unwind" fn dlr_std__string_eq(
+    _rt: *mut u8,
+    a_ptr: *const u8, _a_td: *const u8,
+    b_ptr: *const u8, _b_td: *const u8,
+    out: *mut u8, _out_td: *const u8,
+) -> u8 {
+    let a = unsafe { as_str(a_ptr) };
+    let b = unsafe { as_str(b_ptr) };
+    unsafe { write_result(out, (a == b) as u8) };
+    OK
 }
 
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__string_cmp(_rt: *mut u8, a: i64, b: i64) -> i64 {
-    let a = unsafe { as_str(a) };
-    let b = unsafe { as_str(b) };
-    match a.cmp(b) {
-        std::cmp::Ordering::Less => -1i64,
-        std::cmp::Ordering::Equal => 0i64,
-        std::cmp::Ordering::Greater => 1i64,
-    }
+pub extern "C-unwind" fn dlr_std__string_cmp(
+    _rt: *mut u8,
+    a_ptr: *const u8, _a_td: *const u8,
+    b_ptr: *const u8, _b_td: *const u8,
+    out: *mut u8, _out_td: *const u8,
+) -> u8 {
+    let a = unsafe { as_str(a_ptr) };
+    let b = unsafe { as_str(b_ptr) };
+    let result: i32 = match a.cmp(b) {
+        std::cmp::Ordering::Less => -1,
+        std::cmp::Ordering::Equal => 0,
+        std::cmp::Ordering::Greater => 1,
+    };
+    unsafe { write_result(out, result) };
+    OK
 }
 
 #[no_mangle]
-pub extern "C-unwind" fn dlr_std__string_eq_ignore_ascii_case(_rt: *mut u8, a: i64, b: i64) -> i64 {
-    let a = unsafe { as_str(a) };
-    let b = unsafe { as_str(b) };
-    a.eq_ignore_ascii_case(b) as i64
+pub extern "C-unwind" fn dlr_std__string_eq_ignore_ascii_case(
+    _rt: *mut u8,
+    a_ptr: *const u8, _a_td: *const u8,
+    b_ptr: *const u8, _b_td: *const u8,
+    out: *mut u8, _out_td: *const u8,
+) -> u8 {
+    let a = unsafe { as_str(a_ptr) };
+    let b = unsafe { as_str(b_ptr) };
+    unsafe { write_result(out, a.eq_ignore_ascii_case(b) as u8) };
+    OK
 }
