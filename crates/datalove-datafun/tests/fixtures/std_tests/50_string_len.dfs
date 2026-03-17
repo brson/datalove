@@ -1,0 +1,10 @@
+require module sys/std/string
+
+import string.len
+import string.is_empty
+
+let a = "hello"
+let b = ""
+let c = "hi"
+
+let output = (len(a), len(b), len(c), is_empty(a), is_empty(b))

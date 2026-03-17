@@ -1,0 +1,12 @@
+require module sys/std/string
+
+import string.eq
+import string.cmp
+import string.eq_ignore_ascii_case
+
+let a = "hello"
+let b = "hello"
+let c = "world"
+let d = "Hello"
+
+let output = (eq(a, b), eq(a, c), cmp(a, c), cmp(c, a), cmp(a, b), eq_ignore_ascii_case(a, d))

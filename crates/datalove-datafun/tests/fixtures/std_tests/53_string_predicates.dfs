@@ -1,0 +1,9 @@
+require module sys/std/string
+
+import string.is_ascii
+import string.char_count
+
+let a = "hello"
+let b = ""
+
+let output = (is_ascii(a), is_ascii(b), char_count(a), char_count(b))
