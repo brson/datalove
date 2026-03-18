@@ -442,6 +442,7 @@ pub fn lower_expression<'db>(
         ExprFunKind::FunctionCall(call) => {
             // Push a new scope for this call's pending intermediates.
             ctx.push_pending_scope();
+            let expr_temp_mark = ctx.expr_temps_mark();
 
             // Resolve function reference using typechecker's resolved call target.
             let func_ref = ctx.resolve_call(call);
@@ -503,6 +504,7 @@ pub fn lower_expression<'db>(
             // Args consumed by Call/ComptimeCall; pop scope.
             ctx.clear_pending_intermediates();
             ctx.pop_pending_scope();
+            ctx.emit_expr_temp_drops_since(expr_temp_mark);
             Ok(dest)
         }
         ExprFunKind::Some(some_expr) => {

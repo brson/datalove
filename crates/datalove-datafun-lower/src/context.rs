@@ -656,10 +656,28 @@ impl<'db> LowerCtx<'db> {
         }
     }
 
+    /// Return the current number of expression temporaries.
+    ///
+    /// Used to snapshot the level before lowering call arguments so that
+    /// only temps created by those arguments are dropped afterwards.
+    pub fn expr_temps_mark(&self) -> usize {
+        self.body.expr_temps.len()
+    }
+
     /// Emit Drop instructions for all expression temporaries and clear the list.
     pub fn emit_expr_temp_drops(&mut self) {
         let temps = std::mem::take(&mut self.body.expr_temps);
         for (value, _ty) in temps {
+            self.emit(Instruction::Drop { operand: Operand::Value(value) });
+        }
+    }
+
+    /// Emit Drop instructions for expression temporaries added since `mark`.
+    ///
+    /// Temps before `mark` are left in place for the enclosing expression.
+    pub fn emit_expr_temp_drops_since(&mut self, mark: usize) {
+        let tail = self.body.expr_temps.split_off(mark);
+        for (value, _ty) in tail {
             self.emit(Instruction::Drop { operand: Operand::Value(value) });
         }
     }

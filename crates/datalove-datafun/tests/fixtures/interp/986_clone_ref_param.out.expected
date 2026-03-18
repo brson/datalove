@@ -16,8 +16,8 @@ Analysis(
                     block0:
                         v0 = const "hello"
                         v1 = call @0 u0(v0)
-                        debuglog v1
                         drop v0
+                        debuglog v1
                         drop v1
                         unit_end
                     

@@ -5,8 +5,5 @@ import string.starts_with
 import string.ends_with
 
 let s = "hello world"
-let w = "world"
-let x = "xyz"
-let h = "hello"
 
-let output = (contains(s, w), contains(s, x), starts_with(s, h), starts_with(s, w), ends_with(s, w), ends_with(s, h))
+let output = (contains(s, "world"), contains(s, "xyz"), starts_with(s, "hello"), starts_with(s, "world"), ends_with(s, "world"), ends_with(s, "hello"))
