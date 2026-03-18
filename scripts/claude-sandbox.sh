@@ -105,6 +105,7 @@ envs=(
     "-e" "JAVA_HOME=/usr/lib/jvm/default-java"
     "-e" "XDG_RUNTIME_DIR=/run/user/1000"
     "-e" "WAYLAND_DISPLAY=${WAYLAND_DISPLAY:-wayland-0}"
+    "-e" "GH_TOKEN=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"
 )
 info "Sandbox: $(pwd) -> ${WORKDIR}"
 info "Git config: $([[ -f "$HOME/.gitconfig" ]] && echo "yes" || echo "no")"
