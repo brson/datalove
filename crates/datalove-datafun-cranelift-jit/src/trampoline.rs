@@ -161,9 +161,7 @@ impl From<&CodeRef> for EncodedFuncKey {
 /// - `ret_dest` is valid if non-null
 /// - `args` points to `arg_count` valid pointers
 ///
-/// # Returns
-///
-/// Scalar return value, or 0 if sret/void.
+/// All results are written via ret_dest (sret convention). No register return.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn __jit_dispatch_call(
     rt_handle: LocalRtHandle,
@@ -172,7 +170,7 @@ pub unsafe extern "C" fn __jit_dispatch_call(
     _ret_is_sret: u8,
     arg_count: u32,
     args: *const *const u8,
-) -> usize {
+) {
     // Get dispatch context.
     let ctx_ptr = match get_dispatch_context() {
         Some(ptr) => ptr,
@@ -226,7 +224,6 @@ pub unsafe extern "C" fn __jit_dispatch_call(
             if let Err(e) = result {
                 panic!("JIT dispatch: JIT call failed: {}", e);
             }
-            0 // Return value written via dest/sret
         }
         Ok(None) | Err(_) => {
             // Not yet compiled or compilation failed - fall back to interpreter.
@@ -246,7 +243,6 @@ pub unsafe extern "C" fn __jit_dispatch_call(
             if let Err(e) = result {
                 panic!("JIT dispatch: interpreter call failed: {:?}", e);
             }
-            0 // Return value written via dest
         }
     }
 }

@@ -175,6 +175,11 @@ impl IrInterpreter {
         self.call_dispatcher.borrow_mut().take()
     }
 
+    /// Set or replace the call dispatcher.
+    pub fn set_dispatcher(&self, dispatcher: Box<dyn CallDispatcher>) {
+        *self.call_dispatcher.borrow_mut() = Some(dispatcher);
+    }
+
     /// Get mutable access to the type descriptor table.
     pub fn tydesc_table_mut(&mut self) -> &mut IrTyDescTable {
         &mut self.tydesc_table

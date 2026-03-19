@@ -41,22 +41,26 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 builder.ins().brif(cond_val, then_blk, &cl_then_args, else_blk, &cl_else_args);
             }
             Terminator::Return { value } => {
-                // Function return.
+                // Function return. All non-Unit returns use sret convention.
                 if let Some(val_op) = value {
-                    // Check if we're using sret convention.
-                    if let Some(sret_ptr) = self.sret_param {
-                        // Aggregate return: copy value to sret location.
-                        let src_ptr = self.get_operand_value(builder, val_op)?;
-                        let ret_ty = &self.func_ctx.return_type;
-                        let size = types::ir_type_size(ret_ty);
-                        let size_val = builder.ins().iconst(PTR_TYPE, size as i64);
-                        builder.call_memcpy(self.isa.frontend_config(), sret_ptr, src_ptr, size_val);
-                        builder.ins().return_(&[]);
-                    } else {
-                        // Scalar return: return value in register.
-                        let val = self.get_operand_value(builder, val_op)?;
-                        builder.ins().return_(&[val]);
+                    let sret_ptr = self.sret_param.expect("non-Unit return requires sret param");
+                    let ret_ty = &self.func_ctx.return_type;
+
+                    match types::ir_type_to_cranelift(ret_ty) {
+                        types::CraneliftRepr::Scalar(_) => {
+                            // Scalar: store value directly to sret pointer.
+                            let val = self.get_operand_value(builder, val_op)?;
+                            builder.ins().store(cranelift_codegen::ir::MemFlags::new(), val, sret_ptr, 0);
+                        }
+                        types::CraneliftRepr::Aggregate(_) => {
+                            // Aggregate: memcpy from source pointer to sret pointer.
+                            let src_ptr = self.get_operand_value(builder, val_op)?;
+                            let size = types::ir_type_size(ret_ty);
+                            let size_val = builder.ins().iconst(PTR_TYPE, size as i64);
+                            builder.call_memcpy(self.isa.frontend_config(), sret_ptr, src_ptr, size_val);
+                        }
                     }
+                    builder.ins().return_(&[]);
                 } else {
                     builder.ins().return_(&[]);
                 }

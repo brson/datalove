@@ -64,6 +64,11 @@ path = "tests/std_tests.rs"
 harness = false
 
 [[test]]
+name = "std_all_tests"
+path = "tests/std_all_tests.rs"
+harness = false
+
+[[test]]
 name = "ir_lower_tests"
 path = "tests/ir_lower_tests.rs"
 harness = false

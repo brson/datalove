@@ -110,13 +110,11 @@ pub fn build_signature_for_func(
     // Implicit rt_handle as first param (pointer to runtime).
     sig.params.push(cl_ir::AbiParam::new(PTR_TYPE));
 
-    // For aggregate returns, add sret pointer as second param.
+    // For non-Unit returns, add sret pointer as second param.
     // Caller allocates space and passes pointer; callee writes result there.
+    // All returns use sret to avoid ABI complexity around register types.
     let ret_ty = &func_ctx.return_type;
-    let has_sret = match ret_ty {
-        IrType::Unit => false,
-        _ => matches!(types::ir_type_to_cranelift(ret_ty), CraneliftRepr::Aggregate(_)),
-    };
+    let has_sret = uses_sret(ret_ty);
     if has_sret {
         sig.params.push(cl_ir::AbiParam::new(PTR_TYPE));
     }
@@ -126,20 +124,7 @@ pub fn build_signature_for_func(
         sig.params.push(cl_ir::AbiParam::new(PTR_TYPE));
     }
 
-    // Return type: scalars in register, Unit/aggregates return nothing (aggregates use sret).
-    match ret_ty {
-        IrType::Unit => {
-            // Unit returns nothing.
-        }
-        _ => match types::ir_type_to_cranelift(ret_ty) {
-            CraneliftRepr::Scalar(cl_ty) => {
-                sig.returns.push(cl_ir::AbiParam::new(cl_ty));
-            }
-            CraneliftRepr::Aggregate(_) => {
-                // Aggregate uses sret convention - no return value.
-            }
-        }
-    }
+    // No register return values. All returns use sret.
 
     sig
 }
@@ -178,11 +163,12 @@ pub fn build_native_signature(
 }
 
 /// Check if a return type uses sret (structure return) convention.
+///
+/// All non-Unit returns use sret. The caller allocates space and passes a
+/// pointer; the callee writes the result there. This avoids ABI complexity
+/// around integer vs float register returns.
 pub fn uses_sret(ret_ty: &IrType) -> bool {
-    match ret_ty {
-        IrType::Unit => false,
-        _ => matches!(types::ir_type_to_cranelift(ret_ty), CraneliftRepr::Aggregate(_)),
-    }
+    !matches!(ret_ty, IrType::Unit)
 }
 
 /// Compiles a single IR function to Cranelift IR.

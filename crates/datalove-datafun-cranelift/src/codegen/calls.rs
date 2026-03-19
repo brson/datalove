@@ -1,6 +1,6 @@
 //! Function call instruction compilation.
 
-use cranelift_codegen::ir::{types as cl_types, InstBuilder, MemFlags};
+use cranelift_codegen::ir::{InstBuilder, MemFlags};
 use cranelift_frontend::FunctionBuilder;
 use cranelift_module::{FuncId, Module};
 
@@ -43,7 +43,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
 
         let callee_func_id = self.resolve_code_ref(code_ref)?;
 
-        // Check if the return type uses sret convention.
+        // All non-Unit returns use sret convention.
         let dest_ty = &self.func.value_types[dest.0 as usize];
         let callee_uses_sret = uses_sret(dest_ty);
 
@@ -51,18 +51,26 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         let mut call_args = Vec::with_capacity(2 + args.len());
         call_args.push(rt_handle);
 
-        // If sret, allocate space in caller's frame and pass pointer.
-        let sret_ptr = if callee_uses_sret {
+        // Allocate space in caller's frame and pass sret pointer.
+        if callee_uses_sret {
             let frame_slot = self.frame_slot.ok_or_else(|| {
                 CraneliftError::Codegen("no frame slot for sret return value".into())
             })?;
             let dest_offset = self.layout.value_offset(dest.0);
             let ptr = builder.ins().stack_addr(PTR_TYPE, frame_slot, dest_offset as i32);
             call_args.push(ptr);
-            Some(ptr)
-        } else {
-            None
-        };
+
+            // For aggregates, the pointer IS the value (used by downstream as address).
+            // For scalars, we load the value from sret location after the call.
+            match types::ir_type_to_cranelift(dest_ty) {
+                CraneliftRepr::Aggregate(_) => {
+                    self.values.insert(dest, ptr);
+                }
+                CraneliftRepr::Scalar(_) => {
+                    // Will load after call below.
+                }
+            }
+        }
 
         // Add user arguments (passed by pointer).
         for arg in args {
@@ -70,22 +78,18 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             call_args.push(arg_val);
         }
 
-        // Declare callee in this function.
+        // Declare callee in this function and emit call.
         let callee_ref = self.module.declare_func_in_func(callee_func_id, builder.func);
+        builder.ins().call(callee_ref, &call_args);
 
-        // Emit call.
-        let call_inst = builder.ins().call(callee_ref, &call_args);
-
-        // Get return value.
-        if let Some(ptr) = sret_ptr {
-            self.values.insert(dest, ptr);
-        } else {
-            let results = builder.inst_results(call_inst);
-            if !results.is_empty() {
-                self.values.insert(dest, results[0]);
-            } else {
-                let dummy = builder.ins().iconst(cl_types::I8, 0);
-                self.values.insert(dest, dummy);
+        // For scalar sret returns, load the value from the sret location.
+        if callee_uses_sret {
+            if let CraneliftRepr::Scalar(scalar_ty) = types::ir_type_to_cranelift(dest_ty) {
+                let frame_slot = self.frame_slot.unwrap();
+                let dest_offset = self.layout.value_offset(dest.0);
+                let ptr = builder.ins().stack_addr(PTR_TYPE, frame_slot, dest_offset as i32);
+                let loaded = builder.ins().load(scalar_ty, MemFlags::new(), ptr, 0);
+                self.values.insert(dest, loaded);
             }
         }
 

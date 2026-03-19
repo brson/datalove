@@ -1,7 +1,7 @@
 //! JIT compiler wrapping Cranelift's JITModule.
 
 use std::collections::{HashMap, HashSet};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use cranelift_codegen::ir::{self as cl_ir, types as cl_types, InstBuilder};
 use cranelift_codegen::isa::TargetIsa;
@@ -34,7 +34,21 @@ pub struct JitCompiler {
     /// Dispatch function FuncId (for JIT->interpreter calls).
     #[allow(dead_code)]
     dispatch_func_id: FuncId,
+    /// Shared native symbol table for rider functions.
+    ///
+    /// Populated after construction via `register_native_symbol()`.
+    /// The JITModule's symbol lookup function checks this map.
+    native_symbols: Arc<Mutex<HashMap<String, SendPtr>>>,
 }
+
+/// Wrapper for `*const u8` that implements `Send`.
+///
+/// Native function pointers from loaded rider libraries are safe to share
+/// across threads because they point to immutable compiled code.
+#[derive(Clone, Copy)]
+pub struct SendPtr(*const u8);
+unsafe impl Send for SendPtr {}
+unsafe impl Sync for SendPtr {}
 
 impl JitCompiler {
     /// Create a new JIT compiler for the host target.
@@ -64,6 +78,13 @@ impl JitCompiler {
         // Register all runtime symbols so JIT code can call them.
         register_runtime_symbols(&mut jit_builder);
 
+        // Register a lookup function for dynamically-added native rider symbols.
+        let native_symbols: Arc<Mutex<HashMap<String, SendPtr>>> = Arc::new(Mutex::new(HashMap::new()));
+        let lookup_symbols = native_symbols.clone();
+        jit_builder.symbol_lookup_fn(Box::new(move |name| {
+            lookup_symbols.lock().unwrap().get(name).map(|p| p.0)
+        }));
+
         let mut jit_module = JITModule::new(jit_builder);
 
         // Declare runtime imports.
@@ -72,7 +93,7 @@ impl JitCompiler {
             .map_err(|e| JitError::CompilationFailed(format!("runtime imports: {}", e)))?;
 
         // Declare the dispatch function signature.
-        // __jit_dispatch_call(rt_handle, encoded_key, ret_dest, ret_is_sret, arg_count, args) -> usize
+        // __jit_dispatch_call(rt_handle, encoded_key, ret_dest, ret_is_sret, arg_count, args) -> void
         let mut dispatch_sig = cl_ir::Signature::new(call_conv);
         dispatch_sig.params.push(AbiParam::new(cl_types::I64)); // rt_handle
         dispatch_sig.params.push(AbiParam::new(cl_types::I64)); // encoded_key
@@ -80,7 +101,7 @@ impl JitCompiler {
         dispatch_sig.params.push(AbiParam::new(cl_types::I8));  // ret_is_sret
         dispatch_sig.params.push(AbiParam::new(cl_types::I32)); // arg_count
         dispatch_sig.params.push(AbiParam::new(cl_types::I64)); // args
-        dispatch_sig.returns.push(AbiParam::new(cl_types::I64)); // return value
+        // No return value - all results written via ret_dest sret pointer.
 
         let dispatch_func_id = jit_module
             .declare_function("__jit_dispatch_call", Linkage::Import, &dispatch_sig)
@@ -94,7 +115,15 @@ impl JitCompiler {
             runtime,
             tydesc_emitter,
             dispatch_func_id,
+            native_symbols,
         })
+    }
+
+    /// Register a native rider function symbol for JIT resolution.
+    ///
+    /// Must be called before compiling any function that calls this native.
+    pub fn register_native_symbol(&self, name: &str, addr: *const u8) {
+        self.native_symbols.lock().unwrap().insert(name.to_string(), SendPtr(addr));
     }
 
     /// Compile a function to native code (no calls to other functions).
@@ -170,6 +199,19 @@ impl JitCompiler {
 
             // Collect types from callee for TyDesc emission.
             tydesc_emit::collect_types_from_code_unit(&callee_ir, &mut types);
+
+            // Native rider functions: declare as imports with C ABI signature
+            // instead of creating trampoline stubs.
+            if let Some(native_ctx) = callee_ir.native_context() {
+                let sig = codegen::build_native_signature(native_ctx, self.isa.as_ref());
+                let func_id = self.jit_module
+                    .declare_function(&native_ctx.symbol, Linkage::Import, &sig)
+                    .map_err(|e| JitError::CompilationFailed(format!("declare native: {}", e)))?;
+                if let CodeRef::Module { module, id } = &code_ref {
+                    module_funcs.insert((*module, CodeUnitId(id.0)), func_id);
+                }
+                continue;
+            }
 
             // Create a stub for this callee.
             let stub_id = self.create_stub_for_callee(&code_ref, &callee_ir)?;
@@ -345,22 +387,12 @@ impl JitCompiler {
         let encoded_key_val = builder.ins().iconst(cl_types::I64, encoded_key.as_u64() as i64);
 
         // Get return destination pointer.
-        // For sret: use the sret ptr.
-        // For scalar: allocate stack space.
-        let (ret_dest, ret_slot) = if let Some(sret) = sret_ptr {
-            (sret, None)
-        } else if !matches!(callee_ctx.return_type, datalove_datafun_ir::IrType::Unit) {
-            // Allocate space for scalar return (8 bytes).
-            let slot = builder.create_sized_stack_slot(cl_ir::StackSlotData::new(
-                cl_ir::StackSlotKind::ExplicitSlot,
-                8,
-                8,
-            ));
-            let ptr = builder.ins().stack_addr(PTR_TYPE, slot, 0);
-            (ptr, Some(slot))
+        // All non-Unit returns use sret. Get the return destination pointer.
+        let ret_dest = if let Some(sret) = sret_ptr {
+            sret
         } else {
             // Unit return - null pointer.
-            (builder.ins().iconst(PTR_TYPE, 0), None)
+            builder.ins().iconst(PTR_TYPE, 0)
         };
 
         // ret_is_sret flag.
@@ -369,25 +401,13 @@ impl JitCompiler {
         // arg_count.
         let arg_count_val = builder.ins().iconst(cl_types::I32, arg_count as i64);
 
-        // Call __jit_dispatch_call.
+        // Call __jit_dispatch_call (void return - result written via ret_dest).
         let dispatch_ref = self.jit_module.declare_func_in_func(self.dispatch_func_id, builder.func);
         let call_args = [rt_handle, encoded_key_val, ret_dest, ret_is_sret_val, arg_count_val, args_ptr];
-        let _call_inst = builder.ins().call(dispatch_ref, &call_args);
+        builder.ins().call(dispatch_ref, &call_args);
 
-        // Return value.
-        if callee_uses_sret {
-            // Sret: no return value.
-            builder.ins().return_(&[]);
-        } else if let Some(slot) = ret_slot {
-            // Scalar: load from stack and return.
-            // Determine the scalar return type.
-            let ret_ty = sig.returns.get(0).map(|r| r.value_type).unwrap_or(cl_types::I64);
-            let ret_val = builder.ins().stack_load(ret_ty, slot, 0);
-            builder.ins().return_(&[ret_val]);
-        } else {
-            // Unit return.
-            builder.ins().return_(&[]);
-        }
+        // All stubs return void. Sret results are written by the callee.
+        builder.ins().return_(&[]);
 
         builder.finalize();
 
@@ -484,4 +504,34 @@ fn register_runtime_symbols(jit_builder: &mut JITBuilder) {
     // Boxing functions.
     jit_builder.symbol("dtlv_rti_error_from_local", c::dtlv_rti_error_from_local as *const u8);
     jit_builder.symbol("dtlv_rti_data_from_local", c::dtlv_rti_data_from_local as *const u8);
+
+    // Math libcalls used by Cranelift when legalizing float instructions.
+    // On some platforms dlsym can't find these (e.g. static linking), so
+    // register them explicitly via libc.
+    unsafe extern "C" {
+        fn floor(x: f64) -> f64;
+        fn floorf(x: f32) -> f32;
+        fn ceil(x: f64) -> f64;
+        fn ceilf(x: f32) -> f32;
+        fn sqrt(x: f64) -> f64;
+        fn sqrtf(x: f32) -> f32;
+        fn trunc(x: f64) -> f64;
+        fn truncf(x: f32) -> f32;
+        fn nearbyint(x: f64) -> f64;
+        fn nearbyintf(x: f32) -> f32;
+        fn fma(x: f64, y: f64, z: f64) -> f64;
+        fn fmaf(x: f32, y: f32, z: f32) -> f32;
+    }
+    jit_builder.symbol("floor", floor as *const u8);
+    jit_builder.symbol("floorf", floorf as *const u8);
+    jit_builder.symbol("ceil", ceil as *const u8);
+    jit_builder.symbol("ceilf", ceilf as *const u8);
+    jit_builder.symbol("sqrt", sqrt as *const u8);
+    jit_builder.symbol("sqrtf", sqrtf as *const u8);
+    jit_builder.symbol("trunc", trunc as *const u8);
+    jit_builder.symbol("truncf", truncf as *const u8);
+    jit_builder.symbol("nearbyint", nearbyint as *const u8);
+    jit_builder.symbol("nearbyintf", nearbyintf as *const u8);
+    jit_builder.symbol("fma", fma as *const u8);
+    jit_builder.symbol("fmaf", fmaf as *const u8);
 }

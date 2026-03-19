@@ -1,6 +1,7 @@
 //! Calling convention bridge between interpreter and JIT code.
 //!
 //! Converts between interpreter's Value/Destination and JIT's raw pointer convention.
+//! All function returns use sret (pointer-based), so the bridge only needs void dispatch.
 
 use datalove_datafun_interp::{Destination, Value};
 use datalove_datafun_ir::IrType;
@@ -11,32 +12,21 @@ use crate::JitError;
 /// Maximum number of function parameters supported by direct dispatch.
 const MAX_DIRECT_ARGS: usize = 8;
 
-/// Get the size of a scalar return type in bytes.
-fn scalar_return_size(ty: &IrType) -> usize {
-    match ty {
-        IrType::Bool | IrType::U8 | IrType::I8 => 1,
-        IrType::U16 | IrType::I16 => 2,
-        IrType::U32 | IrType::I32 | IrType::F32 => 4,
-        IrType::U64 | IrType::I64 | IrType::F64 => 8,
-        _ => 8, // Default to pointer size for other types.
-    }
-}
-
 /// Call a JIT-compiled function from the interpreter.
 ///
 /// JIT functions use this calling convention:
 /// - First param: rt_handle (pointer to runtime)
-/// - If uses_sret: second param is return value pointer
+/// - Second param (non-Unit returns): sret pointer for return value
 /// - Remaining params: pointers to argument values
 ///
-/// Returns via register (scalar) or sret pointer (aggregate).
+/// All returns are written via sret pointer. No register returns.
 pub unsafe fn call_jit(
     code_ptr: *const u8,
     uses_sret: bool,
     rt_handle: LocalRtHandle,
     args: &[Value],
     ret_dest: Destination,
-    return_type: &IrType,
+    _return_type: &IrType,
 ) -> Result<(), JitError> {
     if args.len() > MAX_DIRECT_ARGS {
         return Err(JitError::BridgeCallFailed(format!(
@@ -54,120 +44,54 @@ pub unsafe fn call_jit(
     raw_args[arg_idx] = rt_handle as usize;
     arg_idx += 1;
 
-    // sret pointer if aggregate return.
+    // sret pointer for non-Unit returns.
     if uses_sret {
         raw_args[arg_idx] = ret_dest.ptr as usize;
         arg_idx += 1;
     }
 
-    // User arguments.
+    // User arguments (all passed by pointer).
     for arg in args {
         raw_args[arg_idx] = arg.ptr as usize;
         arg_idx += 1;
     }
 
-    // Dispatch based on number of arguments.
-    // This avoids using libffi by handling common cases directly.
+    // All functions return void (results written via sret pointer).
     let total_args = arg_idx;
-    // SAFETY: code_ptr is a valid JIT-compiled function, args are valid pointers.
-    unsafe { dispatch_call(code_ptr, &raw_args, total_args, uses_sret, ret_dest, return_type)? };
-
-    Ok(())
+    unsafe { dispatch_void(code_ptr, &raw_args, total_args) }
 }
 
-/// Dispatch a JIT call with the given arguments.
-///
-/// # Safety
-///
-/// code_ptr must be a valid JIT-compiled function pointer with the expected signature.
-/// args must contain valid pointers for the function's parameters.
-unsafe fn dispatch_call(
+/// Dispatch a JIT call. All functions return void (sret convention).
+unsafe fn dispatch_void(
     code_ptr: *const u8,
     args: &[usize; MAX_DIRECT_ARGS + 2],
     arg_count: usize,
-    uses_sret: bool,
-    ret_dest: Destination,
-    return_type: &IrType,
 ) -> Result<(), JitError> {
-    // Type aliases for function pointers with different arities.
-    type Fn1 = unsafe extern "C" fn(usize) -> usize;
-    type Fn2 = unsafe extern "C" fn(usize, usize) -> usize;
-    type Fn3 = unsafe extern "C" fn(usize, usize, usize) -> usize;
-    type Fn4 = unsafe extern "C" fn(usize, usize, usize, usize) -> usize;
-    type Fn5 = unsafe extern "C" fn(usize, usize, usize, usize, usize) -> usize;
-    type Fn6 = unsafe extern "C" fn(usize, usize, usize, usize, usize, usize) -> usize;
-    type Fn7 = unsafe extern "C" fn(usize, usize, usize, usize, usize, usize, usize) -> usize;
-    type Fn8 = unsafe extern "C" fn(usize, usize, usize, usize, usize, usize, usize, usize) -> usize;
-    type Fn9 = unsafe extern "C" fn(usize, usize, usize, usize, usize, usize, usize, usize, usize) -> usize;
-    type Fn10 = unsafe extern "C" fn(usize, usize, usize, usize, usize, usize, usize, usize, usize, usize) -> usize;
+    type Fn1 = unsafe extern "C" fn(usize);
+    type Fn2 = unsafe extern "C" fn(usize, usize);
+    type Fn3 = unsafe extern "C" fn(usize, usize, usize);
+    type Fn4 = unsafe extern "C" fn(usize, usize, usize, usize);
+    type Fn5 = unsafe extern "C" fn(usize, usize, usize, usize, usize);
+    type Fn6 = unsafe extern "C" fn(usize, usize, usize, usize, usize, usize);
+    type Fn7 = unsafe extern "C" fn(usize, usize, usize, usize, usize, usize, usize);
+    type Fn8 = unsafe extern "C" fn(usize, usize, usize, usize, usize, usize, usize, usize);
+    type Fn9 = unsafe extern "C" fn(usize, usize, usize, usize, usize, usize, usize, usize, usize);
+    type Fn10 = unsafe extern "C" fn(usize, usize, usize, usize, usize, usize, usize, usize, usize, usize);
 
-    // SAFETY: caller guarantees code_ptr is valid JIT code and args are valid.
-    let result = unsafe {
+    unsafe {
         match arg_count {
-            1 => {
-                let f: Fn1 = std::mem::transmute(code_ptr);
-                f(args[0])
-            }
-            2 => {
-                let f: Fn2 = std::mem::transmute(code_ptr);
-                f(args[0], args[1])
-            }
-            3 => {
-                let f: Fn3 = std::mem::transmute(code_ptr);
-                f(args[0], args[1], args[2])
-            }
-            4 => {
-                let f: Fn4 = std::mem::transmute(code_ptr);
-                f(args[0], args[1], args[2], args[3])
-            }
-            5 => {
-                let f: Fn5 = std::mem::transmute(code_ptr);
-                f(args[0], args[1], args[2], args[3], args[4])
-            }
-            6 => {
-                let f: Fn6 = std::mem::transmute(code_ptr);
-                f(args[0], args[1], args[2], args[3], args[4], args[5])
-            }
-            7 => {
-                let f: Fn7 = std::mem::transmute(code_ptr);
-                f(args[0], args[1], args[2], args[3], args[4], args[5], args[6])
-            }
-            8 => {
-                let f: Fn8 = std::mem::transmute(code_ptr);
-                f(args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7])
-            }
-            9 => {
-                let f: Fn9 = std::mem::transmute(code_ptr);
-                f(args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7], args[8])
-            }
-            10 => {
-                let f: Fn10 = std::mem::transmute(code_ptr);
-                f(args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7], args[8], args[9])
-            }
-            _ => {
-                return Err(JitError::BridgeCallFailed(format!(
-                    "unsupported argument count: {}",
-                    arg_count
-                )));
-            }
+            1 => { let f: Fn1 = std::mem::transmute(code_ptr); f(args[0]); }
+            2 => { let f: Fn2 = std::mem::transmute(code_ptr); f(args[0], args[1]); }
+            3 => { let f: Fn3 = std::mem::transmute(code_ptr); f(args[0], args[1], args[2]); }
+            4 => { let f: Fn4 = std::mem::transmute(code_ptr); f(args[0], args[1], args[2], args[3]); }
+            5 => { let f: Fn5 = std::mem::transmute(code_ptr); f(args[0], args[1], args[2], args[3], args[4]); }
+            6 => { let f: Fn6 = std::mem::transmute(code_ptr); f(args[0], args[1], args[2], args[3], args[4], args[5]); }
+            7 => { let f: Fn7 = std::mem::transmute(code_ptr); f(args[0], args[1], args[2], args[3], args[4], args[5], args[6]); }
+            8 => { let f: Fn8 = std::mem::transmute(code_ptr); f(args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7]); }
+            9 => { let f: Fn9 = std::mem::transmute(code_ptr); f(args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7], args[8]); }
+            10 => { let f: Fn10 = std::mem::transmute(code_ptr); f(args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7], args[8], args[9]); }
+            _ => return Err(JitError::BridgeCallFailed(format!("unsupported argument count: {}", arg_count))),
         }
     };
-
-    // If not sret, write scalar result to destination.
-    // The result is in a register (usize-sized), but we only write the
-    // appropriate number of bytes based on the return type.
-    if !uses_sret {
-        let size = scalar_return_size(return_type);
-        // SAFETY: ret_dest.ptr points to a buffer of at least `size` bytes.
-        unsafe {
-            std::ptr::copy_nonoverlapping(
-                &result as *const usize as *const u8,
-                ret_dest.ptr,
-                size,
-            );
-        }
-    }
-    // If sret, result was written directly to ret_dest.ptr by the callee.
-
     Ok(())
 }

@@ -307,4 +307,9 @@ impl ScriptExecutor {
     pub fn take_dispatcher(&self) -> Option<Box<dyn CallDispatcher>> {
         self.interp.take_dispatcher()
     }
+
+    /// Set or replace the call dispatcher.
+    pub fn set_dispatcher(&self, dispatcher: Box<dyn CallDispatcher>) {
+        self.interp.set_dispatcher(dispatcher);
+    }
 }

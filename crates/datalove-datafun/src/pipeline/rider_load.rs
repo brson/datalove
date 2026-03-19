@@ -15,6 +15,10 @@ use datalove_rt::c::LocalRtHandle;
 /// Must outlive any calls through the registered native functions.
 pub struct LoadedRider {
     pub rider_name: String,
+    /// Raw native function pointers extracted from the library.
+    ///
+    /// Used by the JIT to register symbols for direct native calls.
+    pub native_fn_ptrs: Vec<(String, *const u8)>,
     _lib: libloading::Library,
 }
 
@@ -33,6 +37,8 @@ pub fn load_rider_library(
     let lib = unsafe { libloading::Library::new(lib_path) }
         .context(fmt!("failed to load rider library '{}' from {}", rider_name, lib_path.display()))?;
 
+    let mut native_fn_ptrs = Vec::new();
+
     for symbol in symbols {
         // Look up the raw function pointer.
         let fn_ptr: *const () = unsafe {
@@ -40,6 +46,9 @@ pub fn load_rider_library(
                 .context(fmt!("symbol '{}' not found in rider '{}'", symbol, rider_name))?;
             *sym
         };
+
+        // Save raw pointer for JIT registration.
+        native_fn_ptrs.push((symbol.clone(), fn_ptr as *const u8));
 
         let symbol_name = symbol.clone();
         let bridge: Box<dyn Fn(LocalRtHandle, &[Value], Destination) -> Result<(), InterpError>> =
@@ -52,6 +61,7 @@ pub fn load_rider_library(
 
     Ok(LoadedRider {
         rider_name: rider_name.to_string(),
+        native_fn_ptrs,
         _lib: lib,
     })
 }

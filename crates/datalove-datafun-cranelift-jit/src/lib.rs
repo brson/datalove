@@ -167,6 +167,14 @@ impl JitEngine {
         })
     }
 
+    /// Register a native rider function symbol for JIT resolution.
+    ///
+    /// Call this after loading rider libraries and before executing code
+    /// that calls native rider functions.
+    pub fn register_native_symbol(&self, name: &str, addr: *const u8) {
+        self.compiler.register_native_symbol(name, addr);
+    }
+
     /// Get compilation statistics.
     pub fn stats(&self) -> &JitStats {
         &self.stats
@@ -407,7 +415,7 @@ mod tests {
         match result {
             Ok(Some((ptr, uses_sret))) => {
                 assert!(!ptr.is_null());
-                assert!(!uses_sret, "i32 return should not use sret");
+                assert!(uses_sret, "all non-Unit returns use sret");
             }
             Ok(None) => panic!("expected immediate compilation"),
             Err(e) => panic!("compilation failed: {}", e),
@@ -425,21 +433,19 @@ mod tests {
 
         // Compile the function.
         let (code_ptr, uses_sret) = jit.record_call(key, &func).unwrap().unwrap();
-        assert!(!uses_sret);
+        assert!(uses_sret, "all non-Unit returns use sret");
 
         // Runtime is already created.
         let rt_handle = runtime.handle();
 
-        // Allocate space for return value (use usize for proper alignment).
+        // Allocate space for return value.
         let mut result_buf: usize = 0;
         let ret_dest = Destination {
             ptr: &mut result_buf as *mut usize as *mut u8,
-            tydesc: std::ptr::null(), // Not used for scalar returns.
+            tydesc: std::ptr::null(),
         };
 
-        // Call the JIT code.
-        // Function takes: (rt_handle) -> i32
-        // No user args, scalar return.
+        // Call the JIT code. Result written to ret_dest via sret.
         let return_type = IrType::I32;
         unsafe {
             jit.call_jit(code_ptr, uses_sret, rt_handle, &[], ret_dest, &return_type).unwrap();
@@ -610,7 +616,7 @@ mod tests {
             .expect("compilation failed")
             .expect("should compile on first call");
 
-        assert!(!uses_sret, "i32 return should not use sret");
+        assert!(uses_sret, "all non-Unit returns use sret");
 
         // Set up interpreter and dispatch context.
         let mut interp = IrInterpreter::new();
