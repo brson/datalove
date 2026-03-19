@@ -494,13 +494,15 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 let result = builder.ins().imul(lhs_val, rhs_val);
                 // Overflow check: if lhs != 0, check result / lhs == rhs.
                 let zero = builder.ins().iconst(cl_ty, 0);
+                let one = builder.ins().iconst(cl_ty, 1);
                 let lhs_is_zero = builder.ins().icmp(cl_ir::condcodes::IntCC::Equal, lhs_val, zero);
 
-                // Divide result by lhs (if lhs != 0).
+                // Use safe divisor to avoid trap when lhs == 0.
+                let safe_lhs = builder.ins().select(lhs_is_zero, one, lhs_val);
                 let quotient = if is_signed {
-                    builder.ins().sdiv(result, lhs_val)
+                    builder.ins().sdiv(result, safe_lhs)
                 } else {
-                    builder.ins().udiv(result, lhs_val)
+                    builder.ins().udiv(result, safe_lhs)
                 };
 
                 // Check if quotient != rhs (overflow occurred).
