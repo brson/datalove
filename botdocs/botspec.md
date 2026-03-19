@@ -11,6 +11,7 @@
 - [7. Place Expressions and Indexing](#user-content-7-place-expressions-and-indexing)
 - [8. Statements](#user-content-8-statements)
 - [9. Module System](#user-content-9-module-system)
+  - [9.4 Native Riders](#user-content-94-native-riders)
 - [10. Numeric Widening](#user-content-10-numeric-widening)
 - [11. Ownership Analysis](#user-content-11-ownership-analysis)
 - [12. Bidirectional Type Inference](#user-content-12-bidirectional-type-inference)
@@ -27,8 +28,8 @@ time.
 The language has a three-layer design:
 
 - **Datalit** (.dlt) - A pure data literal sublanguage for representing values.
-- **Datafun** (.dfs, .dfm) - A pure functional layer with functions, modules,
-  and control flow.
+- **Datafun** (.dfs, .dfm, .dli) - A pure functional layer with functions,
+  modules, native rider interfaces, and control flow.
 - **Full Datalove** (.dls, .dlm) - Procedures and mutable objects. (Not yet
   implemented.)
 
@@ -858,21 +859,92 @@ ret
 
 The module system has three levels: library, package, module.
 
+A **library** is a directory of packages (e.g. `sys/`, `local/`).
+A **package** is a directory of modules (e.g. `sys/std/`).
+A **module** is a single `.dfm` file (e.g. `sys/std/u32.dfm`).
+
 ### 9.2 Require
 
-`require` loads a module:
+`require` loads a module or rider:
 
 ```datalove
 require module sys/std/u32
+require rider std
 ```
 
 ### 9.3 Import
 
-`import` brings a name into scope:
+`import` brings a name into scope from a required module or rider:
 
 ```datalove
 import u32.negate
+import std.string_len
 ```
+
+### 9.4 Native Riders
+
+A **rider** is a Rust crate that provides native functions to a package's
+modules. Each package has at most one rider. The system library uses the
+same mechanism as user packages.
+
+#### Rider Interface
+
+A rider interface file (`rider.dli`) declares native function signatures
+using restricted syntax (`native fun` declarations and `type` aliases only):
+
+```datalove
+native fun string_len(ref self: string): index
+native fun string_contains(ref haystack: string, ref needle: string): bool
+native fun list_push(mut self: [data], elem: data)
+```
+
+#### Rider Crate
+
+The rider crate (`rider/src/lib.rs`) implements native functions as
+`extern "C-unwind"` functions following the rider C ABI. Each parameter
+is a `(ptr, tydesc)` pair, with an out-param for the return value:
+
+```rust
+#[unsafe(no_mangle)]
+pub extern "C-unwind" fn dlr_std__string_len(
+    rt: LocalRtHandle,
+    self_ptr: *const u8,
+    self_tydesc: *const TyDesc,
+    result_out: *mut u8,
+    result_tydesc: *const TyDesc,
+) -> RtStatus { ... }
+```
+
+Symbol naming convention: `dlr_{rider_name}__{function_name}`.
+
+#### Using Riders
+
+Modules use `require rider` to access native functions:
+
+```datalove
+require rider std
+import std.string_len
+
+fun my_len(ref s: string): index
+    ret string_len(s)
+end fun
+```
+
+Call sites typecheck normally against the declared signatures. The compiler
+emits standard `Call` instructions; dispatch to native code is handled by the
+backend.
+
+#### Backend Support
+
+All three execution backends support native rider calls:
+
+- **Interpreter**: Rider `.so` files are loaded via `dlopen`. Function pointers
+  are registered in `NativeFunctionTable` and dispatched by symbol name.
+- **AOT**: Native functions are declared as `Linkage::Import` and resolved by
+  the linker against the rider shared library.
+- **JIT**: Native functions are declared as Cranelift imports with their C ABI
+  signatures. Symbol addresses are registered via the JIT's symbol lookup
+  mechanism after rider libraries are loaded.
 
 ## 10. Numeric Widening
 
