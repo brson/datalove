@@ -131,7 +131,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libwayland-client0 libwayland-cursor0 libwayland-egl1 libxkbcommon0 \
     mesa-vulkan-drivers libvulkan1 libasound2-dev \
     xvfb imagemagick mesa-utils libgl1-mesa-dri libegl-mesa0 \
-    libgl1-mesa-dev xorg-dev libx11-xcb-dev libxkbcommon-dev librtmidi-dev \
+    libgl1-mesa-dev xorg-dev libx11-xcb-dev libxkbcommon-dev librtmidi-dev apitrace \
     qt6-base-dev qt6-declarative-dev unzip \
     && rm -rf /var/lib/apt/lists/*
 
