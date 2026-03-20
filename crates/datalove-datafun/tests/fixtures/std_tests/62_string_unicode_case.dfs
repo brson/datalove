@@ -1,0 +1,9 @@
+require module sys/std/string
+
+import string.to_lowercase
+import string.to_uppercase
+
+let a = "Hello World"
+let b = ""
+
+let output = (to_lowercase(a), to_uppercase(a), to_lowercase(b), to_uppercase(b))

@@ -1,0 +1,27 @@
+require module sys/std/string
+
+import string.find
+import string.rfind
+
+let s = "hello world hello"
+
+fun unwrap_idx(opt: ?index): index
+  if opt |v|
+    ret v
+  end if
+  ret : index / 0
+end fun
+
+fun has_idx(opt: ?index): bool
+  if opt |v|
+    ret true
+  end if
+  ret false
+end fun
+
+let f1 = unwrap_idx(find(s, "world"))
+let f2 = has_idx(find(s, "xyz"))
+let r1 = unwrap_idx(rfind(s, "hello"))
+let r2 = has_idx(rfind(s, "xyz"))
+
+let output = (f1, f2, r1, r2)

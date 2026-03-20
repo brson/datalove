@@ -3,6 +3,7 @@
 //! This module provides an idiomatic Rust interface around the C-ABI functions.
 
 mod aligned_buffer;
+pub mod rider_helpers;
 
 pub use aligned_buffer::AlignedBuffer;
 

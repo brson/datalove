@@ -36,3 +36,18 @@ native fun string_concat(ref a: string, ref b: string): string
 
 // Replacement.
 native fun string_replace(ref self: string, ref pattern: string, ref replacement: string): string
+
+// Byte access.
+native fun string_get_byte(ref self: string, index: index): ?u8
+
+// Searching (option returns).
+native fun string_find(ref self: string, ref pattern: string): ?index
+native fun string_rfind(ref self: string, ref pattern: string): ?index
+
+// Trimming (option returns).
+native fun string_strip_prefix(ref self: string, ref prefix: string): ?string
+native fun string_strip_suffix(ref self: string, ref suffix: string): ?string
+
+// Unicode case conversion.
+native fun string_to_lowercase(ref self: string): string
+native fun string_to_uppercase(ref self: string): string

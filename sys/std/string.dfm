@@ -23,6 +23,13 @@ import std.string_to_ascii_uppercase
 import std.string_repeat
 import std.string_concat
 import std.string_replace
+import std.string_get_byte
+import std.string_find
+import std.string_rfind
+import std.string_strip_prefix
+import std.string_strip_suffix
+import std.string_to_lowercase
+import std.string_to_uppercase
 
 // --- Basic Properties ---
 
@@ -39,9 +46,8 @@ end fun
 // --- Byte Access ---
 
 // Returns the byte at the given index, or none if out of bounds.
-// TODO: needs native rider support for option returns.
 fun get_byte(ref self: string, index: index): ?u8
-  ret none
+  ret string_get_byte(self, index)
 end fun
 
 // --- Character Access ---
@@ -106,15 +112,13 @@ fun ends_with(ref self: string, ref suffix: string): bool
 end fun
 
 // Returns the byte index of the first occurrence of pattern, or none.
-// TODO: needs native rider support for option returns.
 fun find(ref self: string, ref pattern: string): ?index
-  ret none
+  ret string_find(self, pattern)
 end fun
 
 // Returns the byte index of the last occurrence of pattern, or none.
-// TODO: needs native rider support for option returns.
 fun rfind(ref self: string, ref pattern: string): ?index
-  ret none
+  ret string_rfind(self, pattern)
 end fun
 
 // --- Comparison ---
@@ -147,17 +151,13 @@ fun to_ascii_uppercase(ref self: string): string
 end fun
 
 // Returns a new string with Unicode lowercase conversion.
-// intrinsic needed: string_to_lowercase(ref string) -> string
 fun to_lowercase(ref self: string): string
-  // TODO: icall string_to_lowercase(self)
-  ret ""
+  ret string_to_lowercase(self)
 end fun
 
 // Returns a new string with Unicode uppercase conversion.
-// intrinsic needed: string_to_uppercase(ref string) -> string
 fun to_uppercase(ref self: string): string
-  // TODO: icall string_to_uppercase(self)
-  ret ""
+  ret string_to_uppercase(self)
 end fun
 
 // --- Trimming ---
@@ -178,17 +178,13 @@ fun trim_end(ref self: string): string
 end fun
 
 // Removes the prefix if present, returns the rest or none.
-// intrinsic needed: string_strip_prefix(ref string, ref string) -> ?string
 fun strip_prefix(ref self: string, ref prefix: string): ?string
-  // TODO: icall string_strip_prefix(self, prefix)
-  ret none
+  ret string_strip_prefix(self, prefix)
 end fun
 
 // Removes the suffix if present, returns the rest or none.
-// intrinsic needed: string_strip_suffix(ref string, ref string) -> ?string
 fun strip_suffix(ref self: string, ref suffix: string): ?string
-  // TODO: icall string_strip_suffix(self, suffix)
-  ret none
+  ret string_strip_suffix(self, suffix)
 end fun
 
 // --- In-place Mutation ---

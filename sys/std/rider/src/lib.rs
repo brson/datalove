@@ -8,6 +8,7 @@
 //! Returns 1 (Ok) on success, 2 (Error) on failure.
 
 use datalove_rtdt as rtdt;
+use datalove_rt::rust::rider_helpers;
 
 const OK: u8 = 1;
 
@@ -326,5 +327,111 @@ pub extern "C-unwind" fn dlr_std__string_concat(
     let a = unsafe { as_str(a_ptr) };
     let b = unsafe { as_str(b_ptr) };
     let result = format!("{}{}", a, b);
+    unsafe { write_string_result(rt, out, out_td, &result) }
+}
+
+// --- Option-returning functions ---
+
+#[no_mangle]
+pub extern "C-unwind" fn dlr_std__string_get_byte(
+    _rt: *mut u8,
+    s_ptr: *const u8, _s_td: *const u8,
+    idx_ptr: *const u8, _idx_td: *const u8,
+    out: *mut u8, _out_td: *const u8,
+) -> u8 {
+    let s = unsafe { as_str(s_ptr) };
+    let idx = unsafe { *(idx_ptr as *const rtdt::Index) };
+    let i = idx.as_usize();
+    if i < s.len() {
+        unsafe { rider_helpers::write_option_some(out, s.as_bytes()[i]) };
+    } else {
+        unsafe { rider_helpers::write_option_none(out) };
+    }
+    OK
+}
+
+#[no_mangle]
+pub extern "C-unwind" fn dlr_std__string_find(
+    _rt: *mut u8,
+    s_ptr: *const u8, _s_td: *const u8,
+    pat_ptr: *const u8, _pat_td: *const u8,
+    out: *mut u8, _out_td: *const u8,
+) -> u8 {
+    let s = unsafe { as_str(s_ptr) };
+    let pat = unsafe { as_str(pat_ptr) };
+    match s.find(pat) {
+        Some(pos) => unsafe { rider_helpers::write_option_some(out, rtdt::Index::new(pos as rtdt::IndexRepr)) },
+        None => unsafe { rider_helpers::write_option_none(out) },
+    }
+    OK
+}
+
+#[no_mangle]
+pub extern "C-unwind" fn dlr_std__string_rfind(
+    _rt: *mut u8,
+    s_ptr: *const u8, _s_td: *const u8,
+    pat_ptr: *const u8, _pat_td: *const u8,
+    out: *mut u8, _out_td: *const u8,
+) -> u8 {
+    let s = unsafe { as_str(s_ptr) };
+    let pat = unsafe { as_str(pat_ptr) };
+    match s.rfind(pat) {
+        Some(pos) => unsafe { rider_helpers::write_option_some(out, rtdt::Index::new(pos as rtdt::IndexRepr)) },
+        None => unsafe { rider_helpers::write_option_none(out) },
+    }
+    OK
+}
+
+#[no_mangle]
+pub extern "C-unwind" fn dlr_std__string_strip_prefix(
+    rt: *mut u8,
+    s_ptr: *const u8, _s_td: *const u8,
+    prefix_ptr: *const u8, _prefix_td: *const u8,
+    out: *mut u8, _out_td: *const u8,
+) -> u8 {
+    let s = unsafe { as_str(s_ptr) };
+    let prefix = unsafe { as_str(prefix_ptr) };
+    match s.strip_prefix(prefix) {
+        Some(rest) => unsafe { rider_helpers::write_option_some_string(rt, out, rest) as u8 },
+        None => { unsafe { rider_helpers::write_option_none(out) }; OK },
+    }
+}
+
+#[no_mangle]
+pub extern "C-unwind" fn dlr_std__string_strip_suffix(
+    rt: *mut u8,
+    s_ptr: *const u8, _s_td: *const u8,
+    suffix_ptr: *const u8, _suffix_td: *const u8,
+    out: *mut u8, _out_td: *const u8,
+) -> u8 {
+    let s = unsafe { as_str(s_ptr) };
+    let suffix = unsafe { as_str(suffix_ptr) };
+    match s.strip_suffix(suffix) {
+        Some(rest) => unsafe { rider_helpers::write_option_some_string(rt, out, rest) as u8 },
+        None => { unsafe { rider_helpers::write_option_none(out) }; OK },
+    }
+}
+
+// --- Unicode case conversion ---
+
+#[no_mangle]
+pub extern "C-unwind" fn dlr_std__string_to_lowercase(
+    rt: *mut u8,
+    s_ptr: *const u8, _s_td: *const u8,
+    out: *mut u8, out_td: *const u8,
+) -> u8 {
+    let s = unsafe { as_str(s_ptr) };
+    let result = s.to_lowercase();
+    unsafe { write_string_result(rt, out, out_td, &result) }
+}
+
+#[no_mangle]
+pub extern "C-unwind" fn dlr_std__string_to_uppercase(
+    rt: *mut u8,
+    s_ptr: *const u8, _s_td: *const u8,
+    out: *mut u8, out_td: *const u8,
+) -> u8 {
+    let s = unsafe { as_str(s_ptr) };
+    let result = s.to_uppercase();
     unsafe { write_string_result(rt, out, out_td, &result) }
 }
