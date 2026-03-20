@@ -8,3 +8,4 @@ crate-type = ["cdylib"]
 
 [dependencies]
 datalove-rtdt = { path = "../../../crates/datalove-rtdt" }
+datalove-rt = { path = "../../../crates/datalove-rt" }

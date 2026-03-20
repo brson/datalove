@@ -14,3 +14,25 @@ native fun string_ends_with(ref self: string, ref suffix: string): bool
 native fun string_eq(ref self: string, ref other: string): bool
 native fun string_cmp(ref self: string, ref other: string): i32
 native fun string_eq_ignore_ascii_case(ref self: string, ref other: string): bool
+
+// Character predicates.
+native fun string_is_ascii_alphabetic(ref self: string): bool
+native fun string_is_ascii_digit(ref self: string): bool
+native fun string_is_ascii_alphanumeric(ref self: string): bool
+native fun string_is_ascii_whitespace(ref self: string): bool
+
+// Trimming.
+native fun string_trim(ref self: string): string
+native fun string_trim_start(ref self: string): string
+native fun string_trim_end(ref self: string): string
+
+// Case conversion.
+native fun string_to_ascii_lowercase(ref self: string): string
+native fun string_to_ascii_uppercase(ref self: string): string
+
+// Construction.
+native fun string_repeat(ref self: string, n: index): string
+native fun string_concat(ref a: string, ref b: string): string
+
+// Replacement.
+native fun string_replace(ref self: string, ref pattern: string, ref replacement: string): string

@@ -1,0 +1,11 @@
+require module sys/std/string
+
+import string.trim
+import string.trim_start
+import string.trim_end
+
+let a = "  hello  "
+let b = "no spaces"
+let c = ""
+
+let output = (trim(a), trim_start(a), trim_end(a), trim(b), trim(c))

@@ -11,6 +11,18 @@ import std.string_ends_with
 import std.string_eq
 import std.string_cmp
 import std.string_eq_ignore_ascii_case
+import std.string_is_ascii_alphabetic
+import std.string_is_ascii_digit
+import std.string_is_ascii_alphanumeric
+import std.string_is_ascii_whitespace
+import std.string_trim
+import std.string_trim_start
+import std.string_trim_end
+import std.string_to_ascii_lowercase
+import std.string_to_ascii_uppercase
+import std.string_repeat
+import std.string_concat
+import std.string_replace
 
 // --- Basic Properties ---
 
@@ -125,17 +137,13 @@ end fun
 // --- Case Conversion ---
 
 // Returns a new string with ASCII characters converted to lowercase.
-// intrinsic needed: string_to_ascii_lowercase(ref string) -> string
 fun to_ascii_lowercase(ref self: string): string
-  // TODO: icall string_to_ascii_lowercase(self)
-  ret ""
+  ret string_to_ascii_lowercase(self)
 end fun
 
 // Returns a new string with ASCII characters converted to uppercase.
-// intrinsic needed: string_to_ascii_uppercase(ref string) -> string
 fun to_ascii_uppercase(ref self: string): string
-  // TODO: icall string_to_ascii_uppercase(self)
-  ret ""
+  ret string_to_ascii_uppercase(self)
 end fun
 
 // Returns a new string with Unicode lowercase conversion.
@@ -155,24 +163,18 @@ end fun
 // --- Trimming ---
 
 // Returns a new string with leading and trailing whitespace removed.
-// intrinsic needed: string_trim(ref string) -> string
 fun trim(ref self: string): string
-  // TODO: icall string_trim(self)
-  ret ""
+  ret string_trim(self)
 end fun
 
 // Returns a new string with leading whitespace removed.
-// intrinsic needed: string_trim_start(ref string) -> string
 fun trim_start(ref self: string): string
-  // TODO: icall string_trim_start(self)
-  ret ""
+  ret string_trim_start(self)
 end fun
 
 // Returns a new string with trailing whitespace removed.
-// intrinsic needed: string_trim_end(ref string) -> string
 fun trim_end(ref self: string): string
-  // TODO: icall string_trim_end(self)
-  ret ""
+  ret string_trim_end(self)
 end fun
 
 // Removes the prefix if present, returns the rest or none.
@@ -259,17 +261,13 @@ fun from_char(ch: u32): string
 end fun
 
 // Repeats the string n times.
-// intrinsic needed: string_repeat(ref string, index) -> string
 fun repeat(ref self: string, n: index): string
-  // TODO: icall string_repeat(self, n)
-  ret ""
+  ret string_repeat(self, n)
 end fun
 
 // Concatenates two strings.
-// intrinsic needed: string_concat(string, string) -> string
-fun concat(self: string, other: string): string
-  // TODO: icall string_concat(self, other)
-  ret ""
+fun concat(ref a: string, ref b: string): string
+  ret string_concat(a, b)
 end fun
 
 // --- Splitting ---
@@ -312,10 +310,8 @@ end fun
 // --- Replacement ---
 
 // Replaces all occurrences of pattern with replacement.
-// intrinsic needed: string_replace(ref string, ref string, ref string) -> string
 fun replace(ref self: string, ref pattern: string, ref replacement: string): string
-  // TODO: icall string_replace(self, pattern, replacement)
-  ret ""
+  ret string_replace(self, pattern, replacement)
 end fun
 
 // Replaces the first n occurrences of pattern.
@@ -334,90 +330,22 @@ end fun
 
 // Returns true if all bytes are ASCII alphabetic. Returns false if empty.
 fun is_ascii_alphabetic(ref self: string): bool
-  if is_empty(self)
-    ret false
-  end if
-  var i: index = (: index / 0)
-  let byte_len = len(self)
-  let one = (: index / 1)
-  loop while i .< byte_len
-    if get_byte(self, i) |b|
-      let is_upper = b >= (: u8 / 65) and b <= (: u8 / 90)
-      let is_lower = b >= (: u8 / 97) and b <= (: u8 / 122)
-      if not (is_upper or is_lower)
-        ret false
-      end if
-    end if
-    set i = icall add_wrapping_index(i, one)
-  end loop
-  ret true
+  ret string_is_ascii_alphabetic(self)
 end fun
 
 // Returns true if all bytes are ASCII digits. Returns false if empty.
 fun is_ascii_digit(ref self: string): bool
-  if is_empty(self)
-    ret false
-  end if
-  var i: index = (: index / 0)
-  let byte_len = len(self)
-  let one = (: index / 1)
-  loop while i .< byte_len
-    if get_byte(self, i) |b|
-      if b .< (: u8 / 48) or b .> (: u8 / 57)
-        ret false
-      end if
-    end if
-    set i = icall add_wrapping_index(i, one)
-  end loop
-  ret true
+  ret string_is_ascii_digit(self)
 end fun
 
 // Returns true if all bytes are ASCII alphanumeric. Returns false if empty.
 fun is_ascii_alphanumeric(ref self: string): bool
-  if is_empty(self)
-    ret false
-  end if
-  var i: index = (: index / 0)
-  let byte_len = len(self)
-  let one = (: index / 1)
-  loop while i .< byte_len
-    if get_byte(self, i) |b|
-      let is_upper = b >= (: u8 / 65) and b <= (: u8 / 90)
-      let is_lower = b >= (: u8 / 97) and b <= (: u8 / 122)
-      let is_digit = b >= (: u8 / 48) and b <= (: u8 / 57)
-      if not (is_upper or is_lower or is_digit)
-        ret false
-      end if
-    end if
-    set i = icall add_wrapping_index(i, one)
-  end loop
-  ret true
+  ret string_is_ascii_alphanumeric(self)
 end fun
 
 // Returns true if all bytes are ASCII whitespace. Returns false if empty.
 fun is_ascii_whitespace(ref self: string): bool
-  if is_empty(self)
-    ret false
-  end if
-  var i: index = (: index / 0)
-  let byte_len = len(self)
-  let one = (: index / 1)
-  loop while i .< byte_len
-    if get_byte(self, i) |b|
-      // Space, tab, newline, carriage return, form feed, vertical tab.
-      let is_space = b == (: u8 / 32)
-      let is_tab = b == (: u8 / 9)
-      let is_newline = b == (: u8 / 10)
-      let is_cr = b == (: u8 / 13)
-      let is_ff = b == (: u8 / 12)
-      let is_vt = b == (: u8 / 11)
-      if not (is_space or is_tab or is_newline or is_cr or is_ff or is_vt)
-        ret false
-      end if
-    end if
-    set i = icall add_wrapping_index(i, one)
-  end loop
-  ret true
+  ret string_is_ascii_whitespace(self)
 end fun
 
 // --- Parsing ---

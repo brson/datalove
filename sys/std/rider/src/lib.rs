@@ -11,6 +11,24 @@ use datalove_rtdt as rtdt;
 
 const OK: u8 = 1;
 
+/// Write a new string result by allocating through the runtime.
+///
+/// # Safety
+///
+/// rt, out, and out_td must be valid pointers.
+unsafe fn write_string_result(rt: *mut u8, out: *mut u8, out_td: *const u8, s: &str) -> u8 {
+    let status = unsafe {
+        datalove_rt::c::dtlv_rti_string_from_bytes(
+            rt,
+            s.as_ptr(),
+            s.len() as rtdt::IndexRepr,
+            out,
+            out_td as *const rtdt::TyDesc,
+        )
+    };
+    status as u8
+}
+
 /// Convert a value pointer to `rtdt::String` into a Rust `&str`.
 ///
 /// # Safety
@@ -156,4 +174,157 @@ pub extern "C-unwind" fn dlr_std__string_eq_ignore_ascii_case(
     let b = unsafe { as_str(b_ptr) };
     unsafe { write_result(out, a.eq_ignore_ascii_case(b) as u8) };
     OK
+}
+
+// --- Character predicates ---
+
+#[no_mangle]
+pub extern "C-unwind" fn dlr_std__string_is_ascii_alphabetic(
+    _rt: *mut u8,
+    s_ptr: *const u8, _s_td: *const u8,
+    out: *mut u8, _out_td: *const u8,
+) -> u8 {
+    let s = unsafe { as_str(s_ptr) };
+    let result = !s.is_empty() && s.bytes().all(|b| b.is_ascii_alphabetic());
+    unsafe { write_result(out, result as u8) };
+    OK
+}
+
+#[no_mangle]
+pub extern "C-unwind" fn dlr_std__string_is_ascii_digit(
+    _rt: *mut u8,
+    s_ptr: *const u8, _s_td: *const u8,
+    out: *mut u8, _out_td: *const u8,
+) -> u8 {
+    let s = unsafe { as_str(s_ptr) };
+    let result = !s.is_empty() && s.bytes().all(|b| b.is_ascii_digit());
+    unsafe { write_result(out, result as u8) };
+    OK
+}
+
+#[no_mangle]
+pub extern "C-unwind" fn dlr_std__string_is_ascii_alphanumeric(
+    _rt: *mut u8,
+    s_ptr: *const u8, _s_td: *const u8,
+    out: *mut u8, _out_td: *const u8,
+) -> u8 {
+    let s = unsafe { as_str(s_ptr) };
+    let result = !s.is_empty() && s.bytes().all(|b| b.is_ascii_alphanumeric());
+    unsafe { write_result(out, result as u8) };
+    OK
+}
+
+#[no_mangle]
+pub extern "C-unwind" fn dlr_std__string_is_ascii_whitespace(
+    _rt: *mut u8,
+    s_ptr: *const u8, _s_td: *const u8,
+    out: *mut u8, _out_td: *const u8,
+) -> u8 {
+    let s = unsafe { as_str(s_ptr) };
+    let result = !s.is_empty() && s.bytes().all(|b| b.is_ascii_whitespace());
+    unsafe { write_result(out, result as u8) };
+    OK
+}
+
+// --- Trimming ---
+
+#[no_mangle]
+pub extern "C-unwind" fn dlr_std__string_trim(
+    rt: *mut u8,
+    s_ptr: *const u8, _s_td: *const u8,
+    out: *mut u8, out_td: *const u8,
+) -> u8 {
+    let s = unsafe { as_str(s_ptr) };
+    unsafe { write_string_result(rt, out, out_td, s.trim()) }
+}
+
+#[no_mangle]
+pub extern "C-unwind" fn dlr_std__string_trim_start(
+    rt: *mut u8,
+    s_ptr: *const u8, _s_td: *const u8,
+    out: *mut u8, out_td: *const u8,
+) -> u8 {
+    let s = unsafe { as_str(s_ptr) };
+    unsafe { write_string_result(rt, out, out_td, s.trim_start()) }
+}
+
+#[no_mangle]
+pub extern "C-unwind" fn dlr_std__string_trim_end(
+    rt: *mut u8,
+    s_ptr: *const u8, _s_td: *const u8,
+    out: *mut u8, out_td: *const u8,
+) -> u8 {
+    let s = unsafe { as_str(s_ptr) };
+    unsafe { write_string_result(rt, out, out_td, s.trim_end()) }
+}
+
+// --- Case conversion ---
+
+#[no_mangle]
+pub extern "C-unwind" fn dlr_std__string_to_ascii_lowercase(
+    rt: *mut u8,
+    s_ptr: *const u8, _s_td: *const u8,
+    out: *mut u8, out_td: *const u8,
+) -> u8 {
+    let s = unsafe { as_str(s_ptr) };
+    let result = s.to_ascii_lowercase();
+    unsafe { write_string_result(rt, out, out_td, &result) }
+}
+
+#[no_mangle]
+pub extern "C-unwind" fn dlr_std__string_to_ascii_uppercase(
+    rt: *mut u8,
+    s_ptr: *const u8, _s_td: *const u8,
+    out: *mut u8, out_td: *const u8,
+) -> u8 {
+    let s = unsafe { as_str(s_ptr) };
+    let result = s.to_ascii_uppercase();
+    unsafe { write_string_result(rt, out, out_td, &result) }
+}
+
+// --- Construction ---
+
+#[no_mangle]
+pub extern "C-unwind" fn dlr_std__string_repeat(
+    rt: *mut u8,
+    s_ptr: *const u8, _s_td: *const u8,
+    n_ptr: *const u8, _n_td: *const u8,
+    out: *mut u8, out_td: *const u8,
+) -> u8 {
+    let s = unsafe { as_str(s_ptr) };
+    let n = unsafe { *(n_ptr as *const rtdt::Index) };
+    let result = s.repeat(n.as_usize());
+    unsafe { write_string_result(rt, out, out_td, &result) }
+}
+
+// --- Replacement ---
+
+#[no_mangle]
+pub extern "C-unwind" fn dlr_std__string_replace(
+    rt: *mut u8,
+    s_ptr: *const u8, _s_td: *const u8,
+    pat_ptr: *const u8, _pat_td: *const u8,
+    rep_ptr: *const u8, _rep_td: *const u8,
+    out: *mut u8, out_td: *const u8,
+) -> u8 {
+    let s = unsafe { as_str(s_ptr) };
+    let pat = unsafe { as_str(pat_ptr) };
+    let rep = unsafe { as_str(rep_ptr) };
+    let result = s.replace(pat, rep);
+    unsafe { write_string_result(rt, out, out_td, &result) }
+}
+
+// --- Concatenation ---
+
+#[no_mangle]
+pub extern "C-unwind" fn dlr_std__string_concat(
+    rt: *mut u8,
+    a_ptr: *const u8, _a_td: *const u8,
+    b_ptr: *const u8, _b_td: *const u8,
+    out: *mut u8, out_td: *const u8,
+) -> u8 {
+    let a = unsafe { as_str(a_ptr) };
+    let b = unsafe { as_str(b_ptr) };
+    let result = format!("{}{}", a, b);
+    unsafe { write_string_result(rt, out, out_td, &result) }
 }

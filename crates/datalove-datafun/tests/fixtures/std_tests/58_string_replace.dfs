@@ -1,0 +1,11 @@
+require module sys/std/string
+
+import string.replace
+
+let a = "hello world"
+let r1 = replace(a, "world", "there")
+let r2 = replace(a, "o", "0")
+let r3 = replace(a, "xyz", "!")
+let r4 = replace("aaa", "a", "bb")
+
+let output = (r1, r2, r3, r4)
