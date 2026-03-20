@@ -435,3 +435,80 @@ pub extern "C-unwind" fn dlr_std__string_to_uppercase(
     let result = s.to_uppercase();
     unsafe { write_string_result(rt, out, out_td, &result) }
 }
+
+// --- Mutation ---
+
+#[no_mangle]
+pub extern "C-unwind" fn dlr_std__string_push_str(
+    rt: *mut u8,
+    self_ptr: *mut u8, self_td: *const u8,
+    other_ptr: *const u8, _other_td: *const u8,
+    _out: *mut u8, _out_td: *const u8,
+) -> u8 {
+    let other = unsafe { as_str(other_ptr) };
+    if other.is_empty() {
+        return OK;
+    }
+    let status = unsafe {
+        datalove_rt::c::dtlv_rti_string_push_bytes_local(
+            rt,
+            self_ptr,
+            self_td as *const rtdt::TyDesc,
+            other.as_ptr(),
+            other.len() as rtdt::IndexRepr,
+        )
+    };
+    status as u8
+}
+
+#[no_mangle]
+pub extern "C-unwind" fn dlr_std__string_clear(
+    _rt: *mut u8,
+    self_ptr: *mut u8, _self_td: *const u8,
+    _out: *mut u8, _out_td: *const u8,
+) -> u8 {
+    unsafe {
+        let s = &mut *(self_ptr as *mut rtdt::String);
+        s.size = rtdt::Index::ZERO;
+    }
+    OK
+}
+
+// --- Construction ---
+
+#[no_mangle]
+pub extern "C-unwind" fn dlr_std__string_from_char(
+    rt: *mut u8,
+    ch_ptr: *const u8, _ch_td: *const u8,
+    out: *mut u8, out_td: *const u8,
+) -> u8 {
+    let codepoint = unsafe { *(ch_ptr as *const u32) };
+    match char::from_u32(codepoint) {
+        Some(ch) => {
+            let mut buf = [0u8; 4];
+            let s = ch.encode_utf8(&mut buf);
+            unsafe { write_string_result(rt, out, out_td, s) }
+        }
+        None => {
+            // Invalid codepoint: return empty string.
+            unsafe { write_string_result(rt, out, out_td, "") }
+        }
+    }
+}
+
+#[no_mangle]
+pub extern "C-unwind" fn dlr_std__string_replacen(
+    rt: *mut u8,
+    s_ptr: *const u8, _s_td: *const u8,
+    pat_ptr: *const u8, _pat_td: *const u8,
+    rep_ptr: *const u8, _rep_td: *const u8,
+    n_ptr: *const u8, _n_td: *const u8,
+    out: *mut u8, out_td: *const u8,
+) -> u8 {
+    let s = unsafe { as_str(s_ptr) };
+    let pat = unsafe { as_str(pat_ptr) };
+    let rep = unsafe { as_str(rep_ptr) };
+    let n = unsafe { *(n_ptr as *const rtdt::Index) };
+    let result = s.replacen(pat, rep, n.as_usize());
+    unsafe { write_string_result(rt, out, out_td, &result) }
+}

@@ -30,6 +30,8 @@ import std.string_strip_prefix
 import std.string_strip_suffix
 import std.string_to_lowercase
 import std.string_to_uppercase
+import std.string_from_char
+import std.string_replacen
 
 // --- Basic Properties ---
 
@@ -196,9 +198,9 @@ fun push_char(mut self: string, ch: u32)
 end fun
 
 // Appends another string.
-// intrinsic needed: string_push_str(mut string, ref string) -> ()
+// TODO: void native calls as statements not yet supported in lowering.
 fun push_str(mut self: string, ref other: string)
-  // TODO: icall string_push_str(self, other)
+  // TODO: string_push_str(mut self, other)
 end fun
 
 // Removes and returns the last character, or none if empty.
@@ -216,9 +218,9 @@ fun truncate(mut self: string, new_len: index): !()
 end fun
 
 // Clears the string, making it empty.
-// intrinsic needed: string_clear(mut string) -> ()
+// TODO: void native calls as statements not yet supported in lowering.
 fun clear(mut self: string)
-  // TODO: icall string_clear(self)
+  // TODO: string_clear(mut self)
 end fun
 
 // Inserts a character at the given byte index.
@@ -250,10 +252,8 @@ fun new(): string
 end fun
 
 // Creates a string from a single character (codepoint).
-// intrinsic needed: string_from_char(u32) -> string
 fun from_char(ch: u32): string
-  // TODO: icall string_from_char(ch)
-  ret ""
+  ret string_from_char(ch)
 end fun
 
 // Repeats the string n times.
@@ -311,10 +311,8 @@ fun replace(ref self: string, ref pattern: string, ref replacement: string): str
 end fun
 
 // Replaces the first n occurrences of pattern.
-// intrinsic needed: string_replacen(ref string, ref string, ref string, index) -> string
 fun replacen(ref self: string, ref pattern: string, ref replacement: string, n: index): string
-  // TODO: icall string_replacen(self, pattern, replacement, n)
-  ret ""
+  ret string_replacen(self, pattern, replacement, n)
 end fun
 
 // --- Character Predicates ---

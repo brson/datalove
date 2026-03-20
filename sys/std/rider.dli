@@ -51,3 +51,9 @@ native fun string_strip_suffix(ref self: string, ref suffix: string): ?string
 // Unicode case conversion.
 native fun string_to_lowercase(ref self: string): string
 native fun string_to_uppercase(ref self: string): string
+
+// Construction.
+native fun string_from_char(ch: u32): string
+
+// Replacement.
+native fun string_replacen(ref self: string, ref pattern: string, ref replacement: string, n: index): string

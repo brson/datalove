@@ -1,0 +1,8 @@
+require module sys/std/string
+
+import string.from_char
+
+let a = from_char(: u32 / 65)
+let b = from_char(: u32 / 48)
+
+let output = (a, b)
