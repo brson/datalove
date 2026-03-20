@@ -1130,6 +1130,10 @@ fn analyze_statements<'db>(ctx: &mut AnalysisCtx<'db>, stmts: &[Statement<'db>])
             Statement::Match(match_stmt) => {
                 analyze_match(ctx, match_stmt, stmt_id);
             }
+            Statement::ExprStatement(stmt) => {
+                // Expression statement consumes its args via the function call.
+                ctx.analyze_expr_moves(stmt.expr, true);
+            }
             Statement::Require(_) | Statement::Import(_) | Statement::NativeFun(_) | Statement::ParseError(_) => {
                 // No drops.
             }

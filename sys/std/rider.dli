@@ -57,3 +57,7 @@ native fun string_from_char(ch: u32): string
 
 // Replacement.
 native fun string_replacen(ref self: string, ref pattern: string, ref replacement: string, n: index): string
+
+// In-place mutation.
+native fun string_push_str(mut self: string, ref other: string)
+native fun string_clear(mut self: string)

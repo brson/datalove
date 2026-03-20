@@ -66,6 +66,7 @@ pub enum Statement<'db> {
     TypeAlias(StmtTypeAlias<'db>),
     NativeFun(StmtNativeFun<'db>),
     Match(StmtMatch<'db>),
+    ExprStatement(StmtExprStatement<'db>),
     ParseError(StmtParseError<'db>),
 }
 
@@ -302,6 +303,15 @@ pub struct StmtNativeFun<'db> {
     pub name: InternedText<'db>,
     pub params: Vec<FunParam<'db>>,
     pub return_type: Option<datalit::ast::TypeHint<'db>>,
+}
+
+/// Expression statement for void function calls.
+///
+/// Allows calling unit-returning functions at statement position.
+#[derive(Clone, Hash, PartialEq, Eq)]
+#[derive(salsa::Update)]
+pub struct StmtExprStatement<'db> {
+    pub expr: ExprFun<'db>,
 }
 
 /// Match statement for exhaustive enum destructuring.

@@ -32,6 +32,8 @@ import std.string_to_lowercase
 import std.string_to_uppercase
 import std.string_from_char
 import std.string_replacen
+import std.string_push_str
+import std.string_clear
 
 // --- Basic Properties ---
 
@@ -198,9 +200,8 @@ fun push_char(mut self: string, ch: u32)
 end fun
 
 // Appends another string.
-// TODO: void native calls as statements not yet supported in lowering.
 fun push_str(mut self: string, ref other: string)
-  // TODO: string_push_str(mut self, other)
+  string_push_str(self, other)
 end fun
 
 // Removes and returns the last character, or none if empty.
@@ -218,9 +219,8 @@ fun truncate(mut self: string, new_len: index): !()
 end fun
 
 // Clears the string, making it empty.
-// TODO: void native calls as statements not yet supported in lowering.
 fun clear(mut self: string)
-  // TODO: string_clear(mut self)
+  string_clear(self)
 end fun
 
 // Inserts a character at the given byte index.

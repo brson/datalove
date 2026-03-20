@@ -39,12 +39,19 @@ impl<'db> Parser<'db> {
             Some("native") => self.parse_native_fun(),
             Some("match") => self.parse_match(remaining_lines),
             _ => {
-                let ts = self.peek_text_span();
-                self.emit_stmt_error(ts,
-                    "unexpected statement",
-                    "P001",
-                    "expected 'let', 'var', 'const', 'set', 'fun', 'ret', 'require', 'import', 'if', 'loop', 'break', 'continue', 'debuglog', 'type', or 'native'"
-                )
+                // Try function call statement: parse as expression, then
+                // verify it's a function call. The expression parser handles
+                // keyword priority (some/ok/er/etc.) so no blocklist needed.
+                if self.peek_word().is_some() && self.peek_next_is_paren() {
+                    self.parse_expr_statement()
+                } else {
+                    let ts = self.peek_text_span();
+                    self.emit_stmt_error(ts,
+                        "unexpected statement",
+                        "P001",
+                        "expected 'let', 'var', 'const', 'set', 'fun', 'ret', 'require', 'import', 'if', 'loop', 'break', 'continue', 'debuglog', 'type', or 'native'"
+                    )
+                }
             }
         };
 
@@ -828,6 +835,34 @@ impl<'db> Parser<'db> {
         self.eat_word("debuglog");
         let value = self.parse_expr_full();
         ast::Statement::DebugLog(ast::StmtDebugLog { value })
+    }
+
+    /// Check if the next token after the current one is an open paren.
+    fn peek_next_is_paren(&self) -> bool {
+        matches!(self.peek_next(), Some(TreeToken::Branch { sigil: Sigil::ParenOpen, .. }))
+    }
+
+    /// Parse an expression and verify it's a function call, then wrap as statement.
+    ///
+    /// The expression parser handles keyword priority (some/ok/er/etc. are
+    /// parsed as their own expression kinds, not as function calls), so no
+    /// keyword blocklist is needed here.
+    fn parse_expr_statement(&mut self) -> ast::Statement<'db> {
+        let expr = self.parse_expr_full();
+        // Verify the expression is a function call.
+        match expr.expr(self.db) {
+            ast::ExprFunKind::FunctionCall(_) => {
+                ast::Statement::ExprStatement(ast::StmtExprStatement { expr })
+            }
+            _ => {
+                let ts = self.peek_text_span();
+                self.emit_stmt_error(ts,
+                    "only function calls can be used as statements",
+                    "P031",
+                    "not a function call"
+                )
+            }
+        }
     }
 
     fn parse_type_alias(&mut self) -> ast::Statement<'db> {

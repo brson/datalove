@@ -1,0 +1,18 @@
+----------
+scriptunit-fragment
+----------
+
+// Test void function call statement inside a loop.
+fun set_to(mut x: int, val: int)
+    set x = val
+end fun
+
+var counter: int = 0
+var i: int = 0
+loop while i .< 3
+    let next = counter + 1
+    set_to(counter, next)
+    let ni = i + 1
+    set i = ni
+end loop
+debuglog counter

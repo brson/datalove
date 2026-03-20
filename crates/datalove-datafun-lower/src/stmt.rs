@@ -193,6 +193,12 @@ fn lower_statement_impl<'db>(
             // Native function declarations have no body to lower.
             Ok(())
         }
+        Statement::ExprStatement(stmt) => {
+            // Lower the function call expression and discard the unit result.
+            lower_expression(ctx, stmt.expr)?;
+            ctx.emit_expr_temp_drops();
+            Ok(())
+        }
         Statement::ParseError(_) => {
             panic!("parse error node reached lowering - callers should check for parse errors before lowering")
         }

@@ -197,6 +197,14 @@ impl<'db> Parser<'db> {
         self.current_fn_name
     }
 
+    /// Peek at the next token after the current one (lookahead of 2).
+    pub(super) fn peek_next(&self) -> Option<&TreeToken<'db>> {
+        match &self.source {
+            TokenSource::Vec { tokens, pos, .. } => tokens.get(*pos + 1),
+            TokenSource::Iter { buffer, .. } => buffer[1].as_ref(),
+        }
+    }
+
     /// Enter function context for expression identity tracking.
     pub(super) fn enter_function(&mut self, name: InternedText<'db>) {
         self.current_fn_name = Some(name);

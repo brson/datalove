@@ -1,0 +1,17 @@
+----------
+scriptunit-fragment
+----------
+
+// Test void function call statement inside another function body.
+fun reset(mut x: u32)
+    set x = 0
+end fun
+
+fun double_reset(mut x: u32)
+    set x = 99
+    reset(x)
+end fun
+
+var n: u32 = 42
+double_reset(n)
+debuglog n

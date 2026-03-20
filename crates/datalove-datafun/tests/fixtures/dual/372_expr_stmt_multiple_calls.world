@@ -1,0 +1,18 @@
+----------
+scriptunit-fragment
+----------
+
+// Test multiple void function call statements in sequence.
+fun set_ten(mut x: int)
+    set x = 10
+end fun
+
+fun set_twenty(mut x: int)
+    set x = 20
+end fun
+
+var a: int = 0
+set_ten(a)
+debuglog a
+set_twenty(a)
+debuglog a

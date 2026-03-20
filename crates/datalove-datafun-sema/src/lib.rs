@@ -65,6 +65,7 @@ impl StmtKey {
             Statement::Const(_) => (14, None),
             Statement::Match(_) => (15, None),
             Statement::NativeFun(_) => (16, None),
+            Statement::ExprStatement(_) => (17, None),
         };
         Self { kind, local_index }
     }
@@ -89,6 +90,7 @@ impl StmtKey {
             14 => "Const",
             15 => "Match",
             16 => "NativeFun",
+            17 => "ExprStatement",
             _ => "Unknown",
         }
     }

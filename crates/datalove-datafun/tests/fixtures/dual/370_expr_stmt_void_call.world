@@ -1,0 +1,13 @@
+----------
+scriptunit-fragment
+----------
+
+// Test void function call as statement.
+fun reset(mut x: int)
+    set x = 0
+end fun
+
+var n: int = 42
+debuglog n
+reset(n)
+debuglog n

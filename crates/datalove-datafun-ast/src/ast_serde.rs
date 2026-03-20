@@ -31,6 +31,7 @@ pub enum Statement {
     TypeAlias(StmtTypeAlias),
     NativeFun(StmtNativeFun),
     Match(StmtMatch),
+    ExprStatement(StmtExprStatement),
     ParseError(StmtParseError),
 }
 
@@ -176,6 +177,11 @@ pub struct StmtContinue {}
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct StmtDebugLog {
     pub value: ExprFun,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct StmtExprStatement {
+    pub expr: ExprFun,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -542,6 +548,9 @@ impl Statement {
             crate::ast::Statement::TypeAlias(s) => Statement::TypeAlias(StmtTypeAlias::from_ast(db, s)),
             crate::ast::Statement::NativeFun(s) => Statement::NativeFun(StmtNativeFun::from_ast(db, s)),
             crate::ast::Statement::Match(s) => Statement::Match(StmtMatch::from_ast(db, s)),
+            crate::ast::Statement::ExprStatement(s) => Statement::ExprStatement(StmtExprStatement {
+                expr: ExprFun::from_ast(db, s.expr),
+            }),
             crate::ast::Statement::ParseError(s) => Statement::ParseError(StmtParseError::from_ast(db, s)),
         }
     }

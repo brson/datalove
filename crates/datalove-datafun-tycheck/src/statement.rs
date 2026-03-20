@@ -518,6 +518,28 @@ pub fn check_statement<'db>(
             }
         }
 
+        Statement::ExprStatement(stmt) => {
+            let expr = stmt.expr;
+            let unit_type = Type::Datalit(datalit::tycheck::unit_type());
+            match ctx.synthesize_expr(expr) {
+                Ok(ty) => {
+                    if ty != unit_type {
+                        let actual_str = type_to_string(db, &ty);
+                        let err = ctx.error_type_mismatch(
+                            expr,
+                            "unit",
+                            &actual_str,
+                            "function call statement must return unit"
+                        );
+                        ctx.add_error(err);
+                    }
+                }
+                Err(e) => {
+                    ctx.add_error(e);
+                }
+            }
+        }
+
         Statement::ParseError(_) => {
             // Skip parse errors.
         }
