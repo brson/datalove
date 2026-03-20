@@ -252,9 +252,7 @@ fn analyze_file(path: &Path) -> Result<String, String> {
         run_aot(&db, compiled, &script_text, &rider_lib_paths)
     };
 
-    // Compare all backends against interpreter.
-    // Output mismatches are hard failures. Backend errors (e.g. AOT crash on
-    // unsupported ops) are noted in the output but don't fail the test.
+    // Compare all backends against interpreter. All errors are fatal.
     let mut mismatches = Vec::new();
     match &jit_result {
         Ok(jit_value) if jit_value != &interp_value => {
@@ -264,9 +262,7 @@ fn analyze_file(path: &Path) -> Result<String, String> {
             ));
         }
         Err(e) => {
-            // JIT backend errors are expected for some operations (e.g. float
-            // libcalls not registered). Log but don't fail.
-            eprintln!("  [JIT skipped: {}]", e);
+            mismatches.push(format!("JIT error: {}", e));
         }
         _ => {}
     }
@@ -278,9 +274,7 @@ fn analyze_file(path: &Path) -> Result<String, String> {
             ));
         }
         Err(e) => {
-            // AOT backend errors are expected for some operations (checked
-            // arithmetic, etc). Log but don't fail.
-            eprintln!("  [AOT skipped: {}]", e);
+            mismatches.push(format!("AOT error: {}", e));
         }
         _ => {}
     }
