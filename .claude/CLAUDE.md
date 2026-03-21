@@ -11,8 +11,3 @@ a task is done.
 
 Don't leave fallback and compatibility code.
 Don't write defensive code.
-
-Before sealing test results with BLESS
-be sure that the environment doesn't contain RUST_BACKTRACE -
-that will corrupt the test output.
-Unset the env var before running to fix.
