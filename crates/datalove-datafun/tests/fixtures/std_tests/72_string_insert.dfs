@@ -1,0 +1,10 @@
+require module sys/std/string
+
+import string.insert_char
+import string.insert_str
+
+var s = "ad"
+insert_char(s, : index / 1, : u32 / 98)
+insert_str(s, : index / 2, "c")
+
+let output = s

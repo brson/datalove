@@ -1,0 +1,13 @@
+require module sys/std/string
+
+import string.new
+import string.push_str
+import string.len
+
+var s = new()
+push_str(s, "hello")
+let len1 = len(s)
+push_str(s, " world")
+let len2 = len(s)
+
+let output = (s, len1, len2)

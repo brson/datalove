@@ -1,0 +1,11 @@
+require module sys/std/string
+
+import string.remove
+import string.len
+
+var s = "abcde"
+let c1 = remove(s, : index / 0)
+let after1 = len(s)
+let c2 = remove(s, : index / 99)
+
+let output = (s, c1, after1, c2)

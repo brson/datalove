@@ -60,4 +60,10 @@ native fun string_replacen(ref self: string, ref pattern: string, ref replacemen
 
 // In-place mutation.
 native fun string_push_str(mut self: string, ref other: string)
+native fun string_push_char(mut self: string, ch: u32)
 native fun string_clear(mut self: string)
+native fun string_pop(mut self: string): ?u32
+native fun string_truncate(mut self: string, new_len: index)
+native fun string_remove(mut self: string, index: index): ?u32
+native fun string_insert_char(mut self: string, index: index, ch: u32)
+native fun string_insert_str(mut self: string, index: index, ref other: string)

@@ -33,7 +33,13 @@ import std.string_to_uppercase
 import std.string_from_char
 import std.string_replacen
 import std.string_push_str
+import std.string_push_char
 import std.string_clear
+import std.string_pop
+import std.string_truncate
+import std.string_remove
+import std.string_insert_char
+import std.string_insert_str
 
 // --- Basic Properties ---
 
@@ -194,9 +200,8 @@ end fun
 // --- In-place Mutation ---
 
 // Appends a character (codepoint) to the string.
-// intrinsic needed: string_push_char(mut string, u32) -> ()
 fun push_char(mut self: string, ch: u32)
-  // TODO: icall string_push_char(self, ch)
+  string_push_char(self, ch)
 end fun
 
 // Appends another string.
@@ -205,17 +210,13 @@ fun push_str(mut self: string, ref other: string)
 end fun
 
 // Removes and returns the last character, or none if empty.
-// intrinsic needed: string_pop(mut string) -> ?u32
 fun pop(mut self: string): ?u32
-  // TODO: icall string_pop(self)
-  ret none
+  ret string_pop(self)
 end fun
 
 // Truncates the string to the given byte length.
-// intrinsic needed: string_truncate(mut string, index) -> !()
-fun truncate(mut self: string, new_len: index): !()
-  // TODO: icall string_truncate(self, new_len)
-  ret ok ()
+fun truncate(mut self: string, new_len: index)
+  string_truncate(self, new_len)
 end fun
 
 // Clears the string, making it empty.
@@ -224,24 +225,18 @@ fun clear(mut self: string)
 end fun
 
 // Inserts a character at the given byte index.
-// intrinsic needed: string_insert_char(mut string, index, u32) -> !()
-fun insert_char(mut self: string, index: index, ch: u32): !()
-  // TODO: icall string_insert_char(self, index, ch)
-  ret ok ()
+fun insert_char(mut self: string, index: index, ch: u32)
+  string_insert_char(self, index, ch)
 end fun
 
 // Inserts a string at the given byte index.
-// intrinsic needed: string_insert_str(mut string, index, ref string) -> !()
-fun insert_str(mut self: string, index: index, ref other: string): !()
-  // TODO: icall string_insert_str(self, index, other)
-  ret ok ()
+fun insert_str(mut self: string, index: index, ref other: string)
+  string_insert_str(self, index, other)
 end fun
 
 // Removes and returns the character at the given byte index.
-// intrinsic needed: string_remove(mut string, index) -> ?u32
 fun remove(mut self: string, index: index): ?u32
-  // TODO: icall string_remove(self, index)
-  ret none
+  ret string_remove(self, index)
 end fun
 
 // --- Construction ---

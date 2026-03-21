@@ -1,0 +1,14 @@
+require module sys/std/string
+
+import string.new
+import string.pop
+import string.len
+
+var s = "abc"
+let c1 = pop(s)
+let len1 = len(s)
+let c2 = pop(s)
+let c3 = pop(s)
+let c4 = pop(s)
+
+let output = (c1, len1, c2, c3, c4)

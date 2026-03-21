@@ -1,0 +1,14 @@
+require module sys/std/string
+
+import string.push_str
+import string.clear
+import string.len
+import string.is_empty
+
+var s = "hello"
+let before = len(s)
+clear(s)
+let after = len(s)
+let empty = is_empty(s)
+
+let output = (before, after, empty)

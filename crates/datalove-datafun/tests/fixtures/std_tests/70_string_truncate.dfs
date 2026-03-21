@@ -1,0 +1,10 @@
+require module sys/std/string
+
+import string.truncate
+import string.len
+
+var s = "hello world"
+truncate(s, : index / 5)
+let len1 = len(s)
+
+let output = (s, len1)

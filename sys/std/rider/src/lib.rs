@@ -474,6 +474,226 @@ pub extern "C-unwind" fn dlr_std__string_clear(
     OK
 }
 
+/// Helper: convert an rtdt::String to a mutable byte slice.
+///
+/// # Safety
+///
+/// The pointer must be valid and point to a live, heap-allocated `rtdt::String`.
+unsafe fn as_mut_bytes<'a>(ptr: *mut u8) -> &'a mut [u8] {
+    let s = &mut *(ptr as *mut rtdt::String);
+    if s.data.is_null() || s.size.0 == 0 {
+        &mut []
+    } else {
+        std::slice::from_raw_parts_mut(s.data as *mut u8, s.size.as_usize())
+    }
+}
+
+#[no_mangle]
+pub extern "C-unwind" fn dlr_std__string_push_char(
+    rt: *mut u8,
+    self_ptr: *mut u8, self_td: *const u8,
+    ch_ptr: *const u8, _ch_td: *const u8,
+    _out: *mut u8, _out_td: *const u8,
+) -> u8 {
+    let codepoint = unsafe { *(ch_ptr as *const u32) };
+    let ch = match char::from_u32(codepoint) {
+        Some(c) => c,
+        None => return OK, // Invalid codepoint: no-op.
+    };
+    let mut buf = [0u8; 4];
+    let encoded = ch.encode_utf8(&mut buf);
+    let status = unsafe {
+        datalove_rt::c::dtlv_rti_string_push_bytes_local(
+            rt,
+            self_ptr,
+            self_td as *const rtdt::TyDesc,
+            encoded.as_ptr(),
+            encoded.len() as rtdt::IndexRepr,
+        )
+    };
+    status as u8
+}
+
+#[no_mangle]
+pub extern "C-unwind" fn dlr_std__string_pop(
+    _rt: *mut u8,
+    self_ptr: *mut u8, _self_td: *const u8,
+    out: *mut u8, _out_td: *const u8,
+) -> u8 {
+    let s = unsafe { as_str(self_ptr) };
+    match s.chars().next_back() {
+        Some(ch) => {
+            let new_len = s.len() - ch.len_utf8();
+            let s_mut = unsafe { &mut *(self_ptr as *mut rtdt::String) };
+            s_mut.size = rtdt::Index::new(new_len as rtdt::IndexRepr);
+            unsafe { rider_helpers::write_option_some(out, ch as u32) };
+        }
+        None => {
+            unsafe { rider_helpers::write_option_none(out) };
+        }
+    }
+    OK
+}
+
+#[no_mangle]
+pub extern "C-unwind" fn dlr_std__string_truncate(
+    _rt: *mut u8,
+    self_ptr: *mut u8, _self_td: *const u8,
+    len_ptr: *const u8, _len_td: *const u8,
+    _out: *mut u8, _out_td: *const u8,
+) -> u8 {
+    let new_len = unsafe { *(len_ptr as *const rtdt::Index) }.as_usize();
+    let s = unsafe { as_str(self_ptr) };
+    if new_len >= s.len() {
+        return OK; // No-op if new_len >= current length.
+    }
+    assert!(s.is_char_boundary(new_len), "truncate: not a char boundary");
+    let s_mut = unsafe { &mut *(self_ptr as *mut rtdt::String) };
+    s_mut.size = rtdt::Index::new(new_len as rtdt::IndexRepr);
+    OK
+}
+
+#[no_mangle]
+pub extern "C-unwind" fn dlr_std__string_remove(
+    _rt: *mut u8,
+    self_ptr: *mut u8, _self_td: *const u8,
+    idx_ptr: *const u8, _idx_td: *const u8,
+    out: *mut u8, _out_td: *const u8,
+) -> u8 {
+    let idx = unsafe { *(idx_ptr as *const rtdt::Index) }.as_usize();
+    let s = unsafe { as_str(self_ptr) };
+    if idx >= s.len() || !s.is_char_boundary(idx) {
+        unsafe { rider_helpers::write_option_none(out) };
+        return OK;
+    }
+    let ch = s[idx..].chars().next().unwrap();
+    let ch_len = ch.len_utf8();
+    // Shift bytes after the removed character.
+    let bytes = unsafe { as_mut_bytes(self_ptr) };
+    let remaining = bytes.len() - idx - ch_len;
+    if remaining > 0 {
+        unsafe {
+            std::ptr::copy(
+                bytes.as_ptr().add(idx + ch_len),
+                bytes.as_mut_ptr().add(idx),
+                remaining,
+            );
+        }
+    }
+    let s_mut = unsafe { &mut *(self_ptr as *mut rtdt::String) };
+    s_mut.size = rtdt::Index::new((s_mut.size.as_usize() - ch_len) as rtdt::IndexRepr);
+    unsafe { rider_helpers::write_option_some(out, ch as u32) };
+    OK
+}
+
+#[no_mangle]
+pub extern "C-unwind" fn dlr_std__string_insert_char(
+    rt: *mut u8,
+    self_ptr: *mut u8, self_td: *const u8,
+    idx_ptr: *const u8, _idx_td: *const u8,
+    ch_ptr: *const u8, _ch_td: *const u8,
+    _out: *mut u8, _out_td: *const u8,
+) -> u8 {
+    let idx = unsafe { *(idx_ptr as *const rtdt::Index) }.as_usize();
+    let codepoint = unsafe { *(ch_ptr as *const u32) };
+    let ch = match char::from_u32(codepoint) {
+        Some(c) => c,
+        None => return OK, // Invalid codepoint: no-op.
+    };
+    let s = unsafe { as_str(self_ptr) };
+    if idx > s.len() || !s.is_char_boundary(idx) {
+        return OK; // Out of bounds or not char boundary: no-op.
+    }
+    let mut buf = [0u8; 4];
+    let encoded = ch.encode_utf8(&mut buf);
+    let encoded_len = encoded.len();
+
+    // First, grow the buffer by pushing the encoded bytes at the end.
+    let status = unsafe {
+        datalove_rt::c::dtlv_rti_string_push_bytes_local(
+            rt,
+            self_ptr,
+            self_td as *const rtdt::TyDesc,
+            encoded.as_ptr(),
+            encoded_len as rtdt::IndexRepr,
+        )
+    };
+    if status as u8 != OK {
+        return status as u8;
+    }
+
+    // Now shift existing bytes after idx to make room.
+    let bytes = unsafe { as_mut_bytes(self_ptr) };
+    let total_len = bytes.len();
+    let old_len = total_len - encoded_len;
+    // Move bytes [idx..old_len] to [idx+encoded_len..total_len].
+    if idx < old_len {
+        unsafe {
+            std::ptr::copy(
+                bytes.as_ptr().add(idx),
+                bytes.as_mut_ptr().add(idx + encoded_len),
+                old_len - idx,
+            );
+        }
+    }
+    // Copy encoded char into the gap.
+    bytes[idx..idx + encoded_len].copy_from_slice(encoded.as_bytes());
+    OK
+}
+
+#[no_mangle]
+pub extern "C-unwind" fn dlr_std__string_insert_str(
+    rt: *mut u8,
+    self_ptr: *mut u8, self_td: *const u8,
+    idx_ptr: *const u8, _idx_td: *const u8,
+    other_ptr: *const u8, _other_td: *const u8,
+    _out: *mut u8, _out_td: *const u8,
+) -> u8 {
+    let idx = unsafe { *(idx_ptr as *const rtdt::Index) }.as_usize();
+    let other = unsafe { as_str(other_ptr) };
+    if other.is_empty() {
+        return OK;
+    }
+    let s = unsafe { as_str(self_ptr) };
+    if idx > s.len() || !s.is_char_boundary(idx) {
+        return OK; // Out of bounds or not char boundary: no-op.
+    }
+    let insert_len = other.len();
+    // Grab the other bytes before mutating self (other_ptr could alias).
+    let other_bytes: Vec<u8> = other.as_bytes().to_vec();
+
+    // Grow the buffer by pushing the insert bytes at the end.
+    let status = unsafe {
+        datalove_rt::c::dtlv_rti_string_push_bytes_local(
+            rt,
+            self_ptr,
+            self_td as *const rtdt::TyDesc,
+            other_bytes.as_ptr(),
+            insert_len as rtdt::IndexRepr,
+        )
+    };
+    if status as u8 != OK {
+        return status as u8;
+    }
+
+    // Now shift existing bytes after idx to make room.
+    let bytes = unsafe { as_mut_bytes(self_ptr) };
+    let total_len = bytes.len();
+    let old_len = total_len - insert_len;
+    if idx < old_len {
+        unsafe {
+            std::ptr::copy(
+                bytes.as_ptr().add(idx),
+                bytes.as_mut_ptr().add(idx + insert_len),
+                old_len - idx,
+            );
+        }
+    }
+    // Copy inserted string into the gap.
+    bytes[idx..idx + insert_len].copy_from_slice(&other_bytes);
+    OK
+}
+
 // --- Construction ---
 
 #[no_mangle]

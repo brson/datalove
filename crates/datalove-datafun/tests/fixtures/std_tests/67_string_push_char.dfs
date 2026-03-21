@@ -1,0 +1,12 @@
+require module sys/std/string
+
+import string.new
+import string.push_char
+import string.len
+
+var s = new()
+push_char(s, : u32 / 72)
+push_char(s, : u32 / 105)
+let len1 = len(s)
+
+let output = (s, len1)
