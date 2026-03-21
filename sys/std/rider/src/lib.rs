@@ -694,6 +694,163 @@ pub extern "C-unwind" fn dlr_std__string_insert_str(
     OK
 }
 
+// --- Character access ---
+
+#[no_mangle]
+pub extern "C-unwind" fn dlr_std__string_char_at(
+    _rt: *mut u8,
+    s_ptr: *const u8, _s_td: *const u8,
+    idx_ptr: *const u8, _idx_td: *const u8,
+    out: *mut u8, _out_td: *const u8,
+) -> u8 {
+    let s = unsafe { as_str(s_ptr) };
+    let idx = unsafe { *(idx_ptr as *const rtdt::Index) }.as_usize();
+    match s.chars().nth(idx) {
+        Some(ch) => unsafe { rider_helpers::write_option_some(out, ch as u32) },
+        None => unsafe { rider_helpers::write_option_none(out) },
+    }
+    OK
+}
+
+#[no_mangle]
+pub extern "C-unwind" fn dlr_std__string_char_to_byte_index(
+    _rt: *mut u8,
+    s_ptr: *const u8, _s_td: *const u8,
+    idx_ptr: *const u8, _idx_td: *const u8,
+    out: *mut u8, _out_td: *const u8,
+) -> u8 {
+    let s = unsafe { as_str(s_ptr) };
+    let char_idx = unsafe { *(idx_ptr as *const rtdt::Index) }.as_usize();
+    match s.char_indices().nth(char_idx) {
+        Some((byte_idx, _)) => unsafe { rider_helpers::write_option_some(out, rtdt::Index::new(byte_idx as rtdt::IndexRepr)) },
+        None => unsafe { rider_helpers::write_option_none(out) },
+    }
+    OK
+}
+
+// --- Slicing ---
+
+#[no_mangle]
+pub extern "C-unwind" fn dlr_std__string_slice(
+    rt: *mut u8,
+    s_ptr: *const u8, _s_td: *const u8,
+    start_ptr: *const u8, _start_td: *const u8,
+    end_ptr: *const u8, _end_td: *const u8,
+    out: *mut u8, _out_td: *const u8,
+) -> u8 {
+    let s = unsafe { as_str(s_ptr) };
+    let start = unsafe { *(start_ptr as *const rtdt::Index) }.as_usize();
+    let end = unsafe { *(end_ptr as *const rtdt::Index) }.as_usize();
+    if start > end || end > s.len() || !s.is_char_boundary(start) || !s.is_char_boundary(end) {
+        unsafe { rider_helpers::write_option_none(out) };
+        return OK;
+    }
+    let status = unsafe { rider_helpers::write_option_some_string(rt, out, &s[start..end]) };
+    status as u8
+}
+
+#[no_mangle]
+pub extern "C-unwind" fn dlr_std__string_slice_from(
+    rt: *mut u8,
+    s_ptr: *const u8, _s_td: *const u8,
+    start_ptr: *const u8, _start_td: *const u8,
+    out: *mut u8, _out_td: *const u8,
+) -> u8 {
+    let s = unsafe { as_str(s_ptr) };
+    let start = unsafe { *(start_ptr as *const rtdt::Index) }.as_usize();
+    if start > s.len() || !s.is_char_boundary(start) {
+        unsafe { rider_helpers::write_option_none(out) };
+        return OK;
+    }
+    let status = unsafe { rider_helpers::write_option_some_string(rt, out, &s[start..]) };
+    status as u8
+}
+
+#[no_mangle]
+pub extern "C-unwind" fn dlr_std__string_slice_to(
+    rt: *mut u8,
+    s_ptr: *const u8, _s_td: *const u8,
+    end_ptr: *const u8, _end_td: *const u8,
+    out: *mut u8, _out_td: *const u8,
+) -> u8 {
+    let s = unsafe { as_str(s_ptr) };
+    let end = unsafe { *(end_ptr as *const rtdt::Index) }.as_usize();
+    if end > s.len() || !s.is_char_boundary(end) {
+        unsafe { rider_helpers::write_option_none(out) };
+        return OK;
+    }
+    let status = unsafe { rider_helpers::write_option_some_string(rt, out, &s[..end]) };
+    status as u8
+}
+
+// --- Parsing ---
+
+#[no_mangle]
+pub extern "C-unwind" fn dlr_std__string_parse_u32(
+    _rt: *mut u8,
+    s_ptr: *const u8, _s_td: *const u8,
+    out: *mut u8, _out_td: *const u8,
+) -> u8 {
+    let s = unsafe { as_str(s_ptr) };
+    match s.parse::<u32>() {
+        Ok(val) => unsafe { rider_helpers::write_option_some(out, val) },
+        Err(_) => unsafe { rider_helpers::write_option_none(out) },
+    }
+    OK
+}
+
+#[no_mangle]
+pub extern "C-unwind" fn dlr_std__string_parse_i32(
+    _rt: *mut u8,
+    s_ptr: *const u8, _s_td: *const u8,
+    out: *mut u8, _out_td: *const u8,
+) -> u8 {
+    let s = unsafe { as_str(s_ptr) };
+    match s.parse::<i32>() {
+        Ok(val) => unsafe { rider_helpers::write_option_some(out, val) },
+        Err(_) => unsafe { rider_helpers::write_option_none(out) },
+    }
+    OK
+}
+
+#[no_mangle]
+pub extern "C-unwind" fn dlr_std__string_parse_f32(
+    _rt: *mut u8,
+    s_ptr: *const u8, _s_td: *const u8,
+    out: *mut u8, _out_td: *const u8,
+) -> u8 {
+    let s = unsafe { as_str(s_ptr) };
+    match s.parse::<f32>() {
+        Ok(val) => unsafe { rider_helpers::write_option_some(out, val) },
+        Err(_) => unsafe { rider_helpers::write_option_none(out) },
+    }
+    OK
+}
+
+// --- Formatting ---
+
+#[no_mangle]
+pub extern "C-unwind" fn dlr_std__string_from_u32(
+    rt: *mut u8,
+    n_ptr: *const u8, _n_td: *const u8,
+    out: *mut u8, out_td: *const u8,
+) -> u8 {
+    let n = unsafe { *(n_ptr as *const u32) };
+    let s = n.to_string();
+    unsafe { write_string_result(rt, out, out_td, &s) }
+}
+
+#[no_mangle]
+pub extern "C-unwind" fn dlr_std__string_from_i32(
+    rt: *mut u8,
+    n_ptr: *const u8, _n_td: *const u8,
+    out: *mut u8, out_td: *const u8,
+) -> u8 {
+    let n = unsafe { *(n_ptr as *const i32) };
+    let s = n.to_string();
+    unsafe { write_string_result(rt, out, out_td, &s) }
+}
+
 // --- Construction ---
 
 #[no_mangle]

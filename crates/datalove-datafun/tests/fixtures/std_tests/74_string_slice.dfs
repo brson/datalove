@@ -1,0 +1,14 @@
+require module sys/std/string
+
+import string.slice
+import string.slice_from
+import string.slice_to
+
+let s = "hello world"
+let mid = slice(s, : index / 6, : index / 11)
+let tail = slice_from(s, : index / 6)
+let head = slice_to(s, : index / 5)
+let bad = slice(s, : index / 3, : index / 1)
+let oob = slice_from(s, : index / 99)
+
+let output = (mid, tail, head, bad, oob)

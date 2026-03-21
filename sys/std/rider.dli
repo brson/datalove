@@ -67,3 +67,21 @@ native fun string_truncate(mut self: string, new_len: index)
 native fun string_remove(mut self: string, index: index): ?u32
 native fun string_insert_char(mut self: string, index: index, ch: u32)
 native fun string_insert_str(mut self: string, index: index, ref other: string)
+
+// Character access.
+native fun string_char_at(ref self: string, index: index): ?u32
+native fun string_char_to_byte_index(ref self: string, index: index): ?index
+
+// Slicing.
+native fun string_slice(ref self: string, start: index, end_idx: index): ?string
+native fun string_slice_from(ref self: string, start: index): ?string
+native fun string_slice_to(ref self: string, end_idx: index): ?string
+
+// Parsing.
+native fun string_parse_u32(ref self: string): ?u32
+native fun string_parse_i32(ref self: string): ?i32
+native fun string_parse_f32(ref self: string): ?f32
+
+// Formatting.
+native fun string_from_u32(n: u32): string
+native fun string_from_i32(n: i32): string

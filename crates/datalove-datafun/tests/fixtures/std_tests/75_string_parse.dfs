@@ -1,0 +1,18 @@
+require module sys/std/string
+
+import string.parse_u32
+import string.parse_i32
+import string.parse_f32
+
+let u1 = parse_u32("42")
+let u2 = parse_u32("abc")
+let u3 = parse_u32("")
+
+let i1 = parse_i32("-7")
+let i2 = parse_i32("100")
+let i3 = parse_i32("xyz")
+
+let f1 = parse_f32("3.14")
+let f2 = parse_f32("bad")
+
+let output = (u1, u2, u3, i1, i2, i3, f1, f2)

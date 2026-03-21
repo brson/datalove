@@ -1,0 +1,11 @@
+require module sys/std/string
+
+import string.from_u32
+import string.from_i32
+
+let a = from_u32(: u32 / 42)
+let b = from_u32(: u32 / 0)
+let c = from_i32(: i32 / -7)
+let d = from_i32(: i32 / 100)
+
+let output = (a, b, c, d)

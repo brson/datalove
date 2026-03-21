@@ -40,6 +40,16 @@ import std.string_truncate
 import std.string_remove
 import std.string_insert_char
 import std.string_insert_str
+import std.string_char_at
+import std.string_char_to_byte_index
+import std.string_slice
+import std.string_slice_from
+import std.string_slice_to
+import std.string_parse_u32
+import std.string_parse_i32
+import std.string_parse_f32
+import std.string_from_u32
+import std.string_from_i32
 
 // --- Basic Properties ---
 
@@ -68,40 +78,30 @@ fun char_count(ref self: string): index
 end fun
 
 // Returns the character (codepoint) at the given character index, or none if out of bounds.
-// intrinsic needed: string_char_at(ref string, index) -> ?u32
 fun get_char(ref self: string, index: index): ?u32
-  // TODO: icall string_char_at(self, index)
-  ret none
+  ret string_char_at(self, index)
 end fun
 
 // Returns the byte index of the n-th character, or none if out of bounds.
-// intrinsic needed: string_char_to_byte_index(ref string, index) -> ?index
 fun find_char(ref self: string, char_index: index): ?index
-  // TODO: icall string_char_to_byte_index(self, char_index)
-  ret none
+  ret string_char_to_byte_index(self, char_index)
 end fun
 
 // --- Slicing ---
 
 // Returns a substring by byte range, or none if invalid or not on char boundary.
-// intrinsic needed: string_slice(ref string, index, index) -> ?string
 fun slice(ref self: string, start: index, end_idx: index): ?string
-  // TODO: icall string_slice(self, start, end_idx)
-  ret none
+  ret string_slice(self, start, end_idx)
 end fun
 
 // Returns a substring from start to end of string.
-// intrinsic needed: string_slice_from(ref string, index) -> ?string
 fun slice_from(ref self: string, start: index): ?string
-  // TODO: icall string_slice_from(self, start)
-  ret none
+  ret string_slice_from(self, start)
 end fun
 
 // Returns a substring from beginning to end index.
-// intrinsic needed: string_slice_to(ref string, index) -> ?string
 fun slice_to(ref self: string, end_idx: index): ?string
-  // TODO: icall string_slice_to(self, end_idx)
-  ret none
+  ret string_slice_to(self, end_idx)
 end fun
 
 // --- Searching ---
@@ -347,24 +347,18 @@ fun parse_int(ref self: string): ?int
 end fun
 
 // Parses the string as u32.
-// intrinsic needed: string_parse_u32(ref string) -> ?u32
 fun parse_u32(ref self: string): ?u32
-  // TODO: icall string_parse_u32(self)
-  ret none
+  ret string_parse_u32(self)
 end fun
 
 // Parses the string as i32.
-// intrinsic needed: string_parse_i32(ref string) -> ?i32
 fun parse_i32(ref self: string): ?i32
-  // TODO: icall string_parse_i32(self)
-  ret none
+  ret string_parse_i32(self)
 end fun
 
 // Parses the string as f32.
-// intrinsic needed: string_parse_f32(ref string) -> ?f32
 fun parse_f32(ref self: string): ?f32
-  // TODO: icall string_parse_f32(self)
-  ret none
+  ret string_parse_f32(self)
 end fun
 
 // Parses the string as bool ("true" or "false").
@@ -390,17 +384,13 @@ fun from_int(n: int): string
 end fun
 
 // Converts u32 to string.
-// intrinsic needed: u32_to_string(u32) -> string
 fun from_u32(n: u32): string
-  // TODO: icall u32_to_string(n)
-  ret ""
+  ret string_from_u32(n)
 end fun
 
 // Converts i32 to string.
-// intrinsic needed: i32_to_string(i32) -> string
 fun from_i32(n: i32): string
-  // TODO: icall i32_to_string(n)
-  ret ""
+  ret string_from_i32(n)
 end fun
 
 // Converts bool to "true" or "false".
