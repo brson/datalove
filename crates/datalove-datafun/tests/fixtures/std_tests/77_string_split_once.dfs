@@ -1,0 +1,12 @@
+require module sys/std/string
+
+import string.split_once
+import string.rsplit_once
+
+let a = split_once("hello=world", "=")
+let b = split_once("no delimiter here", "=")
+let c = split_once("a::b::c", "::")
+let d = rsplit_once("a::b::c", "::")
+let e = rsplit_once("no delimiter", "::")
+
+let output = (a, b, c, d, e)

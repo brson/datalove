@@ -85,3 +85,7 @@ native fun string_parse_f32(ref self: string): ?f32
 // Formatting.
 native fun string_from_u32(n: u32): string
 native fun string_from_i32(n: i32): string
+
+// Splitting (option-of-tuple).
+native fun string_split_once(ref self: string, ref delimiter: string): ?(string, string)
+native fun string_rsplit_once(ref self: string, ref delimiter: string): ?(string, string)

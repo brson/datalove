@@ -50,6 +50,8 @@ import std.string_parse_i32
 import std.string_parse_f32
 import std.string_from_u32
 import std.string_from_i32
+import std.string_split_once
+import std.string_rsplit_once
 
 // --- Basic Properties ---
 
@@ -264,17 +266,13 @@ end fun
 // --- Splitting ---
 
 // Splits on the first occurrence, returns (before, after) or none if not found.
-// intrinsic needed: string_split_once(ref string, ref string) -> ?(string, string)
 fun split_once(ref self: string, ref delimiter: string): ?(string, string)
-  // TODO: icall string_split_once(self, delimiter)
-  ret none
+  ret string_split_once(self, delimiter)
 end fun
 
 // Splits on the last occurrence, returns (before, after) or none if not found.
-// intrinsic needed: string_rsplit_once(ref string, ref string) -> ?(string, string)
 fun rsplit_once(ref self: string, ref delimiter: string): ?(string, string)
-  // TODO: icall string_rsplit_once(self, delimiter)
-  ret none
+  ret string_rsplit_once(self, delimiter)
 end fun
 
 // Splits into a list of strings by delimiter.

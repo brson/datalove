@@ -694,6 +694,50 @@ pub extern "C-unwind" fn dlr_std__string_insert_str(
     OK
 }
 
+// --- Splitting (option-of-tuple) ---
+
+#[no_mangle]
+pub extern "C-unwind" fn dlr_std__string_split_once(
+    rt: *mut u8,
+    s_ptr: *const u8, _s_td: *const u8,
+    delim_ptr: *const u8, _delim_td: *const u8,
+    out: *mut u8, _out_td: *const u8,
+) -> u8 {
+    let s = unsafe { as_str(s_ptr) };
+    let delim = unsafe { as_str(delim_ptr) };
+    match s.split_once(delim) {
+        Some((before, after)) => {
+            let status = unsafe { rider_helpers::write_option_some_string_pair(rt, out, before, after) };
+            status as u8
+        }
+        None => {
+            unsafe { rider_helpers::write_option_none(out) };
+            OK
+        }
+    }
+}
+
+#[no_mangle]
+pub extern "C-unwind" fn dlr_std__string_rsplit_once(
+    rt: *mut u8,
+    s_ptr: *const u8, _s_td: *const u8,
+    delim_ptr: *const u8, _delim_td: *const u8,
+    out: *mut u8, _out_td: *const u8,
+) -> u8 {
+    let s = unsafe { as_str(s_ptr) };
+    let delim = unsafe { as_str(delim_ptr) };
+    match s.rsplit_once(delim) {
+        Some((before, after)) => {
+            let status = unsafe { rider_helpers::write_option_some_string_pair(rt, out, before, after) };
+            status as u8
+        }
+        None => {
+            unsafe { rider_helpers::write_option_none(out) };
+            OK
+        }
+    }
+}
+
 // --- Character access ---
 
 #[no_mangle]
