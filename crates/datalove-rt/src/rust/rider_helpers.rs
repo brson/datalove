@@ -135,9 +135,11 @@ pub unsafe fn write_option_some_string_pair(
 unsafe fn write_string_at(rt: LocalRtHandle, dest: *mut u8, s: &str) -> RtStatus {
     if s.is_empty() {
         let string_ptr = dest as *mut rtdt::String;
-        (*string_ptr).data = std::ptr::null();
-        (*string_ptr).size = rtdt::Index::ZERO;
-        (*string_ptr).capacity = rtdt::Index::ZERO;
+        unsafe {
+            (*string_ptr).data = std::ptr::null();
+            (*string_ptr).size = rtdt::Index::ZERO;
+            (*string_ptr).capacity = rtdt::Index::ZERO;
+        }
         RtStatus::Ok
     } else {
         let tydesc = rtdt::TyDesc {
@@ -146,13 +148,15 @@ unsafe fn write_string_at(rt: LocalRtHandle, dest: *mut u8, s: &str) -> RtStatus
             align: std::mem::align_of::<rtdt::String>() as u32,
             type_info: rtdt::TyInfo { nothing: rtdt::TyInfoNothing },
         };
-        crate::impls::string::string_from_bytes(
-            rt,
-            s.as_ptr(),
-            s.len() as rtdt::IndexRepr,
-            dest,
-            &tydesc,
-        )
+        unsafe {
+            crate::impls::string::string_from_bytes(
+                rt,
+                s.as_ptr(),
+                s.len() as rtdt::IndexRepr,
+                dest,
+                &tydesc,
+            )
+        }
     }
 }
 
