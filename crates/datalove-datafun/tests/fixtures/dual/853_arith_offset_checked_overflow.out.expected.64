@@ -17,17 +17,17 @@ DualAnalysis(
                         v1 = const -2147483648offset
                         v2 = const 1offset
                         v3 = const 0offset
-                        v4 = call @0 f1(v0, v2)
+                        v4 = call @0 u1(v0, v2)
                         v5 = const 999offset
-                        v6 = call @1 f0(v4, v5)
+                        v6 = call @1 u0(v4, v5)
                         debuglog v6
-                        v7 = call @2 f2(v1, v2)
+                        v7 = call @2 u2(v1, v2)
                         v8 = const 999offset
-                        v9 = call @3 f0(v7, v8)
+                        v9 = call @3 u0(v7, v8)
                         debuglog v9
-                        v10 = call @4 f3(v2, v3)
+                        v10 = call @4 u3(v2, v3)
                         v11 = const 999offset
-                        v12 = call @5 f0(v10, v11)
+                        v12 = call @5 u0(v10, v11)
                         debuglog v12
                         unit_end
                     
@@ -43,6 +43,7 @@ DualAnalysis(
                     block3:
                         v3 = copy p1
                         return v3
+                    
                     fn checked_add(p0, p1):
                     block0:
                         v0, v1 = add.checked p0, p1
@@ -53,6 +54,7 @@ DualAnalysis(
                     block2:
                         v3 = some v0
                         return v3
+                    
                     fn checked_sub(p0, p1):
                     block0:
                         v0, v1 = sub.checked p0, p1
@@ -63,6 +65,7 @@ DualAnalysis(
                     block2:
                         v3 = some v0
                         return v3
+                    
                     fn checked_div(p0, p1):
                     block0:
                         v0, v1 = div.checked p0, p1
@@ -73,15 +76,6 @@ DualAnalysis(
                     block2:
                         v3 = some v0
                         return v3
-                    exports:
-                        unwrap_offset = f0
-                        checked_add = f1
-                        checked_sub = f2
-                        checked_div = f3
-                        max = v0
-                        min = v1
-                        one = v2
-                        zero = v3
                 """,
             ),
             aot_lowering: LoweringResult(
@@ -93,17 +87,17 @@ DualAnalysis(
                         v1 = const -2147483648offset
                         v2 = const 1offset
                         v3 = const 0offset
-                        v4 = call @0 f1(v0, v2)
+                        v4 = call @0 u1(v0, v2)
                         v5 = const 999offset
-                        v6 = call @1 f0(v4, v5)
+                        v6 = call @1 u0(v4, v5)
                         debuglog v6
-                        v7 = call @2 f2(v1, v2)
+                        v7 = call @2 u2(v1, v2)
                         v8 = const 999offset
-                        v9 = call @3 f0(v7, v8)
+                        v9 = call @3 u0(v7, v8)
                         debuglog v9
-                        v10 = call @4 f3(v2, v3)
+                        v10 = call @4 u3(v2, v3)
                         v11 = const 999offset
-                        v12 = call @5 f0(v10, v11)
+                        v12 = call @5 u0(v10, v11)
                         debuglog v12
                         unit_end
                     
@@ -119,6 +113,7 @@ DualAnalysis(
                     block3:
                         v3 = copy p1
                         return v3
+                    
                     fn checked_add(p0, p1):
                     block0:
                         v0, v1 = add.checked p0, p1
@@ -129,6 +124,7 @@ DualAnalysis(
                     block2:
                         v3 = some v0
                         return v3
+                    
                     fn checked_sub(p0, p1):
                     block0:
                         v0, v1 = sub.checked p0, p1
@@ -139,6 +135,7 @@ DualAnalysis(
                     block2:
                         v3 = some v0
                         return v3
+                    
                     fn checked_div(p0, p1):
                     block0:
                         v0, v1 = div.checked p0, p1
@@ -149,15 +146,6 @@ DualAnalysis(
                     block2:
                         v3 = some v0
                         return v3
-                    exports:
-                        unwrap_offset = f0
-                        checked_add = f1
-                        checked_sub = f2
-                        checked_div = f3
-                        max = v0
-                        min = v1
-                        one = v2
-                        zero = v3
                 """,
             ),
             ir_match: true,

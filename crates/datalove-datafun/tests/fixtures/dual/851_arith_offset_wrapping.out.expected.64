@@ -92,13 +92,6 @@ DualAnalysis(
                     block16:
                         debuglog v41
                         unit_end
-                    exports:
-                        a = v0
-                        b = v1
-                        c = v2
-                        max = v33
-                        one = v34
-                        min = v40
                 """,
             ),
             aot_lowering: LoweringResult(
@@ -185,13 +178,6 @@ DualAnalysis(
                     block16:
                         debuglog v41
                         unit_end
-                    exports:
-                        a = v0
-                        b = v1
-                        c = v2
-                        max = v33
-                        one = v34
-                        min = v40
                 """,
             ),
             ir_match: true,

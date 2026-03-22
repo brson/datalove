@@ -16,17 +16,17 @@ DualAnalysis(
                         v0 = const 4294967295index
                         v1 = const 1index
                         v2 = const 0index
-                        v3 = call @0 f1(v0, v1)
+                        v3 = call @0 u1(v0, v1)
                         v4 = const 999index
-                        v5 = call @1 f0(v3, v4)
+                        v5 = call @1 u0(v3, v4)
                         debuglog v5
-                        v6 = call @2 f2(v2, v1)
+                        v6 = call @2 u2(v2, v1)
                         v7 = const 999index
-                        v8 = call @3 f0(v6, v7)
+                        v8 = call @3 u0(v6, v7)
                         debuglog v8
-                        v9 = call @4 f3(v1, v2)
+                        v9 = call @4 u3(v1, v2)
                         v10 = const 999index
-                        v11 = call @5 f0(v9, v10)
+                        v11 = call @5 u0(v9, v10)
                         debuglog v11
                         unit_end
                     
@@ -42,6 +42,7 @@ DualAnalysis(
                     block3:
                         v3 = copy p1
                         return v3
+                    
                     fn checked_add(p0, p1):
                     block0:
                         v0, v1 = add.checked p0, p1
@@ -52,6 +53,7 @@ DualAnalysis(
                     block2:
                         v3 = some v0
                         return v3
+                    
                     fn checked_sub(p0, p1):
                     block0:
                         v0, v1 = sub.checked p0, p1
@@ -62,6 +64,7 @@ DualAnalysis(
                     block2:
                         v3 = some v0
                         return v3
+                    
                     fn checked_div(p0, p1):
                     block0:
                         v0, v1 = div.checked p0, p1
@@ -72,14 +75,6 @@ DualAnalysis(
                     block2:
                         v3 = some v0
                         return v3
-                    exports:
-                        unwrap_index = f0
-                        checked_add = f1
-                        checked_sub = f2
-                        checked_div = f3
-                        max = v0
-                        one = v1
-                        zero = v2
                 """,
             ),
             aot_lowering: LoweringResult(
@@ -90,17 +85,17 @@ DualAnalysis(
                         v0 = const 4294967295index
                         v1 = const 1index
                         v2 = const 0index
-                        v3 = call @0 f1(v0, v1)
+                        v3 = call @0 u1(v0, v1)
                         v4 = const 999index
-                        v5 = call @1 f0(v3, v4)
+                        v5 = call @1 u0(v3, v4)
                         debuglog v5
-                        v6 = call @2 f2(v2, v1)
+                        v6 = call @2 u2(v2, v1)
                         v7 = const 999index
-                        v8 = call @3 f0(v6, v7)
+                        v8 = call @3 u0(v6, v7)
                         debuglog v8
-                        v9 = call @4 f3(v1, v2)
+                        v9 = call @4 u3(v1, v2)
                         v10 = const 999index
-                        v11 = call @5 f0(v9, v10)
+                        v11 = call @5 u0(v9, v10)
                         debuglog v11
                         unit_end
                     
@@ -116,6 +111,7 @@ DualAnalysis(
                     block3:
                         v3 = copy p1
                         return v3
+                    
                     fn checked_add(p0, p1):
                     block0:
                         v0, v1 = add.checked p0, p1
@@ -126,6 +122,7 @@ DualAnalysis(
                     block2:
                         v3 = some v0
                         return v3
+                    
                     fn checked_sub(p0, p1):
                     block0:
                         v0, v1 = sub.checked p0, p1
@@ -136,6 +133,7 @@ DualAnalysis(
                     block2:
                         v3 = some v0
                         return v3
+                    
                     fn checked_div(p0, p1):
                     block0:
                         v0, v1 = div.checked p0, p1
@@ -146,14 +144,6 @@ DualAnalysis(
                     block2:
                         v3 = some v0
                         return v3
-                    exports:
-                        unwrap_index = f0
-                        checked_add = f1
-                        checked_sub = f2
-                        checked_div = f3
-                        max = v0
-                        one = v1
-                        zero = v2
                 """,
             ),
             ir_match: true,
