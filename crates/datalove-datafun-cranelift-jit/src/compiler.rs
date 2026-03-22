@@ -21,6 +21,30 @@ use datalove_datafun_cranelift::types::PTR_TYPE;
 use crate::trampoline::{self, EncodedFuncKey};
 use crate::JitError;
 
+/// Size of the contiguous memory arena for JIT code and data.
+///
+/// All JIT-compiled code and associated data (type descriptors, constants) are
+/// allocated from this arena so that PC-relative references between them stay
+/// within the x86_64 32-bit offset limit. If compilation fails with "jit memory
+/// region exhausted", increase this value.
+const JIT_ARENA_SIZE: usize = 64 * 1024 * 1024;
+
+/// Wrap a JIT compilation error with context about arena exhaustion.
+///
+/// When the arena runs out of space, cranelift reports a generic allocation
+/// error. This annotates it so the user knows the arena size can be increased.
+fn jit_err(context: &str, err: impl std::fmt::Display) -> JitError {
+    let msg = err.to_string();
+    if msg.contains("region exhausted") {
+        JitError::CompilationFailed(format!(
+            "{context}: {msg} (JIT arena is {}MB — increase JIT_ARENA_SIZE if programs are large)",
+            JIT_ARENA_SIZE / (1024 * 1024),
+        ))
+    } else {
+        JitError::CompilationFailed(format!("{context}: {msg}"))
+    }
+}
+
 /// JIT compiler using Cranelift.
 pub struct JitCompiler {
     /// JIT module for in-memory code generation.
@@ -32,7 +56,6 @@ pub struct JitCompiler {
     /// Type descriptor emitter.
     tydesc_emitter: TyDescEmitter,
     /// Dispatch function FuncId (for JIT->interpreter calls).
-    #[allow(dead_code)]
     dispatch_func_id: FuncId,
     /// Shared native symbol table for rider functions.
     ///
@@ -72,6 +95,18 @@ impl JitCompiler {
         // Build JIT module with all required symbols registered.
         let mut jit_builder = JITBuilder::with_isa(isa.clone(), cranelift_module::default_libcall_names());
 
+        // Use ArenaMemoryProvider to allocate code and data from a single
+        // contiguous region. The default SystemMemoryProvider uses separate
+        // mmap regions for code and data which can land >2GB apart on x86_64,
+        // causing 32-bit PC-relative relocations to overflow.
+        let arena = cranelift_jit::ArenaMemoryProvider::new_with_size(JIT_ARENA_SIZE)
+            .map_err(|e| JitError::CompilationFailed(format!(
+                "failed to reserve {}MB JIT arena: {e}. \
+                 The JIT compiler requires a contiguous memory region for code and data.",
+                JIT_ARENA_SIZE / (1024 * 1024),
+            )))?;
+        jit_builder.memory_provider(Box::new(arena));
+
         // Register the dispatch function so JIT code can call it.
         jit_builder.symbol("__jit_dispatch_call", trampoline::dispatch_fn_ptr());
 
@@ -89,7 +124,7 @@ impl JitCompiler {
 
         // Declare runtime imports.
         let call_conv = isa.default_call_conv();
-        let runtime = RuntimeImports::declare(&mut jit_module, call_conv)
+        let mut runtime = RuntimeImports::declare(&mut jit_module, call_conv)
             .map_err(|e| JitError::CompilationFailed(format!("runtime imports: {}", e)))?;
 
         // Declare the dispatch function signature.
@@ -106,6 +141,16 @@ impl JitCompiler {
         let dispatch_func_id = jit_module
             .declare_function("__jit_dispatch_call", Linkage::Import, &dispatch_sig)
             .map_err(|e| JitError::CompilationFailed(format!("declare dispatch: {}", e)))?;
+
+        // Replace all imported FuncIds with local indirect-call trampolines.
+        // On x86_64, cranelift-jit uses 32-bit PC-relative relocations for
+        // imports, which overflow when the target is >2GB from JIT memory.
+        trampoline_all_runtime_imports(&mut jit_module, &mut runtime)?;
+        let dispatch_func_id = trampoline_import(
+            &mut jit_module,
+            dispatch_func_id,
+            trampoline::dispatch_fn_ptr() as u64,
+        )?;
 
         let tydesc_emitter = TyDescEmitter::new();
 
@@ -135,7 +180,7 @@ impl JitCompiler {
         tydesc_emit::collect_types_from_code_unit(func, &mut types);
 
         self.tydesc_emitter.emit_all(&mut self.jit_module, types)
-            .map_err(|e| JitError::CompilationFailed(format!("tydesc emit: {}", e)))?;
+            .map_err(|e| jit_err("tydesc emit", e))?;
 
         // Build a FunctionCompiler for this function.
         let compiler = codegen::FunctionCompiler::new_with_runtime_and_tydescs(
@@ -149,11 +194,11 @@ impl JitCompiler {
 
         // Compile and get the Cranelift FuncId.
         let cl_func_id = compiler.compile()
-            .map_err(|e| JitError::CompilationFailed(format!("compile: {}", e)))?;
+            .map_err(|e| jit_err("compile", e))?;
 
         // Finalize to get executable code.
         self.jit_module.finalize_definitions()
-            .map_err(|e| JitError::CompilationFailed(format!("finalize: {}", e)))?;
+            .map_err(|e| jit_err("finalize", e))?;
 
         // Get the code pointer and size.
         let code_ptr = self.jit_module.get_finalized_function(cl_func_id);
@@ -200,13 +245,17 @@ impl JitCompiler {
             // Collect types from callee for TyDesc emission.
             tydesc_emit::collect_types_from_code_unit(&callee_ir, &mut types);
 
-            // Native rider functions: declare as imports with C ABI signature
-            // instead of creating trampoline stubs.
+            // Native rider functions: create local trampoline stubs that use
+            // indirect calls via absolute address. Direct imports would require
+            // 32-bit relative relocations which can overflow if the shared
+            // library is loaded >2GB from JIT code memory.
             if let Some(native_ctx) = callee_ir.native_context() {
                 let sig = codegen::build_native_signature(native_ctx, self.isa.as_ref());
-                let func_id = self.jit_module
-                    .declare_function(&native_ctx.symbol, Linkage::Import, &sig)
-                    .map_err(|e| JitError::CompilationFailed(format!("declare native: {}", e)))?;
+                let addr = self.native_symbols.lock().unwrap()
+                    .get(&native_ctx.symbol)
+                    .map(|p| p.0 as u64)
+                    .unwrap_or_else(|| panic!("native symbol not registered: {}", native_ctx.symbol));
+                let func_id = self.create_native_trampoline(&native_ctx.symbol, &sig, addr)?;
                 if let CodeRef::Module { module, id } = &code_ref {
                     module_funcs.insert((*module, CodeUnitId(id.0)), func_id);
                 }
@@ -235,7 +284,7 @@ impl JitCompiler {
 
         // Emit TyDescs for all collected types.
         self.tydesc_emitter.emit_all(&mut self.jit_module, types)
-            .map_err(|e| JitError::CompilationFailed(format!("tydesc emit: {}", e)))?;
+            .map_err(|e| jit_err("tydesc emit", e))?;
 
         // Build a FunctionCompiler with stub mappings.
         let mut compiler = codegen::FunctionCompiler::new_with_runtime_and_tydescs(
@@ -251,11 +300,11 @@ impl JitCompiler {
 
         // Compile and get the Cranelift FuncId.
         let cl_func_id = compiler.compile()
-            .map_err(|e| JitError::CompilationFailed(format!("compile: {}", e)))?;
+            .map_err(|e| jit_err("compile", e))?;
 
         // Finalize to get executable code.
         self.jit_module.finalize_definitions()
-            .map_err(|e| JitError::CompilationFailed(format!("finalize: {}", e)))?;
+            .map_err(|e| jit_err("finalize", e))?;
 
         // Get the code pointer and size.
         let code_ptr = self.jit_module.get_finalized_function(cl_func_id);
@@ -286,6 +335,20 @@ impl JitCompiler {
         targets
     }
 
+    /// Create a local trampoline for a native rider function.
+    ///
+    /// Uses an indirect call with an absolute address to avoid 32-bit
+    /// relative relocation overflow when the shared library is far from
+    /// JIT code memory.
+    fn create_native_trampoline(
+        &mut self,
+        symbol: &str,
+        sig: &cl_ir::Signature,
+        addr: u64,
+    ) -> Result<FuncId, JitError> {
+        create_indirect_trampoline(&mut self.jit_module, symbol, sig, addr)
+    }
+
     /// Create a stub function for a callee that dispatches through the trampoline.
     ///
     /// The stub has the same signature as the callee and internally calls
@@ -306,7 +369,7 @@ impl JitCompiler {
         // Declare the stub.
         let stub_id = self.jit_module
             .declare_function(&stub_name, Linkage::Local, &sig)
-            .map_err(|e| JitError::CompilationFailed(format!("declare stub: {}", e)))?;
+            .map_err(|e| jit_err("declare stub", e))?;
 
         // Define the stub.
         self.define_stub(stub_id, code_ref, callee, &sig)?;
@@ -417,7 +480,7 @@ impl JitCompiler {
 
         self.jit_module
             .define_function(stub_id, &mut ctx)
-            .map_err(|e| JitError::CompilationFailed(format!("define stub: {}", e)))?;
+            .map_err(|e| jit_err("define stub", e))?;
 
         Ok(())
     }
@@ -446,6 +509,141 @@ fn estimate_code_size(func: &IrCodeUnit) -> usize {
         .unwrap_or(0);
 
     base + overhead + param_overhead
+}
+
+/// Create a local trampoline function that calls an external address indirectly.
+///
+/// On x86_64, cranelift-jit uses 32-bit PC-relative relocations for imported
+/// functions. When the target symbol is in the main binary or a shared library
+/// loaded >2GB from JIT code memory, these relocations overflow. This function
+/// creates a local trampoline in JIT memory that uses `call_indirect` with the
+/// absolute address, avoiding PC-relative relocations entirely.
+fn create_indirect_trampoline(
+    jit_module: &mut JITModule,
+    symbol: &str,
+    sig: &cl_ir::Signature,
+    addr: u64,
+) -> Result<FuncId, JitError> {
+    static TRAMP_COUNTER: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+    let num = TRAMP_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let tramp_name = format!("__jit_tramp_{}_{}", symbol, num);
+
+    // Declare as local so it lives in JIT memory.
+    let tramp_id = jit_module
+        .declare_function(&tramp_name, Linkage::Local, sig)
+        .map_err(|e| jit_err("declare trampoline", e))?;
+
+    // Build a function that loads the absolute address and does call_indirect.
+    let mut cl_func = cl_ir::Function::with_name_signature(
+        cl_ir::UserFuncName::user(0, tramp_id.as_u32()),
+        sig.clone(),
+    );
+
+    let mut fb_ctx = FunctionBuilderContext::new();
+    let mut builder = FunctionBuilder::new(&mut cl_func, &mut fb_ctx);
+
+    let entry_block = builder.create_block();
+    builder.append_block_params_for_function_params(entry_block);
+    builder.switch_to_block(entry_block);
+    builder.seal_block(entry_block);
+
+    let params: Vec<_> = builder.block_params(entry_block).to_vec();
+
+    // Load absolute address of the target function.
+    let addr_val = builder.ins().iconst(cl_types::I64, addr as i64);
+
+    // Declare the signature for the indirect call.
+    let sig_ref = builder.import_signature(sig.clone());
+
+    // Call indirectly through the absolute address.
+    let call = builder.ins().call_indirect(sig_ref, addr_val, &params);
+
+    // Return the result (if any).
+    let results: Vec<_> = builder.inst_results(call).to_vec();
+    builder.ins().return_(&results);
+
+    builder.finalize();
+
+    // Define the function in the JIT module.
+    let mut ctx = cranelift_codegen::Context::for_function(cl_func);
+    jit_module.define_function(tramp_id, &mut ctx)
+        .map_err(|e| jit_err("define trampoline", e))?;
+
+    Ok(tramp_id)
+}
+
+/// Replace an imported FuncId with a local trampoline that calls the import indirectly.
+///
+/// Looks up the function's signature from the module declarations and creates
+/// a trampoline using the given absolute address.
+fn trampoline_import(
+    jit_module: &mut JITModule,
+    func_id: FuncId,
+    addr: u64,
+) -> Result<FuncId, JitError> {
+    let decl = jit_module.declarations().get_function_decl(func_id);
+    let name = decl.linkage_name(func_id).into_owned();
+    let sig = decl.signature.clone();
+    create_indirect_trampoline(jit_module, &name, &sig, addr)
+}
+
+/// Replace all RuntimeImports FuncIds with local indirect-call trampolines.
+fn trampoline_all_runtime_imports(
+    jit_module: &mut JITModule,
+    runtime: &mut RuntimeImports,
+) -> Result<(), JitError> {
+    use datalove_rt::c;
+
+    /// Helper to trampoline a single field.
+    fn tramp(
+        jit_module: &mut JITModule,
+        field: &mut FuncId,
+        addr: *const u8,
+    ) -> Result<(), JitError> {
+        *field = trampoline_import(jit_module, *field, addr as u64)?;
+        Ok(())
+    }
+
+    tramp(jit_module, &mut runtime.init, c::dtlv_rti_init as *const u8)?;
+    tramp(jit_module, &mut runtime.shutdown, c::dtlv_rti_shutdown as *const u8)?;
+    tramp(jit_module, &mut runtime.set_debug_mode, c::dtlv_rti_set_debug_mode as *const u8)?;
+    tramp(jit_module, &mut runtime.debuglog_local, c::dtlv_rti_debuglog_local as *const u8)?;
+    tramp(jit_module, &mut runtime.destroy_local, c::dtlv_rti_any_destroy_local as *const u8)?;
+    tramp(jit_module, &mut runtime.mem_alloc_raw, c::dtlv_rti_mem_alloc_raw_local as *const u8)?;
+    tramp(jit_module, &mut runtime.string_create, c::dtlv_rti_string_create_local as *const u8)?;
+    tramp(jit_module, &mut runtime.string_push_bytes, c::dtlv_rti_string_push_bytes_local as *const u8)?;
+    tramp(jit_module, &mut runtime.string_from_bytes, c::dtlv_rti_string_from_bytes as *const u8)?;
+    tramp(jit_module, &mut runtime.list_create, c::dtlv_rti_list_create_local as *const u8)?;
+    tramp(jit_module, &mut runtime.list_push, c::dtlv_rti_list_push_local as *const u8)?;
+    tramp(jit_module, &mut runtime.list_build_from_slice, c::dtlv_rti_list_build_from_slice_local as *const u8)?;
+    tramp(jit_module, &mut runtime.set_create, c::dtlv_rti_btreeset_create_local as *const u8)?;
+    tramp(jit_module, &mut runtime.set_insert, c::dtlv_rti_btreeset_insert_local as *const u8)?;
+    tramp(jit_module, &mut runtime.set_build_from_sorted, c::dtlv_rti_btreeset_build_from_sorted_slice_local as *const u8)?;
+    tramp(jit_module, &mut runtime.map_create, c::dtlv_rti_btreemap_create_local as *const u8)?;
+    tramp(jit_module, &mut runtime.map_insert, c::dtlv_rti_btreemap_insert_local as *const u8)?;
+    tramp(jit_module, &mut runtime.map_build_from_sorted, c::dtlv_rti_btreemap_build_from_sorted_slices_local as *const u8)?;
+    tramp(jit_module, &mut runtime.map_contains_key, c::dtlv_rti_btreemap_contains_key_local as *const u8)?;
+    tramp(jit_module, &mut runtime.map_get_value_ref, c::dtlv_rti_btreemap_get_value_ref_local as *const u8)?;
+    tramp(jit_module, &mut runtime.map_set_value, c::dtlv_rti_btreemap_set_value_local as *const u8)?;
+    tramp(jit_module, &mut runtime.tensor_init, c::dtlv_rti_tensor_init_local as *const u8)?;
+    tramp(jit_module, &mut runtime.tensor_hyperplane_clone, c::dtlv_rti_tensor_hyperplane_clone_local as *const u8)?;
+    tramp(jit_module, &mut runtime.table_create, c::dtlv_rti_table_create_local as *const u8)?;
+    tramp(jit_module, &mut runtime.table_push_row, c::dtlv_rti_table_push_row_local as *const u8)?;
+    tramp(jit_module, &mut runtime.table_build_from_rows, c::dtlv_rti_table_build_from_rows_local as *const u8)?;
+    tramp(jit_module, &mut runtime.int_add, c::dtlv_rti_int_add as *const u8)?;
+    tramp(jit_module, &mut runtime.int_sub, c::dtlv_rti_int_sub as *const u8)?;
+    tramp(jit_module, &mut runtime.int_mul, c::dtlv_rti_int_mul as *const u8)?;
+    tramp(jit_module, &mut runtime.int_div, c::dtlv_rti_int_div_checked as *const u8)?;
+    tramp(jit_module, &mut runtime.int_neg, c::dtlv_rti_int_neg as *const u8)?;
+    tramp(jit_module, &mut runtime.int_from_fixed, c::dtlv_rti_int_from_fixed as *const u8)?;
+    tramp(jit_module, &mut runtime.int_from_limbs, c::dtlv_rti_int_from_limbs as *const u8)?;
+    tramp(jit_module, &mut runtime.int_cmp, c::dtlv_rti_cmp_local as *const u8)?;
+    tramp(jit_module, &mut runtime.move_value, c::dtlv_rti_move_value_local as *const u8)?;
+    tramp(jit_module, &mut runtime.clone_local, c::dtlv_rti_clone_local as *const u8)?;
+    tramp(jit_module, &mut runtime.error_from, c::dtlv_rti_error_from_local as *const u8)?;
+    tramp(jit_module, &mut runtime.data_from, c::dtlv_rti_data_from_local as *const u8)?;
+
+    Ok(())
 }
 
 /// Register all runtime symbols with the JIT builder.
