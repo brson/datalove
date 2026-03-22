@@ -1,0 +1,23 @@
+require module sys/std/string
+
+import string.split
+import string.lines
+import string.split_whitespace
+import string.concat
+import string.from_char
+
+let a = split("hello world foo", " ")
+let b = split("a::b::c", "::")
+let c = split("no-delim", ",")
+
+// Build a string with actual newlines via from_char(10).
+let nl = from_char(10)
+let multiline = concat(concat(concat(concat("line1", nl), "line2"), nl), "line3")
+let d = lines(multiline)
+let e = lines("single")
+
+let f = split_whitespace("  hello   world  ")
+let g = split_whitespace("")
+let h = split("", ",")
+
+let output = (a, b, c, d, e, f, g, h)

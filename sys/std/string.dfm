@@ -52,6 +52,9 @@ import std.string_from_u32
 import std.string_from_i32
 import std.string_split_once
 import std.string_rsplit_once
+import std.string_split
+import std.string_lines
+import std.string_split_whitespace
 
 // --- Basic Properties ---
 
@@ -276,24 +279,18 @@ fun rsplit_once(ref self: string, ref delimiter: string): ?(string, string)
 end fun
 
 // Splits into a list of strings by delimiter.
-// intrinsic needed: string_split(ref string, ref string) -> [string]
 fun split(ref self: string, ref delimiter: string): [string]
-  // TODO: icall string_split(self, delimiter)
-  ret []
+  ret string_split(self, delimiter)
 end fun
 
 // Splits into lines.
-// intrinsic needed: string_lines(ref string) -> [string]
 fun lines(ref self: string): [string]
-  // TODO: icall string_lines(self)
-  ret []
+  ret string_lines(self)
 end fun
 
 // Splits by whitespace.
-// intrinsic needed: string_split_whitespace(ref string) -> [string]
 fun split_whitespace(ref self: string): [string]
-  // TODO: icall string_split_whitespace(self)
-  ret []
+  ret string_split_whitespace(self)
 end fun
 
 // --- Replacement ---

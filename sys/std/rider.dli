@@ -89,3 +89,8 @@ native fun string_from_i32(n: i32): string
 // Splitting (option-of-tuple).
 native fun string_split_once(ref self: string, ref delimiter: string): ?(string, string)
 native fun string_rsplit_once(ref self: string, ref delimiter: string): ?(string, string)
+
+// Splitting (list returns).
+native fun string_split(ref self: string, ref delimiter: string): [string]
+native fun string_lines(ref self: string): [string]
+native fun string_split_whitespace(ref self: string): [string]

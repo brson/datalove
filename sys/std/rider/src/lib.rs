@@ -933,3 +933,49 @@ pub extern "C-unwind" fn dlr_std__string_replacen(
     let result = s.replacen(pat, rep, n.as_usize());
     unsafe { write_string_result(rt, out, out_td, &result) }
 }
+
+// --- Splitting (list returns) ---
+
+#[no_mangle]
+pub extern "C-unwind" fn dlr_std__string_split(
+    rt: *mut u8,
+    s_ptr: *const u8, _s_td: *const u8,
+    delim_ptr: *const u8, _delim_td: *const u8,
+    out: *mut u8, out_td: *const u8,
+) -> u8 {
+    let s = unsafe { as_str(s_ptr) };
+    let delim = unsafe { as_str(delim_ptr) };
+    let parts: Vec<&str> = s.split(delim).collect();
+    let status = unsafe {
+        rider_helpers::write_string_list(rt, out, out_td as *const rtdt::TyDesc, &parts)
+    };
+    status as u8
+}
+
+#[no_mangle]
+pub extern "C-unwind" fn dlr_std__string_lines(
+    rt: *mut u8,
+    s_ptr: *const u8, _s_td: *const u8,
+    out: *mut u8, out_td: *const u8,
+) -> u8 {
+    let s = unsafe { as_str(s_ptr) };
+    let parts: Vec<&str> = s.lines().collect();
+    let status = unsafe {
+        rider_helpers::write_string_list(rt, out, out_td as *const rtdt::TyDesc, &parts)
+    };
+    status as u8
+}
+
+#[no_mangle]
+pub extern "C-unwind" fn dlr_std__string_split_whitespace(
+    rt: *mut u8,
+    s_ptr: *const u8, _s_td: *const u8,
+    out: *mut u8, out_td: *const u8,
+) -> u8 {
+    let s = unsafe { as_str(s_ptr) };
+    let parts: Vec<&str> = s.split_whitespace().collect();
+    let status = unsafe {
+        rider_helpers::write_string_list(rt, out, out_td as *const rtdt::TyDesc, &parts)
+    };
+    status as u8
+}

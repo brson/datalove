@@ -160,6 +160,90 @@ unsafe fn write_string_at(rt: LocalRtHandle, dest: *mut u8, s: &str) -> RtStatus
     }
 }
 
+/// Write a list of strings to the result pointer.
+///
+/// Allocates each string through the runtime, then builds the list by moving
+/// the string elements from a temporary buffer. The `out_td` must be a list
+/// tydesc whose element type is string.
+///
+/// # Safety
+///
+/// `rt`, `out`, and `out_td` must be valid pointers. `out` must point to a
+/// writable region large enough for an `rtdt::List`.
+pub unsafe fn write_string_list(
+    rt: LocalRtHandle,
+    out: *mut u8,
+    out_td: *const rtdt::TyDesc,
+    parts: &[&str],
+) -> RtStatus {
+    let list_td_ref = unsafe { rtdt::TyDescRef::from_ptr(out_td) };
+    let element_td = list_td_ref.list_element_ty().as_ptr();
+
+    if parts.is_empty() {
+        // Initialize empty list directly.
+        let list_ptr = out as *mut rtdt::List;
+        unsafe {
+            (*list_ptr).data = std::ptr::null();
+            (*list_ptr).size = rtdt::Index::ZERO;
+            (*list_ptr).capacity = rtdt::Index::ZERO;
+        }
+        return RtStatus::Ok;
+    }
+
+    // Allocate a buffer of rtdt::String elements.
+    let string_size = std::mem::size_of::<rtdt::String>();
+    let mut buf: Vec<u8> = vec![0u8; parts.len() * string_size];
+
+    // Initialize each string in the buffer.
+    for (i, part) in parts.iter().enumerate() {
+        let dest = unsafe { buf.as_mut_ptr().add(i * string_size) };
+        let status = unsafe { write_string_at(rt, dest, part) };
+        if status != RtStatus::Ok {
+            // Destroy already-initialized strings before returning.
+            for j in 0..i {
+                let s = unsafe { buf.as_mut_ptr().add(j * string_size) as *mut rtdt::String };
+                unsafe { destroy_string(rt, s) };
+            }
+            return status;
+        }
+    }
+
+    // Build the list by moving elements from the buffer.
+    unsafe {
+        crate::c::dtlv_rti_list_build_from_slice_local(
+            rt,
+            out,
+            element_td,
+            buf.as_mut_ptr(),
+            parts.len() as rtdt::IndexRepr,
+        )
+    }
+}
+
+/// Destroy a string value, freeing its backing allocation.
+///
+/// # Safety
+///
+/// `rt` must be a valid runtime handle. `s` must point to a valid `rtdt::String`.
+unsafe fn destroy_string(rt: LocalRtHandle, s: *mut rtdt::String) {
+    let s_ref = unsafe { &*s };
+    if !s_ref.data.is_null() && s_ref.capacity.0 != 0 {
+        let tydesc = rtdt::TyDesc {
+            type_tag: rtdt::TyTag::String,
+            size: std::mem::size_of::<rtdt::String>() as u32,
+            align: std::mem::align_of::<rtdt::String>() as u32,
+            type_info: rtdt::TyInfo { nothing: rtdt::TyInfoNothing },
+        };
+        unsafe {
+            crate::c::dtlv_rti_any_destroy_local(
+                rt,
+                s as *mut u8,
+                &tydesc,
+            );
+        }
+    }
+}
+
 /// Smallest value >= `offset` that is a multiple of `align`.
 pub const fn align_up(offset: usize, align: usize) -> usize {
     (offset + align - 1) & !(align - 1)
