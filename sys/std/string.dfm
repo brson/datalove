@@ -55,6 +55,9 @@ import std.string_rsplit_once
 import std.string_split
 import std.string_lines
 import std.string_split_whitespace
+import std.string_join
+import std.string_from_int
+import std.string_parse_int
 
 // --- Basic Properties ---
 
@@ -335,10 +338,8 @@ end fun
 // --- Parsing ---
 
 // Parses the string as an arbitrary-precision integer.
-// intrinsic needed: string_parse_int(ref string) -> ?int
 fun parse_int(ref self: string): ?int
-  // TODO: icall string_parse_int(self)
-  ret none
+  ret string_parse_int(self)
 end fun
 
 // Parses the string as u32.
@@ -372,10 +373,8 @@ end fun
 // --- Formatting ---
 
 // Converts an arbitrary-precision integer to string.
-// intrinsic needed: int_to_string(int) -> string
-fun from_int(n: int): string
-  // TODO: icall int_to_string(n)
-  ret ""
+fun from_int(ref n: int): string
+  ret string_from_int(n)
 end fun
 
 // Converts u32 to string.
@@ -400,8 +399,6 @@ end fun
 // --- Joining ---
 
 // Joins a list of strings with a separator.
-// intrinsic needed: string_join(ref [string], ref string) -> string
 fun join(ref parts: [string], ref separator: string): string
-  // TODO: icall string_join(parts, separator)
-  ret ""
+  ret string_join(parts, separator)
 end fun

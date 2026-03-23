@@ -94,3 +94,10 @@ native fun string_rsplit_once(ref self: string, ref delimiter: string): ?(string
 native fun string_split(ref self: string, ref delimiter: string): [string]
 native fun string_lines(ref self: string): [string]
 native fun string_split_whitespace(ref self: string): [string]
+
+// Joining.
+native fun string_join(ref parts: [string], ref separator: string): string
+
+// Bigint conversion.
+native fun string_from_int(ref n: int): string
+native fun string_parse_int(ref self: string): ?int

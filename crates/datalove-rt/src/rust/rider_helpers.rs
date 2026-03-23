@@ -244,6 +244,143 @@ unsafe fn destroy_string(rt: LocalRtHandle, s: *mut rtdt::String) {
     }
 }
 
+/// Read a list-of-strings argument into a Vec of `&str`.
+///
+/// The `list_ptr` must point to a valid `rtdt::List` whose elements are
+/// `rtdt::String` values.
+///
+/// # Safety
+///
+/// `list_ptr` must be a valid pointer to a live `rtdt::List` of strings.
+pub unsafe fn read_string_list<'a>(list_ptr: *const u8) -> Vec<&'a str> {
+    let list = unsafe { &*(list_ptr as *const rtdt::List) };
+    let count = list.size.as_usize();
+    if count == 0 {
+        return Vec::new();
+    }
+    let string_size = std::mem::size_of::<rtdt::String>();
+    let mut result = Vec::with_capacity(count);
+    for i in 0..count {
+        let elem_ptr = unsafe { list.data.add(i * string_size) as *const rtdt::String };
+        let s = unsafe { &*elem_ptr };
+        if s.data.is_null() || s.size.0 == 0 {
+            result.push("");
+        } else {
+            let bytes = unsafe { std::slice::from_raw_parts(s.data, s.size.as_usize()) };
+            result.push(unsafe { std::str::from_utf8_unchecked(bytes) });
+        }
+    }
+    result
+}
+
+/// Convert an `Int` (bigint) value to its decimal string representation.
+///
+/// # Safety
+///
+/// `int_ptr` must point to a valid `rtdt::Int`.
+pub unsafe fn int_to_string(int_ptr: *const u8) -> String {
+    unsafe { crate::impls::int_math::int_to_string_impl(int_ptr as *const rtdt::Int) }
+}
+
+/// Parse a decimal string into an `Int` (bigint), writing the result as `?int`.
+///
+/// Writes `Some(int)` on successful parse, `None` on failure. Handles
+/// optional leading `-` sign and rejects empty strings or non-digit characters.
+///
+/// # Safety
+///
+/// `rt` must be a valid runtime handle. `out` must point to a writable
+/// region large enough for the `?int` layout.
+pub unsafe fn write_option_int_from_str(
+    rt: LocalRtHandle,
+    out: *mut u8,
+    s: &str,
+) -> RtStatus {
+    let s = s.trim();
+    if s.is_empty() {
+        unsafe { write_option_none(out) };
+        return RtStatus::Ok;
+    }
+
+    // Parse sign and digits.
+    let (negative, digits) = if let Some(rest) = s.strip_prefix('-') {
+        (true, rest)
+    } else if let Some(rest) = s.strip_prefix('+') {
+        (false, rest)
+    } else {
+        (false, s)
+    };
+
+    if digits.is_empty() || !digits.bytes().all(|b| b.is_ascii_digit()) {
+        unsafe { write_option_none(out) };
+        return RtStatus::Ok;
+    }
+
+    // Convert decimal digits to u32 limbs (little-endian base-2^32).
+    // Process 9 digits at a time (fits in u32 as 10^9 < 2^32).
+    let limbs = decimal_to_limbs(digits);
+
+    // Determine actual limb count (strip trailing zero limbs).
+    let limb_count = limbs.iter().rposition(|&l| l != 0).map_or(0, |i| i + 1);
+
+    // Write the option payload.
+    let int_align = std::mem::align_of::<rtdt::Int>();
+    let payload_offset = align_up(1, int_align);
+
+    unsafe {
+        *out = rtdt::OptionTag::Some as u8;
+        let int_out = out.add(payload_offset);
+        let rt_ref = &mut *(rt as *mut crate::impls::rt_local::RtLocal);
+        crate::impls::int_math::int_from_limbs_impl(
+            rt_ref,
+            limbs.as_ptr(),
+            limb_count as u32,
+            negative && limb_count > 0,
+            int_out,
+        )
+    }
+}
+
+/// Convert a decimal digit string to a vector of u32 limbs (little-endian base-2^32).
+fn decimal_to_limbs(digits: &str) -> Vec<u32> {
+    if digits.is_empty() || digits == "0" {
+        return vec![];
+    }
+
+    // Parse 9 digits at a time into base-10^9 chunks, then multiply-accumulate
+    // into base-2^32 limbs.
+    const CHUNK_BASE: u64 = 1_000_000_000;
+    let mut limbs: Vec<u32> = vec![0];
+
+    let bytes = digits.as_bytes();
+    let first_chunk_len = if bytes.len() % 9 == 0 { 9 } else { bytes.len() % 9 };
+
+    // Process first (possibly short) chunk.
+    let first_val: u32 = digits[..first_chunk_len].parse().unwrap();
+    limbs[0] = first_val;
+
+    // Process remaining 9-digit chunks.
+    let mut pos = first_chunk_len;
+    while pos < bytes.len() {
+        let chunk_val: u32 = digits[pos..pos + 9].parse().unwrap();
+
+        // Multiply all limbs by 10^9 and add chunk_val.
+        let mut carry: u64 = chunk_val as u64;
+        for limb in limbs.iter_mut() {
+            let prod = (*limb as u64) * CHUNK_BASE + carry;
+            *limb = prod as u32;
+            carry = prod >> 32;
+        }
+        if carry > 0 {
+            limbs.push(carry as u32);
+        }
+
+        pos += 9;
+    }
+
+    limbs
+}
+
 /// Smallest value >= `offset` that is a multiple of `align`.
 pub const fn align_up(offset: usize, align: usize) -> usize {
     (offset + align - 1) & !(align - 1)

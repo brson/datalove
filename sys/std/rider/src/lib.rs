@@ -979,3 +979,41 @@ pub extern "C-unwind" fn dlr_std__string_split_whitespace(
     };
     status as u8
 }
+
+// --- Joining ---
+
+#[no_mangle]
+pub extern "C-unwind" fn dlr_std__string_join(
+    rt: *mut u8,
+    parts_ptr: *const u8, _parts_td: *const u8,
+    sep_ptr: *const u8, _sep_td: *const u8,
+    out: *mut u8, out_td: *const u8,
+) -> u8 {
+    let parts = unsafe { rider_helpers::read_string_list(parts_ptr) };
+    let sep = unsafe { as_str(sep_ptr) };
+    let result = parts.join(sep);
+    unsafe { write_string_result(rt, out, out_td, &result) }
+}
+
+// --- Bigint conversion ---
+
+#[no_mangle]
+pub extern "C-unwind" fn dlr_std__string_from_int(
+    rt: *mut u8,
+    n_ptr: *const u8, _n_td: *const u8,
+    out: *mut u8, out_td: *const u8,
+) -> u8 {
+    let s = unsafe { rider_helpers::int_to_string(n_ptr) };
+    unsafe { write_string_result(rt, out, out_td, &s) }
+}
+
+#[no_mangle]
+pub extern "C-unwind" fn dlr_std__string_parse_int(
+    rt: *mut u8,
+    s_ptr: *const u8, _s_td: *const u8,
+    out: *mut u8, _out_td: *const u8,
+) -> u8 {
+    let s = unsafe { as_str(s_ptr) };
+    let status = unsafe { rider_helpers::write_option_int_from_str(rt, out, s) };
+    status as u8
+}

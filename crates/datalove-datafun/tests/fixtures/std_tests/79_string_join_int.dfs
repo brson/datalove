@@ -1,0 +1,32 @@
+require module sys/std/string
+
+import string.join
+import string.from_int
+import string.parse_int
+import string.split
+
+// join
+let a = join(["hello", "world"], " ")
+let b = join(["a", "b", "c"], "::")
+let c = join([], ",")
+let d = join(["solo"], "-")
+
+// from_int
+let e = from_int(0)
+let f = from_int(42)
+let g = from_int(-123)
+let h = from_int(999999999999999999)
+
+// parse_int
+let i = parse_int("0")
+let j = parse_int("42")
+let k = parse_int("-123")
+let l = parse_int("999999999999999999")
+let m = parse_int("")
+let n = parse_int("not a number")
+let o = parse_int("  456  ")
+
+// round-trip: split then join
+let p = join(split("one--two--three", "--"), ", ")
+
+let output = (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p)
