@@ -23,7 +23,7 @@ Then we'll add I/O to it &mdash; carefully.
 
 > **Roadmap**: [12 of 21 complete](roadmap.md) &middot; updated 2026-02-10.
 
-> **Latest news**: [Const param specialization](posts.html) &middot; updated 2026-01-31.
+> **Latest news**: [Native riders](posts.html) &middot; updated 2026-03-27.
 
 
 
