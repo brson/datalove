@@ -10,7 +10,7 @@ end fun
 
 fun abs_offset(n: offset): offset
     let zero: offset = (: offset / 0)
-    if n .< zero
+    if n < zero
         ret icall neg_wrapping_offset(n)
     else
         ret n
@@ -21,10 +21,10 @@ fun signum_offset(n: offset): offset
     let zero: offset = (: offset / 0)
     let one: offset = (: offset / 1)
     let neg_one: offset = (: offset / -1)
-    if n .> zero
+    if n > zero
         ret one
     else
-        if n .< zero
+        if n < zero
             ret neg_one
         else
             ret zero

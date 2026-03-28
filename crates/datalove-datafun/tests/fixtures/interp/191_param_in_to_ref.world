@@ -5,7 +5,7 @@ module local/test/main
 // Test passing In-mode param to Ref-mode param.
 // The outer function takes ownership (In mode), then passes a reference to inner.
 fun inner(ref x: int): bool
-    ret x == :int/100
+    ret x ≡ :int/100
 end fun
 
 fun outer(y: int): bool

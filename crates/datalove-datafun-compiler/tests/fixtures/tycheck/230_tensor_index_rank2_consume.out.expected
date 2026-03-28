@@ -13,14 +13,14 @@
       "params": [
         {
           "name": "t",
-          "type": "[|u32, 2|]"
+          "type": "⟪u32, 2⟫"
         },
         {
           "name": "i",
           "type": "index"
         }
       ],
-      "return_type": "?[|u32, 1|]"
+      "return_type": "?⟪u32, 1⟫"
     }
   ]
 }

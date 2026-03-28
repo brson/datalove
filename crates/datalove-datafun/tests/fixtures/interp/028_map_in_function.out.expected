@@ -22,7 +22,7 @@ Analysis(
                         v1 = const 1000u32
                         v2 = const 2u32
                         v3 = const 2000u32
-                        v4 = %{v0: v1, v2: v3}
+                        v4 = ⦇v0 ↦ v1, v2 ↦ v3⦈
                         return v4
                 """,
             ),
@@ -46,7 +46,7 @@ Analysis(
                         unit_end v0
                 """,
             ),
-            output: "%{1 = 1000, 2 = 2000}",
+            output: "⦇1 ↦ 1000, 2 ↦ 2000⦈",
         ),
     ],
 )

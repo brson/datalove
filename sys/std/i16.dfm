@@ -16,10 +16,10 @@ end fun
 
 fun signum(self: i16): i16
   let zero = (: i16 / 0)
-  if self .> zero
+  if self > zero
     ret : i16 / 1
   else
-    if self .< zero
+    if self < zero
       ret (: i16 / -1)
     else
       ret zero
@@ -28,16 +28,16 @@ fun signum(self: i16): i16
 end fun
 
 fun is_positive(self: i16): bool
-  ret self .> (: i16 / 0)
+  ret self > (: i16 / 0)
 end fun
 
 fun is_negative(self: i16): bool
-  ret self .< (: i16 / 0)
+  ret self < (: i16 / 0)
 end fun
 
 // Wrapping absolute value.
 fun abs(self: i16): i16
-  if self .< (: i16 / 0)
+  if self < (: i16 / 0)
     ret icall neg_wrapping_i16(self)
   else
     ret self
@@ -46,7 +46,7 @@ end fun
 
 // Checked absolute value. Returns none for MIN.
 fun abs_checked(self: i16): ?i16
-  if self == min_value()
+  if self ≡ min_value()
     ret none
   else
     ret some abs(self)
@@ -55,7 +55,7 @@ end fun
 
 // Saturating absolute value. MIN becomes MAX.
 fun abs_saturating(self: i16): i16
-  if self == min_value()
+  if self ≡ min_value()
     ret max_value()
   else
     ret abs(self)
@@ -131,7 +131,7 @@ end fun
 // Checked arithmetic.
 
 fun neg_checked(self: i16): ?i16
-  if self == min_value()
+  if self ≡ min_value()
     ret none
   else
     ret some icall neg_wrapping_i16(self)
@@ -158,11 +158,11 @@ end fun
 // Overflow can occur with MIN % -1 on some platforms.
 fun rem_checked(self: i16, other: i16): ?i16
   let zero = (: i16 / 0)
-  if other == zero
+  if other ≡ zero
     ret none
   else
-    if self == min_value()
-      if other == (: i16 / -1)
+    if self ≡ min_value()
+      if other ≡ (: i16 / -1)
         ret some zero
       else
         ret some icall srem_i16(self, other)
@@ -180,7 +180,7 @@ fun add_saturating(self: i16, other: i16): i16
     ret value
   else
     // Overflow direction depends on signs.
-    if other .> (: i16 / 0)
+    if other > (: i16 / 0)
       ret max_value()
     else
       ret min_value()
@@ -193,7 +193,7 @@ fun sub_saturating(self: i16, other: i16): i16
     ret value
   else
     // Underflow direction depends on signs.
-    if other .> (: i16 / 0)
+    if other > (: i16 / 0)
       ret min_value()
     else
       ret max_value()
@@ -252,9 +252,9 @@ end fun
 
 // Shifts.
 
-// Checked left shift. Returns none if n >= 16.
+// Checked left shift. Returns none if n ≥ 16.
 fun shift_left(self: i16, n: u16): ?i16
-  if n >= (: u16 / 16)
+  if n ≥ (: u16 / 16)
     ret none
   else
     let u = icall i16_to_u16(self)
@@ -263,9 +263,9 @@ fun shift_left(self: i16, n: u16): ?i16
   end if
 end fun
 
-// Checked arithmetic right shift. Returns none if n >= 16.
+// Checked arithmetic right shift. Returns none if n ≥ 16.
 fun shift_right(self: i16, n: u16): ?i16
-  if n >= (: u16 / 16)
+  if n ≥ (: u16 / 16)
     ret none
   else
     ret some icall sshr_i16(self, n)
@@ -291,7 +291,7 @@ fun shift_right_wrapping(self: i16, n: u16): i16
 end fun
 
 fun shift_left_saturating(self: i16, n: u16): i16
-  if n >= (: u16 / 16)
+  if n ≥ (: u16 / 16)
     if is_negative(self)
       ret min_value()
     else
@@ -311,7 +311,7 @@ fun shift_left_saturating(self: i16, n: u16): i16
 end fun
 
 fun shift_right_saturating(self: i16, n: u16): i16
-  if n >= (: u16 / 16)
+  if n ≥ (: u16 / 16)
     // Arithmetic shift fills with sign bit.
     if is_negative(self)
       ret (: i16 / -1)
@@ -408,11 +408,11 @@ end fun
 // Comparisons and utilities.
 
 fun is_zero(self: i16): bool
-  ret self == (: i16 / 0)
+  ret self ≡ (: i16 / 0)
 end fun
 
 fun min(self: i16, other: i16): i16
-  if self <= other
+  if self ≤ other
     ret self
   else
     ret other
@@ -420,7 +420,7 @@ fun min(self: i16, other: i16): i16
 end fun
 
 fun max(self: i16, other: i16): i16
-  if self >= other
+  if self ≥ other
     ret self
   else
     ret other
@@ -428,10 +428,10 @@ fun max(self: i16, other: i16): i16
 end fun
 
 fun clamp(self: i16, min_val: i16, max_val: i16): i16
-  if self .< min_val
+  if self < min_val
     ret min_val
   else
-    if self .> max_val
+    if self > max_val
       ret max_val
     else
       ret self
@@ -441,7 +441,7 @@ end fun
 
 // Absolute difference, returns u16 (always non-negative).
 fun abs_diff(self: i16, other: i16): u16
-  if self >= other
+  if self ≥ other
     // self - other is non-negative.
     let diff = sub_wrapping(self, other)
     ret icall i16_to_u16(diff)

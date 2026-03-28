@@ -15,7 +15,7 @@ fun mul(a: index, b: index): !index
 end fun
 
 fun max_of(a: index, b: index): index
-    if a .>= b
+    if a ≥ b
         ret a
     else
         ret b
@@ -23,7 +23,7 @@ fun max_of(a: index, b: index): index
 end fun
 
 fun min_of(a: index, b: index): index
-    if a .<= b
+    if a ≤ b
         ret a
     else
         ret b

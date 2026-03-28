@@ -1,4 +1,4 @@
 // Tensor rank-1 index with linear element in consume context is NonCopyIndexProjection.
-fun get(t: [|string, 1|], i: index): ?string
+fun get(t: ⟪string, 1⟫, i: index): ?string
     ret some (t[i]?)
 end fun

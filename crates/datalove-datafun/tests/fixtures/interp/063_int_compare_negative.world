@@ -10,4 +10,4 @@ let pos: int = :int/10 - :int/0
 scriptunit-expr
 ----------
 
-neg .< pos
+neg < pos

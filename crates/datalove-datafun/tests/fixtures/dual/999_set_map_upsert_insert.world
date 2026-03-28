@@ -3,10 +3,10 @@ scriptunit-fragment
 ----------
 
 // Upsert on map where key is absent — inserts new entry.
-fun upsert(m: %{u32 = u32}, k: u32, v: u32): %{u32 = u32}
+fun upsert(m: ⦇u32 ↦ u32⦈, k: u32, v: u32): ⦇u32 ↦ u32⦈
     var b = m
     set b[k] = v
     ret b
 end fun
 
-debuglog upsert(%{ 1 = 100, 2 = 200 }, 3, 300)
+debuglog upsert(⦇ 1 ↦ 100, 2 ↦ 200 ⦈, 3, 300)

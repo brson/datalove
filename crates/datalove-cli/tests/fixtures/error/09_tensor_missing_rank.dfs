@@ -1,1 +1,1 @@
-let output: [|i32, |] = 5
+let output: ⟪i32, ⟫ = 5

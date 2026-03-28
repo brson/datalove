@@ -3,8 +3,8 @@ scriptunit-fragment
 ----------
 
 // CTFE set in script function.
-fun get_numbers(): #{u32}
-    const S: #{u32} = #{ 30, 10, 20 }
+fun get_numbers(): ⦃u32⦄
+    const S: ⦃u32⦄ = ⦃ 30, 10, 20 ⦄
     ret S
 end fun
 

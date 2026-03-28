@@ -6,7 +6,7 @@ module local/test/main
 // The outer function borrows (Ref mode), then tries to transfer ownership to inner.
 // This should fail because ref params of non-Copy types cannot be moved.
 fun inner(x: int): bool
-    ret x == :int/100
+    ret x ≡ :int/100
 end fun
 
 fun outer(ref y: int): bool

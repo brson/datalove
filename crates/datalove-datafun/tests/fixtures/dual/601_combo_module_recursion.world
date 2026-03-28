@@ -4,7 +4,7 @@ module local/test/fib
 
 // Fibonacci using int arithmetic.
 fun fib(n: int): int
-    if n <= 1
+    if n ≤ 1
         ret n
     end if
     ret fib(n - 1) + fib(n - 2)

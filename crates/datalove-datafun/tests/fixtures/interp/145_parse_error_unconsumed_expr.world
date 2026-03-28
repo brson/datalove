@@ -2,6 +2,6 @@
 scriptunit-expr
 ----------
 
-// Parser doesn't recognize '<' as comparison operator (should be '.<').
+// Parser doesn't recognize '<' as comparison operator (should be '<').
 // The '< 20' part is unconsumed, triggering a parse error.
 10 < 20

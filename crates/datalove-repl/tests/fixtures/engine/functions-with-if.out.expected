@@ -7,7 +7,7 @@
       }
     },
     "eval": {
-      "Error": "TypeMismatch { expected: \"i32\", actual: \"int\" }; TypeMismatch { expected: \"int\", actual: \"i32\" }"
+      "Error": "ProjectionOnNonAggregate { ty: \"i32\" }; TypeMismatch { expected: \"int\", actual: \"i32\" }"
     },
     "environment": []
   },
@@ -43,7 +43,7 @@
       }
     },
     "eval": {
-      "Error": "TypeMismatch { expected: \"u32\", actual: \"int\" }; TypeMismatch { expected: \"u32\", actual: \"int\" }"
+      "Error": "ProjectionOnNonAggregate { ty: \"u32\" }; ProjectionOnNonAggregate { ty: \"u32\" }"
     },
     "environment": []
   },
@@ -91,7 +91,7 @@
       }
     },
     "eval": {
-      "Error": "TypeMismatch { expected: \"u32\", actual: \"int\" }; TypeMismatch { expected: \"u32\", actual: \"int\" }; TypeMismatch { expected: \"u32\", actual: \"int\" }"
+      "Error": "unexpected token in expression; unexpected token in expression; unexpected token in expression"
     },
     "environment": []
   },

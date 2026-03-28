@@ -256,7 +256,7 @@ impl<'db> Parser<'db> {
                 self.expr_spans.extend(sub_parser.expr_spans);
                 ast::Expr::List(ast::ExprList { elements })
             }
-            Some(TreeToken::Branch { sigil: Sigil::PercentBraceOpen, .. }) => {
+            Some(TreeToken::Branch { sigil: Sigil::MapOpen, .. }) => {
                 // Map: %{k = v, ...}
                 let inner = match self.next() {
                     Some(TreeToken::Branch { inner, .. }) => inner,
@@ -265,12 +265,12 @@ impl<'db> Parser<'db> {
                 let mut sub_parser = Parser::from_branch(self.db, inner, self.source_text());
                 let entries = sub_parser.parse_comma_separated(|p| {
                     let key = p.parse_expr_full();
-                    if !p.eat_sigil(Sigil::Equals) {
+                    if !p.eat_sigil(Sigil::MapsTo) {
                         let ts = p.peek_text_span();
                         let error_expr = p.emit_expr_error(ts,
-                            "expected '=' between map key and value",
+                            "expected '↦' between map key and value",
                             "D017",
-                            "expected '=' after key"
+                            "expected '↦' after key"
                         );
                         let error_value = ast::ExprFull::new(p.db, None, error_expr);
                         return ast::ExprMapEntry { key, value: error_value };
@@ -282,7 +282,7 @@ impl<'db> Parser<'db> {
                 self.expr_spans.extend(sub_parser.expr_spans);
                 ast::Expr::Map(ast::ExprMap { entries })
             }
-            Some(TreeToken::Branch { sigil: Sigil::HashBraceOpen, .. }) => {
+            Some(TreeToken::Branch { sigil: Sigil::SetOpen, .. }) => {
                 // Set: #{e, ...}
                 let inner = match self.next() {
                     Some(TreeToken::Branch { inner, .. }) => inner,
@@ -294,7 +294,7 @@ impl<'db> Parser<'db> {
                 self.expr_spans.extend(sub_parser.expr_spans);
                 ast::Expr::Set(ast::ExprSet { elements })
             }
-            Some(TreeToken::Branch { sigil: Sigil::BracePipeOpen, .. }) => {
+            Some(TreeToken::Branch { sigil: Sigil::TableOpen, .. }) => {
                 // Table.
                 let inner = match self.next() {
                     Some(TreeToken::Branch { inner, .. }) => inner,
@@ -302,7 +302,7 @@ impl<'db> Parser<'db> {
                 };
                 self.parse_table_expr(inner)
             }
-            Some(TreeToken::Branch { sigil: Sigil::BracketPipeOpen, .. }) => {
+            Some(TreeToken::Branch { sigil: Sigil::TensorOpen, .. }) => {
                 // Tensor: [| data |] with multi-comma separators.
                 let inner = match self.next() {
                     Some(TreeToken::Branch { inner, .. }) => inner,

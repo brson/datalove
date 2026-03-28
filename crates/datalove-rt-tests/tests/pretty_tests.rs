@@ -339,25 +339,25 @@ fn test_pretty_list_strings() -> AnyResult<()> {
 
 #[test]
 fn test_pretty_set_empty() -> AnyResult<()> {
-    test_pretty(": #{u32} / #{}", "#{}")
+    test_pretty(": ⦃u32⦄ / ⦃⦄", "⦃⦄")
 }
 
 #[test]
 fn test_pretty_set_single() -> AnyResult<()> {
-    test_pretty(": #{u32} / #{42}", "#{42}")
+    test_pretty(": ⦃u32⦄ / ⦃42⦄", "⦃42⦄")
 }
 
 #[test]
 fn test_pretty_set_multiple() -> AnyResult<()> {
     // Sets are ordered, so output should be sorted.
-    test_pretty(": #{u32} / #{3, 1, 2}", "#{1, 2, 3}")
+    test_pretty(": ⦃u32⦄ / ⦃3, 1, 2⦄", "⦃1, 2, 3⦄")
 }
 
 #[test]
 fn test_pretty_set_strings() -> AnyResult<()> {
     test_pretty(
-        ": #{string} / #{\"banana\", \"apple\"}",
-        "#{\"apple\", \"banana\"}",
+        ": ⦃string⦄ / ⦃\"banana\", \"apple\"⦄",
+        "⦃\"apple\", \"banana\"⦄",
     )
 }
 
@@ -365,14 +365,14 @@ fn test_pretty_set_strings() -> AnyResult<()> {
 
 #[test]
 fn test_pretty_map_empty() -> AnyResult<()> {
-    test_pretty(": %{u32 = string} / %{}", "%{}")
+    test_pretty(": ⦇u32 ↦ string⦈ / ⦇⦈", "⦇⦈")
 }
 
 #[test]
 fn test_pretty_map_single() -> AnyResult<()> {
     test_pretty(
-        ": %{u32 = string} / %{1 = \"one\"}",
-        "%{1 = \"one\"}",
+        ": ⦇u32 ↦ string⦈ / ⦇1 ↦ \"one\"⦈",
+        "⦇1 ↦ \"one\"⦈",
     )
 }
 
@@ -380,16 +380,16 @@ fn test_pretty_map_single() -> AnyResult<()> {
 fn test_pretty_map_multiple() -> AnyResult<()> {
     // Maps are ordered by key.
     test_pretty(
-        ": %{u32 = string} / %{2 = \"two\", 1 = \"one\"}",
-        "%{1 = \"one\", 2 = \"two\"}",
+        ": ⦇u32 ↦ string⦈ / ⦇2 ↦ \"two\", 1 ↦ \"one\"⦈",
+        "⦇1 ↦ \"one\", 2 ↦ \"two\"⦈",
     )
 }
 
 #[test]
 fn test_pretty_map_string_keys() -> AnyResult<()> {
     test_pretty(
-        ": %{string = u32} / %{\"b\" = 2, \"a\" = 1}",
-        "%{\"a\" = 1, \"b\" = 2}",
+        ": ⦇string ↦ u32⦈ / ⦇\"b\" ↦ 2, \"a\" ↦ 1⦈",
+        "⦇\"a\" ↦ 1, \"b\" ↦ 2⦈",
     )
 }
 
@@ -406,16 +406,16 @@ fn test_pretty_list_of_tuples() -> AnyResult<()> {
 #[test]
 fn test_pretty_map_of_lists() -> AnyResult<()> {
     test_pretty(
-        ": %{string = [u32]} / %{\"nums\" = [1, 2, 3]}",
-        "%{\"nums\" = [1, 2, 3]}",
+        ": ⦇string ↦ [u32]⦈ / ⦇\"nums\" ↦ [1, 2, 3]⦈",
+        "⦇\"nums\" ↦ [1, 2, 3]⦈",
     )
 }
 
 #[test]
 fn test_pretty_set_of_tuples() -> AnyResult<()> {
     test_pretty(
-        ": #{(u32, u32)} / #{(1, 2), (3, 4)}",
-        "#{(1, 2), (3, 4)}",
+        ": ⦃(u32, u32)⦄ / ⦃(1, 2), (3, 4)⦄",
+        "⦃(1, 2), (3, 4)⦄",
     )
 }
 
@@ -430,8 +430,8 @@ fn test_pretty_option_of_list() -> AnyResult<()> {
 #[test]
 fn test_pretty_deeply_nested() -> AnyResult<()> {
     test_pretty(
-        ": %{string = ?[(u32, bool)]} / %{\"data\" = some [(1, true)]}",
-        "%{\"data\" = some [(1, true)]}",
+        ": ⦇string ↦ ?[(u32, bool)]⦈ / ⦇\"data\" ↦ some [(1, true)]⦈",
+        "⦇\"data\" ↦ some [(1, true)]⦈",
     )
 }
 
@@ -440,48 +440,48 @@ fn test_pretty_deeply_nested() -> AnyResult<()> {
 #[test]
 fn test_pretty_tensor_1d() -> AnyResult<()> {
     test_pretty(
-        ": [|u32, 1|] / [| 1 2 3 |]",
-        "[| 1 2 3 |]",
+        ": ⟪u32, 1⟫ / ⟪ 1 2 3 ⟫",
+        "⟪ 1 2 3 ⟫",
     )
 }
 
 #[test]
 fn test_pretty_tensor_1d_empty() -> AnyResult<()> {
     test_pretty(
-        ": [|u32, 1|] / [| |]",
-        "[| |]",
+        ": ⟪u32, 1⟫ / ⟪ ⟫",
+        "⟪ ⟫",
     )
 }
 
 #[test]
 fn test_pretty_tensor_2d() -> AnyResult<()> {
     test_pretty(
-        ": [|u32, 2|] / [| 1 2 3, 4 5 6 |]",
-        "[| 1 2 3, 4 5 6 |]",
+        ": ⟪u32, 2⟫ / ⟪ 1 2 3, 4 5 6 ⟫",
+        "⟪ 1 2 3, 4 5 6 ⟫",
     )
 }
 
 #[test]
 fn test_pretty_tensor_2d_single_row() -> AnyResult<()> {
     test_pretty(
-        ": [|u32, 2|] / [| 1 2 3, |]",
-        "[| 1 2 3, |]",
+        ": ⟪u32, 2⟫ / ⟪ 1 2 3, ⟫",
+        "⟪ 1 2 3, ⟫",
     )
 }
 
 #[test]
 fn test_pretty_tensor_3d() -> AnyResult<()> {
     test_pretty(
-        ": [|u32, 3|] / [| 1 2, 3 4,, 5 6, 7 8 |]",
-        "[| 1 2, 3 4,, 5 6, 7 8 |]",
+        ": ⟪u32, 3⟫ / ⟪ 1 2, 3 4,, 5 6, 7 8 ⟫",
+        "⟪ 1 2, 3 4,, 5 6, 7 8 ⟫",
     )
 }
 
 #[test]
 fn test_pretty_tensor_f32() -> AnyResult<()> {
     test_pretty(
-        ": [|f32, 1|] / [| 1.5 2.5 3.5 |]",
-        "[| 1.5 2.5 3.5 |]",
+        ": ⟪f32, 1⟫ / ⟪ 1.5 2.5 3.5 ⟫",
+        "⟪ 1.5 2.5 3.5 ⟫",
     )
 }
 
@@ -490,31 +490,31 @@ fn test_pretty_tensor_f32() -> AnyResult<()> {
 #[test]
 fn test_pretty_table_empty() -> AnyResult<()> {
     test_pretty(
-        ": {| x: u32, y: u32 |} / {| x, y |}",
-        "{| x, y |}",
+        ": ⟦ x: u32, y: u32 ⟧ / ⟦ x, y ⟧",
+        "⟦ x, y ⟧",
     )
 }
 
 #[test]
 fn test_pretty_table_single_row() -> AnyResult<()> {
     test_pretty(
-        ": {| x: u32, y: u32 |} / {| x, y; 1, 2 |}",
-        "{| x, y; 1, 2 |}",
+        ": ⟦ x: u32, y: u32 ⟧ / ⟦ x, y; 1, 2 ⟧",
+        "⟦ x, y; 1, 2 ⟧",
     )
 }
 
 #[test]
 fn test_pretty_table_multiple_rows() -> AnyResult<()> {
     test_pretty(
-        ": {| x: u32, y: u32 |} / {| x, y; 1, 2; 3, 4 |}",
-        "{| x, y; 1, 2; 3, 4 |}",
+        ": ⟦ x: u32, y: u32 ⟧ / ⟦ x, y; 1, 2; 3, 4 ⟧",
+        "⟦ x, y; 1, 2; 3, 4 ⟧",
     )
 }
 
 #[test]
 fn test_pretty_table_with_strings() -> AnyResult<()> {
     test_pretty(
-        r#": {| name: string, age: u32 |} / {| name, age; "Alice", 30 |}"#,
-        r#"{| name, age; "Alice", 30 |}"#,
+        r#": ⟦ name: string, age: u32 ⟧ / ⟦ name, age; "Alice", 30 ⟧"#,
+        r#"⟦ name, age; "Alice", 30 ⟧"#,
     )
 }

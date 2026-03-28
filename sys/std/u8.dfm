@@ -57,16 +57,16 @@ fun trailing_ones(self: u8): u8
 end fun
 
 fun is_power_of_two(self: u8): bool
-  if self == (: u8 / 0)
+  if self ≡ (: u8 / 0)
     ret false
   else
-    ret count_ones(self) == (: u8 / 1)
+    ret count_ones(self) ≡ (: u8 / 1)
   end if
 end fun
 
 // Integer log base 2. Returns none if self is zero.
 fun ilog2(self: u8): ?u8
-  if self == (: u8 / 0)
+  if self ≡ (: u8 / 0)
     ret none
   else
     ret some sub_saturating((: u8 / 7), leading_zeros(self))
@@ -75,9 +75,9 @@ end fun
 
 // Power functions.
 
-// Returns the smallest power of two >= self. Returns none on overflow.
+// Returns the smallest power of two ≥ self. Returns none on overflow.
 fun next_power_of_two(self: u8): ?u8
-  if self <= (: u8 / 1)
+  if self ≤ (: u8 / 1)
     ret some (: u8 / 1)
   else
     if is_power_of_two(self)
@@ -86,7 +86,7 @@ fun next_power_of_two(self: u8): ?u8
       // self > 1 and not a power of two, so we need 2^(ilog2(self) + 1).
       if ilog2(self) |log|
         let next_exp = add_saturating(log, (: u8 / 1))
-        if next_exp >= (: u8 / 8)
+        if next_exp ≥ (: u8 / 8)
           ret none
         else
           ret shift_left((: u8 / 1), next_exp)
@@ -104,8 +104,8 @@ fun pow_checked(self: u8, exp: u8): ?u8
   var result: u8 = (: u8 / 1)
   var base: u8 = self
   var e: u8 = exp
-  loop while e .> (: u8 / 0)
-    if bitand(e, (: u8 / 1)) == (: u8 / 1)
+  loop while e > (: u8 / 0)
+    if bitand(e, (: u8 / 1)) ≡ (: u8 / 1)
       if mul_checked(result, base) |next_result|
         set result = next_result
       else
@@ -113,7 +113,7 @@ fun pow_checked(self: u8, exp: u8): ?u8
       end if
     end if
     set e = shift_right_wrapping(e, (: u8 / 1))
-    if e .> (: u8 / 0)
+    if e > (: u8 / 0)
       if mul_checked(base, base) |next_base|
         set base = next_base
       else
@@ -130,8 +130,8 @@ fun pow_saturating(self: u8, exp: u8): u8
   var base: u8 = self
   var e: u8 = exp
   var overflow: bool = false
-  loop while e .> (: u8 / 0)
-    if bitand(e, (: u8 / 1)) == (: u8 / 1)
+  loop while e > (: u8 / 0)
+    if bitand(e, (: u8 / 1)) ≡ (: u8 / 1)
       if mul_checked(result, base) |next_result|
         set result = next_result
       else
@@ -139,7 +139,7 @@ fun pow_saturating(self: u8, exp: u8): u8
       end if
     end if
     set e = shift_right_wrapping(e, (: u8 / 1))
-    if e .> (: u8 / 0)
+    if e > (: u8 / 0)
       if mul_checked(base, base) |next_base|
         set base = next_base
       else
@@ -159,12 +159,12 @@ fun pow_wrapping(self: u8, exp: u8): u8
   var result: u8 = (: u8 / 1)
   var base: u8 = self
   var e: u8 = exp
-  loop while e .> (: u8 / 0)
-    if bitand(e, (: u8 / 1)) == (: u8 / 1)
+  loop while e > (: u8 / 0)
+    if bitand(e, (: u8 / 1)) ≡ (: u8 / 1)
       set result = mul_wrapping(result, base)
     end if
     set e = shift_right_wrapping(e, (: u8 / 1))
-    if e .> (: u8 / 0)
+    if e > (: u8 / 0)
       set base = mul_wrapping(base, base)
     end if
   end loop
@@ -186,7 +186,7 @@ end fun
 // Checked arithmetic.
 
 fun neg_checked(self: u8): ?u8
-  if self == (: u8 / 0)
+  if self ≡ (: u8 / 0)
     ret some (: u8 / 0)
   else
     ret none
@@ -210,7 +210,7 @@ fun div_checked(self: u8, other: u8): ?u8
 end fun
 
 fun rem_checked(self: u8, other: u8): ?u8
-  if other == (: u8 / 0)
+  if other ≡ (: u8 / 0)
     ret none
   else
     ret some icall rem_u8(self, other)
@@ -220,7 +220,7 @@ end fun
 // Checked signed addition. Adds a signed i8 to u8.
 // Returns none on overflow (positive other) or underflow (negative other).
 fun add_checked_signed(self: u8, other: i8): ?u8
-  if other >= (: i8 / 0)
+  if other ≥ (: i8 / 0)
     let other_u8 = icall i8_to_u8(other)
     ret some (self +? other_u8)
   else
@@ -233,7 +233,7 @@ end fun
 // Checked signed subtraction. Subtracts a signed i8 from u8.
 // Returns none on underflow (positive other) or overflow (negative other).
 fun sub_checked_signed(self: u8, other: i8): ?u8
-  if other >= (: i8 / 0)
+  if other ≥ (: i8 / 0)
     let other_u8 = icall i8_to_u8(other)
     ret some (self -? other_u8)
   else
@@ -269,13 +269,13 @@ fun mul_saturating(self: u8, other: u8): u8
   end if
 end fun
 
-// For u8, division cannot overflow (result <= dividend), so this is same as div_checked.
+// For u8, division cannot overflow (result ≤ dividend), so this is same as div_checked.
 fun div_saturating(self: u8, other: u8): ?u8
   ret div_checked(self, other)
 end fun
 
 fun add_saturating_signed(self: u8, other: i8): u8
-  if other >= (: i8 / 0)
+  if other ≥ (: i8 / 0)
     let other_u8 = icall i8_to_u8(other)
     ret add_saturating(self, other_u8)
   else
@@ -286,7 +286,7 @@ fun add_saturating_signed(self: u8, other: i8): u8
 end fun
 
 fun sub_saturating_signed(self: u8, other: i8): u8
-  if other >= (: i8 / 0)
+  if other ≥ (: i8 / 0)
     let other_u8 = icall i8_to_u8(other)
     ret sub_saturating(self, other_u8)
   else
@@ -316,7 +316,7 @@ fun div_wrapping(self: u8, other: u8): ?u8
 end fun
 
 fun add_wrapping_signed(self: u8, other: i8): u8
-  if other >= (: i8 / 0)
+  if other ≥ (: i8 / 0)
     let other_u8 = icall i8_to_u8(other)
     ret add_wrapping(self, other_u8)
   else
@@ -327,7 +327,7 @@ fun add_wrapping_signed(self: u8, other: i8): u8
 end fun
 
 fun sub_wrapping_signed(self: u8, other: i8): u8
-  if other >= (: i8 / 0)
+  if other ≥ (: i8 / 0)
     let other_u8 = icall i8_to_u8(other)
     ret sub_wrapping(self, other_u8)
   else
@@ -339,18 +339,18 @@ end fun
 
 // Shifts.
 
-// Returns none if shift >= 8.
+// Returns none if shift ≥ 8.
 fun shift_left(self: u8, n: u8): ?u8
-  if n >= (: u8 / 8)
+  if n ≥ (: u8 / 8)
     ret none
   else
     ret some icall shl_u8(self, n)
   end if
 end fun
 
-// Returns none if shift >= 8.
+// Returns none if shift ≥ 8.
 fun shift_right(self: u8, n: u8): ?u8
-  if n >= (: u8 / 8)
+  if n ≥ (: u8 / 8)
     ret none
   else
     ret some icall shr_u8(self, n)
@@ -358,7 +358,7 @@ fun shift_right(self: u8, n: u8): ?u8
 end fun
 
 fun shift_left_saturating(self: u8, n: u8): u8
-  if n >= (: u8 / 8)
+  if n ≥ (: u8 / 8)
     ret max_value()
   else
     if shift_left(self, n) |value|
@@ -370,7 +370,7 @@ fun shift_left_saturating(self: u8, n: u8): u8
 end fun
 
 fun shift_right_saturating(self: u8, n: u8): u8
-  if n >= (: u8 / 8)
+  if n ≥ (: u8 / 8)
     ret (: u8 / 0)
   else
     if shift_right(self, n) |value|
@@ -420,11 +420,11 @@ end fun
 // Comparisons and utilities.
 
 fun is_zero(self: u8): bool
-  ret self == (: u8 / 0)
+  ret self ≡ (: u8 / 0)
 end fun
 
 fun min(self: u8, other: u8): u8
-  if self <= other
+  if self ≤ other
     ret self
   else
     ret other
@@ -432,7 +432,7 @@ fun min(self: u8, other: u8): u8
 end fun
 
 fun max(self: u8, other: u8): u8
-  if self >= other
+  if self ≥ other
     ret self
   else
     ret other
@@ -440,10 +440,10 @@ fun max(self: u8, other: u8): u8
 end fun
 
 fun clamp(self: u8, min_val: u8, max_val: u8): u8
-  if self .< min_val
+  if self < min_val
     ret min_val
   else
-    if self .> max_val
+    if self > max_val
       ret max_val
     else
       ret self
@@ -452,7 +452,7 @@ fun clamp(self: u8, min_val: u8, max_val: u8): u8
 end fun
 
 fun abs_diff(self: u8, other: u8): u8
-  if self >= other
+  if self ≥ other
     ret sub_saturating(self, other)
   else
     ret sub_saturating(other, self)

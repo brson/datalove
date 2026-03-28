@@ -1,1 +1,1 @@
-Parse error: unclosed '<'; unexpected token after expression; unterminated function body
+Typecheck error: line 3, col 8: error[F016]: mismatched types: expected `i64`, found `int`; line 4, col 13: error[F016]: mismatched types: expected `int`, found `i64`; line 6, col 13: error[F016]: mismatched types: expected `int`, found `i64` (help: use `@` to convert from `i64` to `int`)

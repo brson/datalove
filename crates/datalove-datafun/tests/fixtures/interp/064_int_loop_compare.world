@@ -4,7 +4,7 @@ scriptunit-fragment
 
 var count = :int/0
 loop
-    if count == :int/5
+    if count ≡ :int/5
         break
     end if
     set count = count + :int/1

@@ -2316,7 +2316,7 @@ mod tests {
     #[test]
     fn test_instantiate_tensor_2d_u32() -> AnyResult<()> {
         let db = Database::default();
-        let typechecked = compile_str(&db, ": [|u32, 2|] / [| 1 2 3, 4 5 6 |]")?;
+        let typechecked = compile_str(&db, ": ⟪u32, 2⟫ / ⟪ 1 2 3, 4 5 6 ⟫")?;
         let rt = datalove_rt::rust::Runtime::new();
         let guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);
@@ -2352,7 +2352,7 @@ mod tests {
     #[test]
     fn test_instantiate_tensor_1d_f32() -> AnyResult<()> {
         let db = Database::default();
-        let typechecked = compile_str(&db, ": [|f32, 1|] / [| 1.0 2.0 3.0 4.0 5.0 |]")?;
+        let typechecked = compile_str(&db, ": ⟪f32, 1⟫ / ⟪ 1.0 2.0 3.0 4.0 5.0 ⟫")?;
         let rt = datalove_rt::rust::Runtime::new();
         let guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);
@@ -2388,7 +2388,7 @@ mod tests {
     #[test]
     fn test_instantiate_tensor_rank4() -> AnyResult<()> {
         let db = Database::default();
-        let typechecked = compile_str(&db, ": [|u32, 4|] / [| 1 2, 3 4,, 5 6, 7 8,,, 9 10, 11 12,, 13 14, 15 16 |]")?;
+        let typechecked = compile_str(&db, ": ⟪u32, 4⟫ / ⟪ 1 2, 3 4,, 5 6, 7 8,,, 9 10, 11 12,, 13 14, 15 16 ⟫")?;
         let rt = datalove_rt::rust::Runtime::new();
         let guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);
@@ -2424,7 +2424,7 @@ mod tests {
     #[test]
     fn test_instantiate_tensor_3d_i32() -> AnyResult<()> {
         let db = Database::default();
-        let typechecked = compile_str(&db, ": [|i32, 3|] / [| 1 2, 3 4,, 5 6, 7 8 |]")?;
+        let typechecked = compile_str(&db, ": ⟪i32, 3⟫ / ⟪ 1 2, 3 4,, 5 6, 7 8 ⟫")?;
         let rt = datalove_rt::rust::Runtime::new();
         let guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);
@@ -2460,7 +2460,7 @@ mod tests {
     #[test]
     fn test_instantiate_tensor_of_tuples() -> AnyResult<()> {
         let db = Database::default();
-        let typechecked = compile_str(&db, ": [|(u32, f32), 2|] / [| (1, 1.0) (2, 2.0), (3, 3.0) (4, 4.0) |]")?;
+        let typechecked = compile_str(&db, ": ⟪(u32, f32), 2⟫ / ⟪ (1, 1.0) (2, 2.0), (3, 3.0) (4, 4.0) ⟫")?;
         let rt = datalove_rt::rust::Runtime::new();
         let guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);
@@ -2494,7 +2494,7 @@ mod tests {
     #[test]
     fn test_instantiate_list_of_tensors() -> AnyResult<()> {
         let db = Database::default();
-        let typechecked = compile_str(&db, ": [[|u32, 2|]] / [[| 1 2, 3 4 |], [| 5 6, 7 8 |]]")?;
+        let typechecked = compile_str(&db, ": [⟪u32, 2⟫] / [⟪ 1 2, 3 4 ⟫, ⟪ 5 6, 7 8 ⟫]")?;
         let rt = datalove_rt::rust::Runtime::new();
         let guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);
@@ -2518,7 +2518,7 @@ mod tests {
     #[test]
     fn test_instantiate_option_of_tensor() -> AnyResult<()> {
         let db = Database::default();
-        let typechecked = compile_str(&db, ": ?[|u32, 2|] / some [| 1 2, 3 4 |]")?;
+        let typechecked = compile_str(&db, ": ?⟪u32, 2⟫ / some ⟪ 1 2, 3 4 ⟫")?;
         let rt = datalove_rt::rust::Runtime::new();
         let guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);
@@ -2546,7 +2546,7 @@ mod tests {
     #[test]
     fn test_instantiate_table_basic() -> AnyResult<()> {
         let db = Database::default();
-        let typechecked = compile_str(&db, ": {| id: u32, val: u32 |} / {| id, val; 1, 10; 2, 20 |}")?;
+        let typechecked = compile_str(&db, ": ⟦ id: u32, val: u32 ⟧ / ⟦ id, val; 1, 10; 2, 20 ⟧")?;
         let rt = datalove_rt::rust::Runtime::new();
         let guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);
@@ -2574,7 +2574,7 @@ mod tests {
     #[test]
     fn test_instantiate_table_empty() -> AnyResult<()> {
         let db = Database::default();
-        let typechecked = compile_str(&db, ": {| x: u32 |} / {| x |}")?;
+        let typechecked = compile_str(&db, ": ⟦ x: u32 ⟧ / ⟦ x ⟧")?;
         let rt = datalove_rt::rust::Runtime::new();
         let guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);
@@ -2597,7 +2597,7 @@ mod tests {
     #[test]
     fn test_instantiate_table_with_string() -> AnyResult<()> {
         let db = Database::default();
-        let typechecked = compile_str(&db, r#": {| name: string, age: u32 |} / {| name, age; "Alice", 30; "Bob", 25 |}"#)?;
+        let typechecked = compile_str(&db, r#": ⟦ name: string, age: u32 ⟧ / ⟦ name, age; "Alice", 30; "Bob", 25 ⟧"#)?;
         let rt = datalove_rt::rust::Runtime::new();
         let guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);

@@ -6,7 +6,7 @@ scriptunit-fragment
 fun check(): bool
     const A: u32 = 10
     const B: u32 = 10
-    const C: bool = A == B
+    const C: bool = A ≡ B
     ret C
 end fun
 

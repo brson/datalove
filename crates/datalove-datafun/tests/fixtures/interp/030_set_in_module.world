@@ -2,8 +2,8 @@
 module local/test/setmod
 ----------
 
-fun make_set(): #{u32}
-    ret #{ 100, 200, 300 }
+fun make_set(): ⦃u32⦄
+    ret ⦃ 100, 200, 300 ⦄
 end fun
 
 ----------

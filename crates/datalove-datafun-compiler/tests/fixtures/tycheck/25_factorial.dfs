@@ -1,5 +1,5 @@
 fun factorial(n: int): int
-  if n <= : int / 1
+  if n ≤ : int / 1
     ret : int / 1
   else
     ret n * factorial(n - : int / 1)

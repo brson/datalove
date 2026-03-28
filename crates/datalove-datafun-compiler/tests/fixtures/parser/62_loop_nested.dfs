@@ -5,7 +5,7 @@ fun nested_loops(): u32
       let total = total + 1
       break
     end loop
-    if total >= 3
+    if total ≥ 3
       break
     end if
   end loop

@@ -1,4 +1,4 @@
 // Using wrong index type for tensor is a type error.
-fun get(t: [|u32, 1|], i: u32): ?u32
+fun get(t: ⟪u32, 1⟫, i: u32): ?u32
     ret some (t[i]?)
 end fun

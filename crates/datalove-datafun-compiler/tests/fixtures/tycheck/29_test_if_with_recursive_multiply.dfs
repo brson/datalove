@@ -1,5 +1,5 @@
 fun test(n: int): int
-  if n <= : int / 1
+  if n ≤ : int / 1
     ret : int / 1
   else
     ret n * test(n - : int / 1)

@@ -21,7 +21,7 @@ DualAnalysis(
                         v5 = const 6u32
                         v6 = const 7u32
                         v7 = const 8u32
-                        v8 = [| v0 v1, v2 v3,, v4 v5, v6 v7 |]
+                        v8 = ⟪ v0 v1, v2 v3,, v4 v5, v6 v7 ⟫
                         v9 = const 0index
                         v10 = const 1index
                         v11 = const 0index
@@ -35,7 +35,7 @@ DualAnalysis(
                         v18 = const 6u32
                         v19 = const 7u32
                         v20 = const 8u32
-                        v21 = [| v13 v14, v15 v16,, v17 v18, v19 v20 |]
+                        v21 = ⟪ v13 v14, v15 v16,, v17 v18, v19 v20 ⟫
                         v22 = const 1index
                         v23 = const 0index
                         v24 = const 1index
@@ -86,7 +86,7 @@ DualAnalysis(
                         v5 = const 6u32
                         v6 = const 7u32
                         v7 = const 8u32
-                        v8 = [| v0 v1, v2 v3,, v4 v5, v6 v7 |]
+                        v8 = ⟪ v0 v1, v2 v3,, v4 v5, v6 v7 ⟫
                         v9 = const 0index
                         v10 = const 1index
                         v11 = const 0index
@@ -100,7 +100,7 @@ DualAnalysis(
                         v18 = const 6u32
                         v19 = const 7u32
                         v20 = const 8u32
-                        v21 = [| v13 v14, v15 v16,, v17 v18, v19 v20 |]
+                        v21 = ⟪ v13 v14, v15 v16,, v17 v18, v19 v20 ⟫
                         v22 = const 1index
                         v23 = const 0index
                         v24 = const 1index

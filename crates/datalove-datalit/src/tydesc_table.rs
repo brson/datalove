@@ -1080,7 +1080,7 @@ mod tests {
     #[test]
     fn test_create_map_tydesc() -> AnyResult<()> {
         let db = Database::default();
-        let typechecked = compile(&db, ": %{u32 = string} / %{ 1 = \"one\", 2 = \"two\" }")?;
+        let typechecked = compile(&db, ": ⦇u32 ↦ string⦈ / ⦇ 1 ↦ \"one\", 2 ↦ \"two\" ⦈")?;
         let root_type = typechecked.root_type(&db).clone().unwrap();
 
         let mut table = TyDescTable::new(&db);
@@ -1105,7 +1105,7 @@ mod tests {
     #[test]
     fn test_create_set_tydesc() -> AnyResult<()> {
         let db = Database::default();
-        let typechecked = compile(&db, ": #{u32} / #{ 1, 2, 3 }")?;
+        let typechecked = compile(&db, ": ⦃u32⦄ / ⦃ 1, 2, 3 ⦄")?;
         let root_type = typechecked.root_type(&db).clone().unwrap();
 
         let mut table = TyDescTable::new(&db);

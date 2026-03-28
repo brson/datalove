@@ -333,7 +333,7 @@ fn gen_simple_bool_expr<'db, R: Rng>(
             let ty = gen_u32_type(db);
             let lhs = gen_expr(db, rng, ty.clone(), config, ctx);
             let rhs = gen_expr(db, rng, ty, config, ctx);
-            let ops = [".<", ".>", "<=", ">=", "==", "!="];
+            let ops = ["<", ">", "≤", "≥", "≡", "≢"];
             let op = ops[rng.gen_range(0..ops.len())];
             format!("{} {} {}", lhs, op, rhs)
         }
@@ -560,9 +560,9 @@ mod tests {
         for seed in 0..100 {
             let mut rng = rand::rngs::StdRng::seed_from_u64(seed);
             let expr = gen_bool_expr(db, &mut rng, &config, &mut ctx);
-            if expr.contains(".<") || expr.contains(".>")
-                || expr.contains("<=") || expr.contains(">=")
-                || expr.contains("==") || expr.contains("!=")
+            if expr.contains("<") || expr.contains(">")
+                || expr.contains("≤") || expr.contains("≥")
+                || expr.contains("≡") || expr.contains("≢")
             {
                 found_comparison = true;
                 break;

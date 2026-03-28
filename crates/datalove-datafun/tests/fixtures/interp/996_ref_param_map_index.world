@@ -7,8 +7,8 @@ fun read_ref(ref x: u32): ?u32
     ret some x
 end fun
 
-fun test(m: %{u32 = u32}, k: u32): ?u32
+fun test(m: ⦇u32 ↦ u32⦈, k: u32): ?u32
     ret read_ref(m[k]?)
 end fun
 
-debuglog test(%{ 1 = 100, 2 = 200 }, 2)
+debuglog test(⦇ 1 ↦ 100, 2 ↦ 200 ⦈, 2)

@@ -8,7 +8,7 @@ fun sum_to_n(n: int): int
     loop
         set i = i + :int/1
         set total = total + i
-        if i == n
+        if i ≡ n
             break
         end if
     end loop

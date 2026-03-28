@@ -13,7 +13,7 @@
       "params": [
         {
           "name": "mat",
-          "type": "[|u32, 2|]"
+          "type": "⟪u32, 2⟫"
         }
       ],
       "return_type": "?bool"
@@ -24,7 +24,7 @@
       "params": [
         {
           "name": "t",
-          "type": "[|u32, 3|]"
+          "type": "⟪u32, 3⟫"
         }
       ],
       "return_type": "?bool"

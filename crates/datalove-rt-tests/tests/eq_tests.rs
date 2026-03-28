@@ -1648,8 +1648,8 @@ fn test_eq_type_mismatch() -> AnyResult<()> {
 #[test]
 fn test_eq_map_empty_equals() -> AnyResult<()> {
     let db = Database::default();
-    let typechecked_a = compile_str(&db, ": %{u32 = u32} / %{}")?;
-    let typechecked_b = compile_str(&db, ": %{u32 = u32} / %{}")?;
+    let typechecked_a = compile_str(&db, ": ⦇u32 ↦ u32⦈ / ⦇⦈")?;
+    let typechecked_b = compile_str(&db, ": ⦇u32 ↦ u32⦈ / ⦇⦈")?;
 
     let rt = Runtime::new();
     let mut tydesc_table = TyDescTable::new(&db);
@@ -1704,8 +1704,8 @@ fn test_eq_map_empty_equals() -> AnyResult<()> {
 #[test]
 fn test_eq_map_equals_same_contents() -> AnyResult<()> {
     let db = Database::default();
-    let typechecked_a = compile_str(&db, "%{10 = 100, 20 = 200, 30 = 300}")?;
-    let typechecked_b = compile_str(&db, "%{10 = 100, 20 = 200, 30 = 300}")?;
+    let typechecked_a = compile_str(&db, "⦇10 ↦ 100, 20 ↦ 200, 30 ↦ 300⦈")?;
+    let typechecked_b = compile_str(&db, "⦇10 ↦ 100, 20 ↦ 200, 30 ↦ 300⦈")?;
 
     let rt = Runtime::new();
     let mut tydesc_table = TyDescTable::new(&db);
@@ -1760,8 +1760,8 @@ fn test_eq_map_equals_same_contents() -> AnyResult<()> {
 #[test]
 fn test_eq_map_equals_different_literal_order() -> AnyResult<()> {
     let db = Database::default();
-    let typechecked_a = compile_str(&db, "%{10 = 100, 20 = 200, 30 = 300}")?;
-    let typechecked_b = compile_str(&db, "%{30 = 300, 10 = 100, 20 = 200}")?;
+    let typechecked_a = compile_str(&db, "⦇10 ↦ 100, 20 ↦ 200, 30 ↦ 300⦈")?;
+    let typechecked_b = compile_str(&db, "⦇30 ↦ 300, 10 ↦ 100, 20 ↦ 200⦈")?;
 
     let rt = Runtime::new();
     let mut tydesc_table = TyDescTable::new(&db);
@@ -1816,8 +1816,8 @@ fn test_eq_map_equals_different_literal_order() -> AnyResult<()> {
 #[test]
 fn test_eq_map_not_equals_different_keys() -> AnyResult<()> {
     let db = Database::default();
-    let typechecked_a = compile_str(&db, ": %{u32 = u32} / %{10 = 100, 20 = 200}")?;
-    let typechecked_b = compile_str(&db, ": %{u32 = u32} / %{10 = 100, 30 = 300}")?;
+    let typechecked_a = compile_str(&db, ": ⦇u32 ↦ u32⦈ / ⦇10 ↦ 100, 20 ↦ 200⦈")?;
+    let typechecked_b = compile_str(&db, ": ⦇u32 ↦ u32⦈ / ⦇10 ↦ 100, 30 ↦ 300⦈")?;
 
     let rt = Runtime::new();
     let mut tydesc_table = TyDescTable::new(&db);
@@ -1872,8 +1872,8 @@ fn test_eq_map_not_equals_different_keys() -> AnyResult<()> {
 #[test]
 fn test_eq_map_not_equals_different_values() -> AnyResult<()> {
     let db = Database::default();
-    let typechecked_a = compile_str(&db, ": %{u32 = u32} / %{10 = 100, 20 = 200}")?;
-    let typechecked_b = compile_str(&db, ": %{u32 = u32} / %{10 = 100, 20 = 999}")?;
+    let typechecked_a = compile_str(&db, ": ⦇u32 ↦ u32⦈ / ⦇10 ↦ 100, 20 ↦ 200⦈")?;
+    let typechecked_b = compile_str(&db, ": ⦇u32 ↦ u32⦈ / ⦇10 ↦ 100, 20 ↦ 999⦈")?;
 
     let rt = Runtime::new();
     let mut tydesc_table = TyDescTable::new(&db);
@@ -1928,8 +1928,8 @@ fn test_eq_map_not_equals_different_values() -> AnyResult<()> {
 #[test]
 fn test_eq_map_not_equals_different_sizes() -> AnyResult<()> {
     let db = Database::default();
-    let typechecked_a = compile_str(&db, ": %{u32 = u32} / %{10 = 100, 20 = 200, 30 = 300}")?;
-    let typechecked_b = compile_str(&db, ": %{u32 = u32} / %{10 = 100, 20 = 200}")?;
+    let typechecked_a = compile_str(&db, ": ⦇u32 ↦ u32⦈ / ⦇10 ↦ 100, 20 ↦ 200, 30 ↦ 300⦈")?;
+    let typechecked_b = compile_str(&db, ": ⦇u32 ↦ u32⦈ / ⦇10 ↦ 100, 20 ↦ 200⦈")?;
 
     let rt = Runtime::new();
     let mut tydesc_table = TyDescTable::new(&db);
@@ -1986,8 +1986,8 @@ fn test_eq_map_not_equals_different_sizes() -> AnyResult<()> {
 #[test]
 fn test_eq_set_empty_equals() -> AnyResult<()> {
     let db = Database::default();
-    let typechecked_a = compile_str(&db, ": #{u32} / #{}")?;
-    let typechecked_b = compile_str(&db, ": #{u32} / #{}")?;
+    let typechecked_a = compile_str(&db, ": ⦃u32⦄ / ⦃⦄")?;
+    let typechecked_b = compile_str(&db, ": ⦃u32⦄ / ⦃⦄")?;
 
     let rt = Runtime::new();
     let mut tydesc_table = TyDescTable::new(&db);
@@ -2042,8 +2042,8 @@ fn test_eq_set_empty_equals() -> AnyResult<()> {
 #[test]
 fn test_eq_set_equals_same_contents() -> AnyResult<()> {
     let db = Database::default();
-    let typechecked_a = compile_str(&db, "#{10, 20, 30}")?;
-    let typechecked_b = compile_str(&db, "#{10, 20, 30}")?;
+    let typechecked_a = compile_str(&db, "⦃10, 20, 30⦄")?;
+    let typechecked_b = compile_str(&db, "⦃10, 20, 30⦄")?;
 
     let rt = Runtime::new();
     let mut tydesc_table = TyDescTable::new(&db);
@@ -2098,8 +2098,8 @@ fn test_eq_set_equals_same_contents() -> AnyResult<()> {
 #[test]
 fn test_eq_set_equals_different_literal_order() -> AnyResult<()> {
     let db = Database::default();
-    let typechecked_a = compile_str(&db, "#{10, 20, 30}")?;
-    let typechecked_b = compile_str(&db, "#{30, 10, 20}")?;
+    let typechecked_a = compile_str(&db, "⦃10, 20, 30⦄")?;
+    let typechecked_b = compile_str(&db, "⦃30, 10, 20⦄")?;
 
     let rt = Runtime::new();
     let mut tydesc_table = TyDescTable::new(&db);
@@ -2154,8 +2154,8 @@ fn test_eq_set_equals_different_literal_order() -> AnyResult<()> {
 #[test]
 fn test_eq_set_not_equals_different_elements() -> AnyResult<()> {
     let db = Database::default();
-    let typechecked_a = compile_str(&db, ": #{u32} / #{10, 20, 30}")?;
-    let typechecked_b = compile_str(&db, ": #{u32} / #{10, 20, 40}")?;
+    let typechecked_a = compile_str(&db, ": ⦃u32⦄ / ⦃10, 20, 30⦄")?;
+    let typechecked_b = compile_str(&db, ": ⦃u32⦄ / ⦃10, 20, 40⦄")?;
 
     let rt = Runtime::new();
     let mut tydesc_table = TyDescTable::new(&db);
@@ -2210,8 +2210,8 @@ fn test_eq_set_not_equals_different_elements() -> AnyResult<()> {
 #[test]
 fn test_eq_set_not_equals_different_sizes() -> AnyResult<()> {
     let db = Database::default();
-    let typechecked_a = compile_str(&db, ": #{u32} / #{10, 20, 30}")?;
-    let typechecked_b = compile_str(&db, ": #{u32} / #{10, 20}")?;
+    let typechecked_a = compile_str(&db, ": ⦃u32⦄ / ⦃10, 20, 30⦄")?;
+    let typechecked_b = compile_str(&db, ": ⦃u32⦄ / ⦃10, 20⦄")?;
 
     let rt = Runtime::new();
     let mut tydesc_table = TyDescTable::new(&db);
@@ -2687,8 +2687,8 @@ proptest! {
 #[test]
 fn test_eq_table_empty_equals() -> AnyResult<()> {
     let db = Database::default();
-    let typechecked_a = compile_str(&db, ": {| x: u32 |} / {| x |}")?;
-    let typechecked_b = compile_str(&db, ": {| x: u32 |} / {| x |}")?;
+    let typechecked_a = compile_str(&db, ": ⟦ x: u32 ⟧ / ⟦ x ⟧")?;
+    let typechecked_b = compile_str(&db, ": ⟦ x: u32 ⟧ / ⟦ x ⟧")?;
 
     let rt = Runtime::new();
     let mut tydesc_table = TyDescTable::new(&db);
@@ -2719,8 +2719,8 @@ fn test_eq_table_empty_equals() -> AnyResult<()> {
 #[test]
 fn test_eq_table_with_rows_equals() -> AnyResult<()> {
     let db = Database::default();
-    let typechecked_a = compile_str(&db, ": {| x: u32, y: u32 |} / {| x, y; 1, 2; 3, 4 |}")?;
-    let typechecked_b = compile_str(&db, ": {| x: u32, y: u32 |} / {| x, y; 1, 2; 3, 4 |}")?;
+    let typechecked_a = compile_str(&db, ": ⟦ x: u32, y: u32 ⟧ / ⟦ x, y; 1, 2; 3, 4 ⟧")?;
+    let typechecked_b = compile_str(&db, ": ⟦ x: u32, y: u32 ⟧ / ⟦ x, y; 1, 2; 3, 4 ⟧")?;
 
     let rt = Runtime::new();
     let mut tydesc_table = TyDescTable::new(&db);
@@ -2751,8 +2751,8 @@ fn test_eq_table_with_rows_equals() -> AnyResult<()> {
 #[test]
 fn test_eq_table_different_values() -> AnyResult<()> {
     let db = Database::default();
-    let typechecked_a = compile_str(&db, ": {| x: u32 |} / {| x; 1 |}")?;
-    let typechecked_b = compile_str(&db, ": {| x: u32 |} / {| x; 2 |}")?;
+    let typechecked_a = compile_str(&db, ": ⟦ x: u32 ⟧ / ⟦ x; 1 ⟧")?;
+    let typechecked_b = compile_str(&db, ": ⟦ x: u32 ⟧ / ⟦ x; 2 ⟧")?;
 
     let rt = Runtime::new();
     let mut tydesc_table = TyDescTable::new(&db);
@@ -2783,8 +2783,8 @@ fn test_eq_table_different_values() -> AnyResult<()> {
 #[test]
 fn test_eq_table_different_lengths() -> AnyResult<()> {
     let db = Database::default();
-    let typechecked_a = compile_str(&db, ": {| x: u32 |} / {| x; 1 |}")?;
-    let typechecked_b = compile_str(&db, ": {| x: u32 |} / {| x; 1; 2 |}")?;
+    let typechecked_a = compile_str(&db, ": ⟦ x: u32 ⟧ / ⟦ x; 1 ⟧")?;
+    let typechecked_b = compile_str(&db, ": ⟦ x: u32 ⟧ / ⟦ x; 1; 2 ⟧")?;
 
     let rt = Runtime::new();
     let mut tydesc_table = TyDescTable::new(&db);
@@ -2815,8 +2815,8 @@ fn test_eq_table_different_lengths() -> AnyResult<()> {
 #[test]
 fn test_eq_table_with_strings() -> AnyResult<()> {
     let db = Database::default();
-    let typechecked_a = compile_str(&db, r#": {| name: string |} / {| name; "Alice"; "Bob" |}"#)?;
-    let typechecked_b = compile_str(&db, r#": {| name: string |} / {| name; "Alice"; "Bob" |}"#)?;
+    let typechecked_a = compile_str(&db, r#": ⟦ name: string ⟧ / ⟦ name; "Alice"; "Bob" ⟧"#)?;
+    let typechecked_b = compile_str(&db, r#": ⟦ name: string ⟧ / ⟦ name; "Alice"; "Bob" ⟧"#)?;
 
     let rt = Runtime::new();
     let mut tydesc_table = TyDescTable::new(&db);

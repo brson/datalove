@@ -4,7 +4,7 @@ scriptunit-fragment
 
 // Simple recursion: countdown to zero.
 fun countdown(n: u32): !u32
-    if n .< 1
+    if n < 1
         ret ok 0
     else
         ret countdown(n -! 1)

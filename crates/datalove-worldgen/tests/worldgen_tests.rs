@@ -521,12 +521,12 @@ fn test_comparison_operators() {
         let wf = gen_worldfile_seeded(seed, config.clone());
 
         // Check for comparison operators.
-        if wf.contains(".<") { found_ops.insert(".<"); }
-        if wf.contains(".>") { found_ops.insert(".>"); }
-        if wf.contains("<=") { found_ops.insert("<="); }
-        if wf.contains(">=") { found_ops.insert(">="); }
-        if wf.contains("==") { found_ops.insert("=="); }
-        if wf.contains("!=") { found_ops.insert("!="); }
+        if wf.contains("<") { found_ops.insert("<"); }
+        if wf.contains(">") { found_ops.insert(">"); }
+        if wf.contains("≤") { found_ops.insert("≤"); }
+        if wf.contains("≥") { found_ops.insert("≥"); }
+        if wf.contains("≡") { found_ops.insert("≡"); }
+        if wf.contains("≢") { found_ops.insert("≢"); }
 
         if found_ops.len() >= 3 {
             break;

@@ -6,7 +6,7 @@ module local/test/main
 // For non-Copy types, In-mode would consume ownership, but mut doesn't own.
 // This should produce CannotMoveRefParam error (mut is borrowed like ref).
 fun inner(x: int): bool
-    ret x == :int/100
+    ret x ≡ :int/100
 end fun
 
 fun outer(mut y: int): bool

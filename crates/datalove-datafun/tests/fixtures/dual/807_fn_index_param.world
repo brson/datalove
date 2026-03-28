@@ -11,7 +11,7 @@ fun double_index(n: index): index
 end fun
 
 fun is_zero_index(n: index): bool
-    ret n == (: index / 0)
+    ret n ≡ (: index / 0)
 end fun
 
 debuglog add_index((: index / 100), (: index / 200))

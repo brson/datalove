@@ -2,7 +2,7 @@ fun test_loop(): int
   let n: int = 0
   loop
     let n = n + :int/1
-    if n >= :int/3
+    if n ≥ :int/3
       break
     end if
   end loop

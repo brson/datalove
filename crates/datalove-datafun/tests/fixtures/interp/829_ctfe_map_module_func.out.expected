@@ -20,7 +20,7 @@ Analysis(
                         v3 = const 200u32
                         v4 = const 30u32
                         v5 = const 300u32
-                        v6 = const %{10u32 = 100u32, 20u32 = 200u32, 30u32 = 300u32}
+                        v6 = const ⦇10u32 ↦ 100u32, 20u32 ↦ 200u32, 30u32 ↦ 300u32⦈
                         return v6
                 """,
             ),
@@ -63,7 +63,7 @@ Analysis(
                         unit_end v0
                 """,
             ),
-            output: "%{10 = 100, 20 = 200, 30 = 300}",
+            output: "⦇10 ↦ 100, 20 ↦ 200, 30 ↦ 300⦈",
         ),
     ],
 )

@@ -467,7 +467,7 @@ unsafe fn pretty_map(
         let key_ty = tydesc.map_key_ty();
         let value_ty = tydesc.map_value_ty();
 
-        push_str(rt, string_mut, string_tydesc, b"%{")?;
+        push_str(rt, string_mut, string_tydesc, "⦇".as_bytes())?;
 
         if !map.root.is_null() && map.len > rtdt::Index::ZERO {
             let key_size = key_ty.size() as usize;
@@ -492,7 +492,7 @@ unsafe fn pretty_map(
                     let value_ptr = values_array.add(i as usize * value_size);
 
                     pretty_value(rt, key_ptr, key_ty, string_mut, string_tydesc)?;
-                    push_str(rt, string_mut, string_tydesc, b" = ")?;
+                    push_str(rt, string_mut, string_tydesc, " ↦ ".as_bytes())?;
                     pretty_value(rt, value_ptr, value_ty, string_mut, string_tydesc)?;
 
                     entry_count += 1;
@@ -504,7 +504,7 @@ unsafe fn pretty_map(
             }
         }
 
-        push_str(rt, string_mut, string_tydesc, b"}")
+        push_str(rt, string_mut, string_tydesc, "⦈".as_bytes())
     }
 }
 
@@ -519,7 +519,7 @@ unsafe fn pretty_set(
         let set = &*(value_ref as *const rtdt::Set);
         let elem_ty = tydesc.set_element_ty();
 
-        push_str(rt, string_mut, string_tydesc, b"#{")?;
+        push_str(rt, string_mut, string_tydesc, "⦃".as_bytes())?;
 
         if !set.root.is_null() && set.len > rtdt::Index::ZERO {
             let elem_size = elem_ty.size() as usize;
@@ -550,7 +550,7 @@ unsafe fn pretty_set(
             }
         }
 
-        push_str(rt, string_mut, string_tydesc, b"}")
+        push_str(rt, string_mut, string_tydesc, "⦄".as_bytes())
     }
 }
 
@@ -674,7 +674,7 @@ unsafe fn pretty_tensor(
         let total_elems: usize = shape.iter().product();
 
         if total_elems > 0 && !tensor.ptr_base.is_null() {
-            push_str(rt, string_mut, string_tydesc, b"[| ")?;
+            push_str(rt, string_mut, string_tydesc, "⟪ ".as_bytes())?;
             pretty_tensor_group(
                 rt, tensor.ptr_base, elem_ty, elem_size,
                 &shape, 0, 0, total_elems,
@@ -688,9 +688,9 @@ unsafe fn pretty_tensor(
                 let commas: Vec<u8> = core::iter::repeat(b',').take(rank - 1).collect();
                 push_str(rt, string_mut, string_tydesc, &commas)?;
             }
-            push_str(rt, string_mut, string_tydesc, b" |]")
+            push_str(rt, string_mut, string_tydesc, " ⟫".as_bytes())
         } else {
-            push_str(rt, string_mut, string_tydesc, b"[| |]")
+            push_str(rt, string_mut, string_tydesc, "⟪ ⟫".as_bytes())
         }
     }
 }
@@ -757,7 +757,7 @@ unsafe fn pretty_table(
 
         // Format: {| col1, col2; val1, val2; val3, val4 |}
         // Header row with column names, then data rows separated by ";".
-        push_str(rt, string_mut, string_tydesc, b"{| ")?;
+        push_str(rt, string_mut, string_tydesc, "⟦ ".as_bytes())?;
 
         // Print column names as header.
         for (i, col) in tydesc.table_column_tydescs().enumerate() {
@@ -789,7 +789,7 @@ unsafe fn pretty_table(
             }
         }
 
-        push_str(rt, string_mut, string_tydesc, b" |}")
+        push_str(rt, string_mut, string_tydesc, " ⟧".as_bytes())
     }
 }
 

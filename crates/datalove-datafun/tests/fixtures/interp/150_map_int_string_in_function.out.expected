@@ -24,7 +24,7 @@ Analysis(
                         v3 = const "two"
                         v4 = const 3int
                         v5 = const "three"
-                        v6 = %{v0: v1, v2: v3, v4: v5}
+                        v6 = ⦇v0 ↦ v1, v2 ↦ v3, v4 ↦ v5⦈
                         return v6
                 """,
             ),
@@ -48,7 +48,7 @@ Analysis(
                         unit_end v0
                 """,
             ),
-            output: "%{1 = \"one\", 2 = \"two\", 3 = \"three\"}",
+            output: "⦇1 ↦ \"one\", 2 ↦ \"two\", 3 ↦ \"three\"⦈",
         ),
     ],
 )

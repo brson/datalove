@@ -3,10 +3,10 @@ scriptunit-fragment
 ----------
 
 // Map index chained with field access: set m[k]?.field = v.
-fun set_field(m: %{u32 = {x: u32, y: u32}}, k: u32, v: u32): ?%{u32 = {x: u32, y: u32}}
+fun set_field(m: ⦇u32 ↦ {x: u32, y: u32}⦈, k: u32, v: u32): ?⦇u32 ↦ {x: u32, y: u32}⦈
     var b = m
     set b[k]?.x = v
     ret some b
 end fun
 
-debuglog set_field(%{ 1 = {x = 10, y = 20}, 2 = {x = 30, y = 40} }, 1, 99)
+debuglog set_field(⦇ 1 ↦ {x = 10, y = 20}, 2 ↦ {x = 30, y = 40} ⦈, 1, 99)

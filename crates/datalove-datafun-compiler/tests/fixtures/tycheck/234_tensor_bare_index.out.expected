@@ -6,8 +6,8 @@
         {
           "message": "cannot infer type",
           "span": [
-            92,
-            95
+            94,
+            97
           ],
           "text": "[i]"
         }
@@ -27,7 +27,7 @@
       "params": [
         {
           "name": "t",
-          "type": "[|u32, 1|]"
+          "type": "⟪u32, 1⟫"
         },
         {
           "name": "i",

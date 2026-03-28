@@ -3,5 +3,5 @@ scriptunit-fragment
 ----------
 
 // CTFE set containing struct values.
-const S: #{{ x: u32, y: u32 }} = #{ { x: 1, y: 2 }, { x: 3, y: 4 } }
+const S: ⦃{ x: u32, y: u32 }⦄ = ⦃ { x: 1, y: 2 }, { x: 3, y: 4 } ⦄
 debuglog S

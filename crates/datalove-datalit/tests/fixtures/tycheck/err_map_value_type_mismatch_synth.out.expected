@@ -51,8 +51,8 @@
         {
           "message": "expected `string`, found `int`",
           "span": [
-            16,
-            18
+            21,
+            23
           ],
           "text": "42"
         }

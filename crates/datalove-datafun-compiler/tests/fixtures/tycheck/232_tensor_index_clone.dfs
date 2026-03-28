@@ -1,4 +1,4 @@
 // Tensor rank-2 index with @ clone passes.
-fun get(t: [|u32, 2|], i: index): ?[|u32, 1|]
+fun get(t: ⟪u32, 2⟫, i: index): ?⟪u32, 1⟫
     ret some (t[i]?@)
 end fun

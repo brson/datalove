@@ -1,6 +1,6 @@
 fun classify(n: u32): u32
-  if n .< 10
-    if n .< 5
+  if n < 10
+    if n < 5
       ret 1
     else
       ret 2

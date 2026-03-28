@@ -20,10 +20,10 @@ fun signum(self: offset): offset
   let zero = (: offset / 0)
   let one = (: offset / 1)
   let neg_one = (: offset / -1)
-  if self .> zero
+  if self > zero
     ret one
   else
-    if self .< zero
+    if self < zero
       ret neg_one
     else
       ret zero
@@ -32,16 +32,16 @@ fun signum(self: offset): offset
 end fun
 
 fun is_positive(self: offset): bool
-  ret self .> (: offset / 0)
+  ret self > (: offset / 0)
 end fun
 
 fun is_negative(self: offset): bool
-  ret self .< (: offset / 0)
+  ret self < (: offset / 0)
 end fun
 
 // Wrapping absolute value.
 fun abs(self: offset): offset
-  if self .< (: offset / 0)
+  if self < (: offset / 0)
     ret icall neg_wrapping_offset(self)
   else
     ret self
@@ -50,7 +50,7 @@ end fun
 
 // Checked absolute value. Returns none for MIN.
 fun abs_checked(self: offset): ?offset
-  if self == min_value()
+  if self ≡ min_value()
     ret none
   else
     ret some abs(self)
@@ -59,7 +59,7 @@ end fun
 
 // Saturating absolute value. MIN becomes MAX.
 fun abs_saturating(self: offset): offset
-  if self == min_value()
+  if self ≡ min_value()
     ret max_value()
   else
     ret abs(self)
@@ -135,7 +135,7 @@ end fun
 // Checked arithmetic.
 
 fun neg_checked(self: offset): ?offset
-  if self == min_value()
+  if self ≡ min_value()
     ret none
   else
     ret some icall neg_wrapping_offset(self)
@@ -163,11 +163,11 @@ end fun
 fun rem_checked(self: offset, other: offset): ?offset
   let zero = (: offset / 0)
   let neg_one = (: offset / -1)
-  if other == zero
+  if other ≡ zero
     ret none
   else
-    if self == min_value()
-      if other == neg_one
+    if self ≡ min_value()
+      if other ≡ neg_one
         ret some zero
       else
         ret some icall srem_offset(self, other)
@@ -186,7 +186,7 @@ fun add_saturating(self: offset, other: offset): offset
     ret value
   else
     // Overflow direction depends on signs.
-    if other .> zero
+    if other > zero
       ret max_value()
     else
       ret min_value()
@@ -200,7 +200,7 @@ fun sub_saturating(self: offset, other: offset): offset
     ret value
   else
     // Underflow direction depends on signs.
-    if other .> zero
+    if other > zero
       ret min_value()
     else
       ret max_value()
@@ -259,9 +259,9 @@ end fun
 
 // Shifts.
 
-// Checked left shift. Returns none if n >= 32.
+// Checked left shift. Returns none if n ≥ 32.
 fun shift_left(self: offset, n: u32): ?offset
-  if n >= (: u32 / 32)
+  if n ≥ (: u32 / 32)
     ret none
   else
     let u = icall offset_to_index(self)
@@ -270,9 +270,9 @@ fun shift_left(self: offset, n: u32): ?offset
   end if
 end fun
 
-// Checked arithmetic right shift. Returns none if n >= 32.
+// Checked arithmetic right shift. Returns none if n ≥ 32.
 fun shift_right(self: offset, n: u32): ?offset
-  if n >= (: u32 / 32)
+  if n ≥ (: u32 / 32)
     ret none
   else
     ret some icall sshr_offset(self, n)
@@ -298,7 +298,7 @@ fun shift_right_wrapping(self: offset, n: u32): offset
 end fun
 
 fun shift_left_saturating(self: offset, n: u32): offset
-  if n >= (: u32 / 32)
+  if n ≥ (: u32 / 32)
     if is_negative(self)
       ret min_value()
     else
@@ -320,7 +320,7 @@ end fun
 fun shift_right_saturating(self: offset, n: u32): offset
   let zero = (: offset / 0)
   let neg_one = (: offset / -1)
-  if n >= (: u32 / 32)
+  if n ≥ (: u32 / 32)
     // Arithmetic shift fills with sign bit.
     if is_negative(self)
       ret neg_one
@@ -417,11 +417,11 @@ end fun
 // Comparisons and utilities.
 
 fun is_zero(self: offset): bool
-  ret self == (: offset / 0)
+  ret self ≡ (: offset / 0)
 end fun
 
 fun min(self: offset, other: offset): offset
-  if self <= other
+  if self ≤ other
     ret self
   else
     ret other
@@ -429,7 +429,7 @@ fun min(self: offset, other: offset): offset
 end fun
 
 fun max(self: offset, other: offset): offset
-  if self >= other
+  if self ≥ other
     ret self
   else
     ret other
@@ -437,10 +437,10 @@ fun max(self: offset, other: offset): offset
 end fun
 
 fun clamp(self: offset, min_val: offset, max_val: offset): offset
-  if self .< min_val
+  if self < min_val
     ret min_val
   else
-    if self .> max_val
+    if self > max_val
       ret max_val
     else
       ret self
@@ -450,7 +450,7 @@ end fun
 
 // Absolute difference, returns index (always non-negative).
 fun abs_diff(self: offset, other: offset): index
-  if self >= other
+  if self ≥ other
     // self - other is non-negative.
     let diff = sub_wrapping(self, other)
     ret icall offset_to_index(diff)

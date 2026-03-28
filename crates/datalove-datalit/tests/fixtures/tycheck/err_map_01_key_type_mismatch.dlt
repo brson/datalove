@@ -1,1 +1,1 @@
-: %{u32 = string} / %{ "bad" = "value" }
+: ⦇u32 ↦ string⦈ / ⦇ "bad" ↦ "value" ⦈

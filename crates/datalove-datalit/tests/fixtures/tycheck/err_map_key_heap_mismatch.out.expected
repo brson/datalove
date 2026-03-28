@@ -33,7 +33,7 @@
             "value": {
               "expr": {
                 "ParseError": {
-                  "message": "expected '=' between map key and value"
+                  "message": "expected '↦' between map key and value"
                 }
               },
               "type_hint": null
@@ -51,8 +51,8 @@
         {
           "message": "parse error occurred here",
           "span": [
-            12,
-            13
+            15,
+            16
           ],
           "text": "#"
         }

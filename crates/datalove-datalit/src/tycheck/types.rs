@@ -725,7 +725,7 @@ pub fn check_int_fits_type(value_str: &str, ty: &Type<'_>) -> Result<(), TypeErr
         Type::Index => value_str.parse::<datalove_rtdt::IndexRepr>().map(|_| ()).map_err(|_| TypeError::IntOutOfRange),
         Type::Offset => value_str.parse::<datalove_rtdt::OffsetRepr>().map(|_| ()).map_err(|_| TypeError::IntOutOfRange),
         Type::Int => Ok(()),
-        _ => panic!("check_int_fits_type called with non-integer type"),
+        _ => Err(TypeError::IntOutOfRange),
     }
 }
 

@@ -4,19 +4,25 @@ Analysis(
             section_type: "scriptunit-expr",
             name: None,
             typecheck: TypecheckResult(
-                status: "ParseError",
-                errors: [
-                    "unclosed \'<\'",
-                    "unexpected token after expression",
-                ],
+                status: "Success",
             ),
             ownership: OwnershipResult(
-                status: "Skipped",
+                status: "Success",
             ),
             lowering: LoweringResult(
-                status: "Skipped",
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 10int
+                        v1 = const 20int
+                        v2 = lt v0, v1
+                        drop v0
+                        drop v1
+                        unit_end v2
+                """,
             ),
-            output: "",
+            output: "true",
         ),
     ],
 )

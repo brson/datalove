@@ -24,7 +24,7 @@ Analysis(
                         unit_end v6
                 """,
             ),
-            output: "{| a, b; 1, 2; 3, 4 |}",
+            output: "⟦ a, b; 1, 2; 3, 4 ⟧",
         ),
     ],
 )

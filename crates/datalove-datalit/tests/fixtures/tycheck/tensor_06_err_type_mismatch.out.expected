@@ -56,8 +56,8 @@
         {
           "message": "expected `u32`, found `f32`",
           "span": [
-            25,
-            26
+            28,
+            29
           ],
           "text": "4"
         }

@@ -4,19 +4,25 @@ Analysis(
             section_type: "scriptunit-fragment",
             name: None,
             typecheck: TypecheckResult(
-                status: "ParseError",
-                errors: [
-                    "unclosed \'<\'",
-                    "unexpected token after expression",
-                ],
+                status: "Success",
             ),
             ownership: OwnershipResult(
-                status: "Skipped",
+                status: "Success",
             ),
             lowering: LoweringResult(
-                status: "Skipped",
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 5u32
+                        v1 = const 10u32
+                        v2 = const true
+                        debuglog v2
+                        unit_end
+                """,
             ),
-            output: "",
+            output: "(fragment executed)",
+            debug_output: Some("true\n"),
         ),
     ],
 )

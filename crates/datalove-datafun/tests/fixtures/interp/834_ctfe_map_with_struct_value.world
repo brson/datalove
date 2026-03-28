@@ -3,5 +3,5 @@ scriptunit-fragment
 ----------
 
 // CTFE map with struct values.
-const M: %{u32 = { a: u32, b: u32 }} = %{ 1 = { a: 10, b: 20 }, 2 = { a: 30, b: 40 } }
+const M: ⦇u32 ↦ { a: u32, b: u32 }⦈ = ⦇ 1 ↦ { a: 10, b: 20 }, 2 ↦ { a: 30, b: 40 } ⦈
 debuglog M

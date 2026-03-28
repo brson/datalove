@@ -1,5 +1,5 @@
 fun test_if(x: u32): u32
-  if x .< 10
+  if x < 10
     ret 1
   else
     ret 2

@@ -4,7 +4,7 @@ scriptunit-fragment
 
 // Factorial using checked arithmetic.
 fun factorial(n: u32): !u32
-    if n .< :u32/2
+    if n < :u32/2
         ret ok :u32/1
     else
         ret ok (n *! factorial(n -! :u32/1)!)

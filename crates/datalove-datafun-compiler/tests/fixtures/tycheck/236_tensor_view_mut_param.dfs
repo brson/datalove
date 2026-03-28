@@ -1,9 +1,9 @@
 // Passing rank-2 tensor sub-view to mut param is ViewTypeMutBinding error.
-fun replace_row(mut row: [|u32, 1|]): ?bool
-    set row = [| 77 88 99 |]
+fun replace_row(mut row: ⟪u32, 1⟫): ?bool
+    set row = ⟪ 77 88 99 ⟫
     ret some true
 end fun
 
-fun test(t: [|u32, 2|]): ?bool
+fun test(t: ⟪u32, 2⟫): ?bool
     ret replace_row(t[(: index / 0)]?)
 end fun

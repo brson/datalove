@@ -3,13 +3,13 @@ fun skip_evens(): u32
   let i = 0
   loop
     let i = i + 1
-    if i .> 5
+    if i > 5
       break
     end if
-    if i == 2
+    if i ≡ 2
       continue
     end if
-    if i == 4
+    if i ≡ 4
       continue
     end if
     let count = count + 1

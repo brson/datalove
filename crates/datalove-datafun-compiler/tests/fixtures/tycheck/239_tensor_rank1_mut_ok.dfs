@@ -4,6 +4,6 @@ fun set_val(mut x: u32): ?bool
     ret some true
 end fun
 
-fun test(t: [|u32, 1|]): ?bool
+fun test(t: ⟪u32, 1⟫): ?bool
     ret set_val(t[(: index / 0)]?)
 end fun

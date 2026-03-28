@@ -17,7 +17,7 @@ DualAnalysis(
                         v1 = const 100u32
                         v2 = const 2u32
                         v3 = const 200u32
-                        v4 = %{v0: v1, v2: v3}
+                        v4 = ⦇v0 ↦ v1, v2 ↦ v3⦈
                         v5 = const 2u32
                         v6 = const 999u32
                         v7 = call @0 u0(v4, v5, v6)
@@ -45,7 +45,7 @@ DualAnalysis(
                         v1 = const 100u32
                         v2 = const 2u32
                         v3 = const 200u32
-                        v4 = %{v0: v1, v2: v3}
+                        v4 = ⦇v0 ↦ v1, v2 ↦ v3⦈
                         v5 = const 2u32
                         v6 = const 999u32
                         v7 = call @0 u0(v4, v5, v6)
@@ -65,8 +65,8 @@ DualAnalysis(
                 """,
             ),
             ir_match: true,
-            interp_output: "%{1 = 100, 2 = 999}\n",
-            aot_output: "%{1 = 100, 2 = 999}\n",
+            interp_output: "⦇1 ↦ 100, 2 ↦ 999⦈\n",
+            aot_output: "⦇1 ↦ 100, 2 ↦ 999⦈\n",
             output_match: true,
             aot_compile: Some(AotCompileResult(
                 status: "Success",

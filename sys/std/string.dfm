@@ -68,7 +68,7 @@ end fun
 
 // Returns true if the string is empty.
 fun is_empty(ref self: string): bool
-  ret len(self) == (: index / 0)
+  ret len(self) ≡ (: index / 0)
 end fun
 
 // --- Byte Access ---

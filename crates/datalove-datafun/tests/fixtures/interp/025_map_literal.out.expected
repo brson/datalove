@@ -18,11 +18,11 @@ Analysis(
                         v1 = const 100int
                         v2 = const 2int
                         v3 = const 200int
-                        v4 = %{v0: v1, v2: v3}
+                        v4 = ⦇v0 ↦ v1, v2 ↦ v3⦈
                         unit_end v4
                 """,
             ),
-            output: "%{1 = 100, 2 = 200}",
+            output: "⦇1 ↦ 100, 2 ↦ 200⦈",
         ),
     ],
 )

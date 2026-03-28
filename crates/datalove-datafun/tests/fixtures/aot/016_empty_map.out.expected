@@ -14,7 +14,7 @@ AotAnalysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = %{}
+                        v0 = ⦇⦈
                         debuglog v0
                         unit_end_drop v0
                         unit_end
@@ -30,7 +30,7 @@ AotAnalysis(
                 status: "Success",
                 exit_code: 0,
             )),
-            output: "%{}\n",
+            output: "⦇⦈\n",
         ),
     ],
 )

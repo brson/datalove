@@ -6,11 +6,11 @@ var count = :int/0
 var sum = :int/0
 loop
     set count = count + :int/1
-    if count == :int/3
+    if count ≡ :int/3
         continue
     end if
     set sum = sum + count
-    if count == :int/5
+    if count ≡ :int/5
         break
     end if
 end loop

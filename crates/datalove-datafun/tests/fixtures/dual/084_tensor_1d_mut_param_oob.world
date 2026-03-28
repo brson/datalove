@@ -8,8 +8,8 @@ fun set_val(mut x: u32): ?bool
     ret some true
 end fun
 
-fun test(): ?[|u32, 1|]
-    var a: [|u32, 1|] = [| 10 20 30 |]
+fun test(): ?⟪u32, 1⟫
+    var a: ⟪u32, 1⟫ = ⟪ 10 20 30 ⟫
     let _ok = set_val(a[(: index / 5)]?)
     ret some a
 end fun

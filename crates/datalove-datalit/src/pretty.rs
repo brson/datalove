@@ -164,17 +164,17 @@ fn pretty_type<'db>(
         }
 
         Type::Map(m) => {
-            out.push_str("%{");
+            out.push_str("⦇");
             pretty_type(db, &*m.key_type.clone(), out);
-            out.push_str(" = ");
+            out.push_str(" ↦ ");
             pretty_type(db, &*m.value_type.clone(), out);
-            out.push('}');
+            out.push('⦈');
         }
 
         Type::Set(s) => {
-            out.push_str("#{");
+            out.push_str("⦃");
             pretty_type(db, &*s.element_type.clone(), out);
-            out.push('}');
+            out.push('⦄');
         }
 
         Type::Option(o) => {
@@ -188,15 +188,15 @@ fn pretty_type<'db>(
         }
 
         Type::Tensor(t) => {
-            out.push_str("[|");
+            out.push_str("⟪");
             pretty_type(db, &*t.element_type.clone(), out);
             out.push_str(", ");
             out.push_str(&t.rank.S());
-            out.push_str("|]");
+            out.push_str("⟫");
         }
 
         Type::Table(t) => {
-            out.push_str("{| ");
+            out.push_str("⟦ ");
             let columns = &t.columns;
             for (i, col) in columns.iter().enumerate() {
                 if i > 0 {
@@ -206,7 +206,7 @@ fn pretty_type<'db>(
                 out.push_str(": ");
                 pretty_type(db, &col.ty, out);
             }
-            out.push_str(" |}");
+            out.push_str(" ⟧");
         }
 
         Type::Atom(a) => {
@@ -321,17 +321,17 @@ fn pretty_type_hint<'db>(
         }
 
         TypeHint::Map(m) => {
-            out.push_str("%{");
+            out.push_str("⦇");
             pretty_type_hint(db, *m.key_type.clone(), out);
-            out.push_str(" = ");
+            out.push_str(" ↦ ");
             pretty_type_hint(db, *m.value_type.clone(), out);
-            out.push('}');
+            out.push('⦈');
         }
 
         TypeHint::Set(s) => {
-            out.push_str("#{");
+            out.push_str("⦃");
             pretty_type_hint(db, *s.element_type.clone(), out);
-            out.push('}');
+            out.push('⦄');
         }
 
         TypeHint::Option(o) => {
@@ -345,15 +345,15 @@ fn pretty_type_hint<'db>(
         }
 
         TypeHint::Tensor(t) => {
-            out.push_str("[|");
+            out.push_str("⟪");
             pretty_type_hint(db, *t.element_type.clone(), out);
             out.push_str(", ");
             out.push_str(&t.rank.S());
-            out.push_str("|]");
+            out.push_str("⟫");
         }
 
         TypeHint::Table(t) => {
-            out.push_str("{| ");
+            out.push_str("⟦ ");
             let columns = &t.columns;
             for (i, col) in columns.iter().enumerate() {
                 if i > 0 {
@@ -363,7 +363,7 @@ fn pretty_type_hint<'db>(
                 out.push_str(": ");
                 pretty_type_hint(db, *col.type_hint.clone(), out);
             }
-            out.push_str(" |}");
+            out.push_str(" ⟧");
         }
 
         TypeHint::Atom(a) => {
@@ -492,21 +492,21 @@ fn pretty_expr<'db>(
         }
 
         Expr::Map(m) => {
-            out.push_str("%{");
+            out.push_str("⦇");
             let entries = &m.entries;
             for (i, entry) in entries.iter().enumerate() {
                 if i > 0 {
                     out.push_str(", ");
                 }
                 pretty_expr_full(db, entry.key, out, indent);
-                out.push_str(" = ");
+                out.push_str(" ↦ ");
                 pretty_expr_full(db, entry.value, out, indent);
             }
-            out.push('}');
+            out.push('⦈');
         }
 
         Expr::Set(s) => {
-            out.push_str("#{");
+            out.push_str("⦃");
             let elements = &s.elements;
             for (i, elem) in elements.iter().enumerate() {
                 if i > 0 {
@@ -514,15 +514,15 @@ fn pretty_expr<'db>(
                 }
                 pretty_expr_full(db, *elem, out, indent);
             }
-            out.push('}');
+            out.push('⦄');
         }
 
         Expr::Tensor(t) => {
-            out.push_str("[| ");
+            out.push_str("⟪ ");
             let shape = &t.shape;
             let elements = &t.elements;
             pretty_tensor_elements(db, shape, elements, out, indent);
-            out.push_str(" |]");
+            out.push_str(" ⟫");
         }
 
         Expr::Data(d) => {
@@ -542,7 +542,7 @@ fn pretty_expr<'db>(
         }
 
         Expr::Table(t) => {
-            out.push_str("{| ");
+            out.push_str("⟦ ");
             // Print header.
             for (i, name) in t.header.iter().enumerate() {
                 if i > 0 {
@@ -560,7 +560,7 @@ fn pretty_expr<'db>(
                     pretty_expr_full(db, *elem, out, indent);
                 }
             }
-            out.push_str(" |}");
+            out.push_str(" ⟧");
         }
     }
 }

@@ -5,7 +5,7 @@ module local/test/main
 // Test ref param with comparison operations.
 // Comparisons work on any type via ref params.
 fun is_equal(ref a: int, ref b: int): bool
-    ret a == b
+    ret a ≡ b
 end fun
 
 ----------

@@ -283,12 +283,12 @@ impl<'db> Parser<'db> {
                     TokenKind::Sigil(Sigil::StarQuestion) => Some(ast::BinOp::MulOptional),
                     TokenKind::Sigil(Sigil::SlashQuestion) => Some(ast::BinOp::DivOptional),
 
-                    TokenKind::Sigil(Sigil::EqualsEquals) => Some(ast::BinOp::Eq),
-                    TokenKind::Sigil(Sigil::ExclamationEquals) => Some(ast::BinOp::Ne),
-                    TokenKind::Sigil(Sigil::DotLess) => Some(ast::BinOp::Lt),
-                    TokenKind::Sigil(Sigil::DotGreater) => Some(ast::BinOp::Gt),
-                    TokenKind::Sigil(Sigil::LessEquals) => Some(ast::BinOp::Le),
-                    TokenKind::Sigil(Sigil::GreaterEquals) => Some(ast::BinOp::Ge),
+                    TokenKind::Sigil(Sigil::Identical) => Some(ast::BinOp::Eq),
+                    TokenKind::Sigil(Sigil::NotIdentical) => Some(ast::BinOp::Ne),
+                    TokenKind::Sigil(Sigil::Less) => Some(ast::BinOp::Lt),
+                    TokenKind::Sigil(Sigil::Greater) => Some(ast::BinOp::Gt),
+                    TokenKind::Sigil(Sigil::LessOrEqual) => Some(ast::BinOp::Le),
+                    TokenKind::Sigil(Sigil::GreaterOrEqual) => Some(ast::BinOp::Ge),
 
                     // Single-character operators (basic arithmetic).
                     TokenKind::Sigil(Sigil::Plus) => Some(ast::BinOp::Add),

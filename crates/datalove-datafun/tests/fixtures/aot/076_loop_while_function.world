@@ -6,7 +6,7 @@ scriptunit-fragment
 fun count_up(n: u32): !u32
     var sum: u32 = 0
     var i: u32 = 0
-    loop while i .< n
+    loop while i < n
         set sum = sum +! i
         set i = i +! 1
     end loop

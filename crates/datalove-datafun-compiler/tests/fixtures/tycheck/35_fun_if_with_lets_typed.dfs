@@ -1,5 +1,5 @@
 fun process(n: int): int
-  if n .> : int / 0
+  if n > : int / 0
     let doubled = n * : int / 2
     ret doubled
   else

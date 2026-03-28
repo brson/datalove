@@ -17,7 +17,7 @@ Analysis(
                         v0 = const 100u32
                         v1 = const 200u32
                         v2 = const 300u32
-                        v3 = #{v0, v1, v2}
+                        v3 = ⦃v0, v1, v2⦄
                         return v3
                 """,
             ),
@@ -60,7 +60,7 @@ Analysis(
                         unit_end v0
                 """,
             ),
-            output: "#{100, 200, 300}",
+            output: "⦃100, 200, 300⦄",
         ),
     ],
 )

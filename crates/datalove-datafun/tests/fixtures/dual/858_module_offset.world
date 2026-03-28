@@ -19,7 +19,7 @@ fun negate(n: offset): !offset
 end fun
 
 fun max_of(a: offset, b: offset): offset
-    if a .>= b
+    if a ≥ b
         ret a
     else
         ret b
@@ -27,7 +27,7 @@ fun max_of(a: offset, b: offset): offset
 end fun
 
 fun min_of(a: offset, b: offset): offset
-    if a .<= b
+    if a ≤ b
         ret a
     else
         ret b

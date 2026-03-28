@@ -375,11 +375,11 @@ pub fn bracer<'db>(
                             close_sigil: Sigil::BracketClose,
                         });
                         parent_brace_map.append(brace_map);
-                    } else if open_sigil == Sigil::AngleOpen {
-                        brace_map.inserted_closes.push((index, Sigil::AngleClose));
+                    } else if open_sigil == Sigil::TableOpen {
+                        brace_map.inserted_closes.push((index, Sigil::TableClose));
                         brace_map.errors.push((
                             open_index..index,
-                            Sigil::AngleOpen,
+                            Sigil::TableOpen,
                         ));
                         parent_brace_map.branches.push(Branch {
                             real_token_range: open_index..index,
@@ -387,15 +387,15 @@ pub fn bracer<'db>(
                             inserted_closes: brace_map.inserted_closes.len(),
                             removed_closes: brace_map.removed_closes.len(),
                             errors: brace_map.errors.len(),
-                            open_sigil: Sigil::AngleOpen,
-                            close_sigil: Sigil::AngleClose,
+                            open_sigil: Sigil::TableOpen,
+                            close_sigil: Sigil::TableClose,
                         });
                         parent_brace_map.append(brace_map);
-                    } else if open_sigil == Sigil::ParenPipeOpen {
-                        brace_map.inserted_closes.push((index, Sigil::ParenPipeClose));
+                    } else if open_sigil == Sigil::TensorOpen {
+                        brace_map.inserted_closes.push((index, Sigil::TensorClose));
                         brace_map.errors.push((
                             open_index..index,
-                            Sigil::ParenPipeOpen,
+                            Sigil::TensorOpen,
                         ));
                         parent_brace_map.branches.push(Branch {
                             real_token_range: open_index..index,
@@ -403,15 +403,15 @@ pub fn bracer<'db>(
                             inserted_closes: brace_map.inserted_closes.len(),
                             removed_closes: brace_map.removed_closes.len(),
                             errors: brace_map.errors.len(),
-                            open_sigil: Sigil::ParenPipeOpen,
-                            close_sigil: Sigil::ParenPipeClose,
+                            open_sigil: Sigil::TensorOpen,
+                            close_sigil: Sigil::TensorClose,
                         });
                         parent_brace_map.append(brace_map);
-                    } else if open_sigil == Sigil::BracePipeOpen {
-                        brace_map.inserted_closes.push((index, Sigil::BracePipeClose));
+                    } else if open_sigil == Sigil::MapOpen {
+                        brace_map.inserted_closes.push((index, Sigil::MapClose));
                         brace_map.errors.push((
                             open_index..index,
-                            Sigil::BracePipeOpen,
+                            Sigil::MapOpen,
                         ));
                         parent_brace_map.branches.push(Branch {
                             real_token_range: open_index..index,
@@ -419,15 +419,15 @@ pub fn bracer<'db>(
                             inserted_closes: brace_map.inserted_closes.len(),
                             removed_closes: brace_map.removed_closes.len(),
                             errors: brace_map.errors.len(),
-                            open_sigil: Sigil::BracePipeOpen,
-                            close_sigil: Sigil::BracePipeClose,
+                            open_sigil: Sigil::MapOpen,
+                            close_sigil: Sigil::MapClose,
                         });
                         parent_brace_map.append(brace_map);
-                    } else if open_sigil == Sigil::BracketPipeOpen {
-                        brace_map.inserted_closes.push((index, Sigil::BracketPipeClose));
+                    } else if open_sigil == Sigil::SetOpen {
+                        brace_map.inserted_closes.push((index, Sigil::SetClose));
                         brace_map.errors.push((
                             open_index..index,
-                            Sigil::BracketPipeOpen,
+                            Sigil::SetOpen,
                         ));
                         parent_brace_map.branches.push(Branch {
                             real_token_range: open_index..index,
@@ -435,56 +435,8 @@ pub fn bracer<'db>(
                             inserted_closes: brace_map.inserted_closes.len(),
                             removed_closes: brace_map.removed_closes.len(),
                             errors: brace_map.errors.len(),
-                            open_sigil: Sigil::BracketPipeOpen,
-                            close_sigil: Sigil::BracketPipeClose,
-                        });
-                        parent_brace_map.append(brace_map);
-                    } else if open_sigil == Sigil::AnglePipeOpen {
-                        brace_map.inserted_closes.push((index, Sigil::AnglePipeClose));
-                        brace_map.errors.push((
-                            open_index..index,
-                            Sigil::AnglePipeOpen,
-                        ));
-                        parent_brace_map.branches.push(Branch {
-                            real_token_range: open_index..index,
-                            branches: brace_map.branches.len(),
-                            inserted_closes: brace_map.inserted_closes.len(),
-                            removed_closes: brace_map.removed_closes.len(),
-                            errors: brace_map.errors.len(),
-                            open_sigil: Sigil::AnglePipeOpen,
-                            close_sigil: Sigil::AnglePipeClose,
-                        });
-                        parent_brace_map.append(brace_map);
-                    } else if open_sigil == Sigil::PercentBraceOpen {
-                        brace_map.inserted_closes.push((index, Sigil::BraceClose));
-                        brace_map.errors.push((
-                            open_index..index,
-                            Sigil::PercentBraceOpen,
-                        ));
-                        parent_brace_map.branches.push(Branch {
-                            real_token_range: open_index..index,
-                            branches: brace_map.branches.len(),
-                            inserted_closes: brace_map.inserted_closes.len(),
-                            removed_closes: brace_map.removed_closes.len(),
-                            errors: brace_map.errors.len(),
-                            open_sigil: Sigil::PercentBraceOpen,
-                            close_sigil: Sigil::BraceClose,
-                        });
-                        parent_brace_map.append(brace_map);
-                    } else if open_sigil == Sigil::HashBraceOpen {
-                        brace_map.inserted_closes.push((index, Sigil::BraceClose));
-                        brace_map.errors.push((
-                            open_index..index,
-                            Sigil::HashBraceOpen,
-                        ));
-                        parent_brace_map.branches.push(Branch {
-                            real_token_range: open_index..index,
-                            branches: brace_map.branches.len(),
-                            inserted_closes: brace_map.inserted_closes.len(),
-                            removed_closes: brace_map.removed_closes.len(),
-                            errors: brace_map.errors.len(),
-                            open_sigil: Sigil::HashBraceOpen,
-                            close_sigil: Sigil::BraceClose,
+                            open_sigil: Sigil::SetOpen,
+                            close_sigil: Sigil::SetClose,
                         });
                         parent_brace_map.append(brace_map);
                     } else {
@@ -511,56 +463,38 @@ pub fn bracer<'db>(
             TokenKind::Sigil(Sigil::BracketOpen) => {
                 stack.push((index, Sigil::BracketOpen, default()));
             }
-            TokenKind::Sigil(Sigil::AngleOpen) => {
-                stack.push((index, Sigil::AngleOpen, default()));
+            TokenKind::Sigil(Sigil::TableOpen) => {
+                stack.push((index, Sigil::TableOpen, default()));
             }
-            TokenKind::Sigil(Sigil::ParenPipeOpen) => {
-                stack.push((index, Sigil::ParenPipeOpen, default()));
+            TokenKind::Sigil(Sigil::TensorOpen) => {
+                stack.push((index, Sigil::TensorOpen, default()));
             }
-            TokenKind::Sigil(Sigil::BracePipeOpen) => {
-                stack.push((index, Sigil::BracePipeOpen, default()));
+            TokenKind::Sigil(Sigil::MapOpen) => {
+                stack.push((index, Sigil::MapOpen, default()));
             }
-            TokenKind::Sigil(Sigil::BracketPipeOpen) => {
-                stack.push((index, Sigil::BracketPipeOpen, default()));
-            }
-            TokenKind::Sigil(Sigil::AnglePipeOpen) => {
-                stack.push((index, Sigil::AnglePipeOpen, default()));
-            }
-            TokenKind::Sigil(Sigil::PercentBraceOpen) => {
-                stack.push((index, Sigil::PercentBraceOpen, default()));
-            }
-            TokenKind::Sigil(Sigil::HashBraceOpen) => {
-                stack.push((index, Sigil::HashBraceOpen, default()));
+            TokenKind::Sigil(Sigil::SetOpen) => {
+                stack.push((index, Sigil::SetOpen, default()));
             }
             TokenKind::Sigil(Sigil::ParenClose) => {
                 close_brace(&mut stack, index, Sigil::ParenOpen, Sigil::ParenClose);
             }
             TokenKind::Sigil(Sigil::BraceClose) => {
-                let open_s = stack.iter().rev()
-                    .find_map(|(_, s, _)| match s {
-                        Sigil::BraceOpen | Sigil::PercentBraceOpen | Sigil::HashBraceOpen => Some(*s),
-                        _ => None,
-                    })
-                    .unwrap_or(Sigil::BraceOpen);
-                close_brace(&mut stack, index, open_s, Sigil::BraceClose);
+                close_brace(&mut stack, index, Sigil::BraceOpen, Sigil::BraceClose);
             }
             TokenKind::Sigil(Sigil::BracketClose) => {
                 close_brace(&mut stack, index, Sigil::BracketOpen, Sigil::BracketClose);
             }
-            TokenKind::Sigil(Sigil::AngleClose) => {
-                close_brace(&mut stack, index, Sigil::AngleOpen, Sigil::AngleClose);
+            TokenKind::Sigil(Sigil::MapClose) => {
+                close_brace(&mut stack, index, Sigil::MapOpen, Sigil::MapClose);
             }
-            TokenKind::Sigil(Sigil::ParenPipeClose) => {
-                close_brace(&mut stack, index, Sigil::ParenPipeOpen, Sigil::ParenPipeClose);
+            TokenKind::Sigil(Sigil::SetClose) => {
+                close_brace(&mut stack, index, Sigil::SetOpen, Sigil::SetClose);
             }
-            TokenKind::Sigil(Sigil::BracePipeClose) => {
-                close_brace(&mut stack, index, Sigil::BracePipeOpen, Sigil::BracePipeClose);
+            TokenKind::Sigil(Sigil::TableClose) => {
+                close_brace(&mut stack, index, Sigil::TableOpen, Sigil::TableClose);
             }
-            TokenKind::Sigil(Sigil::BracketPipeClose) => {
-                close_brace(&mut stack, index, Sigil::BracketPipeOpen, Sigil::BracketPipeClose);
-            }
-            TokenKind::Sigil(Sigil::AnglePipeClose) => {
-                close_brace(&mut stack, index, Sigil::AnglePipeOpen, Sigil::AnglePipeClose);
+            TokenKind::Sigil(Sigil::TensorClose) => {
+                close_brace(&mut stack, index, Sigil::TensorOpen, Sigil::TensorClose);
             }
             _ => {},
         }
@@ -783,20 +717,8 @@ fn test_bracer() {
         "[ ]",
     );
     assert_eq!(
-        dbglex("<>"),
-        "< >",
-    );
-    assert_eq!(
         dbglex("a[b]c"),
         "a [ b ] c",
-    );
-    assert_eq!(
-        dbglex("a<b>c"),
-        "a < b > c",
-    );
-    assert_eq!(
-        dbglex("([{<>}])"),
-        "( [ { < > } ] )",
     );
     // Mismatch: paren inside brace closed by brace.
     assert_eq!(
@@ -808,25 +730,10 @@ fn test_bracer() {
         dbglex("{[}"),
         "{ [ ] }",
     );
-    // Mismatch: angle inside brace closed by brace.
-    assert_eq!(
-        dbglex("{<}"),
-        "{ < > }",
-    );
     // Mismatch: bracket inside paren closed by paren.
     assert_eq!(
         dbglex("([)"),
         "( [ ] )",
-    );
-    // Mismatch: angle inside paren closed by paren.
-    assert_eq!(
-        dbglex("(<)"),
-        "( < > )",
-    );
-    // Mismatch: angle inside bracket closed by bracket.
-    assert_eq!(
-        dbglex("[<]"),
-        "[ < > ]",
     );
 }
 
@@ -893,10 +800,6 @@ fn test_text_span() {
     assert_eq!(start, 0);
     assert_eq!(end, 3);
 
-    let (start, end, spanned) = get_span("<z>").X();
-    assert_eq!(spanned, "<z>");
-    assert_eq!(start, 0);
-    assert_eq!(end, 3);
 }
 
 #[test]
@@ -930,9 +833,8 @@ fn test_removed_closes() {
     assert_eq!(dbglex("a)b"), "a b");
     assert_eq!(dbglex("a}b"), "a b");
     assert_eq!(dbglex("a]b"), "a b");
-    assert_eq!(dbglex("a>b"), "a b");
     // Multiple stray closes.
-    assert_eq!(dbglex("a)}]>b"), "a b");
+    assert_eq!(dbglex("a)}]b"), "a b");
     // Stray close inside matched braces.
     assert_eq!(dbglex("(a}b)"), "( a b )");
     assert_eq!(dbglex("(a}b}c)"), "( a b c )");
@@ -944,58 +846,43 @@ fn test_removed_closes() {
 }
 
 #[test]
-fn test_earmuff_braces() {
-    // Basic earmuff brace matching.
-    assert_eq!(dbglex("(|a|)"), "(| a |)");
-    assert_eq!(dbglex("{|a|}"), "{| a |}");
-    assert_eq!(dbglex("[|a|]"), "[| a |]");
-    assert_eq!(dbglex("<|a|>"), "<| a |>");
+fn test_unicode_braces() {
+    // Basic Unicode bracket matching.
+    assert_eq!(dbglex("\u{27E6}a\u{27E7}"), "\u{27E6} a \u{27E7}");
+    assert_eq!(dbglex("\u{27EA}a\u{27EB}"), "\u{27EA} a \u{27EB}");
 
-    // Empty earmuff braces.
-    assert_eq!(dbglex("(||)"), "(| |)");
-    assert_eq!(dbglex("{||}"), "{| |}");
-    assert_eq!(dbglex("[||]"), "[| |]");
-    assert_eq!(dbglex("<||>"), "<| |>");
+    // Empty Unicode brackets.
+    assert_eq!(dbglex("\u{27E6}\u{27E7}"), "\u{27E6} \u{27E7}");
+    assert_eq!(dbglex("\u{27EA}\u{27EB}"), "\u{27EA} \u{27EB}");
 
-    // Nesting earmuff braces.
-    assert_eq!(dbglex("(|[|a|]|)"), "(| [| a |] |)");
-    assert_eq!(dbglex("{|<|a|>|}"), "{| <| a |> |}");
+    // Nesting Unicode brackets.
+    assert_eq!(dbglex("\u{27E6}\u{27EA}a\u{27EB}\u{27E7}"), "\u{27E6} \u{27EA} a \u{27EB} \u{27E7}");
 
-    // Mixing earmuff and regular braces.
-    assert_eq!(dbglex("(|(a)|)"), "(| ( a ) |)");
-    assert_eq!(dbglex("([|a|])"), "( [| a |] )");
+    // Mixing Unicode and regular braces.
+    assert_eq!(dbglex("\u{27E6}(a)\u{27E7}"), "\u{27E6} ( a ) \u{27E7}");
+    assert_eq!(dbglex("(\u{27EA}a\u{27EB})"), "( \u{27EA} a \u{27EB} )");
 
-    // Unclosed earmuff braces.
-    assert_eq!(dbglex("(|a"), "(| a |)");
-    assert_eq!(dbglex("{|a"), "{| a |}");
-    assert_eq!(dbglex("[|a"), "[| a |]");
-    assert_eq!(dbglex("<|a"), "<| a |>");
+    // Unclosed Unicode brackets.
+    assert_eq!(dbglex("\u{27E6}a"), "\u{27E6} a \u{27E7}");
+    assert_eq!(dbglex("\u{27EA}a"), "\u{27EA} a \u{27EB}");
 
-    // Mismatched earmuff braces.
-    assert_eq!(dbglex("(|a)"), "(| a |)");
-    assert_eq!(dbglex("{|a}"), "{| a |}");
-    assert_eq!(dbglex("[|a]"), "[| a |]");
-    assert_eq!(dbglex("<|a>"), "<| a |>");
+    // Stray Unicode close brackets.
+    assert_eq!(dbglex("a\u{27E7}b"), "a b");
+    assert_eq!(dbglex("a\u{27EB}b"), "a b");
 
-    // Stray earmuff close braces.
-    assert_eq!(dbglex("a|)b"), "a b");
-    assert_eq!(dbglex("a|}b"), "a b");
-    assert_eq!(dbglex("a|]b"), "a b");
-    assert_eq!(dbglex("a|>b"), "a b");
+    // Unicode map and set brackets.
+    assert_eq!(dbglex("\u{2987}a\u{2988}"), "\u{2987} a \u{2988}");
+    assert_eq!(dbglex("\u{2983}a\u{2984}"), "\u{2983} a \u{2984}");
+    assert_eq!(dbglex("\u{2987}\u{2988}"), "\u{2987} \u{2988}");
+    assert_eq!(dbglex("\u{2983}\u{2984}"), "\u{2983} \u{2984}");
+    assert_eq!(dbglex("\u{2987}\u{2983}a\u{2984}\u{2988}"), "\u{2987} \u{2983} a \u{2984} \u{2988}");
+    assert_eq!(dbglex("\u{2983}\u{2987}a\u{2988}\u{2984}"), "\u{2983} \u{2987} a \u{2988} \u{2984}");
 
-    // Sigil-brace opens: %{ and #{.
-    assert_eq!(dbglex("%{a}"), "%{ a }");
-    assert_eq!(dbglex("#{a}"), "#{ a }");
-    assert_eq!(dbglex("%{}"), "%{ }");
-    assert_eq!(dbglex("#{}"), "#{ }");
-    assert_eq!(dbglex("%{#{a}}"), "%{ #{ a } }");
-    assert_eq!(dbglex("#{%{a}}"), "#{ %{ a } }");
-
-    // Unclosed sigil-brace opens.
-    assert_eq!(dbglex("%{a"), "%{ a }");
-    assert_eq!(dbglex("#{a"), "#{ a }");
+    // Unclosed map/set brackets.
+    assert_eq!(dbglex("\u{2987}a"), "\u{2987} a \u{2988}");
+    assert_eq!(dbglex("\u{2983}a"), "\u{2983} a \u{2984}");
 
     // Nested with regular braces.
-    assert_eq!(dbglex("%{{a}}"), "%{ { a } }");
-    assert_eq!(dbglex("{%{a}}"), "{ %{ a } }");
+    assert_eq!(dbglex("\u{2987}{a}\u{2988}"), "\u{2987} { a } \u{2988}");
+    assert_eq!(dbglex("{\u{2987}a\u{2988}}"), "{ \u{2987} a \u{2988} }");
 }

@@ -4,7 +4,7 @@ var counter: u32 = (: u32 / 0)
 
 loop
   let x: int = outer
-  if counter .> (: u32 / 0)
+  if counter > (: u32 / 0)
     break
   end if
   set counter = counter +! (: u32 / 1)

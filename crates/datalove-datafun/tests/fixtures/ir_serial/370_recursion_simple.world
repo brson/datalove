@@ -4,7 +4,7 @@ scriptunit-fragment
 
 // Simple recursion: count down to 0 using checked arithmetic.
 fun countdown(n: u32): !u32
-    if n == :u32/0
+    if n ≡ :u32/0
         ret ok :u32/0
     else
         ret countdown(n -! :u32/1)

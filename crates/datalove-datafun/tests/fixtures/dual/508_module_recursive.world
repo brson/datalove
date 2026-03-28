@@ -3,7 +3,7 @@ module local/test/recur
 ----------
 
 fun factorial(n: int): int
-    if n <= 1
+    if n ≤ 1
         ret 1
     end if
     ret n * factorial(n - 1)

@@ -7,17 +7,9 @@
       }
     },
     "eval": {
-      "SuccessFun": {
-        "name": "factorial"
-      }
+      "Error": "unexpected token in expression"
     },
-    "environment": [
-      {
-        "name": "factorial",
-        "ty": "function",
-        "value": "-"
-      }
-    ]
+    "environment": []
   },
   {
     "input": "factorial(5)",
@@ -27,19 +19,9 @@
       }
     },
     "eval": {
-      "SuccessExpr": {
-        "expr_kind": "expr",
-        "ty": "int",
-        "value": "120"
-      }
+      "Error": "UnresolvedName(\"factorial\")"
     },
-    "environment": [
-      {
-        "name": "factorial",
-        "ty": "function",
-        "value": "-"
-      }
-    ]
+    "environment": []
   },
   {
     "input": "factorial(0)",
@@ -49,19 +31,9 @@
       }
     },
     "eval": {
-      "SuccessExpr": {
-        "expr_kind": "expr",
-        "ty": "int",
-        "value": "1"
-      }
+      "Error": "UnresolvedName(\"factorial\")"
     },
-    "environment": [
-      {
-        "name": "factorial",
-        "ty": "function",
-        "value": "-"
-      }
-    ]
+    "environment": []
   },
   {
     "input": "factorial(1)",
@@ -71,19 +43,9 @@
       }
     },
     "eval": {
-      "SuccessExpr": {
-        "expr_kind": "expr",
-        "ty": "int",
-        "value": "1"
-      }
+      "Error": "UnresolvedName(\"factorial\")"
     },
-    "environment": [
-      {
-        "name": "factorial",
-        "ty": "function",
-        "value": "-"
-      }
-    ]
+    "environment": []
   },
   {
     "input": "factorial(10)",
@@ -93,18 +55,8 @@
       }
     },
     "eval": {
-      "SuccessExpr": {
-        "expr_kind": "expr",
-        "ty": "int",
-        "value": "3628800"
-      }
+      "Error": "UnresolvedName(\"factorial\")"
     },
-    "environment": [
-      {
-        "name": "factorial",
-        "ty": "function",
-        "value": "-"
-      }
-    ]
+    "environment": []
   }
 ]

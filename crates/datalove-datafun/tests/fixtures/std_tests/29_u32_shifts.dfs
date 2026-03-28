@@ -17,7 +17,7 @@ let shr_16 = shift_right(16, 2)
 let shl_0 = shift_left(a, 0)
 let shr_0 = shift_right(a, 0)
 
-// Shift >= 32 returns none.
+// Shift ≥ 32 returns none.
 let shl_32 = shift_left(a, 32)
 let shr_32 = shift_right(a, 32)
 

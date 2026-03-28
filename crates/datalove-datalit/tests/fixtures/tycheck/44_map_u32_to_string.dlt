@@ -1,1 +1,1 @@
-: %{u32 = string} / %{ 1 = "hello", 2 = "world" }
+: ⦇u32 ↦ string⦈ / ⦇ 1 ↦ "hello", 2 ↦ "world" ⦈

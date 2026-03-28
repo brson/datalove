@@ -60,17 +60,17 @@ end fun
 
 fun is_power_of_two(self: index): bool
   let zero = (: index / 0)
-  if self == zero
+  if self ≡ zero
     ret false
   else
-    ret count_ones(self) == (: u32 / 1)
+    ret count_ones(self) ≡ (: u32 / 1)
   end if
 end fun
 
 // Integer log base 2. Returns none if self is zero.
 fun ilog2(self: index): ?u32
   let zero = (: index / 0)
-  if self == zero
+  if self ≡ zero
     ret none
   else
     ret some icall sub_wrapping_u32(icall sub_wrapping_u32(bits(), : u32 / 1), leading_zeros(self))
@@ -135,7 +135,7 @@ end fun
 
 fun neg_checked(self: index): ?index
   let zero = (: index / 0)
-  if self == zero
+  if self ≡ zero
     ret some zero
   else
     ret none
@@ -160,7 +160,7 @@ end fun
 
 fun rem_checked(self: index, other: index): ?index
   let zero = (: index / 0)
-  if other == zero
+  if other ≡ zero
     ret none
   else
     ret some icall rem_index(self, other)
@@ -193,7 +193,7 @@ fun mul_saturating(self: index, other: index): index
   end if
 end fun
 
-// For index, division cannot overflow (result <= dividend), so this is same as div_checked.
+// For index, division cannot overflow (result ≤ dividend), so this is same as div_checked.
 fun div_saturating(self: index, other: index): ?index
   ret div_checked(self, other)
 end fun
@@ -219,18 +219,18 @@ end fun
 
 // Shifts.
 
-// Returns none if shift >= bits().
+// Returns none if shift ≥ bits().
 fun shift_left(self: index, n: u32): ?index
-  if n >= bits()
+  if n ≥ bits()
     ret none
   else
     ret some icall shl_index(self, n)
   end if
 end fun
 
-// Returns none if shift >= bits().
+// Returns none if shift ≥ bits().
 fun shift_right(self: index, n: u32): ?index
-  if n >= bits()
+  if n ≥ bits()
     ret none
   else
     ret some icall shr_index(self, n)
@@ -238,7 +238,7 @@ fun shift_right(self: index, n: u32): ?index
 end fun
 
 fun shift_left_saturating(self: index, n: u32): index
-  if n >= bits()
+  if n ≥ bits()
     ret max_value()
   else
     if shift_left(self, n) |value|
@@ -250,7 +250,7 @@ fun shift_left_saturating(self: index, n: u32): index
 end fun
 
 fun shift_right_saturating(self: index, n: u32): index
-  if n >= bits()
+  if n ≥ bits()
     ret (: index / 0)
   else
     if shift_right(self, n) |value|
@@ -312,11 +312,11 @@ end fun
 // Comparisons and utilities.
 
 fun is_zero(self: index): bool
-  ret self == (: index / 0)
+  ret self ≡ (: index / 0)
 end fun
 
 fun min(self: index, other: index): index
-  if self <= other
+  if self ≤ other
     ret self
   else
     ret other
@@ -324,7 +324,7 @@ fun min(self: index, other: index): index
 end fun
 
 fun max(self: index, other: index): index
-  if self >= other
+  if self ≥ other
     ret self
   else
     ret other
@@ -332,10 +332,10 @@ fun max(self: index, other: index): index
 end fun
 
 fun clamp(self: index, min_val: index, max_val: index): index
-  if self .< min_val
+  if self < min_val
     ret min_val
   else
-    if self .> max_val
+    if self > max_val
       ret max_val
     else
       ret self
@@ -344,7 +344,7 @@ fun clamp(self: index, min_val: index, max_val: index): index
 end fun
 
 fun abs_diff(self: index, other: index): index
-  if self >= other
+  if self ≥ other
     ret sub_saturating(self, other)
   else
     ret sub_saturating(other, self)

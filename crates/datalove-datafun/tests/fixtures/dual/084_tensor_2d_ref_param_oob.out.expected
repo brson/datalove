@@ -31,7 +31,7 @@ DualAnalysis(
                         v3 = const 40u32
                         v4 = const 50u32
                         v5 = const 60u32
-                        v6 = [| v0 v1 v2, v3 v4 v5 |]
+                        v6 = ⟪ v0 v1 v2, v3 v4 v5 ⟫
                         v7 = const 5index
                         v8 = tensorboundscheck v6[v7]
                         branch v8, block2, block1
@@ -70,7 +70,7 @@ DualAnalysis(
                         v3 = const 40u32
                         v4 = const 50u32
                         v5 = const 60u32
-                        v6 = [| v0 v1 v2, v3 v4 v5 |]
+                        v6 = ⟪ v0 v1 v2, v3 v4 v5 ⟫
                         v7 = const 5index
                         v8 = tensorboundscheck v6[v7]
                         branch v8, block2, block1

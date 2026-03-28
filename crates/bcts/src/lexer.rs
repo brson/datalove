@@ -52,20 +52,6 @@ pub enum Sigil {
     StarBarEquals,
     SlashBarEquals,
 
-    // Earmuff braces (two-character, before single-char variants).
-    ParenPipeOpen,    // "(|"
-    ParenPipeClose,   // "|)"
-    BracePipeOpen,    // "{|"
-    BracePipeClose,   // "|}"
-    BracketPipeOpen,  // "[|"
-    BracketPipeClose, // "|]"
-    AnglePipeOpen,    // "<|"
-    AnglePipeClose,   // "|>"
-
-    // Sigil-brace opens (two-character, before single-char variants).
-    PercentBraceOpen, // "%{"
-    HashBraceOpen,    // "#{"
-
     // Two-character sigils (must come before single-character variants).
     ColonDash,
     PlusQuestion,
@@ -88,12 +74,23 @@ pub enum Sigil {
     MinusEquals,
     StarEquals,
     SlashEquals,
-    DotLess,
-    DotGreater,
-    LessEquals,
-    GreaterEquals,
-    EqualsEquals,
-    ExclamationEquals,
+
+    // Unicode bracket pairs (single unicode char, 3 bytes UTF-8).
+    MapOpen,       // "⦇"
+    MapClose,      // "⦈"
+    SetOpen,       // "⦃"
+    SetClose,      // "⦄"
+    TableOpen,     // "⟦"
+    TableClose,    // "⟧"
+    TensorOpen,    // "⟪"
+    TensorClose,   // "⟫"
+
+    // Unicode sigils (single unicode char, 3 bytes UTF-8).
+    MapsTo,        // "↦"
+    LessOrEqual,   // "≤"
+    GreaterOrEqual, // "≥"
+    Identical,     // "≡"
+    NotIdentical,  // "≢"
 
     // Single-character sigils.
     Dot,
@@ -104,8 +101,8 @@ pub enum Sigil {
     Star,
     SlashForward,
     Equals,
-    AngleOpen,
-    AngleClose,
+    Less,          // "<"
+    Greater,       // ">"
     Pipe,
     Question,
     Exclamation,
@@ -284,7 +281,7 @@ pub fn lex_chunk<'db>(
         fn eat_error_from(&mut self, start_ch: char) -> Token<'db> {
             // The first error character has already been consumed by the caller.
             let token_start = Self::token_start(start_ch);
-            let start = self.range.start.checked_sub(1).X();
+            let start = self.range.start.checked_sub(start_ch.len_utf8()).X();
             while let Some(ch) = self.peek() {
                 let next_token_start = Self::token_start(ch);
                 let recover = match (token_start, next_token_start) {
@@ -408,20 +405,6 @@ impl Sigil {
             Sigil::StarBarEquals => "*|=",
             Sigil::SlashBarEquals => "/|=",
 
-            // Earmuff braces.
-            Sigil::ParenPipeOpen => "(|",
-            Sigil::ParenPipeClose => "|)",
-            Sigil::BracePipeOpen => "{|",
-            Sigil::BracePipeClose => "|}",
-            Sigil::BracketPipeOpen => "[|",
-            Sigil::BracketPipeClose => "|]",
-            Sigil::AnglePipeOpen => "<|",
-            Sigil::AnglePipeClose => "|>",
-
-            // Sigil-brace opens.
-            Sigil::PercentBraceOpen => "%{",
-            Sigil::HashBraceOpen => "#{",
-
             // Two-character sigils.
             Sigil::ColonDash => ":-",
             Sigil::PlusQuestion => "+?",
@@ -444,12 +427,23 @@ impl Sigil {
             Sigil::MinusEquals => "-=",
             Sigil::StarEquals => "*=",
             Sigil::SlashEquals => "/=",
-            Sigil::DotLess => ".<",
-            Sigil::DotGreater => ".>",
-            Sigil::LessEquals => "<=",
-            Sigil::GreaterEquals => ">=",
-            Sigil::EqualsEquals => "==",
-            Sigil::ExclamationEquals => "!=",
+
+            // Unicode bracket pairs.
+            Sigil::MapOpen => "\u{2987}",
+            Sigil::MapClose => "\u{2988}",
+            Sigil::SetOpen => "\u{2983}",
+            Sigil::SetClose => "\u{2984}",
+            Sigil::TableOpen => "\u{27E6}",
+            Sigil::TableClose => "\u{27E7}",
+            Sigil::TensorOpen => "\u{27EA}",
+            Sigil::TensorClose => "\u{27EB}",
+
+            // Unicode sigils.
+            Sigil::MapsTo => "\u{21A6}",
+            Sigil::LessOrEqual => "\u{2264}",
+            Sigil::GreaterOrEqual => "\u{2265}",
+            Sigil::Identical => "\u{2261}",
+            Sigil::NotIdentical => "\u{2262}",
 
             // Single-character sigils.
             Sigil::Dot => ".",
@@ -460,8 +454,8 @@ impl Sigil {
             Sigil::Star => "*",
             Sigil::SlashForward => "/",
             Sigil::Equals => "=",
-            Sigil::AngleOpen => "<",
-            Sigil::AngleClose => ">",
+            Sigil::Less => "<",
+            Sigil::Greater => ">",
             Sigil::Pipe => "|",
             Sigil::Question => "?",
             Sigil::Exclamation => "!",
@@ -488,13 +482,10 @@ impl Sigil {
             Sigil::ParenOpen => Sigil::ParenClose,
             Sigil::BraceOpen => Sigil::BraceClose,
             Sigil::BracketOpen => Sigil::BracketClose,
-            Sigil::AngleOpen => Sigil::AngleClose,
-            Sigil::ParenPipeOpen => Sigil::ParenPipeClose,
-            Sigil::BracePipeOpen => Sigil::BracePipeClose,
-            Sigil::BracketPipeOpen => Sigil::BracketPipeClose,
-            Sigil::AnglePipeOpen => Sigil::AnglePipeClose,
-            Sigil::PercentBraceOpen => Sigil::BraceClose,
-            Sigil::HashBraceOpen => Sigil::BraceClose,
+            Sigil::MapOpen => Sigil::MapClose,
+            Sigil::SetOpen => Sigil::SetClose,
+            Sigil::TableOpen => Sigil::TableClose,
+            Sigil::TensorOpen => Sigil::TensorClose,
             _ => bug!(),
         }
     }
@@ -505,19 +496,18 @@ impl Sigil {
             Sigil::ParenClose => Sigil::ParenOpen,
             Sigil::BraceClose => Sigil::BraceOpen,
             Sigil::BracketClose => Sigil::BracketOpen,
-            Sigil::AngleClose => Sigil::AngleOpen,
-            Sigil::ParenPipeClose => Sigil::ParenPipeOpen,
-            Sigil::BracePipeClose => Sigil::BracePipeOpen,
-            Sigil::BracketPipeClose => Sigil::BracketPipeOpen,
-            Sigil::AnglePipeClose => Sigil::AnglePipeOpen,
+            Sigil::MapClose => Sigil::MapOpen,
+            Sigil::SetClose => Sigil::SetOpen,
+            Sigil::TableClose => Sigil::TableOpen,
+            Sigil::TensorClose => Sigil::TensorOpen,
             _ => bug!(),
         }
     }
 
     fn is_close_sigil(&self) -> bool {
         matches!(self,
-            Sigil::ParenClose | Sigil::BraceClose | Sigil::BracketClose | Sigil::AngleClose |
-            Sigil::ParenPipeClose | Sigil::BracePipeClose | Sigil::BracketPipeClose | Sigil::AnglePipeClose
+            Sigil::ParenClose | Sigil::BraceClose | Sigil::BracketClose |
+            Sigil::MapClose | Sigil::SetClose | Sigil::TableClose | Sigil::TensorClose
         )
     }
 }
@@ -580,6 +570,15 @@ fn test_lex_chunk() {
         dbglex("a<b>c[d]e|f:g=h"),
         "a < b > c [ d ] e | f : g = h",
     );
+    // Unicode bracket pairs.
+    assert_eq!(dbglex("\u{2987}a\u{2988}"), "\u{2987} a \u{2988}");
+    assert_eq!(dbglex("\u{2983}a\u{2984}"), "\u{2983} a \u{2984}");
+    assert_eq!(dbglex("\u{27E6}a\u{27E7}"), "\u{27E6} a \u{27E7}");
+    assert_eq!(dbglex("\u{27EA}a\u{27EB}"), "\u{27EA} a \u{27EB}");
+    // Unicode sigils.
+    assert_eq!(dbglex("a \u{21A6} b"), "a ws \u{21A6} ws b");
+    assert_eq!(dbglex("a \u{2264} b"), "a ws \u{2264} ws b");
+    assert_eq!(dbglex("a \u{2261} b"), "a ws \u{2261} ws b");
     assert_eq!(
         dbglex("a?b!c"),
         "a ? b ! c",
@@ -593,23 +592,9 @@ fn test_lex_chunk() {
         "a # b",
     );
 
-    // Sigil-brace opens.
-    assert_eq!(
-        dbglex("%{a}"),
-        "%{ a }",
-    );
-    assert_eq!(
-        dbglex("#{a}"),
-        "#{ a }",
-    );
-    assert_eq!(
-        dbglex("%{}"),
-        "%{ }",
-    );
-    assert_eq!(
-        dbglex("#{}"),
-        "#{ }",
-    );
+    // Map and set brackets.
+    assert_eq!(dbglex("\u{2987}a\u{2988}"), "\u{2987} a \u{2988}");
+    assert_eq!(dbglex("\u{2983}a\u{2984}"), "\u{2983} a \u{2984}");
 
     // Basic arithmetic operators.
     assert_eq!(
@@ -691,14 +676,14 @@ fn test_lex_chunk() {
         "+|= ws -|= ws *|= ws /|=",
     );
 
-    // Comparison operators.
+    // Comparison operators (unicode).
     assert_eq!(
-        dbglex("a.<b.>c<=d>=e==f!=g"),
-        "a .< b .> c <= d >= e == f != g",
+        dbglex("a<b>c\u{2264}d\u{2265}e\u{2261}f\u{2262}g"),
+        "a < b > c \u{2264} d \u{2265} e \u{2261} f \u{2262} g",
     );
     assert_eq!(
-        dbglex(".< .> <= >= == !="),
-        ".< ws .> ws <= ws >= ws == ws !=",
+        dbglex("< > \u{2264} \u{2265} \u{2261} \u{2262}"),
+        "< ws > ws \u{2264} ws \u{2265} ws \u{2261} ws \u{2262}",
     );
 
     // Mixed complex expressions.
@@ -725,31 +710,10 @@ fn test_lex_chunk() {
         "x $ ~",
     );
 
-    // Earmuff braces.
-    assert_eq!(
-        dbglex("(|a|)"),
-        "(| a |)",
-    );
-    assert_eq!(
-        dbglex("{|a|}"),
-        "{| a |}",
-    );
-    assert_eq!(
-        dbglex("[|a|]"),
-        "[| a |]",
-    );
-    assert_eq!(
-        dbglex("<|a|>"),
-        "<| a |>",
-    );
-    assert_eq!(
-        dbglex("(|[|a|]|)"),
-        "(| [| a |] |)",
-    );
-    assert_eq!(
-        dbglex("(||)"),
-        "(| |)",
-    );
+    // Unicode bracket pairs (table, tensor).
+    assert_eq!(dbglex("\u{27E6}a\u{27E7}"), "\u{27E6} a \u{27E7}");
+    assert_eq!(dbglex("\u{27EA}a\u{27EB}"), "\u{27EA} a \u{27EB}");
+    assert_eq!(dbglex("\u{2987}\u{27EA}a\u{27EB}\u{2988}"), "\u{2987} \u{27EA} a \u{27EB} \u{2988}");
 }
 
 

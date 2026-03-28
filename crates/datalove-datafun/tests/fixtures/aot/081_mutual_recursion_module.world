@@ -6,7 +6,7 @@ module local/test/math
 // Modules support forward references for functions.
 
 fun is_even(n: u32): !bool
-    if n == 0
+    if n ≡ 0
         ret ok true
     else
         ret is_odd(n -! 1)
@@ -14,7 +14,7 @@ fun is_even(n: u32): !bool
 end fun
 
 fun is_odd(n: u32): !bool
-    if n == 0
+    if n ≡ 0
         ret ok false
     else
         ret is_even(n -! 1)

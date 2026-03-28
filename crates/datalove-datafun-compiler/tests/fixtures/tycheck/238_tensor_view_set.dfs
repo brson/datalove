@@ -1,6 +1,6 @@
 // Setting rank-2 tensor sub-view via `set t[i]? = row` is ViewTypeMutBinding error.
 fun test(): ?bool
-    var t: [|u32, 2|] = [| 10 20 30, 40 50 60 |]
-    set t[(: index / 0)]? = [| 77 88 99 |]
+    var t: ⟪u32, 2⟫ = ⟪ 10 20 30, 40 50 60 ⟫
+    set t[(: index / 0)]? = ⟪ 77 88 99 ⟫
     ret some true
 end fun

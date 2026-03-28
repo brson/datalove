@@ -1,1 +1,1 @@
-Parse error: unexpected token after expression
+Typecheck error: line 3, col 8: error[F016]: mismatched types: expected `i64`, found `int`; line 6, col 8: error[F016]: mismatched types: expected `i64`, found `int`

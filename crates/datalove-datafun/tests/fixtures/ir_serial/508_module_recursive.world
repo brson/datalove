@@ -3,7 +3,7 @@ module local/test/recur
 ----------
 
 fun factorial(n: u32): !u32
-    if n <= :u32/1
+    if n ≤ :u32/1
         ret ok :u32/1
     end if
     ret ok (n *! factorial(n -! :u32/1)!)

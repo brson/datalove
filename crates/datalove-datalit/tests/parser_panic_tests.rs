@@ -59,18 +59,18 @@ fn type_hint_enum_variant_missing_name() {
 }
 
 /// Map type hint missing equals between key and value type.
-/// `%{K = V}` expects an equals sign.
+/// `⦇K ↦ V⦈` expects an equals sign.
 #[test]
 fn type_hint_map_missing_equals() {
-    let json = parse(": %{i32 i32} / @42");
+    let json = parse(": ⦇i32 i32} / @42");
     assert_parse_error(&json, "map missing equals");
 }
 
 /// Tensor type hint missing comma between element type and rank.
-/// `[|T, N|]` expects a comma.
+/// `⟪T, N⟫` expects a comma.
 #[test]
 fn type_hint_tensor_missing_comma() {
-    let json = parse(": [|i32 2|] / 42");
+    let json = parse(": ⟪i32 2⟫ / 42");
     assert_parse_error(&json, "tensor missing comma");
 }
 
@@ -95,10 +95,10 @@ fn expr_type_hint_missing_slash() {
 }
 
 /// Map entry missing equals between key and value.
-/// `%{k = v}` expects `=`.
+/// `⦇k ↦ v⦈` expects `=`.
 #[test]
 fn expr_map_entry_missing_equals() {
-    let json = parse("%{@1 @2}");
+    let json = parse("⦇@1 @2}");
     assert_parse_error(&json, "map entry missing equals");
 }
 

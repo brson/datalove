@@ -4,7 +4,7 @@ scriptunit-fragment
 
 // Fibonacci using checked arithmetic.
 fun fib(n: u32): !u32
-    if n .< :u32/2
+    if n < :u32/2
         ret ok n
     else
         ret ok (fib(n -! :u32/1)! +! fib(n -! :u32/2)!)

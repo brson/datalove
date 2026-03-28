@@ -3,8 +3,8 @@ scriptunit-fragment
 ----------
 
 // CTFE table in script function.
-fn get_table() -> {| a: u32, b: u32 |} {
-    const T: {| a: u32, b: u32 |} = {| a, b; 10, 20; 30, 40 |}
+fn get_table() -> ⟦ a: u32, b: u32 ⟧ {
+    const T: ⟦ a: u32, b: u32 ⟧ = ⟦ a, b; 10, 20; 30, 40 ⟧
     : T
 }
 

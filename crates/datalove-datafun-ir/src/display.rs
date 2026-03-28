@@ -212,23 +212,23 @@ impl fmt::Display for ConstValue {
                 write!(f, "]")
             }
             ConstValue::Set(elems) => {
-                write!(f, "#{{")?;
+                write!(f, "⦃")?;
                 for (i, e) in elems.iter().enumerate() {
                     if i > 0 { write!(f, ", ")?; }
                     write!(f, "{}", e)?;
                 }
-                write!(f, "}}")
+                write!(f, "⦄")
             }
             ConstValue::Map(entries) => {
-                write!(f, "%{{")?;
+                write!(f, "⦇")?;
                 for (i, (k, v)) in entries.iter().enumerate() {
                     if i > 0 { write!(f, ", ")?; }
-                    write!(f, "{} = {}", k, v)?;
+                    write!(f, "{} ↦ {}", k, v)?;
                 }
-                write!(f, "}}")
+                write!(f, "⦈")
             }
             ConstValue::Table { columns, rows } => {
-                write!(f, "{{| ")?;
+                write!(f, "⟦ ")?;
                 for (i, col) in columns.iter().enumerate() {
                     if i > 0 { write!(f, ", ")?; }
                     write!(f, "{}", col)?;
@@ -240,7 +240,7 @@ impl fmt::Display for ConstValue {
                         write!(f, "{}", val)?;
                     }
                 }
-                write!(f, " |}}")
+                write!(f, " ⟧")
             }
         }
     }
@@ -467,29 +467,29 @@ impl fmt::Display for Instruction {
                 write!(f, "]")
             }
             Instruction::SetNew { dest, elements } => {
-                write!(f, "{} = #{{", dest)?;
+                write!(f, "{} = ⦃", dest)?;
                 for (i, elem) in elements.iter().enumerate() {
                     if i > 0 {
                         write!(f, ", ")?;
                     }
                     write!(f, "{}", elem)?;
                 }
-                write!(f, "}}")
+                write!(f, "⦄")
             }
             Instruction::MapNew { dest, entries } => {
-                write!(f, "{} = %{{", dest)?;
+                write!(f, "{} = ⦇", dest)?;
                 for (i, (k, v)) in entries.iter().enumerate() {
                     if i > 0 {
                         write!(f, ", ")?;
                     }
-                    write!(f, "{}: {}", k, v)?;
+                    write!(f, "{} ↦ {}", k, v)?;
                 }
-                write!(f, "}}")
+                write!(f, "⦈")
             }
             Instruction::TensorNew { dest, shape, elements } => {
-                write!(f, "{} = [| ", dest)?;
+                write!(f, "{} = ⟪ ", dest)?;
                 write_tensor_elements_ir(f, shape, elements)?;
-                write!(f, " |]")
+                write!(f, " ⟫")
             }
             Instruction::TableNew { dest, rows } => {
                 write!(f, "{} = table [", dest)?;

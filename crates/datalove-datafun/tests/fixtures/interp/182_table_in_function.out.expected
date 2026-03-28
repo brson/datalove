@@ -6,7 +6,6 @@ Analysis(
             typecheck: TypecheckResult(
                 status: "ParseError",
                 errors: [
-                    "unmatched \'>\'",
                     "unexpected statement",
                 ],
             ),

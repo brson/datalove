@@ -59,7 +59,7 @@ fn type_hint_to_string(db: &dyn salsa::Database, type_hint: &datalove_datalit::a
 
         TypeHint::Tensor(t) => {
             let elem_str = type_hint_to_string(db, &t.element_type);
-            format!("[|{}, {}|]", elem_str, t.rank)
+            format!("⟪{}, {}⟫", elem_str, t.rank)
         }
         TypeHint::Data => "data".to_string(),
         TypeHint::Error => "error".to_string(),

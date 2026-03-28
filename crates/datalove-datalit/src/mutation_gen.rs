@@ -165,7 +165,7 @@ impl Mutation {
 fn apply_delete_opening_bracket(source: &str, rng: &mut impl Rng) -> Option<MutationResult> {
     let bracket_positions: Vec<(usize, char)> = source
         .char_indices()
-        .filter(|(_, c)| *c == '(' || *c == '[' || *c == '{' || *c == '<')
+        .filter(|(_, c)| *c == '(' || *c == '[' || *c == '{' || *c == '<' || *c == '⦇' || *c == '⦃' || *c == '⟦' || *c == '⟪')
         .collect();
 
     if bracket_positions.is_empty() {
@@ -239,7 +239,7 @@ fn apply_delete_comma(source: &str, rng: &mut impl Rng) -> Option<MutationResult
 
 /// Add extra closing bracket.
 fn apply_extra_closing_bracket(source: &str, rng: &mut impl Rng) -> Option<MutationResult> {
-    let brackets = [')', ']', '}', '>'];
+    let brackets = [')', ']', '}', '>', '⦈', '⦄', '⟧', '⟫'];
     let bracket = brackets[rng.gen_range(0..brackets.len())];
 
     // Insert at a random position (preferring middle of source).
@@ -483,8 +483,8 @@ fn apply_remove_type_hint<'db>(
         Expr::None => format!("{}none", ""),
 
         Expr::List(_) => format!("{}[]", ""),
-        Expr::Set(_) => "#{}".S(),
-        Expr::Map(_) => "%{}".S(),
+        Expr::Set(_) => "⦃⦄".S(),
+        Expr::Map(_) => "⦇⦈".S(),
         _ => return None,
     };
 
@@ -500,7 +500,7 @@ fn apply_remove_type_hint<'db>(
 fn apply_delete_closing_bracket(source: &str, rng: &mut impl Rng) -> Option<MutationResult> {
     let bracket_positions: Vec<(usize, char)> = source
         .char_indices()
-        .filter(|(_, c)| *c == ')' || *c == ']' || *c == '}' || *c == '>')
+        .filter(|(_, c)| *c == ')' || *c == ']' || *c == '}' || *c == '>' || *c == '⦈' || *c == '⦄' || *c == '⟧' || *c == '⟫')
         .collect();
 
     if bracket_positions.is_empty() {
@@ -642,16 +642,16 @@ fn apply_swap_map_key_value<'db>(
             let val_pp = pretty_print(db, e.value);
             if i == 0 {
                 // Swap key and value for first entry.
-                format!("{}: {}", val_pp, key_pp)
+                format!("{} ↦ {}", val_pp, key_pp)
             } else {
-                format!("{}: {}", key_pp, val_pp)
+                format!("{} ↦ {}", key_pp, val_pp)
             }
         }).collect();
 
         // Build type prefix.
         
 
-        let map_body = format!("%{{ {} }}", entry_strs.join(", "));
+        let map_body = format!("⦇ {} ⦈", entry_strs.join(", "));
 
         // Build type hint string.
         let mut type_str = String::new();
@@ -733,17 +733,17 @@ fn pretty_type_hint<'db>(
         }
 
         TypeHint::Map(m) => {
-            out.push_str("%{");
+            out.push_str("⦇");
             pretty_type_hint(db, *m.key_type.clone(), out);
-            out.push_str(" = ");
+            out.push_str(" ↦ ");
             pretty_type_hint(db, *m.value_type.clone(), out);
-            out.push('}');
+            out.push('⦈');
         }
 
         TypeHint::Set(s) => {
-            out.push_str("#{");
+            out.push_str("⦃");
             pretty_type_hint(db, *s.element_type.clone(), out);
-            out.push('}');
+            out.push('⦄');
         }
 
         TypeHint::Option(o) => {
@@ -757,11 +757,11 @@ fn pretty_type_hint<'db>(
         }
 
         TypeHint::Tensor(t) => {
-            out.push_str("[|");
+            out.push_str("⟪");
             pretty_type_hint(db, *t.element_type.clone(), out);
             out.push_str(", ");
             out.push_str(&t.rank.S());
-            out.push_str("|]");
+            out.push_str("⟫");
         }
 
         TypeHint::ParseError(e) => {
@@ -771,7 +771,7 @@ fn pretty_type_hint<'db>(
         }
 
         TypeHint::Table(t) => {
-            out.push_str("{| ");
+            out.push_str("⟦ ");
             let columns = &t.columns;
             for (i, col) in columns.iter().enumerate() {
                 if i > 0 {
@@ -781,7 +781,7 @@ fn pretty_type_hint<'db>(
                 out.push_str(": ");
                 pretty_type_hint(db, *col.type_hint.clone(), out);
             }
-            out.push_str(" |}");
+            out.push_str(" ⟧");
         }
 
         TypeHint::Alias(name) => {

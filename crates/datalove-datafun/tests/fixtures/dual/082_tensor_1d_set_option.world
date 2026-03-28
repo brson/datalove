@@ -3,12 +3,12 @@ scriptunit-fragment
 ----------
 
 // Set element in 1D tensor.
-fun set_elem(t: [|u32, 1|], i: index, v: u32): ?[|u32, 1|]
+fun set_elem(t: ⟪u32, 1⟫, i: index, v: u32): ?⟪u32, 1⟫
     var b = t
     set b[i]? = v
     ret some b
 end fun
 
-debuglog set_elem([| 10 20 30 |], (: index / 0), 99)
-debuglog set_elem([| 10 20 30 |], (: index / 1), 88)
-debuglog set_elem([| 10 20 30 |], (: index / 5), 77)
+debuglog set_elem(⟪ 10 20 30 ⟫, (: index / 0), 99)
+debuglog set_elem(⟪ 10 20 30 ⟫, (: index / 1), 88)
+debuglog set_elem(⟪ 10 20 30 ⟫, (: index / 5), 77)

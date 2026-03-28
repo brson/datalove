@@ -1,9 +1,5 @@
 {
   "diagnostics": [],
-  "errors": [
-    {
-      "kind": "CannotSynthesize"
-    }
-  ],
+  "errors": [],
   "judgements": []
 }

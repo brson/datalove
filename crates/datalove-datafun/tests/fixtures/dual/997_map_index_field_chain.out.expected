@@ -21,7 +21,7 @@ DualAnalysis(
                         v5 = const 30u32
                         v6 = const 40u32
                         v7 = pack Struct0 {v5, v6}
-                        v8 = %{v0: v3, v4: v7}
+                        v8 = ⦇v0 ↦ v3, v4 ↦ v7⦈
                         v9 = const 1u32
                         v10 = const 99u32
                         v11 = call @0 u0(v8, v9, v10)
@@ -62,7 +62,7 @@ DualAnalysis(
                         v5 = const 30u32
                         v6 = const 40u32
                         v7 = pack Struct0 {v5, v6}
-                        v8 = %{v0: v3, v4: v7}
+                        v8 = ⦇v0 ↦ v3, v4 ↦ v7⦈
                         v9 = const 1u32
                         v10 = const 99u32
                         v11 = call @0 u0(v8, v9, v10)
@@ -91,8 +91,8 @@ DualAnalysis(
                 """,
             ),
             ir_match: true,
-            interp_output: "some %{1 = {x = 99, y = 20}, 2 = {x = 30, y = 40}}\n",
-            aot_output: "some %{1 = {x = 99, y = 20}, 2 = {x = 30, y = 40}}\n",
+            interp_output: "some ⦇1 ↦ {x = 99, y = 20}, 2 ↦ {x = 30, y = 40}⦈\n",
+            aot_output: "some ⦇1 ↦ {x = 99, y = 20}, 2 ↦ {x = 30, y = 40}⦈\n",
             output_match: true,
             aot_compile: Some(AotCompileResult(
                 status: "Success",

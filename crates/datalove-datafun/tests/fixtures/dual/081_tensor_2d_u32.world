@@ -2,5 +2,5 @@
 scriptunit-fragment
 ----------
 
-let t: [|u32, 2|] = [| 1 2 3, 4 5 6 |]
+let t: ⟪u32, 2⟫ = ⟪ 1 2 3, 4 5 6 ⟫
 debuglog t

@@ -44,9 +44,9 @@
           "message": "expected 4 element(s), found 3",
           "span": [
             0,
-            12
+            14
           ],
-          "text": "[| 1 2, 3 |]"
+          "text": "⟪ 1 2, 3 ⟫"
         }
       ],
       "message": "tensor has wrong number of elements"

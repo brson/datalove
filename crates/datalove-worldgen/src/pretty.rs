@@ -97,35 +97,35 @@ fn write_expr<'db>(
         }
 
         Expr::Map(m) => {
-            out.push_str("%{");
+            out.push_str("⦇");
             for (i, entry) in m.entries.iter().enumerate() {
                 if i > 0 {
                     out.push_str(", ");
                 }
                 write_expr_full(db, entry.key, out);
-                out.push_str(" = ");
+                out.push_str(" ↦ ");
                 write_expr_full(db, entry.value, out);
             }
-            out.push('}');
+            out.push('⦈');
         }
 
         Expr::Set(s) => {
-            out.push_str("#{");
+            out.push_str("⦃");
             for (i, elem) in s.elements.iter().enumerate() {
                 if i > 0 {
                     out.push_str(", ");
                 }
                 write_expr_full(db, *elem, out);
             }
-            out.push('}');
+            out.push('⦄');
         }
 
         Expr::Tensor(t) => {
-            out.push_str("[| ");
+            out.push_str("⟪ ");
             let shape = &t.shape;
             let elements = &t.elements;
             write_tensor_elements(db, shape, elements, out);
-            out.push_str(" |]");
+            out.push_str(" ⟫");
         }
 
         Expr::Data(d) => {
@@ -145,7 +145,7 @@ fn write_expr<'db>(
         }
 
         Expr::Table(t) => {
-            out.push_str("{| ");
+            out.push_str("⟦ ");
             for (i, name) in t.header.iter().enumerate() {
                 if i > 0 {
                     out.push_str(", ");
@@ -161,7 +161,7 @@ fn write_expr<'db>(
                     write_expr_full(db, *elem, out);
                 }
             }
-            out.push_str(" |}");
+            out.push_str(" ⟧");
         }
     }
 }
@@ -235,17 +235,17 @@ fn write_type_hint<'db>(
         }
 
         TypeHint::Map(m) => {
-            out.push_str("%{");
+            out.push_str("⦇");
             write_type_hint(db, &m.key_type, out);
-            out.push_str(" = ");
+            out.push_str(" ↦ ");
             write_type_hint(db, &m.value_type, out);
-            out.push('}');
+            out.push('⦈');
         }
 
         TypeHint::Set(s) => {
-            out.push_str("#{");
+            out.push_str("⦃");
             write_type_hint(db, &s.element_type, out);
-            out.push('}');
+            out.push('⦄');
         }
 
         TypeHint::Option(o) => {
@@ -259,15 +259,15 @@ fn write_type_hint<'db>(
         }
 
         TypeHint::Tensor(t) => {
-            out.push_str("[|");
+            out.push_str("⟪");
             write_type_hint(db, &t.element_type, out);
             out.push_str(", ");
             out.push_str(&t.rank.to_string());
-            out.push_str("|]");
+            out.push_str("⟫");
         }
 
         TypeHint::Table(t) => {
-            out.push_str("{| ");
+            out.push_str("⟦ ");
             for (i, col) in t.columns.iter().enumerate() {
                 if i > 0 {
                     out.push_str(", ");
@@ -276,7 +276,7 @@ fn write_type_hint<'db>(
                 out.push_str(": ");
                 write_type_hint(db, &col.type_hint, out);
             }
-            out.push_str(" |}");
+            out.push_str(" ⟧");
         }
 
         TypeHint::ParseError(e) => {
@@ -491,7 +491,7 @@ mod tests {
             key_type: Box::new(TypeHint::String),
             value_type: Box::new(TypeHint::I32),
         });
-        assert_eq!(pretty_type_hint(db, map), "%{string = i32}");
+        assert_eq!(pretty_type_hint(db, map), "⦇string ↦ i32⦈");
     }
 
     #[test]
@@ -506,7 +506,7 @@ mod tests {
         let _ = db;
 
         let set = TypeHint::Set(TypeHintSet { element_type: Box::new(TypeHint::U64) });
-        assert_eq!(pretty_type_hint(db, set), "#{u64}");
+        assert_eq!(pretty_type_hint(db, set), "⦃u64⦄");
     }
 
     #[test]

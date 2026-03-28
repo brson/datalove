@@ -7,9 +7,9 @@
           "message": "operands must have the same type",
           "span": [
             23,
-            30
+            29
           ],
-          "text": "n .< 10"
+          "text": "n < 10"
         }
       ],
       "message": "mismatched types: expected `u32`, found `int`"

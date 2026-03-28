@@ -5,7 +5,7 @@ fun nested_break(): int
       break
     end loop
     let n = n + :int/1
-    if n >= :int/2
+    if n ≥ :int/2
       break
     end if
   end loop

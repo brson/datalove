@@ -9,13 +9,13 @@ scriptunit-fragment
 // Without proper handling, this causes memory corruption/double-free.
 
 fun fib(n: u32): !int
-    if n .< 2
+    if n < 2
         ret ok n@
     end if
     var a: int = 0
     var b: int = 1
     var i: u32 = 2
-    loop while i <= n
+    loop while i ≤ n
         let next = a + b
         set a = b
         set b = next

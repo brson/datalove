@@ -49,18 +49,11 @@
       }
     },
     "eval": {
-      "SuccessFun": {
-        "name": "fib"
-      }
+      "Error": "unexpected token in expression"
     },
     "environment": [
       {
         "name": "compute",
-        "ty": "function",
-        "value": "-"
-      },
-      {
-        "name": "fib",
         "ty": "function",
         "value": "-"
       }
@@ -74,20 +67,11 @@
       }
     },
     "eval": {
-      "SuccessExpr": {
-        "expr_kind": "expr",
-        "ty": "int",
-        "value": "13"
-      }
+      "Error": "UnresolvedName(\"fib\")"
     },
     "environment": [
       {
         "name": "compute",
-        "ty": "function",
-        "value": "-"
-      },
-      {
-        "name": "fib",
         "ty": "function",
         "value": "-"
       }
@@ -108,11 +92,6 @@
     "environment": [
       {
         "name": "compute",
-        "ty": "function",
-        "value": "-"
-      },
-      {
-        "name": "fib",
         "ty": "function",
         "value": "-"
       },
@@ -140,11 +119,6 @@
     "environment": [
       {
         "name": "compute",
-        "ty": "function",
-        "value": "-"
-      },
-      {
-        "name": "fib",
         "ty": "function",
         "value": "-"
       },

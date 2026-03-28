@@ -1,9 +1,9 @@
 // Passing rank-3 tensor sub-view to mut param is rejected (view type).
-fun set_elem(mut mat: [|u32, 2|]): ?bool
+fun set_elem(mut mat: ⟪u32, 2⟫): ?bool
     set mat[(: index / 0)]?[(: index / 1)]? = 99
     ret some true
 end fun
 
-fun test(t: [|u32, 3|]): ?bool
+fun test(t: ⟪u32, 3⟫): ?bool
     ret set_elem(t[(: index / 1)]?)
 end fun

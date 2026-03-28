@@ -3,10 +3,10 @@ scriptunit-fragment
 ----------
 
 // 2D tensor get with @ clone produces 1D tensor.
-fun get_row(t: [|u32, 2|], i: index): ?[|u32, 1|]
+fun get_row(t: ⟪u32, 2⟫, i: index): ?⟪u32, 1⟫
     ret some (t[i]?@)
 end fun
 
-debuglog get_row([| 10 20 30, 40 50 60 |], (: index / 0))
-debuglog get_row([| 10 20 30, 40 50 60 |], (: index / 1))
-debuglog get_row([| 10 20 30, 40 50 60 |], (: index / 5))
+debuglog get_row(⟪ 10 20 30, 40 50 60 ⟫, (: index / 0))
+debuglog get_row(⟪ 10 20 30, 40 50 60 ⟫, (: index / 1))
+debuglog get_row(⟪ 10 20 30, 40 50 60 ⟫, (: index / 5))

@@ -128,34 +128,34 @@ impl<'db> Parser<'db> {
                     let fields = sub_parser.parse_comma_separated(|p| p.parse_type_hint_named_field());
                     sub_parser.error_if_not_exhausted_type_hint();
                     ast::TypeHint::AnonStruct(ast::TypeHintAnonStruct { fields })
-                } else if let Some(iter) = self.eat_branch(Sigil::BracePipeOpen) {
+                } else if let Some(iter) = self.eat_branch(Sigil::TableOpen) {
                     // Table type hint.
                     let mut sub_parser = Parser::from_branch(self.db, iter, self.source_text());
                     let columns = sub_parser.parse_comma_separated(|p| p.parse_type_hint_named_field());
                     sub_parser.error_if_not_exhausted_type_hint();
                     ast::TypeHint::Table(ast::TypeHintTable { columns })
-                } else if let Some(iter) = self.eat_branch(Sigil::PercentBraceOpen) {
+                } else if let Some(iter) = self.eat_branch(Sigil::MapOpen) {
                     // Map type hint: %{K = V}
                     let mut sub_parser = Parser::from_branch(self.db, iter, self.source_text());
                     let key_type = sub_parser.parse_type_hint();
-                    if !sub_parser.eat_sigil(Sigil::Equals) {
+                    if !sub_parser.eat_sigil(Sigil::MapsTo) {
                         let ts = sub_parser.peek_text_span();
                         return self.emit_type_hint_error(ts,
-                            "expected '=' between map key and value types",
+                            "expected '↦' between map key and value types",
                             "D005",
-                            "expected '=' between key and value types"
+                            "expected '↦' between key and value types"
                         );
                     }
                     let value_type = sub_parser.parse_type_hint();
                     sub_parser.error_if_not_exhausted_type_hint();
                     ast::TypeHint::Map(ast::TypeHintMap { key_type: Box::new(key_type), value_type: Box::new(value_type) })
-                } else if let Some(iter) = self.eat_branch(Sigil::HashBraceOpen) {
+                } else if let Some(iter) = self.eat_branch(Sigil::SetOpen) {
                     // Set type hint: #{T}
                     let mut sub_parser = Parser::from_branch(self.db, iter, self.source_text());
                     let element_type = sub_parser.parse_type_hint();
                     sub_parser.error_if_not_exhausted_type_hint();
                     ast::TypeHint::Set(ast::TypeHintSet { element_type: Box::new(element_type) })
-                } else if let Some(iter) = self.eat_branch(Sigil::BracketPipeOpen) {
+                } else if let Some(iter) = self.eat_branch(Sigil::TensorOpen) {
                     // Tensor type hint: [|T, N|]
                     let mut sub_parser = Parser::from_branch(self.db, iter, self.source_text());
                     let element_type = sub_parser.parse_type_hint();

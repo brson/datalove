@@ -3,5 +3,5 @@ scriptunit-fragment
 ----------
 
 // CTFE map with struct keys.
-const M: %{{ id: u32 } = u32} = %{ { id: 1 } = 100, { id: 2 } = 200 }
+const M: ⦇{ id: u32 } ↦ u32⦈ = ⦇ { id: 1 } ↦ 100, { id: 2 } ↦ 200 ⦈
 debuglog M

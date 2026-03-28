@@ -19,7 +19,7 @@ DualAnalysis(
                         v3 = const 40u32
                         v4 = const 50u32
                         v5 = const 60u32
-                        v6 = [| v0 v1 v2, v3 v4 v5 |]
+                        v6 = ⟪ v0 v1 v2, v3 v4 v5 ⟫
                         v7 = const 0index
                         v8 = call @0 u0(v6, v7)
                         debuglog v8
@@ -30,7 +30,7 @@ DualAnalysis(
                         v12 = const 40u32
                         v13 = const 50u32
                         v14 = const 60u32
-                        v15 = [| v9 v10 v11, v12 v13 v14 |]
+                        v15 = ⟪ v9 v10 v11, v12 v13 v14 ⟫
                         v16 = const 1index
                         v17 = call @1 u0(v15, v16)
                         debuglog v17
@@ -41,7 +41,7 @@ DualAnalysis(
                         v21 = const 40u32
                         v22 = const 50u32
                         v23 = const 60u32
-                        v24 = [| v18 v19 v20, v21 v22 v23 |]
+                        v24 = ⟪ v18 v19 v20, v21 v22 v23 ⟫
                         v25 = const 5index
                         v26 = call @2 u0(v24, v25)
                         debuglog v26
@@ -75,7 +75,7 @@ DualAnalysis(
                         v3 = const 40u32
                         v4 = const 50u32
                         v5 = const 60u32
-                        v6 = [| v0 v1 v2, v3 v4 v5 |]
+                        v6 = ⟪ v0 v1 v2, v3 v4 v5 ⟫
                         v7 = const 0index
                         v8 = call @0 u0(v6, v7)
                         debuglog v8
@@ -86,7 +86,7 @@ DualAnalysis(
                         v12 = const 40u32
                         v13 = const 50u32
                         v14 = const 60u32
-                        v15 = [| v9 v10 v11, v12 v13 v14 |]
+                        v15 = ⟪ v9 v10 v11, v12 v13 v14 ⟫
                         v16 = const 1index
                         v17 = call @1 u0(v15, v16)
                         debuglog v17
@@ -97,7 +97,7 @@ DualAnalysis(
                         v21 = const 40u32
                         v22 = const 50u32
                         v23 = const 60u32
-                        v24 = [| v18 v19 v20, v21 v22 v23 |]
+                        v24 = ⟪ v18 v19 v20, v21 v22 v23 ⟫
                         v25 = const 5index
                         v26 = call @2 u0(v24, v25)
                         debuglog v26
@@ -121,8 +121,8 @@ DualAnalysis(
                 """,
             ),
             ir_match: true,
-            interp_output: "some [| 10 20 30 |]\nsome [| 40 50 60 |]\nnone\n",
-            aot_output: "some [| 10 20 30 |]\nsome [| 40 50 60 |]\nnone\n",
+            interp_output: "some ⟪ 10 20 30 ⟫\nsome ⟪ 40 50 60 ⟫\nnone\n",
+            aot_output: "some ⟪ 10 20 30 ⟫\nsome ⟪ 40 50 60 ⟫\nnone\n",
             output_match: true,
             aot_compile: Some(AotCompileResult(
                 status: "Success",

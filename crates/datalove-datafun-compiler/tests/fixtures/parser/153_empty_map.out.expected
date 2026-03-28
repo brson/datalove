@@ -2,20 +2,8 @@
   "ast": {
     "statements": [
       {
-        "kind": "Let",
-        "name": "x",
-        "type_hint": {
-          "ParseError": {
-            "message": "unexpected tokens in type hint"
-          }
-        },
-        "value": {
-          "expr": {
-            "kind": "Place",
-            "root": "map",
-            "steps": []
-          }
-        }
+        "kind": "ParseError",
+        "message": "expected '=' after let binding"
       }
     ]
   },
@@ -35,18 +23,18 @@
       "message": "unexpected tokens in type hint"
     },
     {
-      "code": "P021",
+      "code": "D023",
       "labels": [
         {
-          "message": "unexpected token",
+          "message": "expected '='",
           "span": [
-            30,
-            32
+            14,
+            15
           ],
-          "text": "{}"
+          "text": ","
         }
       ],
-      "message": "unexpected token after expression"
+      "message": "expected '=' after let binding"
     }
   ]
 }

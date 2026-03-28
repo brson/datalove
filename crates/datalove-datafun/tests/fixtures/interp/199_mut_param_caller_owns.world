@@ -13,7 +13,7 @@ fun test(): bool
     var n: int = :int/100
     let _ok: bool = modify(n)
     // n is still accessible and now contains 999
-    ret n == :int/999
+    ret n ≡ :int/999
 end fun
 
 ----------

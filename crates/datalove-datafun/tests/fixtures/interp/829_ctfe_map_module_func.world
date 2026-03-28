@@ -3,8 +3,8 @@ module local/test/mapfunc
 ----------
 
 // CTFE map in module function.
-fun compute(): %{u32 = u32}
-    const M: %{u32 = u32} = %{ 10 = 100, 20 = 200, 30 = 300 }
+fun compute(): ⦇u32 ↦ u32⦈
+    const M: ⦇u32 ↦ u32⦈ = ⦇ 10 ↦ 100, 20 ↦ 200, 30 ↦ 300 ⦈
     ret M
 end fun
 

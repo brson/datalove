@@ -7,9 +7,9 @@
           "message": "operands must have the same type",
           "span": [
             34,
-            40
+            41
           ],
-          "text": "n == 0"
+          "text": "n ≡ 0"
         }
       ],
       "message": "mismatched types: expected `u64`, found `int`"

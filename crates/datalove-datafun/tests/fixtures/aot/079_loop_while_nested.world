@@ -5,9 +5,9 @@ scriptunit-fragment
 // Nested while loops - outer 3 iters, inner 3 iters = 9 total
 var total = :int/0
 var i = :int/0
-loop while i .< :int/3
+loop while i < :int/3
     var j = :int/0
-    loop while j .< :int/3
+    loop while j < :int/3
         set total = total + :int/1
         set j = j + :int/1
     end loop
