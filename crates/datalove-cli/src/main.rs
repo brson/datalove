@@ -29,18 +29,13 @@ fn prefix_nav_links(nav_html: &str, path_prefix: &str) -> String {
 mod feed;
 mod render;
 
-/// Build unified native component and return the static library path for AOT linking.
-fn build_rider_libs(
+/// Build the native component (runtime + riders) and return the static library path for AOT linking.
+fn build_native_component_for_aot(
     pipeline: &datalove_datafun::pipeline::ModuleCompilationPipeline,
 ) -> AnyResult<Vec<std::path::PathBuf>> {
     use datalove_datafun::pipeline::rider_build;
 
-    let rider_crate_dirs = pipeline.rider_crate_dirs();
-    if rider_crate_dirs.is_empty() {
-        return Ok(Vec::new());
-    }
-
-    let result = rider_build::build_native_component(rider_crate_dirs)
+    let result = rider_build::build_native_component(pipeline.rider_crate_dirs())
         .map_err(|e| anyhow!("{}", e))?;
     Ok(vec![result.staticlib_path])
 }
@@ -55,12 +50,7 @@ fn build_and_load_riders(
 ) -> AnyResult<Vec<datalove_datafun::pipeline::rider_load::LoadedRider>> {
     use datalove_datafun::pipeline::{rider_build, rider_load};
 
-    let rider_crate_dirs = pipeline.rider_crate_dirs();
-    if rider_crate_dirs.is_empty() {
-        return Ok(Vec::new());
-    }
-
-    let build_result = rider_build::build_native_component(rider_crate_dirs)
+    let build_result = rider_build::build_native_component(pipeline.rider_crate_dirs())
         .map_err(|e| anyhow!("{}", e))?;
 
     let native_symbols = compiled.native_symbols();
@@ -665,7 +655,7 @@ impl AotCompileCommand {
             .ok_or_else(|| anyhow!("IR unit not available after lowering"))?;
 
         // Build rider crates for linking.
-        let rider_libs = build_rider_libs(&pipeline)?;
+        let rider_libs = build_native_component_for_aot(&pipeline)?;
 
         // Compile to object bytes using pipeline::aot.
         let obj_bytes = aot::compile_script_to_object_with_world(

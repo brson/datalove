@@ -34,16 +34,17 @@ impl std::fmt::Display for RiderBuildError {
 
 impl std::error::Error for RiderBuildError {}
 
-/// Build a unified native component library from all rider crates.
+/// Build a unified native component library containing the runtime and all riders.
 ///
-/// Synthesizes a single Rust crate that depends on all rider crates as rlib
-/// dependencies, producing one cdylib and one staticlib. The synthesized crate
-/// is generated in `target/datalove-native-component/` under the workspace root.
+/// Synthesizes a single Rust crate that depends on `datalove-rt` and all rider
+/// crates as rlib dependencies, producing one cdylib and one staticlib. The
+/// synthesized crate is generated in `target/datalove-native-component/` under
+/// the workspace root.
+///
+/// Can be called with an empty `riders` slice to produce a runtime-only component.
 pub fn build_native_component(
     riders: &[(String, PathBuf)],
 ) -> Result<NativeComponentBuild, RiderBuildError> {
-    assert!(!riders.is_empty());
-
     // Resolve rider crate names from their Cargo.toml files.
     let mut rider_crates = Vec::new();
     for (rider_name, crate_dir) in riders {
@@ -65,12 +66,18 @@ pub fn build_native_component(
         rider_crates.push((rider_name.clone(), crate_name, abs_dir));
     }
 
-    // Determine workspace root from the first rider's crate dir.
-    // Rider crates live outside the workspace (e.g. sys/std/rider/), but within the repo.
     let synth_dir = synth_crate_dir();
     let src_dir = synth_dir.join("src");
     std::fs::create_dir_all(&src_dir)
         .map_err(|e| build_err("native-component", format!("failed to create synth dir: {}", e)))?;
+
+    // The runtime crate is always included so the native component provides
+    // datalove_rt for AOT linking, eliminating the need for a separate
+    // libdatalove_rt.a.
+    let workspace_root = workspace_root_dir();
+    let rt_dir = workspace_root.join("crates").join("datalove-rt");
+    let rt_abs = rt_dir.canonicalize()
+        .map_err(|e| build_err("native-component", format!("failed to canonicalize datalove-rt path: {}", e)))?;
 
     // Generate Cargo.toml.
     let mut cargo_toml = String::new();
@@ -80,7 +87,9 @@ pub fn build_native_component(
          # Empty workspace table prevents cargo from treating this as part of\n\
          # the parent workspace.\n\
          [workspace]\n\n\
-         [dependencies]\n"
+         [dependencies]\n\
+         datalove-rt = {{ path = \"{}\" }}\n",
+        rt_abs.display(),
     ));
     for (_rider_name, crate_name, abs_dir) in &rider_crates {
         cargo_toml.push_str(&format!(
@@ -92,9 +101,9 @@ pub fn build_native_component(
     std::fs::write(synth_dir.join("Cargo.toml"), &cargo_toml)
         .map_err(|e| build_err("native-component", format!("failed to write Cargo.toml: {}", e)))?;
 
-    // Generate lib.rs that pulls in all rider crates.
+    // Generate lib.rs that pulls in the runtime and all rider crates.
     // The extern crate declarations ensure #[no_mangle] symbols are included.
-    let mut lib_rs = String::new();
+    let mut lib_rs = String::from("extern crate datalove_rt;\n");
     for (_rider_name, crate_name, _abs_dir) in &rider_crates {
         let ident = crate_name.replace('-', "_");
         lib_rs.push_str(&format!("extern crate {};\n", ident));
@@ -130,12 +139,16 @@ pub fn build_native_component(
     })
 }
 
-/// Directory for the synthesized native component crate.
-fn synth_crate_dir() -> PathBuf {
+/// Workspace root directory (repo root).
+fn workspace_root_dir() -> PathBuf {
     let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     // crates/datalove-datafun -> crates -> repo root
-    manifest_dir.parent().unwrap().parent().unwrap()
-        .join("target").join("datalove-native-component")
+    manifest_dir.parent().unwrap().parent().unwrap().to_path_buf()
+}
+
+/// Directory for the synthesized native component crate.
+fn synth_crate_dir() -> PathBuf {
+    workspace_root_dir().join("target").join("datalove-native-component")
 }
 
 fn build_err(rider_name: &str, message: String) -> RiderBuildError {

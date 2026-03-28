@@ -64,12 +64,7 @@ fn build_and_load_riders(
     compiled: &datafun::pipeline::CompiledModules<'_>,
     executor: &mut datafun::pipeline::ScriptExecutor,
 ) -> Result<(Vec<PathBuf>, Vec<datafun::pipeline::rider_load::LoadedRider>), String> {
-    let rider_crate_dirs = pipeline.rider_crate_dirs();
-    if rider_crate_dirs.is_empty() {
-        return Ok((Vec::new(), Vec::new()));
-    }
-
-    let build_result = datafun::pipeline::rider_build::build_native_component(rider_crate_dirs)
+    let build_result = datafun::pipeline::rider_build::build_native_component(pipeline.rider_crate_dirs())
         .map_err(|e| format!("rider build error: {}", e))?;
 
     let lib_paths = vec![build_result.staticlib_path.clone()];

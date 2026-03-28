@@ -174,8 +174,9 @@ pub fn link_object_to_path(obj_bytes: &[u8], output_path: &Path) -> Result<(), L
 
 /// Link object bytes to an executable, including extra libraries.
 ///
-/// The `extra_libs` parameter provides paths to libraries (e.g. rider `.a`
-/// static archives) that should be linked into the executable.
+/// When `extra_libs` contains the native component staticlib, it provides
+/// `datalove_rt` and no separate runtime lib is linked. When `extra_libs` is
+/// empty, the standalone `libdatalove_rt.a` is linked via `ensure_runtime_lib()`.
 pub fn link_object_to_path_with_libs(
     obj_bytes: &[u8],
     output_path: &Path,
@@ -185,22 +186,21 @@ pub fn link_object_to_path_with_libs(
     let obj_path = dir.path().join("script.o");
     std::fs::write(&obj_path, obj_bytes).map_err(LinkError::WriteObject)?;
 
-    let lib_dir = ensure_runtime_lib();
-    let lib_path = lib_dir.join("libdatalove_rt.a");
-
     // Use lld for faster linking if available.
     let mut cmd = Command::new("cc");
     if use_lld() {
         cmd.arg("-fuse-ld=lld");
     }
     cmd.arg(obj_path.to_str().unwrap());
-    cmd.arg(lib_path.to_str().unwrap());
 
-    // The native component staticlib bundles datalove_rt (Rust staticlib
-    // bundles all transitive deps), which overlaps with libdatalove_rt.a
-    // linked above. Allow the linker to use the first definition.
-    if !extra_libs.is_empty() {
-        cmd.arg("-Wl,-z,muldefs");
+    if extra_libs.is_empty() {
+        // No native component — link the standalone runtime lib.
+        let lib_dir = ensure_runtime_lib();
+        let lib_path = lib_dir.join("libdatalove_rt.a");
+        cmd.arg(lib_path.to_str().unwrap());
+    } else {
+        // The native component staticlib bundles datalove_rt along with
+        // all rider symbols, so it replaces the standalone runtime lib.
         for lib in extra_libs {
             cmd.arg(lib.to_str().unwrap());
         }
