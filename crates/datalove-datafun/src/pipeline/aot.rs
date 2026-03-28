@@ -172,10 +172,10 @@ pub fn link_object_to_path(obj_bytes: &[u8], output_path: &Path) -> Result<(), L
     link_object_to_path_with_libs(obj_bytes, output_path, &[])
 }
 
-/// Link object bytes to an executable, including extra shared libraries.
+/// Link object bytes to an executable, including extra libraries.
 ///
-/// The `extra_libs` parameter provides paths to shared libraries (e.g. rider
-/// `.so` files) that should be linked into the executable.
+/// The `extra_libs` parameter provides paths to libraries (e.g. rider `.a`
+/// static archives) that should be linked into the executable.
 pub fn link_object_to_path_with_libs(
     obj_bytes: &[u8],
     output_path: &Path,
@@ -193,17 +193,20 @@ pub fn link_object_to_path_with_libs(
     if use_lld() {
         cmd.arg("-fuse-ld=lld");
     }
-    cmd.args([
-        obj_path.to_str().unwrap(),
-        lib_path.to_str().unwrap(),
-        "-ldl", "-lpthread", "-lm",
-        "-o", output_path.to_str().unwrap(),
-    ]);
+    cmd.arg(obj_path.to_str().unwrap());
+    cmd.arg(lib_path.to_str().unwrap());
 
-    // Add rider shared libraries.
-    for lib in extra_libs {
-        cmd.arg(lib.to_str().unwrap());
+    // The native component staticlib bundles datalove_rt (Rust staticlib
+    // bundles all transitive deps), which overlaps with libdatalove_rt.a
+    // linked above. Allow the linker to use the first definition.
+    if !extra_libs.is_empty() {
+        cmd.arg("-Wl,-z,muldefs");
+        for lib in extra_libs {
+            cmd.arg(lib.to_str().unwrap());
+        }
     }
+
+    cmd.args(["-ldl", "-lpthread", "-lm", "-o", output_path.to_str().unwrap()]);
 
     let output = cmd.output().map_err(LinkError::LinkerExec)?;
 

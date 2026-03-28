@@ -65,22 +65,18 @@ fn analyze_file(path: &Path) -> Result<String, String> {
         return Err("Module compilation failed".to_string());
     };
 
-    // Build and load rider shared libraries.
-    let native_symbols = compiled.native_symbols();
+    // Build unified native component and load it.
     let mut _loaded_riders = Vec::new();
-    for (rider_name, crate_dir) in pipeline.rider_crate_dirs() {
-        let build_result = datafun::pipeline::rider_build::build_rider_crate(crate_dir, rider_name)
+    let rider_crate_dirs = pipeline.rider_crate_dirs();
+    if !rider_crate_dirs.is_empty() {
+        let build_result = datafun::pipeline::rider_build::build_native_component(rider_crate_dirs)
             .map_err(|e| format!("rider build error: {}", e))?;
-        let prefix = format!("dlr_{}__", rider_name);
-        let rider_symbols: Vec<String> = native_symbols.iter()
-            .filter(|s| s.starts_with(&prefix))
-            .cloned()
-            .collect();
-        if !rider_symbols.is_empty() {
+        let native_symbols = compiled.native_symbols();
+        if !native_symbols.is_empty() {
             let loaded = datafun::pipeline::rider_load::load_rider_library(
-                &build_result.lib_path,
-                rider_name,
-                &rider_symbols,
+                &build_result.cdylib_path,
+                "native-component",
+                &native_symbols,
                 executor.native_table_mut(),
             ).map_err(|e| format!("rider load error: {}", e))?;
             _loaded_riders.push(loaded);

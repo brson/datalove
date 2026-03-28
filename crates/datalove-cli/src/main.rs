@@ -29,9 +29,7 @@ fn prefix_nav_links(nav_html: &str, path_prefix: &str) -> String {
 mod feed;
 mod render;
 
-/// Build rider crates and return their shared library paths.
-///
-/// Used by AOT compilation to pass rider libraries to the linker.
+/// Build unified native component and return the static library path for AOT linking.
 fn build_rider_libs(
     pipeline: &datalove_datafun::pipeline::ModuleCompilationPipeline,
 ) -> AnyResult<Vec<std::path::PathBuf>> {
@@ -42,19 +40,14 @@ fn build_rider_libs(
         return Ok(Vec::new());
     }
 
-    let mut lib_paths = Vec::new();
-    for (rider_name, crate_dir) in rider_crate_dirs {
-        let build_result = rider_build::build_rider_crate(crate_dir, rider_name)
-            .map_err(|e| anyhow!("{}", e))?;
-        lib_paths.push(build_result.lib_path);
-    }
-
-    Ok(lib_paths)
+    let result = rider_build::build_native_component(rider_crate_dirs)
+        .map_err(|e| anyhow!("{}", e))?;
+    Ok(vec![result.staticlib_path])
 }
 
-/// Build and load rider shared libraries, registering native symbols in the executor.
+/// Build unified native component and load it, registering native symbols in the executor.
 ///
-/// Returns the loaded rider handles, which must be kept alive for the duration of execution.
+/// Returns the loaded rider handle, which must be kept alive for the duration of execution.
 fn build_and_load_riders(
     pipeline: &datalove_datafun::pipeline::ModuleCompilationPipeline,
     compiled: &datalove_datafun::pipeline::CompiledModules,
@@ -67,33 +60,21 @@ fn build_and_load_riders(
         return Ok(Vec::new());
     }
 
+    let build_result = rider_build::build_native_component(rider_crate_dirs)
+        .map_err(|e| anyhow!("{}", e))?;
+
     let native_symbols = compiled.native_symbols();
-    let mut loaded_riders = Vec::new();
-
-    for (rider_name, crate_dir) in rider_crate_dirs {
-        // Build the rider crate.
-        let build_result = rider_build::build_rider_crate(crate_dir, rider_name)
-            .map_err(|e| anyhow!("{}", e))?;
-
-        // Filter symbols belonging to this rider (prefix `dlr_{rider}__`).
-        let prefix = format!("dlr_{}__", rider_name);
-        let rider_symbols: Vec<String> = native_symbols.iter()
-            .filter(|s| s.starts_with(&prefix))
-            .cloned()
-            .collect();
-
-        if !rider_symbols.is_empty() {
-            let loaded = rider_load::load_rider_library(
-                &build_result.lib_path,
-                rider_name,
-                &rider_symbols,
-                executor.native_table_mut(),
-            )?;
-            loaded_riders.push(loaded);
-        }
+    if native_symbols.is_empty() {
+        return Ok(Vec::new());
     }
 
-    Ok(loaded_riders)
+    let loaded = rider_load::load_rider_library(
+        &build_result.cdylib_path,
+        "native-component",
+        &native_symbols,
+        executor.native_table_mut(),
+    )?;
+    Ok(vec![loaded])
 }
 
 fn main() -> AnyResult<()> {
