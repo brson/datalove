@@ -38,42 +38,42 @@ Fixed-width integers require a type hint or checking context.
 | Type                             | Literal                          | Destructuring                    |
 |----------------------------------|----------------------------------|----------------------------------|
 | `[T]`                            | `[1, 2, 3]`                      | n/a                              |
-| `%{ K = V }`                     | `%{ 0 = 5, 1 = 2 }`              | n/a                              |
-| `#{ K }`                         | `#{ 1, 2, 3 }`                   | n/a                              |
-| `{\| col1: T1, col2: T2 \|}`     | `{\| col1, col2; 1, 2; 3, 4 \|}` | n/a                              |
-| `[\|T, N\|]`                     | `[\| 1 2 3, 4 5 6 \|]`           | n/a                              |
+| `⦇ K ↦ V ⦈`                     | `⦇ 0 ↦ 5, 1 ↦ 2 ⦈`              | n/a                              |
+| `⦃ K ⦄`                         | `⦃ 1, 2, 3 ⦄`                   | n/a                              |
+| `{\| col1: T1, col2: T2 \⟧`     | `{\| col1, col2; 1, 2; 3, 4 \⟧` | n/a                              |
+| `[\|T, N\⟫`                     | `[\| 1 2 3, 4 5 6 \⟫`           | n/a                              |
 
 ```datalove
 // Lists
 let a: [int] = [1, 2, 3]
 
 // Maps
-let a: %{int=int} = %{ 0 = 5, 1 = 2 }
+let a: ⦇int↦int⦈ = ⦇ 0 ↦ 5, 1 ↦ 2 ⦈
 
 // Sets
-let a: #{int} = #{ 1, 2, 3 }
+let a: ⦃int⦄ = ⦃ 1, 2, 3 ⦄
 
 // Tables
-let a: {|
+let a: ⟦
   col1: T1,
   col2: T2
-|} = {|
+⟧ = ⟦
   x, y
   1, 2
   3, 4
-|}
+⟧
 
 // Tensors
-let a: [|int, 2|] = [|
+let a: ⟪int, 2⟫ = ⟪
   1 2 3,                // 2x3
   4 5 6,
-|]
-let a: [|int, 3|] = [|
+⟫
+let a: ⟪int, 3⟫ = ⟪
   1 2 3,                // 2x2x3
   4 5 6,,
   1 2 3,
   4 5 6,,
-|]
+⟫
 ```
 
 

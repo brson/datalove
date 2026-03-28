@@ -67,10 +67,10 @@ with N branches**, dispatching on an enum tag:
 enum Comptime_repeat_n { V0, V1, V2 }  // variants for N=3, N=5, N=10
 
 fun repeat_unified(n_tag: Comptime_repeat_n, s: string) -> string
-    if discriminant(n_tag) == 0
+    if discriminant(n_tag) ≡ 0
         const n = 3
         // body with n=3 const-folded
-    else if discriminant(n_tag) == 1
+    else if discriminant(n_tag) ≡ 1
         const n = 5
         // body with n=5 const-folded
     else
@@ -223,7 +223,7 @@ Modify `parse_fun_param()`:
 fn parse_fun_param(&mut self) -> Result<FunParam<'db>, ParseError> {
     // NEW: Check for `const` modifier first
     let is_comptime = if self.check(TokenKind::Keyword)
-        && self.current_text() == "const"
+        && self.current_text() ≡ "const"
     {
         self.advance();
         true
@@ -682,7 +682,7 @@ fn build_dispatch_ir(
             // v1 = discriminant(v0) -- or just use v0 if enum is repr(int)
         ],
         terminator: Terminator::Branch {
-            cond: /* v1 == 0 */,
+            cond: /* v1 ≡ 0 */,
             then_block: BlockId(num_variants as u32),  // first variant body
             then_args: vec![],
             else_block: BlockId(1),  // next check
@@ -698,7 +698,7 @@ fn build_dispatch_ir(
             params: vec![],
             instructions: vec![],
             terminator: Terminator::Branch {
-                cond: /* discriminant == i */,
+                cond: /* discriminant ≡ i */,
                 then_block: BlockId((num_variants + i) as u32),
                 then_args: vec![],
                 else_block: BlockId((i + 1) as u32),
@@ -744,7 +744,7 @@ fn clone_blocks_with_const_substitution(
         new_block.id = BlockId(base_block_id.0 + i as u32);
 
         // Prepend const instructions for const parameters
-        if i == 0 {
+        if i ≡ 0 {
             let mut const_instrs: Vec<Instruction> = comptime_param_indices.iter()
                 .zip(values.iter())
                 .enumerate()
@@ -844,7 +844,7 @@ The union-branch transformation produces code like:
 
 ```datalove
 // Before CTFE (conceptual IR):
-if discriminant(n_tag) == 0
+if discriminant(n_tag) ≡ 0
     const n = 3          // <- normal const binding
     let result = s * n   // <- uses const n
     ...
@@ -1128,7 +1128,7 @@ end fun
 ### Sprint 5: Differential Testing ✅
 - [x] Create `interp_specialize_tests.rs` following `interp_constlet_tests.rs` pattern
 - [x] Add test fixtures in `fixtures/specialize_differential/`
-- [x] Verify: specialized IR == unspecialized IR (same debuglog output)
+- [x] Verify: specialized IR ≡ unspecialized IR (same debuglog output)
 - [x] Test edge cases: multiple instantiations, nested calls, mixed params
 
 ### Sprint 6: Polish

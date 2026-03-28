@@ -10,7 +10,7 @@ values must be known at compile time, enabling function specialization based on 
 fun repeat(const n: i32, s: string) -> string
     let result = ""
     let i = 0
-    loop while i .< n
+    loop while i < n
         set result = result + s
         set i = i + 1
     end loop
@@ -602,9 +602,9 @@ fn rewrite_call(
 The optimal approach may combine both strategies:
 
 ```
-if num_instantiations <= MONO_THRESHOLD {
+if num_instantiations ≤ MONO_THRESHOLD {
     full_monomorphization()
-} else if num_instantiations <= UNION_THRESHOLD {
+} else if num_instantiations ≤ UNION_THRESHOLD {
     union_branch_transform()
 } else {
     error("too many instantiations")

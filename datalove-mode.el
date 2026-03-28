@@ -80,18 +80,20 @@
       ;; @data, @error, @tensor constructors.
       ("@\\(data\\|error\\|tensor\\)\\>" . font-lock-builtin-face)
 
-      ;; Map (%{) and set (#{) sigils.
-      ("%{" . font-lock-builtin-face)
-      ("#{" . font-lock-builtin-face)
+      ;; Unicode bracket pairs (map, set, table, tensor).
+      ("[⦇⦈]" . font-lock-builtin-face)
+      ("[⦃⦄]" . font-lock-builtin-face)
+      ("[⟦⟧]" . font-lock-builtin-face)
+      ("[⟪⟫]" . font-lock-builtin-face)
 
-      ;; Table delimiters.
-      ("{|\\||}" . font-lock-builtin-face)
+      ;; Maps-to arrow.
+      ("↦" . font-lock-builtin-face)
 
       ;; String literals.
       ("@\"\\(?:[^\"\\]\\|\\\\.\\)*\"" . font-lock-string-face)
 
       ;; Comparison operators.
-      ("\\(\\.<\\|\\.>\\|<=\\|>=\\|==\\|!=\\)" . font-lock-builtin-face)
+      ("\\([<>≤≥≡≢]\\)" . font-lock-builtin-face)
 
       ;; Checked/optional arithmetic operators.
       ("\\([+\\-*/][!?]\\)" . font-lock-builtin-face)

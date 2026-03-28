@@ -159,7 +159,7 @@ When `cleanup_frame` runs after function body:
 
 ### Option Handling
 ```rust
-if value.location == ValueLocation::TempOwned {
+if value.location ≡ ValueLocation::TempOwned {
     // Free the Option structure
     dtlv_rti_mem_free_local(...);
 }

@@ -214,7 +214,7 @@ pub enum AutoAdaptMode {
 
 pub fn auto_adapt_mode_from_env() -> AutoAdaptMode {
     match std::env::var("DATALOVE_AUTO_ADAPT") {
-        Ok(val) if val == "report" => AutoAdaptMode::EnabledWithReport,
+        Ok(val) if val ≡ "report" => AutoAdaptMode::EnabledWithReport,
         Ok(_) => AutoAdaptMode::Enabled,
         Err(_) => AutoAdaptMode::Disabled,
     }
@@ -299,7 +299,7 @@ impl<'db> TypeContext<'db> {
         }
 
         // Try auto-adapt if enabled
-        if self.auto_adapt_mode != AutoAdaptMode::Disabled {
+        if self.auto_adapt_mode ≢ AutoAdaptMode::Disabled {
             if can_clone_coerce_to(&actual, expected, self.db) {
                 self.record_auto_adaptation(expr, &actual, expected);
                 // Store adapted type for this expression
@@ -328,7 +328,7 @@ impl<'db> TypeContext<'db> {
         });
 
         // Emit info diagnostic if reporting enabled
-        if self.auto_adapt_mode == AutoAdaptMode::EnabledWithReport {
+        if self.auto_adapt_mode ≡ AutoAdaptMode::EnabledWithReport {
             self.pending_diagnostics.push(PendingDiagnostic::AutoAdapted {
                 expr,
                 from_type: type_to_string(self.db, from),
@@ -354,7 +354,7 @@ impl<'db> AnalysisCtx<'db> {
         // ... existing logic ...
 
         // When we would emit UseAfterMove/DoubleMove/MoveInLoop:
-        if self.options.auto_adapt_mode != AutoAdaptMode::Disabled {
+        if self.options.auto_adapt_mode ≢ AutoAdaptMode::Disabled {
             // Instead of error, record that @ should be inserted
             self.auto_clone_insertions.push(expr);
             // Don't mark as moved - the clone keeps original alive

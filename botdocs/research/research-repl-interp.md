@@ -828,7 +828,7 @@ impl TieredExecutor {
         // Threshold for JIT compilation
         const JIT_THRESHOLD: usize = 100;
 
-        if info.call_count >= JIT_THRESHOLD && info.jit_code.is_none() {
+        if info.call_count ≥ JIT_THRESHOLD && info.jit_code.is_none() {
             // Compile to native code
             info.jit_code = Some(self.jit.compile_function(&info.bytecode)?);
         }
@@ -979,7 +979,7 @@ let typed3 = typecheck(db, ast3);        // Recomputed
 ```rust
 #[memoized]
 fun fibonacci(n: @u32 ^in) -> @u32 ^out {
-    if n <= @1 {
+    if n ≤ @1 {
         n
     } else {
         fibonacci(n - @1) + fibonacci(n - @2)
@@ -1263,7 +1263,7 @@ pub struct DataflowHistory {
 
 impl DataflowHistory {
     pub fn undo(&mut self, db: &mut dyn ReplDb) -> Result<(), Error> {
-        if self.current == 0 {
+        if self.current ≡ 0 {
             return Ok(());
         }
 
@@ -1342,7 +1342,7 @@ impl EditHistory {
     }
 
     pub fn undo(&mut self, db: &mut dyn ReplDb) -> Result<(), Error> {
-        if self.current == 0 {
+        if self.current ≡ 0 {
             return Ok(());
         }
 
@@ -1366,7 +1366,7 @@ impl EditHistory {
     }
 
     pub fn redo(&mut self, db: &mut dyn ReplDb) -> Result<(), Error> {
-        if self.current >= self.edits.len() {
+        if self.current ≥ self.edits.len() {
             return Ok(());
         }
 
@@ -1464,7 +1464,7 @@ impl<T: Clone> Generator for SplitGenerator<T> {
     type Return = ();
 
     fn resume(&mut self) -> GeneratorState<Self::Yield, Self::Return> {
-        if self.index <= self.list.len() {
+        if self.index ≤ self.list.len() {
             let left = self.list[..self.index].to_vec();
             let right = self.list[self.index..].to_vec();
             self.index += 1;
@@ -1613,7 +1613,7 @@ fun queens(n: @u32 ^in) yields [@u32] ^out {
             let new_board = place_queen(board, @0, col);
 
             // Recursive search (creates nested choice points)
-            if n == @1 {
+            if n ≡ @1 {
                 yield new_board
             } else {
                 for solution in queens_from(new_board, @1, n) {

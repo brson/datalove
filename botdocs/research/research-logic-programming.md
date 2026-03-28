@@ -34,8 +34,8 @@ This document explores how datalove funs with argument modes could support logic
 **Functional (one direction)**:
 ```python
 def children_of(parent):
-    if parent == "Alice": return ["Bob", "Carol"]
-    if parent == "Bob": return ["Dave"]
+    if parent ≡ "Alice": return ["Bob", "Carol"]
+    if parent ≡ "Bob": return ["Dave"]
     return []
 ```
 
@@ -332,8 +332,8 @@ impl append_split {
 // Implementation for mode 3 (in, in, in)
 impl append_check {
     fun body(left: [@T] ^in, right: [@T] ^in, expected: [@T] ^in) -> @bool {
-        // Check: left + right == expected
-        list_concat(left, right) == expected
+        // Check: left + right ≡ expected
+        list_concat(left, right) ≡ expected
     }
 }
 ```
@@ -842,15 +842,15 @@ fun parent_of(parent_name: @string, child_name: @string, db: [@Person] ^in)
 // Mode 1: Check relationship
 mode parent_of(^in, ^in, ^in) -> @bool {
     db.iter()
-        .filter(|p| p.name == parent_name)
+        .filter(|p| p.name ≡ parent_name)
         .flat_map(|p| p.children.iter())
-        .any(|c| c == child_name)
+        .any(|c| c ≡ child_name)
 }
 
 // Mode 2: Find children
 mode parent_of(^in, ^out, ^in) yields @string {
     for person in db {
-        if person.name == parent_name {
+        if person.name ≡ parent_name {
             for child in person.children {
                 yield child
             }
@@ -961,7 +961,7 @@ fun replay(trace: Trace ^in) {
     for (input, choice) in zip(trace.inputs, trace.choices) {
         let solutions = execute_multi(input);
         let output = solutions[choice.solution_index];
-        assert output == trace.outputs[i]
+        assert output ≡ trace.outputs[i]
     }
 }
 ```
@@ -976,7 +976,7 @@ Generate test cases using multi funs:
 fun test_append_split_inverse() {
     for list in generate_lists() {
         for (left, right) in split(list) {
-            assert append(left, right) == list
+            assert append(left, right) ≡ list
         }
     }
 }

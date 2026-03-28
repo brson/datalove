@@ -8,9 +8,9 @@
 // This script covers the Datafun layer.
 
 
-// =========================================================================
+// ≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡=
 // 1. PRIMITIVE TYPES AND LITERALS
-// =========================================================================
+// ≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡=
 
 // Boolean.
 let b1: bool = true
@@ -45,9 +45,9 @@ let hex_int: u32 = 0xFF             // 255
 let hex_float = : f32 / 0x40490FDB  // pi as bit pattern (needs type hint)
 
 
-// =========================================================================
+// ≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡=
 // 2. VARIABLES: LET, VAR, SET
-// =========================================================================
+// ≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡=
 
 // `let` creates an immutable binding.
 let immutable: u32 = 10
@@ -59,9 +59,9 @@ var counter: u32 = 0
 set counter = 1
 
 
-// =========================================================================
+// ≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡=
 // 3. COLLECTION TYPES
-// =========================================================================
+// ≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡=
 
 // Lists use [@T] type and [a, b, c] syntax.
 let numbers: [u32] = [1, 2, 3, 4, 5]
@@ -76,9 +76,9 @@ let unique: @set<u32> = @set { 1, 2, 3 }
 let empty_set: @set<u32> = @set {}
 
 
-// =========================================================================
+// ≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡=
 // 4. AGGREGATE TYPES
-// =========================================================================
+// ≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡=
 
 // Tuples.
 let pair: (u32, bool) = (42, true)
@@ -89,9 +89,9 @@ let unit: () = ()
 let point: { x: u32, y: u32 } = { x = 10, y = 20 }
 
 
-// =========================================================================
+// ≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡=
 // 5. OPTION AND RESULT TYPES
-// =========================================================================
+// ≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡=
 
 // Option type: ?T holds a value or none.
 let found: ?u32 = some 42
@@ -103,18 +103,18 @@ let success: !u32 = ok 42
 let failure: !u32 = er error "something went wrong"
 
 
-// =========================================================================
+// ≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡=
 // 6. THE DATA TYPE
-// =========================================================================
+// ≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡=
 
 // @data can hold any value (type-erased).
 let anything: @data = @data 42
 let also_data: @data = @data "hello"
 
 
-// =========================================================================
+// ≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡=
 // 7. FUNCTIONS
-// =========================================================================
+// ≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡=
 
 // Basic function definition.
 // Note: bare + widens to int, so we return int here.
@@ -133,14 +133,14 @@ end fun
 
 // Early return in void function.
 fun maybe_early(n: u32)
-  if n .< 10
+  if n < 10
     ret
   end if
 end fun
 
 // Functions returning options.
 fun safe_divide(a: u32, b: u32): ?u32
-  if b == 0
+  if b ≡ 0
     ret none
   else
     ret some (a /? b)
@@ -153,9 +153,9 @@ fun checked_add(a: u32, b: u32): !u32
 end fun
 
 
-// =========================================================================
+// ≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡=
 // 8. PARAMETER MODES
-// =========================================================================
+// ≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡=
 
 // All parameters passed by reference. The mode controls allowed operations:
 
@@ -181,9 +181,9 @@ fun init_value(out value: u32)
 end fun
 
 
-// =========================================================================
+// ≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡=
 // 9. OPERATORS
-// =========================================================================
+// ≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡=
 
 // Arithmetic: + - * (bare ops widen fixed ints to int).
 let sum: int = 1 + 2     // Result is int
@@ -205,14 +205,14 @@ end fun
 // int:  /! returns !int, /? returns ?int
 // fixed: /! returns !T, /? returns ?T
 
-// Comparison: .< .> <= >= == !=
-// Note: < and > written as .< and .> (dot prefix).
-let less = 1 .< 2
-let greater = 5 .> 3
-let less_eq = 1 <= 1
-let greater_eq = 5 >= 4
-let equal = 2 == 2
-let not_equal = 1 != 2
+// Comparison: < > ≤ ≥ ≡ ≢
+// Note: < and > written as < and > (dot prefix).
+let less = 1 < 2
+let greater = 5 > 3
+let less_eq = 1 ≤ 1
+let greater_eq = 5 ≥ 4
+let equal = 2 ≡ 2
+let not_equal = 1 ≢ 2
 
 // Logical: and or xor not
 let both = true and false     // false
@@ -221,16 +221,16 @@ let exclusive = true xor true // false
 let negated = not true         // false
 
 
-// =========================================================================
+// ≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡=
 // 10. CONTROL FLOW
-// =========================================================================
+// ≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡=
 
 // If/else.
 fun classify(n: u32): string
-  if n == 0
+  if n ≡ 0
     ret "zero"
   else
-    if n .< 10
+    if n < 10
       ret "small"
     else
       ret "large"
@@ -252,7 +252,7 @@ fun count_to(limit: u32): !u32
   var n: u32 = 0
   loop
     set n = n +! 1
-    if n >= limit
+    if n ≥ limit
       break
     end if
   end loop
@@ -263,7 +263,7 @@ end fun
 fun sum_to(limit: u32): !u32
   var total: u32 = 0
   var i: u32 = 1
-  loop while i <= limit
+  loop while i ≤ limit
     set total = total +! i
     set i = i +! 1
   end loop
@@ -274,9 +274,9 @@ end fun
 fun count_odds(limit: u32): !u32
   var count: u32 = 0
   var i: u32 = 0
-  loop while i .< limit
+  loop while i < limit
     set i = i +! 1
-    if icall rem_u32(i, 2) == 0
+    if icall rem_u32(i, 2) ≡ 0
       continue
     end if
     set count = count +! 1
@@ -285,9 +285,9 @@ fun count_odds(limit: u32): !u32
 end fun
 
 
-// =========================================================================
+// ≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡=
 // 11. TRY OPERATORS
-// =========================================================================
+// ≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡=
 
 // Postfix ? early-returns none on none.
 fun chain_options(a: ?u32, b: ?u32): ?u32
@@ -304,9 +304,9 @@ fun chain_results(a: !u32, b: !u32): !u32
 end fun
 
 
-// =========================================================================
+// ≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡=
 // 12. MODULE SYSTEM
-// =========================================================================
+// ≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡=
 
 // Import modules from sys/std library.
 require module sys/std/u32
@@ -323,9 +323,9 @@ fun use_stdlib(): u32
 end fun
 
 
-// =========================================================================
+// ≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡=
 // 13. INTRINSIC CALLS
-// =========================================================================
+// ≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡=
 
 // Low-level operations via icall.
 fun bitwise_example(a: u32, b: u32): u32
@@ -336,9 +336,9 @@ fun bitwise_example(a: u32, b: u32): u32
 end fun
 
 
-// =========================================================================
+// ≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡=
 // 14. TYPE ALIASES
-// =========================================================================
+// ≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡=
 
 // Type aliases provide names for structural types.
 type Age: u32
@@ -364,9 +364,9 @@ type PointList: [Point]
 // - Purely syntactic: no runtime difference from the structural type.
 
 
-// =========================================================================
+// ≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡=
 // 15. TYPE SYSTEM NOTES
-// =========================================================================
+// ≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡=
 
 // Numeric widening: smaller types widen to larger.
 // u8 -> u16 -> u32 -> u64 -> int
@@ -386,19 +386,19 @@ fun can_reuse(x: int): int
 end fun
 
 
-// =========================================================================
+// ≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡=
 // 16. PUTTING IT ALL TOGETHER
-// =========================================================================
+// ≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡=
 
 // Example: Fibonacci with checked arithmetic.
 fun fib(n: u32): !u32
-  if n .< 2
+  if n < 2
     ret ok n
   end if
   var a: u32 = 0
   var b: u32 = 1
   var i: u32 = 2
-  loop while i <= n
+  loop while i ≤ n
     let next = a +! b
     set a = b
     set b = next
@@ -408,9 +408,9 @@ fun fib(n: u32): !u32
 end fun
 
 
-// =========================================================================
+// ≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡=
 // SCRIPT OUTPUT
-// =========================================================================
+// ≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡=
 
 // Script final expression is the output.
 let output = fib(10)

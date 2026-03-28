@@ -39,8 +39,8 @@ size, sign and capacity
 pub struct Int {
     // "limbs"
     pub data: *const u32,
-    // abs(size_and_sign) == number of limbs;
-    // sign(size_and_sign) == sign of self
+    // abs(size_and_sign) ≡ number of limbs;
+    // sign(size_and_sign) ≡ sign of self
     pub size_and_sign: i32,
     // Limbs allocated.
     pub capacity: u32,

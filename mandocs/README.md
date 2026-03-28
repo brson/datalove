@@ -38,13 +38,13 @@ Then we'll add I/O to it &mdash; carefully.
 <div class="four-things-grid">
   <div class="thing-box">
     <p>Part <em>data serialization, configuration and interchange format</em>
-       for common <em>modern</em> data types.</p>
+       for common <em>modern</em> data types</p>
   </div>
   <div class="thing-box">
     <p>Part <em>pure-functional language</em>
        that reads like an imperative language,
        with a simple but sophisticated <em>linear type system</em>,
-       and a focus on <em>numerical correctness.</em></p>
+       and a focus on <em>numerical correctness</em></p>
   </div>
   <div class="thing-box">
     <p>todo</p>
@@ -54,7 +54,7 @@ Then we'll add I/O to it &mdash; carefully.
        <em>fully memoized and parallelized</em> compilation,
        <em>rapid script iteration</em>,
        interactive (<em>REPL</em>) interpreter with <em>JIT</em>,
-       compiles to <em>staticly-linked binaries</em>.</p>
+       compiles to <em>staticly-linked binaries</em></p>
   </div>
 </div>
 
@@ -80,7 +80,7 @@ Datalove is built from <bold>[<em>| 3 sublanguages |</em>]</bold> of increasing 
 
 
 
-### [| 1, Datalove Literals |]
+### ⟪ 1, Datalove Literals ⟫
 
 The tiny and comprehensible foundation of Datalove, a strongly-typed and
 declarative pure-data language for expressing typical data structures.
@@ -95,10 +95,10 @@ strings, lists, maps and sets.
   year = 1949,
   rating = 4.7,
   available = true,
-  genres = #{ atom Fiction, atom Dystopia },
+  genres = ⦃ atom Fiction, atom Dystopia ⦄,
   subtitle = none,
   status = atom InPrint,
-  translations = %{ "fr" = true, "de" = true, "jp" = false },
+  translations = ⦇ "fr" ↦ true, "de" ↦ true, "jp" ↦ false ⦈,
 }
 ```
 
@@ -106,26 +106,26 @@ It includes first-class _tables_ (dataframes / structs-of-arrays),
 and _tensors_ (multidimensional arrays).
 
 ```datalove
-{|
+⟦
   title,              author,          year
   "1984",             "Orwell",        1949
   "Brave New World",  "Huxley",        1932
   "Fahrenheit 451",   "Bradbury",      1953
-|}
+⟧
 ```
 
 ```datalove
-[|
+⟪
   1 0 0,
   0 1 0,
   0 0 1,
-|]
+⟫
 ```
 
 
 
 
-### [| 2, Datalove Functions |]
+### ⟪ 2, Datalove Functions ⟫
 
 A simple pure-functional language that feels like an imperative language, built
 on the datalit type system.
@@ -137,16 +137,16 @@ type Book: {
   year: i32,
   rating: f32,
   available: bool,
-  genres: #{enum { atom Fiction, atom Dystopia, atom SciFi }},
+  genres: ⦃enum { atom Fiction, atom Dystopia, atom SciFi }⦄,
   subtitle: ?string,
   status: enum { atom InPrint, atom OutOfPrint },
-  translations: %{string = bool},
+  translations: ⦇string ↦ bool⦈,
 }
 
 fun reserve_book(mut db: [Book], ref title: string): !()
   var i: index = 0
-  loop while i .< db.len
-    if db[i]!.title == title
+  loop while i < db.len
+    if db[i]!.title ≡ title
       if db[i]!.available
         set db[i]!.available = false
         ret ok ()
@@ -163,7 +163,7 @@ end fun
 
 
 
-### [| 3, Datalove with Side Effects |]
+### ⟪ 3, Datalove with Side Effects ⟫
 
 The complete language with I/O-bearing procedures,
 owned native pointers, objects with identity,

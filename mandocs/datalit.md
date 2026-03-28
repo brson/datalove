@@ -18,11 +18,11 @@ and its types and datalit types.
   flags: u32,
   offset: i32,
   tags: [string],
-  counts: %{string = int},
-  ids: #{int},
-  matrix: [|f64, 2|],
-  cube: [|int, 3|],
-  metrics: {| name: string, value: f64 |},
+  counts: ⦇string ↦ int⦈,
+  ids: ⦃int⦄,
+  matrix: ⟪f64, 2⟫,
+  cube: ⟪int, 3⟫,
+  metrics: ⟦ name: string, value: f64 ⟧,
   config: ?{ retries: u32, timeout: f64 },
   backup: ?string,
   status: !string,
@@ -41,11 +41,11 @@ and its types and datalit types.
   flags = 0xFF,
   offset = -1,
   tags = ["fast", "typed", "portable"],
-  counts = %{ "a" = 1, "b" = 2, "c" = 3 },
-  ids = #{ 10, 20, 30 },
-  matrix = [| 1.0 0.0, 0.0 1.0 |],
-  cube = [| 1 2, 3 4,, 5 6, 7 8 |],
-  metrics = {| name, value; "latency", 0.5; "throughput", 1000.0 |},
+  counts = ⦇ "a" ↦ 1, "b" ↦ 2, "c" ↦ 3 ⦈,
+  ids = ⦃ 10, 20, 30 ⦄,
+  matrix = ⟪ 1.0 0.0, 0.0 1.0 ⟫,
+  cube = ⟪ 1 2, 3 4,, 5 6, 7 8 ⟫,
+  metrics = ⟦ name, value; "latency", 0.5; "throughput", 1000.0 ⟧,
   config = some { retries = 3, timeout = 30.0 },
   backup = none,
   status = ok "healthy",
@@ -176,13 +176,13 @@ string_lit     = '"', { string_char }, '"' ;
 | Name   | Type                             | Literal                          |
 |--------|----------------------------------|----------------------------------|
 | list   | `[T]`                            | `[1, 2, 3]`                      |
-| map    | `%{ K = V }`                     | `%{ 0 = 5, 1 = 2 }`              |
-| set    | `#{ K }`                         | `#{ 1, 2, 3 }`                   |
-| table  | `{\| col1: T1, col2: T2 \|}`     | `{\| col1, col2; 1, 2; 3, 4 \|}` |
-| tensor | `[\|T, N\|]`                     | `[\| 1 2 3, 4 5 6 \|]`           |
+| map    | `⦇ K ↦ V ⦈`                     | `⦇ 0 ↦ 5, 1 ↦ 2 ⦈`              |
+| set    | `⦃ K ⦄`                         | `⦃ 1, 2, 3 ⦄`                   |
+| table  | `{\| col1: T1, col2: T2 \⟧`     | `{\| col1, col2; 1, 2; 3, 4 \⟧` |
+| tensor | `[\|T, N\⟫`                     | `[\| 1 2 3, 4 5 6 \⟫`           |
 
 Empty collections synthesize with unit element types
-(`[()]`, `#{()}`, `%{() = ()}`),
+(`[()]`, `⦃()⦄`, `⦇() ↦ ()⦈`),
 but check against any element type:
 `: [u32] / []` is valid.
 
@@ -209,9 +209,9 @@ use a type hint for fixed-width element types.
 An ordered key-value mapping.
 
 ```datalove
-%{ "a" = 1, "b" = 2 }         // %{string = int}
-: %{u32 = string} / %{ 1 = "x", 2 = "y" }
-%{}                            // %{() = ()}, empty map
+⦇ "a" ↦ 1, "b" ↦ 2 ⦈         // ⦇string ↦ int⦈
+: ⦇u32 ↦ string⦈ / ⦇ 1 ↦ "x", 2 ↦ "y" ⦈
+⦇⦈                            // ⦇() ↦ ()⦈, empty map
 ```
 
 Entries use `=` to separate keys from values,
@@ -226,9 +226,9 @@ All keys have a [total ordering].
 A collection of unique elements.
 
 ```datalove
-#{ 1, 2, 3 }                  // #{int}
-: #{u32} / #{ 10, 20, 30 }
-#{}                            // #{()}, empty set
+⦃ 1, 2, 3 ⦄                  // ⦃int⦄
+: ⦃u32⦄ / ⦃ 10, 20, 30 ⦄
+⦃⦄                            // ⦃()⦄, empty set
 ```
 
 All elements must have the same type.
@@ -240,11 +240,11 @@ All keys have a [total ordering].
 A data structure with named, typed columns.
 
 ```datalove
-: {| x: int, y: string |} / {|
+: ⟦ x: int, y: string ⟧ / ⟦
   x, y
   1, "a"
   2, "b"
-|}
+⟧
 ```
 
 The first row names the columns;
@@ -252,7 +252,7 @@ subsequent rows provide data.
 Rows are delimited by newlines or semicolons.
 
 ```datalove
-: {| x: int, y: int |} / {| x, y; 1, 2; 3, 4 |}
+: ⟦ x: int, y: int ⟧ / ⟦ x, y; 1, 2; 3, 4 ⟧
 ```
 
 Table literals always require a type hint &mdash;
@@ -267,11 +267,11 @@ A multi-dimensional array with fixed shape,
 typed by element type and rank.
 
 ```datalove
-[| 1 2 3 |]                    // 1D, shape [3]
-[| 1 2 3, 4 5 6 |]             // 2D, shape [2, 3]
-[| 1 2, 3 4,, 5 6, 7 8 |]      // 3D, shape [2, 2, 2]
-: [|u32, 2|] / [| 1 2, 3 4 |]  // typed: element u32, rank 2
-[| |]                          // empty tensor, shape [0]
+⟪ 1 2 3 ⟫                    // 1D, shape [3]
+⟪ 1 2 3, 4 5 6 ⟫             // 2D, shape [2, 3]
+⟪ 1 2, 3 4,, 5 6, 7 8 ⟫      // 3D, shape [2, 2, 2]
+: ⟪u32, 2⟫ / ⟪ 1 2, 3 4 ⟫  // typed: element u32, rank 2
+⟪ ⟫                          // empty tensor, shape [0]
 ```
 
 Shape is inferred from the multi-comma structure:
@@ -286,7 +286,7 @@ using blank lines to visually separate the higher axes:
 
 ```datalove
 // 3D tensor with shape [2, 3, 3]
-: [|f64, 3|] / [|
+: ⟪f64, 3⟫ / ⟪
   1.0 0.0 0.0,
   0.0 1.0 0.0,
   0.0 0.0 1.0,,
@@ -294,17 +294,17 @@ using blank lines to visually separate the higher axes:
   2.0 0.0 0.0,
   0.0 2.0 0.0,
   0.0 0.0 2.0,
-|]
+⟫
 ```
 
 When the outermost dimension is 1,
 the highest comma level never appears as a separator.
 Trailing commas preserve rank in this case:
-`[| 1 2 3, |]` is a rank-2 tensor with shape [1, 3],
+`⟪ 1 2 3, ⟫` is a rank-2 tensor with shape [1, 3],
 not a rank-1 tensor with shape [3].
 The number of trailing commas equals rank minus one.
 
-The type specifies element type and rank: `[|T, N|]`.
+The type specifies element type and rank: `⟪T, N⟫`.
 Shape is not part of the type &mdash;
 two tensors of the same element type and rank
 but different shapes have the same type.
@@ -315,16 +315,16 @@ All elements must have the same type.
 
 ```ebnf
 list_type      = "[", ws, type, ws, "]" ;
-map_type       = "%{", ws, type, ws, "=", ws, type, ws, "}" ;
-set_type       = "#{", ws, type, ws, "}" ;
-table_type     = "{|", ws, type_field_list, ws, "|}" ;
-tensor_type    = "[|", ws, type, ws, ",", ws, int_lit, ws, "|]" ;
+map_type       = "⦇", ws, type, ws, "↦", ws, type, ws, "⦈" ;
+set_type       = "⦃", ws, type, ws, "⦄" ;
+table_type     = "⟦", ws, type_field_list, ws, "⟧" ;
+tensor_type    = "⟪", ws, type, ws, ",", ws, int_lit, ws, "⟫" ;
 
 list_expr      = "[", ws, [ expr_list ], ws, "]" ;
-map_expr       = "%{", ws, [ entry_list ], ws, "}" ;
-set_expr       = "#{", ws, [ expr_list ], ws, "}" ;
-table_expr     = "{|", ws, table_header, table_rows, ws, "|}" ;
-tensor_expr    = "[|", ws, [ tensor_body ], ws, "|]" ;
+map_expr       = "⦇", ws, [ entry_list ], ws, "⦈" ;
+set_expr       = "⦃", ws, [ expr_list ], ws, "⦄" ;
+table_expr     = "⟦", ws, table_header, table_rows, ws, "⟧" ;
+tensor_expr    = "⟪", ws, [ tensor_body ], ws, "⟫" ;
 
 expr_list      = full_expr, { ws, ",", ws, full_expr }, [ ws, "," ] ;
 entry_list     = entry, { ws, ",", ws, entry }, [ ws, "," ] ;

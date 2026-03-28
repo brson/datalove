@@ -20,7 +20,7 @@ Pairs naturally with existing `in`/`ref`/`mut`/`out` modes.
 
 SMT-backed predicates on types:
 ```datalove
-type NonZero: { n: u32 | n != 0 }
+type NonZero: { n: u32 | n ≢ 0 }
 type Sorted: { xs: [@int] | is_sorted(xs) }
 ```
 Purity makes refinement checking tractable - no side effects to invalidate predicates. Could eliminate runtime bounds checks, prove division safety, etc.

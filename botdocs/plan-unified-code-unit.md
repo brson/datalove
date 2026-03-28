@@ -77,7 +77,7 @@ pub struct IrCodeUnit {
     /// Name for debugging/symbol resolution.
     pub name: String,
 
-    // ========== Body (common to all code units) ==========
+    // ≡≡≡≡≡ Body (common to all code units) ≡≡≡≡≡
     pub blocks: Vec<IrBlock>,
     pub value_count: u32,
     pub slot_count: u32,
@@ -91,10 +91,10 @@ pub struct IrCodeUnit {
     /// Symbol table for nested function resolution.
     pub symbols: SymbolTable,
 
-    // ========== Context (determines execution semantics) ==========
+    // ≡≡≡≡≡ Context (determines execution semantics) ≡≡≡≡≡
     pub context: CodeUnitContext,
 
-    // ========== Nested Units ==========
+    // ≡≡≡≡≡ Nested Units ≡≡≡≡≡
     /// Functions/closures defined inside this unit.
     pub nested_units: Vec<IrCodeUnit>,
 }
@@ -227,7 +227,7 @@ impl CodeUnitRegistry {
             CodeRef::Local(_) => None, // Local refs resolved by caller
             CodeRef::External { unit, id } => {
                 self.script_units.get(*unit as usize)
-                    .and_then(|units| units.iter().find(|u| u.id == *id))
+                    .and_then(|units| units.iter().find(|u| u.id ≡ *id))
             }
             CodeRef::Module { module, id } => {
                 self.module_units.get(&(*module, *id))
@@ -570,9 +570,9 @@ After all phases complete, these are permanently removed:
 #### New Types to Add
 
 ```rust
-// ============================================================================
+// ≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡
 // Unified Code Unit
-// ============================================================================
+// ≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡
 
 /// Identifier for a code unit.
 ///
@@ -647,7 +647,7 @@ pub struct IrCodeUnit {
     /// Name for debugging/symbol resolution.
     pub name: String,
 
-    // ========== Body ==========
+    // ≡≡≡≡≡ Body ≡≡≡≡≡
     /// Basic blocks.
     pub blocks: Vec<IrBlock>,
     /// Number of SSA values.
@@ -670,11 +670,11 @@ pub struct IrCodeUnit {
     /// Symbol table for nested unit resolution.
     pub symbols: SymbolTable,
 
-    // ========== Context ==========
+    // ≡≡≡≡≡ Context ≡≡≡≡≡
     /// Determines execution semantics.
     pub context: CodeUnitContext,
 
-    // ========== Nested Units ==========
+    // ≡≡≡≡≡ Nested Units ≡≡≡≡≡
     /// Code units defined inside this unit.
     #[serde(default)]
     pub nested_units: Vec<IrCodeUnit>,
@@ -881,7 +881,7 @@ pub fn execute_script_unit_in_env(&mut self, unit: &IrScriptUnit, ...) -> ... {
 
 #### After (unified)
 ```rust
-pub fn execute_code_unit(&mut self, unit: &IrCodeUnit, ...) -> Result<...> {
+pub fn execute_code_unit(&mut self, unit: &IrCodeUnit, ...) -> Result<..> {
     let layout = IrLayout::for_code_unit(unit);
     let mut frame = Frame::new(unit, layout);
 
@@ -981,7 +981,7 @@ impl CodeUnitRegistry {
             CodeRef::Local(_) => None,  // Caller handles local refs
             CodeRef::External { unit, id } => {
                 self.script_units.get(*unit as usize)
-                    .and_then(|units| units.iter().find(|u| u.id == *id))
+                    .and_then(|units| units.iter().find(|u| u.id ≡ *id))
             }
             CodeRef::Module { module, id } => {
                 self.module_units.get(&(*module, *id))

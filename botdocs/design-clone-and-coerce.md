@@ -28,7 +28,7 @@ expr$
 | Linear type  | Same type, cloned value |
 | Copy type    | **Error**: cannot clone copy type |
 
-Linear types: `int`, `string`, `[T]`, `%{K = V}`, `#{T}`, `[|T, N|]`, `{| ... |}`, `data`
+Linear types: `int`, `string`, `[T]`, `⦇K ↦ V⦈`, `⦃T⦄`, `⟪T, N⟫`, `⟦ ... ⟧`, `data`
 
 Copy types: `bool`, `u8`-`u64`, `i8`-`i64`, `f32`
 
@@ -57,7 +57,7 @@ Loop usage (linear values cannot be moved in loops):
 fun sum_n_times(val: int, n: u32): int
     var acc: int = 0
     var i: u32 = @0
-    loop while i .< n
+    loop while i < n
         set acc = acc + val$    // clone each iteration
         set i = i + @1
     end loop
@@ -162,7 +162,7 @@ The type at each step determines validity:
 | 3     | `?` `!` `$` `~`        |
 | 4     | `*` `/` `*!` `/!` etc. |
 | 5     | `+` `-` `+!` `-!` etc. |
-| 6     | `.<` `.>` `<=` etc.    |
+| 6     | `<` `>` `≤` etc.    |
 | 7     | `and`                  |
 | 8     | `or` `xor`             |
 

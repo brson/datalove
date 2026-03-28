@@ -97,8 +97,8 @@ Likewise some bracket pairs are for one thing.
 
 | When you see | it means |
 |--------------|----------|
-| `{|` … `|}`  | table    |
-| `[|` … `|]`  | tensor   |
+| `⟦` … `⟧`  | table    |
+| `⟪` … `⟫`  | tensor   |
 
 
 

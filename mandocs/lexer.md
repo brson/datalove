@@ -21,7 +21,7 @@ unambiguously reuse the standard braces:
 
 ```datalove
 (| |)
-{| |}
-[| |]
+⟦ ⟧
+⟪ ⟫
 <| |>
 ```

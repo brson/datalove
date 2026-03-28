@@ -48,17 +48,17 @@ where it makes it more readable.
 [1, 2, 3]
 
 // maps
-%{ int = int }
+⦇ int ↦ int ⦈
 map { int -> int }
 ⟪ int → int ⟫
 
 // sets
-#{ int }
+⦃ int ⦄
 set { int }
 ⟨ int ⟩
 
 // tables
-[| a, b ; 1, 2 |]
+⟪ a, b ; 1, 2 ⟫
 ⟦ a, b ; 1, 2 ⟧
 
 // tensors
@@ -108,22 +108,22 @@ let y = a[1]?
 
 
 // Map
-let a = %{ 100 = 1 }
+let a = ⦇ 100 ↦ 1 ⦈
 let x = a[100]?
 
 
 // Set
-let a = #{ 100 }
+let a = ⦃ 100 ⦄
 let x = a[100]?
 
 
 // Table
-let a = {| b, c ; 0, 1 ; 2, 3 }
+let a = ⟦ b, c ; 0, 1 ; 2, 3 }
 let x = a.b@   // column projection then clone
 let y = a.b[0]? // column projection then index
 
 // Tensor
-let a = [| 0 1, 2 3 |]
+let a = ⟪ 0 1, 2 3 ⟫
 let x = a[0]@ // row projection then clone
 let y = a[0]?[]? // row projection, row projection
 
@@ -173,19 +173,19 @@ fun foo()
   let b = # "data" : int / 2
 end fun
 
-# term Linkage #{
+# term Linkage ⦃
   atom NoMangle,
   term SymbolName "foobar",
-}
+⦄
 fun foo()
   let a = : int / 2
 
-  let b = # term DebugInfo #{
+  let b = # term DebugInfo ⦃
     term Span (0, 0)
-  } / 2
-  let b = # term DebugInfo #{
+  ⦄ / 2
+  let b = # term DebugInfo ⦃
     term Span (0, 0)
-  } : int / 2
+  ⦄ : int / 2
 end fun
 
 // Multiple attributes.
@@ -200,10 +200,10 @@ Could try to enforce "inner" function attributes.
 
 ```datalove
 fun foo()
-  #^ term Linkage #{
+  #^ term Linkage ⦃
     atom NoMangle,
     term SymbolName "foobar",
-  }
+  ⦄
 
   ret
 end fun
@@ -276,14 +276,14 @@ Shift operators are logical.
 For arithmetic right shift use divide by 2.
 
 Can't have << and >> because of ambiguous lex.
-Well we can have .<< and .>>.
+Well we can have << and >>.
 
 bitand
 bitor
 bitnot
 bitxor
 
-.<< .>>
+<< >>
 & | ~ ^
 
 to use `|` we would need to change the `if expr |arg|` syntax.

@@ -12,7 +12,7 @@ Source: `crates/datalove-datafun-parser/src/expr.rs`
 | 3 | `?` `!` | Left (postfix) | Try operators |
 | 4 | `*` `/` `*!` `/!` `*?` `/?` | Left | Multiplicative |
 | 5 | `+` `-` `+!` `-!` `+?` `-?` | Left | Additive |
-| 6 | `.<` `.>` `<=` `>=` `==` `!=` | Left | Comparison |
+| 6 | `<` `>` `≤` `≥` `≡` `≢` | Left | Comparison |
 | 7 | `and` | Left | Logical AND |
 | 8 | `or` `xor` | Left | Logical OR/XOR |
 
@@ -60,12 +60,12 @@ Source: `crates/datalove-datafun-parser/src/expr.rs`
 
 | Operator | Description |
 |----------|-------------|
-| `.<` | Less than |
-| `.>` | Greater than |
-| `<=` | Less or equal |
-| `>=` | Greater or equal |
-| `==` | Equal |
-| `!=` | Not equal |
+| `<` | Less than |
+| `>` | Greater than |
+| `≤` | Less or equal |
+| `≥` | Greater or equal |
+| `≡` | Equal |
+| `≢` | Not equal |
 
 All return `bool`. Operands must be same numeric type.
 
@@ -85,7 +85,7 @@ All require `bool` operands and return `bool`.
 // Precedence demonstration
 not a or b          // (not a) or b
 a and b or c        // (a and b) or c
-a == b and c == d   // (a == b) and (c == d)
+a ≡ b and c ≡ d   // (a ≡ b) and (c ≡ d)
 a + b * c           // a + (b * c)
 -x + y              // (-x) + y
 x? + y              // (x?) + y

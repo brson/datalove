@@ -214,9 +214,9 @@ Minimal `workspace.dlt`:
 ```dlt
 {
     name = "my-project",
-    libraries = %{
-        "local" = { path = "src" },
-    },
+    libraries = ⦇
+        "local" ↦ { path = "src" },
+    ⦈,
 }
 ```
 

@@ -26,7 +26,7 @@ Conditional loops with `loop while`:
 ```datalove
 var x = 0
 
-loop while x != 10
+loop while x ≢ 10
   if x = 0
     set x = 1
   else if x = 10

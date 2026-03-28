@@ -16,7 +16,7 @@ This document records what it was and why it was removed.
 ```datalove
 // Carry only: iteration state.
 loop carry (acc: u32 = @1, i = n)
-    if i <= @1
+    if i ≤ @1
         break
     end if
     continue(acc * i, i - @1)
@@ -25,7 +25,7 @@ end loop
 // Bring only: exit values.
 loop
     set x = x + @1
-    if x .> threshold
+    if x > threshold
         break(x)
     end if
 end loop bring (found: u32)
@@ -33,7 +33,7 @@ ret found
 
 // Combined carry and bring.
 loop carry (acc: u32 = @1, i = n)
-    if i <= @1
+    if i ≤ @1
         break(acc)
     end if
     continue(acc * i, i - @1)
@@ -41,7 +41,7 @@ end loop bring (result: u32)
 ret result
 
 // With while condition.
-loop carry (i: u32 = @0) while i .< limit
+loop carry (i: u32 = @0) while i < limit
     set total = total + i
     continue(i + @1)
 end loop
@@ -88,7 +88,7 @@ Plain `var`/`set` handles loop iteration state:
 var acc: u32 = @1
 var i = n
 loop
-    if i <= @1
+    if i ≤ @1
         break
     end if
     let new_acc = acc * i

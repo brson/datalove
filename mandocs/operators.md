@@ -12,7 +12,7 @@
 | 3     | `?` `!` `$` `~` `@`            | Postfix        |
 | 4     | `*` `/` `*!` `/!` `*?` `/?`    | Multiplicative |
 | 5     | `+` `-` `+!` `-!` `+?` `-?`    | Additive       |
-| 6     | `.<` `.>` `<=` `>=` `==` `!=`  | Comparison     |
+| 6     | `<` `>` `≤` `≥` `≡` `≢`  | Comparison     |
 | 7     | `and`                          | Logical AND    |
 | 8     | `or` `xor`                     | Logical OR/XOR |
 
@@ -75,7 +75,7 @@ Use in loops where a linear value is consumed repeatedly:
 fun sum_n_times(val: int, n: u32): int
     var acc: int = 0
     var i: u32 = 0
-    loop while i .< n
+    loop while i < n
         set acc = acc + val@  // clone each iteration
         set i = i + 1
     end loop
@@ -133,7 +133,7 @@ let sum: u32 = a@ + b@    // + propagates u32 to both sides
 
 let bytes: u32 = 4096
 let limit: u64 = 1000000
-if bytes@ .< limit        // .< propagates u64 to left side
+if bytes@ < limit        // < propagates u64 to left side
     // ...
 end if
 ```

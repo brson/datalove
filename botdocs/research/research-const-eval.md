@@ -158,7 +158,7 @@ Const functions from imported modules:
 // Const function computing factorial
 fun factorial_const(n: u32): u32
     loop carry (acc: u32 = @1, i = n)
-        if i <= @1
+        if i ≤ @1
             break(acc)
         end if
         continue(acc * i, i - @1)

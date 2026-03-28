@@ -312,7 +312,7 @@ was already evaluated for the lookup. The existing equal key stays
 in the map; the provided key is dropped (if linear).
 
 ```datalove
-var m: %{string = string} = %{ "a" = "one" }
+var m: ⦇string ↦ string⦈ = ⦇ "a" ↦ "one" ⦈
 set m["a"] = "uno"    // drops provided "a", drops "one", stores "uno"
 set m["b"] = "two"    // consumes "b" and "two", inserts pair
 ```

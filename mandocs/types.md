@@ -185,7 +185,7 @@ The name and the inner type must both match for type compatibility.
 let a = term Foo 1
 let a = term Foo (1,)     // tuple payload
 let a = term Bar 1
-let b = term Baz #{ 1 }
+let b = term Baz ⦃ 1 ⦄
 
 let d: term Foo int = term Foo 1
 
@@ -231,7 +231,7 @@ Enums are destructured with `match`; see types-lits-destr.md.
 ## Tensors
 
 ```datalove
-let data: [|f32, 2|] = [| 1 2, 3 4 |]
+let data: ⟪f32, 2⟫ = ⟪ 1 2, 3 4 ⟫
 ```
 
 
@@ -241,17 +241,17 @@ Tables, a.k.a. dataframes ala Pandas / Polars / Arrow.
 Tables provide "struct-of-array" memory layout.
 
 ```datalove
-let data: {|
+let data: ⟦
   x: int,
   t: int,
-|} = {|
+⟧ = ⟦
   x, t       // column names are required
   1, 2  
   3, 4
-|}
+⟧
 ```
 
-Note that the `{|` opening bracket enters a line-oriented
+Note that the `⟦` opening bracket enters a line-oriented
 parsing context, one row per line.
 This allows a natural CSV-like presentation for tables,
 taking advantage of Datalove's mixed-mode brace-matched parser.
@@ -260,9 +260,9 @@ One call always use manual linebreaks with `;`:
 
 ```
 ```datalove
-let data = {|
+let data = ⟦
   x, t; 1, 2; 3, 4
-|}
+⟧
 ```
 
 The type reads like a struct;
@@ -276,14 +276,14 @@ They can be passed to reference destinations,
 particularly `ref`-mode function arguments.
 
 ```datalove
-let data: {|
+let data: ⟦
   x: int,
   t: int,
-|} = {|
+⟧ = ⟦
   x, t
   1, 2  
   3, 4
-|}
+⟧
 
 // Binding a column projection to a `ref` slot.
 let ref xs = data.x

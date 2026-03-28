@@ -15,7 +15,7 @@ Pascal, Python, and Rust-influenced syntax.
 Rust has token trees, but not for `< >`.
 
 Datalove consequentially has to sacrifice comparison ops and arrows,
-using `.<` and `.>` for comparison.
+using `<` and `>` for comparison.
 
 
 

@@ -5,7 +5,7 @@ It extends datalit typing rules with functions, control flow, and operations.
 
 ## Core Principles
 
-- **Bidirectional**: Expressions either synthesize (=>) or check (<=) against types
+- **Bidirectional**: Expressions either synthesize (=>) or check (≤) against types
 - **Extends datalit**: All datalit types are also datafun types
 - **Function types**: Functions have types of the form `(T1, T2, ...) -> R`
 - **Effect tracking**: Checked/optional operators require compatible function return types
@@ -106,7 +106,7 @@ e1 +? e2 => T
 
 **Note**: Optional operators return the element type directly. On overflow/error, the function early-returns None.
 
-#### Comparison (<, >, <=, >=, ==, !=)
+#### Comparison (<, >, ≤, ≥, ≡, ≢)
 ```
 e1 => T, e2 => T
 T is numeric type
@@ -149,8 +149,8 @@ function returns Option<U>
 ### Rule: Syn-FunctionCall
 ```
 f is bound to function type (T1, T2, ..., Tn) -> R
-args.len() == n
-for all i: ei <= Ti
+args.len() ≡ n
+for all i: ei ≤ Ti
 ---------------------------------------------------
 f(e1, e2, ..., en) => R
 ```
@@ -274,34 +274,34 @@ Empty collections default to unit element type: `[] => [()]`
 e => T'
 T' = T OR can_widen(T', T) OR T = data
 --------------------------------------
-e <= T
+e ≤ T
 ```
 
 ### Rule: Check-None
 ```
 -------------------
-none <= Option<T>
+none ≤ Option<T>
 ```
 
 ### Rule: Check-Some
 ```
-e <= T
+e ≤ T
 -------------------
-some(e) <= Option<T>
+some(e) ≤ Option<T>
 ```
 
 ### Rule: Check-Ok
 ```
-e <= T
+e ≤ T
 -------------------
-ok(e) <= Result<T>
+ok(e) ≤ Result<T>
 ```
 
 ### Rule: Check-Er
 ```
-e <= error
+e ≤ error
 -------------------
-er(e) <= Result<T>
+er(e) ≤ Result<T>
 ```
 
 ### Rule: Check-BinOp (Bidirectional Type Propagation)
@@ -312,10 +312,10 @@ Binary operators support checking mode for type propagation from context to oper
 ```
 T is fixed int (u8, i8, u16, i16, u32, i32, u64, i64, index, offset)
 function returns Result<U>
-e1 <= T
-e2 <= T
+e1 ≤ T
+e2 ≤ T
 ------------------------------------------
-e1 +! e2 <= T   (also -!, *!, /!)
+e1 +! e2 ≤ T   (also -!, *!, /!)
 ```
 
 **Note**: The expected type T propagates to both operands, allowing literals to infer their type from context.
@@ -324,39 +324,39 @@ e1 +! e2 <= T   (also -!, *!, /!)
 ```
 T is fixed int
 function returns Option<U>
-e1 <= T
-e2 <= T
+e1 ≤ T
+e2 ≤ T
 ------------------------------------------
-e1 +? e2 <= T   (also -?, *?, /?)
+e1 +? e2 ≤ T   (also -?, *?, /?)
 ```
 
 #### Check-BinOp-Checked (Bigint Division)
 ```
 T is bigint (int)
 function returns Result<U>
-e1 <= T
-e2 <= T
+e1 ≤ T
+e2 ≤ T
 ------------------------------------------
-e1 /! e2 <= T
+e1 /! e2 ≤ T
 ```
 
 #### Check-BinOp-Optional (Bigint Division)
 ```
 T is bigint (int)
 function returns Option<U>
-e1 <= T
-e2 <= T
+e1 ≤ T
+e2 ≤ T
 ------------------------------------------
-e1 /? e2 <= T
+e1 /? e2 ≤ T
 ```
 
 #### Check-BinOp-Float
 ```
 T is float (f32 or f64)
-e1 <= T
-e2 <= T
+e1 ≤ T
+e2 ≤ T
 ------------------------------------------
-e1 + e2 <= T   (also -, *, /)
+e1 + e2 ≤ T   (also -, *, /)
 ```
 
 **Note**: Float literals can check against f32 or f64 and infer their type.
@@ -370,7 +370,7 @@ check fails
 e => T'
 T' = T OR can_widen(T', T)
 ---------------------------
-e <= T
+e ≤ T
 ```
 
 **Example - Type Propagation:**
@@ -398,24 +398,24 @@ let x: u32 = a +? b    // Falls through to synthesis, produces error
 ```
 expected is Atom(Name) with same name
 --------------------------------------
-atom Name <= Atom(Name)
+atom Name ≤ Atom(Name)
 
 expected is Enum(variants) and Name is atom variant in variants
 ---------------------------------------------------------------
-atom Name <= Enum(variants)
+atom Name ≤ Enum(variants)
 ```
 
 ### Rule: Check-Term
 ```
 expected is Term(Name, T) with same name
-e <= T
+e ≤ T
 --------------------------------------
-term Name e <= Term(Name, T)
+term Name e ≤ Term(Name, T)
 
 expected is Enum(variants) and Name is term variant with payload T
-e <= T
+e ≤ T
 ------------------------------------------------------------------
-term Name e <= Enum(variants)
+term Name e ≤ Enum(variants)
 ```
 
 ### Rule: Check-EnumLiteral
@@ -423,23 +423,23 @@ term Name e <= Enum(variants)
 expected is Enum(variants)
 inner variant checks against expected
 --------------------------------------
-enum { variant } <= Enum(variants)
+enum { variant } ≤ Enum(variants)
 ```
 
 ### Rule: Check-Int
 ```
 n fits in expected integer type
 -------------------------------
-n <= T (where T is integer type)
+n ≤ T (where T is integer type)
 ```
 
 **Note**: Integer literals can check against any integer type they fit in.
 
 ### Coercion Rules
 
-1. **Exact match**: `T <= T`
-2. **Numeric widening**: `u8 <= u16 <= u32 <= u64 <= int`, `i8 <= i16 <= i32 <= i64 <= int`
-3. **Data coercion**: Any type `T <= data`
+1. **Exact match**: `T ≤ T`
+2. **Numeric widening**: `u8 ≤ u16 ≤ u32 ≤ u64 ≤ int`, `i8 ≤ i16 ≤ i32 ≤ i64 ≤ int`
+3. **Data coercion**: Any type `T ≤ data`
 
 ## Statement Typing
 
@@ -447,7 +447,7 @@ n <= T (where T is integer type)
 ```
 let x: T = e
 -------------
-e <= T
+e ≤ T
 x : T in subsequent context
 
 let x = e
@@ -460,7 +460,7 @@ x : T in subsequent context
 ```
 var x: T = e
 -------------
-e <= T
+e ≤ T
 x : T in subsequent context (mutable)
 
 var x = e
@@ -472,7 +472,7 @@ x : T in subsequent context (mutable)
 ### Statement: Set
 ```
 x : T in context
-e <= T
+e ≤ T
 ---------------
 set x = e
 ```
@@ -489,7 +489,7 @@ name : (T1, T2, ...) -> R in subsequent context
 
 ### Statement: Ret
 ```
-e <= R (where R is function's return type)
+e ≤ R (where R is function's return type)
 ------------------------------------------
 ret e
 
@@ -502,7 +502,7 @@ ret  (bare return for void functions)
 
 #### Boolean condition
 ```
-condition <= bool
+condition ≤ bool
 then_body type checks
 else_body type checks (if present)
 ----------------------------------
@@ -535,10 +535,10 @@ if let ok(binding) = condition { then_body } else error(err_binding) { else_body
 ```
 carry bindings: c1: T1 = e1, c2: T2 = e2, ...
 bring bindings: b1: U1, b2: U2, ... (require type hints)
-condition <= bool (if present, checked after carries bound)
+condition ≤ bool (if present, checked after carries bound)
 body type checks with carries in scope
-break values <= bring types
-continue values <= carry types
+break values ≤ bring types
+continue values ≤ carry types
 loops with carries must not fall through (all paths must break/continue/return)
 -------------------------------------------------------------------------------
 loop carry c1: T1 = e1, ... bring b1: U1, ... while condition { body }
@@ -548,8 +548,8 @@ b1: U1, b2: U2, ... in subsequent context
 ### Statement: Break
 ```
 inside loop with bring bindings b1: U1, ...
-values.len() == brings.len()
-for all i: vi <= Ui
+values.len() ≡ brings.len()
+for all i: vi ≤ Ui
 -------------------------------------------
 break v1, v2, ...
 ```
@@ -557,8 +557,8 @@ break v1, v2, ...
 ### Statement: Continue
 ```
 inside loop with carry bindings c1: T1, ...
-values.len() == carries.len()
-for all i: vi <= Ti
+values.len() ≡ carries.len()
+for all i: vi ≤ Ti
 -------------------------------------------
 continue v1, v2, ...
 ```

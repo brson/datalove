@@ -12,10 +12,10 @@ but shape, layout, and stride are dynamic.
 - stride - rows/columns to skip in a particular view
 
 ```datalove
-: [|u32, 2|] / [|
+: ⟪u32, 2⟫ / ⟪
   1 2 3,
   4 5 6
-|]
+⟫
 ```
 
 I think outer hash may be best but currently used for heap sigil.
@@ -57,16 +57,16 @@ fun foo(a: !u32): !u32
 end fun
 ```
 
-### `[| |]` (pipe postfix)
+### `⟪ ⟫` (pipe postfix)
 
 ```datalove
-: [|u32, 2|] / [|
+: ⟪u32, 2⟫ / ⟪
   1 2 3,
   4 5 6
-|]
+⟫
 
 fun foo(a: !u32): !u32
-  if a |val: [|u32, 2|]| {
+  if a |val: ⟪u32, 2⟫| {
     ret val
   } else |err| {
     ret err
@@ -393,7 +393,7 @@ Single-character modifiers:
 
 ### Hash/Pound `#`
 ```datalove
-#[ ]#    #( )#    #{ }#
+#[ ]#    #( )#    ⦃ ⦄#
 [# #]    (# #)    {# #}
 ```
 Pros: Grid-like appearance, keyboard accessible, not heavily overloaded in most languages
@@ -433,7 +433,7 @@ Cons: Very overloaded (multiplication, pointers, wildcards, unpacking)
 
 ### Percent `%`
 ```datalove
-%[ ]%    %( )%    %{ }%
+%[ ]%    %( )%    ⦇ ⦈%
 [% %]    (% %)    {% %}
 ```
 Pros: Two circles suggest dimensionality, distinct

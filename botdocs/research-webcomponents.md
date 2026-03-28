@@ -220,7 +220,7 @@ crates/
 | `Map<K,V>` | i32,i32 | `list<tuple<K,V>>` | ptr+len |
 | `Option<T>` | i32,T* | `option<T>` | discriminant+payload |
 | `Result<T>` | i32,T*,i32,i32 | `result<T,string>` | disc+ok+err_ptr+len |
-| Tuple(fields) | flattened | `tuple<...>` | flattened |
+| Tuple(fields) | flattened | `tuple<..>` | flattened |
 | Struct(fields) | flattened | record | flattened |
 | Enum(variants) | i32,max_payload | variant | disc+max_payload |
 

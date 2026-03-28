@@ -20,14 +20,14 @@ Maybe use arrows instead.
 
 The dots are visually confusing with method/field dots:
 
-`.<` `.>`
+`<` `>`
 
 
 
 
 ## Not-equals has a bang in it
 
-Want ! to be reserved for error handling, but `!=` is unfortunate.
+Want ! to be reserved for error handling, but `≢` is unfortunate.
 
 
 

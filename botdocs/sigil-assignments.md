@@ -4,12 +4,11 @@ Current lexer sigils and their uses in the language.
 
 Sigils are defined in the `bcts` crate (`lexer.rs`).
 
-## Single-Character Sigils
+## Single-Character ASCII Sigils
 
 ### Punctuation
 - `.` - Dot
   - Member access in import statements: `import u32.negate`
-  - Part of comparison operators: `.<`, `.>`
   - Decimal point in float literals: `3.14`
 
 - `,` - Comma
@@ -22,10 +21,6 @@ Sigils are defined in the `bcts` crate (`lexer.rs`).
 - `@` - At
   - Postfix adapt operator: clone, widen, or coerce
 
-### Hash
-- `#` - Hash
-  - Part of `#{` set open sigil
-
 ### Type Constructors / Modifiers
 - `?` - Question
   - Prefix: Option type constructor: `let x: ?u32`
@@ -36,39 +31,34 @@ Sigils are defined in the `bcts` crate (`lexer.rs`).
   - Postfix: Try operator for Result (early return on Error)
 
 ### Arithmetic Operators
-- `+` - Plus
-  - Total addition
-
-- `-` - Minus
-  - Total subtraction
-  - Unary negation
-
-- `*` - Star
-  - Total multiplication
-
+- `+` - Plus: Total addition
+- `-` - Minus: Total subtraction, unary negation
+- `*` - Star: Total multiplication
 - `/` - SlashForward
   - Total division (panics on overflow/zero)
   - Path separator in require statements: `require module sys/std/u32`
   - Type hint / expression separator: `: u32 / @42`
+
+### Comparison Operators
+- `<` - Less: Less than
+- `>` - Greater: Greater than
 
 ### Structural
 - `:` - Colon
   - Type hint separator: `let x: u32`
   - Function parameter types: `fun foo(x: u32)`
   - Function return types: `fun foo(): u32`
-  - Struct field type separator: `struct { x: u32 }`
+  - Struct field type separator: `{ x: u32 }`
 
 - `=` - Equals
   - Assignment in let statements: `let x = value`
   - Struct field assignment: `{ x = 1 }`
-  - Map entry assignment: `%{ 1 = 10 }`
-  - Map type key-value separator: `%{K = V}`
   - Carry binding: `loop carry (x = 0)`
 
 - `|` - Pipe
   - Binding delimiter in if statements: `if condition |x|`
 
-### Braces (Balanced Pairs)
+### ASCII Braces (Balanced Pairs)
 - `(` `)` - ParenOpen, ParenClose
   - Function parameters: `fun foo(a: u32, b: u32)`
   - Function calls: `foo(1, 2)`
@@ -81,31 +71,38 @@ Sigils are defined in the `bcts` crate (`lexer.rs`).
   - Structs: `{ x = 1, y = 2 }`
   - Enum type hints: `enum { atom A, term B u32 }`
   - Anonymous struct type hints: `{ x: u32 }`
-  - Closes `%{` and `#{` sigils
 
 - `[` `]` - BracketOpen, BracketClose
   - Lists: `[1, 2, 3]`
   - List types: `[u32]`
 
-- `<` `>` - AngleOpen, AngleClose
-  - Comparison operators: `.<`, `.>`
+## Unicode Bracket Pairs
 
-### Earmuff Braces (Pipe-Delimited)
+- `⦇` `⦈` - MapOpen, MapClose (U+2987, U+2988 - Z notation image bracket)
+  - Map types: `⦇K ↦ V⦈`
+  - Map literals: `⦇ 1 ↦ 10, 2 ↦ 20 ⦈`
 
-- `[|` `|]` - BracketPipeOpen, BracketPipeClose
-  - Tensor types: `[|u32, 2|]`
-  - Tensor literals: `[| 1 2 3, 4 5 6 |]`
-- `{|` `|}` - BracePipeOpen, BracePipeClose
-  - Table types and literals: `{| x: u32, y: u32 |}`
+- `⦃` `⦄` - SetOpen, SetClose (U+2983, U+2984 - white curly bracket)
+  - Set types: `⦃T⦄`
+  - Set literals: `⦃ 1, 2, 3 ⦄`
 
-### Asymmetric Braces (close with `}`)
+- `⟦` `⟧` - TableOpen, TableClose (U+27E6, U+27E7 - double square bracket)
+  - Table types and literals: `⟦ x: u32, y: u32 ⟧`
 
-- `%{` - PercentBraceOpen (closes with `}`)
-  - Map types: `%{K = V}`
-  - Map literals: `%{ 1 = 10, 2 = 20 }`
-- `#{` - HashBraceOpen (closes with `}`)
-  - Set types: `#{T}`
-  - Set literals: `#{ 1, 2, 3 }`
+- `⟪` `⟫` - TensorOpen, TensorClose (U+27EA, U+27EB - double angle bracket)
+  - Tensor types: `⟪u32, 2⟫`
+  - Tensor literals: `⟪ 1 2 3, 4 5 6 ⟫`
+
+## Unicode Sigils
+
+- `↦` - MapsTo (U+21A6 - rightwards arrow from bar)
+  - Map key-value separator: `⦇ "key" ↦ "value" ⦈`
+  - Map type separator: `⦇string ↦ int⦈`
+
+- `≤` - LessOrEqual (U+2264)
+- `≥` - GreaterOrEqual (U+2265)
+- `≡` - Identical (U+2261)
+- `≢` - NotIdentical (U+2262)
 
 ## Two-Character Sigils
 
@@ -149,14 +146,6 @@ Reserved, not yet used in parser.
 - `*=` - StarEquals
 - `/=` - SlashEquals
 
-### Comparison Operators
-- `.<` - DotLess: Less than
-- `.>` - DotGreater: Greater than
-- `<=` - LessEquals: Less than or equal
-- `>=` - GreaterEquals: Greater than or equal
-- `==` - EqualsEquals: Equality
-- `!=` - ExclamationEquals: Not equal
-
 ### Other
 - `:-` - ColonDash: Reserved, not yet used in parser
 
@@ -180,16 +169,17 @@ Reserved, not yet used in parser.
 
 ## Available Characters
 
-Characters not currently assigned as sigil start characters:
+ASCII characters not currently assigned as sigil start characters:
 
-```datalove
-$ & \ ^ ` ~
+```
+# % $ & \ ^ ` ~
 ```
 
-Note: `_` is considered a word character (identifier start).
+`#` and `%` were freed by the Unicode bracket migration.
+`_` is considered a word character (identifier start).
 
 
 # Open design questions
 
-Tensor constructors use multi-comma separators (`[| 1 2, 3 4,, 5 6, 7 8 |]`)
+Tensor constructors use multi-comma separators (`⟪ 1 2, 3 4,, 5 6, 7 8 ⟫`)
 instead of semicolons, since `;` is used as a line separator.

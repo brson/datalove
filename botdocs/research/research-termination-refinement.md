@@ -34,7 +34,7 @@ Datafun has properties that make termination analysis more tractable:
 1. **Explicit Loop State**: Loop carries make iteration state explicit:
    ```datalove
    loop carry (i = n)
-     if i <= @0
+     if i ≤ @0
        break
      end if
      continue(i - @1)
@@ -65,7 +65,7 @@ Analyze loop carries for size-change termination:
 ```datalove
 // TERMINATES: i strictly decreases each iteration
 loop carry (i = n)
-  if i <= @0; break; end if
+  if i ≤ @0; break; end if
   continue(i - @1)
 end loop
 ```
@@ -100,9 +100,9 @@ on subexpressions.
 Combine with refinement types (see below) to express loop bounds:
 
 ```datalove
-fun sum_to(n: {n: u32 | n <= 1000}): u32
+fun sum_to(n: {n: u32 | n ≤ 1000}): u32
   loop carry (i: u32 = @0, acc: u32 = @0)
-    if i >= n
+    if i ≥ n
       break(acc)
     end if
     continue(i +! @1, acc +! i)
@@ -111,7 +111,7 @@ fun sum_to(n: {n: u32 | n <= 1000}): u32
 end fun
 ```
 
-The refinement `n <= 1000` bounds the iteration count.
+The refinement `n ≤ 1000` bounds the iteration count.
 
 #### Approach 4: Totality Annotations
 
@@ -120,7 +120,7 @@ Like Idris, allow optional totality assertions:
 ```datalove
 @total
 fun factorial(n: u32): u32
-  if n <= @1
+  if n ≤ @1
     ret @1
   end if
   ret n * factorial(n - @1)  // n decreases
@@ -152,7 +152,7 @@ Given datafun's design:
 @total
 fun count_down(n: u32): u32
   loop carry (i = n, sum: u32 = @0)  // i is the "fuel"
-    if i == @0
+    if i ≡ @0
       break(sum)
     end if
     continue(i - @1, sum +! i)  // i strictly decreases
@@ -164,7 +164,7 @@ end fun
 Termination proof:
 - `i` starts at `n` (finite)
 - Each `continue` decreases `i` by 1
-- Loop exits when `i == 0`
+- Loop exits when `i ≡ 0`
 - Therefore: at most `n` iterations
 
 ---
@@ -207,16 +207,16 @@ Building on datafun's existing syntax:
 
 ```datalove
 // Refined type with predicate
-: {v: u32 | v != 0} / divisor
+: {v: u32 | v ≢ 0} / divisor
 
 // Function with refined parameters
-fun safe_div(a: u32, b: {b: u32 | b != 0}): u32
+fun safe_div(a: u32, b: {b: u32 | b ≢ 0}): u32
   ret a / b  // safe: b guaranteed non-zero
 end fun
 
 // Refined return type
-fun absolute(x: i32): {r: u32 | r >= 0}
-  if x >= @0
+fun absolute(x: i32): {r: u32 | r ≥ 0}
+  if x ≥ @0
     ret : u32 / x
   else
     ret : u32 / (-x)
@@ -228,12 +228,12 @@ Alternative sigil-based syntax (more concise):
 
 ```datalove
 // Using & for refinement predicates
-fun safe_div(a: u32, b: u32 & != 0): u32
+fun safe_div(a: u32, b: u32 & ≢ 0): u32
   ret a / b
 end fun
 
 // Or dedicated keyword
-fun safe_div(a: u32, b: u32 where b != 0): u32
+fun safe_div(a: u32, b: u32 where b ≢ 0): u32
   ret a / b
 end fun
 ```
@@ -242,7 +242,7 @@ end fun
 
 1. **Division by Zero**:
    ```datalove
-   fun div(a: int, b: {b: int | b != 0}): int
+   fun div(a: int, b: {b: int | b ≢ 0}): int
      ret a / b  // statically safe
    end fun
    ```
@@ -256,7 +256,7 @@ end fun
 
 3. **Integer Ranges**:
    ```datalove
-   fun to_u8(n: {n: u32 | n <= 255}): u8
+   fun to_u8(n: {n: u32 | n ≤ 255}): u8
      ret : u8 / n  // no truncation
    end fun
    ```
@@ -282,13 +282,13 @@ end fun
 Currently:
 ```datalove
 fun div_checked(a: u32, b: u32): !u32
-  ret a /! b  // early-returns error if b == 0
+  ret a /! b  // early-returns error if b ≡ 0
 end fun
 ```
 
 With refinements:
 ```datalove
-fun div_safe(a: u32, b: {b: u32 | b != 0}): u32
+fun div_safe(a: u32, b: {b: u32 | b ≢ 0}): u32
   ret a / b  // no runtime check needed
 end fun
 ```
@@ -307,9 +307,9 @@ end fun
 
 Refinements could express loop invariants:
 ```datalove
-loop carry (i: {i: u32 | i <= n} = @0)
-  // invariant: i always <= n
-  if i >= n; break; end if
+loop carry (i: {i: u32 | i ≤ n} = @0)
+  // invariant: i always ≤ n
+  if i ≥ n; break; end if
   continue(i + @1)  // maintain invariant
 end loop
 ```
@@ -337,7 +337,7 @@ end loop
 1. **Start with explicit refinements**: Require programmers to write
    predicates initially. Don't attempt inference yet.
 
-2. **Focus on numeric predicates**: `==`, `!=`, `<`, `<=`, `>`, `>=`,
+2. **Focus on numeric predicates**: `≡`, `≢`, `<`, `≤`, `>`, `≥`,
    `+`, `-`, `*` on integers. These are decidable via SMT.
 
 3. **Integrate with existing operators**: Make `/!` and `/?` unnecessary
@@ -378,7 +378,7 @@ The two features reinforce each other:
 1. **Bounded Recursion**: Refinements can express the "fuel" for termination:
    ```datalove
    @total
-   fun fib(n: {n: u32 | n <= 40}): u64
+   fun fib(n: {n: u32 | n ≤ 40}): u64
      // Bounded input guarantees termination
    end fun
    ```
@@ -386,8 +386,8 @@ The two features reinforce each other:
 2. **Loop Bounds from Refinements**: If a carry has a refinement bound,
    termination follows:
    ```datalove
-   loop carry (i: {i: u32 | i <= n} = @0)
-     if i >= n; break; end if
+   loop carry (i: {i: u32 | i ≤ n} = @0)
+     if i ≥ n; break; end if
      continue(i + @1)
    end loop
    // Terminates: i bounded by n, increases each iteration

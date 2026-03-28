@@ -247,8 +247,8 @@ From report-gadts.md, enums with const indices:
 
 ```datalove
 enum Expr<const TAG: TypeTag>
-    LitInt(i64)   where TAG == TInt
-    LitBool(bool) where TAG == TBool
+    LitInt(i64)   where TAG ≡ TInt
+    LitBool(bool) where TAG ≡ TBool
 end enum
 ```
 

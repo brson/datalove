@@ -5,7 +5,7 @@ It follows a bidirectional typing discipline based on Dunfield & Krishnaswami (2
 
 ## Core Principles
 
-- **Bidirectional**: Expressions either synthesize (=>) or check (<=) against types
+- **Bidirectional**: Expressions either synthesize (=>) or check (≤) against types
 - **Structural typing**: Anonymous types (tuples, structs) are compatible by structure
 - **Nominal typing**: Named types (`struct Foo`, `tuple Pair`) are distinct even with same structure
 - **Explicit at boundaries**: The `: type / expr` syntax provides type information at expression boundaries
@@ -54,18 +54,18 @@ Examples:
 
 ### Collections
 - `[T] = [T']` iff T = T'
-- `%{K = V} = %{K' = V'}` iff K = K' and V = V'
-- `#{T} = #{T'}` iff T = T'
+- `⦇K ↦ V⦈ = ⦇K' ↦ V'⦈` iff K = K' and V = V'
+- `⦃T⦄ = ⦃T'⦄` iff T = T'
 
 ### Option and Result
 - `?T = ?T'` iff T = T'
 - `!T = !T'` iff T = T'
 
 ### Tensor
-- `[|T, R|] = [|T', R'|]` iff T = T' and R = R' (same element type and rank)
+- `⟪T, R⟫ = ⟪T', R'⟫` iff T = T' and R = R' (same element type and rank)
 
 ### Table
-- `{| c1: T1, c2: T2, ... |} = {| c1': T1', c2': T2', ... |}` iff column names and types match in order
+- `⟦ c1: T1, c2: T2, ... ⟧ = ⟦ c1': T1', c2': T2', ... ⟧` iff column names and types match in order
 
 ### Atom, Term, and Enum
 - `atom A = atom A'` iff A and A' have the same name
@@ -115,7 +115,7 @@ Synthesis rules determine what type an expression produces.
 ### Rule: Syn-TypedExpr
 ```
 e : ExprFull with type_hint = Some(T)
-e.expr <= T
+e.expr ≤ T
 ------------------------------------
 e => T
 ```
@@ -229,7 +229,7 @@ Example:
 
 ### Rule: Syn-List
 ```
-n >= 1
+n ≥ 1
 e1 => T
 for all i in [2..n]: ei => T' where T = T'
 -------------------------------------------
@@ -248,48 +248,48 @@ Example:
 
 ### Rule: Syn-Set
 ```
-n >= 1
+n ≥ 1
 e1 => T
 for all i in [2..n]: ei => T' where T = T'
 -------------------------------------------
-#{e1, e2, ..., en} => #{T}
+⦃e1, e2, ..., en⦄ => ⦃T⦄
 ```
 
 Sets are synthesized by synthesizing all elements and ensuring they have
-the same type. Empty sets synthesize as `#{()}`.
+the same type. Empty sets synthesize as `⦃()⦄`.
 
 Example:
 ```
-#{true, false} => #{bool}
-#{} => #{()}                       (empty set, unit element type)
+⦃true, false⦄ => ⦃bool⦄
+⦃⦄ => ⦃()⦄                       (empty set, unit element type)
 ```
 
 ### Rule: Syn-Map
 ```
-n >= 1
+n ≥ 1
 k1 => K, v1 => V
 for all i in [2..n]: ki => K' where K = K'
 for all i in [2..n]: vi => V' where V = V'
 --------------------------------------------
-%{k1 = v1, k2 = v2, ...} => %{K = V}
+⦇k1 ↦ v1, k2 ↦ v2, ...⦈ => ⦇K ↦ V⦈
 ```
 
 Maps are synthesized by synthesizing all keys and values. Empty maps
-synthesize as `%{() = ()}`.
+synthesize as `⦇() ↦ ()⦈`.
 
 Example:
 ```datalove
-%{1 = 10, 2 = 20} => %{int = int}
-%{} => %{() = ()}                   (empty map, unit key/value types)
+⦇1 ↦ 10, 2 ↦ 20⦈ => ⦇int ↦ int⦈
+⦇⦈ => ⦇() ↦ ()⦈                   (empty map, unit key/value types)
 ```
 
 ### Rule: Syn-Tensor
 ```
 shape = [d1, d2, ..., dn]
-elements.len() == d1 * d2 * ... * dn
+elements.len() ≡ d1 * d2 * ... * dn
 all elements synthesize to same type T
 -----------------------------------------
-[| e1 e2 ... |] => [|T, n|]
+⟪ e1 e2 ... ⟫ => ⟪T, n⟫
 ```
 
 Tensors are synthesized if non-empty and all elements have the same type.
@@ -370,7 +370,7 @@ Cannot synthesize type for er (needs context)
 
 `er` cannot be synthesized - requires Result type context.
 
-## Checking Rules (e <= T)
+## Checking Rules (e ≤ T)
 
 Checking rules verify an expression against an expected type.
 
@@ -379,7 +379,7 @@ Checking rules verify an expression against an expected type.
 e => T'
 T' = T  (or T' can widen to T)
 -----------
-e <= T
+e ≤ T
 ```
 
 This is the key rule that allows synthesizing expressions to be checked.
@@ -390,17 +390,17 @@ Also applies same-sign widening.
 n : integer literal
 n fits in u8 range
 --------------------------------
-n <= u8
+n ≤ u8
 
 n fits in i8 range
 --------------------------------
-n <= i8
+n ≤ i8
 
 ... (similarly for u16, i16, u32, i32, u64, i64, index, offset)
 
 any integer literal
 --------------------------------
-n <= int
+n ≤ int
 ```
 
 Examples:
@@ -417,10 +417,10 @@ Examples:
 ### Rule: Check-TypedInt
 ```
 n has type hint T_hint (a direct integer type)
-n <= T_hint  (validates literal fits in hinted type)
+n ≤ T_hint  (validates literal fits in hinted type)
 T_hint = T_expected OR can_widen(T_hint, T_expected)
 ------------------------------------------------
-: T_hint / n <= T_expected
+: T_hint / n ≤ T_expected
 ```
 
 When an integer literal has a type hint, the hint is respected. The hinted
@@ -436,11 +436,11 @@ Example:
 ```
 f : float literal
 --------------------------------
-f <= f32
+f ≤ f32
 
 f : float literal
 --------------------------------
-f <= f64
+f ≤ f64
 ```
 
 Float literals check against both `f32` and `f64`.
@@ -450,21 +450,21 @@ Float literals check against both `f32` and `f64`.
 h : hex literal (0x..., non-negative)
 h fits in u8 range
 --------------------------------
-h <= u8
+h ≤ u8
 
 ... (similarly for u16, u32, u64, index)
 
 any hex literal
 --------------------------------
-h <= int
+h ≤ int
 
 h fits in 32 bits (non-negative)
 --------------------------------
-h <= f32  (as IEEE 754 bit pattern)
+h ≤ f32  (as IEEE 754 bit pattern)
 
 h fits in 64 bits (non-negative)
 --------------------------------
-h <= f64  (as IEEE 754 bit pattern)
+h ≤ f64  (as IEEE 754 bit pattern)
 ```
 
 Hex literals can check against unsigned integer types, `int`, and float
@@ -485,89 +485,89 @@ Examples:
 ```
 (T1, T2, ..., Tn) is expected type
 length matches
-for all i: ei <= Ti
+for all i: ei ≤ Ti
 ----------------------------------
-(e1, e2, ..., en) <= (T1, T2, ..., Tn)
+(e1, e2, ..., en) ≤ (T1, T2, ..., Tn)
 ```
 
 ### Rule: Check-AnonStruct
 ```
 {f1: T1, f2: T2, ...} is expected type
 fields match (same names, same order)
-for all i: ei <= Ti
+for all i: ei ≤ Ti
 -----------------------------------------
-{f1 = e1, f2 = e2, ...} <= {f1: T1, f2: T2, ...}
+{f1 = e1, f2 = e2, ...} ≤ {f1: T1, f2: T2, ...}
 ```
 
 ### Rule: Check-List
 ```
 [T] is expected type
-for all ei in elements: ei <= T
+for all ei in elements: ei ≤ T
 ------------------------------
-[e1, e2, ...] <= [T]
+[e1, e2, ...] ≤ [T]
 ```
 
 Empty lists check against any list type.
 
 ### Rule: Check-Map
 ```
-%{K = V} is expected type
-for all (ki, vi) in entries: ki <= K and vi <= V
+⦇K ↦ V⦈ is expected type
+for all (ki, vi) in entries: ki ≤ K and vi ≤ V
 ------------------------------------------------
-%{k1 = v1, k2 = v2, ...} <= %{K = V}
+⦇k1 ↦ v1, k2 ↦ v2, ...⦈ ≤ ⦇K ↦ V⦈
 ```
 
 ### Rule: Check-Set
 ```
-#{T} is expected type
-for all ei in elements: ei <= T
+⦃T⦄ is expected type
+for all ei in elements: ei ≤ T
 ------------------------------
-#{e1, e2, ...} <= #{T}
+⦃e1, e2, ...⦄ ≤ ⦃T⦄
 ```
 
 ### Rule: Check-Tensor
 ```
-[|T, R|] is expected type
+⟪T, R⟫ is expected type
 rank matches R
 element count matches product of shape dimensions
-for all ei: ei <= T
+for all ei: ei ≤ T
 -----------------------------------------------
-[| e1 ... |] <= [|T, R|]
+⟪ e1 ... ⟫ ≤ ⟪T, R⟫
 ```
 
 ### Rule: Check-Table
 ```
-{| c1: T1, c2: T2, ... |} is expected type
+⟦ c1: T1, c2: T2, ... ⟧ is expected type
 column count matches
 column names match in order
 for all rows: row element count matches column count
-for all row elements: ei <= Ti (column type)
+for all row elements: ei ≤ Ti (column type)
 -----------------------------------------------
-{| headers; rows... |} <= {| c1: T1, c2: T2, ... |}
+⟦ headers; rows... ⟧ ≤ ⟦ c1: T1, c2: T2, ... ⟧
 ```
 
 ### Rule: Check-None
 ```
 --------------
-none <= ?T
+none ≤ ?T
 ```
 
 `none` checks against any option type.
 
 ### Rule: Check-Some
 ```
-e <= T
+e ≤ T
 --------------
-some e <= ?T
+some e ≤ ?T
 ```
 
 The `some` constructor checks payload against inner type.
 
 ### Rule: Check-Ok
 ```
-e <= T
+e ≤ T
 --------------
-ok e <= !T
+ok e ≤ !T
 ```
 
 The `ok` constructor checks payload against inner type.
@@ -576,7 +576,7 @@ The `ok` constructor checks payload against inner type.
 ```
 e is error or data expression
 --------------
-er e <= !T
+er e ≤ !T
 ```
 
 The `er` constructor for Results. Payload must be an `error` or `data` expression.
@@ -584,7 +584,7 @@ The `er` constructor for Results. Payload must be an `error` or `data` expressio
 ### Rule: Check-ResultErr (implicit Err wrapping)
 ```
 ----------------------
-error "msg" <= !T
+error "msg" ≤ !T
 ```
 
 Error expressions can check against any Result type as implicit Err wrapping.
@@ -593,20 +593,20 @@ Example:
 ```datalove
 : !u32 / error "failed"
            |
-      error "failed" <= error  ok
-      error "failed" <= !u32   ok (implicit Err wrapping)
+      error "failed" ≤ error  ok
+      error "failed" ≤ !u32   ok (implicit Err wrapping)
 ```
 
 ### Rule: Check-Data
 ```
 ----------------------
-data e <= data
+data e ≤ data
 ```
 
 ### Rule: Check-Error
 ```
 ----------------------
-error e <= error
+error e ≤ error
 ```
 
 ## Type Error Codes
@@ -655,10 +655,10 @@ Empty collections synthesize with unit element type, and check against any eleme
 ```datalove
 [] => [()]                   (synthesis: unit element type)
 : [u32] / []                 ok (checking: any element type)
-#{} => #{()}            (synthesis)
-: #{u32} / #{}          ok (checking)
-%{} => %{() = ()}        (synthesis)
-: %{u32 = string} / %{}  ok (checking)
+⦃⦄ => ⦃()⦄            (synthesis)
+: ⦃u32⦄ / ⦃⦄          ok (checking)
+⦇⦈ => ⦇() ↦ ()⦈        (synthesis)
+: ⦇u32 ↦ string⦈ / ⦇⦈  ok (checking)
 ```
 
 ### 2. Field order in anonymous structs
@@ -666,7 +666,7 @@ Empty collections synthesize with unit element type, and check against any eleme
 Field order must match:
 
 ```datalove
-{x: u32, y: bool} != {y: bool, x: u32}
+{x: u32, y: bool} ≢ {y: bool, x: u32}
 ```
 
 ### 3. Default numeric types
@@ -699,8 +699,8 @@ Anonymous composite types can be synthesized when all their components can be sy
 - **Tuples**: `(true, 42)` synthesizes as `(bool, int)`
 - **Structs**: `{x = 42}` synthesizes as `{x: int}`
 - **Lists**: `[1, 2, 3]` synthesizes as `[int]`
-- **Sets**: `#{true, false}` synthesizes as `#{bool}`
-- **Maps**: `%{1 = 10}` synthesizes as `%{int = int}`
+- **Sets**: `⦃true, false⦄` synthesizes as `⦃bool⦄`
+- **Maps**: `⦇1 ↦ 10⦈` synthesizes as `⦇int ↦ int⦈`
 
 For collections (lists, sets, maps), all elements/keys/values must have the
 same type. The first element determines the expected type for the rest.

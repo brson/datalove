@@ -21,9 +21,9 @@ enum TypeTag
 end enum
 
 enum Expr<const TAG: TypeTag>
-    LitInt(i64)                 where TAG == TInt
-    LitBool(bool)               where TAG == TBool
-    Add(Expr<TInt>, Expr<TInt>) where TAG == TInt
+    LitInt(i64)                 where TAG ≡ TInt
+    LitBool(bool)               where TAG ≡ TBool
+    Add(Expr<TInt>, Expr<TInt>) where TAG ≡ TInt
     If(Expr<TBool>, Expr<TAG>, Expr<TAG>)
 end enum
 ```
@@ -58,10 +58,10 @@ type Reify<const TAG: TypeTag> =
 fun eval<const T: TypeTag>(e: Expr<T>): Reify<T>
     match e
         LitInt(n) =>
-            // Compiler knows: T == TInt, so Reify<T> == i64
+            // Compiler knows: T ≡ TInt, so Reify<T> ≡ i64
             ret n
         LitBool(b) =>
-            // T == TBool, so Reify<T> == bool
+            // T ≡ TBool, so Reify<T> ≡ bool
             ret b
         Add(left, right) =>
             ret eval<TInt>(left) + eval<TInt>(right)
@@ -84,7 +84,7 @@ fun negate(e: Expr<TBool>): Expr<TBool>
     match e
         LitBool(b) => ret LitBool(not b)
         If(c, t, f) => ret If(c, negate(t), negate(f))
-        // LitInt, Add unreachable: TAG == TBool contradicts TAG == TInt
+        // LitInt, Add unreachable: TAG ≡ TBool contradicts TAG ≡ TInt
     end match
 end fun
 ```
@@ -95,8 +95,8 @@ For heterogeneous collections, pack the index existentially with a runtime witne
 
 ```datalove
 enum TypeWitness<const T: TypeTag>
-    WitInt  where T == TInt
-    WitBool where T == TBool
+    WitInt  where T ≡ TInt
+    WitBool where T ≡ TBool
 end enum
 
 enum SomeExpr
@@ -112,7 +112,7 @@ Const arithmetic in indices:
 
 ```datalove
 enum Vec<const N: u64, T>
-    Nil                    where N == 0
+    Nil                    where N ≡ 0
     Cons(T, Vec<N - 1, T>) where N > 0
 end enum
 
@@ -139,11 +139,11 @@ enum Connection<const S: ConnState>
     Conn(String, Reify<ConnData(S)>)
 end enum
 
-// Only callable when S == Open
+// Only callable when S ≡ Open
 fun send<const S: ConnState>(
     ref conn: Connection<S>,
     data: Bytes
-): Result<(), Error> where S == Open
+): Result<(), Error> where S ≡ Open
 ```
 
 ## Implementation Strategy

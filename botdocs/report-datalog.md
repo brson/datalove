@@ -51,7 +51,7 @@ end fun
 // Fixed point: keep applying rules until stable.
 fun saturate(facts: set { Prop }): set { Prop }
   let next = infer(facts)
-  if next == facts
+  if next ≡ facts
     ret facts
   end if
   ret saturate(next)
@@ -99,7 +99,7 @@ fun derive(facts: set { Fact }): set { Fact }
       case term Parent p
         match f2
         case term Ancestor a
-          if p.1 == a.0
+          if p.1 ≡ a.0
             set result = insert(result, term Ancestor (p.0, a.1)@)
           end if
         case default
@@ -132,7 +132,7 @@ type Sign: enum {
 }
 
 fun join(a: Sign, b: Sign): Sign
-  if a == b
+  if a ≡ b
     ret a
   end if
   match a
@@ -247,7 +247,7 @@ fun constrain(cell: CellValue, must_not_be: int): CellValue
   case atom Any
     ret cell
   case term Exactly v
-    if v == must_not_be
+    if v ≡ must_not_be
       ret atom Contradiction@
     end if
     ret cell
@@ -256,7 +256,7 @@ fun constrain(cell: CellValue, must_not_be: int): CellValue
     if is_empty(remaining)
       ret atom Contradiction@
     end if
-    if size(remaining) == 1
+    if size(remaining) ≡ 1
       ret term Exactly (first(remaining))@
     end if
     ret term OneOf remaining@
@@ -474,7 +474,7 @@ for __e1 in facts
     for __e2 in facts
       match __e2
       case term Ancestor __p2
-        if __p2.0 == z
+        if __p2.0 ≡ z
           let y = __p2.1
           set __result = insert(__result, term Ancestor (x, y)@)
         end if
@@ -499,7 +499,7 @@ filters on bound variables:
 ```datalove
 from facts
   given term Age (person, age)
-  where age .> 18
+  where age > 18
   yield term Adult person@
 end from
 ```
@@ -517,7 +517,7 @@ from parents
   given term Parent (x, y)
 from ages
   given term Age (y, age)
-  where age .> 18
+  where age > 18
   select (x, y, age)
 end from
 ```
@@ -577,7 +577,7 @@ loop
     yield term Ancestor (x, y)@
   end from
   let next = union(facts, direct, transitive)
-  if next == facts
+  if next ≡ facts
     break
   end if
   set facts = next
@@ -607,7 +607,7 @@ loop carry (facts = db)
     yield term Ancestor (x, y)@
   end from
   let next = union(facts, direct, transitive)
-  if next == facts
+  if next ≡ facts
     break
   end if
   continue next
@@ -640,7 +640,7 @@ The compiler can directly analyze the carried value:
 total fun saturate(db: set { Fact }): set { Fact }
   total loop carry (facts = db)
     let next = union(facts, derive(facts))
-    if next == facts
+    if next ≡ facts
       break
     end if
     continue next
@@ -653,7 +653,7 @@ The termination argument for Datalog saturation:
 1. The carried value is `facts: set { Fact }`.
 2. `continue next` where `next = union(facts, ...)` --
    the set only grows (monotone).
-3. The break condition is `next == facts` -- exits at fixed point.
+3. The break condition is `next ≡ facts` -- exits at fixed point.
 4. If `Fact` is a finite-domain enum
    (atom-only, or terms over bounded payloads),
    the set has a finite upper bound.
@@ -735,7 +735,7 @@ loop
   let next = union(all_facts,
     direct_ancestors(all_facts),
     transitive_ancestors(all_facts))
-  if next == all_facts
+  if next ≡ all_facts
     break
   end if
   set all_facts = next
@@ -771,7 +771,7 @@ Then saturation becomes:
 var facts = db
 loop
   let next = ancestry(facts)
-  if next == facts
+  if next ≡ facts
     break
   end if
   set facts = next
@@ -893,7 +893,7 @@ loop
     yield term Ancestor (x, y)@
   end from
   let next = union(kb, direct, transitive)
-  if next == kb
+  if next ≡ kb
     break
   end if
   set kb = next
@@ -938,7 +938,7 @@ Incremental exploration of a knowledge base:
     let next = union(kb,
       from kb given term Parent (x, y) yield term Ancestor (x, y)@ end from,
       from kb given term Parent (x, z), term Ancestor (z, y) yield term Ancestor (x, y)@ end from)
-    if next == kb; break; end if
+    if next ≡ kb; break; end if
     set kb = next
   end loop
 
@@ -1027,7 +1027,7 @@ The mapping is almost direct:
 | `from facts` | `from f in facts` | Source |
 | `given term Parent (x, y)` | `where f is Parent` + destructure | Filter + bind |
 | multiple `given` with shared var | multiple `from` + `where` on shared | SelectMany + equijoin |
-| `where age .> 18` | `where age > 18` | Filter |
+| `where age > 18` | `where age > 18` | Filter |
 | `select child` | `select child` | Projection |
 | `yield term Ancestor (x, y)@` | `select new Ancestor(x, y)` | Construction |
 | `count` | `.Count()` | Aggregation |
@@ -1066,7 +1066,7 @@ In Haskell, the list monad expresses nondeterministic computation:
 solutions = do
   x <- [1..9]
   y <- [1..9]
-  guard (x + y == 10)
+  guard (x + y ≡ 10)
   return (x, y)
 ```
 

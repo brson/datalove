@@ -92,7 +92,7 @@ Proving this shape of problem would unlock a lot:
 ```datalove
 total fun foo(max: int): int
   total loop carry (index = 0, sum = 0)
-    if index .< max
+    if index < max
       continue (index + 1, sum + index)
     else
       ret sum
@@ -107,13 +107,13 @@ linear ranking functions via polyhedral analysis.
 This loop is entirely linear:
 - Induction variable: index' = index + 1
 - Bound: max (loop-invariant constant)
-- Exit condition: index >= max (linear inequality)
+- Exit condition: index ≥ max (linear inequality)
 - Measure: max - index (linear expression)
 
 How it works:
 
 1. Express loop state as a polyhedron (linear constraints on variables)
 2. Search for a linear ranking function r(vars) such that:
-  - r(vars) >= 0 while loop continues
+  - r(vars) ≥ 0 while loop continues
   - r(vars') < r(vars) after each iteration
 3. For this loop: r(index, max) = max - index satisfies both

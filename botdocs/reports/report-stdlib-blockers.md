@@ -46,7 +46,7 @@ end fun
 **Example:**
 ```datalove
 fun abs(self: int): int
-  if self .< 0      // <-- self is moved here
+  if self < 0      // <-- self is moved here
     ret -self       // <-- Error: self already moved
   else
     ret self        // <-- Error: self already moved
@@ -225,11 +225,11 @@ end fun
 ### B. int comparison pattern (linear move)
 ```datalove
 fun is_negative(self: int): bool
-  ret self .< 0   // self moved by comparison, can't return bool
+  ret self < 0   // self moved by comparison, can't return bool
 end fun
 
 fun max(self: int, other: int): int
-  if self .>= other   // both moved
+  if self ≥ other   // both moved
     ret self          // Error: already moved
   else
     ret other         // Error: already moved

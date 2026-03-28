@@ -124,34 +124,34 @@ The size of `index` is less than or equal to the platform pointer size.
 **Map.** A key-value mapping.
 
 ```datalove
-%{K = V}         // type
-%{ 0 = 5 }       // literal
+⦇K ↦ V⦈         // type
+⦇ 0 ↦ 5 ⦈       // literal
 ```
 
 **Set.** An unordered collection of unique elements.
 
 ```datalove
-#{T}             // type
-#{ 1, 2, 3 }     // literal
+⦃T⦄             // type
+⦃ 1, 2, 3 ⦄     // literal
 ```
 
 **Table.** A columnar data structure with named columns.
 
 ```datalove
-{| col1: T1, col2: T2 |}    // type
+⟦ col1: T1, col2: T2 ⟧    // type
 ```
 
 Table literals use a line-oriented syntax:
 
 ```datalove
-{|
+⟦
   x, y           // column names
   1, 2           // row 1
   3, 4           // row 2
-|}
+⟧
 ```
 
-Semicolons permit single-line format: `{| x, y; 1, 2; 3, 4 |}`.
+Semicolons permit single-line format: `⟦ x, y; 1, 2; 3, 4 ⟧`.
 
 Column projections (e.g., `table.x`) yield a list view that cannot be moved or
 mutated, but can be passed to `ref` parameters.
@@ -159,22 +159,22 @@ mutated, but can be passed to `ref` parameters.
 **Tensor.** A multi-dimensional array with fixed shape.
 
 ```datalove
-[|T, N|]                 // type: element type T, rank N
-[| 1 2 3 |]             // 1D literal (shape inferred: [3])
-[| 1 2 3, 4 5 6 |]      // 2D literal (shape inferred: [2, 3])
-[| 1 2, 3 4,, 5 6, 7 8 |]  // 3D literal (shape inferred: [2, 2, 2])
+⟪T, N⟫                 // type: element type T, rank N
+⟪ 1 2 3 ⟫             // 1D literal (shape inferred: [3])
+⟪ 1 2 3, 4 5 6 ⟫      // 2D literal (shape inferred: [2, 3])
+⟪ 1 2, 3 4,, 5 6, 7 8 ⟫  // 3D literal (shape inferred: [2, 2, 2])
 ```
 
 Type hints specify element type and rank:
 
 ```datalove
-: [|u32, 2|] / [| 1 2, 3 4 |]
+: ⟪u32, 2⟫ / ⟪ 1 2, 3 4 ⟫
 ```
 
 Shape is inferred from the multi-comma structure: spaces separate elements
 along the innermost axis, `,` separates rows (2nd axis), `,,` separates
 slabs (3rd axis), `,,,` separates blocks (4th axis), etc. When the outermost
-dimension is 1, a trailing comma run preserves rank: `[| 1 2 3, |]` is a
+dimension is 1, a trailing comma run preserves rank: `⟪ 1 2 3, ⟫` is a
 rank-2 tensor with shape [1, 3].
 
 Tensor literals can be created and stored, but element access and tensor
@@ -328,8 +328,8 @@ through `u64`, `i8` through `i64`), `index`, `offset`, `f32`, `f64`.
 Atoms are always copy. Terms are copy if their payload type is copy.
 Enums are copy if all variant payloads are copy.
 
-**Linear types** have move semantics: `int`, `string`, `[T]`, `%{K = V}`,
-`#{T}`, `{| ... |}`, `[|T, N|]`, `data`, `error`. Terms and enums with
+**Linear types** have move semantics: `int`, `string`, `[T]`, `⦇K ↦ V⦈`,
+`⦃T⦄`, `⟦ ... ⟧`, `⟪T, N⟫`, `data`, `error`. Terms and enums with
 linear payloads are linear.
 
 A linear value can be used exactly once. After a value is moved, subsequent
@@ -354,7 +354,7 @@ Operators listed from highest to lowest precedence:
 | 3 | `.field` `.0` `[i]` `@` `?` `!` | Postfix (field, index, adapt, try) |
 | 4 | `*` `/` `*!` `/!` `*?` `/?` | Multiplicative |
 | 5 | `+` `-` `+!` `-!` `+?` `-?` | Additive |
-| 6 | `.<` `.>` `<=` `>=` `==` `!=` | Comparison |
+| 6 | `<` `>` `≤` `≥` `≡` `≢` | Comparison |
 | 7 | `and` | Logical AND |
 | 8 | `or` `xor` | Logical OR/XOR |
 
@@ -397,12 +397,12 @@ fixed integers.
 ### 6.3 Comparison
 
 ```datalove
-.<    less than
-.>    greater than
-<=    less than or equal
->=    greater than or equal
-==    equal
-!=    not equal
+<    less than
+>    greater than
+≤    less than or equal
+≥    greater than or equal
+≡    equal
+≢    not equal
 ```
 
 All comparison operators return `bool`.
@@ -745,7 +745,7 @@ time:
 fun repeat(const n: i32, s: string): string
     var result = ""
     var i: i32 = 0
-    loop while i .< n
+    loop while i < n
         set result = result + s
         set i = i +! 1
     end loop

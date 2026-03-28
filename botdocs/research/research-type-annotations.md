@@ -292,7 +292,7 @@ seq: _*                       // varargs ascription
 - Modes: `in` (input), `out` (output), `di` (destructive input), `uo` (unique output)
 - Very fine-grained—types, modes, and determinism all annotated
 - Type definitions use `--->` operator: `type T ---> Constructor`
-- Type class constraints use `<=` operator
+- Type class constraints use `≤` operator
 
 **Notable Features**:
 - One of the few languages with similarly fine-grained annotations

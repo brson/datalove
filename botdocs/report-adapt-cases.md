@@ -23,7 +23,7 @@ The `@` operator performs two operations:
 - `string`
 - Collections: `list`, `map`, `set`, `tensor`
 - `data`, `error`
-- Tables `{| col: Type |}`
+- Tables `⟦ col: Type ⟧`
 
 ### Widening Chains
 
