@@ -3,6 +3,11 @@
 
 
 
+## 2026/03/29 - Workspace descriptor
+
+See `botdocs/proposal-workspaces.md`.
+
+
 ## 2026/02/20 - Workspaces, the package world, and native riders
 
 The workspace contains all the resources the compiler incorporates into a single
