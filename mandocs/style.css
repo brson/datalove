@@ -416,7 +416,6 @@ th {
 .token.function { color: var(--syn-function); }
 .token.brace-curly,
 .token.brace-paren,
-.token.brace-angle,
 .token.brace-square,
 .token.brace-table,
 .token.brace-tensor,

@@ -25,6 +25,23 @@
     (modify-syntax-entry ?. "." table)
     (modify-syntax-entry ?| "." table)
 
+    ;; Unicode bracket pairs (matched delimiters, same as parens/braces/brackets).
+    (modify-syntax-entry #x2987 "(⦈" table)  ; ⦇ map open
+    (modify-syntax-entry #x2988 ")⦇" table)  ; ⦈ map close
+    (modify-syntax-entry #x2983 "(⦄" table)  ; ⦃ set open
+    (modify-syntax-entry #x2984 ")⦃" table)  ; ⦄ set close
+    (modify-syntax-entry #x27E6 "(⟧" table)  ; ⟦ table open
+    (modify-syntax-entry #x27E7 ")⟦" table)  ; ⟧ table close
+    (modify-syntax-entry #x27EA "(⟫" table)  ; ⟪ tensor open
+    (modify-syntax-entry #x27EB ")⟪" table)  ; ⟫ tensor close
+
+    ;; Unicode operators as punctuation.
+    (modify-syntax-entry #x21A6 "." table)  ; ↦ maps-to
+    (modify-syntax-entry #x2264 "." table)  ; ≤
+    (modify-syntax-entry #x2265 "." table)  ; ≥
+    (modify-syntax-entry #x2261 "." table)  ; ≡
+    (modify-syntax-entry #x2262 "." table)  ; ≢
+
     table)
   "Syntax table for `datalove-mode'.")
 
@@ -80,20 +97,8 @@
       ;; @data, @error, @tensor constructors.
       ("@\\(data\\|error\\|tensor\\)\\>" . font-lock-builtin-face)
 
-      ;; Unicode bracket pairs (map, set, table, tensor).
-      ("[⦇⦈]" . font-lock-builtin-face)
-      ("[⦃⦄]" . font-lock-builtin-face)
-      ("[⟦⟧]" . font-lock-builtin-face)
-      ("[⟪⟫]" . font-lock-builtin-face)
-
-      ;; Maps-to arrow.
-      ("↦" . font-lock-builtin-face)
-
       ;; String literals.
       ("@\"\\(?:[^\"\\]\\|\\\\.\\)*\"" . font-lock-string-face)
-
-      ;; Comparison operators.
-      ("\\([<>≤≥≡≢]\\)" . font-lock-builtin-face)
 
       ;; Checked/optional arithmetic operators.
       ("\\([+\\-*/][!?]\\)" . font-lock-builtin-face)
