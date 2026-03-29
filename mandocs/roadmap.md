@@ -25,7 +25,7 @@ Thorough compiler architecture, bare language.
 - [x] jit
 - [x] aot
 - [ ] compute-only core library
-- [ ] core->runtime calls
+- [x] core->runtime calls
 - [ ] intrinsics and core functions
 - [x] field projections
 - [x] match for enums
