@@ -79,6 +79,12 @@ pub fn build_native_component(
     let rt_abs = rt_dir.canonicalize()
         .map_err(|e| build_err("native-component", format!("failed to canonicalize datalove-rt path: {}", e)))?;
 
+    // Propagate index-64 feature when this crate was compiled with it.
+    #[cfg(feature = "index-64")]
+    let rt_features = ", features = [\"index-64\"]";
+    #[cfg(not(feature = "index-64"))]
+    let rt_features = "";
+
     // Generate Cargo.toml.
     let mut cargo_toml = String::new();
     cargo_toml.push_str(&format!(
@@ -88,8 +94,9 @@ pub fn build_native_component(
          # the parent workspace.\n\
          [workspace]\n\n\
          [dependencies]\n\
-         datalove-rt = {{ path = \"{}\" }}\n",
+         datalove-rt = {{ path = \"{}\"{} }}\n",
         rt_abs.display(),
+        rt_features,
     ));
     for (_rider_name, crate_name, abs_dir) in &rider_crates {
         cargo_toml.push_str(&format!(
