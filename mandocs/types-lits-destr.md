@@ -3,15 +3,10 @@
 Quick reference for type syntax, literal expression syntax,
 and destructuring syntax for all datalove types.
 
-Goals are for type syntax to look visually similar to literal syntax,
-and for destructuring syntax to look identical to literal syntax;
-and for all types to use sigils and braces that are both visually distinct
-but also evocative of other types that use the same sigils and braces.
-
+Type syntax looks visually similar to literal syntax.
+Destructuring syntax looks identical to literal syntax.
 Curly braces `{ }` are for structish types,
 square braces `[ ]` are for arrayish types, etc.
-
-
 
 
 ## Primitives
@@ -31,33 +26,30 @@ Bare integer literals synthesize as `int`.
 Fixed-width integers require a type hint or checking context.
 
 
-
-
 ## Collections
 
-| Type                             | Literal                          | Destructuring                    |
-|----------------------------------|----------------------------------|----------------------------------|
-| `[T]`                            | `[1, 2, 3]`                      | n/a                              |
-| `⦇ K ↦ V ⦈`                     | `⦇ 0 ↦ 5, 1 ↦ 2 ⦈`              | n/a                              |
-| `⦃ K ⦄`                         | `⦃ 1, 2, 3 ⦄`                   | n/a                              |
-| `{\| col1: T1, col2: T2 \⟧`     | `{\| col1, col2; 1, 2; 3, 4 \⟧` | n/a                              |
-| `[\|T, N\⟫`                     | `[\| 1 2 3, 4 5 6 \⟫`           | n/a                              |
+| Type               | Literal                       |
+|--------------------|-------------------------------|
+| `[T]`              | `[1, 2, 3]`                   |
+| `⦇K ↦ V⦈`         | `⦇ 0 ↦ 5, 1 ↦ 2 ⦈`           |
+| `⦃T⦄`              | `⦃ 1, 2, 3 ⦄`                |
+| `⟦ col: T ⟧`       | `⟦ x, y; 1, 2; 3, 4 ⟧`       |
+| `⟪T, N⟫`           | `⟪ 1 2 3, 4 5 6 ⟫`           |
+
+No collection types support destructuring.
 
 ```datalove
 // Lists
 let a: [int] = [1, 2, 3]
 
 // Maps
-let a: ⦇int↦int⦈ = ⦇ 0 ↦ 5, 1 ↦ 2 ⦈
+let a: ⦇int ↦ int⦈ = ⦇ 0 ↦ 5, 1 ↦ 2 ⦈
 
 // Sets
 let a: ⦃int⦄ = ⦃ 1, 2, 3 ⦄
 
 // Tables
-let a: ⟦
-  col1: T1,
-  col2: T2
-⟧ = ⟦
+let a: ⟦ col1: int, col2: int ⟧ = ⟦
   x, y
   1, 2
   3, 4
@@ -65,18 +57,16 @@ let a: ⟦
 
 // Tensors
 let a: ⟪int, 2⟫ = ⟪
-  1 2 3,                // 2x3
+  1 2 3,
   4 5 6,
 ⟫
-let a: ⟪int, 3⟫ = ⟪
-  1 2 3,                // 2x2x3
+let b: ⟪int, 3⟫ = ⟪
+  1 2 3,
   4 5 6,,
   1 2 3,
   4 5 6,,
 ⟫
 ```
-
-
 
 
 ## Aggregates
@@ -86,14 +76,12 @@ let a: ⟪int, 3⟫ = ⟪
 | `()`                          | `()`                           | `let ()`                      |
 | `(T1,)`                       | `(true,)`                      | `let (a,)`                    |
 | `(T1, T2)`                    | `(true, 42)`                   | `let (a, b)`                  |
-| `{ x: T1, y: T2}`             | `{x = 1, y = 2}`               | `let {x, y}` <br> `let {x = my_x, y = my_y}` |
-| `?T`                          | `some 1` <br> `none`           | `some a` <br> `none` †        |
-| `!T`                          | `ok 1` <br> `er 2`             | `ok a` <br> `er b` †          |
-| `atom Foo`                    | `atom Foo`                     | `let atom Foo`                |
-| `term Foo T`                  | `term Foo 1`                   | `let term Foo a`              |
-| `enum { atom A, term B T }`   | `enum { atom A }`              | †                             |
-
-† Sum types need to use `match` or `if` for destructuring. See below.
+| `{ x: T1, y: T2 }`           | `{ x = 1, y = 2 }`            | `let { x, y }`               |
+| `?T`                          | `some 1` / `none`              | via `if` binding              |
+| `!T`                          | `ok 1` / `er 2`               | via `if` binding              |
+| `atom Foo`                    | `atom Foo`                     | `case atom Foo`               |
+| `term Foo T`                  | `term Foo 1`                   | `case term Foo x`             |
+| `enum { atom A, term B T }`   | `(atom A)@`                    | via `match`                   |
 
 ```datalove
 // Tuples
@@ -103,7 +91,6 @@ let (a, b) = t
 // Structs
 let s: { x: f32, y: f32 } = { x = 1.0, y = 2.0 }
 let { x, y } = s
-let { x = my_x, y = my_y } = s
 
 // Option
 let o: ?int = some 1
@@ -114,19 +101,15 @@ let r: !int = ok 1
 // Atoms and terms
 let a: atom Foo = atom Foo
 let t: term Bar int = term Bar 1
-let atom Foo = a
-let term Bar x = t
 
-// Enums
+// Enums -- use @ to coerce atom/term into enum type
 type Shape: enum {
   atom Circle,
   term Rect (f32, f32),
 }
 
-let s: Shape = enum { atom Circle }
-let s: Shape = enum { term Rect (1.0, 2.0) }
-let s: Shape = atom Circle@
-let s: Shape = term Rect (1.0, 2.0)@
+let s: Shape = (atom Circle)@
+let s: Shape = (term Rect (1.0, 2.0))@
 
 // Data and error
 let d: data = data 42
@@ -135,11 +118,9 @@ let e: error = error "oops"
 ```
 
 
-
-
 ## Destructuring sum types with `if` and `match`
 
-Optional and result types with `if`.
+Option and result types with `if` binding.
 
 ```datalove
 let o: ?int = some 42
@@ -166,43 +147,38 @@ type Shape: enum {
   term Tri (f32, f32, f32),
 }
 
-let s: Shape = term Rect (3.0, 4.0)@
+let s: Shape = (term Rect (3.0, 4.0))@
 
-var area: f64 = 0.0
 match s
 case atom Circle
-  set area = 0.0
+  debuglog "circle"
 case term Rect dims
   // dims: (f32, f32), the whole payload bound to one name
-  set area = 0.0
+  debuglog dims
 case term Tri sides
-  // sides: (f32, f32, f32)
-  set area = 0.0
+  debuglog sides
 end match
 ```
 
-There is no deep destructuring,
-just a single binding for the whole payload.
-Matches move out of their input.
-
-Match must be exhaustive;
-use `case default` for a catch-all.
+No deep destructuring -- just a single binding for the whole payload.
+Match consumes (moves) its input.
+Match must be exhaustive; use `case default` for a catch-all.
 
 ```datalove
 match s
 case atom Circle
-  set area = 0.0
+  debuglog "circle"
 case default
-  set area = 1.0
+  debuglog "not a circle"
 end match
 ```
 
 
-
-
 ## Dynamic types
 
-| Type                          | Literal                        | Destructuring                 |
-|-------------------------------|--------------------------------|-------------------------------|
-| `data`                        | `data 1` <br> `data : u32 / 2` | n/a                           |
-| `error`                       | `error 1` <br> `error "oops"`  | n/a                           |
+| Type    | Literal                          |
+|---------|----------------------------------|
+| `data`  | `data 1` / `data : u32 / 2`     |
+| `error` | `error "oops"` / `error(expr)`   |
+
+Any type coerces to `data`.

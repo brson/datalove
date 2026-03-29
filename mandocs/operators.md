@@ -1,65 +1,123 @@
-# Datalove Operators - `? ! @` etc.
-
-
+# Datalove Operators
 
 
 ## Operator precedence
 
-| Level | Operators                      | Description    |
-|-------|--------------------------------|----------------|
-| 1     | `()`                           | Grouping       |
-| 2     | `-` `-?` `-!` `not`            | Unary prefix   |
-| 3     | `?` `!` `$` `~` `@`            | Postfix        |
-| 4     | `*` `/` `*!` `/!` `*?` `/?`    | Multiplicative |
-| 5     | `+` `-` `+!` `-!` `+?` `-?`    | Additive       |
-| 6     | `<` `>` `≤` `≥` `≡` `≢`  | Comparison     |
-| 7     | `and`                          | Logical AND    |
-| 8     | `or` `xor`                     | Logical OR/XOR |
+| Level | Operators                                           | Description    |
+|-------|-----------------------------------------------------|----------------|
+| 1     | `()`                                                | Grouping       |
+| 2     | `-` `-?` `-!` `not` `some` `ok` `er` `data` `error` | Unary prefix |
+| 3     | `.field` `.0` `[i]` `@` `?` `!`                    | Postfix        |
+| 4     | `*` `/` `*!` `/!` `*?` `/?`                        | Multiplicative |
+| 5     | `+` `-` `+!` `-!` `+?` `-?`                        | Additive       |
+| 6     | `<` `>` `≤` `≥` `≡` `≢`                            | Comparison     |
+| 7     | `and`                                               | Logical AND    |
+| 8     | `or` `xor`                                          | Logical OR/XOR |
 
 
+## Arithmetic
 
+**Bare arithmetic** (`+`, `-`, `*`, `/`) depends on type:
 
-## Logic operators
+- **Floats**: Returns the same float type. Division permitted.
+- **Bigints** (`int`): Addition, subtraction, multiplication, unary negation.
+  Division not permitted (use checked variants).
+- **Fixed integers**: Bare arithmetic not permitted.
+  Use `@` to widen to `int`, or use checked/optional operators.
 
-Booleans support `and`, `or`, `xor`, and `not`.
-todo say more
+**Checked arithmetic** (`+!` `-!` `*!` `/!`) operates on fixed integers
+and returns a result type. On overflow or division by zero, the enclosing
+function early-returns an error.
 
+```datalove
+fun add(a: u32, b: u32): !u32
+    ret ok (a +! b)
+end fun
+```
 
+**Optional arithmetic** (`+?` `-?` `*?` `/?`) is the same but returns
+an option type. On overflow, the function early-returns `none`.
+
+```datalove
+fun add(a: u32, b: u32): ?u32
+    ret some (a +? b)
+end fun
+```
+
+All operators borrow their operands -- operands are not consumed.
 
 
 ## Comparison operators
 
+```
+<     less than
+>     greater than
+≤     less than or equal
+≥     greater than or equal
+≡     equal
+≢     not equal
+```
+
+All comparison operators require same-type operands and return `bool`.
+Like arithmetic operators, they borrow their operands.
 
 
-## Floats and total ordering
+## Logical operators
 
-All pure data types support a total order,
-which is used for maps and sets.
-
-Floats use the typical ordering, like Rust's `total_cmp`:
-
-> -NaN < -Infinity < -numbers < -0.0 < +0.0 < +numbers < +Infinity < +NaN
-
-Equality, less than, greater than, etc. behave
-the standard way wrt float zeros and NaNs.
+`and`, `or`, `xor`, and `not` operate on `bool` values and return `bool`.
 
 
+## Try operators `?` and `!`
+
+Postfix `?` unwraps an option, early-returning `none` if absent.
+
+```datalove
+fun get_value(opt: ?i32): ?i32
+    let x = opt?
+    ret some (x + 1)
+end fun
+```
+
+Postfix `!` unwraps a result, early-returning the error on failure.
+
+```datalove
+fun parse(s: string): !i32
+    let n = do_parse(s)!
+    ret ok n
+end fun
+```
+
+The enclosing function's return type must match:
+`?` requires the function to return `?R`, `!` requires `!R`.
 
 
-## The adapt operator - `@`
+## Indexing
 
-The postfix _adapt_ operator, `@`,
-performs a lossless clone and/or coercion.
+List, map, and tensor indexing is fallible -- there is no
+infallible/panicking variant.
 
-A single operator for making expression types "fit" their destination.
-Balances correctness with scripting ergonomics.
+```datalove
+a[i]?       // early-return none on out-of-bounds
+a[i]!       // early-return error on out-of-bounds
+m[key]?     // early-return none on missing key
+m[key]!     // early-return error on missing key
+```
 
-Performs whatever lossless conversion is needed:
-- **Widen** fixed integers along their signedness chain
-- **Clone** linear types so the original remains valid
-- **Both** when widening produces a linear type
+Bare `a[i]` without `?` or `!` is a type error in read context.
 
-Target type inferred from context (assignment, parameter, binary op).
+Index and field steps can be chained:
+
+```datalove
+a[i]?.field
+m[key]?.0
+a[i]?.b[j]?
+```
+
+
+## The adapt operator `@`
+
+The postfix adapt operator performs a lossless clone and/or coercion.
+A single operator for making expression types fit their destination.
 
 ### Clone (linear types)
 
@@ -69,31 +127,6 @@ let y = x@          // clone x
 let z = x           // x still valid
 ```
 
-Use in loops where a linear value is consumed repeatedly:
-
-```datalove
-fun sum_n_times(val: int, n: u32): int
-    var acc: int = 0
-    var i: u32 = 0
-    loop while i < n
-        set acc = acc + val@  // clone each iteration
-        set i = i + 1
-    end loop
-    ret acc
-end fun
-```
-
-Multiple consumption in a single call:
-
-```datalove
-fun consume_both(a: int, b: int): int
-    ret a + b
-end fun
-
-let x: int = 100
-let result = consume_both(x@, x)  // clone for first, move for second
-```
-
 ### Widen (fixed integers)
 
 ```datalove
@@ -101,7 +134,7 @@ let a: u8 = 10
 let b: u32 = a@     // widen u8 to u32
 ```
 
-Cross-sign conversion is allowed when lossless:
+Cross-sign widening is allowed when lossless:
 
 ```datalove
 let a: u8 = 5
@@ -110,45 +143,23 @@ let b: i16 = a@
 
 Valid widening chains:
 
-```datalove
+```
 u8 -> u16 -> u32 -> u64 -> int
 i8 -> i16 -> i32 -> i64 -> int
+u8 -> i16, i32, i64, int       (cross-sign)
+u16 -> i32, i64, int           (cross-sign)
+u32 -> i64, int                (cross-sign)
 index -> int
 offset -> int
-u8 -> i16 ...
-u16 -> i32 ...
-u32 ->
 ```
 
-`index` and `offset` don't participate in fixed-int widening.
-Conversion to/from these types are always considered lossy.
+`@` requires a type context -- it cannot synthesize a target type.
 
-
-Binary operators propagate expected type:
+### Atom/term to enum
 
 ```datalove
-let a: u8 = 100
-let b: u8 = 50
-let sum: u32 = a@ + b@    // + propagates u32 to both sides
-
-let bytes: u32 = 4096
-let limit: u64 = 1000000
-if bytes@ < limit        // < propagates u64 to left side
-    // ...
-end if
-```
-
-Function parameters propagate their types:
-
-```datalove
-fun lerp(a: u64, b: u64, t: u64): u64
-    ret a + (b - a) * t / 100
-end fun
-
-let lo: u8 = 0
-let hi: u8 = 255
-let pct: u16 = 50
-let mid = lerp(lo@, hi@, pct@)  // each @ gets u64 from param type
+type Color: enum { atom Red, atom Blue }
+let c: Color = (atom Red)@
 ```
 
 ### Widen + clone
@@ -157,38 +168,24 @@ Widening to `int` produces a linear type, so `@` clones if needed:
 
 ```datalove
 let a: u8 = 10
-let b: int = a@     // widen to int (linear), clone happens implicitly
+let b: int = a@     // widen + clone
 let c: int = a@     // can do it again
+```
+
+### Composition with try operators
+
+```datalove
+let val: u32 = get_byte()?@   // unwrap option, then widen
+let data: int = fetch()!@     // unwrap result, then widen+clone
 ```
 
 ### Errors
 
 ```datalove
 let x: u8 = 10
-let y = x@          // ERROR: no type context for coercion
+let y = x@          // error: no type context
 let w: u32 = 1000
-let z: u16 = w@     // ERROR: narrowing (u32 to u16 loses precision)
+let z: u16 = w@     // error: narrowing not permitted
 ```
 
-### Behavior on copy types without widening
-
-When applied to a copy type where source and target are the same type, `@` is a no-op.
-
-```datalove
-let x: u32 = 10
-let y: u32 = x@     // no-op, x is copy type, no widening needed
-```
-
-### Interaction with try operators
-
-`@` composes with `?` and `!`:
-
-```datalove
-let val: u32 = get_byte()?@   // unwrap option, then widen
-let data: int = fetch()!@     // unwrap result, then clone
-```
-
-
-
-
-
+When applied to a copy type with no widening needed, `@` is a no-op.
