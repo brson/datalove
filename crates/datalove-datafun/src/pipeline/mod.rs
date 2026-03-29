@@ -53,6 +53,7 @@ mod compiled_modules;
 mod script_compiler;
 mod script_executor;
 mod module_pipeline;
+pub mod workspace;
 pub mod aot;
 pub mod rider_build;
 pub mod rider_load;
@@ -67,6 +68,11 @@ pub use compiled_modules::{SharedModuleContext, CompiledModules};
 pub use script_compiler::ScriptCompiler;
 pub use script_executor::ScriptExecutor;
 pub use module_pipeline::{ModuleCompilationPipeline, ConstInlining};
+pub use workspace::{
+    WorkspaceDescriptor, WorkspaceDelta,
+    PackageLibrary, PackageDescriptor, ModuleDescriptor,
+    RiderDescriptor, CompilerOptions,
+};
 
 #[cfg(test)]
 mod tests;

@@ -188,6 +188,21 @@ impl ModuleCompilationPipeline {
         &self.rider_crate_dirs
     }
 
+    /// Set rider interface sources (replaces any existing).
+    pub fn set_rider_sources(&mut self, sources: Vec<(String, String)>) {
+        self.rider_sources = sources;
+    }
+
+    /// Set rider crate directories (replaces any existing).
+    pub fn set_rider_crate_dirs(&mut self, dirs: Vec<(String, std::path::PathBuf)>) {
+        self.rider_crate_dirs = dirs;
+    }
+
+    /// Set skip_specialization option.
+    pub fn set_skip_specialization(&mut self, skip: bool) {
+        self.skip_specialization = skip;
+    }
+
     /// Check if a module exists.
     pub fn contains_module(&self, library: &str, package: &str, module: &str) -> bool {
         let path = format!("{}/{}/{}", library, package, module);
