@@ -148,6 +148,23 @@ impl WorkspaceDescriptor {
         }
     }
 
+    /// Load the default system library from disk and return a descriptor.
+    pub async fn load_default_sys() -> rmx::anyhow::Result<Self> {
+        use datalove_datafun_pkg::package_load;
+
+        let manifest_dir = env!("CARGO_MANIFEST_DIR");
+        let manifest_path = std::path::PathBuf::from(manifest_dir);
+        let sys_dir = manifest_path.parent().unwrap().parent().unwrap().join("sys");
+
+        let config = package_load::PackageWorldConfig {
+            dir_pkglib_system: sys_dir,
+            dir_pkglib_local: None,
+        };
+
+        let world = package_load::load_world(config).await?;
+        Ok(Self::from_package_world(&world, CompilerOptions::default()))
+    }
+
     /// Build from a loaded [`PackageWorld`].
     ///
     /// The `system` library populates `system_library`; the `local`
@@ -215,6 +232,34 @@ impl WorkspaceDescriptor {
             descriptor.attach_rider(&rider_name, rider);
         }
         descriptor
+    }
+
+    /// Combine two descriptors, producing a new one.
+    ///
+    /// The system library comes from `self` if present, otherwise from `other`.
+    /// User libraries from both are concatenated (`self` first, then `other`).
+    /// Options come from `other` (the newer descriptor wins).
+    pub fn merge(&self, other: &WorkspaceDescriptor) -> WorkspaceDescriptor {
+        let system_library = self.system_library.clone()
+            .or_else(|| other.system_library.clone());
+
+        let mut user_libraries = self.user_libraries.clone();
+        for other_lib in &other.user_libraries {
+            // Merge into existing library with same name, or append.
+            if let Some(existing) = user_libraries.iter_mut().find(|l| l.name == other_lib.name) {
+                for (pkg_name, pkg) in &other_lib.packages {
+                    existing.packages.insert(pkg_name.clone(), pkg.clone());
+                }
+            } else {
+                user_libraries.push(other_lib.clone());
+            }
+        }
+
+        WorkspaceDescriptor {
+            system_library,
+            user_libraries,
+            options: other.options.clone(),
+        }
     }
 
     /// Attach a rider to the first package matching the rider name.

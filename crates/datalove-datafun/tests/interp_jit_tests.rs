@@ -12,7 +12,7 @@ use datalove_datafun as datafun;
 use datalove_datafun_pkg::package_load_worldfile::{self, WorldfileSection, ParsedWorldfile};
 use datalove_datafun_cranelift_jit::JitEngine;
 use datafun::pipeline::{
-    ModuleCompilationPipeline, ConstInlining, TypecheckResult, OwnershipResult, LoweringResult,
+    WorkspaceDescriptor, CompilerOptions, TypecheckResult, OwnershipResult, LoweringResult,
     format_ownership_result, format_lowering_result,
 };
 
@@ -53,7 +53,8 @@ pub fn analyze_worldfile_with_jit(
     let mut results = Vec::new();
 
     // Build pipeline from sections.
-    let mut pipeline = ModuleCompilationPipeline::from_sections(db, &parsed.sections, ConstInlining::Enabled);
+    let descriptor = WorkspaceDescriptor::from_worldfile_sections(&parsed.sections, CompilerOptions::default());
+    let mut pipeline = descriptor.to_pipeline(db);
 
     // Compile modules.
     let compiled = pipeline.compile_fresh(db);

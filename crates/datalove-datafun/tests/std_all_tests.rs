@@ -10,39 +10,20 @@ use datalove_datafun as datafun;
 use datalove_datafun_cranelift_jit::JitEngine;
 use datalove_datafun_interp::CallDispatcher;
 use datafun::pipeline::{
-    ModuleCompilationPipeline, TypecheckResult, LoweringResult,
+    WorkspaceDescriptor, TypecheckResult, LoweringResult,
     aot as pipeline_aot,
 };
 
 /// Load the package world, set up the pipeline, and compile modules.
 fn setup_and_compile(db: &datafun::Database) -> Result<(
-    ModuleCompilationPipeline,
+    WorkspaceDescriptor,
     datafun::pipeline::CompiledModules<'_>,
 ), String> {
-    let manifest_dir = env!("CARGO_MANIFEST_DIR");
-    let sys_dir = std::path::PathBuf::from(manifest_dir)
-        .parent().unwrap()
-        .parent().unwrap()
-        .join("sys");
-
-    let config = datafun::package_load::PackageWorldConfig {
-        dir_pkglib_system: sys_dir,
-        dir_pkglib_local: None,
-    };
-
-    let package_world_raw = rmx::futures::executor::block_on(
-        datafun::package_load::load_world(config)
+    let descriptor = rmx::futures::executor::block_on(
+        WorkspaceDescriptor::load_default_sys()
     ).map_err(|e| format!("Failed to load package world: {}", e))?;
 
-    let mut pipeline = ModuleCompilationPipeline::default();
-    pipeline.add_riders_from_package_world(&package_world_raw);
-
-    for (pkg_name, pkg) in &package_world_raw.pkglib_system {
-        for (mod_name, pkg_mod) in &pkg.modules {
-            pipeline.add_module(db, "sys", pkg_name, mod_name, &pkg_mod.text);
-        }
-    }
-
+    let mut pipeline = descriptor.to_pipeline(db);
     let compiled = pipeline.compile_fresh(db);
 
     if let Some(err) = &compiled.resolution_error {
@@ -54,17 +35,18 @@ fn setup_and_compile(db: &datafun::Database) -> Result<(
         }
     }
 
-    Ok((pipeline, compiled))
+    Ok((descriptor, compiled))
 }
 
 /// Build the unified native component and load it into the given executor.
 /// Returns the static library path (for AOT linking) and loaded rider handle.
 fn build_and_load_riders(
-    pipeline: &ModuleCompilationPipeline,
+    descriptor: &WorkspaceDescriptor,
     compiled: &datafun::pipeline::CompiledModules<'_>,
     executor: &mut datafun::pipeline::ScriptExecutor,
 ) -> Result<(Vec<PathBuf>, Vec<datafun::pipeline::rider_load::LoadedRider>), String> {
-    let build_result = datafun::pipeline::rider_build::build_native_component(pipeline.rider_crate_dirs())
+    let rider_crate_dirs = descriptor.rider_crate_dirs();
+    let build_result = datafun::pipeline::rider_build::build_native_component(&rider_crate_dirs)
         .map_err(|e| format!("rider build error: {}", e))?;
 
     let lib_paths = vec![build_result.staticlib_path.clone()];
@@ -88,7 +70,7 @@ fn build_and_load_riders(
 fn run_with_executor(
     db: &datafun::Database,
     compiled: &datafun::pipeline::CompiledModules<'_>,
-    pipeline: &ModuleCompilationPipeline,
+    descriptor: &WorkspaceDescriptor,
     script_text: &str,
     jit: Option<Box<dyn CallDispatcher>>,
     backend_name: &str,
@@ -98,7 +80,7 @@ fn run_with_executor(
     let mut executor = compiled.script_executor(datalove_rt::c::DebugOutputMode::Disabled, jit)
         .ok_or(format!("{}: module compilation failed (executor)", backend_name))?;
 
-    let (lib_paths, loaded_riders) = build_and_load_riders(pipeline, compiled, &mut executor)?;
+    let (lib_paths, loaded_riders) = build_and_load_riders(descriptor, compiled, &mut executor)?;
 
     // Register native rider symbols with JIT engine if present.
     if let Some(dispatcher) = executor.take_dispatcher() {
@@ -213,8 +195,8 @@ fn analyze_file(path: &Path) -> Result<String, String> {
     // Backend 1: Interpreter.
     let (interp_value, rider_lib_paths) = {
         let db = datafun::Database::default();
-        let (pipeline, compiled) = setup_and_compile(&db)?;
-        run_with_executor(&db, &compiled, &pipeline, &script_text, None, "Interp")?
+        let (descriptor, compiled) = setup_and_compile(&db)?;
+        run_with_executor(&db, &compiled, &descriptor, &script_text, None, "Interp")?
     };
 
     // Backend 2: JIT (in spawned thread for Cranelift PIE workaround).
@@ -222,9 +204,9 @@ fn analyze_file(path: &Path) -> Result<String, String> {
         let script_for_jit = script_text.clone();
         std::thread::spawn(move || -> Result<String, String> {
             let db = datafun::Database::default();
-            let (pipeline, compiled) = setup_and_compile(&db)?;
+            let (descriptor, compiled) = setup_and_compile(&db)?;
             let jit = JitEngine::new(1).map_err(|e| format!("JIT engine creation failed: {}", e))?;
-            let (value, _) = run_with_executor(&db, &compiled, &pipeline, &script_for_jit, Some(Box::new(jit)), "JIT")?;
+            let (value, _) = run_with_executor(&db, &compiled, &descriptor, &script_for_jit, Some(Box::new(jit)), "JIT")?;
             Ok(value)
         }).join().unwrap_or_else(|panic| {
             let msg = if let Some(s) = panic.downcast_ref::<&str>() {
@@ -241,7 +223,7 @@ fn analyze_file(path: &Path) -> Result<String, String> {
     // Backend 3: AOT.
     let aot_result = {
         let db = datafun::Database::default();
-        let (ref _pipeline, ref compiled) = setup_and_compile(&db)?;
+        let (ref _descriptor, ref compiled) = setup_and_compile(&db)?;
         run_aot(&db, compiled, &script_text, &rider_lib_paths)
     };
 

@@ -15,7 +15,7 @@ use datalove_datafun as datafun;
 use datalove_datafun_pkg::package_load_worldfile::{self, WorldfileSection, ParsedWorldfile};
 use datalove_datafun_cranelift_jit::{OptimizingDispatcher, DispatcherConfig};
 use datalove_datafun_interp::CallDispatcher;
-use datafun::pipeline::{ModuleCompilationPipeline, ConstInlining};
+use datafun::pipeline::{WorkspaceDescriptor, CompilerOptions};
 
 /// Global stats for tracking JIT and inlining activity.
 static TOTAL_JIT_COMPILED: AtomicU32 = AtomicU32::new(0);
@@ -45,7 +45,8 @@ fn run_worldfile_with_stats(
 ) -> (Vec<UnitOutput>, RunStats) {
     let mut results = Vec::new();
 
-    let mut pipeline = ModuleCompilationPipeline::from_sections(db, &parsed.sections, ConstInlining::Enabled);
+    let descriptor = WorkspaceDescriptor::from_worldfile_sections(&parsed.sections, CompilerOptions::default());
+    let mut pipeline = descriptor.to_pipeline(db);
     let compiled = pipeline.compile_fresh(db);
 
     if compiled.resolution_error.is_some() {
@@ -149,7 +150,8 @@ fn run_worldfile(
 ) -> Vec<UnitOutput> {
     let mut results = Vec::new();
 
-    let mut pipeline = ModuleCompilationPipeline::from_sections(db, &parsed.sections, ConstInlining::Enabled);
+    let descriptor = WorkspaceDescriptor::from_worldfile_sections(&parsed.sections, CompilerOptions::default());
+    let mut pipeline = descriptor.to_pipeline(db);
     let compiled = pipeline.compile_fresh(db);
 
     if compiled.resolution_error.is_some() {

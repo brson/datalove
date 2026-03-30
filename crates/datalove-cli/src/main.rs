@@ -31,11 +31,12 @@ mod render;
 
 /// Build the native component (runtime + riders) and return the static library path for AOT linking.
 fn build_native_component_for_aot(
-    pipeline: &datalove_datafun::pipeline::ModuleCompilationPipeline,
+    descriptor: &datalove_datafun::pipeline::WorkspaceDescriptor,
 ) -> AnyResult<Vec<std::path::PathBuf>> {
     use datalove_datafun::pipeline::rider_build;
 
-    let result = rider_build::build_native_component(pipeline.rider_crate_dirs())
+    let rider_crate_dirs = descriptor.rider_crate_dirs();
+    let result = rider_build::build_native_component(&rider_crate_dirs)
         .map_err(|e| anyhow!("{}", e))?;
     Ok(vec![result.staticlib_path])
 }
@@ -44,13 +45,14 @@ fn build_native_component_for_aot(
 ///
 /// Returns the loaded rider handle, which must be kept alive for the duration of execution.
 fn build_and_load_riders(
-    pipeline: &datalove_datafun::pipeline::ModuleCompilationPipeline,
+    descriptor: &datalove_datafun::pipeline::WorkspaceDescriptor,
     compiled: &datalove_datafun::pipeline::CompiledModules,
     executor: &mut datalove_datafun::pipeline::ScriptExecutor,
 ) -> AnyResult<Vec<datalove_datafun::pipeline::rider_load::LoadedRider>> {
     use datalove_datafun::pipeline::{rider_build, rider_load};
 
-    let build_result = rider_build::build_native_component(pipeline.rider_crate_dirs())
+    let rider_crate_dirs = descriptor.rider_crate_dirs();
+    let build_result = rider_build::build_native_component(&rider_crate_dirs)
         .map_err(|e| anyhow!("{}", e))?;
 
     let native_symbols = compiled.native_symbols();
@@ -443,17 +445,19 @@ impl ScriptCommand {
 
     fn run_impl(file_path: &PathBuf, no_sys: bool, jit: bool) -> AnyResult<()> {
         use datalove_datafun as datafun;
-        use datafun::pipeline::ModuleCompilationPipeline;
+        use datafun::pipeline::WorkspaceDescriptor;
 
         let db = datafun::Database::default();
 
-        // Load sys library unless --no-sys.
-        let mut pipeline = ModuleCompilationPipeline::default();
-        if !no_sys {
-            rmx::futures::executor::block_on(pipeline.load_sys_library_default(&db))?;
-        }
+        // Build workspace descriptor.
+        let descriptor = if no_sys {
+            WorkspaceDescriptor::empty()
+        } else {
+            rmx::futures::executor::block_on(WorkspaceDescriptor::load_default_sys())?
+        };
 
-        // Compile modules (typecheck, drop analysis, lower to IR).
+        // Create pipeline from descriptor and compile.
+        let mut pipeline = descriptor.to_pipeline(&db);
         let compiled = pipeline.compile_fresh(&db);
 
         // Check for errors using consolidated helper methods.
@@ -479,7 +483,7 @@ impl ScriptCommand {
             .expect("script_executor should succeed after error check");
 
         // Build and load rider shared libraries.
-        let _loaded_riders = build_and_load_riders(&pipeline, &compiled, &mut executor)?;
+        let _loaded_riders = build_and_load_riders(&descriptor, &compiled, &mut executor)?;
 
         // Read the script file.
         let script_source = rmx::std::fs::read_to_string(file_path)
@@ -544,17 +548,18 @@ impl ScriptCommand {
 impl ScriptIrCommand {
     fn run(&self, _args: &Args) -> AnyResult<()> {
         use datalove_datafun as datafun;
-        use datafun::pipeline::ModuleCompilationPipeline;
+        use datafun::pipeline::WorkspaceDescriptor;
 
         let db = datafun::Database::default();
 
-        // Load sys library unless --no-sys.
-        let mut pipeline = ModuleCompilationPipeline::default();
-        if !self.no_sys {
-            rmx::futures::executor::block_on(pipeline.load_sys_library_default(&db))?;
-        }
+        // Build workspace descriptor.
+        let descriptor = if self.no_sys {
+            WorkspaceDescriptor::empty()
+        } else {
+            rmx::futures::executor::block_on(WorkspaceDescriptor::load_default_sys())?
+        };
 
-        // Compile modules (typecheck, drop analysis, lower to IR).
+        let mut pipeline = descriptor.to_pipeline(&db);
         let compiled = pipeline.compile_fresh(&db);
 
         // Check for errors.
@@ -603,15 +608,18 @@ impl ScriptIrCommand {
 impl AotCompileCommand {
     fn run(&self, _args: &Args) -> AnyResult<()> {
         use datalove_datafun as datafun;
-        use datafun::pipeline::{ModuleCompilationPipeline, aot};
+        use datafun::pipeline::{WorkspaceDescriptor, aot};
 
         let db = datafun::Database::default();
 
-        // Load sys library unless --no-sys.
-        let mut pipeline = ModuleCompilationPipeline::default();
-        if !self.no_sys {
-            rmx::futures::executor::block_on(pipeline.load_sys_library_default(&db))?;
-        }
+        // Build workspace descriptor.
+        let descriptor = if self.no_sys {
+            WorkspaceDescriptor::empty()
+        } else {
+            rmx::futures::executor::block_on(WorkspaceDescriptor::load_default_sys())?
+        };
+
+        let mut pipeline = descriptor.to_pipeline(&db);
 
         // Compile modules (typecheck, drop analysis, lower to IR).
         let compiled = pipeline.compile_fresh(&db);
@@ -655,7 +663,7 @@ impl AotCompileCommand {
             .ok_or_else(|| anyhow!("IR unit not available after lowering"))?;
 
         // Build rider crates for linking.
-        let rider_libs = build_native_component_for_aot(&pipeline)?;
+        let rider_libs = build_native_component_for_aot(&descriptor)?;
 
         // Compile to object bytes using pipeline::aot.
         let obj_bytes = aot::compile_script_to_object_with_world(
@@ -716,7 +724,7 @@ impl AotCompileCommand {
 impl ScriptWorldCommand {
     fn run(&self, _args: &Args) -> AnyResult<()> {
         use datalove_datafun as datafun;
-        use datafun::pipeline::ModuleCompilationPipeline;
+        use datafun::pipeline::WorkspaceDescriptor;
         use datalove_datafun_pkg::package_load_worldfile::{parse_worldfile_sections, WorldfileSection};
 
         let db = datafun::Database::default();
@@ -738,12 +746,18 @@ impl ScriptWorldCommand {
             );
         }
 
-        // Build pipeline from module sections.
-        let mut pipeline = ModuleCompilationPipeline::default();
-        if !self.no_sys {
-            rmx::futures::executor::block_on(pipeline.load_sys_library_default(&db))?;
-        }
-        pipeline.add_modules_from_sections(&db, &parsed.sections);
+        // Build workspace descriptor from sys library + worldfile sections.
+        let sys_descriptor = if self.no_sys {
+            WorkspaceDescriptor::empty()
+        } else {
+            rmx::futures::executor::block_on(WorkspaceDescriptor::load_default_sys())?
+        };
+        let worldfile_descriptor = WorkspaceDescriptor::from_worldfile_sections(
+            &parsed.sections,
+            datafun::pipeline::CompilerOptions::default(),
+        );
+        let descriptor = sys_descriptor.merge(&worldfile_descriptor);
+        let mut pipeline = descriptor.to_pipeline(&db);
 
         // Compile modules.
         let compiled = pipeline.compile_fresh(&db);
@@ -773,7 +787,7 @@ impl ScriptWorldCommand {
             .expect("script_executor should succeed after error check");
 
         // Build and load rider shared libraries.
-        let _loaded_riders = build_and_load_riders(&pipeline, &compiled, &mut executor)?;
+        let _loaded_riders = build_and_load_riders(&descriptor, &compiled, &mut executor)?;
 
         // Compile and execute the script section.
         let script_section = script_sections[0];

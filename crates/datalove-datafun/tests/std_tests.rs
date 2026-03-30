@@ -3,7 +3,7 @@
 use rmx::prelude::*;
 use std::path::Path;
 use datalove_datafun as datafun;
-use datafun::pipeline::{ModuleCompilationPipeline, TypecheckResult, LoweringResult};
+use datafun::pipeline::{WorkspaceDescriptor, CompilerOptions, TypecheckResult, LoweringResult};
 
 /// Run a script with the std library loaded from sys/ directory.
 fn analyze_file(path: &Path) -> Result<String, String> {
@@ -29,20 +29,14 @@ fn analyze_file(path: &Path) -> Result<String, String> {
         datafun::package_load::load_world(config)
     ).map_err(|e| format!("Failed to load package world: {}", e))?;
 
-    // Build pipeline with loaded packages.
-    let mut pipeline = ModuleCompilationPipeline::default();
+    // Build workspace descriptor from loaded packages.
+    let descriptor = WorkspaceDescriptor::from_package_world(
+        &package_world_raw,
+        CompilerOptions::default(),
+    );
 
-    // Add rider sources and crate directories from the loaded package world.
-    pipeline.add_riders_from_package_world(&package_world_raw);
-
-    // Add all modules from the loaded package world.
-    for (pkg_name, pkg) in &package_world_raw.pkglib_system {
-        for (mod_name, pkg_mod) in &pkg.modules {
-            pipeline.add_module(&db, "sys", pkg_name, mod_name, &pkg_mod.text);
-        }
-    }
-
-    // Compile modules.
+    // Create pipeline from descriptor and compile.
+    let mut pipeline = descriptor.to_pipeline(&db);
     let compiled = pipeline.compile_fresh(&db);
 
     // Check for resolution errors.
@@ -67,9 +61,9 @@ fn analyze_file(path: &Path) -> Result<String, String> {
 
     // Build unified native component and load it.
     let mut _loaded_riders = Vec::new();
-    let rider_crate_dirs = pipeline.rider_crate_dirs();
+    let rider_crate_dirs = descriptor.rider_crate_dirs();
     if !rider_crate_dirs.is_empty() {
-        let build_result = datafun::pipeline::rider_build::build_native_component(rider_crate_dirs)
+        let build_result = datafun::pipeline::rider_build::build_native_component(&rider_crate_dirs)
             .map_err(|e| format!("rider build error: {}", e))?;
         let native_symbols = compiled.native_symbols();
         if !native_symbols.is_empty() {
