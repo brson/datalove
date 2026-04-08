@@ -4,29 +4,6 @@ use datalove_datafun_resolve::{resolve_all_names, resolve_all_exports, build_all
 use rmx::clap::{self, Parser as _};
 use rmx::std::path::PathBuf;
 
-/// Prefix relative links in rendered nav HTML with a path prefix.
-///
-/// Leaves absolute URLs, anchors, and root-relative links unchanged.
-fn prefix_nav_links(nav_html: &str, path_prefix: &str) -> String {
-    if path_prefix.is_empty() {
-        return nav_html.to_string();
-    }
-    let re = rmx::regex::Regex::new(r#"href="([^"]+)""#).unwrap();
-    re.replace_all(nav_html, |caps: &rmx::regex::Captures| {
-        let link = &caps[1];
-        if link.starts_with("http://")
-            || link.starts_with("https://")
-            || link.starts_with('#')
-            || link.starts_with('/')
-        {
-            caps[0].to_string()
-        } else {
-            format!(r#"href="{path_prefix}{link}""#)
-        }
-    }).into_owned()
-}
-
-mod feed;
 mod render;
 
 /// Build the native component (runtime + riders) and return the static library path for AOT linking.
@@ -927,7 +904,7 @@ impl TypecheckStdCommand {
 
 impl DocsCommand {
     fn run(&self, _args: &Args) -> AnyResult<()> {
-        use rmx::std::fs;
+        use megaspace_pipeliner::{DocSetConfig, RssConfig};
 
         let manifest_dir = env!("CARGO_MANIFEST_DIR");
         let manifest_path = PathBuf::from(manifest_dir);
@@ -936,39 +913,33 @@ impl DocsCommand {
             .and_then(|p| p.parent())
             .ok_or_else(|| anyhow!("Failed to find project root"))?;
 
+        let static_assets = &["style.css", "template.html", "datalove-logo.svg", "datalove-prism.js"];
+
         // Build mandocs -> docs/.
         let mandocs_dir = project_root.join("mandocs");
         let mandocs_out = project_root.join("docs");
+        let mandocs_extra: &[(&str, &str)] = &[
+            ("cross_link_url", "bot/index.html"),
+            ("cross_link_label", "Botdocs"),
+        ];
 
-        let mandocs_nav = Self::render_nav_file(&mandocs_dir)?;
+        megaspace_pipeliner::build_docs(&DocSetConfig {
+            input_dir: &mandocs_dir,
+            output_dir: &mandocs_out,
+            static_assets,
+            extra_context: mandocs_extra,
+        })?;
 
-        Self::build_docs(
+        megaspace_pipeliner::build_posts(
             &mandocs_dir,
             &mandocs_out,
-            &mandocs_nav,
-            "bot/index.html",
-            "Botdocs",
+            &RssConfig {
+                site_title: "Datalove",
+                site_description: "Updates from Datalove",
+                base_url: "https://datalove.dev",
+            },
+            mandocs_extra,
         )?;
-
-        // Generate posts feed for mandocs.
-        let posts_dir = mandocs_dir.join("posts");
-        let posts = feed::parse_posts(&posts_dir)?;
-        if !posts.is_empty() {
-            let mut tera = rmx::tera::Tera::default();
-            let posts_template_path = mandocs_dir.join("posts-template.html");
-            let posts_template_content = fs::read_to_string(&posts_template_path)
-                .with_context(|| format!("Failed to read posts template: {}", posts_template_path.display()))?;
-            tera.add_raw_template("posts-template.html", &posts_template_content)?;
-            feed::generate_feed_page(
-                &posts,
-                &tera,
-                &mandocs_out,
-                &mandocs_nav,
-                "bot/index.html",
-                "Botdocs",
-            )?;
-            feed::generate_rss(&posts, &mandocs_out, "https://datalove.dev")?;
-        }
 
         println!("Documentation generated in {}", mandocs_out.display());
 
@@ -976,194 +947,19 @@ impl DocsCommand {
         let botdocs_dir = project_root.join("botdocs");
         let botdocs_out = project_root.join("docs").join("bot");
 
-        let botdocs_nav = Self::render_nav_file(&botdocs_dir)?;
-        Self::build_docs(
-            &botdocs_dir,
-            &botdocs_out,
-            &botdocs_nav,
-            "../index.html",
-            "Mandocs",
-        )?;
+        megaspace_pipeliner::build_docs(&DocSetConfig {
+            input_dir: &botdocs_dir,
+            output_dir: &botdocs_out,
+            static_assets,
+            extra_context: &[
+                ("cross_link_url", "../index.html"),
+                ("cross_link_label", "Mandocs"),
+            ],
+        })?;
 
         println!("Documentation generated in {}", botdocs_out.display());
 
         Ok(())
-    }
-
-    /// Build HTML docs from markdown files in `input_dir`, writing to `output_dir`.
-    ///
-    /// Copies static assets (style.css, template.html, logo, prism.js)
-    /// and converts all .md files (including subdirectories) to HTML.
-    fn build_docs(
-        input_dir: &std::path::Path,
-        output_dir: &std::path::Path,
-        nav_html: &str,
-        cross_link_url: &str,
-        cross_link_label: &str,
-    ) -> AnyResult<()> {
-        use rmx::std::fs;
-        use rmx::tera::{Tera, Context};
-
-        fs::create_dir_all(output_dir)?;
-
-        // Load template.
-        let template_path = input_dir.join("template.html");
-        let template_content = fs::read_to_string(&template_path)
-            .with_context(|| format!("Failed to read template: {}", template_path.display()))?;
-
-        let mut tera = Tera::default();
-        tera.add_raw_template("page", &template_content)?;
-
-        // Copy static assets.
-        for asset in &["style.css", "template.html", "datalove-logo.svg", "datalove-prism.js"] {
-            let src = input_dir.join(asset);
-            if src.exists() {
-                let dst = output_dir.join(asset);
-                fs::copy(&src, &dst)
-                    .with_context(|| format!("Failed to copy {}", asset))?;
-                println!("Copied {}", asset);
-            }
-        }
-
-        // Collect all markdown files, including subdirectories.
-        let mut md_files = Vec::new();
-        Self::collect_markdown_files(input_dir, input_dir, &mut md_files)?;
-
-        // Process all markdown files.
-        for (rel_path, abs_path) in &md_files {
-            let file_name = abs_path.file_name().unwrap().to_string_lossy();
-
-            // Determine output path, preserving subdirectory structure.
-            let output_rel = if file_name == "README.md" {
-                rel_path.with_file_name("index.html")
-            } else {
-                rel_path.with_extension("html")
-            };
-
-            // Ensure output subdirectory exists.
-            let output_path = output_dir.join(&output_rel);
-            if let Some(parent) = output_path.parent() {
-                fs::create_dir_all(parent)?;
-            }
-
-            // Read and convert markdown.
-            let markdown = fs::read_to_string(abs_path)?;
-            let markdown = Self::rewrite_links(&markdown);
-
-            // Convert to HTML with GFM extensions.
-            let mut options = rmx::comrak::Options::default();
-            options.extension.table = true;
-            options.extension.strikethrough = true;
-            options.extension.autolink = true;
-            options.extension.tasklist = true;
-            options.extension.header_ids = Some("user-content-".S());
-            options.render.unsafe_ = true;
-            let html = rmx::comrak::markdown_to_html(&markdown, &options);
-
-            let title = Self::extract_title(&markdown, &file_name);
-
-            // Compute path_prefix from directory depth of output file.
-            let path_prefix = Self::compute_path_prefix(&output_rel);
-
-            let prefixed_nav = prefix_nav_links(nav_html, &path_prefix);
-
-            let mut context = Context::new();
-            context.insert("title", &title);
-            context.insert("content", &html);
-            context.insert("nav_html", &prefixed_nav);
-            context.insert("path_prefix", &path_prefix);
-            context.insert("cross_link_url", cross_link_url);
-            context.insert("cross_link_label", cross_link_label);
-            let rendered = tera.render("page", &context)?;
-
-            fs::write(&output_path, rendered)?;
-            println!("{} -> {}", rel_path.display(), output_rel.display());
-        }
-
-        Ok(())
-    }
-
-    /// Recursively collect .md files under `dir`, recording paths relative to `base`.
-    fn collect_markdown_files(
-        base: &std::path::Path,
-        dir: &std::path::Path,
-        out: &mut Vec<(PathBuf, PathBuf)>,
-    ) -> AnyResult<()> {
-        use rmx::std::fs;
-
-        for entry in fs::read_dir(dir)? {
-            let entry = entry?;
-            let path = entry.path();
-            if path.is_dir() {
-                Self::collect_markdown_files(base, &path, out)?;
-            } else if path.extension().map(|e| e == "md").unwrap_or(false) {
-                // Skip nav.md; it is used for sidebar navigation, not content.
-                if path.file_name().map(|n| n == "nav.md").unwrap_or(false) {
-                    continue;
-                }
-                let rel = path.strip_prefix(base)?.to_path_buf();
-                out.push((rel, path));
-            }
-        }
-        Ok(())
-    }
-
-    fn rewrite_links(markdown: &str) -> String {
-        use rmx::regex::Regex;
-
-        // Match markdown links: [text](path.md) or [text](path.md#anchor)
-        // Also handle README.md -> index.html
-        let re = Regex::new(r"\]\(([^)]+)\.md(#[^)]*)?\)").unwrap();
-
-        re.replace_all(markdown, |caps: &rmx::regex::Captures| {
-            let path = &caps[1];
-            let anchor = caps.get(2).map(|m| m.as_str()).unwrap_or("");
-
-            if path == "README" {
-                format!("](index.html{})", anchor)
-            } else {
-                format!("]({}.html{})", path, anchor)
-            }
-        }).into_owned()
-    }
-
-    fn extract_title(markdown: &str, filename: &str) -> String {
-        // Try to extract title from first # heading.
-        for line in markdown.lines() {
-            let trimmed = line.trim();
-            if trimmed.starts_with("# ") {
-                return trimmed[2..].trim().S();
-            }
-        }
-        // Fall back to filename without extension.
-        filename.trim_end_matches(".md").S()
-    }
-
-    /// Render `nav.md` from the input directory to HTML.
-    ///
-    /// Rewrites `.md` links to `.html` and renders the markdown with comrak.
-    fn render_nav_file(input_dir: &std::path::Path) -> AnyResult<String> {
-        use rmx::std::fs;
-
-        let nav_path = input_dir.join("nav.md");
-        let content = fs::read_to_string(&nav_path)
-            .with_context(|| format!("Failed to read {}", nav_path.display()))?;
-
-        let content = Self::rewrite_links(&content);
-
-        let mut options = rmx::comrak::Options::default();
-        options.render.unsafe_ = true;
-        let html = rmx::comrak::markdown_to_html(&content, &options);
-
-        Ok(html)
-    }
-
-    /// Compute the path prefix for a file based on its directory depth.
-    ///
-    /// Root-level files get "", one subdir deep gets "../", etc.
-    fn compute_path_prefix(rel_path: &std::path::Path) -> String {
-        let depth = rel_path.parent().map_or(0, |p| p.components().count());
-        "../".repeat(depth)
     }
 }
 
