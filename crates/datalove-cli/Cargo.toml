@@ -8,7 +8,7 @@ edition.workspace = true
 [dependencies]
 rmx.workspace = true
 serde = { version = "1", features = ["derive"] }
-megaspace-pipeliner.path = "../../../megaspace-one/crates/megaspace-pipeliner"
+megaspace-pipeliner = "0.1"
 bct.workspace = true
 datalove.path = "../datalove"
 datalove-datalit.path = "../datalove-datalit"

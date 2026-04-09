@@ -3180,6 +3180,8 @@ dependencies = [
 [[package]]
 name = "megaspace-pipeliner"
 version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "37c00f0f68d4dd18162ddf9f26017df1c40a4d83fe15bc047202ca5d9f22ed33"
 dependencies = [
  "rustmax",
  "serde",
@@ -4300,7 +4302,7 @@ dependencies = [
  "security-framework",
  "security-framework-sys",
  "webpki-root-certs",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -4350,6 +4352,7 @@ dependencies = [
  "getrandom 0.2.16",
  "glob",
  "hex",
+ "http",
  "hyper",
  "ignore",
  "image",
@@ -4360,6 +4363,7 @@ dependencies = [
  "libc",
  "log",
  "memchr",
+ "mime",
  "nom 8.0.0",
  "notify",
  "num-bigint",
@@ -4379,6 +4383,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2",
+ "socket2",
  "tempfile",
  "tera",
  "termcolor",
