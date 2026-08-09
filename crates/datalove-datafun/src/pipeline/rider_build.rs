@@ -10,6 +10,9 @@ use rmx::std::path::{Path, PathBuf};
 
 const NATIVE_COMPONENT_CRATE_NAME: &str = "datalove-native-component";
 
+/// Counter for unique temp file names in `write_atomic`.
+static TMP_COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
 /// Result of building the unified native component library.
 pub struct NativeComponentBuild {
     /// Path to the built shared library (.so/.dylib/.dll) for interpreter use.
@@ -105,7 +108,7 @@ pub fn build_native_component(
             abs_dir.display(),
         ));
     }
-    std::fs::write(synth_dir.join("Cargo.toml"), &cargo_toml)
+    write_atomic(&synth_dir.join("Cargo.toml"), &cargo_toml)
         .map_err(|e| build_err("native-component", format!("failed to write Cargo.toml: {}", e)))?;
 
     // Generate lib.rs that pulls in the runtime and all rider crates.
@@ -115,7 +118,7 @@ pub fn build_native_component(
         let ident = crate_name.replace('-', "_");
         lib_rs.push_str(&format!("extern crate {};\n", ident));
     }
-    std::fs::write(src_dir.join("lib.rs"), &lib_rs)
+    write_atomic(&src_dir.join("lib.rs"), &lib_rs)
         .map_err(|e| build_err("native-component", format!("failed to write lib.rs: {}", e)))?;
 
     // Build the synthesized crate.
@@ -156,6 +159,21 @@ fn workspace_root_dir() -> PathBuf {
 /// Directory for the synthesized native component crate.
 fn synth_crate_dir() -> PathBuf {
     workspace_root_dir().join("target").join("datalove-native-component")
+}
+
+/// Write a file by renaming a fully-written temp file over the destination.
+///
+/// The synthesized crate lives at one fixed path, so concurrent builders all
+/// regenerate these files with identical content. A plain write truncates the
+/// file first, and another builder's `cargo` may parse it inside that window.
+/// Rename is atomic, so readers always see one complete version or the other.
+fn write_atomic(path: &Path, contents: &str) -> std::io::Result<()> {
+    let n = TMP_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let file_name = path.file_name().unwrap().to_string_lossy();
+    // Leading dot keeps the transient file out of cargo's way.
+    let tmp = path.with_file_name(format!(".{}.tmp{}-{}", file_name, std::process::id(), n));
+    std::fs::write(&tmp, contents)?;
+    std::fs::rename(&tmp, path)
 }
 
 fn build_err(rider_name: &str, message: String) -> RiderBuildError {
