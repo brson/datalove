@@ -250,6 +250,27 @@ pub fn compute_tuple_field_offsets(fields: &[IrType]) -> Vec<u32> {
     offsets
 }
 
+/// Get the payload offset of each enum variant.
+///
+/// Each variant's payload sits at the first offset past the discriminant that
+/// satisfies that variant's own alignment, so variants with differing alignment
+/// have differing offsets. Variants without a payload get 0. This must agree
+/// with `rtdt::layout::compute_enum_layout`, which the runtime uses to find
+/// payloads, and with the offsets `emit_enum_variant` writes.
+pub fn compute_enum_variant_offsets(variants: &[(String, Option<IrType>)]) -> Vec<u32> {
+    let discriminant_size = 4u32;
+
+    variants.iter().map(|(_, payload)| {
+        match payload {
+            Some(payload_ty) => {
+                let payload_layout = ir_type_to_crepr(payload_ty).layout();
+                align_up(discriminant_size, payload_layout.align)
+            }
+            None => 0,
+        }
+    }).collect()
+}
+
 /// Get the C type name for an IR type.
 pub fn ir_type_to_c(ty: &IrType) -> String {
     match ir_type_to_crepr(ty) {

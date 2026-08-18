@@ -1,0 +1,32 @@
+----------
+scriptunit-fragment
+----------
+
+// Dual test: enum whose variant payloads have differing alignment.
+// The small-payload variant sits at a lower offset than the large one, so the
+// emitted tydesc, the generated code and the runtime must all agree on the
+// per-variant payload offsets. Logging the enum itself exercises the tydesc
+// path in the runtime; matching exercises the generated code.
+type Mixed: enum { term Small u8, term Big u64, atom None }
+
+let a: Mixed = term Small 7
+debuglog a
+match a
+case term Small v
+    debuglog v
+case term Big w
+    debuglog w
+case atom None
+    debuglog "none"
+end match
+
+let b: Mixed = term Big 1234567890123
+debuglog b
+match b
+case term Small v
+    debuglog v
+case term Big w
+    debuglog w
+case atom None
+    debuglog "none"
+end match

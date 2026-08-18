@@ -263,16 +263,9 @@ pub fn emit_tydesc(
                 writeln!(out, "static const dtlv_tydesc_t {} = {{ .type_tag = 0x42, .size = {}, .align = {}, .type_info = {{ .enum_ = {{ .variants = DANGLING(dtlv_enum_variant_t), .num_variants = 0 }} }} }};",
                     name, layout.size, layout.align).unwrap();
             } else {
-                // Compute max payload alignment for payload offset calculation.
-                // All variants share the same payload offset, determined by the maximum alignment.
-                let mut max_payload_align = 4u32; // discriminant align
-                for (_, payload) in variants {
-                    if let Some(payload_ty) = payload {
-                        let payload_layout = types::ir_type_to_crepr(payload_ty).layout();
-                        max_payload_align = max_payload_align.max(payload_layout.align);
-                    }
-                }
-                let common_payload_offset = types::align_up(4, max_payload_align);
+                // Each variant's payload is placed at its own alignment, matching
+                // what codegen writes and what the runtime recomputes.
+                let variant_offsets = types::compute_enum_variant_offsets(variants);
 
                 // Emit variant array.
                 write!(out, "static const dtlv_enum_variant_t {}[] = {{ ", variants_name).unwrap();
@@ -284,10 +277,8 @@ pub fn emit_tydesc(
                     } else {
                         "NULL".to_string()
                     };
-                    // Payload offset is the same for all variants (based on max alignment).
-                    let payload_offset = if payload.is_some() { common_payload_offset } else { 0 };
                     write!(out, "{{ .name = \"{}\", .name_len = {}, .offset = {}, .payload = {} }}",
-                        variant_name, variant_name.len(), payload_offset, payload_ptr).unwrap();
+                        variant_name, variant_name.len(), variant_offsets[i], payload_ptr).unwrap();
                 }
                 writeln!(out, " }};").unwrap();
 

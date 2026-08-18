@@ -661,18 +661,20 @@ impl<'a> FunctionCodegenContext<'a> {
             BinOp::Mul => "dtlv_rti_int_mul",
             BinOp::Div => "dtlv_rti_int_div_checked",
             BinOp::Lt | BinOp::Le | BinOp::Gt | BinOp::Ge | BinOp::Eq | BinOp::Ne => {
-                // Comparison - use cmp and then compare result.
-                let cmp_op = match op {
-                    BinOp::Lt => "< 0",
-                    BinOp::Le => "<= 0",
-                    BinOp::Gt => "> 0",
-                    BinOp::Ge => ">= 0",
-                    BinOp::Eq => "== 0",
-                    BinOp::Ne => "!= 0",
+                // Comparison - use cmp and then test the RtOrdering tag.
+                // RtOrdering is Less=1, Equal=2, Greater=3, so it must be
+                // compared against those tags, not against zero.
+                let test = match op {
+                    BinOp::Lt => "__ord == ORD_LESS",
+                    BinOp::Le => "__ord == ORD_LESS || __ord == ORD_EQUAL",
+                    BinOp::Gt => "__ord == ORD_GREATER",
+                    BinOp::Ge => "__ord == ORD_GREATER || __ord == ORD_EQUAL",
+                    BinOp::Eq => "__ord == ORD_EQUAL",
+                    BinOp::Ne => "__ord != ORD_EQUAL",
                     _ => unreachable!(),
                 };
-                writeln!(out, "    *(bool_t*){} = dtlv_rti_cmp_local(rt, {}, &{}, {}, &{}) {};",
-                    dest_addr, lhs_addr, lhs_tydesc, rhs_addr, lhs_tydesc, cmp_op).unwrap();
+                writeln!(out, "    {{ int8_t __ord = dtlv_rti_cmp_local(rt, {}, &{}, {}, &{}); *(bool_t*){} = ({}); }}",
+                    lhs_addr, lhs_tydesc, rhs_addr, lhs_tydesc, dest_addr, test).unwrap();
                 return Ok(());
             }
             _ => return Err(CAotError::Unsupported(format!("Int binop {:?}", op))),
@@ -1071,6 +1073,14 @@ impl<'a> FunctionCodegenContext<'a> {
         // Copy value to field.
         let src_addr = self.operand_addr(value);
         let repr = types::ir_type_to_crepr(&current_ty);
+
+        // The field holds a live value, so destroy it before overwriting.
+        // This applies to the tracked form too: the tracking byte covers the
+        // whole slot, which is already live whenever a field of it is assigned.
+        if !current_ty.is_copy() {
+            let tydesc = self.tydesc_name(&current_ty);
+            writeln!(out, "    dtlv_rti_any_destroy_local(rt, {}, &{});", current_addr, tydesc).unwrap();
+        }
 
         match repr {
             CRepr::Scalar(c_ty) => {

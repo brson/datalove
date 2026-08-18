@@ -290,6 +290,8 @@ impl CAotCompiler {
         writeln!(out, "    struct {{ uint32_t num_columns; const dtlv_table_column_t* columns; }} table;").unwrap();
         writeln!(out, "    struct {{ const dtlv_tydesc_t* inner_tydesc; uint32_t payload_offset; }} option;").unwrap();
         writeln!(out, "    struct {{ const dtlv_tydesc_t* ok_tydesc; uint32_t payload_offset; }} result;").unwrap();
+        writeln!(out, "    struct {{ const char* name; uint32_t name_len; }} atom;").unwrap();
+        writeln!(out, "    struct {{ const char* name; uint32_t name_len; const dtlv_tydesc_t* payload; }} term;").unwrap();
         writeln!(out, "}} dtlv_tyinfo_t;").unwrap();
         writeln!(out).unwrap();
 
@@ -342,6 +344,14 @@ impl CAotCompiler {
         writeln!(out, "#define TRACK_UNINIT 0x00").unwrap();
         writeln!(out, "#define TRACK_LIVE   0x01").unwrap();
         writeln!(out, "#define TRACK_MOVED  0x02").unwrap();
+        writeln!(out).unwrap();
+
+        // RtOrdering values returned by dtlv_rti_cmp_local. Note these are
+        // positive tags, not the C convention of negative/zero/positive.
+        writeln!(out, "// RtOrdering values").unwrap();
+        writeln!(out, "#define ORD_LESS    1").unwrap();
+        writeln!(out, "#define ORD_EQUAL   2").unwrap();
+        writeln!(out, "#define ORD_GREATER 3").unwrap();
         writeln!(out).unwrap();
 
         // Option/Result tag values.
