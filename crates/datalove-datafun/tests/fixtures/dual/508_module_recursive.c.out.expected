@@ -1,0 +1,44 @@
+DualAnalysis(
+    sections: [
+        DualSectionResult(
+            section_type: "module",
+            name: Some("local/test/recur"),
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Error",
+                message: "Ownership error in factorial: InconsistentBranchMove { stmt_idx: 0, name: \"n\", moved_in: \"then\" }, UseAfterMove { local_index: 16398, moved_at: 16398, name: \"n\", recovery_hint: InsertAdapt { description: \"clone `n` before the earlier use\" } }, UseAfterMove { local_index: 16399, moved_at: 16399, name: \"n\", recovery_hint: InsertAdapt { description: \"clone `n` before the earlier use\" } }",
+            ),
+            interp_lowering: LoweringResult(
+                status: "Skipped",
+            ),
+            aot_lowering: LoweringResult(
+                status: "Skipped",
+            ),
+            ir_match: true,
+            interp_output: "",
+            aot_output: "",
+            output_match: true,
+        ),
+        DualSectionResult(
+            section_type: "scriptunit-fragment",
+            typecheck: TypecheckResult(
+                status: "Skipped",
+            ),
+            ownership: OwnershipResult(
+                status: "Skipped",
+            ),
+            interp_lowering: LoweringResult(
+                status: "Skipped",
+            ),
+            aot_lowering: LoweringResult(
+                status: "Skipped",
+            ),
+            ir_match: true,
+            interp_output: "",
+            aot_output: "",
+            output_match: true,
+        ),
+    ],
+)

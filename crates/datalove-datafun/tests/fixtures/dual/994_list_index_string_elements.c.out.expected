@@ -1,0 +1,121 @@
+DualAnalysis(
+    sections: [
+        DualSectionResult(
+            section_type: "scriptunit-fragment",
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            interp_lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const "hello"
+                        v1 = const "world"
+                        v2 = const "foo"
+                        v3 = list [v0, v1, v2]
+                        v4 = const 0index
+                        v5 = call @0 u0(v3, v4)
+                        debuglog v5
+                        drop v5
+                        v6 = const "hello"
+                        v7 = const "world"
+                        v8 = const "foo"
+                        v9 = list [v6, v7, v8]
+                        v10 = const 1index
+                        v11 = call @1 u0(v9, v10)
+                        debuglog v11
+                        drop v11
+                        v12 = const "hello"
+                        v13 = const "world"
+                        v14 = const "foo"
+                        v15 = list [v12, v13, v14]
+                        v16 = const 5index
+                        v17 = call @2 u0(v15, v16)
+                        debuglog v17
+                        drop v17
+                        unit_end
+                    
+                    fn get_str(p0, p1):
+                    block0:
+                        v0, v1 = listget p0[p1]
+                        branch v1, block2, block1
+                    block1:
+                        v2 = none
+                        drop p0
+                        return v2
+                    block2:
+                        v3 = clone v0
+                        drop v0
+                        v4 = some v3
+                        drop p0
+                        return v4
+                """,
+            ),
+            aot_lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const "hello"
+                        v1 = const "world"
+                        v2 = const "foo"
+                        v3 = list [v0, v1, v2]
+                        v4 = const 0index
+                        v5 = call @0 u0(v3, v4)
+                        debuglog v5
+                        drop v5
+                        v6 = const "hello"
+                        v7 = const "world"
+                        v8 = const "foo"
+                        v9 = list [v6, v7, v8]
+                        v10 = const 1index
+                        v11 = call @1 u0(v9, v10)
+                        debuglog v11
+                        drop v11
+                        v12 = const "hello"
+                        v13 = const "world"
+                        v14 = const "foo"
+                        v15 = list [v12, v13, v14]
+                        v16 = const 5index
+                        v17 = call @2 u0(v15, v16)
+                        debuglog v17
+                        drop v17
+                        unit_end
+                    
+                    fn get_str(p0, p1):
+                    block0:
+                        v0, v1 = listget p0[p1]
+                        branch v1, block2, block1
+                    block1:
+                        v2 = none
+                        drop p0
+                        return v2
+                    block2:
+                        v3 = clone v0
+                        drop v0
+                        v4 = some v3
+                        drop p0
+                        return v4
+                """,
+            ),
+            ir_match: true,
+            interp_output: "some \"hello\"\nsome \"world\"\nnone\n",
+            aot_output: "some \"hello\"\nsome \"world\"\nnone\n",
+            output_match: true,
+            aot_compile: Some(AotCompileResult(
+                status: "Success",
+            )),
+            link: Some(LinkResult(
+                status: "Success",
+            )),
+            execution: Some(ExecutionResult(
+                status: "Success",
+                exit_code: 0,
+            )),
+        ),
+    ],
+)

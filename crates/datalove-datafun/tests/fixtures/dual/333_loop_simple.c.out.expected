@@ -1,0 +1,83 @@
+DualAnalysis(
+    sections: [
+        DualSectionResult(
+            section_type: "scriptunit-fragment",
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            interp_lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 0u32
+                        store.copy.tracked s0, v0
+                        v1 = const false
+                        store.copy.tracked s1, v1
+                        goto block1
+                    block1:
+                        v2 = load.copy s1
+                        branch v2, block2, block3
+                    block2:
+                        goto block5
+                    block3:
+                        goto block4
+                    block4:
+                        v3 = const 5u32
+                        store.copy s0, v3
+                        v4 = const true
+                        store.copy s1, v4
+                        goto block1
+                    block5:
+                        debuglog s0
+                        unit_end
+                """,
+            ),
+            aot_lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 0u32
+                        store.copy.tracked s0, v0
+                        v1 = const false
+                        store.copy.tracked s1, v1
+                        goto block1
+                    block1:
+                        v2 = load.copy s1
+                        branch v2, block2, block3
+                    block2:
+                        goto block5
+                    block3:
+                        goto block4
+                    block4:
+                        v3 = const 5u32
+                        store.copy s0, v3
+                        v4 = const true
+                        store.copy s1, v4
+                        goto block1
+                    block5:
+                        debuglog s0
+                        unit_end
+                """,
+            ),
+            ir_match: true,
+            interp_output: "5\n",
+            aot_output: "5\n",
+            output_match: true,
+            aot_compile: Some(AotCompileResult(
+                status: "Success",
+            )),
+            link: Some(LinkResult(
+                status: "Success",
+            )),
+            execution: Some(ExecutionResult(
+                status: "Success",
+                exit_code: 0,
+            )),
+        ),
+    ],
+)

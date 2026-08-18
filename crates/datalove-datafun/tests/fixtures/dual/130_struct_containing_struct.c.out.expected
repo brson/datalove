@@ -1,0 +1,71 @@
+DualAnalysis(
+    sections: [
+        DualSectionResult(
+            section_type: "scriptunit-fragment",
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            interp_lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 10int
+                        v1 = const 20int
+                        v2 = pack Struct0 {v0, v1}
+                        v3 = const "nested"
+                        v4 = pack Struct0 {v2, v3}
+                        v5 = getfieldref v4.0
+                        v6 = getfieldref *v5.0
+                        debuglog *v6
+                        v7 = getfieldref v4.0
+                        v8 = getfieldref *v7.1
+                        debuglog *v8
+                        v9 = getfieldref v4.1
+                        debuglog *v9
+                        unit_end_drop v4
+                        unit_end
+                """,
+            ),
+            aot_lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 10int
+                        v1 = const 20int
+                        v2 = pack Struct0 {v0, v1}
+                        v3 = const "nested"
+                        v4 = pack Struct0 {v2, v3}
+                        v5 = getfieldref v4.0
+                        v6 = getfieldref *v5.0
+                        debuglog *v6
+                        v7 = getfieldref v4.0
+                        v8 = getfieldref *v7.1
+                        debuglog *v8
+                        v9 = getfieldref v4.1
+                        debuglog *v9
+                        unit_end_drop v4
+                        unit_end
+                """,
+            ),
+            ir_match: true,
+            interp_output: "10\n20\n\"nested\"\n",
+            aot_output: "10\n20\n\"nested\"\n",
+            output_match: true,
+            aot_compile: Some(AotCompileResult(
+                status: "Success",
+            )),
+            link: Some(LinkResult(
+                status: "Success",
+            )),
+            execution: Some(ExecutionResult(
+                status: "Success",
+                exit_code: 0,
+            )),
+        ),
+    ],
+)

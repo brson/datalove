@@ -1,0 +1,47 @@
+DualAnalysis(
+    sections: [
+        DualSectionResult(
+            section_type: "module",
+            name: Some("local/test/index_math"),
+            typecheck: TypecheckResult(
+                status: "Error",
+                errors: [
+                    "local/test/index_math: CannotSynthesize",
+                    "local/test/index_math: CannotSynthesize",
+                ],
+            ),
+            ownership: OwnershipResult(
+                status: "Skipped",
+            ),
+            interp_lowering: LoweringResult(
+                status: "Skipped",
+            ),
+            aot_lowering: LoweringResult(
+                status: "Skipped",
+            ),
+            ir_match: true,
+            interp_output: "",
+            aot_output: "",
+            output_match: true,
+        ),
+        DualSectionResult(
+            section_type: "scriptunit-fragment",
+            typecheck: TypecheckResult(
+                status: "Skipped",
+            ),
+            ownership: OwnershipResult(
+                status: "Skipped",
+            ),
+            interp_lowering: LoweringResult(
+                status: "Skipped",
+            ),
+            aot_lowering: LoweringResult(
+                status: "Skipped",
+            ),
+            ir_match: true,
+            interp_output: "",
+            aot_output: "",
+            output_match: true,
+        ),
+    ],
+)

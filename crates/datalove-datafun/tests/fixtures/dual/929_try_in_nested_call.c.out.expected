@@ -1,0 +1,105 @@
+DualAnalysis(
+    sections: [
+        DualSectionResult(
+            section_type: "scriptunit-fragment",
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            interp_lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = call @0 u2()
+                        debuglog v0
+                        drop v0
+                        unit_end
+                    
+                    fn identity(p0):
+                    block0:
+                        v0 = copy p0
+                        return v0
+                    
+                    fn outer(p0, p1):
+                    block0:
+                        v0 = move p0
+                        v1 = copy p1
+                        v2 = pack Struct0 {v0, v1}
+                        return v2
+                    
+                    fn test():
+                    block0:
+                        v0 = none
+                        v1 = const "test"
+                        v2, v3 = unwrap_option v0
+                        branch v3, block2, block1
+                    block1:
+                        v4 = none
+                        drop v1
+                        return v4
+                    block2:
+                        v5 = call @0 u0(v2)
+                        v6 = call @1 u1(v1, v5)
+                        v7 = some v6
+                        return v7
+                """,
+            ),
+            aot_lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = call @0 u2()
+                        debuglog v0
+                        drop v0
+                        unit_end
+                    
+                    fn identity(p0):
+                    block0:
+                        v0 = copy p0
+                        return v0
+                    
+                    fn outer(p0, p1):
+                    block0:
+                        v0 = move p0
+                        v1 = copy p1
+                        v2 = pack Struct0 {v0, v1}
+                        return v2
+                    
+                    fn test():
+                    block0:
+                        v0 = none
+                        v1 = const "test"
+                        v2, v3 = unwrap_option v0
+                        branch v3, block2, block1
+                    block1:
+                        v4 = none
+                        drop v1
+                        return v4
+                    block2:
+                        v5 = call @0 u0(v2)
+                        v6 = call @1 u1(v1, v5)
+                        v7 = some v6
+                        return v7
+                """,
+            ),
+            ir_match: true,
+            interp_output: "none\n",
+            aot_output: "none\n",
+            output_match: true,
+            aot_compile: Some(AotCompileResult(
+                status: "Success",
+            )),
+            link: Some(LinkResult(
+                status: "Success",
+            )),
+            execution: Some(ExecutionResult(
+                status: "Success",
+                exit_code: 0,
+            )),
+        ),
+    ],
+)

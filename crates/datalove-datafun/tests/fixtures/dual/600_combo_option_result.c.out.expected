@@ -1,0 +1,169 @@
+DualAnalysis(
+    sections: [
+        DualSectionResult(
+            section_type: "scriptunit-fragment",
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            interp_lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 100u32
+                        v1 = const 5u32
+                        v2 = call @0 u0(v0, v1)
+                        v3 = call @1 u1(v2)
+                        v4 = const 999u32
+                        v5 = call @2 u2(v3, v4)
+                        debuglog v5
+                        v6 = const 100u32
+                        v7 = const 0u32
+                        v8 = call @3 u0(v6, v7)
+                        v9 = call @4 u1(v8)
+                        v10 = const 999u32
+                        v11 = call @5 u2(v9, v10)
+                        debuglog v11
+                        unit_end
+                    
+                    fn safe_divide(p0, p1):
+                    block0:
+                        v0 = const 0u32
+                        v1 = eq p1, v0
+                        branch v1, block1, block2
+                    block1:
+                        v2 = none
+                        v3 = ok v2
+                        return v3
+                    block2:
+                        goto block3
+                    block3:
+                        v4, v5 = div.checked p0, p1
+                        branch v5, block4, block5
+                    block4:
+                        v6 = const "arithmetic overflow"
+                        v7 = error_from v6
+                        v8 = err v7
+                        return v8
+                    block5:
+                        v9 = some v4
+                        v10 = ok v9
+                        return v10
+                    
+                    fn unwrap_result(p0):
+                    block0:
+                        v0 = move p0
+                        v1, v2, v3 = unwrap_result v0
+                        branch v3, block1, block2
+                    block1:
+                        return v1
+                    block2:
+                        v4 = none
+                        drop v2
+                        return v4
+                    
+                    fn unwrap_opt(p0, p1):
+                    block0:
+                        v0 = copy p0
+                        v1, v2 = unwrap_option v0
+                        branch v2, block1, block2
+                    block1:
+                        return v1
+                    block2:
+                        goto block3
+                    block3:
+                        v3 = copy p1
+                        return v3
+                """,
+            ),
+            aot_lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 100u32
+                        v1 = const 5u32
+                        v2 = call @0 u0(v0, v1)
+                        v3 = call @1 u1(v2)
+                        v4 = const 999u32
+                        v5 = call @2 u2(v3, v4)
+                        debuglog v5
+                        v6 = const 100u32
+                        v7 = const 0u32
+                        v8 = call @3 u0(v6, v7)
+                        v9 = call @4 u1(v8)
+                        v10 = const 999u32
+                        v11 = call @5 u2(v9, v10)
+                        debuglog v11
+                        unit_end
+                    
+                    fn safe_divide(p0, p1):
+                    block0:
+                        v0 = const 0u32
+                        v1 = eq p1, v0
+                        branch v1, block1, block2
+                    block1:
+                        v2 = none
+                        v3 = ok v2
+                        return v3
+                    block2:
+                        goto block3
+                    block3:
+                        v4, v5 = div.checked p0, p1
+                        branch v5, block4, block5
+                    block4:
+                        v6 = const "arithmetic overflow"
+                        v7 = error_from v6
+                        v8 = err v7
+                        return v8
+                    block5:
+                        v9 = some v4
+                        v10 = ok v9
+                        return v10
+                    
+                    fn unwrap_result(p0):
+                    block0:
+                        v0 = move p0
+                        v1, v2, v3 = unwrap_result v0
+                        branch v3, block1, block2
+                    block1:
+                        return v1
+                    block2:
+                        v4 = none
+                        drop v2
+                        return v4
+                    
+                    fn unwrap_opt(p0, p1):
+                    block0:
+                        v0 = copy p0
+                        v1, v2 = unwrap_option v0
+                        branch v2, block1, block2
+                    block1:
+                        return v1
+                    block2:
+                        goto block3
+                    block3:
+                        v3 = copy p1
+                        return v3
+                """,
+            ),
+            ir_match: true,
+            interp_output: "20\n999\n",
+            aot_output: "20\n999\n",
+            output_match: true,
+            aot_compile: Some(AotCompileResult(
+                status: "Success",
+            )),
+            link: Some(LinkResult(
+                status: "Success",
+            )),
+            execution: Some(ExecutionResult(
+                status: "Success",
+                exit_code: 0,
+            )),
+        ),
+    ],
+)

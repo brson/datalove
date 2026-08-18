@@ -12,6 +12,7 @@ test-slow:
     cargo test -p datalove-rt --features slow_tests
     cargo test -p datalove-rt-tests --features slow_tests
     cargo test -p datalove-datafun-compiler --features slow_tests
+    cargo test -p datalove-datafun --features slow_tests
     just check-wasm
 
 test-ci: test test-slow

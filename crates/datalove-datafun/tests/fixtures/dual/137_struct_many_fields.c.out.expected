@@ -1,0 +1,79 @@
+DualAnalysis(
+    sections: [
+        DualSectionResult(
+            section_type: "scriptunit-fragment",
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            interp_lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 1int
+                        v1 = const 2int
+                        v2 = const 3int
+                        v3 = const 4int
+                        v4 = const 5int
+                        v5 = const 6int
+                        v6 = const 7int
+                        v7 = const 8int
+                        v8 = const 9int
+                        v9 = const 10int
+                        v10 = pack Struct0 {v0, v1, v2, v3, v4, v5, v6, v7, v8, v9}
+                        v11 = getfieldref v10.0
+                        debuglog *v11
+                        v12 = getfieldref v10.4
+                        debuglog *v12
+                        v13 = getfieldref v10.9
+                        debuglog *v13
+                        unit_end_drop v10
+                        unit_end
+                """,
+            ),
+            aot_lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 1int
+                        v1 = const 2int
+                        v2 = const 3int
+                        v3 = const 4int
+                        v4 = const 5int
+                        v5 = const 6int
+                        v6 = const 7int
+                        v7 = const 8int
+                        v8 = const 9int
+                        v9 = const 10int
+                        v10 = pack Struct0 {v0, v1, v2, v3, v4, v5, v6, v7, v8, v9}
+                        v11 = getfieldref v10.0
+                        debuglog *v11
+                        v12 = getfieldref v10.4
+                        debuglog *v12
+                        v13 = getfieldref v10.9
+                        debuglog *v13
+                        unit_end_drop v10
+                        unit_end
+                """,
+            ),
+            ir_match: true,
+            interp_output: "1\n5\n10\n",
+            aot_output: "1\n5\n10\n",
+            output_match: true,
+            aot_compile: Some(AotCompileResult(
+                status: "Success",
+            )),
+            link: Some(LinkResult(
+                status: "Success",
+            )),
+            execution: Some(ExecutionResult(
+                status: "Success",
+                exit_code: 0,
+            )),
+        ),
+    ],
+)

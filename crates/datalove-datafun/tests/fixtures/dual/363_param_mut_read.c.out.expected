@@ -1,0 +1,71 @@
+DualAnalysis(
+    sections: [
+        DualSectionResult(
+            section_type: "scriptunit-fragment",
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            interp_lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 32int
+                        store.move.tracked s0, v0
+                        v1 = call @0 u0(s0)
+                        debuglog s0
+                        unit_end_drop.tracked s0
+                        unit_end
+                    
+                    fn add_ten(p0):
+                    block0:
+                        v0 = const 10int
+                        v1 = add p0, v0
+                        store p0, v1
+                        v2 = const true
+                        drop v0
+                        return v2
+                """,
+            ),
+            aot_lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 32int
+                        store.move.tracked s0, v0
+                        v1 = call @0 u0(s0)
+                        debuglog s0
+                        unit_end_drop.tracked s0
+                        unit_end
+                    
+                    fn add_ten(p0):
+                    block0:
+                        v0 = const 10int
+                        v1 = add p0, v0
+                        store p0, v1
+                        v2 = const true
+                        drop v0
+                        return v2
+                """,
+            ),
+            ir_match: true,
+            interp_output: "42\n",
+            aot_output: "42\n",
+            output_match: true,
+            aot_compile: Some(AotCompileResult(
+                status: "Success",
+            )),
+            link: Some(LinkResult(
+                status: "Success",
+            )),
+            execution: Some(ExecutionResult(
+                status: "Success",
+                exit_code: 0,
+            )),
+        ),
+    ],
+)

@@ -1,0 +1,99 @@
+DualAnalysis(
+    sections: [
+        DualSectionResult(
+            section_type: "module",
+            name: Some("local/test/mutops"),
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            interp_lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    fn set_to_42(p0):
+                    block0:
+                        v0 = const 42u32
+                        store p0, v0
+                        v1 = const true
+                        return v1
+                """,
+            ),
+            aot_lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    fn set_to_42(p0):
+                    block0:
+                        v0 = const 42u32
+                        store p0, v0
+                        v1 = const true
+                        return v1
+                """,
+            ),
+            ir_match: true,
+            interp_output: "",
+            aot_output: "",
+            output_match: true,
+        ),
+        DualSectionResult(
+            section_type: "scriptunit-fragment",
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            interp_lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 100u32
+                        v1 = const 200u32
+                        v2 = pack Tuple2 {v0, v1}
+                        store.copy.tracked s0, v2
+                        v3 = getfieldref s0.0
+                        v4 = call @0 m0.u0(*v3)
+                        v5 = getfieldref s0.0
+                        debuglog *v5
+                        v6 = getfieldref s0.1
+                        debuglog *v6
+                        unit_end
+                """,
+            ),
+            aot_lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 100u32
+                        v1 = const 200u32
+                        v2 = pack Tuple2 {v0, v1}
+                        store.copy.tracked s0, v2
+                        v3 = getfieldref s0.0
+                        v4 = call @0 m0.u0(*v3)
+                        v5 = getfieldref s0.0
+                        debuglog *v5
+                        v6 = getfieldref s0.1
+                        debuglog *v6
+                        unit_end
+                """,
+            ),
+            ir_match: true,
+            interp_output: "42\n200\n",
+            aot_output: "42\n200\n",
+            output_match: true,
+            aot_compile: Some(AotCompileResult(
+                status: "Success",
+            )),
+            link: Some(LinkResult(
+                status: "Success",
+            )),
+            execution: Some(ExecutionResult(
+                status: "Success",
+                exit_code: 0,
+            )),
+        ),
+    ],
+)

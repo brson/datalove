@@ -1,0 +1,111 @@
+DualAnalysis(
+    sections: [
+        DualSectionResult(
+            section_type: "scriptunit-fragment",
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            interp_lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 10u32
+                        v1 = const 20u32
+                        v2 = pack Struct0 {v0, v1}
+                        v3 = const 30u32
+                        v4 = const 40u32
+                        v5 = pack Struct0 {v3, v4}
+                        v6 = list [v2, v5]
+                        v7 = const 0index
+                        v8, v9 = listget v6[v7]
+                        branch v9, block2, block1
+                    block1:
+                        v10 = const "index out of bounds"
+                        v11 = error_from v10
+                        v12 = err v11
+                        unit_early_return v12
+                    block2:
+                        v13 = getfieldref v8.0
+                        debuglog *v13
+                        v14 = getfieldref v8.1
+                        debuglog *v14
+                        v15 = const 1index
+                        v16, v17 = listget v6[v15]
+                        branch v17, block4, block3
+                    block3:
+                        v18 = const "index out of bounds"
+                        v19 = error_from v18
+                        v20 = err v19
+                        unit_early_return v20
+                    block4:
+                        v21 = getfieldref v16.0
+                        debuglog *v21
+                        v22 = getfieldref v16.1
+                        debuglog *v22
+                        unit_end_drop v6
+                        unit_end
+                """,
+            ),
+            aot_lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 10u32
+                        v1 = const 20u32
+                        v2 = pack Struct0 {v0, v1}
+                        v3 = const 30u32
+                        v4 = const 40u32
+                        v5 = pack Struct0 {v3, v4}
+                        v6 = list [v2, v5]
+                        v7 = const 0index
+                        v8, v9 = listget v6[v7]
+                        branch v9, block2, block1
+                    block1:
+                        v10 = const "index out of bounds"
+                        v11 = error_from v10
+                        v12 = err v11
+                        unit_early_return v12
+                    block2:
+                        v13 = getfieldref v8.0
+                        debuglog *v13
+                        v14 = getfieldref v8.1
+                        debuglog *v14
+                        v15 = const 1index
+                        v16, v17 = listget v6[v15]
+                        branch v17, block4, block3
+                    block3:
+                        v18 = const "index out of bounds"
+                        v19 = error_from v18
+                        v20 = err v19
+                        unit_early_return v20
+                    block4:
+                        v21 = getfieldref v16.0
+                        debuglog *v21
+                        v22 = getfieldref v16.1
+                        debuglog *v22
+                        unit_end_drop v6
+                        unit_end
+                """,
+            ),
+            ir_match: true,
+            interp_output: "10\n20\n30\n40\n",
+            aot_output: "10\n20\n30\n40\n",
+            output_match: true,
+            aot_compile: Some(AotCompileResult(
+                status: "Success",
+            )),
+            link: Some(LinkResult(
+                status: "Success",
+            )),
+            execution: Some(ExecutionResult(
+                status: "Success",
+                exit_code: 0,
+            )),
+        ),
+    ],
+)

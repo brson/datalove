@@ -1,0 +1,24 @@
+DualAnalysis(
+    sections: [
+        DualSectionResult(
+            section_type: "scriptunit-fragment",
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Error",
+                message: "test_cond: error[D008]: `x` moved in then branch but not the other",
+            ),
+            interp_lowering: LoweringResult(
+                status: "Skipped",
+            ),
+            aot_lowering: LoweringResult(
+                status: "Skipped",
+            ),
+            ir_match: true,
+            interp_output: "",
+            aot_output: "",
+            output_match: true,
+        ),
+    ],
+)

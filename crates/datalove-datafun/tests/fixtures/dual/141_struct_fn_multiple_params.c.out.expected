@@ -1,0 +1,83 @@
+DualAnalysis(
+    sections: [
+        DualSectionResult(
+            section_type: "scriptunit-fragment",
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            interp_lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 1u32
+                        v1 = const 2u32
+                        v2 = pack Struct0 {v0, v1}
+                        v3 = const 10u32
+                        v4 = const 20u32
+                        v5 = pack Struct0 {v3, v4}
+                        v6 = call @0 u0(v2, v5)
+                        debuglog v6
+                        drop v6
+                        unit_end
+                    
+                    fn sum_x(p0, p1):
+                    block0:
+                        v0 = getfield p0.0
+                        v1 = widen v0
+                        v2 = getfield p1.0
+                        v3 = widen v2
+                        v4 = add v1, v3
+                        drop v1
+                        drop v3
+                        return v4
+                """,
+            ),
+            aot_lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 1u32
+                        v1 = const 2u32
+                        v2 = pack Struct0 {v0, v1}
+                        v3 = const 10u32
+                        v4 = const 20u32
+                        v5 = pack Struct0 {v3, v4}
+                        v6 = call @0 u0(v2, v5)
+                        debuglog v6
+                        drop v6
+                        unit_end
+                    
+                    fn sum_x(p0, p1):
+                    block0:
+                        v0 = getfield p0.0
+                        v1 = widen v0
+                        v2 = getfield p1.0
+                        v3 = widen v2
+                        v4 = add v1, v3
+                        drop v1
+                        drop v3
+                        return v4
+                """,
+            ),
+            ir_match: true,
+            interp_output: "11\n",
+            aot_output: "11\n",
+            output_match: true,
+            aot_compile: Some(AotCompileResult(
+                status: "Success",
+            )),
+            link: Some(LinkResult(
+                status: "Success",
+            )),
+            execution: Some(ExecutionResult(
+                status: "Success",
+                exit_code: 0,
+            )),
+        ),
+    ],
+)

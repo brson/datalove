@@ -60,6 +60,7 @@ pub struct ExampleTestRunner<F> {
     manifest_dir: PathBuf,
     fixture_subdir: String,
     file_extension: String,
+    output_tag: Option<String>,
     analyzer: F,
     allow_errors: bool,
     skip_names: Vec<String>,
@@ -86,6 +87,7 @@ where
             manifest_dir: manifest_dir.into(),
             fixture_subdir: String::new(),
             file_extension: String::new(),
+            output_tag: None,
             analyzer,
             allow_errors: false,
             skip_names: Vec::new(),
@@ -102,6 +104,26 @@ where
     pub fn file_extension(mut self, ext: impl Into<String>) -> Self {
         self.file_extension = ext.into();
         self
+    }
+
+    /// Distinguish this suite's output files from other suites sharing the fixtures.
+    ///
+    /// Without a tag the output files are `<stem>.out.expected` and
+    /// `<stem>.out.actual`; with tag `c` they become `<stem>.c.out.expected` and
+    /// `<stem>.c.out.actual`. Two suites reading the same fixture directory must
+    /// use distinct tags, otherwise they compare against - and concurrently
+    /// overwrite - each other's files.
+    pub fn output_tag(mut self, tag: impl Into<String>) -> Self {
+        self.output_tag = Some(tag.into());
+        self
+    }
+
+    /// Build an output path for a fixture, e.g. `<stem>.c.out.expected`.
+    fn output_path(&self, base_path: &Path, suffix: &str) -> PathBuf {
+        match &self.output_tag {
+            Some(tag) => PathBuf::from(format!("{}.{}.out.{}", base_path.display(), tag, suffix)),
+            None => PathBuf::from(format!("{}.out.{}", base_path.display(), suffix)),
+        }
     }
 
     /// Allow tests that return errors (adds Error variant to results).
@@ -143,20 +165,20 @@ where
     /// Run a single test case.
     fn run_test_case(&self, input_path: &Path) -> TestResult {
         let base_path = input_path.with_extension("");
-        let actual_path = PathBuf::from(format!("{}.out.actual", base_path.display()));
+        let actual_path = self.output_path(&base_path, "actual");
 
         // Feature-specific expected file takes precedence over default.
         #[cfg(feature = "index-64")]
         let expected_path = {
-            let feature_path = PathBuf::from(format!("{}.out.expected.64", base_path.display()));
+            let feature_path = self.output_path(&base_path, "expected.64");
             if feature_path.exists() {
                 feature_path
             } else {
-                PathBuf::from(format!("{}.out.expected", base_path.display()))
+                self.output_path(&base_path, "expected")
             }
         };
         #[cfg(not(feature = "index-64"))]
-        let expected_path = PathBuf::from(format!("{}.out.expected", base_path.display()));
+        let expected_path = self.output_path(&base_path, "expected");
 
         let analysis = match (self.analyzer)(input_path) {
             Ok(result) => result,

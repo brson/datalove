@@ -1,0 +1,101 @@
+DualAnalysis(
+    sections: [
+        DualSectionResult(
+            section_type: "scriptunit-fragment",
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            interp_lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 1u32
+                        v1 = const 2u32
+                        v2 = const 3u32
+                        v3 = list [v0, v1, v2]
+                        debuglog v3
+                        v4 = call @0 u0()
+                        v5 = const 999u32
+                        v6 = call @1 u1(v4, v5)
+                        debuglog v6
+                        unit_end_drop v3
+                        unit_end
+                    
+                    fn get_opt():
+                    block0:
+                        v0 = const 42u32
+                        v1 = some v0
+                        return v1
+                    
+                    fn unwrap(p0, p1):
+                    block0:
+                        v0 = copy p0
+                        v1, v2 = unwrap_option v0
+                        branch v2, block1, block2
+                    block1:
+                        return v1
+                    block2:
+                        goto block3
+                    block3:
+                        v3 = copy p1
+                        return v3
+                """,
+            ),
+            aot_lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 1u32
+                        v1 = const 2u32
+                        v2 = const 3u32
+                        v3 = list [v0, v1, v2]
+                        debuglog v3
+                        v4 = call @0 u0()
+                        v5 = const 999u32
+                        v6 = call @1 u1(v4, v5)
+                        debuglog v6
+                        unit_end_drop v3
+                        unit_end
+                    
+                    fn get_opt():
+                    block0:
+                        v0 = const 42u32
+                        v1 = some v0
+                        return v1
+                    
+                    fn unwrap(p0, p1):
+                    block0:
+                        v0 = copy p0
+                        v1, v2 = unwrap_option v0
+                        branch v2, block1, block2
+                    block1:
+                        return v1
+                    block2:
+                        goto block3
+                    block3:
+                        v3 = copy p1
+                        return v3
+                """,
+            ),
+            ir_match: true,
+            interp_output: "[1, 2, 3]\n42\n",
+            aot_output: "[1, 2, 3]\n42\n",
+            output_match: true,
+            aot_compile: Some(AotCompileResult(
+                status: "Success",
+            )),
+            link: Some(LinkResult(
+                status: "Success",
+            )),
+            execution: Some(ExecutionResult(
+                status: "Success",
+                exit_code: 0,
+            )),
+        ),
+    ],
+)

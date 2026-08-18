@@ -1,0 +1,101 @@
+DualAnalysis(
+    sections: [
+        DualSectionResult(
+            section_type: "scriptunit-fragment",
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            interp_lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = call @0 u0()
+                        debuglog v0
+                        drop v0
+                        unit_end
+                    
+                    fn test():
+                    block0:
+                        v0 = const 10u32
+                        v1 = some v0
+                        v2 = const 20u32
+                        v3 = some v2
+                        v4, v5 = unwrap_option v1
+                        branch v5, block2, block1
+                    block1:
+                        v6 = none
+                        return v6
+                    block2:
+                        v7, v8 = unwrap_option v3
+                        branch v8, block4, block3
+                    block3:
+                        v9 = none
+                        return v9
+                    block4:
+                        v10 = widen v4
+                        v11 = widen v7
+                        v12 = add v10, v11
+                        v13 = some v12
+                        drop v10
+                        drop v11
+                        return v13
+                """,
+            ),
+            aot_lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = call @0 u0()
+                        debuglog v0
+                        drop v0
+                        unit_end
+                    
+                    fn test():
+                    block0:
+                        v0 = const 10u32
+                        v1 = some v0
+                        v2 = const 20u32
+                        v3 = some v2
+                        v4, v5 = unwrap_option v1
+                        branch v5, block2, block1
+                    block1:
+                        v6 = none
+                        return v6
+                    block2:
+                        v7, v8 = unwrap_option v3
+                        branch v8, block4, block3
+                    block3:
+                        v9 = none
+                        return v9
+                    block4:
+                        v10 = widen v4
+                        v11 = widen v7
+                        v12 = add v10, v11
+                        v13 = some v12
+                        drop v10
+                        drop v11
+                        return v13
+                """,
+            ),
+            ir_match: true,
+            interp_output: "some 30\n",
+            aot_output: "some 30\n",
+            output_match: true,
+            aot_compile: Some(AotCompileResult(
+                status: "Success",
+            )),
+            link: Some(LinkResult(
+                status: "Success",
+            )),
+            execution: Some(ExecutionResult(
+                status: "Success",
+                exit_code: 0,
+            )),
+        ),
+    ],
+)

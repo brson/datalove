@@ -714,6 +714,9 @@ fn main() {
     datalove_exampletest::ExampleTestRunner::new(env!("CARGO_MANIFEST_DIR"), analyze_file)
         .fixture_subdir("dual")
         .file_extension("world")
+        // Shares fixtures with dual_tests (Cranelift); the tag keeps the two
+        // suites' expected/actual files apart.
+        .output_tag("c")
         .allow_errors(true)
         .run();
 }

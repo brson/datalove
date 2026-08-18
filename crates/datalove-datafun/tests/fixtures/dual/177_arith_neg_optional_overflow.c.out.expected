@@ -1,0 +1,101 @@
+DualAnalysis(
+    sections: [
+        DualSectionResult(
+            section_type: "scriptunit-fragment",
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            interp_lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const -2147483648i32
+                        v1 = call @0 u0(v0)
+                        v2 = const 999i32
+                        v3 = call @1 u1(v1, v2)
+                        debuglog v3
+                        unit_end
+                    
+                    fn neg_opt(p0):
+                    block0:
+                        v0, v1 = neg.checked p0
+                        branch v1, block1, block2
+                    block1:
+                        v2 = none
+                        return v2
+                    block2:
+                        v3 = some v0
+                        return v3
+                    
+                    fn unwrap(p0, p1):
+                    block0:
+                        v0 = copy p0
+                        v1, v2 = unwrap_option v0
+                        branch v2, block1, block2
+                    block1:
+                        return v1
+                    block2:
+                        goto block3
+                    block3:
+                        v3 = copy p1
+                        return v3
+                """,
+            ),
+            aot_lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const -2147483648i32
+                        v1 = call @0 u0(v0)
+                        v2 = const 999i32
+                        v3 = call @1 u1(v1, v2)
+                        debuglog v3
+                        unit_end
+                    
+                    fn neg_opt(p0):
+                    block0:
+                        v0, v1 = neg.checked p0
+                        branch v1, block1, block2
+                    block1:
+                        v2 = none
+                        return v2
+                    block2:
+                        v3 = some v0
+                        return v3
+                    
+                    fn unwrap(p0, p1):
+                    block0:
+                        v0 = copy p0
+                        v1, v2 = unwrap_option v0
+                        branch v2, block1, block2
+                    block1:
+                        return v1
+                    block2:
+                        goto block3
+                    block3:
+                        v3 = copy p1
+                        return v3
+                """,
+            ),
+            ir_match: true,
+            interp_output: "999\n",
+            aot_output: "999\n",
+            output_match: true,
+            aot_compile: Some(AotCompileResult(
+                status: "Success",
+            )),
+            link: Some(LinkResult(
+                status: "Success",
+            )),
+            execution: Some(ExecutionResult(
+                status: "Success",
+                exit_code: 0,
+            )),
+        ),
+    ],
+)

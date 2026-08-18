@@ -1,0 +1,73 @@
+DualAnalysis(
+    sections: [
+        DualSectionResult(
+            section_type: "scriptunit-fragment",
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            interp_lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = call @0 u0()
+                        debuglog v0
+                        unit_end
+                    
+                    fn test():
+                    block0:
+                        v0 = const 10u32
+                        v1 = some v0
+                        v2, v3 = unwrap_option v1
+                        branch v3, block2, block1
+                    block1:
+                        v4 = none
+                        return v4
+                    block2:
+                        v5 = some v2
+                        return v5
+                """,
+            ),
+            aot_lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = call @0 u0()
+                        debuglog v0
+                        unit_end
+                    
+                    fn test():
+                    block0:
+                        v0 = const 10u32
+                        v1 = some v0
+                        v2, v3 = unwrap_option v1
+                        branch v3, block2, block1
+                    block1:
+                        v4 = none
+                        return v4
+                    block2:
+                        v5 = some v2
+                        return v5
+                """,
+            ),
+            ir_match: true,
+            interp_output: "some 10\n",
+            aot_output: "some 10\n",
+            output_match: true,
+            aot_compile: Some(AotCompileResult(
+                status: "Success",
+            )),
+            link: Some(LinkResult(
+                status: "Success",
+            )),
+            execution: Some(ExecutionResult(
+                status: "Success",
+                exit_code: 0,
+            )),
+        ),
+    ],
+)

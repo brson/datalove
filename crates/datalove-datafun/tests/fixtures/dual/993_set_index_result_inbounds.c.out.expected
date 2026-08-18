@@ -1,0 +1,117 @@
+DualAnalysis(
+    sections: [
+        DualSectionResult(
+            section_type: "scriptunit-fragment",
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            interp_lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 10u32
+                        v1 = const 20u32
+                        v2 = const 30u32
+                        v3 = list [v0, v1, v2]
+                        v4 = const 0index
+                        v5 = const 99u32
+                        v6 = call @0 u0(v3, v4, v5)
+                        debuglog v6
+                        drop v6
+                        v7 = const 10u32
+                        v8 = const 20u32
+                        v9 = const 30u32
+                        v10 = list [v7, v8, v9]
+                        v11 = const 2index
+                        v12 = const 77u32
+                        v13 = call @1 u0(v10, v11, v12)
+                        debuglog v13
+                        drop v13
+                        unit_end
+                    
+                    fn set_elem(p0, p1, p2):
+                    block0:
+                        v0 = move p0
+                        store.move.tracked s0, v0
+                        v1 = listboundscheck s0[p1]
+                        branch v1, block2, block1
+                    block1:
+                        v2 = const "index out of bounds"
+                        v3 = error_from v2
+                        v4 = err v3
+                        drop.tracked s0
+                        return v4
+                    block2:
+                        v5 = copy p2
+                        listset s0[p1] = v5
+                        v6 = load.move.tracked s0
+                        v7 = ok v6
+                        return v7
+                """,
+            ),
+            aot_lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 10u32
+                        v1 = const 20u32
+                        v2 = const 30u32
+                        v3 = list [v0, v1, v2]
+                        v4 = const 0index
+                        v5 = const 99u32
+                        v6 = call @0 u0(v3, v4, v5)
+                        debuglog v6
+                        drop v6
+                        v7 = const 10u32
+                        v8 = const 20u32
+                        v9 = const 30u32
+                        v10 = list [v7, v8, v9]
+                        v11 = const 2index
+                        v12 = const 77u32
+                        v13 = call @1 u0(v10, v11, v12)
+                        debuglog v13
+                        drop v13
+                        unit_end
+                    
+                    fn set_elem(p0, p1, p2):
+                    block0:
+                        v0 = move p0
+                        store.move.tracked s0, v0
+                        v1 = listboundscheck s0[p1]
+                        branch v1, block2, block1
+                    block1:
+                        v2 = const "index out of bounds"
+                        v3 = error_from v2
+                        v4 = err v3
+                        drop.tracked s0
+                        return v4
+                    block2:
+                        v5 = copy p2
+                        listset s0[p1] = v5
+                        v6 = load.move.tracked s0
+                        v7 = ok v6
+                        return v7
+                """,
+            ),
+            ir_match: true,
+            interp_output: "ok [99, 20, 30]\nok [10, 20, 77]\n",
+            aot_output: "ok [99, 20, 30]\nok [10, 20, 77]\n",
+            output_match: true,
+            aot_compile: Some(AotCompileResult(
+                status: "Success",
+            )),
+            link: Some(LinkResult(
+                status: "Success",
+            )),
+            execution: Some(ExecutionResult(
+                status: "Success",
+                exit_code: 0,
+            )),
+        ),
+    ],
+)

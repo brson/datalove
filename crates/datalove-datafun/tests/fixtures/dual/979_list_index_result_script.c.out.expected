@@ -1,0 +1,93 @@
+DualAnalysis(
+    sections: [
+        DualSectionResult(
+            section_type: "scriptunit-fragment",
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            interp_lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 10u32
+                        v1 = const 20u32
+                        v2 = const 30u32
+                        v3 = list [v0, v1, v2]
+                        v4 = const 0index
+                        v5, v6 = listget v3[v4]
+                        branch v6, block2, block1
+                    block1:
+                        v7 = const "index out of bounds"
+                        v8 = error_from v7
+                        v9 = err v8
+                        unit_early_return v9
+                    block2:
+                        debuglog v5
+                        v10 = const 2index
+                        v11, v12 = listget v3[v10]
+                        branch v12, block4, block3
+                    block3:
+                        v13 = const "index out of bounds"
+                        v14 = error_from v13
+                        v15 = err v14
+                        unit_early_return v15
+                    block4:
+                        debuglog v11
+                        unit_end_drop v3
+                        unit_end
+                """,
+            ),
+            aot_lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 10u32
+                        v1 = const 20u32
+                        v2 = const 30u32
+                        v3 = list [v0, v1, v2]
+                        v4 = const 0index
+                        v5, v6 = listget v3[v4]
+                        branch v6, block2, block1
+                    block1:
+                        v7 = const "index out of bounds"
+                        v8 = error_from v7
+                        v9 = err v8
+                        unit_early_return v9
+                    block2:
+                        debuglog v5
+                        v10 = const 2index
+                        v11, v12 = listget v3[v10]
+                        branch v12, block4, block3
+                    block3:
+                        v13 = const "index out of bounds"
+                        v14 = error_from v13
+                        v15 = err v14
+                        unit_early_return v15
+                    block4:
+                        debuglog v11
+                        unit_end_drop v3
+                        unit_end
+                """,
+            ),
+            ir_match: true,
+            interp_output: "10\n30\n",
+            aot_output: "10\n30\n",
+            output_match: true,
+            aot_compile: Some(AotCompileResult(
+                status: "Success",
+            )),
+            link: Some(LinkResult(
+                status: "Success",
+            )),
+            execution: Some(ExecutionResult(
+                status: "Success",
+                exit_code: 0,
+            )),
+        ),
+    ],
+)

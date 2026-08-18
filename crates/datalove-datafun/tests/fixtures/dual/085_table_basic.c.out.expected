@@ -1,0 +1,61 @@
+DualAnalysis(
+    sections: [
+        DualSectionResult(
+            section_type: "scriptunit-fragment",
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            interp_lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 1u32
+                        v1 = const 2u32
+                        v2 = pack Tuple2 {v0, v1}
+                        v3 = const 3u32
+                        v4 = const 4u32
+                        v5 = pack Tuple2 {v3, v4}
+                        v6 = table [v2, v5]
+                        debuglog v6
+                        unit_end_drop v6
+                        unit_end
+                """,
+            ),
+            aot_lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 1u32
+                        v1 = const 2u32
+                        v2 = pack Tuple2 {v0, v1}
+                        v3 = const 3u32
+                        v4 = const 4u32
+                        v5 = pack Tuple2 {v3, v4}
+                        v6 = table [v2, v5]
+                        debuglog v6
+                        unit_end_drop v6
+                        unit_end
+                """,
+            ),
+            ir_match: true,
+            interp_output: "{| a, b; 1, 2; 3, 4 |}\n",
+            aot_output: "{| a, b; 1, 2; 3, 4 |}\n",
+            output_match: true,
+            aot_compile: Some(AotCompileResult(
+                status: "Success",
+            )),
+            link: Some(LinkResult(
+                status: "Success",
+            )),
+            execution: Some(ExecutionResult(
+                status: "Success",
+                exit_code: 0,
+            )),
+        ),
+    ],
+)

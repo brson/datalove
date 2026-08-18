@@ -1,0 +1,97 @@
+DualAnalysis(
+    sections: [
+        DualSectionResult(
+            section_type: "scriptunit-fragment",
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            interp_lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = call @0 u0()
+                        debuglog v0
+                        drop v0
+                        unit_end
+                    
+                    fn test():
+                    block0:
+                        v0 = const "chained"
+                        v1 = const 10u32
+                        v2 = const 20u32
+                        v3, v4 = add.checked v1, v2
+                        branch v4, block1, block2
+                    block1:
+                        v5 = none
+                        drop v0
+                        return v5
+                    block2:
+                        v6 = const 1000000000u32
+                        v7, v8 = mul.checked v3, v6
+                        branch v8, block3, block4
+                    block3:
+                        v9 = none
+                        drop v0
+                        return v9
+                    block4:
+                        v10 = pack Struct0 {v0, v7}
+                        v11 = some v10
+                        return v11
+                """,
+            ),
+            aot_lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = call @0 u0()
+                        debuglog v0
+                        drop v0
+                        unit_end
+                    
+                    fn test():
+                    block0:
+                        v0 = const "chained"
+                        v1 = const 10u32
+                        v2 = const 20u32
+                        v3, v4 = add.checked v1, v2
+                        branch v4, block1, block2
+                    block1:
+                        v5 = none
+                        drop v0
+                        return v5
+                    block2:
+                        v6 = const 1000000000u32
+                        v7, v8 = mul.checked v3, v6
+                        branch v8, block3, block4
+                    block3:
+                        v9 = none
+                        drop v0
+                        return v9
+                    block4:
+                        v10 = pack Struct0 {v0, v7}
+                        v11 = some v10
+                        return v11
+                """,
+            ),
+            ir_match: true,
+            interp_output: "none\n",
+            aot_output: "none\n",
+            output_match: true,
+            aot_compile: Some(AotCompileResult(
+                status: "Success",
+            )),
+            link: Some(LinkResult(
+                status: "Success",
+            )),
+            execution: Some(ExecutionResult(
+                status: "Success",
+                exit_code: 0,
+            )),
+        ),
+    ],
+)
