@@ -9,6 +9,7 @@ publish = false
 [dev-dependencies]
 divan = "0.1"
 datalove-datafun-compiler = { path = "../datalove-datafun-compiler" }
+datalove-datafun-resolve = { path = "../datalove-datafun-resolve" }
 datalove-datafun-tycheck = { path = "../datalove-datafun-tycheck" }
 datalove-datafun = { path = "../datalove-datafun" }
 datalove-datafun-cranelift-jit = { path = "../datalove-datafun-cranelift-jit" }
