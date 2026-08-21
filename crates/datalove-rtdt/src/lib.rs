@@ -724,6 +724,56 @@ pub enum TyTag {
     Error = 0x71,
 }
 
+impl TyTag {
+    /// Convert a raw tag byte, or `None` if it names no type.
+    ///
+    /// The discriminants are sparse, so most byte values are not tags.
+    /// Transmuting one would be undefined behaviour.
+    pub fn from_u8(raw: u8) -> core::option::Option<TyTag> {
+        let tag = match raw {
+            0x01 => TyTag::Bool,
+
+            0x10 => TyTag::U8,
+            0x11 => TyTag::I8,
+            0x12 => TyTag::U16,
+            0x13 => TyTag::I16,
+            0x14 => TyTag::U32,
+            0x15 => TyTag::I32,
+            0x16 => TyTag::U64,
+            0x17 => TyTag::I64,
+            0x18 => TyTag::Index,
+            0x19 => TyTag::Offset,
+
+            0x20 => TyTag::F32,
+            0x21 => TyTag::F64,
+
+            0x30 => TyTag::Int,
+
+            0x40 => TyTag::Tuple,
+            0x41 => TyTag::Struct,
+            0x42 => TyTag::Enum,
+            0x43 => TyTag::Atom,
+            0x44 => TyTag::Term,
+
+            0x50 => TyTag::List,
+            0x51 => TyTag::String,
+            0x52 => TyTag::Map,
+            0x53 => TyTag::Set,
+            0x54 => TyTag::Tensor,
+            0x55 => TyTag::Table,
+
+            0x60 => TyTag::Option,
+            0x61 => TyTag::Result,
+
+            0x70 => TyTag::Data,
+            0x71 => TyTag::Error,
+
+            _ => return core::option::Option::None,
+        };
+        core::option::Option::Some(tag)
+    }
+}
+
 
 #[repr(C)]
 pub union TyInfo {

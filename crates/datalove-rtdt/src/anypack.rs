@@ -289,7 +289,8 @@ impl Data {
             }
             Tag::SmallImmediate => {
                 let tytag_u8 = (self.secondary.addr() & 0xFF) as u8;
-                unsafe { std::mem::transmute(tytag_u8) }
+                TyTag::from_u8(tytag_u8)
+                    .unwrap_or_else(|| panic!("not a type tag: 0x{:02x}", tytag_u8))
             }
             _ => panic!("invalid tag"),
         }
@@ -635,6 +636,101 @@ mod tests {
                 nothing: TyInfoNothing,
             },
         }
+    }
+
+    /// Every tag, with an exhaustive match so that adding a variant to `TyTag`
+    /// fails to compile here rather than silently escaping the tests below.
+    fn every_tag() -> Vec<TyTag> {
+        fn discriminant(tag: TyTag) -> u8 {
+            match tag {
+                TyTag::Bool => 0x01,
+                TyTag::U8 => 0x10,
+                TyTag::I8 => 0x11,
+                TyTag::U16 => 0x12,
+                TyTag::I16 => 0x13,
+                TyTag::U32 => 0x14,
+                TyTag::I32 => 0x15,
+                TyTag::U64 => 0x16,
+                TyTag::I64 => 0x17,
+                TyTag::Index => 0x18,
+                TyTag::Offset => 0x19,
+                TyTag::F32 => 0x20,
+                TyTag::F64 => 0x21,
+                TyTag::Int => 0x30,
+                TyTag::Tuple => 0x40,
+                TyTag::Struct => 0x41,
+                TyTag::Enum => 0x42,
+                TyTag::Atom => 0x43,
+                TyTag::Term => 0x44,
+                TyTag::List => 0x50,
+                TyTag::String => 0x51,
+                TyTag::Map => 0x52,
+                TyTag::Set => 0x53,
+                TyTag::Tensor => 0x54,
+                TyTag::Table => 0x55,
+                TyTag::Option => 0x60,
+                TyTag::Result => 0x61,
+                TyTag::Data => 0x70,
+                TyTag::Error => 0x71,
+            }
+        }
+
+        let tags = vec![
+            TyTag::Bool,
+            TyTag::U8, TyTag::I8, TyTag::U16, TyTag::I16,
+            TyTag::U32, TyTag::I32, TyTag::U64, TyTag::I64,
+            TyTag::Index, TyTag::Offset,
+            TyTag::F32, TyTag::F64,
+            TyTag::Int,
+            TyTag::Tuple, TyTag::Struct, TyTag::Enum, TyTag::Atom, TyTag::Term,
+            TyTag::List, TyTag::String, TyTag::Map, TyTag::Set,
+            TyTag::Tensor, TyTag::Table,
+            TyTag::Option, TyTag::Result,
+            TyTag::Data, TyTag::Error,
+        ];
+        for tag in &tags {
+            assert_eq!(discriminant(*tag), *tag as u8);
+        }
+        tags
+    }
+
+    #[test]
+    fn test_tytag_from_u8_accepts_every_tag() {
+        for tag in every_tag() {
+            assert_eq!(TyTag::from_u8(tag as u8), std::option::Option::Some(tag));
+        }
+    }
+
+    #[test]
+    fn test_tytag_from_u8_rejects_non_tags() {
+        let valid: Vec<u8> = every_tag().into_iter().map(|t| t as u8).collect();
+        let mut rejected = 0;
+        for raw in 0u8..=255 {
+            match TyTag::from_u8(raw) {
+                std::option::Option::Some(tag) => {
+                    // Anything accepted must be the tag it names.
+                    assert_eq!(tag as u8, raw);
+                    assert!(valid.contains(&raw));
+                }
+                std::option::Option::None => {
+                    assert!(!valid.contains(&raw), "rejected a real tag: 0x{:02x}", raw);
+                    rejected += 1;
+                }
+            }
+        }
+        assert_eq!(rejected, 256 - valid.len());
+    }
+
+    #[test]
+    #[should_panic(expected = "not a type tag")]
+    fn test_tytag_panics_on_corrupt_immediate() {
+        // A SmallImmediate whose secondary byte names no type. Before this was
+        // checked, reading it transmuted an arbitrary byte into TyTag.
+        let data = Data {
+            primary: std::ptr::without_provenance(0x1001),
+            secondary: std::ptr::without_provenance(0xAB),
+        };
+        let _ = data.tytag();
     }
 
     #[test]
