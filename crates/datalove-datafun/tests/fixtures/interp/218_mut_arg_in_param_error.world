@@ -1,0 +1,26 @@
+----------
+module local/test/main
+----------
+
+// Test passing an in parameter to a mut parameter.
+// Should error - an in parameter is not assignable in the callee's frame.
+fun bump(mut x: u32): bool
+    set x = 999
+    ret true
+end fun
+
+fun outer(v: u32): bool
+    ret bump(v)
+end fun
+
+----------
+scriptunit-fragment
+----------
+
+require module local/test/main
+
+----------
+scriptunit-expr
+----------
+
+true

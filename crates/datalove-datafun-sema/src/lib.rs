@@ -250,6 +250,18 @@ pub enum AnalysisError {
         local_index: u32,
         name: String,
     },
+    /// Passing an immutable binding to a `mut` or `out` parameter.
+    /// D011. Applies to `let` bindings and `in` parameters; a `ref` parameter
+    /// reports D004 instead.
+    CannotMutateImmutable {
+        local_index: u32,
+        name: String,
+    },
+    /// Passing a value that is not a place to a `mut` or `out` parameter.
+    /// D012. The callee's writes would land in a temporary and be discarded.
+    CannotMutateTemporary {
+        local_index: u32,
+    },
 }
 
 /// Format analysis errors for display.
@@ -294,6 +306,12 @@ fn format_single_error(error: &AnalysisError) -> String {
         }
         AnalysisError::AliasedMutableArgument { local_index: _, name } => {
             format!("error[D010]: aliased mutable argument: `{}`", name)
+        }
+        AnalysisError::CannotMutateImmutable { local_index: _, name } => {
+            format!("error[D011]: cannot pass immutable binding as mutable: `{}`", name)
+        }
+        AnalysisError::CannotMutateTemporary { local_index: _ } => {
+            "error[D012]: cannot pass a temporary as mutable".to_string()
         }
     }
 }

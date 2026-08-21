@@ -390,6 +390,8 @@ across all match arms: if a value is moved in one arm, it must be moved in all.
 | D008 | InconsistentBranchMove | Value moved in one branch only |
 | D009 | OutParamPartialWrite | Field write to `out` param |
 | D010 | AliasedMutableArgument | Two arguments share a place root, one is `mut`/`out` |
+| D011 | CannotMutateImmutable | `let` binding or `in` param passed as `mut`/`out` |
+| D012 | CannotMutateTemporary | Non-place argument passed as `mut`/`out` |
 
 ### Drop Schedule
 

@@ -1,0 +1,35 @@
+----------
+module local/test/main
+----------
+
+// Test the forms that may be passed to a mut parameter: a var binding, a
+// projection of one, and a mut parameter being forwarded.
+fun bump(mut x: u32): bool
+    set x = 999
+    ret true
+end fun
+
+fun forward(mut y: u32): bool
+    ret bump(y)
+end fun
+
+fun outer(): u32
+    var v: u32 = 1
+    var t: (u32, u32) = (1, 2)
+    let _a = bump(v)
+    let _b = bump(t.0)
+    let _c = forward(v)
+    ret v
+end fun
+
+----------
+scriptunit-fragment
+----------
+
+require module local/test/main
+
+----------
+scriptunit-expr
+----------
+
+true

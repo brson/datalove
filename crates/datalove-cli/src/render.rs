@@ -453,6 +453,37 @@ fn render_ownership_error<'db>(
                 let _ = report.eprint((file_name, Source::from(text.as_str(db))));
             }
         }
+        AnalysisError::CannotMutateImmutable { local_index, name } => {
+            if let Some((text, span)) = lookup_expr_span(db, spans, *local_index) {
+                let msg = format!("cannot pass immutable binding as mutable: `{}`", name);
+                let report = Report::build(ReportKind::Error, file_name, span.start)
+                    .with_code("D011")
+                    .with_message(&msg)
+                    .with_label(
+                        Label::new((file_name, span.clone()))
+                            .with_color(colors.next())
+                            .with_message("passed to a `mut` or `out` parameter")
+                    )
+                    .with_note(format!("declare `{}` with `var` to allow mutation", name))
+                    .finish();
+                let _ = report.eprint((file_name, Source::from(text.as_str(db))));
+            }
+        }
+        AnalysisError::CannotMutateTemporary { local_index } => {
+            if let Some((text, span)) = lookup_expr_span(db, spans, *local_index) {
+                let report = Report::build(ReportKind::Error, file_name, span.start)
+                    .with_code("D012")
+                    .with_message("cannot pass a temporary as mutable")
+                    .with_label(
+                        Label::new((file_name, span.clone()))
+                            .with_color(colors.next())
+                            .with_message("passed to a `mut` or `out` parameter")
+                    )
+                    .with_note("bind the value to a `var` first, so the mutation is observable")
+                    .finish();
+                let _ = report.eprint((file_name, Source::from(text.as_str(db))));
+            }
+        }
         AnalysisError::ReadUninitialized { local_index, name } => {
             if let Some((text, span)) = lookup_expr_span(db, spans, *local_index) {
                 let msg = format!("read of uninitialized binding: `{}`", name);

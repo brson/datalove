@@ -333,6 +333,25 @@ fn emit_single_ownership_diagnostic<'db>(
                     .emit_ownership();
             }
         }
+        AnalysisError::CannotMutateImmutable { local_index, name } => {
+            if let Some(ts) = lookup_expr_span(db, spans, *local_index) {
+                let msg = format!("cannot pass immutable binding as mutable: `{}`", name);
+                bct::diagnostic::DiagnosticBuilder::error(db, &msg)
+                    .code("D011")
+                    .primary_label(ts, "passed to a `mut` or `out` parameter")
+                    .note(&format!("declare `{}` with `var` to allow mutation", name))
+                    .emit_ownership();
+            }
+        }
+        AnalysisError::CannotMutateTemporary { local_index } => {
+            if let Some(ts) = lookup_expr_span(db, spans, *local_index) {
+                bct::diagnostic::DiagnosticBuilder::error(db, "cannot pass a temporary as mutable")
+                    .code("D012")
+                    .primary_label(ts, "passed to a `mut` or `out` parameter")
+                    .note("bind the value to a `var` first, so the mutation is observable")
+                    .emit_ownership();
+            }
+        }
         AnalysisError::ReadUninitialized { local_index, name } => {
             if let Some(ts) = lookup_expr_span(db, spans, *local_index) {
                 let msg = format!("read of uninitialized binding: `{}`", name);

@@ -1,0 +1,29 @@
+----------
+module local/test/main
+----------
+
+// Test passing a let binding to a mut parameter.
+// Should error - parameters are passed by reference, so this would mutate a
+// binding declared immutable.
+fun bump(mut x: u32): bool
+    set x = 999
+    ret true
+end fun
+
+fun outer(): u32
+    let v: u32 = 42
+    let _ok = bump(v)
+    ret v
+end fun
+
+----------
+scriptunit-fragment
+----------
+
+require module local/test/main
+
+----------
+scriptunit-expr
+----------
+
+true

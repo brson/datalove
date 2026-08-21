@@ -1003,8 +1003,31 @@ values.
 | D008 | InconsistentBranchMove | Moved in one branch but not another |
 | D009 | OutParamPartialWrite | Writing fields of `out` param individually |
 | D010 | AliasedMutableArgument | Two arguments alias, one is `mut`/`out` |
+| D011 | CannotMutateImmutable | Immutable binding passed as `mut`/`out` |
+| D012 | CannotMutateTemporary | Temporary passed as `mut`/`out` |
 
-### 11.2 Argument Aliasing
+### 11.2 Mutable Arguments
+
+A `mut` or `out` argument is written through, so it must denote something the
+caller can assign to: a `var` binding, a projection of one, or a `mut`/`out`
+parameter being forwarded.
+
+```datalove
+fun bump(mut x: u32)
+
+var v: u32 = 1
+bump(v)            // ok
+bump(v.0)          // ok for a var aggregate
+
+let w: u32 = 1
+bump(w)            // error: `w` is immutable
+bump(compute())    // error: the write would be discarded
+```
+
+An `in` parameter is not assignable either, and a `ref` parameter reports the
+more specific D004.
+
+### 11.3 Argument Aliasing
 
 Every parameter is passed by reference, so two arguments naming the same
 binding hand the callee two references to one object. That is an error when
@@ -1028,7 +1051,7 @@ Arguments are compared by the binding their place is rooted at. Distinct
 fields (`f(mut p.x, ref p.y)`) and distinct indexes (`f(mut a[i]?, ref a[j]?)`)
 share a root and are rejected, even where they do not overlap in fact.
 
-### 11.3 Loop Restrictions
+### 11.4 Loop Restrictions
 
 Moving an outer-scoped linear value inside a loop is an error:
 
@@ -1041,7 +1064,7 @@ end loop
 
 Copy types and operator operands (which are borrowed) are exempt.
 
-### 11.4 Branch Consistency
+### 11.5 Branch Consistency
 
 If a value is moved in one branch, it must be moved in all branches:
 
@@ -1053,7 +1076,7 @@ else
 end if
 ```
 
-### 11.5 Tracking Categories
+### 11.6 Tracking Categories
 
 Bindings are categorized for drop scheduling:
 

@@ -493,6 +493,43 @@ impl<'db> AnalysisCtx<'db> {
         None
     }
 
+    /// True if a binding can be assigned through: a `var` slot, or a `mut` or
+    /// `out` parameter. `let` bindings and `in`/`ref` parameters cannot.
+    fn binding_is_mutable(&self, id: BindingId) -> bool {
+        let info = &self.bindings[id.0 as usize];
+        info.is_slot || matches!(info.param_mode, Some(ParamMode::Mut) | Some(ParamMode::Out))
+    }
+
+    /// Reject an argument to a `mut` or `out` parameter that the caller cannot
+    /// mutate.
+    ///
+    /// Parameters are passed by reference, so the callee writes into whatever
+    /// the argument denotes. That must be a place the caller may assign to,
+    /// otherwise `let` bindings are mutable in fact while immutable by
+    /// declaration, and writes through a temporary are silently discarded.
+    fn check_mutable_argument(&mut self, arg: ExprFun<'db>) {
+        let local_index = arg.as_id().index() as u32;
+
+        if !matches!(arg.expr(self.db), ExprFunKind::Place(_)) {
+            self.errors.push(AnalysisError::CannotMutateTemporary { local_index });
+            return;
+        }
+        let Some(root) = self.expr_to_place_root(arg) else {
+            return;
+        };
+        if self.binding_is_mutable(root) {
+            return;
+        }
+
+        let name = self.bindings[root.0 as usize].name.C();
+        // A ref parameter gets the more specific message.
+        if self.bindings[root.0 as usize].param_mode == Some(ParamMode::Ref) {
+            self.errors.push(AnalysisError::CannotMutFromRef { local_index, name });
+        } else {
+            self.errors.push(AnalysisError::CannotMutateImmutable { local_index, name });
+        }
+    }
+
     /// Reject calls where two arguments share a place root and at least one of
     /// them is passed to a `mut` or `out` parameter.
     ///
@@ -641,20 +678,10 @@ impl<'db> AnalysisCtx<'db> {
                 for (i, arg) in args.iter().enumerate() {
                     let callee_mode = callee_modes.get(i).copied();
 
-                    // Check for invalid ref -> mut passing.
-                    // Can't get mutable reference from immutable ref param.
-                    // Mut -> Mut is allowed since the source already has mutable access.
-                    if callee_mode == Some(ParamMode::Mut) {
-                        if let Some(binding_id) = self.expr_to_binding(*arg) {
-                            if self.bindings[binding_id.0 as usize].param_mode == Some(ParamMode::Ref) {
-                                let name = self.bindings[binding_id.0 as usize].name.C();
-                                let local_index = arg.as_id().index() as u32;
-                                self.errors.push(AnalysisError::CannotMutFromRef {
-                                    local_index,
-                                    name,
-                                });
-                            }
-                        }
+                    // The callee writes through a mut or out parameter, so the
+                    // argument has to be something the caller can mutate.
+                    if matches!(callee_mode, Some(ParamMode::Mut) | Some(ParamMode::Out)) {
+                        self.check_mutable_argument(*arg);
                     }
 
                     // For Out params: the callee writes to the arg, so this is NOT a read.

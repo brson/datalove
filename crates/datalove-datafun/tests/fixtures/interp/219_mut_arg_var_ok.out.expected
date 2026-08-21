@@ -1,0 +1,85 @@
+Analysis(
+    sections: [
+        SectionResult(
+            section_type: "module",
+            name: Some("local/test/main"),
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    fn bump(p0):
+                    block0:
+                        v0 = const 999u32
+                        store p0, v0
+                        v1 = const true
+                        return v1
+                    
+                    fn forward(p0):
+                    block0:
+                        v0 = call @0 m0.u0(p0)
+                        return v0
+                    
+                    fn outer():
+                    block0:
+                        v0 = const 1u32
+                        store.copy.tracked s0, v0
+                        v1 = const 1u32
+                        v2 = const 2u32
+                        v3 = pack Tuple2 {v1, v2}
+                        store.copy.tracked s1, v3
+                        v4 = call @0 m0.u0(s0)
+                        v5 = getfieldref s1.0
+                        v6 = call @1 m0.u0(*v5)
+                        v7 = call @2 m0.u1(s0)
+                        v8 = load.copy s0
+                        return v8
+                """,
+            ),
+            output: "",
+        ),
+        SectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        unit_end
+                """,
+            ),
+            output: "(fragment executed)",
+        ),
+        SectionResult(
+            section_type: "scriptunit-expr",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const true
+                        unit_end v0
+                """,
+            ),
+            output: "true",
+        ),
+    ],
+)
