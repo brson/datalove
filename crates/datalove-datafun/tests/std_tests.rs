@@ -15,10 +15,11 @@ fn analyze_file(path: &Path) -> Result<String, String> {
 
     // Load package world from sys/ directory.
     let manifest_dir = env!("CARGO_MANIFEST_DIR");
-    let sys_dir = std::path::PathBuf::from(manifest_dir)
+    let repo_root = std::path::PathBuf::from(manifest_dir)
         .parent().unwrap()
         .parent().unwrap()
-        .join("sys");
+        .to_path_buf();
+    let sys_dir = repo_root.join("sys");
 
     let config = datafun::package_load::PackageWorldConfig {
         dir_pkglib_system: sys_dir,
@@ -29,11 +30,13 @@ fn analyze_file(path: &Path) -> Result<String, String> {
         datafun::package_load::load_world(config)
     ).map_err(|e| format!("Failed to load package world: {}", e))?;
 
-    // Build workspace descriptor from loaded packages.
+    // Build workspace descriptor from loaded packages. The work dir is unique
+    // to this suite so a concurrently running suite builds its own component
+    // rather than rebuilding over this one's.
     let descriptor = WorkspaceDescriptor::from_package_world(
         &package_world_raw,
         CompilerOptions::default(),
-    );
+    ).with_work_dir(repo_root.join("target").join("datalove-work").join("std_tests"));
 
     // Create pipeline from descriptor and compile.
     let mut pipeline = descriptor.to_pipeline(&db);
@@ -63,7 +66,9 @@ fn analyze_file(path: &Path) -> Result<String, String> {
     let mut _loaded_riders = Vec::new();
     let rider_crate_dirs = descriptor.rider_crate_dirs();
     if !rider_crate_dirs.is_empty() {
-        let build_result = datafun::pipeline::rider_build::build_native_component(&rider_crate_dirs)
+        let work_dir = descriptor.work_dir.as_ref()
+            .ok_or("workspace has riders but no work dir")?;
+        let build_result = datafun::pipeline::rider_build::build_native_component(work_dir, &rider_crate_dirs)
             .map_err(|e| format!("rider build error: {}", e))?;
         let native_symbols = compiled.native_symbols();
         if !native_symbols.is_empty() {

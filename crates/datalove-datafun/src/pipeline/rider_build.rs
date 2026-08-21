@@ -7,13 +7,23 @@
 
 use rmx::prelude::*;
 use rmx::std::path::{Path, PathBuf};
+use std::collections::HashMap;
+use std::sync::{LazyLock, Mutex};
 
 const NATIVE_COMPONENT_CRATE_NAME: &str = "datalove-native-component";
 
 /// Counter for unique temp file names in `write_atomic`.
 static TMP_COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
+/// Identifies a native component build: where it is built and what goes in it.
+type ComponentKey = (PathBuf, Vec<(String, PathBuf)>);
+
+/// Components already built by this process, keyed by work dir and rider set.
+static COMPONENT_CACHE: LazyLock<Mutex<HashMap<ComponentKey, NativeComponentBuild>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
+
 /// Result of building the unified native component library.
+#[derive(Clone)]
 pub struct NativeComponentBuild {
     /// Path to the built shared library (.so/.dylib/.dll) for interpreter use.
     pub cdylib_path: PathBuf,
@@ -41,11 +51,37 @@ impl std::error::Error for RiderBuildError {}
 ///
 /// Synthesizes a single Rust crate that depends on `datalove-rt` and all rider
 /// crates as rlib dependencies, producing one cdylib and one staticlib. The
-/// synthesized crate is generated in `target/datalove-native-component/` under
-/// the workspace root.
+/// synthesized crate is generated in `native-component/` under `work_dir`, which
+/// is the workspace's writable working area (see
+/// [`WorkspaceDescriptor::work_dir`](super::WorkspaceDescriptor::work_dir)).
 ///
 /// Can be called with an empty `riders` slice to produce a runtime-only component.
+///
+/// The result is memoized per process for a given work dir and rider set, so
+/// concurrent callers compiling the same workspace build once and share the
+/// artifacts. A caller that edits rider sources within one process will keep
+/// seeing the first build.
 pub fn build_native_component(
+    work_dir: &Path,
+    riders: &[(String, PathBuf)],
+) -> Result<NativeComponentBuild, RiderBuildError> {
+    let key: ComponentKey = (work_dir.to_path_buf(), riders.to_vec());
+
+    // Held across the build so that concurrent callers wait for the first
+    // build rather than each running cargo against the same directory.
+    let mut cache = COMPONENT_CACHE.lock()
+        .expect("native component cache poisoned");
+    if let Some(build) = cache.get(&key) {
+        return Ok(build.clone());
+    }
+
+    let build = build_native_component_uncached(work_dir, riders)?;
+    cache.insert(key, build.clone());
+    Ok(build)
+}
+
+fn build_native_component_uncached(
+    work_dir: &Path,
     riders: &[(String, PathBuf)],
 ) -> Result<NativeComponentBuild, RiderBuildError> {
     // Resolve rider crate names from their Cargo.toml files.
@@ -69,7 +105,7 @@ pub fn build_native_component(
         rider_crates.push((rider_name.clone(), crate_name, abs_dir));
     }
 
-    let synth_dir = synth_crate_dir();
+    let synth_dir = synth_crate_dir(work_dir);
     let src_dir = synth_dir.join("src");
     std::fs::create_dir_all(&src_dir)
         .map_err(|e| build_err("native-component", format!("failed to create synth dir: {}", e)))?;
@@ -108,7 +144,7 @@ pub fn build_native_component(
             abs_dir.display(),
         ));
     }
-    write_atomic(&synth_dir.join("Cargo.toml"), &cargo_toml)
+    write_if_changed(&synth_dir.join("Cargo.toml"), &cargo_toml)
         .map_err(|e| build_err("native-component", format!("failed to write Cargo.toml: {}", e)))?;
 
     // Generate lib.rs that pulls in the runtime and all rider crates.
@@ -118,7 +154,7 @@ pub fn build_native_component(
         let ident = crate_name.replace('-', "_");
         lib_rs.push_str(&format!("extern crate {};\n", ident));
     }
-    write_atomic(&src_dir.join("lib.rs"), &lib_rs)
+    write_if_changed(&src_dir.join("lib.rs"), &lib_rs)
         .map_err(|e| build_err("native-component", format!("failed to write lib.rs: {}", e)))?;
 
     // Build the synthesized crate.
@@ -156,17 +192,38 @@ fn workspace_root_dir() -> PathBuf {
     manifest_dir.parent().unwrap().parent().unwrap().to_path_buf()
 }
 
-/// Directory for the synthesized native component crate.
-fn synth_crate_dir() -> PathBuf {
-    workspace_root_dir().join("target").join("datalove-native-component")
+/// Directory for the synthesized native component crate within a work dir.
+fn synth_crate_dir(work_dir: &Path) -> PathBuf {
+    work_dir.join("native-component")
+}
+
+/// Write a file only if its contents would change.
+///
+/// Every caller regenerates these files, and their contents are fully
+/// determined by the rider set, so almost every write is a no-op in content but
+/// not in metadata: `write_atomic` renames a just-created temp file over the
+/// destination, which moves its mtime forward. Cargo fingerprints local sources
+/// by mtime, so it recompiles and relinks, and relinking briefly unlinks the
+/// output archive - while other threads are handing that path to the linker.
+///
+/// Skipping the write leaves the fingerprint intact, so cargo does no work and
+/// never touches the archive. Contents that genuinely differ still go through
+/// `write_atomic`.
+fn write_if_changed(path: &Path, contents: &str) -> std::io::Result<()> {
+    if let Ok(existing) = std::fs::read_to_string(path) {
+        if existing == contents {
+            return Ok(());
+        }
+    }
+    write_atomic(path, contents)
 }
 
 /// Write a file by renaming a fully-written temp file over the destination.
 ///
-/// The synthesized crate lives at one fixed path, so concurrent builders all
-/// regenerate these files with identical content. A plain write truncates the
-/// file first, and another builder's `cargo` may parse it inside that window.
-/// Rename is atomic, so readers always see one complete version or the other.
+/// Concurrent builders sharing a work dir may be running `cargo` against these
+/// files. A plain write truncates first, and another builder's cargo may parse
+/// the file inside that window. Rename is atomic, so readers always see one
+/// complete version or the other.
 fn write_atomic(path: &Path, contents: &str) -> std::io::Result<()> {
     let n = TMP_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     let file_name = path.file_name().unwrap().to_string_lossy();

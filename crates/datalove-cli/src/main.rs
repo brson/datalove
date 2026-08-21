@@ -13,7 +13,9 @@ fn build_native_component_for_aot(
     use datalove_datafun::pipeline::rider_build;
 
     let rider_crate_dirs = descriptor.rider_crate_dirs();
-    let result = rider_build::build_native_component(&rider_crate_dirs)
+    let work_dir = descriptor.work_dir.as_ref()
+        .ok_or_else(|| anyhow!("workspace has riders but no work dir"))?;
+    let result = rider_build::build_native_component(work_dir, &rider_crate_dirs)
         .map_err(|e| anyhow!("{}", e))?;
     Ok(vec![result.staticlib_path])
 }
@@ -29,7 +31,9 @@ fn build_and_load_riders(
     use datalove_datafun::pipeline::{rider_build, rider_load};
 
     let rider_crate_dirs = descriptor.rider_crate_dirs();
-    let build_result = rider_build::build_native_component(&rider_crate_dirs)
+    let work_dir = descriptor.work_dir.as_ref()
+        .ok_or_else(|| anyhow!("workspace has riders but no work dir"))?;
+    let build_result = rider_build::build_native_component(work_dir, &rider_crate_dirs)
         .map_err(|e| anyhow!("{}", e))?;
 
     let native_symbols = compiled.native_symbols();

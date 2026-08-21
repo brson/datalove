@@ -33,6 +33,17 @@ pub struct WorkspaceDescriptor {
 
     /// Compiler options that affect all compilation.
     pub options: CompilerOptions,
+
+    /// Directory the compiler may write to, equivalent to cargo's target dir.
+    ///
+    /// The synthesized native component crate is built here. Two workspaces
+    /// compiled concurrently must not share one, or their components overwrite
+    /// each other. `None` for workspaces with no on-disk working area, such as
+    /// those built from worldfiles; building a native rider then fails.
+    ///
+    /// This is where output goes, not an input to compilation, so it takes no
+    /// part in [`diff`](Self::diff).
+    pub work_dir: Option<PathBuf>,
 }
 
 /// A named collection of packages.
@@ -139,22 +150,34 @@ impl WorkspaceDelta {
 // ---------------------------------------------------------------------------
 
 impl WorkspaceDescriptor {
-    /// Empty workspace with default options.
+    /// Empty workspace with default options and no working area.
     pub fn empty() -> Self {
         Self {
             system_library: None,
             user_libraries: Vec::new(),
             options: CompilerOptions::default(),
+            work_dir: None,
         }
     }
 
+    /// Set the directory the compiler may write to.
+    pub fn with_work_dir(mut self, work_dir: impl Into<PathBuf>) -> Self {
+        self.work_dir = Some(work_dir.into());
+        self
+    }
+
     /// Load the default system library from disk and return a descriptor.
+    ///
+    /// The work dir defaults to `target/datalove-work` in the repository, which
+    /// is only meaningful while the compiler runs from its own source tree.
     pub async fn load_default_sys() -> rmx::anyhow::Result<Self> {
         use datalove_datafun_pkg::package_load;
 
         let manifest_dir = env!("CARGO_MANIFEST_DIR");
         let manifest_path = std::path::PathBuf::from(manifest_dir);
-        let sys_dir = manifest_path.parent().unwrap().parent().unwrap().join("sys");
+        let repo_root = manifest_path.parent().unwrap().parent().unwrap();
+        let sys_dir = repo_root.join("sys");
+        let work_dir = repo_root.join("target").join("datalove-work");
 
         let config = package_load::PackageWorldConfig {
             dir_pkglib_system: sys_dir,
@@ -162,7 +185,8 @@ impl WorkspaceDescriptor {
         };
 
         let world = package_load::load_world(config).await?;
-        Ok(Self::from_package_world(&world, CompilerOptions::default()))
+        Ok(Self::from_package_world(&world, CompilerOptions::default())
+            .with_work_dir(work_dir))
     }
 
     /// Build from a loaded [`PackageWorld`].
@@ -182,7 +206,7 @@ impl WorkspaceDescriptor {
             vec![package_library_from_map("local", &world.pkglib_local)]
         };
 
-        Self { system_library, user_libraries, options }
+        Self { system_library, user_libraries, options, work_dir: None }
     }
 
     /// Build from parsed worldfile sections.
@@ -227,7 +251,7 @@ impl WorkspaceDescriptor {
 
         // Attach worldfile riders to matching packages.
         // Worldfile riders are identified by package name.
-        let mut descriptor = Self { system_library, user_libraries, options };
+        let mut descriptor = Self { system_library, user_libraries, options, work_dir: None };
         for (rider_name, rider) in riders {
             descriptor.attach_rider(&rider_name, rider);
         }
@@ -259,6 +283,7 @@ impl WorkspaceDescriptor {
             system_library,
             user_libraries,
             options: other.options.clone(),
+            work_dir: other.work_dir.clone().or_else(|| self.work_dir.clone()),
         }
     }
 

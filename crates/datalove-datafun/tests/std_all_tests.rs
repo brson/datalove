@@ -19,9 +19,16 @@ fn setup_and_compile(db: &datafun::Database) -> Result<(
     WorkspaceDescriptor,
     datafun::pipeline::CompiledModules<'_>,
 ), String> {
+    // The work dir is unique to this suite so a concurrently running suite
+    // builds its own component rather than rebuilding over this one's.
+    let work_dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .parent().unwrap()
+        .parent().unwrap()
+        .join("target").join("datalove-work").join("std_all_tests");
     let descriptor = rmx::futures::executor::block_on(
         WorkspaceDescriptor::load_default_sys()
-    ).map_err(|e| format!("Failed to load package world: {}", e))?;
+    ).map_err(|e| format!("Failed to load package world: {}", e))?
+        .with_work_dir(work_dir);
 
     let mut pipeline = descriptor.to_pipeline(db);
     let compiled = pipeline.compile_fresh(db);
@@ -46,7 +53,9 @@ fn build_and_load_riders(
     executor: &mut datafun::pipeline::ScriptExecutor,
 ) -> Result<(Vec<PathBuf>, Vec<datafun::pipeline::rider_load::LoadedRider>), String> {
     let rider_crate_dirs = descriptor.rider_crate_dirs();
-    let build_result = datafun::pipeline::rider_build::build_native_component(&rider_crate_dirs)
+    let work_dir = descriptor.work_dir.as_ref()
+        .ok_or("workspace has riders but no work dir")?;
+    let build_result = datafun::pipeline::rider_build::build_native_component(work_dir, &rider_crate_dirs)
         .map_err(|e| format!("rider build error: {}", e))?;
 
     let lib_paths = vec![build_result.staticlib_path.clone()];
