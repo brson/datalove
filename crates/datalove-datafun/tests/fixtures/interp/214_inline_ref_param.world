@@ -8,8 +8,8 @@ fun read_int(ref x: int): int
 end fun
 
 let val: int = 42
-let result1 = read_int(val)
-let result2 = read_int(val)
+let result1 = read_int(ref val)
+let result2 = read_int(ref val)
 let output = (result1, result2)
 
 ----------

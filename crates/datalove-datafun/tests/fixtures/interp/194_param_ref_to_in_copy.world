@@ -23,4 +23,4 @@ import main.outer
 scriptunit-expr
 ----------
 
-outer(100)
+outer(ref 100)

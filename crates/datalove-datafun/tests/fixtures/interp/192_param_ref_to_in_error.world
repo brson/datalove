@@ -21,7 +21,7 @@ require module local/test/main
 import main.outer
 
 let val: int = :int/100
-let result = outer(val)
+let result = outer(ref val)
 let output = result
 
 ----------

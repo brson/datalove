@@ -8,7 +8,7 @@ fun inner(ref x: bool): bool
 end fun
 
 fun outer(ref y: bool): bool
-    ret inner(y)
+    ret inner(ref y)
 end fun
 
 ----------
@@ -19,7 +19,7 @@ require module local/test/main
 import main.outer
 
 let val: bool = true
-let result1 = outer(val)
+let result1 = outer(ref val)
 let output = result1
 
 ----------

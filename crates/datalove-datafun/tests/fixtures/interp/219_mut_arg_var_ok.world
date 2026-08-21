@@ -10,15 +10,15 @@ fun bump(mut x: u32): bool
 end fun
 
 fun forward(mut y: u32): bool
-    ret bump(y)
+    ret bump(mut y)
 end fun
 
 fun outer(): u32
     var v: u32 = 1
     var t: (u32, u32) = (1, 2)
-    let _a = bump(v)
-    let _b = bump(t.0)
-    let _c = forward(v)
+    let _a = bump(mut v)
+    let _b = bump(mut t.0)
+    let _c = forward(mut v)
     ret v
 end fun
 

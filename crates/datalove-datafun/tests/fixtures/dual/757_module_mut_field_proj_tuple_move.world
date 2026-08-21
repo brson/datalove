@@ -17,5 +17,5 @@ require module local/test/mutops_move
 import mutops_move.set_to_42
 
 var t: (int, int) = (:int/100, :int/200)
-let _ok = set_to_42(t.0)
+let _ok = set_to_42(mut t.0)
 debuglog t.0

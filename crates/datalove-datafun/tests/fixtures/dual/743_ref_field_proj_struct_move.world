@@ -8,4 +8,4 @@ fun takes_ref(ref x: int): int
 end fun
 
 let s: {a: int, b: int} = {a = :int/100, b = :int/200}
-debuglog takes_ref(s.a)
+debuglog takes_ref(ref s.a)

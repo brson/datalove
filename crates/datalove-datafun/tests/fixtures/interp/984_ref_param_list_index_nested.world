@@ -9,7 +9,7 @@ end fun
 
 fun test(): ?u32
     var a: [[u32]] = [[1, 2], [3, 4, 5]]
-    ret list_len(a[(: index / 1)]?)
+    ret list_len(ref a[(: index / 1)]?)
 end fun
 
 debuglog test()

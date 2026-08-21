@@ -9,7 +9,7 @@ end fun
 
 fun main(): bool
     let val: int = :int/100
-    ret inner(val)
+    ret inner(ref val)
 end fun
 
 ----------

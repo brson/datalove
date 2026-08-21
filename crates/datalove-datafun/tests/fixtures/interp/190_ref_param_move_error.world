@@ -18,7 +18,7 @@ require module local/test/main
 import main.bad_function
 
 let val: int = :int/100
-let result = bad_function(val)
+let result = bad_function(ref val)
 let output = result
 
 ----------

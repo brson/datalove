@@ -7,4 +7,4 @@ fun clone_str(ref x: string): ?string
     ret some x@
 end fun
 
-debuglog clone_str("hello")
+debuglog clone_str(ref "hello")

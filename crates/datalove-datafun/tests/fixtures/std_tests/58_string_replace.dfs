@@ -3,9 +3,9 @@ require module sys/std/string
 import string.replace
 
 let a = "hello world"
-let r1 = replace(a, "world", "there")
-let r2 = replace(a, "o", "0")
-let r3 = replace(a, "xyz", "!")
-let r4 = replace("aaa", "a", "bb")
+let r1 = replace(ref a, ref "world", ref "there")
+let r2 = replace(ref a, ref "o", ref "0")
+let r3 = replace(ref a, ref "xyz", ref "!")
+let r4 = replace(ref "aaa", ref "a", ref "bb")
 
 let output = (r1, r2, r3, r4)

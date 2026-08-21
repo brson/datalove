@@ -12,7 +12,7 @@ end fun
 // Test wrapper.
 fun test(): bool
     var n: int = :int/5
-    let _ok: bool = set_to_int100(n)
+    let _ok: bool = set_to_int100(mut n)
     // Check that n is now 100
     ret n == :int/100
 end fun

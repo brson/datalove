@@ -10,5 +10,5 @@ fun add_ten(mut x: int): bool
 end fun
 
 var n: int = 32
-let _ok = add_ten(n)
+let _ok = add_ten(mut n)
 debuglog n

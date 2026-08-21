@@ -9,5 +9,5 @@ fun set_to_100(mut x: u32): bool
 end fun
 
 var n: u32 = 5
-let _ok = set_to_100(n)
+let _ok = set_to_100(mut n)
 debuglog n

@@ -6,9 +6,9 @@ import string.len
 import string.is_empty
 
 var s = "hello"
-let before = len(s)
-clear(s)
-let after = len(s)
-let empty = is_empty(s)
+let before = len(ref s)
+clear(mut s)
+let after = len(ref s)
+let empty = is_empty(ref s)
 
 let output = (before, after, empty)

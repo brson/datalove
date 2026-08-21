@@ -74,7 +74,7 @@ fun foo(ref b: int): int
 end fun
 
 let a: (int, int) = (1, 2)
-debuglog foo(a.0) // ref-destination projections are ok for move types
+debuglog foo(ref a.0) // ref-destination projections are ok for move types
 ```
 
 Nested projections are allowed:

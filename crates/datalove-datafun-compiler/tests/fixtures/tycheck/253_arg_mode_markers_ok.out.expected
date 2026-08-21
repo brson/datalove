@@ -1,0 +1,52 @@
+{
+  "diagnostics": [
+    {
+      "code": "F026",
+      "labels": [
+        {
+          "message": "operator `+` cannot be applied to type `u32`",
+          "span": [
+            161,
+            166
+          ],
+          "text": "a + b"
+        }
+      ],
+      "message": "invalid operand type `u32` for operator `+`"
+    }
+  ],
+  "errors": [
+    {
+      "kind": "InvalidOperandType",
+      "op": "+",
+      "type": "u32"
+    }
+  ],
+  "judgements": [
+    {
+      "kind": "function",
+      "name": "mixed",
+      "params": [
+        {
+          "name": "a",
+          "type": "u32"
+        },
+        {
+          "name": "b",
+          "type": "u32"
+        },
+        {
+          "name": "c",
+          "type": "u32"
+        }
+      ],
+      "return_type": "u32"
+    },
+    {
+      "kind": "function",
+      "name": "caller",
+      "params": [],
+      "return_type": "u32"
+    }
+  ]
+}

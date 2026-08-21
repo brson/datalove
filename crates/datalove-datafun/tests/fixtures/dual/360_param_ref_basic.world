@@ -8,5 +8,5 @@ fun double(ref x: int): int
 end fun
 
 let val: int = 21
-debuglog double(val)
+debuglog double(ref val)
 debuglog val

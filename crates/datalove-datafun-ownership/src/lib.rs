@@ -60,17 +60,6 @@ pub use datalove_datafun_common::AutoAdaptMode;
 // Call site information
 // ============================================================================
 
-/// Pre-resolved call site info for ownership analysis.
-///
-/// This provides the parameter modes of the callee function, which ownership
-/// analysis needs to determine whether arguments are consumed (In) or borrowed
-/// (Ref, Mut, Out).
-#[derive(Clone, Debug)]
-pub struct CallInfo {
-    /// Parameter modes of the called function.
-    pub param_modes: Vec<ParamMode>,
-}
-
 // ============================================================================
 // Core types
 // ============================================================================
@@ -105,8 +94,6 @@ struct AnalysisCtx<'db> {
     db: &'db dyn salsa::Database,
     /// Pre-converted expression types (IrType).
     expr_types: &'db [Option<IrType>],
-    /// Pre-resolved call info for looking up callee parameter modes.
-    call_info: &'db [Option<CallInfo>],
     /// Next binding ID to allocate.
     next_binding: u32,
     /// Next global statement ID for drop schedule keys.
@@ -155,13 +142,11 @@ impl<'db> AnalysisCtx<'db> {
     fn new(
         db: &'db dyn salsa::Database,
         expr_types: &'db [Option<IrType>],
-        call_info: &'db [Option<CallInfo>],
         auto_adapt_mode: AutoAdaptMode,
     ) -> Self {
         Self {
             db,
             expr_types,
-            call_info,
             next_binding: 0,
             next_stmt_id: 0,
             bindings: Vec::new(),
@@ -658,21 +643,16 @@ impl<'db> AnalysisCtx<'db> {
                 None
             }
             ExprFunKind::FunctionCall(call) => {
-                // Ownership analysis only runs on modules and units that
-                // typechecked cleanly, so every call has a resolved target and
-                // a missing entry is a bug in call resolution. Tolerating it
-                // would silently disable the mode-dependent checks below.
-                let call_index = call.as_id().index() as usize;
-                let callee_modes: &[ParamMode] = self.call_info
-                    .get(call_index)
-                    .and_then(|opt| opt.as_ref())
-                    .map(|info| info.param_modes.as_slice())
-                    .unwrap_or_else(|| panic!(
-                        "no resolved call target for call at index {}", call_index
-                    ));
+                // Every argument carries its mode, and typechecking has already
+                // established that each marker matches the callee's declared
+                // mode, so the call site alone says how each argument is passed.
+                // An absent marker denotes `in`.
+                let callee_modes: Vec<ParamMode> = call.arg_modes(self.db).iter()
+                    .map(|m| m.unwrap_or(ParamMode::In))
+                    .collect();
 
                 let args = call.args(self.db);
-                self.check_argument_aliasing(&args, callee_modes);
+                self.check_argument_aliasing(&args, &callee_modes);
 
                 // Analyze args with appropriate consumption based on param mode.
                 for (i, arg) in args.iter().enumerate() {
@@ -887,10 +867,9 @@ pub fn analyze_function<'db>(
     db: &'db dyn salsa::Database,
     func: StmtFun<'db>,
     expr_types: &'db [Option<IrType>],
-    call_info: &'db [Option<CallInfo>],
     resolved_param_types: Option<&[IrType]>,
 ) -> FunctionAnalysis {
-    analyze_function_with_mode(db, func, expr_types, call_info, resolved_param_types, AutoAdaptMode::Disabled)
+    analyze_function_with_mode(db, func, expr_types, resolved_param_types, AutoAdaptMode::Disabled)
 }
 
 /// Analyze a function for ownership with configurable auto-adapt mode.
@@ -898,11 +877,10 @@ pub fn analyze_function_with_mode<'db>(
     db: &'db dyn salsa::Database,
     func: StmtFun<'db>,
     expr_types: &'db [Option<IrType>],
-    call_info: &'db [Option<CallInfo>],
     resolved_param_types: Option<&[IrType]>,
     auto_adapt_mode: AutoAdaptMode,
 ) -> FunctionAnalysis {
-    let mut ctx = AnalysisCtx::new(db, expr_types, call_info, auto_adapt_mode);
+    let mut ctx = AnalysisCtx::new(db, expr_types, auto_adapt_mode);
 
     // Enter function scope.
     ctx.enter_scope(ScopeKind::Function);
@@ -947,7 +925,6 @@ pub fn analyze_function_with_mode<'db>(
 pub fn analyze_script_functions<'db>(
     db: &'db dyn salsa::Database,
     expr_types: &'db [Option<IrType>],
-    call_info: &'db [Option<CallInfo>],
     stmts: &[Statement<'db>],
     func_param_types: Option<&HashMap<String, Vec<IrType>>>,
 ) -> Result<ScriptFunctionAnalyses<'db>, Vec<(String, Vec<AnalysisError>)>> {
@@ -962,7 +939,7 @@ pub fn analyze_script_functions<'db>(
                 .and_then(|m| m.get(func_name))
                 .map(|v| v.as_slice());
 
-            let analysis = analyze_function(db, *func, expr_types, call_info, resolved_params);
+            let analysis = analyze_function(db, *func, expr_types, resolved_params);
             if !analysis.errors.is_empty() {
                 errors.push((func_name.S(), analysis.errors.C()));
             }
@@ -981,7 +958,6 @@ pub fn analyze_script_functions<'db>(
 pub fn analyze_script_functions_with_mode<'db>(
     db: &'db dyn salsa::Database,
     expr_types: &'db [Option<IrType>],
-    call_info: &'db [Option<CallInfo>],
     stmts: &[Statement<'db>],
     func_param_types: Option<&HashMap<String, Vec<IrType>>>,
     auto_adapt_mode: AutoAdaptMode,
@@ -997,7 +973,7 @@ pub fn analyze_script_functions_with_mode<'db>(
                 .and_then(|m| m.get(func_name))
                 .map(|v| v.as_slice());
 
-            let analysis = analyze_function_with_mode(db, *func, expr_types, call_info, resolved_params, auto_adapt_mode);
+            let analysis = analyze_function_with_mode(db, *func, expr_types, resolved_params, auto_adapt_mode);
             if !analysis.errors.is_empty() {
                 errors.push((func_name.S(), analysis.errors.C()));
             }
@@ -1048,21 +1024,19 @@ pub struct ScriptAnalysis {
 pub fn analyze_script_statements<'db>(
     db: &'db dyn salsa::Database,
     expr_types: &'db [Option<IrType>],
-    call_info: &'db [Option<CallInfo>],
     stmts: &[Statement<'db>],
 ) -> ScriptAnalysis {
-    analyze_script_statements_with_mode(db, expr_types, call_info, stmts, AutoAdaptMode::Disabled)
+    analyze_script_statements_with_mode(db, expr_types, stmts, AutoAdaptMode::Disabled)
 }
 
 /// Analyze script statements for ownership with configurable auto-adapt mode.
 pub fn analyze_script_statements_with_mode<'db>(
     db: &'db dyn salsa::Database,
     expr_types: &'db [Option<IrType>],
-    call_info: &'db [Option<CallInfo>],
     stmts: &[Statement<'db>],
     auto_adapt_mode: AutoAdaptMode,
 ) -> ScriptAnalysis {
-    let mut ctx = AnalysisCtx::new(db, expr_types, call_info, auto_adapt_mode);
+    let mut ctx = AnalysisCtx::new(db, expr_types, auto_adapt_mode);
 
     // Enter ScriptUnit scope so bindings are Tracked.
     ctx.enter_scope(ScopeKind::ScriptUnit);
@@ -1124,9 +1098,8 @@ pub fn analyze_expr<'db>(
     db: &'db dyn salsa::Database,
     expr: datalove_datafun_ast::ast::ExprFun<'db>,
     expr_types: &'db [Option<IrType>],
-    call_info: &'db [Option<CallInfo>],
 ) -> ExprAnalysis {
-    analyze_expr_with_mode(db, expr, expr_types, call_info, AutoAdaptMode::Disabled)
+    analyze_expr_with_mode(db, expr, expr_types, AutoAdaptMode::Disabled)
 }
 
 /// Analyze expression for ownership with configurable auto-adapt mode.
@@ -1134,10 +1107,9 @@ pub fn analyze_expr_with_mode<'db>(
     db: &'db dyn salsa::Database,
     expr: datalove_datafun_ast::ast::ExprFun<'db>,
     expr_types: &'db [Option<IrType>],
-    call_info: &'db [Option<CallInfo>],
     auto_adapt_mode: AutoAdaptMode,
 ) -> ExprAnalysis {
-    let mut ctx = AnalysisCtx::new(db, expr_types, call_info, auto_adapt_mode);
+    let mut ctx = AnalysisCtx::new(db, expr_types, auto_adapt_mode);
 
     // Enter a scope for the expression analysis.
     ctx.enter_scope(ScopeKind::Function);

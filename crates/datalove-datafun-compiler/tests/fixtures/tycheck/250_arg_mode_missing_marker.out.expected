@@ -1,0 +1,48 @@
+{
+  "diagnostics": [
+    {
+      "code": "F057",
+      "labels": [
+        {
+          "message": "this argument must be passed as `ref`",
+          "span": [
+            152,
+            153
+          ],
+          "text": "v"
+        }
+      ],
+      "message": "argument mode mismatch: expected `ref`, found `in`",
+      "notes": [
+        "the marker at a call site must match the parameter's declared mode"
+      ]
+    }
+  ],
+  "errors": [
+    {
+      "expected": "ref",
+      "found": "in",
+      "kind": "ArgumentModeMismatch",
+      "param_idx": 0
+    }
+  ],
+  "judgements": [
+    {
+      "kind": "function",
+      "name": "rd",
+      "params": [
+        {
+          "name": "a",
+          "type": "u32"
+        }
+      ],
+      "return_type": "u32"
+    },
+    {
+      "kind": "function",
+      "name": "caller",
+      "params": [],
+      "return_type": "u32"
+    }
+  ]
+}

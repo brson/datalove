@@ -412,6 +412,12 @@ pub enum TypeError {
     CannotShadowPrimitive(String),
     /// Const not allowed at module level.
     ConstNotAllowedInModule(String),
+    /// Call-site mode marker disagrees with the parameter's declared mode.
+    ArgumentModeMismatch {
+        param_idx: usize,
+        expected: String,
+        found: String,
+    },
     /// Comptime argument must be a const binding name.
     ComptimeArgNotConstBinding {
         param_idx: usize,

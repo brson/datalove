@@ -12,7 +12,7 @@ end fun
 
 fun caller(): u32
     var v: u32 = 42
-    let _ok = set_to_100(v)
+    let _ok = set_to_100(mut v)
     ret v
 end fun
 

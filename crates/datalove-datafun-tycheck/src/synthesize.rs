@@ -760,6 +760,21 @@ fn synthesize_function_call<'db>(
         }
     }
 
+    // Every argument must carry the parameter's mode, so that mutation and
+    // borrowing are visible at the call site rather than only in the callee's
+    // signature. `in` is written by omitting the marker.
+    let arg_modes = call.arg_modes(db);
+    for (i, mode) in param_modes.iter().enumerate() {
+        let written = arg_modes.get(i).copied().flatten();
+        if written == mode_marker(*mode) {
+            continue;
+        }
+        let err = ctx.error_argument_mode_mismatch(
+            args[i], i, mode_name(*mode), written.map_or("in", |m| mode_name(m)),
+        );
+        ctx.add_error(err);
+    }
+
     // Check each argument type, setting ref/mut context for ref/mut/out params.
     for ((arg, expected_param_ty), mode) in args.iter().zip(param_types.iter()).zip(param_modes.iter()) {
         let old_ref_context = ctx.ref_context;
@@ -779,6 +794,26 @@ fn synthesize_function_call<'db>(
 
     // Return the function's return type.
     Ok(return_type)
+}
+
+/// The marker a parameter mode requires at a call site.
+///
+/// `in` is written by omitting the marker, so it maps to `None`.
+fn mode_marker(mode: ParamMode) -> Option<ParamMode> {
+    match mode {
+        ParamMode::In => None,
+        other => Some(other),
+    }
+}
+
+/// The keyword naming a parameter mode.
+fn mode_name(mode: ParamMode) -> &'static str {
+    match mode {
+        ParamMode::In => "in",
+        ParamMode::Ref => "ref",
+        ParamMode::Mut => "mut",
+        ParamMode::Out => "out",
+    }
 }
 
 /// Validate that a comptime argument is a const binding name.
@@ -828,6 +863,14 @@ fn synthesize_intrinsic_call<'db>(
     let db = ctx.db;
     let name_str = icall.name.as_str(db);
     let args = &icall.args;
+
+    // Intrinsics take every argument by value, so a marker is always wrong.
+    for (i, written) in icall.arg_modes.iter().enumerate() {
+        if let Some(mode) = written {
+            let err = ctx.error_argument_mode_mismatch(args[i], i, "in", mode_name(*mode));
+            ctx.add_error(err);
+        }
+    }
 
     // Look up intrinsic by name.
     let (intrinsic_id, intrinsic_def) = lookup_intrinsic(name_str)

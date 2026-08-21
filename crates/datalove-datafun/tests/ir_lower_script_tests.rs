@@ -13,11 +13,11 @@ use datalove_datafun_resolve::resolve_script_names;
 use datalove_datafun_pkg::package_load_worldfile::{self, WorldfileSection};
 use datalove_datafun_compiler::lower::{self, ScriptLowerContext, lower_script_functions, lower_const_binding};
 use datalove_datafun_const::{inline_script_consts, PreparedConst, evaluate_prepared_const};
-use datalove_datafun_compiler::ownership_analysis::{self, CallInfo};
+use datalove_datafun_compiler::ownership_analysis;
 use datalove_datafun_compiler::tracked_script_ownership::ScriptAnalysisData;
 use datalove_datafun_compiler::IrTypeExt;
 use datalove_datafun_ir::{IrType, ConstBindingInfo, ConstBindingGraph, ConstValue, ResolvedConsts};
-use datalove_datafun_tycheck::{Type, ResolvedCallTarget};
+use datalove_datafun_tycheck::Type;
 use datalove_datafun_interp::InterpCtfeEvaluator;
 use salsa::plumbing::AsId;
 use bct::input::Source;
@@ -30,21 +30,6 @@ fn convert_expr_types<'db>(
 ) -> Vec<Option<IrType>> {
     types.iter()
         .map(|opt| opt.as_ref().map(|ty| IrType::from_tycheck(db, ty)))
-        .collect()
-}
-
-/// Convert resolved call targets to CallInfo.
-fn convert_call_targets<'db>(
-    db: &'db dyn salsa::Database,
-    targets: &[Option<ResolvedCallTarget<'db>>],
-) -> Vec<Option<CallInfo>> {
-    targets.iter()
-        .map(|opt| opt.as_ref().map(|target| CallInfo {
-            param_modes: target.func(db).params(db)
-                .iter()
-                .map(|p| p.mode)
-                .collect()
-        }))
         .collect()
 }
 
@@ -130,7 +115,6 @@ fn analyze_file(path: &Path) -> Result<String, String> {
 
                 // Convert to IR types for ownership analysis.
                 let expr_types_ir = convert_expr_types(&db, expr_types_raw);
-                let call_info = convert_call_targets(&db, call_targets_raw);
 
                 output.push_str(&format!("--- script unit {} (fragment) ---\n", unit_index));
 
@@ -148,7 +132,7 @@ fn analyze_file(path: &Path) -> Result<String, String> {
                 }
 
                 // Run drop analysis on all functions first.
-                let func_analyses = match ownership_analysis::analyze_script_functions(&db, &expr_types_ir, &call_info, &stmts, Some(&func_param_types)) {
+                let func_analyses = match ownership_analysis::analyze_script_functions(&db, &expr_types_ir, &stmts, Some(&func_param_types)) {
                     Ok(analyses) => analyses,
                     Err(errors) => {
                         for (func_name, errs) in errors {
@@ -164,7 +148,7 @@ fn analyze_file(path: &Path) -> Result<String, String> {
                 };
 
                 // Run script-level ownership analysis.
-                let script_analysis_raw = ownership_analysis::analyze_script_statements(&db, &expr_types_ir, &call_info, &stmts);
+                let script_analysis_raw = ownership_analysis::analyze_script_statements(&db, &expr_types_ir, &stmts);
 
                 // Check for script analysis errors.
                 if !script_analysis_raw.errors.is_empty() {

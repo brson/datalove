@@ -10,7 +10,7 @@ end fun
 
 fun test(): ?[string]
     var a: [string] = ["hello", "world"]
-    let _ok = replace(a[(: index / 1)]?)
+    let _ok = replace(mut a[(: index / 1)]?)
     ret some a
 end fun
 

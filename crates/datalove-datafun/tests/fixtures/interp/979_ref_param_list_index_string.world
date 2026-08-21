@@ -8,7 +8,7 @@ fun read_str(ref x: string): ?string
 end fun
 
 fun test(a: [string], i: index): ?string
-    ret read_str(a[i]?)
+    ret read_str(ref a[i]?)
 end fun
 
 debuglog test(["hello", "world"], (: index / 0))

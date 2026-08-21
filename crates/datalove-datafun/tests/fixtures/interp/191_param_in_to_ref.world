@@ -9,7 +9,7 @@ fun inner(ref x: int): bool
 end fun
 
 fun outer(y: int): bool
-    ret inner(y)
+    ret inner(ref y)
 end fun
 
 ----------

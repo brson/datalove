@@ -8,4 +8,4 @@ fun takes_ref(ref x: u32): u32
 end fun
 
 let s: {a: u32, b: u32} = {a = 100, b = 200}
-debuglog takes_ref(s.a)
+debuglog takes_ref(ref s.a)

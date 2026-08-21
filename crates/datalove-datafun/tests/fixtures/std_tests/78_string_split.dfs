@@ -6,18 +6,18 @@ import string.split_whitespace
 import string.concat
 import string.from_char
 
-let a = split("hello world foo", " ")
-let b = split("a::b::c", "::")
-let c = split("no-delim", ",")
+let a = split(ref "hello world foo", ref " ")
+let b = split(ref "a::b::c", ref "::")
+let c = split(ref "no-delim", ref ",")
 
 // Build a string with actual newlines via from_char(10).
 let nl = from_char(10)
-let multiline = concat(concat(concat(concat("line1", nl), "line2"), nl), "line3")
-let d = lines(multiline)
-let e = lines("single")
+let multiline = concat(ref concat(ref concat(ref concat(ref "line1", ref nl), ref "line2"), ref nl), ref "line3")
+let d = lines(ref multiline)
+let e = lines(ref "single")
 
-let f = split_whitespace("  hello   world  ")
-let g = split_whitespace("")
-let h = split("", ",")
+let f = split_whitespace(ref "  hello   world  ")
+let g = split_whitespace(ref "")
+let h = split(ref "", ref ",")
 
 let output = (a, b, c, d, e, f, g, h)

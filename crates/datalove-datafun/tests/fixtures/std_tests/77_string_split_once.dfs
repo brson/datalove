@@ -3,10 +3,10 @@ require module sys/std/string
 import string.split_once
 import string.rsplit_once
 
-let a = split_once("hello=world", "=")
-let b = split_once("no delimiter here", "=")
-let c = split_once("a::b::c", "::")
-let d = rsplit_once("a::b::c", "::")
-let e = rsplit_once("no delimiter", "::")
+let a = split_once(ref "hello=world", ref "=")
+let b = split_once(ref "no delimiter here", ref "=")
+let c = split_once(ref "a::b::c", ref "::")
+let d = rsplit_once(ref "a::b::c", ref "::")
+let e = rsplit_once(ref "no delimiter", ref "::")
 
 let output = (a, b, c, d, e)

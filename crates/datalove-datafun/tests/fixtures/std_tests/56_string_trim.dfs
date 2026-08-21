@@ -8,4 +8,4 @@ let a = "  hello  "
 let b = "no spaces"
 let c = ""
 
-let output = (trim(a), trim_start(a), trim_end(a), trim(b), trim(c))
+let output = (trim(ref a), trim_start(ref a), trim_end(ref a), trim(ref b), trim(ref c))

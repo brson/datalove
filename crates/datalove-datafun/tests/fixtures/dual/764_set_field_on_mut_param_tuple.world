@@ -9,6 +9,6 @@ fun set_first(mut t: (u32, u32)): bool
 end fun
 
 var pair: (u32, u32) = (100, 200)
-let _ok = set_first(pair)
+let _ok = set_first(mut pair)
 debuglog pair.0
 debuglog pair.1

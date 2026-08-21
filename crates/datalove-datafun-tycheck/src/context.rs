@@ -454,6 +454,27 @@ impl<'db> TypeContext<'db> {
         TypeError::ConstNotAllowedInModule(name.as_str(self.db).S())
     }
 
+    /// F057: Call-site mode marker disagrees with the declared parameter mode.
+    pub fn error_argument_mode_mismatch(
+        &mut self,
+        arg: ExprFun<'db>,
+        param_idx: usize,
+        expected: &str,
+        found: &str,
+    ) -> TypeError {
+        self.pending_diagnostics.push(PendingDiagnostic::ArgumentModeMismatch {
+            local_index: arg.as_id().index(),
+            module_id: self.current_module_id,
+            expected: InternedText::new(self.db, expected.S()),
+            found: InternedText::new(self.db, found.S()),
+        });
+        TypeError::ArgumentModeMismatch {
+            param_idx,
+            expected: expected.S(),
+            found: found.S(),
+        }
+    }
+
     /// Check if we're at module top level (not inside a function).
     pub fn is_module_top_level(&self) -> bool {
         self.current_module_id.is_some() && self.expected_return_type.is_none()

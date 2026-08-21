@@ -6,21 +6,21 @@ let s = "hello"
 
 // Use if-binding to unwrap option results.
 fun test_byte(ref str: string, idx: index): u8
-  if get_byte(str, idx) |b|
+  if get_byte(ref str, idx) |b|
     ret b
   end if
   ret : u8 / 0
 end fun
 
 fun test_has_byte(ref str: string, idx: index): bool
-  if get_byte(str, idx) |b|
+  if get_byte(ref str, idx) |b|
     ret true
   end if
   ret false
 end fun
 
-let b0 = test_byte(s, : index / 0)
-let b4 = test_byte(s, : index / 4)
-let oob = test_has_byte(s, : index / 10)
+let b0 = test_byte(ref s, : index / 0)
+let b4 = test_byte(ref s, : index / 4)
+let oob = test_has_byte(ref s, : index / 10)
 
 let output = (b0, b4, oob)

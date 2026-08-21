@@ -9,4 +9,4 @@ let b = "hello"
 let c = "world"
 let d = "Hello"
 
-let output = (eq(a, b), eq(a, c), cmp(a, c), cmp(c, a), cmp(a, b), eq_ignore_ascii_case(a, d))
+let output = (eq(ref a, ref b), eq(ref a, ref c), cmp(ref a, ref c), cmp(ref c, ref a), cmp(ref a, ref b), eq_ignore_ascii_case(ref a, ref d))

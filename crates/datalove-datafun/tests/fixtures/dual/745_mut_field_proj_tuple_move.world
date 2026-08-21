@@ -9,5 +9,5 @@ fun set_to_42(mut x: int): bool
 end fun
 
 var t: (int, int) = (:int/100, :int/200)
-let _ok = set_to_42(t.0)
+let _ok = set_to_42(mut t.0)
 debuglog t.0

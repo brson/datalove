@@ -5,5 +5,5 @@ fun replace_row(mut row: [|u32, 1|]): ?bool
 end fun
 
 fun test(t: [|u32, 2|]): ?bool
-    ret replace_row(t[(: index / 0)]?)
+    ret replace_row(mut t[(: index / 0)]?)
 end fun

@@ -19,9 +19,9 @@ fun has_idx(opt: ?index): bool
   ret false
 end fun
 
-let f1 = unwrap_idx(find(s, "world"))
-let f2 = has_idx(find(s, "xyz"))
-let r1 = unwrap_idx(rfind(s, "hello"))
-let r2 = has_idx(rfind(s, "xyz"))
+let f1 = unwrap_idx(find(ref s, ref "world"))
+let f2 = has_idx(find(ref s, ref "xyz"))
+let r1 = unwrap_idx(rfind(ref s, ref "hello"))
+let r2 = has_idx(rfind(ref s, ref "xyz"))
 
 let output = (f1, f2, r1, r2)

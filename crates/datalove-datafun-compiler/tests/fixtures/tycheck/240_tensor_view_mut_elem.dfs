@@ -6,5 +6,5 @@ fun set_first(mut row: [|u32, 1|]): ?bool
 end fun
 
 fun test(t: [|u32, 2|]): ?bool
-    ret set_first(t[(: index / 1)]?)
+    ret set_first(mut t[(: index / 1)]?)
 end fun

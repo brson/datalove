@@ -11,8 +11,8 @@ let x: int = 10
 let y: int = 20
 let z: int = 30
 
-debuglog add_refs(x, y)
-debuglog add_refs(x, z)
-debuglog add_refs(y, z)
+debuglog add_refs(ref x, ref y)
+debuglog add_refs(ref x, ref z)
+debuglog add_refs(ref y, ref z)
 // Can reuse all values since they're borrowed
-debuglog add_refs(x, x)
+debuglog add_refs(ref x, ref x)

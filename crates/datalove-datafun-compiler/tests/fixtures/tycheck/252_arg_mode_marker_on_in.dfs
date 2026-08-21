@@ -1,0 +1,9 @@
+// An in parameter is written by omitting the marker, so a marker is an error.
+fun cn(a: u32): u32
+    ret a
+end fun
+
+fun caller(): u32
+    var v: u32 = 1
+    ret cn(ref v)
+end fun

@@ -10,7 +10,7 @@ end fun
 
 fun test(): u32
     var n: u32 = 5
-    let _ok = set_to_42(n)
+    let _ok = set_to_42(mut n)
     ret n
 end fun
 

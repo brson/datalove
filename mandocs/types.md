@@ -293,7 +293,7 @@ fun process(ref xs: [int]): u32
   ret core.list.len(xs)
 end fun
 
-let p = process(xs)
+let p = process(ref xs)
 ```
 
 

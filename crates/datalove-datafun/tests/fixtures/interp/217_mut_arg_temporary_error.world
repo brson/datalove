@@ -14,7 +14,7 @@ fun mk(): u32
 end fun
 
 fun outer(): bool
-    ret bump(mk())
+    ret bump(mut mk())
 end fun
 
 ----------

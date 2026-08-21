@@ -481,6 +481,7 @@ impl<'db> Parser<'db> {
                                     };
 
                                     // Parse arguments in parentheses.
+                                    let mut intrinsic_arg_modes = Vec::new();
                                     let args = match self.peek() {
                                         Some(TreeToken::Branch { sigil: Sigil::ParenOpen, .. }) => {
                                             let (args_iter, open_span) = match self.next() {
@@ -490,7 +491,11 @@ impl<'db> Parser<'db> {
                                                 }
                                                 _ => unreachable!(),
                                             };
-                                            self.parse_function_call_args(args_iter, Some((open_span, "in this argument list")))
+                                            // Intrinsics have no parameter modes; a marker
+                                            // here is rejected during typechecking.
+                                            let (args, modes) = self.parse_function_call_args(args_iter, Some((open_span, "in this argument list")));
+                                            intrinsic_arg_modes = modes;
+                                            args
                                         }
                                         _ => {
                                             return self.emit_expr_error(ts,
@@ -505,6 +510,7 @@ impl<'db> Parser<'db> {
                                         ast::ExprFunKind::IntrinsicCall(ast::ExprIntrinsicCall {
                                             name: intrinsic_name,
                                             args,
+                                            arg_modes: intrinsic_arg_modes,
                                         }),
                                         ts
                                     )
@@ -532,7 +538,7 @@ impl<'db> Parser<'db> {
                                             }
                                             _ => unreachable!(),
                                         };
-                                        let args = self.parse_function_call_args(args_iter, Some((open_span, "in this argument list")));
+                                        let (args, arg_modes) = self.parse_function_call_args(args_iter, Some((open_span, "in this argument list")));
                                         // For function calls, span should include the parens, but for now just use the name span.
                                         let call = ast::ExprFunctionCall::new(
                                             self.db,
@@ -541,6 +547,7 @@ impl<'db> Parser<'db> {
                                             self.next_call_index(),
                                             name,
                                             args,
+                                            arg_modes,
                                         );
                                         self.create_expr(
                                             ast::ExprFunKind::FunctionCall(call),
@@ -618,12 +625,37 @@ impl<'db> Parser<'db> {
         &mut self,
         iter: BracerIter<'db>,
         context: Option<(TextSpan<'db>, &'static str)>,
-    ) -> Vec<ast::ExprFun<'db>> {
+    ) -> (Vec<ast::ExprFun<'db>>, Vec<Option<ast::ParamMode>>) {
         let mut sub = self.sub_parser(iter, context);
-        let args = sub.parse_comma_separated(|p| p.parse_expr_full());
+        let args = sub.parse_comma_separated(|p| {
+            let mode = p.parse_arg_mode();
+            (p.parse_expr_full(), mode)
+        });
         sub.error_if_not_exhausted();
         self.merge_from_sub(&mut sub);
-        args
+        args.into_iter().unzip()
+    }
+
+    /// Parse a `ref`, `mut` or `out` marker before a call argument.
+    ///
+    /// Returns `None` when the argument carries no marker, which denotes `in`.
+    fn parse_arg_mode(&mut self) -> Option<ast::ParamMode> {
+        use bct::lexer::TokenKind;
+
+        let TreeToken::Token(t) = self.peek()? else {
+            return None;
+        };
+        if t.kind(self.db) != TokenKind::Word {
+            return None;
+        }
+        let mode = match t.word_str(self.db)? {
+            "ref" => ast::ParamMode::Ref,
+            "mut" => ast::ParamMode::Mut,
+            "out" => ast::ParamMode::Out,
+            _ => return None,
+        };
+        self.next();
+        Some(mode)
     }
 
     /// Parse a datafun tuple: (expr1, expr2, ...).

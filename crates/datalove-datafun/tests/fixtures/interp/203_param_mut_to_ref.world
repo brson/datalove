@@ -9,12 +9,12 @@ fun inner(ref x: int): bool
 end fun
 
 fun outer(mut y: int): bool
-    ret inner(y)
+    ret inner(ref y)
 end fun
 
 fun test(): bool
     var n: int = :int/100
-    ret outer(n)
+    ret outer(mut n)
 end fun
 
 ----------

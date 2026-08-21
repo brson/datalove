@@ -192,6 +192,15 @@ pub enum PendingDiagnostic<'db> {
         module_id: Option<ModuleId>,
         name: InternedText<'db>,
     },
+    /// F057: Call-site mode marker disagrees with the declared parameter mode.
+    ArgumentModeMismatch {
+        local_index: u32,
+        module_id: Option<ModuleId>,
+        /// Declared mode of the parameter.
+        expected: InternedText<'db>,
+        /// Marker written at the call site, or `in` when none was written.
+        found: InternedText<'db>,
+    },
 }
 
 /// Check if a datalit type is a copy type (can be safely copied without cloning).

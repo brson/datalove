@@ -6,4 +6,4 @@ import string.ends_with
 
 let s = "hello world"
 
-let output = (contains(s, "world"), contains(s, "xyz"), starts_with(s, "hello"), starts_with(s, "world"), ends_with(s, "world"), ends_with(s, "hello"))
+let output = (contains(ref s, ref "world"), contains(ref s, ref "xyz"), starts_with(ref s, ref "hello"), starts_with(ref s, ref "world"), ends_with(ref s, ref "world"), ends_with(ref s, ref "hello"))

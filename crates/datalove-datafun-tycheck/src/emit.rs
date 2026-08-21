@@ -404,6 +404,18 @@ fn emit_single_diagnostic<'db>(
                     .emit_type();
             }
         }
+        PendingDiagnostic::ArgumentModeMismatch { local_index, module_id: _, expected, found } => {
+            if let Some(ts) = spans.lookup_expr(db, *local_index) {
+                bct::diagnostic::DiagnosticBuilder::error(
+                    db,
+                    &format!("argument mode mismatch: expected `{}`, found `{}`", expected.as_str(db), found.as_str(db)),
+                )
+                    .code("F057")
+                    .primary_label(ts, &format!("this argument must be passed as `{}`", expected.as_str(db)))
+                    .note("the marker at a call site must match the parameter's declared mode")
+                    .emit_type();
+            }
+        }
     }
 }
 
@@ -557,6 +569,11 @@ fn format_single_diagnostic<'db>(
             let ts = spans.lookup_expr(db, *local_index)?;
             let loc = format_location(db, &ts);
             Some(format!("{}: error[F056]: const `{}` not allowed at module level", loc, name.as_str(db)))
+        }
+        PendingDiagnostic::ArgumentModeMismatch { local_index, module_id: _, expected, found } => {
+            let ts = spans.lookup_expr(db, *local_index)?;
+            let loc = format_location(db, &ts);
+            Some(format!("{}: error[F057]: argument mode mismatch: expected `{}`, found `{}`", loc, expected.as_str(db), found.as_str(db)))
         }
     }
 }

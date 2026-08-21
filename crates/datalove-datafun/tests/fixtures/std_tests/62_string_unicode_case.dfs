@@ -6,4 +6,4 @@ import string.to_uppercase
 let a = "Hello World"
 let b = ""
 
-let output = (to_lowercase(a), to_uppercase(a), to_lowercase(b), to_uppercase(b))
+let output = (to_lowercase(ref a), to_uppercase(ref a), to_lowercase(ref b), to_uppercase(ref b))

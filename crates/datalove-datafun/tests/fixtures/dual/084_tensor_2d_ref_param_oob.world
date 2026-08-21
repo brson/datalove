@@ -9,7 +9,7 @@ end fun
 
 fun test(): ?[|u32, 1|]
     let t: [|u32, 2|] = [| 10 20 30, 40 50 60 |]
-    ret some read_row(t[(: index / 5)]?)
+    ret some read_row(ref t[(: index / 5)]?)
 end fun
 
 debuglog test()

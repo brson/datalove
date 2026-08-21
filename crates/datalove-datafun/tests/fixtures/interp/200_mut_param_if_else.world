@@ -15,13 +15,13 @@ end fun
 
 fun test_true(): u32
     var n: u32 = 0
-    let _ok: bool = conditional_set(n, true)
+    let _ok: bool = conditional_set(mut n, true)
     ret n
 end fun
 
 fun test_false(): u32
     var n: u32 = 0
-    let _ok: bool = conditional_set(n, false)
+    let _ok: bool = conditional_set(mut n, false)
     ret n
 end fun
 

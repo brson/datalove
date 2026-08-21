@@ -10,7 +10,7 @@ fun bump(mut x: u32): bool
 end fun
 
 fun outer(v: u32): bool
-    ret bump(v)
+    ret bump(mut v)
 end fun
 
 ----------

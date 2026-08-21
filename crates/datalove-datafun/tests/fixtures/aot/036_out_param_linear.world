@@ -10,7 +10,7 @@ end fun
 
 fun test(): int
     var n: int = 0
-    let _ok = init_int(n)
+    let _ok = init_int(out n)
     ret n
 end fun
 

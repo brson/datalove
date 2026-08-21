@@ -11,7 +11,7 @@ end fun
 
 fun caller(): int
     let v: int = 42
-    let r = read_int(v)
+    let r = read_int(ref v)
     ret r
 end fun
 

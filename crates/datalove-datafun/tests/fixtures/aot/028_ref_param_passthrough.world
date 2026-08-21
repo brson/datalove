@@ -8,9 +8,9 @@ fun inner(ref x: int): int
 end fun
 
 fun outer(ref y: int): int
-    ret inner(y)
+    ret inner(ref y)
 end fun
 
 let val: int = 100
-debuglog outer(val)
-debuglog outer(val)
+debuglog outer(ref val)
+debuglog outer(ref val)

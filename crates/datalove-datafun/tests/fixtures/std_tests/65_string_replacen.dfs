@@ -3,8 +3,8 @@ require module sys/std/string
 import string.replacen
 
 let s = "aaa bbb aaa"
-let r1 = replacen(s, "aaa", "xxx", : index / 1)
-let r2 = replacen(s, "aaa", "xxx", : index / 2)
-let r3 = replacen(s, "aaa", "xxx", : index / 0)
+let r1 = replacen(ref s, ref "aaa", ref "xxx", : index / 1)
+let r2 = replacen(ref s, ref "aaa", ref "xxx", : index / 2)
+let r3 = replacen(ref s, ref "aaa", ref "xxx", : index / 0)
 
 let output = (r1, r2, r3)

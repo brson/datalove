@@ -10,7 +10,7 @@ end fun
 
 fun test(): int
     var n: int = 42
-    ret read_and_add(n)
+    ret read_and_add(mut n)
 end fun
 
 debuglog test()

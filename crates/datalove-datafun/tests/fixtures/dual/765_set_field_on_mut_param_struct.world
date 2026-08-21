@@ -9,6 +9,6 @@ fun set_x(mut point: {x: u32, y: u32}): bool
 end fun
 
 var p: {x: u32, y: u32} = {x = 100, y = 200}
-let _ok = set_x(p)
+let _ok = set_x(mut p)
 debuglog p.x
 debuglog p.y

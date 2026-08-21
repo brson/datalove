@@ -14,7 +14,7 @@ fun ii(a: u32, b: u32): bool
 end fun
 
 fun outer(ref v: u32): bool
-    let same = rr(v, v)
+    let same = rr(ref v, ref v)
     ret ii(v, v) and same
 end fun
 

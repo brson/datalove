@@ -10,7 +10,7 @@ end fun
 
 fun test(): u32
     var n: u32 = 5
-    let _ok: bool = init_value(n)
+    let _ok: bool = init_value(out n)
     ret n
 end fun
 

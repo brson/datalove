@@ -6,27 +6,27 @@ import string.parse_int
 import string.split
 
 // join
-let a = join(["hello", "world"], " ")
-let b = join(["a", "b", "c"], "::")
-let c = join([], ",")
-let d = join(["solo"], "-")
+let a = join(ref ["hello", "world"], ref " ")
+let b = join(ref ["a", "b", "c"], ref "::")
+let c = join(ref [], ref ",")
+let d = join(ref ["solo"], ref "-")
 
 // from_int
-let e = from_int(0)
-let f = from_int(42)
-let g = from_int(-123)
-let h = from_int(999999999999999999)
+let e = from_int(ref 0)
+let f = from_int(ref 42)
+let g = from_int(ref -123)
+let h = from_int(ref 999999999999999999)
 
 // parse_int
-let i = parse_int("0")
-let j = parse_int("42")
-let k = parse_int("-123")
-let l = parse_int("999999999999999999")
-let m = parse_int("")
-let n = parse_int("not a number")
-let o = parse_int("  456  ")
+let i = parse_int(ref "0")
+let j = parse_int(ref "42")
+let k = parse_int(ref "-123")
+let l = parse_int(ref "999999999999999999")
+let m = parse_int(ref "")
+let n = parse_int(ref "not a number")
+let o = parse_int(ref "  456  ")
 
 // round-trip: split then join
-let p = join(split("one--two--three", "--"), ", ")
+let p = join(ref split(ref "one--two--three", ref "--"), ref ", ")
 
 let output = (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p)

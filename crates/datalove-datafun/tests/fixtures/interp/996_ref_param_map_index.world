@@ -8,7 +8,7 @@ fun read_ref(ref x: u32): ?u32
 end fun
 
 fun test(m: %{u32 = u32}, k: u32): ?u32
-    ret read_ref(m[k]?)
+    ret read_ref(ref m[k]?)
 end fun
 
 debuglog test(%{ 1 = 100, 2 = 200 }, 2)

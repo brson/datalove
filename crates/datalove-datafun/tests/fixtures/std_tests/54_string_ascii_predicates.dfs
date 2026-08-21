@@ -5,4 +5,4 @@ import string.is_ascii_digit
 import string.is_ascii_alphanumeric
 import string.is_ascii_whitespace
 
-let output = (is_ascii_alphabetic("hello"), is_ascii_alphabetic("hello1"), is_ascii_alphabetic(""), is_ascii_digit("123"), is_ascii_digit("12a"), is_ascii_digit(""), is_ascii_alphanumeric("abc123"), is_ascii_alphanumeric("abc!"), is_ascii_whitespace("  "), is_ascii_whitespace(" a "))
+let output = (is_ascii_alphabetic(ref "hello"), is_ascii_alphabetic(ref "hello1"), is_ascii_alphabetic(ref ""), is_ascii_digit(ref "123"), is_ascii_digit(ref "12a"), is_ascii_digit(ref ""), is_ascii_alphanumeric(ref "abc123"), is_ascii_alphanumeric(ref "abc!"), is_ascii_whitespace(ref "  "), is_ascii_whitespace(ref " a "))

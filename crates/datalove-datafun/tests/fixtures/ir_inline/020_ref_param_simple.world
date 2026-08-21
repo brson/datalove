@@ -10,7 +10,7 @@ end fun
 
 fun caller(): i64
     let v: i64 = 42
-    let r = read_val(v)
+    let r = read_val(ref v)
     ret r
 end fun
 

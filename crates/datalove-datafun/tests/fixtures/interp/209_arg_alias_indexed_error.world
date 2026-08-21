@@ -11,7 +11,7 @@ fun mf(mut a: u32, ref b: u32): u32
 end fun
 
 fun outer(mut a: [u32]): ?u32
-    ret some mf(a[0]?, a[1]?)
+    ret some mf(mut a[0]?, ref a[1]?)
 end fun
 
 ----------

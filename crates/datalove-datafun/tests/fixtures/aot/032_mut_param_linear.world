@@ -10,7 +10,7 @@ end fun
 
 fun test(): int
     var n: int = 5
-    let _ok = set_to_100(n)
+    let _ok = set_to_100(mut n)
     ret n
 end fun
 

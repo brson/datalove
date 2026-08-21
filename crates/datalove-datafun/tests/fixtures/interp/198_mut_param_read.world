@@ -17,7 +17,7 @@ end fun
 
 fun test(): bool
     var n: int = :int/100
-    ret read_twice(n)
+    ret read_twice(mut n)
 end fun
 
 ----------

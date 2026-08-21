@@ -10,7 +10,7 @@ use bct::text::TextSpan;
 use datalove_datafun_ast::ast::{Statement, StmtFun};
 use datalove_datafun_ast::spans::DatafunSpans;
 use datalove_datafun_ir::IrType;
-use datalove_datafun_tycheck::{UnitTypecheckResultTracked, ResolvedCallTarget, Type};
+use datalove_datafun_tycheck::{UnitTypecheckResultTracked, Type};
 use datalove_diagnostic::DiagnosticBuilderExt;
 use salsa::plumbing::FromId;
 
@@ -18,7 +18,7 @@ use crate::IrTypeExt;
 use crate::lower::ScriptFunctionAnalyses;
 use datalove_datafun_ownership::{
     self as ownership_analysis, DropSchedule, BindingInfo, FunctionAnalysis,
-    TrackingCategory, format_analysis_errors, CallInfo, AutoAdaptMode,
+    TrackingCategory, format_analysis_errors, AutoAdaptMode,
 };
 pub use datalove_datafun_sema::{ScriptAnalysisData, AnalysisError, OwnershipRecoveryHint};
 
@@ -114,21 +114,6 @@ fn convert_expr_types<'db>(
         .collect()
 }
 
-/// Convert resolved call targets to CallInfo.
-fn convert_call_targets<'db>(
-    db: &'db dyn salsa::Database,
-    targets: &[Option<ResolvedCallTarget<'db>>],
-) -> Vec<Option<CallInfo>> {
-    targets.iter()
-        .map(|opt| opt.as_ref().map(|target| CallInfo {
-            param_modes: target.func(db).params(db)
-                .iter()
-                .map(|p| p.mode)
-                .collect()
-        }))
-        .collect()
-}
-
 /// Analyze ownership for a script fragment unit.
 ///
 /// Memoized: if typecheck_result, statements, and auto_adapt_mode match a previous call,
@@ -142,7 +127,6 @@ pub fn analyze_script_fragment_tracked<'db>(
 ) -> ScriptUnitOwnershipResult<'db> {
     // Convert tycheck types to IR types.
     let expr_types = convert_expr_types(db, typecheck_result.expr_types(db));
-    let call_info = convert_call_targets(db, typecheck_result.call_targets(db));
 
     // Build map of function name -> resolved param types for type alias support.
     let mut func_param_types: HashMap<String, Vec<IrType>> = HashMap::new();
@@ -156,7 +140,7 @@ pub fn analyze_script_fragment_tracked<'db>(
 
     // Analyze functions in this unit for ownership.
     let func_analyses_result = ownership_analysis::analyze_script_functions_with_mode(
-        db, &expr_types, &call_info, &statements, Some(&func_param_types), auto_adapt_mode
+        db, &expr_types, &statements, Some(&func_param_types), auto_adapt_mode
     );
 
     let (func_analyses, func_errors, structured_func_errors) = match func_analyses_result {
@@ -180,7 +164,7 @@ pub fn analyze_script_fragment_tracked<'db>(
 
     // Analyze script-level statements for drop schedule.
     let script_analysis = ownership_analysis::analyze_script_statements_with_mode(
-        db, &expr_types, &call_info, &statements, auto_adapt_mode
+        db, &expr_types, &statements, auto_adapt_mode
     );
 
     // Check for script analysis errors.
@@ -237,9 +221,8 @@ pub fn analyze_script_expr_tracked<'db>(
 ) -> ScriptUnitOwnershipResult<'db> {
     // Convert tycheck types to IR types.
     let expr_types = convert_expr_types(db, typecheck_result.expr_types(db));
-    let call_info = convert_call_targets(db, typecheck_result.call_targets(db));
 
-    let analysis = ownership_analysis::analyze_expr_with_mode(db, expr, &expr_types, &call_info, auto_adapt_mode);
+    let analysis = ownership_analysis::analyze_expr_with_mode(db, expr, &expr_types, auto_adapt_mode);
 
     if !analysis.errors.is_empty() {
         let error_msg = format_analysis_errors(&analysis.errors);

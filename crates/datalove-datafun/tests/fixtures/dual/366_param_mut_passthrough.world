@@ -10,9 +10,9 @@ fun inner(mut x: int): bool
 end fun
 
 fun outer(mut x: int): bool
-    ret inner(x)
+    ret inner(mut x)
 end fun
 
 var n: int = 5
-let _ok = outer(n)
+let _ok = outer(mut n)
 debuglog n

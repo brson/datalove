@@ -16,4 +16,4 @@ require module local/test/refops
 import refops.takes_ref
 
 let t: (int, int) = (:int/100, :int/200)
-debuglog takes_ref(t.0)
+debuglog takes_ref(ref t.0)

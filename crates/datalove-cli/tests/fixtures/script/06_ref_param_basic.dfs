@@ -3,5 +3,5 @@ fun read_val(ref x: u32): u32
 end fun
 
 let a: u32 = 42
-let b = read_val(a)
+let b = read_val(ref a)
 let output = a

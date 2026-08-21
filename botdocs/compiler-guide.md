@@ -261,6 +261,12 @@ pub enum ParamMode {
 }
 ```
 
+Call sites repeat the mode: `ExprFunctionCall.arg_modes` holds the marker
+written before each argument, `None` meaning `in`. Typechecking rejects any
+disagreement with the callee's declared mode (F057), so later phases can read
+the mode off the call site alone. Ownership analysis does exactly that, which
+is why it needs no resolved call target to know how an argument is passed.
+
 IR instructions for parameters:
 - `ParamLoad { param, value }` - load value
 - `ParamStore { param, value }` - store to Mut (destroys old value)

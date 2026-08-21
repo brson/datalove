@@ -9,4 +9,4 @@ fun takes_ref(ref x: int): int
 end fun
 
 let t: (int, int) = (100, 200)
-debuglog takes_ref(t.0)
+debuglog takes_ref(ref t.0)

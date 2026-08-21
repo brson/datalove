@@ -7,4 +7,4 @@ let a = "hello"
 let b = ""
 let c = "hi"
 
-let output = (len(a), len(b), len(c), is_empty(a), is_empty(b))
+let output = (len(ref a), len(ref b), len(ref c), is_empty(ref a), is_empty(ref b))

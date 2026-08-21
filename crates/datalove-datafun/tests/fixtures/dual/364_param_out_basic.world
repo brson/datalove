@@ -9,5 +9,5 @@ fun init_42(out x: u32): bool
 end fun
 
 var n: u32 = 0
-let _ok = init_42(n)
+let _ok = init_42(out n)
 debuglog n

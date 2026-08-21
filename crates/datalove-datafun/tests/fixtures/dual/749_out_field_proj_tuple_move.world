@@ -9,5 +9,5 @@ fun write_42(out x: int): bool
 end fun
 
 var t: (int, int) = (:int/100, :int/200)
-let _ok = write_42(t.0)
+let _ok = write_42(out t.0)
 debuglog t.0

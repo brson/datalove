@@ -9,6 +9,6 @@ fun set_to_42(mut x: u32): bool
 end fun
 
 var t: (u32, u32) = (100, 200)
-let _ok = set_to_42(t.0)
+let _ok = set_to_42(mut t.0)
 debuglog t.0
 debuglog t.1

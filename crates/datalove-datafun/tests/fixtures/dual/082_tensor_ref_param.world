@@ -8,7 +8,7 @@ fun read_ref(ref x: u32): ?u32
 end fun
 
 fun test(t: [|u32, 1|], i: index): ?u32
-    ret read_ref(t[i]?)
+    ret read_ref(ref t[i]?)
 end fun
 
 debuglog test([| 10 20 30 |], (: index / 1))

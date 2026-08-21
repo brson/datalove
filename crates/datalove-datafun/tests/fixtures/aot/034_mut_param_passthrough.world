@@ -9,12 +9,12 @@ fun inner(mut x: u32): bool
 end fun
 
 fun outer(mut y: u32): bool
-    ret inner(y)
+    ret inner(mut y)
 end fun
 
 fun test(): u32
     var n: u32 = 0
-    let _ok = outer(n)
+    let _ok = outer(mut n)
     ret n
 end fun
 

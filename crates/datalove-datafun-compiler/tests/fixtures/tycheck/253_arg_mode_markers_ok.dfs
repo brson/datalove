@@ -1,0 +1,13 @@
+// Each marker matches its parameter's declared mode, and the in parameter
+// carries none.
+fun mixed(a: u32, ref b: u32, mut c: u32): u32
+    set c = 3
+    ret a + b
+end fun
+
+fun caller(): u32
+    var x: u32 = 1
+    var y: u32 = 2
+    var z: u32 = 3
+    ret mixed(x, ref y, mut z)
+end fun

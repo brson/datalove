@@ -8,12 +8,12 @@ fun inner(ref x: int): bool
 end fun
 
 fun outer(ref y: int): bool
-    ret inner(y)
+    ret inner(ref y)
 end fun
 
 fun main(): bool
     let val: int = :int/100
-    ret outer(val)
+    ret outer(ref val)
 end fun
 
 ----------

@@ -1,0 +1,10 @@
+// The marker must name the parameter's declared mode, not another one.
+fun wr(mut a: u32): bool
+    set a = 9
+    ret true
+end fun
+
+fun caller(): bool
+    var v: u32 = 1
+    ret wr(ref v)
+end fun

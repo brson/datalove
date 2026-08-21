@@ -15,7 +15,7 @@ require module local/test/main
 import main.read_ref
 
 let val: int = :int/100
-let result1 = read_ref(val)
+let result1 = read_ref(ref val)
 let output = result1
 
 ----------

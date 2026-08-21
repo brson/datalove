@@ -14,11 +14,10 @@ use datalove_datafun_tycheck::{
     SingleModuleTypecheckResult,
     ModuleGraphTypecheckResult,
     ParsedModuleGraph,
-    ResolvedCallTarget,
     Type,
 };
 use datalove_datafun_ir::IrType;
-use datalove_datafun_ownership::{self as ownership_analysis, FunctionAnalysis, CallInfo, AutoAdaptMode};
+use datalove_datafun_ownership::{self as ownership_analysis, FunctionAnalysis, AutoAdaptMode};
 
 use crate::IrTypeExt;
 
@@ -92,21 +91,6 @@ fn convert_expr_types<'db>(
         .collect()
 }
 
-/// Convert resolved call targets to CallInfo.
-fn convert_call_targets<'db>(
-    db: &'db dyn salsa::Database,
-    targets: &[Option<ResolvedCallTarget<'db>>],
-) -> Vec<Option<CallInfo>> {
-    targets.iter()
-        .map(|opt| opt.as_ref().map(|target| CallInfo {
-            param_modes: target.func(db).params(db)
-                .iter()
-                .map(|p| p.mode)
-                .collect()
-        }))
-        .collect()
-}
-
 /// Analyze a single module for ownership errors.
 #[salsa::tracked]
 pub fn analyze_module<'db>(
@@ -123,7 +107,6 @@ pub fn analyze_module<'db>(
 
     // Convert tycheck types to IR types.
     let expr_types = convert_expr_types(db, typecheck_result.expr_types(db));
-    let call_info = convert_call_targets(db, typecheck_result.call_targets(db));
 
     // Build map of function name -> resolved param types from exports.
     // This is needed to resolve type aliases in function parameters.
@@ -148,7 +131,7 @@ pub fn analyze_module<'db>(
 
             // Run ownership analysis with auto-adapt mode.
             let analysis = ownership_analysis::analyze_function_with_mode(
-                db, *func, &expr_types, &call_info, resolved_params, auto_adapt_mode
+                db, *func, &expr_types, resolved_params, auto_adapt_mode
             );
 
             let (opt_analysis, errors) = if analysis.errors.is_empty() {

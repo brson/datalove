@@ -19,9 +19,9 @@ let x: int = :int/10
 let y: int = :int/20
 let z: int = :int/10
 
-let eq1 = is_equal(x, z)
-let eq2 = is_equal(x, y)
-let eq3 = is_equal(x, x)
+let eq1 = is_equal(ref x, ref z)
+let eq2 = is_equal(ref x, ref y)
+let eq3 = is_equal(ref x, ref x)
 let output = (eq1, eq2, eq3)
 
 ----------

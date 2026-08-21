@@ -6,4 +6,4 @@ import string.char_count
 let a = "hello"
 let b = ""
 
-let output = (is_ascii(a), is_ascii(b), char_count(a), char_count(b))
+let output = (is_ascii(ref a), is_ascii(ref b), char_count(ref a), char_count(ref b))

@@ -10,7 +10,7 @@ end fun
 
 fun outer(y: int): int
     // y is owned (In mode), pass reference to inner
-    ret inner(y)
+    ret inner(ref y)
 end fun
 
 debuglog outer(42)

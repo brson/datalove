@@ -4,9 +4,9 @@ import string.repeat
 import string.concat
 
 let a = "ab"
-let r0 = repeat(a, : index / 0)
-let r1 = repeat(a, : index / 1)
-let r3 = repeat(a, : index / 3)
-let c = concat("hello", " world")
+let r0 = repeat(ref a, : index / 0)
+let r1 = repeat(ref a, : index / 1)
+let r3 = repeat(ref a, : index / 3)
+let c = concat(ref "hello", ref " world")
 
 let output = (r0, r1, r3, c)

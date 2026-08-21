@@ -1,0 +1,9 @@
+// A ref parameter requires a `ref` marker at the call site.
+fun rd(ref a: u32): u32
+    ret a
+end fun
+
+fun caller(): u32
+    var v: u32 = 1
+    ret rd(v)
+end fun

@@ -12,7 +12,7 @@ end fun
 
 fun outer(): u32
     let v: u32 = 42
-    let _ok = bump(v)
+    let _ok = bump(mut v)
     ret v
 end fun
 

@@ -1,0 +1,48 @@
+{
+  "diagnostics": [
+    {
+      "code": "F057",
+      "labels": [
+        {
+          "message": "this argument must be passed as `mut`",
+          "span": [
+            186,
+            187
+          ],
+          "text": "v"
+        }
+      ],
+      "message": "argument mode mismatch: expected `mut`, found `ref`",
+      "notes": [
+        "the marker at a call site must match the parameter's declared mode"
+      ]
+    }
+  ],
+  "errors": [
+    {
+      "expected": "mut",
+      "found": "ref",
+      "kind": "ArgumentModeMismatch",
+      "param_idx": 0
+    }
+  ],
+  "judgements": [
+    {
+      "kind": "function",
+      "name": "wr",
+      "params": [
+        {
+          "name": "a",
+          "type": "u32"
+        }
+      ],
+      "return_type": "bool"
+    },
+    {
+      "kind": "function",
+      "name": "caller",
+      "params": [],
+      "return_type": "bool"
+    }
+  ]
+}

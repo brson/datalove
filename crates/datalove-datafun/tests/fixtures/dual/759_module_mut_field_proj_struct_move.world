@@ -17,5 +17,5 @@ require module local/test/mutops_struct_move
 import mutops_struct_move.set_to_42
 
 var s: {a: int, b: int} = {a = :int/100, b = :int/200}
-let _ok = set_to_42(s.a)
+let _ok = set_to_42(mut s.a)
 debuglog s.a

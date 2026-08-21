@@ -12,9 +12,9 @@ fun has_string(opt: ?string): bool
   ret false
 end fun
 
-let p1 = has_string(strip_prefix(s, "hello "))
-let p2 = has_string(strip_prefix(s, "xyz"))
-let s1 = has_string(strip_suffix(s, " world"))
-let s2 = has_string(strip_suffix(s, "xyz"))
+let p1 = has_string(strip_prefix(ref s, ref "hello "))
+let p2 = has_string(strip_prefix(ref s, ref "xyz"))
+let s1 = has_string(strip_suffix(ref s, ref " world"))
+let s2 = has_string(strip_suffix(ref s, ref "xyz"))
 
 let output = (p1, p2, s1, s2)

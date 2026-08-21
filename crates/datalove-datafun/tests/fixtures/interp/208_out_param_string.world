@@ -10,7 +10,7 @@ end fun
 
 fun test(): string
     var s: string = ""
-    let _ok: bool = init_string(s)
+    let _ok: bool = init_string(out s)
     ret s
 end fun
 

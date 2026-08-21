@@ -11,7 +11,7 @@ end fun
 
 fun caller(): u32
     var v: u32 = 0
-    let _ok = write_100(v)
+    let _ok = write_100(out v)
     ret v
 end fun
 

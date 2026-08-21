@@ -736,6 +736,21 @@ operations:
 - View types (e.g. tensor sub-views from rank > 1 indexing) cannot be
   passed to `mut` or `out` parameters. Use `ref` instead.
 
+**Call-site markers.** Every argument repeats its parameter's mode, so that
+borrowing and mutation are visible where the call is written rather than only
+in the callee's signature. `in` is written by omitting the marker:
+
+```datalove
+fun mixed(a: u32, ref b: u32, mut c: u32): u32
+
+mixed(x, ref y, mut z)
+```
+
+A marker that disagrees with the declared mode is an error (F057), including
+a missing marker for a `ref`, `mut` or `out` parameter and a marker on an
+`in` parameter. Intrinsics take every argument by value, so `icall` arguments
+never carry a marker.
+
 ### 8.4 Const Parameters
 
 The `const` modifier declares a parameter whose value must be known at compile
@@ -926,7 +941,7 @@ require rider std
 import std.string_len
 
 fun my_len(ref s: string): index
-    ret string_len(s)
+    ret string_len(ref s)
 end fun
 ```
 
@@ -1016,12 +1031,12 @@ parameter being forwarded.
 fun bump(mut x: u32)
 
 var v: u32 = 1
-bump(v)            // ok
-bump(v.0)          // ok for a var aggregate
+bump(mut v)            // ok
+bump(mut v.0)          // ok for a var aggregate
 
 let w: u32 = 1
-bump(w)            // error: `w` is immutable
-bump(compute())    // error: the write would be discarded
+bump(mut w)            // error: `w` is immutable
+bump(mut compute())    // error: the write would be discarded
 ```
 
 An `in` parameter is not assignable either, and a `ref` parameter reports the
@@ -1037,14 +1052,14 @@ either is `mut` or `out`:
 fun grow(mut self: string, ref other: string)
 
 var s: string = "hi"
-grow(s, s)         // error: aliased mutable argument
+grow(mut s, ref s)    // error: aliased mutable argument
 ```
 
 Two `ref` arguments are permitted, as are two reads of a copy value:
 
 ```datalove
-let equal = compare(x, x)    // ok: both ref
-let n = mul_checked(b, b)    // ok: both consume a copy type
+let equal = compare(ref x, ref x)    // ok: both ref
+let n = mul_checked(b, b)            // ok: both consume a copy type
 ```
 
 Arguments are compared by the binding their place is rooted at. Distinct

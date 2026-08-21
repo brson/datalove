@@ -16,8 +16,8 @@ require module local/test/main
 import main.read_int
 
 let val: int = :int/42
-let result1 = read_int(val)
-let result2 = read_int(val)
+let result1 = read_int(ref val)
+let result2 = read_int(ref val)
 let output = (result1, result2)
 
 ----------

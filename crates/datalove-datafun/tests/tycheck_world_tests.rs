@@ -215,6 +215,14 @@ fn error_to_json(error: &datalove_datafun_tycheck::TypeError) -> rmx::serde_json
                 "reason": reason
             })
         }
+        TypeError::ArgumentModeMismatch { param_idx, expected, found } => {
+            json!({
+                "kind": "ArgumentModeMismatch",
+                "param_idx": param_idx,
+                "expected": expected,
+                "found": found
+            })
+        }
     }
 }
 

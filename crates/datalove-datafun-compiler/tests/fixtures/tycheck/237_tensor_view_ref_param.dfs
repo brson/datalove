@@ -4,5 +4,5 @@ fun read_row(ref row: [|u32, 1|]): [|u32, 1|]
 end fun
 
 fun test(t: [|u32, 2|]): ?[|u32, 1|]
-    ret some read_row(t[(: index / 0)]?)
+    ret some read_row(ref t[(: index / 0)]?)
 end fun

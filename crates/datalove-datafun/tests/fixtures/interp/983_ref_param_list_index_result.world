@@ -8,7 +8,7 @@ fun read_ref(ref x: u32): !u32
 end fun
 
 fun test(a: [u32], i: index): !u32
-    ret read_ref(a[i]!)
+    ret read_ref(ref a[i]!)
 end fun
 
 debuglog test([10, 20, 30], (: index / 2))

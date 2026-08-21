@@ -3,12 +3,12 @@ require module sys/std/string
 import string.get_char
 import string.find_char
 
-let c0 = get_char("hello", : index / 0)
-let c4 = get_char("hello", : index / 4)
-let c5 = get_char("hello", : index / 5)
+let c0 = get_char(ref "hello", : index / 0)
+let c4 = get_char(ref "hello", : index / 4)
+let c5 = get_char(ref "hello", : index / 5)
 
-let b0 = find_char("hello", : index / 0)
-let b4 = find_char("hello", : index / 4)
-let b5 = find_char("hello", : index / 5)
+let b0 = find_char(ref "hello", : index / 0)
+let b4 = find_char(ref "hello", : index / 4)
+let b5 = find_char(ref "hello", : index / 5)
 
 let output = (c0, c4, c5, b0, b4, b5)
