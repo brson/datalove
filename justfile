@@ -1,7 +1,9 @@
 default:
     just --list
 
+# Run the tests, and check benches compile since they are not tested.
 test:
+    cargo check --all --benches
     cargo test --all --lib --bins --tests --examples
 
 # Run tests with 64-bit collection indexes.
