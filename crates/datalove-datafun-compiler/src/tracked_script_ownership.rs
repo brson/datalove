@@ -323,6 +323,16 @@ fn emit_single_ownership_diagnostic<'db>(
                     .emit_ownership();
             }
         }
+        AnalysisError::AliasedMutableArgument { local_index, name } => {
+            if let Some(ts) = lookup_expr_span(db, spans, *local_index) {
+                let msg = format!("aliased mutable argument: `{}`", name);
+                bct::diagnostic::DiagnosticBuilder::error(db, &msg)
+                    .code("D010")
+                    .primary_label(ts, "passed again in the same call")
+                    .note("an argument passed as `mut` or `out` cannot also be passed to another parameter")
+                    .emit_ownership();
+            }
+        }
         AnalysisError::ReadUninitialized { local_index, name } => {
             if let Some(ts) = lookup_expr_span(db, spans, *local_index) {
                 let msg = format!("read of uninitialized binding: `{}`", name);

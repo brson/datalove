@@ -437,6 +437,22 @@ fn render_ownership_error<'db>(
                 let _ = report.eprint((file_name, Source::from(text.as_str(db))));
             }
         }
+        AnalysisError::AliasedMutableArgument { local_index, name } => {
+            if let Some((text, span)) = lookup_expr_span(db, spans, *local_index) {
+                let msg = format!("aliased mutable argument: `{}`", name);
+                let report = Report::build(ReportKind::Error, file_name, span.start)
+                    .with_code("D010")
+                    .with_message(&msg)
+                    .with_label(
+                        Label::new((file_name, span.clone()))
+                            .with_color(colors.next())
+                            .with_message("passed again in the same call")
+                    )
+                    .with_note("an argument passed as `mut` or `out` cannot also be passed to another parameter")
+                    .finish();
+                let _ = report.eprint((file_name, Source::from(text.as_str(db))));
+            }
+        }
         AnalysisError::ReadUninitialized { local_index, name } => {
             if let Some((text, span)) = lookup_expr_span(db, spans, *local_index) {
                 let msg = format!("read of uninitialized binding: `{}`", name);

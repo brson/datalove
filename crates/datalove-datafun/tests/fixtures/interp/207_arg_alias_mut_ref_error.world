@@ -1,0 +1,27 @@
+----------
+module local/test/main
+----------
+
+// Test passing one binding to both a mut and a ref parameter.
+// Should error - the ref would observe mutation through the mut, and for a
+// linear type the mut may free the buffer the ref points into.
+fun rw(mut a: u32, ref b: u32): u32
+    set a = 111
+    ret b
+end fun
+
+fun outer(mut v: u32): u32
+    ret rw(v, v)
+end fun
+
+----------
+scriptunit-fragment
+----------
+
+require module local/test/main
+
+----------
+scriptunit-expr
+----------
+
+true

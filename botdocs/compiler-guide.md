@@ -389,6 +389,7 @@ across all match arms: if a value is moved in one arm, it must be moved in all.
 | D007 | MoveInLoop | Moving outer-scoped value in loop |
 | D008 | InconsistentBranchMove | Value moved in one branch only |
 | D009 | OutParamPartialWrite | Field write to `out` param |
+| D010 | AliasedMutableArgument | Two arguments share a place root, one is `mut`/`out` |
 
 ### Drop Schedule
 

@@ -1,0 +1,31 @@
+----------
+module local/test/main
+----------
+
+// Test passing one binding to two ref parameters, and to two in parameters.
+// Should compile - shared borrows do not conflict, and neither do reads of a
+// copy type. sys/std relies on the second form: mul_checked(base, base).
+fun rr(ref a: u32, ref b: u32): bool
+    ret a == b
+end fun
+
+fun ii(a: u32, b: u32): bool
+    ret a == b
+end fun
+
+fun outer(ref v: u32): bool
+    let same = rr(v, v)
+    ret ii(v, v) and same
+end fun
+
+----------
+scriptunit-fragment
+----------
+
+require module local/test/main
+
+----------
+scriptunit-expr
+----------
+
+true

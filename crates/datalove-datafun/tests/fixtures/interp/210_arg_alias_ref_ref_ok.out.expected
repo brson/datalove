@@ -1,0 +1,75 @@
+Analysis(
+    sections: [
+        SectionResult(
+            section_type: "module",
+            name: Some("local/test/main"),
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    fn rr(p0, p1):
+                    block0:
+                        v0 = eq p0, p1
+                        return v0
+                    
+                    fn ii(p0, p1):
+                    block0:
+                        v0 = eq p0, p1
+                        return v0
+                    
+                    fn outer(p0):
+                    block0:
+                        v0 = call @0 m0.u0(p0, p0)
+                        v1 = call @1 m0.u1(p0, p0)
+                        v2 = logic_and v1, v0
+                        return v2
+                """,
+            ),
+            output: "",
+        ),
+        SectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        unit_end
+                """,
+            ),
+            output: "(fragment executed)",
+        ),
+        SectionResult(
+            section_type: "scriptunit-expr",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const true
+                        unit_end v0
+                """,
+            ),
+            output: "true",
+        ),
+    ],
+)

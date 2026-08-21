@@ -1002,8 +1002,33 @@ values.
 | D007 | MoveInLoop | Moving outer-scoped linear value in loop |
 | D008 | InconsistentBranchMove | Moved in one branch but not another |
 | D009 | OutParamPartialWrite | Writing fields of `out` param individually |
+| D010 | AliasedMutableArgument | Two arguments alias, one is `mut`/`out` |
 
-### 11.2 Loop Restrictions
+### 11.2 Argument Aliasing
+
+Every parameter is passed by reference, so two arguments naming the same
+binding hand the callee two references to one object. That is an error when
+either is `mut` or `out`:
+
+```datalove
+fun grow(mut self: string, ref other: string)
+
+var s: string = "hi"
+grow(s, s)         // error: aliased mutable argument
+```
+
+Two `ref` arguments are permitted, as are two reads of a copy value:
+
+```datalove
+let equal = compare(x, x)    // ok: both ref
+let n = mul_checked(b, b)    // ok: both consume a copy type
+```
+
+Arguments are compared by the binding their place is rooted at. Distinct
+fields (`f(mut p.x, ref p.y)`) and distinct indexes (`f(mut a[i]?, ref a[j]?)`)
+share a root and are rejected, even where they do not overlap in fact.
+
+### 11.3 Loop Restrictions
 
 Moving an outer-scoped linear value inside a loop is an error:
 
@@ -1016,7 +1041,7 @@ end loop
 
 Copy types and operator operands (which are borrowed) are exempt.
 
-### 11.3 Branch Consistency
+### 11.4 Branch Consistency
 
 If a value is moved in one branch, it must be moved in all branches:
 
@@ -1028,7 +1053,7 @@ else
 end if
 ```
 
-### 11.4 Tracking Categories
+### 11.5 Tracking Categories
 
 Bindings are categorized for drop scheduling:
 

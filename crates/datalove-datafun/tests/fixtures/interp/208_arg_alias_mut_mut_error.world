@@ -1,0 +1,27 @@
+----------
+module local/test/main
+----------
+
+// Test passing one binding to two mut parameters.
+// Should error - two mutable references to one object.
+fun two(mut a: u32, mut b: u32): bool
+    set a = 111
+    set b = 222
+    ret true
+end fun
+
+fun outer(mut v: u32): bool
+    ret two(v, v)
+end fun
+
+----------
+scriptunit-fragment
+----------
+
+require module local/test/main
+
+----------
+scriptunit-expr
+----------
+
+true

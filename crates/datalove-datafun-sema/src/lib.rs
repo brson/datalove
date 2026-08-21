@@ -242,6 +242,14 @@ pub enum AnalysisError {
         local_index: u32,
         name: String,
     },
+    /// Two arguments of one call name the same binding, and at least one of
+    /// them is passed to a `mut` or `out` parameter.
+    /// D010
+    AliasedMutableArgument {
+        /// Location of the later of the two arguments.
+        local_index: u32,
+        name: String,
+    },
 }
 
 /// Format analysis errors for display.
@@ -283,6 +291,9 @@ fn format_single_error(error: &AnalysisError) -> String {
         }
         AnalysisError::OutParamPartialWrite { local_index: _, name } => {
             format!("error[D009]: cannot partially write to out parameter: `{}`", name)
+        }
+        AnalysisError::AliasedMutableArgument { local_index: _, name } => {
+            format!("error[D010]: aliased mutable argument: `{}`", name)
         }
     }
 }

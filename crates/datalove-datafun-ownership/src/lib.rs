@@ -481,6 +481,59 @@ impl<'db> AnalysisCtx<'db> {
         None
     }
 
+    /// The binding an expression's place is rooted at, ignoring any steps.
+    ///
+    /// Unlike `expr_to_binding` this answers for projections and indexes too:
+    /// `a.x` and `a[i]?` are both rooted at `a`.
+    fn expr_to_place_root(&self, expr: ExprFun<'db>) -> Option<BindingId> {
+        if let ExprFunKind::Place(ref place) = expr.expr(self.db) {
+            let name: &str = place.root.text(self.db).as_ref();
+            return self.name_to_binding.get(name).copied();
+        }
+        None
+    }
+
+    /// Reject calls where two arguments share a place root and at least one of
+    /// them is passed to a `mut` or `out` parameter.
+    ///
+    /// Every parameter is passed by reference, so two such arguments hand the
+    /// callee two references to one object with at least one of them mutable.
+    /// `string_push_str(mut self, ref other)` called as `push_str(s, s)`
+    /// reallocates `self` and then reads `other` through the freed pointer.
+    ///
+    /// Comparison is on the root binding alone. Distinct fields of one value
+    /// (`f(mut p.x, ref p.y)`) do not overlap in fact, and distinct indexes
+    /// (`f(mut a[i]?, ref a[j]?)`) may or may not, but neither is admitted
+    /// yet: rejecting is sound, and nothing in the standard library or the
+    /// fixtures relies on either.
+    ///
+    /// Arguments that are not places cannot alias: a nested call is evaluated
+    /// to a value before this call runs.
+    fn check_argument_aliasing(&mut self, args: &[ExprFun<'db>], callee_modes: &[ParamMode]) {
+        let is_borrow_conflict = |mode: Option<ParamMode>| {
+            matches!(mode, Some(ParamMode::Mut) | Some(ParamMode::Out))
+        };
+
+        for (j, later) in args.iter().enumerate() {
+            let Some(later_root) = self.expr_to_place_root(*later) else {
+                continue;
+            };
+            for (i, earlier) in args.iter().enumerate().take(j) {
+                if self.expr_to_place_root(*earlier) != Some(later_root) {
+                    continue;
+                }
+                let modes = (callee_modes.get(i).copied(), callee_modes.get(j).copied());
+                if !is_borrow_conflict(modes.0) && !is_borrow_conflict(modes.1) {
+                    continue;
+                }
+                let name = self.bindings[later_root.0 as usize].name.C();
+                let local_index = later.as_id().index() as u32;
+                self.errors.push(AnalysisError::AliasedMutableArgument { local_index, name });
+                break;
+            }
+        }
+    }
+
     /// Check if an expression contains early-return operators.
     fn expr_may_early_return(&self, expr: ExprFun<'db>) -> bool {
         match expr.expr(self.db) {
@@ -568,16 +621,23 @@ impl<'db> AnalysisCtx<'db> {
                 None
             }
             ExprFunKind::FunctionCall(call) => {
-                // Look up callee's parameter modes if available.
+                // Ownership analysis only runs on modules and units that
+                // typechecked cleanly, so every call has a resolved target and
+                // a missing entry is a bug in call resolution. Tolerating it
+                // would silently disable the mode-dependent checks below.
                 let call_index = call.as_id().index() as usize;
-                let callee_modes: Vec<ParamMode> = self.call_info
+                let callee_modes: &[ParamMode] = self.call_info
                     .get(call_index)
                     .and_then(|opt| opt.as_ref())
-                    .map(|info| info.param_modes.clone())
-                    .unwrap_or_default();
+                    .map(|info| info.param_modes.as_slice())
+                    .unwrap_or_else(|| panic!(
+                        "no resolved call target for call at index {}", call_index
+                    ));
+
+                let args = call.args(self.db);
+                self.check_argument_aliasing(&args, callee_modes);
 
                 // Analyze args with appropriate consumption based on param mode.
-                let args = call.args(self.db);
                 for (i, arg) in args.iter().enumerate() {
                     let callee_mode = callee_modes.get(i).copied();
 
