@@ -102,6 +102,30 @@ fn results_land_on_their_own_entry() {
     assert_eq!(executor.evals(), vec![0, 1]);
 }
 
+/// Multiline mode loads whatever the engine read, however many lines it is.
+#[test]
+fn read_multiline_loads_every_line_it_was_given() {
+    let executor = MockExecutor::default();
+    let mut app = ReplApp::with_executor(executor.clone());
+
+    app.submit_input("fun double(x: int): int\n  ret x + x".to_string());
+
+    executor.queue(WorkerResponse::ParseResult {
+        id: 0,
+        parse: repl::InputParse::ReadMultiline("fun double(x: int): int\n  ret x + x".to_string()),
+    });
+    let actions = app.poll_results();
+
+    assert!(app.multiline_mode());
+    assert_eq!(actions.len(), 1);
+    match &actions[0] {
+        repl::app::UiAction::SetMultilineInput { lines } => {
+            assert_eq!(lines, &["fun double(x: int): int", "  ret x + x", ""]);
+        }
+        other => panic!("expected SetMultilineInput, got {:?}", other),
+    }
+}
+
 /// A crash reset clears the history, so responses for requests that were in
 /// flight at the time have nowhere to land and are dropped.
 #[test]

@@ -214,10 +214,11 @@ impl<E: ReplExecutor> ReplApp<E> {
                 entry.status = EntryStatus::ReadMultiline;
                 self.multiline_mode = true;
 
-                assert!(!input.contains('\n'));
-                UiAction::SetMultilineInput {
-                    lines: vec![input, String::new()]
-                }
+                // The input carries however many lines the user submitted at
+                // once; the empty line at the end is where they continue.
+                let mut lines: Vec<String> = input.lines().map(S).collect();
+                lines.push(String::new());
+                UiAction::SetMultilineInput { lines }
             }
             repl::InputParse::Command(command) => {
                 entry.parse_result = Some(parse);
