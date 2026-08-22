@@ -4,35 +4,78 @@ Analysis(
             section_type: "scriptunit-fragment",
             name: None,
             typecheck: TypecheckResult(
-                status: "Error",
-                errors: [
-                    "TypeMismatch { expected: \"u32\", actual: \"int\" }",
-                ],
+                status: "Success",
             ),
             ownership: OwnershipResult(
-                status: "Skipped",
+                status: "Success",
             ),
             lowering: LoweringResult(
-                status: "Skipped",
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        unit_end
+                    
+                    fn factorial(p0):
+                    block0:
+                        v0 = const 2u32
+                        v1 = lt p0, v0
+                        branch v1, block1, block2
+                    block1:
+                        v2 = const 1u32
+                        v3 = ok v2
+                        return v3
+                    block2:
+                        v4 = const 1u32
+                        v5, v6 = sub.checked p0, v4
+                        branch v6, block3, block4
+                    block3:
+                        v7 = const "arithmetic overflow"
+                        v8 = error_from v7
+                        v9 = err v8
+                        return v9
+                    block4:
+                        v10 = call @0 u0(v5)
+                        v11, v12, v13 = unwrap_result v10
+                        branch v13, block6, block5
+                    block5:
+                        v14 = err v12
+                        return v14
+                    block6:
+                        v15, v16 = mul.checked p0, v11
+                        branch v16, block7, block8
+                    block7:
+                        v17 = const "arithmetic overflow"
+                        v18 = error_from v17
+                        v19 = err v18
+                        return v19
+                    block8:
+                        v20 = ok v15
+                        return v20
+                """,
             ),
-            output: "",
+            output: "(fragment executed)",
         ),
         SectionResult(
             section_type: "scriptunit-expr",
             name: None,
             typecheck: TypecheckResult(
-                status: "Error",
-                errors: [
-                    "UnresolvedName(\"factorial\")",
-                ],
+                status: "Success",
             ),
             ownership: OwnershipResult(
-                status: "Skipped",
+                status: "Success",
             ),
             lowering: LoweringResult(
-                status: "Skipped",
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 5u32
+                        v1 = call @0 unit0.u0(v0)
+                        unit_end v1
+                """,
             ),
-            output: "",
+            output: "ok 120",
         ),
     ],
 )

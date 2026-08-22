@@ -1,46 +1,6 @@
 {
-  "diagnostics": [
-    {
-      "code": "F016",
-      "labels": [
-        {
-          "message": "operands must have the same type",
-          "span": [
-            31,
-            38
-          ],
-          "text": "n .< 10"
-        }
-      ],
-      "message": "mismatched types: expected `u32`, found `int`"
-    },
-    {
-      "code": "F016",
-      "labels": [
-        {
-          "message": "operands must have the same type",
-          "span": [
-            46,
-            52
-          ],
-          "text": "n .< 5"
-        }
-      ],
-      "message": "mismatched types: expected `u32`, found `int`"
-    }
-  ],
-  "errors": [
-    {
-      "actual": "int",
-      "expected": "u32",
-      "kind": "TypeMismatch"
-    },
-    {
-      "actual": "int",
-      "expected": "u32",
-      "kind": "TypeMismatch"
-    }
-  ],
+  "diagnostics": [],
+  "errors": [],
   "judgements": [
     {
       "kind": "function",

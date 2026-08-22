@@ -669,7 +669,7 @@ mod tests {
         // allocator can express. This used to wrap to 0.
         let td = make_tydesc(16, 8);
         let tydescs: Vec<&TyDesc> = vec![&td];
-        let _ = table_data_allocation_size(&tydescs, 1 << 28);
+        let _ = table_data_allocation_size(&tydescs, 1 << 28 as IndexRepr);
     }
 
     #[test]
@@ -677,7 +677,7 @@ mod tests {
         // One byte short of the limit still computes.
         let td = make_tydesc(1, 1);
         let tydescs: Vec<&TyDesc> = vec![&td];
-        assert_eq!(table_data_allocation_size(&tydescs, u32::MAX), u32::MAX);
+        assert_eq!(table_data_allocation_size(&tydescs, u32::MAX as IndexRepr), u32::MAX);
     }
 
     #[test]

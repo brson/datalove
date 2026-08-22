@@ -1,27 +1,6 @@
 {
-  "diagnostics": [
-    {
-      "code": "F016",
-      "labels": [
-        {
-          "message": "operands must have the same type",
-          "span": [
-            46,
-            52
-          ],
-          "text": "y == 0"
-        }
-      ],
-      "message": "mismatched types: expected `u32`, found `int`"
-    }
-  ],
-  "errors": [
-    {
-      "actual": "int",
-      "expected": "u32",
-      "kind": "TypeMismatch"
-    }
-  ],
+  "diagnostics": [],
+  "errors": [],
   "judgements": [
     {
       "kind": "function",

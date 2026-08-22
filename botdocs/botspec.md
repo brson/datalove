@@ -1124,6 +1124,20 @@ fun add(): !u32
 end fun
 ```
 
+With no expected type for a binary operator, one operand can supply the other's.
+When exactly one side is a bare numeric literal and the other has a numeric type
+of its own, the literal checks against that type:
+
+```datalove
+fun f(n: u32): bool
+    ret n == 0         // 0 infers u32 from n
+end fun
+```
+
+With a literal on both sides there is nothing to propagate and both synthesize
+`int`, so `1 == 2` compares bigints. A non-numeric operand supplies nothing
+either: `1 + "hello"` is a plain mismatch.
+
 Float literals infer their precision from context:
 
 ```datalove

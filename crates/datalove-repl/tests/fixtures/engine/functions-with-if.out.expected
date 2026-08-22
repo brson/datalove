@@ -7,7 +7,7 @@
       }
     },
     "eval": {
-      "Error": "TypeMismatch { expected: \"i32\", actual: \"int\" }; TypeMismatch { expected: \"int\", actual: \"i32\" }"
+      "Error": "InvalidOperandType { op: \"-\", ty: \"i32\" }"
     },
     "environment": []
   },
@@ -43,9 +43,17 @@
       }
     },
     "eval": {
-      "Error": "TypeMismatch { expected: \"u32\", actual: \"int\" }; TypeMismatch { expected: \"u32\", actual: \"int\" }"
+      "SuccessFun": {
+        "name": "classify"
+      }
     },
-    "environment": []
+    "environment": [
+      {
+        "name": "classify",
+        "ty": "function",
+        "value": "-"
+      }
+    ]
   },
   {
     "input": "classify(5)",
@@ -55,9 +63,19 @@
       }
     },
     "eval": {
-      "Error": "UnresolvedName(\"classify\")"
+      "SuccessExpr": {
+        "expr_kind": "expr",
+        "ty": "u32",
+        "value": "1"
+      }
     },
-    "environment": []
+    "environment": [
+      {
+        "name": "classify",
+        "ty": "function",
+        "value": "-"
+      }
+    ]
   },
   {
     "input": "classify(15)",
@@ -67,9 +85,19 @@
       }
     },
     "eval": {
-      "Error": "UnresolvedName(\"classify\")"
+      "SuccessExpr": {
+        "expr_kind": "expr",
+        "ty": "u32",
+        "value": "2"
+      }
     },
-    "environment": []
+    "environment": [
+      {
+        "name": "classify",
+        "ty": "function",
+        "value": "-"
+      }
+    ]
   },
   {
     "input": "classify(25)",
@@ -79,9 +107,19 @@
       }
     },
     "eval": {
-      "Error": "UnresolvedName(\"classify\")"
+      "SuccessExpr": {
+        "expr_kind": "expr",
+        "ty": "u32",
+        "value": "3"
+      }
     },
-    "environment": []
+    "environment": [
+      {
+        "name": "classify",
+        "ty": "function",
+        "value": "-"
+      }
+    ]
   },
   {
     "input": "fun grade(score: u32): u32\n  if score >= 90\n    ret 4\n  else\n    if score >= 80\n      ret 3\n    else\n      if score >= 70\n        ret 2\n      else\n        ret 1\n      end if\n    end if\n  end if\nend fun",
@@ -91,9 +129,22 @@
       }
     },
     "eval": {
-      "Error": "TypeMismatch { expected: \"u32\", actual: \"int\" }; TypeMismatch { expected: \"u32\", actual: \"int\" }; TypeMismatch { expected: \"u32\", actual: \"int\" }"
+      "SuccessFun": {
+        "name": "grade"
+      }
     },
-    "environment": []
+    "environment": [
+      {
+        "name": "classify",
+        "ty": "function",
+        "value": "-"
+      },
+      {
+        "name": "grade",
+        "ty": "function",
+        "value": "-"
+      }
+    ]
   },
   {
     "input": "grade(95)",
@@ -103,9 +154,24 @@
       }
     },
     "eval": {
-      "Error": "UnresolvedName(\"grade\")"
+      "SuccessExpr": {
+        "expr_kind": "expr",
+        "ty": "u32",
+        "value": "4"
+      }
     },
-    "environment": []
+    "environment": [
+      {
+        "name": "classify",
+        "ty": "function",
+        "value": "-"
+      },
+      {
+        "name": "grade",
+        "ty": "function",
+        "value": "-"
+      }
+    ]
   },
   {
     "input": "grade(85)",
@@ -115,9 +181,24 @@
       }
     },
     "eval": {
-      "Error": "UnresolvedName(\"grade\")"
+      "SuccessExpr": {
+        "expr_kind": "expr",
+        "ty": "u32",
+        "value": "3"
+      }
     },
-    "environment": []
+    "environment": [
+      {
+        "name": "classify",
+        "ty": "function",
+        "value": "-"
+      },
+      {
+        "name": "grade",
+        "ty": "function",
+        "value": "-"
+      }
+    ]
   },
   {
     "input": "grade(75)",
@@ -127,9 +208,24 @@
       }
     },
     "eval": {
-      "Error": "UnresolvedName(\"grade\")"
+      "SuccessExpr": {
+        "expr_kind": "expr",
+        "ty": "u32",
+        "value": "2"
+      }
     },
-    "environment": []
+    "environment": [
+      {
+        "name": "classify",
+        "ty": "function",
+        "value": "-"
+      },
+      {
+        "name": "grade",
+        "ty": "function",
+        "value": "-"
+      }
+    ]
   },
   {
     "input": "grade(65)",
@@ -139,8 +235,23 @@
       }
     },
     "eval": {
-      "Error": "UnresolvedName(\"grade\")"
+      "SuccessExpr": {
+        "expr_kind": "expr",
+        "ty": "u32",
+        "value": "1"
+      }
     },
-    "environment": []
+    "environment": [
+      {
+        "name": "classify",
+        "ty": "function",
+        "value": "-"
+      },
+      {
+        "name": "grade",
+        "ty": "function",
+        "value": "-"
+      }
+    ]
   }
 ]

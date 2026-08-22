@@ -1,1 +1,33 @@
-Typecheck error: line 3, col 8: error[F016]: mismatched types: expected `i64`, found `int`
+=== BEFORE INLINING ===
+fn factorial(p0):
+block0:
+    v0 = const 1i64
+    v1 = le p0, v0
+    branch v1, block1, block2
+block1:
+    v2 = const 1i64
+    return v2
+block2:
+    v3 = copy p0
+    return v3
+
+=== INLINE DIRECTIVES ===
+inline factorial factorial
+
+=== AFTER INLINING ===
+fn factorial(p0):
+block0:
+    v0 = const 1i64
+    v1 = le p0, v0
+    branch v1, block1, block2
+block1:
+    v2 = const 1i64
+    return v2
+block2:
+    v3 = copy p0
+    return v3
+
+=== INLINING STATS ===
+Inlined: 0 call(s)
+Skipped: 1 directive(s)
+  - RecursiveCall { func: "factorial" }

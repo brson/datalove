@@ -1,26 +1,6 @@
 {
-  "diagnostics": [
-    {
-      "code": "F016",
-      "labels": [
-        {
-          "message": "operands must have the same type",
-          "span": [
-            34,
-            40
-          ],
-          "text": "n == 0"
-        }
-      ],
-      "message": "mismatched types: expected `u64`, found `int`"
-    }
-  ],
+  "diagnostics": [],
   "errors": [
-    {
-      "actual": "int",
-      "expected": "u64",
-      "kind": "TypeMismatch"
-    },
     {
       "kind": "CannotSynthesize"
     }

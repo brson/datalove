@@ -456,6 +456,22 @@ pub fn synthesize_expr<'db>(
 // ============================================================================
 
 /// Synthesize type for binary operation.
+/// True if an expression is a numeric literal carrying no type of its own.
+///
+/// Such a literal synthesizes `int` by default, so its type is a fallback
+/// rather than information. A negated literal counts, since the sign does not
+/// constrain the width either.
+fn is_bare_numeric_literal<'db>(ctx: &TypeContext<'db>, expr: ExprFun<'db>) -> bool {
+    match expr.expr(ctx.db) {
+        ExprFunKind::Int(_) | ExprFunKind::Hex(_) | ExprFunKind::Float(_) => true,
+        ExprFunKind::UnaryOp(ref unary) => {
+            matches!(unary.op, UnaryOp::Neg | UnaryOp::NegOptional | UnaryOp::NegResult)
+                && is_bare_numeric_literal(ctx, unary.operand)
+        }
+        _ => false,
+    }
+}
+
 fn synthesize_binop<'db>(
     ctx: &mut TypeContext<'db>,
     expr: ExprFun<'db>,
@@ -468,11 +484,46 @@ fn synthesize_binop<'db>(
 
     // Synthesize types for operands in ref context.
     // All binops treat their operands as ref (they don't move).
+    //
+    // Reaching here means no expected type flowed in from the surrounding
+    // expression, so a bare numeric literal would otherwise synthesize `int`
+    // and then mismatch a fixed-width operand: `n == 0` against a `u32` is the
+    // common case. When exactly one side is such a literal, the other side's
+    // type is the only information available, so check the literal against it.
+    // With a literal on both sides there is nothing to propagate and both
+    // synthesize `int`, so `1 == 2` is a bigint comparison as before.
     let old_ref_context = ctx.ref_context;
     ctx.ref_context = true;
-    let lhs_ty = ctx.synthesize_expr(lhs)?;
-    let rhs_ty = ctx.synthesize_expr(rhs)?;
+    let lhs_bare = is_bare_numeric_literal(ctx, lhs);
+    let rhs_bare = is_bare_numeric_literal(ctx, rhs);
+    let result: Result<(Type<'db>, Type<'db>), TypeError> = (|ctx: &mut TypeContext<'db>| {
+        // Only a numeric type can inform a numeric literal. Against anything
+        // else the operands are simply incompatible, and saying so is clearer
+        // than reporting that the literal failed to be a string.
+        if rhs_bare && !lhs_bare {
+            let lhs_ty = ctx.synthesize_expr(lhs)?;
+            if is_numeric_type(&lhs_ty) {
+                check_expr(ctx, rhs, &lhs_ty)?;
+                return Ok((lhs_ty.clone(), lhs_ty));
+            }
+            let rhs_ty = ctx.synthesize_expr(rhs)?;
+            Ok((lhs_ty, rhs_ty))
+        } else if lhs_bare && !rhs_bare {
+            let rhs_ty = ctx.synthesize_expr(rhs)?;
+            if is_numeric_type(&rhs_ty) {
+                check_expr(ctx, lhs, &rhs_ty)?;
+                return Ok((rhs_ty.clone(), rhs_ty));
+            }
+            let lhs_ty = ctx.synthesize_expr(lhs)?;
+            Ok((lhs_ty, rhs_ty))
+        } else {
+            let lhs_ty = ctx.synthesize_expr(lhs)?;
+            let rhs_ty = ctx.synthesize_expr(rhs)?;
+            Ok((lhs_ty, rhs_ty))
+        }
+    })(ctx);
     ctx.ref_context = old_ref_context;
+    let (lhs_ty, rhs_ty) = result?;
 
     // Check that operands have the same type.
     if !types_equivalent(db, &lhs_ty, &rhs_ty) {
