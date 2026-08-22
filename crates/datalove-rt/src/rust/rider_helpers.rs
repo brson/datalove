@@ -249,6 +249,12 @@ unsafe fn destroy_string(rt: LocalRtHandle, s: *mut rtdt::String) {
 /// The `list_ptr` must point to a valid `rtdt::List` whose elements are
 /// `rtdt::String` values.
 ///
+/// Panics if an element is not valid UTF-8. Nothing currently enforces that
+/// invariant on the way in - a rider can write arbitrary bytes into a string -
+/// so it is checked here rather than assumed. Where the validation ought to
+/// live is an open question; this at least makes a violation a diagnosable
+/// panic rather than undefined behaviour.
+///
 /// # Safety
 ///
 /// `list_ptr` must be a valid pointer to a live `rtdt::List` of strings.
@@ -267,7 +273,9 @@ pub unsafe fn read_string_list<'a>(list_ptr: *const u8) -> Vec<&'a str> {
             result.push("");
         } else {
             let bytes = unsafe { std::slice::from_raw_parts(s.data, s.size.as_usize()) };
-            result.push(unsafe { std::str::from_utf8_unchecked(bytes) });
+            let text = std::str::from_utf8(bytes)
+                .unwrap_or_else(|e| panic!("string list element {} is not utf-8: {}", i, e));
+            result.push(text);
         }
     }
     result

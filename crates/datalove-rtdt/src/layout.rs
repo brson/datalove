@@ -511,6 +511,10 @@ pub fn table_column_offset(
 }
 
 /// Compute total allocation size for a table's data.
+///
+/// Panics if the total exceeds `u32::MAX`. The allocator takes sizes as `u32`,
+/// so a larger table cannot be allocated at all; truncating here would instead
+/// allocate a short buffer and let the caller write past it.
 #[inline]
 pub fn table_data_allocation_size(
     column_tydescs: &[&TyDesc],
@@ -523,10 +527,17 @@ pub fn table_data_allocation_size(
     let mut max_align = 1u32;
     for tydesc in column_tydescs {
         offset = align_up_usize(offset, tydesc.align);
-        offset += (tydesc.size as usize) * (capacity as usize);
+        let column_bytes = (tydesc.size as usize)
+            .checked_mul(capacity as usize)
+            .expect("table column size overflow");
+        offset = offset.checked_add(column_bytes)
+            .expect("table data size overflow");
         max_align = max_align.max(tydesc.align);
     }
-    align_up_usize(offset, max_align) as u32
+    let total = align_up_usize(offset, max_align);
+    u32::try_from(total).unwrap_or_else(|_| {
+        panic!("table data of {} bytes exceeds the {} byte maximum", total, u32::MAX)
+    })
 }
 
 /// Compute required alignment for a table's data allocation.
@@ -650,6 +661,24 @@ mod tests {
     }
 
     // table_data_alignment tests
+
+    #[test]
+    #[should_panic(expected = "exceeds the")]
+    fn test_table_data_allocation_size_rejects_oversized() {
+        // 16 bytes per row times 2^28 rows is exactly 2^32, one past what the
+        // allocator can express. This used to wrap to 0.
+        let td = make_tydesc(16, 8);
+        let tydescs: Vec<&TyDesc> = vec![&td];
+        let _ = table_data_allocation_size(&tydescs, 1 << 28);
+    }
+
+    #[test]
+    fn test_table_data_allocation_size_allows_largest_valid() {
+        // One byte short of the limit still computes.
+        let td = make_tydesc(1, 1);
+        let tydescs: Vec<&TyDesc> = vec![&td];
+        assert_eq!(table_data_allocation_size(&tydescs, u32::MAX), u32::MAX);
+    }
 
     #[test]
     fn test_table_data_alignment_empty() {

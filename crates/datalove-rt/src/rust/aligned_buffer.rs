@@ -20,16 +20,22 @@ impl AlignedBuffer {
 
     /// Create a new buffer with specified alignment, zero-initialized.
     pub fn with_align(size: usize, align: usize) -> Self {
-        if size == 0 {
-            // Return a dangling but aligned pointer for zero-size.
-            return Self {
-                ptr: NonNull::dangling(),
-                layout: Layout::from_size_align(0, align).unwrap(),
-            };
-        }
-
+        // Also validates that align is a non-zero power of two, which the
+        // zero-size branch below relies on.
         let layout = Layout::from_size_align(size, align)
             .expect("invalid layout");
+
+        if size == 0 {
+            // Nothing to allocate, but callers still offset from this pointer
+            // and assert its alignment, so it has to meet the request.
+            // NonNull::dangling would give address 1, being u8's alignment
+            // rather than the caller's. The address is never dereferenced or
+            // freed, so it carries no provenance.
+            let ptr = NonNull::new(std::ptr::without_provenance_mut::<u8>(align))
+                .expect("alignment is non-zero");
+            return Self { ptr, layout };
+        }
+
         let ptr = unsafe { alloc_zeroed(layout) };
         let ptr = NonNull::new(ptr).unwrap_or_else(|| {
             std::alloc::handle_alloc_error(layout)
@@ -72,6 +78,34 @@ impl Drop for AlignedBuffer {
     fn drop(&mut self) {
         if self.layout.size() > 0 {
             unsafe { dealloc(self.ptr.as_ptr(), self.layout) }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn zero_size_buffer_is_aligned() {
+        for align in [1usize, 2, 4, 8, 16, 32, 64] {
+            let buf = AlignedBuffer::with_align(0, align);
+            assert_eq!(
+                buf.as_ptr() as usize % align, 0,
+                "zero-size buffer for align {} is at {:p}", align, buf.as_ptr()
+            );
+            assert!(buf.is_empty());
+            assert_eq!(buf.as_slice(), &[] as &[u8]);
+        }
+    }
+
+    #[test]
+    fn allocated_buffer_is_aligned_and_zeroed() {
+        for align in [1usize, 2, 4, 8, 16, 32, 64] {
+            let buf = AlignedBuffer::with_align(128, align);
+            assert_eq!(buf.as_ptr() as usize % align, 0);
+            assert_eq!(buf.len(), 128);
+            assert!(buf.as_slice().iter().all(|b| *b == 0));
         }
     }
 }
