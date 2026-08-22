@@ -14,6 +14,7 @@ Reference for the datalove-datafun compiler architecture.
   - [IDs](#user-content-ids)
   - [Function References](#user-content-function-references)
   - [IrFunction](#user-content-irfunction)
+  - [Type Layout](#user-content-type-layout)
   - [Parameter Modes](#user-content-parameter-modes)
 - [Salsa Patterns](#user-content-salsa-patterns)
   - [Database](#user-content-database)
@@ -249,6 +250,28 @@ pub struct IrFunction {
     pub tracked_params: Vec<ParamId>,  // Params needing runtime tracking
 }
 ```
+
+### Type Layout
+
+`datalove_datafun_ir::layout` is the single authority on how an `IrType` is
+laid out. Both AOT backends and the CTFE evaluator compile against it, and
+`datalove_rtdt::layout` computes the same layouts from runtime type
+descriptors, which is what the runtime reads values back through.
+
+Generated code writes at offsets from the first and the runtime reads at
+offsets from the second, so a disagreement corrupts values rather than
+failing a build. `layout_conformance_tests` walks a corpus of types and
+checks size, alignment, field offsets, variant payload offsets and tag
+payload offsets in both directions.
+
+Nothing should open-code the arithmetic. Payload offsets have named
+functions in both authorities:
+
+| | `ir::layout` | `rtdt::layout` |
+|---|---|---|
+| enum variant | `enum_payload_offset(ty)` | `enum_payload_offset(align)` |
+| `?T` | `option_payload_offset(ty)` | `option_payload_offset(align)` |
+| `!T` | `result_payload_offset(ty)` | `result_payload_offset(align)` |
 
 ### Parameter Modes
 

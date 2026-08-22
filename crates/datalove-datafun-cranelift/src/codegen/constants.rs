@@ -473,7 +473,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
 
                 if let Some(payload_value) = payload {
                     let payload_align = self.align_of_const_value(payload_value);
-                    let payload_offset = datalove_rtdt::layout::align_up(4, payload_align);
+                    let payload_offset = datalove_rtdt::layout::enum_payload_offset(payload_align);
                     let payload_addr = builder.ins().iadd_imm(base, payload_offset as i64);
                     self.write_const_value_to_addr(builder, payload_addr, payload_value)?;
                 }
@@ -507,9 +507,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
 
         // Compute payload offset based on inner type alignment.
         let inner_align = self.align_of_const_value(inner);
-        let error_align = 8u32;
-        let max_align = inner_align.max(error_align);
-        let payload_offset = datalove_rtdt::layout::align_up(1, max_align);
+        let payload_offset = datalove_rtdt::layout::result_payload_offset(inner_align);
         let payload_addr = builder.ins().iadd_imm(base, payload_offset as i64);
 
         // Write the inner value at the payload offset.
@@ -552,9 +550,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
 
         // Compute payload offset based on max of Ok type alignment and Error alignment (8).
         let ok_align = self.align_of_ir_type(ok_type);
-        let error_align = 8u32;
-        let max_align = ok_align.max(error_align);
-        let payload_offset = datalove_rtdt::layout::align_up(1, max_align);
+        let payload_offset = datalove_rtdt::layout::result_payload_offset(ok_align);
         let payload_addr = builder.ins().iadd_imm(base, payload_offset as i64);
 
         // Write the Error value at the payload offset.
@@ -1172,7 +1168,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 // Enum size: discriminant (4) + aligned payload.
                 let payload_size = payload.as_ref().map(|p| self.size_of_const_value(p)).unwrap_or(0);
                 let payload_align = payload.as_ref().map(|p| self.align_of_const_value(p)).unwrap_or(1);
-                let payload_offset = datalove_rtdt::layout::align_up(4, payload_align);
+                let payload_offset = datalove_rtdt::layout::enum_payload_offset(payload_align);
                 let max_align = 4u32.max(payload_align);
                 datalove_rtdt::layout::align_up(payload_offset + payload_size, max_align)
             }
@@ -1182,9 +1178,8 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 let error_size = 16u32; // Error is two pointers
                 let max_payload = inner_size.max(error_size);
                 let inner_align = self.align_of_const_value(inner);
-                let error_align = 8u32;
-                let max_align = inner_align.max(error_align);
-                let payload_offset = datalove_rtdt::layout::align_up(1, max_align);
+                let max_align = inner_align.max(std::mem::align_of::<datalove_rtdt::Error>() as u32);
+                let payload_offset = datalove_rtdt::layout::result_payload_offset(inner_align);
                 datalove_rtdt::layout::align_up(payload_offset + max_payload, max_align)
             }
             ConstValue::List(_) => 24, // ptr + size + capacity (with padding)
@@ -1192,39 +1187,9 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         }
     }
 
-    /// Get the alignment of an IrType.
+    /// Alignment of an IR type.
     fn align_of_ir_type(&self, ir_type: &IrType) -> u32 {
-        match ir_type {
-            IrType::Unit => 1,
-            IrType::Bool => 1,
-            IrType::U8 | IrType::I8 => 1,
-            IrType::U16 | IrType::I16 => 2,
-            IrType::U32 | IrType::I32 | IrType::F32 => 4,
-            IrType::U64 | IrType::I64 | IrType::F64 => 8,
-            IrType::Index | IrType::Offset => std::mem::size_of::<usize>() as u32,
-            IrType::Int | IrType::String => 8,
-            IrType::Data | IrType::Error => 8,
-            IrType::Option(inner) => self.align_of_ir_type(inner).max(1),
-            IrType::Result(inner) => self.align_of_ir_type(inner).max(8),
-            IrType::Tuple(fields) => {
-                fields.iter().map(|f| self.align_of_ir_type(f)).max().unwrap_or(1)
-            }
-            IrType::Struct(fields) => {
-                fields.iter().map(|(_, t)| self.align_of_ir_type(t)).max().unwrap_or(1)
-            }
-            IrType::Enum(variants) => {
-                let payload_align = variants.iter()
-                    .filter_map(|(_, p)| p.as_ref().map(|t| self.align_of_ir_type(t)))
-                    .max()
-                    .unwrap_or(1);
-                4u32.max(payload_align)
-            }
-            IrType::Atom(_) => 1,
-            IrType::Term(_, payload) => self.align_of_ir_type(payload),
-            IrType::List(_) | IrType::Set(_) | IrType::Map(_, _) | IrType::Table(_) => 8,
-            IrType::Tensor(_, _) => 8,
-            IrType::Ref(_) => std::mem::size_of::<*const ()>() as u32,
-        }
+        datalove_datafun_ir::layout::layout_of(ir_type).align
     }
 
     /// Write a ConstValue to a memory address.
@@ -1404,9 +1369,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 builder.ins().store(mem_flags, tag, addr, 0);
 
                 let inner_align = self.align_of_const_value(inner);
-                let error_align = 8u32;
-                let max_align = inner_align.max(error_align);
-                let payload_offset = datalove_rtdt::layout::align_up(1, max_align);
+                let payload_offset = datalove_rtdt::layout::result_payload_offset(inner_align);
                 let payload_addr = builder.ins().iadd_imm(addr, payload_offset as i64);
                 self.write_const_value_to_addr(builder, payload_addr, inner)?;
             }
@@ -1415,9 +1378,9 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 let tag = builder.ins().iconst(cl_types::I8, 2);
                 builder.ins().store(mem_flags, tag, addr, 0);
 
-                // Error uses 8-byte alignment.
-                let error_align = 8u32;
-                let payload_offset = datalove_rtdt::layout::align_up(1, error_align);
+                // The Err arm always carries an Error, so the payload sits at
+                // the offset a result with a zero-alignment ok type would use.
+                let payload_offset = datalove_rtdt::layout::result_payload_offset(1);
                 let payload_addr = builder.ins().iadd_imm(addr, payload_offset as i64);
                 // The inner is a ConstValue::Error which will be written.
                 self.write_const_value_to_addr(builder, payload_addr, inner)?;

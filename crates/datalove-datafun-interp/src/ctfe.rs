@@ -116,116 +116,19 @@ impl CtfeEvaluator for InterpCtfeEvaluator {
     }
 }
 
-/// Get the alignment of an IR type.
-///
-/// Used for computing payload offsets in composite types like Option.
+/// Alignment of an IR type.
 fn align_of_ir_type(ir_type: &IrType) -> u32 {
-    match ir_type {
-        IrType::Unit => 1,
-        IrType::Bool => 1,
-        IrType::U8 | IrType::I8 => 1,
-        IrType::U16 | IrType::I16 => 2,
-        IrType::U32 | IrType::I32 | IrType::F32 => 4,
-        IrType::U64 | IrType::I64 | IrType::F64 => 8,
-        IrType::Index | IrType::Offset => std::mem::size_of::<usize>() as u32,
-        // Int, String, collections are pointer types - align to pointer size.
-        IrType::Int | IrType::String | IrType::Data | IrType::Error => 8,
-        IrType::List(_) | IrType::Set(_) | IrType::Map(_, _) => 8,
-        IrType::Tuple(fields) => fields.iter().map(align_of_ir_type).max().unwrap_or(1),
-        IrType::Struct(fields) => fields.iter().map(|(_, ty)| align_of_ir_type(ty)).max().unwrap_or(1),
-        IrType::Enum(_) => 8,
-        IrType::Atom(_) => 1,
-        IrType::Term(_, payload) => align_of_ir_type(payload),
-        IrType::Option(inner) => align_of_ir_type(inner).max(1),
-        IrType::Result(inner) => align_of_ir_type(inner).max(8), // Error is pointer-sized
-        IrType::Tensor(_, _) => 8,
-        IrType::Ref(_) => 8,
-        IrType::Table(_) => 8,
-    }
+    datalove_datafun_ir::layout::layout_of(ir_type).align
 }
 
-/// Get the size of an IR type.
+/// Size of an IR type.
 fn size_of_ir_type(ir_type: &IrType) -> u32 {
-    match ir_type {
-        IrType::Unit => 0,
-        IrType::Bool => 1,
-        IrType::U8 | IrType::I8 => 1,
-        IrType::U16 | IrType::I16 => 2,
-        IrType::U32 | IrType::I32 | IrType::F32 => 4,
-        IrType::U64 | IrType::I64 | IrType::F64 => 8,
-        IrType::Index | IrType::Offset => std::mem::size_of::<usize>() as u32,
-        // Pointer-based types.
-        IrType::Int => std::mem::size_of::<datalove_rtdt::Int>() as u32,
-        IrType::String => std::mem::size_of::<datalove_rtdt::String>() as u32,
-        IrType::Data | IrType::Error => std::mem::size_of::<datalove_rtdt::Error>() as u32,
-        IrType::List(_) => std::mem::size_of::<datalove_rtdt::List>() as u32,
-        IrType::Set(_) | IrType::Map(_, _) => 8, // pointer to B-tree
-        IrType::Tuple(fields) => {
-            let offsets = compute_tuple_field_offsets(fields);
-            if fields.is_empty() {
-                0
-            } else {
-                let last_offset = offsets[fields.len() - 1];
-                let last_size = size_of_ir_type(&fields[fields.len() - 1]);
-                let max_align = fields.iter().map(align_of_ir_type).max().unwrap_or(1);
-                datalove_rtdt::layout::align_up(last_offset + last_size, max_align)
-            }
-        }
-        IrType::Struct(fields) => {
-            let types: Vec<_> = fields.iter().map(|(_, ty)| ty.clone()).collect();
-            let offsets = compute_tuple_field_offsets(&types);
-            if fields.is_empty() {
-                0
-            } else {
-                let last_offset = offsets[fields.len() - 1];
-                let last_size = size_of_ir_type(&fields[fields.len() - 1].1);
-                let max_align = fields.iter().map(|(_, ty)| align_of_ir_type(ty)).max().unwrap_or(1);
-                datalove_rtdt::layout::align_up(last_offset + last_size, max_align)
-            }
-        }
-        IrType::Enum(_) => 16, // tag + max variant
-        IrType::Atom(_) => 0,
-        IrType::Term(_, payload) => size_of_ir_type(payload),
-        IrType::Option(inner) => {
-            let inner_align = align_of_ir_type(inner);
-            let payload_offset = datalove_rtdt::layout::option_payload_offset(inner_align);
-            let inner_size = size_of_ir_type(inner);
-            datalove_rtdt::layout::align_up(payload_offset + inner_size, inner_align.max(1))
-        }
-        IrType::Result(inner) => {
-            let inner_size = size_of_ir_type(inner);
-            let error_size = 16u32; // usize + ptr
-            let max_payload = inner_size.max(error_size);
-            let inner_align = align_of_ir_type(inner);
-            let error_align = 8u32;
-            let max_align = inner_align.max(error_align);
-            let payload_offset = datalove_rtdt::layout::align_up(1, max_align);
-            datalove_rtdt::layout::align_up(payload_offset + max_payload, max_align)
-        }
-        IrType::Tensor(_, _) => 8,
-        IrType::Ref(_) => 8,
-        IrType::Table(_) => 8,
-    }
+    datalove_datafun_ir::layout::layout_of(ir_type).size
 }
 
 /// Compute field offsets for a tuple type.
 fn compute_tuple_field_offsets(field_types: &[IrType]) -> Vec<u32> {
-    let mut offset = 0u32;
-    let mut offsets = Vec::with_capacity(field_types.len());
-
-    for field_type in field_types {
-        let field_align = align_of_ir_type(field_type);
-        let field_size = size_of_ir_type(field_type);
-
-        // Align offset to field alignment.
-        offset = datalove_rtdt::layout::align_up(offset, field_align);
-        offsets.push(offset);
-
-        // Advance offset by field size.
-        offset += field_size;
-    }
-
-    offsets
+    datalove_datafun_ir::layout::aggregate_field_offsets(field_types)
 }
 
 /// Extract a ConstValue from raw memory.
@@ -366,8 +269,7 @@ fn extract_const_value(ptr: *const u8, ir_type: &IrType) -> Result<ConstValue, C
                 let (variant_name, payload_type) = &variants[variant_index];
 
                 if let Some(payload_ty) = payload_type {
-                    let payload_align = align_of_ir_type(payload_ty);
-                    let payload_offset = datalove_rtdt::layout::align_up(4, payload_align);
+                    let payload_offset = datalove_datafun_ir::layout::enum_payload_offset(payload_ty);
                     let payload_ptr = ptr.add(payload_offset as usize);
                     let payload_value = extract_const_value(payload_ptr, payload_ty)?;
                     Ok(ConstValue::Enum {
@@ -414,10 +316,7 @@ fn extract_const_value(ptr: *const u8, ir_type: &IrType) -> Result<ConstValue, C
             IrType::Result(inner) => {
                 // Result layout: tag (u8) at offset 0, payload at aligned offset.
                 let tag = *(ptr as *const u8);
-                let inner_align = align_of_ir_type(inner);
-                let error_align = 8u32;
-                let max_align = inner_align.max(error_align);
-                let payload_offset = datalove_rtdt::layout::align_up(1, max_align);
+                let payload_offset = datalove_datafun_ir::layout::result_payload_offset(inner);
                 let payload_ptr = ptr.add(payload_offset as usize);
 
                 match tag {

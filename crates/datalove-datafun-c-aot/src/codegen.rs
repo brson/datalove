@@ -2,6 +2,7 @@
 
 use std::fmt::Write;
 
+use datalove_datafun_ir::layout as ir_layout;
 use datalove_datafun_ir::{
     BinOp, BlockId, CodeRef, ConstValue, FunctionRegistry, IrCodeUnit, IrModuleId,
     IrType, Instruction, Operand, ParamId, SlotDest, SlotId, Terminator, UnaryOp,
@@ -9,7 +10,7 @@ use datalove_datafun_ir::{
 };
 
 use crate::layout::FrameLayout;
-use crate::types::{self, align_up, CRepr};
+use crate::types::{self, CRepr};
 use crate::{CAotCompiler, CAotError};
 
 /// Emit a complete function.
@@ -1110,7 +1111,7 @@ impl<'a> FunctionCodegenContext<'a> {
         let inner_ty = self.operand_type(inner).clone();
         let inner_repr = types::ir_type_to_crepr(&inner_ty);
         let inner_layout = inner_repr.layout();
-        let payload_offset = align_up(1, inner_layout.align);
+        let payload_offset = ir_layout::option_payload_offset(&inner_ty);
 
         // Set tag to Some (2).
         writeln!(out, "    *(uint8_t*){} = OPTION_SOME;", dest_addr).unwrap();
@@ -1158,10 +1159,7 @@ impl<'a> FunctionCodegenContext<'a> {
             _ => return Err(CAotError::Codegen("wrap_ok requires Result type".into())),
         };
 
-        let ok_layout = types::ir_type_to_crepr(ok_ty).layout();
-        let error_align = std::mem::align_of::<datalove_rtdt::Error>() as u32;
-        let max_align = ok_layout.align.max(error_align);
-        let payload_offset = align_up(1, max_align);
+        let payload_offset = ir_layout::result_payload_offset(ok_ty);
 
         // Set tag to Ok (1).
         writeln!(out, "    *(uint8_t*){} = RESULT_OK;", dest_addr).unwrap();
@@ -1201,11 +1199,8 @@ impl<'a> FunctionCodegenContext<'a> {
             _ => return Err(CAotError::Codegen("wrap_err requires Result type".into())),
         };
 
-        let ok_layout = types::ir_type_to_crepr(ok_ty).layout();
         let error_size = std::mem::size_of::<datalove_rtdt::Error>() as u32;
-        let error_align = std::mem::align_of::<datalove_rtdt::Error>() as u32;
-        let max_align = ok_layout.align.max(error_align);
-        let payload_offset = align_up(1, max_align);
+        let payload_offset = ir_layout::result_payload_offset(ok_ty);
 
         // Set tag to Err (2).
         writeln!(out, "    *(uint8_t*){} = RESULT_ERR;", dest_addr).unwrap();
@@ -1223,8 +1218,7 @@ impl<'a> FunctionCodegenContext<'a> {
         let is_some_addr = self.value_addr(is_some);
         let src_addr = self.operand_addr(src);
         let dest_ty = self.value_type(dest);
-        let inner_layout = types::ir_type_to_crepr(dest_ty).layout();
-        let payload_offset = align_up(1, inner_layout.align);
+        let payload_offset = ir_layout::option_payload_offset(dest_ty);
 
         // Read tag.
         writeln!(out, "    *(bool_t*){} = (*(uint8_t*){} == OPTION_SOME);", is_some_addr, src_addr).unwrap();
@@ -1259,11 +1253,8 @@ impl<'a> FunctionCodegenContext<'a> {
         let src_addr = self.operand_addr(src);
         let ok_ty = self.value_type(ok_dest);
 
-        let ok_layout = types::ir_type_to_crepr(ok_ty).layout();
         let error_size = std::mem::size_of::<datalove_rtdt::Error>() as u32;
-        let error_align = std::mem::align_of::<datalove_rtdt::Error>() as u32;
-        let max_align = ok_layout.align.max(error_align);
-        let payload_offset = align_up(1, max_align);
+        let payload_offset = ir_layout::result_payload_offset(ok_ty);
 
         // Read tag.
         writeln!(out, "    *(bool_t*){} = (*(uint8_t*){} == RESULT_OK);", is_ok_addr, src_addr).unwrap();
@@ -1303,8 +1294,7 @@ impl<'a> FunctionCodegenContext<'a> {
         if let Some(payload_op) = payload {
             let payload_addr = self.operand_addr(payload_op);
             let payload_ty = self.operand_type(payload_op);
-            let payload_layout = types::ir_type_to_crepr(payload_ty).layout();
-            let payload_offset = align_up(4, payload_layout.align);
+            let payload_offset = ir_layout::enum_payload_offset(payload_ty);
             let dest_payload_addr = format!("({} + {})", dest_addr, payload_offset);
 
             match types::ir_type_to_crepr(payload_ty) {
@@ -1351,8 +1341,7 @@ impl<'a> FunctionCodegenContext<'a> {
             .expect("EnumPayload src must be enum-like type");
         let payload_ty = variants[variant_index as usize].1.as_ref()
             .unwrap_or_else(|| panic!("EnumPayload variant has no payload type"));
-        let payload_layout = types::ir_type_to_crepr(payload_ty).layout();
-        let payload_offset = align_up(4, payload_layout.align);
+        let payload_offset = ir_layout::enum_payload_offset(payload_ty);
 
         match types::ir_type_to_crepr(payload_ty) {
             CRepr::Scalar(c_ty) => {

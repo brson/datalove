@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 pub mod display;
+pub mod layout;
 pub mod registry;
 
 pub use display::expand_ir_strings;

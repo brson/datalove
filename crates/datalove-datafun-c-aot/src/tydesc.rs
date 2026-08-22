@@ -4,6 +4,7 @@ use std::collections::HashSet;
 use std::fmt::Write;
 
 use datalove_datafun_ir::{IrCodeUnit, IrType};
+use datalove_datafun_ir::layout as ir_layout;
 use crate::types::{self, compute_option_layout, compute_result_layout, compute_tuple_field_offsets};
 use crate::CAotCompiler;
 
@@ -301,8 +302,7 @@ pub fn emit_tydesc(
         IrType::Option(inner) => {
             let inner_tydesc = compiler.get_tydesc_name(inner);
             let opt_layout = compute_option_layout(inner);
-            let inner_layout = types::ir_type_to_crepr(inner).layout();
-            let payload_offset = types::align_up(1, inner_layout.align);
+            let payload_offset = ir_layout::option_payload_offset(inner);
             writeln!(out, "static const dtlv_tydesc_t {} = {{ .type_tag = 0x60, .size = {}, .align = {}, .type_info = {{ .option = {{ .inner_tydesc = &{}, .payload_offset = {} }} }} }};",
                 name, opt_layout.size, opt_layout.align, inner_tydesc, payload_offset).unwrap();
         }
@@ -310,10 +310,7 @@ pub fn emit_tydesc(
         IrType::Result(ok) => {
             let ok_tydesc = compiler.get_tydesc_name(ok);
             let res_layout = compute_result_layout(ok);
-            let ok_layout = types::ir_type_to_crepr(ok).layout();
-            let error_align = std::mem::align_of::<datalove_rtdt::Error>() as u32;
-            let max_align = ok_layout.align.max(error_align);
-            let payload_offset = types::align_up(1, max_align);
+            let payload_offset = ir_layout::result_payload_offset(ok);
             writeln!(out, "static const dtlv_tydesc_t {} = {{ .type_tag = 0x61, .size = {}, .align = {}, .type_info = {{ .result = {{ .ok_tydesc = &{}, .payload_offset = {} }} }} }};",
                 name, res_layout.size, res_layout.align, ok_tydesc, payload_offset).unwrap();
         }

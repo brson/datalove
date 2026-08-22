@@ -4,6 +4,7 @@ use cranelift_codegen::ir::{types as cl_types, InstBuilder, MemFlags};
 use cranelift_frontend::FunctionBuilder;
 use cranelift_module::Module;
 
+use datalove_datafun_ir::layout as ir_layout;
 use datalove_datafun_ir::{IrType, Operand, ValueId};
 use datalove_rtdt::{Error as RtError, OptionTag, ResultTag};
 
@@ -299,8 +300,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
 
         // Compute payload offset for this variant.
         let payload_offset = if let Some(payload_ty) = &variants[variant_index as usize].1 {
-            let payload_layout = types::ir_type_to_cranelift(payload_ty).layout();
-            types::align_up(4, payload_layout.align) // 4 = discriminant size
+            ir_layout::enum_payload_offset(payload_ty)
         } else {
             0
         };
@@ -381,8 +381,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             .ok_or_else(|| CraneliftError::Codegen("EnumPayload variant has no payload type".into()))?;
 
         // Compute payload offset.
-        let payload_layout = types::ir_type_to_cranelift(payload_ty).layout();
-        let payload_offset = types::align_up(4, payload_layout.align);
+        let payload_offset = ir_layout::enum_payload_offset(payload_ty);
 
         // Get source address.
         let src_addr = self.get_operand_ptr(builder, src)?;

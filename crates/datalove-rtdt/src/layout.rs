@@ -17,6 +17,15 @@ pub fn option_payload_offset(inner_align: u32) -> u32 {
     align_up(1, inner_align)
 }
 
+/// Compute the payload offset for an enum variant, given the payload's
+/// alignment.
+///
+/// The payload starts after the u32 discriminant, aligned to the payload.
+#[inline]
+pub fn enum_payload_offset(payload_align: u32) -> u32 {
+    align_up(4, payload_align)
+}
+
 /// Compute the payload offset for a Result<T> type.
 ///
 /// The payload starts after the tag (u8), aligned to the maximum of

@@ -2195,10 +2195,7 @@ impl IrInterpreter {
                     // Get inner type from tydesc.
                     let tydesc_ref = rtdt::TyDescRef::from_ptr(dest.tydesc);
                     let ok_tydesc = tydesc_ref.result_ok_ty();
-                    let inner_align = ok_tydesc.align();
-                    let error_align = 8u32;
-                    let max_align = inner_align.max(error_align);
-                    let payload_offset = rtdt::layout::align_up(1, max_align);
+                    let payload_offset = rtdt::layout::result_payload_offset(ok_tydesc.align());
                     let payload_ptr = dest.ptr.add(payload_offset as usize);
                     let payload_dest = Destination {
                         ptr: payload_ptr,
@@ -2400,10 +2397,7 @@ impl IrInterpreter {
                     // Get the Ok type from the Result tydesc to compute payload offset.
                     let tydesc_ref = rtdt::TyDescRef::from_ptr(dest.tydesc);
                     let ok_tydesc = tydesc_ref.result_ok_ty();
-                    let inner_align = ok_tydesc.align();
-                    let error_align = 8u32;
-                    let max_align = inner_align.max(error_align);
-                    let payload_offset = rtdt::layout::align_up(1, max_align);
+                    let payload_offset = rtdt::layout::result_payload_offset(ok_tydesc.align());
                     let payload_ptr = dest.ptr.add(payload_offset as usize);
 
                     // The payload is an Error value. Create the Error tydesc and destination.

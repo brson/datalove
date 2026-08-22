@@ -143,3 +143,7 @@ name = "c_dual_tests"
 path = "tests/c_dual_tests.rs"
 harness = false
 required-features = ["slow_tests"]
+
+[[test]]
+name = "layout_conformance_tests"
+path = "tests/layout_conformance_tests.rs"
