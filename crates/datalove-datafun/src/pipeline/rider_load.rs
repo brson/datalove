@@ -9,6 +9,41 @@ use rmx::std::path::Path;
 use datalove_datafun_interp::{NativeFunctionTable, Value, Destination, InterpError};
 use datalove_rt::c::LocalRtHandle;
 
+use super::{CompiledModules, ScriptExecutor, WorkspaceDescriptor, rider_build};
+
+/// Build a workspace's native component and register its symbols with an executor.
+///
+/// The returned riders own the loaded shared library and must outlive the
+/// executor they were registered with.
+pub fn build_and_load_riders(
+    descriptor: &WorkspaceDescriptor,
+    compiled: &CompiledModules,
+    executor: &mut ScriptExecutor,
+) -> AnyResult<Vec<LoadedRider>> {
+    let rider_crate_dirs = descriptor.rider_crate_dirs();
+    if rider_crate_dirs.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let work_dir = descriptor.work_dir.as_ref()
+        .ok_or_else(|| anyhow!("workspace has riders but no work dir"))?;
+    let build_result = rider_build::build_native_component(work_dir, &rider_crate_dirs)
+        .map_err(|e| anyhow!("{}", e))?;
+
+    let native_symbols = compiled.native_symbols();
+    if native_symbols.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let loaded = load_rider_library(
+        &build_result.cdylib_path,
+        "native-component",
+        &native_symbols,
+        executor.native_table_mut(),
+    )?;
+    Ok(vec![loaded])
+}
+
 /// A loaded rider shared library.
 ///
 /// Holds the `libloading::Library` handle to keep the loaded code alive.

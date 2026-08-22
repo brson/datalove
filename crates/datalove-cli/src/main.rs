@@ -20,35 +20,7 @@ fn build_native_component_for_aot(
     Ok(vec![result.staticlib_path])
 }
 
-/// Build unified native component and load it, registering native symbols in the executor.
-///
-/// Returns the loaded rider handle, which must be kept alive for the duration of execution.
-fn build_and_load_riders(
-    descriptor: &datalove_datafun::pipeline::WorkspaceDescriptor,
-    compiled: &datalove_datafun::pipeline::CompiledModules,
-    executor: &mut datalove_datafun::pipeline::ScriptExecutor,
-) -> AnyResult<Vec<datalove_datafun::pipeline::rider_load::LoadedRider>> {
-    use datalove_datafun::pipeline::{rider_build, rider_load};
-
-    let rider_crate_dirs = descriptor.rider_crate_dirs();
-    let work_dir = descriptor.work_dir.as_ref()
-        .ok_or_else(|| anyhow!("workspace has riders but no work dir"))?;
-    let build_result = rider_build::build_native_component(work_dir, &rider_crate_dirs)
-        .map_err(|e| anyhow!("{}", e))?;
-
-    let native_symbols = compiled.native_symbols();
-    if native_symbols.is_empty() {
-        return Ok(Vec::new());
-    }
-
-    let loaded = rider_load::load_rider_library(
-        &build_result.cdylib_path,
-        "native-component",
-        &native_symbols,
-        executor.native_table_mut(),
-    )?;
-    Ok(vec![loaded])
-}
+use datalove_datafun::pipeline::rider_load::build_and_load_riders;
 
 fn main() -> AnyResult<()> {
     rmx::extras::init_crate_name(env!("CARGO_CRATE_NAME"));
