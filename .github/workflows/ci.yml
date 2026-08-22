@@ -10,11 +10,33 @@ concurrency:
   group: ci-${{ github.head_ref || github.ref }}
   cancel-in-progress: true
 
+env:
+  # Debug info is around 85% of the size of a test binary here, and the
+  # workspace produces enough of them to exhaust a runner's disk without it
+  # being dropped. Nothing under test reads its own debug info; the two tests
+  # that assert on a backtrace check the message, not the symbols.
+  CARGO_PROFILE_DEV_DEBUG: 0
+
 jobs:
   test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      # A full debug build of this workspace does not fit in the ~14GB a
+      # hosted runner leaves free, and the linker dies with SIGBUS partway
+      # through rather than reporting ENOSPC. Reclaim the preinstalled
+      # toolchains, none of which this build uses.
+      - name: Free disk space
+        run: |
+          df -h /
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /usr/local/.ghcup
+          sudo rm -rf /opt/ghc
+          sudo rm -rf /opt/hostedtoolcache/CodeQL
+          sudo rm -rf /usr/local/share/boost
+          df -h /
 
       - name: Install Rust nightly
         uses: dtolnay/rust-toolchain@nightly
@@ -38,6 +60,21 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      # A full debug build of this workspace does not fit in the ~14GB a
+      # hosted runner leaves free, and the linker dies with SIGBUS partway
+      # through rather than reporting ENOSPC. Reclaim the preinstalled
+      # toolchains, none of which this build uses.
+      - name: Free disk space
+        run: |
+          df -h /
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /usr/local/.ghcup
+          sudo rm -rf /opt/ghc
+          sudo rm -rf /opt/hostedtoolcache/CodeQL
+          sudo rm -rf /usr/local/share/boost
+          df -h /
 
       - name: Install Rust nightly
         uses: dtolnay/rust-toolchain@nightly
