@@ -23,3 +23,7 @@ harness = false
 [[bench]]
 name = "jit"
 harness = false
+
+[[bench]]
+name = "runtime"
+harness = false

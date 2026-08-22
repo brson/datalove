@@ -126,8 +126,10 @@ mod unix_impl {
                     self.alloc_small(total_size, align)
                 };
 
-                // Track allocation for leak detection.
-                if !ptr.is_null() {
+                // Track allocation for leak detection. Ignore mode reports
+                // nothing, so it skips the bookkeeping entirely rather than
+                // paying a hash insert on every allocation.
+                if !ptr.is_null() && self.leak_check_mode != LeakCheckMode::Ignore {
                     let backtrace = if self.leak_check_mode == LeakCheckMode::PanicWithBacktrace {
                         Some(std::backtrace::Backtrace::capture())
                     } else {
@@ -157,23 +159,23 @@ mod unix_impl {
 
             let align = align.max(std::mem::align_of::<*mut u8>() as u32) as usize;
 
-            // Remove from tracking and optionally validate.
-            if let Some(info) = self.active_allocations.remove(&ptr) {
-                // Validate parameters match (in warn/panic modes).
-                if self.leak_check_mode != LeakCheckMode::Ignore {
-                    if info.size != size || info.align != align as u32 || info.count != count as u32 {
-                        let msg = format!(
-                            "free() parameter mismatch: ptr={:p}, expected (size={}, align={}, count={}), got (size={}, align={}, count={})",
-                            ptr, info.size, info.align, info.count, size, align, count
-                        );
-                        match self.leak_check_mode {
-                            LeakCheckMode::Warn => eprintln!("WARNING: {}", msg),
-                            LeakCheckMode::Panic | LeakCheckMode::PanicWithBacktrace => panic!("{}", msg),
-                            LeakCheckMode::Ignore => unreachable!(),
-                        }
+            // Remove from tracking and validate. Nothing is recorded in
+            // Ignore mode, so there is nothing to remove or check.
+            if self.leak_check_mode == LeakCheckMode::Ignore {
+                // Nothing tracked.
+            } else if let Some(info) = self.active_allocations.remove(&ptr) {
+                if info.size != size || info.align != align as u32 || info.count != count as u32 {
+                    let msg = format!(
+                        "free() parameter mismatch: ptr={:p}, expected (size={}, align={}, count={}), got (size={}, align={}, count={})",
+                        ptr, info.size, info.align, info.count, size, align, count
+                    );
+                    match self.leak_check_mode {
+                        LeakCheckMode::Warn => eprintln!("WARNING: {}", msg),
+                        LeakCheckMode::Panic | LeakCheckMode::PanicWithBacktrace => panic!("{}", msg),
+                        LeakCheckMode::Ignore => unreachable!(),
                     }
                 }
-            } else if self.leak_check_mode != LeakCheckMode::Ignore {
+            } else {
                 // Pointer not found in tracking - possible double-free or invalid pointer.
                 let msg = format!("free() called on untracked pointer: {:p}", ptr);
                 match self.leak_check_mode {

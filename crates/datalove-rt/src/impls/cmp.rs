@@ -106,12 +106,19 @@ pub unsafe fn cmp_total(
 
 /// Compare two type descriptors for structural equality.
 ///
-/// Fixme we can probably use pointer equality, but need
-/// to make sure tydescs are fully deduplicated.
+/// Tydescs are not fully deduplicated, so two descriptions of one type may sit
+/// at different addresses and still have to compare equal. The walk below
+/// handles that. One descriptor compared against itself is the common case
+/// though: the collections pass the same pointer for both sides on every key
+/// comparison, so the identity check below carries the B-tree hot path.
 fn eq_tydesc(
     td_a: rtdt::TyDescRef,
     td_b: rtdt::TyDescRef,
 ) -> bool {
+    if std::ptr::eq(td_a.as_ptr(), td_b.as_ptr()) {
+        return true;
+    }
+
     // Type tags must match.
     if td_a.type_tag() != td_b.type_tag() {
         return false;
