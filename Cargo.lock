@@ -1652,12 +1652,9 @@ dependencies = [
 name = "datalove-repl"
 version = "0.1.0"
 dependencies = [
- "bcts",
  "datalove-datafun",
- "datalove-datalit",
  "datalove-exampletest",
  "rustmax",
- "salsa",
  "serde",
 ]
 
@@ -1667,10 +1664,8 @@ version = "0.1.0"
 dependencies = [
  "crossterm",
  "datalove-repl",
- "datalove-repl-term",
  "ratatui",
  "rustmax",
- "serde",
  "tui-textarea",
 ]
 
@@ -1679,7 +1674,6 @@ name = "datalove-repl-term"
 version = "0.1.0"
 dependencies = [
  "crossterm",
- "datalove-repl",
  "datalove-repl-rat",
  "libc",
  "ratatui",
