@@ -1,0 +1,20 @@
+let x = 1
+---
+const c = 3
+---
+var v = 2
+---
+set v = 9
+---
+v
+---
+let  y = 4
+---
+require module sys/std/option
+---
+fun f(n: int): int
+  ret n
+end fun
+---
+let a = 5
+let b = 6

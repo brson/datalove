@@ -7,9 +7,13 @@
       }
     },
     "eval": {
-      "SuccessFun": {
-        "name": "compute"
-      }
+      "Success": [
+        {
+          "Function": {
+            "name": "compute"
+          }
+        }
+      ]
     },
     "environment": [
       {
@@ -28,7 +32,6 @@
     },
     "eval": {
       "SuccessExpr": {
-        "expr_kind": "expr",
         "ty": "int",
         "value": "11"
       }
@@ -49,9 +52,13 @@
       }
     },
     "eval": {
-      "SuccessFun": {
-        "name": "fib"
-      }
+      "Success": [
+        {
+          "Function": {
+            "name": "fib"
+          }
+        }
+      ]
     },
     "environment": [
       {
@@ -75,7 +82,6 @@
     },
     "eval": {
       "SuccessExpr": {
-        "expr_kind": "expr",
         "ty": "int",
         "value": "13"
       }
@@ -101,9 +107,13 @@
       }
     },
     "eval": {
-      "SuccessFun": {
-        "name": "shadow"
-      }
+      "Success": [
+        {
+          "Function": {
+            "name": "shadow"
+          }
+        }
+      ]
     },
     "environment": [
       {
@@ -132,7 +142,6 @@
     },
     "eval": {
       "SuccessExpr": {
-        "expr_kind": "expr",
         "ty": "int",
         "value": "12"
       }

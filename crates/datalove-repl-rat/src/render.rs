@@ -63,6 +63,28 @@ pub fn ui<E: ReplExecutor>(f: &mut Frame, app: &RatatuiApp<E>) {
     }
 }
 
+/// Render one binding a fragment defined.
+fn binding_line(binding: &repl::EvalBinding) -> Line<'_> {
+    let check = ratatui::text::Span::styled("  ✓ ", Style::default().fg(Color::Green));
+
+    match binding {
+        repl::EvalBinding::Function { name } => Line::from(vec![
+            check,
+            ratatui::text::Span::raw("fun "),
+            ratatui::text::Span::styled(name, Style::default().fg(Color::Cyan)),
+        ]),
+        repl::EvalBinding::Value { name, ty, value }
+        | repl::EvalBinding::Slot { name, ty, value } => Line::from(vec![
+            check,
+            ratatui::text::Span::styled(name, Style::default().fg(Color::Cyan)),
+            ratatui::text::Span::raw(": "),
+            ratatui::text::Span::styled(ty, Style::default().fg(Color::Yellow)),
+            ratatui::text::Span::raw(" = "),
+            ratatui::text::Span::raw(value),
+        ]),
+    }
+}
+
 /// Render the history panel with interactive cards.
 fn render_history<E: ReplExecutor>(f: &mut Frame, repl: &ReplApp<E>, area: Rect) {
     let history_block = Block::default()
@@ -127,24 +149,10 @@ fn render_history<E: ReplExecutor>(f: &mut Frame, repl: &ReplApp<E>, area: Rect)
                                 ratatui::text::Span::raw("nothing"),
                             ]));
                         }
-                        repl::Eval::SuccessLet(eval_let) => {
-                            lines.push(Line::from(vec![
-                                ratatui::text::Span::styled(
-                                    "  ✓ ",
-                                    Style::default().fg(Color::Green),
-                                ),
-                                ratatui::text::Span::styled(
-                                    &eval_let.name,
-                                    Style::default().fg(Color::Cyan),
-                                ),
-                                ratatui::text::Span::raw(": "),
-                                ratatui::text::Span::styled(
-                                    &eval_let.ty,
-                                    Style::default().fg(Color::Yellow),
-                                ),
-                                ratatui::text::Span::raw(" = "),
-                                ratatui::text::Span::raw(&eval_let.value),
-                            ]));
+                        repl::Eval::Success(bindings) => {
+                            for binding in bindings {
+                                lines.push(binding_line(binding));
+                            }
                         }
                         repl::Eval::SuccessExpr(eval_expr) => {
                             lines.push(Line::from(vec![
@@ -158,19 +166,6 @@ fn render_history<E: ReplExecutor>(f: &mut Frame, repl: &ReplApp<E>, area: Rect)
                                 ),
                                 ratatui::text::Span::raw(" = "),
                                 ratatui::text::Span::raw(&eval_expr.value),
-                            ]));
-                        }
-                        repl::Eval::SuccessFun(eval_fun) => {
-                            lines.push(Line::from(vec![
-                                ratatui::text::Span::styled(
-                                    "  ✓ ",
-                                    Style::default().fg(Color::Green),
-                                ),
-                                ratatui::text::Span::raw("fun "),
-                                ratatui::text::Span::styled(
-                                    &eval_fun.name,
-                                    Style::default().fg(Color::Cyan),
-                                ),
                             ]));
                         }
                         repl::Eval::Error(e) => {

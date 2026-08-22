@@ -43,9 +43,13 @@
       }
     },
     "eval": {
-      "SuccessFun": {
-        "name": "classify"
-      }
+      "Success": [
+        {
+          "Function": {
+            "name": "classify"
+          }
+        }
+      ]
     },
     "environment": [
       {
@@ -64,7 +68,6 @@
     },
     "eval": {
       "SuccessExpr": {
-        "expr_kind": "expr",
         "ty": "u32",
         "value": "1"
       }
@@ -86,7 +89,6 @@
     },
     "eval": {
       "SuccessExpr": {
-        "expr_kind": "expr",
         "ty": "u32",
         "value": "2"
       }
@@ -108,7 +110,6 @@
     },
     "eval": {
       "SuccessExpr": {
-        "expr_kind": "expr",
         "ty": "u32",
         "value": "3"
       }
@@ -129,9 +130,13 @@
       }
     },
     "eval": {
-      "SuccessFun": {
-        "name": "grade"
-      }
+      "Success": [
+        {
+          "Function": {
+            "name": "grade"
+          }
+        }
+      ]
     },
     "environment": [
       {
@@ -155,7 +160,6 @@
     },
     "eval": {
       "SuccessExpr": {
-        "expr_kind": "expr",
         "ty": "u32",
         "value": "4"
       }
@@ -182,7 +186,6 @@
     },
     "eval": {
       "SuccessExpr": {
-        "expr_kind": "expr",
         "ty": "u32",
         "value": "3"
       }
@@ -209,7 +212,6 @@
     },
     "eval": {
       "SuccessExpr": {
-        "expr_kind": "expr",
         "ty": "u32",
         "value": "2"
       }
@@ -236,7 +238,6 @@
     },
     "eval": {
       "SuccessExpr": {
-        "expr_kind": "expr",
         "ty": "u32",
         "value": "1"
       }

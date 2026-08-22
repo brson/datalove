@@ -8,6 +8,7 @@ edition.workspace = true
 [dependencies]
 rmx.workspace = true
 datalove-datafun.path = "../datalove-datafun"
+datalove-datafun-ir.path = "../datalove-datafun-ir"
 serde = { version = "1.0", features = ["derive"] }
 
 [dev-dependencies]

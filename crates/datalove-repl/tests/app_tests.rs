@@ -63,11 +63,11 @@ fn parsed_statement(id: u64, source: &str) -> WorkerResponse {
 fn evaluated_let(id: u64, name: &str) -> WorkerResponse {
     WorkerResponse::EvalResult {
         id,
-        eval: repl::Eval::SuccessLet(repl::EvalLet {
+        eval: repl::Eval::Success(vec![repl::EvalBinding::Value {
             name: name.to_string(),
             ty: "int".to_string(),
             value: "1".to_string(),
-        }),
+        }]),
         environment: vec![(name.to_string(), "int".to_string(), "1".to_string())],
     }
 }
@@ -96,7 +96,7 @@ fn results_land_on_their_own_entry() {
     assert!(matches!(history[0].status, EntryStatus::Success));
     assert!(matches!(
         history[0].eval_result,
-        Some(repl::Eval::SuccessLet(_))
+        Some(repl::Eval::Success(_))
     ));
     assert!(matches!(history[1].status, EntryStatus::Evaluating { .. }));
     assert_eq!(executor.evals(), vec![0, 1]);

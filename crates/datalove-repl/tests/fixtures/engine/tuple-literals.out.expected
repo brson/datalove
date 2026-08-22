@@ -7,11 +7,15 @@
       }
     },
     "eval": {
-      "SuccessLet": {
-        "name": "pair",
-        "ty": "(int, string)",
-        "value": "(42, \"hello\")"
-      }
+      "Success": [
+        {
+          "Value": {
+            "name": "pair",
+            "ty": "(int, string)",
+            "value": "(42, \"hello\")"
+          }
+        }
+      ]
     },
     "environment": [
       {
@@ -30,7 +34,6 @@
     },
     "eval": {
       "SuccessExpr": {
-        "expr_kind": "expr",
         "ty": "(int, string)",
         "value": "(42, \"hello\")"
       }
@@ -51,11 +54,15 @@
       }
     },
     "eval": {
-      "SuccessLet": {
-        "name": "triple",
-        "ty": "(int, int, int)",
-        "value": "(1, 2, 3)"
-      }
+      "Success": [
+        {
+          "Value": {
+            "name": "triple",
+            "ty": "(int, int, int)",
+            "value": "(1, 2, 3)"
+          }
+        }
+      ]
     },
     "environment": [
       {
@@ -79,7 +86,6 @@
     },
     "eval": {
       "SuccessExpr": {
-        "expr_kind": "expr",
         "ty": "(int, int, int)",
         "value": "(1, 2, 3)"
       }
@@ -105,11 +111,15 @@
       }
     },
     "eval": {
-      "SuccessLet": {
-        "name": "mixed",
-        "ty": "(int, string, bool)",
-        "value": "(100, \"test\", true)"
-      }
+      "Success": [
+        {
+          "Value": {
+            "name": "mixed",
+            "ty": "(int, string, bool)",
+            "value": "(100, \"test\", true)"
+          }
+        }
+      ]
     },
     "environment": [
       {
@@ -138,7 +148,6 @@
     },
     "eval": {
       "SuccessExpr": {
-        "expr_kind": "expr",
         "ty": "(int, string, bool)",
         "value": "(100, \"test\", true)"
       }

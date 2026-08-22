@@ -19,11 +19,15 @@
       }
     },
     "eval": {
-      "SuccessLet": {
-        "name": "x",
-        "ty": "int",
-        "value": "42"
-      }
+      "Success": [
+        {
+          "Value": {
+            "name": "x",
+            "ty": "int",
+            "value": "42"
+          }
+        }
+      ]
     },
     "environment": [
       {

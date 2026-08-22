@@ -7,11 +7,15 @@
       }
     },
     "eval": {
-      "SuccessLet": {
-        "name": "point",
-        "ty": "{x: int, y: int}",
-        "value": "{x = 10, y = 20}"
-      }
+      "Success": [
+        {
+          "Value": {
+            "name": "point",
+            "ty": "{x: int, y: int}",
+            "value": "{x = 10, y = 20}"
+          }
+        }
+      ]
     },
     "environment": [
       {
@@ -30,7 +34,6 @@
     },
     "eval": {
       "SuccessExpr": {
-        "expr_kind": "expr",
         "ty": "{x: int, y: int}",
         "value": "{x = 10, y = 20}"
       }
@@ -51,11 +54,15 @@
       }
     },
     "eval": {
-      "SuccessLet": {
-        "name": "person",
-        "ty": "{name: string, age: int}",
-        "value": "{name = \"Alice\", age = 30}"
-      }
+      "Success": [
+        {
+          "Value": {
+            "name": "person",
+            "ty": "{name: string, age: int}",
+            "value": "{name = \"Alice\", age = 30}"
+          }
+        }
+      ]
     },
     "environment": [
       {
@@ -79,7 +86,6 @@
     },
     "eval": {
       "SuccessExpr": {
-        "expr_kind": "expr",
         "ty": "{name: string, age: int}",
         "value": "{name = \"Alice\", age = 30}"
       }
@@ -105,11 +111,15 @@
       }
     },
     "eval": {
-      "SuccessLet": {
-        "name": "multifield",
-        "ty": "{a: int, b: int, c: int, d: int}",
-        "value": "{a = 1, b = 2, c = 3, d = 4}"
-      }
+      "Success": [
+        {
+          "Value": {
+            "name": "multifield",
+            "ty": "{a: int, b: int, c: int, d: int}",
+            "value": "{a = 1, b = 2, c = 3, d = 4}"
+          }
+        }
+      ]
     },
     "environment": [
       {
@@ -138,7 +148,6 @@
     },
     "eval": {
       "SuccessExpr": {
-        "expr_kind": "expr",
         "ty": "{a: int, b: int, c: int, d: int}",
         "value": "{a = 1, b = 2, c = 3, d = 4}"
       }

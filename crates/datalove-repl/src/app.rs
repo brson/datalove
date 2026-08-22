@@ -256,13 +256,10 @@ impl<E: ReplExecutor> ReplApp<E> {
             repl::Eval::Nothing => {
                 entry.status = EntryStatus::Success;
             }
-            repl::Eval::SuccessLet(_) => {
+            repl::Eval::Success(_) => {
                 entry.status = EntryStatus::Success;
             }
             repl::Eval::SuccessExpr(_) => {
-                entry.status = EntryStatus::Success;
-            }
-            repl::Eval::SuccessFun(_) => {
                 entry.status = EntryStatus::Success;
             }
             repl::Eval::CallerInterpret(cmd) => {

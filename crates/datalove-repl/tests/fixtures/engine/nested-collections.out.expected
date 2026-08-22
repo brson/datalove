@@ -7,11 +7,15 @@
       }
     },
     "eval": {
-      "SuccessLet": {
-        "name": "struct_in_list",
-        "ty": "list<{x: int}>",
-        "value": "[{x = 1}, {x = 2}]"
-      }
+      "Success": [
+        {
+          "Value": {
+            "name": "struct_in_list",
+            "ty": "list<{x: int}>",
+            "value": "[{x = 1}, {x = 2}]"
+          }
+        }
+      ]
     },
     "environment": [
       {
@@ -30,7 +34,6 @@
     },
     "eval": {
       "SuccessExpr": {
-        "expr_kind": "expr",
         "ty": "list<{x: int}>",
         "value": "[{x = 1}, {x = 2}]"
       }
@@ -51,11 +54,15 @@
       }
     },
     "eval": {
-      "SuccessLet": {
-        "name": "list_in_struct",
-        "ty": "{items: list<int>}",
-        "value": "{items = [1, 2, 3]}"
-      }
+      "Success": [
+        {
+          "Value": {
+            "name": "list_in_struct",
+            "ty": "{items: list<int>}",
+            "value": "{items = [1, 2, 3]}"
+          }
+        }
+      ]
     },
     "environment": [
       {
@@ -79,7 +86,6 @@
     },
     "eval": {
       "SuccessExpr": {
-        "expr_kind": "expr",
         "ty": "{items: list<int>}",
         "value": "{items = [1, 2, 3]}"
       }

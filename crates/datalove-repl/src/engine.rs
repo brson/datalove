@@ -2,10 +2,11 @@
 
 use rmx::prelude::*;
 
-use crate::{Command, ReplCommand, Eval, EvalLet, EvalExpr, EvalFun, InputParse, Input};
+use crate::{Command, ReplCommand, Eval, EvalBinding, EvalExpr, InputParse, Input};
 use datalove_datafun as datafun;
-use datafun::pipeline::{ScriptCompiler, ScriptExecutor, TypecheckResult, LoweringResult, WorkspaceDescriptor};
+use datafun::pipeline::{ScriptCompiler, ScriptExecutor, TypecheckResult, OwnershipResult, LoweringResult, WorkspaceDescriptor};
 use datafun::pipeline::rider_load::{build_and_load_riders, LoadedRider};
+use datalove_datafun_ir::ExportBinding;
 
 pub struct Engine<'db> {
     db: &'db datafun::Database,
@@ -220,62 +221,60 @@ impl<'db> Engine<'db> {
             return Eval::Error(errors.join("; "));
         }
 
+        // Check for ownership errors.
+        if let OwnershipResult::Error { message } = &compiled.ownership {
+            return Eval::Error(message.C());
+        }
+
         // Check for lowering errors.
         if let LoweringResult::Error { message } = &compiled.lowering {
             return Eval::Error(message.C());
         }
 
-        // Execute if compilation succeeded.
-        let output = if let Some(ir_unit) = &compiled.ir_unit {
-            self.executor.execute_fragment(ir_unit)
-        } else {
-            String::new()
-        };
+        let ir_unit = compiled.ir_unit.as_ref()
+            .expect("a fragment that compiled without errors has ir");
+        let output = self.executor.execute_fragment(ir_unit);
 
         // Check for runtime errors.
         if output.starts_with("Error:") {
             return Eval::Error(output);
         }
 
-        // Detect what kind of statement was evaluated.
-        let trimmed = source.trim();
-        if trimmed.starts_with("let ") {
-            // Extract let binding name (simple parsing).
-            let after_let = &trimmed[4..];
-            let name = after_let.split(|c: char| !c.is_alphanumeric() && c != '_')
-                .next()
-                .unwrap_or("?")
-                .S();
+        // Report the bindings the fragment defined, as the compiler recorded
+        // them. A fragment that defines nothing, like a require or a set,
+        // exports nothing.
+        let exports = &ir_unit.script_context()
+            .expect("a compiled fragment is a script unit")
+            .exports;
+        let bindings: Vec<EvalBinding> = exports.iter()
+            .map(|(name, binding)| self.eval_binding(name, binding))
+            .collect();
 
-            // Look up type and value from the executor.
-            let (ty, value) = self.executor.get_binding(&name)
-                .unwrap_or(("?".S(), "?".S()));
-
-            Eval::SuccessLet(EvalLet { name, ty, value })
-        } else if trimmed.starts_with("fun ") {
-            // Extract function name.
-            let after_fun = &trimmed[4..];
-            let name = after_fun.split(|c: char| !c.is_alphanumeric() && c != '_')
-                .next()
-                .unwrap_or("?")
-                .S();
-            Eval::SuccessFun(EvalFun { name })
-        } else if trimmed.starts_with("var ") {
-            // Extract var binding name.
-            let after_var = &trimmed[4..];
-            let name = after_var.split(|c: char| !c.is_alphanumeric() && c != '_')
-                .next()
-                .unwrap_or("?")
-                .S();
-
-            // Look up type and value from the executor.
-            let (ty, value) = self.executor.get_binding(&name)
-                .unwrap_or(("?".S(), "?".S()));
-
-            Eval::SuccessLet(EvalLet { name, ty, value })
-        } else {
+        if bindings.is_empty() {
             Eval::Nothing
+        } else {
+            Eval::Success(bindings)
         }
+    }
+
+    /// Describe one exported binding, looking up its current value.
+    fn eval_binding(&mut self, name: &str, binding: &ExportBinding) -> EvalBinding {
+        match binding {
+            ExportBinding::Function(_) => EvalBinding::Function { name: name.S() },
+            ExportBinding::Value(_) => {
+                let (ty, value) = self.binding_type_and_value(name);
+                EvalBinding::Value { name: name.S(), ty, value }
+            }
+            ExportBinding::Slot(_) => {
+                let (ty, value) = self.binding_type_and_value(name);
+                EvalBinding::Slot { name: name.S(), ty, value }
+            }
+        }
+    }
+
+    fn binding_type_and_value(&mut self, name: &str) -> (String, String) {
+        self.executor.get_binding(name)
+            .expect("the executor registered the unit's exports before executing it")
     }
 
     fn eval_expression(&mut self, source: String) -> Eval {
@@ -292,17 +291,19 @@ impl<'db> Engine<'db> {
             return Eval::Error(errors.join("; "));
         }
 
+        // Check for ownership errors.
+        if let OwnershipResult::Error { message } = &compiled.ownership {
+            return Eval::Error(message.C());
+        }
+
         // Check for lowering errors.
         if let LoweringResult::Error { message } = &compiled.lowering {
             return Eval::Error(message.C());
         }
 
-        // Execute if compilation succeeded.
-        let (ty, output) = if let Some(ir_unit) = &compiled.ir_unit {
-            self.executor.execute_expr(ir_unit)
-        } else {
-            (None, String::new())
-        };
+        let ir_unit = compiled.ir_unit.as_ref()
+            .expect("an expression that compiled without errors has ir");
+        let (ty, output) = self.executor.execute_expr(ir_unit);
 
         // Check for runtime errors.
         if output.starts_with("Error:") {
@@ -310,8 +311,7 @@ impl<'db> Engine<'db> {
         }
 
         Eval::SuccessExpr(EvalExpr {
-            expr_kind: "expr".S(),
-            ty: ty.unwrap_or_else(|| "?".S()),
+            ty: ty.expect("an executed expression unit has a result type"),
             value: output,
         })
     }

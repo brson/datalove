@@ -43,33 +43,29 @@ pub enum ReplCommand {
     Help,
 }
 
+/// A binding a script fragment defined.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct EvalLet {
-    pub name: String,
-    pub ty: String,
-    pub value: String,
+pub enum EvalBinding {
+    /// A `let` or `const` binding.
+    Value { name: String, ty: String, value: String },
+    /// A `var` binding.
+    Slot { name: String, ty: String, value: String },
+    /// A function definition.
+    Function { name: String },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EvalExpr {
-    // Is it a variable binding, function call,
-    // math expression, etc.
-    pub expr_kind: String,
     pub ty: String,
     pub value: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct EvalFun {
-    pub name: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Eval {
     Nothing,
-    SuccessLet(EvalLet),
+    /// The bindings a script fragment defined, in source order.
+    Success(Vec<EvalBinding>),
     SuccessExpr(EvalExpr),
-    SuccessFun(EvalFun),
     Error(String),
     CallerInterpret(ReplCommand),
     CrashReset(String),

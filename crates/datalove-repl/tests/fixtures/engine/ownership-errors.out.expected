@@ -1,0 +1,40 @@
+[
+  {
+    "input": "let a = [1, 2]\nlet b = a\nlet c = a",
+    "parse": {
+      "Command": {
+        "ScriptStatement": "let a = [1, 2]\nlet b = a\nlet c = a"
+      }
+    },
+    "eval": {
+      "Error": "error[D001]: use of moved value: `a`\n  help: use `@` to clone `a` before the earlier use"
+    },
+    "environment": []
+  },
+  {
+    "input": "let d = [3, 4]",
+    "parse": {
+      "Command": {
+        "ScriptStatement": "let d = [3, 4]"
+      }
+    },
+    "eval": {
+      "Success": [
+        {
+          "Value": {
+            "name": "d",
+            "ty": "list<int>",
+            "value": "[3, 4]"
+          }
+        }
+      ]
+    },
+    "environment": [
+      {
+        "name": "d",
+        "ty": "list<int>",
+        "value": "[3, 4]"
+      }
+    ]
+  }
+]

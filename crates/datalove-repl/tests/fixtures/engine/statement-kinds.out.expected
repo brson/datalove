@@ -1,0 +1,331 @@
+[
+  {
+    "input": "let x = 1",
+    "parse": {
+      "Command": {
+        "ScriptStatement": "let x = 1"
+      }
+    },
+    "eval": {
+      "Success": [
+        {
+          "Value": {
+            "name": "x",
+            "ty": "int",
+            "value": "1"
+          }
+        }
+      ]
+    },
+    "environment": [
+      {
+        "name": "x",
+        "ty": "int",
+        "value": "1"
+      }
+    ]
+  },
+  {
+    "input": "const c = 3",
+    "parse": {
+      "Command": {
+        "ScriptStatement": "const c = 3"
+      }
+    },
+    "eval": {
+      "Success": [
+        {
+          "Value": {
+            "name": "c",
+            "ty": "int",
+            "value": "3"
+          }
+        }
+      ]
+    },
+    "environment": [
+      {
+        "name": "c",
+        "ty": "int",
+        "value": "3"
+      },
+      {
+        "name": "x",
+        "ty": "int",
+        "value": "1"
+      }
+    ]
+  },
+  {
+    "input": "var v = 2",
+    "parse": {
+      "Command": {
+        "ScriptStatement": "var v = 2"
+      }
+    },
+    "eval": {
+      "Success": [
+        {
+          "Slot": {
+            "name": "v",
+            "ty": "int",
+            "value": "2"
+          }
+        }
+      ]
+    },
+    "environment": [
+      {
+        "name": "c",
+        "ty": "int",
+        "value": "3"
+      },
+      {
+        "name": "v",
+        "ty": "int",
+        "value": "2"
+      },
+      {
+        "name": "x",
+        "ty": "int",
+        "value": "1"
+      }
+    ]
+  },
+  {
+    "input": "set v = 9",
+    "parse": {
+      "Command": {
+        "ScriptStatement": "set v = 9"
+      }
+    },
+    "eval": "Nothing",
+    "environment": [
+      {
+        "name": "c",
+        "ty": "int",
+        "value": "3"
+      },
+      {
+        "name": "v",
+        "ty": "int",
+        "value": "9"
+      },
+      {
+        "name": "x",
+        "ty": "int",
+        "value": "1"
+      }
+    ]
+  },
+  {
+    "input": "v",
+    "parse": {
+      "Command": {
+        "Expression": "v"
+      }
+    },
+    "eval": {
+      "SuccessExpr": {
+        "ty": "int",
+        "value": "9"
+      }
+    },
+    "environment": [
+      {
+        "name": "c",
+        "ty": "int",
+        "value": "3"
+      },
+      {
+        "name": "v",
+        "ty": "int",
+        "value": "<moved>"
+      },
+      {
+        "name": "x",
+        "ty": "int",
+        "value": "1"
+      }
+    ]
+  },
+  {
+    "input": "let  y = 4",
+    "parse": {
+      "Command": {
+        "ScriptStatement": "let  y = 4"
+      }
+    },
+    "eval": {
+      "Success": [
+        {
+          "Value": {
+            "name": "y",
+            "ty": "int",
+            "value": "4"
+          }
+        }
+      ]
+    },
+    "environment": [
+      {
+        "name": "c",
+        "ty": "int",
+        "value": "3"
+      },
+      {
+        "name": "v",
+        "ty": "int",
+        "value": "<moved>"
+      },
+      {
+        "name": "x",
+        "ty": "int",
+        "value": "1"
+      },
+      {
+        "name": "y",
+        "ty": "int",
+        "value": "4"
+      }
+    ]
+  },
+  {
+    "input": "require module sys/std/option",
+    "parse": {
+      "Command": {
+        "ScriptStatement": "require module sys/std/option"
+      }
+    },
+    "eval": "Nothing",
+    "environment": [
+      {
+        "name": "c",
+        "ty": "int",
+        "value": "3"
+      },
+      {
+        "name": "v",
+        "ty": "int",
+        "value": "<moved>"
+      },
+      {
+        "name": "x",
+        "ty": "int",
+        "value": "1"
+      },
+      {
+        "name": "y",
+        "ty": "int",
+        "value": "4"
+      }
+    ]
+  },
+  {
+    "input": "fun f(n: int): int\n  ret n\nend fun",
+    "parse": {
+      "Command": {
+        "ScriptStatement": "fun f(n: int): int\n  ret n\nend fun"
+      }
+    },
+    "eval": {
+      "Success": [
+        {
+          "Function": {
+            "name": "f"
+          }
+        }
+      ]
+    },
+    "environment": [
+      {
+        "name": "c",
+        "ty": "int",
+        "value": "3"
+      },
+      {
+        "name": "f",
+        "ty": "function",
+        "value": "-"
+      },
+      {
+        "name": "v",
+        "ty": "int",
+        "value": "<moved>"
+      },
+      {
+        "name": "x",
+        "ty": "int",
+        "value": "1"
+      },
+      {
+        "name": "y",
+        "ty": "int",
+        "value": "4"
+      }
+    ]
+  },
+  {
+    "input": "let a = 5\nlet b = 6",
+    "parse": {
+      "Command": {
+        "ScriptStatement": "let a = 5\nlet b = 6"
+      }
+    },
+    "eval": {
+      "Success": [
+        {
+          "Value": {
+            "name": "a",
+            "ty": "int",
+            "value": "5"
+          }
+        },
+        {
+          "Value": {
+            "name": "b",
+            "ty": "int",
+            "value": "6"
+          }
+        }
+      ]
+    },
+    "environment": [
+      {
+        "name": "a",
+        "ty": "int",
+        "value": "5"
+      },
+      {
+        "name": "b",
+        "ty": "int",
+        "value": "6"
+      },
+      {
+        "name": "c",
+        "ty": "int",
+        "value": "3"
+      },
+      {
+        "name": "f",
+        "ty": "function",
+        "value": "-"
+      },
+      {
+        "name": "v",
+        "ty": "int",
+        "value": "<moved>"
+      },
+      {
+        "name": "x",
+        "ty": "int",
+        "value": "1"
+      },
+      {
+        "name": "y",
+        "ty": "int",
+        "value": "4"
+      }
+    ]
+  }
+]

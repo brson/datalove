@@ -27,11 +27,15 @@
       }
     },
     "eval": {
-      "SuccessLet": {
-        "name": "s",
-        "ty": "string",
-        "value": "\"hello\""
-      }
+      "Success": [
+        {
+          "Value": {
+            "name": "s",
+            "ty": "string",
+            "value": "\"hello\""
+          }
+        }
+      ]
     },
     "environment": [
       {
@@ -50,7 +54,6 @@
     },
     "eval": {
       "SuccessExpr": {
-        "expr_kind": "expr",
         "ty": "index",
         "value": "5"
       }
@@ -88,7 +91,6 @@
     },
     "eval": {
       "SuccessExpr": {
-        "expr_kind": "expr",
         "ty": "string",
         "value": "\"HELLO\""
       }
@@ -126,7 +128,6 @@
     },
     "eval": {
       "SuccessExpr": {
-        "expr_kind": "expr",
         "ty": "bool",
         "value": "true"
       }
@@ -180,7 +181,6 @@
     },
     "eval": {
       "SuccessExpr": {
-        "expr_kind": "expr",
         "ty": "u32",
         "value": "3"
       }
