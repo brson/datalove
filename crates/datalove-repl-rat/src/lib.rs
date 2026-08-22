@@ -131,10 +131,6 @@ impl<E: ReplExecutor> RatatuiApp<E> {
     pub fn crash_modal_is_open(&self) -> bool {
         self.repl.crash_modal_message().is_some()
     }
-
-    pub fn has_pending_work(&self) -> bool {
-        self.repl.has_pending_work()
-    }
 }
 
 /// Re-export the UI rendering function from the render module.

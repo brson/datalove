@@ -4,6 +4,7 @@
 use rmx::prelude::*;
 
 use crossterm::{
+    cursor::Show,
     event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyEventKind, KeyModifiers},
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
@@ -16,6 +17,29 @@ use std::io;
 use std::fs::File;
 
 const ENGINE_UPDATES_MAX_LATENCY_MS: u64 = 10;
+
+/// Puts the terminal back the way it was found, including while panicking.
+///
+/// Without this a panic in the UI thread leaves the terminal in raw mode on
+/// the alternate screen, and the trace goes to the redirected stderr where
+/// nobody sees it.
+struct TerminalGuard {
+    stderr_log_path: std::path::PathBuf,
+}
+
+impl Drop for TerminalGuard {
+    fn drop(&mut self) {
+        let _ = disable_raw_mode();
+        let _ = execute!(io::stdout(), LeaveAlternateScreen, DisableMouseCapture, Show);
+
+        if std::thread::panicking() {
+            println!(
+                "the datalove repl panicked; the trace is in {}",
+                self.stderr_log_path.display()
+            );
+        }
+    }
+}
 
 /// Run the ratatui-based REPL.
 pub fn run() -> AnyResult<()> {
@@ -37,27 +61,17 @@ pub fn run() -> AnyResult<()> {
         }
     }
 
-    // Setup terminal.
+    // Setup terminal. The guard restores it however this function exits.
     enable_raw_mode()?;
     let mut stdout = io::stdout();
     execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
+    let _guard = TerminalGuard { stderr_log_path: stderr_log_path.C() };
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
 
     // Create app and run it, passing the stderr log path.
     let mut app = datalove_repl_rat::RatatuiApp::<datalove_repl_rat::ThreadedExecutor>::new_with_stderr_log(stderr_log_path);
-    let res = run_app(&mut terminal, &mut app);
-
-    // Restore terminal.
-    disable_raw_mode()?;
-    execute!(
-        terminal.backend_mut(),
-        LeaveAlternateScreen,
-        DisableMouseCapture
-    )?;
-    terminal.show_cursor()?;
-
-    res
+    run_app(&mut terminal, &mut app)
 }
 
 /// Run the application loop.

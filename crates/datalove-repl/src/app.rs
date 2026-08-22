@@ -52,6 +52,14 @@ pub enum EntryStatus {
     ReadMultiline,
 }
 
+/// Find the history entry a worker response belongs to.
+///
+/// Returns `None` when the entry is gone, which happens to requests that were
+/// still in flight when a crash reset cleared the history.
+fn find_entry(history: &mut [HistoryEntry], id: u64) -> Option<&mut HistoryEntry> {
+    history.iter_mut().rev().find(|entry| entry.id == id)
+}
+
 impl HistoryEntry {
     fn new(input: String, id: u64) -> Self {
         Self {
@@ -118,8 +126,19 @@ pub struct ReplApp<E: ReplExecutor> {
 impl<E: ReplExecutor> ReplApp<E> {
     /// Create a new core REPL app.
     pub fn new() -> Self {
+        Self::with_executor(E::new())
+    }
+
+    pub fn with_stderr_log(stderr_log_path: std::path::PathBuf) -> Self {
+        let mut app = Self::with_executor(E::new());
+        app.stderr_log_path = Some(stderr_log_path);
+        app
+    }
+
+    /// Create a core REPL app around an already-constructed executor.
+    pub fn with_executor(executor: E) -> Self {
         Self {
-            executor: E::new(),
+            executor,
             next_id: 0,
             history: Vec::new(),
             environment: Vec::new(),
@@ -129,21 +148,6 @@ impl<E: ReplExecutor> ReplApp<E> {
             should_exit: false,
             crash_modal: None,
             stderr_log_path: None,
-        }
-    }
-
-    pub fn with_stderr_log(stderr_log_path: std::path::PathBuf) -> Self {
-        Self {
-            executor: E::new(),
-            next_id: 0,
-            history: Vec::new(),
-            environment: Vec::new(),
-            multiline_mode: false,
-            menu_open: false,
-            menu_selection: 0,
-            should_exit: false,
-            crash_modal: None,
-            stderr_log_path: Some(stderr_log_path),
         }
     }
 
@@ -195,9 +199,9 @@ impl<E: ReplExecutor> ReplApp<E> {
     }
 
     fn handle_parse_result(&mut self, id: u64, parse: repl::InputParse) -> UiAction {
-        let entry = self.history.last_mut().X();
-
-        assert_eq!(entry.id, id);
+        let Some(entry) = find_entry(&mut self.history, id) else {
+            return UiAction::None;
+        };
 
         match parse.C() {
             repl::InputParse::Empty => {
@@ -238,9 +242,9 @@ impl<E: ReplExecutor> ReplApp<E> {
     }
 
     fn handle_eval_result(&mut self, id: u64, eval: repl::Eval, environment: Vec<(String, String, String)>) {
-        let entry = self.history.last_mut().X();
-
-        assert_eq!(entry.id, id);
+        let Some(entry) = find_entry(&mut self.history, id) else {
+            return;
+        };
 
         entry.eval_result = Some(eval.C());
 
@@ -283,8 +287,8 @@ impl<E: ReplExecutor> ReplApp<E> {
     }
 
     fn handle_caller_interpret(&mut self, id: u64, cmd: &repl::ReplCommand) {
-        let entry = self.history.last_mut().X();
-        assert_eq!(entry.id, id);
+        let entry = find_entry(&mut self.history, id)
+            .expect("the entry was found by the caller");
 
         match cmd {
             repl::ReplCommand::Unknown => bug!(),
@@ -376,12 +380,5 @@ impl<E: ReplExecutor> ReplApp<E> {
     /// Get the history entries for testing.
     pub fn history(&self) -> &[HistoryEntry] {
         &self.history
-    }
-
-    /// Check if there's work pending from the worker thread.
-    pub fn has_pending_work(&self) -> bool {
-        self.history.last().map_or(false, |e| {
-            matches!(e.status, EntryStatus::Parsing | EntryStatus::Evaluating { .. })
-        })
     }
 }
