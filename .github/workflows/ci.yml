@@ -29,3 +29,27 @@ jobs:
 
       - name: Run tests
         run: just test-ci
+
+  # index-64 changes the width of `index` and `offset`, so it builds different
+  # artifacts and exercises the `.out.expected.64` fixtures. It gets its own
+  # runner rather than a step on the one above, so a failure in either
+  # configuration is reported separately and neither waits on the other.
+  test-index-64:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust nightly
+        uses: dtolnay/rust-toolchain@nightly
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          # Separate from the default build's cache; the two share no artifacts.
+          key: index-64
+
+      - name: Install just
+        uses: taiki-e/install-action@just
+
+      - name: Run tests
+        run: just test-64
