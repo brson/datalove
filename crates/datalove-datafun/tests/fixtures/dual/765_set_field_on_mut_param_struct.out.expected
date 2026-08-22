@@ -16,7 +16,7 @@ DualAnalysis(
                         v0 = const 100u32
                         v1 = const 200u32
                         v2 = pack Struct0 {v0, v1}
-                        store.copy.tracked s0, v2
+                        store.copy s0, v2
                         v3 = call @0 u0(s0)
                         v4 = getfieldref s0.0
                         debuglog *v4
@@ -40,7 +40,7 @@ DualAnalysis(
                         v0 = const 100u32
                         v1 = const 200u32
                         v2 = pack Struct0 {v0, v1}
-                        store.copy.tracked s0, v2
+                        store.copy s0, v2
                         v3 = call @0 u0(s0)
                         v4 = getfieldref s0.0
                         debuglog *v4

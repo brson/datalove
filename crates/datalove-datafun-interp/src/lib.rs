@@ -629,18 +629,13 @@ impl IrInterpreter {
                 let src_val = self.read_operand(value, frame, frames);
                 match dest {
                     SlotDest::Local(slot_id) => {
-                        // For move types, the compiler emits Drop before SlotStoreMove,
-                        // so the slot should not be initialized. But check defensively.
-                        if frame.is_slot_initialized(*slot_id) {
-                            let old_val = frame.slot(*slot_id).unwrap();
-                            unsafe {
-                                datalove_rt::c::dtlv_rti_any_destroy_local(
-                                    self.runtime.handle(),
-                                    old_val.ptr,
-                                    old_val.tydesc,
-                                );
-                            }
-                        }
+                        // The compiler emits a Drop before SlotStoreMove, so the
+                        // slot is empty; overwriting an occupied one would leak it.
+                        assert!(
+                            !frame.is_slot_initialized(*slot_id),
+                            "SlotStoreMove into occupied slot {:?}",
+                            slot_id,
+                        );
                         let dest_slot = frame.slot_dest(*slot_id);
                         unsafe { self.move_value(&src_val, dest_slot); }
                         Self::mark_source_dropped_local(value, frame);

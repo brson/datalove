@@ -14,10 +14,10 @@ DualAnalysis(
                     scriptunit:
                     block0:
                         v0 = const 10u32
-                        store.copy.tracked s0, v0
+                        store.copy s0, v0
                         debuglog s0
                         v1 = const 20u32
-                        store.copy.tracked s1, v1
+                        store.copy s1, v1
                         debuglog s1
                         unit_end
                 """,
@@ -28,10 +28,10 @@ DualAnalysis(
                     scriptunit:
                     block0:
                         v0 = const 10u32
-                        store.copy.tracked s0, v0
+                        store.copy s0, v0
                         debuglog s0
                         v1 = const 20u32
-                        store.copy.tracked s1, v1
+                        store.copy s1, v1
                         debuglog s1
                         unit_end
                 """,

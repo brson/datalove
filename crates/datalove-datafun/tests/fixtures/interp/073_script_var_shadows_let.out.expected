@@ -16,7 +16,7 @@ Analysis(
                     block0:
                         v0 = const 1u32
                         v1 = const 2u32
-                        store.copy.tracked s0, v1
+                        store.copy s0, v1
                         unit_end
                 """,
             ),

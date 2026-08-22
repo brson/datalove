@@ -27,7 +27,7 @@ Analysis(
                     fn test():
                     block0:
                         v0 = const 0u32
-                        store.copy.tracked s0, v0
+                        store.copy s0, v0
                         v1 = call @0 m0.u1(s0)
                         v2 = load.copy s0
                         return v2

@@ -28,9 +28,9 @@ AotAnalysis(
                     fn count_up(p0):
                     block0:
                         v0 = const 0u32
-                        store.copy.tracked s0, v0
+                        store.copy s0, v0
                         v1 = const 0u32
-                        store.copy.tracked s1, v1
+                        store.copy s1, v1
                         goto block1
                     block1:
                         v2 = lt s1, p0

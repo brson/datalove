@@ -14,7 +14,7 @@ DualAnalysis(
                     scriptunit:
                     block0:
                         v0 = const 0u32
-                        store.copy.tracked s0, v0
+                        store.copy s0, v0
                         v1 = const false
                         branch v1, block1, block2
                     block1:
@@ -36,7 +36,7 @@ DualAnalysis(
                     scriptunit:
                     block0:
                         v0 = const 0u32
-                        store.copy.tracked s0, v0
+                        store.copy s0, v0
                         v1 = const false
                         branch v1, block1, block2
                     block1:

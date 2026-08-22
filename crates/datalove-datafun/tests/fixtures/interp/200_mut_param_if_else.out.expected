@@ -31,7 +31,7 @@ Analysis(
                     fn test_true():
                     block0:
                         v0 = const 0u32
-                        store.copy.tracked s0, v0
+                        store.copy s0, v0
                         v1 = const true
                         v2 = call @0 m0.u0(s0, v1)
                         v3 = load.copy s0
@@ -40,7 +40,7 @@ Analysis(
                     fn test_false():
                     block0:
                         v0 = const 0u32
-                        store.copy.tracked s0, v0
+                        store.copy s0, v0
                         v1 = const false
                         v2 = call @0 m0.u0(s0, v1)
                         v3 = load.copy s0

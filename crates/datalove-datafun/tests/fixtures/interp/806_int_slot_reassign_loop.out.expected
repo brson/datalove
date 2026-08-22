@@ -33,7 +33,7 @@ Analysis(
                         v5 = const 1int
                         store.move.tracked s1, v5
                         v6 = const 2u32
-                        store.copy.tracked s2, v6
+                        store.copy s2, v6
                         goto block4
                     block4:
                         v7 = le s2, p0

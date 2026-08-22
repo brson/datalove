@@ -82,6 +82,12 @@ fn lower_statement_impl<'db>(
             let is_copy = slot_type.is_copy();
             let slot = ctx.fresh_slot(slot_type);
 
+            let operand = Operand::Slot(slot);
+            ctx.bind_var(&name, operand);
+            // Record binding operand for drop schedule. This has to happen
+            // before the store, which asks whether the slot is tracked.
+            ctx.record_binding_operand(operand);
+
             // Only emit store instruction if there's an initializer.
             if let Some(value_id) = init_value {
                 if is_copy {
@@ -92,10 +98,6 @@ fn lower_statement_impl<'db>(
             }
             // If no initializer, slot is uninitialized and tracked.
 
-            let operand = Operand::Slot(slot);
-            ctx.bind_var(&name, operand);
-            // Record binding operand for drop schedule.
-            ctx.record_binding_operand(operand);
             Ok(())
         }
         Statement::Set(set_stmt) => {

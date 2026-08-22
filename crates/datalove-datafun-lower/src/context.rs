@@ -832,9 +832,9 @@ impl<'db> LowerCtx<'db> {
     /// Bindings are tracked when ownership analysis cannot statically prove their
     /// state at all use points (e.g., exports, values in conditional branches).
     pub fn is_binding_tracked(&self, id: BindingId) -> bool {
-        self.body.tracking.get(id.0 as usize)
-            .map(|cat| *cat == TrackingCategory::Tracked)
-            .unwrap_or(true) // Default to tracked if not found (safe fallback).
+        let category = self.body.tracking.get(id.0 as usize)
+            .expect("ownership analysis categorizes every binding");
+        *category == TrackingCategory::Tracked
     }
 
     /// Check if a source operand needs tracking when consumed.
@@ -847,9 +847,18 @@ impl<'db> LowerCtx<'db> {
     ///
     /// Returns true if the source's tracking byte should be written to MOVED.
     pub fn is_operand_tracked(&self, operand: Operand) -> bool {
-        self.body.operand_to_binding.get(&operand)
-            .map(|id| self.is_binding_tracked(*id))
-            .unwrap_or(true) // Default to tracked if not found (safe fallback).
+        match operand {
+            // Values are let bindings and temporaries, which ownership analysis
+            // always categorizes as precise.
+            Operand::Value(_) | Operand::ValueRef(_) | Operand::ExternalValue { .. } => false,
+            // A var from an earlier unit, whose state the frame store tracks.
+            Operand::ExternalSlot { .. } => true,
+            Operand::Slot(_) | Operand::Param(_) => {
+                let id = self.body.operand_to_binding.get(&operand)
+                    .expect("slots and params are recorded as bindings when created");
+                self.is_binding_tracked(*id)
+            }
+        }
     }
 
     /// Check if a slot needs tracking when written.
@@ -862,12 +871,7 @@ impl<'db> LowerCtx<'db> {
     ///
     /// Returns true if the slot's tracking byte should be written to LIVE.
     pub fn is_slot_tracked(&self, slot: SlotId) -> bool {
-        let operand = Operand::Slot(slot);
-        if let Some(&id) = self.body.operand_to_binding.get(&operand) {
-            return self.is_binding_tracked(id);
-        }
-        // Default to tracked for safety.
-        true
+        self.is_operand_tracked(Operand::Slot(slot))
     }
 
     /// Emit a drop for a binding, using DropTracked if tracked, Drop if precise.
