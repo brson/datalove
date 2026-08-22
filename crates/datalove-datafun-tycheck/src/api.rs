@@ -50,6 +50,8 @@ pub struct AccumulatedBindings<'db> {
     pub vars: Vec<(InternedText<'db>, Type<'db>, bool)>,
     pub fns: Vec<(InternedText<'db>, TypeFunction<'db>)>,
     pub fn_asts: Vec<(InternedText<'db>, StmtFun<'db>, Option<ModuleId>)>,
+    /// Module aliases from require statements: (alias, full path).
+    pub module_aliases: Vec<(InternedText<'db>, String)>,
 }
 
 /// Output from typecheck_script_unit.
@@ -66,6 +68,9 @@ pub struct ScriptUnitTypecheckOutput<'db> {
     pub new_fns: Vec<(InternedText<'db>, TypeFunction<'db>)>,
     #[returns(ref)]
     pub new_fn_asts: Vec<(InternedText<'db>, StmtFun<'db>, Option<ModuleId>)>,
+    /// Module aliases from require statements: (alias, full path).
+    #[returns(ref)]
+    pub new_module_aliases: Vec<(InternedText<'db>, String)>,
 }
 
 /// Create a ScriptBatchSpec inside a tracked function.
@@ -139,6 +144,7 @@ pub fn typecheck_script_unit<'db>(
     let mut new_vars = Vec::new();
     let mut new_fns = Vec::new();
     let mut new_fn_asts = Vec::new();
+    let mut new_module_aliases = Vec::new();
 
     // Typecheck this unit based on kind.
     match &unit_spec.kind {
@@ -146,9 +152,16 @@ pub fn typecheck_script_unit<'db>(
             // Use pre-computed name resolution.
             ctx.seed_from_collected_names(collected, None);
 
+            // Module aliases carry forward from prior units, so a require in one
+            // REPL line is visible to an import in a later one.
+            new_module_aliases = collect_module_aliases(db, script);
+            let mut alias_to_path: HashMap<InternedText<'db>, String> =
+                accumulated.module_aliases.iter().cloned().collect();
+            alias_to_path.extend(new_module_aliases.iter().cloned());
+
             // Resolve imports using shared helper.
             let (resolved_imports, import_errors) = resolve_script_imports(
-                db, script, &module_functions, &path_to_module_id
+                db, script, &alias_to_path, &module_functions, &path_to_module_id
             );
 
             // Add resolved imports to context and track as new bindings.
@@ -219,7 +232,7 @@ pub fn typecheck_script_unit<'db>(
     let function_types: Vec<_> = ctx.functions.into_iter().collect();
     let result = UnitTypecheckResultTracked::new(db, errors, ctx.expr_types, ctx.call_targets, function_types);
 
-    ScriptUnitTypecheckOutput::new(db, result, new_vars, new_fns, new_fn_asts)
+    ScriptUnitTypecheckOutput::new(db, result, new_vars, new_fns, new_fn_asts, new_module_aliases)
 }
 
 /// Typecheck multiple script units together, with bindings shared across units.
@@ -256,6 +269,7 @@ pub fn type_check_script_units<'db>(
             accumulated.vars.extend(output.new_vars(db).iter().cloned());
             accumulated.fns.extend(output.new_fns(db).iter().cloned());
             accumulated.fn_asts.extend(output.new_fn_asts(db).iter().cloned());
+            accumulated.module_aliases.extend(output.new_module_aliases(db).iter().cloned());
         }
     }
 
@@ -775,18 +789,14 @@ fn build_script_module_functions<'db>(
     (module_functions, path_to_module_id)
 }
 
-/// Resolve imports for a script unit using path-based module lookup.
+/// Collect the module aliases a script unit's require statements introduce.
 ///
-/// Parses require statements to build alias-to-path map, then resolves import
-/// statements against the provided module functions.
-fn resolve_script_imports<'db>(
+/// Returns (alias, full path) pairs.
+fn collect_module_aliases<'db>(
     db: &'db dyn crate::Db,
     script: &ParsedStatements<'db>,
-    module_functions: &HashMap<String, HashMap<InternedText<'db>, (TypeFunction<'db>, StmtFun<'db>)>>,
-    path_to_module_id: &HashMap<String, ModuleId>,
-) -> (Vec<(InternedText<'db>, TypeFunction<'db>, StmtFun<'db>, Option<ModuleId>)>, Vec<TypeError>) {
-    // Build alias map from require statements.
-    let mut alias_to_path: HashMap<InternedText<'db>, String> = HashMap::new();
+) -> Vec<(InternedText<'db>, String)> {
+    let mut aliases = Vec::new();
     for statement in &script.statements {
         if let Statement::Require(StmtRequire::Module(req)) = statement {
             let import_space = req.import_space;
@@ -798,10 +808,23 @@ fn resolve_script_imports<'db>(
                 package_alias.as_str(db),
                 module_alias.as_str(db)
             );
-            alias_to_path.insert(module_alias, full_path);
+            aliases.push((module_alias, full_path));
         }
     }
+    aliases
+}
 
+/// Resolve imports for a script unit using path-based module lookup.
+///
+/// Resolves import statements against the provided module functions, using
+/// `alias_to_path` to expand module aliases introduced by require statements.
+fn resolve_script_imports<'db>(
+    db: &'db dyn crate::Db,
+    script: &ParsedStatements<'db>,
+    alias_to_path: &HashMap<InternedText<'db>, String>,
+    module_functions: &HashMap<String, HashMap<InternedText<'db>, (TypeFunction<'db>, StmtFun<'db>)>>,
+    path_to_module_id: &HashMap<String, ModuleId>,
+) -> (Vec<(InternedText<'db>, TypeFunction<'db>, StmtFun<'db>, Option<ModuleId>)>, Vec<TypeError>) {
     // Resolve import statements.
     let mut resolved = Vec::new();
     let mut errors = Vec::new();
