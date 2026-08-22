@@ -110,7 +110,7 @@ pub(crate) fn classify_input(input: &str) -> InputKind {
     let is_whitespace = input.chars().all(char::is_whitespace);
     let is_repl_command = input.trim().starts_with(REPL_COMMAND_SIGIL);
     let is_oneline_statement_keyword = parse_ident(input).map(|ident| match ident {
-        "let" | "var" | "const" | "set" => true,
+        "let" | "var" | "const" | "set" | "require" | "import" => true,
         _ => false
     }).unwrap_or(false);
     let is_multiline_statement_keyword = parse_ident(input).map(|ident| match ident {

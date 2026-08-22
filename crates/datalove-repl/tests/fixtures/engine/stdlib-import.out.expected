@@ -1,0 +1,196 @@
+[
+  {
+    "input": "require module sys/std/string",
+    "parse": {
+      "Command": {
+        "ScriptStatement": "require module sys/std/string"
+      }
+    },
+    "eval": "Nothing",
+    "environment": []
+  },
+  {
+    "input": "import string.len",
+    "parse": {
+      "Command": {
+        "ScriptStatement": "import string.len"
+      }
+    },
+    "eval": "Nothing",
+    "environment": []
+  },
+  {
+    "input": "let s = \"hello\"",
+    "parse": {
+      "Command": {
+        "ScriptStatement": "let s = \"hello\""
+      }
+    },
+    "eval": {
+      "SuccessLet": {
+        "name": "s",
+        "ty": "string",
+        "value": "\"hello\""
+      }
+    },
+    "environment": [
+      {
+        "name": "s",
+        "ty": "string",
+        "value": "\"hello\""
+      }
+    ]
+  },
+  {
+    "input": "len(ref s)",
+    "parse": {
+      "Command": {
+        "Expression": "len(ref s)"
+      }
+    },
+    "eval": {
+      "SuccessExpr": {
+        "expr_kind": "expr",
+        "ty": "index",
+        "value": "5"
+      }
+    },
+    "environment": [
+      {
+        "name": "s",
+        "ty": "string",
+        "value": "\"hello\""
+      }
+    ]
+  },
+  {
+    "input": "import string.to_ascii_uppercase",
+    "parse": {
+      "Command": {
+        "ScriptStatement": "import string.to_ascii_uppercase"
+      }
+    },
+    "eval": "Nothing",
+    "environment": [
+      {
+        "name": "s",
+        "ty": "string",
+        "value": "\"hello\""
+      }
+    ]
+  },
+  {
+    "input": "to_ascii_uppercase(ref s)",
+    "parse": {
+      "Command": {
+        "Expression": "to_ascii_uppercase(ref s)"
+      }
+    },
+    "eval": {
+      "SuccessExpr": {
+        "expr_kind": "expr",
+        "ty": "string",
+        "value": "\"HELLO\""
+      }
+    },
+    "environment": [
+      {
+        "name": "s",
+        "ty": "string",
+        "value": "\"hello\""
+      }
+    ]
+  },
+  {
+    "input": "import string.contains",
+    "parse": {
+      "Command": {
+        "ScriptStatement": "import string.contains"
+      }
+    },
+    "eval": "Nothing",
+    "environment": [
+      {
+        "name": "s",
+        "ty": "string",
+        "value": "\"hello\""
+      }
+    ]
+  },
+  {
+    "input": "contains(ref s, ref \"ell\")",
+    "parse": {
+      "Command": {
+        "Expression": "contains(ref s, ref \"ell\")"
+      }
+    },
+    "eval": {
+      "SuccessExpr": {
+        "expr_kind": "expr",
+        "ty": "bool",
+        "value": "true"
+      }
+    },
+    "environment": [
+      {
+        "name": "s",
+        "ty": "string",
+        "value": "\"hello\""
+      }
+    ]
+  },
+  {
+    "input": "require module sys/std/option",
+    "parse": {
+      "Command": {
+        "ScriptStatement": "require module sys/std/option"
+      }
+    },
+    "eval": "Nothing",
+    "environment": [
+      {
+        "name": "s",
+        "ty": "string",
+        "value": "\"hello\""
+      }
+    ]
+  },
+  {
+    "input": "import option.unwrap_or",
+    "parse": {
+      "Command": {
+        "ScriptStatement": "import option.unwrap_or"
+      }
+    },
+    "eval": "Nothing",
+    "environment": [
+      {
+        "name": "s",
+        "ty": "string",
+        "value": "\"hello\""
+      }
+    ]
+  },
+  {
+    "input": "unwrap_or(some 3, 7)",
+    "parse": {
+      "Command": {
+        "Expression": "unwrap_or(some 3, 7)"
+      }
+    },
+    "eval": {
+      "SuccessExpr": {
+        "expr_kind": "expr",
+        "ty": "u32",
+        "value": "3"
+      }
+    },
+    "environment": [
+      {
+        "name": "s",
+        "ty": "string",
+        "value": "\"hello\""
+      }
+    ]
+  }
+]

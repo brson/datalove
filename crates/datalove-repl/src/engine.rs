@@ -4,15 +4,21 @@ use rmx::prelude::*;
 
 use crate::{Command, ReplCommand, Eval, EvalLet, EvalExpr, EvalFun, InputParse, Input};
 use datalove_datafun as datafun;
-use datafun::pipeline::{ModuleCompilationPipeline, ScriptCompiler, ScriptExecutor, TypecheckResult, LoweringResult};
+use datafun::pipeline::{ScriptCompiler, ScriptExecutor, TypecheckResult, LoweringResult, WorkspaceDescriptor};
+use datafun::pipeline::rider_load::{build_and_load_riders, LoadedRider};
 
 pub struct Engine<'db> {
     db: &'db datafun::Database,
+    /// The system library the session compiles against, kept so the engine can
+    /// rebuild its compiler and executor after a crash reset.
+    workspace: WorkspaceDescriptor,
     history: ReplHistory,
     /// Script compiler for incremental compilation.
     compiler: ScriptCompiler<'db>,
     /// Script executor for running compiled units.
     executor: ScriptExecutor,
+    /// Loaded native rider libraries, which must outlive the executor.
+    riders: Vec<LoadedRider>,
 }
 
 struct ReplHistory {
@@ -22,6 +28,35 @@ struct ReplHistory {
 struct HistoryEntry {
     _command: Command,
     _last_eval: Eval,
+}
+
+/// A compiled session: everything the engine rebuilds when it resets.
+struct Session<'db> {
+    compiler: ScriptCompiler<'db>,
+    executor: ScriptExecutor,
+    riders: Vec<LoadedRider>,
+}
+
+impl<'db> Session<'db> {
+    /// Compile a workspace's modules and load its native riders.
+    fn compile(db: &'db datafun::Database, workspace: &WorkspaceDescriptor) -> AnyResult<Session<'db>> {
+        let mut pipeline = workspace.to_pipeline(db);
+        let compiled = pipeline.compile_fresh(db);
+
+        if compiled.has_errors() {
+            let errors = compiled.all_errors();
+            bail!("Module compilation failed: {}", errors.join("; "));
+        }
+
+        // Safe to unwrap since we checked for errors above.
+        let compiler = compiled.script_compiler_default(db)
+            .expect("script_compiler should succeed after error check");
+        let mut executor = compiled.script_executor(datafun::DebugOutputMode::Disabled, None)
+            .expect("script_executor should succeed after error check");
+        let riders = build_and_load_riders(workspace, &compiled, &mut executor)?;
+
+        Ok(Session { compiler, executor, riders })
+    }
 }
 
 impl ReplHistory {
@@ -41,27 +76,17 @@ impl ReplHistory {
 
 impl<'db> Engine<'db> {
     pub fn new(db: &'db datafun::Database) -> AnyResult<Engine<'db>> {
-        // Create an empty module pipeline and compile.
-        let mut pipeline = ModuleCompilationPipeline::default();
-        let compiled = pipeline.compile_fresh(db);
-
-        // Check for errors.
-        if compiled.has_errors() {
-            let errors = compiled.all_errors();
-            bail!("Module compilation failed: {}", errors.join("; "));
-        }
-
-        // Create compiler and executor (safe to unwrap since we checked for errors above).
-        let compiler = compiled.script_compiler_default(db)
-            .expect("script_compiler should succeed after is_successful check");
-        let executor = compiled.script_executor(datalove_datafun::DebugOutputMode::Disabled, None)
-            .expect("script_executor should succeed after is_successful check");
+        let workspace = rmx::futures::executor::block_on(WorkspaceDescriptor::load_default_sys())
+            .context("failed to load the system library")?;
+        let session = Session::compile(db, &workspace)?;
 
         Ok(Engine {
             db,
+            workspace,
             history: ReplHistory::new(),
-            compiler,
-            executor,
+            compiler: session.compiler,
+            executor: session.executor,
+            riders: session.riders,
         })
     }
 
@@ -69,13 +94,13 @@ impl<'db> Engine<'db> {
         self.history = ReplHistory::new();
         // Cleanup the current executor.
         self.executor.destroy_live_values();
-        // Create new compiler and executor (empty pipeline always succeeds).
-        let mut pipeline = ModuleCompilationPipeline::default();
-        let compiled = pipeline.compile_fresh(self.db);
-        self.compiler = compiled.script_compiler_default(self.db)
-            .expect("empty pipeline compilation should succeed");
-        self.executor = compiled.script_executor(datalove_datafun::DebugOutputMode::Disabled, None)
-            .expect("empty pipeline compilation should succeed");
+        // The system library compiled at startup, so it compiles again here.
+        let session = Session::compile(self.db, &self.workspace)
+            .expect("system library compiled successfully at startup");
+        self.compiler = session.compiler;
+        // The old executor must go before the riders its native table points into.
+        self.executor = session.executor;
+        self.riders = session.riders;
     }
 
     pub fn parse_input(&mut self, input: Input) -> InputParse {

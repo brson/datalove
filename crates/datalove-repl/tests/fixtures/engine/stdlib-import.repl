@@ -1,0 +1,21 @@
+require module sys/std/string
+---
+import string.len
+---
+let s = "hello"
+---
+len(ref s)
+---
+import string.to_ascii_uppercase
+---
+to_ascii_uppercase(ref s)
+---
+import string.contains
+---
+contains(ref s, ref "ell")
+---
+require module sys/std/option
+---
+import option.unwrap_or
+---
+unwrap_or(some 3, 7)
