@@ -17,7 +17,8 @@ test-slow:
     cargo test -p datalove-datafun --features slow_tests
     just check-wasm
 
-test-ci: test test-slow
+# Everything CI runs, which it does one configuration per runner.
+test-ci: test test-slow test-64
 
 # Run tests with parallelism enabled.
 test-parallel:

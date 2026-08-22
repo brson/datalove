@@ -18,8 +18,24 @@ env:
   CARGO_PROFILE_DEV_DEBUG: 0
 
 jobs:
+  # One runner per configuration. Each builds a different feature set, so
+  # splitting them keeps any single runner's disk and wall clock down, and
+  # reports a failure against the configuration that caused it.
   test:
+    name: test (${{ matrix.name }})
     runs-on: ubuntu-latest
+    strategy:
+      # A failure in one configuration says nothing about the others, so let
+      # them all finish.
+      fail-fast: false
+      matrix:
+        include:
+          - name: default
+            recipe: test
+          - name: slow
+            recipe: test-slow
+          - name: index-64
+            recipe: test-64
     steps:
       - uses: actions/checkout@v4
 
@@ -41,52 +57,18 @@ jobs:
       - name: Install Rust nightly
         uses: dtolnay/rust-toolchain@nightly
         with:
+          # Only test-slow's check-wasm needs this, but installing it
+          # everywhere costs seconds and keeps the matrix uniform.
           targets: wasm32-unknown-unknown
 
       - name: Cache cargo
         uses: Swatinem/rust-cache@v2
-
-      - name: Install just
-        uses: taiki-e/install-action@just
-
-      - name: Run tests
-        run: just test-ci
-
-  # index-64 changes the width of `index` and `offset`, so it builds different
-  # artifacts and exercises the `.out.expected.64` fixtures. It gets its own
-  # runner rather than a step on the one above, so a failure in either
-  # configuration is reported separately and neither waits on the other.
-  test-index-64:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      # A full debug build of this workspace does not fit in the ~14GB a
-      # hosted runner leaves free, and the linker dies with SIGBUS partway
-      # through rather than reporting ENOSPC. Reclaim the preinstalled
-      # toolchains, none of which this build uses.
-      - name: Free disk space
-        run: |
-          df -h /
-          sudo rm -rf /usr/local/lib/android
-          sudo rm -rf /usr/share/dotnet
-          sudo rm -rf /usr/local/.ghcup
-          sudo rm -rf /opt/ghc
-          sudo rm -rf /opt/hostedtoolcache/CodeQL
-          sudo rm -rf /usr/local/share/boost
-          df -h /
-
-      - name: Install Rust nightly
-        uses: dtolnay/rust-toolchain@nightly
-
-      - name: Cache cargo
-        uses: Swatinem/rust-cache@v2
         with:
-          # Separate from the default build's cache; the two share no artifacts.
-          key: index-64
+          # The configurations share no artifacts, so they cache separately.
+          key: ${{ matrix.recipe }}
 
       - name: Install just
         uses: taiki-e/install-action@just
 
       - name: Run tests
-        run: just test-64
+        run: just ${{ matrix.recipe }}
