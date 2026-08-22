@@ -787,16 +787,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "console_error_panic_hook"
-version = "0.1.7"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a06aeb73f470f66dcdbf7223caeebb85984942f22f1adb2a088cf9668146bbbc"
-dependencies = [
- "cfg-if",
- "wasm-bindgen",
-]
-
-[[package]]
 name = "const-random"
 version = "0.1.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1663,33 +1653,25 @@ name = "datalove-repl"
 version = "0.1.0"
 dependencies = [
  "bcts",
- "console_error_panic_hook",
  "datalove-datafun",
  "datalove-datalit",
  "datalove-exampletest",
- "js-sys",
  "rustmax",
  "salsa",
  "serde",
- "wasm-bindgen",
- "web-sys",
 ]
 
 [[package]]
 name = "datalove-repl-rat"
 version = "0.1.0"
 dependencies = [
- "console_error_panic_hook",
  "crossterm",
  "datalove-repl",
  "datalove-repl-term",
- "js-sys",
  "ratatui",
  "rustmax",
  "serde",
  "tui-textarea",
- "wasm-bindgen",
- "web-sys",
 ]
 
 [[package]]

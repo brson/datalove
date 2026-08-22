@@ -9,20 +9,9 @@ pub use engine::Engine;
 pub mod app;
 
 // Executor implementations.
-mod executor_blocking;
 mod executor_threaded;
 
-pub use executor_blocking::BlockingExecutor;
 pub use executor_threaded::ThreadedExecutor;
-
-#[cfg(target_arch = "wasm32")]
-mod executor_webworker;
-
-#[cfg(target_arch = "wasm32")]
-pub use executor_webworker::WebWorkerExecutor;
-
-#[cfg(target_arch = "wasm32")]
-pub mod worker;
 
 const REPL_COMMAND_SIGIL: char = '/';
 

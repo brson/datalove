@@ -5,13 +5,7 @@ use rmx::prelude::*;
 
 use datalove_repl as repl;
 pub use repl::app::{ReplApp, ReplExecutor, UiAction, HistoryEntry, EntryStatus};
-pub use repl::{ThreadedExecutor, BlockingExecutor};
-
-#[cfg(target_arch = "wasm32")]
-pub use repl::WebWorkerExecutor;
-
-#[cfg(target_arch = "wasm32")]
-pub use repl::worker;
+pub use repl::ThreadedExecutor;
 
 mod render;
 
@@ -46,7 +40,6 @@ impl<E: ReplExecutor> RatatuiApp<E> {
         &self.textarea
     }
 
-    #[cfg(not(target_arch = "wasm32"))]
     pub fn handle_input_key(&mut self, key: crossterm::event::KeyEvent) {
         self.textarea.input(key);
     }

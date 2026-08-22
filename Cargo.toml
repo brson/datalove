@@ -14,9 +14,6 @@ members = [
 ]
 
 exclude = [
-  "crates/datalove-repl-worker",
-  "crates/datalove-repl-egui",
-  "crates/datalove-web",
   "sys/std/rider",
 ]
 
