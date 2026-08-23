@@ -44,7 +44,6 @@ Specifications, research, design documents, implementation plans, and reports.
 - [Pattern Matching and Destructuring](report-match-downcast.md)
 - [Coercion Implementation](reports/report-coercion-impl.md)
 - [Interpreter Ownership](reports/report-interp2-impl.md)
-- [Old REPL Engine](reports/report-old-repl-engine.md)
 - [Stdlib Blockers](reports/report-stdlib-blockers.md)
 - [Primary vs Full Expression Parsing](report-expr-primary.md)
 - [Datalog-Style Programming with Atoms/Terms/Enums](report-datalog.md)
