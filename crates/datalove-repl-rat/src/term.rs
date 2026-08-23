@@ -1,5 +1,4 @@
-//! Crossterm Ratatui REPL.
-
+//! Terminal frontend: owns the terminal, the event loop, and the key bindings.
 
 use rmx::prelude::*;
 
@@ -15,6 +14,8 @@ use ratatui::{
 };
 use std::io;
 use std::fs::File;
+
+use crate::{RatatuiApp, ReplExecutor, ThreadedExecutor};
 
 const ENGINE_UPDATES_MAX_LATENCY_MS: u64 = 10;
 
@@ -70,25 +71,25 @@ pub fn run() -> AnyResult<()> {
     let mut terminal = Terminal::new(backend)?;
 
     // Create app and run it, passing the stderr log path.
-    let executor = datalove_repl_rat::ThreadedExecutor::spawn();
-    let mut app = datalove_repl_rat::RatatuiApp::with_stderr_log(executor, stderr_log_path);
+    let executor = ThreadedExecutor::spawn();
+    let mut app = RatatuiApp::with_stderr_log(executor, stderr_log_path);
     run_app(&mut terminal, &mut app)
 }
 
 /// Run the application loop.
 fn run_app<B, E>(
     terminal: &mut Terminal<B>,
-    app: &mut datalove_repl_rat::RatatuiApp<E>,
+    app: &mut RatatuiApp<E>,
 ) -> AnyResult<()>
 where
     B: ratatui::backend::Backend,
-    E: datalove_repl_rat::ReplExecutor,
+    E: ReplExecutor,
 {
     loop {
         // Poll for worker results before drawing.
         app.poll_results();
 
-        terminal.draw(|f| datalove_repl_rat::ui(f, app))?;
+        terminal.draw(|f| crate::ui(f, app))?;
 
         if app.should_exit() {
             break;
@@ -106,8 +107,8 @@ where
 }
 
 /// Handle a key event.
-fn handle_key_event<E: datalove_repl_rat::ReplExecutor>(
-    app: &mut datalove_repl_rat::RatatuiApp<E>,
+fn handle_key_event<E: ReplExecutor>(
+    app: &mut RatatuiApp<E>,
     key: crossterm::event::KeyEvent,
 ) {
     // Only process press events, not repeat/release.

@@ -1311,7 +1311,7 @@ dependencies = [
  "datalove-diagnostic",
  "datalove-exampletest",
  "datalove-repl",
- "datalove-repl-term",
+ "datalove-repl-rat",
  "datalove-rt",
  "datalove-worldgen",
  "megaspace-pipeliner",
@@ -1665,20 +1665,10 @@ version = "0.1.0"
 dependencies = [
  "crossterm",
  "datalove-repl",
- "ratatui",
- "rustmax",
- "tui-textarea",
-]
-
-[[package]]
-name = "datalove-repl-term"
-version = "0.1.0"
-dependencies = [
- "crossterm",
- "datalove-repl-rat",
  "libc",
  "ratatui",
  "rustmax",
+ "tui-textarea",
 ]
 
 [[package]]

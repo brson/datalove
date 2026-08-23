@@ -1,4 +1,4 @@
-//! The Ratatui REPL application.
+//! The Ratatui REPL application and the terminal that runs it.
 
 
 use rmx::prelude::*;
@@ -8,6 +8,7 @@ pub use repl::app::{ReplApp, ReplExecutor, UiAction, HistoryEntry, EntryStatus};
 pub use repl::ThreadedExecutor;
 
 mod render;
+mod term;
 
 use tui_textarea::TextArea;
 
@@ -135,3 +136,6 @@ impl<E: ReplExecutor> RatatuiApp<E> {
 
 /// Re-export the UI rendering function from the render module.
 pub use render::ui;
+
+/// Re-export the terminal entry point.
+pub use term::run;

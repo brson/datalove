@@ -376,7 +376,7 @@ impl ReplCommand {
             let db = datalove_datafun::Database::default();
             datalove_repl::Engine::run_script(&db, script_path)
         } else {
-            datalove_repl_term::run()
+            datalove_repl_rat::run()
         }
     }
 }
