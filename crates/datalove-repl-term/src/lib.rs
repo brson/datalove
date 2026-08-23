@@ -70,7 +70,8 @@ pub fn run() -> AnyResult<()> {
     let mut terminal = Terminal::new(backend)?;
 
     // Create app and run it, passing the stderr log path.
-    let mut app = datalove_repl_rat::RatatuiApp::<datalove_repl_rat::ThreadedExecutor>::new_with_stderr_log(stderr_log_path);
+    let executor = datalove_repl_rat::ThreadedExecutor::spawn();
+    let mut app = datalove_repl_rat::RatatuiApp::with_stderr_log(executor, stderr_log_path);
     run_app(&mut terminal, &mut app)
 }
 

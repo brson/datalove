@@ -26,15 +26,14 @@ pub struct ThreadedExecutor {
     worker_rx: Receiver<WorkerResponse>,
 }
 
-impl ReplExecutor for ThreadedExecutor {
-    fn new() -> Self {
+impl ThreadedExecutor {
+    /// Spawn the worker thread, which constructs the engine it owns.
+    pub fn spawn() -> Self {
         let (main_tx, worker_rx) = channel();
         let (worker_tx, main_rx) = channel();
 
-        // Spawn worker thread.
         thread::spawn(move || {
-            // Construct Engine in worker thread.
-            // Database is created here and lives for the lifetime of the thread.
+            // The database is created here and lives for the thread's lifetime.
             let db = datafun::Database::default();
             let engine = Engine::new(&db).X();
             worker_thread(engine, worker_rx, worker_tx);
@@ -45,7 +44,9 @@ impl ReplExecutor for ThreadedExecutor {
             worker_rx: main_rx,
         }
     }
+}
 
+impl ReplExecutor for ThreadedExecutor {
     fn submit_parse(&mut self, id: u64, input: Input) {
         let _ = self.worker_tx.send(WorkerRequest::Parse { id, input });
     }

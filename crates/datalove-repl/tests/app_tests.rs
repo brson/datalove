@@ -14,7 +14,7 @@ use repl::app::{EntryStatus, ReplApp, ReplExecutor, WorkerResponse};
 /// Submissions the app made, and responses waiting to be delivered to it.
 #[derive(Default)]
 struct MockState {
-    parses: Vec<u64>,
+    parses: Vec<(u64, repl::Input)>,
     evals: Vec<u64>,
     responses: VecDeque<WorkerResponse>,
 }
@@ -26,12 +26,8 @@ struct MockExecutor {
 }
 
 impl ReplExecutor for MockExecutor {
-    fn new() -> Self {
-        Self::default()
-    }
-
-    fn submit_parse(&mut self, id: u64, _input: repl::Input) {
-        self.state.borrow_mut().parses.push(id);
+    fn submit_parse(&mut self, id: u64, input: repl::Input) {
+        self.state.borrow_mut().parses.push((id, input));
     }
 
     fn submit_eval(&mut self, id: u64, _command: repl::Command) {
@@ -50,6 +46,18 @@ impl MockExecutor {
 
     fn evals(&self) -> Vec<u64> {
         self.state.borrow().evals.clone()
+    }
+
+    fn parse_count(&self) -> usize {
+        self.state.borrow().parses.len()
+    }
+
+    /// The input of the nth parse submission, rendered for comparison.
+    fn parse_input(&self, index: usize) -> (&'static str, String) {
+        match &self.state.borrow().parses[index].1 {
+            repl::Input::Input(text) => ("Input", text.clone()),
+            repl::Input::Multiline(text) => ("Multiline", text.clone()),
+        }
     }
 }
 
@@ -124,6 +132,83 @@ fn read_multiline_loads_every_line_it_was_given() {
         }
         other => panic!("expected SetMultilineInput, got {:?}", other),
     }
+}
+
+/// The submission after a ReadMultiline is sent as multiline input, and the
+/// mode ends when the engine answers.
+#[test]
+fn multiline_mode_spans_one_submission() {
+    let executor = MockExecutor::default();
+    let mut app = ReplApp::with_executor(executor.clone());
+
+    app.submit_input("fun f(): int".to_string());
+    executor.queue(WorkerResponse::ParseResult {
+        id: 0,
+        parse: repl::InputParse::ReadMultiline("fun f(): int".to_string()),
+    });
+    app.poll_results();
+    assert!(app.multiline_mode());
+    assert_eq!(executor.parse_input(0), ("Input", "fun f(): int".to_string()));
+
+    // The continued fragment goes to the engine as one multiline input.
+    app.submit_input("fun f(): int\n  ret 1\nend fun".to_string());
+    assert!(!app.multiline_mode());
+    assert_eq!(
+        executor.parse_input(1),
+        ("Multiline", "fun f(): int\n  ret 1\nend fun".to_string())
+    );
+
+    executor.queue(parsed_statement(1, "fun f(): int\n  ret 1\nend fun"));
+    app.poll_results();
+    executor.queue(WorkerResponse::EvalResult {
+        id: 1,
+        eval: repl::Eval::Success(vec![repl::EvalBinding::Function {
+            name: "f".to_string(),
+        }]),
+        environment: vec![("f".to_string(), "function".to_string(), "-".to_string())],
+    });
+    app.poll_results();
+
+    assert!(matches!(app.history()[1].status, EntryStatus::Success));
+    assert_eq!(app.environment().len(), 1);
+}
+
+/// Empty input is not a request; it never reaches the engine.
+#[test]
+fn empty_input_is_not_submitted() {
+    let executor = MockExecutor::default();
+    let mut app = ReplApp::with_executor(executor.clone());
+
+    let action = app.submit_input(String::new());
+
+    assert!(matches!(action, repl::app::UiAction::None));
+    assert_eq!(executor.parse_count(), 0);
+    assert!(app.history().is_empty());
+}
+
+/// Commands the engine hands back for the UI to interpret take effect.
+#[test]
+fn exit_command_asks_the_app_to_exit() {
+    let executor = MockExecutor::default();
+    let mut app = ReplApp::with_executor(executor.clone());
+
+    app.submit_input("/exit".to_string());
+    executor.queue(WorkerResponse::ParseResult {
+        id: 0,
+        parse: repl::InputParse::Command(repl::Command::ReplCommand(repl::ReplCommand::Exit)),
+    });
+    app.poll_results();
+    assert!(!app.should_exit());
+
+    executor.queue(WorkerResponse::EvalResult {
+        id: 0,
+        eval: repl::Eval::CallerInterpret(repl::ReplCommand::Exit),
+        environment: Vec::new(),
+    });
+    app.poll_results();
+
+    assert!(app.should_exit());
+    assert!(matches!(app.history()[0].status, EntryStatus::Success));
 }
 
 /// A crash reset clears the history, so responses for requests that were in

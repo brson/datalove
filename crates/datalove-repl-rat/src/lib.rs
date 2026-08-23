@@ -20,17 +20,17 @@ pub struct RatatuiApp<E: ReplExecutor> {
 }
 
 impl<E: ReplExecutor> RatatuiApp<E> {
-    /// Create a new Ratatui app.
-    pub fn new() -> Self {
+    /// Create a Ratatui app around an executor.
+    pub fn with_executor(executor: E) -> Self {
         Self {
-            repl: ReplApp::new(),
+            repl: ReplApp::with_executor(executor),
             textarea: TextArea::default(),
         }
     }
 
-    pub fn new_with_stderr_log(stderr_log_path: std::path::PathBuf) -> Self {
+    pub fn with_stderr_log(executor: E, stderr_log_path: std::path::PathBuf) -> Self {
         Self {
-            repl: ReplApp::with_stderr_log(stderr_log_path),
+            repl: ReplApp::with_stderr_log(executor, stderr_log_path),
             textarea: TextArea::default(),
         }
     }

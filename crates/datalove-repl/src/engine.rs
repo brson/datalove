@@ -13,22 +13,12 @@ pub struct Engine<'db> {
     /// The system library the session compiles against, kept so the engine can
     /// rebuild its compiler and executor after a crash reset.
     workspace: WorkspaceDescriptor,
-    history: ReplHistory,
     /// Script compiler for incremental compilation.
     compiler: ScriptCompiler<'db>,
     /// Script executor for running compiled units.
     executor: ScriptExecutor,
     /// Loaded native rider libraries, which must outlive the executor.
     riders: Vec<LoadedRider>,
-}
-
-struct ReplHistory {
-    entries: Vec<HistoryEntry>,
-}
-
-struct HistoryEntry {
-    _command: Command,
-    _last_eval: Eval,
 }
 
 /// A compiled session: everything the engine rebuilds when it resets.
@@ -60,21 +50,6 @@ impl<'db> Session<'db> {
     }
 }
 
-impl ReplHistory {
-    fn new() -> Self {
-        ReplHistory {
-            entries: Vec::new(),
-        }
-    }
-
-    fn add_non_script_entry(&mut self, command: Command, eval: Eval) {
-        self.entries.push(HistoryEntry {
-            _command: command,
-            _last_eval: eval,
-        });
-    }
-}
-
 impl<'db> Engine<'db> {
     pub fn new(db: &'db datafun::Database) -> AnyResult<Engine<'db>> {
         let workspace = rmx::futures::executor::block_on(WorkspaceDescriptor::load_default_sys())
@@ -84,7 +59,6 @@ impl<'db> Engine<'db> {
         Ok(Engine {
             db,
             workspace,
-            history: ReplHistory::new(),
             compiler: session.compiler,
             executor: session.executor,
             riders: session.riders,
@@ -92,7 +66,6 @@ impl<'db> Engine<'db> {
     }
 
     fn reset(&mut self) {
-        self.history = ReplHistory::new();
         // Cleanup the current executor.
         self.executor.destroy_live_values();
         // The system library compiled at startup, so it compiles again here.
@@ -177,19 +150,9 @@ impl<'db> Engine<'db> {
 
     fn eval_impl(&mut self, command: Command) -> Eval {
         match command {
-            Command::ReplCommand(ref repl_command) => {
-                let eval = self.eval_repl_command(repl_command.C());
-                self.history.add_non_script_entry(command, eval.C());
-                eval
-            }
-            Command::ScriptStatement(source) => {
-                self.eval_script_statement(source)
-            }
-            Command::Expression(ref source) => {
-                let eval = self.eval_expression(source.C());
-                self.history.add_non_script_entry(command, eval.C());
-                eval
-            }
+            Command::ReplCommand(repl_command) => self.eval_repl_command(repl_command),
+            Command::ScriptStatement(source) => self.eval_script_statement(source),
+            Command::Expression(source) => self.eval_expression(source),
         }
     }
 

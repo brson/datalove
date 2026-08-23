@@ -83,11 +83,7 @@ pub enum WorkerResponse {
 ///
 /// Implementations can be synchronous or asynchronous,
 /// single-threaded or multi-threaded.
-/// Each executor constructs its own Engine internally.
 pub trait ReplExecutor {
-    /// Create a new executor (constructs its own Engine internally).
-    fn new() -> Self where Self: Sized;
-
     /// Submit a parse request.
     fn submit_parse(&mut self, id: u64, input: repl::Input);
 
@@ -124,18 +120,13 @@ pub struct ReplApp<E: ReplExecutor> {
 }
 
 impl<E: ReplExecutor> ReplApp<E> {
-    /// Create a new core REPL app.
-    pub fn new() -> Self {
-        Self::with_executor(E::new())
-    }
-
-    pub fn with_stderr_log(stderr_log_path: std::path::PathBuf) -> Self {
-        let mut app = Self::with_executor(E::new());
+    pub fn with_stderr_log(executor: E, stderr_log_path: std::path::PathBuf) -> Self {
+        let mut app = Self::with_executor(executor);
         app.stderr_log_path = Some(stderr_log_path);
         app
     }
 
-    /// Create a core REPL app around an already-constructed executor.
+    /// Create a core REPL app around an executor.
     pub fn with_executor(executor: E) -> Self {
         Self {
             executor,
