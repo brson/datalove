@@ -1,6 +1,7 @@
 //! REPL engine for evaluating Datalove expressions and statements.
 
 use rmx::prelude::*;
+use serde::Serialize;
 
 use crate::{Command, ReplCommand, Eval, EvalBinding, EvalExpr, InputParse, Input};
 use datalove_datafun as datafun;
@@ -19,6 +20,23 @@ pub struct Engine<'db> {
     executor: ScriptExecutor,
     /// Loaded native rider libraries, which must outlive the executor.
     riders: Vec<LoadedRider>,
+}
+
+/// One input's parse and eval, and the environment it left behind.
+#[derive(Debug, Serialize)]
+pub struct InputResult {
+    pub input: String,
+    pub parse: InputParse,
+    pub eval: Option<Eval>,
+    pub environment: Vec<EnvBinding>,
+}
+
+/// An environment binding as reported after an input.
+#[derive(Debug, Serialize)]
+pub struct EnvBinding {
+    pub name: String,
+    pub ty: String,
+    pub value: String,
 }
 
 /// A compiled session: everything the engine rebuilds when it resets.
@@ -290,26 +308,51 @@ impl<'db> Engine<'db> {
             .collect()
     }
 
-    /// Execute a script file line by line and output JSON results.
+    /// Evaluate a script of inputs, one result per input.
+    ///
+    /// Inputs are separated by a line holding only `---`. An input spanning
+    /// several lines is submitted the way the UI submits a multiline entry, so
+    /// definitions that span lines are evaluated rather than left waiting for
+    /// more input.
+    pub fn run_source(&mut self, source: &str) -> Vec<InputResult> {
+        let mut results = Vec::new();
+
+        for section in source.split("\n---\n") {
+            let input = section.trim();
+            if input.is_empty() {
+                continue;
+            }
+
+            let repl_input = if input.contains('\n') {
+                Input::Multiline(input.S())
+            } else {
+                Input::Input(input.S())
+            };
+
+            let parse = self.parse_input(repl_input);
+            let eval = match &parse {
+                InputParse::Command(command) => Some(self.eval(command.C())),
+                _ => None,
+            };
+            let environment = self.get_environment()
+                .into_iter()
+                .map(|(name, ty, value)| EnvBinding { name, ty, value })
+                .collect();
+
+            results.push(InputResult { input: input.S(), parse, eval, environment });
+        }
+
+        results
+    }
+
+    /// Execute a script file and print one JSON result per input.
     pub fn run_script(db: &'db datafun::Database, script_path: &std::path::Path) -> AnyResult<()> {
         let mut engine = Self::new(db)?;
         let contents = std::fs::read_to_string(script_path)
             .context("failed to read script file")?;
 
-        for line in contents.lines() {
-            let parse_result = engine.parse_input(Input::Input(line.S()));
-            let eval_result = match &parse_result {
-                InputParse::Command(cmd) => Some(engine.eval(cmd.C())),
-                _ => None,
-            };
-
-            let output = rmx::serde_json::json!({
-                "input": line,
-                "parse": parse_result,
-                "eval": eval_result,
-            });
-
-            println!("{}", rmx::serde_json::to_string(&output)?);
+        for result in engine.run_source(&contents) {
+            println!("{}", rmx::serde_json::to_string(&result)?);
         }
 
         // Engine's Drop impl will call destroy_all().
