@@ -23,6 +23,7 @@ use datalove_datafun::{
 use datalove_datafun_tycheck::{typecheck_module_graph, AutoAdaptMode};
 use datalove_datafun_resolve::{resolve_all_names, resolve_all_exports, build_all_function_ast_maps, ParallelMode};
 use datalove_datafun_pkg::package_load_worldfile::{WorldfileSection, parse_worldfile_sections};
+use datalove_datafun::pipeline::{WorkspaceDescriptor, CompilerOptions};
 use datalove_datafun_compiler::tracked_ownership_analysis::analyze_module_graph_with_mode;
 use datalove_datafun_compiler::tracked_script_ownership::analyze_script_fragment_tracked;
 
@@ -204,6 +205,92 @@ fn typecheck_sections_with_mode(
     (all_errors, all_diagnostics)
 }
 
+/// Describe why a unit produced no IR.
+fn compile_failure(unit: &datalove_datafun::pipeline::ScriptCompilationResult) -> String {
+    use datalove_datafun::pipeline::{TypecheckResult, OwnershipResult, LoweringResult};
+
+    match &unit.typecheck {
+        TypecheckResult::ParseError { errors } => return format!("parse: {}", errors.join("; ")),
+        TypecheckResult::Error { errors } => return format!("typecheck: {}", errors.join("; ")),
+        TypecheckResult::Success | TypecheckResult::Skipped => {}
+    }
+    if let OwnershipResult::Error { message } = &unit.ownership {
+        return format!("ownership: {}", message);
+    }
+    if let LoweringResult::Error { message } = &unit.lowering {
+        return format!("lowering: {}", message);
+    }
+    "no ir and no error".S()
+}
+
+/// Run a worldfile's script sections and report what they computed.
+///
+/// Auto-adapt is meant to insert the `@` the programmer omitted, so checking
+/// that the errors went away says nothing on its own: the adapted program has
+/// to produce the values it would have produced with `@` written by hand.
+/// Fixtures with no script section have nothing to run.
+fn execute_sections_with_mode(
+    sections: &[WorldfileSection],
+    mode: AutoAdaptMode,
+) -> rmx::serde_json::Value {
+    let db = Database::default();
+    let descriptor = WorkspaceDescriptor::from_worldfile_sections(sections, CompilerOptions::default());
+    let mut pipeline = descriptor.to_pipeline(&db);
+    let compiled = pipeline.compile_fresh(&db);
+
+    if compiled.has_errors() {
+        return json!({ "status": "modules did not compile" });
+    }
+
+    let (Some(mut compiler), Some(mut executor)) = (
+        compiled.script_compiler_default(&db),
+        compiled.script_executor(datalove_datafun::DebugOutputMode::Disabled, None),
+    ) else {
+        return json!({ "status": "modules did not compile" });
+    };
+    compiler.set_auto_adapt_mode(mode);
+
+    let mut outputs = Vec::new();
+    for section in sections {
+        let (kind, compiled_unit) = match section {
+            WorldfileSection::ScriptFragment { source } => {
+                ("fragment", compiler.compile_fragment(source))
+            }
+            WorldfileSection::ScriptExpr { source } => {
+                ("expr", compiler.compile_expr(source))
+            }
+            _ => continue,
+        };
+
+        let output = match &compiled_unit.ir_unit {
+            Some(ir_unit) if kind == "expr" => executor.execute_expr(ir_unit).1,
+            Some(ir_unit) => executor.execute_fragment(ir_unit),
+            // Auto-adapt can leave a unit that passed analysis with no IR,
+            // so say which phase stopped it.
+            None => format!("did not compile: {}", compile_failure(&compiled_unit)),
+        };
+        outputs.push(json!({ "kind": kind, "output": output }));
+    }
+
+    let environment: Vec<_> = executor.get_environment()
+        .into_iter()
+        .map(|(name, kind, ty, value)| json!({
+            "name": name,
+            "kind": kind,
+            "ty": ty,
+            "value": value,
+        }))
+        .collect();
+
+    executor.destroy_live_values();
+
+    json!({
+        "status": if outputs.is_empty() { "nothing to run" } else { "ran" },
+        "outputs": outputs,
+        "environment": environment,
+    })
+}
+
 /// Analyze a worldfile in both modes and return combined output.
 fn analyze_both_modes(path: &Path) -> Result<String, String> {
     let source = std::fs::read_to_string(path).X();
@@ -234,9 +321,13 @@ fn analyze_both_modes(path: &Path) -> Result<String, String> {
         "errors": adapt_errors.iter().map(|e| json!({ "error": e })).collect::<Vec<_>>(),
     });
 
+    // Run what auto-adapt accepted, to see whether it computes the right thing.
+    let adapt_execution = execute_sections_with_mode(&parsed.sections, AutoAdaptMode::Enabled);
+
     let combined = json!({
         "normal_mode": normal_result,
         "auto_adapt_mode": adapt_result,
+        "auto_adapt_execution": adapt_execution,
     });
 
     Ok(rmx::serde_json::to_string_pretty(&combined).X())

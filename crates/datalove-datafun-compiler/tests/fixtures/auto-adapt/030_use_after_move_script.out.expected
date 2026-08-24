@@ -1,4 +1,39 @@
 {
+  "auto_adapt_execution": {
+    "environment": [
+      {
+        "kind": "let",
+        "name": "a",
+        "ty": "int",
+        "value": "42"
+      },
+      {
+        "kind": "let",
+        "name": "b",
+        "ty": "string",
+        "value": "<moved>"
+      },
+      {
+        "kind": "fun",
+        "name": "consume",
+        "ty": "function",
+        "value": "-"
+      },
+      {
+        "kind": "let",
+        "name": "msg",
+        "ty": "string",
+        "value": "<moved>"
+      }
+    ],
+    "outputs": [
+      {
+        "kind": "fragment",
+        "output": "(fragment executed)"
+      }
+    ],
+    "status": "ran"
+  },
   "auto_adapt_mode": {
     "diagnostic_count": 0,
     "diagnostics": [],

@@ -1,4 +1,14 @@
 {
+  "auto_adapt_execution": {
+    "environment": [],
+    "outputs": [
+      {
+        "kind": "fragment",
+        "output": "did not compile: typecheck: TypeMismatch { expected: \"i64\", actual: \"u32\" }"
+      }
+    ],
+    "status": "ran"
+  },
   "auto_adapt_mode": {
     "diagnostic_count": 0,
     "diagnostics": [],

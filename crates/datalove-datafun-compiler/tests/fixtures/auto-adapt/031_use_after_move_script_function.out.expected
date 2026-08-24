@@ -1,4 +1,27 @@
 {
+  "auto_adapt_execution": {
+    "environment": [
+      {
+        "kind": "fun",
+        "name": "consume",
+        "ty": "function",
+        "value": "-"
+      },
+      {
+        "kind": "fun",
+        "name": "test_move",
+        "ty": "function",
+        "value": "-"
+      }
+    ],
+    "outputs": [
+      {
+        "kind": "fragment",
+        "output": "(fragment executed)"
+      }
+    ],
+    "status": "ran"
+  },
   "auto_adapt_mode": {
     "diagnostic_count": 0,
     "diagnostics": [],

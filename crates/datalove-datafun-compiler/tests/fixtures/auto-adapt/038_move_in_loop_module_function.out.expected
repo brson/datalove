@@ -1,4 +1,7 @@
 {
+  "auto_adapt_execution": {
+    "status": "modules did not compile"
+  },
   "auto_adapt_mode": {
     "diagnostic_count": 0,
     "diagnostics": [],
