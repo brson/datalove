@@ -1,0 +1,132 @@
+[
+  {
+    "input": "var v = [1, 2]",
+    "parse": {
+      "Command": {
+        "ScriptStatement": "var v = [1, 2]"
+      }
+    },
+    "eval": {
+      "Success": [
+        {
+          "Slot": {
+            "name": "v",
+            "ty": "list<int>",
+            "value": "[1, 2]"
+          }
+        }
+      ]
+    },
+    "environment": [
+      {
+        "name": "v",
+        "ty": "list<int>",
+        "value": "[1, 2]"
+      }
+    ]
+  },
+  {
+    "input": "let x = v",
+    "parse": {
+      "Command": {
+        "ScriptStatement": "let x = v"
+      }
+    },
+    "eval": {
+      "Success": [
+        {
+          "Value": {
+            "name": "x",
+            "ty": "list<int>",
+            "value": "[1, 2]"
+          }
+        }
+      ]
+    },
+    "environment": [
+      {
+        "name": "v",
+        "ty": "list<int>",
+        "value": "<moved>"
+      },
+      {
+        "name": "x",
+        "ty": "list<int>",
+        "value": "[1, 2]"
+      }
+    ]
+  },
+  {
+    "input": "set v = [3]",
+    "parse": {
+      "Command": {
+        "ScriptStatement": "set v = [3]"
+      }
+    },
+    "eval": "Nothing",
+    "environment": [
+      {
+        "name": "v",
+        "ty": "list<int>",
+        "value": "[3]"
+      },
+      {
+        "name": "x",
+        "ty": "list<int>",
+        "value": "[1, 2]"
+      }
+    ]
+  },
+  {
+    "input": "v",
+    "parse": {
+      "Command": {
+        "Expression": "v"
+      }
+    },
+    "eval": {
+      "SuccessExpr": {
+        "ty": "list<int>",
+        "value": "[3]"
+      }
+    },
+    "environment": [
+      {
+        "name": "v",
+        "ty": "list<int>",
+        "value": "<moved>"
+      },
+      {
+        "name": "x",
+        "ty": "list<int>",
+        "value": "[1, 2]"
+      }
+    ]
+  },
+  {
+    "input": "x",
+    "parse": {
+      "Command": {
+        "Expression": "x"
+      }
+    },
+    "eval": {
+      "SuccessExpr": {
+        "ty": "list<int>",
+        "value": "[1, 2]"
+      }
+    },
+    "environment": [
+      {
+        "name": "v",
+        "ty": "list<int>",
+        "value": "<moved>"
+      },
+      {
+        "name": "x",
+        "ty": "list<int>",
+        "value": "<moved>"
+      }
+    ]
+  }
+]

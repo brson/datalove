@@ -419,7 +419,10 @@ impl FrameStore {
 
     /// Write a value to a slot in a previous unit.
     ///
-    /// If the slot already contains a value, destroys it before writing.
+    /// If the slot still owns a value, destroys it before writing. The write
+    /// re-initializes the slot, so a slot that had been moved out of is
+    /// readable again.
+    ///
     /// Panics if unit not found (compiler bug).
     pub fn write_external_slot(
         &mut self,
@@ -428,17 +431,23 @@ impl FrameStore {
         slot: SlotId,
         value: &Value,
     ) {
+        // A slot that was moved out of no longer owns what it holds, even
+        // though its frame still records it as initialized.
+        let was_moved = self.moved_slots.remove(&(unit, slot));
+
         let frame = self.frames.get_mut(unit as usize)
             .unwrap_or_else(|| panic!("external unit {} not found", unit));
 
-        // Destroy old value if slot was already initialized.
-        if let Some(old_val) = frame.slot(slot) {
-            unsafe {
-                datalove_rt::c::dtlv_rti_any_destroy_local(
-                    rt_handle,
-                    old_val.ptr,
-                    old_val.tydesc,
-                );
+        // Destroy the old value if the slot still owns one.
+        if !was_moved {
+            if let Some(old_val) = frame.slot(slot) {
+                unsafe {
+                    datalove_rt::c::dtlv_rti_any_destroy_local(
+                        rt_handle,
+                        old_val.ptr,
+                        old_val.tydesc,
+                    );
+                }
             }
         }
 
