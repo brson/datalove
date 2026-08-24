@@ -3,7 +3,6 @@
 //! A `Frame` holds all values and slots for a single function/unit execution.
 //! `FrameStore` accumulates frames from script units for cross-unit value access.
 
-use std::collections::HashSet;
 use datalove_rt::rust::AlignedBuffer;
 use datalove_rtdt::TyDesc;
 use datalove_datafun_ir::{CodeUnitContext, IrCodeUnit, ValueId, SlotId, ParamId};
@@ -96,6 +95,16 @@ impl Frame {
             if idx < initialized.len() {
                 initialized[idx] = false;
             }
+        }
+    }
+
+    /// Check if a value is initialized.
+    ///
+    /// Always true for function frames, which don't track value initialization.
+    pub fn is_value_initialized(&self, id: ValueId) -> bool {
+        match &self.value_initialized {
+            Some(initialized) => initialized[id.0 as usize],
+            None => true,
         }
     }
 
@@ -301,8 +310,8 @@ impl Frame {
 
     /// Destroy unit_end bindings (values/slots) in this frame.
     ///
-    /// Called during REPL cleanup to free persistent bindings.
-    /// `moved_values`/`moved_slots` contain IDs that have been moved out and should be skipped.
+    /// Called during REPL cleanup to free persistent bindings. Bindings that
+    /// were moved out of are no longer initialized, so they are skipped.
     ///
     /// Only valid for script frames (panics if value_initialized is None).
     pub fn destroy_unit_end_bindings(
@@ -310,8 +319,6 @@ impl Frame {
         rt_handle: datalove_rt::c::LocalRtHandle,
         unit_end_values: &[ValueId],
         unit_end_slots: &[SlotId],
-        moved_values: &HashSet<ValueId>,
-        moved_slots: &HashSet<SlotId>,
     ) {
         let initialized = self.value_initialized.as_mut()
             .expect("destroy_unit_end_bindings called on function frame");
@@ -319,8 +326,7 @@ impl Frame {
         // Destroy unit_end values (persistent let bindings).
         for &vid in unit_end_values {
             let idx = vid.0 as usize;
-            // Skip if not initialized or moved out.
-            if !initialized[idx] || moved_values.contains(&vid) {
+            if !initialized[idx] {
                 continue;
             }
             let offset = self.layout.value_offsets[idx] as usize;
@@ -335,8 +341,7 @@ impl Frame {
         // Destroy unit_end slots (persistent var bindings).
         for &sid in unit_end_slots {
             let idx = sid.0 as usize;
-            // Skip if not initialized or moved out.
-            if idx >= self.slot_initialized.len() || !self.slot_initialized[idx] || moved_slots.contains(&sid) {
+            if idx >= self.slot_initialized.len() || !self.slot_initialized[idx] {
                 continue;
             }
             let offset = self.layout.slot_offsets[idx] as usize;
@@ -353,7 +358,8 @@ impl Frame {
 /// Mutable frame storage for script unit execution.
 ///
 /// Stores frames from previously executed units for external value/slot access.
-/// Tracks which values/slots have been moved out for post-execution inspection.
+/// A binding that is moved out of is marked uninitialized in the frame that
+/// owns it, which is what makes it unreadable afterwards.
 pub struct FrameStore {
     /// Frames from executed units, indexed by unit number.
     frames: Vec<Frame>,
@@ -361,10 +367,6 @@ pub struct FrameStore {
     unit_end_values: Vec<Vec<ValueId>>,
     /// Unit-end slots for each unit (persistent bindings to destroy).
     unit_end_slots: Vec<Vec<SlotId>>,
-    /// Values that have been moved out, keyed by (unit, value_id).
-    moved_values: HashSet<(u32, ValueId)>,
-    /// Slots that have been moved out, keyed by (unit, slot_id).
-    moved_slots: HashSet<(u32, SlotId)>,
 }
 
 impl FrameStore {
@@ -374,8 +376,6 @@ impl FrameStore {
             frames: Vec::new(),
             unit_end_values: Vec::new(),
             unit_end_slots: Vec::new(),
-            moved_values: HashSet::new(),
-            moved_slots: HashSet::new(),
         }
     }
 
@@ -393,35 +393,28 @@ impl FrameStore {
 
     /// Read a value from a previous unit.
     ///
-    /// Returns None if value has been moved out.
+    /// Returns None if the value has been moved out.
     /// Panics if unit not found (compiler bug).
     pub fn external_value(&self, unit: u32, value: ValueId) -> Option<Value> {
-        if self.moved_values.contains(&(unit, value)) {
+        let frame = self.frame(unit);
+        if !frame.is_value_initialized(value) {
             return None;
         }
-        let frame = self.frames.get(unit as usize)
-            .unwrap_or_else(|| panic!("external unit {} not found", unit));
         Some(frame.value(value))
     }
 
     /// Read a slot from a previous unit.
     ///
-    /// Returns None if slot has been moved out or not initialized.
+    /// Returns None if the slot has been moved out or was never written.
     /// Panics if unit not found (compiler bug).
     pub fn external_slot(&self, unit: u32, slot: SlotId) -> Option<Value> {
-        if self.moved_slots.contains(&(unit, slot)) {
-            return None;
-        }
-        let frame = self.frames.get(unit as usize)
-            .unwrap_or_else(|| panic!("external unit {} not found", unit));
-        frame.slot(slot)
+        self.frame(unit).slot(slot)
     }
 
     /// Write a value to a slot in a previous unit.
     ///
-    /// If the slot still owns a value, destroys it before writing. The write
-    /// re-initializes the slot, so a slot that had been moved out of is
-    /// readable again.
+    /// Destroys whatever the slot still owns before writing, and leaves it
+    /// initialized, so a slot that had been moved out of is readable again.
     ///
     /// Panics if unit not found (compiler bug).
     pub fn write_external_slot(
@@ -431,23 +424,16 @@ impl FrameStore {
         slot: SlotId,
         value: &Value,
     ) {
-        // A slot that was moved out of no longer owns what it holds, even
-        // though its frame still records it as initialized.
-        let was_moved = self.moved_slots.remove(&(unit, slot));
+        let frame = self.frame_mut(unit);
 
-        let frame = self.frames.get_mut(unit as usize)
-            .unwrap_or_else(|| panic!("external unit {} not found", unit));
-
-        // Destroy the old value if the slot still owns one.
-        if !was_moved {
-            if let Some(old_val) = frame.slot(slot) {
-                unsafe {
-                    datalove_rt::c::dtlv_rti_any_destroy_local(
-                        rt_handle,
-                        old_val.ptr,
-                        old_val.tydesc,
-                    );
-                }
+        // A slot that was moved out of is uninitialized and owns nothing.
+        if let Some(old_val) = frame.slot(slot) {
+            unsafe {
+                datalove_rt::c::dtlv_rti_any_destroy_local(
+                    rt_handle,
+                    old_val.ptr,
+                    old_val.tydesc,
+                );
             }
         }
 
@@ -460,42 +446,39 @@ impl FrameStore {
 
     /// Mark an external value as moved out.
     pub fn mark_external_value_dropped(&mut self, unit: u32, value: ValueId) {
-        self.moved_values.insert((unit, value));
+        self.frame_mut(unit).mark_value_dropped(value);
     }
 
     /// Mark an external slot as moved out.
     pub fn mark_external_slot_dropped(&mut self, unit: u32, slot: SlotId) {
-        self.moved_slots.insert((unit, slot));
+        self.frame_mut(unit).mark_slot_dropped(slot);
     }
 
     /// Check if an external slot is initialized (not moved).
     pub fn is_external_slot_initialized(&self, unit: u32, slot: SlotId) -> bool {
-        let frame = match self.frames.get(unit as usize) {
-            Some(f) => f,
-            None => return false,
-        };
-        frame.is_slot_initialized(slot) && !self.moved_slots.contains(&(unit, slot))
+        self.frame(unit).is_slot_initialized(slot)
     }
 
     /// Destroy live bindings in all frames.
     pub fn destroy_live_values(&mut self, rt_handle: datalove_rt::c::LocalRtHandle) {
         for i in 0..self.frames.len() {
-            let unit = i as u32;
             let values = &self.unit_end_values[i];
             let slots = &self.unit_end_slots[i];
-            // Build sets of moved values/slots for this unit.
-            let moved_values_for_unit: HashSet<ValueId> = self.moved_values.iter()
-                .filter(|(u, _)| *u == unit)
-                .map(|(_, v)| *v)
-                .collect();
-            let moved_slots_for_unit: HashSet<SlotId> = self.moved_slots.iter()
-                .filter(|(u, _)| *u == unit)
-                .map(|(_, s)| *s)
-                .collect();
-            self.frames[i].destroy_unit_end_bindings(
-                rt_handle, values, slots, &moved_values_for_unit, &moved_slots_for_unit
-            );
+            self.frames[i].destroy_unit_end_bindings(rt_handle, values, slots);
         }
+    }
+
+    /// The frame of a previous unit.
+    ///
+    /// Panics if the unit is not in the store (compiler bug).
+    fn frame(&self, unit: u32) -> &Frame {
+        self.frames.get(unit as usize)
+            .unwrap_or_else(|| panic!("external unit {} not found", unit))
+    }
+
+    fn frame_mut(&mut self, unit: u32) -> &mut Frame {
+        self.frames.get_mut(unit as usize)
+            .unwrap_or_else(|| panic!("external unit {} not found", unit))
     }
 }
 
