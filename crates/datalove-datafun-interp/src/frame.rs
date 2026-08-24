@@ -391,6 +391,14 @@ impl FrameStore {
         self.unit_end_slots.push(unit_end_slots);
     }
 
+    /// How many units the store holds frames for.
+    ///
+    /// External operands index frames by unit, so this is also the index the
+    /// next unit to execute will be given.
+    pub fn unit_count(&self) -> usize {
+        self.frames.len()
+    }
+
     /// Read a value from a previous unit.
     ///
     /// Returns None if the value has been moved out.

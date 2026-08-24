@@ -203,7 +203,18 @@ impl ScriptExecutor {
     }
 
     /// Register bindings from an IR unit for future lookups.
+    ///
+    /// The unit index this assigns is the one external operands in later units
+    /// will use to index the frame store, so the two have to agree. They only
+    /// do while every unit that is registered goes on to execute: a unit that
+    /// errors out leaves no frame behind.
     fn register_bindings(&mut self, ir_unit: &IrCodeUnit) {
+        assert_eq!(
+            self.script_ctx.current_unit as usize,
+            self.env.frames.unit_count(),
+            "script unit index diverged from the frame store",
+        );
+
         let script_ctx = ir_unit.script_context()
             .expect("register_bindings requires a script code unit");
         let unit_index = self.script_ctx.current_unit;
