@@ -51,6 +51,7 @@ use datalove_datafun_ir::IrType;
 pub use datalove_datafun_sema::{
     StmtKey, BindingId, TrackingCategory, BindingInfo, AnalysisError,
     OwnershipRecoveryHint, format_analysis_errors, DropSchedule, FunctionAnalysis,
+    ExternalBinding, ExternalBindings, ExternalState,
 };
 
 // Re-export AutoAdaptMode for callers.
@@ -104,6 +105,11 @@ struct AnalysisCtx<'db> {
     name_to_binding: HashMap<String, BindingId>,
     /// Stack of scopes. Each scope records bindings created in it.
     scope_stack: Vec<ScopeFrame>,
+    /// Bindings earlier script units left behind, and their states.
+    ///
+    /// Consulted when a name is not a binding of this unit. Moves update the
+    /// state here so the unit after this one sees them.
+    externals: ExternalBindings,
     /// Detected errors.
     errors: Vec<AnalysisError>,
     /// Computed drop schedule.
@@ -143,6 +149,7 @@ impl<'db> AnalysisCtx<'db> {
         db: &'db dyn salsa::Database,
         expr_types: &'db [Option<IrType>],
         auto_adapt_mode: AutoAdaptMode,
+        externals: ExternalBindings,
     ) -> Self {
         Self {
             db,
@@ -152,10 +159,74 @@ impl<'db> AnalysisCtx<'db> {
             bindings: Vec::new(),
             name_to_binding: HashMap::new(),
             scope_stack: Vec::new(),
+            externals,
             errors: Vec::new(),
             schedule: DropSchedule::default(),
             auto_adapt_mode,
         }
+    }
+
+    /// Read a name that belongs to an earlier unit, reporting a use after move.
+    ///
+    /// Returns whether the name was an external binding at all.
+    fn use_external(&mut self, name: &str, local_index: u32, is_consumed: bool) -> bool {
+        let Some(binding) = self.externals.get(name) else {
+            return false;
+        };
+
+        if binding.state == ExternalState::Moved && !self.auto_adapt_mode.is_enabled() {
+            let recovery_hint = OwnershipRecoveryHint::InsertAdapt {
+                description: format!("clone `{}` at the earlier use", name),
+            };
+            self.errors.push(AnalysisError::UseAfterMoveInEarlierUnit {
+                local_index,
+                name: name.to_string(),
+                recovery_hint,
+            });
+            return true;
+        }
+
+        if is_consumed && !binding.ty.is_copy() {
+            let mut moved = binding.clone();
+            moved.state = ExternalState::Moved;
+            self.externals.insert(moved);
+        }
+        true
+    }
+
+    /// Record that a name from an earlier unit holds a value again.
+    fn reinit_external(&mut self, name: &str) {
+        if let Some(binding) = self.externals.get(name) {
+            let mut live = binding.clone();
+            live.state = ExternalState::Live;
+            self.externals.insert(live);
+        }
+    }
+
+    /// The bindings in scope for the unit after this one.
+    ///
+    /// The externals this unit inherited, with its moves applied, plus the
+    /// script-level bindings it declared itself.
+    fn externals_for_next_unit(&self) -> ExternalBindings {
+        let mut next = self.externals.clone();
+
+        for (id, info) in self.bindings.iter().enumerate() {
+            if !info.is_script_unit || info.ty.is_copy() || info.is_borrowed() {
+                continue;
+            }
+            let state = match self.get_state(BindingId(id as u32)) {
+                Some(BindingState::Moved) => ExternalState::Moved,
+                _ => ExternalState::Live,
+            };
+            next.insert(ExternalBinding {
+                name: info.name.clone(),
+                ty: info.ty.clone(),
+                is_slot: info.is_slot,
+                state,
+            });
+        }
+
+        next
     }
 
     /// Compute tracking category for each binding.
@@ -822,6 +893,9 @@ impl<'db> AnalysisCtx<'db> {
                             self.mark_moved(id, local_index);
                             return Some(id);
                         }
+                    } else {
+                        // Not a binding of this unit; an earlier one may own it.
+                        self.use_external(root_name, local_index, is_consumed);
                     }
                     None
                 } else {
@@ -838,6 +912,8 @@ impl<'db> AnalysisCtx<'db> {
                                 self.errors.push(AnalysisError::UseAfterMove { local_index, moved_at, name, recovery_hint });
                             }
                         }
+                    } else {
+                        self.use_external(root_name, local_index, false);
                     }
                     for step in &place.steps {
                         if let datalove_datafun_ast::ast::PlaceStep::Index(idx) = step {
@@ -880,7 +956,8 @@ pub fn analyze_function_with_mode<'db>(
     resolved_param_types: Option<&[IrType]>,
     auto_adapt_mode: AutoAdaptMode,
 ) -> FunctionAnalysis {
-    let mut ctx = AnalysisCtx::new(db, expr_types, auto_adapt_mode);
+    // A function body cannot name script-level bindings.
+    let mut ctx = AnalysisCtx::new(db, expr_types, auto_adapt_mode, ExternalBindings::default());
 
     // Enter function scope.
     ctx.enter_scope(ScopeKind::Function);
@@ -1007,6 +1084,8 @@ pub struct ScriptAnalysis {
     /// - Interpreter: no-op (bindings persist for REPL)
     /// - AOT: conditional drop (checks tracking byte)
     pub unit_end: Vec<BindingId>,
+    /// Script-level bindings in scope for the next unit.
+    pub externals: ExternalBindings,
 }
 
 /// Analyze script-level statements and compute drop schedule.
@@ -1026,7 +1105,9 @@ pub fn analyze_script_statements<'db>(
     expr_types: &'db [Option<IrType>],
     stmts: &[Statement<'db>],
 ) -> ScriptAnalysis {
-    analyze_script_statements_with_mode(db, expr_types, stmts, AutoAdaptMode::Disabled)
+    analyze_script_statements_with_mode(
+        db, expr_types, stmts, AutoAdaptMode::Disabled, ExternalBindings::default(),
+    )
 }
 
 /// Analyze script statements for ownership with configurable auto-adapt mode.
@@ -1035,8 +1116,9 @@ pub fn analyze_script_statements_with_mode<'db>(
     expr_types: &'db [Option<IrType>],
     stmts: &[Statement<'db>],
     auto_adapt_mode: AutoAdaptMode,
+    externals: ExternalBindings,
 ) -> ScriptAnalysis {
-    let mut ctx = AnalysisCtx::new(db, expr_types, auto_adapt_mode);
+    let mut ctx = AnalysisCtx::new(db, expr_types, auto_adapt_mode, externals);
 
     // Enter ScriptUnit scope so bindings are Tracked.
     ctx.enter_scope(ScopeKind::ScriptUnit);
@@ -1062,6 +1144,10 @@ pub fn analyze_script_statements_with_mode<'db>(
         })
         .unwrap_or_default();
 
+    // Collect the table for the next unit while the scope still holds the
+    // final states of this unit's bindings.
+    let externals = ctx.externals_for_next_unit();
+
     // Exit scope (returns empty for ScriptUnit, but we collected bindings above).
     let _ = ctx.exit_scope();
 
@@ -1074,6 +1160,7 @@ pub fn analyze_script_statements_with_mode<'db>(
         bindings: ctx.bindings,
         tracking,
         unit_end: unit_end_bindings,
+        externals,
     }
 }
 
@@ -1084,6 +1171,8 @@ pub struct ExprAnalysis {
     pub errors: Vec<AnalysisError>,
     /// Information about each binding (indexed by BindingId).
     pub bindings: Vec<BindingInfo>,
+    /// Script-level bindings in scope for the next unit.
+    pub externals: ExternalBindings,
 }
 
 /// Analyze a standalone expression for ownership errors.
@@ -1099,7 +1188,7 @@ pub fn analyze_expr<'db>(
     expr: datalove_datafun_ast::ast::ExprFun<'db>,
     expr_types: &'db [Option<IrType>],
 ) -> ExprAnalysis {
-    analyze_expr_with_mode(db, expr, expr_types, AutoAdaptMode::Disabled)
+    analyze_expr_with_mode(db, expr, expr_types, AutoAdaptMode::Disabled, ExternalBindings::default())
 }
 
 /// Analyze expression for ownership with configurable auto-adapt mode.
@@ -1108,8 +1197,9 @@ pub fn analyze_expr_with_mode<'db>(
     expr: datalove_datafun_ast::ast::ExprFun<'db>,
     expr_types: &'db [Option<IrType>],
     auto_adapt_mode: AutoAdaptMode,
+    externals: ExternalBindings,
 ) -> ExprAnalysis {
-    let mut ctx = AnalysisCtx::new(db, expr_types, auto_adapt_mode);
+    let mut ctx = AnalysisCtx::new(db, expr_types, auto_adapt_mode, externals);
 
     // Enter a scope for the expression analysis.
     ctx.enter_scope(ScopeKind::Function);
@@ -1120,9 +1210,11 @@ pub fn analyze_expr_with_mode<'db>(
     // Exit scope. No drops needed since expression result is returned.
     let _ = ctx.exit_scope();
 
+    let externals = ctx.externals_for_next_unit();
     ExprAnalysis {
         errors: ctx.errors,
         bindings: ctx.bindings,
+        externals,
     }
 }
 
@@ -1329,6 +1421,8 @@ fn analyze_set<'db>(ctx: &mut AnalysisCtx<'db>, stmt: &StmtSet<'db>, stmt_idx: u
             if ctx.get_out_param_init(id).is_some() {
                 ctx.set_out_param_init(id, OutParamInitState::Initialized);
             }
+        } else {
+            ctx.reinit_external(name);
         }
     } else {
         // Projection/index chain — check root for partial write to uninit.

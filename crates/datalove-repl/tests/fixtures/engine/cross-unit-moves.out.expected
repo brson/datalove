@@ -1,0 +1,416 @@
+[
+  {
+    "input": "let a = [1, 2]",
+    "parse": {
+      "Command": {
+        "ScriptStatement": "let a = [1, 2]"
+      }
+    },
+    "eval": {
+      "Success": [
+        {
+          "Value": {
+            "name": "a",
+            "ty": "list<int>",
+            "value": "[1, 2]"
+          }
+        }
+      ]
+    },
+    "environment": [
+      {
+        "name": "a",
+        "ty": "list<int>",
+        "value": "[1, 2]"
+      }
+    ]
+  },
+  {
+    "input": "let b = a",
+    "parse": {
+      "Command": {
+        "ScriptStatement": "let b = a"
+      }
+    },
+    "eval": {
+      "Success": [
+        {
+          "Value": {
+            "name": "b",
+            "ty": "list<int>",
+            "value": "[1, 2]"
+          }
+        }
+      ]
+    },
+    "environment": [
+      {
+        "name": "a",
+        "ty": "list<int>",
+        "value": "<moved>"
+      },
+      {
+        "name": "b",
+        "ty": "list<int>",
+        "value": "[1, 2]"
+      }
+    ]
+  },
+  {
+    "input": "let c = a",
+    "parse": {
+      "Command": {
+        "ScriptStatement": "let c = a"
+      }
+    },
+    "eval": {
+      "Error": "error[D013]: `a` was moved by an earlier input\n  help: use `@` to clone `a` at the earlier use"
+    },
+    "environment": [
+      {
+        "name": "a",
+        "ty": "list<int>",
+        "value": "<moved>"
+      },
+      {
+        "name": "b",
+        "ty": "list<int>",
+        "value": "[1, 2]"
+      }
+    ]
+  },
+  {
+    "input": "b",
+    "parse": {
+      "Command": {
+        "Expression": "b"
+      }
+    },
+    "eval": {
+      "SuccessExpr": {
+        "ty": "list<int>",
+        "value": "[1, 2]"
+      }
+    },
+    "environment": [
+      {
+        "name": "a",
+        "ty": "list<int>",
+        "value": "<moved>"
+      },
+      {
+        "name": "b",
+        "ty": "list<int>",
+        "value": "<moved>"
+      }
+    ]
+  },
+  {
+    "input": "let d = [3, 4]\nlet e = d",
+    "parse": {
+      "Command": {
+        "ScriptStatement": "let d = [3, 4]\nlet e = d"
+      }
+    },
+    "eval": {
+      "Success": [
+        {
+          "Value": {
+            "name": "d",
+            "ty": "list<int>",
+            "value": "[3, 4]"
+          }
+        },
+        {
+          "Value": {
+            "name": "e",
+            "ty": "list<int>",
+            "value": "[3, 4]"
+          }
+        }
+      ]
+    },
+    "environment": [
+      {
+        "name": "a",
+        "ty": "list<int>",
+        "value": "<moved>"
+      },
+      {
+        "name": "b",
+        "ty": "list<int>",
+        "value": "<moved>"
+      },
+      {
+        "name": "d",
+        "ty": "list<int>",
+        "value": "[3, 4]"
+      },
+      {
+        "name": "e",
+        "ty": "list<int>",
+        "value": "[3, 4]"
+      }
+    ]
+  },
+  {
+    "input": "d",
+    "parse": {
+      "Command": {
+        "Expression": "d"
+      }
+    },
+    "eval": {
+      "Error": "error[D013]: `d` was moved by an earlier input\n  help: use `@` to clone `d` at the earlier use"
+    },
+    "environment": [
+      {
+        "name": "a",
+        "ty": "list<int>",
+        "value": "<moved>"
+      },
+      {
+        "name": "b",
+        "ty": "list<int>",
+        "value": "<moved>"
+      },
+      {
+        "name": "d",
+        "ty": "list<int>",
+        "value": "[3, 4]"
+      },
+      {
+        "name": "e",
+        "ty": "list<int>",
+        "value": "[3, 4]"
+      }
+    ]
+  },
+  {
+    "input": "var v = [5]",
+    "parse": {
+      "Command": {
+        "ScriptStatement": "var v = [5]"
+      }
+    },
+    "eval": {
+      "Success": [
+        {
+          "Slot": {
+            "name": "v",
+            "ty": "list<int>",
+            "value": "[5]"
+          }
+        }
+      ]
+    },
+    "environment": [
+      {
+        "name": "a",
+        "ty": "list<int>",
+        "value": "<moved>"
+      },
+      {
+        "name": "b",
+        "ty": "list<int>",
+        "value": "<moved>"
+      },
+      {
+        "name": "d",
+        "ty": "list<int>",
+        "value": "[3, 4]"
+      },
+      {
+        "name": "e",
+        "ty": "list<int>",
+        "value": "[3, 4]"
+      },
+      {
+        "name": "v",
+        "ty": "list<int>",
+        "value": "[5]"
+      }
+    ]
+  },
+  {
+    "input": "let w = v",
+    "parse": {
+      "Command": {
+        "ScriptStatement": "let w = v"
+      }
+    },
+    "eval": {
+      "Success": [
+        {
+          "Value": {
+            "name": "w",
+            "ty": "list<int>",
+            "value": "[5]"
+          }
+        }
+      ]
+    },
+    "environment": [
+      {
+        "name": "a",
+        "ty": "list<int>",
+        "value": "<moved>"
+      },
+      {
+        "name": "b",
+        "ty": "list<int>",
+        "value": "<moved>"
+      },
+      {
+        "name": "d",
+        "ty": "list<int>",
+        "value": "[3, 4]"
+      },
+      {
+        "name": "e",
+        "ty": "list<int>",
+        "value": "[3, 4]"
+      },
+      {
+        "name": "v",
+        "ty": "list<int>",
+        "value": "<moved>"
+      },
+      {
+        "name": "w",
+        "ty": "list<int>",
+        "value": "[5]"
+      }
+    ]
+  },
+  {
+    "input": "v",
+    "parse": {
+      "Command": {
+        "Expression": "v"
+      }
+    },
+    "eval": {
+      "Error": "error[D013]: `v` was moved by an earlier input\n  help: use `@` to clone `v` at the earlier use"
+    },
+    "environment": [
+      {
+        "name": "a",
+        "ty": "list<int>",
+        "value": "<moved>"
+      },
+      {
+        "name": "b",
+        "ty": "list<int>",
+        "value": "<moved>"
+      },
+      {
+        "name": "d",
+        "ty": "list<int>",
+        "value": "[3, 4]"
+      },
+      {
+        "name": "e",
+        "ty": "list<int>",
+        "value": "[3, 4]"
+      },
+      {
+        "name": "v",
+        "ty": "list<int>",
+        "value": "<moved>"
+      },
+      {
+        "name": "w",
+        "ty": "list<int>",
+        "value": "[5]"
+      }
+    ]
+  },
+  {
+    "input": "set v = [6]",
+    "parse": {
+      "Command": {
+        "ScriptStatement": "set v = [6]"
+      }
+    },
+    "eval": "Nothing",
+    "environment": [
+      {
+        "name": "a",
+        "ty": "list<int>",
+        "value": "<moved>"
+      },
+      {
+        "name": "b",
+        "ty": "list<int>",
+        "value": "<moved>"
+      },
+      {
+        "name": "d",
+        "ty": "list<int>",
+        "value": "[3, 4]"
+      },
+      {
+        "name": "e",
+        "ty": "list<int>",
+        "value": "[3, 4]"
+      },
+      {
+        "name": "v",
+        "ty": "list<int>",
+        "value": "[6]"
+      },
+      {
+        "name": "w",
+        "ty": "list<int>",
+        "value": "[5]"
+      }
+    ]
+  },
+  {
+    "input": "v",
+    "parse": {
+      "Command": {
+        "Expression": "v"
+      }
+    },
+    "eval": {
+      "SuccessExpr": {
+        "ty": "list<int>",
+        "value": "[6]"
+      }
+    },
+    "environment": [
+      {
+        "name": "a",
+        "ty": "list<int>",
+        "value": "<moved>"
+      },
+      {
+        "name": "b",
+        "ty": "list<int>",
+        "value": "<moved>"
+      },
+      {
+        "name": "d",
+        "ty": "list<int>",
+        "value": "[3, 4]"
+      },
+      {
+        "name": "e",
+        "ty": "list<int>",
+        "value": "[3, 4]"
+      },
+      {
+        "name": "v",
+        "ty": "list<int>",
+        "value": "<moved>"
+      },
+      {
+        "name": "w",
+        "ty": "list<int>",
+        "value": "[5]"
+      }
+    ]
+  }
+]

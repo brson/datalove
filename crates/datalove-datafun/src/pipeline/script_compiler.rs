@@ -40,7 +40,7 @@ use datalove_datafun_compiler::tracked_script_lower::{
 };
 use datalove_datafun_compiler::tracked_script_ownership::{
     analyze_script_fragment_tracked, analyze_script_expr_tracked, ScriptAnalysisData,
-    emit_ownership_diagnostics, AnalysisError,
+    emit_ownership_diagnostics, AnalysisError, ExternalBindings,
 };
 use datalove_datafun_compiler::lower::ScriptFunctionAnalyses;
 use datalove_datafun_ir::{ConstValue, CtfeEvaluator, CtfeError, IrCodeUnit, IrType, ResolvedConsts, ConstEvalError};
@@ -72,6 +72,8 @@ struct TypecheckOutput<'db> {
 struct OwnershipOutput<'db> {
     func_analyses: ScriptFunctionAnalyses<'db>,
     script_analysis: Option<ScriptAnalysisData>,
+    /// Script-level bindings in scope for the unit after this one.
+    externals: ExternalBindings,
 }
 
 /// Lowered functions from the lowering phase.
@@ -159,6 +161,7 @@ impl<'db> CompiledModules<'db> {
             auto_adapt_mode: AutoAdaptMode::Disabled,
             last_ownership_errors: Vec::new(),
             last_spans: None,
+            accumulated_externals: ExternalBindings::default(),
         })
     }
 
@@ -203,6 +206,11 @@ pub struct ScriptCompiler<'db> {
     last_ownership_errors: Vec<AnalysisError>,
     /// Spans for the last compilation unit (for diagnostic rendering).
     last_spans: Option<datalove_datafun_ast::spans::DatafunSpans>,
+    /// Script-level bindings earlier units left behind, with their move states.
+    ///
+    /// Ownership analysis runs per unit, so this is how a move in one unit
+    /// reaches the units after it. Only successful units contribute.
+    accumulated_externals: ExternalBindings,
 }
 
 impl<'db> ScriptCompiler<'db> {
@@ -387,7 +395,7 @@ impl<'db> ScriptCompiler<'db> {
         let ir_unit = self.phase_const_inline(ir_unit, &consts);
 
         // Update accumulated state
-        self.update_accumulated_state(&ir_unit);
+        self.update_accumulated_state(&ir_unit, ownership.externals);
 
         let ir_dump = format!("{}", ir_unit);
         ScriptCompilationResult {
@@ -470,6 +478,7 @@ impl<'db> ScriptCompiler<'db> {
                     typecheck.result,
                     stmts.clone(),
                     self.auto_adapt_mode,
+                    self.accumulated_externals.clone(),
                 );
                 if !ownership_result.errors(self.db).is_empty() {
                     // Store structured errors and spans for CLI rendering.
@@ -488,7 +497,8 @@ impl<'db> ScriptCompiler<'db> {
                 }
                 let func_analyses = ownership_result.to_function_analyses_map(self.db, stmts);
                 let script_analysis = ownership_result.script_analysis(self.db).clone();
-                Ok(OwnershipOutput { func_analyses, script_analysis })
+                let externals = ownership_result.externals(self.db).clone();
+                Ok(OwnershipOutput { func_analyses, script_analysis, externals })
             }
             ParsedUnit::Expr(expr) => {
                 let ownership_result = analyze_script_expr_tracked(
@@ -496,6 +506,7 @@ impl<'db> ScriptCompiler<'db> {
                     typecheck.result,
                     *expr,
                     self.auto_adapt_mode,
+                    self.accumulated_externals.clone(),
                 );
                 if !ownership_result.errors(self.db).is_empty() {
                     // Store structured errors and spans for CLI rendering.
@@ -515,6 +526,7 @@ impl<'db> ScriptCompiler<'db> {
                 Ok(OwnershipOutput {
                     func_analyses: HashMap::new(),
                     script_analysis: None,
+                    externals: ownership_result.externals(self.db).clone(),
                 })
             }
         }
@@ -999,7 +1011,8 @@ impl<'db> ScriptCompiler<'db> {
     // ========================================================================
 
     /// Update accumulated state after successful compilation.
-    fn update_accumulated_state(&mut self, ir_unit: &IrCodeUnit) {
+    fn update_accumulated_state(&mut self, ir_unit: &IrCodeUnit, externals: ExternalBindings) {
+        self.accumulated_externals = externals;
         let unit_index = self.accumulated_lower_bindings.current_unit;
         if let Some(script_ctx) = ir_unit.script_context() {
             self.accumulated_lower_bindings.add_exports(

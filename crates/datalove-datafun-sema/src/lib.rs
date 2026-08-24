@@ -174,6 +174,14 @@ pub enum OwnershipRecoveryHint {
 #[derive(Clone, Debug, Hash, PartialEq, Eq)]
 #[derive(salsa::Update)]
 pub enum AnalysisError {
+    /// Using a binding an earlier script unit moved out of.
+    /// D013 - Recoverable with @ (clone at the earlier use)
+    UseAfterMoveInEarlierUnit {
+        /// Location of the use in this unit.
+        local_index: u32,
+        name: String,
+        recovery_hint: OwnershipRecoveryHint,
+    },
     /// Using a value after it was moved.
     /// D001 - Recoverable with @ (clone before first use)
     UseAfterMove {
@@ -274,6 +282,10 @@ pub fn format_analysis_errors(errors: &[AnalysisError]) -> String {
 
 fn format_single_error(error: &AnalysisError) -> String {
     match error {
+        AnalysisError::UseAfterMoveInEarlierUnit { local_index: _, name, recovery_hint } => {
+            let base = format!("error[D013]: `{}` was moved by an earlier input", name);
+            format_with_hint(base, recovery_hint)
+        }
         AnalysisError::UseAfterMove { local_index: _, moved_at: _, name, recovery_hint } => {
             let base = format!("error[D001]: use of moved value: `{}`", name);
             format_with_hint(base, recovery_hint)
@@ -388,6 +400,54 @@ pub struct FunctionAnalysis {
     /// Tracking category for each binding (indexed by BindingId).
     /// Determines whether precise or tracked move/drop instructions are used.
     pub tracking: Vec<TrackingCategory>,
+}
+
+/// Whether a binding from an earlier script unit still holds its value.
+#[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
+pub enum ExternalState {
+    /// Holds a value and can be read.
+    Live,
+    /// Was moved out of, by this unit or an earlier one.
+    Moved,
+}
+
+/// A script-level binding an earlier unit left behind.
+#[derive(Clone, Debug, Hash, PartialEq, Eq)]
+#[derive(salsa::Update)]
+pub struct ExternalBinding {
+    pub name: String,
+    pub ty: IrType,
+    /// Whether the binding is a slot (var) rather than a value (let).
+    pub is_slot: bool,
+    pub state: ExternalState,
+}
+
+/// The script-level bindings in scope for a unit, and their states.
+///
+/// A script unit is analyzed on its own, so this is how the moves of earlier
+/// units reach it. Copy-typed bindings are left out: they cannot be moved, so
+/// their state never varies. The analysis returns the table its own bindings
+/// and moves leave behind, for the unit after it.
+#[derive(Clone, Debug, Default, Hash, PartialEq, Eq)]
+#[derive(salsa::Update)]
+pub struct ExternalBindings {
+    /// Bindings by declaration order. A later entry shadows an earlier one.
+    pub bindings: Vec<ExternalBinding>,
+}
+
+impl ExternalBindings {
+    /// The binding a name currently refers to.
+    pub fn get(&self, name: &str) -> Option<&ExternalBinding> {
+        self.bindings.iter().rev().find(|b| b.name == name)
+    }
+
+    /// Record a binding, replacing whatever the name referred to before.
+    pub fn insert(&mut self, binding: ExternalBinding) {
+        match self.bindings.iter_mut().find(|b| b.name == binding.name) {
+            Some(existing) => *existing = binding,
+            None => self.bindings.push(binding),
+        }
+    }
 }
 
 /// Analysis result for script-level statements.

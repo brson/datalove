@@ -1,0 +1,22 @@
+let a = [1, 2]
+---
+let b = a
+---
+let c = a
+---
+b
+---
+let d = [3, 4]
+let e = d
+---
+d
+---
+var v = [5]
+---
+let w = v
+---
+v
+---
+set v = [6]
+---
+v

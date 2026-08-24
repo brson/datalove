@@ -318,6 +318,26 @@ fn render_ownership_error<'db>(
     use datalove_datafun_sema::{AnalysisError, OwnershipRecoveryHint};
 
     match error {
+        AnalysisError::UseAfterMoveInEarlierUnit { local_index, name, recovery_hint } => {
+            if let Some((text, span)) = lookup_expr_span(db, spans, *local_index) {
+                let source_str = text.as_str(db);
+                let msg = format!("`{}` was moved by an earlier input", name);
+                let mut builder = Report::build(ReportKind::Error, file_name, span.start)
+                    .with_code("D013")
+                    .with_message(&msg)
+                    .with_label(
+                        Label::new((file_name, span.clone()))
+                            .with_color(colors.next())
+                            .with_message("value used after move")
+                    );
+
+                if let OwnershipRecoveryHint::InsertAdapt { description } = recovery_hint {
+                    builder = builder.with_help(format!("use `@` to {}", description));
+                }
+
+                let _ = builder.finish().eprint((file_name, Source::from(source_str)));
+            }
+        }
         AnalysisError::UseAfterMove { local_index, moved_at, name, recovery_hint } => {
             if let Some((text, span)) = lookup_expr_span(db, spans, *local_index) {
                 let source_str = text.as_str(db);
