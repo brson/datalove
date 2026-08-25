@@ -23,9 +23,9 @@ default-members = [
 
 [workspace.dependencies]
 rmx.package = "rustmax"
-rmx.version = "0.0.8"
+rmx.version = "0.0.10"
 rmx.features = [
-  "rmx-profile-wasm",
+  "rmx-profile-portable",
   "comrak",
   "tera",
   "termcolor",

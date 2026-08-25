@@ -83,6 +83,7 @@ fn run_app<B, E>(
 ) -> AnyResult<()>
 where
     B: ratatui::backend::Backend,
+    B::Error: std::error::Error + Send + Sync + 'static,
     E: ReplExecutor,
 {
     loop {
