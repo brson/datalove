@@ -220,16 +220,16 @@ mod unix_impl {
             let alloc_size = size + align;
 
             unsafe {
-                let ptr = libc::mmap(
+                let ptr = rmx::libc::mmap(
                     ptr::null_mut(),
                     alloc_size,
-                    libc::PROT_READ | libc::PROT_WRITE,
-                    libc::MAP_PRIVATE | libc::MAP_ANONYMOUS,
+                    rmx::libc::PROT_READ | rmx::libc::PROT_WRITE,
+                    rmx::libc::MAP_PRIVATE | rmx::libc::MAP_ANONYMOUS,
                     -1,
                     0,
                 );
 
-                if ptr == libc::MAP_FAILED {
+                if ptr == rmx::libc::MAP_FAILED {
                     panic!("mmap failed for large allocation");
                 }
 
@@ -254,7 +254,7 @@ mod unix_impl {
             }) {
                 let page = self.large_pages.swap_remove(idx);
                 unsafe {
-                    let result = libc::munmap(page.ptr as *mut libc::c_void, page.size);
+                    let result = rmx::libc::munmap(page.ptr as *mut rmx::libc::c_void, page.size);
                     if result != 0 {
                         panic!("munmap failed for large allocation");
                     }
@@ -268,16 +268,16 @@ mod unix_impl {
             let block_size = SIZE_CLASSES[size_class_idx];
 
             unsafe {
-                let ptr = libc::mmap(
+                let ptr = rmx::libc::mmap(
                     ptr::null_mut(),
                     PAGE_SIZE,
-                    libc::PROT_READ | libc::PROT_WRITE,
-                    libc::MAP_PRIVATE | libc::MAP_ANONYMOUS,
+                    rmx::libc::PROT_READ | rmx::libc::PROT_WRITE,
+                    rmx::libc::MAP_PRIVATE | rmx::libc::MAP_ANONYMOUS,
                     -1,
                     0,
                 );
 
-                if ptr == libc::MAP_FAILED {
+                if ptr == rmx::libc::MAP_FAILED {
                     panic!("mmap failed for small allocation page");
                 }
 
@@ -360,14 +360,14 @@ mod unix_impl {
             // Clean up resources first.
             unsafe {
                 for page in self.small_pages.drain(..) {
-                    let result = libc::munmap(page.ptr as *mut libc::c_void, page.size);
+                    let result = rmx::libc::munmap(page.ptr as *mut rmx::libc::c_void, page.size);
                     if result != 0 {
                         eprintln!("Warning: munmap failed during shutdown");
                     }
                 }
 
                 for page in self.large_pages.drain(..) {
-                    let result = libc::munmap(page.ptr as *mut libc::c_void, page.size);
+                    let result = rmx::libc::munmap(page.ptr as *mut rmx::libc::c_void, page.size);
                     if result != 0 {
                         eprintln!("Warning: munmap failed during shutdown");
                     }
@@ -560,7 +560,7 @@ pub use wasm_impl::AllocLocal;
 #[cfg(test)]
 mod tests {
     use super::*;
-    use proptest::prelude::*;
+    use rmx::proptest::prelude::*;
 
     fn is_aligned(ptr: *mut u8, align: usize) -> bool {
         (ptr as usize) % align == 0

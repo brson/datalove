@@ -667,7 +667,7 @@ fn test_cmp_total_set_greater_by_element() -> AnyResult<()> {
 // ==================== Property-Based Tests ====================
 
 #[cfg(feature = "slow_tests")]
-use proptest::prelude::*;
+use rmx::proptest::prelude::*;
 #[cfg(feature = "slow_tests")]
 use datalove_datalit::ast_gen::*;
 

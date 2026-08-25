@@ -492,7 +492,7 @@ fn test_eq_unique_set_not_equals_different_sizes() -> AnyResult<()> {
 // ==================== Property-Based Tests ====================
 
 #[cfg(feature = "slow_tests")]
-use proptest::prelude::*;
+use rmx::proptest::prelude::*;
 #[cfg(feature = "slow_tests")]
 use datalove_datalit::ast_gen::*;
 

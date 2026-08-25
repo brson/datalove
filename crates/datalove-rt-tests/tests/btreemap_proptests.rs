@@ -5,7 +5,7 @@
 use rmx::prelude::*;
 use datalove_rtdt as rtdt;
 use std::ptr;
-use proptest::prelude::*;
+use rmx::proptest::prelude::*;
 
 /// Create a Map<u32, u32> type descriptor.
 fn create_map_u32_u32_tydesc() -> (Box<rtdt::TyDesc>, Box<rtdt::TyDesc>, Box<rtdt::TyDesc>) {

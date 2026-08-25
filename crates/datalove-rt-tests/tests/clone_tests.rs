@@ -599,7 +599,7 @@ fn test_clone_set_nested_tuples() -> AnyResult<()> {
 // ==================== Property-Based Tests ====================
 
 #[cfg(feature = "slow_tests")]
-use proptest::prelude::*;
+use rmx::proptest::prelude::*;
 use datalove_datalit::ast_gen::*;
 use datalove_rt::rust::Runtime;
 

@@ -12,6 +12,3 @@ ratatui = { version = "0.30", features = ["crossterm"] }
 crossterm = "0.29"
 tui-textarea.package = "tui-textarea-2"
 tui-textarea.version = "0.13"
-
-[target.'cfg(unix)'.dependencies]
-libc = "0.2"

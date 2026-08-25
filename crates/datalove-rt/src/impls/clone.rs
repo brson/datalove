@@ -854,7 +854,7 @@ unsafe fn clone_view_tensor(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use proptest::prelude::*;
+    use rmx::proptest::prelude::*;
 
     /// Helper to create a test runtime.
     fn make_rt() -> Box<rt_local::RtLocal> {

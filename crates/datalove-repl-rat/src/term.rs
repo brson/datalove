@@ -55,7 +55,7 @@ pub fn run() -> AnyResult<()> {
         use std::os::unix::io::AsRawFd;
         // dup2 duplicates file descriptor to stderr (fd 2).
         let result = unsafe {
-            libc::dup2(stderr_file.as_raw_fd(), 2)
+            rmx::libc::dup2(stderr_file.as_raw_fd(), 2)
         };
         if result == -1 {
             bail!("failed to redirect stderr");

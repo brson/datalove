@@ -13,8 +13,10 @@ slow_tests = []
 index-64 = ["datalove-rtdt/index-64"]
 
 [dependencies]
+rmx.workspace = true
 datalove-rtdt = { path = "../datalove-rtdt" }
-libc = "0.2"
 
+# Proptest is only enabled here so that it stays out of the wasm build,
+# where its getrandom dependency does not compile.
 [dev-dependencies]
-proptest = "1.5"
+rmx = { workspace = true, features = ["proptest"] }

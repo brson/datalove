@@ -941,7 +941,7 @@ fn test_int_add_a_is_zero() -> AnyResult<()> {
 #[cfg(feature = "slow_tests")]
 mod proptests {
     use super::*;
-    use proptest::prelude::*;
+    use rmx::proptest::prelude::*;
 
     // Generate small integers for testing (to avoid very expensive multi-limb operations).
     fn small_int() -> impl Strategy<Value = i64> {

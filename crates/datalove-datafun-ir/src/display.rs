@@ -1,6 +1,6 @@
 //! Pretty-printing for IR.
 
-use regex::Regex;
+use rmx::regex::Regex;
 use std::fmt;
 use crate::*;
 
@@ -22,7 +22,7 @@ pub fn expand_ir_strings(ron: &str) -> String {
     // Match `ir: "...",` where the string may contain escaped characters.
     let re = Regex::new(r#"(?m)^(\s*)ir: "((?:[^"\\]|\\.)*)","#).unwrap();
 
-    re.replace_all(ron, |caps: &regex::Captures| {
+    re.replace_all(ron, |caps: &rmx::regex::Captures| {
         let indent = &caps[1];
         let escaped_content = &caps[2];
 

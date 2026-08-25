@@ -50,7 +50,6 @@ datalove-datafun-cranelift-jit.path = "../datalove-datafun-cranelift-jit"
 datalove-datafun-inline.path = "../datalove-datafun-inline"
 datalove-datafun-c-aot.path = "../datalove-datafun-c-aot"
 datalove-rtdt.path = "../datalove-rtdt"
-regex = "1"
 ron = "0.8"
 
 [[test]]

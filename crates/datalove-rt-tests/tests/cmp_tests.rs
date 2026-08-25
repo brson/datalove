@@ -1642,7 +1642,7 @@ fn test_cmp_set_with_strings() -> AnyResult<()> {
 // ==================== Property-Based Tests ====================
 
 #[cfg(feature = "slow_tests")]
-use proptest::prelude::*;
+use rmx::proptest::prelude::*;
 #[cfg(feature = "slow_tests")]
 use datalove_datalit::ast_gen::*;
 

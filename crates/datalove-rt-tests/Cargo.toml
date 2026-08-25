@@ -10,10 +10,9 @@ slow_tests = []
 index-64 = ["datalove-rt/index-64", "datalove-rtdt/index-64", "datalove-datalit/index-64"]
 
 [dependencies]
-rmx.workspace = true
+rmx = { workspace = true, features = ["proptest"] }
 bct.workspace = true
 salsa.workspace = true
-proptest = "1.5"
 datalove-rt.path = "../datalove-rt"
 datalove-rtdt.path = "../datalove-rtdt"
 datalove-datalit.path = "../datalove-datalit"
