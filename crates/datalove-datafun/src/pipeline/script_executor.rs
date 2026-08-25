@@ -152,6 +152,7 @@ impl ScriptExecutor {
             .expect("execute_expr requires a script code unit");
         let result_ty = script_ctx.result
             .map(|id| format!("{}", &ir_unit.value_types[id.0 as usize]));
+        let shown_binding = script_ctx.result_name.clone();
 
         let output = if let Some(result_id) = script_ctx.result {
             let ret_type = IrType::Result(Box::new(IrType::Unit));
@@ -196,7 +197,28 @@ impl ScriptExecutor {
                 Err(e) => format!("Error: {:?}", e),
             }
         } else {
-            "(fragment executed)".S()
+            // The unit computes nothing. Run it anyway so it takes its place
+            // in the frame store, then read the binding it named.
+            let ret_type = IrType::Result(Box::new(IrType::Unit));
+            let ret_tydesc = self.interp.tydesc_table_mut().get_or_create(&ret_type);
+            let (ret_size, ret_align) = unsafe { ((*ret_tydesc).size, (*ret_tydesc).align) };
+            let mut ret_buffer = AlignedBuffer::with_align(ret_size as usize, ret_align as usize);
+            let ret_dest = datalove_datafun_interp::Destination {
+                ptr: ret_buffer.as_mut_ptr(),
+                tydesc: ret_tydesc,
+            };
+
+            match self.interp.execute_script_unit_in_env(ir_unit, &mut self.env, ret_dest, None) {
+                Ok(_) => match &shown_binding {
+                    Some(name) => {
+                        let (ty, value) = self.get_binding(name)
+                            .expect("the unit named a binding the executor registered");
+                        return (Some(ty), value);
+                    }
+                    None => "(fragment executed)".S(),
+                },
+                Err(e) => format!("Error: {:?}", e),
+            }
         };
 
         (result_ty, output)

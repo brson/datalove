@@ -162,6 +162,7 @@ pub fn lower_script_fragment_raw<'db>(
             unit_end_values,
             unit_end_slots,
             result: None,
+            result_name: None,
             exports: ctx.exports,
         }),
         nested_units: ctx.functions,
@@ -261,12 +262,17 @@ pub fn lower_script_expr<'db>(
 ) -> Result<IrCodeUnit, LowerError> {
     let mut ctx = LowerCtx::new_for_script(db, expr_types, call_targets, func_id_map, script_ctx);
 
-    // Lower the expression and capture the result.
-    let value_id = lower_expression(&mut ctx, expr)?;
+    // An expression unit that is just a name is the prompt asking to see a
+    // binding, not to take it. Name it and compute nothing.
+    let result_name = shown_binding(&ctx, expr);
+    let result = match result_name {
+        Some(_) => None,
+        None => Some(lower_expression(&mut ctx, expr)?),
+    };
 
     // Finish the final block with UnitEnd.
     ctx.finish_block(Terminator::UnitEnd {
-        result: Some(Operand::Value(value_id)),
+        result: result.map(Operand::Value),
     });
 
     // Renumber blocks for O(1) lookup in interpreter.
@@ -288,11 +294,30 @@ pub fn lower_script_expr<'db>(
         context: CodeUnitContext::Script(ScriptContext {
             unit_end_values: Vec::new(),
             unit_end_slots: Vec::new(),
-            result: Some(value_id),
+            result,
+            result_name,
             exports: ctx.exports,
         }),
         nested_units: ctx.functions,
     })
+}
+
+/// The binding an expression unit merely shows, if that is all it does.
+///
+/// A bare name bound by an earlier unit needs no code: the caller reads that
+/// binding where it lives, which is both cheaper and non-consuming.
+fn shown_binding<'db>(ctx: &LowerCtx<'db>, expr: ExprFun<'db>) -> Option<String> {
+    let ExprFunKind::Place(ref place) = expr.expr(ctx.db) else {
+        return None;
+    };
+    if !place.steps.is_empty() {
+        return None;
+    }
+    let name = place.root.text(ctx.db);
+    match ctx.lookup_var(name) {
+        Some(Operand::ExternalValue { .. }) | Some(Operand::ExternalSlot { .. }) => Some(name.to_string()),
+        _ => None,
+    }
 }
 
 /// Lower a statement in script unit context.

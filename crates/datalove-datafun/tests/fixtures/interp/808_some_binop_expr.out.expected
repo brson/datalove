@@ -47,8 +47,7 @@ Analysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = copy unit0.v2
-                        unit_end v0
+                        unit_end
                 """,
             ),
             output: "some 8",

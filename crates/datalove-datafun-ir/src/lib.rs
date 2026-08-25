@@ -1588,6 +1588,13 @@ pub struct ScriptContext {
     pub unit_end_slots: Vec<SlotId>,
     /// Result value for expression units.
     pub result: Option<ValueId>,
+    /// The binding this unit's result simply names.
+    ///
+    /// An expression unit that is a bare name is the prompt asking to see a
+    /// binding an earlier unit owns. There is nothing to compute and nothing
+    /// to copy: the caller reads that binding where it lives.
+    #[serde(default)]
+    pub result_name: Option<String>,
     /// Bindings exported to subsequent units.
     #[serde(default)]
     pub exports: Vec<(String, ExportBinding)>,

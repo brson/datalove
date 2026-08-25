@@ -72,6 +72,7 @@ fn make_script_unit(
             unit_end_values,
             unit_end_slots,
             result,
+            result_name: None,
             exports,
         }),
         nested_units,

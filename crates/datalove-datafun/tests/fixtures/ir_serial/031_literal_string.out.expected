@@ -18,7 +18,7 @@ IrSerialAnalysis(
             ),
             direct_interp_output: "\"hello world\"\n",
             direct_aot_output: "\"hello world\"\n",
-            serialized_ir_size: 1087,
+            serialized_ir_size: 1114,
             serialized_registry_size: 177,
             deser_success: true,
             deser_interp_output: "\"hello world\"\n",
