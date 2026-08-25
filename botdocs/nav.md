@@ -4,6 +4,7 @@
 
 - [Language Specification](botspec.md)
 - [Compiler Guide](compiler-guide.md)
+- [REPL Architecture](repl-architecture.md)
 - [Datalit Grammar (EBNF)](datalit-ebnf.md)
 - [Datalit Typing Rules](datalit-typing-rules.md)
 - [Datafun Typing Rules](datafun-typing-rules.md)

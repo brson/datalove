@@ -207,6 +207,27 @@ Script units accumulate via `AccumulatedLowerBindings`:
 - Each unit increments `accumulated_unit_specs`
 - Functions reference prior units via `FuncRef::External { unit, func }`
 
+### Ownership across units
+
+A unit copies out of the bindings earlier units own rather than taking from
+them: lowering emits `Clone` for a consuming use that resolves to an
+`ExternalValue`/`ExternalSlot`. Every line of a REPL is a unit, so taking
+would mean inspecting a value consumed it and binding it to a new name
+emptied the old one. A whole-file script is one unit and has no such uses, so
+this changes nothing about running a script.
+
+A unit can still give away a binding it defined itself, and then the name
+outlives its value. Ownership analysis reports those names in
+`ScriptAnalysisData::dead_exports`, `ScriptCompiler` remembers them, and
+using one is D013. Assigning to such a name revives it, which is why
+`unit_end` covers every non-Copy slot rather than only live ones - a later
+unit can assign to a slot this one gave away, and the cleanup list is fixed
+at lowering time.
+
+An expression unit that is a bare name computes nothing: lowering records the
+name in `ScriptContext::result_name` with no result value, and the executor
+reads that binding where it lives instead of copying it to print it.
+
 ## IR Types
 
 ### IDs
@@ -405,6 +426,28 @@ Tracked bindings: exports, `out` params, conditional moves, mutable slots.
 Match arms use `ScopeKind::MatchArm`. Branch consistency (D008) is generalized
 across all match arms: if a value is moved in one arm, it must be moved in all.
 
+### Auto-adapt
+
+`AutoAdaptMode::Enabled` accepts the `@`-recoverable errors catalogued in
+`report-adapt-cases.md` by supplying the `@` the source left out. Both
+analyses record where it belongs as `AdaptSites`, keyed by salsa expression
+id, and lowering emits what an explicit `@` on that expression would - a
+widening between fixed ints, a clone for linear types.
+
+Ownership analysis records the *earlier* use, not the one that would have
+errored: a value read after a move is already gone, so the repair belongs
+where it was given away. That covers D001, D002, and D007, where the clone
+restores the binding for the next iteration. The typechecker's adaptations
+travel the same way, which is why `ScriptCompiler` typechecks through
+`create_batch_spec_with_auto_adapt` rather than `create_batch_spec` and its
+hardcoded `Disabled`.
+
+Sites are keyed by expression, so handing a body a set naming expressions
+from elsewhere is harmless - no expression there matches.
+
+Module-level auto-adapt is not wired up: `ModuleCompilationPipeline` has no
+way to ask for a mode, so module typechecking is always `Disabled`.
+
 ### Error Codes
 
 | Code | Error | Trigger |
@@ -421,6 +464,7 @@ across all match arms: if a value is moved in one arm, it must be moved in all.
 | D010 | AliasedMutableArgument | Two arguments share a place root, one is `mut`/`out` |
 | D011 | CannotMutateImmutable | `let` binding or `in` param passed as `mut`/`out` |
 | D012 | CannotMutateTemporary | Non-place argument passed as `mut`/`out` |
+| D013 | UseAfterMoveInEarlierUnit | Using a binding whose own script unit gave its value away |
 
 ### Drop Schedule
 

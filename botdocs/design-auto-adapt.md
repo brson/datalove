@@ -677,6 +677,34 @@ DATALOVE_AUTO_ADAPT=report datalove run example.dfs
 
 ---
 
+## Status
+
+Implemented for script units, in the shape "record where the `@` belongs,
+then let lowering emit it" - see `compiler-guide.md` under "Auto-adapt".
+That answers open question 1 below: IR-level, via `AdaptSites` keyed by
+salsa expression id, not AST rewriting.
+
+Not implemented:
+
+- **Modules.** `ModuleCompilationPipeline` cannot be asked for a mode, so
+  module typechecking is always `Disabled` and the module fixtures record
+  that their modules did not compile.
+- **`EnabledWithReport`.** Identical to `Enabled`; the diagnostic is a TODO
+  in `check_type_mismatch_or_adapt`.
+
+The fixtures under `datafun-compiler/tests/fixtures/auto-adapt/` run what the
+mode accepted and record the values it computed, because checking that the
+errors went away says nothing about whether the adapted program is the one
+the programmer meant. That check is what showed the mode had never inserted
+anything.
+
+Auto-adapt cannot help a binding an *earlier script unit* gave away: it
+repairs by cloning where the value was given away, and that unit has already
+run. The REPL solves that differently, by copying out of earlier units in the
+first place - see `repl-architecture.md`.
+
+---
+
 ## Open Questions
 
 1. **AST Rewriting vs IR-level**: Should auto-adapt rewrite the AST (inserting
