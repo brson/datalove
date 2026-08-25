@@ -1,11 +1,42 @@
 use rmx::prelude::*;
 
 use std::ops::Range;
-use std::{iter, mem};
+use std::{fmt, hash, iter, mem};
 
 use crate::input::Source;
 use crate::text::{Text, SubText};
 use crate::chunk::Chunk;
+
+/// How far a comment or string extends, or `None` if one does not start here.
+///
+/// `Ok` is a well-formed run, `Err` an unterminated one; either way the
+/// payload is its length in bytes.
+pub type ScanResult = Option<Result<usize, usize>>;
+
+/// A scanner for one lexical form, wrapped so it can sit in a salsa struct.
+///
+/// A bare `fn` pointer field makes the `Debug` bound salsa derives ambiguous
+/// under a higher-ranked lifetime, so the impls it needs are written out here.
+#[derive(Copy, Clone)]
+pub struct Scanner(pub for<'a> fn(&'a str) -> ScanResult);
+
+impl Scanner {
+    pub fn scan(&self, text: &str) -> ScanResult {
+        (self.0)(text)
+    }
+}
+
+impl fmt::Debug for Scanner {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("Scanner")
+    }
+}
+
+impl hash::Hash for Scanner {
+    fn hash<H: hash::Hasher>(&self, state: &mut H) {
+        (self.0 as usize).hash(state);
+    }
+}
 
 #[salsa::tracked]
 pub struct Config<'db> {
@@ -13,10 +44,14 @@ pub struct Config<'db> {
     comment_start_chars: Vec<char>,
     #[returns(ref)]
     string_start_chars: Vec<char>,
-    // fixme had to remove configurability in salsa upgrade
-    // fixme why does chunks::Config work? - because one field derives correctly, but two doesn't
-    //parse_comment: fn(&str) -> Option<Result<usize, usize>>,
-    //parse_string: fn(&str) -> Option<Result<usize, usize>>,
+    // Function pointers have no meaningful equality, so opt out of the
+    // backdating comparison salsa would otherwise generate.
+    #[no_eq]
+    #[returns(copy)]
+    parse_comment: Scanner,
+    #[no_eq]
+    #[returns(copy)]
+    parse_string: Scanner,
 }
 
 #[salsa::tracked(returns(copy))]
@@ -61,8 +96,8 @@ pub fn basic_config<'db>(
         db,
         vec!['/'],
         vec!['"'],
-        //basic_parse_comment,
-        //basic_parse_string,
+        Scanner(basic_parse_comment),
+        Scanner(basic_parse_string),
     )
 }
 
@@ -165,8 +200,7 @@ impl<'db> State<'db> {
     fn parse_comment(&self, text: &str) -> Option<Result<usize, usize>> {
         let start_char = text.chars().next().X();
         if self.config.comment_start_chars(self.db).contains(&start_char) {
-            //self.config.parse_comment(self.db)(text)
-            basic_parse_comment(text)
+            self.config.parse_comment(self.db).scan(text)
         } else {
             None
         }
@@ -175,8 +209,7 @@ impl<'db> State<'db> {
     fn parse_string(&self, text: &str) -> Option<Result<usize, usize>> {
         let start_char = text.chars().next().X();
         if self.config.string_start_chars(self.db).contains(&start_char) {
-            //self.config.parse_string(self.db)(text)
-            basic_parse_string(text)
+            self.config.parse_string(self.db).scan(text)
         } else {
             None
         }
@@ -466,4 +499,88 @@ fn test_source_map() {
         F::S("\"a\\\"b\""),
         F::T("y"),
     ]);
+}
+
+/// A `Config` other than `basic_config` really does drive the scan.
+///
+/// The comment and string forms here share no syntax with the built-in ones,
+/// so the same text has to chunk differently under each.
+#[test]
+fn test_source_map_custom_config() {
+    let db = &crate::Database::default();
+
+    // Comment and string in the custom syntax, followed by text that only the
+    // built-in config would read as a comment and a string.
+    let text = "a#note\nb'str'c// not a comment\n\"not a string\"";
+    let source = Source::new(db, S(text));
+
+    let at = |needle: &str| {
+        let start = text.find(needle).expect("fragment is in the source");
+        start..start + needle.len()
+    };
+
+    let custom = source_map(db, source, custom_config(db));
+    assert_eq!(custom.comments(db), &vec![at("#note")]);
+    assert_eq!(custom.strings(db), &vec![at("'str'")]);
+    assert_eq!(custom.errors(db), &Vec::<Range<usize>>::new());
+
+    // The built-in config sees the other two forms and none of the custom ones.
+    let basic = source_map(db, source, basic_config(db));
+    assert_eq!(basic.comments(db), &vec![at("// not a comment")]);
+    assert_eq!(basic.strings(db), &vec![at("\"not a string\"")]);
+    assert_eq!(basic.errors(db), &Vec::<Range<usize>>::new());
+}
+
+/// An unterminated run in a custom scanner is reported as an error range.
+#[test]
+fn test_source_map_custom_config_error() {
+    let db = &crate::Database::default();
+    let source = Source::new(db, S("ab'unterminated"));
+    let chunk = source_map(db, source, strings_only_config(db));
+    assert_eq!(chunk.strings(db), &Vec::<Range<usize>>::new());
+    assert_eq!(chunk.errors(db), &vec![2..15]);
+}
+
+#[cfg(test)]
+fn hash_comment(text: &str) -> ScanResult {
+    assert!(text.starts_with('#'));
+    Some(Ok(rmx::memchr::memchr(b'\n', text.as_bytes()).unwrap_or(text.len())))
+}
+
+#[cfg(test)]
+fn quote_string(text: &str) -> ScanResult {
+    assert!(text.starts_with('\''));
+    match text[1..].find('\'') {
+        Some(end) => Some(Ok(end + 2)),
+        None => Some(Err(text.len())),
+    }
+}
+
+#[cfg(test)]
+fn never_comment(_text: &str) -> ScanResult {
+    None
+}
+
+#[cfg(test)]
+#[salsa::tracked(returns(copy))]
+fn custom_config<'db>(db: &'db dyn crate::Db) -> Config<'db> {
+    Config::new(
+        db,
+        vec!['#'],
+        vec!['\''],
+        Scanner(hash_comment),
+        Scanner(quote_string),
+    )
+}
+
+#[cfg(test)]
+#[salsa::tracked(returns(copy))]
+fn strings_only_config<'db>(db: &'db dyn crate::Db) -> Config<'db> {
+    Config::new(
+        db,
+        vec![],
+        vec!['\''],
+        Scanner(never_comment),
+        Scanner(quote_string),
+    )
 }
