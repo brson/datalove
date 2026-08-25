@@ -28,7 +28,7 @@ pub fn resolve_functions<'db>(
     // Process each unit in order.
     for unit_index in 0..units.len() {
         let parsed = parser::parse_script_unit(db, script, unit_index);
-        let statements = parsed.statements;
+        let statements = &parsed.statements;
 
         // Check if this unit contains function statements.
         let has_fun = statements.iter().any(|stmt| matches!(stmt, ast::Statement::Fun(_)));
@@ -54,7 +54,7 @@ pub fn resolve_functions<'db>(
         // Add functions from current unit.
         for stmt in statements {
             if let ast::Statement::Fun(fun) = stmt {
-                candidate_functions.push((unit_index, fun));
+                candidate_functions.push((unit_index, *fun));
             }
         }
 
@@ -102,7 +102,7 @@ pub fn resolve_let_statement<'db>(
     unit_index: usize,
 ) -> LetResolution<'db> {
     let parsed = parser::parse_script_unit(db, script, unit_index);
-    let statements = parsed.statements;
+    let statements = &parsed.statements;
 
     // Check that this unit contains a let statement.
     let has_let = statements.iter().any(|stmt| matches!(stmt, ast::Statement::Let(_)));

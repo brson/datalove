@@ -90,13 +90,13 @@ fn analyze_file(path: &Path) -> Result<String, String> {
                 // Parse the fragment to get statements.
                 let source_obj = Source::new(&db, source.clone());
                 let parse_result = datalove_datafun_parser::parse(&db, source_obj);
-                let parsed_ast = parse_result.parsed;
+                let parsed_ast = &parse_result.parsed;
                 let stmts: Vec<Statement> = parsed_ast.statements.to_vec();
 
                 // Typecheck to get expression types using production path.
                 let spans = datalove_datafun_parser::datafun_spans(&db, source_obj);
                 let name_resolution = resolve_script_names(&db, source_obj, parsed_ast.clone());
-                let tycheck_result = datalove_datafun_tycheck::type_check_single_script(&db, source_obj, spans, parsed_ast, name_resolution);
+                let tycheck_result = datalove_datafun_tycheck::type_check_single_script(&db, source_obj, spans, parsed_ast.clone(), name_resolution);
 
                 // Check for type errors - if any, skip lowering.
                 let tycheck_errors = tycheck_result.errors(&db);

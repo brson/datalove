@@ -23,7 +23,7 @@ fn diagnostic_label_spans(db: &Database, source: bct::input::Source) -> Vec<(usi
     let unit_spec = datalove_datafun_tycheck::ScriptUnitSpec::new(
         source,
         spans,
-        datalove_datafun_tycheck::ScriptUnitKind::Fragment(script, name_resolution),
+        datalove_datafun_tycheck::ScriptUnitKind::Fragment(script.clone(), name_resolution),
     );
     let batch_spec = datalove_datafun_tycheck::create_batch_spec(db, source, vec![unit_spec], vec![]);
     let _ = datalove_datafun_tycheck::type_check_script_units(db, batch_spec);

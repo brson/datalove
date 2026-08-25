@@ -31,7 +31,7 @@ fn analyze_file(path: &Path) -> Result<String, String> {
         })
         .collect();
 
-    let serde_ast = datalove_datafun_ast::ast_serde::Script::from_ast(&db, script);
+    let serde_ast = datalove_datafun_ast::ast_serde::Script::from_ast(&db, script.clone());
 
     let output = json!({
         "ast": serde_ast,

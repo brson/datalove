@@ -126,7 +126,7 @@ fn get_datafun_errors<'db>(
 
     let spans = datalove_datafun_parser::datafun_spans(db, src);
     let name_resolution = resolve_script_names(db, src, script.clone());
-    let result = datalove_datafun_tycheck::type_check_single_script(db, src, spans, script, name_resolution);
+    let result = datalove_datafun_tycheck::type_check_single_script(db, src, spans, script.clone(), name_resolution);
 
     let errors: Vec<String> = result
         .errors(db)
@@ -842,7 +842,7 @@ fn test_debug_specific_bracket_cases() {
     let src1_fun = bct::input::Source::new(&db, datafun_text1);
     let datafun_parsed = datalove_datafun_parser::parse_integration_test(&db, src1_fun);
     eprintln!("Datafun has_parse_error: {}", {
-        let stmts = datafun_parsed.statements;
+        let stmts = &datafun_parsed.statements;
         if stmts.is_empty() {
             true
         } else if let datalove_datafun_ast::ast::Statement::Let(stmt) = &stmts[0] {

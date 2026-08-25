@@ -38,7 +38,7 @@ use datalove_datafun_ast::ast::{ParseResult, ParsedStatements};
 ///
 /// Returns just ParsedStatements. For whitespace-only changes, this should
 /// return an equal value, allowing downstream functions to be memoized.
-#[salsa::tracked(returns(clone))]
+#[salsa::tracked(returns(ref))]
 pub fn parse_module_ast<'db>(
     db: &'db dyn salsa::Database,
     module: Module,
@@ -60,7 +60,7 @@ pub fn parse_module_ast<'db>(
 ///
 /// This is tracked so that parsing is memoized per module. The result includes
 /// both statements and spans from the same parse, ensuring expr IDs match.
-#[salsa::tracked(returns(clone))]
+#[salsa::tracked(returns(ref))]
 pub fn parse_module_full<'db>(
     db: &'db dyn salsa::Database,
     module: Module,
@@ -93,7 +93,7 @@ pub fn parse_module_graph<'db>(
     for module in graph.iter_modules(db) {
         let module_id = module.id(db);
         let full_result = parse_module_full(db, module);
-        let parsed = full_result.parsed;
+        let parsed = full_result.parsed.clone();
         let spans = datalove_datafun_ast::spans::DatafunSpans::with_stmt_spans(
             full_result.expr_spans.iter().map(|e| {
                 datalove_datafun_ast::spans::SpanMapEntry {

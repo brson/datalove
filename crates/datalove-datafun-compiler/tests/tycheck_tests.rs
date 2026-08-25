@@ -334,7 +334,7 @@ fn analyze_file(path: &Path) -> Result<String, String> {
     // Collect type judgements for variables and functions.
     let mut judgements = Vec::new();
     let expr_types = tycheck_result.expr_types(&db);
-    for statement in script.statements {
+    for statement in &script.statements {
         match statement {
             datalove_datafun_ast::ast::Statement::Let(let_stmt) => {
                 let name = let_stmt.name;

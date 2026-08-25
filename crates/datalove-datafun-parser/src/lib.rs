@@ -32,7 +32,7 @@ use salsa::Database as Db;
 ///
 /// Returns the parsed statements for that unit.
 /// Salsa will memoize this per unit, so unchanged units don't need re-parsing.
-#[salsa::tracked(returns(clone))]
+#[salsa::tracked(returns(ref))]
 pub fn parse_script_unit<'db>(
     db: &'db dyn Db,
     script: script::Script,
@@ -48,7 +48,7 @@ pub fn parse_script_unit<'db>(
 /// Parse a Source into a datafun script with span information.
 ///
 /// For script parsing (no module context).
-#[salsa::tracked(returns(clone))]
+#[salsa::tracked(returns(ref))]
 pub fn parse<'db>(
     db: &'db dyn Db,
     source: Source,
@@ -261,23 +261,23 @@ fn parse_statements<'db>(
 }
 
 /// Tracked wrapper for parser tests that only need the ParsedStatements.
-#[salsa::tracked(returns(clone))]
+#[salsa::tracked(returns(ref))]
 pub fn parse_for_test<'db>(
     db: &'db dyn Db,
     source: Source,
 ) -> ast::ParsedStatements<'db> {
-    parse(db, source).parsed
+    parse(db, source).parsed.clone()
 }
 
 /// Public tracked wrapper for integration tests that returns just the ParsedStatements.
 ///
 /// Integration tests are compiled as separate binaries and need pub access.
-#[salsa::tracked(returns(clone))]
+#[salsa::tracked(returns(ref))]
 pub fn parse_integration_test<'db>(
     db: &'db dyn Db,
     source: Source,
 ) -> ast::ParsedStatements<'db> {
-    parse(db, source).parsed
+    parse(db, source).parsed.clone()
 }
 
 /// Public tracked wrapper for integration code to enable diagnostic accumulation.
@@ -285,12 +285,12 @@ pub fn parse_integration_test<'db>(
 /// This function should be called before parse() to accumulate diagnostics,
 /// then parse() can be called separately to get the full ParseResult.
 /// Returns just the ParsedStatements to satisfy Salsa's type requirements.
-#[salsa::tracked(returns(clone))]
+#[salsa::tracked(returns(ref))]
 pub fn parse_for_diagnostics<'db>(
     db: &'db dyn Db,
     source: Source,
 ) -> ast::ParsedStatements<'db> {
-    parse(db, source).parsed
+    parse(db, source).parsed.clone()
 }
 
 use datalove_datafun_ast::spans::{SpanMapEntry, DatafunSpans};

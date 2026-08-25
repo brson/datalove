@@ -41,7 +41,7 @@ fn test_parse_equiv(db: &datalove_datafun_compiler::Database, expr_text: &str) -
     let datafun_parsed = datalove_datafun_parser::parse_integration_test(db, datafun_source);
 
     // Extract expression from let statement.
-    let datafun_expr = extract_let_value(db, datafun_parsed)?;
+    let datafun_expr = extract_let_value(db, datafun_parsed.clone())?;
 
     // Convert to datalit serde.
     let datafun_serde = datafun_expr_to_datalit_serde(db, datafun_expr)
@@ -79,7 +79,7 @@ fn test_typecheck_equiv(db: &datalove_datafun_compiler::Database, expr_text: &st
     let datafun_result = datalove_datafun_tycheck::type_check_single_script(db, datafun_source, datafun_spans, datafun_script.clone(), name_resolution);
 
     // Extract expression for type lookup.
-    let datafun_expr = extract_let_value(db, datafun_script)?;
+    let datafun_expr = extract_let_value(db, datafun_script.clone())?;
 
     let datafun_serde = datafun_unit_typecheck_to_serde(db, datafun_result, datafun_expr);
 
@@ -399,7 +399,7 @@ fn test_funlit_equiv_roundtrip() {
         let datafun_source = bct::input::Source::new(&db, datafun_text);
         let datafun_script = datalove_datafun_parser::parse_integration_test(&db, datafun_source);
 
-        if let Ok(datafun_expr) = extract_let_value(&db, datafun_script) {
+        if let Ok(datafun_expr) = extract_let_value(&db, datafun_script.clone()) {
             if let Ok(serde) = datafun_expr_to_datalit_serde(&db, datafun_expr) {
                 // Serialize and deserialize to get a new string representation.
                 let json = rmx::serde_json::to_string(&serde).unwrap();

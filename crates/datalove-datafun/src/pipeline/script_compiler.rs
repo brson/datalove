@@ -222,7 +222,7 @@ impl<'db> ScriptCompiler<'db> {
         let src = bct::input::Source::new(self.db, source.S());
         self.last_source = Some(src);
         let parse_result = datalove_datafun_parser::parse(self.db, src);
-        let parsed = parse_result.parsed;
+        let parsed = &parse_result.parsed;
 
         let parse_diags = datalove_datafun_parser::parse::accumulated::<datalove_diagnostic::ParseDiagnostic>(self.db, src);
         if let Some(result) = self.check_parse_errors(&parse_diags) {
@@ -230,7 +230,7 @@ impl<'db> ScriptCompiler<'db> {
         }
 
         let stmts = parsed.statements.to_vec();
-        let unit = ParsedUnit::Fragment { parsed, stmts };
+        let unit = ParsedUnit::Fragment { parsed: parsed.clone(), stmts };
         self.compile_unit_inner(src, unit)
     }
 
