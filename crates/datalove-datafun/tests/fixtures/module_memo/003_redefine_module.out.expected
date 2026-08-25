@@ -107,7 +107,7 @@
           "resolved_names": false,
           "typechecked": false,
           "typecheck_ok": true,
-          "lowered": true,
+          "lowered": false,
           "lower_ok": true,
           "hash_changed": false,
           "expected": {
@@ -117,7 +117,7 @@
             "lowered": false,
             "hash_changed": false
           },
-          "correct": false
+          "correct": true
         }
       }
     }

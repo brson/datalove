@@ -9,9 +9,18 @@ use crate::input::Source;
 
 /// Opaque module identifier.
 ///
-/// Modules are identified by their path string (e.g., "sys/std/u32").
-#[salsa::input]
-#[derive(Ord, PartialOrd)]
+/// Modules are identified by their path string (e.g., "sys/std/u32"), which
+/// is what interning means: the same path yields the same id, wherever it is
+/// asked for. As an input it did not, and every caller had to route through
+/// whoever happened to construct the id first.
+///
+/// `revisions = usize::MAX` keeps a module id interned for the life of the
+/// database, which is what lets the handle drop the database lifetime. There
+/// are as many of these as there are modules, so nothing is lost by holding
+/// them, and callers pass module ids around too freely for a borrow to be
+/// practical.
+#[salsa::interned(revisions = usize::MAX, unsafe(no_lifetime))]
+#[derive(Debug, Ord, PartialOrd)]
 pub struct ModuleId {
     /// Module path (e.g., "sys/std/u32").
     #[returns(ref)]
@@ -139,5 +148,60 @@ mod tests {
         // Verify dependencies.
         let math_deps = graph.dependencies(&db).get(&math).unwrap();
         assert!(math_deps.contains(&base));
+    }
+
+    /// The same path is the same module id, however it is reached.
+    ///
+    /// This is why the id is interned rather than an input. As an input each
+    /// `new` handed back a distinct id for the same path, so anything that
+    /// built one independently - a synthetic rider path, a second graph
+    /// builder - got an id that compared unequal to everyone else's.
+    #[test]
+    fn module_id_is_the_path() {
+        let db = crate::Database::default();
+
+        let a = ModuleId::new(&db, "sys/std/u32".to_string());
+        let b = ModuleId::new(&db, "sys/std/u32".to_string());
+        assert_eq!(a, b, "the same path has to give the same id");
+        assert_eq!(a.path(&db), "sys/std/u32");
+
+        let other = ModuleId::new(&db, "sys/std/i32".to_string());
+        assert_ne!(a, other, "different paths stay different ids");
+    }
+
+    /// An id built far from the graph still matches the one in it.
+    #[test]
+    fn module_id_matches_across_builders() {
+        let db = crate::Database::default();
+
+        let mut builder = ModuleGraphBuilder::new(&db);
+        let source = Source::new(&db, "let x = 1".to_string());
+        let in_graph = builder.add_module("local/test/a", source);
+        let graph = builder.build();
+
+        // Rebuild the id from the path alone, as a caller holding only a path
+        // would have to.
+        let from_path = ModuleId::new(&db, "local/test/a".to_string());
+        assert_eq!(in_graph, from_path);
+        assert!(
+            graph.get_module(&db, from_path).is_some(),
+            "an id built from the path alone should find its module",
+        );
+    }
+
+    /// Ids keep working as map keys.
+    #[test]
+    fn module_id_is_usable_as_a_map_key() {
+        use rmx::std::collections::BTreeMap;
+
+        let db = crate::Database::default();
+        let mut map = BTreeMap::new();
+        map.insert(ModuleId::new(&db, "b".to_string()), 2);
+        map.insert(ModuleId::new(&db, "a".to_string()), 1);
+
+        // Re-derived keys find their entries.
+        assert_eq!(map.get(&ModuleId::new(&db, "a".to_string())), Some(&1));
+        assert_eq!(map.get(&ModuleId::new(&db, "b".to_string())), Some(&2));
+        assert_eq!(map.len(), 2, "the same path must not insert twice");
     }
 }
