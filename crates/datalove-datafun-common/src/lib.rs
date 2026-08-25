@@ -136,7 +136,7 @@ pub struct ParsedModuleGraph<'db> {
     /// Changes to spans don't invalidate typecheck.
     #[tracked]
     #[returns(ref)]
-    pub spans: Vec<(ModuleId, DatafunSpans)>,
+    pub spans: Vec<(ModuleId, DatafunSpans<'db>)>,
 
     /// Resolved module requires from package resolution.
     ///

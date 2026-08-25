@@ -8,7 +8,7 @@ DualAnalysis(
             ),
             ownership: OwnershipResult(
                 status: "Error",
-                message: "Ownership error in factorial: InconsistentBranchMove { stmt_idx: 0, name: \"n\", moved_in: \"then\" }, UseAfterMove { local_index: 2062, moved_at: 2062, name: \"n\", recovery_hint: InsertAdapt { description: \"clone `n` before the earlier use\" } }, UseAfterMove { local_index: 2063, moved_at: 2063, name: \"n\", recovery_hint: InsertAdapt { description: \"clone `n` before the earlier use\" } }",
+                message: "Ownership error in factorial: InconsistentBranchMove { stmt_idx: 0, name: \"n\", moved_in: \"then\" }, UseAfterMove { expr_key: ExprKey(fn #4), moved_at: ExprKey(fn #4), name: \"n\", recovery_hint: InsertAdapt { description: \"clone `n` before the earlier use\" } }, UseAfterMove { expr_key: ExprKey(fn #5), moved_at: ExprKey(fn #5), name: \"n\", recovery_hint: InsertAdapt { description: \"clone `n` before the earlier use\" } }",
             ),
             interp_lowering: LoweringResult(
                 status: "Skipped",

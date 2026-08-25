@@ -43,7 +43,7 @@ use salsa::plumbing::AsId;
 use datalove_datafun_ast::ast::{
     Statement, StmtFun, StmtLet, StmtVar, StmtSet, StmtRet, StmtIf, StmtLoop, StmtConst,
     StmtMatch, MatchCaseKind,
-    ExprFun, ExprFunKind, BinOp, UnaryOp, ParamMode,
+    ExprFun, ExprFunKind, BinOp, UnaryOp, ParamMode, ExprKey,
 };
 use datalove_datafun_ir::IrType;
 
@@ -66,7 +66,7 @@ pub use datalove_datafun_common::AutoAdaptMode;
 // ============================================================================
 
 /// Pre-computed drop analyses for functions in a script unit.
-pub type ScriptFunctionAnalyses<'db> = HashMap<StmtFun<'db>, FunctionAnalysis>;
+pub type ScriptFunctionAnalyses<'db> = HashMap<StmtFun<'db>, FunctionAnalysis<'db>>;
 
 /// State of a binding during analysis.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -91,10 +91,10 @@ enum OutParamInitState {
 // ============================================================================
 
 /// Context for ownership and liveness analysis.
-struct AnalysisCtx<'db> {
+struct AnalysisCtx<'a, 'db> {
     db: &'db dyn salsa::Database,
     /// Pre-converted expression types (IrType).
-    expr_types: &'db [Option<IrType>],
+    expr_types: &'a [Option<IrType>],
     /// Next binding ID to allocate.
     next_binding: u32,
     /// Next global statement ID for drop schedule keys.
@@ -104,15 +104,15 @@ struct AnalysisCtx<'db> {
     /// Name to binding ID mapping (current scope).
     name_to_binding: HashMap<String, BindingId>,
     /// Stack of scopes. Each scope records bindings created in it.
-    scope_stack: Vec<ScopeFrame>,
+    scope_stack: Vec<ScopeFrame<'db>>,
     /// Uses that auto-adapt turns into clones.
-    adapt_sites: AdaptSites,
+    adapt_sites: AdaptSites<'db>,
     /// Names earlier units exported without a value behind them.
     dead_externals: Vec<String>,
     /// Names from `dead_externals` this unit assigned to.
     revived_externals: Vec<String>,
     /// Detected errors.
-    errors: Vec<AnalysisError>,
+    errors: Vec<AnalysisError<'db>>,
     /// Computed drop schedule.
     schedule: DropSchedule,
     /// Auto-adapt mode for suppressing recoverable errors.
@@ -121,7 +121,7 @@ struct AnalysisCtx<'db> {
 
 /// A scope frame for tracking bindings.
 #[derive(Clone, Debug)]
-struct ScopeFrame {
+struct ScopeFrame<'db> {
     /// Bindings created in this scope.
     bindings: Vec<BindingId>,
     /// Kind of scope (for handling break/continue).
@@ -130,8 +130,8 @@ struct ScopeFrame {
     current_state: HashMap<BindingId, BindingState>,
     /// Initialization state for Out params.
     out_param_init: HashMap<BindingId, OutParamInitState>,
-    /// Where each binding was moved (local_index), for error reporting.
-    moved_at: HashMap<BindingId, u32>,
+    /// Where each binding was moved, for error reporting.
+    moved_at: HashMap<BindingId, ExprKey<'db>>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -145,10 +145,10 @@ enum ScopeKind {
     MatchArm,
 }
 
-impl<'db> AnalysisCtx<'db> {
+impl<'a, 'db> AnalysisCtx<'a, 'db> {
     fn new(
         db: &'db dyn salsa::Database,
-        expr_types: &'db [Option<IrType>],
+        expr_types: &'a [Option<IrType>],
         auto_adapt_mode: AutoAdaptMode,
         dead_externals: Vec<String>,
     ) -> Self {
@@ -174,7 +174,7 @@ impl<'db> AnalysisCtx<'db> {
     /// Consuming a binding from an earlier unit copies out of it, so the only
     /// way a name arrives here empty is that the unit which defined it gave
     /// the value away before it ended.
-    fn check_dead_external(&mut self, name: &str, local_index: u32) {
+    fn check_dead_external(&mut self, name: &str, expr_key: ExprKey<'db>) {
         if !self.dead_externals.iter().any(|dead| dead == name) {
             return;
         }
@@ -182,7 +182,7 @@ impl<'db> AnalysisCtx<'db> {
             description: format!("clone `{}` where it was given away", name),
         };
         self.errors.push(AnalysisError::UseAfterMoveInEarlierUnit {
-            local_index,
+            expr_key,
             name: name.to_string(),
             recovery_hint,
         });
@@ -358,15 +358,15 @@ impl<'db> AnalysisCtx<'db> {
         }
     }
 
-    /// Get where a binding was moved (local_index).
-    fn get_moved_at(&self, id: BindingId) -> Option<u32> {
+    /// Get where a binding was moved.
+    fn get_moved_at(&self, id: BindingId) -> Option<ExprKey<'db>> {
         self.scope_stack.last()?.moved_at.get(&id).copied()
     }
 
     /// Record where a binding was moved.
-    fn set_moved_at(&mut self, id: BindingId, local_index: u32) {
+    fn set_moved_at(&mut self, id: BindingId, expr_key: ExprKey<'db>) {
         if let Some(frame) = self.scope_stack.last_mut() {
-            frame.moved_at.insert(id, local_index);
+            frame.moved_at.insert(id, expr_key);
         }
     }
 
@@ -376,11 +376,11 @@ impl<'db> AnalysisCtx<'db> {
     }
 
     /// Mark a binding as moved at the given expression.
-    fn mark_moved(&mut self, id: BindingId, local_index: u32) {
+    fn mark_moved(&mut self, id: BindingId, expr_key: ExprKey<'db>) {
         // Borrowed params (Ref/Mut) cannot be moved - caller retains ownership.
         if self.bindings[id.0 as usize].is_borrowed() {
             let name = self.bindings[id.0 as usize].name.C();
-            self.errors.push(AnalysisError::CannotMoveBorrowed { local_index, name });
+            self.errors.push(AnalysisError::CannotMoveBorrowed { expr_key, name });
             return;
         }
 
@@ -391,21 +391,21 @@ impl<'db> AnalysisCtx<'db> {
                 if let Some(moved_at) = self.get_moved_at(id) {
                     self.adapt_sites.insert(moved_at);
                 }
-                self.set_moved_at(id, local_index);
+                self.set_moved_at(id, expr_key);
                 return;
             }
             let name = self.bindings[id.0 as usize].name.C();
-            let moved_at = self.get_moved_at(id).unwrap_or(local_index);
+            let moved_at = self.get_moved_at(id).unwrap_or(expr_key);
             let recovery_hint = OwnershipRecoveryHint::InsertAdapt {
                 description: format!("clone `{}` before the second use", name),
             };
-            self.errors.push(AnalysisError::DoubleMove { local_index, moved_at, name, recovery_hint });
+            self.errors.push(AnalysisError::DoubleMove { expr_key, moved_at, name, recovery_hint });
         } else {
             // Track the move for error detection.
             // Note: ScriptUnit bindings are tracked for error detection (e.g., move in loop)
             // but are NOT scheduled for drops since they're exported.
             self.set_state(id, BindingState::Moved);
-            self.set_moved_at(id, local_index);
+            self.set_moved_at(id, expr_key);
         }
     }
 
@@ -540,10 +540,10 @@ impl<'db> AnalysisCtx<'db> {
     /// otherwise `let` bindings are mutable in fact while immutable by
     /// declaration, and writes through a temporary are silently discarded.
     fn check_mutable_argument(&mut self, arg: ExprFun<'db>) {
-        let local_index = arg.as_id().index() as u32;
+        let expr_key = ExprKey::of(self.db, arg);
 
         if !matches!(arg.expr(self.db), ExprFunKind::Place(_)) {
-            self.errors.push(AnalysisError::CannotMutateTemporary { local_index });
+            self.errors.push(AnalysisError::CannotMutateTemporary { expr_key });
             return;
         }
         let Some(root) = self.expr_to_place_root(arg) else {
@@ -556,9 +556,9 @@ impl<'db> AnalysisCtx<'db> {
         let name = self.bindings[root.0 as usize].name.C();
         // A ref parameter gets the more specific message.
         if self.bindings[root.0 as usize].param_mode == Some(ParamMode::Ref) {
-            self.errors.push(AnalysisError::CannotMutFromRef { local_index, name });
+            self.errors.push(AnalysisError::CannotMutFromRef { expr_key, name });
         } else {
-            self.errors.push(AnalysisError::CannotMutateImmutable { local_index, name });
+            self.errors.push(AnalysisError::CannotMutateImmutable { expr_key, name });
         }
     }
 
@@ -596,8 +596,8 @@ impl<'db> AnalysisCtx<'db> {
                     continue;
                 }
                 let name = self.bindings[later_root.0 as usize].name.C();
-                let local_index = later.as_id().index() as u32;
-                self.errors.push(AnalysisError::AliasedMutableArgument { local_index, name });
+                let expr_key = ExprKey::of(self.db, *later);
+                self.errors.push(AnalysisError::AliasedMutableArgument { expr_key, name });
                 break;
             }
         }
@@ -676,7 +676,7 @@ impl<'db> AnalysisCtx<'db> {
     /// Returns the binding ID if the expression is a simple move of a binding.
     fn analyze_expr_moves(&mut self, expr: ExprFun<'db>, is_consumed: bool) -> Option<BindingId> {
         // Use salsa ID index for span lookup (not the AST sequential local_index).
-        let local_index = expr.as_id().index() as u32;
+        let expr_key = ExprKey::of(self.db, expr);
         match expr.expr(self.db) {
             ExprFunKind::BinOp(binop) => {
                 // Binary ops read their operands, not consume them.
@@ -720,12 +720,12 @@ impl<'db> AnalysisCtx<'db> {
                                 && !self.auto_adapt_mode.is_enabled()
                             {
                                 let name = self.bindings[binding_id.0 as usize].name.C();
-                                let local_index = arg.as_id().index() as u32;
-                                let moved_at = self.get_moved_at(binding_id).unwrap_or(local_index);
+                                let expr_key = ExprKey::of(self.db, *arg);
+                                let moved_at = self.get_moved_at(binding_id).unwrap_or(expr_key);
                                 let recovery_hint = OwnershipRecoveryHint::InsertAdapt {
                                     description: format!("clone `{}` before the earlier use", name),
                                 };
-                                self.errors.push(AnalysisError::UseAfterMove { local_index, moved_at, name, recovery_hint });
+                                self.errors.push(AnalysisError::UseAfterMove { expr_key, moved_at, name, recovery_hint });
                             }
                             // Mark the binding as initialized after the call writes to it.
                             if self.bindings[binding_id.0 as usize].param_mode == Some(ParamMode::Out) {
@@ -848,7 +848,7 @@ impl<'db> AnalysisCtx<'db> {
                         // Check for reading uninitialized binding (Out param or uninitialized var).
                         if self.get_out_param_init(id) == Some(OutParamInitState::Uninitialized) {
                             let name = self.bindings[id.0 as usize].name.C();
-                            self.errors.push(AnalysisError::ReadUninitialized { local_index, name });
+                            self.errors.push(AnalysisError::ReadUninitialized { expr_key, name });
                             return None;
                         }
                         // Check for use after move.
@@ -862,20 +862,20 @@ impl<'db> AnalysisCtx<'db> {
                                 self.set_state(id, BindingState::Live);
                             } else {
                                 let name = self.bindings[id.0 as usize].name.C();
-                                let moved_at = self.get_moved_at(id).unwrap_or(local_index);
+                                let moved_at = self.get_moved_at(id).unwrap_or(expr_key);
                                 let recovery_hint = OwnershipRecoveryHint::InsertAdapt {
                                     description: format!("clone `{}` before the earlier use", name),
                                 };
-                                self.errors.push(AnalysisError::UseAfterMove { local_index, moved_at, name, recovery_hint });
+                                self.errors.push(AnalysisError::UseAfterMove { expr_key, moved_at, name, recovery_hint });
                                 return None;
                             }
                         }
                         if is_consumed && !self.bindings[id.0 as usize].ty.is_copy() {
-                            self.mark_moved(id, local_index);
+                            self.mark_moved(id, expr_key);
                             return Some(id);
                         }
                     } else {
-                        self.check_dead_external(root_name, local_index);
+                        self.check_dead_external(root_name, expr_key);
                     }
                     None
                 } else {
@@ -890,15 +890,15 @@ impl<'db> AnalysisCtx<'db> {
                                 self.set_state(id, BindingState::Live);
                             } else {
                                 let name = self.bindings[id.0 as usize].name.C();
-                                let moved_at = self.get_moved_at(id).unwrap_or(local_index);
+                                let moved_at = self.get_moved_at(id).unwrap_or(expr_key);
                                 let recovery_hint = OwnershipRecoveryHint::InsertAdapt {
                                     description: format!("clone `{}` before the earlier use", name),
                                 };
-                                self.errors.push(AnalysisError::UseAfterMove { local_index, moved_at, name, recovery_hint });
+                                self.errors.push(AnalysisError::UseAfterMove { expr_key, moved_at, name, recovery_hint });
                             }
                         }
                     } else {
-                        self.check_dead_external(root_name, local_index);
+                        self.check_dead_external(root_name, expr_key);
                     }
                     for step in &place.steps {
                         if let datalove_datafun_ast::ast::PlaceStep::Index(idx) = step {
@@ -927,9 +927,9 @@ impl<'db> AnalysisCtx<'db> {
 pub fn analyze_function<'db>(
     db: &'db dyn salsa::Database,
     func: StmtFun<'db>,
-    expr_types: &'db [Option<IrType>],
+    expr_types: &[Option<IrType>],
     resolved_param_types: Option<&[IrType]>,
-) -> FunctionAnalysis {
+) -> FunctionAnalysis<'db> {
     analyze_function_with_mode(db, func, expr_types, resolved_param_types, AutoAdaptMode::Disabled)
 }
 
@@ -937,10 +937,10 @@ pub fn analyze_function<'db>(
 pub fn analyze_function_with_mode<'db>(
     db: &'db dyn salsa::Database,
     func: StmtFun<'db>,
-    expr_types: &'db [Option<IrType>],
+    expr_types: &[Option<IrType>],
     resolved_param_types: Option<&[IrType]>,
     auto_adapt_mode: AutoAdaptMode,
-) -> FunctionAnalysis {
+) -> FunctionAnalysis<'db> {
     // A function body cannot name script-level bindings.
     let mut ctx = AnalysisCtx::new(db, expr_types, auto_adapt_mode, Vec::new());
 
@@ -987,10 +987,10 @@ pub fn analyze_function_with_mode<'db>(
 /// This is needed when type aliases are used in function parameters.
 pub fn analyze_script_functions<'db>(
     db: &'db dyn salsa::Database,
-    expr_types: &'db [Option<IrType>],
+    expr_types: &[Option<IrType>],
     stmts: &[Statement<'db>],
     func_param_types: Option<&HashMap<String, Vec<IrType>>>,
-) -> Result<ScriptFunctionAnalyses<'db>, Vec<(String, Vec<AnalysisError>)>> {
+) -> Result<ScriptFunctionAnalyses<'db>, Vec<(String, Vec<AnalysisError<'db>>)>> {
     let mut analyses = HashMap::new();
     let mut errors = Vec::new();
 
@@ -1020,11 +1020,11 @@ pub fn analyze_script_functions<'db>(
 /// Analyze all functions in a list of statements with configurable auto-adapt mode.
 pub fn analyze_script_functions_with_mode<'db>(
     db: &'db dyn salsa::Database,
-    expr_types: &'db [Option<IrType>],
+    expr_types: &[Option<IrType>],
     stmts: &[Statement<'db>],
     func_param_types: Option<&HashMap<String, Vec<IrType>>>,
     auto_adapt_mode: AutoAdaptMode,
-) -> Result<ScriptFunctionAnalyses<'db>, Vec<(String, Vec<AnalysisError>)>> {
+) -> Result<ScriptFunctionAnalyses<'db>, Vec<(String, Vec<AnalysisError<'db>>)>> {
     let mut analyses = HashMap::new();
     let mut errors = Vec::new();
 
@@ -1053,9 +1053,9 @@ pub fn analyze_script_functions_with_mode<'db>(
 
 /// Result of analyzing script-level statements.
 #[derive(Clone, Debug)]
-pub struct ScriptAnalysis {
+pub struct ScriptAnalysis<'db> {
     /// Errors detected during analysis.
-    pub errors: Vec<AnalysisError>,
+    pub errors: Vec<AnalysisError<'db>>,
     /// Computed drop schedule.
     pub schedule: DropSchedule,
     /// Information about each binding (indexed by BindingId).
@@ -1071,7 +1071,7 @@ pub struct ScriptAnalysis {
     /// - AOT: conditional drop (checks tracking byte)
     pub unit_end: Vec<BindingId>,
     /// Uses auto-adapt turned into clones.
-    pub adapt_sites: AdaptSites,
+    pub adapt_sites: AdaptSites<'db>,
     /// Names this unit exports that hold no value.
     pub dead_exports: Vec<String>,
     /// Names from earlier units this unit assigned to.
@@ -1092,20 +1092,20 @@ pub struct ScriptAnalysis {
 /// - AOT: conditional drop (checks tracking byte)
 pub fn analyze_script_statements<'db>(
     db: &'db dyn salsa::Database,
-    expr_types: &'db [Option<IrType>],
+    expr_types: &[Option<IrType>],
     stmts: &[Statement<'db>],
-) -> ScriptAnalysis {
+) -> ScriptAnalysis<'db> {
     analyze_script_statements_with_mode(db, expr_types, stmts, AutoAdaptMode::Disabled, Vec::new())
 }
 
 /// Analyze script statements for ownership with configurable auto-adapt mode.
 pub fn analyze_script_statements_with_mode<'db>(
     db: &'db dyn salsa::Database,
-    expr_types: &'db [Option<IrType>],
+    expr_types: &[Option<IrType>],
     stmts: &[Statement<'db>],
     auto_adapt_mode: AutoAdaptMode,
     dead_externals: Vec<String>,
-) -> ScriptAnalysis {
+) -> ScriptAnalysis<'db> {
     let mut ctx = AnalysisCtx::new(db, expr_types, auto_adapt_mode, dead_externals);
 
     // Enter ScriptUnit scope so bindings are Tracked.
@@ -1160,9 +1160,9 @@ pub fn analyze_script_statements_with_mode<'db>(
 
 /// Result of analyzing a standalone expression.
 #[derive(Clone, Debug)]
-pub struct ExprAnalysis {
+pub struct ExprAnalysis<'db> {
     /// Errors detected during analysis.
-    pub errors: Vec<AnalysisError>,
+    pub errors: Vec<AnalysisError<'db>>,
     /// Information about each binding (indexed by BindingId).
     pub bindings: Vec<BindingInfo>,
 }
@@ -1178,8 +1178,8 @@ pub struct ExprAnalysis {
 pub fn analyze_expr<'db>(
     db: &'db dyn salsa::Database,
     expr: datalove_datafun_ast::ast::ExprFun<'db>,
-    expr_types: &'db [Option<IrType>],
-) -> ExprAnalysis {
+    expr_types: &[Option<IrType>],
+) -> ExprAnalysis<'db> {
     analyze_expr_with_mode(db, expr, expr_types, AutoAdaptMode::Disabled, Vec::new())
 }
 
@@ -1187,10 +1187,10 @@ pub fn analyze_expr<'db>(
 pub fn analyze_expr_with_mode<'db>(
     db: &'db dyn salsa::Database,
     expr: datalove_datafun_ast::ast::ExprFun<'db>,
-    expr_types: &'db [Option<IrType>],
+    expr_types: &[Option<IrType>],
     auto_adapt_mode: AutoAdaptMode,
     dead_externals: Vec<String>,
-) -> ExprAnalysis {
+) -> ExprAnalysis<'db> {
     let mut ctx = AnalysisCtx::new(db, expr_types, auto_adapt_mode, dead_externals);
 
     // Enter a scope for the expression analysis.
@@ -1216,7 +1216,7 @@ pub fn analyze_expr_with_mode<'db>(
 ///
 /// Uses globally-unique statement IDs for drop schedule keys to avoid
 /// collisions between nested scopes (e.g., breaks in different loops).
-fn analyze_statements<'db>(ctx: &mut AnalysisCtx<'db>, stmts: &[Statement<'db>]) {
+fn analyze_statements<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmts: &[Statement<'db>]) {
     for stmt in stmts.iter() {
         // Allocate a globally-unique statement ID.
         let stmt_id = ctx.alloc_stmt_id(stmt);
@@ -1282,7 +1282,7 @@ fn analyze_statements<'db>(ctx: &mut AnalysisCtx<'db>, stmts: &[Statement<'db>])
     }
 }
 
-fn analyze_let<'db>(ctx: &mut AnalysisCtx<'db>, stmt: &StmtLet<'db>, stmt_idx: usize) {
+fn analyze_let<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmt: &StmtLet<'db>, stmt_idx: usize) {
     let expr = stmt.value;
     let may_early_return = ctx.expr_may_early_return(expr);
 
@@ -1307,7 +1307,7 @@ fn analyze_let<'db>(ctx: &mut AnalysisCtx<'db>, stmt: &StmtLet<'db>, stmt_idx: u
 /// Analyze a const statement.
 ///
 /// Const bindings are lowered as let bindings and need the same ownership tracking.
-fn analyze_const<'db>(ctx: &mut AnalysisCtx<'db>, stmt: &StmtConst<'db>, stmt_idx: usize) {
+fn analyze_const<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmt: &StmtConst<'db>, stmt_idx: usize) {
     let expr = stmt.value;
     let may_early_return = ctx.expr_may_early_return(expr);
 
@@ -1328,7 +1328,7 @@ fn analyze_const<'db>(ctx: &mut AnalysisCtx<'db>, stmt: &StmtConst<'db>, stmt_id
     ctx.alloc_binding(name, ty, false, None);
 }
 
-fn analyze_var<'db>(ctx: &mut AnalysisCtx<'db>, stmt: &StmtVar<'db>, stmt_idx: usize) {
+fn analyze_var<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmt: &StmtVar<'db>, stmt_idx: usize) {
     let name = stmt.name.text(ctx.db).S();
 
     if let Some(expr) = stmt.value {
@@ -1363,7 +1363,7 @@ fn analyze_var<'db>(ctx: &mut AnalysisCtx<'db>, stmt: &StmtVar<'db>, stmt_idx: u
     }
 }
 
-fn analyze_set<'db>(ctx: &mut AnalysisCtx<'db>, stmt: &StmtSet<'db>, stmt_idx: usize) {
+fn analyze_set<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmt: &StmtSet<'db>, stmt_idx: usize) {
     let place = &stmt.target;
 
     // Analyze moves in index sub-expressions of the target (if any).
@@ -1420,7 +1420,7 @@ fn analyze_set<'db>(ctx: &mut AnalysisCtx<'db>, stmt: &StmtSet<'db>, stmt_idx: u
         if let Some(id) = ctx.lookup(root_name) {
             if ctx.get_out_param_init(id) == Some(OutParamInitState::Uninitialized) {
                 ctx.errors.push(AnalysisError::OutParamPartialWrite {
-                    local_index: stmt.local_index,
+                    expr_key: ExprKey::of(ctx.db, stmt.value),
                     name: root_name.to_string(),
                 });
             }
@@ -1428,7 +1428,7 @@ fn analyze_set<'db>(ctx: &mut AnalysisCtx<'db>, stmt: &StmtSet<'db>, stmt_idx: u
     }
 }
 
-fn analyze_return<'db>(ctx: &mut AnalysisCtx<'db>, stmt: &StmtRet<'db>, stmt_idx: usize) {
+fn analyze_return<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmt: &StmtRet<'db>, stmt_idx: usize) {
     // Check that all Out params are initialized before return.
     for (idx, info) in ctx.bindings.iter().enumerate() {
         if info.param_mode == Some(ParamMode::Out) {
@@ -1473,7 +1473,7 @@ fn analyze_return<'db>(ctx: &mut AnalysisCtx<'db>, stmt: &StmtRet<'db>, stmt_idx
     }
 }
 
-fn analyze_if<'db>(ctx: &mut AnalysisCtx<'db>, stmt: &StmtIf<'db>, stmt_idx: usize) {
+fn analyze_if<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmt: &StmtIf<'db>, stmt_idx: usize) {
     // Analyze condition. For regular bool conditions, it's just read.
     // For Option/Result conditions with bindings, it's consumed by the destructure.
     let has_binding = stmt.then_binding.is_some();
@@ -1605,7 +1605,7 @@ fn analyze_if<'db>(ctx: &mut AnalysisCtx<'db>, stmt: &StmtIf<'db>, stmt_idx: usi
     }
 }
 
-fn analyze_match<'db>(ctx: &mut AnalysisCtx<'db>, stmt: &StmtMatch<'db>, stmt_idx: usize) {
+fn analyze_match<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmt: &StmtMatch<'db>, stmt_idx: usize) {
     // Match consumes its input.
     ctx.analyze_expr_moves(stmt.input, true);
 
@@ -1716,7 +1716,7 @@ fn analyze_match<'db>(ctx: &mut AnalysisCtx<'db>, stmt: &StmtMatch<'db>, stmt_id
     }
 }
 
-fn analyze_loop<'db>(ctx: &mut AnalysisCtx<'db>, stmt: &StmtLoop<'db>, stmt_idx: usize) {
+fn analyze_loop<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmt: &StmtLoop<'db>, stmt_idx: usize) {
     // Capture outer-scope non-copy bindings that are Live before entering the loop.
     // If any of these become Moved during loop body analysis, that's an error
     // because the loop could iterate multiple times.
@@ -1749,12 +1749,12 @@ fn analyze_loop<'db>(ctx: &mut AnalysisCtx<'db>, stmt: &StmtLoop<'db>, stmt_idx:
                 ctx.set_state(*id, BindingState::Live);
             } else {
                 let name = ctx.bindings[id.0 as usize].name.C();
-                // Use the recorded move location for the error span.
-                let local_index = ctx.get_moved_at(*id).unwrap_or(0);
+                // The binding is Moved, so mark_moved recorded where.
+                let expr_key = ctx.get_moved_at(*id).X();
                 let recovery_hint = OwnershipRecoveryHint::InsertAdapt {
                     description: format!("clone `{}` inside the loop", name),
                 };
-                ctx.errors.push(AnalysisError::MoveInLoop { local_index, name, recovery_hint });
+                ctx.errors.push(AnalysisError::MoveInLoop { expr_key, name, recovery_hint });
             }
         }
     }

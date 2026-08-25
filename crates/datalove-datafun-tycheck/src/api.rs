@@ -230,7 +230,7 @@ pub fn typecheck_script_unit<'db>(
     // supply the conversion the source left out.
     let mut adapt_sites = datalove_datafun_sema::AdaptSites::default();
     for adaptation in ctx.auto_adaptations() {
-        adapt_sites.insert(adaptation.expr_id);
+        adapt_sites.insert(adaptation.expr_key);
     }
 
     // Build result for this unit.
@@ -293,7 +293,7 @@ pub fn type_check_script_units<'db>(
 pub fn type_check_single_script<'db>(
     db: &'db dyn crate::Db,
     source: bct::input::Source,
-    spans: DatafunSpans,
+    spans: DatafunSpans<'db>,
     parsed: ParsedStatements<'db>,
     name_resolution: crate::CollectedNames<'db>,
 ) -> UnitTypecheckResultTracked<'db> {
@@ -327,7 +327,7 @@ pub fn typecheck_module<'db>(
     db: &'db dyn crate::Db,
     module: Module,
     parsed: ParsedStatements<'db>,
-    spans: DatafunSpans,
+    spans: DatafunSpans<'db>,
     name_resolution: crate::ModuleNameResolution<'db>,
     resolved_imports: Vec<ResolvedImportData<'db>>,
     import_errors: Vec<TypeError>,

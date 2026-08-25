@@ -5,21 +5,22 @@
 
 use rmx::prelude::*;
 use bct::diagnostic::SpanEntry;
-use crate::ast::ExprFun;
+use crate::ast::{ExprFun, ExprKey};
 
-/// Entry pairing expression ID with span.
+/// Entry pairing an expression's stable key with its span.
 #[derive(Clone, Debug, Hash, PartialEq, Eq)]
-pub struct SpanMapEntry {
-    pub expr_id: salsa::Id,
+#[derive(salsa::SalsaValue)]
+pub struct SpanMapEntry<'db> {
+    pub expr_key: ExprKey<'db>,
     pub entry: SpanEntry,
 }
 
 /// Datafun expression and statement spans.
 #[derive(Clone, Debug, Hash, PartialEq, Eq)]
 #[derive(salsa::SalsaValue)]
-pub struct DatafunSpans {
-    /// Expression spans, keyed by expression salsa ID.
-    pub entries: Vec<SpanMapEntry>,
+pub struct DatafunSpans<'db> {
+    /// Expression spans, keyed by the expression's stable key.
+    pub entries: Vec<SpanMapEntry<'db>>,
     /// Break statement spans, indexed by local_index.
     pub break_spans: Vec<SpanEntry>,
     /// Continue statement spans, indexed by local_index.
@@ -34,9 +35,9 @@ pub struct DatafunSpans {
     pub type_alias_spans: Vec<SpanEntry>,
 }
 
-impl DatafunSpans {
+impl<'db> DatafunSpans<'db> {
     /// Create new DatafunSpans with expression spans only.
-    pub fn new(entries: Vec<SpanMapEntry>) -> Self {
+    pub fn new(entries: Vec<SpanMapEntry<'db>>) -> Self {
         Self {
             entries,
             break_spans: vec![],
@@ -50,7 +51,7 @@ impl DatafunSpans {
 
     /// Create new DatafunSpans with all span types.
     pub fn with_stmt_spans(
-        entries: Vec<SpanMapEntry>,
+        entries: Vec<SpanMapEntry<'db>>,
         break_spans: Vec<SpanEntry>,
         continue_spans: Vec<SpanEntry>,
         ret_spans: Vec<SpanEntry>,
@@ -62,11 +63,14 @@ impl DatafunSpans {
     }
 
     /// Look up span for an expression.
-    pub fn lookup<'db>(&self, expr: ExprFun<'db>) -> Option<SpanEntry> {
-        use salsa::plumbing::AsId;
-        let expr_id = expr.as_id();
+    pub fn lookup(&self, db: &'db dyn salsa::Database, expr: ExprFun<'db>) -> Option<SpanEntry> {
+        self.lookup_key(ExprKey::of(db, expr))
+    }
+
+    /// Look up span by an expression's stable key.
+    pub fn lookup_key(&self, expr_key: ExprKey<'db>) -> Option<SpanEntry> {
         self.entries.iter()
-            .find(|e| e.expr_id == expr_id)
+            .find(|e| e.expr_key == expr_key)
             .map(|e| e.entry.C())
     }
 

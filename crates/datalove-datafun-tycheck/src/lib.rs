@@ -81,19 +81,19 @@ impl Default for RecoveryHint {
 pub enum PendingDiagnostic<'db> {
     /// F001: Undefined variable.
     UndefinedVariable {
-        expr_id: u32,
+        expr_key: ExprKey<'db>,
         module_id: Option<ModuleId>,
         name: InternedText<'db>,
     },
     /// F002: Undefined function.
     UndefinedFunction {
-        expr_id: u32,
+        expr_key: ExprKey<'db>,
         module_id: Option<ModuleId>,
         name: InternedText<'db>,
     },
     /// F011: Cannot synthesize type.
     CannotSynthesize {
-        expr_id: u32,
+        expr_key: ExprKey<'db>,
         module_id: Option<ModuleId>,
         message: InternedText<'db>,
     },
@@ -101,7 +101,7 @@ pub enum PendingDiagnostic<'db> {
     ///
     /// If recovery_hint is `InsertAdapt`, the error can be fixed by inserting `@`.
     TypeMismatch {
-        expr_id: u32,
+        expr_key: ExprKey<'db>,
         module_id: Option<ModuleId>,
         expected: InternedText<'db>,
         actual: InternedText<'db>,
@@ -111,7 +111,7 @@ pub enum PendingDiagnostic<'db> {
     },
     /// F026: Invalid operand type.
     InvalidOperandType {
-        expr_id: u32,
+        expr_key: ExprKey<'db>,
         module_id: Option<ModuleId>,
         op: InternedText<'db>,
         ty: InternedText<'db>,
@@ -119,7 +119,7 @@ pub enum PendingDiagnostic<'db> {
     /// F045: Function arity mismatch.
     ArityMismatch {
         /// Salsa ID of the call expression (for primary span lookup).
-        call_expr_id: u32,
+        call_expr_key: ExprKey<'db>,
         /// Module where the call occurs (None for non-module-graph paths).
         call_module_id: Option<ModuleId>,
         /// Name of the function being called.
@@ -135,12 +135,12 @@ pub enum PendingDiagnostic<'db> {
     },
     /// F046: Result destructuring requires error binding.
     ResultRequiresBinding {
-        expr_id: u32,
+        expr_key: ExprKey<'db>,
         module_id: Option<ModuleId>,
     },
     /// F048: Try operator type mismatch.
     TryTypeMismatch {
-        expr_id: u32,
+        expr_key: ExprKey<'db>,
         module_id: Option<ModuleId>,
         operator: InternedText<'db>,
         expected: InternedText<'db>,
@@ -148,7 +148,7 @@ pub enum PendingDiagnostic<'db> {
     },
     /// F049: Try operator return type mismatch.
     TryReturnTypeMismatch {
-        expr_id: u32,
+        expr_key: ExprKey<'db>,
         module_id: Option<ModuleId>,
         operator: InternedText<'db>,
         expected: InternedText<'db>,
@@ -188,13 +188,13 @@ pub enum PendingDiagnostic<'db> {
     },
     /// F056: Const not allowed at module level.
     ConstNotAllowedInModule {
-        local_index: u32,
+        expr_key: ExprKey<'db>,
         module_id: Option<ModuleId>,
         name: InternedText<'db>,
     },
     /// F057: Call-site mode marker disagrees with the declared parameter mode.
     ArgumentModeMismatch {
-        local_index: u32,
+        expr_key: ExprKey<'db>,
         module_id: Option<ModuleId>,
         /// Declared mode of the parameter.
         expected: InternedText<'db>,
@@ -332,13 +332,13 @@ pub enum ScriptUnitKind<'db> {
 #[derive(salsa::SalsaValue)]
 pub struct ScriptUnitSpec<'db> {
     pub source: bct::input::Source,
-    pub spans: DatafunSpans,
+    pub spans: DatafunSpans<'db>,
     pub kind: ScriptUnitKind<'db>,
 }
 
 impl<'db> ScriptUnitSpec<'db> {
     /// Create new ScriptUnitSpec.
-    pub fn new(source: bct::input::Source, spans: DatafunSpans, kind: ScriptUnitKind<'db>) -> Self {
+    pub fn new(source: bct::input::Source, spans: DatafunSpans<'db>, kind: ScriptUnitKind<'db>) -> Self {
         Self { source, spans, kind }
     }
 }
@@ -349,7 +349,7 @@ impl<'db> ScriptUnitSpec<'db> {
 pub struct ModuleSpec<'db> {
     pub path: String,
     pub source: bct::input::Source,
-    pub spans: DatafunSpans,
+    pub spans: DatafunSpans<'db>,
     pub parsed: ParsedStatements<'db>,
     pub module_id: ModuleId,
     /// Pre-computed name resolution for this module.
@@ -361,7 +361,7 @@ impl<'db> ModuleSpec<'db> {
     pub fn new(
         path: String,
         source: bct::input::Source,
-        spans: DatafunSpans,
+        spans: DatafunSpans<'db>,
         parsed: ParsedStatements<'db>,
         module_id: ModuleId,
         name_resolution: CollectedNames<'db>,
@@ -438,7 +438,7 @@ pub struct UnitTypecheckResultTracked<'db> {
     /// Lowering has to supply the conversion the source left out, or the
     /// binding would hold the unconverted value under the adapted type.
     #[returns(ref)]
-    pub adapt_sites: datalove_datafun_sema::AdaptSites,
+    pub adapt_sites: datalove_datafun_sema::AdaptSites<'db>,
 }
 
 /// Result of typechecking multiple script units together.

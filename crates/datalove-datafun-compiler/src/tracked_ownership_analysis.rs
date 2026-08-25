@@ -30,7 +30,7 @@ pub struct SingleFunctionAnalysis<'db> {
 
     /// Analysis result (None if analysis failed with errors).
     #[returns(ref)]
-    pub analysis: Option<FunctionAnalysis>,
+    pub analysis: Option<FunctionAnalysis<'db>>,
 
     /// Errors from analysis.
     #[returns(ref)]

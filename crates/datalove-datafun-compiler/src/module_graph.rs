@@ -97,7 +97,7 @@ pub fn parse_module_graph<'db>(
         let spans = datalove_datafun_ast::spans::DatafunSpans::with_stmt_spans(
             full_result.expr_spans.iter().map(|e| {
                 datalove_datafun_ast::spans::SpanMapEntry {
-                    expr_id: e.expr_id,
+                    expr_key: e.expr_key,
                     entry: bct::diagnostic::SpanEntry::new(e.text_id, e.span.clone()),
                 }
             }).collect(),
@@ -930,15 +930,30 @@ mod tests {
         let source_a = bct::input::Source::new(&db, "let x = 1".to_string());
         let source_b = bct::input::Source::new(&db, "let y = 2".to_string());
 
-        let spans_a1 = datalove_datafun_parser::datafun_spans(&db, source_a);
-        let _ = datalove_datafun_parser::datafun_spans(&db, source_b);
-        let entries_a1: Vec<_> = spans_a1.entries.iter().map(|e| e.expr_id).collect();
+        // Take the keys as owned data: an ExprKey borrows the database, so it
+        // cannot be carried across the edit below, which is the point of it.
+        let owned_keys = |spans: &datalove_datafun_ast::spans::DatafunSpans<'_>, db: &Database| {
+            spans.entries.iter()
+                .map(|e| (
+                    e.expr_key.fn_name.map(|n| n.as_str(db).to_string()),
+                    e.expr_key.local_index,
+                ))
+                .collect::<Vec<_>>()
+        };
+
+        let entries_a1 = {
+            let spans_a1 = datalove_datafun_parser::datafun_spans(&db, source_a);
+            let _ = datalove_datafun_parser::datafun_spans(&db, source_b);
+            owned_keys(&spans_a1, &db)
+        };
 
         // Change only B.
         source_b.set_text(&mut db).to("let y = 999".to_string());
 
-        let spans_a2 = datalove_datafun_parser::datafun_spans(&db, source_a);
-        let entries_a2: Vec<_> = spans_a2.entries.iter().map(|e| e.expr_id).collect();
+        let entries_a2 = {
+            let spans_a2 = datalove_datafun_parser::datafun_spans(&db, source_a);
+            owned_keys(&spans_a2, &db)
+        };
 
         // Verify entries are consistent for unchanged source A.
         assert!(!entries_a1.is_empty(), "First call has entries");

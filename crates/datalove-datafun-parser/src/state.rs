@@ -35,6 +35,16 @@ enum TokenSource<'db> {
     },
 }
 
+/// Script-level identity counters carried from one line's parser to the next.
+///
+/// A `Parser` is built per line, so without this the script-level expression
+/// keys would restart at zero on every line and collide.
+#[derive(Copy, Clone, Default)]
+pub(super) struct ScriptCounters {
+    pub expr: u32,
+    pub call: u32,
+}
+
 /// Parser state for datafun parsing.
 pub(super) struct Parser<'db> {
     pub(super) db: &'db dyn Db,
@@ -45,7 +55,7 @@ pub(super) struct Parser<'db> {
     /// Module ID for stable function identity (None for scripts).
     module_id: Option<ModuleId>,
     /// Accumulated expression spans (side table pattern).
-    expr_spans: Vec<ast::ParseSpanEntry>,
+    expr_spans: Vec<ast::ParseSpanEntry<'db>>,
     /// Accumulated break statement spans, indexed by local_index.
     break_spans: Vec<SpanEntry>,
     /// Accumulated continue statement spans, indexed by local_index.
@@ -63,9 +73,17 @@ pub(super) struct Parser<'db> {
     /// Current function name for expression identity (None for script-level).
     current_fn_name: Option<InternedText<'db>>,
     /// Counter for expressions within current function.
+    ///
+    /// Reset on entering a function, since a key names the function it is in.
+    /// At script level it runs for the whole parse, across the per-line
+    /// parsers, so that script-level keys stay distinct.
     expr_counter: u32,
+    /// Script-level expression counter, saved while inside a function.
+    script_expr_counter: u32,
     /// Counter for function calls within current function.
     call_counter: u32,
+    /// Script-level call counter, saved while inside a function.
+    script_call_counter: u32,
     /// Counter for statements needing spans (break, continue).
     stmt_counter: u32,
 }
@@ -77,6 +95,7 @@ impl<'db> Parser<'db> {
         tokens: Vec<TreeToken<'db>>,
         source_text: bct::text::Text<'db>,
         module_id: Option<ModuleId>,
+        counters: ScriptCounters,
     ) -> Self {
         Parser {
             db,
@@ -93,9 +112,39 @@ impl<'db> Parser<'db> {
             type_alias_spans: Vec::new(),
             branch_context: None,
             current_fn_name: None,
-            expr_counter: 0,
-            call_counter: 0,
+            expr_counter: counters.expr,
+            script_expr_counter: counters.expr,
+            call_counter: counters.call,
+            script_call_counter: counters.call,
             stmt_counter: 0,
+        }
+    }
+
+    /// Create a parser for a nested body, continuing this parser's identity.
+    ///
+    /// A nested parser that started its counters from zero would hand out keys
+    /// that collide with the enclosing body's.
+    pub(super) fn new_sub(&self, tokens: Vec<TreeToken<'db>>) -> Self {
+        let mut sub = Parser::new(
+            self.db,
+            tokens,
+            self.source_text,
+            self.module_id,
+            ScriptCounters::default(),
+        );
+        sub.current_fn_name = self.current_fn_name;
+        sub.expr_counter = self.expr_counter;
+        sub.script_expr_counter = self.script_expr_counter;
+        sub.call_counter = self.call_counter;
+        sub.script_call_counter = self.script_call_counter;
+        sub
+    }
+
+    /// The script-level counters this parser reached, to seed the next line.
+    pub(super) fn script_counters(&self) -> ScriptCounters {
+        ScriptCounters {
+            expr: if self.current_fn_name.is_some() { self.script_expr_counter } else { self.expr_counter },
+            call: if self.current_fn_name.is_some() { self.script_call_counter } else { self.call_counter },
         }
     }
 
@@ -135,7 +184,9 @@ impl<'db> Parser<'db> {
             branch_context: context,
             current_fn_name: None,
             expr_counter: 0,
+            script_expr_counter: 0,
             call_counter: 0,
+            script_call_counter: 0,
             stmt_counter: 0,
         };
         // Prime the buffer.
@@ -171,18 +222,33 @@ impl<'db> Parser<'db> {
             branch_context: context,
             current_fn_name: self.current_fn_name,
             expr_counter: self.expr_counter,
+            script_expr_counter: self.script_expr_counter,
             call_counter: self.call_counter,
+            script_call_counter: self.script_call_counter,
             stmt_counter: self.stmt_counter,
         };
         parser.fill_iter_buffer();
         parser
     }
 
+    /// Merge a nested parser's spans and identity counters, but not its
+    /// statement counter, which indexes a positional span vector.
+    pub(super) fn merge_identity_from(&mut self, sub: &mut Self) {
+        self.had_error |= sub.had_error;
+        self.expr_counter = sub.expr_counter;
+        self.script_expr_counter = sub.script_expr_counter;
+        self.call_counter = sub.call_counter;
+        self.script_call_counter = sub.script_call_counter;
+        self.merge_spans_from(sub);
+    }
+
     /// Merge state back from sub-parser after it finishes.
     pub(super) fn merge_from_sub(&mut self, sub: &mut Self) {
         self.had_error |= sub.had_error;
         self.expr_counter = sub.expr_counter;
+        self.script_expr_counter = sub.script_expr_counter;
         self.call_counter = sub.call_counter;
+        self.script_call_counter = sub.script_call_counter;
         self.stmt_counter = sub.stmt_counter;
         self.merge_spans_from(sub);
     }
@@ -207,14 +273,18 @@ impl<'db> Parser<'db> {
 
     /// Enter function context for expression identity tracking.
     pub(super) fn enter_function(&mut self, name: InternedText<'db>) {
+        self.script_expr_counter = self.expr_counter;
+        self.script_call_counter = self.call_counter;
         self.current_fn_name = Some(name);
         self.expr_counter = 0;
         self.call_counter = 0;
     }
 
-    /// Exit function context.
+    /// Exit function context, restoring the script-level counters.
     pub(super) fn exit_function(&mut self) {
         self.current_fn_name = None;
+        self.expr_counter = self.script_expr_counter;
+        self.call_counter = self.script_call_counter;
     }
 
     /// Get next expression index and increment counter.
@@ -389,7 +459,7 @@ impl<'db> Parser<'db> {
             kind,
         );
         self.expr_spans.push(ast::ParseSpanEntry::new(
-            expr.as_id(),
+            ast::ExprKey::of(self.db, expr),
             ts.text.as_id(),
             ts.span,
         ));
@@ -397,7 +467,7 @@ impl<'db> Parser<'db> {
     }
 
     /// Take the accumulated expression spans (consumes them).
-    pub(super) fn take_expr_spans(&mut self) -> Vec<ast::ParseSpanEntry> {
+    pub(super) fn take_expr_spans(&mut self) -> Vec<ast::ParseSpanEntry<'db>> {
         rmx::std::mem::take(&mut self.expr_spans)
     }
 

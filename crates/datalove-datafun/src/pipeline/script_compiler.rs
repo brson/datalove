@@ -71,7 +71,7 @@ struct TypecheckOutput<'db> {
 /// Output from ownership phase.
 struct OwnershipOutput<'db> {
     func_analyses: ScriptFunctionAnalyses<'db>,
-    script_analysis: Option<ScriptAnalysisData>,
+    script_analysis: Option<ScriptAnalysisData<'db>>,
     /// Names this unit exports that hold no value.
     dead_exports: Vec<String>,
     /// Names from earlier units this unit assigned to.
@@ -205,9 +205,9 @@ pub struct ScriptCompiler<'db> {
     /// Auto-adapt mode for ownership analysis.
     auto_adapt_mode: AutoAdaptMode,
     /// Last ownership errors from compilation (for diagnostic rendering).
-    last_ownership_errors: Vec<AnalysisError>,
+    last_ownership_errors: Vec<AnalysisError<'db>>,
     /// Spans for the last compilation unit (for diagnostic rendering).
-    last_spans: Option<datalove_datafun_ast::spans::DatafunSpans>,
+    last_spans: Option<datalove_datafun_ast::spans::DatafunSpans<'db>>,
     /// Names earlier units exported without a value behind them.
     ///
     /// A unit copies out of the bindings earlier units own, so a name only

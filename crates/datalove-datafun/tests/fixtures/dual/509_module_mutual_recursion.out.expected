@@ -8,7 +8,7 @@ DualAnalysis(
             ),
             ownership: OwnershipResult(
                 status: "Error",
-                message: "Ownership error in is_even: InconsistentBranchMove { stmt_idx: 0, name: \"n\", moved_in: \"then\" }, UseAfterMove { local_index: 2068, moved_at: 2068, name: \"n\", recovery_hint: InsertAdapt { description: \"clone `n` before the earlier use\" } }\nOwnership error in is_odd: InconsistentBranchMove { stmt_idx: 0, name: \"n\", moved_in: \"then\" }, UseAfterMove { local_index: 2076, moved_at: 2076, name: \"n\", recovery_hint: InsertAdapt { description: \"clone `n` before the earlier use\" } }",
+                message: "Ownership error in is_even: InconsistentBranchMove { stmt_idx: 0, name: \"n\", moved_in: \"then\" }, UseAfterMove { expr_key: ExprKey(fn #4), moved_at: ExprKey(fn #4), name: \"n\", recovery_hint: InsertAdapt { description: \"clone `n` before the earlier use\" } }\nOwnership error in is_odd: InconsistentBranchMove { stmt_idx: 0, name: \"n\", moved_in: \"then\" }, UseAfterMove { expr_key: ExprKey(fn #4), moved_at: ExprKey(fn #4), name: \"n\", recovery_hint: InsertAdapt { description: \"clone `n` before the earlier use\" } }",
             ),
             interp_lowering: LoweringResult(
                 status: "Skipped",

@@ -10,7 +10,7 @@ Analysis(
             ),
             ownership: OwnershipResult(
                 status: "Error",
-                message: "Ownership error in double_add: UseAfterMove { local_index: 2065, moved_at: 2062, name: \"N\", recovery_hint: InsertAdapt { description: \"clone `N` before the earlier use\" } }",
+                message: "Ownership error in double_add: UseAfterMove { expr_key: ExprKey(fn #4), moved_at: ExprKey(fn #1), name: \"N\", recovery_hint: InsertAdapt { description: \"clone `N` before the earlier use\" } }",
             ),
             lowering: LoweringResult(
                 status: "Skipped",

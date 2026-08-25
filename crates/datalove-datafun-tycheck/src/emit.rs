@@ -5,9 +5,8 @@
 
 use bct::text::{InternedText, TextSpan};
 use datalove_diagnostic::DiagnosticBuilderExt;
-use salsa::plumbing::FromId;
 
-use datalove_datafun_ast::ast::ExprFun;
+use datalove_datafun_ast::ast::ExprKey;
 
 use crate::{DatafunSpans, ModuleId, ParsedModuleGraph, PendingDiagnostic, RecoveryHint};
 
@@ -16,8 +15,8 @@ use crate::{DatafunSpans, ModuleId, ParsedModuleGraph, PendingDiagnostic, Recove
 /// Abstracts over local spans (DatafunSpans) and module graph spans
 /// (ParsedModuleGraph + ModuleId) so diagnostic emission can be shared.
 pub trait SpanLookup<'db> {
-    /// Look up span for an expression by its salsa ID index.
-    fn lookup_expr(&self, db: &'db dyn crate::Db, expr_id: u32) -> Option<TextSpan<'db>>;
+    /// Look up span for an expression by its stable key.
+    fn lookup_expr(&self, db: &'db dyn crate::Db, expr_key: ExprKey<'db>) -> Option<TextSpan<'db>>;
 
     /// Look up span for a break statement by local_index.
     fn lookup_break(&self, db: &'db dyn crate::Db, local_index: u32) -> Option<TextSpan<'db>>;
@@ -48,21 +47,19 @@ pub trait SpanLookup<'db> {
 }
 
 /// SpanLookup implementation for local spans (DatafunSpans).
-pub struct LocalSpanLookup<'a> {
-    spans: &'a DatafunSpans,
+pub struct LocalSpanLookup<'a, 'db> {
+    spans: &'a DatafunSpans<'db>,
 }
 
-impl<'a> LocalSpanLookup<'a> {
-    pub fn new(spans: &'a DatafunSpans) -> Self {
+impl<'a, 'db> LocalSpanLookup<'a, 'db> {
+    pub fn new(spans: &'a DatafunSpans<'db>) -> Self {
         Self { spans }
     }
 }
 
-impl<'db> SpanLookup<'db> for LocalSpanLookup<'_> {
-    fn lookup_expr(&self, db: &'db dyn crate::Db, expr_id: u32) -> Option<TextSpan<'db>> {
-        let id = unsafe { salsa::Id::from_index(expr_id) };
-        let expr = ExprFun::from_id(id);
-        self.spans.lookup(expr).map(|entry| {
+impl<'db> SpanLookup<'db> for LocalSpanLookup<'_, 'db> {
+    fn lookup_expr(&self, db: &'db dyn crate::Db, expr_key: ExprKey<'db>) -> Option<TextSpan<'db>> {
+        self.spans.lookup_key(expr_key).map(|entry| {
             let (text, span) = entry.to_text_and_span(db);
             TextSpan::new(text, span)
         })
@@ -127,11 +124,9 @@ impl<'a, 'db> ModuleGraphSpanLookup<'a, 'db> {
 }
 
 impl<'db> SpanLookup<'db> for ModuleGraphSpanLookup<'_, 'db> {
-    fn lookup_expr(&self, db: &'db dyn crate::Db, expr_id: u32) -> Option<TextSpan<'db>> {
+    fn lookup_expr(&self, db: &'db dyn crate::Db, expr_key: ExprKey<'db>) -> Option<TextSpan<'db>> {
         let spans = self.parsed_graph.get_spans(db, self.module_id)?;
-        let id = unsafe { salsa::Id::from_index(expr_id) };
-        let expr = ExprFun::from_id(id);
-        spans.lookup(expr).map(|entry| {
+        spans.lookup_key(expr_key).map(|entry| {
             let (text, span) = entry.to_text_and_span(db);
             TextSpan::new(text, span)
         })
@@ -211,8 +206,8 @@ fn emit_single_diagnostic<'db>(
     spans: &dyn SpanLookup<'db>,
 ) {
     match diag {
-        PendingDiagnostic::UndefinedVariable { expr_id, module_id: _, name } => {
-            if let Some(ts) = spans.lookup_expr(db, *expr_id) {
+        PendingDiagnostic::UndefinedVariable { expr_key, module_id: _, name } => {
+            if let Some(ts) = spans.lookup_expr(db, *expr_key) {
                 let msg = format!("cannot find value `{}` in this scope", name.as_str(db));
                 bct::diagnostic::DiagnosticBuilder::error(db, &msg)
                     .code("F001")
@@ -220,8 +215,8 @@ fn emit_single_diagnostic<'db>(
                     .emit_type();
             }
         }
-        PendingDiagnostic::UndefinedFunction { expr_id, module_id: _, name } => {
-            if let Some(ts) = spans.lookup_expr(db, *expr_id) {
+        PendingDiagnostic::UndefinedFunction { expr_key, module_id: _, name } => {
+            if let Some(ts) = spans.lookup_expr(db, *expr_key) {
                 let msg = format!("cannot find function `{}` in this scope", name.as_str(db));
                 bct::diagnostic::DiagnosticBuilder::error(db, &msg)
                     .code("F002")
@@ -229,16 +224,16 @@ fn emit_single_diagnostic<'db>(
                     .emit_type();
             }
         }
-        PendingDiagnostic::CannotSynthesize { expr_id, module_id: _, message } => {
-            if let Some(ts) = spans.lookup_expr(db, *expr_id) {
+        PendingDiagnostic::CannotSynthesize { expr_key, module_id: _, message } => {
+            if let Some(ts) = spans.lookup_expr(db, *expr_key) {
                 bct::diagnostic::DiagnosticBuilder::error(db, message.as_str(db))
                     .code("F011")
                     .primary_label(ts, "cannot infer type")
                     .emit_type();
             }
         }
-        PendingDiagnostic::TypeMismatch { expr_id, module_id: _, expected, actual, label, recovery_hint } => {
-            if let Some(ts) = spans.lookup_expr(db, *expr_id) {
+        PendingDiagnostic::TypeMismatch { expr_key, module_id: _, expected, actual, label, recovery_hint } => {
+            if let Some(ts) = spans.lookup_expr(db, *expr_key) {
                 let msg = format!(
                     "mismatched types: expected `{}`, found `{}`",
                     expected.as_str(db),
@@ -256,8 +251,8 @@ fn emit_single_diagnostic<'db>(
                 builder.emit_type();
             }
         }
-        PendingDiagnostic::InvalidOperandType { expr_id, module_id: _, op, ty } => {
-            if let Some(ts) = spans.lookup_expr(db, *expr_id) {
+        PendingDiagnostic::InvalidOperandType { expr_key, module_id: _, op, ty } => {
+            if let Some(ts) = spans.lookup_expr(db, *expr_key) {
                 let msg = format!(
                     "invalid operand type `{}` for operator `{}`",
                     ty.as_str(db),
@@ -277,7 +272,7 @@ fn emit_single_diagnostic<'db>(
             }
         }
         PendingDiagnostic::ArityMismatch {
-            call_expr_id,
+            call_expr_key,
             call_module_id: _,
             func_name,
             func_local_index,
@@ -285,10 +280,10 @@ fn emit_single_diagnostic<'db>(
             expected,
             actual,
         } => {
-            emit_arity_mismatch(db, spans, *call_expr_id, *func_name, *func_local_index, *func_module_id, *expected, *actual);
+            emit_arity_mismatch(db, spans, *call_expr_key, *func_name, *func_local_index, *func_module_id, *expected, *actual);
         }
-        PendingDiagnostic::ResultRequiresBinding { expr_id, module_id: _ } => {
-            if let Some(ts) = spans.lookup_expr(db, *expr_id) {
+        PendingDiagnostic::ResultRequiresBinding { expr_key, module_id: _ } => {
+            if let Some(ts) = spans.lookup_expr(db, *expr_key) {
                 bct::diagnostic::DiagnosticBuilder::error(db, "Result destructuring requires an else binding")
                     .code("F046")
                     .primary_label(ts, "Result type here")
@@ -296,8 +291,8 @@ fn emit_single_diagnostic<'db>(
                     .emit_type();
             }
         }
-        PendingDiagnostic::TryTypeMismatch { expr_id, module_id: _, operator, expected, actual } => {
-            if let Some(ts) = spans.lookup_expr(db, *expr_id) {
+        PendingDiagnostic::TryTypeMismatch { expr_key, module_id: _, operator, expected, actual } => {
+            if let Some(ts) = spans.lookup_expr(db, *expr_key) {
                 let msg = format!(
                     "try operator `{}` requires {} type, found `{}`",
                     operator.as_str(db),
@@ -313,8 +308,8 @@ fn emit_single_diagnostic<'db>(
                     .emit_type();
             }
         }
-        PendingDiagnostic::TryReturnTypeMismatch { expr_id, module_id: _, operator, expected, actual } => {
-            if let Some(ts) = spans.lookup_expr(db, *expr_id) {
+        PendingDiagnostic::TryReturnTypeMismatch { expr_key, module_id: _, operator, expected, actual } => {
+            if let Some(ts) = spans.lookup_expr(db, *expr_key) {
                 let msg = format!(
                     "try operator `{}` requires function to return {}, found `{}`",
                     operator.as_str(db),
@@ -392,8 +387,8 @@ fn emit_single_diagnostic<'db>(
                     .emit_type();
             }
         }
-        PendingDiagnostic::ConstNotAllowedInModule { local_index, module_id: _, name } => {
-            if let Some(ts) = spans.lookup_expr(db, *local_index) {
+        PendingDiagnostic::ConstNotAllowedInModule { expr_key, module_id: _, name } => {
+            if let Some(ts) = spans.lookup_expr(db, *expr_key) {
                 bct::diagnostic::DiagnosticBuilder::error(
                     db,
                     &format!("const `{}` not allowed at module level", name.as_str(db)),
@@ -404,8 +399,8 @@ fn emit_single_diagnostic<'db>(
                     .emit_type();
             }
         }
-        PendingDiagnostic::ArgumentModeMismatch { local_index, module_id: _, expected, found } => {
-            if let Some(ts) = spans.lookup_expr(db, *local_index) {
+        PendingDiagnostic::ArgumentModeMismatch { expr_key, module_id: _, expected, found } => {
+            if let Some(ts) = spans.lookup_expr(db, *expr_key) {
                 bct::diagnostic::DiagnosticBuilder::error(
                     db,
                     &format!("argument mode mismatch: expected `{}`, found `{}`", expected.as_str(db), found.as_str(db)),
@@ -424,14 +419,14 @@ fn emit_single_diagnostic<'db>(
 fn emit_arity_mismatch<'db>(
     db: &'db dyn crate::Db,
     spans: &dyn SpanLookup<'db>,
-    call_expr_id: u32,
+    call_expr_key: ExprKey<'db>,
     func_name: InternedText<'db>,
     func_local_index: u32,
     func_module_id: Option<ModuleId>,
     expected: usize,
     actual: usize,
 ) {
-    let Some(primary_ts) = spans.lookup_expr(db, call_expr_id) else {
+    let Some(primary_ts) = spans.lookup_expr(db, call_expr_key) else {
         return;
     };
 
@@ -485,23 +480,23 @@ fn format_single_diagnostic<'db>(
     spans: &dyn SpanLookup<'db>,
 ) -> Option<String> {
     match diag {
-        PendingDiagnostic::UndefinedVariable { expr_id, module_id: _, name } => {
-            let ts = spans.lookup_expr(db, *expr_id)?;
+        PendingDiagnostic::UndefinedVariable { expr_key, module_id: _, name } => {
+            let ts = spans.lookup_expr(db, *expr_key)?;
             let loc = format_location(db, &ts);
             Some(format!("{}: error[F001]: cannot find value `{}` in this scope", loc, name.as_str(db)))
         }
-        PendingDiagnostic::UndefinedFunction { expr_id, module_id: _, name } => {
-            let ts = spans.lookup_expr(db, *expr_id)?;
+        PendingDiagnostic::UndefinedFunction { expr_key, module_id: _, name } => {
+            let ts = spans.lookup_expr(db, *expr_key)?;
             let loc = format_location(db, &ts);
             Some(format!("{}: error[F002]: cannot find function `{}` in this scope", loc, name.as_str(db)))
         }
-        PendingDiagnostic::CannotSynthesize { expr_id, module_id: _, message } => {
-            let ts = spans.lookup_expr(db, *expr_id)?;
+        PendingDiagnostic::CannotSynthesize { expr_key, module_id: _, message } => {
+            let ts = spans.lookup_expr(db, *expr_key)?;
             let loc = format_location(db, &ts);
             Some(format!("{}: error[F011]: {}", loc, message.as_str(db)))
         }
-        PendingDiagnostic::TypeMismatch { expr_id, module_id: _, expected, actual, label: _, recovery_hint } => {
-            let ts = spans.lookup_expr(db, *expr_id)?;
+        PendingDiagnostic::TypeMismatch { expr_key, module_id: _, expected, actual, label: _, recovery_hint } => {
+            let ts = spans.lookup_expr(db, *expr_key)?;
             let loc = format_location(db, &ts);
             let base_msg = format!("{}: error[F016]: mismatched types: expected `{}`, found `{}`", loc, expected.as_str(db), actual.as_str(db));
             if let RecoveryHint::InsertAdapt { description } = recovery_hint {
@@ -510,23 +505,23 @@ fn format_single_diagnostic<'db>(
                 Some(base_msg)
             }
         }
-        PendingDiagnostic::InvalidOperandType { expr_id, module_id: _, op, ty } => {
-            let ts = spans.lookup_expr(db, *expr_id)?;
+        PendingDiagnostic::InvalidOperandType { expr_key, module_id: _, op, ty } => {
+            let ts = spans.lookup_expr(db, *expr_key)?;
             let loc = format_location(db, &ts);
             Some(format!("{}: error[F026]: invalid operand type `{}` for operator `{}`", loc, ty.as_str(db), op.as_str(db)))
         }
-        PendingDiagnostic::ArityMismatch { call_expr_id, call_module_id: _, func_name, func_local_index: _, func_module_id: _, expected, actual } => {
-            let ts = spans.lookup_expr(db, *call_expr_id)?;
+        PendingDiagnostic::ArityMismatch { call_expr_key, call_module_id: _, func_name, func_local_index: _, func_module_id: _, expected, actual } => {
+            let ts = spans.lookup_expr(db, *call_expr_key)?;
             let loc = format_location(db, &ts);
             Some(format!("{}: error[F045]: function `{}` takes {} argument(s) but {} were supplied", loc, func_name.as_str(db), expected, actual))
         }
-        PendingDiagnostic::ResultRequiresBinding { expr_id, module_id: _ } => {
-            let ts = spans.lookup_expr(db, *expr_id)?;
+        PendingDiagnostic::ResultRequiresBinding { expr_key, module_id: _ } => {
+            let ts = spans.lookup_expr(db, *expr_key)?;
             let loc = format_location(db, &ts);
             Some(format!("{}: error[F046]: Result destructuring requires an else binding", loc))
         }
-        PendingDiagnostic::TryTypeMismatch { expr_id, module_id: _, operator, expected, actual } => {
-            let ts = spans.lookup_expr(db, *expr_id)?;
+        PendingDiagnostic::TryTypeMismatch { expr_key, module_id: _, operator, expected, actual } => {
+            let ts = spans.lookup_expr(db, *expr_key)?;
             let loc = format_location(db, &ts);
             Some(format!("{}: error[F048]: try operator `{}` requires {} type, found `{}`", loc, operator.as_str(db), expected.as_str(db), actual.as_str(db)))
         }
@@ -560,18 +555,18 @@ fn format_single_diagnostic<'db>(
             let loc = format_location(db, &ts);
             Some(format!("{}: error[F044]: void function cannot return a value", loc))
         }
-        PendingDiagnostic::TryReturnTypeMismatch { expr_id, module_id: _, operator, expected, actual } => {
-            let ts = spans.lookup_expr(db, *expr_id)?;
+        PendingDiagnostic::TryReturnTypeMismatch { expr_key, module_id: _, operator, expected, actual } => {
+            let ts = spans.lookup_expr(db, *expr_key)?;
             let loc = format_location(db, &ts);
             Some(format!("{}: error[F049]: try operator `{}` return type mismatch: expected `{}`, found `{}`", loc, operator.as_str(db), expected.as_str(db), actual.as_str(db)))
         }
-        PendingDiagnostic::ConstNotAllowedInModule { local_index, module_id: _, name } => {
-            let ts = spans.lookup_expr(db, *local_index)?;
+        PendingDiagnostic::ConstNotAllowedInModule { expr_key, module_id: _, name } => {
+            let ts = spans.lookup_expr(db, *expr_key)?;
             let loc = format_location(db, &ts);
             Some(format!("{}: error[F056]: const `{}` not allowed at module level", loc, name.as_str(db)))
         }
-        PendingDiagnostic::ArgumentModeMismatch { local_index, module_id: _, expected, found } => {
-            let ts = spans.lookup_expr(db, *local_index)?;
+        PendingDiagnostic::ArgumentModeMismatch { expr_key, module_id: _, expected, found } => {
+            let ts = spans.lookup_expr(db, *expr_key)?;
             let loc = format_location(db, &ts);
             Some(format!("{}: error[F057]: argument mode mismatch: expected `{}`, found `{}`", loc, expected.as_str(db), found.as_str(db)))
         }

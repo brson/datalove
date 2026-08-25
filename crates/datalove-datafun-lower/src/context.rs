@@ -10,7 +10,7 @@ use std::collections::HashMap;
 use std::rc::Rc;
 use salsa::plumbing::AsId;
 use bct::module_graph::ModuleId;
-use datalove_datafun_ast::ast::{Statement, ExprFun, ExprFunctionCall};
+use datalove_datafun_ast::ast::{Statement, ExprFun, ExprFunctionCall, ExprKey};
 use datalove_datafun_sema::ResolvedCallTarget;
 use datalove_datafun_ir::{
     IrType, IrBlock, IrCodeUnit, Operand, ValueId, SlotId, ParamId, BlockId, FuncId,
@@ -25,7 +25,7 @@ use datalove_datafun_sema::{BindingId, DropSchedule, BindingInfo, TrackingCatego
 /// Analogous to `Frame` in the interpreter, which holds runtime state.
 /// When lowering a nested function, this state is swapped for a fresh
 /// instance, then restored after.
-pub struct FrameState {
+pub struct FrameState<'db> {
     /// Blocks being built.
     pub blocks: Vec<IrBlock>,
     /// Instructions for current block.
@@ -67,7 +67,7 @@ pub struct FrameState {
     /// Drop schedule from analysis.
     pub drop_schedule: DropSchedule,
     /// Uses auto-adapt turned into clones.
-    pub adapt_sites: AdaptSites,
+    pub adapt_sites: AdaptSites<'db>,
     /// Loop context stack for each nested loop.
     pub loop_stack: Vec<LoopLowerContext>,
     /// Whether current block is unreachable (after return/break/continue).
@@ -93,7 +93,7 @@ pub struct FrameState {
     pub const_values: Vec<(String, ValueId)>,
 }
 
-impl FrameState {
+impl<'db> FrameState<'db> {
     pub fn new() -> Self {
         Self {
             blocks: Vec::new(),
@@ -128,7 +128,7 @@ impl FrameState {
     }
 }
 
-impl Default for FrameState {
+impl<'db> Default for FrameState<'db> {
     fn default() -> Self {
         Self::new()
     }
@@ -235,7 +235,7 @@ pub struct LowerCtx<'db> {
     pub(super) func_id_map: &'db HashMap<(ModuleId, String), (IrModuleId, FuncId)>,
 
     /// Function-local state (swapped when entering nested function).
-    pub(super) body: FrameState,
+    pub(super) body: FrameState<'db>,
 
     // Unit-level state (persists across nested functions).
     /// Exports from this unit (only used for script units).
@@ -387,7 +387,7 @@ impl<'db> LowerCtx<'db> {
     }
 
     /// Swap function body state for a new function, returning the old state.
-    pub fn swap_body_state(&mut self, new_state: FrameState) -> FrameState {
+    pub fn swap_body_state(&mut self, new_state: FrameState<'db>) -> FrameState<'db> {
         std::mem::replace(&mut self.body, new_state)
     }
 
@@ -591,7 +591,7 @@ impl<'db> LowerCtx<'db> {
     /// Such a use clones instead of moving, which is what leaves the binding
     /// available to the use that would otherwise have been an error.
     pub fn is_adapt_site(&self, expr: ExprFun<'db>) -> bool {
-        self.body.adapt_sites.contains(expr.as_id().index() as u32)
+        self.body.adapt_sites.contains(ExprKey::of(self.db, expr))
     }
 
     /// Look up a variable.

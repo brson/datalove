@@ -34,7 +34,7 @@ use std::collections::HashSet;
 pub struct TypeContext<'db> {
     pub(crate) db: &'db dyn crate::Db,
     /// Pre-computed spans for error reporting.
-    pub(crate) spans: DatafunSpans,
+    pub(crate) spans: DatafunSpans<'db>,
     /// Current module being typechecked (for pending diagnostics).
     pub(crate) current_module_id: Option<ModuleId>,
     /// Variable bindings (name -> (type, is_mutable)).
@@ -80,7 +80,7 @@ pub struct TypeContext<'db> {
 #[derive(Clone)]
 pub struct AutoAdaptation<'db> {
     /// The expression that was adapted.
-    pub expr_id: u32,
+    pub expr_key: ExprKey<'db>,
     /// The original type of the expression.
     pub from_type: Type<'db>,
     /// The type after adaptation.
@@ -90,7 +90,7 @@ pub struct AutoAdaptation<'db> {
 impl<'db> TypeContext<'db> {
     pub fn new(
         db: &'db dyn crate::Db,
-        spans: DatafunSpans,
+        spans: DatafunSpans<'db>,
     ) -> Self {
         Self::with_options(db, spans, None, AutoAdaptMode::Disabled)
     }
@@ -98,7 +98,7 @@ impl<'db> TypeContext<'db> {
     /// Create a TypeContext for a specific module.
     pub fn with_module_id(
         db: &'db dyn crate::Db,
-        spans: DatafunSpans,
+        spans: DatafunSpans<'db>,
         module_id: Option<ModuleId>,
     ) -> Self {
         Self::with_options(db, spans, module_id, AutoAdaptMode::Disabled)
@@ -107,7 +107,7 @@ impl<'db> TypeContext<'db> {
     /// Create a TypeContext with all options.
     pub fn with_options(
         db: &'db dyn crate::Db,
-        spans: DatafunSpans,
+        spans: DatafunSpans<'db>,
         module_id: Option<ModuleId>,
         auto_adapt_mode: AutoAdaptMode,
     ) -> Self {
@@ -166,7 +166,7 @@ impl<'db> TypeContext<'db> {
     /// F001: Undefined variable.
     pub fn error_undefined_variable(&mut self, expr: ExprFun<'db>, name: InternedText<'db>) -> TypeError {
         self.pending_diagnostics.push(PendingDiagnostic::UndefinedVariable {
-            expr_id: expr.as_id().index(),
+            expr_key: ExprKey::of(self.db, expr),
             module_id: self.current_module_id,
             name,
         });
@@ -176,7 +176,7 @@ impl<'db> TypeContext<'db> {
     /// F002: Undefined function.
     pub fn error_undefined_function(&mut self, expr: ExprFun<'db>, name: InternedText<'db>) -> TypeError {
         self.pending_diagnostics.push(PendingDiagnostic::UndefinedFunction {
-            expr_id: expr.as_id().index(),
+            expr_key: ExprKey::of(self.db, expr),
             module_id: self.current_module_id,
             name,
         });
@@ -186,7 +186,7 @@ impl<'db> TypeContext<'db> {
     /// F011: Cannot synthesize type.
     pub fn error_cannot_synthesize(&mut self, expr: ExprFun<'db>, message: &str) -> TypeError {
         self.pending_diagnostics.push(PendingDiagnostic::CannotSynthesize {
-            expr_id: expr.as_id().index(),
+            expr_key: ExprKey::of(self.db, expr),
             module_id: self.current_module_id,
             message: InternedText::new(self.db, message.S()),
         });
@@ -196,7 +196,7 @@ impl<'db> TypeContext<'db> {
     /// F016: Type mismatch (simple version without recovery hint).
     pub fn error_type_mismatch(&mut self, expr: ExprFun<'db>, expected: &str, actual: &str, label: &str) -> TypeError {
         self.pending_diagnostics.push(PendingDiagnostic::TypeMismatch {
-            expr_id: expr.as_id().index(),
+            expr_key: ExprKey::of(self.db, expr),
             module_id: self.current_module_id,
             expected: InternedText::new(self.db, expected.S()),
             actual: InternedText::new(self.db, actual.S()),
@@ -229,7 +229,7 @@ impl<'db> TypeContext<'db> {
         if can_adapt && self.auto_adapt_mode.is_enabled() {
             // Auto-adapt: record the adaptation and store the expected type.
             self.auto_adaptations.push(AutoAdaptation {
-                expr_id: expr.as_id().index(),
+                expr_key: ExprKey::of(self.db, expr),
                 from_type: actual.clone(),
                 to_type: expected.clone(),
             });
@@ -279,7 +279,7 @@ impl<'db> TypeContext<'db> {
         };
 
         self.pending_diagnostics.push(PendingDiagnostic::TypeMismatch {
-            expr_id: expr.as_id().index(),
+            expr_key: ExprKey::of(self.db, expr),
             module_id: self.current_module_id,
             expected: InternedText::new(self.db, expected_str.C()),
             actual: InternedText::new(self.db, actual_str.C()),
@@ -305,7 +305,7 @@ impl<'db> TypeContext<'db> {
             .unwrap_or((0, None));
 
         self.pending_diagnostics.push(PendingDiagnostic::ArityMismatch {
-            call_expr_id: expr.as_id().index(),
+            call_expr_key: ExprKey::of(self.db, expr),
             call_module_id: self.current_module_id,
             func_name,
             func_local_index,
@@ -319,7 +319,7 @@ impl<'db> TypeContext<'db> {
     /// F046: Result destructuring requires error binding.
     pub fn error_result_requires_binding(&mut self, expr: ExprFun<'db>) -> TypeError {
         self.pending_diagnostics.push(PendingDiagnostic::ResultRequiresBinding {
-            expr_id: expr.as_id().index(),
+            expr_key: ExprKey::of(self.db, expr),
             module_id: self.current_module_id,
         });
         TypeError::ResultRequiresErrorBinding
@@ -328,7 +328,7 @@ impl<'db> TypeContext<'db> {
     /// F026: Invalid operand type for operator.
     pub fn error_invalid_operand_type(&mut self, expr: ExprFun<'db>, op: &str, ty: &str) -> TypeError {
         self.pending_diagnostics.push(PendingDiagnostic::InvalidOperandType {
-            expr_id: expr.as_id().index(),
+            expr_key: ExprKey::of(self.db, expr),
             module_id: self.current_module_id,
             op: InternedText::new(self.db, op.S()),
             ty: InternedText::new(self.db, ty.S()),
@@ -342,7 +342,7 @@ impl<'db> TypeContext<'db> {
     /// F048: Try operator type mismatch.
     pub fn error_try_type_mismatch(&mut self, expr: ExprFun<'db>, operator: &str, expected: &str, actual: &str) -> TypeError {
         self.pending_diagnostics.push(PendingDiagnostic::TryTypeMismatch {
-            expr_id: expr.as_id().index(),
+            expr_key: ExprKey::of(self.db, expr),
             module_id: self.current_module_id,
             operator: InternedText::new(self.db, operator.S()),
             expected: InternedText::new(self.db, expected.S()),
@@ -357,7 +357,7 @@ impl<'db> TypeContext<'db> {
     /// F049: Try operator return type mismatch.
     pub fn error_try_return_type_mismatch(&mut self, expr: ExprFun<'db>, operator: &str, expected: &str, actual: &str) -> TypeError {
         self.pending_diagnostics.push(PendingDiagnostic::TryReturnTypeMismatch {
-            expr_id: expr.as_id().index(),
+            expr_key: ExprKey::of(self.db, expr),
             module_id: self.current_module_id,
             operator: InternedText::new(self.db, operator.S()),
             expected: InternedText::new(self.db, expected.S()),
@@ -371,7 +371,7 @@ impl<'db> TypeContext<'db> {
 
     /// Look up span for a datafun expression.
     pub fn get_span(&self, expr: ExprFun<'db>) -> Option<TextSpan<'db>> {
-        self.spans.lookup(expr).map(|entry| {
+        self.spans.lookup(self.db, expr).map(|entry| {
             let (text, span) = entry.to_text_and_span(self.db);
             TextSpan::new(text, span)
         })
@@ -445,9 +445,9 @@ impl<'db> TypeContext<'db> {
     pub fn error_const_not_allowed_in_module(&mut self, stmt: &StmtConst<'db>) -> TypeError {
         let name = stmt.name;
         // Use the value expression's ID for span lookup.
-        let local_index = stmt.value.as_id().index();
+        let expr_key = ExprKey::of(self.db, stmt.value);
         self.pending_diagnostics.push(PendingDiagnostic::ConstNotAllowedInModule {
-            local_index,
+            expr_key,
             module_id: self.current_module_id,
             name,
         });
@@ -463,7 +463,7 @@ impl<'db> TypeContext<'db> {
         found: &str,
     ) -> TypeError {
         self.pending_diagnostics.push(PendingDiagnostic::ArgumentModeMismatch {
-            local_index: arg.as_id().index(),
+            expr_key: ExprKey::of(self.db, arg),
             module_id: self.current_module_id,
             expected: InternedText::new(self.db, expected.S()),
             found: InternedText::new(self.db, found.S()),

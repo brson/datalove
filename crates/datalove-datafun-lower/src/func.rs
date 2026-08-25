@@ -42,7 +42,7 @@ pub fn lower_function_for_module<'db>(
     func_id_map: &'db HashMap<(ModuleId, String), (IrModuleId, FuncId)>,
     func: ast::StmtFun<'db>,
     func_id: FuncId,
-    analysis: FunctionAnalysis,
+    analysis: FunctionAnalysis<'db>,
     resolved_param_types: Option<&[IrType]>,
     resolved_return_type: Option<IrType>,
 ) -> Result<IrCodeUnit, LowerError> {
@@ -61,7 +61,7 @@ pub fn lower_function_body<'db>(
     ctx: &mut LowerCtx<'db>,
     func_id: FuncId,
     func: ast::StmtFun<'db>,
-    analysis: FunctionAnalysis,
+    analysis: FunctionAnalysis<'db>,
     resolved_param_types: Option<&[IrType]>,
     resolved_return_type: Option<IrType>,
 ) -> Result<IrCodeUnit, LowerError> {

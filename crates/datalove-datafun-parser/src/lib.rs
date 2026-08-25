@@ -24,7 +24,7 @@ use datalove_datafun_ast::ast;
 use datalove_datafun_ast::script;
 use bct::diagnostic::DiagnosticBuilder;
 use datalove_diagnostic::DiagnosticBuilderExt;
-use state::Parser;
+use state::{Parser, ScriptCounters};
 
 use salsa::Database as Db;
 
@@ -200,8 +200,8 @@ fn is_line_separator<'db>(db: &'db dyn Db, token: Token<'db>) -> bool {
 }
 
 /// Parsed statement spans result.
-struct ParsedSpans {
-    expr_spans: Vec<ast::ParseSpanEntry>,
+struct ParsedSpans<'db> {
+    expr_spans: Vec<ast::ParseSpanEntry<'db>>,
     break_spans: Vec<bct::diagnostic::SpanEntry>,
     continue_spans: Vec<bct::diagnostic::SpanEntry>,
     ret_spans: Vec<bct::diagnostic::SpanEntry>,
@@ -218,7 +218,7 @@ fn parse_statements<'db>(
     lines: impl Iterator<Item = Vec<TreeToken<'db>>>,
     source_text: bct::text::Text<'db>,
     module_id: Option<ModuleId>,
-) -> (Vec<ast::Statement<'db>>, ParsedSpans) {
+) -> (Vec<ast::Statement<'db>>, ParsedSpans<'db>) {
     let mut statements = vec![];
     let mut all_expr_spans = vec![];
     let mut all_break_spans = vec![];
@@ -228,14 +228,16 @@ fn parse_statements<'db>(
     let mut all_fun_spans = vec![];
     let mut all_type_alias_spans = vec![];
     let mut line_iter = lines.enumerate().peekable();
+    let mut counters = ScriptCounters::default();
 
     while let Some((_line_num, line)) = line_iter.next() {
         if line.is_empty() {
             continue;
         }
 
-        let mut parser = Parser::new(db, line, source_text, module_id);
+        let mut parser = Parser::new(db, line, source_text, module_id, counters);
         let statement = parser.parse_statement(&mut line_iter);
+        counters = parser.script_counters();
         statements.push(statement);
         all_expr_spans.extend(parser.take_expr_spans());
         all_break_spans.extend(parser.take_break_spans());
@@ -306,7 +308,7 @@ pub fn datafun_spans<'db>(
     let entries: Vec<SpanMapEntry> = parse_result.expr_spans
         .iter()
         .map(|e| SpanMapEntry {
-            expr_id: e.expr_id,
+            expr_key: e.expr_key,
             entry: SpanEntry::new(e.text_id, e.span.C()),
         })
         .collect();

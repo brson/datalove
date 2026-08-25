@@ -392,7 +392,7 @@ impl<'db> Parser<'db> {
     ) -> (Vec<u32>, Vec<ast::ExprFun<'db>>) {
         if rank == 1 {
             // Innermost level: space-separated elements.
-            let mut sub = Parser::new(self.db, tokens.to_vec(), self.source_text(), self.module_id());
+            let mut sub = self.new_sub(tokens.to_vec());
             let mut elements = Vec::new();
             while sub.peek().is_some() {
                 elements.push(sub.parse_expr_full());
@@ -609,7 +609,7 @@ impl<'db> Parser<'db> {
         let mut elements = Vec::new();
 
         for part in parts {
-            let mut sub = Parser::new(self.db, part, self.source_text(), self.module_id());
+            let mut sub = self.new_sub(part);
             let expr = sub.parse_expr_full();
             sub.error_if_not_exhausted();
             self.merge_from_sub(&mut sub);

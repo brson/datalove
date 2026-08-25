@@ -9,7 +9,7 @@
 
 use rmx::std::collections::BTreeMap;
 use bct::module_graph::ModuleId;
-use datalove_datafun_ast::ast::{Statement, StmtFun, ParamMode};
+use datalove_datafun_ast::ast::{Statement, StmtFun, ParamMode, ExprKey};
 use datalove_datafun_ir::IrType;
 
 // ============================================================================
@@ -170,17 +170,17 @@ pub enum OwnershipRecoveryHint {
 
 /// Error detected during ownership analysis.
 ///
-/// Each variant includes a `local_index` for span lookup during diagnostic
-/// emission. The local_index is the expression's salsa ID index, used to
-/// look up spans in DatafunSpans.
+/// Each variant includes an `expr_key` for span lookup during diagnostic
+/// emission, the expression's stable key within its function, used to look
+/// up spans in DatafunSpans.
 #[derive(Clone, Debug, Hash, PartialEq, Eq)]
 #[derive(salsa::SalsaValue)]
-pub enum AnalysisError {
+pub enum AnalysisError<'db> {
     /// Using a binding whose own unit gave its value away.
     /// D013 - Recoverable with @ (clone at the use that gave it away)
     UseAfterMoveInEarlierUnit {
         /// Location of the use in this unit.
-        local_index: u32,
+        expr_key: ExprKey<'db>,
         name: String,
         recovery_hint: OwnershipRecoveryHint,
     },
@@ -188,9 +188,9 @@ pub enum AnalysisError {
     /// D001 - Recoverable with @ (clone before first use)
     UseAfterMove {
         /// Location of the second use (where error is detected).
-        local_index: u32,
+        expr_key: ExprKey<'db>,
         /// Location of the first move (where @ should be inserted).
-        moved_at: u32,
+        moved_at: ExprKey<'db>,
         name: String,
         recovery_hint: OwnershipRecoveryHint,
     },
@@ -198,28 +198,28 @@ pub enum AnalysisError {
     /// D002 - Recoverable with @ (clone before second move)
     DoubleMove {
         /// Location of the second move (where error is detected).
-        local_index: u32,
+        expr_key: ExprKey<'db>,
         /// Location of the first move (where @ should be inserted).
-        moved_at: u32,
+        moved_at: ExprKey<'db>,
         name: String,
         recovery_hint: OwnershipRecoveryHint,
     },
     /// Attempting to move a borrowed value (ref/mut/out parameter).
     /// D003
     CannotMoveBorrowed {
-        local_index: u32,
+        expr_key: ExprKey<'db>,
         name: String,
     },
     /// Attempting to pass a ref param to a mut param.
     /// D004
     CannotMutFromRef {
-        local_index: u32,
+        expr_key: ExprKey<'db>,
         name: String,
     },
     /// Reading binding before it was initialized.
     /// D005. Applies to Out params and uninitialized var bindings.
     ReadUninitialized {
-        local_index: u32,
+        expr_key: ExprKey<'db>,
         name: String,
     },
     /// Function returns without initializing Out param.
@@ -233,7 +233,7 @@ pub enum AnalysisError {
     /// D007 - Recoverable with @ (clone before entering loop)
     MoveInLoop {
         /// Expression where the move occurred.
-        local_index: u32,
+        expr_key: ExprKey<'db>,
         name: String,
         recovery_hint: OwnershipRecoveryHint,
     },
@@ -249,7 +249,7 @@ pub enum AnalysisError {
     /// Partial field write to out param (must write whole value).
     /// D009
     OutParamPartialWrite {
-        local_index: u32,
+        expr_key: ExprKey<'db>,
         name: String,
     },
     /// Two arguments of one call name the same binding, and at least one of
@@ -257,20 +257,20 @@ pub enum AnalysisError {
     /// D010
     AliasedMutableArgument {
         /// Location of the later of the two arguments.
-        local_index: u32,
+        expr_key: ExprKey<'db>,
         name: String,
     },
     /// Passing an immutable binding to a `mut` or `out` parameter.
     /// D011. Applies to `let` bindings and `in` parameters; a `ref` parameter
     /// reports D004 instead.
     CannotMutateImmutable {
-        local_index: u32,
+        expr_key: ExprKey<'db>,
         name: String,
     },
     /// Passing a value that is not a place to a `mut` or `out` parameter.
     /// D012. The callee's writes would land in a temporary and be discarded.
     CannotMutateTemporary {
-        local_index: u32,
+        expr_key: ExprKey<'db>,
     },
 }
 
@@ -284,47 +284,47 @@ pub fn format_analysis_errors(errors: &[AnalysisError]) -> String {
 
 fn format_single_error(error: &AnalysisError) -> String {
     match error {
-        AnalysisError::UseAfterMoveInEarlierUnit { local_index: _, name, recovery_hint } => {
+        AnalysisError::UseAfterMoveInEarlierUnit { expr_key: _, name, recovery_hint } => {
             let base = format!("error[D013]: `{}` was given away by an earlier input", name);
             format_with_hint(base, recovery_hint)
         }
-        AnalysisError::UseAfterMove { local_index: _, moved_at: _, name, recovery_hint } => {
+        AnalysisError::UseAfterMove { expr_key: _, moved_at: _, name, recovery_hint } => {
             let base = format!("error[D001]: use of moved value: `{}`", name);
             format_with_hint(base, recovery_hint)
         }
-        AnalysisError::DoubleMove { local_index: _, moved_at: _, name, recovery_hint } => {
+        AnalysisError::DoubleMove { expr_key: _, moved_at: _, name, recovery_hint } => {
             let base = format!("error[D002]: value moved twice: `{}`", name);
             format_with_hint(base, recovery_hint)
         }
-        AnalysisError::CannotMoveBorrowed { local_index: _, name } => {
+        AnalysisError::CannotMoveBorrowed { expr_key: _, name } => {
             format!("error[D003]: cannot move borrowed value: `{}`", name)
         }
-        AnalysisError::CannotMutFromRef { local_index: _, name } => {
+        AnalysisError::CannotMutFromRef { expr_key: _, name } => {
             format!("error[D004]: cannot get mutable reference from immutable: `{}`", name)
         }
-        AnalysisError::ReadUninitialized { local_index: _, name } => {
+        AnalysisError::ReadUninitialized { expr_key: _, name } => {
             format!("error[D005]: read of uninitialized binding: `{}`", name)
         }
         AnalysisError::OutParamNotInitialized { ret_stmt_idx: _, name } => {
             format!("error[D006]: out parameter not initialized: `{}`", name)
         }
-        AnalysisError::MoveInLoop { local_index: _, name, recovery_hint } => {
+        AnalysisError::MoveInLoop { expr_key: _, name, recovery_hint } => {
             let base = format!("error[D007]: cannot move `{}` in loop", name);
             format_with_hint(base, recovery_hint)
         }
         AnalysisError::InconsistentBranchMove { stmt_idx: _, name, moved_in } => {
             format!("error[D008]: `{}` moved in {} branch but not the other", name, moved_in)
         }
-        AnalysisError::OutParamPartialWrite { local_index: _, name } => {
+        AnalysisError::OutParamPartialWrite { expr_key: _, name } => {
             format!("error[D009]: cannot partially write to out parameter: `{}`", name)
         }
-        AnalysisError::AliasedMutableArgument { local_index: _, name } => {
+        AnalysisError::AliasedMutableArgument { expr_key: _, name } => {
             format!("error[D010]: aliased mutable argument: `{}`", name)
         }
-        AnalysisError::CannotMutateImmutable { local_index: _, name } => {
+        AnalysisError::CannotMutateImmutable { expr_key: _, name } => {
             format!("error[D011]: cannot pass immutable binding as mutable: `{}`", name)
         }
-        AnalysisError::CannotMutateTemporary { local_index: _ } => {
+        AnalysisError::CannotMutateTemporary { expr_key: _ } => {
             "error[D012]: cannot pass a temporary as mutable".to_string()
         }
     }
@@ -392,9 +392,10 @@ pub struct DropSchedule {
 
 /// Result of analyzing a function.
 #[derive(Clone, Debug, Hash, PartialEq, Eq)]
-pub struct FunctionAnalysis {
+#[derive(salsa::SalsaValue)]
+pub struct FunctionAnalysis<'db> {
     /// Errors detected during analysis.
-    pub errors: Vec<AnalysisError>,
+    pub errors: Vec<AnalysisError<'db>>,
     /// Computed drop schedule.
     pub schedule: DropSchedule,
     /// Information about each binding (indexed by BindingId).
@@ -403,31 +404,31 @@ pub struct FunctionAnalysis {
     /// Determines whether precise or tracked move/drop instructions are used.
     pub tracking: Vec<TrackingCategory>,
     /// Uses auto-adapt turned into clones.
-    pub adapt_sites: AdaptSites,
+    pub adapt_sites: AdaptSites<'db>,
 }
 
 /// Expressions where auto-adapt supplies the `@` the source left out.
 ///
-/// Keyed by salsa expression id index, the same key ownership analysis uses
+/// Keyed by the expression's stable key, the same key ownership analysis uses
 /// for spans, so lowering can recognize the expression it is looking at.
 /// Lowering clones such a use instead of moving it.
 #[derive(Clone, Debug, Default, Hash, PartialEq, Eq)]
 #[derive(salsa::SalsaValue)]
-pub struct AdaptSites {
-    sites: Vec<u32>,
+pub struct AdaptSites<'db> {
+    sites: Vec<ExprKey<'db>>,
 }
 
-impl AdaptSites {
+impl<'db> AdaptSites<'db> {
     /// Record that an expression needs an implicit `@`.
-    pub fn insert(&mut self, expr_index: u32) {
-        if !self.sites.contains(&expr_index) {
-            self.sites.push(expr_index);
+    pub fn insert(&mut self, expr_key: ExprKey<'db>) {
+        if !self.sites.contains(&expr_key) {
+            self.sites.push(expr_key);
         }
     }
 
     /// Whether an expression needs an implicit `@`.
-    pub fn contains(&self, expr_index: u32) -> bool {
-        self.sites.contains(&expr_index)
+    pub fn contains(&self, expr_key: ExprKey<'db>) -> bool {
+        self.sites.contains(&expr_key)
     }
 
     pub fn is_empty(&self) -> bool {
@@ -436,9 +437,9 @@ impl AdaptSites {
 
     /// Take on another set's sites.
     ///
-    /// Sites are keyed by salsa expression id, so a set that names expressions
-    /// belonging to some other body is harmless: no expression here matches.
-    pub fn extend(&mut self, other: &AdaptSites) {
+    /// A key names a function and an index within it, so a set that names
+    /// expressions belonging to some other body is harmless: nothing matches.
+    pub fn extend(&mut self, other: &AdaptSites<'db>) {
         for site in &other.sites {
             self.insert(*site);
         }
@@ -450,7 +451,8 @@ impl AdaptSites {
 /// Similar to FunctionAnalysis but includes script-specific data like unit_end
 /// drops for bindings that should be dropped when the script unit ends.
 #[derive(Clone, Debug, Hash, PartialEq, Eq)]
-pub struct ScriptAnalysisData {
+#[derive(salsa::SalsaValue)]
+pub struct ScriptAnalysisData<'db> {
     /// Computed drop schedule.
     pub schedule: DropSchedule,
     /// Information about each binding (indexed by BindingId).
@@ -460,7 +462,7 @@ pub struct ScriptAnalysisData {
     /// Bindings to drop at unit end (for AOT cleanup).
     pub unit_end: Vec<BindingId>,
     /// Uses auto-adapt turned into clones.
-    pub adapt_sites: AdaptSites,
+    pub adapt_sites: AdaptSites<'db>,
     /// Names this unit exports whose value it already gave away.
     ///
     /// Later units can still see the name, but there is nothing behind it, so

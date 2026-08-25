@@ -249,13 +249,10 @@ pub fn render_ownership_errors_direct<'db>(
 /// Look up span for an expression by local_index.
 fn lookup_expr_span<'db>(
     db: &'db dyn salsa::Database,
-    spans: &datalove_datafun_ast::spans::DatafunSpans,
-    local_index: u32,
+    spans: &datalove_datafun_ast::spans::DatafunSpans<'db>,
+    expr_key: datalove_datafun_ast::ast::ExprKey<'db>,
 ) -> Option<(bct::text::Text<'db>, std::ops::Range<usize>)> {
-    use salsa::plumbing::FromId;
-    let id = unsafe { salsa::Id::from_index(local_index) };
-    let expr = datalove_datafun_ast::ast::ExprFun::from_id(id);
-    spans.lookup(expr).map(|entry| entry.to_text_and_span(db))
+    spans.lookup_key(expr_key).map(|entry| entry.to_text_and_span(db))
 }
 
 /// Generate a Rust-style suggestion showing the modified source line with `+` markers.
@@ -318,8 +315,8 @@ fn render_ownership_error<'db>(
     use datalove_datafun_sema::{AnalysisError, OwnershipRecoveryHint};
 
     match error {
-        AnalysisError::UseAfterMoveInEarlierUnit { local_index, name, recovery_hint } => {
-            if let Some((text, span)) = lookup_expr_span(db, spans, *local_index) {
+        AnalysisError::UseAfterMoveInEarlierUnit { expr_key, name, recovery_hint } => {
+            if let Some((text, span)) = lookup_expr_span(db, spans, *expr_key) {
                 let source_str = text.as_str(db);
                 let msg = format!("`{}` was given away by an earlier input", name);
                 let mut builder = Report::build(ReportKind::Error, file_name, span.start)
@@ -338,8 +335,8 @@ fn render_ownership_error<'db>(
                 let _ = builder.finish().eprint((file_name, Source::from(source_str)));
             }
         }
-        AnalysisError::UseAfterMove { local_index, moved_at, name, recovery_hint } => {
-            if let Some((text, span)) = lookup_expr_span(db, spans, *local_index) {
+        AnalysisError::UseAfterMove { expr_key, moved_at, name, recovery_hint } => {
+            if let Some((text, span)) = lookup_expr_span(db, spans, *expr_key) {
                 let source_str = text.as_str(db);
                 let msg = format!("use of moved value: `{}`", name);
                 let mut builder = Report::build(ReportKind::Error, file_name, span.start)
@@ -352,7 +349,7 @@ fn render_ownership_error<'db>(
                     );
 
                 // Add secondary label at the move location if different.
-                let move_span_for_suggestion = if moved_at != local_index {
+                let move_span_for_suggestion = if moved_at != expr_key {
                     if let Some((_, move_span)) = lookup_expr_span(db, spans, *moved_at) {
                         builder = builder.with_label(
                             Label::new((file_name, move_span.clone()))
@@ -382,8 +379,8 @@ fn render_ownership_error<'db>(
                 let _ = report.eprint((file_name, Source::from(source_str)));
             }
         }
-        AnalysisError::DoubleMove { local_index, moved_at, name, recovery_hint } => {
-            if let Some((text, span)) = lookup_expr_span(db, spans, *local_index) {
+        AnalysisError::DoubleMove { expr_key, moved_at, name, recovery_hint } => {
+            if let Some((text, span)) = lookup_expr_span(db, spans, *expr_key) {
                 let source_str = text.as_str(db);
                 let msg = format!("value moved twice: `{}`", name);
                 let mut builder = Report::build(ReportKind::Error, file_name, span.start)
@@ -396,7 +393,7 @@ fn render_ownership_error<'db>(
                     );
 
                 // Add secondary label at the first move location if different.
-                let move_span_for_suggestion = if moved_at != local_index {
+                let move_span_for_suggestion = if moved_at != expr_key {
                     if let Some((_, move_span)) = lookup_expr_span(db, spans, *moved_at) {
                         builder = builder.with_label(
                             Label::new((file_name, move_span.clone()))
@@ -426,8 +423,8 @@ fn render_ownership_error<'db>(
                 let _ = report.eprint((file_name, Source::from(source_str)));
             }
         }
-        AnalysisError::CannotMoveBorrowed { local_index, name } => {
-            if let Some((text, span)) = lookup_expr_span(db, spans, *local_index) {
+        AnalysisError::CannotMoveBorrowed { expr_key, name } => {
+            if let Some((text, span)) = lookup_expr_span(db, spans, *expr_key) {
                 let msg = format!("cannot move borrowed value: `{}`", name);
                 let report = Report::build(ReportKind::Error, file_name, span.start)
                     .with_code("D003")
@@ -442,8 +439,8 @@ fn render_ownership_error<'db>(
                 let _ = report.eprint((file_name, Source::from(text.as_str(db))));
             }
         }
-        AnalysisError::CannotMutFromRef { local_index, name } => {
-            if let Some((text, span)) = lookup_expr_span(db, spans, *local_index) {
+        AnalysisError::CannotMutFromRef { expr_key, name } => {
+            if let Some((text, span)) = lookup_expr_span(db, spans, *expr_key) {
                 let msg = format!("cannot get mutable reference from immutable: `{}`", name);
                 let report = Report::build(ReportKind::Error, file_name, span.start)
                     .with_code("D004")
@@ -457,8 +454,8 @@ fn render_ownership_error<'db>(
                 let _ = report.eprint((file_name, Source::from(text.as_str(db))));
             }
         }
-        AnalysisError::AliasedMutableArgument { local_index, name } => {
-            if let Some((text, span)) = lookup_expr_span(db, spans, *local_index) {
+        AnalysisError::AliasedMutableArgument { expr_key, name } => {
+            if let Some((text, span)) = lookup_expr_span(db, spans, *expr_key) {
                 let msg = format!("aliased mutable argument: `{}`", name);
                 let report = Report::build(ReportKind::Error, file_name, span.start)
                     .with_code("D010")
@@ -473,8 +470,8 @@ fn render_ownership_error<'db>(
                 let _ = report.eprint((file_name, Source::from(text.as_str(db))));
             }
         }
-        AnalysisError::CannotMutateImmutable { local_index, name } => {
-            if let Some((text, span)) = lookup_expr_span(db, spans, *local_index) {
+        AnalysisError::CannotMutateImmutable { expr_key, name } => {
+            if let Some((text, span)) = lookup_expr_span(db, spans, *expr_key) {
                 let msg = format!("cannot pass immutable binding as mutable: `{}`", name);
                 let report = Report::build(ReportKind::Error, file_name, span.start)
                     .with_code("D011")
@@ -489,8 +486,8 @@ fn render_ownership_error<'db>(
                 let _ = report.eprint((file_name, Source::from(text.as_str(db))));
             }
         }
-        AnalysisError::CannotMutateTemporary { local_index } => {
-            if let Some((text, span)) = lookup_expr_span(db, spans, *local_index) {
+        AnalysisError::CannotMutateTemporary { expr_key } => {
+            if let Some((text, span)) = lookup_expr_span(db, spans, *expr_key) {
                 let report = Report::build(ReportKind::Error, file_name, span.start)
                     .with_code("D012")
                     .with_message("cannot pass a temporary as mutable")
@@ -504,8 +501,8 @@ fn render_ownership_error<'db>(
                 let _ = report.eprint((file_name, Source::from(text.as_str(db))));
             }
         }
-        AnalysisError::ReadUninitialized { local_index, name } => {
-            if let Some((text, span)) = lookup_expr_span(db, spans, *local_index) {
+        AnalysisError::ReadUninitialized { expr_key, name } => {
+            if let Some((text, span)) = lookup_expr_span(db, spans, *expr_key) {
                 let msg = format!("read of uninitialized binding: `{}`", name);
                 let report = Report::build(ReportKind::Error, file_name, span.start)
                     .with_code("D005")
@@ -524,8 +521,8 @@ fn render_ownership_error<'db>(
             let msg = format!("out parameter not initialized: `{}`", name);
             eprintln!("error[D006]: {}", msg);
         }
-        AnalysisError::MoveInLoop { local_index, name, recovery_hint } => {
-            if let Some((text, span)) = lookup_expr_span(db, spans, *local_index) {
+        AnalysisError::MoveInLoop { expr_key, name, recovery_hint } => {
+            if let Some((text, span)) = lookup_expr_span(db, spans, *expr_key) {
                 let source_str = text.as_str(db);
                 let msg = format!("cannot move `{}` in loop", name);
                 let mut builder = Report::build(ReportKind::Error, file_name, span.start)
@@ -553,8 +550,8 @@ fn render_ownership_error<'db>(
             let msg = format!("`{}` moved in {} branch but not the other", name, moved_in);
             eprintln!("error[D008]: {}", msg);
         }
-        AnalysisError::OutParamPartialWrite { local_index, name } => {
-            if let Some((text, span)) = lookup_expr_span(db, spans, *local_index) {
+        AnalysisError::OutParamPartialWrite { expr_key, name } => {
+            if let Some((text, span)) = lookup_expr_span(db, spans, *expr_key) {
                 let msg = format!("cannot partially write to out parameter: `{}`", name);
                 let report = Report::build(ReportKind::Error, file_name, span.start)
                     .with_code("D009")

@@ -8,7 +8,7 @@ Analysis(
             ),
             ownership: OwnershipResult(
                 status: "Error",
-                message: "Ownership error in bad_function: OutParamPartialWrite { local_index: 0, name: \"x\" }, OutParamPartialWrite { local_index: 0, name: \"x\" }, OutParamNotInitialized { ret_stmt_idx: Some(2), name: \"x\" }",
+                message: "Ownership error in bad_function: OutParamPartialWrite { expr_key: ExprKey(fn #0), name: \"x\" }, OutParamPartialWrite { expr_key: ExprKey(fn #1), name: \"x\" }, OutParamNotInitialized { ret_stmt_idx: Some(2), name: \"x\" }",
             ),
             lowering: LoweringResult(
                 status: "Skipped",

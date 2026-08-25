@@ -75,7 +75,7 @@ pub use const_expr::{
 pub use ir_ext::IrTypeExt;
 
 /// Pre-computed drop analyses for functions in a script unit.
-pub type ScriptFunctionAnalyses<'db> = HashMap<StmtFun<'db>, FunctionAnalysis>;
+pub type ScriptFunctionAnalyses<'db> = HashMap<StmtFun<'db>, FunctionAnalysis<'db>>;
 
 /// Errors that can occur during lowering.
 ///

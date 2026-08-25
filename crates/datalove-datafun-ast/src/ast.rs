@@ -1,22 +1,66 @@
 use rmx::prelude::*;
 
+use std::fmt;
+
 use bct::module_graph::ModuleId;
 use bct::text::{InternedText, Text};
 use bct::text::ByteSpan;
 use bct::diagnostic::SpanEntry;
 use datalove_datalit as datalit;
 
-/// Span entry for a parsed expression, using salsa IDs for storage.
+/// Stable identity of an expression within a module.
+///
+/// This is the same pair salsa uses as `ExprFun`'s identity keys, held as a
+/// plain value. A salsa `Id` is not usable for this: its generation counter
+/// changes when salsa recycles a slot, and an id renumbers between salsa
+/// releases, so neither side of a lookup can rely on one staying put.
+#[derive(Copy, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(salsa::SalsaValue)]
+pub struct ExprKey<'db> {
+    /// Function the expression belongs to, or None at script level.
+    pub fn_name: Option<InternedText<'db>>,
+    /// Sequential index within that function.
+    pub local_index: u32,
+}
+
+/// Print the key without the function name's salsa id.
+///
+/// `InternedText` debug-prints the id behind it, and reading the text needs a
+/// database this does not have. Printing the id would put salsa's numbering
+/// back into error messages and expected test output, which is what keying on
+/// `ExprKey` exists to avoid.
+impl fmt::Debug for ExprKey<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self.fn_name {
+            Some(_) => write!(f, "ExprKey(fn #{})", self.local_index),
+            None => write!(f, "ExprKey(script #{})", self.local_index),
+        }
+    }
+}
+
+impl<'db> ExprKey<'db> {
+    pub fn new(fn_name: Option<InternedText<'db>>, local_index: u32) -> Self {
+        ExprKey { fn_name, local_index }
+    }
+
+    /// The key identifying `expr`.
+    pub fn of(db: &'db dyn salsa::Database, expr: ExprFun<'db>) -> Self {
+        ExprKey::new(expr.fn_name(db), expr.local_index(db))
+    }
+}
+
+/// Span entry for a parsed expression.
 #[derive(Clone, Debug, Hash, PartialEq, Eq)]
-pub struct ParseSpanEntry {
-    pub expr_id: salsa::Id,
+#[derive(salsa::SalsaValue)]
+pub struct ParseSpanEntry<'db> {
+    pub expr_key: ExprKey<'db>,
     pub text_id: salsa::Id,
     pub span: ByteSpan,
 }
 
-impl ParseSpanEntry {
-    pub fn new(expr_id: salsa::Id, text_id: salsa::Id, span: ByteSpan) -> Self {
-        ParseSpanEntry { expr_id, text_id, span }
+impl<'db> ParseSpanEntry<'db> {
+    pub fn new(expr_key: ExprKey<'db>, text_id: salsa::Id, span: ByteSpan) -> Self {
+        ParseSpanEntry { expr_key, text_id, span }
     }
 }
 
@@ -32,7 +76,7 @@ pub struct ParsedStatements<'db> {
 #[derive(salsa::SalsaValue)]
 pub struct ParseResult<'db> {
     pub parsed: ParsedStatements<'db>,
-    pub expr_spans: Vec<ParseSpanEntry>,
+    pub expr_spans: Vec<ParseSpanEntry<'db>>,
     /// Break statement spans, indexed by local_index.
     pub break_spans: Vec<SpanEntry>,
     /// Continue statement spans, indexed by local_index.

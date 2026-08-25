@@ -8,7 +8,7 @@ Analysis(
             ),
             ownership: OwnershipResult(
                 status: "Error",
-                message: "Ownership error in outer: AliasedMutableArgument { local_index: 2056, name: \"v\" }",
+                message: "Ownership error in outer: AliasedMutableArgument { expr_key: ExprKey(fn #1), name: \"v\" }",
             ),
             lowering: LoweringResult(
                 status: "Skipped",
