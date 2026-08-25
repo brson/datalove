@@ -7,7 +7,7 @@ use datalove_datalit::tydesc_table::TyDescTable;
 use datalove_rt::rust::{Runtime, MemGuard, ValueGuard};
 use datalove_rt::c::RtStatus;
 
-#[salsa::tracked]
+#[salsa::tracked(returns(copy))]
 fn compile<'db>(db: &'db dyn salsa::Database, source: bct::input::Source) -> datalove_datalit::tycheck::TypecheckResult<'db> {
     let parse_result = datalove_datalit::parser::parse(db, source);
     let parsed = parse_result.expr(db);

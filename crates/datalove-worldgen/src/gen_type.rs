@@ -83,7 +83,7 @@ mod tests {
         test_gen_type_hint_leaf_inner(&db);
     }
 
-    #[salsa::tracked]
+    #[salsa::tracked(returns(copy))]
     fn test_gen_type_hint_leaf_inner<'db>(db: &'db dyn salsa::Database) {
         let config = WorldGenConfig::default();
         let mut rng = rand::rngs::StdRng::seed_from_u64(42);
@@ -121,7 +121,7 @@ mod tests {
         test_gen_type_alias_inner(&db);
     }
 
-    #[salsa::tracked]
+    #[salsa::tracked(returns(copy))]
     fn test_gen_type_alias_inner<'db>(db: &'db dyn salsa::Database) {
         let config = WorldGenConfig::default();
         let mut rng = rand::rngs::StdRng::seed_from_u64(42);
@@ -153,7 +153,7 @@ mod tests {
         test_format_type_alias_inner(&db);
     }
 
-    #[salsa::tracked]
+    #[salsa::tracked(returns(copy))]
     fn test_format_type_alias_inner<'db>(db: &'db dyn salsa::Database) {
         let ty = TypeHint::U32;
         let formatted = format_type_alias(db, "Counter", ty);
@@ -166,7 +166,7 @@ mod tests {
         test_gen_type_deterministic_inner(&db);
     }
 
-    #[salsa::tracked]
+    #[salsa::tracked(returns(copy))]
     fn test_gen_type_deterministic_inner<'db>(db: &'db dyn salsa::Database) {
         let config = WorldGenConfig::default();
 

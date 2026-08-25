@@ -20,6 +20,7 @@ pub struct Package {
 pub struct PackageModule {
     #[returns(ref)]
     pub name: ModuleName,
+    #[returns(copy)]
     pub text: Source,
 }
 
@@ -33,7 +34,7 @@ pub struct PackageWorld {
 }
 
 /// Create a PackageWorldMap from a PackageWorld.
-#[salsa::tracked]
+#[salsa::tracked(returns(copy))]
 pub fn package_world_map(
     db: &dyn salsa::Database,
     package_world: PackageWorld,

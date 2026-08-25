@@ -21,7 +21,7 @@ use crate::ast;
 use state::Parser;
 
 /// Parse a Source into a datalit expression with span information.
-#[salsa::tracked]
+#[salsa::tracked(returns(copy))]
 pub fn parse<'db>(
     db: &'db dyn crate::Db,
     source: Source,
@@ -61,7 +61,7 @@ pub fn parse_type_hint_from_tokens<'db>(
 ///
 /// Allows tests to call parse() which creates tracked AST nodes.
 /// Regular code should call parse() from within a tracked function context.
-#[salsa::tracked]
+#[salsa::tracked(returns(copy))]
 #[cfg(test)]
 pub(crate) fn parse_for_test<'db>(
     db: &'db dyn crate::Db,
@@ -73,7 +73,7 @@ pub(crate) fn parse_for_test<'db>(
 /// Public wrapper for integration tests.
 ///
 /// Integration tests are compiled as separate binaries and need pub access.
-#[salsa::tracked]
+#[salsa::tracked(returns(copy))]
 pub fn parse_integration_test<'db>(
     db: &'db dyn crate::Db,
     source: Source,

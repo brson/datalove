@@ -23,8 +23,10 @@ use datalove_datafun_ir::IrType;
 #[salsa::tracked]
 pub struct ResolvedCallTarget<'db> {
     /// The resolved function AST.
+    #[returns(copy)]
     pub func: StmtFun<'db>,
     /// The source module (None for script-local functions).
+    #[returns(copy)]
     pub module_id: Option<ModuleId>,
 }
 
@@ -154,7 +156,7 @@ impl BindingInfo {
 /// When an ownership error can be fixed by inserting the `@` (adapt) operator
 /// to clone the value, a recovery hint is attached to the diagnostic.
 #[derive(Clone, Debug, Default, Hash, PartialEq, Eq)]
-#[derive(salsa::Update)]
+#[derive(salsa::SalsaValue)]
 pub enum OwnershipRecoveryHint {
     /// Insert @ before the expression to clone the value.
     InsertAdapt {
@@ -172,7 +174,7 @@ pub enum OwnershipRecoveryHint {
 /// emission. The local_index is the expression's salsa ID index, used to
 /// look up spans in DatafunSpans.
 #[derive(Clone, Debug, Hash, PartialEq, Eq)]
-#[derive(salsa::Update)]
+#[derive(salsa::SalsaValue)]
 pub enum AnalysisError {
     /// Using a binding whose own unit gave its value away.
     /// D013 - Recoverable with @ (clone at the use that gave it away)
@@ -410,7 +412,7 @@ pub struct FunctionAnalysis {
 /// for spans, so lowering can recognize the expression it is looking at.
 /// Lowering clones such a use instead of moving it.
 #[derive(Clone, Debug, Default, Hash, PartialEq, Eq)]
-#[derive(salsa::Update)]
+#[derive(salsa::SalsaValue)]
 pub struct AdaptSites {
     sites: Vec<u32>,
 }

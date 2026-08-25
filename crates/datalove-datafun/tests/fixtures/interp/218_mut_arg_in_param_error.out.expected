@@ -8,7 +8,7 @@ Analysis(
             ),
             ownership: OwnershipResult(
                 status: "Error",
-                message: "Ownership error in outer: CannotMutateImmutable { local_index: 16390, name: \"v\" }",
+                message: "Ownership error in outer: CannotMutateImmutable { local_index: 2054, name: \"v\" }",
             ),
             lowering: LoweringResult(
                 status: "Skipped",

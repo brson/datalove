@@ -23,7 +23,7 @@ pub struct RiderDemandMap<'db> {
     pub map: BTreeMap<PackageModule, Vec<RiderDemand>>,
 }
 
-#[salsa::tracked]
+#[salsa::tracked(returns(copy))]
 pub fn import_demands<'db>(
     db: &'db dyn salsa::Database,
     package_world_map: PackageWorldMap<'db>,
@@ -39,7 +39,7 @@ pub fn import_demands<'db>(
 }
 
 /// Extract rider demands from all modules in a package world.
-#[salsa::tracked]
+#[salsa::tracked(returns(copy))]
 pub fn rider_demands<'db>(
     db: &'db dyn salsa::Database,
     package_world_map: PackageWorldMap<'db>,
@@ -66,7 +66,7 @@ struct ModuleRiderDemands<'db> {
     demands: Vec<RiderDemand>,
 }
 
-#[salsa::tracked]
+#[salsa::tracked(returns(copy))]
 fn module_import_demands<'db>(
     db: &'db dyn salsa::Database,
     source: Source,
@@ -90,7 +90,7 @@ fn module_import_demands<'db>(
 }
 
 /// Extract rider demands from a single module's source.
-#[salsa::tracked]
+#[salsa::tracked(returns(copy))]
 fn module_rider_demands<'db>(
     db: &'db dyn salsa::Database,
     source: Source,

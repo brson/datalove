@@ -44,7 +44,7 @@ pub use crate::{
 /// Plain data struct (not tracked) - compared by Salsa via Eq/Hash.
 /// Contains bindings from all prior units in the batch.
 #[derive(Clone, PartialEq, Eq, Hash, Default)]
-#[derive(salsa::Update)]
+#[derive(salsa::SalsaValue)]
 pub struct AccumulatedBindings<'db> {
     /// Variables: (name, type, is_mutable).
     pub vars: Vec<(InternedText<'db>, Type<'db>, bool)>,
@@ -60,6 +60,7 @@ pub struct AccumulatedBindings<'db> {
 /// for accumulation by the caller.
 #[salsa::tracked]
 pub struct ScriptUnitTypecheckOutput<'db> {
+    #[returns(copy)]
     pub result: UnitTypecheckResultTracked<'db>,
     /// Variables: (name, type, is_mutable).
     #[returns(ref)]
@@ -77,7 +78,7 @@ pub struct ScriptUnitTypecheckOutput<'db> {
 ///
 /// ScriptBatchSpec is a tracked type, so it must be created inside a tracked function.
 /// The Source parameter serves as the memoization key.
-#[salsa::tracked]
+#[salsa::tracked(returns(copy))]
 pub fn create_batch_spec<'db>(
     db: &'db dyn crate::Db,
     key: bct::input::Source,
@@ -91,7 +92,7 @@ pub fn create_batch_spec<'db>(
 /// Create a ScriptBatchSpec with auto-adapt mode inside a tracked function.
 ///
 /// Like `create_batch_spec`, but allows specifying auto-adapt mode.
-#[salsa::tracked]
+#[salsa::tracked(returns(copy))]
 pub fn create_batch_spec_with_auto_adapt<'db>(
     db: &'db dyn crate::Db,
     key: bct::input::Source,
@@ -108,7 +109,7 @@ pub fn create_batch_spec_with_auto_adapt<'db>(
 /// Memoized: if unit_spec, module_specs, and accumulated all match a previous call,
 /// returns the cached result. This enables per-unit caching when adding new units
 /// to a batch - prior units are cache hits.
-#[salsa::tracked]
+#[salsa::tracked(returns(copy))]
 pub fn typecheck_script_unit<'db>(
     db: &'db dyn crate::Db,
     unit_spec: ScriptUnitSpec<'db>,
@@ -249,7 +250,7 @@ pub fn typecheck_script_unit<'db>(
 /// Units are processed in order. Bindings from earlier units (let/var/fn)
 /// are visible in subsequent units. Delegates to `typecheck_script_unit` for
 /// per-unit memoization - prior units are cached when new units are added.
-#[salsa::tracked]
+#[salsa::tracked(returns(copy))]
 pub fn type_check_script_units<'db>(
     db: &'db dyn crate::Db,
     spec: ScriptBatchSpec<'db>,
@@ -321,7 +322,7 @@ pub type ResolvedImportData<'db> = (InternedText<'db>, TypeFunction<'db>, Option
 /// Takes pre-resolved name resolution (type aliases, function signatures) and
 /// resolved imports as plain data. Each module's typecheck only depends on its
 /// own name resolution and imports, enabling proper per-module caching.
-#[salsa::tracked]
+#[salsa::tracked(returns(copy))]
 pub fn typecheck_module<'db>(
     db: &'db dyn crate::Db,
     module: Module,
@@ -424,7 +425,7 @@ fn prepare_typecheck<'db>(
 /// Resolves imports for each module, then typechecks each module.
 /// Each module's typecheck depends on its own name resolution and imports,
 /// enabling per-module caching.
-#[salsa::tracked]
+#[salsa::tracked(returns(copy))]
 pub fn typecheck_module_graph<'db>(
     db: &'db dyn crate::Db,
     parsed_graph: ParsedModuleGraph<'db>,
@@ -620,7 +621,7 @@ fn emit_pending_diagnostics_for_module<'db>(
 /// path hits the cache.
 ///
 /// Accepts pre-computed exports and function ASTs from the resolve crate.
-#[salsa::tracked]
+#[salsa::tracked(returns(copy))]
 pub fn resolve_module_imports<'db>(
     db: &'db dyn crate::Db,
     module: Module,

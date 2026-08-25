@@ -8,7 +8,7 @@ Analysis(
             ),
             ownership: OwnershipResult(
                 status: "Error",
-                message: "Ownership error in outer: CannotMoveBorrowed { local_index: 16392, name: \"y\" }",
+                message: "Ownership error in outer: CannotMoveBorrowed { local_index: 2056, name: \"y\" }",
             ),
             lowering: LoweringResult(
                 status: "Skipped",

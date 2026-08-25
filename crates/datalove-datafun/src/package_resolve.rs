@@ -14,7 +14,7 @@ use datalove_datafun_pkg::{PackageWorld, package_world_map};
 /// 1. Creates a PackageWorldMap from the PackageWorld
 /// 2. Extracts import demands using the compiler's parser
 /// 3. Resolves dependencies using pkg's resolver
-#[salsa::tracked]
+#[salsa::tracked(returns(copy))]
 pub fn resolve_package_world_with_imports<'db>(
     db: &'db dyn salsa::Database,
     package_world: PackageWorld,

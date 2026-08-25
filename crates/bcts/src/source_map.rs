@@ -19,7 +19,7 @@ pub struct Config<'db> {
     //parse_string: fn(&str) -> Option<Result<usize, usize>>,
 }
 
-#[salsa::tracked]
+#[salsa::tracked(returns(copy))]
 pub fn basic_source_map<'db>(
     db: &'db dyn crate::Db,
     source: Source,
@@ -31,7 +31,7 @@ pub fn basic_source_map<'db>(
     )
 }
 
-#[salsa::tracked]
+#[salsa::tracked(returns(copy))]
 pub fn source_map<'db>(
     db: &'db dyn crate::Db,
     source: Source,
@@ -53,7 +53,7 @@ pub fn source_map<'db>(
     state.map()
 }
 
-#[salsa::tracked]
+#[salsa::tracked(returns(copy))]
 pub fn basic_config<'db>(
     db: &'db dyn crate::Db,
 ) -> Config<'db> {

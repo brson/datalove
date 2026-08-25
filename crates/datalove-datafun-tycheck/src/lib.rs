@@ -52,7 +52,7 @@ pub use emit::{SpanLookup, LocalSpanLookup, ModuleGraphSpanLookup, emit_pending_
 /// - Displaying helpful suggestions to the user
 /// - Auto-adapt mode to automatically apply the fix
 #[derive(Clone, Hash, PartialEq, Eq)]
-#[derive(salsa::Update)]
+#[derive(salsa::SalsaValue)]
 pub enum RecoveryHint {
     /// Insert @ after the expression to clone and/or coerce.
     InsertAdapt {
@@ -77,7 +77,7 @@ impl Default for RecoveryHint {
 /// non-module-graph paths, module_id is None and spans are looked up from
 /// TypeContext.spans.
 #[derive(Clone, Hash, PartialEq, Eq)]
-#[derive(salsa::Update)]
+#[derive(salsa::SalsaValue)]
 pub enum PendingDiagnostic<'db> {
     /// F001: Undefined variable.
     UndefinedVariable {
@@ -275,6 +275,7 @@ pub fn is_copy_type<'db>(db: &'db dyn salsa::Database, ty: &datalove_datalit::ty
 /// Type error entry with location info.
 #[salsa::tracked]
 pub struct TypeErrorEntry<'db> {
+    #[returns(clone)]
     pub error: TypeError,
 }
 
@@ -282,9 +283,11 @@ pub struct TypeErrorEntry<'db> {
 #[salsa::tracked]
 pub struct TypecheckResult<'db> {
     /// The root parsed statements.
+    #[returns(clone)]
     pub root_parsed: ParsedStatements<'db>,
 
     /// Type errors encountered.
+    #[returns(clone)]
     pub errors: Vec<TypeErrorEntry<'db>>,
 
     /// Expression types, indexed by ExprFun ID.
@@ -307,6 +310,7 @@ pub struct TypecheckResult<'db> {
 #[salsa::tracked]
 pub struct ExprTypecheckResult<'db> {
     /// Type errors encountered.
+    #[returns(clone)]
     pub errors: Vec<TypeErrorEntry<'db>>,
     /// Expression types, indexed by ExprFun ID.
     #[returns(ref)]
@@ -315,7 +319,7 @@ pub struct ExprTypecheckResult<'db> {
 
 /// Kind of script unit for batch typechecking (with parsed content).
 #[derive(Clone, Hash, PartialEq, Eq)]
-#[derive(salsa::Update)]
+#[derive(salsa::SalsaValue)]
 pub enum ScriptUnitKind<'db> {
     /// A fragment containing statements and pre-computed name resolution.
     Fragment(ParsedStatements<'db>, CollectedNames<'db>),
@@ -325,7 +329,7 @@ pub enum ScriptUnitKind<'db> {
 
 /// Spec for a single script unit (with pre-parsed content).
 #[derive(Clone, Hash, PartialEq, Eq)]
-#[derive(salsa::Update)]
+#[derive(salsa::SalsaValue)]
 pub struct ScriptUnitSpec<'db> {
     pub source: bct::input::Source,
     pub spans: DatafunSpans,
@@ -341,7 +345,7 @@ impl<'db> ScriptUnitSpec<'db> {
 
 /// Spec for a module (path + pre-parsed statements + module ID + name resolution).
 #[derive(Clone, Hash, PartialEq, Eq)]
-#[derive(salsa::Update)]
+#[derive(salsa::SalsaValue)]
 pub struct ModuleSpec<'db> {
     pub path: String,
     pub source: bct::input::Source,
@@ -376,12 +380,14 @@ pub struct ScriptBatchSpec<'db> {
     #[returns(ref)]
     pub modules: Vec<ModuleSpec<'db>>,
     /// Auto-adapt mode for type checking.
+    #[returns(copy)]
     pub auto_adapt_mode: AutoAdaptMode,
 }
 
 /// A script unit with parsed content (tracked - created inside tracked fn).
 #[salsa::tracked]
 pub struct ScriptUnitInput<'db> {
+    #[returns(copy)]
     pub source: bct::input::Source,
     #[returns(ref)]
     pub kind: ScriptUnitKind<'db>,
@@ -392,8 +398,11 @@ pub struct ScriptUnitInput<'db> {
 pub struct ModuleInfo<'db> {
     #[returns(ref)]
     pub path: String,
+    #[returns(clone)]
     pub parsed: ParsedStatements<'db>,
+    #[returns(copy)]
     pub source: bct::input::Source,
+    #[returns(copy)]
     pub module_id: ModuleId,
 }
 
@@ -410,6 +419,7 @@ pub struct ScriptUnitBatch<'db> {
 #[salsa::tracked]
 pub struct UnitTypecheckResultTracked<'db> {
     /// Type errors encountered.
+    #[returns(clone)]
     pub errors: Vec<TypeErrorEntry<'db>>,
     /// Expression types, indexed by ExprFun ID.
     #[returns(ref)]
@@ -435,6 +445,7 @@ pub struct UnitTypecheckResultTracked<'db> {
 #[salsa::tracked]
 pub struct ScriptUnitsTypecheckResultTracked<'db> {
     /// Per-unit results.
+    #[returns(clone)]
     pub results: Vec<UnitTypecheckResultTracked<'db>>,
 }
 
@@ -448,14 +459,19 @@ pub struct ScriptUnitsTypecheckResultTracked<'db> {
 #[salsa::tracked]
 pub struct ResolvedImport<'db> {
     /// Local name for the imported function.
+    #[returns(copy)]
     pub local_name: InternedText<'db>,
     /// Type of the imported function.
+    #[returns(copy)]
     pub func_type: TypeFunction<'db>,
     /// AST of the imported function (for inlining).
+    #[returns(copy)]
     pub func_ast: Option<StmtFun<'db>>,
     /// Module the function was imported from.
+    #[returns(copy)]
     pub source_module: ModuleId,
     /// Original name in the source module.
+    #[returns(copy)]
     pub source_name: InternedText<'db>,
 }
 
@@ -463,6 +479,7 @@ pub struct ResolvedImport<'db> {
 #[salsa::tracked]
 pub struct ModuleImportResolution<'db> {
     /// Module this is for.
+    #[returns(copy)]
     pub module_id: ModuleId,
 
     /// Resolved imports: (local_name, func_type, func_ast, source_module_id).
@@ -478,6 +495,7 @@ pub struct ModuleImportResolution<'db> {
 #[salsa::tracked]
 pub struct SingleModuleTypecheckResult<'db> {
     /// Module that was typechecked.
+    #[returns(copy)]
     pub module_id: ModuleId,
 
     /// Type errors encountered.
@@ -522,6 +540,7 @@ pub struct SingleModuleTypecheckResult<'db> {
 #[salsa::tracked]
 pub struct ModuleExports<'db> {
     /// Module this is for.
+    #[returns(copy)]
     pub module_id: ModuleId,
 
     /// Function signatures as a vector of (name, type) pairs.
@@ -537,6 +556,7 @@ pub struct ModuleExports<'db> {
 #[salsa::tracked]
 pub struct ModuleImports<'db> {
     /// Module this is for.
+    #[returns(copy)]
     pub module_id: ModuleId,
 
     /// Imported functions: (local_name, source_module_id, source_name).
@@ -548,6 +568,7 @@ pub struct ModuleImports<'db> {
 #[salsa::tracked]
 pub struct ModuleGraphTypecheckResult<'db> {
     /// The module graph that was typechecked.
+    #[returns(copy)]
     pub graph: bct::module_graph::ModuleGraph,
 
     /// Type errors encountered, per module.

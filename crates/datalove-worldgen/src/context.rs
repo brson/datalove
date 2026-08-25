@@ -399,7 +399,7 @@ mod tests {
         test_types_match_same_inner(&db);
     }
 
-    #[salsa::tracked]
+    #[salsa::tracked(returns(copy))]
     fn test_types_match_same_inner<'db>(db: &'db dyn salsa::Database) {
         assert!(types_match(db, TypeHint::U32, TypeHint::U32), "Same types should match");
     }
@@ -410,7 +410,7 @@ mod tests {
         test_types_match_different_type_inner(&db);
     }
 
-    #[salsa::tracked]
+    #[salsa::tracked(returns(copy))]
     fn test_types_match_different_type_inner<'db>(db: &'db dyn salsa::Database) {
         assert!(!types_match(db, TypeHint::U32, TypeHint::I32), "Different types should not match");
     }
@@ -421,7 +421,7 @@ mod tests {
         test_variables_of_type_inner(&db);
     }
 
-    #[salsa::tracked]
+    #[salsa::tracked(returns(copy))]
     fn test_variables_of_type_inner<'db>(db: &'db dyn salsa::Database) {
         let mut ctx = GenContext::new();
         ctx.variables.push(Variable {
@@ -462,7 +462,7 @@ mod tests {
         test_mutable_variables_inner(&db);
     }
 
-    #[salsa::tracked]
+    #[salsa::tracked(returns(copy))]
     fn test_mutable_variables_inner<'db>(db: &'db dyn salsa::Database) {
         let _ = db;
         let mut ctx = GenContext::new();
@@ -494,7 +494,7 @@ mod tests {
         test_callable_functions_shadowing_inner(&db);
     }
 
-    #[salsa::tracked]
+    #[salsa::tracked(returns(copy))]
     fn test_callable_functions_shadowing_inner<'db>(db: &'db dyn salsa::Database) {
         let _ = db;
         let mut ctx = GenContext::new();

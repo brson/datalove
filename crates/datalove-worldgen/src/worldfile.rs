@@ -17,7 +17,7 @@ pub fn gen_worldfile_seeded(seed: u64, config: WorldGenConfig) -> String {
 /// Internal tracked function for worldfile generation.
 ///
 /// Must be tracked to allow creation of Salsa tracked structs.
-#[salsa::tracked]
+#[salsa::tracked(returns(clone))]
 fn gen_worldfile_tracked<'db>(
     db: &'db dyn salsa::Database,
     seed: u64,

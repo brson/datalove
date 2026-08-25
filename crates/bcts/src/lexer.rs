@@ -14,6 +14,7 @@ use crate::source_map::{
 
 #[salsa::tracked]
 pub struct ChunkLex<'db> {
+    #[returns(copy)]
     pub chunk: Chunk<'db>,
     #[returns(ref)]
     pub tokens: Vec<Token<'db>>,
@@ -22,12 +23,15 @@ pub struct ChunkLex<'db> {
 #[salsa::tracked]
 #[derive(Debug)]
 pub struct Token<'db> {
+    #[returns(copy)]
     pub text: InternedText<'db>,
+    #[returns(clone)]
     pub span: Range<usize>,
+    #[returns(copy)]
     pub kind: TokenKind,
 }
 
-#[derive(Copy, Clone, Debug, Hash, salsa::Update)]
+#[derive(Copy, Clone, Debug, Hash, salsa::SalsaValue)]
 #[derive(Eq, PartialEq)]
 pub enum TokenKind {
     Word,
@@ -38,7 +42,7 @@ pub enum TokenKind {
     Error,
 }
 
-#[derive(Copy, Clone, Debug, Hash, salsa::Update)]
+#[derive(Copy, Clone, Debug, Hash, salsa::SalsaValue)]
 #[derive(Eq, PartialEq)]
 #[derive(enum_iterator::Sequence)]
 pub enum Sigil {
@@ -122,7 +126,7 @@ pub enum Sigil {
     Tilde,
 }
 
-#[salsa::tracked]
+#[salsa::tracked(returns(copy))]
 pub fn lex_chunk<'db>(
     db: &'db dyn crate::Db,
     chunk: Chunk<'db>,

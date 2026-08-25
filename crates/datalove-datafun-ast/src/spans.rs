@@ -16,7 +16,7 @@ pub struct SpanMapEntry {
 
 /// Datafun expression and statement spans.
 #[derive(Clone, Debug, Hash, PartialEq, Eq)]
-#[derive(salsa::Update)]
+#[derive(salsa::SalsaValue)]
 pub struct DatafunSpans {
     /// Expression spans, keyed by expression salsa ID.
     pub entries: Vec<SpanMapEntry>,

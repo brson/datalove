@@ -9,6 +9,7 @@ use crate::text::Text;
 
 #[salsa::tracked]
 pub struct Chunk<'db> {
+    #[returns(copy)]
     pub text: Text<'db>,
     #[returns(ref)]
     pub comments: Vec<Range<usize>>,

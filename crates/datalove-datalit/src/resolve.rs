@@ -7,16 +7,18 @@ use crate::ast::*;
 #[salsa::tracked]
 pub struct ResolvedExpr<'db> {
     /// Original expression.
+    #[returns(copy)]
     pub expr: ExprFull<'db>,
 
     /// Source for on-demand span lookup.
+    #[returns(copy)]
     pub source: bct::input::Source,
 }
 
 /// Main entry point: resolve all names in an expression.
 ///
 /// With named types removed, this now simply wraps the expression with source.
-#[salsa::tracked]
+#[salsa::tracked(returns(copy))]
 pub fn resolve_names<'db>(
     db: &'db dyn crate::Db,
     source: bct::input::Source,

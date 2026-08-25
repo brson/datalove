@@ -29,7 +29,7 @@ pub struct PackageWorldModuleGraph<'db> {
     pub map: BTreeMap<PackageModule, BTreeSet<(ImportDemand, ResolvedPackageModule)>>,
 }
 
-#[derive(Copy, Clone, Hash, salsa::Update)]
+#[derive(Copy, Clone, Hash, salsa::SalsaValue)]
 #[derive(Eq, PartialEq, Ord, PartialOrd)]
 pub enum ResolvedPackageModule {
     Resolved(PackageModule),
@@ -38,16 +38,17 @@ pub enum ResolvedPackageModule {
 
 #[salsa::tracked]
 pub struct PackageWorldModuleGraphWithErrors<'db> {
+    #[returns(copy)]
     pub result: Result<PackageWorldModuleGraph<'db>, ValidationError>,
 }
 
-#[derive(Copy, Clone, Debug, Hash, salsa::Update)]
+#[derive(Copy, Clone, Debug, Hash, salsa::SalsaValue)]
 #[derive(Eq, PartialEq, Ord, PartialOrd)]
 pub enum ValidationError {
     CycleDetected,
 }
 
-#[salsa::tracked]
+#[salsa::tracked(returns(copy))]
 pub fn resolve_package_world<'db>(
     db: &'db dyn crate::Db,
     package_world_map: PackageWorldMap<'db>,
@@ -189,7 +190,7 @@ fn dfs_detect_cycle(
     false
 }
 
-#[salsa::tracked]
+#[salsa::tracked(returns(copy))]
 pub fn module_world_map<'db>(
     db: &'db dyn crate::Db,
     package_world_map: PackageWorldMap<'db>,
@@ -284,7 +285,7 @@ use crate::input::Source;
 
 #[cfg(test)]
 #[rustfmt::skip]
-#[salsa::tracked]
+#[salsa::tracked(returns(copy))]
 fn test_map<'db>(
     db: &'db dyn crate::Db,
 ) -> PackageWorldMap<'db> {
@@ -371,13 +372,15 @@ fn package_world_map_iter_lazy() {
 
 #[salsa::tracked]
 struct TestInput<'db> {
+    #[returns(copy)]
     package_world_map: PackageWorldMap<'db>,
+    #[returns(copy)]
     import_demand_map: ImportDemandMap<'db>,
 }
 
 #[cfg(test)]
 #[rustfmt::skip]
-#[salsa::tracked]
+#[salsa::tracked(returns(copy))]
 fn test_input_unresolvable<'db>(
     db: &'db dyn crate::Db,
 ) -> TestInput<'db> {
@@ -449,7 +452,7 @@ fn test_unresolved_import() {
 
 #[cfg(test)]
 #[rustfmt::skip]
-#[salsa::tracked]
+#[salsa::tracked(returns(copy))]
 fn test_input_cycle<'db>(
     db: &'db dyn crate::Db,
 ) -> TestInput<'db> {

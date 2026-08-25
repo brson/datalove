@@ -393,7 +393,7 @@ mod tests {
         test_pretty_primitive_types_inner(&db);
     }
 
-    #[salsa::tracked]
+    #[salsa::tracked(returns(copy))]
     fn test_pretty_primitive_types_inner<'db>(db: &'db dyn salsa::Database) {
         let _ = db;
         let cases = [
@@ -424,7 +424,7 @@ mod tests {
         test_pretty_expr_bool_inner(&db);
     }
 
-    #[salsa::tracked]
+    #[salsa::tracked(returns(copy))]
     fn test_pretty_expr_bool_inner<'db>(db: &'db dyn salsa::Database) {
         assert_eq!(pretty_expr(db, Expr::True), "true");
         assert_eq!(pretty_expr(db, Expr::False), "false");
@@ -437,7 +437,7 @@ mod tests {
         test_pretty_type_list_inner(&db);
     }
 
-    #[salsa::tracked]
+    #[salsa::tracked(returns(copy))]
     fn test_pretty_type_list_inner<'db>(db: &'db dyn salsa::Database) {
         use datalove_datalit::ast::TypeHintList;
         let _ = db;
@@ -452,7 +452,7 @@ mod tests {
         test_pretty_type_option_inner(&db);
     }
 
-    #[salsa::tracked]
+    #[salsa::tracked(returns(copy))]
     fn test_pretty_type_option_inner<'db>(db: &'db dyn salsa::Database) {
         use datalove_datalit::ast::TypeHintOption;
         let _ = db;
@@ -467,7 +467,7 @@ mod tests {
         test_pretty_type_result_inner(&db);
     }
 
-    #[salsa::tracked]
+    #[salsa::tracked(returns(copy))]
     fn test_pretty_type_result_inner<'db>(db: &'db dyn salsa::Database) {
         use datalove_datalit::ast::TypeHintResult;
         let _ = db;
@@ -482,7 +482,7 @@ mod tests {
         test_pretty_type_map_inner(&db);
     }
 
-    #[salsa::tracked]
+    #[salsa::tracked(returns(copy))]
     fn test_pretty_type_map_inner<'db>(db: &'db dyn salsa::Database) {
         use datalove_datalit::ast::TypeHintMap;
         let _ = db;
@@ -500,7 +500,7 @@ mod tests {
         test_pretty_type_set_inner(&db);
     }
 
-    #[salsa::tracked]
+    #[salsa::tracked(returns(copy))]
     fn test_pretty_type_set_inner<'db>(db: &'db dyn salsa::Database) {
         use datalove_datalit::ast::TypeHintSet;
         let _ = db;
@@ -515,7 +515,7 @@ mod tests {
         test_pretty_type_tuple_inner(&db);
     }
 
-    #[salsa::tracked]
+    #[salsa::tracked(returns(copy))]
     fn test_pretty_type_tuple_inner<'db>(db: &'db dyn salsa::Database) {
         use datalove_datalit::ast::TypeHintAnonTuple;
         let _ = db;
@@ -532,7 +532,7 @@ mod tests {
         test_pretty_type_struct_inner(&db);
     }
 
-    #[salsa::tracked]
+    #[salsa::tracked(returns(copy))]
     fn test_pretty_type_struct_inner<'db>(db: &'db dyn salsa::Database) {
         use datalove_datalit::ast::{TypeHintAnonStruct, TypeHintNamedField};
         use bct::text::InternedText;
@@ -556,7 +556,7 @@ mod tests {
         test_pretty_output_no_trailing_whitespace_inner(&db);
     }
 
-    #[salsa::tracked]
+    #[salsa::tracked(returns(copy))]
     fn test_pretty_output_no_trailing_whitespace_inner<'db>(db: &'db dyn salsa::Database) {
         let _ = db;
         let types = [

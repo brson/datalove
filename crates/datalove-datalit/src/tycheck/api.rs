@@ -12,6 +12,7 @@ use super::types::{Type, TypeError};
 /// Type error entry with location info.
 #[salsa::tracked]
 pub struct TypeErrorEntry<'db> {
+    #[returns(clone)]
     pub error: TypeError,
 }
 
@@ -19,6 +20,7 @@ pub struct TypeErrorEntry<'db> {
 #[salsa::tracked]
 pub struct TypecheckResult<'db> {
     /// The root expression.
+    #[returns(copy)]
     pub root_expr: ExprFull<'db>,
 
     /// The root expression type (if successfully synthesized).
@@ -26,16 +28,18 @@ pub struct TypecheckResult<'db> {
     pub root_type: Option<Type<'db>>,
 
     /// Type errors encountered.
+    #[returns(clone)]
     pub errors: Vec<TypeErrorEntry<'db>>,
 
     /// The resolved expression context.
     ///
     /// Preserved for instantiation of nested types like Data/Error.
+    #[returns(copy)]
     pub resolved: ResolvedExpr<'db>,
 }
 
 /// Main entry point: typecheck an expression.
-#[salsa::tracked]
+#[salsa::tracked(returns(copy))]
 pub fn type_check<'db>(
     db: &'db dyn crate::Db,
     expr: ExprFull<'db>,

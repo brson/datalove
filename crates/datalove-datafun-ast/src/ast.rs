@@ -22,14 +22,14 @@ impl ParseSpanEntry {
 
 /// Result of parsing a source text into statements.
 #[derive(Clone, Hash, PartialEq, Eq)]
-#[derive(salsa::Update)]
+#[derive(salsa::SalsaValue)]
 pub struct ParsedStatements<'db> {
     pub statements: Vec<Statement<'db>>,
 }
 
 /// Parse result containing parsed statements and span side tables.
 #[derive(Clone, Hash, PartialEq, Eq)]
-#[derive(salsa::Update)]
+#[derive(salsa::SalsaValue)]
 pub struct ParseResult<'db> {
     pub parsed: ParsedStatements<'db>,
     pub expr_spans: Vec<ParseSpanEntry>,
@@ -48,7 +48,7 @@ pub struct ParseResult<'db> {
 }
 
 #[derive(Clone, Hash, PartialEq, Eq)]
-#[derive(salsa::Update)]
+#[derive(salsa::SalsaValue)]
 pub enum Statement<'db> {
     Let(StmtLet<'db>),
     Var(StmtVar<'db>),
@@ -71,7 +71,7 @@ pub enum Statement<'db> {
 }
 
 #[derive(Clone, Hash, PartialEq, Eq)]
-#[derive(salsa::Update)]
+#[derive(salsa::SalsaValue)]
 pub struct StmtLet<'db> {
     pub name: InternedText<'db>,
     pub type_hint: Option<datalit::ast::TypeHint<'db>>,
@@ -83,7 +83,7 @@ pub struct StmtLet<'db> {
 /// If `value` is None, the variable is declared but not initialized.
 /// A type hint is required when there is no initializer.
 #[derive(Clone, Hash, PartialEq, Eq)]
-#[derive(salsa::Update)]
+#[derive(salsa::SalsaValue)]
 pub struct StmtVar<'db> {
     pub name: InternedText<'db>,
     pub type_hint: Option<datalit::ast::TypeHint<'db>>,
@@ -96,7 +96,7 @@ pub struct StmtVar<'db> {
 /// The value expression is evaluated at compile time via the const evaluator.
 /// The resulting value is inlined at use sites.
 #[derive(Clone, Hash, PartialEq, Eq)]
-#[derive(salsa::Update)]
+#[derive(salsa::SalsaValue)]
 pub struct StmtConst<'db> {
     pub name: InternedText<'db>,
     pub type_hint: Option<datalit::ast::TypeHint<'db>>,
@@ -105,7 +105,7 @@ pub struct StmtConst<'db> {
 
 /// Mutation of an existing mutable variable or field.
 #[derive(Clone, Hash, PartialEq, Eq)]
-#[derive(salsa::Update)]
+#[derive(salsa::SalsaValue)]
 pub struct StmtSet<'db> {
     pub target: Place<'db>,
     pub value: ExprFun<'db>,
@@ -119,7 +119,7 @@ pub struct StmtSet<'db> {
 /// `Place { root: "x", steps: [] }`. Field chains like `x.a.b` have
 /// Field steps. Index operations like `a[i]?` have Index steps.
 #[derive(Clone, Hash, PartialEq, Eq)]
-#[derive(salsa::Update)]
+#[derive(salsa::SalsaValue)]
 pub struct Place<'db> {
     pub root: InternedText<'db>,
     pub steps: Vec<PlaceStep<'db>>,
@@ -127,7 +127,7 @@ pub struct Place<'db> {
 
 /// A navigation step within a place.
 #[derive(Clone, Hash, PartialEq, Eq)]
-#[derive(salsa::Update)]
+#[derive(salsa::SalsaValue)]
 pub enum PlaceStep<'db> {
     /// Field or tuple-element projection: `.field` or `.0`.
     Field(FieldSelector<'db>),
@@ -140,7 +140,7 @@ pub enum PlaceStep<'db> {
 
 /// Index step in a place.
 #[derive(Clone, Hash, PartialEq, Eq)]
-#[derive(salsa::Update)]
+#[derive(salsa::SalsaValue)]
 pub struct PlaceIndex<'db> {
     pub index: ExprFun<'db>,
     pub error_mode: Option<IndexErrorMode>,
@@ -148,7 +148,7 @@ pub struct PlaceIndex<'db> {
 
 /// How index failure is handled.
 #[derive(Clone, Copy, Hash, PartialEq, Eq, Debug)]
-#[derive(salsa::Update)]
+#[derive(salsa::SalsaValue)]
 pub enum IndexErrorMode {
     /// `?` — early-return none on failure.
     Option,
@@ -160,23 +160,27 @@ pub enum IndexErrorMode {
 pub struct StmtFun<'db> {
     /// Module this function belongs to (identity key).
     /// None for script-local functions.
+    #[returns(copy)]
     pub module_id: Option<ModuleId>,
     /// Function name (identity key).
+    #[returns(copy)]
     pub name: InternedText<'db>,
     #[tracked]
     #[returns(ref)]
     pub params: Vec<FunParam<'db>>,
     #[tracked]
+    #[returns(clone)]
     pub return_type: Option<datalit::ast::TypeHint<'db>>,
     #[tracked]
     #[returns(ref)]
     pub body: Vec<Statement<'db>>,
     /// Index for span lookup in DatafunSpans.fun_spans.
+    #[returns(copy)]
     pub local_index: u32,
 }
 
 #[derive(Clone, Hash, PartialEq, Eq)]
-#[derive(salsa::Update)]
+#[derive(salsa::SalsaValue)]
 pub struct FunParam<'db> {
     pub name: InternedText<'db>,
     pub mode: ParamMode,
@@ -185,7 +189,7 @@ pub struct FunParam<'db> {
 }
 
 #[derive(Copy, Clone, Hash, Debug, PartialEq, Eq)]
-#[derive(salsa::Update)]
+#[derive(salsa::SalsaValue)]
 pub enum ParamMode {
     In,   // by-val (default)
     Out,  // by-mut-ptr
@@ -195,7 +199,7 @@ pub enum ParamMode {
 
 /// Return statement. Value is None for bare `ret` in void functions.
 #[derive(Clone, Hash, PartialEq, Eq)]
-#[derive(salsa::Update)]
+#[derive(salsa::SalsaValue)]
 pub struct StmtRet<'db> {
     pub value: Option<ExprFun<'db>>,
     /// Index for span lookup in DatafunSpans.
@@ -203,7 +207,7 @@ pub struct StmtRet<'db> {
 }
 
 #[derive(Clone, Hash, PartialEq, Eq)]
-#[derive(salsa::Update)]
+#[derive(salsa::SalsaValue)]
 pub enum StmtRequire<'db> {
     Module(StmtRequireModule<'db>),
     Data(StmtRequireData<'db>),
@@ -211,7 +215,7 @@ pub enum StmtRequire<'db> {
 }
 
 #[derive(Clone, Hash, PartialEq, Eq)]
-#[derive(salsa::Update)]
+#[derive(salsa::SalsaValue)]
 pub struct StmtRequireModule<'db> {
     pub import_space: InternedText<'db>,
     pub package_alias: InternedText<'db>,
@@ -219,7 +223,7 @@ pub struct StmtRequireModule<'db> {
 }
 
 #[derive(Clone, Hash, PartialEq, Eq)]
-#[derive(salsa::Update)]
+#[derive(salsa::SalsaValue)]
 pub struct StmtRequireData<'db> {
     pub name: InternedText<'db>,
     pub type_hint: Option<datalit::ast::TypeHint<'db>>,
@@ -227,20 +231,20 @@ pub struct StmtRequireData<'db> {
 
 /// Rider requirement: `require rider <name>`.
 #[derive(Clone, Hash, PartialEq, Eq)]
-#[derive(salsa::Update)]
+#[derive(salsa::SalsaValue)]
 pub struct StmtRequireRider<'db> {
     pub name: InternedText<'db>,
 }
 
 #[derive(Clone, Hash, PartialEq, Eq)]
-#[derive(salsa::Update)]
+#[derive(salsa::SalsaValue)]
 pub struct StmtImport<'db> {
     pub module_name: InternedText<'db>,
     pub item_name: InternedText<'db>,
 }
 
 #[derive(Clone, Hash, PartialEq, Eq)]
-#[derive(salsa::Update)]
+#[derive(salsa::SalsaValue)]
 pub struct StmtIf<'db> {
     pub condition: ExprFun<'db>,
     pub then_binding: Option<InternedText<'db>>,
@@ -254,7 +258,7 @@ pub struct StmtIf<'db> {
 /// Basic: `loop ... end loop`
 /// With while: `loop while cond ... end loop`
 #[derive(Clone, Hash, PartialEq, Eq)]
-#[derive(salsa::Update)]
+#[derive(salsa::SalsaValue)]
 pub struct StmtLoop<'db> {
     /// Optional while condition, checked at the start of each iteration.
     pub condition: Option<ExprFun<'db>>,
@@ -263,7 +267,7 @@ pub struct StmtLoop<'db> {
 
 /// Break statement for exiting the innermost loop.
 #[derive(Clone, Hash, PartialEq, Eq)]
-#[derive(salsa::Update)]
+#[derive(salsa::SalsaValue)]
 pub struct StmtBreak {
     /// Index for span lookup in DatafunSpans.
     pub local_index: u32,
@@ -271,7 +275,7 @@ pub struct StmtBreak {
 
 /// Continue statement for skipping to the next iteration.
 #[derive(Clone, Hash, PartialEq, Eq)]
-#[derive(salsa::Update)]
+#[derive(salsa::SalsaValue)]
 pub struct StmtContinue {
     /// Index for span lookup in DatafunSpans.
     pub local_index: u32,
@@ -279,14 +283,14 @@ pub struct StmtContinue {
 
 /// Debug log statement for outputting values during execution.
 #[derive(Clone, Hash, PartialEq, Eq)]
-#[derive(salsa::Update)]
+#[derive(salsa::SalsaValue)]
 pub struct StmtDebugLog<'db> {
     pub value: ExprFun<'db>,
 }
 
 /// Type alias statement: `type Name: structural_type`.
 #[derive(Clone, Hash, PartialEq, Eq)]
-#[derive(salsa::Update)]
+#[derive(salsa::SalsaValue)]
 pub struct StmtTypeAlias<'db> {
     pub name: InternedText<'db>,
     pub type_hint: datalit::ast::TypeHint<'db>,
@@ -298,7 +302,7 @@ pub struct StmtTypeAlias<'db> {
 /// Declares a function signature without a body. Used in `.dli` rider
 /// interface files to describe functions implemented in Rust.
 #[derive(Clone, Hash, PartialEq, Eq)]
-#[derive(salsa::Update)]
+#[derive(salsa::SalsaValue)]
 pub struct StmtNativeFun<'db> {
     pub name: InternedText<'db>,
     pub params: Vec<FunParam<'db>>,
@@ -309,14 +313,14 @@ pub struct StmtNativeFun<'db> {
 ///
 /// Allows calling unit-returning functions at statement position.
 #[derive(Clone, Hash, PartialEq, Eq)]
-#[derive(salsa::Update)]
+#[derive(salsa::SalsaValue)]
 pub struct StmtExprStatement<'db> {
     pub expr: ExprFun<'db>,
 }
 
 /// Match statement for exhaustive enum destructuring.
 #[derive(Clone, Hash, PartialEq, Eq)]
-#[derive(salsa::Update)]
+#[derive(salsa::SalsaValue)]
 pub struct StmtMatch<'db> {
     pub input: ExprFun<'db>,
     pub cases: Vec<MatchCase<'db>>,
@@ -325,7 +329,7 @@ pub struct StmtMatch<'db> {
 
 /// A single case arm in a match statement.
 #[derive(Clone, Hash, PartialEq, Eq)]
-#[derive(salsa::Update)]
+#[derive(salsa::SalsaValue)]
 pub struct MatchCase<'db> {
     pub kind: MatchCaseKind<'db>,
     pub body: Vec<Statement<'db>>,
@@ -333,14 +337,14 @@ pub struct MatchCase<'db> {
 
 /// Kind of match case: atom (no binding) or term (with binding).
 #[derive(Clone, Hash, PartialEq, Eq)]
-#[derive(salsa::Update)]
+#[derive(salsa::SalsaValue)]
 pub enum MatchCaseKind<'db> {
     Atom { name: InternedText<'db> },
     Term { name: InternedText<'db>, binding: InternedText<'db> },
 }
 
 #[derive(Clone, Hash, PartialEq, Eq)]
-#[derive(salsa::Update)]
+#[derive(salsa::SalsaValue)]
 pub struct StmtParseError<'db> {
     pub text: Text<'db>,
     pub span: ByteSpan,
@@ -351,17 +355,21 @@ pub struct StmtParseError<'db> {
 #[salsa::tracked]
 pub struct ExprFun<'db> {
     /// Module this expression belongs to (identity key). None for scripts.
+    #[returns(copy)]
     pub module_id: Option<ModuleId>,
     /// Function this expression belongs to (identity key). None for script-level.
+    #[returns(copy)]
     pub fn_name: Option<InternedText<'db>>,
     /// Sequential index within the function (identity key).
+    #[returns(copy)]
     pub local_index: u32,
     #[tracked]
+    #[returns(clone)]
     pub expr: ExprFunKind<'db>,
 }
 
 #[derive(Clone, Hash, PartialEq, Eq)]
-#[derive(salsa::Update)]
+#[derive(salsa::SalsaValue)]
 pub enum ExprFunKind<'db> {
     // Binary operation
     BinOp(ExprBinOp<'db>),
@@ -429,7 +437,7 @@ pub enum ExprFunKind<'db> {
 }
 
 #[derive(Clone, Hash, PartialEq, Eq)]
-#[derive(salsa::Update)]
+#[derive(salsa::SalsaValue)]
 pub struct ExprBinOp<'db> {
     pub op: BinOp,
     pub lhs: ExprFun<'db>,
@@ -439,12 +447,16 @@ pub struct ExprBinOp<'db> {
 #[salsa::tracked]
 pub struct ExprFunctionCall<'db> {
     /// Module this call belongs to (identity key). None for scripts.
+    #[returns(copy)]
     pub module_id: Option<ModuleId>,
     /// Function this call belongs to (identity key). None for script-level.
+    #[returns(copy)]
     pub fn_name: Option<InternedText<'db>>,
     /// Sequential index within the function (identity key).
+    #[returns(copy)]
     pub local_index: u32,
     #[tracked]
+    #[returns(copy)]
     pub name: InternedText<'db>,
     #[tracked]
     #[returns(ref)]
@@ -459,13 +471,13 @@ pub struct ExprFunctionCall<'db> {
 }
 
 #[derive(Clone, Hash, PartialEq, Eq)]
-#[derive(salsa::Update)]
+#[derive(salsa::SalsaValue)]
 pub struct ExprTuple<'db> {
     pub elements: Vec<ExprFun<'db>>,
 }
 
 #[derive(Copy, Clone, Hash, Debug, PartialEq, Eq)]
-#[derive(salsa::Update)]
+#[derive(salsa::SalsaValue)]
 pub enum BinOp {
     // Basic arithmetic (no suffix)
     Add,    // +
@@ -500,7 +512,7 @@ pub enum BinOp {
 }
 
 #[derive(Copy, Clone, Hash, Debug, PartialEq, Eq)]
-#[derive(salsa::Update)]
+#[derive(salsa::SalsaValue)]
 pub enum UnaryOp {
     Neg,          // - (bare, for bigints)
     NegOptional,  // -?
@@ -509,20 +521,20 @@ pub enum UnaryOp {
 }
 
 #[derive(Clone, Hash, PartialEq, Eq)]
-#[derive(salsa::Update)]
+#[derive(salsa::SalsaValue)]
 pub struct ExprUnaryOp<'db> {
     pub op: UnaryOp,
     pub operand: ExprFun<'db>,
 }
 
 #[derive(Clone, Hash, PartialEq, Eq)]
-#[derive(salsa::Update)]
+#[derive(salsa::SalsaValue)]
 pub struct ExprTryOption<'db> {
     pub operand: ExprFun<'db>,
 }
 
 #[derive(Clone, Hash, PartialEq, Eq)]
-#[derive(salsa::Update)]
+#[derive(salsa::SalsaValue)]
 pub struct ExprTryResult<'db> {
     pub operand: ExprFun<'db>,
 }
@@ -536,14 +548,14 @@ pub struct ExprTryResult<'db> {
 ///
 /// Target type is inferred from context (assignment, parameter, binary op).
 #[derive(Clone, Hash, PartialEq, Eq)]
-#[derive(salsa::Update)]
+#[derive(salsa::SalsaValue)]
 pub struct ExprCloneCoerce<'db> {
     pub operand: ExprFun<'db>,
 }
 
 /// Field projection expression (a.x or a.0).
 #[derive(Clone, Hash, PartialEq, Eq)]
-#[derive(salsa::Update)]
+#[derive(salsa::SalsaValue)]
 pub struct ExprFieldProj<'db> {
     pub base: ExprFun<'db>,
     pub field: FieldSelector<'db>,
@@ -554,7 +566,7 @@ pub struct ExprFieldProj<'db> {
 /// Produces a fallible place — must be resolved by postfix `?` or `!`.
 /// Bare `a[i]` is a type error.
 #[derive(Clone, Hash, PartialEq, Eq)]
-#[derive(salsa::Update)]
+#[derive(salsa::SalsaValue)]
 pub struct ExprIndex<'db> {
     pub base: ExprFun<'db>,
     pub index: ExprFun<'db>,
@@ -562,7 +574,7 @@ pub struct ExprIndex<'db> {
 
 /// Selector for field projection.
 #[derive(Clone, Hash, PartialEq, Eq)]
-#[derive(salsa::Update)]
+#[derive(salsa::SalsaValue)]
 pub enum FieldSelector<'db> {
     /// Named field: a.x
     Name(InternedText<'db>),
@@ -572,69 +584,69 @@ pub enum FieldSelector<'db> {
 
 /// Base struct for simple literals (true, false, none).
 #[derive(Clone, Hash, PartialEq, Eq)]
-#[derive(salsa::Update)]
+#[derive(salsa::SalsaValue)]
 pub struct ExprLit<'db> {
     pub type_hint: Option<datalit::ast::TypeHint<'db>>,
 }
 
 #[derive(Clone, Hash, PartialEq, Eq)]
-#[derive(salsa::Update)]
+#[derive(salsa::SalsaValue)]
 pub struct ExprInt<'db> {
     pub type_hint: Option<datalit::ast::TypeHint<'db>>,
     pub value: InternedText<'db>,
 }
 
 #[derive(Clone, Hash, PartialEq, Eq)]
-#[derive(salsa::Update)]
+#[derive(salsa::SalsaValue)]
 pub struct ExprFloat<'db> {
     pub type_hint: Option<datalit::ast::TypeHint<'db>>,
     pub value: InternedText<'db>,
 }
 
 #[derive(Clone, Hash, PartialEq, Eq)]
-#[derive(salsa::Update)]
+#[derive(salsa::SalsaValue)]
 pub struct ExprHex<'db> {
     pub type_hint: Option<datalit::ast::TypeHint<'db>>,
     pub value: InternedText<'db>,
 }
 
 #[derive(Clone, Hash, PartialEq, Eq)]
-#[derive(salsa::Update)]
+#[derive(salsa::SalsaValue)]
 pub struct ExprString<'db> {
     pub type_hint: Option<datalit::ast::TypeHint<'db>>,
     pub value: InternedText<'db>,
 }
 
 #[derive(Clone, Hash, PartialEq, Eq)]
-#[derive(salsa::Update)]
+#[derive(salsa::SalsaValue)]
 pub struct ExprList<'db> {
     pub type_hint: Option<datalit::ast::TypeHint<'db>>,
     pub elements: Vec<ExprFun<'db>>,
 }
 
 #[derive(Clone, Hash, PartialEq, Eq)]
-#[derive(salsa::Update)]
+#[derive(salsa::SalsaValue)]
 pub struct ExprSet<'db> {
     pub type_hint: Option<datalit::ast::TypeHint<'db>>,
     pub elements: Vec<ExprFun<'db>>,
 }
 
 #[derive(Clone, Hash, PartialEq, Eq)]
-#[derive(salsa::Update)]
+#[derive(salsa::SalsaValue)]
 pub struct ExprMap<'db> {
     pub type_hint: Option<datalit::ast::TypeHint<'db>>,
     pub entries: Vec<ExprMapEntry<'db>>,
 }
 
 #[derive(Clone, Hash, PartialEq, Eq)]
-#[derive(salsa::Update)]
+#[derive(salsa::SalsaValue)]
 pub struct ExprMapEntry<'db> {
     pub key: ExprFun<'db>,
     pub value: ExprFun<'db>,
 }
 
 #[derive(Clone, Hash, PartialEq, Eq)]
-#[derive(salsa::Update)]
+#[derive(salsa::SalsaValue)]
 pub struct ExprTensor<'db> {
     pub type_hint: Option<datalit::ast::TypeHint<'db>>,
     pub shape: Vec<u32>,
@@ -642,21 +654,21 @@ pub struct ExprTensor<'db> {
 }
 
 #[derive(Clone, Hash, PartialEq, Eq)]
-#[derive(salsa::Update)]
+#[derive(salsa::SalsaValue)]
 pub struct ExprAnonTuple<'db> {
     pub type_hint: Option<datalit::ast::TypeHint<'db>>,
     pub elements: Vec<ExprFun<'db>>,
 }
 
 #[derive(Clone, Hash, PartialEq, Eq)]
-#[derive(salsa::Update)]
+#[derive(salsa::SalsaValue)]
 pub struct ExprAnonStruct<'db> {
     pub type_hint: Option<datalit::ast::TypeHint<'db>>,
     pub fields: Vec<ExprStructField<'db>>,
 }
 
 #[derive(Clone, Hash, PartialEq, Eq)]
-#[derive(salsa::Update)]
+#[derive(salsa::SalsaValue)]
 pub struct ExprStructField<'db> {
     pub name: InternedText<'db>,
     pub value: ExprFun<'db>,
@@ -664,42 +676,42 @@ pub struct ExprStructField<'db> {
 
 
 #[derive(Clone, Hash, PartialEq, Eq)]
-#[derive(salsa::Update)]
+#[derive(salsa::SalsaValue)]
 pub struct ExprSome<'db> {
     pub type_hint: Option<datalit::ast::TypeHint<'db>>,
     pub payload: ExprFun<'db>,
 }
 
 #[derive(Clone, Hash, PartialEq, Eq)]
-#[derive(salsa::Update)]
+#[derive(salsa::SalsaValue)]
 pub struct ExprOk<'db> {
     pub type_hint: Option<datalit::ast::TypeHint<'db>>,
     pub payload: ExprFun<'db>,
 }
 
 #[derive(Clone, Hash, PartialEq, Eq)]
-#[derive(salsa::Update)]
+#[derive(salsa::SalsaValue)]
 pub struct ExprEr<'db> {
     pub type_hint: Option<datalit::ast::TypeHint<'db>>,
     pub payload: ExprFun<'db>,
 }
 
 #[derive(Clone, Hash, PartialEq, Eq)]
-#[derive(salsa::Update)]
+#[derive(salsa::SalsaValue)]
 pub struct ExprData<'db> {
     pub type_hint: Option<datalit::ast::TypeHint<'db>>,
     pub value: ExprFun<'db>,
 }
 
 #[derive(Clone, Hash, PartialEq, Eq)]
-#[derive(salsa::Update)]
+#[derive(salsa::SalsaValue)]
 pub struct ExprError<'db> {
     pub type_hint: Option<datalit::ast::TypeHint<'db>>,
     pub value: ExprFun<'db>,
 }
 
 #[derive(Clone, Hash, PartialEq, Eq)]
-#[derive(salsa::Update)]
+#[derive(salsa::SalsaValue)]
 pub struct ExprTable<'db> {
     pub type_hint: Option<datalit::ast::TypeHint<'db>>,
     pub header: Vec<InternedText<'db>>,
@@ -707,13 +719,13 @@ pub struct ExprTable<'db> {
 }
 
 #[derive(Clone, Hash, PartialEq, Eq)]
-#[derive(salsa::Update)]
+#[derive(salsa::SalsaValue)]
 pub struct ExprTableRow<'db> {
     pub elements: Vec<ExprFun<'db>>,
 }
 
 #[derive(Clone, Hash, PartialEq, Eq)]
-#[derive(salsa::Update)]
+#[derive(salsa::SalsaValue)]
 pub struct ExprFunParseError<'db> {
     pub text: Text<'db>,
     pub span: ByteSpan,
@@ -722,14 +734,14 @@ pub struct ExprFunParseError<'db> {
 
 /// Atom expression: `atom Foo`.
 #[derive(Clone, Hash, PartialEq, Eq)]
-#[derive(salsa::Update)]
+#[derive(salsa::SalsaValue)]
 pub struct ExprAtom<'db> {
     pub name: InternedText<'db>,
 }
 
 /// Term expression: `term Foo payload`.
 #[derive(Clone, Hash, PartialEq, Eq)]
-#[derive(salsa::Update)]
+#[derive(salsa::SalsaValue)]
 pub struct ExprTerm<'db> {
     pub name: InternedText<'db>,
     pub payload: ExprFun<'db>,
@@ -737,14 +749,14 @@ pub struct ExprTerm<'db> {
 
 /// Enum literal expression: `enum { atom Foo }` (requires type context).
 #[derive(Clone, Hash, PartialEq, Eq)]
-#[derive(salsa::Update)]
+#[derive(salsa::SalsaValue)]
 pub struct ExprEnumLiteral<'db> {
     pub variant: ExprFun<'db>,
 }
 
 /// Intrinsic call expression (icall name(args)).
 #[derive(Clone, Hash, PartialEq, Eq)]
-#[derive(salsa::Update)]
+#[derive(salsa::SalsaValue)]
 pub struct ExprIntrinsicCall<'db> {
     /// The intrinsic name (e.g., "bitnot_u32").
     pub name: InternedText<'db>,

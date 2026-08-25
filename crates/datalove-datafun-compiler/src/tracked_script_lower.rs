@@ -25,7 +25,7 @@ use crate::IrTypeExt;
 /// Plain data struct (not tracked) - compared by Salsa via Eq/Hash.
 /// Contains exports from all prior units in the batch.
 #[derive(Clone, PartialEq, Eq, Hash, Default)]
-#[derive(salsa::Update)]
+#[derive(salsa::SalsaValue)]
 pub struct AccumulatedLowerBindings {
     /// Value bindings: (name, unit_index, value_id).
     pub values: Vec<(String, u32, ValueId)>,
@@ -144,7 +144,7 @@ pub fn build_func_id_map<'db>(
 /// 3. lower_with_consts (memoized) - uses resolved values
 ///
 /// The returned graph is hashable, enabling salsa memoization.
-#[salsa::tracked]
+#[salsa::tracked(returns(clone))]
 pub fn collect_const_graph<'db>(
     db: &'db dyn salsa::Database,
     statements: Vec<Statement<'db>>,

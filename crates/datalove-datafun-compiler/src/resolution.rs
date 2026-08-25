@@ -17,7 +17,7 @@ pub struct FunctionResolution<'db> {
 
 /// Resolve function declarations bidirectionally across the script.
 /// This implements the algorithm from notes/script-semantics.md.
-#[salsa::tracked]
+#[salsa::tracked(returns(copy))]
 pub fn resolve_functions<'db>(
     db: &'db dyn salsa::Database,
     script: script::Script,
@@ -84,8 +84,10 @@ fn check_function_names<'db>(
 #[salsa::tracked]
 pub struct LetResolution<'db> {
     /// Whether the let statement resolved successfully.
+    #[returns(copy)]
     pub is_valid: bool,
     /// Error message if resolution failed.
+    #[returns(copy)]
     pub error: Option<bct::text::InternedText<'db>>,
 }
 
@@ -93,7 +95,7 @@ pub struct LetResolution<'db> {
 /// Let statements can reference:
 /// - All green functions (from function resolution)
 /// - Previous let statements (but not forward references)
-#[salsa::tracked]
+#[salsa::tracked(returns(copy))]
 pub fn resolve_let_statement<'db>(
     db: &'db dyn salsa::Database,
     script: script::Script,

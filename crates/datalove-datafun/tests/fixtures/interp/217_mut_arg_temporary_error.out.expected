@@ -8,7 +8,7 @@ Analysis(
             ),
             ownership: OwnershipResult(
                 status: "Error",
-                message: "Ownership error in outer: CannotMutateTemporary { local_index: 16392 }",
+                message: "Ownership error in outer: CannotMutateTemporary { local_index: 2056 }",
             ),
             lowering: LoweringResult(
                 status: "Skipped",

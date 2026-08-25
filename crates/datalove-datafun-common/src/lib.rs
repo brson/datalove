@@ -72,7 +72,7 @@ pub fn parallel_mode_from_env() -> ParallelMode {
 ///
 /// See `botdocs/report-adapt-cases.md` for the full list of recoverable errors.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
-#[derive(salsa::Update)]
+#[derive(salsa::SalsaValue)]
 pub enum AutoAdaptMode {
     /// Disabled - emit errors for type mismatches (default).
     #[default]
@@ -105,7 +105,7 @@ impl AutoAdaptMode {
 /// Plain data, not salsa::tracked. Flows through the pipeline as part of
 /// `ParsedModuleGraph`.
 #[derive(Clone, PartialEq, Eq, Hash)]
-#[derive(salsa::Update)]
+#[derive(salsa::SalsaValue)]
 pub struct RiderInterface<'db> {
     pub name: InternedText<'db>,
     /// Synthetic ModuleId for this rider (e.g. `@rider/testlib`).
@@ -122,6 +122,7 @@ pub struct RiderInterface<'db> {
 #[salsa::tracked]
 pub struct ParsedModuleGraph<'db> {
     /// The underlying module graph (identity key).
+    #[returns(copy)]
     pub graph: bct::module_graph::ModuleGraph,
 
     /// Pre-parsed statements only, as (ModuleId, ParsedStatements) tuples.
@@ -215,6 +216,7 @@ impl<'db> ParsedModuleGraph<'db> {
 #[salsa::tracked]
 pub struct ModuleNameResolution<'db> {
     /// Module this is for.
+    #[returns(copy)]
     pub module_id: ModuleId,
 
     /// Type aliases defined in this module: (name, resolved_type).
@@ -246,7 +248,7 @@ pub struct AllModuleNameResolutions<'db> {
 ///
 /// This is the core name resolution result used by both modules and scripts.
 #[derive(Clone, Hash, PartialEq, Eq)]
-#[derive(salsa::Update)]
+#[derive(salsa::SalsaValue)]
 pub struct CollectedNames<'db> {
     /// Type aliases: (name, resolved_type).
     pub type_aliases: Vec<(InternedText<'db>, Type<'db>)>,
@@ -274,7 +276,7 @@ pub struct AllModuleFunctionAsts<'db> {
 
 /// Type representation for datafun (extends datalit types with function types).
 #[derive(Clone, Hash, PartialEq, Eq)]
-#[derive(salsa::Update)]
+#[derive(salsa::SalsaValue)]
 pub enum Type<'db> {
     /// Datalit type (primitives, collections, etc.).
     Datalit(datalove_datalit::tycheck::Type<'db>),
@@ -288,10 +290,12 @@ pub struct TypeFunction<'db> {
     #[tracked]
     #[returns(ref)]
     pub param_types: Vec<Type<'db>>,
+    #[returns(clone)]
     pub param_modes: Vec<ParamMode>,
     #[returns(ref)]
     pub param_comptime: Vec<bool>,
     #[tracked]
+    #[returns(clone)]
     pub return_type: Type<'db>,
 }
 
@@ -304,7 +308,7 @@ pub struct TypeFunction<'db> {
 /// Note: We record const binding *names*, not values. The values are looked up
 /// later from ResolvedConsts during specialization (after const evaluation).
 #[derive(Clone, Debug, Hash, PartialEq, Eq)]
-#[derive(salsa::Update)]
+#[derive(salsa::SalsaValue)]
 pub struct ComptimeCallSite<'db> {
     /// The call expression ID (for locating in IR later).
     pub call_expr_id: salsa::Id,
@@ -320,7 +324,7 @@ pub struct ComptimeCallSite<'db> {
 ///
 /// Uses BTreeMap instead of HashMap to satisfy Hash/Eq requirements for Salsa tracking.
 #[derive(Clone, Debug, Default, Hash, PartialEq, Eq)]
-#[derive(salsa::Update)]
+#[derive(salsa::SalsaValue)]
 pub struct ComptimeCallSiteRegistry<'db> {
     /// All call sites with const parameter args.
     pub call_sites: Vec<ComptimeCallSite<'db>>,

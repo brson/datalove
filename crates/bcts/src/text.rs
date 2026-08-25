@@ -46,7 +46,9 @@ pub struct Text<'db> {
 
 #[salsa::tracked]
 pub struct SubText<'db> {
+    #[returns(copy)]
     pub text: Text<'db>,
+    #[returns(clone)]
     pub range: Range<usize>,
 }
 
@@ -60,7 +62,9 @@ pub struct InternedText<'db> {
 #[salsa::interned]
 #[derive(Debug)]
 pub struct InternedSubText<'db> {
+    #[returns(copy)]
     pub text: InternedText<'db>,
+    #[returns(clone)]
     pub range: Range<usize>,
 }
 
@@ -194,7 +198,7 @@ fn interned_text_eq() {
     let s2 = InternedText::new(db, S("abc"));
     assert_eq!(s1, s2);
 
-    #[salsa::tracked]
+    #[salsa::tracked(returns(copy))]
     fn test_sub<'db>(
         db: &'db dyn crate::Db,
         s1: InternedText<'db>,

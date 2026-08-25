@@ -5,7 +5,7 @@ use crate::tycheck::*;
 /// Pretty print a datalove literal expression.
 ///
 /// Returns a canonical string representation that can be parsed back.
-#[salsa::tracked]
+#[salsa::tracked(returns(clone))]
 pub fn pretty_print<'db>(
     db: &'db dyn crate::Db,
     expr: ExprFull<'db>,

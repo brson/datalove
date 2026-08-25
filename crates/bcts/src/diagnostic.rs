@@ -32,7 +32,7 @@ impl SpanEntry {
 
 /// Diagnostic severity level.
 #[derive(Copy, Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
-#[derive(salsa::Update)]
+#[derive(salsa::SalsaValue)]
 pub enum Severity {
     Error,
     Warning,
@@ -53,7 +53,7 @@ impl Severity {
 
 /// Style of a diagnostic label.
 #[derive(Copy, Clone, Debug, Hash, PartialEq, Eq)]
-#[derive(salsa::Update)]
+#[derive(salsa::SalsaValue)]
 pub enum LabelStyle {
     /// The primary location of the diagnostic.
     Primary,

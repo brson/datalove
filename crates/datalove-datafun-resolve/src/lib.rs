@@ -160,7 +160,7 @@ pub fn resolve_names_impl<'db>(
 /// - Function ASTs (for inlining)
 ///
 /// These are resolved before typechecking and seeded into the TypeContext.
-#[salsa::tracked]
+#[salsa::tracked(returns(copy))]
 pub fn resolve_module_names<'db>(
     db: &'db dyn Db,
     module: Module,
@@ -190,7 +190,7 @@ pub fn resolve_module_names<'db>(
 ///
 /// Calls the tracked `resolve_module_names` for each module, enabling
 /// per-module caching of name resolution.
-#[salsa::tracked]
+#[salsa::tracked(returns(copy))]
 pub fn resolve_all_names<'db>(
     db: &'db dyn Db,
     parsed_graph: ParsedModuleGraph<'db>,
@@ -271,7 +271,7 @@ pub fn resolve_all_names_with_mode<'db>(
 /// This is a tracked function that provides memoization for script name resolution.
 /// It uses the source as the memoization key, ensuring that the same script
 /// produces the same resolution results.
-#[salsa::tracked]
+#[salsa::tracked(returns(clone))]
 pub fn resolve_script_names<'db>(
     db: &'db dyn Db,
     source: bct::input::Source,
@@ -289,7 +289,7 @@ pub fn resolve_script_names<'db>(
 ///
 /// This is a tracked function so Salsa can cache per-module export collection.
 /// Only depends on parsed statements, not on any other module.
-#[salsa::tracked]
+#[salsa::tracked(returns(clone))]
 pub fn resolve_module_exports<'db>(
     db: &'db dyn Db,
     module: Module,
@@ -303,7 +303,7 @@ pub fn resolve_module_exports<'db>(
 ///
 /// Calls the tracked `resolve_module_exports` for each module, enabling
 /// per-module caching of export collection.
-#[salsa::tracked]
+#[salsa::tracked(returns(copy))]
 pub fn resolve_all_exports<'db>(
     db: &'db dyn Db,
     parsed_graph: ParsedModuleGraph<'db>,
@@ -328,7 +328,7 @@ pub fn resolve_all_exports<'db>(
 /// Build function AST maps for all modules.
 ///
 /// Used for function inlining - maps module ID to function name to AST.
-#[salsa::tracked]
+#[salsa::tracked(returns(copy))]
 pub fn build_all_function_ast_maps<'db>(
     db: &'db dyn Db,
     parsed_graph: ParsedModuleGraph<'db>,

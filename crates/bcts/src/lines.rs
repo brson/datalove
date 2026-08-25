@@ -54,7 +54,7 @@ impl<'db> TreeToken<'db> {
             TreeToken::Branch { .. } => false,
         };
 
-        #[salsa::tracked]
+        #[salsa::tracked(returns(copy))]
         fn token_contains_newline<'db>(
             db: &'db dyn crate::Db,
             token: Token<'db>

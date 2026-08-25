@@ -395,7 +395,7 @@ mod tests {
         test_gen_expr_literal_u32_inner(&db);
     }
 
-    #[salsa::tracked]
+    #[salsa::tracked(returns(copy))]
     fn test_gen_expr_literal_u32_inner<'db>(db: &'db dyn salsa::Database) {
         let config = WorldGenConfig::default();
         let mut ctx = GenContext::new();
@@ -414,7 +414,7 @@ mod tests {
         test_gen_expr_literal_bool_inner(&db);
     }
 
-    #[salsa::tracked]
+    #[salsa::tracked(returns(copy))]
     fn test_gen_expr_literal_bool_inner<'db>(db: &'db dyn salsa::Database) {
         let config = WorldGenConfig::default();
         let mut ctx = GenContext::new();
@@ -437,7 +437,7 @@ mod tests {
         test_gen_expr_literal_string_inner(&db);
     }
 
-    #[salsa::tracked]
+    #[salsa::tracked(returns(copy))]
     fn test_gen_expr_literal_string_inner<'db>(db: &'db dyn salsa::Database) {
         let config = WorldGenConfig::default();
         let mut ctx = GenContext::new();
@@ -457,7 +457,7 @@ mod tests {
         test_gen_expr_uses_variable_inner(&db);
     }
 
-    #[salsa::tracked]
+    #[salsa::tracked(returns(copy))]
     fn test_gen_expr_uses_variable_inner<'db>(db: &'db dyn salsa::Database) {
         let config = WorldGenConfig::default();
         let ty = TypeHint::U32;
@@ -489,7 +489,7 @@ mod tests {
         test_gen_expr_function_call_inner(&db);
     }
 
-    #[salsa::tracked]
+    #[salsa::tracked(returns(copy))]
     fn test_gen_expr_function_call_inner<'db>(db: &'db dyn salsa::Database) {
         let mut config = WorldGenConfig::default();
         config.function_call_probability = 100; // Always call if available.
@@ -521,7 +521,7 @@ mod tests {
         test_gen_bool_expr_literals_inner(&db);
     }
 
-    #[salsa::tracked]
+    #[salsa::tracked(returns(copy))]
     fn test_gen_bool_expr_literals_inner<'db>(db: &'db dyn salsa::Database) {
         let config = WorldGenConfig::default();
         let mut ctx = GenContext::new();
@@ -550,7 +550,7 @@ mod tests {
         test_gen_bool_expr_comparison_inner(&db);
     }
 
-    #[salsa::tracked]
+    #[salsa::tracked(returns(copy))]
     fn test_gen_bool_expr_comparison_inner<'db>(db: &'db dyn salsa::Database) {
         let config = WorldGenConfig::default();
         let mut ctx = GenContext::new();
@@ -578,7 +578,7 @@ mod tests {
         test_gen_bool_expr_logical_operators_inner(&db);
     }
 
-    #[salsa::tracked]
+    #[salsa::tracked(returns(copy))]
     fn test_gen_bool_expr_logical_operators_inner<'db>(db: &'db dyn salsa::Database) {
         let config = WorldGenConfig::default();
         let mut ctx = GenContext::new();
@@ -617,7 +617,7 @@ mod tests {
         test_gen_expr_type_variety_inner(&db);
     }
 
-    #[salsa::tracked]
+    #[salsa::tracked(returns(copy))]
     fn test_gen_expr_type_variety_inner<'db>(db: &'db dyn salsa::Database) {
         let config = WorldGenConfig::default();
         let mut ctx = GenContext::new();
@@ -652,7 +652,7 @@ mod tests {
         test_gen_expr_u32_inner(&db);
     }
 
-    #[salsa::tracked]
+    #[salsa::tracked(returns(copy))]
     fn test_gen_expr_u32_inner<'db>(db: &'db dyn salsa::Database) {
         let config = WorldGenConfig::default();
         let mut ctx = GenContext::new();
@@ -671,7 +671,7 @@ mod tests {
         test_gen_expr_deterministic_inner(&db);
     }
 
-    #[salsa::tracked]
+    #[salsa::tracked(returns(copy))]
     fn test_gen_expr_deterministic_inner<'db>(db: &'db dyn salsa::Database) {
         let config = WorldGenConfig::default();
         let mut ctx = GenContext::new();

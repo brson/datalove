@@ -8,7 +8,7 @@ Analysis(
             ),
             ownership: OwnershipResult(
                 status: "Error",
-                message: "Ownership error in outer: CannotMutFromRef { local_index: 16390, name: \"y\" }",
+                message: "Ownership error in outer: CannotMutFromRef { local_index: 2054, name: \"y\" }",
             ),
             lowering: LoweringResult(
                 status: "Skipped",

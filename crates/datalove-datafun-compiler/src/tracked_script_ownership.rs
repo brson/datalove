@@ -29,7 +29,7 @@ pub use datalove_datafun_ownership::AutoAdaptMode as OwnershipAutoAdaptMode;
 
 /// Hashable wrapper for FunctionAnalysis.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-#[derive(salsa::Update)]
+#[derive(salsa::SalsaValue)]
 pub struct FunctionAnalysisData {
     pub schedule: DropSchedule,
     pub bindings: Vec<BindingInfo>,
@@ -129,7 +129,7 @@ fn convert_expr_types<'db>(
 ///
 /// Memoized: if typecheck_result, statements, and auto_adapt_mode match a previous call,
 /// returns the cached result.
-#[salsa::tracked]
+#[salsa::tracked(returns(copy))]
 pub fn analyze_script_fragment_tracked<'db>(
     db: &'db dyn salsa::Database,
     typecheck_result: UnitTypecheckResultTracked<'db>,
@@ -235,7 +235,7 @@ pub fn analyze_script_fragment_tracked<'db>(
 ///
 /// Memoized: if typecheck_result, expr, and auto_adapt_mode match a previous call,
 /// returns the cached result.
-#[salsa::tracked]
+#[salsa::tracked(returns(copy))]
 pub fn analyze_script_expr_tracked<'db>(
     db: &'db dyn salsa::Database,
     typecheck_result: UnitTypecheckResultTracked<'db>,

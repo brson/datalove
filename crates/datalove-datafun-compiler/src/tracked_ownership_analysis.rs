@@ -25,6 +25,7 @@ use crate::IrTypeExt;
 #[salsa::tracked]
 pub struct SingleFunctionAnalysis<'db> {
     /// Name of the function.
+    #[returns(clone)]
     pub func_name: String,
 
     /// Analysis result (None if analysis failed with errors).
@@ -40,6 +41,7 @@ pub struct SingleFunctionAnalysis<'db> {
 #[salsa::tracked]
 pub struct SingleModuleAnalysis<'db> {
     /// Module that was analyzed.
+    #[returns(copy)]
     pub module_id: ModuleId,
 
     /// Per-function analysis results.
@@ -59,6 +61,7 @@ pub struct ModuleGraphAnalysis<'db> {
     pub module_results: BTreeMap<ModuleId, SingleModuleAnalysis<'db>>,
 
     /// Whether all modules analyzed successfully.
+    #[returns(copy)]
     pub success: bool,
 }
 
@@ -92,7 +95,7 @@ fn convert_expr_types<'db>(
 }
 
 /// Analyze a single module for ownership errors.
-#[salsa::tracked]
+#[salsa::tracked(returns(copy))]
 pub fn analyze_module<'db>(
     db: &'db dyn salsa::Database,
     module: Module,
@@ -166,7 +169,7 @@ pub fn analyze_module<'db>(
 }
 
 /// Analyze an entire module graph for ownership errors.
-#[salsa::tracked]
+#[salsa::tracked(returns(copy))]
 pub fn analyze_module_graph<'db>(
     db: &'db dyn salsa::Database,
     parsed_graph: ParsedModuleGraph<'db>,

@@ -17,6 +17,7 @@ pub struct SpanMapEntry {
 /// Tracked struct for datalit expression spans.
 #[salsa::tracked]
 pub struct DatalitSpans<'db> {
+    #[returns(clone)]
     pub entries: Vec<SpanMapEntry>,
 }
 
@@ -40,7 +41,7 @@ impl<'db> DatalitSpans<'db> {
 }
 
 /// Extract datalit expression spans from a parsed source.
-#[salsa::tracked]
+#[salsa::tracked(returns(copy))]
 pub fn datalit_spans<'db>(
     db: &'db dyn crate::Db,
     source: bct::input::Source,

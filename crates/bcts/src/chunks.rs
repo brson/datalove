@@ -14,7 +14,7 @@ pub struct Chunks<'db> {
     pub chunks: Vec<Chunk<'db>>,
 }
 
-#[salsa::tracked]
+#[salsa::tracked(returns(copy))]
 pub fn basic_chunks<'db>(
     db: &'db dyn crate::Db,
     chunk_in: Chunk<'db>
@@ -30,10 +30,14 @@ pub fn basic_chunks<'db>(
 pub struct Config<'db> {
     #[returns(ref)]
     pub chunk_start_chars: Vec<char>,
+    // Function pointers have no meaningful equality, so opt out of the
+    // backdating comparison salsa would otherwise generate.
+    #[no_eq]
+    #[returns(copy)]
     pub try_chunk: for <'a> fn(&'a str) -> Option<usize>,
 }
 
-#[salsa::tracked]
+#[salsa::tracked(returns(copy))]
 pub fn basic_config<'db>(
     db: &'db dyn crate::Db,
 ) -> Config<'db> {
@@ -49,7 +53,7 @@ fn basic_try_chunk(text: &str) -> Option<usize> {
     Some(1)
 }
 
-#[salsa::tracked]
+#[salsa::tracked(returns(copy))]
 pub fn chunks<'db>(
     db: &'db dyn crate::Db,
     chunk_in: Chunk<'db>,

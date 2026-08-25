@@ -15,7 +15,7 @@
     "error_count": 1,
     "errors": [
       {
-        "error": "local/test/ownership: Ownership error in test_move: UseAfterMove { local_index: 14343, moved_at: 14341, name: \"msg\", recovery_hint: InsertAdapt { description: \"clone `msg` before the earlier use\" } }"
+        "error": "local/test/ownership: Ownership error in test_move: UseAfterMove { local_index: 1799, moved_at: 1797, name: \"msg\", recovery_hint: InsertAdapt { description: \"clone `msg` before the earlier use\" } }"
       }
     ],
     "success": false

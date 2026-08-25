@@ -1012,7 +1012,7 @@ fn gen_expr_full_random_type<'db, R: Rng>(
 /// Named types (named tuples, structs, enums) are always disabled for seeded generation
 /// because they require external type definitions for name resolution, which standalone
 /// expressions don't have.
-#[salsa::tracked]
+#[salsa::tracked(returns(copy))]
 pub fn gen_expr_full_seeded<'db>(
     db: &'db dyn salsa::Database,
     seed: u64,

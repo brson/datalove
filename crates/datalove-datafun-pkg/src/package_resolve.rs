@@ -24,7 +24,7 @@ use crate::package::PackageWorld;
 /// - `import_demand_map`: Import demands extracted by the caller (using datafun's parser)
 ///
 /// Returns a result with the resolved module graph.
-#[salsa::tracked]
+#[salsa::tracked(returns(copy))]
 pub fn resolve_package_world_with_imports<'db>(
     db: &'db dyn salsa::Database,
     package_world: PackageWorld,

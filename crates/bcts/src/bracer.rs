@@ -9,6 +9,7 @@ use crate::lexer::{ChunkLex, Token, TokenKind, Sigil};
 
 #[salsa::tracked]
 pub struct Bracer<'db> {
+    #[returns(copy)]
     pub chunk: ChunkLex<'db>,
     #[returns(ref)]
     pub branches: Vec<Branch>,
@@ -20,7 +21,7 @@ pub struct Bracer<'db> {
     pub errors: Vec<(Range<usize>, Sigil)>,
 }
 
-#[derive(Clone, Debug, Hash, salsa::Update)]
+#[derive(Clone, Debug, Hash, Eq, PartialEq, salsa::SalsaValue)]
 pub struct Branch {
     real_token_range: Range<usize>,
     branches: usize,
@@ -274,7 +275,7 @@ pub enum TreeToken<'db> {
     },
 }
 
-#[salsa::tracked]
+#[salsa::tracked(returns(copy))]
 pub fn bracer<'db>(
     db: &'db dyn crate::Db,
     chunk: ChunkLex<'db>

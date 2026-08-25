@@ -35,7 +35,7 @@ bct.package = "bcts"
 bct.path = "crates/bcts"
 serde.version = "1"
 enum-iterator.version = "2"
-salsa.version = "0.25.2"
+salsa.version = "0.28.2"
 
 [profile.dev]
 debug = 1

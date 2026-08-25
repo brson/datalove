@@ -105,7 +105,7 @@
           "parsed": false,
           "parse_ok": true,
           "resolved_names": false,
-          "typechecked": true,
+          "typechecked": false,
           "typecheck_ok": true,
           "lowered": true,
           "lower_ok": true,

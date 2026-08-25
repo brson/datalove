@@ -58,7 +58,7 @@ impl<'db> FuncIdMap<'db> {
 ///
 /// This assigns module-local FuncIds (0, 1, 2, ...) to each function in each
 /// module. The result is cached based on the parsed graph structure.
-#[salsa::tracked]
+#[salsa::tracked(returns(copy))]
 pub fn compute_func_id_map<'db>(
     db: &'db dyn salsa::Database,
     parsed_graph: ParsedModuleGraph<'db>,
@@ -155,9 +155,11 @@ impl ModulePreResolvedConsts {
 #[salsa::tracked]
 pub struct SingleModuleLoweringResult<'db> {
     /// Module that was lowered.
+    #[returns(copy)]
     pub module_id: ModuleId,
 
     /// IR module index (0-based position in graph).
+    #[returns(copy)]
     pub ir_module_id: IrModuleId,
 
     /// Successfully lowered code units (functions).
@@ -181,9 +183,11 @@ pub struct ModuleGraphLoweringResult<'db> {
     pub module_results: BTreeMap<ModuleId, SingleModuleLoweringResult<'db>>,
 
     /// Function ID map for cross-module calls.
+    #[returns(copy)]
     pub func_id_map: FuncIdMap<'db>,
 
     /// Whether all modules lowered successfully.
+    #[returns(copy)]
     pub success: bool,
 }
 
@@ -191,7 +195,7 @@ pub struct ModuleGraphLoweringResult<'db> {
 ///
 /// This is a tracked function that allows creating the result struct
 /// from outside of the main `lower_module_graph` tracked function.
-#[salsa::tracked]
+#[salsa::tracked(returns(copy))]
 pub fn create_module_graph_lowering_result<'db>(
     db: &'db dyn salsa::Database,
     results_vec: Vec<(ModuleId, SingleModuleLoweringResult<'db>)>,
@@ -242,7 +246,7 @@ impl<'db> ModuleGraphLoweringResult<'db> {
 /// Requires pre-computed ownership analysis results. Functions with ownership analysis
 /// errors are skipped (but those errors are already captured in the ownership
 /// analysis result, not here).
-#[salsa::tracked]
+#[salsa::tracked(returns(copy))]
 pub fn lower_module<'db>(
     db: &'db dyn salsa::Database,
     module: Module,

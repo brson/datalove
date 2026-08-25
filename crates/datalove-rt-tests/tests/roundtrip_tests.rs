@@ -79,7 +79,7 @@ fn types_equal<'db>(
 }
 
 /// Compile and instantiate a datalit value.
-#[salsa::tracked]
+#[salsa::tracked(returns(copy))]
 fn compile<'db>(
     db: &'db dyn salsa::Database,
     source: bct::input::Source,

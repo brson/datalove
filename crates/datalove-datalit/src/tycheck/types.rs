@@ -22,7 +22,7 @@ use crate::ast::TypeHint;
 
 /// Type representation (synthesized types, mirrors TypeHint but without parse errors).
 #[derive(Clone, Hash, PartialEq, Eq)]
-#[derive(salsa::Update)]
+#[derive(salsa::SalsaValue)]
 pub enum Type<'db> {
     Bool,
     U8,
@@ -58,19 +58,19 @@ pub enum Type<'db> {
 
 
 #[derive(Clone, Hash, PartialEq, Eq)]
-#[derive(salsa::Update)]
+#[derive(salsa::SalsaValue)]
 pub struct TypeAnonTuple<'db> {
     pub fields: Vec<Type<'db>>,
 }
 
 #[derive(Clone, Hash, PartialEq, Eq)]
-#[derive(salsa::Update)]
+#[derive(salsa::SalsaValue)]
 pub struct TypeAnonStruct<'db> {
     pub fields: Vec<TypeNamedField<'db>>,
 }
 
 #[derive(Clone, Hash, PartialEq, Eq)]
-#[derive(salsa::Update)]
+#[derive(salsa::SalsaValue)]
 pub struct TypeNamedField<'db> {
     pub name: InternedText<'db>,
     pub ty: Box<Type<'db>>,
@@ -78,70 +78,70 @@ pub struct TypeNamedField<'db> {
 
 
 #[derive(Clone, Hash, PartialEq, Eq)]
-#[derive(salsa::Update)]
+#[derive(salsa::SalsaValue)]
 pub struct TypeList<'db> {
     pub element_type: Box<Type<'db>>,
 }
 
 #[derive(Clone, Hash, PartialEq, Eq)]
-#[derive(salsa::Update)]
+#[derive(salsa::SalsaValue)]
 pub struct TypeMap<'db> {
     pub key_type: Box<Type<'db>>,
     pub value_type: Box<Type<'db>>,
 }
 
 #[derive(Clone, Hash, PartialEq, Eq)]
-#[derive(salsa::Update)]
+#[derive(salsa::SalsaValue)]
 pub struct TypeSet<'db> {
     pub element_type: Box<Type<'db>>,
 }
 
 #[derive(Clone, Hash, PartialEq, Eq)]
-#[derive(salsa::Update)]
+#[derive(salsa::SalsaValue)]
 pub struct TypeOption<'db> {
     pub inner_type: Box<Type<'db>>,
 }
 
 #[derive(Clone, Hash, PartialEq, Eq)]
-#[derive(salsa::Update)]
+#[derive(salsa::SalsaValue)]
 pub struct TypeResult<'db> {
     pub inner_type: Box<Type<'db>>,
 }
 
 #[derive(Clone, Hash, PartialEq, Eq)]
-#[derive(salsa::Update)]
+#[derive(salsa::SalsaValue)]
 pub struct TypeTensor<'db> {
     pub element_type: Box<Type<'db>>,
     pub rank: u32,
 }
 
 #[derive(Clone, Hash, PartialEq, Eq)]
-#[derive(salsa::Update)]
+#[derive(salsa::SalsaValue)]
 pub struct TypeTable<'db> {
     pub columns: Vec<TypeNamedField<'db>>,
 }
 
 #[derive(Clone, Hash, PartialEq, Eq)]
-#[derive(salsa::Update)]
+#[derive(salsa::SalsaValue)]
 pub struct TypeAtom<'db> {
     pub name: InternedText<'db>,
 }
 
 #[derive(Clone, Hash, PartialEq, Eq)]
-#[derive(salsa::Update)]
+#[derive(salsa::SalsaValue)]
 pub struct TypeTerm<'db> {
     pub name: InternedText<'db>,
     pub payload: Box<Type<'db>>,
 }
 
 #[derive(Clone, Hash, PartialEq, Eq)]
-#[derive(salsa::Update)]
+#[derive(salsa::SalsaValue)]
 pub struct TypeEnum<'db> {
     pub variants: Vec<TypeEnumVariant<'db>>,
 }
 
 #[derive(Clone, Hash, PartialEq, Eq)]
-#[derive(salsa::Update)]
+#[derive(salsa::SalsaValue)]
 pub struct TypeEnumVariant<'db> {
     pub name: InternedText<'db>,
     pub payload: Option<Box<Type<'db>>>,

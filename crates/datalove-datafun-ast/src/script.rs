@@ -5,6 +5,7 @@ use rmx::prelude::*;
 #[salsa::input]
 pub struct Script {
     /// All script units in submission order.
+    #[returns(clone)]
     pub units: Vec<ScriptUnit>,
 }
 
@@ -13,5 +14,6 @@ pub struct Script {
 #[salsa::input]
 pub struct ScriptUnit {
     /// The source text for this unit.
+    #[returns(copy)]
     pub source: bct::input::Source,
 }

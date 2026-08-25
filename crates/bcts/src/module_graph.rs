@@ -22,8 +22,10 @@ pub struct ModuleId {
 #[salsa::input]
 pub struct Module {
     /// Module identifier.
+    #[returns(copy)]
     pub id: ModuleId,
     /// Module source text.
+    #[returns(copy)]
     pub source: Source,
 }
 
