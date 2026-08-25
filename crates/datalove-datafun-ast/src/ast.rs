@@ -54,13 +54,13 @@ impl<'db> ExprKey<'db> {
 #[derive(salsa::SalsaValue)]
 pub struct ParseSpanEntry<'db> {
     pub expr_key: ExprKey<'db>,
-    pub text_id: salsa::Id,
+    pub source: bct::input::Source,
     pub span: ByteSpan,
 }
 
 impl<'db> ParseSpanEntry<'db> {
-    pub fn new(expr_key: ExprKey<'db>, text_id: salsa::Id, span: ByteSpan) -> Self {
-        ParseSpanEntry { expr_key, text_id, span }
+    pub fn new(expr_key: ExprKey<'db>, source: bct::input::Source, span: ByteSpan) -> Self {
+        ParseSpanEntry { expr_key, source, span }
     }
 }
 

@@ -178,7 +178,7 @@ impl<'db> State<'db> {
             self.chunks.push(
                 Chunk::new(
                     self.db,
-                    Text::new(self.db, S(chunk_text)),
+                    Text::new(self.db, self.chunk_in.text(self.db).source(self.db), S(chunk_text)),
                     mem::take(&mut self.chunk_wip.comments),
                     mem::take(&mut self.chunk_wip.strings),
                     mem::take(&mut self.chunk_wip.errors),

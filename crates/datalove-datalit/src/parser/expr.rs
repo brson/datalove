@@ -45,7 +45,7 @@ impl<'db> Parser<'db> {
         use salsa::plumbing::AsId;
         self.expr_spans.push(ast::ParseSpanEntry::new(
             expr_full.as_id(),
-            ts.text.as_id(),
+            ts.text.source(self.db),
             ts.span.clone(),
         ));
 

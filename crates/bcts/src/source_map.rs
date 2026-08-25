@@ -153,7 +153,7 @@ impl<'db> State<'db> {
         Chunk::new(
             self.db,
             // fixme bad clone of full source
-            Text::new(self.db, S(text_all)),
+            Text::new(self.db, self.source, S(text_all)),
             mem::take(&mut self.chunk_wip.comments),
             mem::take(&mut self.chunk_wip.strings),
             mem::take(&mut self.chunk_wip.errors),

@@ -7,26 +7,31 @@
 //! - Salsa-compatible storage for accumulator round-tripping
 
 use rmx::prelude::*;
+use crate::input::Source;
 use crate::text::{Text, InternedText, TextSpan, ByteSpan};
-use salsa::plumbing::AsId;
 
 /// Single span entry for efficient lookup.
 ///
-/// Stores a text ID and byte span for on-demand conversion to typed references.
+/// Names the source rather than the `Text` derived from it. A `Text` is a
+/// tracked struct and an `InternedText` is collectable, so an id held for
+/// either goes stale: salsa deletes the tracked slot when the query that made
+/// it runs again, and recycles an interned slot that has gone unread. Reading
+/// a stale id panics, or in a build without debug assertions hands back
+/// whatever now occupies the slot. A `Source` is an input, so its id is good
+/// for the life of the database.
 #[derive(Clone, Debug, Hash, PartialEq, Eq)]
 pub struct SpanEntry {
-    pub text_id: salsa::Id,
+    pub source: Source,
     pub span: ByteSpan,
 }
 
 impl SpanEntry {
-    pub fn new(text_id: salsa::Id, span: ByteSpan) -> Self {
-        SpanEntry { text_id, span }
+    pub fn new(source: Source, span: ByteSpan) -> Self {
+        SpanEntry { source, span }
     }
 
-    pub fn to_text_and_span<'db>(&self, _db: &'db dyn salsa::Database) -> (Text<'db>, ByteSpan) {
-        use salsa::plumbing::FromId;
-        (Text::from_id(self.text_id), self.span.C())
+    pub fn to_text_and_span<'db>(&self, db: &'db dyn crate::Db) -> (Text<'db>, ByteSpan) {
+        (crate::source_map::basic_source_map(db, self.source).text(db), self.span.C())
     }
 }
 
@@ -136,59 +141,61 @@ pub struct Diagnostic<'db> {
 
 /// Stored diagnostic for accumulator (no lifetimes).
 ///
-/// This is a simplified representation that can be stored in Salsa accumulators.
-/// Uses raw IDs instead of typed salsa references.
+/// An accumulator's payload is `Any`, so it cannot hold a salsa handle and
+/// keep the database lifetime. It used to hold raw ids instead, which does not
+/// work either: an interned or tracked id read after its slot is recycled
+/// resolves to whatever now lives there. So the strings are stored as strings
+/// and re-interned on the way out, and a label names the `Source` it points
+/// into, which is an input and so cannot be recycled.
 #[derive(Clone, Debug, Hash, PartialEq, Eq)]
 pub struct StoredDiagnostic {
     pub severity: Severity,
-    pub code: Option<salsa::Id>,
-    pub message: salsa::Id,
+    pub code: Option<String>,
+    pub message: String,
     pub labels: Vec<StoredLabel>,
-    pub notes: Vec<salsa::Id>,
+    pub notes: Vec<String>,
 }
 
 #[derive(Clone, Debug, Hash, PartialEq, Eq)]
 pub struct StoredLabel {
-    pub text: salsa::Id,
+    pub source: Source,
     pub span: ByteSpan,
-    pub message: Option<salsa::Id>,
+    pub message: Option<String>,
     pub style: LabelStyle,
 }
 
 impl<'db> Diagnostic<'db> {
     /// Convert to stored form for accumulation.
-    pub fn to_stored(&self) -> StoredDiagnostic {
+    pub fn to_stored(&self, db: &'db dyn crate::Db) -> StoredDiagnostic {
         StoredDiagnostic {
             severity: self.severity,
-            code: self.code.map(|c| c.as_id()),
-            message: self.message.as_id(),
+            code: self.code.map(|c| c.as_str(db).to_string()),
+            message: self.message.as_str(db).to_string(),
             labels: self.labels.iter().map(|l| StoredLabel {
-                text: l.text.as_id(),
+                source: l.text.source(db),
                 span: l.span.C(),
-                message: l.message.map(|m| m.as_id()),
+                message: l.message.map(|m| m.as_str(db).to_string()),
                 style: l.style,
             }).collect(),
-            notes: self.notes.iter().map(|n| n.as_id()).collect(),
+            notes: self.notes.iter().map(|n| n.as_str(db).to_string()).collect(),
         }
     }
 }
 
 impl StoredDiagnostic {
     /// Convert from stored form back to rich diagnostic.
-    pub fn to_diagnostic<'db>(&self, _db: &'db dyn salsa::Database) -> Diagnostic<'db> {
-        use salsa::plumbing::FromId;
-
+    pub fn to_diagnostic<'db>(&self, db: &'db dyn crate::Db) -> Diagnostic<'db> {
         Diagnostic {
             severity: self.severity,
-            code: self.code.map(|id| InternedText::from_id(id)),
-            message: InternedText::from_id(self.message),
+            code: self.code.as_ref().map(|c| InternedText::new(db, c.C())),
+            message: InternedText::new(db, self.message.C()),
             labels: self.labels.iter().map(|l| DiagnosticLabel {
-                text: Text::from_id(l.text),
+                text: crate::source_map::basic_source_map(db, l.source).text(db),
                 span: l.span.C(),
-                message: l.message.map(|id| InternedText::from_id(id)),
+                message: l.message.as_ref().map(|m| InternedText::new(db, m.C())),
                 style: l.style,
             }).collect(),
-            notes: self.notes.iter().map(|id| InternedText::from_id(*id)).collect(),
+            notes: self.notes.iter().map(|n| InternedText::new(db, n.C())).collect(),
             suggestions: vec![],  // TODO: Handle suggestions in stored form
         }
     }
@@ -317,6 +324,6 @@ impl<'db> DiagnosticBuilder<'db> {
 
     /// Build and return the stored form for accumulation.
     pub fn build_stored(self) -> StoredDiagnostic {
-        self.diagnostic.to_stored()
+        self.diagnostic.to_stored(self.db)
     }
 }

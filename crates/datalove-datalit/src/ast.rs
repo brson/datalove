@@ -6,13 +6,13 @@ use bct::text::ByteSpan;
 #[derive(Clone, Debug, Hash, PartialEq, Eq)]
 pub struct ParseSpanEntry {
     pub expr_id: salsa::Id,
-    pub text_id: salsa::Id,
+    pub source: bct::input::Source,
     pub span: ByteSpan,
 }
 
 impl ParseSpanEntry {
-    pub fn new(expr_id: salsa::Id, text_id: salsa::Id, span: ByteSpan) -> Self {
-        ParseSpanEntry { expr_id, text_id, span }
+    pub fn new(expr_id: salsa::Id, source: bct::input::Source, span: ByteSpan) -> Self {
+        ParseSpanEntry { expr_id, source, span }
     }
 }
 

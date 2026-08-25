@@ -38,8 +38,17 @@ impl<'db> TextSpan<'db> {
     }
 }
 
+/// The text of a source, or of a chunk of one.
+///
+/// Carries the `Source` it came from as an identity field, so anything holding
+/// a `Text` can name that source. That matters because a `Text` is a tracked
+/// struct: salsa deletes it when the query that made it runs again, and an id
+/// held past that point is not safe to read. A `Source` is an input and lasts
+/// as long as the database, so it is what gets stored.
 #[salsa::tracked]
 pub struct Text<'db> {
+    #[returns(copy)]
+    pub source: crate::input::Source,
     #[returns(ref)]
     pub text: String,
 }

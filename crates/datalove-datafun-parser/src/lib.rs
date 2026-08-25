@@ -309,7 +309,7 @@ pub fn datafun_spans<'db>(
         .iter()
         .map(|e| SpanMapEntry {
             expr_key: e.expr_key,
-            entry: SpanEntry::new(e.text_id, e.span.C()),
+            entry: SpanEntry::new(e.source, e.span.C()),
         })
         .collect();
 

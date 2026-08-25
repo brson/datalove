@@ -98,7 +98,7 @@ pub fn parse_module_graph<'db>(
             full_result.expr_spans.iter().map(|e| {
                 datalove_datafun_ast::spans::SpanMapEntry {
                     expr_key: e.expr_key,
-                    entry: bct::diagnostic::SpanEntry::new(e.text_id, e.span.clone()),
+                    entry: bct::diagnostic::SpanEntry::new(e.source, e.span.clone()),
                 }
             }).collect(),
             full_result.break_spans.clone(),

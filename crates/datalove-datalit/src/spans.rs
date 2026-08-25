@@ -51,7 +51,7 @@ pub fn datalit_spans<'db>(
         .iter()
         .map(|e| SpanMapEntry {
             expr_id: e.expr_id,
-            entry: SpanEntry::new(e.text_id, e.span.C()),
+            entry: SpanEntry::new(e.source, e.span.C()),
         })
         .collect();
 

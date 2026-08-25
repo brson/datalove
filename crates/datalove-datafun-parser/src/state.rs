@@ -460,7 +460,7 @@ impl<'db> Parser<'db> {
         );
         self.expr_spans.push(ast::ParseSpanEntry::new(
             ast::ExprKey::of(self.db, expr),
-            ts.text.as_id(),
+            ts.text.source(self.db),
             ts.span,
         ));
         expr
@@ -523,7 +523,7 @@ impl<'db> Parser<'db> {
     pub(super) fn record_break_span(&mut self, ts: TextSpan<'db>) -> u32 {
         use salsa::plumbing::AsId;
         let index = self.next_stmt_index();
-        self.break_spans.push(SpanEntry::new(ts.text.as_id(), ts.span));
+        self.break_spans.push(SpanEntry::new(ts.text.source(self.db), ts.span));
         index
     }
 
@@ -531,7 +531,7 @@ impl<'db> Parser<'db> {
     pub(super) fn record_continue_span(&mut self, ts: TextSpan<'db>) -> u32 {
         use salsa::plumbing::AsId;
         let index = self.next_stmt_index();
-        self.continue_spans.push(SpanEntry::new(ts.text.as_id(), ts.span));
+        self.continue_spans.push(SpanEntry::new(ts.text.source(self.db), ts.span));
         index
     }
 
@@ -539,7 +539,7 @@ impl<'db> Parser<'db> {
     pub(super) fn record_ret_span(&mut self, ts: TextSpan<'db>) -> u32 {
         use salsa::plumbing::AsId;
         let index = self.next_stmt_index();
-        self.ret_spans.push(SpanEntry::new(ts.text.as_id(), ts.span));
+        self.ret_spans.push(SpanEntry::new(ts.text.source(self.db), ts.span));
         index
     }
 
@@ -547,7 +547,7 @@ impl<'db> Parser<'db> {
     pub(super) fn record_set_span(&mut self, ts: TextSpan<'db>) -> u32 {
         use salsa::plumbing::AsId;
         let index = self.next_stmt_index();
-        self.set_spans.push(SpanEntry::new(ts.text.as_id(), ts.span));
+        self.set_spans.push(SpanEntry::new(ts.text.source(self.db), ts.span));
         index
     }
 
@@ -555,7 +555,7 @@ impl<'db> Parser<'db> {
     pub(super) fn record_fun_span(&mut self, ts: TextSpan<'db>) -> u32 {
         use salsa::plumbing::AsId;
         let index = self.next_stmt_index();
-        self.fun_spans.push(SpanEntry::new(ts.text.as_id(), ts.span));
+        self.fun_spans.push(SpanEntry::new(ts.text.source(self.db), ts.span));
         index
     }
 
@@ -563,7 +563,7 @@ impl<'db> Parser<'db> {
     pub(super) fn record_type_alias_span(&mut self, ts: TextSpan<'db>) -> u32 {
         use salsa::plumbing::AsId;
         let index = self.next_stmt_index();
-        self.type_alias_spans.push(SpanEntry::new(ts.text.as_id(), ts.span));
+        self.type_alias_spans.push(SpanEntry::new(ts.text.source(self.db), ts.span));
         index
     }
 
