@@ -42,7 +42,7 @@ Analysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = move unit0.v7
+                        v0 = clone unit0.v7
                         unit_end v0
                 """,
             ),

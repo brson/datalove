@@ -321,7 +321,7 @@ fn render_ownership_error<'db>(
         AnalysisError::UseAfterMoveInEarlierUnit { local_index, name, recovery_hint } => {
             if let Some((text, span)) = lookup_expr_span(db, spans, *local_index) {
                 let source_str = text.as_str(db);
-                let msg = format!("`{}` was moved by an earlier input", name);
+                let msg = format!("`{}` was given away by an earlier input", name);
                 let mut builder = Report::build(ReportKind::Error, file_name, span.start)
                     .with_code("D013")
                     .with_message(&msg)

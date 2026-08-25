@@ -42,7 +42,7 @@
       {
         "name": "struct_in_list",
         "ty": "list<{x: int}>",
-        "value": "<moved>"
+        "value": "[{x = 1}, {x = 2}]"
       }
     ]
   },
@@ -73,7 +73,7 @@
       {
         "name": "struct_in_list",
         "ty": "list<{x: int}>",
-        "value": "<moved>"
+        "value": "[{x = 1}, {x = 2}]"
       }
     ]
   },
@@ -94,12 +94,12 @@
       {
         "name": "list_in_struct",
         "ty": "{items: list<int>}",
-        "value": "<moved>"
+        "value": "{items = [1, 2, 3]}"
       },
       {
         "name": "struct_in_list",
         "ty": "list<{x: int}>",
-        "value": "<moved>"
+        "value": "[{x = 1}, {x = 2}]"
       }
     ]
   }

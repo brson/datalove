@@ -42,7 +42,7 @@
       {
         "name": "x",
         "ty": "int",
-        "value": "<moved>"
+        "value": "42"
       }
     ]
   }

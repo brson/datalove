@@ -42,7 +42,7 @@
       {
         "name": "pair",
         "ty": "(int, string)",
-        "value": "<moved>"
+        "value": "(42, \"hello\")"
       }
     ]
   },
@@ -68,7 +68,7 @@
       {
         "name": "pair",
         "ty": "(int, string)",
-        "value": "<moved>"
+        "value": "(42, \"hello\")"
       },
       {
         "name": "triple",
@@ -94,12 +94,12 @@
       {
         "name": "pair",
         "ty": "(int, string)",
-        "value": "<moved>"
+        "value": "(42, \"hello\")"
       },
       {
         "name": "triple",
         "ty": "(int, int, int)",
-        "value": "<moved>"
+        "value": "(1, 2, 3)"
       }
     ]
   },
@@ -130,12 +130,12 @@
       {
         "name": "pair",
         "ty": "(int, string)",
-        "value": "<moved>"
+        "value": "(42, \"hello\")"
       },
       {
         "name": "triple",
         "ty": "(int, int, int)",
-        "value": "<moved>"
+        "value": "(1, 2, 3)"
       }
     ]
   },
@@ -156,17 +156,17 @@
       {
         "name": "mixed",
         "ty": "(int, string, bool)",
-        "value": "<moved>"
+        "value": "(100, \"test\", true)"
       },
       {
         "name": "pair",
         "ty": "(int, string)",
-        "value": "<moved>"
+        "value": "(42, \"hello\")"
       },
       {
         "name": "triple",
         "ty": "(int, int, int)",
-        "value": "<moved>"
+        "value": "(1, 2, 3)"
       }
     ]
   }

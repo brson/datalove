@@ -42,7 +42,7 @@
       {
         "name": "nums",
         "ty": "list<int>",
-        "value": "<moved>"
+        "value": "[1, 2, 3]"
       }
     ]
   },
@@ -68,7 +68,7 @@
       {
         "name": "nums",
         "ty": "list<int>",
-        "value": "<moved>"
+        "value": "[1, 2, 3]"
       },
       {
         "name": "words",
@@ -94,12 +94,12 @@
       {
         "name": "nums",
         "ty": "list<int>",
-        "value": "<moved>"
+        "value": "[1, 2, 3]"
       },
       {
         "name": "words",
         "ty": "list<string>",
-        "value": "<moved>"
+        "value": "[\"hello\", \"world\"]"
       }
     ]
   },
@@ -130,12 +130,12 @@
       {
         "name": "nums",
         "ty": "list<int>",
-        "value": "<moved>"
+        "value": "[1, 2, 3]"
       },
       {
         "name": "words",
         "ty": "list<string>",
-        "value": "<moved>"
+        "value": "[\"hello\", \"world\"]"
       }
     ]
   },
@@ -156,17 +156,17 @@
       {
         "name": "bigger",
         "ty": "list<int>",
-        "value": "<moved>"
+        "value": "[10, 20, 30, 40, 50]"
       },
       {
         "name": "nums",
         "ty": "list<int>",
-        "value": "<moved>"
+        "value": "[1, 2, 3]"
       },
       {
         "name": "words",
         "ty": "list<string>",
-        "value": "<moved>"
+        "value": "[\"hello\", \"world\"]"
       }
     ]
   }

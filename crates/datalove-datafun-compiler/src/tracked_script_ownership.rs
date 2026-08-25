@@ -21,8 +21,7 @@ use datalove_datafun_ownership::{
     TrackingCategory, format_analysis_errors, AutoAdaptMode,
 };
 pub use datalove_datafun_sema::{
-    ScriptAnalysisData, AnalysisError, OwnershipRecoveryHint,
-    ExternalBinding, ExternalBindings, ExternalState, AdaptSites,
+    ScriptAnalysisData, AnalysisError, OwnershipRecoveryHint, AdaptSites,
 };
 
 // Re-export AutoAdaptMode for callers.
@@ -64,12 +63,12 @@ pub struct ScriptUnitOwnershipResult<'db> {
     /// Structured errors for diagnostic emission.
     #[returns(ref)]
     pub structured_errors: Vec<AnalysisError>,
-    /// Script-level bindings in scope for the next unit.
-    ///
-    /// Empty when the unit failed analysis, since a failed unit contributes
-    /// nothing to the units after it.
+    /// Names this unit exports that hold no value.
     #[returns(ref)]
-    pub externals: ExternalBindings,
+    pub dead_exports: Vec<String>,
+    /// Names from earlier units this unit assigned to.
+    #[returns(ref)]
+    pub revived_exports: Vec<String>,
 }
 
 impl<'db> ScriptUnitOwnershipResult<'db> {
@@ -136,7 +135,7 @@ pub fn analyze_script_fragment_tracked<'db>(
     typecheck_result: UnitTypecheckResultTracked<'db>,
     statements: Vec<Statement<'db>>,
     auto_adapt_mode: AutoAdaptMode,
-    externals: ExternalBindings,
+    dead_externals: Vec<String>,
 ) -> ScriptUnitOwnershipResult<'db> {
     // Convert tycheck types to IR types.
     let expr_types = convert_expr_types(db, typecheck_result.expr_types(db));
@@ -171,14 +170,15 @@ pub fn analyze_script_fragment_tracked<'db>(
                 None,
                 error_msgs,
                 structured_errors,
-                ExternalBindings::default(),
+                Vec::new(),
+                Vec::new(),
             );
         }
     };
 
     // Analyze script-level statements for drop schedule.
     let script_analysis = ownership_analysis::analyze_script_statements_with_mode(
-        db, &expr_types, &statements, auto_adapt_mode, externals
+        db, &expr_types, &statements, auto_adapt_mode, dead_externals
     );
 
     // Check for script analysis errors.
@@ -191,7 +191,8 @@ pub fn analyze_script_fragment_tracked<'db>(
             None,
             vec![error_msg],
             structured_errors,
-            ExternalBindings::default(),
+            Vec::new(),
+            Vec::new(),
         );
     }
 
@@ -204,13 +205,16 @@ pub fn analyze_script_fragment_tracked<'db>(
         })
         .collect();
 
-    let externals = script_analysis.externals;
+    let dead_exports = script_analysis.dead_exports.clone();
+    let revived_exports = script_analysis.revived_exports.clone();
     let script_data = ScriptAnalysisData {
         schedule: script_analysis.schedule,
         bindings: script_analysis.bindings,
         tracking: script_analysis.tracking,
         unit_end: script_analysis.unit_end,
         adapt_sites: script_analysis.adapt_sites,
+        dead_exports: script_analysis.dead_exports,
+        revived_exports: script_analysis.revived_exports,
     };
 
     ScriptUnitOwnershipResult::new(
@@ -219,7 +223,8 @@ pub fn analyze_script_fragment_tracked<'db>(
         Some(script_data),
         func_errors,
         structured_func_errors,
-        externals,
+        dead_exports,
+        revived_exports,
     )
 }
 
@@ -236,13 +241,13 @@ pub fn analyze_script_expr_tracked<'db>(
     typecheck_result: UnitTypecheckResultTracked<'db>,
     expr: datalove_datafun_ast::ast::ExprFun<'db>,
     auto_adapt_mode: AutoAdaptMode,
-    externals: ExternalBindings,
+    dead_externals: Vec<String>,
 ) -> ScriptUnitOwnershipResult<'db> {
     // Convert tycheck types to IR types.
     let expr_types = convert_expr_types(db, typecheck_result.expr_types(db));
 
     let analysis = ownership_analysis::analyze_expr_with_mode(
-        db, expr, &expr_types, auto_adapt_mode, externals,
+        db, expr, &expr_types, auto_adapt_mode, dead_externals,
     );
 
     if !analysis.errors.is_empty() {
@@ -250,14 +255,14 @@ pub fn analyze_script_expr_tracked<'db>(
         let structured_errors = analysis.errors.clone();
         return ScriptUnitOwnershipResult::new(
             db, Vec::new(), None, vec![error_msg], structured_errors,
-            ExternalBindings::default(),
+            Vec::new(), Vec::new(),
         );
     }
 
     // Expression units have no functions and no script-level drop schedule.
     // The expression result is consumed by the caller, so no drops needed.
     ScriptUnitOwnershipResult::new(
-        db, Vec::new(), None, Vec::new(), Vec::new(), analysis.externals,
+        db, Vec::new(), None, Vec::new(), Vec::new(), Vec::new(), Vec::new(),
     )
 }
 
@@ -287,7 +292,7 @@ fn emit_single_ownership_diagnostic<'db>(
     match error {
         AnalysisError::UseAfterMoveInEarlierUnit { local_index, name, recovery_hint } => {
             if let Some(ts) = lookup_expr_span(db, spans, *local_index) {
-                let msg = format!("`{}` was moved by an earlier input", name);
+                let msg = format!("`{}` was given away by an earlier input", name);
                 let mut builder = bct::diagnostic::DiagnosticBuilder::error(db, &msg)
                     .code("D013")
                     .primary_label(ts, "value used after move");

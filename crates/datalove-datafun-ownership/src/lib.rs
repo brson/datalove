@@ -51,7 +51,7 @@ use datalove_datafun_ir::IrType;
 pub use datalove_datafun_sema::{
     StmtKey, BindingId, TrackingCategory, BindingInfo, AnalysisError,
     OwnershipRecoveryHint, format_analysis_errors, DropSchedule, FunctionAnalysis,
-    ExternalBinding, ExternalBindings, ExternalState, AdaptSites,
+    AdaptSites,
 };
 
 // Re-export AutoAdaptMode for callers.
@@ -105,13 +105,12 @@ struct AnalysisCtx<'db> {
     name_to_binding: HashMap<String, BindingId>,
     /// Stack of scopes. Each scope records bindings created in it.
     scope_stack: Vec<ScopeFrame>,
-    /// Bindings earlier script units left behind, and their states.
-    ///
-    /// Consulted when a name is not a binding of this unit. Moves update the
-    /// state here so the unit after this one sees them.
-    externals: ExternalBindings,
     /// Uses that auto-adapt turns into clones.
     adapt_sites: AdaptSites,
+    /// Names earlier units exported without a value behind them.
+    dead_externals: Vec<String>,
+    /// Names from `dead_externals` this unit assigned to.
+    revived_externals: Vec<String>,
     /// Detected errors.
     errors: Vec<AnalysisError>,
     /// Computed drop schedule.
@@ -151,7 +150,7 @@ impl<'db> AnalysisCtx<'db> {
         db: &'db dyn salsa::Database,
         expr_types: &'db [Option<IrType>],
         auto_adapt_mode: AutoAdaptMode,
-        externals: ExternalBindings,
+        dead_externals: Vec<String>,
     ) -> Self {
         Self {
             db,
@@ -161,75 +160,46 @@ impl<'db> AnalysisCtx<'db> {
             bindings: Vec::new(),
             name_to_binding: HashMap::new(),
             scope_stack: Vec::new(),
-            externals,
             adapt_sites: AdaptSites::default(),
+            dead_externals,
+            revived_externals: Vec::new(),
             errors: Vec::new(),
             schedule: DropSchedule::default(),
             auto_adapt_mode,
         }
     }
 
-    /// Read a name that belongs to an earlier unit, reporting a use after move.
+    /// Report using a name an earlier unit exported without a value.
     ///
-    /// Returns whether the name was an external binding at all.
-    fn use_external(&mut self, name: &str, local_index: u32, is_consumed: bool) -> bool {
-        let Some(binding) = self.externals.get(name) else {
-            return false;
+    /// Consuming a binding from an earlier unit copies out of it, so the only
+    /// way a name arrives here empty is that the unit which defined it gave
+    /// the value away before it ended.
+    fn check_dead_external(&mut self, name: &str, local_index: u32) {
+        if !self.dead_externals.iter().any(|dead| dead == name) {
+            return;
+        }
+        let recovery_hint = OwnershipRecoveryHint::InsertAdapt {
+            description: format!("clone `{}` where it was given away", name),
         };
-
-        if binding.state == ExternalState::Moved && !self.auto_adapt_mode.is_enabled() {
-            let recovery_hint = OwnershipRecoveryHint::InsertAdapt {
-                description: format!("clone `{}` at the earlier use", name),
-            };
-            self.errors.push(AnalysisError::UseAfterMoveInEarlierUnit {
-                local_index,
-                name: name.to_string(),
-                recovery_hint,
-            });
-            return true;
-        }
-
-        if is_consumed && !binding.ty.is_copy() {
-            let mut moved = binding.clone();
-            moved.state = ExternalState::Moved;
-            self.externals.insert(moved);
-        }
-        true
+        self.errors.push(AnalysisError::UseAfterMoveInEarlierUnit {
+            local_index,
+            name: name.to_string(),
+            recovery_hint,
+        });
     }
 
-    /// Record that a name from an earlier unit holds a value again.
-    fn reinit_external(&mut self, name: &str) {
-        if let Some(binding) = self.externals.get(name) {
-            let mut live = binding.clone();
-            live.state = ExternalState::Live;
-            self.externals.insert(live);
-        }
-    }
-
-    /// The bindings in scope for the unit after this one.
-    ///
-    /// The externals this unit inherited, with its moves applied, plus the
-    /// script-level bindings it declared itself.
-    fn externals_for_next_unit(&self) -> ExternalBindings {
-        let mut next = self.externals.clone();
-
+    /// The names this unit exports that hold no value.
+    fn dead_exports(&self) -> Vec<String> {
+        let mut dead = Vec::new();
         for (id, info) in self.bindings.iter().enumerate() {
             if !info.is_script_unit || info.ty.is_copy() || info.is_borrowed() {
                 continue;
             }
-            let state = match self.get_state(BindingId(id as u32)) {
-                Some(BindingState::Moved) => ExternalState::Moved,
-                _ => ExternalState::Live,
-            };
-            next.insert(ExternalBinding {
-                name: info.name.clone(),
-                ty: info.ty.clone(),
-                is_slot: info.is_slot,
-                state,
-            });
+            if self.get_state(BindingId(id as u32)) == Some(BindingState::Moved) {
+                dead.push(info.name.clone());
+            }
         }
-
-        next
+        dead
     }
 
     /// Compute tracking category for each binding.
@@ -905,8 +875,7 @@ impl<'db> AnalysisCtx<'db> {
                             return Some(id);
                         }
                     } else {
-                        // Not a binding of this unit; an earlier one may own it.
-                        self.use_external(root_name, local_index, is_consumed);
+                        self.check_dead_external(root_name, local_index);
                     }
                     None
                 } else {
@@ -929,7 +898,7 @@ impl<'db> AnalysisCtx<'db> {
                             }
                         }
                     } else {
-                        self.use_external(root_name, local_index, false);
+                        self.check_dead_external(root_name, local_index);
                     }
                     for step in &place.steps {
                         if let datalove_datafun_ast::ast::PlaceStep::Index(idx) = step {
@@ -973,7 +942,7 @@ pub fn analyze_function_with_mode<'db>(
     auto_adapt_mode: AutoAdaptMode,
 ) -> FunctionAnalysis {
     // A function body cannot name script-level bindings.
-    let mut ctx = AnalysisCtx::new(db, expr_types, auto_adapt_mode, ExternalBindings::default());
+    let mut ctx = AnalysisCtx::new(db, expr_types, auto_adapt_mode, Vec::new());
 
     // Enter function scope.
     ctx.enter_scope(ScopeKind::Function);
@@ -1101,10 +1070,12 @@ pub struct ScriptAnalysis {
     /// - Interpreter: no-op (bindings persist for REPL)
     /// - AOT: conditional drop (checks tracking byte)
     pub unit_end: Vec<BindingId>,
-    /// Script-level bindings in scope for the next unit.
-    pub externals: ExternalBindings,
     /// Uses auto-adapt turned into clones.
     pub adapt_sites: AdaptSites,
+    /// Names this unit exports that hold no value.
+    pub dead_exports: Vec<String>,
+    /// Names from earlier units this unit assigned to.
+    pub revived_exports: Vec<String>,
 }
 
 /// Analyze script-level statements and compute drop schedule.
@@ -1124,9 +1095,7 @@ pub fn analyze_script_statements<'db>(
     expr_types: &'db [Option<IrType>],
     stmts: &[Statement<'db>],
 ) -> ScriptAnalysis {
-    analyze_script_statements_with_mode(
-        db, expr_types, stmts, AutoAdaptMode::Disabled, ExternalBindings::default(),
-    )
+    analyze_script_statements_with_mode(db, expr_types, stmts, AutoAdaptMode::Disabled, Vec::new())
 }
 
 /// Analyze script statements for ownership with configurable auto-adapt mode.
@@ -1135,9 +1104,9 @@ pub fn analyze_script_statements_with_mode<'db>(
     expr_types: &'db [Option<IrType>],
     stmts: &[Statement<'db>],
     auto_adapt_mode: AutoAdaptMode,
-    externals: ExternalBindings,
+    dead_externals: Vec<String>,
 ) -> ScriptAnalysis {
-    let mut ctx = AnalysisCtx::new(db, expr_types, auto_adapt_mode, externals);
+    let mut ctx = AnalysisCtx::new(db, expr_types, auto_adapt_mode, dead_externals);
 
     // Enter ScriptUnit scope so bindings are Tracked.
     ctx.enter_scope(ScopeKind::ScriptUnit);
@@ -1146,15 +1115,19 @@ pub fn analyze_script_statements_with_mode<'db>(
     analyze_statements(&mut ctx, stmts);
 
     // Collect bindings for UnitEndDrop before exiting scope.
-    // These are script-level bindings that are still live and non-Copy.
+    //
+    // Live non-Copy bindings, plus every non-Copy slot whatever its state: a
+    // later unit can assign to a slot this one gave away, and the cleanup list
+    // is fixed now. Slots are Tracked, so both backends check whether the slot
+    // holds anything before dropping it.
     let unit_end_bindings: Vec<BindingId> = ctx.scope_stack.last()
         .map(|frame| {
             frame.bindings.iter()
                 .filter(|&id| {
                     let info = &ctx.bindings[id.0 as usize];
                     let state = frame.current_state.get(id).copied();
-                    // Include if: live, non-Copy, not borrowed.
-                    state == Some(BindingState::Live)
+                    let live_or_assignable = state == Some(BindingState::Live) || info.is_slot;
+                    live_or_assignable
                         && !info.ty.is_copy()
                         && !info.is_borrowed()
                 })
@@ -1163,9 +1136,9 @@ pub fn analyze_script_statements_with_mode<'db>(
         })
         .unwrap_or_default();
 
-    // Collect the table for the next unit while the scope still holds the
-    // final states of this unit's bindings.
-    let externals = ctx.externals_for_next_unit();
+    // Collect the exports that hold no value while the scope still has the
+    // final state of each binding.
+    let dead_exports = ctx.dead_exports();
 
     // Exit scope (returns empty for ScriptUnit, but we collected bindings above).
     let _ = ctx.exit_scope();
@@ -1179,8 +1152,9 @@ pub fn analyze_script_statements_with_mode<'db>(
         bindings: ctx.bindings,
         tracking,
         unit_end: unit_end_bindings,
-        externals,
         adapt_sites: ctx.adapt_sites,
+        dead_exports,
+        revived_exports: ctx.revived_externals,
     }
 }
 
@@ -1191,8 +1165,6 @@ pub struct ExprAnalysis {
     pub errors: Vec<AnalysisError>,
     /// Information about each binding (indexed by BindingId).
     pub bindings: Vec<BindingInfo>,
-    /// Script-level bindings in scope for the next unit.
-    pub externals: ExternalBindings,
 }
 
 /// Analyze a standalone expression for ownership errors.
@@ -1208,7 +1180,7 @@ pub fn analyze_expr<'db>(
     expr: datalove_datafun_ast::ast::ExprFun<'db>,
     expr_types: &'db [Option<IrType>],
 ) -> ExprAnalysis {
-    analyze_expr_with_mode(db, expr, expr_types, AutoAdaptMode::Disabled, ExternalBindings::default())
+    analyze_expr_with_mode(db, expr, expr_types, AutoAdaptMode::Disabled, Vec::new())
 }
 
 /// Analyze expression for ownership with configurable auto-adapt mode.
@@ -1217,9 +1189,9 @@ pub fn analyze_expr_with_mode<'db>(
     expr: datalove_datafun_ast::ast::ExprFun<'db>,
     expr_types: &'db [Option<IrType>],
     auto_adapt_mode: AutoAdaptMode,
-    externals: ExternalBindings,
+    dead_externals: Vec<String>,
 ) -> ExprAnalysis {
-    let mut ctx = AnalysisCtx::new(db, expr_types, auto_adapt_mode, externals);
+    let mut ctx = AnalysisCtx::new(db, expr_types, auto_adapt_mode, dead_externals);
 
     // Enter a scope for the expression analysis.
     ctx.enter_scope(ScopeKind::Function);
@@ -1230,11 +1202,9 @@ pub fn analyze_expr_with_mode<'db>(
     // Exit scope. No drops needed since expression result is returned.
     let _ = ctx.exit_scope();
 
-    let externals = ctx.externals_for_next_unit();
     ExprAnalysis {
         errors: ctx.errors,
         bindings: ctx.bindings,
-        externals,
     }
 }
 
@@ -1442,7 +1412,7 @@ fn analyze_set<'db>(ctx: &mut AnalysisCtx<'db>, stmt: &StmtSet<'db>, stmt_idx: u
                 ctx.set_out_param_init(id, OutParamInitState::Initialized);
             }
         } else {
-            ctx.reinit_external(name);
+            ctx.revived_externals.push(name.to_string());
         }
     } else {
         // Projection/index chain — check root for partial write to uninit.

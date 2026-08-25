@@ -47,7 +47,7 @@
       {
         "name": "a",
         "ty": "list<int>",
-        "value": "<moved>"
+        "value": "[1, 2]"
       },
       {
         "name": "b",
@@ -64,16 +64,29 @@
       }
     },
     "eval": {
-      "Error": "error[D013]: `a` was moved by an earlier input\n  help: use `@` to clone `a` at the earlier use"
+      "Success": [
+        {
+          "Value": {
+            "name": "c",
+            "ty": "list<int>",
+            "value": "[1, 2]"
+          }
+        }
+      ]
     },
     "environment": [
       {
         "name": "a",
         "ty": "list<int>",
-        "value": "<moved>"
+        "value": "[1, 2]"
       },
       {
         "name": "b",
+        "ty": "list<int>",
+        "value": "[1, 2]"
+      },
+      {
+        "name": "c",
         "ty": "list<int>",
         "value": "[1, 2]"
       }
@@ -96,12 +109,17 @@
       {
         "name": "a",
         "ty": "list<int>",
-        "value": "<moved>"
+        "value": "[1, 2]"
       },
       {
         "name": "b",
         "ty": "list<int>",
-        "value": "<moved>"
+        "value": "[1, 2]"
+      },
+      {
+        "name": "c",
+        "ty": "list<int>",
+        "value": "[1, 2]"
       }
     ]
   },
@@ -134,12 +152,17 @@
       {
         "name": "a",
         "ty": "list<int>",
-        "value": "<moved>"
+        "value": "[1, 2]"
       },
       {
         "name": "b",
         "ty": "list<int>",
-        "value": "<moved>"
+        "value": "[1, 2]"
+      },
+      {
+        "name": "c",
+        "ty": "list<int>",
+        "value": "[1, 2]"
       },
       {
         "name": "d",
@@ -161,18 +184,23 @@
       }
     },
     "eval": {
-      "Error": "error[D013]: `d` was moved by an earlier input\n  help: use `@` to clone `d` at the earlier use"
+      "Error": "error[D013]: `d` was given away by an earlier input\n  help: use `@` to clone `d` where it was given away"
     },
     "environment": [
       {
         "name": "a",
         "ty": "list<int>",
-        "value": "<moved>"
+        "value": "[1, 2]"
       },
       {
         "name": "b",
         "ty": "list<int>",
-        "value": "<moved>"
+        "value": "[1, 2]"
+      },
+      {
+        "name": "c",
+        "ty": "list<int>",
+        "value": "[1, 2]"
       },
       {
         "name": "d",
@@ -208,12 +236,17 @@
       {
         "name": "a",
         "ty": "list<int>",
-        "value": "<moved>"
+        "value": "[1, 2]"
       },
       {
         "name": "b",
         "ty": "list<int>",
-        "value": "<moved>"
+        "value": "[1, 2]"
+      },
+      {
+        "name": "c",
+        "ty": "list<int>",
+        "value": "[1, 2]"
       },
       {
         "name": "d",
@@ -254,12 +287,17 @@
       {
         "name": "a",
         "ty": "list<int>",
-        "value": "<moved>"
+        "value": "[1, 2]"
       },
       {
         "name": "b",
         "ty": "list<int>",
-        "value": "<moved>"
+        "value": "[1, 2]"
+      },
+      {
+        "name": "c",
+        "ty": "list<int>",
+        "value": "[1, 2]"
       },
       {
         "name": "d",
@@ -274,7 +312,7 @@
       {
         "name": "v",
         "ty": "list<int>",
-        "value": "<moved>"
+        "value": "[5]"
       },
       {
         "name": "w",
@@ -291,18 +329,26 @@
       }
     },
     "eval": {
-      "Error": "error[D013]: `v` was moved by an earlier input\n  help: use `@` to clone `v` at the earlier use"
+      "SuccessExpr": {
+        "ty": "list<int>",
+        "value": "[5]"
+      }
     },
     "environment": [
       {
         "name": "a",
         "ty": "list<int>",
-        "value": "<moved>"
+        "value": "[1, 2]"
       },
       {
         "name": "b",
         "ty": "list<int>",
-        "value": "<moved>"
+        "value": "[1, 2]"
+      },
+      {
+        "name": "c",
+        "ty": "list<int>",
+        "value": "[1, 2]"
       },
       {
         "name": "d",
@@ -317,7 +363,7 @@
       {
         "name": "v",
         "ty": "list<int>",
-        "value": "<moved>"
+        "value": "[5]"
       },
       {
         "name": "w",
@@ -338,12 +384,17 @@
       {
         "name": "a",
         "ty": "list<int>",
-        "value": "<moved>"
+        "value": "[1, 2]"
       },
       {
         "name": "b",
         "ty": "list<int>",
-        "value": "<moved>"
+        "value": "[1, 2]"
+      },
+      {
+        "name": "c",
+        "ty": "list<int>",
+        "value": "[1, 2]"
       },
       {
         "name": "d",
@@ -384,12 +435,17 @@
       {
         "name": "a",
         "ty": "list<int>",
-        "value": "<moved>"
+        "value": "[1, 2]"
       },
       {
         "name": "b",
         "ty": "list<int>",
-        "value": "<moved>"
+        "value": "[1, 2]"
+      },
+      {
+        "name": "c",
+        "ty": "list<int>",
+        "value": "[1, 2]"
       },
       {
         "name": "d",
@@ -404,7 +460,7 @@
       {
         "name": "v",
         "ty": "list<int>",
-        "value": "<moved>"
+        "value": "[6]"
       },
       {
         "name": "w",

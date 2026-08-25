@@ -42,7 +42,7 @@
       {
         "name": "point",
         "ty": "{x: int, y: int}",
-        "value": "<moved>"
+        "value": "{x = 10, y = 20}"
       }
     ]
   },
@@ -73,7 +73,7 @@
       {
         "name": "point",
         "ty": "{x: int, y: int}",
-        "value": "<moved>"
+        "value": "{x = 10, y = 20}"
       }
     ]
   },
@@ -94,12 +94,12 @@
       {
         "name": "person",
         "ty": "{name: string, age: int}",
-        "value": "<moved>"
+        "value": "{name = \"Alice\", age = 30}"
       },
       {
         "name": "point",
         "ty": "{x: int, y: int}",
-        "value": "<moved>"
+        "value": "{x = 10, y = 20}"
       }
     ]
   },
@@ -130,12 +130,12 @@
       {
         "name": "person",
         "ty": "{name: string, age: int}",
-        "value": "<moved>"
+        "value": "{name = \"Alice\", age = 30}"
       },
       {
         "name": "point",
         "ty": "{x: int, y: int}",
-        "value": "<moved>"
+        "value": "{x = 10, y = 20}"
       }
     ]
   },
@@ -156,17 +156,17 @@
       {
         "name": "multifield",
         "ty": "{a: int, b: int, c: int, d: int}",
-        "value": "<moved>"
+        "value": "{a = 1, b = 2, c = 3, d = 4}"
       },
       {
         "name": "person",
         "ty": "{name: string, age: int}",
-        "value": "<moved>"
+        "value": "{name = \"Alice\", age = 30}"
       },
       {
         "name": "point",
         "ty": "{x: int, y: int}",
-        "value": "<moved>"
+        "value": "{x = 10, y = 20}"
       }
     ]
   }

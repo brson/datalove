@@ -42,7 +42,7 @@
       {
         "name": "x",
         "ty": "int",
-        "value": "<moved>"
+        "value": "42"
       }
     ]
   },
@@ -68,7 +68,7 @@
       {
         "name": "x",
         "ty": "int",
-        "value": "<moved>"
+        "value": "42"
       },
       {
         "name": "y",
@@ -94,12 +94,12 @@
       {
         "name": "x",
         "ty": "int",
-        "value": "<moved>"
+        "value": "42"
       },
       {
         "name": "y",
         "ty": "int",
-        "value": "<moved>"
+        "value": "52"
       }
     ]
   }

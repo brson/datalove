@@ -141,9 +141,13 @@ fn lower_call_arg<'db>(
         ExprFunKind::Place(ref place) if place.steps.is_empty() => {
             let name_str = place.root.text(ctx.db);
             let (operand, _) = lower_var_operand(ctx, name_str);
-            if ctx.is_adapt_site(arg) {
-                // The callee consumes the clone, not the binding.
-                return Ok(Operand::Value(emit_adapt(ctx, arg, operand)));
+            let is_external = matches!(
+                operand,
+                Operand::ExternalValue { .. } | Operand::ExternalSlot { .. },
+            );
+            if ctx.is_adapt_site(arg) || is_external {
+                // The callee consumes the copy, not the binding.
+                return Ok(Operand::Value(emit_owned_copy(ctx, arg, operand)));
             }
             Ok(operand)
         }
@@ -350,11 +354,12 @@ pub fn lower_expression_for_ref<'db>(
     }
 }
 
-/// Emit the clone or coercion that auto-adapt supplies at a use.
+/// Produce an owned value from an operand without consuming it.
 ///
-/// Mirrors what an explicit `@` on the same expression would lower to: a
-/// widening for fixed ints, a clone for linear types.
-fn emit_adapt<'db>(
+/// Emits what an explicit `@` on the expression would: a widening between
+/// fixed ints, a clone for linear types. Used where auto-adapt supplies the
+/// `@`, and for every consuming use of a binding an earlier unit owns.
+fn emit_owned_copy<'db>(
     ctx: &mut LowerCtx<'db>,
     expr: ExprFun<'db>,
     operand: Operand,
@@ -392,7 +397,7 @@ pub fn lower_expression<'db>(
 
             // Auto-adapt supplies the `@` here, so clone rather than consume.
             if ctx.is_adapt_site(expr) {
-                return Ok(emit_adapt(ctx, expr, operand));
+                return Ok(emit_owned_copy(ctx, expr, operand));
             }
 
             match operand {
@@ -426,13 +431,14 @@ pub fn lower_expression<'db>(
                     Ok(dest)
                 }
                 Operand::ExternalValue { .. } | Operand::ExternalSlot { .. } => {
-                    // External operands from previous script units.
+                    // A binding an earlier unit owns is copied out of, never
+                    // taken: the name has to keep working at the next prompt.
                     let ext_type = ctx.expr_type(expr);
                     let dest = ctx.fresh_value(ext_type.clone());
                     if ext_type.is_copy() {
                         ctx.emit(Instruction::Copy { dest, src: operand });
                     } else {
-                        ctx.emit(Instruction::Move { dest, src: operand });
+                        ctx.emit(Instruction::Clone { dest, src: operand });
                     }
                     Ok(dest)
                 }

@@ -47,7 +47,7 @@
       {
         "name": "v",
         "ty": "list<int>",
-        "value": "<moved>"
+        "value": "[1, 2]"
       },
       {
         "name": "x",
@@ -94,7 +94,7 @@
       {
         "name": "v",
         "ty": "list<int>",
-        "value": "<moved>"
+        "value": "[3]"
       },
       {
         "name": "x",
@@ -120,12 +120,12 @@
       {
         "name": "v",
         "ty": "list<int>",
-        "value": "<moved>"
+        "value": "[3]"
       },
       {
         "name": "x",
         "ty": "list<int>",
-        "value": "<moved>"
+        "value": "[1, 2]"
       }
     ]
   }
