@@ -9,11 +9,13 @@ scriptunit-fragment
 
 fun test_loop(b: int): int
   var a: int = (: int / 4)
-  loop {
-    if a == b {
+  loop
+    if a == b
       break
-    }
+    end if
     set a = b
-  }
+  end loop
   ret a
 end fun
+
+let result: int = test_loop((: int / 5))

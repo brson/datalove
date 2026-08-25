@@ -51,7 +51,7 @@ use datalove_datafun_ir::IrType;
 pub use datalove_datafun_sema::{
     StmtKey, BindingId, TrackingCategory, BindingInfo, AnalysisError,
     OwnershipRecoveryHint, format_analysis_errors, DropSchedule, FunctionAnalysis,
-    ExternalBinding, ExternalBindings, ExternalState,
+    ExternalBinding, ExternalBindings, ExternalState, AdaptSites,
 };
 
 // Re-export AutoAdaptMode for callers.
@@ -110,6 +110,8 @@ struct AnalysisCtx<'db> {
     /// Consulted when a name is not a binding of this unit. Moves update the
     /// state here so the unit after this one sees them.
     externals: ExternalBindings,
+    /// Uses that auto-adapt turns into clones.
+    adapt_sites: AdaptSites,
     /// Detected errors.
     errors: Vec<AnalysisError>,
     /// Computed drop schedule.
@@ -160,6 +162,7 @@ impl<'db> AnalysisCtx<'db> {
             name_to_binding: HashMap::new(),
             scope_stack: Vec::new(),
             externals,
+            adapt_sites: AdaptSites::default(),
             errors: Vec::new(),
             schedule: DropSchedule::default(),
             auto_adapt_mode,
@@ -414,8 +417,11 @@ impl<'db> AnalysisCtx<'db> {
         if self.get_state(id) == Some(BindingState::Moved) {
             // Double move error - can be recovered by cloning before the second move.
             if self.auto_adapt_mode.is_enabled() {
-                // Auto-adapt: treat as if value was cloned, no error.
-                // The value remains in Moved state (second "move" is really a clone+move).
+                // Clone at the earlier move, which leaves this one a real move.
+                if let Some(moved_at) = self.get_moved_at(id) {
+                    self.adapt_sites.insert(moved_at);
+                }
+                self.set_moved_at(id, local_index);
                 return;
             }
             let name = self.bindings[id.0 as usize].name.C();
@@ -878,7 +884,12 @@ impl<'db> AnalysisCtx<'db> {
                         // Check for use after move.
                         if self.get_state(id) == Some(BindingState::Moved) {
                             if self.auto_adapt_mode.is_enabled() {
-                                // Auto-adapt: treat as if the original move was a clone+move.
+                                // Clone at the earlier move, which leaves the
+                                // binding live for this read.
+                                if let Some(moved_at) = self.get_moved_at(id) {
+                                    self.adapt_sites.insert(moved_at);
+                                }
+                                self.set_state(id, BindingState::Live);
                             } else {
                                 let name = self.bindings[id.0 as usize].name.C();
                                 let moved_at = self.get_moved_at(id).unwrap_or(local_index);
@@ -903,7 +914,12 @@ impl<'db> AnalysisCtx<'db> {
                     let root_name = place.root.text(self.db);
                     if let Some(id) = self.lookup(root_name) {
                         if self.get_state(id) == Some(BindingState::Moved) {
-                            if !self.auto_adapt_mode.is_enabled() {
+                            if self.auto_adapt_mode.is_enabled() {
+                                if let Some(moved_at) = self.get_moved_at(id) {
+                                    self.adapt_sites.insert(moved_at);
+                                }
+                                self.set_state(id, BindingState::Live);
+                            } else {
                                 let name = self.bindings[id.0 as usize].name.C();
                                 let moved_at = self.get_moved_at(id).unwrap_or(local_index);
                                 let recovery_hint = OwnershipRecoveryHint::InsertAdapt {
@@ -989,6 +1005,7 @@ pub fn analyze_function_with_mode<'db>(
         schedule: ctx.schedule,
         bindings: ctx.bindings,
         tracking,
+        adapt_sites: ctx.adapt_sites,
     }
 }
 
@@ -1086,6 +1103,8 @@ pub struct ScriptAnalysis {
     pub unit_end: Vec<BindingId>,
     /// Script-level bindings in scope for the next unit.
     pub externals: ExternalBindings,
+    /// Uses auto-adapt turned into clones.
+    pub adapt_sites: AdaptSites,
 }
 
 /// Analyze script-level statements and compute drop schedule.
@@ -1161,6 +1180,7 @@ pub fn analyze_script_statements_with_mode<'db>(
         tracking,
         unit_end: unit_end_bindings,
         externals,
+        adapt_sites: ctx.adapt_sites,
     }
 }
 
@@ -1751,8 +1771,11 @@ fn analyze_loop<'db>(ctx: &mut AnalysisCtx<'db>, stmt: &StmtLoop<'db>, stmt_idx:
     for id in &outer_live_bindings {
         if ctx.get_state(*id) == Some(BindingState::Moved) {
             if ctx.auto_adapt_mode.is_enabled() {
-                // Auto-adapt: treat as if value is cloned inside the loop each iteration.
-                // Restore binding to Live state so subsequent iterations can use it.
+                // Clone at the use inside the loop, so each iteration takes a
+                // copy and the binding survives the loop.
+                if let Some(moved_at) = ctx.get_moved_at(*id) {
+                    ctx.adapt_sites.insert(moved_at);
+                }
                 ctx.set_state(*id, BindingState::Live);
             } else {
                 let name = ctx.bindings[id.0 as usize].name.C();

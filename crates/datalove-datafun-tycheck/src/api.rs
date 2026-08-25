@@ -225,12 +225,21 @@ pub fn typecheck_script_unit<'db>(
     // Emit pending diagnostics with local spans.
     ctx.emit_pending_diagnostics();
 
+    // Expressions auto-adapt accepted by adjusting their type; lowering has to
+    // supply the conversion the source left out.
+    let mut adapt_sites = datalove_datafun_sema::AdaptSites::default();
+    for adaptation in ctx.auto_adaptations() {
+        adapt_sites.insert(adaptation.expr_id);
+    }
+
     // Build result for this unit.
     let errors = ctx.errors.into_iter()
         .map(|e| TypeErrorEntry::new(db, e))
         .collect();
     let function_types: Vec<_> = ctx.functions.into_iter().collect();
-    let result = UnitTypecheckResultTracked::new(db, errors, ctx.expr_types, ctx.call_targets, function_types);
+    let result = UnitTypecheckResultTracked::new(
+        db, errors, ctx.expr_types, ctx.call_targets, function_types, adapt_sites,
+    );
 
     ScriptUnitTypecheckOutput::new(db, result, new_vars, new_fns, new_fn_asts, new_module_aliases)
 }

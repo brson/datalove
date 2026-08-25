@@ -1,10 +1,23 @@
 {
   "auto_adapt_execution": {
-    "environment": [],
+    "environment": [
+      {
+        "kind": "var",
+        "name": "a",
+        "ty": "int",
+        "value": "5"
+      },
+      {
+        "kind": "var",
+        "name": "b",
+        "ty": "int",
+        "value": "5"
+      }
+    ],
     "outputs": [
       {
         "kind": "fragment",
-        "output": "did not compile: parse: unexpected token after expression"
+        "output": "(fragment executed)"
       }
     ],
     "status": "ran"
@@ -19,8 +32,12 @@
   "normal_mode": {
     "diagnostic_count": 0,
     "diagnostics": [],
-    "error_count": 0,
-    "errors": [],
-    "success": true
+    "error_count": 1,
+    "errors": [
+      {
+        "error": "error[D007]: cannot move `b` in loop\n  help: use `@` to clone `b` inside the loop"
+      }
+    ],
+    "success": false
   }
 }

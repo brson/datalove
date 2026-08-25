@@ -78,6 +78,7 @@ pub fn lower_function_body<'db>(
     ctx.body.drop_schedule = analysis.schedule;
     ctx.body.binding_info = analysis.bindings;
     ctx.body.tracking = analysis.tracking;
+    ctx.body.adapt_sites = analysis.adapt_sites;
 
     // Reset counters - each function has its own statement/binding ID space.
     // Note: For nested functions, these are already 0 from swap_body_state(),

@@ -400,6 +400,47 @@ pub struct FunctionAnalysis {
     /// Tracking category for each binding (indexed by BindingId).
     /// Determines whether precise or tracked move/drop instructions are used.
     pub tracking: Vec<TrackingCategory>,
+    /// Uses auto-adapt turned into clones.
+    pub adapt_sites: AdaptSites,
+}
+
+/// Expressions where auto-adapt supplies the `@` the source left out.
+///
+/// Keyed by salsa expression id index, the same key ownership analysis uses
+/// for spans, so lowering can recognize the expression it is looking at.
+/// Lowering clones such a use instead of moving it.
+#[derive(Clone, Debug, Default, Hash, PartialEq, Eq)]
+#[derive(salsa::Update)]
+pub struct AdaptSites {
+    sites: Vec<u32>,
+}
+
+impl AdaptSites {
+    /// Record that an expression needs an implicit `@`.
+    pub fn insert(&mut self, expr_index: u32) {
+        if !self.sites.contains(&expr_index) {
+            self.sites.push(expr_index);
+        }
+    }
+
+    /// Whether an expression needs an implicit `@`.
+    pub fn contains(&self, expr_index: u32) -> bool {
+        self.sites.contains(&expr_index)
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.sites.is_empty()
+    }
+
+    /// Take on another set's sites.
+    ///
+    /// Sites are keyed by salsa expression id, so a set that names expressions
+    /// belonging to some other body is harmless: no expression here matches.
+    pub fn extend(&mut self, other: &AdaptSites) {
+        for site in &other.sites {
+            self.insert(*site);
+        }
+    }
 }
 
 /// Whether a binding from an earlier script unit still holds its value.
@@ -464,4 +505,6 @@ pub struct ScriptAnalysisData {
     pub tracking: Vec<TrackingCategory>,
     /// Bindings to drop at unit end (for AOT cleanup).
     pub unit_end: Vec<BindingId>,
+    /// Uses auto-adapt turned into clones.
+    pub adapt_sites: AdaptSites,
 }

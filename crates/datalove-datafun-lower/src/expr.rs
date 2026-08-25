@@ -141,6 +141,10 @@ fn lower_call_arg<'db>(
         ExprFunKind::Place(ref place) if place.steps.is_empty() => {
             let name_str = place.root.text(ctx.db);
             let (operand, _) = lower_var_operand(ctx, name_str);
+            if ctx.is_adapt_site(arg) {
+                // The callee consumes the clone, not the binding.
+                return Ok(Operand::Value(emit_adapt(ctx, arg, operand)));
+            }
             Ok(operand)
         }
         _ => {
@@ -346,6 +350,36 @@ pub fn lower_expression_for_ref<'db>(
     }
 }
 
+/// Emit the clone or coercion that auto-adapt supplies at a use.
+///
+/// Mirrors what an explicit `@` on the same expression would lower to: a
+/// widening for fixed ints, a clone for linear types.
+fn emit_adapt<'db>(
+    ctx: &mut LowerCtx<'db>,
+    expr: ExprFun<'db>,
+    operand: Operand,
+) -> ValueId {
+    let dest_type = ctx.expr_type(expr);
+    let src_type = ctx.operand_type(operand).unwrap_or_else(|| dest_type.clone());
+    let dest = ctx.fresh_value(dest_type.clone());
+
+    if src_type == dest_type {
+        if src_type.is_copy() {
+            ctx.emit(Instruction::Copy { dest, src: operand });
+        } else {
+            ctx.emit(Instruction::Clone { dest, src: operand });
+        }
+    } else if is_fixed_width_int(&src_type) && is_fixed_width_int(&dest_type) {
+        ctx.emit(Instruction::WidenFixed { dest, src: operand });
+    } else if is_fixed_width_int(&src_type) && matches!(dest_type, IrType::Int) {
+        ctx.emit(Instruction::Widen { dest, src: operand });
+    } else {
+        ctx.emit(Instruction::Clone { dest, src: operand });
+    }
+
+    dest
+}
+
 /// Lower an expression, returning the ValueId holding the result.
 pub fn lower_expression<'db>(
     ctx: &mut LowerCtx<'db>,
@@ -355,6 +389,12 @@ pub fn lower_expression<'db>(
         ExprFunKind::Place(ref place) if place.steps.is_empty() => {
             let name_str = place.root.text(ctx.db);
             let (operand, _) = lower_var_operand(ctx, name_str);
+
+            // Auto-adapt supplies the `@` here, so clone rather than consume.
+            if ctx.is_adapt_site(expr) {
+                return Ok(emit_adapt(ctx, expr, operand));
+            }
+
             match operand {
                 Operand::Value(v) | Operand::ValueRef(v) => {
                     // For SSA values, just return the existing ValueId.

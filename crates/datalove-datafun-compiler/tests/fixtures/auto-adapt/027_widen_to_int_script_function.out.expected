@@ -1,10 +1,17 @@
 {
   "auto_adapt_execution": {
-    "environment": [],
+    "environment": [
+      {
+        "kind": "fun",
+        "name": "convert",
+        "ty": "function",
+        "value": "-"
+      }
+    ],
     "outputs": [
       {
         "kind": "fragment",
-        "output": "did not compile: typecheck: TypeMismatch { expected: \"int\", actual: \"u32\" }"
+        "output": "(fragment executed)"
       }
     ],
     "status": "ran"

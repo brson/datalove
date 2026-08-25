@@ -22,7 +22,7 @@ use datalove_datafun_ownership::{
 };
 pub use datalove_datafun_sema::{
     ScriptAnalysisData, AnalysisError, OwnershipRecoveryHint,
-    ExternalBinding, ExternalBindings, ExternalState,
+    ExternalBinding, ExternalBindings, ExternalState, AdaptSites,
 };
 
 // Re-export AutoAdaptMode for callers.
@@ -35,6 +35,7 @@ pub struct FunctionAnalysisData {
     pub schedule: DropSchedule,
     pub bindings: Vec<BindingInfo>,
     pub tracking: Vec<TrackingCategory>,
+    pub adapt_sites: AdaptSites,
 }
 
 impl From<FunctionAnalysis> for FunctionAnalysisData {
@@ -43,6 +44,7 @@ impl From<FunctionAnalysis> for FunctionAnalysisData {
             schedule: analysis.schedule,
             bindings: analysis.bindings,
             tracking: analysis.tracking,
+            adapt_sites: analysis.adapt_sites,
         }
     }
 }
@@ -100,6 +102,7 @@ impl<'db> ScriptUnitOwnershipResult<'db> {
                     schedule: data.schedule.clone(),
                     bindings: data.bindings.clone(),
                     tracking: data.tracking.clone(),
+                    adapt_sites: data.adapt_sites.clone(),
                 };
                 map.insert(func, analysis);
             }
@@ -207,6 +210,7 @@ pub fn analyze_script_fragment_tracked<'db>(
         bindings: script_analysis.bindings,
         tracking: script_analysis.tracking,
         unit_end: script_analysis.unit_end,
+        adapt_sites: script_analysis.adapt_sites,
     };
 
     ScriptUnitOwnershipResult::new(

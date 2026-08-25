@@ -11,7 +11,7 @@
         "kind": "let",
         "name": "b",
         "ty": "string",
-        "value": "<moved>"
+        "value": "\"hello\""
       },
       {
         "kind": "fun",
@@ -23,7 +23,7 @@
         "kind": "let",
         "name": "msg",
         "ty": "string",
-        "value": "<moved>"
+        "value": "\"hello\""
       }
     ],
     "outputs": [

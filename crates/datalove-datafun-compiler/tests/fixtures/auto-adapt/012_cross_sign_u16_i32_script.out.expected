@@ -1,10 +1,23 @@
 {
   "auto_adapt_execution": {
-    "environment": [],
+    "environment": [
+      {
+        "kind": "let",
+        "name": "m",
+        "ty": "i32",
+        "value": "1000"
+      },
+      {
+        "kind": "let",
+        "name": "n",
+        "ty": "u16",
+        "value": "1000"
+      }
+    ],
     "outputs": [
       {
         "kind": "fragment",
-        "output": "did not compile: typecheck: TypeMismatch { expected: \"i32\", actual: \"u16\" }"
+        "output": "(fragment executed)"
       }
     ],
     "status": "ran"

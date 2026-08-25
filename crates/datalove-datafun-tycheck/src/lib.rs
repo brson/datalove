@@ -423,6 +423,12 @@ pub struct UnitTypecheckResultTracked<'db> {
     /// are used in function parameters.
     #[returns(ref)]
     pub function_types: Vec<(InternedText<'db>, TypeFunction<'db>)>,
+    /// Expressions auto-adapt accepted by adjusting their type.
+    ///
+    /// Lowering has to supply the conversion the source left out, or the
+    /// binding would hold the unconverted value under the adapted type.
+    #[returns(ref)]
+    pub adapt_sites: datalove_datafun_sema::AdaptSites,
 }
 
 /// Result of typechecking multiple script units together.

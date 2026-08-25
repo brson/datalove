@@ -94,6 +94,7 @@ pub fn lower_script_fragment_raw<'db>(
     ctx.body.binding_info = script_analysis.bindings;
     ctx.body.tracking = script_analysis.tracking;
     ctx.unit_end_drops = script_analysis.unit_end;
+    ctx.body.adapt_sites = script_analysis.adapt_sites;
 
     // Track which functions have already been lowered (to skip in statement handling).
     let already_lowered_funcs: HashSet<String>;

@@ -46,7 +46,7 @@ use datalove_datafun_compiler::lower::ScriptFunctionAnalyses;
 use datalove_datafun_ir::{ConstValue, CtfeEvaluator, CtfeError, IrCodeUnit, IrType, ResolvedConsts, ConstEvalError};
 use datalove_datafun_interp::InterpCtfeEvaluator;
 use datalove_datafun_tycheck::{
-    type_check_script_units, create_batch_spec,
+    type_check_script_units, create_batch_spec_with_auto_adapt,
     ScriptUnitSpec, ModuleSpec, ScriptBatchSpec, ScriptUnitKind,
     UnitTypecheckResultTracked, ResolvedCallTarget, Type,
     AutoAdaptMode,
@@ -428,12 +428,14 @@ impl<'db> ScriptCompiler<'db> {
         let unit_spec = ScriptUnitSpec::new(src, spans, unit_kind);
         self.accumulated_unit_specs.push(unit_spec);
 
-        // Run typechecking.
-        let batch_spec = create_batch_spec(
+        // Run typechecking. The mode has to reach here too, not just ownership
+        // analysis: a mismatch `@` would fix is a type error first.
+        let batch_spec = create_batch_spec_with_auto_adapt(
             self.db,
             src,
             self.accumulated_unit_specs.clone(),
             self.module_specs.clone(),
+            self.auto_adapt_mode,
         );
         self.last_batch_spec = Some(batch_spec);
         let typecheck_results = type_check_script_units(self.db, batch_spec);
@@ -495,8 +497,20 @@ impl<'db> ScriptCompiler<'db> {
                         ir_unit: None,
                     });
                 }
-                let func_analyses = ownership_result.to_function_analyses_map(self.db, stmts);
-                let script_analysis = ownership_result.script_analysis(self.db).clone();
+                let mut func_analyses = ownership_result.to_function_analyses_map(self.db, stmts);
+                let mut script_analysis = ownership_result.script_analysis(self.db).clone();
+
+                // Type adaptations are decided during typechecking, and lowering
+                // needs them alongside the ones ownership analysis decided.
+                let type_adapts = typecheck.result.adapt_sites(self.db);
+                if !type_adapts.is_empty() {
+                    if let Some(analysis) = script_analysis.as_mut() {
+                        analysis.adapt_sites.extend(type_adapts);
+                    }
+                    for analysis in func_analyses.values_mut() {
+                        analysis.adapt_sites.extend(type_adapts);
+                    }
+                }
                 let externals = ownership_result.externals(self.db).clone();
                 Ok(OwnershipOutput { func_analyses, script_analysis, externals })
             }

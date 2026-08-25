@@ -10,9 +10,9 @@ scriptunit-fragment
 var a: int = (: int / 4)
 var b: int = (: int / 5)
 
-loop {
-  if a == b {
+loop
+  if a == b
     break
-  }
+  end if
   set a = b
-}
+end loop

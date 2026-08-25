@@ -18,7 +18,7 @@ use datalove_datafun_ir::{
     ConstValue, TypeRef, SlotDest, CtfeEvaluator, CallSiteId,
 };
 use crate::ir_ext::IrTypeExt;
-use datalove_datafun_sema::{BindingId, DropSchedule, BindingInfo, TrackingCategory, StmtKey};
+use datalove_datafun_sema::{BindingId, DropSchedule, BindingInfo, TrackingCategory, StmtKey, AdaptSites};
 
 /// Compile-time state for building a function's IR.
 ///
@@ -66,6 +66,8 @@ pub struct FrameState {
     pub binding_info: Vec<BindingInfo>,
     /// Drop schedule from analysis.
     pub drop_schedule: DropSchedule,
+    /// Uses auto-adapt turned into clones.
+    pub adapt_sites: AdaptSites,
     /// Loop context stack for each nested loop.
     pub loop_stack: Vec<LoopLowerContext>,
     /// Whether current block is unreachable (after return/break/continue).
@@ -114,6 +116,7 @@ impl FrameState {
             tracking: Vec::new(),
             binding_info: Vec::new(),
             drop_schedule: DropSchedule::default(),
+            adapt_sites: AdaptSites::default(),
             loop_stack: Vec::new(),
             in_unreachable: false,
             expr_temps: Vec::new(),
@@ -567,6 +570,28 @@ impl<'db> LowerCtx<'db> {
     /// Bind a variable name to an operand.
     pub fn bind_var(&mut self, name: &str, operand: Operand) {
         self.body.variables.insert(name.to_string(), operand);
+    }
+
+    /// The type an operand currently holds.
+    ///
+    /// This is the type of the storage the operand names, which is not always
+    /// the expression's type: an adapted use reads a `u8` where the expression
+    /// says `i16`.
+    pub fn operand_type(&self, operand: Operand) -> Option<IrType> {
+        match operand {
+            Operand::Value(id) | Operand::ValueRef(id) => self.value_type(id).cloned(),
+            Operand::Slot(id) => self.slot_type(id).cloned(),
+            Operand::Param(id) => self.body.param_types.get(id.0 as usize).cloned(),
+            Operand::ExternalValue { .. } | Operand::ExternalSlot { .. } => None,
+        }
+    }
+
+    /// Whether auto-adapt supplies an implicit `@` at this expression.
+    ///
+    /// Such a use clones instead of moving, which is what leaves the binding
+    /// available to the use that would otherwise have been an error.
+    pub fn is_adapt_site(&self, expr: ExprFun<'db>) -> bool {
+        self.body.adapt_sites.contains(expr.as_id().index() as u32)
     }
 
     /// Look up a variable.
