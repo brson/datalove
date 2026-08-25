@@ -40,7 +40,7 @@
           "resolved_names": false,
           "typechecked": false,
           "typecheck_ok": true,
-          "lowered": true,
+          "lowered": false,
           "lower_ok": true,
           "hash_changed": false,
           "expected": {
@@ -50,7 +50,7 @@
             "lowered": false,
             "hash_changed": false
           },
-          "correct": false
+          "correct": true
         },
         "local/test/b": {
           "is_direct": true,
@@ -87,7 +87,7 @@
           "resolved_names": false,
           "typechecked": false,
           "typecheck_ok": true,
-          "lowered": true,
+          "lowered": false,
           "lower_ok": true,
           "hash_changed": false,
           "expected": {
@@ -97,7 +97,7 @@
             "lowered": false,
             "hash_changed": false
           },
-          "correct": false
+          "correct": true
         },
         "local/test/b": {
           "is_direct": true,
@@ -124,6 +124,6 @@
   ],
   "summary": {
     "total_steps": 3,
-    "all_correct": false
+    "all_correct": true
   }
 }

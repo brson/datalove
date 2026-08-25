@@ -54,6 +54,47 @@ impl<'db> FuncIdMap<'db> {
     }
 }
 
+/// The entries of `func_id_map` that lowering `module_id` can reach.
+///
+/// The full map names every function in the world, so passing it whole makes
+/// every module's lowering depend on every other module: add one module
+/// anywhere and they all lower again. A module can only call into itself, the
+/// modules it transitively requires, and the riders, so it is given those
+/// entries and nothing else. Adding an unrelated module then leaves this
+/// argument equal and the lowering stays cached.
+fn reachable_func_ids<'db>(
+    db: &'db dyn salsa::Database,
+    graph: bct::module_graph::ModuleGraph,
+    func_id_map: FuncIdMap<'db>,
+    module_id: ModuleId,
+) -> Vec<((ModuleId, String), (IrModuleId, FuncId))> {
+    let dependencies = graph.dependencies(db);
+
+    // Transitive requires of this module.
+    let mut reachable: std::collections::BTreeSet<ModuleId> = std::collections::BTreeSet::new();
+    let mut queue = vec![module_id];
+    while let Some(current) = queue.pop() {
+        if !reachable.insert(current) {
+            continue;
+        }
+        if let Some(deps) = dependencies.get(&current) {
+            queue.extend(deps.iter().copied());
+        }
+    }
+
+    // Riders live under synthetic module ids that are not in the graph, so
+    // they never appear in `dependencies`; keep every entry the graph does
+    // not account for rather than work out which rider belongs to whom.
+    let in_graph: std::collections::BTreeSet<ModuleId> =
+        graph.iter_modules(db).map(|m| m.id(db)).collect();
+
+    func_id_map.entries(db)
+        .iter()
+        .filter(|((mid, _), _)| reachable.contains(mid) || !in_graph.contains(mid))
+        .cloned()
+        .collect()
+}
+
 /// Compute the function ID map from a parsed module graph.
 ///
 /// This assigns module-local FuncIds (0, 1, 2, ...) to each function in each
@@ -254,7 +295,7 @@ pub fn lower_module<'db>(
     parsed: ParsedStatements<'db>,
     typecheck_result: SingleModuleTypecheckResult<'db>,
     ownership_analysis: SingleModuleAnalysis<'db>,
-    func_id_map: FuncIdMap<'db>,
+    func_ids: Vec<((ModuleId, String), (IrModuleId, FuncId))>,
     pre_resolved_consts: Option<ModulePreResolvedConsts>,
     skip_const_inlining: bool,
     lowered_functions: Option<ModuleLoweredFunctions>,
@@ -267,8 +308,8 @@ pub fn lower_module<'db>(
     let expr_types = typecheck_result.expr_types(db);
     let call_targets = typecheck_result.call_targets(db);
 
-    // Convert FuncIdMap to HashMap for efficient lookup during lowering.
-    let func_id_hashmap = func_id_map.to_hashmap(db);
+    let func_id_hashmap: HashMap<(ModuleId, String), (IrModuleId, FuncId)> =
+        func_ids.iter().cloned().collect();
 
     // Get pre-computed ownership analysis results.
     let function_analyses = ownership_analysis.function_analyses(db);
@@ -913,7 +954,7 @@ fn assemble_module_graph<'db>(
             parsed.clone(),
             single_typecheck,
             single_ownership_analysis,
-            func_id_map,
+            reachable_func_ids(db, graph, func_id_map, *module_id),
             module_consts,
             skip_const_inlining,
             module_funcs,
@@ -991,6 +1032,7 @@ fn assemble_module_graph_parallel<'db>(
                 parsed.clone(),
                 single_typecheck,
                 single_ownership_analysis,
+                reachable_func_ids(db_salsa, graph, func_id_map, *module_id),
                 module_consts,
                 skip_const_inlining,
                 module_funcs,
@@ -999,7 +1041,7 @@ fn assemble_module_graph_parallel<'db>(
         .collect();
 
     // Assemble modules in parallel - populates salsa's memoization cache.
-    work.into_par_iter().for_each(|(db_clone, module, ir_module_id, parsed, single_typecheck, single_ownership_analysis, module_consts, skip_const_inlining, module_funcs)| {
+    work.into_par_iter().for_each(|(db_clone, module, ir_module_id, parsed, single_typecheck, single_ownership_analysis, func_ids, module_consts, skip_const_inlining, module_funcs)| {
         let db_s = db_clone.as_salsa_db();
 
         // This populates the cache.
@@ -1010,7 +1052,7 @@ fn assemble_module_graph_parallel<'db>(
             parsed,
             single_typecheck,
             single_ownership_analysis,
-            func_id_map,
+            func_ids,
             module_consts,
             skip_const_inlining,
             module_funcs,
@@ -1020,4 +1062,102 @@ fn assemble_module_graph_parallel<'db>(
     // Delegate to sequential function which aggregates results.
     // All lower_module calls will be cache hits from the parallel phase.
     assemble_module_graph(db_salsa, parsed_graph, typecheck_result, ownership_analysis, resolved_consts, lowered_functions, skip_const_inlining)
+}
+
+#[cfg(test)]
+mod reachable_func_ids_tests {
+    use super::*;
+    use bct::module_graph::{ModuleGraph, ModuleGraphBuilder};
+    use crate::Database;
+
+    /// One function per module, named after the last segment of its path,
+    /// plus one rider function whose module is not in the graph.
+    ///
+    /// `FuncIdMap` is a tracked struct, so it has to be built inside a tracked
+    /// function, whose first argument has to be a salsa struct.
+    #[salsa::tracked(returns(copy))]
+    fn test_func_id_map<'db>(
+        db: &'db dyn salsa::Database,
+        graph: ModuleGraph,
+    ) -> FuncIdMap<'db> {
+        let mut entries = Vec::new();
+        for (index, module) in graph.iter_modules(db).enumerate() {
+            let id = module.id(db);
+            let name = id.path(db).rsplit('/').next().X().to_string();
+            entries.push(((id, name), (IrModuleId(index as u32), FuncId(0))));
+        }
+        let rider = ModuleId::new(db, "@rider/std".to_string());
+        entries.push(((rider, "rider_fn".to_string()), (IrModuleId(99), FuncId(0))));
+        FuncIdMap::new(db, entries)
+    }
+
+    fn reachable_names(db: &Database, graph: ModuleGraph, module: ModuleId) -> Vec<String> {
+        let map = test_func_id_map(db, graph);
+        let mut names: Vec<String> = reachable_func_ids(db, graph, map, module)
+            .into_iter()
+            .map(|((_, name), _)| name)
+            .collect();
+        names.sort();
+        names
+    }
+
+    /// A module sees itself, what it requires transitively, and the riders,
+    /// and does not see modules it has no path to.
+    #[test]
+    fn reaches_dependencies_but_not_strangers() {
+        let db = Database::default();
+        let source = |text: &str| bct::input::Source::new(&db, text.to_string());
+
+        // base <- mid <- top, plus a module nobody requires.
+        let mut builder = ModuleGraphBuilder::new(&db);
+        let base = builder.add_module("local/test/base", source("// base"));
+        let mid = builder.add_module("local/test/mid", source("// mid"));
+        let top = builder.add_module("local/test/top", source("// top"));
+        let stranger = builder.add_module("local/test/stranger", source("// stranger"));
+        builder.add_dependency(mid, base);
+        builder.add_dependency(top, mid);
+        let graph = builder.build();
+
+        // top requires mid requires base, so it reaches all three.
+        assert_eq!(reachable_names(&db, graph, top), vec!["base", "mid", "rider_fn", "top"]);
+        // mid does not reach top.
+        assert_eq!(reachable_names(&db, graph, mid), vec!["base", "mid", "rider_fn"]);
+        // base reaches only itself.
+        assert_eq!(reachable_names(&db, graph, base), vec!["base", "rider_fn"]);
+        // The stranger requires nothing and is required by nothing.
+        assert_eq!(reachable_names(&db, graph, stranger), vec!["rider_fn", "stranger"]);
+    }
+
+    /// Adding an unrelated module leaves an existing module's entries alone.
+    ///
+    /// This is the property that keeps lowering cached: the argument compares
+    /// equal, so salsa does not run it again.
+    #[test]
+    fn unrelated_module_does_not_change_the_entries() {
+        let db = Database::default();
+        let source = |text: &str| bct::input::Source::new(&db, text.to_string());
+
+        let mut builder = ModuleGraphBuilder::new(&db);
+        let a = builder.add_module("local/test/a", source("// a"));
+        let graph_before = builder.build();
+        let before = reachable_func_ids(
+            &db, graph_before, test_func_id_map(&db, graph_before), a,
+        );
+
+        // The same graph plus an unrelated module, which lands after `a` and
+        // so does not disturb its IR module index either.
+        let mut builder = ModuleGraphBuilder::new(&db);
+        let a2 = builder.add_module("local/test/a", source("// a"));
+        let _b = builder.add_module("local/test/b", source("// b"));
+        let graph_after = builder.build();
+        let after = reachable_func_ids(
+            &db, graph_after, test_func_id_map(&db, graph_after), a2,
+        );
+
+        assert_eq!(a, a2, "the path is the identity, so these are one module");
+        assert_eq!(
+            before, after,
+            "adding an unrelated module must not change what `a` can reach",
+        );
+    }
 }
