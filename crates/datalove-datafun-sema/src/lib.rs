@@ -12,6 +12,25 @@ use bct::module_graph::ModuleId;
 use datalove_datafun_ast::ast::{Statement, StmtFun, ParamMode, ExprKey};
 use datalove_datafun_ir::IrType;
 
+/// Types of expressions, keyed by the expression's identity.
+///
+/// This used to be a `Vec` indexed by the raw salsa id, which sizes it by
+/// however many ids the database had handed out rather than by how many
+/// expressions there are: measured at 1416 slots for 8 of them, and growing
+/// with every module added. Keying it also lets two tables with the same
+/// contents compare equal, which they could not when their length depended on
+/// where the id counter happened to stand.
+pub type ExprTypes<'db> = BTreeMap<ExprKey<'db>, datalove_datafun_common::Type<'db>>;
+
+/// The same table after conversion to IR types.
+pub type ExprIrTypes<'db> = BTreeMap<ExprKey<'db>, IrType>;
+
+/// Resolved call targets, keyed by the call's identity.
+///
+/// Calls are numbered separately from other expressions, so a key from one
+/// of these tables means nothing against the other.
+pub type CallTargets<'db> = BTreeMap<ExprKey<'db>, ResolvedCallTarget<'db>>;
+
 // ============================================================================
 // Resolved call target
 // ============================================================================

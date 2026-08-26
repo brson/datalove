@@ -12,6 +12,8 @@ use salsa::Database as Db;
 use bct::module_graph::ModuleId;
 use datalove_datafun_ast::spans::DatafunSpans;
 
+pub use datalove_datafun_sema::{CallTargets, ExprIrTypes, ExprTypes};
+
 // Re-export shared types from common crate.
 pub use datalove_datafun_common::{
     Type,
@@ -292,11 +294,11 @@ pub struct TypecheckResult<'db> {
 
     /// Expression types, indexed by ExprFun ID.
     #[returns(ref)]
-    pub expr_types: Vec<Option<Type<'db>>>,
+    pub expr_types: ExprTypes<'db>,
 
     /// Resolved call targets, indexed by ExprFunctionCall ID.
     #[returns(ref)]
-    pub call_targets: Vec<Option<ResolvedCallTarget<'db>>>,
+    pub call_targets: CallTargets<'db>,
 
     /// Function signatures defined in this script.
     ///
@@ -314,7 +316,7 @@ pub struct ExprTypecheckResult<'db> {
     pub errors: Vec<TypeErrorEntry<'db>>,
     /// Expression types, indexed by ExprFun ID.
     #[returns(ref)]
-    pub expr_types: Vec<Option<Type<'db>>>,
+    pub expr_types: ExprTypes<'db>,
 }
 
 /// Kind of script unit for batch typechecking (with parsed content).
@@ -423,10 +425,10 @@ pub struct UnitTypecheckResultTracked<'db> {
     pub errors: Vec<TypeErrorEntry<'db>>,
     /// Expression types, indexed by ExprFun ID.
     #[returns(ref)]
-    pub expr_types: Vec<Option<Type<'db>>>,
+    pub expr_types: ExprTypes<'db>,
     /// Resolved call targets, indexed by ExprFunctionCall ID.
     #[returns(ref)]
-    pub call_targets: Vec<Option<ResolvedCallTarget<'db>>>,
+    pub call_targets: CallTargets<'db>,
     /// Function signatures defined in this script unit.
     ///
     /// Contains resolved function types needed for lowering when type aliases
@@ -523,11 +525,11 @@ pub struct SingleModuleTypecheckResult<'db> {
 
     /// Expression types for this module.
     #[returns(ref)]
-    pub expr_types: Vec<Option<Type<'db>>>,
+    pub expr_types: ExprTypes<'db>,
 
     /// Resolved call targets for this module.
     #[returns(ref)]
-    pub call_targets: Vec<Option<ResolvedCallTarget<'db>>>,
+    pub call_targets: CallTargets<'db>,
 
     /// Comptime call site registry for this module.
     ///
@@ -588,14 +590,14 @@ pub struct ModuleGraphTypecheckResult<'db> {
     /// Indexed by ExprFun salsa ID, contains types for all expressions
     /// across all modules in the graph.
     #[returns(ref)]
-    pub expr_types: Vec<Option<Type<'db>>>,
+    pub expr_types: ExprTypes<'db>,
 
     /// Resolved call targets from all modules, combined.
     ///
     /// Indexed by ExprFunctionCall salsa ID, contains resolved function ASTs
     /// for all function calls across all modules in the graph.
     #[returns(ref)]
-    pub call_targets: Vec<Option<ResolvedCallTarget<'db>>>,
+    pub call_targets: CallTargets<'db>,
 
     /// Per-module typecheck results (tracked structs with stable salsa IDs).
     ///

@@ -358,13 +358,11 @@ pub fn datafun_unit_typecheck_to_serde<'db>(
     result: datalove_datafun_tycheck::UnitTypecheckResultTracked<'db>,
     expr: ast::ExprFun<'db>,
 ) -> TypecheckResultSerde {
-    use salsa::plumbing::AsId;
 
     // Find the type for this expression in expr_types.
-    let expr_id = expr.as_id().index() as usize;
     let expr_types = result.expr_types(db);
-    let root_type = expr_types.get(expr_id)
-        .and_then(|opt| opt.as_ref())
+    let root_type = expr_types
+        .get(&datalove_datafun_ast::ast::ExprKey::of(db, expr))
         .map(|t| datafun_type_to_serde(db, t));
 
     let errors = result.errors(db).iter()

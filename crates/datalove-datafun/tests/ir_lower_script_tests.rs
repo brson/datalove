@@ -17,7 +17,6 @@ use datalove_datafun_compiler::ownership_analysis;
 use datalove_datafun_compiler::tracked_script_ownership::ScriptAnalysisData;
 use datalove_datafun_compiler::IrTypeExt;
 use datalove_datafun_ir::{IrType, ConstBindingInfo, ConstBindingGraph, ConstValue, ResolvedConsts};
-use datalove_datafun_tycheck::Type;
 use datalove_datafun_interp::InterpCtfeEvaluator;
 use salsa::plumbing::AsId;
 use bct::input::Source;
@@ -26,10 +25,10 @@ use datalove_datafun_ast::ast::Statement;
 /// Convert tycheck expression types to IR types.
 fn convert_expr_types<'db>(
     db: &'db dyn salsa::Database,
-    types: &[Option<Type<'db>>],
-) -> Vec<Option<IrType>> {
+    types: &datalove_datafun_tycheck::ExprTypes<'db>,
+) -> datalove_datafun_tycheck::ExprIrTypes<'db> {
     types.iter()
-        .map(|opt| opt.as_ref().map(|ty| IrType::from_tycheck(db, ty)))
+        .map(|(key, ty)| (*key, IrType::from_tycheck(db, ty)))
         .collect()
 }
 
@@ -38,7 +37,7 @@ fn convert_expr_types<'db>(
 fn build_const_graph<'db>(
     db: &'db dyn salsa::Database,
     stmts: &[Statement<'db>],
-    expr_types: &[Option<datalove_datafun_tycheck::Type<'db>>],
+    expr_types: &datalove_datafun_tycheck::ExprTypes<'db>,
 ) -> ConstBindingGraph {
     let mut bindings = Vec::new();
 
@@ -46,14 +45,12 @@ fn build_const_graph<'db>(
         if let Statement::Const(const_stmt) = stmt {
             let expr = const_stmt.value;
             let stmt_id = expr.as_id();
+            let expr_id = stmt_id;
             let name = const_stmt.name.text(db).to_string();
-            let expr_id = expr.as_id();
-
-            // Get the type from typechecker using expression ID index.
-            let ir_type = expr_types.get(expr_id.index() as usize)
-                .cloned()
-                .flatten()
-                .map(|ty| IrType::from_tycheck(db, &ty))
+            // Get the type from the typechecker's table.
+            let ir_type = expr_types
+                .get(&datalove_datafun_ast::ast::ExprKey::of(db, expr))
+                .map(|ty| IrType::from_tycheck(db, ty))
                 .unwrap_or(IrType::Unit);
 
             bindings.push(ConstBindingInfo {

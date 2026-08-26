@@ -18,13 +18,11 @@ use datalove_datafun_ir::{
     ConstValue, IrType, IrCodeUnit, CodeUnitId, CodeUnitContext, ScriptContext, IrModuleId,
     Operand, Terminator,
 };
-use datalove_datafun_common::Type;
-use datalove_datafun_sema::ResolvedCallTarget;
 use super::context::LowerCtx;
 use super::LowerError;
+use datalove_datafun_sema::{ExprTypes, CallTargets};
 
 // Empty arrays for isolated contexts that don't need call resolution.
-static EMPTY_CALL_TARGETS: Vec<Option<ResolvedCallTarget<'static>>> = Vec::new();
 
 /// Evaluate a constant expression at compile time using the LowerCtx's evaluator.
 ///
@@ -75,7 +73,7 @@ fn lower_const_expr_to_unit<'db>(
     let mut isolated_ctx = LowerCtx::new(
         parent_ctx.db,
         parent_ctx.expr_types,
-        &EMPTY_CALL_TARGETS,
+        None,
     );
 
     // Copy const bindings from parent so we can reference previously evaluated consts.
@@ -133,8 +131,8 @@ fn lower_const_expr_to_unit<'db>(
 pub fn lower_const_expr_to_unit_standalone<'db>(
     db: &'db dyn salsa::Database,
     expr: ExprFun<'db>,
-    expr_types: &'db [Option<Type<'db>>],
-    call_targets: &'db [Option<ResolvedCallTarget<'db>>],
+    expr_types: &'db ExprTypes<'db>,
+    call_targets: &'db CallTargets<'db>,
     resolved_consts: &HashMap<String, (IrType, ConstValue)>,
     return_type: Option<IrType>,
     lowered_functions: &[IrCodeUnit],
@@ -148,7 +146,7 @@ pub fn lower_const_expr_to_unit_standalone<'db>(
     let mut ctx = LowerCtx::new_for_module(
         db,
         expr_types,
-        call_targets,
+        Some(call_targets),
         module_func_id_map,
     );
 
@@ -247,8 +245,8 @@ pub fn lower_const_binding<'db>(
     db: &'db dyn salsa::Database,
     expr: ExprFun<'db>,
     ir_type: &IrType,
-    expr_types: &'db [Option<Type<'db>>],
-    call_targets: &'db [Option<ResolvedCallTarget<'db>>],
+    expr_types: &'db ExprTypes<'db>,
+    call_targets: &'db CallTargets<'db>,
     resolved_consts: &HashMap<String, (IrType, ConstValue)>,
     return_type: Option<IrType>,
     lowered_functions: &[IrCodeUnit],

@@ -1,7 +1,6 @@
 use rmx::prelude::*;
 use std::path::Path;
 use rmx::serde_json::json;
-use salsa::plumbing::AsId;
 
 fn type_hint_to_string(db: &dyn salsa::Database, type_hint: &datalove_datalit::ast::TypeHint) -> String {
     use datalove_datalit::ast::TypeHint;
@@ -340,8 +339,8 @@ fn analyze_file(path: &Path) -> Result<String, String> {
                 let name = let_stmt.name;
                 // Get type from the let statement's value expression.
                 let value_expr = let_stmt.value;
-                let expr_id = value_expr.as_id().index() as usize;
-                if let Some(Some(ty)) = expr_types.get(expr_id) {
+                let key = datalove_datafun_ast::ast::ExprKey::of(&db, value_expr);
+                if let Some(ty) = expr_types.get(&key) {
                     judgements.push(json!({
                         "kind": "variable",
                         "name": name.as_str(&db),

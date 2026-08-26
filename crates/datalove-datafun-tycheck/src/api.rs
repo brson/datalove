@@ -22,7 +22,6 @@ pub use crate::{
     TypeFunction,
     TypeError,
     TypeErrorEntry,
-    ResolvedCallTarget,
     ScriptUnitKind,
     ScriptUnitSpec,
     ScriptBatchSpec,
@@ -443,8 +442,8 @@ pub fn typecheck_module_graph<'db>(
     let mut module_exports_map: BTreeMap<ModuleId, ModuleExports<'db>> = BTreeMap::new();
     let mut module_imports_map: BTreeMap<ModuleId, ModuleImports<'db>> = BTreeMap::new();
     let mut module_results_map: BTreeMap<ModuleId, SingleModuleTypecheckResult<'db>> = BTreeMap::new();
-    let mut combined_expr_types: Vec<Option<Type<'db>>> = Vec::new();
-    let mut combined_call_targets: Vec<Option<ResolvedCallTarget<'db>>> = Vec::new();
+    let mut combined_expr_types = crate::ExprTypes::new();
+    let mut combined_call_targets = crate::CallTargets::new();
     let mut combined_comptime_registry = datalove_datafun_common::ComptimeCallSiteRegistry::new();
 
     for module in prep.graph.iter_modules(db) {
@@ -483,27 +482,14 @@ pub fn typecheck_module_graph<'db>(
         let imports = ModuleImports::new(db, module_id, result.imports(db).C());
         module_imports_map.insert(module_id, imports);
 
-        // Merge expr_types.
-        let new_types = result.expr_types(db);
-        if new_types.len() > combined_expr_types.len() {
-            combined_expr_types.resize(new_types.len(), None);
-        }
-        for (i, ty) in new_types.iter().enumerate() {
-            if ty.is_some() {
-                combined_expr_types[i] = ty.clone();
-            }
-        }
-
-        // Merge call_targets.
-        let new_targets = result.call_targets(db);
-        if new_targets.len() > combined_call_targets.len() {
-            combined_call_targets.resize(new_targets.len(), None);
-        }
-        for (i, target) in new_targets.iter().enumerate() {
-            if target.is_some() {
-                combined_call_targets[i] = *target;
-            }
-        }
+        // Merge this module's tables in. Keys carry the module, so modules
+        // cannot tread on each other.
+        combined_expr_types.extend(
+            result.expr_types(db).iter().map(|(k, v)| (*k, v.clone()))
+        );
+        combined_call_targets.extend(
+            result.call_targets(db).iter().map(|(k, v)| (*k, *v))
+        );
 
         // Process pending diagnostics with span enrichment.
         emit_pending_diagnostics_for_module(db, &parsed_graph, module_id, result.pending_diagnostics(db));

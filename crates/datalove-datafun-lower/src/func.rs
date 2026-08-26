@@ -9,8 +9,6 @@
 use std::collections::HashMap;
 use bct::module_graph::ModuleId;
 use datalove_datafun_ast::ast;
-use datalove_datafun_common::Type;
-use datalove_datafun_sema::ResolvedCallTarget;
 use datalove_datafun_ir::{
     IrType, IrCodeUnit, CodeUnitId, CodeUnitContext, FunctionContext,
     Operand, FuncId, IrModuleId, Terminator, ParamMode, ParamId, SymbolTable,
@@ -19,6 +17,7 @@ use datalove_datafun_sema::FunctionAnalysis;
 use super::context::LowerCtx;
 use super::stmt::lower_statement;
 use super::LowerError;
+use datalove_datafun_sema::{ExprTypes, CallTargets};
 
 /// Lower a function to IR with available module functions in scope.
 ///
@@ -37,8 +36,8 @@ use super::LowerError;
 /// available for use within the function body.
 pub fn lower_function_for_module<'db>(
     db: &'db dyn salsa::Database,
-    expr_types: &'db [Option<Type<'db>>],
-    call_targets: &'db [Option<ResolvedCallTarget<'db>>],
+    expr_types: &'db ExprTypes<'db>,
+    call_targets: &'db CallTargets<'db>,
     func_id_map: &'db HashMap<(ModuleId, String), (IrModuleId, FuncId)>,
     func: ast::StmtFun<'db>,
     func_id: FuncId,
@@ -46,7 +45,7 @@ pub fn lower_function_for_module<'db>(
     resolved_param_types: Option<&[IrType]>,
     resolved_return_type: Option<IrType>,
 ) -> Result<IrCodeUnit, LowerError> {
-    let mut ctx = LowerCtx::new_for_module(db, expr_types, call_targets, func_id_map);
+    let mut ctx = LowerCtx::new_for_module(db, expr_types, Some(call_targets), func_id_map);
     lower_function_body(&mut ctx, func_id, func, analysis, resolved_param_types, resolved_return_type)
 }
 

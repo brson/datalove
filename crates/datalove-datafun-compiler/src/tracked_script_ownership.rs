@@ -10,7 +10,7 @@ use bct::text::TextSpan;
 use datalove_datafun_ast::ast::{Statement, StmtFun};
 use datalove_datafun_ast::spans::DatafunSpans;
 use datalove_datafun_ir::IrType;
-use datalove_datafun_tycheck::{UnitTypecheckResultTracked, Type};
+use datalove_datafun_tycheck::{UnitTypecheckResultTracked};
 use datalove_diagnostic::DiagnosticBuilderExt;
 
 use crate::IrTypeExt;
@@ -117,10 +117,10 @@ impl<'db> ScriptUnitOwnershipResult<'db> {
 /// Convert tycheck expression types to IR types.
 fn convert_expr_types<'db>(
     db: &'db dyn salsa::Database,
-    types: &[Option<Type<'db>>],
-) -> Vec<Option<IrType>> {
+    types: &datalove_datafun_tycheck::ExprTypes<'db>,
+) -> datalove_datafun_sema::ExprIrTypes<'db> {
     types.iter()
-        .map(|opt| opt.as_ref().map(|ty| IrType::from_tycheck(db, ty)))
+        .map(|(key, ty)| (*key, IrType::from_tycheck(db, ty)))
         .collect()
 }
 

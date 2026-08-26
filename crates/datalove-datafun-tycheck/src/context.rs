@@ -12,6 +12,7 @@ use datalove_datafun_ast::ast::*;
 use datalove_datafun_intrinsics::IntrinsicId;
 
 pub use datalove_datafun_ast::spans::DatafunSpans;
+use crate::{CallTargets, ExprTypes};
 pub use bct::module_graph::ModuleId;
 
 pub use crate::{
@@ -53,9 +54,9 @@ pub struct TypeContext<'db> {
     /// Pending diagnostics for post-hoc span enrichment.
     pub(crate) pending_diagnostics: Vec<PendingDiagnostic<'db>>,
     /// Expression types, indexed by ExprFun ID.
-    pub(crate) expr_types: Vec<Option<Type<'db>>>,
+    pub(crate) expr_types: ExprTypes<'db>,
     /// Resolved call targets, indexed by ExprFunctionCall ID.
-    pub(crate) call_targets: Vec<Option<ResolvedCallTarget<'db>>>,
+    pub(crate) call_targets: CallTargets<'db>,
     /// Stack of loop depth (for validating break/continue are inside a loop).
     pub(crate) loop_depth: usize,
     /// Whether we're in a reference context (ref/mut/out param or binop operand).
@@ -123,8 +124,8 @@ impl<'db> TypeContext<'db> {
             is_void_function: false,
             errors: Vec::new(),
             pending_diagnostics: Vec::new(),
-            expr_types: Vec::new(),
-            call_targets: Vec::new(),
+            expr_types: ExprTypes::new(),
+            call_targets: CallTargets::new(),
             loop_depth: 0,
             ref_context: false,
             mut_context: false,
@@ -553,28 +554,15 @@ impl<'db> TypeContext<'db> {
 
     /// Store resolved call target for a function call expression.
     pub fn store_call_target(&mut self, call: ExprFunctionCall<'db>, func: StmtFun<'db>, module_id: Option<ModuleId>) {
-        let id = call.as_id();
-        let index = id.index() as usize;
-
-        // Ensure the vector is large enough.
-        if index >= self.call_targets.len() {
-            self.call_targets.resize(index + 1, None);
-        }
-
-        self.call_targets[index] = Some(ResolvedCallTarget::new(self.db, func, module_id));
+        self.call_targets.insert(
+            ExprKey::of_call(self.db, call),
+            ResolvedCallTarget::new(self.db, func, module_id),
+        );
     }
 
     /// Store the type for an expression.
     pub fn store_expr_type(&mut self, expr: ExprFun<'db>, ty: &Type<'db>) {
-        let id = expr.as_id();
-        let index = id.index() as usize;
-
-        // Ensure the vector is large enough.
-        if index >= self.expr_types.len() {
-            self.expr_types.resize(index + 1, None);
-        }
-
-        self.expr_types[index] = Some(ty.clone());
+        self.expr_types.insert(ExprKey::of(self.db, expr), ty.clone());
     }
 
     /// Synthesize the type of an expression.

@@ -3,11 +3,10 @@
 //! Transforms AST expressions into IR values and instructions. Handles literals,
 //! operators, function calls, tuples, records, and control flow expressions.
 
-use datalove_datafun_ast::ast::{self, ExprFun, ExprFunKind, ParamMode};
+use datalove_datafun_ast::ast::{self, ExprFun, ExprFunKind, ParamMode, ExprKey};
 use datalove_datafun_ir::{
     IrType, Operand, ValueId, BinOp, UnaryOp, Instruction, ConstValue, Terminator, TypeRef,
 };
-use salsa::plumbing::AsId;
 use super::context::LowerCtx;
 use super::literal::{parse_int_const, parse_hex_const, parse_float_const, try_parse_negated_int_const};
 use super::LowerError;
@@ -494,8 +493,7 @@ pub fn lower_expression<'db>(
             let func_ref = ctx.resolve_call(call);
 
             // Get param modes and types from the resolved call target.
-            let id = call.as_id().index() as usize;
-            let target = ctx.call_targets.get(id).and_then(|t| t.as_ref());
+            let target = ctx.call_targets.and_then(|t| t.get(&ExprKey::of_call(ctx.db, call)));
             let param_modes: Vec<ParamMode> = target
                 .map(|t| t.func(ctx.db).params(ctx.db).iter().map(|p| p.mode).collect())
                 .unwrap_or_default();

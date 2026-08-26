@@ -8,17 +8,15 @@
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
-use salsa::plumbing::AsId;
 use bct::module_graph::ModuleId;
 use datalove_datafun_ast::ast::{Statement, ExprFun, ExprFunctionCall, ExprKey};
-use datalove_datafun_sema::ResolvedCallTarget;
 use datalove_datafun_ir::{
     IrType, IrBlock, IrCodeUnit, Operand, ValueId, SlotId, ParamId, BlockId, FuncId,
     CodeRef, CodeUnitId, Terminator, Instruction, SymbolTable, ExportBinding, IrModuleId, ParamMode,
     ConstValue, TypeRef, SlotDest, CtfeEvaluator, CallSiteId,
 };
 use crate::ir_ext::IrTypeExt;
-use datalove_datafun_sema::{BindingId, DropSchedule, BindingInfo, TrackingCategory, StmtKey, AdaptSites};
+use datalove_datafun_sema::{BindingId, DropSchedule, BindingInfo, TrackingCategory, StmtKey, AdaptSites, ExprTypes, CallTargets};
 
 /// Compile-time state for building a function's IR.
 ///
@@ -228,9 +226,11 @@ pub struct LowerCtx<'db> {
     // Shared/immutable context (from typechecker).
     pub(super) db: &'db dyn salsa::Database,
     /// Expression types from typechecker.
-    pub(super) expr_types: &'db [Option<datalove_datafun_common::Type<'db>>],
+    pub(super) expr_types: &'db ExprTypes<'db>,
     /// Resolved call targets from typechecker, indexed by ExprFunctionCall salsa ID.
-    pub(super) call_targets: &'db [Option<ResolvedCallTarget<'db>>],
+    /// None where there is nothing to resolve against, as when lowering a
+    /// const expression in isolation.
+    pub(super) call_targets: Option<&'db CallTargets<'db>>,
     /// Map from (salsa ModuleId, func_name) -> (IrModuleId, FuncId).
     pub(super) func_id_map: &'db HashMap<(ModuleId, String), (IrModuleId, FuncId)>,
 
@@ -270,8 +270,8 @@ static EMPTY_FUNC_ID_MAP: std::sync::LazyLock<HashMap<(ModuleId, String), (IrMod
 impl<'db> LowerCtx<'db> {
     pub fn new(
         db: &'db dyn salsa::Database,
-        expr_types: &'db [Option<datalove_datafun_common::Type<'db>>],
-        call_targets: &'db [Option<ResolvedCallTarget<'db>>],
+        expr_types: &'db ExprTypes<'db>,
+        call_targets: Option<&'db CallTargets<'db>>,
     ) -> Self {
         Self {
             db,
@@ -295,8 +295,8 @@ impl<'db> LowerCtx<'db> {
     /// Create a context for lowering module functions with call resolution support.
     pub fn new_for_module(
         db: &'db dyn salsa::Database,
-        expr_types: &'db [Option<datalove_datafun_common::Type<'db>>],
-        call_targets: &'db [Option<ResolvedCallTarget<'db>>],
+        expr_types: &'db ExprTypes<'db>,
+        call_targets: Option<&'db CallTargets<'db>>,
         func_id_map: &'db HashMap<(ModuleId, String), (IrModuleId, FuncId)>,
     ) -> Self {
         Self {
@@ -320,13 +320,12 @@ impl<'db> LowerCtx<'db> {
 
     /// Get the IrType for an expression from the typechecker.
     pub fn expr_type(&self, expr: ExprFun<'db>) -> IrType {
-        let expr_id = expr.as_id();
-        let index = expr_id.index() as usize;
-        match self.expr_types.get(index).cloned().flatten() {
-            Some(ty) => IrType::from_tycheck(self.db, &ty),
+        let key = ExprKey::of(self.db, expr);
+        match self.expr_types.get(&key) {
+            Some(ty) => IrType::from_tycheck(self.db, ty),
             None => panic!(
-                "Expression must have type from typechecker. Expression ID {} but expr_types.len() = {}",
-                index, self.expr_types.len()
+                "Expression must have type from typechecker. {:?} but the table holds {} entries",
+                key, self.expr_types.len()
             ),
         }
     }
@@ -334,8 +333,8 @@ impl<'db> LowerCtx<'db> {
     /// Create a context for lowering a script unit.
     pub fn new_for_script(
         db: &'db dyn salsa::Database,
-        expr_types: &'db [Option<datalove_datafun_common::Type<'db>>],
-        call_targets: &'db [Option<ResolvedCallTarget<'db>>],
+        expr_types: &'db ExprTypes<'db>,
+        call_targets: Option<&'db CallTargets<'db>>,
         func_id_map: &'db HashMap<(ModuleId, String), (IrModuleId, FuncId)>,
         script_ctx: ScriptLowerContext,
     ) -> Self {
@@ -437,15 +436,14 @@ impl<'db> LowerCtx<'db> {
     /// For module functions (module_id = Some), looks up in `func_id_map`.
     /// For local functions (module_id = None), uses `func_scope` lookup.
     pub fn resolve_call(&self, call: ExprFunctionCall<'db>) -> CodeRef {
-        let id = call.as_id().index() as usize;
+        let key = ExprKey::of_call(self.db, call);
         let func_name = call.name(self.db).text(self.db).to_string();
 
         // Get the resolved call target from typechecking.
-        let target = self.call_targets.get(id)
-            .and_then(|t| t.as_ref())
+        let target = self.call_targets.and_then(|t| t.get(&key))
             .unwrap_or_else(|| panic!(
-                "function call not resolved by typechecker: {} (id={})",
-                func_name, id
+                "function call not resolved by typechecker: {} ({:?})",
+                func_name, key
             ));
 
         match target.module_id(self.db) {

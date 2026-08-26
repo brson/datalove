@@ -48,7 +48,7 @@ use datalove_datafun_interp::InterpCtfeEvaluator;
 use datalove_datafun_tycheck::{
     type_check_script_units, create_batch_spec_with_auto_adapt,
     ScriptUnitSpec, ModuleSpec, ScriptBatchSpec, ScriptUnitKind,
-    UnitTypecheckResultTracked, ResolvedCallTarget, Type,
+    UnitTypecheckResultTracked,
     AutoAdaptMode,
 };
 use datalove_datafun_resolve::resolve_script_names;
@@ -64,8 +64,8 @@ use super::result::{TypecheckResult, OwnershipResult, LoweringResult, ScriptComp
 /// Output from typecheck phase.
 struct TypecheckOutput<'db> {
     result: UnitTypecheckResultTracked<'db>,
-    expr_types: &'db [Option<Type<'db>>],
-    call_targets: &'db [Option<ResolvedCallTarget<'db>>],
+    expr_types: &'db datalove_datafun_tycheck::ExprTypes<'db>,
+    call_targets: &'db datalove_datafun_tycheck::CallTargets<'db>,
 }
 
 /// Output from ownership phase.
@@ -726,8 +726,8 @@ impl<'db> ScriptCompiler<'db> {
         &self,
         const_graph: &datalove_datafun_ir::ConstBindingGraph,
         statements: &[Statement<'db>],
-        expr_types: &'db [Option<Type<'db>>],
-        call_targets: &'db [Option<ResolvedCallTarget<'db>>],
+        expr_types: &'db datalove_datafun_tycheck::ExprTypes<'db>,
+        call_targets: &'db datalove_datafun_tycheck::CallTargets<'db>,
         lowered_funcs: &LoweredFunctions,
     ) -> Result<ResolvedConsts, ConstEvalError> {
         let mut resolved = ResolvedConsts::new();
@@ -782,8 +782,8 @@ impl<'db> ScriptCompiler<'db> {
     fn evaluate_function_consts(
         &self,
         statements: &[Statement<'db>],
-        expr_types: &'db [Option<Type<'db>>],
-        call_targets: &'db [Option<ResolvedCallTarget<'db>>],
+        expr_types: &'db datalove_datafun_tycheck::ExprTypes<'db>,
+        call_targets: &'db datalove_datafun_tycheck::CallTargets<'db>,
         script_level_consts: &HashMap<String, (IrType, ConstValue)>,
         lowered_funcs: &LoweredFunctions,
     ) -> ScriptFunctionConstsResult {
@@ -805,10 +805,9 @@ impl<'db> ScriptCompiler<'db> {
                         let init_expr = const_stmt.value;
 
                         // Get the type from the typechecker.
-                        let expr_id = init_expr.as_id();
-                        let index = expr_id.index() as usize;
-                        let ir_type = match expr_types.get(index).cloned().flatten() {
-                            Some(ty) => IrType::from_tycheck(self.db, &ty),
+                        let key = datalove_datafun_ast::ast::ExprKey::of(self.db, init_expr);
+                        let ir_type = match expr_types.get(&key) {
+                            Some(ty) => IrType::from_tycheck(self.db, ty),
                             None => {
                                 errors.push(format!("{}::{}: missing type information", func_name, name));
                                 continue;

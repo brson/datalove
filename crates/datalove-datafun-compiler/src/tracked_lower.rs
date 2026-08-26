@@ -6,7 +6,6 @@
 
 use rmx::prelude::*;
 use rmx::std::collections::{BTreeMap, HashMap};
-use salsa::plumbing::AsId;
 use bct::module_graph::{Module, ModuleId};
 use datalove_ct::query_log::{log_query, QueryPhase};
 use datalove_datafun_ast::ast::{ParsedStatements, Statement};
@@ -662,8 +661,8 @@ pub fn evaluate_all_module_consts<'db>(
 fn evaluate_single_const<'db>(
     db: &'db dyn salsa::Database,
     const_stmt: &datalove_datafun_ast::ast::StmtConst<'db>,
-    expr_types: &'db [Option<datalove_datafun_tycheck::Type<'db>>],
-    call_targets: &'db [Option<datalove_datafun_tycheck::ResolvedCallTarget<'db>>],
+    expr_types: &'db datalove_datafun_sema::ExprTypes<'db>,
+    call_targets: &'db datalove_datafun_sema::CallTargets<'db>,
     resolved_so_far: &HashMap<String, (IrType, ConstValue)>,
     evaluator: &Rc<RefCell<dyn CtfeEvaluator>>,
     lowered_functions: &[IrCodeUnit],
@@ -675,10 +674,8 @@ fn evaluate_single_const<'db>(
     let init_expr = const_stmt.value;
 
     // Get the type from the typechecker.
-    let expr_id = init_expr.as_id();
-    let index = expr_id.index() as usize;
-    let ir_type = match expr_types.get(index).cloned().flatten() {
-        Some(ty) => IrType::from_tycheck(db, &ty),
+    let ir_type = match expr_types.get(&datalove_datafun_ast::ast::ExprKey::of(db, init_expr)) {
+        Some(ty) => IrType::from_tycheck(db, ty),
         None => return Err(format!("const '{}': missing type information", name)),
     };
 

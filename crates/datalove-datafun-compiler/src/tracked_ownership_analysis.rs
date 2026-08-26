@@ -14,7 +14,6 @@ use datalove_datafun_tycheck::{
     SingleModuleTypecheckResult,
     ModuleGraphTypecheckResult,
     ParsedModuleGraph,
-    Type,
 };
 use datalove_datafun_ir::IrType;
 use datalove_datafun_ownership::{self as ownership_analysis, FunctionAnalysis, AutoAdaptMode};
@@ -87,10 +86,10 @@ impl<'db> ModuleGraphAnalysis<'db> {
 /// Convert tycheck expression types to IR types.
 fn convert_expr_types<'db>(
     db: &'db dyn salsa::Database,
-    types: &[Option<Type<'db>>],
-) -> Vec<Option<IrType>> {
+    types: &datalove_datafun_tycheck::ExprTypes<'db>,
+) -> datalove_datafun_sema::ExprIrTypes<'db> {
     types.iter()
-        .map(|opt| opt.as_ref().map(|ty| IrType::from_tycheck(db, ty)))
+        .map(|(key, ty)| (*key, IrType::from_tycheck(db, ty)))
         .collect()
 }
 

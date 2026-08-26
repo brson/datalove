@@ -165,11 +165,10 @@ pub fn collect_const_graph<'db>(
             let name = const_stmt.name.text(db).to_string();
             let expr_id = expr.as_id();
 
-            // Get the type from typechecker using expression ID index.
-            let ir_type = expr_types.get(expr_id.index() as usize)
-                .cloned()
-                .flatten()
-                .map(|ty| IrType::from_tycheck(db, &ty))
+            // Get the type from the typechecker's table.
+            let ir_type = expr_types
+                .get(&datalove_datafun_ast::ast::ExprKey::of(db, expr))
+                .map(|ty| IrType::from_tycheck(db, ty))
                 .unwrap_or(IrType::Unit);
 
             const_names.insert(name.clone());

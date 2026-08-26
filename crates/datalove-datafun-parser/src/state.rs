@@ -450,7 +450,6 @@ impl<'db> Parser<'db> {
 
     /// Create an expression and record its span in the side table.
     pub(super) fn create_expr(&mut self, kind: ast::ExprFunKind<'db>, ts: TextSpan<'db>) -> ast::ExprFun<'db> {
-        use salsa::plumbing::AsId;
         let expr = ast::ExprFun::new(
             self.db,
             self.module_id,
@@ -521,7 +520,6 @@ impl<'db> Parser<'db> {
 
     /// Record a break statement span and return its local_index.
     pub(super) fn record_break_span(&mut self, ts: TextSpan<'db>) -> u32 {
-        use salsa::plumbing::AsId;
         let index = self.next_stmt_index();
         self.break_spans.push(SpanEntry::new(ts.text.source(self.db), ts.span));
         index
@@ -529,7 +527,6 @@ impl<'db> Parser<'db> {
 
     /// Record a continue statement span and return its local_index.
     pub(super) fn record_continue_span(&mut self, ts: TextSpan<'db>) -> u32 {
-        use salsa::plumbing::AsId;
         let index = self.next_stmt_index();
         self.continue_spans.push(SpanEntry::new(ts.text.source(self.db), ts.span));
         index
@@ -537,7 +534,6 @@ impl<'db> Parser<'db> {
 
     /// Record a return statement span and return its local_index.
     pub(super) fn record_ret_span(&mut self, ts: TextSpan<'db>) -> u32 {
-        use salsa::plumbing::AsId;
         let index = self.next_stmt_index();
         self.ret_spans.push(SpanEntry::new(ts.text.source(self.db), ts.span));
         index
@@ -545,7 +541,6 @@ impl<'db> Parser<'db> {
 
     /// Record a set statement span and return its local_index.
     pub(super) fn record_set_span(&mut self, ts: TextSpan<'db>) -> u32 {
-        use salsa::plumbing::AsId;
         let index = self.next_stmt_index();
         self.set_spans.push(SpanEntry::new(ts.text.source(self.db), ts.span));
         index
@@ -553,7 +548,6 @@ impl<'db> Parser<'db> {
 
     /// Record a function definition span and return its local_index.
     pub(super) fn record_fun_span(&mut self, ts: TextSpan<'db>) -> u32 {
-        use salsa::plumbing::AsId;
         let index = self.next_stmt_index();
         self.fun_spans.push(SpanEntry::new(ts.text.source(self.db), ts.span));
         index
@@ -561,7 +555,6 @@ impl<'db> Parser<'db> {
 
     /// Record a type alias span and return its local_index.
     pub(super) fn record_type_alias_span(&mut self, ts: TextSpan<'db>) -> u32 {
-        use salsa::plumbing::AsId;
         let index = self.next_stmt_index();
         self.type_alias_spans.push(SpanEntry::new(ts.text.source(self.db), ts.span));
         index

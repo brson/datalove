@@ -13,8 +13,6 @@
 use std::collections::{HashMap, HashSet};
 use bct::module_graph::ModuleId;
 use datalove_datafun_ast::ast::{self, Statement, ExprFun, ExprFunKind};
-use datalove_datafun_common::Type;
-use datalove_datafun_sema::ResolvedCallTarget;
 use datalove_datafun_ir::{
     IrType, IrCodeUnit, CodeUnitId, CodeUnitContext, ScriptContext,
     Operand, Terminator, Instruction, ConstValue, SlotDest, ExportBinding, IrModuleId, FuncId,
@@ -26,6 +24,7 @@ use super::expr::{lower_expression, lower_expression_for_ref};
 use super::func::lower_function_body;
 use super::stmt::{collect_field_path_from_place, lower_statement};
 use super::LowerError;
+use datalove_datafun_sema::{ExprTypes, CallTargets};
 
 /// Check if a set statement is a self-assignment (set v0 = v0) for script context.
 ///
@@ -76,8 +75,8 @@ fn is_self_assignment_script<'db>(
 /// separately to replace them with literal values.
 pub fn lower_script_fragment_raw<'db>(
     db: &'db dyn salsa::Database,
-    expr_types: &'db [Option<Type<'db>>],
-    call_targets: &'db [Option<ResolvedCallTarget<'db>>],
+    expr_types: &'db ExprTypes<'db>,
+    call_targets: &'db CallTargets<'db>,
     func_id_map: &'db HashMap<(ModuleId, String), (IrModuleId, FuncId)>,
     script_ctx: ScriptLowerContext,
     stmts: Vec<Statement<'db>>,
@@ -87,7 +86,7 @@ pub fn lower_script_fragment_raw<'db>(
     func_return_types: Option<&HashMap<String, IrType>>,
     lowered_functions: Option<(Vec<IrCodeUnit>, HashMap<String, FuncId>)>,
 ) -> Result<IrCodeUnit, LowerError> {
-    let mut ctx = LowerCtx::new_for_script(db, expr_types, call_targets, func_id_map, script_ctx);
+    let mut ctx = LowerCtx::new_for_script(db, expr_types, Some(call_targets), func_id_map, script_ctx);
 
     // Use pre-computed script analysis from ownership analysis phase.
     ctx.body.drop_schedule = script_analysis.schedule;
@@ -184,8 +183,8 @@ pub fn lower_script_fragment_raw<'db>(
 /// Returns a vector of lowered functions and a map from function name to FuncId.
 pub fn lower_script_functions<'db>(
     db: &'db dyn salsa::Database,
-    expr_types: &'db [Option<Type<'db>>],
-    call_targets: &'db [Option<ResolvedCallTarget<'db>>],
+    expr_types: &'db ExprTypes<'db>,
+    call_targets: &'db CallTargets<'db>,
     stmts: &[Statement<'db>],
     func_analyses: &ScriptFunctionAnalyses<'db>,
     func_param_types: Option<&HashMap<String, Vec<IrType>>>,
@@ -194,7 +193,7 @@ pub fn lower_script_functions<'db>(
     script_ctx: ScriptLowerContext,
 ) -> Result<(Vec<IrCodeUnit>, HashMap<String, FuncId>), LowerError> {
     // Create a minimal context with the accumulated script context.
-    let mut ctx = LowerCtx::new_for_script(db, expr_types, call_targets, func_id_map, script_ctx);
+    let mut ctx = LowerCtx::new_for_script(db, expr_types, Some(call_targets), func_id_map, script_ctx);
 
     // Pre-register all functions to enable forward references (mutual recursion).
     for stmt in stmts {
@@ -254,13 +253,13 @@ pub fn lower_script_functions<'db>(
 /// Expression units don't have const bindings, so no pre-resolution is needed.
 pub fn lower_script_expr<'db>(
     db: &'db dyn salsa::Database,
-    expr_types: &'db [Option<Type<'db>>],
-    call_targets: &'db [Option<ResolvedCallTarget<'db>>],
+    expr_types: &'db ExprTypes<'db>,
+    call_targets: &'db CallTargets<'db>,
     func_id_map: &'db HashMap<(ModuleId, String), (IrModuleId, FuncId)>,
     script_ctx: ScriptLowerContext,
     expr: ExprFun<'db>,
 ) -> Result<IrCodeUnit, LowerError> {
-    let mut ctx = LowerCtx::new_for_script(db, expr_types, call_targets, func_id_map, script_ctx);
+    let mut ctx = LowerCtx::new_for_script(db, expr_types, Some(call_targets), func_id_map, script_ctx);
 
     // An expression unit that is just a name is the prompt asking to see a
     // binding, not to take it. Name it and compute nothing.

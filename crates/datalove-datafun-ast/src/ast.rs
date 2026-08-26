@@ -8,15 +8,21 @@ use bct::text::ByteSpan;
 use bct::diagnostic::SpanEntry;
 use datalove_datalit as datalit;
 
-/// Stable identity of an expression within a module.
+/// Stable identity of an expression.
 ///
-/// This is the same pair salsa uses as `ExprFun`'s identity keys, held as a
-/// plain value. A salsa `Id` is not usable for this: its generation counter
-/// changes when salsa recycles a slot, and an id renumbers between salsa
-/// releases, so neither side of a lookup can rely on one staying put.
+/// These are the identity keys salsa gives `ExprFun`, held as a plain value.
+/// A salsa `Id` is not usable for this: its generation counter changes when
+/// salsa recycles a slot, and an id renumbers between salsa releases, so
+/// neither side of a lookup can rely on one staying put.
+///
+/// The module has to be part of it. Within one module a function name and an
+/// index identify an expression, but the type table is merged across a whole
+/// graph, and every module numbers its expressions from zero.
 #[derive(Copy, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
 #[derive(salsa::SalsaValue)]
 pub struct ExprKey<'db> {
+    /// Module the expression belongs to, or None for a script.
+    pub module_id: Option<ModuleId>,
     /// Function the expression belongs to, or None at script level.
     pub fn_name: Option<InternedText<'db>>,
     /// Sequential index within that function.
@@ -39,13 +45,25 @@ impl fmt::Debug for ExprKey<'_> {
 }
 
 impl<'db> ExprKey<'db> {
-    pub fn new(fn_name: Option<InternedText<'db>>, local_index: u32) -> Self {
-        ExprKey { fn_name, local_index }
+    pub fn new(
+        module_id: Option<ModuleId>,
+        fn_name: Option<InternedText<'db>>,
+        local_index: u32,
+    ) -> Self {
+        ExprKey { module_id, fn_name, local_index }
     }
 
     /// The key identifying `expr`.
     pub fn of(db: &'db dyn salsa::Database, expr: ExprFun<'db>) -> Self {
-        ExprKey::new(expr.fn_name(db), expr.local_index(db))
+        ExprKey::new(expr.module_id(db), expr.fn_name(db), expr.local_index(db))
+    }
+
+    /// The key identifying `call`.
+    ///
+    /// Calls are numbered separately from expressions, so these keys only make
+    /// sense against a table of calls.
+    pub fn of_call(db: &'db dyn salsa::Database, call: ExprFunctionCall<'db>) -> Self {
+        ExprKey::new(call.module_id(db), call.fn_name(db), call.local_index(db))
     }
 }
 
