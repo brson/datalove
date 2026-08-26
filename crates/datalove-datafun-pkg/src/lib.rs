@@ -17,6 +17,6 @@ pub mod package_resolve;
 pub use package_load::{PackageWorldConfig, load_world};
 pub use package::{
     Package, PackageModule, PackageName, ModuleName,
-    PackageWorld, import_from_loader, package_world_map,
+    PackageWorld, import_from_loader, import_with_sources, package_world_map,
 };
 pub use package_resolve::{resolve_package_world_with_imports, to_module_graph, ModuleGraphWithRequires};

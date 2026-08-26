@@ -32,6 +32,47 @@ pub fn import_from_loader(
     )
 }
 
+/// Build a `PackageWorld` over sources that already exist.
+///
+/// `import_from_loader` makes a `Source` for every module it is handed, which
+/// is right the first time and wrong every time after. A `Source` is an input,
+/// so a fresh one is a different input however alike its text, and the
+/// `PackageModule`, `Package` and `PackageWorld` built over it are all new in
+/// turn - which puts package resolution and everything downstream of it back
+/// to square one, and leaves the old inputs behind, since inputs are not
+/// collected.
+///
+/// A caller that already holds its sources - which an incremental rebuild
+/// does - passes them here, and the interning on those three types does the
+/// rest: same sources, same world, nothing to redo.
+pub fn import_with_sources(
+    db: &dyn salsa::Database,
+    pkglib_system: BTreeMap<PackageName, BTreeMap<ModuleName, Source>>,
+    pkglib_local: BTreeMap<PackageName, BTreeMap<ModuleName, Source>>,
+) -> PackageWorld {
+    PackageWorld::new(
+        db,
+        library_from_sources(db, pkglib_system),
+        library_from_sources(db, pkglib_local),
+    )
+}
+
+fn library_from_sources(
+    db: &dyn salsa::Database,
+    library: BTreeMap<PackageName, BTreeMap<ModuleName, Source>>,
+) -> BTreeMap<PackageName, Package> {
+    library.into_iter().map(|(package_name, modules)| {
+        let modules: BTreeMap<ModuleName, PackageModule> = modules.into_iter()
+            .map(|(module_name, source)| {
+                let module = PackageModule::new(db, module_name.C(), source);
+                (module_name, module)
+            })
+            .collect();
+        let package = Package::new(db, package_name.C(), modules);
+        (package_name, package)
+    }).collect()
+}
+
 fn make_library(
     db: &dyn salsa::Database,
     library: BTreeMap<pl::PackageName, pl::Package>,

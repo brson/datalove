@@ -355,11 +355,13 @@ pub fn extract_dependencies(
     world: &IncrementalModuleWorld,
     db: &dyn salsa::Database,
 ) -> BTreeMap<String, BTreeSet<String>> {
-    use datalove_datafun_pkg::package_load::{Package, PackageModule, PackageWorld};
-
-    // Build raw PackageWorld from the modules.
-    let mut pkglib_system = BTreeMap::new();
-    let mut pkglib_local = BTreeMap::new();
+    // Pass the sources the world already holds. Reading their text out and
+    // handing it to `import_from_loader` would make a second `Source` for
+    // every module on every call, and a `Source` is an input, so that is a
+    // whole new world each time and nothing downstream of resolution can be
+    // reused - even when nothing has been edited at all.
+    let mut pkglib_system: BTreeMap<String, BTreeMap<String, Source>> = BTreeMap::new();
+    let mut pkglib_local: BTreeMap<String, BTreeMap<String, Source>> = BTreeMap::new();
 
     for (path, module) in world.modules() {
         let parts: Vec<&str> = path.split('/').collect();
@@ -376,31 +378,13 @@ pub fn extract_dependencies(
             _ => continue,
         };
 
-        let source_text = module.source(db).text(db).C();
-
-        let package = pkglib.entry(package_name.S())
-            .or_insert_with(|| Package {
-                name: package_name.S(),
-                modules: BTreeMap::new(),
-                rider_source: None,
-                rider_crate_dir: None,
-            });
-
-        let pkg_module = PackageModule {
-            name: module_name.S(),
-            path: path.C().into(),
-            text: source_text,
-        };
-        package.modules.insert(module_name.S(), pkg_module);
+        pkglib.entry(package_name.S())
+            .or_default()
+            .insert(module_name.S(), module.source(db));
     }
 
-    let raw_package_world = PackageWorld {
-        pkglib_system,
-        pkglib_local,
-    };
-
     // Run resolution pipeline.
-    let package_world = datalove_datafun_pkg::import_from_loader(db, raw_package_world);
+    let package_world = datalove_datafun_pkg::import_with_sources(db, pkglib_system, pkglib_local);
     let resolution = crate::package_resolve::resolve_package_world_with_imports(db, package_world);
     let pkg_graph = match resolution.result(db) {
         Ok(graph) => graph,
