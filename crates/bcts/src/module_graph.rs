@@ -27,8 +27,17 @@ pub struct ModuleId {
     pub path: String,
 }
 
-/// A module in the graph.
-#[salsa::input]
+/// A module in the graph: an identifier and the source behind it.
+///
+/// Interned, so building the same module twice is the same module. It is never
+/// mutated - editing a module edits its `Source`, whose handle does not change
+/// - so there is nothing an input would give it beyond a fresh identity each
+/// time it is built, which is the thing to avoid.
+///
+/// Lifetime-free because `ModuleGraph` is an input and an input's fields
+/// cannot borrow the database. See `ModuleId` for what that costs.
+#[salsa::interned(revisions = usize::MAX, unsafe(no_lifetime))]
+#[derive(Debug)]
 pub struct Module {
     /// Module identifier.
     #[returns(copy)]

@@ -7,7 +7,11 @@ use crate::package_resolve2::PackageWorldMap;
 pub type PackageName = String;
 pub type ModuleName = String;
 
-#[salsa::input]
+/// A package: a name and the modules under it.
+///
+/// Interned; see `Module` for why these are not inputs.
+#[salsa::interned(revisions = usize::MAX, unsafe(no_lifetime))]
+#[derive(Debug)]
 pub struct Package {
     #[returns(ref)]
     pub name: PackageName,
@@ -15,8 +19,8 @@ pub struct Package {
     pub modules: BTreeMap<ModuleName, PackageModule>,
 }
 
-#[salsa::input]
-#[derive(Ord, PartialOrd)]
+#[salsa::interned(revisions = usize::MAX, unsafe(no_lifetime))]
+#[derive(Debug, Ord, PartialOrd)]
 pub struct PackageModule {
     #[returns(ref)]
     pub name: ModuleName,
@@ -25,7 +29,11 @@ pub struct PackageModule {
 }
 
 /// A package world containing system and local package libraries.
-#[salsa::input]
+///
+/// Interned, so recompiling an unchanged world is recognised as the same
+/// world rather than a new one that happens to hold the same packages.
+#[salsa::interned(revisions = usize::MAX, unsafe(no_lifetime))]
+#[derive(Debug)]
 pub struct PackageWorld {
     #[returns(ref)]
     pub pkglib_system: BTreeMap<PackageName, Package>,

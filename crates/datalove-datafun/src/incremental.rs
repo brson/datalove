@@ -37,8 +37,11 @@ use salsa::Setter;
 
 /// Module world with stable salsa identity for incremental compilation.
 ///
-/// Maintains Module and ModuleGraph objects across edits, ensuring downstream
-/// queries see stable identities and can benefit from memoization.
+/// `Module` is interned, so holding one here is no longer what keeps its
+/// identity stable - building the same module again would give the same
+/// handle. The map is a lookup by path, and the cached `ModuleGraph` is the
+/// part that still has to be held: it is an input, so a second one would be a
+/// different graph.
 pub struct IncrementalModuleWorld {
     /// Modules keyed by path (e.g., "local/pkg/main").
     modules: BTreeMap<String, Module>,

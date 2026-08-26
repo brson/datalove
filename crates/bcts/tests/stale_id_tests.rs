@@ -116,3 +116,95 @@ fn stored_diagnostic_survives_a_source_edit() {
     let label = &diagnostic.labels[0];
     assert_eq!(&label.text.as_str(&db)[label.span.C()], "also");
 }
+
+// ============================================================================
+// Interned identity
+// ============================================================================
+
+use bcts::module_graph::{Module, ModuleId};
+use bcts::package2::{Package, PackageModule, PackageWorld};
+
+/// Building the same module twice is the same module.
+///
+/// As inputs these handed out a fresh identity per call, so two callers
+/// describing the same thing held handles that compared unequal, and anything
+/// keyed on them saw two of everything.
+#[test]
+fn building_the_same_module_twice_gives_one_module() {
+    let db = bcts::Database::default();
+
+    let id = ModuleId::new(&db, "local/test/a".to_string());
+    let source = Source::new(&db, "let x = 1".to_string());
+
+    assert_eq!(Module::new(&db, id, source), Module::new(&db, id, source));
+
+    let other = Source::new(&db, "let x = 2".to_string());
+    assert_ne!(
+        Module::new(&db, id, source),
+        Module::new(&db, id, other),
+        "a different source is a different module",
+    );
+}
+
+/// A module's identity survives an edit to its source.
+///
+/// The text is behind the `Source`, which is mutated in place, so the module
+/// naming it does not change. That is what lets an edit invalidate only the
+/// queries that read the text.
+#[test]
+fn editing_a_source_does_not_change_the_module() {
+    let mut db = bcts::Database::default();
+
+    let id = ModuleId::new(&db, "local/test/a".to_string());
+    let source = Source::new(&db, "let x = 1".to_string());
+    let before = Module::new(&db, id, source);
+
+    source.set_text(&mut db).to("let x = 2".to_string());
+
+    assert_eq!(before, Module::new(&db, id, source));
+}
+
+/// Packages and worlds are their contents too.
+///
+/// Note what "the same contents" means: a `Source` is an input, so building
+/// one twice from equal text gives two of them, and a world built over fresh
+/// sources is a different world however alike it reads. Interning pays off
+/// where the sources are carried over, which is the case an incremental
+/// rebuild is in.
+#[test]
+fn building_the_same_package_world_twice_gives_one_world() {
+    use rmx::std::collections::BTreeMap;
+
+    let db = bcts::Database::default();
+    let source = Source::new(&db, "let x = 1".to_string());
+
+    let build = |source| {
+        let module = PackageModule::new(&db, "main".to_string(), source);
+        let mut modules = BTreeMap::new();
+        modules.insert("main".to_string(), module);
+        let package = Package::new(&db, "test".to_string(), modules);
+        let mut library = BTreeMap::new();
+        library.insert("test".to_string(), package);
+        PackageWorld::new(&db, BTreeMap::new(), library)
+    };
+
+    assert_eq!(build(source), build(source), "one world, described twice");
+
+    // A world over a different source is a different world.
+    let other = Source::new(&db, "let x = 2".to_string());
+    assert_ne!(build(source), build(other));
+}
+
+/// A source built twice from equal text is two sources, not one.
+///
+/// This is why the world test above threads one through: `Source` is an input
+/// and an input's identity is its slot, not its contents. Anything built over
+/// a freshly made source is fresh too, however far up the chain it sits.
+#[test]
+fn equal_text_does_not_make_one_source() {
+    let db = bcts::Database::default();
+    assert_ne!(
+        Source::new(&db, "let x = 1".to_string()),
+        Source::new(&db, "let x = 1".to_string()),
+    );
+}
