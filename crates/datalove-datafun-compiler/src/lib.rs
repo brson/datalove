@@ -47,6 +47,16 @@ pub struct Database {
 impl salsa::Database for Database {
 }
 
+impl Database {
+    /// A database that reports every query it runs to `recorder`.
+    ///
+    /// Clones of this database report to the same recorder, so work the
+    /// compiler farms out to rayon is recorded along with the rest.
+    pub fn recording(recorder: &datalove_ct::query_events::QueryRecorder) -> Self {
+        Self { storage: salsa::Storage::new(Some(recorder.callback())) }
+    }
+}
+
 impl datalove_datafun_tycheck::DbClone for Database {
     fn dyn_clone(&self) -> Box<dyn datalove_datafun_tycheck::DbClone + Send> {
         Box::new(self.clone())
