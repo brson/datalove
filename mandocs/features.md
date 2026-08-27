@@ -50,3 +50,4 @@
 - Direct SSA lowering.
 - Session types.
 - Guaranteed explicit drops.
+- Rewind and replay.
