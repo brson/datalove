@@ -69,7 +69,7 @@ impl<'db> Parser<'db> {
         line: Vec<TreeToken<'db>>,
         remaining_lines: &mut Peekable<impl Iterator<Item = (usize, Vec<TreeToken<'db>>)>>,
     ) -> ast::Statement<'db> {
-        let line_tokens: Vec<_> = line.into_iter().filter_map(|t| t.without_space(self.db)).collect();
+        let line_tokens: Vec<_> = line.into_iter().filter_map(|t| t.without_space()).collect();
         let mut sub = self.new_sub(line_tokens);
         let stmt = sub.parse_statement(remaining_lines);
         self.merge_identity_from(&mut sub);
@@ -309,7 +309,7 @@ impl<'db> Parser<'db> {
         // Parse parameters in parentheses.
         let params = match self.next() {
             Some(TreeToken::Branch { sigil: Sigil::ParenOpen, open, inner, .. }) => {
-                let open_span = TextSpan::new(self.source_text(), open.span(self.db));
+                let open_span = TextSpan::new(self.source_text(), open.span());
                 self.parse_fun_params(inner, Some((open_span, "in this parameter list")))
             }
             _ => {
@@ -719,7 +719,7 @@ impl<'db> Parser<'db> {
         let (else_binding, else_body) = if found_else {
             // Consume the "else" line and parse any binding.
             let (_, else_line) = remaining_lines.next().X();
-            let else_tokens: Vec<_> = else_line.into_iter().filter_map(|t| t.without_space(self.db)).collect();
+            let else_tokens: Vec<_> = else_line.into_iter().filter_map(|t| t.without_space()).collect();
             let mut else_sub = self.new_sub(else_tokens);
             else_sub.eat_word("else");
 
@@ -929,7 +929,7 @@ impl<'db> Parser<'db> {
         // Parse parameters in parentheses.
         let params = match self.next() {
             Some(TreeToken::Branch { sigil: Sigil::ParenOpen, open, inner, .. }) => {
-                let open_span = TextSpan::new(self.source_text(), open.span(self.db));
+                let open_span = TextSpan::new(self.source_text(), open.span());
                 self.parse_fun_params(inner, Some((open_span, "in this parameter list")))
             }
             _ => {
@@ -980,7 +980,7 @@ impl<'db> Parser<'db> {
             if let Some(TreeToken::Token(t1)) = line.get(0) {
                 if let Some("case") = t1.word_str(self.db) {
                     let (_, case_line) = remaining_lines.next().X();
-                    let case_tokens: Vec<_> = case_line.into_iter().filter_map(|t| t.without_space(self.db)).collect();
+                    let case_tokens: Vec<_> = case_line.into_iter().filter_map(|t| t.without_space()).collect();
                     let mut case_sub = self.new_sub(case_tokens);
                     case_sub.eat_word("case");
 
@@ -1121,7 +1121,7 @@ impl<'db> Parser<'db> {
             let should_stop = match token {
                 TreeToken::Token(t) => {
                     matches!(
-                        t.kind(self.db),
+                        t.kind,
                         TokenKind::Sigil(Sigil::Equals)
                             | TokenKind::Sigil(Sigil::Comma)
                             | TokenKind::Sigil(Sigil::SlashForward)

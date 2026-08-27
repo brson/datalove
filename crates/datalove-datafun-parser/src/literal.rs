@@ -150,7 +150,7 @@ impl<'db> Parser<'db> {
         // Check for numbers, strings, or branches.
         match self.peek() {
             Some(TreeToken::Token(token)) => {
-                match token.kind(self.db) {
+                match token.kind {
                     TokenKind::Word => {
                         let word = token.word_str(self.db).X();
                         if Self::is_numeric_literal(word) {
@@ -199,7 +199,7 @@ impl<'db> Parser<'db> {
                     }
                     TokenKind::String => {
                         // Get the text before consuming the token.
-                        let text_str = token.text(self.db).as_str(self.db).S();
+                        let text_str = token.text.as_str(self.db).S();
                         self.next();
                         let value = InternedText::new(self.db, text_str);
                         return ast::ExprFunKind::String(ast::ExprString { type_hint, value });
@@ -344,7 +344,7 @@ impl<'db> Parser<'db> {
 
         // Filter to non-whitespace tokens for comma-level scanning.
         let tokens_no_ws: Vec<_> = all_tokens.iter()
-            .filter_map(|t| t.C().without_space(self.db))
+            .filter_map(|t| t.C().without_space())
             .collect();
 
         if tokens_no_ws.is_empty() {
@@ -370,7 +370,7 @@ impl<'db> Parser<'db> {
 
         for token in tokens {
             if let TreeToken::Token(tok) = token {
-                if tok.kind(self.db) == TokenKind::Sigil(Sigil::Comma) {
+                if tok.kind == TokenKind::Sigil(Sigil::Comma) {
                     current_commas += 1;
                     max_level = max_level.max(current_commas);
                 } else {
@@ -451,7 +451,7 @@ impl<'db> Parser<'db> {
             let mut j = i;
             while j < tokens.len() {
                 if let TreeToken::Token(tok) = &tokens[j] {
-                    if tok.kind(self.db) == TokenKind::Sigil(Sigil::Comma) {
+                    if tok.kind == TokenKind::Sigil(Sigil::Comma) {
                         comma_count += 1;
                         j += 1;
                     } else {
@@ -537,14 +537,14 @@ impl<'db> Parser<'db> {
         for token in tokens {
             match token {
                 // Semicolon is explicit row delimiter.
-                TreeToken::Token(tok) if tok.kind(self.db) == TokenKind::Sigil(Sigil::Semicolon) => {
+                TreeToken::Token(tok) if tok.kind == TokenKind::Sigil(Sigil::Semicolon) => {
                     if !current_row.is_empty() {
                         rows.push(std::mem::take(&mut current_row));
                     }
                 }
                 // Whitespace containing newline is implicit row delimiter.
-                TreeToken::Token(tok) if tok.kind(self.db) == TokenKind::Whitespace => {
-                    let text = tok.text(self.db).as_str(self.db);
+                TreeToken::Token(tok) if tok.kind == TokenKind::Whitespace => {
+                    let text = tok.text.as_str(self.db);
                     if text.contains('\n') {
                         if !current_row.is_empty() {
                             rows.push(std::mem::take(&mut current_row));
@@ -570,7 +570,7 @@ impl<'db> Parser<'db> {
     fn parse_table_header(&mut self, row_tokens: &[TreeToken<'db>]) -> Vec<InternedText<'db>> {
         // Filter out whitespace and split by comma.
         let tokens_no_ws: Vec<_> = row_tokens.iter()
-            .filter_map(|t| t.C().without_space(self.db))
+            .filter_map(|t| t.C().without_space())
             .collect();
 
         // Split by comma and extract names.
@@ -601,7 +601,7 @@ impl<'db> Parser<'db> {
     fn parse_table_data_row(&mut self, row_tokens: &[TreeToken<'db>]) -> Vec<ast::ExprFun<'db>> {
         // Filter out whitespace.
         let tokens_no_ws: Vec<_> = row_tokens.iter()
-            .filter_map(|t| t.C().without_space(self.db))
+            .filter_map(|t| t.C().without_space())
             .collect();
 
         // Split by comma and parse each element.
@@ -626,7 +626,7 @@ impl<'db> Parser<'db> {
 
         for token in tokens {
             match token {
-                TreeToken::Token(tok) if tok.kind(self.db) == TokenKind::Sigil(Sigil::Comma) => {
+                TreeToken::Token(tok) if tok.kind == TokenKind::Sigil(Sigil::Comma) => {
                     if !current.is_empty() {
                         groups.push(std::mem::take(&mut current));
                     }

@@ -77,8 +77,8 @@ impl<'db> Parser<'db> {
         loop {
             match self.peek() {
                 Some(TreeToken::Token(token)) => {
-                    let TextSpan { text, span: op_span } = self.extract_text_span(&TreeToken::Token(*token));
-                    match token.kind(self.db) {
+                    let TextSpan { text, span: op_span } = self.extract_text_span(&TreeToken::Token(token.clone()));
+                    match token.kind {
                         TokenKind::Sigil(Sigil::Question) => {
                             self.next(); // consume ?
                             let end_pos = self.last_byte_end();
@@ -261,7 +261,7 @@ impl<'db> Parser<'db> {
     fn peek_binop(&self) -> Option<ast::BinOp> {
         match self.peek() {
             Some(TreeToken::Token(token)) => {
-                match token.kind(self.db) {
+                match token.kind {
                     // Keyword operators (logical).
                     TokenKind::Word => {
                         match token.word_str(self.db) {
@@ -319,7 +319,7 @@ impl<'db> Parser<'db> {
     pub(super) fn parse_expr_primary(&mut self) -> ast::ExprFun<'db> {
         // Check for unary operators (-, -?, -!, not).
         if let Some(TreeToken::Token(token)) = self.peek() {
-            let unary_op = match token.kind(self.db) {
+            let unary_op = match token.kind {
                 TokenKind::Sigil(Sigil::Minus) => Some(ast::UnaryOp::Neg),
                 TokenKind::Sigil(Sigil::MinusQuestion) => Some(ast::UnaryOp::NegOptional),
                 TokenKind::Sigil(Sigil::MinusExclamation) => Some(ast::UnaryOp::NegResult),
@@ -354,7 +354,7 @@ impl<'db> Parser<'db> {
         match self.peek() {
             Some(TreeToken::Token(token)) => {
                 // If it's a word token, check if it's a datalit keyword or a datafun name.
-                match token.kind(self.db) {
+                match token.kind {
                     TokenKind::Word => {
                         if let Some(word) = token.word_str(self.db) {
                             // Check against datalit keywords - use new inline variants.
@@ -466,7 +466,7 @@ impl<'db> Parser<'db> {
 
                                     // Parse intrinsic name.
                                     let intrinsic_name = match self.peek() {
-                                        Some(TreeToken::Token(tok)) if tok.kind(self.db) == TokenKind::Word => {
+                                        Some(TreeToken::Token(tok)) if tok.kind == TokenKind::Word => {
                                             let name = tok.word_str(self.db).unwrap_or("");
                                             self.next(); // consume the name
                                             InternedText::new(self.db, name.to_string())
@@ -486,7 +486,7 @@ impl<'db> Parser<'db> {
                                         Some(TreeToken::Branch { sigil: Sigil::ParenOpen, .. }) => {
                                             let (args_iter, open_span) = match self.next() {
                                                 Some(TreeToken::Branch { sigil: Sigil::ParenOpen, open, inner, .. }) => {
-                                                    let open_span = TextSpan::new(self.source_text(), open.span(self.db));
+                                                    let open_span = TextSpan::new(self.source_text(), open.span());
                                                     (inner, open_span)
                                                 }
                                                 _ => unreachable!(),
@@ -533,7 +533,7 @@ impl<'db> Parser<'db> {
                                         // It's a function call.
                                         let (args_iter, open_span) = match self.next() {
                                             Some(TreeToken::Branch { sigil: Sigil::ParenOpen, open, inner, .. }) => {
-                                                let open_span = TextSpan::new(self.source_text(), open.span(self.db));
+                                                let open_span = TextSpan::new(self.source_text(), open.span());
                                                 (inner, open_span)
                                             }
                                             _ => unreachable!(),
@@ -574,7 +574,7 @@ impl<'db> Parser<'db> {
                     }
                     TokenKind::String => {
                         // String literal - use new inline variant.
-                        let text_str = token.text(self.db).as_str(self.db).S();
+                        let text_str = token.text.as_str(self.db).S();
                         self.next();
                         let value = InternedText::new(self.db, text_str);
                         ast::ExprFun::new(
@@ -645,7 +645,7 @@ impl<'db> Parser<'db> {
         let TreeToken::Token(t) = self.peek()? else {
             return None;
         };
-        if t.kind(self.db) != TokenKind::Word {
+        if t.kind != TokenKind::Word {
             return None;
         }
         let mode = match t.word_str(self.db)? {
@@ -665,7 +665,7 @@ impl<'db> Parser<'db> {
         // Consume the ParenOpen branch and get its contents.
         let (iter, open_span) = match self.next() {
             Some(TreeToken::Branch { sigil: Sigil::ParenOpen, open, inner, .. }) => {
-                let open_span = TextSpan::new(self.source_text(), open.span(self.db));
+                let open_span = TextSpan::new(self.source_text(), open.span());
                 (inner, open_span)
             }
             _ => unreachable!("caller must peek for ParenOpen before calling"),

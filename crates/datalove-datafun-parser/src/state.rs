@@ -305,20 +305,20 @@ impl<'db> Parser<'db> {
     fn fill_iter_buffer(&mut self) {
         if let TokenSource::Iter { iter, buffer, .. } = &mut self.source {
             if buffer[0].is_none() {
-                buffer[0] = Self::next_non_whitespace(self.db, iter);
+                buffer[0] = Self::next_non_whitespace(iter);
             }
             if buffer[1].is_none() {
-                buffer[1] = Self::next_non_whitespace(self.db, iter);
+                buffer[1] = Self::next_non_whitespace(iter);
             }
         }
     }
 
     /// Get next non-whitespace token from iterator.
-    fn next_non_whitespace(db: &'db dyn Db, iter: &mut BracerIter<'db>) -> Option<TreeToken<'db>> {
+    fn next_non_whitespace(iter: &mut BracerIter<'db>) -> Option<TreeToken<'db>> {
         loop {
             match iter.next() {
                 Some(token) => {
-                    if Self::is_non_whitespace(db, &token) {
+                    if Self::is_non_whitespace(&token) {
                         return Some(token);
                     }
                 }
@@ -328,10 +328,10 @@ impl<'db> Parser<'db> {
     }
 
     /// Check if a token is non-whitespace.
-    fn is_non_whitespace(db: &'db dyn Db, token: &TreeToken<'db>) -> bool {
+    fn is_non_whitespace(token: &TreeToken<'db>) -> bool {
         match token {
             TreeToken::Token(t) => {
-                !matches!(t.kind(db), TokenKind::Whitespace | TokenKind::Comment)
+                !matches!(t.kind, TokenKind::Whitespace | TokenKind::Comment)
             }
             TreeToken::Branch { .. } => true,
         }
@@ -405,7 +405,7 @@ impl<'db> Parser<'db> {
     pub(super) fn peek_second_sigil(&self, sigil: Sigil) -> bool {
         match self.peek_second() {
             Some(TreeToken::Token(token)) => {
-                matches!(token.kind(self.db), TokenKind::Sigil(s) if s == sigil)
+                matches!(token.kind, TokenKind::Sigil(s) if s == sigil)
             }
             Some(TreeToken::Branch { sigil: s, .. }) => *s == sigil,
             None => false,
@@ -617,7 +617,7 @@ impl<'db> TokenStream<'db> for Parser<'db> {
                 // Shift slot 1 to slot 0.
                 buffer[0] = buffer[1].take();
                 // Fill slot 1 from iterator.
-                buffer[1] = Self::next_non_whitespace(self.db, iter);
+                buffer[1] = Self::next_non_whitespace(iter);
                 result
             }
         }

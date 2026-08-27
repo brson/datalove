@@ -35,7 +35,7 @@ pub trait TokenStreamExt<'db>: TokenStream<'db> {
     fn peek_sigil(&self, sigil: Sigil) -> bool {
         match self.peek() {
             Some(TreeToken::Token(token)) => {
-                matches!(token.kind(self.db()), TokenKind::Sigil(s) if s == sigil)
+                matches!(token.kind, TokenKind::Sigil(s) if s == sigil)
             }
             Some(TreeToken::Branch { sigil: s, .. }) => *s == sigil,
             None => false,

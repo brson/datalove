@@ -116,7 +116,7 @@ fn emit_bracer_errors<'db>(
         if is_stray_close {
             // Stray closing brace - no matching open.
             if let Some(token) = tokens.get(token_range.start) {
-                let span = token.span(db);
+                let span = token.span();
                 let ts = TextSpan::new(source_text, span);
                 DiagnosticBuilder::error(db, &format!("unmatched '{}'", sigil.as_str()))
                     .code("P050")
@@ -127,7 +127,7 @@ fn emit_bracer_errors<'db>(
         } else {
             // Unclosed opening brace.
             if let Some(open_token) = tokens.get(token_range.start) {
-                let span = open_token.span(db);
+                let span = open_token.span();
                 let ts = TextSpan::new(source_text, span);
                 DiagnosticBuilder::error(db, &format!("unclosed '{}'", sigil.as_str()))
                     .code("P051")
@@ -154,13 +154,13 @@ fn parse_bracer<'db>(
 
             while let Some(token) = iter.next() {
                 match token {
-                    TreeToken::Token(t) if is_line_separator(db, t) => {
+                    TreeToken::Token(ref t) if is_line_separator(db, t) => {
                         found_newline = true;
                         break;
                     }
                     _ => {
                         // Filter spaces here, after newline check.
-                        if let Some(t) = token.without_space(db) {
+                        if let Some(t) = token.without_space() {
                             line.push(t);
                         }
                     }
@@ -191,9 +191,9 @@ fn parse_bracer<'db>(
 /// Check if a token acts as a line separator.
 ///
 /// Line separators are newlines or semicolons.
-fn is_line_separator<'db>(db: &'db dyn Db, token: Token<'db>) -> bool {
-    match token.kind(db) {
-        TokenKind::Whitespace => token.text(db).as_str(db).contains("\n"),
+fn is_line_separator<'db>(db: &'db dyn Db, token: &Token<'db>) -> bool {
+    match token.kind {
+        TokenKind::Whitespace => token.text.as_str(db).contains("\n"),
         TokenKind::Sigil(Sigil::Semicolon) => true,
         _ => false,
     }

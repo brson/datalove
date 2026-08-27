@@ -4,7 +4,7 @@ use rmx::core::iter;
 use rmx::core::ops::Range;
 
 use crate::bracer::{Bracer, TreeToken, BracerIter};
-use crate::lexer::{Token, TokenKind};
+use crate::lexer::TokenKind;
 
 pub fn iter_lines<'db>(
     db: &'db dyn crate::Db,
@@ -44,23 +44,15 @@ impl<'db> TreeToken<'db> {
     fn is_whitespace_newline(&self, db: &'db dyn crate::Db) -> bool {
         return match self {
             TreeToken::Token(token) => {
-                match token.kind(db) {
+                match token.kind {
                     TokenKind::Whitespace => {
-                        token_contains_newline(db, *token)
+                        token.text.as_str(db).contains("\n")
                     }
                     _ => false,
                 }
             }
             TreeToken::Branch { .. } => false,
         };
-
-        #[salsa::tracked(returns(copy))]
-        fn token_contains_newline<'db>(
-            db: &'db dyn crate::Db,
-            token: Token<'db>
-        ) -> bool {
-            token.text(db).as_str(db).contains("\n")
-        }
     }
 }
 

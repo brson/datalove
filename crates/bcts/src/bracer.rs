@@ -73,7 +73,7 @@ impl<'db> Iterator for BracerIter<'db> {
         let res = self.next2();
         debug!("next: {:?}", match res.as_ref() {
             None => "none",
-            Some(TreeToken::Token(t)) => t.text(self.db).as_str(self.db),
+            Some(TreeToken::Token(t)) => t.text.as_str(self.db),
             Some(TreeToken::Branch { .. }) => "branch",
         });
         res
@@ -93,8 +93,8 @@ impl<'db> BracerIter<'db> {
         let open_token = tokens.get(open_idx)?;
         let close_token = tokens.get(close_idx)?;
         let text = chunk_lex.chunk(self.db).text(self.db);
-        let span = open_token.span(self.db).start
-                 ..close_token.span(self.db).end;
+        let span = open_token.span().start
+                 ..close_token.span().end;
         Some(crate::text::TextSpan::new(text, span))
     }
 
@@ -141,8 +141,8 @@ impl<'db> BracerIter<'db> {
             ) {
                 (Some(next_token), None, _, None) => {
                     self.next_token_index = self.next_token_index.checked_add(1).X();
-                    if !next_token.is_close_sigil(self.db) {
-                        Some(TreeToken::Token(*next_token))
+                    if !next_token.is_close_sigil() {
+                        Some(TreeToken::Token(next_token.clone()))
                     } else {
                         continue;
                     }
@@ -151,8 +151,8 @@ impl<'db> BracerIter<'db> {
                     match self.next_token_index.cmp(&next_removed_close.0) {
                         Ordering::Less => {
                             self.next_token_index = self.next_token_index.checked_add(1).X();
-                            if !next_token.is_close_sigil(self.db) {
-                                Some(TreeToken::Token(*next_token))
+                            if !next_token.is_close_sigil() {
+                                Some(TreeToken::Token(next_token.clone()))
                             } else {
                                 panic!("is this possible?")
                             }
@@ -169,7 +169,7 @@ impl<'db> BracerIter<'db> {
                     match self.next_token_index.cmp(&next_branch.real_token_range.start) {
                         Ordering::Less => {
                             self.next_token_index = self.next_token_index.checked_add(1).X();
-                            Some(TreeToken::Token(*next_token))
+                            Some(TreeToken::Token(next_token.clone()))
                         },
                         Ordering::Equal => {
                             self.next_token_index = self.next_token_index.checked_add(1).X();
@@ -180,24 +180,24 @@ impl<'db> BracerIter<'db> {
                             let branch_token_range = branch_token_range_start..next_branch.real_token_range.end;
 
                             // Get the open token.
-                            let open_token = *next_token;
+                            let open_token = next_token.clone();
 
                             // Get the potential close token and check if it's a real close.
                             let all_tokens = self.tree.chunk(self.db).tokens(self.db);
                             let close_idx = next_branch.real_token_range.end.checked_sub(1);
                             let expected_close_sigil = next_branch.open_sigil.close_sigil();
                             let (close_token, end_byte) = match close_idx.and_then(|i| all_tokens.get(i)) {
-                                Some(tok) if tok.kind(self.db) == TokenKind::Sigil(expected_close_sigil) => {
+                                Some(tok) if tok.kind == TokenKind::Sigil(expected_close_sigil) => {
                                     // Real close token found.
-                                    (Some(*tok), tok.span(self.db).end)
+                                    (Some(tok.clone()), tok.span().end)
                                 }
                                 Some(tok) => {
                                     // Last token exists but isn't the close sigil (unclosed/mismatched).
-                                    (None, tok.span(self.db).end)
+                                    (None, tok.span().end)
                                 }
                                 None => {
                                     // No tokens at all after open (empty unclosed branch).
-                                    (None, open_token.span(self.db).end)
+                                    (None, open_token.span().end)
                                 }
                             };
 
@@ -502,7 +502,7 @@ pub fn bracer<'db>(
         };
 
     for (index, token) in tokens {
-        match token.kind(db) {
+        match token.kind {
             TokenKind::Sigil(Sigil::ParenOpen) => {
                 stack.push((index, Sigil::ParenOpen, default()));
             }
@@ -606,10 +606,10 @@ impl<'db> TreeToken<'db> {
     pub fn text_span(&self, db: &'db dyn crate::Db, source_text: crate::text::Text<'db>) -> Option<crate::text::TextSpan<'db>> {
         match self {
             TreeToken::Token(tok) => {
-                Some(crate::text::TextSpan::new(source_text, tok.span(db)))
+                Some(crate::text::TextSpan::new(source_text, tok.span()))
             }
             TreeToken::Branch { open, end_byte, .. } => {
-                Some(crate::text::TextSpan::new(source_text, open.span(db).start..*end_byte))
+                Some(crate::text::TextSpan::new(source_text, open.span().start..*end_byte))
             }
         }
     }
@@ -618,7 +618,7 @@ impl<'db> TreeToken<'db> {
     pub fn open_span(&self, db: &'db dyn crate::Db) -> Option<Range<usize>> {
         match self {
             TreeToken::Token(_) => None,
-            TreeToken::Branch { open, .. } => Some(open.span(db)),
+            TreeToken::Branch { open, .. } => Some(open.span()),
         }
     }
 
@@ -626,14 +626,14 @@ impl<'db> TreeToken<'db> {
     pub fn close_span(&self, db: &'db dyn crate::Db) -> Option<Range<usize>> {
         match self {
             TreeToken::Token(_) => None,
-            TreeToken::Branch { close, .. } => close.map(|c| c.span(db)),
+            TreeToken::Branch { close, .. } => close.as_ref().map(|c| c.span()),
         }
     }
 
-    pub fn without_space(self, db: &'db dyn crate::Db) -> Option<Self> {
+    pub fn without_space(self) -> Option<Self> {
         match self {
             TreeToken::Token(token) => {
-                token.without_space(db)
+                token.without_space()
                     .map(TreeToken::Token)
             }
             token @ TreeToken::Branch { .. } => Some(token),
@@ -913,15 +913,15 @@ fn test_without_space() {
     assert_eq!(tokens.len(), 5);
 
     // Token "a" - not whitespace, returns Some.
-    let t0 = tokens[0].C().without_space(db);
+    let t0 = tokens[0].C().without_space();
     assert!(t0.is_some());
 
     // Whitespace token - returns None.
-    let t1 = tokens[1].C().without_space(db);
+    let t1 = tokens[1].C().without_space();
     assert!(t1.is_none());
 
     // Branch - always returns Some.
-    let t4 = tokens[4].C().without_space(db);
+    let t4 = tokens[4].C().without_space();
     assert!(t4.is_some());
 }
 

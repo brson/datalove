@@ -12,7 +12,7 @@ use crate::source_map::{
     basic_source_map,
 };
 
-#[salsa::tracked]
+#[salsa::tracked(heap_size = chunk_lex_heap_size)]
 pub struct ChunkLex<'db> {
     #[returns(copy)]
     pub chunk: Chunk<'db>,
@@ -20,14 +20,25 @@ pub struct ChunkLex<'db> {
     pub tokens: Vec<Token<'db>>,
 }
 
-#[salsa::tracked]
-#[derive(Debug)]
+/// The tokens are values in a `Vec`, so they are heap, not fields.
+///
+/// Without this salsa's memory reporting would show the tokens costing nothing,
+/// since it measures fields by their stack size and a `Vec` is three words
+/// whatever it holds.
+fn chunk_lex_heap_size<'db>(fields: &(Chunk<'db>, Vec<Token<'db>>)) -> usize {
+    fields.1.capacity() * mem::size_of::<Token<'db>>()
+}
+
+/// One lexed token.
+///
+/// A plain value rather than a tracked struct. Tokens are read straight out of
+/// the `Vec` in a [`ChunkLex`] and never looked up by identity, so the salsa id
+/// and page slot each one used to carry paid for nothing.
+#[derive(Clone, Debug, Hash, PartialEq, Eq)]
+#[derive(salsa::SalsaValue)]
 pub struct Token<'db> {
-    #[returns(copy)]
     pub text: InternedText<'db>,
-    #[returns(clone)]
     pub span: Range<usize>,
-    #[returns(copy)]
     pub kind: TokenKind,
 }
 
@@ -139,28 +150,25 @@ pub fn lex_chunk<'db>(
     for range in chunk.ranges(db) {
         match range {
             (range, RangeKind::Comment) => {
-                tokens.push(Token::new(
-                    db,
-                    intern(range.C()),
-                    range,
-                    TokenKind::Comment,
-                ));
+                tokens.push(Token {
+                    text: intern(range.C()),
+                    span: range,
+                    kind: TokenKind::Comment,
+                });
             }
             (range, RangeKind::String) => {
-                tokens.push(Token::new(
-                    db,
-                    intern(range.C()),
-                    range,
-                    TokenKind::String,
-                ));
+                tokens.push(Token {
+                    text: intern(range.C()),
+                    span: range,
+                    kind: TokenKind::String,
+                });
             }
             (range, RangeKind::Error) => {
-                tokens.push(Token::new(
-                    db,
-                    intern(range.C()),
-                    range,
-                    TokenKind::Error,
-                ));
+                tokens.push(Token {
+                    text: intern(range.C()),
+                    span: range,
+                    kind: TokenKind::Error,
+                });
             }
             (range, RangeKind::Unknown) => {
                 let mut tokenizer = Tokenizer {
@@ -241,12 +249,11 @@ pub fn lex_chunk<'db>(
             }
             assert!(start < self.range.start);
             let span = start .. self.range.start;
-            Token::new(
-                self.db,
-                self.intern(span.C()),
+            Token {
+                text: self.intern(span.C()),
                 span,
-                TokenKind::Word,
-            )
+                kind: TokenKind::Word,
+            }
         }
 
         fn is_sigil_start(ch: char) -> bool {
@@ -265,12 +272,11 @@ pub fn lex_chunk<'db>(
                     let range_start = self.range.start;
                     self.range.start = range_start.checked_add(sigil_str.len()).X();
                     let span = range_start .. self.range.start;
-                    return Token::new(
-                        self.db,
-                        self.intern(span.C()),
+                    return Token {
+                        text: self.intern(span.C()),
                         span,
-                        TokenKind::Sigil(sigil),
-                    )
+                        kind: TokenKind::Sigil(sigil),
+                    }
                 }
             }
 
@@ -311,12 +317,11 @@ pub fn lex_chunk<'db>(
             }
             assert!(start < self.range.start);
             let span = start .. self.range.start;
-            Token::new(
-                self.db,
-                self.intern(span.C()),
+            Token {
+                text: self.intern(span.C()),
                 span,
-                TokenKind::Error,
-            )
+                kind: TokenKind::Error,
+            }
         }
 
         fn eat_whitespace(&mut self) -> Token<'db> {
@@ -332,12 +337,11 @@ pub fn lex_chunk<'db>(
             }
             assert!(start < self.range.start);
             let span = start .. self.range.start;
-            Token::new(
-                self.db,
-                self.intern(span.C()),
+            Token {
+                text: self.intern(span.C()),
                 span,
-                TokenKind::Whitespace,
-            )
+                kind: TokenKind::Whitespace,
+            }
         }
 
         fn eat_char(&mut self, ch: char) {
@@ -363,8 +367,16 @@ impl<'db> ChunkLex<'db> {
 }
 
 impl<'db> Token<'db> {
-    pub fn without_space(self, db: &'db dyn crate::Db) -> Option<Self> {
-        match self.kind(db) {
+    /// The token's span in its chunk.
+    ///
+    /// `Range` is not `Copy`, so the field is cloned rather than borrowed; a
+    /// span is two words and every caller wants it by value.
+    pub fn span(&self) -> Range<usize> {
+        self.span.clone()
+    }
+
+    pub fn without_space(self) -> Option<Self> {
+        match self.kind {
             TokenKind::Whitespace => None,
             TokenKind::Comment => None,
             _ => Some(self),
@@ -373,9 +385,9 @@ impl<'db> Token<'db> {
 
     #[cfg(test)]
     pub fn debug_str(&self, db: &'db dyn crate::Db) -> &'db str {
-        match self.kind(db) {
+        match self.kind {
             TokenKind::Word | TokenKind::String => {
-                self.text(db).as_str(db)
+                self.text.as_str(db)
             }
             TokenKind::Sigil(s) => s.as_str(),
             TokenKind::Whitespace => "ws",
@@ -384,18 +396,18 @@ impl<'db> Token<'db> {
         }
     }
 
-    pub fn is_close_sigil(&self, db: &'db dyn crate::Db) -> bool {
-        match self.kind(db) {
+    pub fn is_close_sigil(&self) -> bool {
+        match self.kind {
             TokenKind::Sigil(s) => s.is_close_sigil(),
             _ => false,
         }
     }
 
     pub fn word_str(&self, db: &'db dyn crate::Db) -> Option<&'db str> {
-        if self.kind(db) != TokenKind::Word {
+        if self.kind != TokenKind::Word {
             return None;
         }
-        Some(self.text(db).as_str(db))
+        Some(self.text.as_str(db))
     }
 }
 
@@ -755,5 +767,3 @@ fn test_lex_chunk() {
         "(| |)",
     );
 }
-
-
