@@ -236,36 +236,22 @@ impl IncrementalModuleWorld {
         result
     }
 
-    /// Update the cached ModuleGraph, calling setters only when values differ.
+    /// Build the ModuleGraph.
+    ///
+    /// There is nothing to update: the graph is interned, so building it again
+    /// from unchanged parts gives back the same graph. This used to compare
+    /// each field against the stored graph and drive a setter only where they
+    /// differed, because a setter marks an input changed either way.
     fn update_graph(
         &mut self,
-        db: &mut dyn salsa::Database,
+        db: &dyn salsa::Database,
         modules: Vec<Module>,
         module_by_id: BTreeMap<ModuleId, Module>,
         dependencies: BTreeMap<ModuleId, BTreeSet<ModuleId>>,
     ) -> ModuleGraph {
-        match self.graph {
-            Some(g) => {
-                // Only update fields if they differ.
-                // Calling a setter ALWAYS marks the input as "changed" in salsa,
-                // even if the value is equal.
-                if g.modules(db) != &modules {
-                    g.set_modules(db).to(modules);
-                }
-                if g.module_by_id(db) != &module_by_id {
-                    g.set_module_by_id(db).to(module_by_id);
-                }
-                if g.dependencies(db) != &dependencies {
-                    g.set_dependencies(db).to(dependencies);
-                }
-                g
-            }
-            None => {
-                let g = ModuleGraph::new(db, modules, module_by_id, dependencies);
-                self.graph = Some(g);
-                g
-            }
-        }
+        let graph = ModuleGraph::new(db, modules, module_by_id, dependencies);
+        self.graph = Some(graph);
+        graph
     }
 
     /// Build the resolved_requires map needed by parse_module_graph.

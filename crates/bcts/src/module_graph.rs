@@ -51,7 +51,12 @@ pub struct Module {
 ///
 /// Contains all modules in topological order (dependencies before dependents).
 /// Function-level imports are resolved by the typechecker, not stored here.
-#[salsa::input]
+///
+/// Interned, so a graph built twice from the same modules is one graph. As an
+/// input it was not, and a caller wanting a stable graph across edits had to
+/// hold on to the first one and drive its setters - carefully, since a setter
+/// marks an input changed whether or not the value differs.
+#[salsa::interned(revisions = usize::MAX, unsafe(no_lifetime))]
 pub struct ModuleGraph {
     /// Modules in dependency order (dependencies come first).
     #[returns(ref)]
