@@ -385,7 +385,7 @@ impl<'db> LoweringContext<'db> {
         let lowered = self.lower_expr_inner(expr);
 
         // Wrap with CloneCoerce if auto-adapted
-        if self.auto_adaptations.contains(&expr.as_id()) {
+        if self.auto_adaptations.contains(&ExprKey::of(self.db, expr)) {
             return self.emit_clone_coerce(lowered, ...);
         }
 
@@ -682,7 +682,7 @@ DATALOVE_AUTO_ADAPT=report datalove run example.dfs
 Implemented for script units, in the shape "record where the `@` belongs,
 then let lowering emit it" - see `compiler-guide.md` under "Auto-adapt".
 That answers open question 1 below: IR-level, via `AdaptSites` keyed by
-salsa expression id, not AST rewriting.
+`ExprKey`, not AST rewriting.
 
 Not implemented:
 

@@ -1,371 +1,305 @@
-# Salsa Patterns Guide
+# Salsa: idiomatic and effective use
 
-Patterns learned from implementing memoization and parallelization in the datalove compiler.
+How this codebase uses salsa, why, and the mistakes that are easy to make and
+hard to notice. Written against salsa 0.28.
 
-## Salsa Type Categories
+Most of what goes wrong with salsa fails silently. The type system does not
+catch it, the test suite usually does not either, and the symptom is a compiler
+that is slower than it should be or that produces different bytes on every run.
+So most of the sections below end with how to measure the thing, not just how to
+write it.
 
-### 1. Input Types (`#[salsa::input]`)
+## The four kinds, and how to choose
 
-External data that enters the system. Changes to inputs trigger recomputation.
+**`#[salsa::input]`** is data that comes from outside and is set, not computed.
+Only `Source` (`bcts/src/input.rs`) is an input here: a path's text, changed
+between revisions with `set_text`. Inputs have no lifetime, so their fields must
+be `'static`, and they are never collected.
 
-```rust
-#[salsa::input]
-pub struct Source {
-    #[returns(ref)]
-    pub text: String,
-}
+**`#[salsa::interned]`** is a value deduplicated by content: equal content gives
+the same handle. `InternedText`, `ModuleId`, `Module` and `ModuleGraph`
+(`bcts/src/module_graph.rs`, `bcts/src/text.rs`) are all interned. Reach for
+this when you want a cheap handle to something you look up by value.
 
-#[salsa::input]
-pub struct Module {
-    pub id: ModuleId,
-    pub source: Source,
-}
+**`#[salsa::tracked]`** structs are computed values with an identity. They can
+only be created inside a tracked function. See the next section, because the
+distinction between their two kinds of field is the part that gets missed.
 
-#[salsa::input]
-pub struct ModuleGraph {
-    #[returns(ref)]
-    pub modules: Vec<Module>,
-}
-```
+**`#[salsa::accumulator]`** is a side channel, used for diagnostics in
+`datalove-diagnostic`. Values are pushed with `.accumulate(db)` and read back
+with `query::accumulated::<T>(db, args)`, which walks the memoized dependency
+graph. The compiler also returns diagnostics directly in result structs
+(`PendingDiagnostic`); both mechanisms are in use.
 
-**Key properties:**
-- Created with `Type::new(db, fields...)`
-- Serve as entry points for computation
-- Use `#[returns(ref)]` for borrowed access to contained data
+A previous version of this file warned that accumulators do not fire on cache
+hits. That was not re-verified against 0.28 and `accumulated()` is designed to
+walk memoized edges, so treat it as unproven rather than as a rule.
 
-### 2. Tracked Types (`#[salsa::tracked]`)
+## Tracked structs have two kinds of field, and we mostly use one
 
-Computed data that salsa caches. Identity based on all fields.
+A tracked struct's identity is `hash(untracked fields) + a disambiguator
+assigned in creation order within the active query`. Fields marked `#[tracked]`
+are *not* part of that identity: they are read through their own dependency
+edge, so they can change while the struct's identity stays put.
 
-```rust
-#[salsa::tracked]
-pub struct TypeAndHeap<'db> {
-    pub heap: Heap,
-    #[returns(ref)]
-    pub ty: Type<'db>,
-}
+That is the whole point of a tracked struct. Used with no `#[tracked]` fields at
+all it is an interned struct with extra steps: creating one hashes everything it
+holds, and any change to any field yields a different struct, so a consumer that
+reads one field is invalidated by a change to another.
 
-#[salsa::tracked]
-pub struct SingleModuleTypecheckResult<'db> {
-    pub module_id: ModuleId,
-    #[returns(ref)]
-    pub errors: Vec<TypeError>,
-    #[returns(ref)]
-    pub expr_types: Vec<Option<TypeAndHeap<'db>>>,
-}
-```
+**In this codebase, 53 of 58 tracked structs have no `#[tracked]` field.**
+`SingleModuleTypecheckResult` has nine fields and none of them are tracked, so
+its identity is a hash of the whole type table.
 
-**Key properties:**
-- Can only be created inside tracked functions
-- Identity includes all fields (careful with Vec contents)
-- Use `#[returns(ref)]` for collections to avoid cloning
+This is a known smell, not a settled task. Marking `expr_types` as `#[tracked]`
+compiles, passes the suite, and changed nothing the `module_memo` fixtures
+measure. If you take it on, do it as an experiment on one struct: find a
+consumer that reads a strict subset of the fields, and measure whether an edit
+to an unread field still invalidates it. Do not sweep all 53 on theory.
 
-### 3. Interned Types (`#[salsa::interned]`)
+## Never store a salsa `Id`. Use a key of your own
 
-Deduplicated values. Equal content = same ID.
+A `salsa::Id` is `{ index: NonZeroU32, generation: u32 }`. Freed slots are
+recycled with the generation bumped, for tracked structs and interned values
+alike, and salsa leaks a slot rather than let the generation wrap. So the
+generation is an ABA guard, and comparing two whole `Id`s is safe.
 
-```rust
-#[salsa::interned]
-pub struct InternedText<'db> {
-    #[returns(ref)]
-    pub text: String,
-}
-```
+What is not safe:
 
-**Key properties:**
-- Lightweight handles (just an ID)
-- Same content always returns same struct
-- Great for identifiers, paths, strings
+- **Dropping the generation.** `id.index()` throws the guard away, so two
+  expressions that occupied one slot in different revisions become
+  indistinguishable. `Id::from_index` rebuilds with generation 0, so a
+  round-trip through an index is lossy.
+- **Dereferencing a stale id.** Comparing is fine; asking what it points at is
+  not. Tracked structs panic outright, even in release. Interned values only
+  `debug_assert`, which means silent corruption in a release build.
+- **Assuming stability across revisions.** An id is stable only while the
+  identity behind it is. The disambiguator is assigned in creation order within
+  a query, so changing the set of structs a query creates moves the ids of
+  everything after the change.
+- **Letting ids into output.** They put salsa's numbering into error messages
+  and expected test output, which then churns for unrelated reasons.
+- **Indexing a `Vec` by `id.index()`.** Ids are not dense over the subset you
+  care about. One measured case held 3764 slots to record 8 entries.
 
-### 4. Accumulators (`#[salsa::accumulator]`)
+The rule that is easy to remember: **a whole `Id`, never taken apart, compared
+within a single revision, where the table and the ids come from queries in the
+same dependency chain, is fine.** Everything else is a bug waiting.
 
-Side-channel data collection (diagnostics).
+Even when it is fine, prefer a key you define. The id version's correctness
+rests on an invariant nobody can see at the call site. The keys this codebase
+uses:
 
-```rust
-#[salsa::accumulator]
-pub struct TypeDiagnostic(StoredDiagnostic);
-```
+| key | where | identifies |
+|---|---|---|
+| `ExprKey { module_id, fn_name, local_index }` | `datafun-ast/src/ast.rs` | a datafun expression |
+| `local_index: Option<u32>` on `ExprFull` | `datalit/src/ast.rs` | a datalit expression's position in its parse |
+| `ConstStmtId(u32)` | `datafun-ir/src/lib.rs` | a const statement's position in its unit |
 
-**Usage:**
-```rust
-TypeDiagnostic(diagnostic).accumulate(db);
-```
+`ExprKey` carries a hand-written `Debug` that prints `ExprKey(fn #4)` rather
+than the interned id behind `fn_name`, so keys can appear in expected output.
 
-**Warning:** Accumulators have caching issues - if the tracked function that accumulated them gets a cache hit, the accumulations won't fire. Prefer returning diagnostics in result structs.
+One deliberate exception survives: `InternedText`'s `Ord`
+(`bcts/src/text.rs`) compares by id. `Ord::cmp` receives no database, so it
+cannot compare content. See the determinism section for why it is load-bearing
+rather than a wart.
 
-## Tracked Functions
+## Key a query on one entity where you can
 
-### Basic Pattern
+A tracked function's memoization key is all of its non-`db` arguments. With more
+than one, salsa interns a tuple to key on, which costs an interned entry per
+distinct argument combination and leaves salsa unable to name the entity in the
+`WillExecute` event it reports.
 
-```rust
-#[salsa::tracked]
-pub fn parse_module_full<'db>(
-    db: &'db dyn salsa::Database,
-    module: Module,
-) -> ParseResult<'db> {
-    // computation...
-}
-```
+`resolve_module_names` used to take `(module, parsed)`. Keying it on `module`
+alone and fetching the parse inside removed 24 interned tuples (2112 bytes for a
+24-module world) and made its events attributable to modules.
 
-**Memoization key:** All non-db parameters determine cache identity.
+The limit is real, though: `typecheck_module` and `lower_module` take six or
+more arguments including graph-level data that is not reachable from a module.
+Restructuring compiler phase signatures to serve test instrumentation is the
+wrong trade, and they were deliberately left alone.
 
-### Per-Module Memoization Pattern
+## The firewall: split a query so edits stop early
 
-For module-level caching, use `Module` as the identity key:
+The most effective memoization tool here is a cheap projection in front of an
+expensive one.
 
-```rust
-#[salsa::tracked]
-pub fn typecheck_module<'db>(
-    db: &'db dyn crate::Db,
-    module: Module,                              // Identity key
-    parsed: ParsedStatements<'db>,               // Derived data
-    spans: DatafunSpans,
-    resolved_imports: Vec<ResolvedImportData<'db>>,
-    import_errors: Vec<TypeError>,
-) -> SingleModuleTypecheckResult<'db> {
-    // ...
-}
-```
+`parse_module_full` returns statements and the span table together.
+`parse_module_ast` projects out just the statements, **deriving from
+`parse_module_full` rather than parsing again**. Name resolution reads the
+projection. So:
 
-This caches per-module even though other parameters change when source changes.
+| edit | full parse | projection | name resolution |
+|---|---|---|---|
+| blank line at end (moves no span) | runs | backdates, not asked for | not run |
+| blank line at start (moves every span) | runs | runs, returns equal value | not run |
+| `ret 1` to `ret 99` | runs | runs, returns equal value | not run |
+| rename a function | runs | runs | **runs** |
 
-### Graph-Level vs Module-Level Functions
+The literal case works because statements compare by tracked-struct identity and
+the literal lives in a tracked field, which typechecking reads and name
+resolution does not.
 
-Two patterns for working with module graphs:
+Write the projection the other way round and it parses the source a second time:
+twice the parsing work, invisible to any fixture that records parsing as a
+yes-or-no per module. `parse_firewall_tests.rs` pins all four rows, and the
+first row is what catches the duplicate parse.
 
-1. **Graph-level tracked function** (aggregates results):
-```rust
-#[salsa::tracked]
-pub fn typecheck_module_graph<'db>(
-    db: &'db dyn Db,
-    parsed_graph: ParsedModuleGraph<'db>,
-) -> ModuleGraphTypecheckResult<'db> {
-    for module in graph.iter_modules(db) {
-        // Call per-module tracked function
-        let result = typecheck_module(db, module, ...);
-        // Aggregate results...
-    }
-}
-```
+## Not everything wants to be a tracked struct
 
-2. **Per-module tracked function** (cached individually):
-```rust
-#[salsa::tracked]
-pub fn typecheck_module<'db>(
-    db: &'db Db,
-    module: Module,
-    // other params...
-) -> SingleModuleTypecheckResult<'db> {
-    // Process single module
-}
-```
+A tracked struct costs an id, a page slot and revision metadata per instance.
+That is worth paying for identity. It is not worth paying for a value nothing
+looks up by identity.
 
-## Parallel Execution Pattern
+`Token` was a tracked struct, one per token: 1032 of them, 66 KB, the largest
+single thing in the database for 24 four-line modules. As a plain value in the
+`Vec` a `ChunkLex` already held, the same tokens cost 50 KB, and a tracked
+function that memoized `text.contains("\n")` *per token* became a direct call.
 
-### DbClone Trait
+Backdating was unaffected, which was worth checking rather than assuming: a
+`Vec` of values compares by value where a `Vec` of ids compared by id, so this
+could have spread span-shift invalidation. It did not, because the firewall that
+spares name resolution sits at `ParsedStatements`.
 
-Enable database cloning for parallel execution:
+The test for "should this be tracked" is: **does anything look it up by
+identity, or does it only ever get read out of a collection?**
 
-```rust
-pub trait DbClone: salsa::Database {
-    /// Clone the database for use on another thread.
-    fn dyn_clone(&self) -> Box<dyn DbClone + Send>;
+## Determinism: `BTreeMap` where it is iterated, `HashMap` where it is not
 
-    /// Get a reference to self as a salsa::Database trait object.
-    fn as_salsa_db(&self) -> &dyn salsa::Database;
-}
-```
+`HashMap` iteration order comes from a seed drawn afresh in every process. For a
+compiler that means the same input can produce different output.
 
-**Implementation:**
-```rust
-impl DbClone for Database {
-    fn dyn_clone(&self) -> Box<dyn DbClone + Send> {
-        Box::new(self.clone())
-    }
+This was not hypothetical. Compiling one file four times produced four different
+object files. The causes, all found by walking hash collections:
 
-    fn as_salsa_db(&self) -> &dyn salsa::Database {
-        self
-    }
-}
-```
+- `ModuleFunctionRegistry` was a `HashMap`, and the Cranelift backend walks it
+  to declare functions. `declare_function` hands out `FuncId`s in call order, so
+  the identifiers themselves varied.
+- Type descriptors were collected into a `HashSet` and emitted in set order.
+- The C backend sorted them by `type_depth` with `sort_by_key`, which is
+  **stable**, so equal-depth types kept set order, and every primitive is depth
+  zero.
+- Consts were flattened with `or_insert_with`, so when two shared a short name
+  the winner was whichever hash order reached it first.
 
-### Cache Warming Pattern
+The rule: **`HashMap` for lookup, `BTreeMap` or a sorted `Vec` for anything
+iterated.** About 116 lookup-only hash maps are left alone and should be.
 
-Parallel execution warms the cache, then sequential aggregation hits it:
+This is also why `InternedText: Ord` exists, via a chain worth knowing:
 
-```rust
-pub fn typecheck_module_graph_parallel<'db>(
-    db: &'db dyn DbClone,
-    parsed_graph: ParsedModuleGraph<'db>,
-) -> ModuleGraphTypecheckResult<'db> {
-    use rayon::prelude::*;
+1. `ExprTypes` and friends are untracked fields of tracked structs, so they are
+   part of the identity hash and must implement `Hash`.
+2. `std::collections::HashMap` does not implement `Hash` and cannot, since its
+   iteration order is unspecified.
+3. `BTreeMap` does, but requires `K: Ord`.
+4. `ExprKey` derives `Ord` and contains `Option<InternedText>`.
+5. `Ord::cmp` gets no database, so the only thing left to compare is the id.
 
-    // Clone databases upfront
-    let work: Vec<_> = modules
-        .map(|module| (db.dyn_clone(), module))
-        .collect();
+Swapping those to `HashMap` would free `InternedText` from needing `Ord`, and it
+would be a mistake: `BTreeMap` is what keeps a memoized value's contents
+order-stable.
 
-    // Parallel phase - warms salsa cache
-    work.into_par_iter().for_each(|(db_clone, module)| {
-        let db_salsa = db_clone.as_salsa_db();
-        let _ = typecheck_module(db_salsa, module, ...);
-    });
+Reproducibility cannot be tested in one process, because the seed is fixed
+within a run and a hash map iterates identically every time. `datalove-cli/tests/reproducible_build_tests.rs`
+compiles a fixture three times in **separate processes** and compares the bytes.
 
-    // Sequential aggregation - hits cached results
-    typecheck_module_graph(db.as_salsa_db(), parsed_graph)
-}
-```
+### Hashers
 
-**Key insight:** Database clones share `Arc<Zalsa>` (global cache state) but have separate `ZalsaLocal` (thread-local state). Parallel workers write to shared cache; sequential phase reads from it.
+Salsa already hashes with `rustc_hash::FxHasher` internally. Replacing std's
+SipHash in our own maps was measured: SipHash is 1.4 to 2.4 percent of runtime
+by phase, and switching the lot to `ahash` bought about 1 percent overall for a
+44-file diff. It was tried and backed out. Hashing is not where the time goes.
 
-## Verifying Memoization
+## Durability
 
-### Query Logging Infrastructure
+Inputs that will not change during a session should say so. `datafun-pkg/src/package.rs`
+marks system library sources `Durability::HIGH` and local sources
+`Durability::LOW`. High-durability inputs let salsa skip whole subtrees when
+validating.
 
-Thread-local logging to verify cache behavior:
+This also interacts with interned garbage collection: salsa only reuses interned
+slots at `Durability::LOW`, after `DEFAULT_REVISIONS` (3) have passed.
 
-```rust
-// In tracked functions, log execution:
-log_query("typecheck", module_path, QueryPhase::Start);
-// ... do work ...
-log_query("typecheck", module_path, QueryPhase::End);
+## Measuring
 
-// In tests:
-enable_query_logging();
-let result = typecheck_module_graph(db, graph);
-let entries = disable_query_logging();
-let executed = get_executed_modules(&entries, "typecheck");
-assert_eq!(executed.len(), expected_count);
-```
-
-### Salsa Event Handler
-
-For direct salsa event observation:
+**What ran.** `datalove-ct/src/query_events.rs` provides `QueryRecorder`, which
+listens for `WillExecute` and records every query salsa executes, with the salsa
+id of its argument. `ModuleKeys` maps those ids back to module paths. This needs
+no annotation and sees every query on every thread.
 
 ```rust
-struct LoggingDatabase {
-    storage: salsa::Storage<Self>,
-    events: Arc<Mutex<Vec<salsa::Event>>>,
-}
-
-impl LoggingDatabase {
-    fn new() -> Self {
-        let events = Arc::new(Mutex::new(Vec::new()));
-        let events_clone = events.clone();
-        Self {
-            storage: salsa::Storage::new(Some(Box::new(move |event| {
-                events_clone.lock().unwrap().push(event);
-            }))),
-            events,
-        }
-    }
-
-    fn executed_queries(&self) -> Vec<String> {
-        self.events.lock().unwrap()
-            .iter()
-            .filter_map(|event| {
-                if let salsa::EventKind::WillExecute { database_key } = &event.kind {
-                    Some(format!("{:?}", database_key))
-                } else {
-                    None
-                }
-            })
-            .collect()
-    }
-}
+let recorder = QueryRecorder::new();
+let db = Database::recording(&recorder);
+// ... compile ...
+recorder.clear();
+// ... compile again ...
+assert!(recorder.take().is_empty());
 ```
 
-### Test Pattern
+Attribution only works for queries keyed on a single entity; multi-argument
+queries key on an interned tuple that cannot be mapped back.
+
+**The older mechanism.** The `module_memo` fixtures answer a narrower question
+(which modules were parsed, resolved, typechecked, lowered) using 12 hand-placed
+`log_query` calls, spread over 6 of the 94 tracked functions. It is thread-local, so anything
+rayon runs is invisible, and a query nobody annotated does not exist to it.
+
+Its failure mode is worth knowing, because it has bitten: moving the parse
+queries to another crate left their `log_query` calls behind, and all 16
+fixtures reported a regression. Nothing about memoization had changed. **If the
+fixtures move as a group after a refactor, check the instrumentation before
+believing them.**
+
+**Memory.** `<dyn salsa::Database>::memory_usage(&db)` reports per-ingredient
+counts and bytes. It sizes fields by their stack size, so a `Vec` looks like
+three words whatever it holds; declare `#[salsa::tracked(heap_size = f)]` to
+count the rest. `ChunkLex` does, and without it the tokens would appear free.
+`database_memory_tests.rs` includes a test whose only job is to check the bytes
+are still counted, so that "no `Token` structs" cannot pass by hiding them.
+
+## Parallel execution
+
+`DbClone` lets a database be cloned across threads. Clones share `Arc<Zalsa>`,
+the global memo state, and get their own `ZalsaLocal`. The pattern is to warm
+the cache in parallel and then let a sequential tracked function aggregate from
+cache hits:
 
 ```rust
-#[test]
-fn test_memoization_works() {
-    let mut db = Database::default();
-
-    // First run - executes queries
-    enable_query_logging();
-    let _ = typecheck_module_graph(&db, graph);
-    let first = disable_query_logging();
-    assert!(get_executed_modules(&first, "typecheck").len() > 0);
-
-    // Second run - should hit cache (0 queries)
-    enable_query_logging();
-    let _ = typecheck_module_graph(&db, graph);
-    let second = disable_query_logging();
-    assert_eq!(get_executed_modules(&second, "typecheck").len(), 0);
-}
+work.into_par_iter().for_each(|(db_clone, module)| {
+    let _ = typecheck_module(db_clone.as_salsa_db(), module, ...);
+});
+typecheck_module_graph(db.as_salsa_db(), parsed_graph)
 ```
 
-## Parallel Safety: Stable Identifiers
+Enabled with `DATALOVE_PARALLEL=1`.
 
-### Problem: Non-Deterministic Salsa IDs
+## Pitfalls in short
 
-Raw salsa IDs (`expr.as_id().index()`) depend on allocation order, which is non-deterministic in parallel:
+- **Tracked structs can only be created inside tracked functions.** Return plain
+  data from helpers and build the struct at the tracked boundary. `TypeFunction`
+  is one of these; passing raw strings down the pipeline and interning inside
+  the tracked function is the workaround used here.
+- **`ModuleId::new()` twice gives two different ids** when `ModuleId` is an
+  input. It is interned now, so equal paths give equal ids, but the general
+  point stands for inputs.
+- **A tracked function taking the whole graph invalidates on any module.** Key
+  per-module functions on the module.
+- **`no_eq`** is used three times, in `bcts/src/chunks.rs` and
+  `bcts/src/source_map.rs`. It suppresses the equality check that backdating
+  relies on, so add it only when equality is genuinely meaningless or too
+  expensive, and say why.
+- **Do not put a crate under `#![allow(unused)]`.** `bcts` was, and it hid 41
+  warnings including two `db` parameters that a refactor had made redundant.
 
-```rust
-// BAD: Parallel order affects ID values
-AnalysisError::UseAfterMove {
-    expr_id: expr.as_id().index() as u32,  // Non-deterministic!
-    name: name.to_string(),
-}
-```
+## Checklist for a new query or struct
 
-### Solution: Use Semantic Indices
-
-Use indices that are deterministic within their containing scope:
-
-```rust
-// GOOD: local_index is sequential within function
-AnalysisError::UseAfterMove {
-    local_index: expr.local_index(db),  // Deterministic
-    name: name.to_string(),
-}
-```
-
-Where `local_index` is the expression's sequential position within its function body.
-
-## Common Pitfalls
-
-### 1. Creating Tracked Structs Outside Tracked Functions
-
-```rust
-// BAD: Tracked struct created outside tracked function
-fn helper<'db>(db: &'db Db) -> MyTrackedStruct<'db> {
-    MyTrackedStruct::new(db, ...)  // Error!
-}
-```
-
-**Solution:** Return plain data from helpers, create tracked struct in tracked function.
-
-### 2. Accumulator Caching Issues
-
-Accumulators don't fire on cache hits. If a tracked function accumulated diagnostics and later gets a cache hit, those diagnostics won't be accumulated again.
-
-**Solution:** Return diagnostics in the result struct instead.
-
-### 3. Identity Instability
-
-If a tracked struct's fields change when they shouldn't (e.g., different expression order in parallel), memoization breaks.
-
-**Solution:** Ensure all fields are deterministic. Use sorted collections, stable IDs.
-
-### 4. Over-Granular Dependencies
-
-If `resolve_all_exports(db, parsed_graph)` depends on the entire graph, ANY module change invalidates ALL modules' import resolution.
-
-**Solution:** For true per-module caching, tracked functions should take `Module` as key, not the whole graph. Graph-level aggregation then calls per-module functions.
-
-## Summary: The Three-Layer Pattern
-
-1. **Per-module tracked functions**: Maximum caching, cache key is `Module`
-   - `parse_module_full(db, module) -> ParseResult`
-   - `typecheck_module(db, module, ...) -> SingleModuleTypecheckResult`
-   - `resolve_module_imports(db, module, ...) -> ModuleImportResolution`
-
-2. **Graph-level tracked functions**: Aggregate per-module results
-   - `parse_module_graph(db, graph) -> ParsedModuleGraph`
-   - `typecheck_module_graph(db, parsed_graph) -> ModuleGraphTypecheckResult`
-
-3. **Parallel entry points**: Warm cache, then delegate to graph-level
-   - `parse_module_graph_parallel(db, graph) -> ParsedModuleGraph`
-   - `typecheck_module_graph_parallel(db, parsed_graph) -> ModuleGraphTypecheckResult`
+1. Does it need identity, or is it a value read out of a collection?
+2. If tracked: which fields identify it, and which should be `#[tracked]`?
+3. Can it be keyed on one entity rather than several arguments?
+4. Is there a cheap projection that would stop edits before the expensive part?
+5. Does anything iterate a collection inside it? If so, is that collection
+   ordered?
+6. Are you storing a `salsa::Id`? Use a key of your own instead.
+7. How will you tell whether it memoizes? Write the measurement, then break the
+   code and check the measurement notices.

@@ -10,7 +10,7 @@
 - [Datafun Typing Rules](datafun-typing-rules.md)
 - [Operator Precedence](op-precedence.md)
 - [Sigil Assignments](sigil-assignments.md)
-- [Salsa Patterns](salsa-patterns.md)
+- [Salsa: idiomatic and effective use](salsa-patterns.md)
 - [index-64 Feature](index-64.md)
 
 ---

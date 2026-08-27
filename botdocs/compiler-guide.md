@@ -339,7 +339,9 @@ use `EnumPayload` to extract the binding.
 
 ## Salsa Patterns
 
-See [salsa-patterns.md](salsa-patterns.md) for detailed type categories.
+See [salsa-patterns.md](salsa-patterns.md) for how the four salsa kinds are
+used here, why expression tables are keyed on `ExprKey` rather than salsa ids,
+and how to measure whether a change memoizes.
 
 ### Database
 
@@ -360,8 +362,8 @@ Implements `DbClone` - shares `Arc<Zalsa>` global state, clones thread-local sta
 | Function | Key Inputs | Output |
 |----------|------------|--------|
 | `parse_module_full` | module | `ParseResult` with spans |
-| `parse_module_ast` | module | `ParsedStatements` (no spans, for equality checks) |
-| `resolve_module_names` | module, parsed | `ModuleNameResolution` |
+| `parse_module_ast` | module | `ParsedStatements`, projected from `parse_module_full` so a module is parsed once |
+| `resolve_module_names` | module | `ModuleNameResolution` |
 | `typecheck_module` | module, parsed, name_resolution, imports | `SingleModuleTypecheckResult` |
 | `analyze_module` | module, parsed, typecheck | `SingleModuleAnalysis` |
 | `lower_module` | module, ir_idx, parsed, typecheck, ownership, func_id_map, consts, skip_inlining, funcs | `SingleModuleLoweringResult` |
@@ -380,7 +382,9 @@ Key principle: `Module` objects are created once and reused. Updates use `set_so
 - Graph rebuilds reuse existing modules
 
 Memoization behavior:
-- Whitespace-only changes: re-parses, but AST equality prevents re-typecheck
+- Whitespace-only changes: re-parses, but the `parse_module_ast` projection
+  returns an equal value and backdates, so name resolution and typechecking do
+  not re-run (see the firewall section of salsa-patterns.md)
 - AST changes (same types): re-typechecks changed module only
 - Type changes: re-typechecks dependents
 
@@ -430,9 +434,9 @@ across all match arms: if a value is moved in one arm, it must be moved in all.
 
 `AutoAdaptMode::Enabled` accepts the `@`-recoverable errors catalogued in
 `report-adapt-cases.md` by supplying the `@` the source left out. Both
-analyses record where it belongs as `AdaptSites`, keyed by salsa expression
-id, and lowering emits what an explicit `@` on that expression would - a
-widening between fixed ints, a clone for linear types.
+analyses record where it belongs as `AdaptSites`, keyed by `ExprKey`, and
+lowering emits what an explicit `@` on that expression would - a widening
+between fixed ints, a clone for linear types.
 
 Ownership analysis records the *earlier* use, not the one that would have
 errored: a value read after a move is already gone, so the repair belongs

@@ -5,6 +5,15 @@
 This document provides a detailed implementation plan for adding Zig-style const parameter specialization
 to datalove using the **union-branch specialization** strategy.
 
+> **Where the plan and the code differ.** The `call_expr_id: salsa::Id` on
+> `ComptimeCallSite`, and the `call_rewrites` map it fed on
+> `SpecializationResult`, are not in the code. Call sites are found in the IR by
+> `rewrite_comptime_calls`, which matches `Instruction::ComptimeCall` and
+> resolves the comptime argument values it finds there, so the id was never
+> read. It was removed, along with the map. A raw salsa id inside a memoized
+> value is not free even when unread: it takes part in the equality that decides
+> whether typechecking can be reused. See `salsa-patterns.md`.
+
 ## Table of Contents
 
 1. [Executive Summary](#executive-summary)

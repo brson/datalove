@@ -682,7 +682,14 @@ This allows mutual recursion between functions.
 
 ### Expression Type Storage
 
-Expression types are stored in a vector indexed by Salsa ID for efficient lookup during code generation.
+Expression types are stored in a `BTreeMap` keyed by `ExprKey`, which is the
+expression's module, enclosing function name and sequential index within that
+function.
+
+They were once a vector indexed by salsa id. That indexed by the wrong half of
+an id, dropping the generation that tells two expressions in a reused slot
+apart, and the vector grew to the highest index salsa had handed out - in one
+measured case 1416 slots to hold 8 entries. See `salsa-patterns.md`.
 
 ### Call Target Resolution
 
