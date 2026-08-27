@@ -20,7 +20,6 @@ use crate::types::*;
 
 pub use crate::{Type, TypeError, is_copy_type};
 use crate::types::ComptimeCallSite;
-use salsa::plumbing::AsId;
 
 // ============================================================================
 // Operator Display Helpers
@@ -803,7 +802,6 @@ fn synthesize_function_call<'db>(
         // Record this call site if we successfully validated all comptime args.
         if comptime_arg_names.len() == comptime_indices.len() {
             ctx.comptime_registry_mut().record_call_site(ComptimeCallSite {
-                call_expr_id: call.as_id(),
                 func_name: name,
                 comptime_param_indices: comptime_indices.clone(),
                 comptime_arg_names,

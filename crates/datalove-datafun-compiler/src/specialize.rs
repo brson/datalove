@@ -81,8 +81,6 @@ impl FuncSpecialization {
 pub struct SpecializationResult {
     /// Functions that were specialized (func_name → specialization info).
     pub specialized_funcs: HashMap<String, FuncSpecialization>,
-    /// Call site rewrites (call_site_id → discriminant to pass).
-    pub call_rewrites: HashMap<salsa::Id, u32>,
 }
 
 impl SpecializationResult {
@@ -106,7 +104,6 @@ pub fn build_specialization_plan<'db>(
     }
 
     let mut specialized_funcs: HashMap<String, FuncSpecialization> = HashMap::new();
-    let mut call_rewrites: HashMap<salsa::Id, u32> = HashMap::new();
 
     // Process each call site.
     for call_site in &registry.call_sites {
@@ -145,24 +142,17 @@ pub fn build_specialization_plan<'db>(
             }
         });
 
-        // Check if this instantiation is new.
-        let discriminant = if let Some(&disc) = spec.value_to_discriminant.get(&values) {
-            disc
-        } else {
+        // Record the instantiation, giving it a discriminant if it is new.
+        // `rewrite_comptime_calls` reads these back by matching the comptime
+        // argument values it finds in the IR.
+        if !spec.value_to_discriminant.contains_key(&values) {
             let disc = spec.instantiations.len() as u32;
             spec.value_to_discriminant.insert(values.clone(), disc);
             spec.instantiations.push(values);
-            disc
-        };
-
-        // Record the rewrite for this call site.
-        call_rewrites.insert(call_site.call_expr_id, discriminant);
+        }
     }
 
-    SpecializationResult {
-        specialized_funcs,
-        call_rewrites,
-    }
+    SpecializationResult { specialized_funcs }
 }
 
 /// Transform a function with comptime parameters into union-branch form.

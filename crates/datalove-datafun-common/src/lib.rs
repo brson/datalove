@@ -310,8 +310,6 @@ pub struct TypeFunction<'db> {
 #[derive(Clone, Debug, Hash, PartialEq, Eq)]
 #[derive(salsa::SalsaValue)]
 pub struct ComptimeCallSite<'db> {
-    /// The call expression ID (for locating in IR later).
-    pub call_expr_id: salsa::Id,
     /// Name of the called function.
     pub func_name: InternedText<'db>,
     /// Indices of const parameters in the callee.
