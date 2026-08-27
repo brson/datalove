@@ -1,4 +1,3 @@
-#![allow(unused)]
 #![allow(clippy::needless_lifetimes)]
 
 use rmx::prelude::*;

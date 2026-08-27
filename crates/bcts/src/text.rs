@@ -1,7 +1,6 @@
 use rmx::prelude::*;
 
 use std::ops::Range;
-use std::{iter, mem};
 
 /// Byte span type alias.
 pub type ByteSpan = Range<usize>;
@@ -85,7 +84,7 @@ impl<'db> Text<'db> {
         SubText::new(
             db,
             *self,
-            (0..self.text(db).len()),
+            0..self.text(db).len() ,
         )
     }
 
@@ -126,7 +125,7 @@ impl<'db> InternedText<'db> {
         InternedSubText::new(
             db,
             *self,
-            (0..self.text(db).len()),
+            0..self.text(db).len() ,
         )
     }
 

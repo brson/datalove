@@ -1,9 +1,7 @@
 use rmx::prelude::*;
 
 use rmx::std::ops::Range;
-use rmx::std::{iter, mem};
-use rmx::std::iter::Peekable;
-use rmx::std::slice::Iter as SliceIter;
+use rmx::std::iter;
 
 use crate::text::Text;
 

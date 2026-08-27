@@ -1,9 +1,7 @@
 use rmx::prelude::*;
 
-use rmx::core::iter;
-use rmx::core::ops::Range;
 
-use crate::bracer::{Bracer, TreeToken, BracerIter};
+use crate::bracer::{TreeToken, BracerIter};
 use crate::lexer::TokenKind;
 
 pub fn iter_lines<'db>(
@@ -65,7 +63,7 @@ fn dbglex(s: &str) -> Vec<String> {
     let chunk = crate::source_map::basic_source_map(db, source);
     let chunk_lex = crate::lexer::lex_chunk(db, chunk);
     let bracer = crate::bracer::bracer(db, chunk_lex);
-    bracer.iter(db).lines().map(|mut line| line.debug_str(db)).collect()
+    bracer.iter(db).lines().map(|line| line.debug_str(db)).collect()
 }
 
 #[test]

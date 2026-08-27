@@ -1,10 +1,10 @@
 use rmx::prelude::*;
 
 use std::ops::Range;
-use std::{fmt, hash, iter, mem};
+use std::{fmt, hash, mem};
 
 use crate::input::Source;
-use crate::text::{Text, SubText};
+use crate::text::Text;
 use crate::chunk::Chunk;
 
 /// How far a comment or string extends, or `None` if one does not start here.
@@ -72,7 +72,7 @@ pub fn source_map<'db>(
     source: Source,
     config: Config<'db>,
 ) -> Chunk<'db> {
-    let mut state = State {
+    let state = State {
         db,
         config,
         source,
@@ -128,7 +128,7 @@ impl<'db> State<'db> {
 
         loop {
             let text_remaining = &text_all[self.position..];
-            let mut start_char_indexes = text_remaining.match_indices(&*all_start_chars).map(|(i, s)| i);
+            let mut start_char_indexes = text_remaining.match_indices(&*all_start_chars).map(|(i, _)| i);
             let next_start_char_index = start_char_indexes.next();
 
             match next_start_char_index {

@@ -1,16 +1,15 @@
 use rmx::prelude::*;
 
-use rmx::itertools::Itertools;
 use rmx::std::ops::Range;
 use rmx::std::{iter, mem};
-use rmx::std::collections::BTreeMap;
 
-use crate::input::Source;
 use crate::text::{Text, InternedText};
 use crate::chunk::{Chunk, RangeKind};
-use crate::source_map::{
-    basic_source_map,
-};
+
+#[cfg(test)]
+use crate::input::Source;
+#[cfg(test)]
+use crate::source_map::basic_source_map;
 
 #[salsa::tracked(heap_size = chunk_lex_heap_size)]
 pub struct ChunkLex<'db> {

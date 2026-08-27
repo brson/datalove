@@ -1,7 +1,7 @@
 use rmx::prelude::*;
 
 use rmx::std::ops::Range;
-use rmx::std::{iter, mem};
+use rmx::std::mem;
 use rmx::std::iter::Peekable;
 use rmx::std::slice::Iter as SliceIter;
 
@@ -59,7 +59,7 @@ pub fn chunks<'db>(
     chunk_in: Chunk<'db>,
     config: Config<'db>,
 ) -> Chunks<'db> {
-    let mut state = State {
+    let state = State {
         db,
         config,
         chunk_in,
@@ -113,7 +113,7 @@ impl<'db> State<'db> {
 
             loop {
                 let text_remaining = &text_all[self.position..range.end];
-                let mut start_char_indexes = text_remaining.match_indices(all_start_chars).map(|(i, s)| i);
+                let mut start_char_indexes = text_remaining.match_indices(all_start_chars).map(|(i, _)| i);
                 let next_start_char_index = start_char_indexes.next();
 
                 match next_start_char_index {
@@ -154,7 +154,8 @@ impl<'db> State<'db> {
         &mut self,
         try_chunk: Option<usize>,
     ) {
-        let chunk_offset = self.position.checked_sub(self.chunk_wip.chunk_start).X();
+        // The position never precedes the start of the chunk being built.
+        assert!(self.position >= self.chunk_wip.chunk_start);
 
         match try_chunk {
             Some(chunk_extra_bytes) => {

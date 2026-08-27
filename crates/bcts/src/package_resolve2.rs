@@ -1,9 +1,7 @@
 use rmx::prelude::*;
 use rmx::std::collections::{BTreeSet, BTreeMap};
-use rmx::std::path::PathBuf;
 
-use crate::text::SubText;
-use crate::package2::{self as package, PackageName, Package, PackageModule, ModuleName};
+use crate::package2::{PackageName, Package, PackageModule, ModuleName};
 
 pub type ImportSpace = String;
 pub type PackageAlias = String;
@@ -56,12 +54,7 @@ pub fn resolve_package_world<'db>(
 ) -> PackageWorldModuleGraphWithErrors<'db> {
     let mut module_edges: BTreeMap<PackageModule<'db>, BTreeSet<(ImportDemand, ResolvedPackageModule<'db>)>> = default();
     for package_world_record in package_world_map.flatten_iter(db) {
-        let PackageWorldRecord {
-            import_space,
-            package_name,
-            package,
-            package_module,
-        } = package_world_record;
+        let PackageWorldRecord { package, package_module, .. } = package_world_record;
         let mut module_deps = BTreeSet::new();
         let import_demands = &import_demand_map.map(db)[&package_module];
         for import_demand in import_demands.iter() {
@@ -251,7 +244,7 @@ impl<'db> PackageWorldMap<'db> {
             .flat_map(move |(import_space, packages)| {
                 packages.iter().flat_map(move |(package_name, package)| {
                     let modules = package.modules(db);
-                    modules.iter().map(move |(module_name, package_module)| {
+                    modules.iter().map(move |(_, package_module)| {
                         PackageWorldRecord {
                             import_space,
                             package_name,

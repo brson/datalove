@@ -1,11 +1,11 @@
 use rmx::prelude::*;
 
 use rmx::core::ops::Range;
-use rmx::core::iter::Peekable;
-use rmx::std::io::Write;
 
-use crate::chunk::Chunk;
 use crate::lexer::{ChunkLex, Token, TokenKind, Sigil};
+
+#[cfg(test)]
+use rmx::std::io::Write;
 
 #[salsa::tracked]
 pub struct Bracer<'db> {
@@ -111,14 +111,6 @@ impl<'db> BracerIter<'db> {
             debug!("next removed close index {:?}", self.next_removed_close_index);
             debug!("--");
 
-            let tokens = &self.tree.chunk(self.db).tokens(self.db)
-                [self.real_token_range.C()];
-            let branches = &self.tree.branches(self.db)
-                [self.branches.C()];
-            let inserted_closes = &self.tree.inserted_closes(self.db)
-                [self.inserted_closes.C()];
-            let removed_closes = &self.tree.removed_closes(self.db)
-                [self.removed_closes.C()];
             let tokens = &self.tree.chunk(self.db).tokens(self.db)
                 [0..self.real_token_range.C().end];
             let branches = &self.tree.branches(self.db)
@@ -249,7 +241,7 @@ impl<'db> BracerIter<'db> {
                     }
                 }
 
-                (None, Some(next_branch), _, _) => bug!(),
+                (None, Some(_), _, _) => bug!(),
 
                 (None, None, Some(next_inserted_close), _) => {
                     assert_eq!(next_inserted_close.0, self.next_token_index);
@@ -313,7 +305,7 @@ pub fn bracer<'db>(
             if seen_open {
                 loop {
                     let (open_index, open_sigil, mut brace_map) = stack.pop().X();
-                    let mut parent_brace_map = stack.last_mut()
+                    let parent_brace_map = stack.last_mut()
                         .map(|(_, _, brace_map)| brace_map)
                         .unwrap_or(&mut top_map);
                     if open_sigil == open_s {
@@ -493,7 +485,7 @@ pub fn bracer<'db>(
                     }
                 }
             } else {
-                let mut parent_brace_map = stack.last_mut()
+                let parent_brace_map = stack.last_mut()
                     .map(|(_, _, brace_map)| brace_map)
                     .unwrap_or(&mut top_map);
                 parent_brace_map.removed_closes.push((index, close_s));
@@ -570,7 +562,7 @@ pub fn bracer<'db>(
     let num_tokens = chunk.tokens(db).len();
 
     while let Some((open_index, open_sigil, brace_map)) = stack.pop() {
-        let mut parent_brace_map = stack.last_mut()
+        let parent_brace_map = stack.last_mut()
             .map(|(_, _, brace_map)| brace_map)
             .unwrap_or(&mut top_map);
         parent_brace_map.branches.push(Branch {
@@ -603,7 +595,7 @@ pub fn bracer<'db>(
 
 impl<'db> TreeToken<'db> {
     /// Get source Text and byte span for this token or branch.
-    pub fn text_span(&self, db: &'db dyn crate::Db, source_text: crate::text::Text<'db>) -> Option<crate::text::TextSpan<'db>> {
+    pub fn text_span(&self, source_text: crate::text::Text<'db>) -> Option<crate::text::TextSpan<'db>> {
         match self {
             TreeToken::Token(tok) => {
                 Some(crate::text::TextSpan::new(source_text, tok.span()))
@@ -611,22 +603,6 @@ impl<'db> TreeToken<'db> {
             TreeToken::Branch { open, end_byte, .. } => {
                 Some(crate::text::TextSpan::new(source_text, open.span().start..*end_byte))
             }
-        }
-    }
-
-    /// Get the byte span of the opening delimiter, if this is a branch.
-    pub fn open_span(&self, db: &'db dyn crate::Db) -> Option<Range<usize>> {
-        match self {
-            TreeToken::Token(_) => None,
-            TreeToken::Branch { open, .. } => Some(open.span()),
-        }
-    }
-
-    /// Get the byte span of the closing delimiter, if this is a branch with a real close.
-    pub fn close_span(&self, db: &'db dyn crate::Db) -> Option<Range<usize>> {
-        match self {
-            TreeToken::Token(_) => None,
-            TreeToken::Branch { close, .. } => close.as_ref().map(|c| c.span()),
         }
     }
 
@@ -688,7 +664,7 @@ impl<'db> Bracer<'db> {
                         Self::debug_write(inner.C(), w, db)
                     })?;
                     if inner.next().is_some() {
-                        write!(w, " ");
+                        write!(w, " ")?;
                     }
                     write!(w, "{}", sigil.close_sigil().as_str())?;
                 }
@@ -845,7 +821,7 @@ fn test_text_span() {
         // Find the first branch.
         for token in bracer.iter(db) {
             if let TreeToken::Branch { .. } = &token {
-                let ts = token.text_span(db, source_text)?;
+                let ts = token.text_span(source_text)?;
                 let spanned = &ts.text.as_str(db)[ts.span.C()];
                 return Some((ts.start(), ts.end(), spanned.S()));
             }
