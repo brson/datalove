@@ -4,9 +4,8 @@
 //! and ScriptTypeContext for tracking accumulated bindings across script units.
 
 use rmx::prelude::*;
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use bct::text::{InternedText, TextSpan};
-use salsa::plumbing::AsId;
 
 use datalove_datafun_ast::ast::*;
 use datalove_datafun_intrinsics::IntrinsicId;
@@ -65,8 +64,8 @@ pub struct TypeContext<'db> {
     /// Whether we're in a mutable binding context (mut/out param).
     /// View types (e.g. tensor sub-views) are not allowed in mut context.
     pub(crate) mut_context: bool,
-    /// Resolved intrinsic targets, indexed by ExprFun ID.
-    pub(crate) intrinsic_targets: Vec<Option<IntrinsicId>>,
+    /// Resolved intrinsic targets, keyed by the expression's stable key.
+    pub(crate) intrinsic_targets: BTreeMap<ExprKey<'db>, IntrinsicId>,
     /// Auto-adapt mode for this context.
     pub(crate) auto_adapt_mode: AutoAdaptMode,
     /// Auto-adaptations that were applied (for reporting and IR lowering).
@@ -129,7 +128,7 @@ impl<'db> TypeContext<'db> {
             loop_depth: 0,
             ref_context: false,
             mut_context: false,
-            intrinsic_targets: Vec::new(),
+            intrinsic_targets: BTreeMap::new(),
             auto_adapt_mode,
             auto_adaptations: Vec::new(),
             const_bindings: HashSet::new(),
@@ -573,23 +572,19 @@ impl<'db> TypeContext<'db> {
     }
 
     /// Store resolved intrinsic target for an intrinsic call expression.
+    ///
+    /// Keyed like [`Self::store_expr_type`] rather than indexed by the
+    /// expression's salsa id. A `Vec` indexed by `id.index()` grew to the
+    /// highest index salsa had handed out - 3764 slots to hold 8 targets in
+    /// one measured fixture - and the index alone drops the generation that
+    /// tells two expressions in a reused slot apart.
     pub fn store_intrinsic_target(&mut self, expr: ExprFun<'db>, intrinsic: IntrinsicId) {
-        let id = expr.as_id();
-        let index = id.index() as usize;
-
-        // Ensure the vector is large enough.
-        if index >= self.intrinsic_targets.len() {
-            self.intrinsic_targets.resize(index + 1, None);
-        }
-
-        self.intrinsic_targets[index] = Some(intrinsic);
+        self.intrinsic_targets.insert(ExprKey::of(self.db, expr), intrinsic);
     }
 
     /// Get resolved intrinsic target for an expression.
     pub fn get_intrinsic_target(&self, expr: ExprFun<'db>) -> Option<IntrinsicId> {
-        let id = expr.as_id();
-        let index = id.index() as usize;
-        self.intrinsic_targets.get(index).and_then(|t| *t)
+        self.intrinsic_targets.get(&ExprKey::of(self.db, expr)).copied()
     }
 
     // ========================================================================
