@@ -109,7 +109,7 @@ impl AutoAdaptMode {
 pub struct RiderInterface<'db> {
     pub name: InternedText<'db>,
     /// Synthetic ModuleId for this rider (e.g. `@rider/testlib`).
-    pub module_id: ModuleId,
+    pub module_id: ModuleId<'db>,
     pub functions: Vec<(InternedText<'db>, TypeFunction<'db>)>,
     pub type_aliases: Vec<(InternedText<'db>, Type<'db>)>,
 }
@@ -123,20 +123,20 @@ pub struct RiderInterface<'db> {
 pub struct ParsedModuleGraph<'db> {
     /// The underlying module graph (identity key).
     #[returns(copy)]
-    pub graph: bct::module_graph::ModuleGraph,
+    pub graph: bct::module_graph::ModuleGraph<'db>,
 
-    /// Pre-parsed statements only, as (ModuleId, ParsedStatements) tuples.
+    /// Pre-parsed statements only, as (ModuleId<'db>, ParsedStatements) tuples.
     /// Separate from spans so typecheck can depend only on statements.
     /// Order matches graph.iter_modules() order.
     #[tracked]
     #[returns(ref)]
-    pub statements_only: Vec<(ModuleId, ParsedStatements<'db>)>,
+    pub statements_only: Vec<(ModuleId<'db>, ParsedStatements<'db>)>,
 
     /// Expression spans for each module, separate from statements.
     /// Changes to spans don't invalidate typecheck.
     #[tracked]
     #[returns(ref)]
-    pub spans: Vec<(ModuleId, DatafunSpans<'db>)>,
+    pub spans: Vec<(ModuleId<'db>, DatafunSpans<'db>)>,
 
     /// Resolved module requires from package resolution.
     ///
@@ -145,7 +145,7 @@ pub struct ParsedModuleGraph<'db> {
     /// import resolution instead of re-parsing require statements.
     #[tracked]
     #[returns(ref)]
-    pub resolved_requires: BTreeMap<ModuleId, Vec<(InternedText<'db>, ModuleId)>>,
+    pub resolved_requires: BTreeMap<ModuleId<'db>, Vec<(InternedText<'db>, ModuleId<'db>)>>,
 
     /// Recursive content hashes for each module.
     ///
@@ -155,7 +155,7 @@ pub struct ParsedModuleGraph<'db> {
     /// content hash is unchanged, its typecheck result should be cached.
     #[tracked]
     #[returns(ref)]
-    pub module_content_hashes: BTreeMap<ModuleId, u64>,
+    pub module_content_hashes: BTreeMap<ModuleId<'db>, u64>,
 
     /// Resolved rider interfaces per module.
     ///
@@ -163,19 +163,19 @@ pub struct ParsedModuleGraph<'db> {
     /// Populated by the compiler driver from `require rider` statements.
     #[tracked]
     #[returns(ref)]
-    pub resolved_riders: BTreeMap<ModuleId, Vec<(InternedText<'db>, RiderInterface<'db>)>>,
+    pub resolved_riders: BTreeMap<ModuleId<'db>, Vec<(InternedText<'db>, RiderInterface<'db>)>>,
 }
 
 impl<'db> ParsedModuleGraph<'db> {
     /// Get the parsed statements for a module by its ID.
-    pub fn get_parsed(&self, db: &'db dyn Db, module_id: ModuleId) -> Option<ParsedStatements<'db>> {
+    pub fn get_parsed(&self, db: &'db dyn Db, module_id: ModuleId<'db>) -> Option<ParsedStatements<'db>> {
         self.statements_only(db).iter()
             .find(|(id, _)| *id == module_id)
             .map(|(_, parsed)| parsed.clone())
     }
 
     /// Get the spans for a module by its ID.
-    pub fn get_spans(&self, db: &'db dyn Db, module_id: ModuleId) -> Option<DatafunSpans> {
+    pub fn get_spans(&self, db: &'db dyn Db, module_id: ModuleId<'db>) -> Option<DatafunSpans> {
         self.spans(db).iter()
             .find(|(id, _)| *id == module_id)
             .map(|(_, spans)| spans.clone())
@@ -185,7 +185,7 @@ impl<'db> ParsedModuleGraph<'db> {
     ///
     /// Returns a slice of (alias, target_module_id) pairs representing what
     /// `require module` statements in this module resolved to.
-    pub fn get_requires(&self, db: &'db dyn Db, module_id: ModuleId) -> &[(InternedText<'db>, ModuleId)] {
+    pub fn get_requires(&self, db: &'db dyn Db, module_id: ModuleId<'db>) -> &[(InternedText<'db>, ModuleId<'db>)] {
         self.resolved_requires(db)
             .get(&module_id)
             .map(|v| v.as_slice())
@@ -196,7 +196,7 @@ impl<'db> ParsedModuleGraph<'db> {
     ///
     /// Returns a slice of (alias, rider_interface) pairs representing what
     /// `require rider` statements in this module resolved to.
-    pub fn get_riders(&self, db: &'db dyn Db, module_id: ModuleId) -> &[(InternedText<'db>, RiderInterface<'db>)] {
+    pub fn get_riders(&self, db: &'db dyn Db, module_id: ModuleId<'db>) -> &[(InternedText<'db>, RiderInterface<'db>)] {
         self.resolved_riders(db)
             .get(&module_id)
             .map(|v| v.as_slice())
@@ -217,7 +217,7 @@ impl<'db> ParsedModuleGraph<'db> {
 pub struct ModuleNameResolution<'db> {
     /// Module this is for.
     #[returns(copy)]
-    pub module_id: ModuleId,
+    pub module_id: ModuleId<'db>,
 
     /// Type aliases defined in this module: (name, resolved_type).
     #[returns(ref)]
@@ -241,7 +241,7 @@ pub struct ModuleNameResolution<'db> {
 pub struct AllModuleNameResolutions<'db> {
     /// Per-module name resolutions.
     #[returns(ref)]
-    pub resolutions: BTreeMap<ModuleId, ModuleNameResolution<'db>>,
+    pub resolutions: BTreeMap<ModuleId<'db>, ModuleNameResolution<'db>>,
 }
 
 /// Collected names from statements (type aliases and optionally functions).
@@ -264,14 +264,14 @@ pub struct CollectedNames<'db> {
 #[salsa::tracked]
 pub struct AllModuleExports<'db> {
     #[returns(ref)]
-    pub exports: BTreeMap<ModuleId, Vec<(InternedText<'db>, TypeFunction<'db>)>>,
+    pub exports: BTreeMap<ModuleId<'db>, Vec<(InternedText<'db>, TypeFunction<'db>)>>,
 }
 
 /// All function ASTs collected from the graph.
 #[salsa::tracked]
 pub struct AllModuleFunctionAsts<'db> {
     #[returns(ref)]
-    pub asts: BTreeMap<ModuleId, Vec<(InternedText<'db>, StmtFun<'db>)>>,
+    pub asts: BTreeMap<ModuleId<'db>, Vec<(InternedText<'db>, StmtFun<'db>)>>,
 }
 
 /// Type representation for datafun (extends datalit types with function types).
@@ -368,7 +368,11 @@ impl<'db> ComptimeCallSiteRegistry<'db> {
 }
 
 /// Type error representation.
+///
+/// A field type that is `'static` needs no `SalsaValue`; these live in maps
+/// keyed by `ModuleId`, which borrows the database, so they do.
 #[derive(Clone, Debug, Hash, PartialEq, Eq)]
+#[derive(salsa::SalsaValue)]
 pub enum TypeError {
     TypeMismatch { expected: String, actual: String },
     UnresolvedName(String),

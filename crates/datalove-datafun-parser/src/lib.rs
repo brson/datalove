@@ -62,7 +62,7 @@ pub fn parse<'db>(
 pub fn parse_with_module_id<'db>(
     db: &'db dyn Db,
     source: Source,
-    module_id: Option<ModuleId>,
+    module_id: Option<ModuleId<'db>>,
 ) -> ast::ParseResult<'db> {
     let chunk = source_map::basic_source_map(db, source);
     let source_text = chunk.text(db);
@@ -143,7 +143,7 @@ fn parse_bracer<'db>(
     db: &'db dyn Db,
     bracer: Bracer<'db>,
     source_text: Text<'db>,
-    module_id: Option<ModuleId>,
+    module_id: Option<ModuleId<'db>>,
 ) -> ast::ParseResult<'db> {
     // Get line iterator - newlines inside balanced braces don't count as line breaks.
     // First split on newlines, then filter spaces from each line.
@@ -217,7 +217,7 @@ fn parse_statements<'db>(
     db: &'db dyn Db,
     lines: impl Iterator<Item = Vec<TreeToken<'db>>>,
     source_text: bct::text::Text<'db>,
-    module_id: Option<ModuleId>,
+    module_id: Option<ModuleId<'db>>,
 ) -> (Vec<ast::Statement<'db>>, ParsedSpans<'db>) {
     let mut statements = vec![];
     let mut all_expr_spans = vec![];

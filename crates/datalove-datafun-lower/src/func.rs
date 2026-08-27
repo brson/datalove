@@ -38,14 +38,14 @@ pub fn lower_function_for_module<'db>(
     db: &'db dyn salsa::Database,
     expr_types: &'db ExprTypes<'db>,
     call_targets: &'db CallTargets<'db>,
-    func_id_map: &'db HashMap<(ModuleId, String), (IrModuleId, FuncId)>,
+    func_id_map: &'db HashMap<(ModuleId<'db>, String), (IrModuleId, FuncId)>,
     func: ast::StmtFun<'db>,
     func_id: FuncId,
     analysis: FunctionAnalysis<'db>,
     resolved_param_types: Option<&[IrType]>,
     resolved_return_type: Option<IrType>,
 ) -> Result<IrCodeUnit, LowerError> {
-    let mut ctx = LowerCtx::new_for_module(db, expr_types, Some(call_targets), func_id_map);
+    let mut ctx = LowerCtx::new_for_module(db, expr_types, Some(call_targets), Some(func_id_map));
     lower_function_body(&mut ctx, func_id, func, analysis, resolved_param_types, resolved_return_type)
 }
 

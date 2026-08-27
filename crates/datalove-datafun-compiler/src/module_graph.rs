@@ -41,7 +41,7 @@ use datalove_datafun_ast::ast::{ParseResult, ParsedStatements};
 #[salsa::tracked(returns(ref))]
 pub fn parse_module_ast<'db>(
     db: &'db dyn salsa::Database,
-    module: Module,
+    module: Module<'db>,
 ) -> ParsedStatements<'db> {
     let module_id = module.id(db);
     let module_path = module_id.path(db);
@@ -63,7 +63,7 @@ pub fn parse_module_ast<'db>(
 #[salsa::tracked(returns(ref))]
 pub fn parse_module_full<'db>(
     db: &'db dyn salsa::Database,
-    module: Module,
+    module: Module<'db>,
 ) -> ParseResult<'db> {
     let module_id = module.id(db);
     let module_path = module_id.path(db);
@@ -83,8 +83,8 @@ pub fn parse_module_full<'db>(
 #[salsa::tracked(returns(copy))]
 pub fn parse_module_graph<'db>(
     db: &'db dyn salsa::Database,
-    graph: ModuleGraph,
-    resolved_requires_str: BTreeMap<ModuleId, Vec<(String, ModuleId)>>,
+    graph: ModuleGraph<'db>,
+    resolved_requires_str: BTreeMap<ModuleId<'db>, Vec<(String, ModuleId<'db>)>>,
     rider_sources: Vec<(String, String)>,
 ) -> ParsedModuleGraph<'db> {
     // Sequential implementation for salsa tracking.
@@ -113,10 +113,10 @@ pub fn parse_module_graph<'db>(
     }
 
     // Convert String aliases to InternedText.
-    let resolved_requires: BTreeMap<ModuleId, Vec<(InternedText<'db>, ModuleId)>> =
+    let resolved_requires: BTreeMap<ModuleId<'db>, Vec<(InternedText<'db>, ModuleId<'db>)>> =
         resolved_requires_str.into_iter()
             .map(|(module_id, requires)| {
-                let interned_requires: Vec<(InternedText<'db>, ModuleId)> = requires.into_iter()
+                let interned_requires: Vec<(InternedText<'db>, ModuleId<'db>)> = requires.into_iter()
                     .map(|(alias, target)| (InternedText::new(db, alias), target))
                     .collect();
                 (module_id, interned_requires)
@@ -124,7 +124,7 @@ pub fn parse_module_graph<'db>(
             .collect();
 
     // Build statements map for hash computation.
-    let statements_map: BTreeMap<ModuleId, ParsedStatements<'db>> = statements_only.iter()
+    let statements_map: BTreeMap<ModuleId<'db>, ParsedStatements<'db>> = statements_only.iter()
         .map(|(id, parsed)| (*id, parsed.clone()))
         .collect();
 
@@ -145,8 +145,8 @@ pub fn parse_module_graph<'db>(
 /// structs. The tracked function will hit the warmed cache for all `parse_module_full` calls.
 pub fn parse_module_graph_parallel<'db>(
     db: &'db dyn DbClone,
-    graph: ModuleGraph,
-    resolved_requires_str: BTreeMap<ModuleId, Vec<(String, ModuleId)>>,
+    graph: ModuleGraph<'db>,
+    resolved_requires_str: BTreeMap<ModuleId<'db>, Vec<(String, ModuleId<'db>)>>,
     rider_sources: Vec<(String, String)>,
 ) -> ParsedModuleGraph<'db> {
     let db_salsa = db.as_salsa_db();
@@ -179,8 +179,8 @@ pub fn parse_module_graph_parallel<'db>(
 /// parallelization (useful for benchmarking).
 pub fn parse_module_graph_with_mode<'db>(
     db: &'db dyn DbClone,
-    graph: ModuleGraph,
-    resolved_requires_str: BTreeMap<ModuleId, Vec<(String, ModuleId)>>,
+    graph: ModuleGraph<'db>,
+    resolved_requires_str: BTreeMap<ModuleId<'db>, Vec<(String, ModuleId<'db>)>>,
     rider_sources: Vec<(String, String)>,
     mode: ParallelMode,
 ) -> ParsedModuleGraph<'db> {
@@ -197,8 +197,8 @@ pub fn parse_module_graph_with_mode<'db>(
 fn build_resolved_riders_from_sources<'db>(
     db: &'db dyn salsa::Database,
     rider_sources: &[(String, String)],
-    graph: &ModuleGraph,
-) -> BTreeMap<ModuleId, Vec<(InternedText<'db>, datalove_datafun_common::RiderInterface<'db>)>> {
+    graph: &ModuleGraph<'db>,
+) -> BTreeMap<ModuleId<'db>, Vec<(InternedText<'db>, datalove_datafun_common::RiderInterface<'db>)>> {
     use datalove_datafun_common::RiderInterface;
     use rmx::std::collections::HashMap;
 
@@ -224,7 +224,7 @@ fn build_resolved_riders_from_sources<'db>(
     }
 
     // Scan each module's source for `require rider X` statements.
-    let mut result: BTreeMap<ModuleId, Vec<(InternedText<'db>, RiderInterface<'db>)>> = BTreeMap::new();
+    let mut result: BTreeMap<ModuleId<'db>, Vec<(InternedText<'db>, RiderInterface<'db>)>> = BTreeMap::new();
     for module in graph.iter_modules(db) {
         let module_id = module.id(db);
         let source_text = module.source(db).text(db);
@@ -257,10 +257,10 @@ fn build_resolved_riders_from_sources<'db>(
 /// by Salsa based on AST equality.
 fn compute_module_content_hashes<'db>(
     db: &'db dyn salsa::Database,
-    graph: &ModuleGraph,
-    _statements_map: &BTreeMap<ModuleId, ParsedStatements<'db>>,
-    resolved_requires: &BTreeMap<ModuleId, Vec<(InternedText<'db>, ModuleId)>>,
-) -> BTreeMap<ModuleId, u64> {
+    graph: &ModuleGraph<'db>,
+    _statements_map: &BTreeMap<ModuleId<'db>, ParsedStatements<'db>>,
+    resolved_requires: &BTreeMap<ModuleId<'db>, Vec<(InternedText<'db>, ModuleId<'db>)>>,
+) -> BTreeMap<ModuleId<'db>, u64> {
     let mut hashes = BTreeMap::new();
 
     // Process modules in deterministic order.
@@ -366,7 +366,7 @@ mod tests {
     /// Build a module graph from source strings.
     ///
     /// Returns module IDs in the same order as the input sources.
-    fn build_graph(db: &Database, sources: &[(&str, &str)]) -> (ModuleGraph, Vec<ModuleId>) {
+    fn build_graph<'db>(db: &'db Database, sources: &[(&str, &str)]) -> (ModuleGraph<'db>, Vec<ModuleId<'db>>) {
         let mut builder = ModuleGraphBuilder::new(db);
         let mut ids = Vec::new();
         for (path, source) in sources {
@@ -578,7 +578,7 @@ mod tests {
     // ========================================================================
 
     /// Helper to build a module graph using the logging database.
-    fn build_graph_logging(db: &LoggingDatabase, sources: &[(&str, &str)]) -> (ModuleGraph, Vec<ModuleId>) {
+    fn build_graph_logging<'db>(db: &'db LoggingDatabase, sources: &[(&str, &str)]) -> (ModuleGraph<'db>, Vec<ModuleId<'db>>) {
         let mut builder = ModuleGraphBuilder::new(db);
         let mut ids = Vec::new();
         for (path, source) in sources {
@@ -745,8 +745,8 @@ mod tests {
         // The graph is interned, so building it again from the same sources
         // gives back the same graph. Building it per phase rather than holding
         // one keeps the handles inside a single revision.
-        fn build(db: &Database, source_a: bct::input::Source, source_b: bct::input::Source)
-            -> (ModuleGraph, ModuleId, ModuleId, BTreeMap<ModuleId, Vec<(String, ModuleId)>>)
+        fn build<'db>(db: &'db Database, source_a: bct::input::Source, source_b: bct::input::Source)
+            -> (ModuleGraph<'db>, ModuleId<'db>, ModuleId<'db>, BTreeMap<ModuleId<'db>, Vec<(String, ModuleId<'db>)>>)
         {
             let mut builder = ModuleGraphBuilder::new(db);
             let id_b = builder.add_module("b".to_string(), source_b);
@@ -802,13 +802,17 @@ mod tests {
         // Create a single module.
         let source = bct::input::Source::new(&db, "let x = 1".to_string());
         // Interned, so this gives the same module every time it is called.
-        let module = |db: &Database| bct::module_graph::Module::new(
-            db, bct::module_graph::ModuleId::new(db, "test".to_string()), source,
-        );
+        fn module<'db>(db: &'db Database, source: bct::input::Source)
+            -> bct::module_graph::Module<'db>
+        {
+            bct::module_graph::Module::new(
+                db, bct::module_graph::ModuleId::new(db, "test".to_string()), source,
+            )
+        }
 
         // First call: should execute.
         enable_query_logging();
-        let _result1 = parse_module_ast(&db, module(&db));
+        let _result1 = parse_module_ast(&db, module(&db, source));
         let log1 = disable_query_logging();
         let first_parsed = get_executed_modules(&log1, "parse");
         eprintln!("Direct first call: {:?}", first_parsed);
@@ -816,7 +820,7 @@ mod tests {
 
         // Second call with same inputs: should be cached.
         enable_query_logging();
-        let _result2 = parse_module_ast(&db, module(&db));
+        let _result2 = parse_module_ast(&db, module(&db, source));
         let log2 = disable_query_logging();
         let second_parsed = get_executed_modules(&log2, "parse");
         eprintln!("Direct second call (same): {:?}", second_parsed);
@@ -827,7 +831,7 @@ mod tests {
 
         // Third call: should re-execute because source changed.
         enable_query_logging();
-        let _result3 = parse_module_ast(&db, module(&db));
+        let _result3 = parse_module_ast(&db, module(&db, source));
         let log3 = disable_query_logging();
         let third_parsed = get_executed_modules(&log3, "parse");
         eprintln!("Direct third call (changed): {:?}", third_parsed);
@@ -843,9 +847,13 @@ mod tests {
         let source_a = bct::input::Source::new(&db, "let x = 1".to_string());
         let source_b = bct::input::Source::new(&db, "let y = 2".to_string());
         // Interned, so these give the same modules however often they run.
-        let module = |db: &Database, path: &str, source| bct::module_graph::Module::new(
-            db, bct::module_graph::ModuleId::new(db, path.to_string()), source,
-        );
+        fn module<'db>(db: &'db Database, path: &str, source: bct::input::Source)
+            -> bct::module_graph::Module<'db>
+        {
+            bct::module_graph::Module::new(
+                db, bct::module_graph::ModuleId::new(db, path.to_string()), source,
+            )
+        }
 
         // Parse both modules.
         enable_query_logging();
@@ -879,9 +887,13 @@ mod tests {
         let source_a = bct::input::Source::new(&db, "let x = 1".to_string());
         let source_b = bct::input::Source::new(&db, "let y = 2".to_string());
         // Interned, so these give the same modules however often they run.
-        let module = |db: &Database, path: &str, source| bct::module_graph::Module::new(
-            db, bct::module_graph::ModuleId::new(db, path.to_string()), source,
-        );
+        fn module<'db>(db: &'db Database, path: &str, source: bct::input::Source)
+            -> bct::module_graph::Module<'db>
+        {
+            bct::module_graph::Module::new(
+                db, bct::module_graph::ModuleId::new(db, path.to_string()), source,
+            )
+        }
 
         // First parse.
         let _r1 = parse_module_ast(&db, module(&db, "a", source_a));
@@ -905,9 +917,13 @@ mod tests {
         let source_a = bct::input::Source::new(&db, "let x = 1".to_string());
         let source_b = bct::input::Source::new(&db, "let y = 2".to_string());
         // Interned, so these give the same modules however often they run.
-        let module = |db: &LoggingDatabase, path: &str, source| bct::module_graph::Module::new(
-            db, bct::module_graph::ModuleId::new(db, path.to_string()), source,
-        );
+        fn module<'db>(db: &'db LoggingDatabase, path: &str, source: bct::input::Source)
+            -> bct::module_graph::Module<'db>
+        {
+            bct::module_graph::Module::new(
+                db, bct::module_graph::ModuleId::new(db, path.to_string()), source,
+            )
+        }
 
         // First parse.
         let _r1 = parse_module_ast(&db, module(&db, "a", source_a));
@@ -1029,8 +1045,8 @@ mod tests {
         // The graph is interned, so building it again from the same sources
         // gives back the same graph, which is what lets each phase build its
         // own rather than one being held across the edit.
-        fn build(db: &Database, source_a: bct::input::Source, source_b: bct::input::Source)
-            -> (ModuleGraph, ModuleId, ModuleId, BTreeMap<ModuleId, Vec<(String, ModuleId)>>)
+        fn build<'db>(db: &'db Database, source_a: bct::input::Source, source_b: bct::input::Source)
+            -> (ModuleGraph<'db>, ModuleId<'db>, ModuleId<'db>, BTreeMap<ModuleId<'db>, Vec<(String, ModuleId<'db>)>>)
         {
             let mut builder = ModuleGraphBuilder::new(db);
             let id_b = builder.add_module("b".to_string(), source_b);
@@ -1125,8 +1141,8 @@ mod tests {
 
         // Interned, so each phase can build its own rather than one being held
         // across the edit; they are the same graph.
-        fn build(db: &Database, source_a: bct::input::Source, source_b: bct::input::Source)
-            -> (ModuleGraph, ModuleId, ModuleId, BTreeMap<ModuleId, Vec<(String, ModuleId)>>)
+        fn build<'db>(db: &'db Database, source_a: bct::input::Source, source_b: bct::input::Source)
+            -> (ModuleGraph<'db>, ModuleId<'db>, ModuleId<'db>, BTreeMap<ModuleId<'db>, Vec<(String, ModuleId<'db>)>>)
         {
             let mut builder = ModuleGraphBuilder::new(db);
             let id_b = builder.add_module("test/b".to_string(), source_b);
@@ -1489,8 +1505,8 @@ mod tests {
 
         // Interned, so each phase builds the same graph rather than one being
         // held across the edit.
-        fn build(db: &Database, source_a: bct::input::Source, source_b: bct::input::Source)
-            -> (ModuleGraph, BTreeMap<ModuleId, Vec<(String, ModuleId)>>)
+        fn build<'db>(db: &'db Database, source_a: bct::input::Source, source_b: bct::input::Source)
+            -> (ModuleGraph<'db>, BTreeMap<ModuleId<'db>, Vec<(String, ModuleId<'db>)>>)
         {
             let mut builder = ModuleGraphBuilder::new(db);
             let id_b = builder.add_module("b".to_string(), source_b);

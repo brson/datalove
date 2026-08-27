@@ -22,10 +22,10 @@ use datalove_datafun_compiler::module_graph::{
 /// Thread-safe via `Arc` wrapping. Multiple `ScriptCompiler` and `ScriptExecutor`
 /// instances can share the same context.
 pub struct SharedModuleContext<'db> {
-    pub module_graph: ModuleGraph,
+    pub module_graph: ModuleGraph<'db>,
     pub parsed_graph: ParsedModuleGraph<'db>,
     pub graph_typecheck: ModuleGraphTypecheckResult<'db>,
-    pub func_id_map: HashMap<(ModuleId, String), (IrModuleId, FuncId)>,
+    pub func_id_map: HashMap<(ModuleId<'db>, String), (IrModuleId, FuncId)>,
     pub module_registry: Arc<ModuleFunctionRegistry>,
 }
 

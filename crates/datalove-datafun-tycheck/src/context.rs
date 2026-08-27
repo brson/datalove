@@ -37,13 +37,13 @@ pub struct TypeContext<'db> {
     /// Pre-computed spans for error reporting.
     pub(crate) spans: DatafunSpans<'db>,
     /// Current module being typechecked (for pending diagnostics).
-    pub(crate) current_module_id: Option<ModuleId>,
+    pub(crate) current_module_id: Option<ModuleId<'db>>,
     /// Variable bindings (name -> (type, is_mutable)).
     pub(crate) variables: HashMap<InternedText<'db>, (Type<'db>, bool)>,
     /// Function signatures (name -> function type).
     pub(crate) functions: HashMap<InternedText<'db>, TypeFunction<'db>>,
     /// Function ASTs for resolving call targets (name -> (AST, module_id)).
-    pub(crate) function_asts: HashMap<InternedText<'db>, (StmtFun<'db>, Option<ModuleId>)>,
+    pub(crate) function_asts: HashMap<InternedText<'db>, (StmtFun<'db>, Option<ModuleId<'db>>)>,
     /// Type aliases (name -> resolved type).
     pub(crate) type_aliases: HashMap<InternedText<'db>, Type<'db>>,
     /// Expected return type for current function (if inside a function).
@@ -100,7 +100,7 @@ impl<'db> TypeContext<'db> {
     pub fn with_module_id(
         db: &'db dyn crate::Db,
         spans: DatafunSpans<'db>,
-        module_id: Option<ModuleId>,
+        module_id: Option<ModuleId<'db>>,
     ) -> Self {
         Self::with_options(db, spans, module_id, AutoAdaptMode::Disabled)
     }
@@ -109,7 +109,7 @@ impl<'db> TypeContext<'db> {
     pub fn with_options(
         db: &'db dyn crate::Db,
         spans: DatafunSpans<'db>,
-        module_id: Option<ModuleId>,
+        module_id: Option<ModuleId<'db>>,
         auto_adapt_mode: AutoAdaptMode,
     ) -> Self {
         TypeContext {
@@ -496,7 +496,7 @@ impl<'db> TypeContext<'db> {
         name: InternedText<'db>,
         func_type: TypeFunction<'db>,
         func_ast: StmtFun<'db>,
-        module_id: Option<ModuleId>,
+        module_id: Option<ModuleId<'db>>,
     ) {
         self.functions.insert(name, func_type);
         self.function_asts.insert(name, (func_ast, module_id));
@@ -508,7 +508,7 @@ impl<'db> TypeContext<'db> {
         name: InternedText<'db>,
         func_type: TypeFunction<'db>,
         func_ast: StmtFun<'db>,
-        source_module_id: ModuleId,
+        source_module_id: ModuleId<'db>,
     ) {
         self.functions.insert(name, func_type);
         self.function_asts.insert(name, (func_ast, Some(source_module_id)));
@@ -548,12 +548,12 @@ impl<'db> TypeContext<'db> {
     }
 
     /// Look up the resolved function AST by name.
-    pub fn lookup_function_ast(&self, name: InternedText<'db>) -> Option<(StmtFun<'db>, Option<ModuleId>)> {
+    pub fn lookup_function_ast(&self, name: InternedText<'db>) -> Option<(StmtFun<'db>, Option<ModuleId<'db>>)> {
         self.function_asts.get(&name).copied()
     }
 
     /// Store resolved call target for a function call expression.
-    pub fn store_call_target(&mut self, call: ExprFunctionCall<'db>, func: StmtFun<'db>, module_id: Option<ModuleId>) {
+    pub fn store_call_target(&mut self, call: ExprFunctionCall<'db>, func: StmtFun<'db>, module_id: Option<ModuleId<'db>>) {
         self.call_targets.insert(
             ExprKey::of_call(self.db, call),
             ResolvedCallTarget::new(self.db, func, module_id),
@@ -629,7 +629,7 @@ impl<'db> TypeContext<'db> {
     pub fn seed_from_name_resolution(
         &mut self,
         name_resolution: &ModuleNameResolution<'db>,
-        module_id: Option<ModuleId>,
+        module_id: Option<ModuleId<'db>>,
     ) {
         // Add type aliases.
         for (name, ty) in name_resolution.type_aliases(self.db) {
@@ -659,7 +659,7 @@ impl<'db> TypeContext<'db> {
     pub fn seed_from_collected_names(
         &mut self,
         collected: &CollectedNames<'db>,
-        module_id: Option<ModuleId>,
+        module_id: Option<ModuleId<'db>>,
     ) {
         // Add errors from name resolution.
         for error in &collected.errors {

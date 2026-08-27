@@ -77,7 +77,7 @@ pub fn lower_script_fragment_raw<'db>(
     db: &'db dyn salsa::Database,
     expr_types: &'db ExprTypes<'db>,
     call_targets: &'db CallTargets<'db>,
-    func_id_map: &'db HashMap<(ModuleId, String), (IrModuleId, FuncId)>,
+    func_id_map: &'db HashMap<(ModuleId<'db>, String), (IrModuleId, FuncId)>,
     script_ctx: ScriptLowerContext,
     stmts: Vec<Statement<'db>>,
     func_analyses: ScriptFunctionAnalyses<'db>,
@@ -86,7 +86,7 @@ pub fn lower_script_fragment_raw<'db>(
     func_return_types: Option<&HashMap<String, IrType>>,
     lowered_functions: Option<(Vec<IrCodeUnit>, HashMap<String, FuncId>)>,
 ) -> Result<IrCodeUnit, LowerError> {
-    let mut ctx = LowerCtx::new_for_script(db, expr_types, Some(call_targets), func_id_map, script_ctx);
+    let mut ctx = LowerCtx::new_for_script(db, expr_types, Some(call_targets), Some(func_id_map), script_ctx);
 
     // Use pre-computed script analysis from ownership analysis phase.
     ctx.body.drop_schedule = script_analysis.schedule;
@@ -189,11 +189,11 @@ pub fn lower_script_functions<'db>(
     func_analyses: &ScriptFunctionAnalyses<'db>,
     func_param_types: Option<&HashMap<String, Vec<IrType>>>,
     func_return_types: Option<&HashMap<String, IrType>>,
-    func_id_map: &'db HashMap<(ModuleId, String), (IrModuleId, FuncId)>,
+    func_id_map: &'db HashMap<(ModuleId<'db>, String), (IrModuleId, FuncId)>,
     script_ctx: ScriptLowerContext,
 ) -> Result<(Vec<IrCodeUnit>, HashMap<String, FuncId>), LowerError> {
     // Create a minimal context with the accumulated script context.
-    let mut ctx = LowerCtx::new_for_script(db, expr_types, Some(call_targets), func_id_map, script_ctx);
+    let mut ctx = LowerCtx::new_for_script(db, expr_types, Some(call_targets), Some(func_id_map), script_ctx);
 
     // Pre-register all functions to enable forward references (mutual recursion).
     for stmt in stmts {
@@ -255,11 +255,11 @@ pub fn lower_script_expr<'db>(
     db: &'db dyn salsa::Database,
     expr_types: &'db ExprTypes<'db>,
     call_targets: &'db CallTargets<'db>,
-    func_id_map: &'db HashMap<(ModuleId, String), (IrModuleId, FuncId)>,
+    func_id_map: &'db HashMap<(ModuleId<'db>, String), (IrModuleId, FuncId)>,
     script_ctx: ScriptLowerContext,
     expr: ExprFun<'db>,
 ) -> Result<IrCodeUnit, LowerError> {
-    let mut ctx = LowerCtx::new_for_script(db, expr_types, Some(call_targets), func_id_map, script_ctx);
+    let mut ctx = LowerCtx::new_for_script(db, expr_types, Some(call_targets), Some(func_id_map), script_ctx);
 
     // An expression unit that is just a name is the prompt asking to see a
     // binding, not to take it. Name it and compute nothing.

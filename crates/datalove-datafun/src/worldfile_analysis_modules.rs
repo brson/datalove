@@ -112,7 +112,7 @@ pub fn analyze_modules_worldfile(
         .map(|m| m.id(db))
         .ok_or_else(|| anyhow!("main module not found"))?;
 
-    // Look up the main function using (ModuleId, "main") key.
+    // Look up the main function using (ModuleId<'db>, "main") key.
     let (main_ir_module_id, main_func_id) = compiled.shared.func_id_map
         .get(&(main_salsa_module_id, "main".S()))
         .ok_or_else(|| anyhow!("main function not found"))?;

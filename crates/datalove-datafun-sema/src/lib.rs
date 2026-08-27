@@ -46,7 +46,7 @@ pub struct ResolvedCallTarget<'db> {
     pub func: StmtFun<'db>,
     /// The source module (None for script-local functions).
     #[returns(copy)]
-    pub module_id: Option<ModuleId>,
+    pub module_id: Option<ModuleId<'db>>,
 }
 
 // ============================================================================

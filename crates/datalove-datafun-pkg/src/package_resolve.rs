@@ -35,22 +35,22 @@ pub fn resolve_package_world_with_imports<'db>(
 }
 
 /// Result of converting PackageWorldModuleGraph to ModuleGraph.
-pub struct ModuleGraphWithRequires {
+pub struct ModuleGraphWithRequires<'db> {
     /// The module graph with modules in dependency order.
-    pub graph: ModuleGraph,
+    pub graph: ModuleGraph<'db>,
     /// Resolved require aliases per module: (alias, target_module_id).
-    pub resolved_requires: BTreeMap<ModuleId, Vec<(String, ModuleId)>>,
+    pub resolved_requires: BTreeMap<ModuleId<'db>, Vec<(String, ModuleId<'db>)>>,
 }
 
 /// Convert a PackageWorldModuleGraph to a ModuleGraph with resolved requires.
 ///
 /// This bridges the package system with the core compiler's module abstraction.
 /// Returns the module graph plus resolved require aliases for use by the typechecker.
-pub fn to_module_graph(
-    db: &dyn salsa::Database,
+pub fn to_module_graph<'db>(
+    db: &'db dyn salsa::Database,
     package_world: PackageWorld,
-    graph: PackageWorldModuleGraph<'_>,
-) -> ModuleGraphWithRequires {
+    graph: PackageWorldModuleGraph<'db>,
+) -> ModuleGraphWithRequires<'db> {
     // Build a mapping from PackageModule to its module path string.
     let mut pkg_module_to_path: HashMap<bct::package2::PackageModule, String> = HashMap::new();
 
@@ -71,7 +71,7 @@ pub fn to_module_graph(
 
     // Build ModuleGraph and collect path → ModuleId mapping.
     let mut builder = ModuleGraphBuilder::new(db);
-    let mut path_to_module_id: HashMap<String, ModuleId> = HashMap::new();
+    let mut path_to_module_id: HashMap<String, ModuleId<'db>> = HashMap::new();
 
     for pkg_module in &sorted_modules {
         let path = pkg_module_to_path.get(pkg_module)
@@ -85,7 +85,7 @@ pub fn to_module_graph(
     let module_graph = builder.build();
 
     // Extract resolved requires from PackageWorldModuleGraph.
-    let mut resolved_requires: BTreeMap<ModuleId, Vec<(String, ModuleId)>> = BTreeMap::new();
+    let mut resolved_requires: BTreeMap<ModuleId<'db>, Vec<(String, ModuleId<'db>)>> = BTreeMap::new();
 
     for (pkg_module, demands) in graph.map(db).iter() {
         let source_path = pkg_module_to_path.get(pkg_module);

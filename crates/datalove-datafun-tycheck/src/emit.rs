@@ -41,7 +41,7 @@ pub trait SpanLookup<'db> {
     fn lookup_fun_in_module(
         &self,
         db: &'db dyn crate::Db,
-        module_id: Option<ModuleId>,
+        module_id: Option<ModuleId<'db>>,
         local_index: u32,
     ) -> Option<TextSpan<'db>>;
 }
@@ -103,7 +103,7 @@ impl<'db> SpanLookup<'db> for LocalSpanLookup<'_, 'db> {
     fn lookup_fun_in_module(
         &self,
         db: &'db dyn crate::Db,
-        _module_id: Option<ModuleId>,
+        _module_id: Option<ModuleId<'db>>,
         local_index: u32,
     ) -> Option<TextSpan<'db>> {
         // For local spans, ignore module_id and use local spans.
@@ -114,11 +114,11 @@ impl<'db> SpanLookup<'db> for LocalSpanLookup<'_, 'db> {
 /// SpanLookup implementation for module graph spans.
 pub struct ModuleGraphSpanLookup<'a, 'db> {
     parsed_graph: &'a ParsedModuleGraph<'db>,
-    module_id: ModuleId,
+    module_id: ModuleId<'db>,
 }
 
 impl<'a, 'db> ModuleGraphSpanLookup<'a, 'db> {
-    pub fn new(parsed_graph: &'a ParsedModuleGraph<'db>, module_id: ModuleId) -> Self {
+    pub fn new(parsed_graph: &'a ParsedModuleGraph<'db>, module_id: ModuleId<'db>) -> Self {
         Self { parsed_graph, module_id }
     }
 }
@@ -175,7 +175,7 @@ impl<'db> SpanLookup<'db> for ModuleGraphSpanLookup<'_, 'db> {
     fn lookup_fun_in_module(
         &self,
         db: &'db dyn crate::Db,
-        module_id: Option<ModuleId>,
+        module_id: Option<ModuleId<'db>>,
         local_index: u32,
     ) -> Option<TextSpan<'db>> {
         // For module graph, look up in the specified module if provided.
@@ -422,7 +422,7 @@ fn emit_arity_mismatch<'db>(
     call_expr_key: ExprKey<'db>,
     func_name: InternedText<'db>,
     func_local_index: u32,
-    func_module_id: Option<ModuleId>,
+    func_module_id: Option<ModuleId<'db>>,
     expected: usize,
     actual: usize,
 ) {

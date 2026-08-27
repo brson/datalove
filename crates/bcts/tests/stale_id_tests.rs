@@ -146,22 +146,30 @@ fn building_the_same_module_twice_gives_one_module() {
     );
 }
 
-/// A module's identity survives an edit to its source.
+/// A module still names the same source after that source is edited.
 ///
-/// The text is behind the `Source`, which is mutated in place, so the module
-/// naming it does not change. That is what lets an edit invalidate only the
-/// queries that read the text.
+/// The stronger statement - that the handle from before the edit equals the
+/// one after - cannot be written: a `Module` borrows the database, so the
+/// borrow checker refuses to carry one across `set_text`. That refusal is what
+/// the lifetime is for, so what is checked here is the substance of it: the
+/// module is still built from the same path and the same source, and the text
+/// behind that source is the edited one.
 #[test]
-fn editing_a_source_does_not_change_the_module() {
+fn a_module_still_names_its_source_after_an_edit() {
     let mut db = bcts::Database::default();
 
-    let id = ModuleId::new(&db, "local/test/a".to_string());
     let source = Source::new(&db, "let x = 1".to_string());
-    let before = Module::new(&db, id, source);
+    {
+        let module = Module::new(&db, ModuleId::new(&db, "local/test/a".to_string()), source);
+        assert_eq!(module.source(&db), source);
+    }
 
     source.set_text(&mut db).to("let x = 2".to_string());
 
-    assert_eq!(before, Module::new(&db, id, source));
+    let module = Module::new(&db, ModuleId::new(&db, "local/test/a".to_string()), source);
+    assert_eq!(module.source(&db), source, "still the same source");
+    assert_eq!(module.id(&db).path(&db), "local/test/a", "still the same path");
+    assert_eq!(source.text(&db), "let x = 2", "whose text is the edited one");
 }
 
 /// Packages and worlds are their contents too.

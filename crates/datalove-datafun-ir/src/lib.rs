@@ -33,6 +33,7 @@ pub struct BlockId(pub u32);
 
 /// Globally unique function identifier within a compilation context.
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
+#[derive(salsa::SalsaValue)]
 pub struct FuncId(pub u32);
 
 /// Call site identifier, unique within a function.
@@ -45,6 +46,7 @@ pub struct CallSiteId(pub u32);
 ///
 /// Serializable numeric ID, unlike salsa's ModuleId.
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
+#[derive(salsa::SalsaValue)]
 pub struct IrModuleId(pub u32);
 
 

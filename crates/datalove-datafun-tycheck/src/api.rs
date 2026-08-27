@@ -48,7 +48,7 @@ pub struct AccumulatedBindings<'db> {
     /// Variables: (name, type, is_mutable).
     pub vars: Vec<(InternedText<'db>, Type<'db>, bool)>,
     pub fns: Vec<(InternedText<'db>, TypeFunction<'db>)>,
-    pub fn_asts: Vec<(InternedText<'db>, StmtFun<'db>, Option<ModuleId>)>,
+    pub fn_asts: Vec<(InternedText<'db>, StmtFun<'db>, Option<ModuleId<'db>>)>,
     /// Module aliases from require statements: (alias, full path).
     pub module_aliases: Vec<(InternedText<'db>, String)>,
 }
@@ -67,7 +67,7 @@ pub struct ScriptUnitTypecheckOutput<'db> {
     #[returns(ref)]
     pub new_fns: Vec<(InternedText<'db>, TypeFunction<'db>)>,
     #[returns(ref)]
-    pub new_fn_asts: Vec<(InternedText<'db>, StmtFun<'db>, Option<ModuleId>)>,
+    pub new_fn_asts: Vec<(InternedText<'db>, StmtFun<'db>, Option<ModuleId<'db>>)>,
     /// Module aliases from require statements: (alias, full path).
     #[returns(ref)]
     pub new_module_aliases: Vec<(InternedText<'db>, String)>,
@@ -311,7 +311,7 @@ use bct::module_graph::Module;
 /// Resolved import data as plain tuple (not tracked).
 ///
 /// Contains: (local_name, func_type, func_ast, source_module)
-pub type ResolvedImportData<'db> = (InternedText<'db>, TypeFunction<'db>, Option<StmtFun<'db>>, ModuleId);
+pub type ResolvedImportData<'db> = (InternedText<'db>, TypeFunction<'db>, Option<StmtFun<'db>>, ModuleId<'db>);
 
 /// Typecheck a single module with logging.
 ///
@@ -324,7 +324,7 @@ pub type ResolvedImportData<'db> = (InternedText<'db>, TypeFunction<'db>, Option
 #[salsa::tracked(returns(copy))]
 pub fn typecheck_module<'db>(
     db: &'db dyn crate::Db,
-    module: Module,
+    module: Module<'db>,
     parsed: ParsedStatements<'db>,
     spans: DatafunSpans<'db>,
     name_resolution: crate::ModuleNameResolution<'db>,
@@ -392,8 +392,8 @@ pub fn typecheck_module<'db>(
 
 /// Prepared data for typechecking a module graph.
 struct TypecheckPreparation<'db> {
-    graph: bct::module_graph::ModuleGraph,
-    module_parsed: HashMap<ModuleId, ParsedStatements<'db>>,
+    graph: bct::module_graph::ModuleGraph<'db>,
+    module_parsed: HashMap<ModuleId<'db>, ParsedStatements<'db>>,
 }
 
 /// Prepare data structures needed for typechecking.
@@ -407,7 +407,7 @@ fn prepare_typecheck<'db>(
     let graph = parsed_graph.graph(db);
 
     // Build parsed statements map.
-    let module_parsed: HashMap<ModuleId, ParsedStatements<'db>> = parsed_graph.statements_only(db)
+    let module_parsed: HashMap<ModuleId<'db>, ParsedStatements<'db>> = parsed_graph.statements_only(db)
         .iter()
         .map(|(id, parsed)| (*id, parsed.C()))
         .collect();
@@ -438,10 +438,10 @@ pub fn typecheck_module_graph<'db>(
     // ========================================================================
     // TYPECHECK PASS
     // ========================================================================
-    let mut module_errors: BTreeMap<ModuleId, Vec<TypeError>> = BTreeMap::new();
-    let mut module_exports_map: BTreeMap<ModuleId, ModuleExports<'db>> = BTreeMap::new();
-    let mut module_imports_map: BTreeMap<ModuleId, ModuleImports<'db>> = BTreeMap::new();
-    let mut module_results_map: BTreeMap<ModuleId, SingleModuleTypecheckResult<'db>> = BTreeMap::new();
+    let mut module_errors: BTreeMap<ModuleId<'db>, Vec<TypeError>> = BTreeMap::new();
+    let mut module_exports_map: BTreeMap<ModuleId<'db>, ModuleExports<'db>> = BTreeMap::new();
+    let mut module_imports_map: BTreeMap<ModuleId<'db>, ModuleImports<'db>> = BTreeMap::new();
+    let mut module_results_map: BTreeMap<ModuleId<'db>, SingleModuleTypecheckResult<'db>> = BTreeMap::new();
     let mut combined_expr_types = crate::ExprTypes::new();
     let mut combined_call_targets = crate::CallTargets::new();
     let mut combined_comptime_registry = datalove_datafun_common::ComptimeCallSiteRegistry::new();
@@ -588,7 +588,7 @@ pub fn typecheck_module_graph_with_mode<'db>(
 fn emit_pending_diagnostics_for_module<'db>(
     db: &'db dyn crate::Db,
     parsed_graph: &ParsedModuleGraph<'db>,
-    module_id: ModuleId,
+    module_id: ModuleId<'db>,
     pending: &[PendingDiagnostic<'db>],
 ) {
     let span_lookup = crate::emit::ModuleGraphSpanLookup::new(parsed_graph, module_id);
@@ -610,7 +610,7 @@ fn emit_pending_diagnostics_for_module<'db>(
 #[salsa::tracked(returns(copy))]
 pub fn resolve_module_imports<'db>(
     db: &'db dyn crate::Db,
-    module: Module,
+    module: Module<'db>,
     parsed_graph: ParsedModuleGraph<'db>,
     all_exports: AllModuleExports<'db>,
     all_function_asts: AllModuleFunctionAsts<'db>,
@@ -650,15 +650,15 @@ pub fn resolve_module_imports<'db>(
 /// tracked function" issue.
 fn resolve_module_imports_internal<'db>(
     db: &'db dyn crate::Db,
-    module_id: ModuleId,
+    module_id: ModuleId<'db>,
     parsed: &ParsedStatements<'db>,
     parsed_graph: &ParsedModuleGraph<'db>,
-    all_exports: &BTreeMap<ModuleId, Vec<(InternedText<'db>, TypeFunction<'db>)>>,
-    module_function_asts: &BTreeMap<ModuleId, Vec<(InternedText<'db>, StmtFun<'db>)>>,
-) -> (Vec<(InternedText<'db>, TypeFunction<'db>, Option<StmtFun<'db>>, ModuleId)>, Vec<TypeError>) {
+    all_exports: &BTreeMap<ModuleId<'db>, Vec<(InternedText<'db>, TypeFunction<'db>)>>,
+    module_function_asts: &BTreeMap<ModuleId<'db>, Vec<(InternedText<'db>, StmtFun<'db>)>>,
+) -> (Vec<(InternedText<'db>, TypeFunction<'db>, Option<StmtFun<'db>>, ModuleId<'db>)>, Vec<TypeError>) {
     // Build module alias map from pre-resolved requires.
     let resolved_requires = parsed_graph.get_requires(db, module_id);
-    let alias_map: HashMap<InternedText<'db>, ModuleId> = resolved_requires.iter()
+    let alias_map: HashMap<InternedText<'db>, ModuleId<'db>> = resolved_requires.iter()
         .map(|(alias, target_id)| (*alias, *target_id))
         .collect();
 
@@ -760,10 +760,10 @@ fn build_script_module_functions<'db>(
     modules: &[ModuleSpec<'db>],
 ) -> (
     HashMap<String, HashMap<InternedText<'db>, (TypeFunction<'db>, StmtFun<'db>)>>,
-    HashMap<String, ModuleId>,
+    HashMap<String, ModuleId<'db>>,
 ) {
     let mut module_functions: HashMap<String, HashMap<InternedText<'db>, (TypeFunction<'db>, StmtFun<'db>)>> = HashMap::new();
-    let mut path_to_module_id: HashMap<String, ModuleId> = HashMap::new();
+    let mut path_to_module_id: HashMap<String, ModuleId<'db>> = HashMap::new();
 
     for module_spec in modules {
         // Use pre-computed name resolution from ModuleSpec.
@@ -819,8 +819,8 @@ fn resolve_script_imports<'db>(
     script: &ParsedStatements<'db>,
     alias_to_path: &HashMap<InternedText<'db>, String>,
     module_functions: &HashMap<String, HashMap<InternedText<'db>, (TypeFunction<'db>, StmtFun<'db>)>>,
-    path_to_module_id: &HashMap<String, ModuleId>,
-) -> (Vec<(InternedText<'db>, TypeFunction<'db>, StmtFun<'db>, Option<ModuleId>)>, Vec<TypeError>) {
+    path_to_module_id: &HashMap<String, ModuleId<'db>>,
+) -> (Vec<(InternedText<'db>, TypeFunction<'db>, StmtFun<'db>, Option<ModuleId<'db>>)>, Vec<TypeError>) {
     // Resolve import statements.
     let mut resolved = Vec::new();
     let mut errors = Vec::new();

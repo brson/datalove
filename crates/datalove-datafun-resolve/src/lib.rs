@@ -163,7 +163,7 @@ pub fn resolve_names_impl<'db>(
 #[salsa::tracked(returns(copy))]
 pub fn resolve_module_names<'db>(
     db: &'db dyn Db,
-    module: Module,
+    module: Module<'db>,
     parsed: ParsedStatements<'db>,
 ) -> ModuleNameResolution<'db> {
     let module_id = module.id(db);
@@ -196,7 +196,7 @@ pub fn resolve_all_names<'db>(
     parsed_graph: ParsedModuleGraph<'db>,
 ) -> AllModuleNameResolutions<'db> {
     let graph = parsed_graph.graph(db);
-    let module_to_module_obj: HashMap<ModuleId, Module> = graph.iter_modules(db)
+    let module_to_module_obj: HashMap<ModuleId<'db>, Module> = graph.iter_modules(db)
         .map(|m| (m.id(db), m))
         .collect();
 
@@ -226,7 +226,7 @@ pub fn resolve_all_names_parallel<'db>(
     let graph = parsed_graph.graph(db_salsa);
 
     // Build module lookup and work items.
-    let module_to_module_obj: HashMap<ModuleId, Module> = graph.iter_modules(db_salsa)
+    let module_to_module_obj: HashMap<ModuleId<'db>, Module> = graph.iter_modules(db_salsa)
         .map(|m| (m.id(db_salsa), m))
         .collect();
 
@@ -292,7 +292,7 @@ pub fn resolve_script_names<'db>(
 #[salsa::tracked(returns(clone))]
 pub fn resolve_module_exports<'db>(
     db: &'db dyn Db,
-    module: Module,
+    module: Module<'db>,
     parsed: ParsedStatements<'db>,
 ) -> Vec<(InternedText<'db>, TypeFunction<'db>)> {
     let _ = module; // Used as memoization key.
@@ -309,7 +309,7 @@ pub fn resolve_all_exports<'db>(
     parsed_graph: ParsedModuleGraph<'db>,
 ) -> AllModuleExports<'db> {
     let graph = parsed_graph.graph(db);
-    let module_to_module_obj: HashMap<ModuleId, Module> = graph.iter_modules(db)
+    let module_to_module_obj: HashMap<ModuleId<'db>, Module> = graph.iter_modules(db)
         .map(|m| (m.id(db), m))
         .collect();
 

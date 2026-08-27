@@ -112,7 +112,7 @@ impl AccumulatedLowerBindings {
 pub fn build_func_id_map<'db>(
     db: &'db dyn salsa::Database,
     module_specs: &[ModuleSpec<'db>],
-) -> HashMap<(ModuleId, String), (IrModuleId, FuncId)> {
+) -> HashMap<(ModuleId<'db>, String), (IrModuleId, FuncId)> {
     let mut func_id_map = HashMap::new();
 
     for (ir_module_idx, spec) in module_specs.iter().enumerate() {

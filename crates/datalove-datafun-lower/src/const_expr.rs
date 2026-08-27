@@ -137,7 +137,7 @@ pub fn lower_const_expr_to_unit_standalone<'db>(
     return_type: Option<IrType>,
     lowered_functions: &[IrCodeUnit],
     func_name_to_id: &HashMap<String, datalove_datafun_ir::FuncId>,
-    module_func_id_map: &'db HashMap<(ModuleId, String), (IrModuleId, datalove_datafun_ir::FuncId)>,
+    module_func_id_map: Option<&'db HashMap<(ModuleId<'db>, String), (IrModuleId, datalove_datafun_ir::FuncId)>>,
 ) -> Result<IrCodeUnit, LowerError> {
     use datalove_datafun_ir::{CodeRef, FuncId, Instruction};
     use std::collections::HashSet;
@@ -224,10 +224,6 @@ pub fn lower_const_expr_to_unit_standalone<'db>(
     })
 }
 
-/// Empty module func_id_map for contexts that don't need cross-module function calls.
-static EMPTY_MODULE_FUNC_ID_MAP: std::sync::LazyLock<HashMap<(ModuleId, String), (IrModuleId, datalove_datafun_ir::FuncId)>> =
-    std::sync::LazyLock::new(HashMap::new);
-
 /// Lower a single const binding, returning either a simple value or an IR unit.
 ///
 /// This is the primary entry point for the "lower then evaluate" pattern.
@@ -251,7 +247,7 @@ pub fn lower_const_binding<'db>(
     return_type: Option<IrType>,
     lowered_functions: &[IrCodeUnit],
     func_name_to_id: &HashMap<String, datalove_datafun_ir::FuncId>,
-    module_func_id_map: Option<&'db HashMap<(ModuleId, String), (IrModuleId, datalove_datafun_ir::FuncId)>>,
+    module_func_id_map: Option<&'db HashMap<(ModuleId<'db>, String), (IrModuleId, datalove_datafun_ir::FuncId)>>,
 ) -> Result<(Option<IrCodeUnit>, Option<ConstValue>), LowerError> {
     // Try simple literal extraction first.
     if let Some(value) = try_extract_literal(db, expr, ir_type) {
@@ -269,7 +265,7 @@ pub fn lower_const_binding<'db>(
     }
 
     // Use provided module func_id_map or empty one.
-    let func_id_map = module_func_id_map.unwrap_or(&EMPTY_MODULE_FUNC_ID_MAP);
+    let func_id_map = module_func_id_map;
 
     // Lower to IR unit for CTFE evaluation.
     let unit = lower_const_expr_to_unit_standalone(

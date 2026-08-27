@@ -26,11 +26,11 @@ use crate::module_graph::{parse_module_graph_with_mode, parse_module_full};
 use crate::tracked_ownership_analysis::{analyze_module_graph_with_mode, ModuleGraphAnalysis};
 
 /// Input for module compilation - the output of package resolution.
-pub struct ModuleCompilationInput {
+pub struct ModuleCompilationInput<'db> {
     /// The module graph with modules in dependency order.
-    pub graph: ModuleGraph,
+    pub graph: ModuleGraph<'db>,
     /// Resolved require aliases per module: (alias, target_module_id).
-    pub resolved_requires: BTreeMap<ModuleId, Vec<(String, ModuleId)>>,
+    pub resolved_requires: BTreeMap<ModuleId<'db>, Vec<(String, ModuleId<'db>)>>,
 }
 
 /// Output of module compilation - analysis results without lowering.
@@ -40,7 +40,7 @@ pub struct ModuleCompilationInput {
 /// after checking for errors.
 pub struct ModuleCompilationOutput<'db> {
     /// The input module graph.
-    pub module_graph: ModuleGraph,
+    pub module_graph: ModuleGraph<'db>,
     /// Parsed module graph with AST.
     pub parsed_graph: ParsedModuleGraph<'db>,
     /// Name resolution results (type aliases and function signatures).
@@ -82,7 +82,7 @@ impl<'db> ModuleCompilationOutput<'db> {
 /// and gives them control over when/if lowering happens.
 pub fn compile_modules<'db>(
     db: &'db dyn DbClone,
-    input: ModuleCompilationInput,
+    input: ModuleCompilationInput<'db>,
     rider_sources: Vec<(String, String)>,
     mode: ParallelMode,
 ) -> ModuleCompilationOutput<'db> {
@@ -123,7 +123,7 @@ pub fn compile_modules<'db>(
 /// Collect all analysis results into the output structure.
 fn collect_results<'db>(
     db: &'db dyn DbClone,
-    module_graph: ModuleGraph,
+    module_graph: ModuleGraph<'db>,
     parsed_graph: ParsedModuleGraph<'db>,
     name_resolution: AllModuleNameResolutions<'db>,
     typecheck_result: ModuleGraphTypecheckResult<'db>,

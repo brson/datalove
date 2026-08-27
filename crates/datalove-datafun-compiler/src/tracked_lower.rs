@@ -28,19 +28,19 @@ use crate::tracked_ownership_analysis::{SingleModuleAnalysis, ModuleGraphAnalysi
 
 /// Function ID map for cross-module call resolution.
 ///
-/// This tracked struct wraps the mapping from (ModuleId, func_name) to
+/// This tracked struct wraps the mapping from (ModuleId<'db>, func_name) to
 /// (IrModuleId, FuncId). Being a tracked struct makes it hashable and
 /// usable as a parameter to other tracked functions.
 #[salsa::tracked]
 pub struct FuncIdMap<'db> {
     /// Mapping entries as a sorted vector for deterministic hashing.
     #[returns(ref)]
-    pub entries: Vec<((ModuleId, String), (IrModuleId, FuncId))>,
+    pub entries: Vec<((ModuleId<'db>, String), (IrModuleId, FuncId))>,
 }
 
 impl<'db> FuncIdMap<'db> {
     /// Look up a function's IR location by module and name.
-    pub fn get(&self, db: &'db dyn salsa::Database, module_id: ModuleId, func_name: &str) -> Option<(IrModuleId, FuncId)> {
+    pub fn get(&self, db: &'db dyn salsa::Database, module_id: ModuleId<'db>, func_name: &str) -> Option<(IrModuleId, FuncId)> {
         self.entries(db)
             .iter()
             .find(|((mid, name), _)| *mid == module_id && name == func_name)
@@ -48,7 +48,7 @@ impl<'db> FuncIdMap<'db> {
     }
 
     /// Convert to a HashMap for efficient repeated lookups.
-    pub fn to_hashmap(&self, db: &'db dyn salsa::Database) -> HashMap<(ModuleId, String), (IrModuleId, FuncId)> {
+    pub fn to_hashmap(&self, db: &'db dyn salsa::Database) -> HashMap<(ModuleId<'db>, String), (IrModuleId, FuncId)> {
         self.entries(db).iter().cloned().collect()
     }
 }
@@ -63,14 +63,14 @@ impl<'db> FuncIdMap<'db> {
 /// argument equal and the lowering stays cached.
 fn reachable_func_ids<'db>(
     db: &'db dyn salsa::Database,
-    graph: bct::module_graph::ModuleGraph,
+    graph: bct::module_graph::ModuleGraph<'db>,
     func_id_map: FuncIdMap<'db>,
-    module_id: ModuleId,
-) -> Vec<((ModuleId, String), (IrModuleId, FuncId))> {
+    module_id: ModuleId<'db>,
+) -> Vec<((ModuleId<'db>, String), (IrModuleId, FuncId))> {
     let dependencies = graph.dependencies(db);
 
     // Transitive requires of this module.
-    let mut reachable: std::collections::BTreeSet<ModuleId> = std::collections::BTreeSet::new();
+    let mut reachable: std::collections::BTreeSet<ModuleId<'db>> = std::collections::BTreeSet::new();
     let mut queue = vec![module_id];
     while let Some(current) = queue.pop() {
         if !reachable.insert(current) {
@@ -84,7 +84,7 @@ fn reachable_func_ids<'db>(
     // Riders live under synthetic module ids that are not in the graph, so
     // they never appear in `dependencies`; keep every entry the graph does
     // not account for rather than work out which rider belongs to whom.
-    let in_graph: std::collections::BTreeSet<ModuleId> =
+    let in_graph: std::collections::BTreeSet<ModuleId<'db>> =
         graph.iter_modules(db).map(|m| m.id(db)).collect();
 
     func_id_map.entries(db)
@@ -160,9 +160,10 @@ pub fn compute_func_id_map<'db>(
 /// This is computed outside tracked functions (using the CTFE evaluator),
 /// then passed to tracked lowering functions as plain hashable data.
 #[derive(Clone, PartialEq, Eq, Hash)]
-pub struct ModulePreResolvedConsts {
+#[derive(salsa::SalsaValue)]
+pub struct ModulePreResolvedConsts<'db> {
     /// Module these consts belong to.
-    pub module_id: ModuleId,
+    pub module_id: ModuleId<'db>,
 
     /// Evaluated const bindings: name -> (type, value).
     pub consts: Vec<(String, IrType, ConstValue)>,
@@ -171,14 +172,14 @@ pub struct ModulePreResolvedConsts {
     pub errors: Vec<String>,
 }
 
-impl ModulePreResolvedConsts {
+impl<'db> ModulePreResolvedConsts<'db> {
     /// Create a new pre-resolved consts container.
-    pub fn new(module_id: ModuleId, consts: Vec<(String, IrType, ConstValue)>) -> Self {
+    pub fn new(module_id: ModuleId<'db>, consts: Vec<(String, IrType, ConstValue)>) -> Self {
         Self { module_id, consts, errors: Vec::new() }
     }
 
     /// Create with errors.
-    pub fn with_errors(module_id: ModuleId, consts: Vec<(String, IrType, ConstValue)>, errors: Vec<String>) -> Self {
+    pub fn with_errors(module_id: ModuleId<'db>, consts: Vec<(String, IrType, ConstValue)>, errors: Vec<String>) -> Self {
         Self { module_id, consts, errors }
     }
 
@@ -196,7 +197,7 @@ impl ModulePreResolvedConsts {
 pub struct SingleModuleLoweringResult<'db> {
     /// Module that was lowered.
     #[returns(copy)]
-    pub module_id: ModuleId,
+    pub module_id: ModuleId<'db>,
 
     /// IR module index (0-based position in graph).
     #[returns(copy)]
@@ -220,7 +221,7 @@ pub struct SingleModuleLoweringResult<'db> {
 pub struct ModuleGraphLoweringResult<'db> {
     /// Per-module lowering results (module_id -> result).
     #[returns(ref)]
-    pub module_results: BTreeMap<ModuleId, SingleModuleLoweringResult<'db>>,
+    pub module_results: BTreeMap<ModuleId<'db>, SingleModuleLoweringResult<'db>>,
 
     /// Function ID map for cross-module calls.
     #[returns(copy)]
@@ -238,7 +239,7 @@ pub struct ModuleGraphLoweringResult<'db> {
 #[salsa::tracked(returns(copy))]
 pub fn create_module_graph_lowering_result<'db>(
     db: &'db dyn salsa::Database,
-    results_vec: Vec<(ModuleId, SingleModuleLoweringResult<'db>)>,
+    results_vec: Vec<(ModuleId<'db>, SingleModuleLoweringResult<'db>)>,
     func_id_map: FuncIdMap<'db>,
     all_success: bool,
 ) -> ModuleGraphLoweringResult<'db> {
@@ -289,13 +290,13 @@ impl<'db> ModuleGraphLoweringResult<'db> {
 #[salsa::tracked(returns(copy))]
 pub fn lower_module<'db>(
     db: &'db dyn salsa::Database,
-    module: Module,
+    module: Module<'db>,
     ir_module_id: IrModuleId,
     parsed: ParsedStatements<'db>,
     typecheck_result: SingleModuleTypecheckResult<'db>,
     ownership_analysis: SingleModuleAnalysis<'db>,
-    func_ids: Vec<((ModuleId, String), (IrModuleId, FuncId))>,
-    pre_resolved_consts: Option<ModulePreResolvedConsts>,
+    func_ids: Vec<((ModuleId<'db>, String), (IrModuleId, FuncId))>,
+    pre_resolved_consts: Option<ModulePreResolvedConsts<'db>>,
     skip_const_inlining: bool,
     lowered_functions: Option<ModuleLoweredFunctions>,
 ) -> SingleModuleLoweringResult<'db> {
@@ -307,7 +308,7 @@ pub fn lower_module<'db>(
     let expr_types = typecheck_result.expr_types(db);
     let call_targets = typecheck_result.call_targets(db);
 
-    let func_id_hashmap: HashMap<(ModuleId, String), (IrModuleId, FuncId)> =
+    let func_id_hashmap: HashMap<(ModuleId<'db>, String), (IrModuleId, FuncId)> =
         func_ids.iter().cloned().collect();
 
     // Get pre-computed ownership analysis results.
@@ -447,9 +448,9 @@ pub struct ModuleLoweredFunctions {
 ///
 /// This creates a temporary registry for CTFE to use when evaluating
 /// const expressions that call functions from other modules.
-fn build_module_registry_from_lowered(
-    lowered_functions: &HashMap<ModuleId, ModuleLoweredFunctions>,
-    func_id_map: &HashMap<(ModuleId, String), (IrModuleId, FuncId)>,
+fn build_module_registry_from_lowered<'db>(
+    lowered_functions: &HashMap<ModuleId<'db>, ModuleLoweredFunctions>,
+    func_id_map: &HashMap<(ModuleId<'db>, String), (IrModuleId, FuncId)>,
 ) -> Arc<ModuleFunctionRegistry> {
     let mut registry = ModuleFunctionRegistry::new();
 
@@ -478,7 +479,7 @@ pub fn lower_all_module_functions<'db>(
     typecheck_result: ModuleGraphTypecheckResult<'db>,
     ownership_analysis: ModuleGraphAnalysis<'db>,
     func_id_map: FuncIdMap<'db>,
-) -> HashMap<ModuleId, ModuleLoweredFunctions> {
+) -> HashMap<ModuleId<'db>, ModuleLoweredFunctions> {
     let typecheck_module_results = typecheck_result.module_results(db);
     let ownership_analysis_results = ownership_analysis.module_results(db);
     let func_id_hashmap = func_id_map.to_hashmap(db);
@@ -589,9 +590,9 @@ pub fn evaluate_all_module_consts<'db>(
     parsed_graph: ParsedModuleGraph<'db>,
     typecheck_result: ModuleGraphTypecheckResult<'db>,
     evaluator: Rc<RefCell<dyn CtfeEvaluator>>,
-    lowered_functions: &HashMap<ModuleId, ModuleLoweredFunctions>,
+    lowered_functions: &HashMap<ModuleId<'db>, ModuleLoweredFunctions>,
     func_id_map: FuncIdMap<'db>,
-) -> HashMap<ModuleId, ModulePreResolvedConsts> {
+) -> HashMap<ModuleId<'db>, ModulePreResolvedConsts<'db>> {
     let typecheck_module_results = typecheck_result.module_results(db);
     let mut result = HashMap::new();
 
@@ -794,9 +795,9 @@ pub fn lower_module_graph_with_evaluator<'db>(
 fn specialize_comptime_functions<'db>(
     db: &'db dyn salsa::Database,
     typecheck_result: ModuleGraphTypecheckResult<'db>,
-    resolved_consts: &HashMap<ModuleId, ModulePreResolvedConsts>,
-    mut lowered_functions: HashMap<ModuleId, ModuleLoweredFunctions>,
-) -> HashMap<ModuleId, ModuleLoweredFunctions> {
+    resolved_consts: &HashMap<ModuleId<'db>, ModulePreResolvedConsts<'db>>,
+    mut lowered_functions: HashMap<ModuleId<'db>, ModuleLoweredFunctions>,
+) -> HashMap<ModuleId<'db>, ModuleLoweredFunctions> {
     // Get the combined comptime registry.
     let registry = typecheck_result.comptime_registry(db);
     if registry.is_empty() {
@@ -847,7 +848,7 @@ fn specialize_comptime_functions<'db>(
 
     // Build ModuleId -> IrModuleId mapping from the graph.
     let graph = typecheck_result.graph(db);
-    let module_id_to_ir: HashMap<ModuleId, IrModuleId> = graph.iter_modules(db)
+    let module_id_to_ir: HashMap<ModuleId<'db>, IrModuleId> = graph.iter_modules(db)
         .enumerate()
         .map(|(idx, module)| (module.id(db), IrModuleId(idx as u32)))
         .collect();
@@ -895,8 +896,8 @@ fn assemble_module_graph<'db>(
     parsed_graph: ParsedModuleGraph<'db>,
     typecheck_result: ModuleGraphTypecheckResult<'db>,
     ownership_analysis: ModuleGraphAnalysis<'db>,
-    resolved_consts: &HashMap<ModuleId, ModulePreResolvedConsts>,
-    lowered_functions: &HashMap<ModuleId, ModuleLoweredFunctions>,
+    resolved_consts: &HashMap<ModuleId<'db>, ModulePreResolvedConsts<'db>>,
+    lowered_functions: &HashMap<ModuleId<'db>, ModuleLoweredFunctions>,
     skip_const_inlining: bool,
 ) -> ModuleGraphLoweringResult<'db> {
     let graph = parsed_graph.graph(db);
@@ -905,7 +906,7 @@ fn assemble_module_graph<'db>(
     let func_id_map = compute_func_id_map(db, parsed_graph);
 
     // Build module lookup.
-    let module_map: HashMap<ModuleId, Module> = graph.iter_modules(db)
+    let module_map: HashMap<ModuleId<'db>, Module> = graph.iter_modules(db)
         .map(|m| (m.id(db), m))
         .collect();
 
@@ -977,8 +978,8 @@ fn assemble_module_graph_parallel<'db>(
     parsed_graph: ParsedModuleGraph<'db>,
     typecheck_result: ModuleGraphTypecheckResult<'db>,
     ownership_analysis: ModuleGraphAnalysis<'db>,
-    resolved_consts: &HashMap<ModuleId, ModulePreResolvedConsts>,
-    lowered_functions: &HashMap<ModuleId, ModuleLoweredFunctions>,
+    resolved_consts: &HashMap<ModuleId<'db>, ModulePreResolvedConsts<'db>>,
+    lowered_functions: &HashMap<ModuleId<'db>, ModuleLoweredFunctions>,
     skip_const_inlining: bool,
 ) -> ModuleGraphLoweringResult<'db> {
     use rmx::rayon::prelude::*;
@@ -990,7 +991,7 @@ fn assemble_module_graph_parallel<'db>(
     let func_id_map = compute_func_id_map(db_salsa, parsed_graph);
 
     // Build module lookup and data for parallel phase.
-    let module_map: HashMap<ModuleId, Module> = graph.iter_modules(db_salsa)
+    let module_map: HashMap<ModuleId<'db>, Module> = graph.iter_modules(db_salsa)
         .map(|m| (m.id(db_salsa), m))
         .collect();
 
@@ -1075,7 +1076,7 @@ mod reachable_func_ids_tests {
     #[salsa::tracked(returns(copy))]
     fn test_func_id_map<'db>(
         db: &'db dyn salsa::Database,
-        graph: ModuleGraph,
+        graph: ModuleGraph<'db>,
     ) -> FuncIdMap<'db> {
         let mut entries = Vec::new();
         for (index, module) in graph.iter_modules(db).enumerate() {
@@ -1088,7 +1089,7 @@ mod reachable_func_ids_tests {
         FuncIdMap::new(db, entries)
     }
 
-    fn reachable_names(db: &Database, graph: ModuleGraph, module: ModuleId) -> Vec<String> {
+    fn reachable_names<'db>(db: &'db Database, graph: ModuleGraph<'db>, module: ModuleId<'db>) -> Vec<String> {
         let map = test_func_id_map(db, graph);
         let mut names: Vec<String> = reachable_func_ids(db, graph, map, module)
             .into_iter()

@@ -92,7 +92,7 @@ impl IncrementalModuleWorld {
     }
 
     /// The module at a path, built from that path and its source.
-    pub fn module(&self, db: &dyn salsa::Database, path: &str) -> Option<Module> {
+    pub fn module<'db>(&self, db: &'db dyn salsa::Database, path: &str) -> Option<Module<'db>> {
         let source = *self.sources.get(path)?;
         Some(Module::new(db, ModuleId::new(db, path.S()), source))
     }
@@ -101,11 +101,11 @@ impl IncrementalModuleWorld {
     ///
     /// There is nothing to cache: the graph is interned, so building it again
     /// from unchanged parts gives back the same graph.
-    pub fn build_graph(
+    pub fn build_graph<'db>(
         &self,
-        db: &dyn salsa::Database,
+        db: &'db dyn salsa::Database,
         path_deps: &BTreeMap<String, BTreeSet<String>>,
-    ) -> (ModuleGraph, BTreeMap<ModuleId, Vec<(String, ModuleId)>>) {
+    ) -> (ModuleGraph<'db>, BTreeMap<ModuleId<'db>, Vec<(String, ModuleId<'db>)>>) {
         // Dependencies before dependents.
         let all_paths: BTreeSet<String> = self.sources.keys().cloned().collect();
         let sorted_paths = topological_sort(&all_paths, path_deps);
@@ -114,14 +114,14 @@ impl IncrementalModuleWorld {
             .filter_map(|p| self.module(db, p))
             .collect();
 
-        let module_by_id: BTreeMap<ModuleId, Module> = self.sources.keys()
+        let module_by_id: BTreeMap<ModuleId<'db>, Module> = self.sources.keys()
             .filter_map(|p| self.module(db, p).map(|m| (m.id(db), m)))
             .collect();
 
-        let mut dependencies: BTreeMap<ModuleId, BTreeSet<ModuleId>> = BTreeMap::new();
+        let mut dependencies: BTreeMap<ModuleId<'db>, BTreeSet<ModuleId<'db>>> = BTreeMap::new();
         for (source_path, target_paths) in path_deps {
             if let Some(source_module) = self.module(db, source_path) {
-                let target_ids: BTreeSet<ModuleId> = target_paths.iter()
+                let target_ids: BTreeSet<ModuleId<'db>> = target_paths.iter()
                     .filter_map(|p| self.module(db, p).map(|m| m.id(db)))
                     .collect();
                 dependencies.insert(source_module.id(db), target_ids);
@@ -136,20 +136,20 @@ impl IncrementalModuleWorld {
     }
 
     /// Build the graph for a first compilation.
-    pub fn build_fresh(
+    pub fn build_fresh<'db>(
         &self,
-        db: &dyn salsa::Database,
+        db: &'db dyn salsa::Database,
         path_deps: &BTreeMap<String, BTreeSet<String>>,
-    ) -> (ModuleGraph, BTreeMap<ModuleId, Vec<(String, ModuleId)>>) {
+    ) -> (ModuleGraph<'db>, BTreeMap<ModuleId<'db>, Vec<(String, ModuleId<'db>)>>) {
         self.build_graph(db, path_deps)
     }
 
     /// Build the graph for a recompilation.
-    pub fn prepare_for_compile(
+    pub fn prepare_for_compile<'db>(
         &self,
-        db: &dyn salsa::Database,
+        db: &'db dyn salsa::Database,
         path_deps: &BTreeMap<String, BTreeSet<String>>,
-    ) -> (ModuleGraph, BTreeMap<ModuleId, Vec<(String, ModuleId)>>) {
+    ) -> (ModuleGraph<'db>, BTreeMap<ModuleId<'db>, Vec<(String, ModuleId<'db>)>>) {
         self.build_graph(db, path_deps)
     }
 
@@ -181,16 +181,16 @@ impl IncrementalModuleWorld {
     }
 
     /// Build the resolved_requires map needed by parse_module_graph.
-    fn build_resolved_requires(
+    fn build_resolved_requires<'db>(
         &self,
-        db: &dyn salsa::Database,
+        db: &'db dyn salsa::Database,
         path_deps: &BTreeMap<String, BTreeSet<String>>,
-    ) -> BTreeMap<ModuleId, Vec<(String, ModuleId)>> {
+    ) -> BTreeMap<ModuleId<'db>, Vec<(String, ModuleId<'db>)>> {
         let mut resolved_requires = BTreeMap::new();
 
         for (source_path, target_paths) in path_deps {
             if let Some(source_module) = self.module(db, source_path) {
-                let requires: Vec<(String, ModuleId)> = target_paths.iter()
+                let requires: Vec<(String, ModuleId<'db>)> = target_paths.iter()
                     .filter_map(|p| {
                         self.module(db, p).map(|m| {
                             // Use the last component of path as alias.

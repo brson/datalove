@@ -14,14 +14,9 @@ use crate::input::Source;
 /// asked for. As an input it did not, and every caller had to route through
 /// whoever happened to construct the id first.
 ///
-/// `revisions = usize::MAX` keeps a module id interned for the life of the
-/// database, which is what lets the handle drop the database lifetime. There
-/// are as many of these as there are modules, so nothing is lost by holding
-/// them, and callers pass module ids around too freely for a borrow to be
-/// practical.
-#[salsa::interned(revisions = usize::MAX, unsafe(no_lifetime))]
+#[salsa::interned]
 #[derive(Debug, Ord, PartialOrd)]
-pub struct ModuleId {
+pub struct ModuleId<'db> {
     /// Module path (e.g., "sys/std/u32").
     #[returns(ref)]
     pub path: String,
@@ -33,15 +28,12 @@ pub struct ModuleId {
 /// mutated - editing a module edits its `Source`, whose handle does not change
 /// - so there is nothing an input would give it beyond a fresh identity each
 /// time it is built, which is the thing to avoid.
-///
-/// Lifetime-free because `ModuleGraph` is an input and an input's fields
-/// cannot borrow the database. See `ModuleId` for what that costs.
-#[salsa::interned(revisions = usize::MAX, unsafe(no_lifetime))]
+#[salsa::interned]
 #[derive(Debug)]
-pub struct Module {
+pub struct Module<'db> {
     /// Module identifier.
     #[returns(copy)]
-    pub id: ModuleId,
+    pub id: ModuleId<'db>,
     /// Module source text.
     #[returns(copy)]
     pub source: Source,
@@ -56,29 +48,29 @@ pub struct Module {
 /// input it was not, and a caller wanting a stable graph across edits had to
 /// hold on to the first one and drive its setters - carefully, since a setter
 /// marks an input changed whether or not the value differs.
-#[salsa::interned(revisions = usize::MAX, unsafe(no_lifetime))]
-pub struct ModuleGraph {
+#[salsa::interned]
+pub struct ModuleGraph<'db> {
     /// Modules in dependency order (dependencies come first).
     #[returns(ref)]
-    pub modules: Vec<Module>,
+    pub modules: Vec<Module<'db>>,
 
     /// Module lookup by ID.
     #[returns(ref)]
-    pub module_by_id: BTreeMap<ModuleId, Module>,
+    pub module_by_id: BTreeMap<ModuleId<'db>, Module<'db>>,
 
     /// Direct dependencies per module (for ordering verification).
     #[returns(ref)]
-    pub dependencies: BTreeMap<ModuleId, BTreeSet<ModuleId>>,
+    pub dependencies: BTreeMap<ModuleId<'db>, BTreeSet<ModuleId<'db>>>,
 }
 
-impl ModuleGraph {
+impl<'db> ModuleGraph<'db> {
     /// Get a module by its ID.
-    pub fn get_module(&self, db: &dyn salsa::Database, id: ModuleId) -> Option<Module> {
+    pub fn get_module(&self, db: &'db dyn salsa::Database, id: ModuleId<'db>) -> Option<Module<'db>> {
         self.module_by_id(db).get(&id).copied()
     }
 
     /// Iterate modules in dependency order.
-    pub fn iter_modules<'db>(&self, db: &'db dyn salsa::Database) -> impl Iterator<Item = Module> + 'db {
+    pub fn iter_modules(&self, db: &'db dyn salsa::Database) -> impl Iterator<Item = Module<'db>> + 'db {
         self.modules(db).iter().copied()
     }
 }
@@ -86,9 +78,9 @@ impl ModuleGraph {
 /// Builder for constructing a ModuleGraph.
 pub struct ModuleGraphBuilder<'db> {
     db: &'db dyn salsa::Database,
-    modules: Vec<Module>,
-    module_by_id: BTreeMap<ModuleId, Module>,
-    dependencies: BTreeMap<ModuleId, BTreeSet<ModuleId>>,
+    modules: Vec<Module<'db>>,
+    module_by_id: BTreeMap<ModuleId<'db>, Module<'db>>,
+    dependencies: BTreeMap<ModuleId<'db>, BTreeSet<ModuleId<'db>>>,
 }
 
 impl<'db> ModuleGraphBuilder<'db> {
@@ -109,7 +101,7 @@ impl<'db> ModuleGraphBuilder<'db> {
         &mut self,
         path: impl Into<String>,
         source: Source,
-    ) -> ModuleId {
+    ) -> ModuleId<'db> {
         let id = ModuleId::new(self.db, path.into());
         let module = Module::new(self.db, id, source);
         self.modules.push(module);
@@ -119,14 +111,14 @@ impl<'db> ModuleGraphBuilder<'db> {
     }
 
     /// Add a dependency between modules.
-    pub fn add_dependency(&mut self, module_id: ModuleId, depends_on: ModuleId) {
+    pub fn add_dependency(&mut self, module_id: ModuleId<'db>, depends_on: ModuleId<'db>) {
         if let Some(deps) = self.dependencies.get_mut(&module_id) {
             deps.insert(depends_on);
         }
     }
 
     /// Build the final ModuleGraph.
-    pub fn build(self) -> ModuleGraph {
+    pub fn build(self) -> ModuleGraph<'db> {
         ModuleGraph::new(
             self.db,
             self.modules,

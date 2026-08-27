@@ -41,7 +41,7 @@ pub struct SingleFunctionAnalysis<'db> {
 pub struct SingleModuleAnalysis<'db> {
     /// Module that was analyzed.
     #[returns(copy)]
-    pub module_id: ModuleId,
+    pub module_id: ModuleId<'db>,
 
     /// Per-function analysis results.
     #[returns(ref)]
@@ -57,7 +57,7 @@ pub struct SingleModuleAnalysis<'db> {
 pub struct ModuleGraphAnalysis<'db> {
     /// Per-module analysis results.
     #[returns(ref)]
-    pub module_results: BTreeMap<ModuleId, SingleModuleAnalysis<'db>>,
+    pub module_results: BTreeMap<ModuleId<'db>, SingleModuleAnalysis<'db>>,
 
     /// Whether all modules analyzed successfully.
     #[returns(copy)]
@@ -97,7 +97,7 @@ fn convert_expr_types<'db>(
 #[salsa::tracked(returns(copy))]
 pub fn analyze_module<'db>(
     db: &'db dyn salsa::Database,
-    module: Module,
+    module: Module<'db>,
     parsed: ParsedStatements<'db>,
     typecheck_result: SingleModuleTypecheckResult<'db>,
     auto_adapt_mode: AutoAdaptMode,
@@ -178,7 +178,7 @@ pub fn analyze_module_graph<'db>(
     let graph = parsed_graph.graph(db);
 
     // Build module lookup.
-    let module_map: HashMap<ModuleId, Module> = graph.iter_modules(db)
+    let module_map: HashMap<ModuleId<'db>, Module> = graph.iter_modules(db)
         .map(|m| (m.id(db), m))
         .collect();
 
@@ -227,7 +227,7 @@ pub fn analyze_module_graph_parallel<'db>(
     let graph = parsed_graph.graph(db_salsa);
 
     // Build module lookup.
-    let module_map: HashMap<ModuleId, Module> = graph.iter_modules(db_salsa)
+    let module_map: HashMap<ModuleId<'db>, Module> = graph.iter_modules(db_salsa)
         .map(|m| (m.id(db_salsa), m))
         .collect();
 

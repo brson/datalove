@@ -53,7 +53,7 @@ pub(super) struct Parser<'db> {
     /// Source text for error reporting when no current token.
     source_text: bct::text::Text<'db>,
     /// Module ID for stable function identity (None for scripts).
-    module_id: Option<ModuleId>,
+    module_id: Option<ModuleId<'db>>,
     /// Accumulated expression spans (side table pattern).
     expr_spans: Vec<ast::ParseSpanEntry<'db>>,
     /// Accumulated break statement spans, indexed by local_index.
@@ -94,7 +94,7 @@ impl<'db> Parser<'db> {
         db: &'db dyn Db,
         tokens: Vec<TreeToken<'db>>,
         source_text: bct::text::Text<'db>,
-        module_id: Option<ModuleId>,
+        module_id: Option<ModuleId<'db>>,
         counters: ScriptCounters,
     ) -> Self {
         Parser {
@@ -162,7 +162,7 @@ impl<'db> Parser<'db> {
         iter: BracerIter<'db>,
         source_text: bct::text::Text<'db>,
         context: Option<(TextSpan<'db>, &'static str)>,
-        module_id: Option<ModuleId>,
+        module_id: Option<ModuleId<'db>>,
     ) -> Self {
         let mut parser = Parser {
             db,
@@ -254,7 +254,7 @@ impl<'db> Parser<'db> {
     }
 
     /// Get the module ID for this parser (for stable function identity).
-    pub(super) fn module_id(&self) -> Option<ModuleId> {
+    pub(super) fn module_id(&self) -> Option<ModuleId<'db>> {
         self.module_id
     }
 

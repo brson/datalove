@@ -22,7 +22,7 @@ use datalove_datalit as datalit;
 #[derive(salsa::SalsaValue)]
 pub struct ExprKey<'db> {
     /// Module the expression belongs to, or None for a script.
-    pub module_id: Option<ModuleId>,
+    pub module_id: Option<ModuleId<'db>>,
     /// Function the expression belongs to, or None at script level.
     pub fn_name: Option<InternedText<'db>>,
     /// Sequential index within that function.
@@ -46,7 +46,7 @@ impl fmt::Debug for ExprKey<'_> {
 
 impl<'db> ExprKey<'db> {
     pub fn new(
-        module_id: Option<ModuleId>,
+        module_id: Option<ModuleId<'db>>,
         fn_name: Option<InternedText<'db>>,
         local_index: u32,
     ) -> Self {
@@ -223,7 +223,7 @@ pub struct StmtFun<'db> {
     /// Module this function belongs to (identity key).
     /// None for script-local functions.
     #[returns(copy)]
-    pub module_id: Option<ModuleId>,
+    pub module_id: Option<ModuleId<'db>>,
     /// Function name (identity key).
     #[returns(copy)]
     pub name: InternedText<'db>,
@@ -418,7 +418,7 @@ pub struct StmtParseError<'db> {
 pub struct ExprFun<'db> {
     /// Module this expression belongs to (identity key). None for scripts.
     #[returns(copy)]
-    pub module_id: Option<ModuleId>,
+    pub module_id: Option<ModuleId<'db>>,
     /// Function this expression belongs to (identity key). None for script-level.
     #[returns(copy)]
     pub fn_name: Option<InternedText<'db>>,
@@ -510,7 +510,7 @@ pub struct ExprBinOp<'db> {
 pub struct ExprFunctionCall<'db> {
     /// Module this call belongs to (identity key). None for scripts.
     #[returns(copy)]
-    pub module_id: Option<ModuleId>,
+    pub module_id: Option<ModuleId<'db>>,
     /// Function this call belongs to (identity key). None for script-level.
     #[returns(copy)]
     pub fn_name: Option<InternedText<'db>>,

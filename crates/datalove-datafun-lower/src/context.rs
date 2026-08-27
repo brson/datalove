@@ -232,7 +232,8 @@ pub struct LowerCtx<'db> {
     /// const expression in isolation.
     pub(super) call_targets: Option<&'db CallTargets<'db>>,
     /// Map from (salsa ModuleId, func_name) -> (IrModuleId, FuncId).
-    pub(super) func_id_map: &'db HashMap<(ModuleId, String), (IrModuleId, FuncId)>,
+    /// None where there are no module functions to resolve against.
+    pub(super) func_id_map: Option<&'db HashMap<(ModuleId<'db>, String), (IrModuleId, FuncId)>>,
 
     /// Function-local state (swapped when entering nested function).
     pub(super) body: FrameState<'db>,
@@ -263,10 +264,6 @@ pub struct LowerCtx<'db> {
     pub(super) ctfe_evaluator: Option<Rc<RefCell<dyn CtfeEvaluator>>>,
 }
 
-/// Empty func_id_map for contexts that don't need module function resolution.
-static EMPTY_FUNC_ID_MAP: std::sync::LazyLock<HashMap<(ModuleId, String), (IrModuleId, FuncId)>> =
-    std::sync::LazyLock::new(HashMap::new);
-
 impl<'db> LowerCtx<'db> {
     pub fn new(
         db: &'db dyn salsa::Database,
@@ -277,7 +274,7 @@ impl<'db> LowerCtx<'db> {
             db,
             expr_types,
             call_targets,
-            func_id_map: &EMPTY_FUNC_ID_MAP,
+            func_id_map: None,
             body: FrameState::new(),
             exports: Vec::new(),
             functions: Vec::new(),
@@ -297,7 +294,7 @@ impl<'db> LowerCtx<'db> {
         db: &'db dyn salsa::Database,
         expr_types: &'db ExprTypes<'db>,
         call_targets: Option<&'db CallTargets<'db>>,
-        func_id_map: &'db HashMap<(ModuleId, String), (IrModuleId, FuncId)>,
+        func_id_map: Option<&'db HashMap<(ModuleId<'db>, String), (IrModuleId, FuncId)>>,
     ) -> Self {
         Self {
             db,
@@ -335,7 +332,7 @@ impl<'db> LowerCtx<'db> {
         db: &'db dyn salsa::Database,
         expr_types: &'db ExprTypes<'db>,
         call_targets: Option<&'db CallTargets<'db>>,
-        func_id_map: &'db HashMap<(ModuleId, String), (IrModuleId, FuncId)>,
+        func_id_map: Option<&'db HashMap<(ModuleId<'db>, String), (IrModuleId, FuncId)>>,
         script_ctx: ScriptLowerContext,
     ) -> Self {
         // Seed variables with external bindings from previous units.
@@ -448,10 +445,10 @@ impl<'db> LowerCtx<'db> {
 
         match target.module_id(self.db) {
             Some(module_id) => {
-                // Module function - look up by (ModuleId, func_name).
+                // Module function - look up by (ModuleId<'db>, func_name).
                 let resolved_func_name = target.func(self.db).name(self.db).text(self.db).to_string();
                 let (ir_mod, func_id) = self.func_id_map
-                    .get(&(module_id, resolved_func_name.clone()))
+                    .and_then(|m| m.get(&(module_id, resolved_func_name.clone())))
                     .unwrap_or_else(|| panic!(
                         "module function not in func_id_map: {}",
                         resolved_func_name

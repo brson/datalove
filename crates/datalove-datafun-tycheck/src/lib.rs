@@ -84,19 +84,19 @@ pub enum PendingDiagnostic<'db> {
     /// F001: Undefined variable.
     UndefinedVariable {
         expr_key: ExprKey<'db>,
-        module_id: Option<ModuleId>,
+        module_id: Option<ModuleId<'db>>,
         name: InternedText<'db>,
     },
     /// F002: Undefined function.
     UndefinedFunction {
         expr_key: ExprKey<'db>,
-        module_id: Option<ModuleId>,
+        module_id: Option<ModuleId<'db>>,
         name: InternedText<'db>,
     },
     /// F011: Cannot synthesize type.
     CannotSynthesize {
         expr_key: ExprKey<'db>,
-        module_id: Option<ModuleId>,
+        module_id: Option<ModuleId<'db>>,
         message: InternedText<'db>,
     },
     /// F016: Type mismatch.
@@ -104,7 +104,7 @@ pub enum PendingDiagnostic<'db> {
     /// If recovery_hint is `InsertAdapt`, the error can be fixed by inserting `@`.
     TypeMismatch {
         expr_key: ExprKey<'db>,
-        module_id: Option<ModuleId>,
+        module_id: Option<ModuleId<'db>>,
         expected: InternedText<'db>,
         actual: InternedText<'db>,
         label: InternedText<'db>,
@@ -114,7 +114,7 @@ pub enum PendingDiagnostic<'db> {
     /// F026: Invalid operand type.
     InvalidOperandType {
         expr_key: ExprKey<'db>,
-        module_id: Option<ModuleId>,
+        module_id: Option<ModuleId<'db>>,
         op: InternedText<'db>,
         ty: InternedText<'db>,
     },
@@ -123,13 +123,13 @@ pub enum PendingDiagnostic<'db> {
         /// Salsa ID of the call expression (for primary span lookup).
         call_expr_key: ExprKey<'db>,
         /// Module where the call occurs (None for non-module-graph paths).
-        call_module_id: Option<ModuleId>,
+        call_module_id: Option<ModuleId<'db>>,
         /// Name of the function being called.
         func_name: InternedText<'db>,
         /// local_index of the function definition (for secondary span lookup).
         func_local_index: u32,
         /// Module where the function is defined (None for script-local functions).
-        func_module_id: Option<ModuleId>,
+        func_module_id: Option<ModuleId<'db>>,
         /// Expected number of arguments.
         expected: usize,
         /// Actual number of arguments supplied.
@@ -138,12 +138,12 @@ pub enum PendingDiagnostic<'db> {
     /// F046: Result destructuring requires error binding.
     ResultRequiresBinding {
         expr_key: ExprKey<'db>,
-        module_id: Option<ModuleId>,
+        module_id: Option<ModuleId<'db>>,
     },
     /// F048: Try operator type mismatch.
     TryTypeMismatch {
         expr_key: ExprKey<'db>,
-        module_id: Option<ModuleId>,
+        module_id: Option<ModuleId<'db>>,
         operator: InternedText<'db>,
         expected: InternedText<'db>,
         actual: InternedText<'db>,
@@ -151,7 +151,7 @@ pub enum PendingDiagnostic<'db> {
     /// F049: Try operator return type mismatch.
     TryReturnTypeMismatch {
         expr_key: ExprKey<'db>,
-        module_id: Option<ModuleId>,
+        module_id: Option<ModuleId<'db>>,
         operator: InternedText<'db>,
         expected: InternedText<'db>,
         actual: InternedText<'db>,
@@ -159,45 +159,45 @@ pub enum PendingDiagnostic<'db> {
     /// F050: Break outside loop.
     BreakOutsideLoop {
         local_index: u32,
-        module_id: Option<ModuleId>,
+        module_id: Option<ModuleId<'db>>,
     },
     /// F051: Continue outside loop.
     ContinueOutsideLoop {
         local_index: u32,
-        module_id: Option<ModuleId>,
+        module_id: Option<ModuleId<'db>>,
     },
     /// F052: Void function returns value.
     VoidFunctionReturnsValue {
         local_index: u32,
-        module_id: Option<ModuleId>,
+        module_id: Option<ModuleId<'db>>,
     },
     /// F053: Non-void function requires return value.
     FunctionRequiresReturnValue {
         local_index: u32,
-        module_id: Option<ModuleId>,
+        module_id: Option<ModuleId<'db>>,
     },
     /// F054: Undefined variable in set statement.
     UndefinedVariableSet {
         local_index: u32,
-        module_id: Option<ModuleId>,
+        module_id: Option<ModuleId<'db>>,
         name: InternedText<'db>,
     },
     /// F055: Cannot assign to immutable variable.
     VariableNotMutable {
         local_index: u32,
-        module_id: Option<ModuleId>,
+        module_id: Option<ModuleId<'db>>,
         name: InternedText<'db>,
     },
     /// F056: Const not allowed at module level.
     ConstNotAllowedInModule {
         expr_key: ExprKey<'db>,
-        module_id: Option<ModuleId>,
+        module_id: Option<ModuleId<'db>>,
         name: InternedText<'db>,
     },
     /// F057: Call-site mode marker disagrees with the declared parameter mode.
     ArgumentModeMismatch {
         expr_key: ExprKey<'db>,
-        module_id: Option<ModuleId>,
+        module_id: Option<ModuleId<'db>>,
         /// Declared mode of the parameter.
         expected: InternedText<'db>,
         /// Marker written at the call site, or `in` when none was written.
@@ -353,7 +353,7 @@ pub struct ModuleSpec<'db> {
     pub source: bct::input::Source,
     pub spans: DatafunSpans<'db>,
     pub parsed: ParsedStatements<'db>,
-    pub module_id: ModuleId,
+    pub module_id: ModuleId<'db>,
     /// Pre-computed name resolution for this module.
     pub name_resolution: CollectedNames<'db>,
 }
@@ -365,7 +365,7 @@ impl<'db> ModuleSpec<'db> {
         source: bct::input::Source,
         spans: DatafunSpans<'db>,
         parsed: ParsedStatements<'db>,
-        module_id: ModuleId,
+        module_id: ModuleId<'db>,
         name_resolution: CollectedNames<'db>,
     ) -> Self {
         Self { path, source, spans, parsed, module_id, name_resolution }
@@ -405,7 +405,7 @@ pub struct ModuleInfo<'db> {
     #[returns(copy)]
     pub source: bct::input::Source,
     #[returns(copy)]
-    pub module_id: ModuleId,
+    pub module_id: ModuleId<'db>,
 }
 
 /// Batch of script units (tracked).
@@ -471,7 +471,7 @@ pub struct ResolvedImport<'db> {
     pub func_ast: Option<StmtFun<'db>>,
     /// Module the function was imported from.
     #[returns(copy)]
-    pub source_module: ModuleId,
+    pub source_module: ModuleId<'db>,
     /// Original name in the source module.
     #[returns(copy)]
     pub source_name: InternedText<'db>,
@@ -482,11 +482,11 @@ pub struct ResolvedImport<'db> {
 pub struct ModuleImportResolution<'db> {
     /// Module this is for.
     #[returns(copy)]
-    pub module_id: ModuleId,
+    pub module_id: ModuleId<'db>,
 
     /// Resolved imports: (local_name, func_type, func_ast, source_module_id).
     #[returns(ref)]
-    pub imports: Vec<(InternedText<'db>, TypeFunction<'db>, Option<StmtFun<'db>>, ModuleId)>,
+    pub imports: Vec<(InternedText<'db>, TypeFunction<'db>, Option<StmtFun<'db>>, ModuleId<'db>)>,
 
     /// Import resolution errors.
     #[returns(ref)]
@@ -498,7 +498,7 @@ pub struct ModuleImportResolution<'db> {
 pub struct SingleModuleTypecheckResult<'db> {
     /// Module that was typechecked.
     #[returns(copy)]
-    pub module_id: ModuleId,
+    pub module_id: ModuleId<'db>,
 
     /// Type errors encountered.
     #[returns(ref)]
@@ -521,7 +521,7 @@ pub struct SingleModuleTypecheckResult<'db> {
 
     /// Imported functions: (local_name, source_module_id, source_name).
     #[returns(ref)]
-    pub imports: Vec<(InternedText<'db>, ModuleId, InternedText<'db>)>,
+    pub imports: Vec<(InternedText<'db>, ModuleId<'db>, InternedText<'db>)>,
 
     /// Expression types for this module.
     #[returns(ref)]
@@ -543,7 +543,7 @@ pub struct SingleModuleTypecheckResult<'db> {
 pub struct ModuleExports<'db> {
     /// Module this is for.
     #[returns(copy)]
-    pub module_id: ModuleId,
+    pub module_id: ModuleId<'db>,
 
     /// Function signatures as a vector of (name, type) pairs.
     #[returns(ref)]
@@ -559,11 +559,11 @@ pub struct ModuleExports<'db> {
 pub struct ModuleImports<'db> {
     /// Module this is for.
     #[returns(copy)]
-    pub module_id: ModuleId,
+    pub module_id: ModuleId<'db>,
 
     /// Imported functions: (local_name, source_module_id, source_name).
     #[returns(ref)]
-    pub functions: Vec<(InternedText<'db>, ModuleId, InternedText<'db>)>,
+    pub functions: Vec<(InternedText<'db>, ModuleId<'db>, InternedText<'db>)>,
 }
 
 /// Result of typechecking a module graph.
@@ -571,19 +571,19 @@ pub struct ModuleImports<'db> {
 pub struct ModuleGraphTypecheckResult<'db> {
     /// The module graph that was typechecked.
     #[returns(copy)]
-    pub graph: bct::module_graph::ModuleGraph,
+    pub graph: bct::module_graph::ModuleGraph<'db>,
 
     /// Type errors encountered, per module.
     #[returns(ref)]
-    pub module_errors: BTreeMap<ModuleId, Vec<TypeError>>,
+    pub module_errors: BTreeMap<ModuleId<'db>, Vec<TypeError>>,
 
     /// Module exports, per module.
     #[returns(ref)]
-    pub module_exports: BTreeMap<ModuleId, ModuleExports<'db>>,
+    pub module_exports: BTreeMap<ModuleId<'db>, ModuleExports<'db>>,
 
     /// Module imports, per module.
     #[returns(ref)]
-    pub module_imports: BTreeMap<ModuleId, ModuleImports<'db>>,
+    pub module_imports: BTreeMap<ModuleId<'db>, ModuleImports<'db>>,
 
     /// Expression types from all modules, combined.
     ///
@@ -604,7 +604,7 @@ pub struct ModuleGraphTypecheckResult<'db> {
     /// Used by downstream phases (e.g., IR lowering) to get per-module type
     /// information while preserving memoization.
     #[returns(ref)]
-    pub module_results: BTreeMap<ModuleId, SingleModuleTypecheckResult<'db>>,
+    pub module_results: BTreeMap<ModuleId<'db>, SingleModuleTypecheckResult<'db>>,
 
     /// Comptime call site registry.
     ///

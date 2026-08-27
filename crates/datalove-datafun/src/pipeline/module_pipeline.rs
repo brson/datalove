@@ -289,7 +289,7 @@ impl ModuleCompilationPipeline {
     ) -> (CompiledModules<'db>, &'db D) {
         // Extract dependencies first (reads from db).
         let path_deps = extract_dependencies(&self.world, db);
-        let (module_graph, resolved_requires) = self.world.prepare_for_compile(db, &path_deps);
+        let (module_graph, resolved_requires) = self.world.prepare_for_compile(&*db, &path_deps);
 
         // Reborrow as immutable for the rest of compilation.
         let db_ref: &'db D = &*db;
@@ -302,8 +302,8 @@ impl ModuleCompilationPipeline {
     fn compile_impl<'db>(
         &self,
         db: &'db dyn DbClone,
-        module_graph: ModuleGraph,
-        resolved_requires: BTreeMap<ModuleId, Vec<(String, ModuleId)>>,
+        module_graph: ModuleGraph<'db>,
+        resolved_requires: BTreeMap<ModuleId<'db>, Vec<(String, ModuleId<'db>)>>,
         mode: ParallelMode,
         evaluator: Rc<RefCell<dyn CtfeEvaluator>>,
     ) -> CompiledModules<'db> {
@@ -345,7 +345,7 @@ impl ModuleCompilationPipeline {
         let (func_id_map, module_registry, lowering_errors, module_ir_dumps) =
             if let Some(ref lowering) = lowering_result {
                 // Convert FuncIdMap to HashMap.
-                let func_id_map: HashMap<(ModuleId, String), (IrModuleId, FuncId)> =
+                let func_id_map: HashMap<(ModuleId<'db>, String), (IrModuleId, FuncId)> =
                     lowering.func_id_map(db.as_salsa_db()).to_hashmap(db.as_salsa_db());
 
                 // Build module registry from IR functions.
@@ -386,7 +386,7 @@ impl ModuleCompilationPipeline {
                 // No lowering - use empty structures.
                 // Still need func_id_map for script compilation even without lowering.
                 use datalove_datafun_compiler::tracked_lower::compute_func_id_map;
-                let func_id_map: HashMap<(ModuleId, String), (IrModuleId, FuncId)> =
+                let func_id_map: HashMap<(ModuleId<'db>, String), (IrModuleId, FuncId)> =
                     compute_func_id_map(db.as_salsa_db(), output.parsed_graph)
                         .to_hashmap(db.as_salsa_db());
                 (func_id_map, ModuleFunctionRegistry::new(), BTreeMap::new(), BTreeMap::new())
@@ -419,7 +419,7 @@ impl ModuleCompilationPipeline {
     fn add_native_rider_units<'db>(
         db: &'db dyn salsa::Database,
         output: &ModuleCompilationOutput<'db>,
-        func_id_map: &HashMap<(ModuleId, String), (IrModuleId, FuncId)>,
+        func_id_map: &HashMap<(ModuleId<'db>, String), (IrModuleId, FuncId)>,
         registry: &mut ModuleFunctionRegistry,
     ) {
         use datalove_datafun_ir::{IrType, CodeUnitId, NativeContext};
