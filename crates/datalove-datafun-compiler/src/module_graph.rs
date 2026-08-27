@@ -742,15 +742,22 @@ mod tests {
         let source_b = bct::input::Source::new(&db, "fun helper(): i32\n  ret 1\nend fun".to_string());
         let source_a = bct::input::Source::new(&db, "let x = 1".to_string());
 
-        let mut builder = ModuleGraphBuilder::new(&db);
-        let id_b = builder.add_module("b".to_string(), source_b);
-        let id_a = builder.add_module("a".to_string(), source_a);
-        let graph = builder.build();
-
-        let mut requires = BTreeMap::new();
-        requires.insert(id_a, vec![("b".to_string(), id_b)]);
+        // The graph is interned, so building it again from the same sources
+        // gives back the same graph. Building it per phase rather than holding
+        // one keeps the handles inside a single revision.
+        fn build(db: &Database, source_a: bct::input::Source, source_b: bct::input::Source)
+            -> (ModuleGraph, ModuleId, ModuleId, BTreeMap<ModuleId, Vec<(String, ModuleId)>>)
+        {
+            let mut builder = ModuleGraphBuilder::new(db);
+            let id_b = builder.add_module("b".to_string(), source_b);
+            let id_a = builder.add_module("a".to_string(), source_a);
+            let mut requires = BTreeMap::new();
+            requires.insert(id_a, vec![("b".to_string(), id_b)]);
+            (builder.build(), id_a, id_b, requires)
+        }
 
         // First run: both modules should be parsed.
+        let (graph, id_a, id_b, requires) = build(&db, source_a, source_b);
         enable_query_logging();
         let parsed1 = parse_module_graph(&db, graph.clone(), requires.clone(), Vec::new());
         let log1 = disable_query_logging();
@@ -767,6 +774,7 @@ mod tests {
         source_b.set_text(&mut db).to("fun helper(): i32\n  ret 999\nend fun".to_string());
 
         // Second run: only B should be re-parsed, A should be cached.
+        let (graph, id_a, id_b, requires) = build(&db, source_a, source_b);
         enable_query_logging();
         let parsed2 = parse_module_graph(&db, graph, requires, Vec::new());
         let log2 = disable_query_logging();
@@ -793,12 +801,14 @@ mod tests {
 
         // Create a single module.
         let source = bct::input::Source::new(&db, "let x = 1".to_string());
-        let module_id = bct::module_graph::ModuleId::new(&db, "test".to_string());
-        let module = bct::module_graph::Module::new(&db, module_id, source);
+        // Interned, so this gives the same module every time it is called.
+        let module = |db: &Database| bct::module_graph::Module::new(
+            db, bct::module_graph::ModuleId::new(db, "test".to_string()), source,
+        );
 
         // First call: should execute.
         enable_query_logging();
-        let _result1 = parse_module_ast(&db, module);
+        let _result1 = parse_module_ast(&db, module(&db));
         let log1 = disable_query_logging();
         let first_parsed = get_executed_modules(&log1, "parse");
         eprintln!("Direct first call: {:?}", first_parsed);
@@ -806,7 +816,7 @@ mod tests {
 
         // Second call with same inputs: should be cached.
         enable_query_logging();
-        let _result2 = parse_module_ast(&db, module);
+        let _result2 = parse_module_ast(&db, module(&db));
         let log2 = disable_query_logging();
         let second_parsed = get_executed_modules(&log2, "parse");
         eprintln!("Direct second call (same): {:?}", second_parsed);
@@ -817,7 +827,7 @@ mod tests {
 
         // Third call: should re-execute because source changed.
         enable_query_logging();
-        let _result3 = parse_module_ast(&db, module);
+        let _result3 = parse_module_ast(&db, module(&db));
         let log3 = disable_query_logging();
         let third_parsed = get_executed_modules(&log3, "parse");
         eprintln!("Direct third call (changed): {:?}", third_parsed);
@@ -832,15 +842,15 @@ mod tests {
         // Create two modules.
         let source_a = bct::input::Source::new(&db, "let x = 1".to_string());
         let source_b = bct::input::Source::new(&db, "let y = 2".to_string());
-        let id_a = bct::module_graph::ModuleId::new(&db, "a".to_string());
-        let id_b = bct::module_graph::ModuleId::new(&db, "b".to_string());
-        let module_a = bct::module_graph::Module::new(&db, id_a, source_a);
-        let module_b = bct::module_graph::Module::new(&db, id_b, source_b);
+        // Interned, so these give the same modules however often they run.
+        let module = |db: &Database, path: &str, source| bct::module_graph::Module::new(
+            db, bct::module_graph::ModuleId::new(db, path.to_string()), source,
+        );
 
         // Parse both modules.
         enable_query_logging();
-        let _result_a1 = parse_module_ast(&db, module_a);
-        let _result_b1 = parse_module_ast(&db, module_b);
+        let _result_a1 = parse_module_ast(&db, module(&db, "a", source_a));
+        let _result_b1 = parse_module_ast(&db, module(&db, "b", source_b));
         let log1 = disable_query_logging();
         let first_parsed = get_executed_modules(&log1, "parse");
         eprintln!("Two modules first: {:?}", first_parsed);
@@ -851,8 +861,8 @@ mod tests {
 
         // Parse both again.
         enable_query_logging();
-        let _result_a2 = parse_module_ast(&db, module_a);
-        let _result_b2 = parse_module_ast(&db, module_b);
+        let _result_a2 = parse_module_ast(&db, module(&db, "a", source_a));
+        let _result_b2 = parse_module_ast(&db, module(&db, "b", source_b));
         let log2 = disable_query_logging();
         let second_parsed = get_executed_modules(&log2, "parse");
         eprintln!("Two modules after B change: {:?}", second_parsed);
@@ -868,19 +878,19 @@ mod tests {
 
         let source_a = bct::input::Source::new(&db, "let x = 1".to_string());
         let source_b = bct::input::Source::new(&db, "let y = 2".to_string());
-        let id_a = bct::module_graph::ModuleId::new(&db, "a".to_string());
-        let id_b = bct::module_graph::ModuleId::new(&db, "b".to_string());
-        let module_a = bct::module_graph::Module::new(&db, id_a, source_a);
-        let module_b = bct::module_graph::Module::new(&db, id_b, source_b);
+        // Interned, so these give the same modules however often they run.
+        let module = |db: &Database, path: &str, source| bct::module_graph::Module::new(
+            db, bct::module_graph::ModuleId::new(db, path.to_string()), source,
+        );
 
         // First parse.
-        let _r1 = parse_module_ast(&db, module_a);
-        let _r2 = parse_module_ast(&db, module_b);
+        let _r1 = parse_module_ast(&db, module(&db, "a", source_a));
+        let _r2 = parse_module_ast(&db, module(&db, "b", source_b));
 
         // Second parse with NO changes - should be fully cached.
         enable_query_logging();
-        let _r3 = parse_module_ast(&db, module_a);
-        let _r4 = parse_module_ast(&db, module_b);
+        let _r3 = parse_module_ast(&db, module(&db, "a", source_a));
+        let _r4 = parse_module_ast(&db, module(&db, "b", source_b));
         let log = disable_query_logging();
         let parsed = get_executed_modules(&log, "parse");
         eprintln!("No change, second call: {:?}", parsed);
@@ -894,14 +904,14 @@ mod tests {
 
         let source_a = bct::input::Source::new(&db, "let x = 1".to_string());
         let source_b = bct::input::Source::new(&db, "let y = 2".to_string());
-        let id_a = bct::module_graph::ModuleId::new(&db, "a".to_string());
-        let id_b = bct::module_graph::ModuleId::new(&db, "b".to_string());
-        let module_a = bct::module_graph::Module::new(&db, id_a, source_a);
-        let module_b = bct::module_graph::Module::new(&db, id_b, source_b);
+        // Interned, so these give the same modules however often they run.
+        let module = |db: &LoggingDatabase, path: &str, source| bct::module_graph::Module::new(
+            db, bct::module_graph::ModuleId::new(db, path.to_string()), source,
+        );
 
         // First parse.
-        let _r1 = parse_module_ast(&db, module_a);
-        let _r2 = parse_module_ast(&db, module_b);
+        let _r1 = parse_module_ast(&db, module(&db, "a", source_a));
+        let _r2 = parse_module_ast(&db, module(&db, "b", source_b));
 
         db.clear_events();
 
@@ -910,8 +920,8 @@ mod tests {
 
         // Parse both again.
         enable_query_logging();
-        let _r3 = parse_module_ast(&db, module_a);
-        let _r4 = parse_module_ast(&db, module_b);
+        let _r3 = parse_module_ast(&db, module(&db, "a", source_a));
+        let _r4 = parse_module_ast(&db, module(&db, "b", source_b));
         let log = disable_query_logging();
 
         let executed = db.executed_queries();
@@ -1016,15 +1026,22 @@ mod tests {
         let source_b = bct::input::Source::new(&db, "fun helper(): i32\n  ret 1\nend fun".to_string());
         let source_a = bct::input::Source::new(&db, "fun main(): i32\n  ret 2\nend fun".to_string());
 
-        let mut builder = ModuleGraphBuilder::new(&db);
-        let id_b = builder.add_module("b".to_string(), source_b);
-        let id_a = builder.add_module("a".to_string(), source_a);
-        let graph = builder.build();
-
-        let mut requires = BTreeMap::new();
-        requires.insert(id_a, vec![("b".to_string(), id_b)]);
+        // The graph is interned, so building it again from the same sources
+        // gives back the same graph, which is what lets each phase build its
+        // own rather than one being held across the edit.
+        fn build(db: &Database, source_a: bct::input::Source, source_b: bct::input::Source)
+            -> (ModuleGraph, ModuleId, ModuleId, BTreeMap<ModuleId, Vec<(String, ModuleId)>>)
+        {
+            let mut builder = ModuleGraphBuilder::new(db);
+            let id_b = builder.add_module("b".to_string(), source_b);
+            let id_a = builder.add_module("a".to_string(), source_a);
+            let mut requires = BTreeMap::new();
+            requires.insert(id_a, vec![("b".to_string(), id_b)]);
+            (builder.build(), id_a, id_b, requires)
+        }
 
         // First run: both modules should typecheck.
+        let (graph, id_a, id_b, requires) = build(&db, source_a, source_b);
         let parsed1 = parse_module_graph(&db, graph.clone(), requires.clone(), Vec::new());
         enable_query_logging();
         let _result1 = resolve_and_typecheck(&db, parsed1);
@@ -1042,6 +1059,7 @@ mod tests {
         source_b.set_text(&mut db).to("fun helper(): i32\n  ret 999\nend fun".to_string());
 
         // Second run: only B should re-typecheck.
+        let (graph, id_a, id_b, requires) = build(&db, source_a, source_b);
         let parsed2 = parse_module_graph(&db, graph, requires, Vec::new());
         enable_query_logging();
         let _result2 = resolve_and_typecheck(&db, parsed2);
@@ -1105,15 +1123,21 @@ mod tests {
         let source_a = bct::input::Source::new(&db,
             "require module /test/b\nimport b.helper\nfun main(): i32\n  ret helper()\nend fun".to_string());
 
-        let mut builder = ModuleGraphBuilder::new(&db);
-        let id_b = builder.add_module("test/b".to_string(), source_b);
-        let id_a = builder.add_module("test/a".to_string(), source_a);
-        let graph = builder.build();
-
-        let mut requires = BTreeMap::new();
-        requires.insert(id_a, vec![("b".to_string(), id_b)]);
+        // Interned, so each phase can build its own rather than one being held
+        // across the edit; they are the same graph.
+        fn build(db: &Database, source_a: bct::input::Source, source_b: bct::input::Source)
+            -> (ModuleGraph, ModuleId, ModuleId, BTreeMap<ModuleId, Vec<(String, ModuleId)>>)
+        {
+            let mut builder = ModuleGraphBuilder::new(db);
+            let id_b = builder.add_module("test/b".to_string(), source_b);
+            let id_a = builder.add_module("test/a".to_string(), source_a);
+            let mut requires = BTreeMap::new();
+            requires.insert(id_a, vec![("b".to_string(), id_b)]);
+            (builder.build(), id_a, id_b, requires)
+        }
 
         // First run.
+        let (graph, id_a, id_b, requires) = build(&db, source_a, source_b);
         let parsed1 = parse_module_graph(&db, graph.clone(), requires.clone(), Vec::new());
         enable_query_logging();
         let _result1 = resolve_and_typecheck(&db, parsed1);
@@ -1132,6 +1156,7 @@ mod tests {
             "require module /test/b\nimport b.helper\nfun main(): i32\n  ret 42\nend fun".to_string());
 
         // Second run: only A should re-typecheck.
+        let (graph, id_a, id_b, requires) = build(&db, source_a, source_b);
         let parsed2 = parse_module_graph(&db, graph, requires, Vec::new());
         enable_query_logging();
         let _result2 = resolve_and_typecheck(&db, parsed2);
@@ -1462,15 +1487,21 @@ mod tests {
         let source_b = bct::input::Source::new(&db, "fun helper(): i32\n  ret 1\nend fun".to_string());
         let source_a = bct::input::Source::new(&db, "fun main(): i32\n  ret 2\nend fun".to_string());
 
-        let mut builder = ModuleGraphBuilder::new(&db);
-        let id_b = builder.add_module("b".to_string(), source_b);
-        let id_a = builder.add_module("a".to_string(), source_a);
-        let graph = builder.build();
-
-        let mut requires = BTreeMap::new();
-        requires.insert(id_a, vec![("b".to_string(), id_b)]);
+        // Interned, so each phase builds the same graph rather than one being
+        // held across the edit.
+        fn build(db: &Database, source_a: bct::input::Source, source_b: bct::input::Source)
+            -> (ModuleGraph, BTreeMap<ModuleId, Vec<(String, ModuleId)>>)
+        {
+            let mut builder = ModuleGraphBuilder::new(db);
+            let id_b = builder.add_module("b".to_string(), source_b);
+            let id_a = builder.add_module("a".to_string(), source_a);
+            let mut requires = BTreeMap::new();
+            requires.insert(id_a, vec![("b".to_string(), id_b)]);
+            (builder.build(), requires)
+        }
 
         // First run with sequential to establish baseline (parallel doesn't log queries).
+        let (graph, requires) = build(&db, source_a, source_b);
         let parsed1 = parse_module_graph(&db, graph.clone(), requires.clone(), Vec::new());
         enable_query_logging();
         let _result1 = resolve_and_typecheck(&db, parsed1);
@@ -1485,6 +1516,7 @@ mod tests {
 
         // Second run with parallel: only B should re-typecheck.
         // Using sequential typecheck for verification since parallel doesn't log to query_log.
+        let (graph, requires) = build(&db, source_a, source_b);
         let parsed2 = parse_module_graph(&db, graph, requires, Vec::new());
         enable_query_logging();
         let _result2 = resolve_and_typecheck(&db, parsed2);
