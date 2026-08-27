@@ -19,6 +19,10 @@ impl<'db> Parser<'db> {
         // Capture span before parsing.
         let ts = self.peek_text_span();
 
+        // Taken before parsing, so that an expression is numbered before the
+        // ones nested inside it.
+        let local_index = self.next_expr_index();
+
         // Check for `: type / expr` pattern.
         let expr_full = if self.peek_sigil(Sigil::Colon) {
             self.eat_sigil(Sigil::Colon);
@@ -30,21 +34,20 @@ impl<'db> Parser<'db> {
                     "D012",
                     "expected '/' separator between type hint and expression"
                 );
-                ast::ExprFull::new(self.db, Some(type_hint), error_expr)
+                ast::ExprFull::new(self.db, Some(local_index), Some(type_hint), error_expr)
             } else {
                 let expr = self.parse_expr();
-                ast::ExprFull::new(self.db, Some(type_hint), expr)
+                ast::ExprFull::new(self.db, Some(local_index), Some(type_hint), expr)
             }
         } else {
             // No type hint, just parse expression.
             let expr = self.parse_expr();
-            ast::ExprFull::new(self.db, None, expr)
+            ast::ExprFull::new(self.db, Some(local_index), None, expr)
         };
 
         // Record span for this expression.
-        use salsa::plumbing::AsId;
         self.expr_spans.push(ast::ParseSpanEntry::new(
-            expr_full.as_id(),
+            local_index,
             ts.text.source(self.db),
             ts.span.clone(),
         ));
@@ -218,11 +221,11 @@ impl<'db> Parser<'db> {
                     Some(TreeToken::Branch { inner, .. }) => inner,
                     _ => unreachable!(),
                 };
-                let mut sub_parser = Parser::from_branch(self.db, inner, self.source_text());
+                let mut sub_parser = self.sub_parser_from_branch(inner);
                 let (elements, had_comma) = sub_parser.parse_comma_separated_with_trailing(|p| p.parse_expr_full());
                 sub_parser.error_if_not_exhausted();
                 // Merge spans from sub-parser.
-                self.expr_spans.extend(sub_parser.expr_spans);
+                self.merge_spans_from(&mut sub_parser);
                 // Single element without comma is grouping parens, not a 1-tuple.
                 if elements.len() == 1 && !had_comma {
                     elements.into_iter().next().unwrap().expr(self.db).clone()
@@ -236,11 +239,11 @@ impl<'db> Parser<'db> {
                     Some(TreeToken::Branch { inner, .. }) => inner,
                     _ => unreachable!(),
                 };
-                let mut sub_parser = Parser::from_branch(self.db, inner, self.source_text());
+                let mut sub_parser = self.sub_parser_from_branch(inner);
                 let fields = sub_parser.parse_comma_separated(|p| p.parse_expr_struct_field());
                 sub_parser.error_if_not_exhausted();
                 // Merge spans from sub-parser.
-                self.expr_spans.extend(sub_parser.expr_spans);
+                self.merge_spans_from(&mut sub_parser);
                 ast::Expr::AnonStruct(ast::ExprAnonStruct { fields })
             }
             Some(TreeToken::Branch { sigil: Sigil::BracketOpen, .. }) => {
@@ -249,11 +252,11 @@ impl<'db> Parser<'db> {
                     Some(TreeToken::Branch { inner, .. }) => inner,
                     _ => unreachable!(),
                 };
-                let mut sub_parser = Parser::from_branch(self.db, inner, self.source_text());
+                let mut sub_parser = self.sub_parser_from_branch(inner);
                 let elements = sub_parser.parse_comma_separated(|p| p.parse_expr_full());
                 sub_parser.error_if_not_exhausted();
                 // Merge spans from sub-parser.
-                self.expr_spans.extend(sub_parser.expr_spans);
+                self.merge_spans_from(&mut sub_parser);
                 ast::Expr::List(ast::ExprList { elements })
             }
             Some(TreeToken::Branch { sigil: Sigil::PercentBraceOpen, .. }) => {
@@ -262,7 +265,7 @@ impl<'db> Parser<'db> {
                     Some(TreeToken::Branch { inner, .. }) => inner,
                     _ => unreachable!(),
                 };
-                let mut sub_parser = Parser::from_branch(self.db, inner, self.source_text());
+                let mut sub_parser = self.sub_parser_from_branch(inner);
                 let entries = sub_parser.parse_comma_separated(|p| {
                     let key = p.parse_expr_full();
                     if !p.eat_sigil(Sigil::Equals) {
@@ -272,14 +275,14 @@ impl<'db> Parser<'db> {
                             "D017",
                             "expected '=' after key"
                         );
-                        let error_value = ast::ExprFull::new(p.db, None, error_expr);
+                        let error_value = ast::ExprFull::new(p.db, None, None, error_expr);
                         return ast::ExprMapEntry { key, value: error_value };
                     }
                     let value = p.parse_expr_full();
                     ast::ExprMapEntry { key, value }
                 });
                 sub_parser.error_if_not_exhausted();
-                self.expr_spans.extend(sub_parser.expr_spans);
+                self.merge_spans_from(&mut sub_parser);
                 ast::Expr::Map(ast::ExprMap { entries })
             }
             Some(TreeToken::Branch { sigil: Sigil::HashBraceOpen, .. }) => {
@@ -288,10 +291,10 @@ impl<'db> Parser<'db> {
                     Some(TreeToken::Branch { inner, .. }) => inner,
                     _ => unreachable!(),
                 };
-                let mut sub_parser = Parser::from_branch(self.db, inner, self.source_text());
+                let mut sub_parser = self.sub_parser_from_branch(inner);
                 let elements = sub_parser.parse_comma_separated(|p| p.parse_expr_full());
                 sub_parser.error_if_not_exhausted();
-                self.expr_spans.extend(sub_parser.expr_spans);
+                self.merge_spans_from(&mut sub_parser);
                 ast::Expr::Set(ast::ExprSet { elements })
             }
             Some(TreeToken::Branch { sigil: Sigil::BracePipeOpen, .. }) => {
@@ -334,7 +337,7 @@ impl<'db> Parser<'db> {
                     "expected field name"
                 );
                 let placeholder_name = InternedText::new(self.db, "<error>".S());
-                let error_value = ast::ExprFull::new(self.db, None, error_expr);
+                let error_value = ast::ExprFull::new(self.db, None, None, error_expr);
                 return ast::ExprStructField { name: placeholder_name, value: error_value };
             }
         };
@@ -345,7 +348,7 @@ impl<'db> Parser<'db> {
                 "D018",
                 "expected '=' after field name"
             );
-            let error_value = ast::ExprFull::new(self.db, None, error_expr);
+            let error_value = ast::ExprFull::new(self.db, None, None, error_expr);
             return ast::ExprStructField { name, value: error_value };
         }
         let value = self.parse_expr_full();
@@ -440,12 +443,12 @@ impl<'db> Parser<'db> {
     ) -> (Vec<u32>, Vec<ast::ExprFull<'db>>) {
         if rank == 1 {
             // Innermost level: space-separated elements (no commas).
-            let mut parser = Parser::new(self.db, tokens.to_vec(), self.source_text());
+            let mut parser = self.sub_parser_from_tokens(tokens.to_vec());
             let mut elements = Vec::new();
             while parser.peek().is_some() {
                 elements.push(parser.parse_expr_full());
             }
-            self.expr_spans.extend(parser.expr_spans);
+            self.merge_spans_from(&mut parser);
             let shape = vec![elements.len() as u32];
             return (shape, elements);
         }
@@ -684,10 +687,10 @@ impl<'db> Parser<'db> {
         let mut elements = Vec::new();
 
         for part in parts {
-            let mut sub_parser = Parser::new(self.db, part, self.source_text());
+            let mut sub_parser = self.sub_parser_from_tokens(part);
             let expr = sub_parser.parse_expr_full();
             sub_parser.error_if_not_exhausted();
-            self.expr_spans.extend(sub_parser.expr_spans);
+            self.merge_spans_from(&mut sub_parser);
             elements.push(expr);
         }
 

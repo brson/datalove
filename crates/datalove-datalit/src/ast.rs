@@ -2,17 +2,22 @@ use rmx::prelude::*;
 use bct::text::{InternedText, Text};
 use bct::text::ByteSpan;
 
-/// Span entry for a parsed expression, using salsa IDs for storage.
+/// Span entry for a parsed expression.
+///
+/// Keyed by the expression's position in the parse rather than its salsa id.
+/// An id is only meaningful in the revision that minted it, so a table that
+/// stores one is correct only while the table and the ids in it are produced
+/// together; an index is ours and means the same thing whenever it is read.
 #[derive(Clone, Debug, Hash, PartialEq, Eq)]
 pub struct ParseSpanEntry {
-    pub expr_id: salsa::Id,
+    pub expr_index: u32,
     pub source: bct::input::Source,
     pub span: ByteSpan,
 }
 
 impl ParseSpanEntry {
-    pub fn new(expr_id: salsa::Id, source: bct::input::Source, span: ByteSpan) -> Self {
-        ParseSpanEntry { expr_id, source, span }
+    pub fn new(expr_index: u32, source: bct::input::Source, span: ByteSpan) -> Self {
+        ParseSpanEntry { expr_index, source, span }
     }
 }
 
@@ -27,6 +32,13 @@ pub struct ParseResult<'db> {
 
 #[salsa::tracked]
 pub struct ExprFull<'db> {
+    /// Position of this expression in the parse that produced it.
+    ///
+    /// `None` for an expression that came from no source: the typechecker
+    /// builds a few to re-check a literal without its type hint, and the AST
+    /// generator makes them up wholesale. Neither has a span to look up.
+    #[returns(copy)]
+    pub local_index: Option<u32>,
     #[returns(clone)]
     pub type_hint: Option<TypeHint<'db>>,
     #[returns(ref)]

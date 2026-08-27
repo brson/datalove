@@ -35,6 +35,9 @@ pub(super) struct Parser<'db> {
     pub(super) db: &'db dyn crate::Db,
     source: TokenSource<'db>,
     pub(super) expr_spans: Vec<ast::ParseSpanEntry>,
+    /// Next position to hand out, shared with sub-parsers so that one parse
+    /// numbers its expressions in a single sequence.
+    pub(super) expr_counter: u32,
     pub(super) had_error: bool,
     /// Source text for error reporting when no current token.
     source_text: bct::text::Text<'db>,
@@ -47,6 +50,7 @@ impl<'db> Parser<'db> {
             db,
             source: TokenSource::Vec { tokens, pos: 0 },
             expr_spans: Vec::new(),
+            expr_counter: 0,
             had_error: false,
             source_text,
         }
@@ -62,6 +66,7 @@ impl<'db> Parser<'db> {
                 last_token: None,
             },
             expr_spans: Vec::new(),
+            expr_counter: 0,
             had_error: false,
             source_text,
         };
@@ -103,6 +108,36 @@ impl<'db> Parser<'db> {
             }
             TreeToken::Branch { .. } => true,
         }
+    }
+
+    /// A sub-parser over a braced branch, carrying on this one's numbering.
+    pub(super) fn sub_parser_from_branch(&self, iter: BracerIter<'db>) -> Self {
+        let mut sub = Parser::from_branch(self.db, iter, self.source_text());
+        sub.expr_counter = self.expr_counter;
+        sub
+    }
+
+    /// A sub-parser over a slice of tokens, carrying on this one's numbering.
+    pub(super) fn sub_parser_from_tokens(&self, tokens: Vec<TreeToken<'db>>) -> Self {
+        let mut sub = Parser::new(self.db, tokens, self.source_text());
+        sub.expr_counter = self.expr_counter;
+        sub
+    }
+
+    /// The next expression position, advancing the counter.
+    pub(super) fn next_expr_index(&mut self) -> u32 {
+        let index = self.expr_counter;
+        self.expr_counter += 1;
+        index
+    }
+
+    /// Take a sub-parser's spans and its place in the numbering.
+    ///
+    /// A sub-parser starts where this one had got to and carries on, so the
+    /// counter has to come back or the two would hand out the same positions.
+    pub(super) fn merge_spans_from(&mut self, sub: &mut Self) {
+        self.expr_spans.append(&mut sub.expr_spans);
+        self.expr_counter = sub.expr_counter;
     }
 
     /// Get current position.

@@ -66,7 +66,7 @@ pub fn check<'db>(
             let hinted_type = convert_type_hint(db, &type_hint)?;
 
             // First check against the hinted type to ensure the literal is valid.
-            let expr_without_hint = ExprFull::new(db, None, expr_inner.clone());
+            let expr_without_hint = ExprFull::new(db, None, None, expr_inner.clone());
             check(ctx, expr_without_hint, &hinted_type)?;
 
             // Now check if the hinted type matches or can widen to the expected type.
@@ -93,7 +93,7 @@ pub fn check<'db>(
 
         // Rule: Check-Subsume - try synthesis first.
         (Expr::True | Expr::False | Expr::String(_), _) => {
-            let expr_without_hint = ExprFull::new(db, None, expr_inner.clone());
+            let expr_without_hint = ExprFull::new(db, None, None, expr_inner.clone());
             let synthesized = synthesize(ctx, expr_without_hint)?;
             if !types_equivalent(db, &synthesized, expected) {
                 if let Some(ts) = ctx.get_span(expr) {
@@ -326,7 +326,7 @@ pub fn check<'db>(
 
         // Otherwise, try subsumption.
         _ => {
-            let ty_without_hint = ExprFull::new(db, None, expr_inner.clone());
+            let ty_without_hint = ExprFull::new(db, None, None, expr_inner.clone());
             let synthesized = synthesize(ctx, ty_without_hint)?;
             if types_equivalent(db, &synthesized, expected) {
                 Ok(())

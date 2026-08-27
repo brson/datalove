@@ -7,10 +7,10 @@ use bct::text::TextSpan;
 use bct::diagnostic::SpanEntry;
 use crate::ast::ExprFull;
 
-/// Entry pairing expression ID with span.
+/// Entry pairing an expression's position in the parse with its span.
 #[derive(Clone, Debug, Hash, PartialEq, Eq)]
 pub struct SpanMapEntry {
-    pub expr_id: salsa::Id,
+    pub expr_index: u32,
     pub entry: SpanEntry,
 }
 
@@ -23,11 +23,13 @@ pub struct DatalitSpans<'db> {
 
 impl<'db> DatalitSpans<'db> {
     /// Look up span for an expression.
+    ///
+    /// An expression the typechecker or the generator built has no position,
+    /// and so no span to find.
     pub fn lookup(&self, db: &'db dyn crate::Db, expr: ExprFull<'db>) -> Option<SpanEntry> {
-        use salsa::plumbing::AsId;
-        let expr_id = expr.as_id();
+        let expr_index = expr.local_index(db)?;
         self.entries(db).iter()
-            .find(|e| e.expr_id == expr_id)
+            .find(|e| e.expr_index == expr_index)
             .map(|e| e.entry.C())
     }
 
@@ -50,7 +52,7 @@ pub fn datalit_spans<'db>(
     let entries = parse_result.expr_spans(db)
         .iter()
         .map(|e| SpanMapEntry {
-            expr_id: e.expr_id,
+            expr_index: e.expr_index,
             entry: SpanEntry::new(e.source, e.span.C()),
         })
         .collect();

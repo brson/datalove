@@ -604,7 +604,7 @@ pub fn gen_expr_matching_type<'db, R: Rng>(
                 let error_inner_type = gen_type_hint_inner(db, rng, config, depth + 1);
                 let error_inner_value = gen_expr_full_inner(db, rng, error_inner_type, config, depth + 1);
                 let error_expr = Expr::Error(ExprError { value: error_inner_value });
-                let er_payload = ExprFull::new(db, None, error_expr);
+                let er_payload = ExprFull::new(db, None, None, error_expr);
                 Expr::Er(ExprEr { payload: er_payload })
             }
         }
@@ -994,7 +994,7 @@ fn gen_expr_full_inner<'db, R: Rng>(
         None
     };
 
-    ExprFull::new(db, type_hint_opt, expr)
+    ExprFull::new(db, None, type_hint_opt, expr)
 }
 
 /// Generate an ExprFull for the entire expression tree.
