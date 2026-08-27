@@ -20,7 +20,7 @@ pub struct FunctionResolution<'db> {
 #[salsa::tracked(returns(copy))]
 pub fn resolve_functions<'db>(
     db: &'db dyn salsa::Database,
-    script: script::Script,
+    script: script::Script<'db>,
 ) -> FunctionResolution<'db> {
     let units = script.units(db);
     let mut green_units = Vec::new();
@@ -98,7 +98,7 @@ pub struct LetResolution<'db> {
 #[salsa::tracked(returns(copy))]
 pub fn resolve_let_statement<'db>(
     db: &'db dyn salsa::Database,
-    script: script::Script,
+    script: script::Script<'db>,
     unit_index: usize,
 ) -> LetResolution<'db> {
     let parsed = parser::parse_script_unit(db, script, unit_index);

@@ -10,18 +10,18 @@ pub type ModuleName = String;
 /// A package: a name and the modules under it.
 ///
 /// Interned; see `Module` for why these are not inputs.
-#[salsa::interned(revisions = usize::MAX, unsafe(no_lifetime))]
+#[salsa::interned]
 #[derive(Debug)]
-pub struct Package {
+pub struct Package<'db> {
     #[returns(ref)]
     pub name: PackageName,
     #[returns(ref)]
-    pub modules: BTreeMap<ModuleName, PackageModule>,
+    pub modules: BTreeMap<ModuleName, PackageModule<'db>>,
 }
 
-#[salsa::interned(revisions = usize::MAX, unsafe(no_lifetime))]
+#[salsa::interned]
 #[derive(Debug, Ord, PartialOrd)]
-pub struct PackageModule {
+pub struct PackageModule<'db> {
     #[returns(ref)]
     pub name: ModuleName,
     #[returns(copy)]
@@ -32,21 +32,21 @@ pub struct PackageModule {
 ///
 /// Interned, so recompiling an unchanged world is recognised as the same
 /// world rather than a new one that happens to hold the same packages.
-#[salsa::interned(revisions = usize::MAX, unsafe(no_lifetime))]
+#[salsa::interned]
 #[derive(Debug)]
-pub struct PackageWorld {
+pub struct PackageWorld<'db> {
     #[returns(ref)]
-    pub pkglib_system: BTreeMap<PackageName, Package>,
+    pub pkglib_system: BTreeMap<PackageName, Package<'db>>,
     #[returns(ref)]
-    pub pkglib_local: BTreeMap<PackageName, Package>,
+    pub pkglib_local: BTreeMap<PackageName, Package<'db>>,
 }
 
 /// Create a PackageWorldMap from a PackageWorld.
 #[salsa::tracked(returns(copy))]
-pub fn package_world_map(
-    db: &dyn salsa::Database,
-    package_world: PackageWorld,
-) -> PackageWorldMap<'_> {
+pub fn package_world_map<'db>(
+    db: &'db dyn salsa::Database,
+    package_world: PackageWorld<'db>,
+) -> PackageWorldMap<'db> {
     let pkglib_system = package_world.pkglib_system(db).C();
     let pkglib_local = package_world.pkglib_local(db).C();
     PackageWorldMap::new(

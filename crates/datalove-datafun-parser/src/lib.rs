@@ -35,7 +35,7 @@ use salsa::Database as Db;
 #[salsa::tracked(returns(ref))]
 pub fn parse_script_unit<'db>(
     db: &'db dyn Db,
-    script: script::Script,
+    script: script::Script<'db>,
     unit_index: usize,
 ) -> ast::ParsedStatements<'db> {
     let units = &script.units(db);

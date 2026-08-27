@@ -12,7 +12,7 @@ pub type ModuleAlias = String;
 #[salsa::tracked]
 pub struct PackageWorldMap<'db> {
     #[returns(ref)]
-    pub map: BTreeMap<ImportSpace, BTreeMap<PackageName, Package>>,
+    pub map: BTreeMap<ImportSpace, BTreeMap<PackageName, Package<'db>>>,
 }
 
 pub type ImportDemand = (ImportSpace, PackageAlias, ModuleAlias);
@@ -20,19 +20,19 @@ pub type ImportDemand = (ImportSpace, PackageAlias, ModuleAlias);
 #[salsa::tracked]
 pub struct ImportDemandMap<'db> {
     #[returns(ref)]
-    pub map: BTreeMap<PackageModule, Vec<ImportDemand>>,
+    pub map: BTreeMap<PackageModule<'db>, Vec<ImportDemand>>,
 }
 
 #[salsa::tracked]
 pub struct PackageWorldModuleGraph<'db> {
     #[returns(ref)]
-    pub map: BTreeMap<PackageModule, BTreeSet<(ImportDemand, ResolvedPackageModule)>>,
+    pub map: BTreeMap<PackageModule<'db>, BTreeSet<(ImportDemand, ResolvedPackageModule<'db>)>>,
 }
 
 #[derive(Copy, Clone, Hash, salsa::SalsaValue)]
 #[derive(Eq, PartialEq, Ord, PartialOrd)]
-pub enum ResolvedPackageModule {
-    Resolved(PackageModule),
+pub enum ResolvedPackageModule<'db> {
+    Resolved(PackageModule<'db>),
     Unresolved,
 }
 
@@ -54,7 +54,7 @@ pub fn resolve_package_world<'db>(
     package_world_map: PackageWorldMap<'db>,
     import_demand_map: ImportDemandMap<'db>,
 ) -> PackageWorldModuleGraphWithErrors<'db> {
-    let mut module_edges: BTreeMap<PackageModule, BTreeSet<(ImportDemand, ResolvedPackageModule)>> = default();
+    let mut module_edges: BTreeMap<PackageModule<'db>, BTreeSet<(ImportDemand, ResolvedPackageModule<'db>)>> = default();
     for package_world_record in package_world_map.flatten_iter(db) {
         let PackageWorldRecord {
             import_space,
@@ -95,9 +95,9 @@ pub fn resolve_package_world<'db>(
 
 fn lookup_import<'db>(
     db: &'db dyn crate::Db,
-    module_world_map: ModuleWorldMap,
+    module_world_map: ModuleWorldMap<'db>,
     import_demand: &ImportDemand,
-) -> Option<PackageModule> {
+) -> Option<PackageModule<'db>> {
     let import_space = &import_demand.0;
     let package_alias = &import_demand.1;
     let module_alias = &import_demand.2;
@@ -116,7 +116,7 @@ fn validate_graph<'db>(
     db: &'db dyn crate::Db,
     graph: PackageWorldModuleGraph<'db>,
 ) -> Result<(), ValidationError> {
-    let edges: BTreeMap<PackageModule, BTreeSet<PackageModule>> = graph.edges(db);
+    let edges: BTreeMap<PackageModule<'db>, BTreeSet<PackageModule<'db>>> = graph.edges(db);
     detect_cycles(&edges)
 }
 
@@ -127,8 +127,8 @@ enum VisitState {
     Visited,
 }
 
-fn detect_cycles(edges: &BTreeMap<PackageModule, BTreeSet<PackageModule>>) -> Result<(), ValidationError> {
-    let mut visit_state: BTreeMap<PackageModule, VisitState> = BTreeMap::new();
+fn detect_cycles<'db>(edges: &BTreeMap<PackageModule<'db>, BTreeSet<PackageModule<'db>>>) -> Result<(), ValidationError> {
+    let mut visit_state: BTreeMap<PackageModule<'db>, VisitState> = BTreeMap::new();
 
     // Initialize all nodes as unvisited
     for &node in edges.keys() {
@@ -144,7 +144,7 @@ fn detect_cycles(edges: &BTreeMap<PackageModule, BTreeSet<PackageModule>>) -> Re
     }
 
     // Perform DFS from each unvisited node
-    let nodes: Vec<PackageModule> = visit_state.keys().copied().collect();
+    let nodes: Vec<PackageModule<'db>> = visit_state.keys().copied().collect();
     for node in nodes {
         if visit_state[&node] == VisitState::Unvisited {
             if dfs_detect_cycle(node, edges, &mut visit_state) {
@@ -156,10 +156,10 @@ fn detect_cycles(edges: &BTreeMap<PackageModule, BTreeSet<PackageModule>>) -> Re
     return Ok(());
 }
 
-fn dfs_detect_cycle(
-    node: PackageModule,
-    edges: &BTreeMap<PackageModule, BTreeSet<PackageModule>>,
-    visit_state: &mut BTreeMap<PackageModule, VisitState>,
+fn dfs_detect_cycle<'db>(
+    node: PackageModule<'db>,
+    edges: &BTreeMap<PackageModule<'db>, BTreeSet<PackageModule<'db>>>,
+    visit_state: &mut BTreeMap<PackageModule<'db>, VisitState>,
 ) -> bool {
     if visit_state[&node] == VisitState::Visiting {
         // Found a back edge - cycle detected
@@ -194,7 +194,7 @@ fn dfs_detect_cycle(
 pub fn module_world_map<'db>(
     db: &'db dyn crate::Db,
     package_world_map: PackageWorldMap<'db>,
-    package: Package,
+    package: Package<'db>,
 ) -> ModuleWorldMap<'db> {
     let mut module_map = package_world_map.module_map(db);
     assert!(module_map.get("pkg").is_none());
@@ -211,21 +211,21 @@ pub fn module_world_map<'db>(
 #[salsa::tracked]
 struct ModuleWorldMap<'db> {
     #[returns(ref)]
-    map: BTreeMap<ImportSpace, BTreeMap<ModuleAlias, PackageModule>>,
+    map: BTreeMap<ImportSpace, BTreeMap<ModuleAlias, PackageModule<'db>>>,
 }
 
 pub struct PackageWorldRecord<'db> {
     pub import_space: &'db str,
     pub package_name: &'db str,
-    pub package: Package,
-    pub package_module: PackageModule,
+    pub package: Package<'db>,
+    pub package_module: PackageModule<'db>,
 }
 
 impl<'db> PackageWorldMap<'db> {
     fn module_map(
         &self,
         db: &'db dyn crate::Db,
-    ) -> BTreeMap<ImportSpace, BTreeMap<ModuleName, PackageModule>> {
+    ) -> BTreeMap<ImportSpace, BTreeMap<ModuleName, PackageModule<'db>>> {
         self.map(db).iter()
             .map(|(import_space, packages)| -> (ImportSpace, BTreeMap<_, _>) {
                 (
@@ -268,7 +268,7 @@ impl<'db> PackageWorldModuleGraph<'db> {
     fn edges(
         &self,
         db: &'db dyn crate::Db,
-    ) -> BTreeMap<PackageModule, BTreeSet<PackageModule>> {
+    ) -> BTreeMap<PackageModule<'db>, BTreeSet<PackageModule<'db>>> {
         self.map(db).iter().map(|(module, modules)| {
             let modules: BTreeSet<_> = modules.iter()
                 .filter_map(|(_, module)| match module {

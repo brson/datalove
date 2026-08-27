@@ -27,7 +27,7 @@ use crate::package::PackageWorld;
 #[salsa::tracked(returns(copy))]
 pub fn resolve_package_world_with_imports<'db>(
     db: &'db dyn salsa::Database,
-    package_world: PackageWorld,
+    package_world: PackageWorld<'db>,
     import_demand_map: ImportDemandMap<'db>,
 ) -> PackageWorldModuleGraphWithErrors<'db> {
     let package_world_map = crate::package::package_world_map(db, package_world);
@@ -48,11 +48,11 @@ pub struct ModuleGraphWithRequires<'db> {
 /// Returns the module graph plus resolved require aliases for use by the typechecker.
 pub fn to_module_graph<'db>(
     db: &'db dyn salsa::Database,
-    package_world: PackageWorld,
+    package_world: PackageWorld<'db>,
     graph: PackageWorldModuleGraph<'db>,
 ) -> ModuleGraphWithRequires<'db> {
     // Build a mapping from PackageModule to its module path string.
-    let mut pkg_module_to_path: HashMap<bct::package2::PackageModule, String> = HashMap::new();
+    let mut pkg_module_to_path: HashMap<bct::package2::PackageModule<'db>, String> = HashMap::new();
 
     // Traverse the package world to build paths.
     let world_map = crate::package::package_world_map(db, package_world);
@@ -122,14 +122,14 @@ pub fn to_module_graph<'db>(
 }
 
 /// Topologically sort modules so dependencies come before dependents.
-fn topological_sort_modules(
-    db: &dyn salsa::Database,
-    graph: PackageWorldModuleGraph<'_>,
-) -> Result<Vec<bct::package2::PackageModule>, ValidationError> {
+fn topological_sort_modules<'db>(
+    db: &'db dyn salsa::Database,
+    graph: PackageWorldModuleGraph<'db>,
+) -> Result<Vec<bct::package2::PackageModule<'db>>, ValidationError> {
     let map = graph.map(db);
 
     // Build dependency graph.
-    let mut dependencies: BTreeMap<bct::package2::PackageModule, BTreeSet<bct::package2::PackageModule>> = BTreeMap::new();
+    let mut dependencies: BTreeMap<bct::package2::PackageModule<'db>, BTreeSet<bct::package2::PackageModule<'db>>> = BTreeMap::new();
 
     for (module, deps) in map.iter() {
         let mut module_deps = BTreeSet::new();
@@ -142,7 +142,7 @@ fn topological_sort_modules(
     }
 
     // Kahn's algorithm for topological sort.
-    let mut in_degree: BTreeMap<bct::package2::PackageModule, usize> = BTreeMap::new();
+    let mut in_degree: BTreeMap<bct::package2::PackageModule<'db>, usize> = BTreeMap::new();
     for module in map.keys() {
         in_degree.insert(*module, 0);
     }
@@ -178,7 +178,7 @@ fn topological_sort_modules(
     }
 
     // Start with modules that have no dependencies (in_degree = 0).
-    let mut queue: Vec<bct::package2::PackageModule> = in_degree.iter()
+    let mut queue: Vec<bct::package2::PackageModule<'db>> = in_degree.iter()
         .filter(|&(_, degree)| *degree == 0)
         .map(|(module, _)| *module)
         .collect();

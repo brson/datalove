@@ -17,7 +17,7 @@ use datalove_datafun_pkg::{PackageWorld, package_world_map};
 #[salsa::tracked(returns(copy))]
 pub fn resolve_package_world_with_imports<'db>(
     db: &'db dyn salsa::Database,
-    package_world: PackageWorld,
+    package_world: PackageWorld<'db>,
 ) -> PackageWorldModuleGraphWithErrors<'db> {
     let map = package_world_map(db, package_world);
     let demands = crate::import_demands::import_demands(db, map);

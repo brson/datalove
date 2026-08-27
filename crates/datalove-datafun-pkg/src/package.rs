@@ -21,10 +21,10 @@ use crate::package_load as pl;
 /// Editing a local module then leaves salsa able to skip revalidating anything
 /// that depends only on the system library, which is most of the compiler's
 /// view of `sys/std`.
-pub fn import_from_loader(
-    db: &dyn salsa::Database,
+pub fn import_from_loader<'db>(
+    db: &'db dyn salsa::Database,
     package_world_raw: pl::PackageWorld,
-) -> PackageWorld {
+) -> PackageWorld<'db> {
     PackageWorld::new(
         db,
         make_library(db, package_world_raw.pkglib_system, Durability::HIGH),
@@ -45,11 +45,11 @@ pub fn import_from_loader(
 /// A caller that already holds its sources - which an incremental rebuild
 /// does - passes them here, and the interning on those three types does the
 /// rest: same sources, same world, nothing to redo.
-pub fn import_with_sources(
-    db: &dyn salsa::Database,
+pub fn import_with_sources<'db>(
+    db: &'db dyn salsa::Database,
     pkglib_system: BTreeMap<PackageName, BTreeMap<ModuleName, Source>>,
     pkglib_local: BTreeMap<PackageName, BTreeMap<ModuleName, Source>>,
-) -> PackageWorld {
+) -> PackageWorld<'db> {
     PackageWorld::new(
         db,
         library_from_sources(db, pkglib_system),
@@ -57,12 +57,12 @@ pub fn import_with_sources(
     )
 }
 
-fn library_from_sources(
-    db: &dyn salsa::Database,
+fn library_from_sources<'db>(
+    db: &'db dyn salsa::Database,
     library: BTreeMap<PackageName, BTreeMap<ModuleName, Source>>,
-) -> BTreeMap<PackageName, Package> {
+) -> BTreeMap<PackageName, Package<'db>> {
     library.into_iter().map(|(package_name, modules)| {
-        let modules: BTreeMap<ModuleName, PackageModule> = modules.into_iter()
+        let modules: BTreeMap<ModuleName, PackageModule<'db>> = modules.into_iter()
             .map(|(module_name, source)| {
                 let module = PackageModule::new(db, module_name.C(), source);
                 (module_name, module)
@@ -73,18 +73,18 @@ fn library_from_sources(
     }).collect()
 }
 
-fn make_library(
-    db: &dyn salsa::Database,
+fn make_library<'db>(
+    db: &'db dyn salsa::Database,
     library: BTreeMap<pl::PackageName, pl::Package>,
     durability: Durability,
-) -> BTreeMap<PackageName, Package> {
+) -> BTreeMap<PackageName, Package<'db>> {
     library.into_iter().map(|(name, package)| {
         (name, make_package(db, package, durability))
     }).collect()
 }
 
-fn make_package(
-    db: &dyn salsa::Database,
+fn make_package<'db>(
+    db: &'db dyn salsa::Database,
     package: pl::Package,
     durability: Durability,
 ) -> Package {
@@ -95,21 +95,21 @@ fn make_package(
     )
 }
 
-fn make_modules(
-    db: &dyn salsa::Database,
+fn make_modules<'db>(
+    db: &'db dyn salsa::Database,
     modules: BTreeMap<pl::ModuleName, pl::PackageModule>,
     durability: Durability,
-) -> BTreeMap<ModuleName, PackageModule> {
+) -> BTreeMap<ModuleName, PackageModule<'db>> {
     modules.into_iter().map(|(name, module)| {
         (name, make_module(db, module, durability))
     }).collect()
 }
 
-fn make_module(
-    db: &dyn salsa::Database,
+fn make_module<'db>(
+    db: &'db dyn salsa::Database,
     module: pl::PackageModule,
     durability: Durability,
-) -> PackageModule {
+) -> PackageModule<'db> {
     PackageModule::new(
         db,
         module.name,

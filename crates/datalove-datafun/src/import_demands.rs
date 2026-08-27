@@ -20,7 +20,7 @@ pub type RiderDemand = String;
 #[salsa::tracked]
 pub struct RiderDemandMap<'db> {
     #[returns(ref)]
-    pub map: BTreeMap<PackageModule, Vec<RiderDemand>>,
+    pub map: BTreeMap<PackageModule<'db>, Vec<RiderDemand>>,
 }
 
 #[salsa::tracked(returns(copy))]
