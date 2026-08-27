@@ -132,7 +132,14 @@ pub fn evaluate_function_consts_prepared(
     let mut consts = HashMap::new();
     let mut errors = Vec::new();
 
-    for (qualified_name, (ir_type, prepared_const)) in prepared {
+    // Evaluated in name order. The evaluator carries state from one const to
+    // the next, and failures are reported in the order they are met, so
+    // neither should depend on how a hash map happened to lay the consts out.
+    let mut names: Vec<&String> = prepared.keys().collect();
+    names.sort();
+
+    for qualified_name in names {
+        let (ir_type, prepared_const) = &prepared[qualified_name];
         match evaluate_prepared_const(prepared_const, ir_type, &evaluator) {
             Ok(value) => {
                 consts.insert(qualified_name.clone(), (ir_type.clone(), value));

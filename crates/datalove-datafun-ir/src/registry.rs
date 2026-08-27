@@ -6,23 +6,28 @@
 //! - `FunctionRegistry`: combined view
 
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::sync::Arc;
 use crate::{IrCodeUnit, CodeUnitId, IrModuleId};
 
 /// Registry of module functions, shared across all scripts.
 ///
 /// Immutable after module compilation completes.
+///
+/// Ordered, because the backends walk it to declare functions and the order
+/// they are declared in decides the identifiers and the layout of the object
+/// file. A hash map made that order depend on the seed the process started
+/// with, so the same input produced different bytes on every run.
 #[derive(Clone, Default, Serialize, Deserialize)]
 pub struct ModuleFunctionRegistry {
-    module_functions: HashMap<(IrModuleId, CodeUnitId), IrCodeUnit>,
+    module_functions: BTreeMap<(IrModuleId, CodeUnitId), IrCodeUnit>,
 }
 
 impl ModuleFunctionRegistry {
     /// Create a new empty registry.
     pub fn new() -> Self {
         Self {
-            module_functions: HashMap::new(),
+            module_functions: BTreeMap::new(),
         }
     }
 

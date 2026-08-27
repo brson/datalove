@@ -6,7 +6,7 @@
 //! Since datalove does whole-world compilation, all types are known
 //! ahead of time. TyDescs are emitted upfront in a single pass.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeSet, HashMap};
 use std::mem::{align_of, offset_of, size_of};
 
 use cranelift_module::{DataDescription, DataId, Linkage, Module};
@@ -1432,7 +1432,7 @@ impl Default for TyDescEmitter {
 }
 
 /// Collect all types from a code unit for TyDesc emission.
-pub fn collect_types_from_code_unit(unit: &IrCodeUnit, types: &mut HashSet<IrType>) {
+pub fn collect_types_from_code_unit(unit: &IrCodeUnit, types: &mut BTreeSet<IrType>) {
     // Collect from unit's value and slot types.
     for ty in &unit.value_types {
         types.insert(ty.clone());
@@ -1463,8 +1463,8 @@ pub fn collect_types_from_code_unit(unit: &IrCodeUnit, types: &mut HashSet<IrTyp
 }
 
 /// Collect all types from a script unit for upfront TyDesc emission.
-pub fn collect_types_from_script_unit(unit: &IrCodeUnit) -> HashSet<IrType> {
-    let mut types = HashSet::new();
+pub fn collect_types_from_script_unit(unit: &IrCodeUnit) -> BTreeSet<IrType> {
+    let mut types = BTreeSet::new();
     collect_types_from_code_unit(unit, &mut types);
     types
 }
@@ -1474,7 +1474,7 @@ pub fn collect_types_from_script_unit(unit: &IrCodeUnit) -> HashSet<IrType> {
 /// Use this to collect types from module functions in a ScriptEnvironment.
 pub fn collect_types_from_code_units<'a>(
     units: impl Iterator<Item = &'a IrCodeUnit>,
-    types: &mut HashSet<IrType>,
+    types: &mut BTreeSet<IrType>,
 ) {
     for unit in units {
         collect_types_from_code_unit(unit, types);

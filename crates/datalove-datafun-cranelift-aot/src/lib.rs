@@ -29,7 +29,7 @@ pub use datalove_datafun_cranelift::{
     CraneliftError,
 };
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 
 use cranelift_codegen::ir::{self as cl_ir, types as cl_types, AbiParam, InstBuilder};
 use cranelift_codegen::isa::TargetIsa;
@@ -164,7 +164,7 @@ impl AotCompiler {
     fn compile_script_unit_with_types(
         &mut self,
         unit: &IrCodeUnit,
-        types: std::collections::HashSet<IrType>,
+        types: std::collections::BTreeSet<IrType>,
         registry: &datalove_datafun_ir::FunctionRegistry,
     ) -> Result<ObjectProduct, AotError> {
         let obj_builder = ObjectBuilder::new(
@@ -198,7 +198,9 @@ impl AotCompiler {
 
         // Pass 2: Declare all module functions to get Cranelift FuncIds.
         // Native code units are declared as imports with their linker symbol.
-        let mut module_funcs: HashMap<(IrModuleId, datalove_datafun_ir::CodeUnitId), FuncId> = HashMap::new();
+        // Ordered, so that function bodies land in the object file in the same
+        // order on every run.
+        let mut module_funcs: BTreeMap<(IrModuleId, datalove_datafun_ir::CodeUnitId), FuncId> = BTreeMap::new();
         for ((module_id, func_id), ir_unit) in registry.iter_module_code_units_with_ids() {
             if let Some(ctx) = ir_unit.native_context() {
                 // Native function: declare as import with C ABI signature.
@@ -230,7 +232,7 @@ impl AotCompiler {
                 Some(registry),
             );
             compiler.set_local_funcs(local_funcs.clone());
-            compiler.set_module_funcs(module_funcs.clone());
+            compiler.set_module_funcs(module_funcs.iter().map(|(k, v)| (*k, *v)).collect());
             compiler.compile_predeclared(cl_func_id)?;
         }
 
@@ -252,7 +254,7 @@ impl AotCompiler {
                 Some(registry),
             );
             compiler.set_local_funcs(local_funcs.clone());
-            compiler.set_module_funcs(module_funcs.clone());
+            compiler.set_module_funcs(module_funcs.iter().map(|(k, v)| (*k, *v)).collect());
             compiler.compile_predeclared(cl_func_id)?;
         }
 
@@ -269,7 +271,7 @@ impl AotCompiler {
             Some(registry),
         );
         compiler.set_local_funcs(local_funcs);
-        compiler.set_module_funcs(module_funcs);
+        compiler.set_module_funcs(module_funcs.into_iter().collect());
         let body_func_id = compiler.compile()?;
 
         // Generate the entry point.

@@ -1,6 +1,6 @@
 //! Type descriptor emission for C code generation.
 
-use std::collections::HashSet;
+use std::collections::BTreeSet;
 use std::fmt::Write;
 
 use datalove_datafun_ir::{IrCodeUnit, IrType};
@@ -9,7 +9,7 @@ use crate::types::{self, compute_option_layout, compute_result_layout, compute_t
 use crate::CAotCompiler;
 
 /// Collect all types used in a script unit.
-pub fn collect_types_from_script_unit(unit: &IrCodeUnit, types: &mut HashSet<IrType>) {
+pub fn collect_types_from_script_unit(unit: &IrCodeUnit, types: &mut BTreeSet<IrType>) {
     collect_types_from_code_unit(unit, types);
     for nested in &unit.nested_units {
         collect_types_from_code_unit(nested, types);
@@ -17,7 +17,7 @@ pub fn collect_types_from_script_unit(unit: &IrCodeUnit, types: &mut HashSet<IrT
 }
 
 /// Collect all types used in a code unit.
-pub fn collect_types_from_code_unit(unit: &IrCodeUnit, types: &mut HashSet<IrType>) {
+pub fn collect_types_from_code_unit(unit: &IrCodeUnit, types: &mut BTreeSet<IrType>) {
     // Collect from value types.
     for ty in &unit.value_types {
         collect_type_recursive(ty, types);
@@ -38,7 +38,7 @@ pub fn collect_types_from_code_unit(unit: &IrCodeUnit, types: &mut HashSet<IrTyp
 }
 
 /// Collect a type and all its nested types.
-fn collect_type_recursive(ty: &IrType, types: &mut HashSet<IrType>) {
+fn collect_type_recursive(ty: &IrType, types: &mut BTreeSet<IrType>) {
     types.insert(ty.clone());
 
     match ty {

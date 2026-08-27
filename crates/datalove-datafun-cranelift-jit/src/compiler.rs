@@ -1,6 +1,6 @@
 //! JIT compiler wrapping Cranelift's JITModule.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeSet, HashMap, HashSet};
 use std::sync::{Arc, Mutex};
 
 use cranelift_codegen::ir::{self as cl_ir, types as cl_types, InstBuilder};
@@ -176,7 +176,7 @@ impl JitCompiler {
     /// Returns (code_ptr, uses_sret, code_size).
     pub fn compile_function(&mut self, func: &IrCodeUnit) -> Result<(*const u8, bool, usize), JitError> {
         // Emit TyDescs for all types in this function.
-        let mut types = HashSet::new();
+        let mut types = BTreeSet::new();
         tydesc_emit::collect_types_from_code_unit(func, &mut types);
 
         self.tydesc_emitter.emit_all(&mut self.jit_module, types)
@@ -231,7 +231,7 @@ impl JitCompiler {
         let callees = self.collect_call_targets(func);
 
         // Collect types from main function and all callees for TyDesc emission.
-        let mut types = HashSet::new();
+        let mut types = BTreeSet::new();
         tydesc_emit::collect_types_from_code_unit(func, &mut types);
 
         // Create stubs for each callee.

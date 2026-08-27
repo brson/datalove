@@ -806,18 +806,26 @@ fn specialize_comptime_functions<'db>(
 
     // Build a flattened map of const names to values for lookup.
     // Include both qualified names (func_name::const_name) and unqualified names.
-    let mut const_values_map: HashMap<String, (IrType, ConstValue)> = HashMap::new();
-    for pre_resolved in resolved_consts.values() {
-        for (qualified_name, ir_type, value) in &pre_resolved.consts {
-            const_values_map.insert(qualified_name.clone(), (ir_type.clone(), value.clone()));
+    //
+    // Gathered in qualified-name order. The unqualified alias below keeps
+    // whichever const reaches it first, so when two of them share a short name
+    // the order decides which one wins; taken straight from a hash map that
+    // would be decided by the seed the process happened to start with.
+    let mut all_consts: Vec<_> = resolved_consts.values()
+        .flat_map(|pre_resolved| pre_resolved.consts.iter())
+        .collect();
+    all_consts.sort_by(|a, b| a.0.cmp(&b.0));
 
-            // Also add unqualified name for direct lookup.
-            if let Some(unqualified) = qualified_name.rsplit("::").next() {
-                if unqualified != qualified_name {
-                    // Only add if it's actually qualified.
-                    const_values_map.entry(unqualified.to_string())
-                        .or_insert_with(|| (ir_type.clone(), value.clone()));
-                }
+    let mut const_values_map: HashMap<String, (IrType, ConstValue)> = HashMap::new();
+    for (qualified_name, ir_type, value) in all_consts {
+        const_values_map.insert(qualified_name.clone(), (ir_type.clone(), value.clone()));
+
+        // Also add unqualified name for direct lookup.
+        if let Some(unqualified) = qualified_name.rsplit("::").next() {
+            if unqualified != qualified_name {
+                // Only add if it's actually qualified.
+                const_values_map.entry(unqualified.to_string())
+                    .or_insert_with(|| (ir_type.clone(), value.clone()));
             }
         }
     }

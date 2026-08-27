@@ -25,7 +25,7 @@ mod layout;
 mod types;
 mod tydesc;
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::fmt::Write;
 
 use datalove_datafun_ir::{
@@ -104,8 +104,9 @@ impl CAotCompiler {
     ) -> Result<CompilationOutput, CAotError> {
         let mut files = Vec::new();
 
-        // Group module functions by module ID.
-        let mut modules_by_id: HashMap<IrModuleId, Vec<&IrCodeUnit>> = HashMap::new();
+        // Group module functions by module ID. Ordered, because both the file
+        // list and the extern declarations below are emitted in this order.
+        let mut modules_by_id: BTreeMap<IrModuleId, Vec<&IrCodeUnit>> = BTreeMap::new();
         for ((module_id, _func_id), ir_unit) in registry.iter_module_code_units_with_ids() {
             modules_by_id.entry(module_id).or_default().push(ir_unit);
         }
@@ -139,7 +140,7 @@ impl CAotCompiler {
         self.emit_header(&mut output)?;
 
         // Collect types used in this module.
-        let mut types = HashSet::new();
+        let mut types = BTreeSet::new();
         for unit in units {
             tydesc::collect_types_from_code_unit(unit, &mut types);
         }
@@ -170,7 +171,7 @@ impl CAotCompiler {
         &mut self,
         unit: &IrCodeUnit,
         registry: &FunctionRegistry,
-        modules_by_id: &HashMap<IrModuleId, Vec<&IrCodeUnit>>,
+        modules_by_id: &BTreeMap<IrModuleId, Vec<&IrCodeUnit>>,
     ) -> Result<String, CAotError> {
         let mut output = String::new();
 
@@ -178,7 +179,7 @@ impl CAotCompiler {
         self.emit_header(&mut output)?;
 
         // Collect types used in script.
-        let mut types = HashSet::new();
+        let mut types = BTreeSet::new();
         tydesc::collect_types_from_script_unit(unit, &mut types);
 
         // Emit type descriptors.
@@ -366,10 +367,12 @@ impl CAotCompiler {
     }
 
     /// Emit type descriptors for all types.
-    fn emit_tydescs(&mut self, out: &mut String, types: &HashSet<IrType>) -> Result<(), CAotError> {
+    fn emit_tydescs(&mut self, out: &mut String, types: &BTreeSet<IrType>) -> Result<(), CAotError> {
         writeln!(out, "// Type descriptors").unwrap();
 
         // We need to emit types in dependency order, so primitive types first.
+        // `sort_by_key` is stable, so ties keep the order they came in; the
+        // types arrive from a `BTreeSet` so that order is the same every run.
         let mut sorted_types: Vec<_> = types.iter().collect();
         sorted_types.sort_by_key(|t| tydesc::type_depth(t));
 

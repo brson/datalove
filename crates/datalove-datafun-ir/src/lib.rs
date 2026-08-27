@@ -45,7 +45,7 @@ pub struct CallSiteId(pub u32);
 /// Module identifier for IR.
 ///
 /// Serializable numeric ID, unlike salsa's ModuleId.
-#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize)]
 #[derive(salsa::SalsaValue)]
 pub struct IrModuleId(pub u32);
 
@@ -58,7 +58,7 @@ pub struct IrModuleId(pub u32);
 ///
 /// Replaces FuncId for unified addressing. The numeric value is local to
 /// the containing scope (module or script execution session).
-#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize)]
 pub struct CodeUnitId(pub u32);
 
 /// Reference to a code unit.
@@ -99,7 +99,7 @@ pub enum TypeRef {
 /// Self-contained type representation for frame layout computation
 /// and runtime TyDesc creation. Unlike salsa-interned types, this
 /// is serializable and database-independent.
-#[derive(Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize)]
 pub enum IrType {
     /// Unit type (empty tuple).
     Unit,
