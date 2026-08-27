@@ -323,3 +323,38 @@ pub fn datafun_spans<'db>(
         parse_result.type_alias_spans.C(),
     )
 }
+
+// ============================================================================
+// Parsing a module
+// ============================================================================
+
+/// Parse a module and return just its statements.
+///
+/// Derived from [`parse_module_full`] rather than parsing again, so a module is
+/// parsed once however many callers want only its statements. Splitting the
+/// statements out this way also firewalls them: an edit that moves spans
+/// without changing any statement re-runs `parse_module_full`, but this returns
+/// an equal value and backdates, so name resolution downstream does not re-run.
+#[salsa::tracked(returns(ref))]
+pub fn parse_module_ast<'db>(
+    db: &'db dyn Db,
+    module: bct::module_graph::Module<'db>,
+) -> ast::ParsedStatements<'db> {
+    parse_module_full(db, module).parsed.clone()
+}
+
+/// Parse a module and return its statements and spans together.
+///
+/// The two come from one parse, so the expression keys in the spans match the
+/// statements beside them.
+#[salsa::tracked(returns(ref))]
+pub fn parse_module_full<'db>(
+    db: &'db dyn Db,
+    module: bct::module_graph::Module<'db>,
+) -> ast::ParseResult<'db> {
+    let module_id = module.id(db);
+    datalove_ct::query_log::log_query("parse", module_id.path(db), datalove_ct::query_log::QueryPhase::Start);
+    let result = parse_with_module_id(db, module.source(db), Some(module_id));
+    datalove_ct::query_log::log_query("parse", module_id.path(db), datalove_ct::query_log::QueryPhase::End);
+    result
+}

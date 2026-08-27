@@ -1664,6 +1664,7 @@ name = "datalove-datafun-parser"
 version = "0.1.0"
 dependencies = [
  "bcts",
+ "datalove-ct",
  "datalove-datafun-ast",
  "datalove-datalit",
  "datalove-diagnostic",
@@ -1689,6 +1690,7 @@ dependencies = [
  "datalove-ct",
  "datalove-datafun-ast",
  "datalove-datafun-common",
+ "datalove-datafun-parser",
  "datalove-datalit",
  "rustmax 0.0.10",
  "salsa",

@@ -160,16 +160,22 @@ pub fn resolve_names_impl<'db>(
 /// - Function ASTs (for inlining)
 ///
 /// These are resolved before typechecking and seeded into the TypeContext.
+/// Keyed on the module alone. Taking the statements as a second argument made
+/// salsa intern the pair to key on, one entry per module, and left it unable to
+/// name the module in the event it reports for this query. Fetching the
+/// statements instead says the same thing as a dependency, which is what was
+/// meant, and drops the interned pair.
 #[salsa::tracked(returns(copy))]
 pub fn resolve_module_names<'db>(
     db: &'db dyn Db,
     module: Module<'db>,
-    parsed: ParsedStatements<'db>,
 ) -> ModuleNameResolution<'db> {
     let module_id = module.id(db);
     let module_path = module_id.path(db);
 
     log_query("resolve_names", module_path, QueryPhase::Start);
+
+    let parsed = datalove_datafun_parser::parse_module_ast(db, module);
 
     // Resolve names: collect type aliases and function signatures.
     let collected = resolve_names_impl(db, &parsed.statements);
@@ -202,10 +208,10 @@ pub fn resolve_all_names<'db>(
 
     let mut all_resolutions = BTreeMap::new();
 
-    for (module_id, parsed) in parsed_graph.statements_only(db) {
+    for (module_id, _) in parsed_graph.statements_only(db) {
         let module = module_to_module_obj.get(module_id)
             .expect("module should exist in graph");
-        let resolution = resolve_module_names(db, *module, parsed.clone());
+        let resolution = resolve_module_names(db, *module);
         all_resolutions.insert(*module_id, resolution);
     }
 
@@ -232,17 +238,17 @@ pub fn resolve_all_names_parallel<'db>(
 
     let work: Vec<_> = parsed_graph.statements_only(db_salsa)
         .iter()
-        .map(|(module_id, parsed)| {
+        .map(|(module_id, _)| {
             let module = *module_to_module_obj.get(module_id)
                 .expect("module should exist in graph");
-            (db.dyn_clone(), module, parsed.clone())
+            (db.dyn_clone(), module)
         })
         .collect();
 
     // Resolve names in parallel - populates salsa's memoization cache.
-    work.into_par_iter().for_each(|(db_clone, module, parsed)| {
+    work.into_par_iter().for_each(|(db_clone, module)| {
         let db_salsa = db_clone.as_salsa_db();
-        let _ = resolve_module_names(db_salsa, module, parsed);
+        let _ = resolve_module_names(db_salsa, module);
     });
 
     // Delegate to tracked function which aggregates results.

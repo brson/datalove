@@ -8,7 +8,6 @@ use rmx::std::hash::{Hash, Hasher};
 use rmx::std::collections::hash_map::DefaultHasher;
 use rmx::rayon::prelude::*;
 use bct::text::InternedText;
-use datalove_ct::query_log::{log_query, QueryPhase};
 use datalove_datafun_tycheck::DbClone;
 
 // Re-export core module graph types from bct.
@@ -29,52 +28,11 @@ pub use datalove_datafun_tycheck::{
     parallel_mode_from_env,
 };
 
-use datalove_datafun_ast::ast::{ParseResult, ParsedStatements};
+use datalove_datafun_ast::ast::ParsedStatements;
 
-/// Parse a single module and return only the AST (no spans).
-///
-/// This is a tracked function so Salsa can cache per-module.
-/// The logging only fires when the function actually executes.
-///
-/// Returns just ParsedStatements. For whitespace-only changes, this should
-/// return an equal value, allowing downstream functions to be memoized.
-#[salsa::tracked(returns(ref))]
-pub fn parse_module_ast<'db>(
-    db: &'db dyn salsa::Database,
-    module: Module<'db>,
-) -> ParsedStatements<'db> {
-    let module_id = module.id(db);
-    let module_path = module_id.path(db);
-    let source = module.source(db);
-
-    log_query("parse", module_path, QueryPhase::Start);
-    // Pass ModuleId for stable function identity.
-    let parse_result = datalove_datafun_parser::parse_with_module_id(db, source, Some(module_id));
-    log_query("parse", module_path, QueryPhase::End);
-
-    // Return only the AST, not spans. This allows memoization when only whitespace changes.
-    parse_result.parsed
-}
-
-/// Parse a single module and return the full result including spans.
-///
-/// This is tracked so that parsing is memoized per module. The result includes
-/// both statements and spans from the same parse, ensuring expr IDs match.
-#[salsa::tracked(returns(ref))]
-pub fn parse_module_full<'db>(
-    db: &'db dyn salsa::Database,
-    module: Module<'db>,
-) -> ParseResult<'db> {
-    let module_id = module.id(db);
-    let module_path = module_id.path(db);
-    let source = module.source(db);
-
-    log_query("parse", module_path, QueryPhase::Start);
-    let result = datalove_datafun_parser::parse_with_module_id(db, source, Some(module_id));
-    log_query("parse", module_path, QueryPhase::End);
-
-    result
-}
+/// Parsing a module is the parser's business; these live there now, so that
+/// name resolution can reach them without depending on this crate.
+pub use datalove_datafun_parser::{parse_module_ast, parse_module_full};
 
 /// Parse all modules in a graph with resolved requires (internal tracked function).
 ///

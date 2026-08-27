@@ -15,4 +15,5 @@ salsa.workspace = true
 datalove-ct.path = "../datalove-ct"
 datalove-datafun-ast.path = "../datalove-datafun-ast"
 datalove-datafun-common.path = "../datalove-datafun-common"
+datalove-datafun-parser.path = "../datalove-datafun-parser"
 datalove-datalit.path = "../datalove-datalit"

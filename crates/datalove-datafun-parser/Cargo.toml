@@ -13,5 +13,6 @@ rmx.workspace = true
 bct.workspace = true
 salsa.workspace = true
 datalove-datafun-ast.path = "../datalove-datafun-ast"
+datalove-ct.path = "../datalove-ct"
 datalove-datalit.path = "../datalove-datalit"
 datalove-diagnostic.path = "../datalove-diagnostic"
