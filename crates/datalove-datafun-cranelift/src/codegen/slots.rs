@@ -1,6 +1,6 @@
 //! Slot instruction compilation (SlotStore, SlotLoad).
 
-use cranelift_codegen::ir::{InstBuilder, MemFlags};
+use cranelift_codegen::ir::{InstBuilder, MemFlagsData};
 use cranelift_frontend::FunctionBuilder;
 use cranelift_module::Module;
 
@@ -43,7 +43,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 // Scalar: store value directly.
                 let val = self.get_operand_value(builder, value)?;
                 let addr = builder.ins().stack_addr(PTR_TYPE, frame_slot, slot_offset as i32);
-                builder.ins().store(MemFlags::new(), val, addr, 0);
+                builder.ins().store(MemFlagsData::new(), val, addr, 0);
             }
             CraneliftRepr::Aggregate(layout) => {
                 // Aggregate: copy bytes from source to destination.
@@ -89,7 +89,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             CraneliftRepr::Scalar(cl_ty) => {
                 // Scalar: load value directly.
                 let addr = builder.ins().stack_addr(PTR_TYPE, frame_slot, slot_offset as i32);
-                let val = builder.ins().load(cl_ty, MemFlags::new(), addr, 0);
+                let val = builder.ins().load(cl_ty, MemFlagsData::new(), addr, 0);
                 self.values.insert(dest, val);
             }
             CraneliftRepr::Aggregate(_) => {
@@ -141,7 +141,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         })?;
 
         let tydesc_gv = self.module.declare_data_in_func(tydesc_id, builder.func);
-        let tydesc_addr = builder.ins().global_value(PTR_TYPE, tydesc_gv);
+        let tydesc_addr = builder.ins().symbol_value(PTR_TYPE, tydesc_gv);
 
         // Call destroy_local(rt_handle, value_ptr, tydesc).
         let destroy_ref = self.module.declare_func_in_func(destroy_func_id, builder.func);
@@ -152,7 +152,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             CraneliftRepr::Scalar(_cl_ty) => {
                 // Scalar: store value directly.
                 let val = self.get_operand_value(builder, value)?;
-                builder.ins().store(MemFlags::new(), val, param_ptr, 0);
+                builder.ins().store(MemFlagsData::new(), val, param_ptr, 0);
             }
             CraneliftRepr::Aggregate(layout) => {
                 // Aggregate: copy bytes from source to param.
@@ -198,7 +198,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
 
         // Load tracking byte.
         let track_addr = builder.ins().stack_addr(PTR_TYPE, frame_slot, track_offset as i32);
-        let track_val = builder.ins().load(cl_types::I8, MemFlags::new(), track_addr, 0);
+        let track_val = builder.ins().load(cl_types::I8, MemFlagsData::new(), track_addr, 0);
 
         // Check if initialized (LIVE).
         let live_const = builder.ins().iconst(cl_types::I8, tracking::LIVE as i64);
@@ -234,7 +234,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         })?;
 
         let tydesc_gv = self.module.declare_data_in_func(tydesc_id, builder.func);
-        let tydesc_addr = builder.ins().global_value(PTR_TYPE, tydesc_gv);
+        let tydesc_addr = builder.ins().symbol_value(PTR_TYPE, tydesc_gv);
 
         let destroy_ref = self.module.declare_func_in_func(destroy_func_id, builder.func);
         builder.ins().call(destroy_ref, &[rt_handle, param_ptr, tydesc_addr]);
@@ -248,7 +248,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         match repr {
             CraneliftRepr::Scalar(_cl_ty) => {
                 let val = self.get_operand_value(builder, value)?;
-                builder.ins().store(MemFlags::new(), val, param_ptr, 0);
+                builder.ins().store(MemFlagsData::new(), val, param_ptr, 0);
             }
             CraneliftRepr::Aggregate(layout) => {
                 let src_ptr = self.get_operand_ptr(builder, value)?;
@@ -297,7 +297,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         })?;
 
         let tydesc_gv = self.module.declare_data_in_func(tydesc_id, builder.func);
-        let tydesc_addr = builder.ins().global_value(PTR_TYPE, tydesc_gv);
+        let tydesc_addr = builder.ins().symbol_value(PTR_TYPE, tydesc_gv);
 
         // Call destroy_local(rt_handle, value_ptr, tydesc).
         let destroy_ref = self.module.declare_func_in_func(destroy_func_id, builder.func);
@@ -307,7 +307,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         match repr {
             CraneliftRepr::Scalar(_cl_ty) => {
                 let val = self.get_operand_value(builder, value)?;
-                builder.ins().store(MemFlags::new(), val, dest_ptr, 0);
+                builder.ins().store(MemFlagsData::new(), val, dest_ptr, 0);
             }
             CraneliftRepr::Aggregate(layout) => {
                 let src_ptr = self.get_operand_ptr(builder, value)?;
@@ -357,7 +357,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             }
 
             let offsets = types::compute_tuple_field_offsets(&field_types);
-            current_addr = builder.ins().iadd_imm(current_addr, offsets[field_idx as usize] as i64);
+            current_addr = builder.ins().iadd_imm_s(current_addr, offsets[field_idx as usize] as i64);
             current_ty = field_types[field_idx as usize].clone();
         }
 
@@ -380,7 +380,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         })?;
 
         let tydesc_gv = self.module.declare_data_in_func(tydesc_id, builder.func);
-        let tydesc_addr = builder.ins().global_value(PTR_TYPE, tydesc_gv);
+        let tydesc_addr = builder.ins().symbol_value(PTR_TYPE, tydesc_gv);
 
         // Call destroy_local(rt_handle, field_ptr, tydesc).
         let destroy_ref = self.module.declare_func_in_func(destroy_func_id, builder.func);
@@ -390,7 +390,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         match repr {
             CraneliftRepr::Scalar(_cl_ty) => {
                 let val = self.get_operand_value(builder, value)?;
-                builder.ins().store(MemFlags::new(), val, current_addr, 0);
+                builder.ins().store(MemFlagsData::new(), val, current_addr, 0);
             }
             CraneliftRepr::Aggregate(layout) => {
                 let src_ptr = self.get_operand_ptr(builder, value)?;
@@ -423,7 +423,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         match repr {
             CraneliftRepr::Scalar(_cl_ty) => {
                 let val = self.get_operand_value(builder, value)?;
-                builder.ins().store(MemFlags::new(), val, dest_ptr, 0);
+                builder.ins().store(MemFlagsData::new(), val, dest_ptr, 0);
             }
             CraneliftRepr::Aggregate(layout) => {
                 let src_ptr = self.get_operand_ptr(builder, value)?;
@@ -476,7 +476,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             }
 
             let offsets = types::compute_tuple_field_offsets(&field_types);
-            current_addr = builder.ins().iadd_imm(current_addr, offsets[field_idx as usize] as i64);
+            current_addr = builder.ins().iadd_imm_s(current_addr, offsets[field_idx as usize] as i64);
             current_ty = field_types[field_idx as usize].clone();
         }
 
@@ -486,7 +486,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         match repr {
             CraneliftRepr::Scalar(_cl_ty) => {
                 let val = self.get_operand_value(builder, value)?;
-                builder.ins().store(MemFlags::new(), val, current_addr, 0);
+                builder.ins().store(MemFlagsData::new(), val, current_addr, 0);
             }
             CraneliftRepr::Aggregate(layout) => {
                 let src_ptr = self.get_operand_ptr(builder, value)?;

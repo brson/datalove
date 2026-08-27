@@ -50,7 +50,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                         types::CraneliftRepr::Scalar(_) => {
                             // Scalar: store value directly to sret pointer.
                             let val = self.get_operand_value(builder, val_op)?;
-                            builder.ins().store(cranelift_codegen::ir::MemFlags::new(), val, sret_ptr, 0);
+                            builder.ins().store(cranelift_codegen::ir::MemFlagsData::new(), val, sret_ptr, 0);
                         }
                         types::CraneliftRepr::Aggregate(_) => {
                             // Aggregate: memcpy from source pointer to sret pointer.

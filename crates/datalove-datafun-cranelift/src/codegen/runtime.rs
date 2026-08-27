@@ -1,6 +1,6 @@
 //! Runtime call instruction compilation (DebugLog, Drop).
 
-use cranelift_codegen::ir::{self as cl_ir, InstBuilder, MemFlags};
+use cranelift_codegen::ir::{self as cl_ir, InstBuilder, MemFlagsData};
 use cranelift_frontend::FunctionBuilder;
 use cranelift_module::Module;
 
@@ -55,7 +55,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
 
         // Get address of tydesc.
         let tydesc_gv = self.module.declare_data_in_func(tydesc_id, builder.func);
-        let tydesc_addr = builder.ins().global_value(PTR_TYPE, tydesc_gv);
+        let tydesc_addr = builder.ins().symbol_value(PTR_TYPE, tydesc_gv);
 
         // Declare debuglog function in this function.
         let debuglog_ref = self.module.declare_func_in_func(
@@ -103,7 +103,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
 
         // Get address of tydesc.
         let tydesc_gv = self.module.declare_data_in_func(tydesc_id, builder.func);
-        let tydesc_addr = builder.ins().global_value(PTR_TYPE, tydesc_gv);
+        let tydesc_addr = builder.ins().symbol_value(PTR_TYPE, tydesc_gv);
 
         // Declare destroy function in this function.
         let destroy_ref = self.module.declare_func_in_func(destroy_func_id, builder.func);
@@ -147,7 +147,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         })?;
 
         let track_addr = builder.ins().stack_addr(PTR_TYPE, frame_slot, track_offset as i32);
-        let track_byte = builder.ins().load(cl_ir::types::I8, MemFlags::new(), track_addr, 0);
+        let track_byte = builder.ins().load(cl_ir::types::I8, MemFlagsData::new(), track_addr, 0);
 
         // Check if LIVE (0x01).
         let live_val = builder.ins().iconst(cl_ir::types::I8, tracking::LIVE as i64);
@@ -181,7 +181,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         })?;
 
         let tydesc_gv = self.module.declare_data_in_func(tydesc_id, builder.func);
-        let tydesc_addr = builder.ins().global_value(PTR_TYPE, tydesc_gv);
+        let tydesc_addr = builder.ins().symbol_value(PTR_TYPE, tydesc_gv);
 
         let value_ptr = self.get_operand_ptr(builder, operand)?;
 
@@ -190,7 +190,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
 
         // Mark as moved after drop.
         let moved_val = builder.ins().iconst(cl_ir::types::I8, tracking::MOVED as i64);
-        builder.ins().store(MemFlags::new(), moved_val, track_addr, 0);
+        builder.ins().store(MemFlagsData::new(), moved_val, track_addr, 0);
 
         // Jump to after block.
         builder.ins().jump(after_block, &[]);
@@ -245,7 +245,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         })?;
 
         let tydesc_gv = self.module.declare_data_in_func(tydesc_id, builder.func);
-        let tydesc_addr = builder.ins().global_value(PTR_TYPE, tydesc_gv);
+        let tydesc_addr = builder.ins().symbol_value(PTR_TYPE, tydesc_gv);
 
         // Declare destroy function and call it.
         let destroy_ref = self.module.declare_func_in_func(destroy_func_id, builder.func);

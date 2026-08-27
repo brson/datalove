@@ -43,7 +43,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             ))
         })?;
         let inner_tydesc_gv = self.module.declare_data_in_func(inner_tydesc_id, builder.func);
-        let inner_tydesc_addr = builder.ins().global_value(PTR_TYPE, inner_tydesc_gv);
+        let inner_tydesc_addr = builder.ins().symbol_value(PTR_TYPE, inner_tydesc_gv);
 
         // Allocate temp slot for the Error result (16 bytes, 8-byte aligned).
         let slot_data = cl_ir::StackSlotData::new(
@@ -95,7 +95,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             ))
         })?;
         let inner_tydesc_gv = self.module.declare_data_in_func(inner_tydesc_id, builder.func);
-        let inner_tydesc_addr = builder.ins().global_value(PTR_TYPE, inner_tydesc_gv);
+        let inner_tydesc_addr = builder.ins().symbol_value(PTR_TYPE, inner_tydesc_gv);
 
         // Allocate temp slot for the Data result (16 bytes, 8-byte aligned).
         let slot_data = cl_ir::StackSlotData::new(

@@ -181,7 +181,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             CraneliftError::Codegen("TyDesc not found for Int".into())
         })?;
         let tydesc_gv = self.module.declare_data_in_func(tydesc_id, builder.func);
-        let tydesc_ptr = builder.ins().global_value(PTR_TYPE, tydesc_gv);
+        let tydesc_ptr = builder.ins().symbol_value(PTR_TYPE, tydesc_gv);
 
         // Get limbs pointer (null for zero, static data otherwise).
         let limbs_ptr = if limbs.is_empty() {
@@ -193,7 +193,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 .collect();
             let limbs_data_id = self.emit_static_bytes_aligned(&limbs_bytes, 4)?;
             let limbs_gv = self.module.declare_data_in_func(limbs_data_id, builder.func);
-            builder.ins().global_value(PTR_TYPE, limbs_gv)
+            builder.ins().symbol_value(PTR_TYPE, limbs_gv)
         };
 
         let limb_count = builder.ins().iconst(cl_types::I32, limbs.len() as i64);
@@ -237,7 +237,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             CraneliftError::Codegen("TyDesc not found for String".into())
         })?;
         let tydesc_gv = self.module.declare_data_in_func(tydesc_id, builder.func);
-        let tydesc_ptr = builder.ins().global_value(PTR_TYPE, tydesc_gv);
+        let tydesc_ptr = builder.ins().symbol_value(PTR_TYPE, tydesc_gv);
 
         // Get bytes pointer and length.
         let (bytes_ptr, len) = if s.is_empty() {
@@ -248,7 +248,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             let bytes = s.as_bytes();
             let bytes_data_id = self.emit_static_bytes(bytes)?;
             let bytes_gv = self.module.declare_data_in_func(bytes_data_id, builder.func);
-            let bytes_ptr = builder.ins().global_value(PTR_TYPE, bytes_gv);
+            let bytes_ptr = builder.ins().symbol_value(PTR_TYPE, bytes_gv);
             let len = builder.ins().iconst(cl_types::I32, bytes.len() as i64);
             (bytes_ptr, len)
         };
@@ -309,7 +309,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
 
         // Write None tag (1) at offset 0.
         let tag = builder.ins().iconst(cl_types::I8, 1);
-        builder.ins().store(cranelift_codegen::ir::MemFlags::trusted(), tag, base, 0);
+        builder.ins().store(cranelift_codegen::ir::MemFlagsData::trusted(), tag, base, 0);
 
         // Store base pointer for this value.
         self.values.insert(dest, base);
@@ -335,12 +335,12 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
 
         // Write Some tag (2) at offset 0.
         let tag = builder.ins().iconst(cl_types::I8, 2);
-        builder.ins().store(cranelift_codegen::ir::MemFlags::trusted(), tag, base, 0);
+        builder.ins().store(cranelift_codegen::ir::MemFlagsData::trusted(), tag, base, 0);
 
         // Compute payload offset based on inner type alignment.
         let inner_align = self.align_of_const_value(inner);
         let payload_offset = datalove_rtdt::layout::option_payload_offset(inner_align);
-        let payload_addr = builder.ins().iadd_imm(base, payload_offset as i64);
+        let payload_addr = builder.ins().iadd_imm_s(base, payload_offset as i64);
 
         // Write the inner value at the payload offset.
         self.write_const_value_to_addr(builder, payload_addr, inner)?;
@@ -372,7 +372,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         // Write each field at its offset.
         for (i, field_value) in fields.iter().enumerate() {
             let field_offset = field_offsets[i];
-            let field_addr = builder.ins().iadd_imm(base, field_offset as i64);
+            let field_addr = builder.ins().iadd_imm_s(base, field_offset as i64);
             self.write_const_value_to_addr(builder, field_addr, field_value)?;
         }
 
@@ -404,7 +404,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         // Write each field at its offset.
         for (i, (_, field_value)) in fields.iter().enumerate() {
             let field_offset = field_offsets[i];
-            let field_addr = builder.ins().iadd_imm(base, field_offset as i64);
+            let field_addr = builder.ins().iadd_imm_s(base, field_offset as i64);
             self.write_const_value_to_addr(builder, field_addr, field_value)?;
         }
 
@@ -469,12 +469,12 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                     .ok_or_else(|| CraneliftError::Codegen(format!("enum variant '{}' not found", variant)))?;
 
                 let discriminant = builder.ins().iconst(cl_types::I32, variant_index as i64);
-                builder.ins().store(cranelift_codegen::ir::MemFlags::trusted(), discriminant, base, 0);
+                builder.ins().store(cranelift_codegen::ir::MemFlagsData::trusted(), discriminant, base, 0);
 
                 if let Some(payload_value) = payload {
                     let payload_align = self.align_of_const_value(payload_value);
                     let payload_offset = datalove_rtdt::layout::enum_payload_offset(payload_align);
-                    let payload_addr = builder.ins().iadd_imm(base, payload_offset as i64);
+                    let payload_addr = builder.ins().iadd_imm_s(base, payload_offset as i64);
                     self.write_const_value_to_addr(builder, payload_addr, payload_value)?;
                 }
 
@@ -503,12 +503,12 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
 
         // Write Ok tag (1) at offset 0.
         let tag = builder.ins().iconst(cl_types::I8, 1);
-        builder.ins().store(cranelift_codegen::ir::MemFlags::trusted(), tag, base, 0);
+        builder.ins().store(cranelift_codegen::ir::MemFlagsData::trusted(), tag, base, 0);
 
         // Compute payload offset based on inner type alignment.
         let inner_align = self.align_of_const_value(inner);
         let payload_offset = datalove_rtdt::layout::result_payload_offset(inner_align);
-        let payload_addr = builder.ins().iadd_imm(base, payload_offset as i64);
+        let payload_addr = builder.ins().iadd_imm_s(base, payload_offset as i64);
 
         // Write the inner value at the payload offset.
         self.write_const_value_to_addr(builder, payload_addr, inner)?;
@@ -537,7 +537,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
 
         // Write Err tag (2) at offset 0.
         let tag = builder.ins().iconst(cl_types::I8, 2);
-        builder.ins().store(cranelift_codegen::ir::MemFlags::trusted(), tag, base, 0);
+        builder.ins().store(cranelift_codegen::ir::MemFlagsData::trusted(), tag, base, 0);
 
         // Get the Result type to find the Ok type alignment for computing payload offset.
         let ir_type = self.func.value_types.get(dest.0 as usize).ok_or_else(|| {
@@ -551,7 +551,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         // Compute payload offset based on max of Ok type alignment and Error alignment (8).
         let ok_align = self.align_of_ir_type(ok_type);
         let payload_offset = datalove_rtdt::layout::result_payload_offset(ok_align);
-        let payload_addr = builder.ins().iadd_imm(base, payload_offset as i64);
+        let payload_addr = builder.ins().iadd_imm_s(base, payload_offset as i64);
 
         // Write the Error value at the payload offset.
         // The inner should be a ConstValue::Error which will be compiled.
@@ -592,7 +592,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             CraneliftError::Codegen(format!("TyDesc not found for inner type {:?}", inner_ir_type))
         })?;
         let inner_tydesc_gv = self.module.declare_data_in_func(inner_tydesc_id, builder.func);
-        let inner_tydesc_ptr = builder.ins().global_value(PTR_TYPE, inner_tydesc_gv);
+        let inner_tydesc_ptr = builder.ins().symbol_value(PTR_TYPE, inner_tydesc_gv);
 
         // Get inner size and alignment.
         let inner_size = self.size_of_const_value(inner).max(1);
@@ -649,7 +649,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             CraneliftError::Codegen(format!("TyDesc not found for inner type {:?}", inner_ir_type))
         })?;
         let inner_tydesc_gv = self.module.declare_data_in_func(inner_tydesc_id, builder.func);
-        let inner_tydesc_ptr = builder.ins().global_value(PTR_TYPE, inner_tydesc_gv);
+        let inner_tydesc_ptr = builder.ins().symbol_value(PTR_TYPE, inner_tydesc_gv);
 
         // Get inner size and alignment.
         let inner_size = self.size_of_const_value(inner).max(1);
@@ -714,7 +714,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             CraneliftError::Codegen("TyDesc not found for List element".into())
         })?;
         let elem_tydesc_gv = self.module.declare_data_in_func(elem_tydesc_id, builder.func);
-        let elem_tydesc_ptr = builder.ins().global_value(PTR_TYPE, elem_tydesc_gv);
+        let elem_tydesc_ptr = builder.ins().symbol_value(PTR_TYPE, elem_tydesc_gv);
 
         // Get element size/alignment for buffer allocation.
         let elem_layout = crate::types::ir_type_to_cranelift(&element_type).layout();
@@ -736,7 +736,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         // Write each element at its offset in the buffer.
         for (i, element_value) in elements.iter().enumerate() {
             let offset = (i as u32) * elem_stride;
-            let elem_addr = builder.ins().iadd_imm(elements_addr, offset as i64);
+            let elem_addr = builder.ins().iadd_imm_s(elements_addr, offset as i64);
             self.write_const_value_to_addr(builder, elem_addr, element_value)?;
         }
 
@@ -788,7 +788,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             CraneliftError::Codegen("TyDesc not found for Set element".into())
         })?;
         let elem_tydesc_gv = self.module.declare_data_in_func(elem_tydesc_id, builder.func);
-        let elem_tydesc_ptr = builder.ins().global_value(PTR_TYPE, elem_tydesc_gv);
+        let elem_tydesc_ptr = builder.ins().symbol_value(PTR_TYPE, elem_tydesc_gv);
 
         // Get element size/alignment for buffer allocation.
         let elem_layout = crate::types::ir_type_to_cranelift(&element_type).layout();
@@ -811,7 +811,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         // Write each element at its offset in the buffer.
         for (i, element_value) in elements.iter().enumerate() {
             let offset = (i as u32) * elem_stride;
-            let elem_addr = builder.ins().iadd_imm(elements_addr, offset as i64);
+            let elem_addr = builder.ins().iadd_imm_s(elements_addr, offset as i64);
             self.write_const_value_to_addr(builder, elem_addr, element_value)?;
         }
 
@@ -863,14 +863,14 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             CraneliftError::Codegen("TyDesc not found for Map key".into())
         })?;
         let key_tydesc_gv = self.module.declare_data_in_func(key_tydesc_id, builder.func);
-        let key_tydesc_ptr = builder.ins().global_value(PTR_TYPE, key_tydesc_gv);
+        let key_tydesc_ptr = builder.ins().symbol_value(PTR_TYPE, key_tydesc_gv);
 
         // Get value TyDesc.
         let val_tydesc_id = self.tydesc_emitter.get(&value_type).ok_or_else(|| {
             CraneliftError::Codegen("TyDesc not found for Map value".into())
         })?;
         let val_tydesc_gv = self.module.declare_data_in_func(val_tydesc_id, builder.func);
-        let val_tydesc_ptr = builder.ins().global_value(PTR_TYPE, val_tydesc_gv);
+        let val_tydesc_ptr = builder.ins().symbol_value(PTR_TYPE, val_tydesc_gv);
 
         // Get key size/alignment for buffer allocation.
         let key_layout = crate::types::ir_type_to_cranelift(&key_type).layout();
@@ -908,8 +908,8 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         for (i, (key_value, val_value)) in entries.iter().enumerate() {
             let key_offset = (i as u32) * key_stride;
             let val_offset = (i as u32) * val_stride;
-            let key_addr = builder.ins().iadd_imm(keys_addr, key_offset as i64);
-            let val_addr = builder.ins().iadd_imm(vals_addr, val_offset as i64);
+            let key_addr = builder.ins().iadd_imm_s(keys_addr, key_offset as i64);
+            let val_addr = builder.ins().iadd_imm_s(vals_addr, val_offset as i64);
             self.write_const_value_to_addr(builder, key_addr, key_value)?;
             self.write_const_value_to_addr(builder, val_addr, val_value)?;
         }
@@ -962,7 +962,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             CraneliftError::Codegen("TyDesc not found for Table".into())
         })?;
         let table_tydesc_gv = self.module.declare_data_in_func(table_tydesc_id, builder.func);
-        let table_tydesc_ptr = builder.ins().global_value(PTR_TYPE, table_tydesc_gv);
+        let table_tydesc_ptr = builder.ins().symbol_value(PTR_TYPE, table_tydesc_gv);
 
         // Compute row tuple layout.
         let col_types: Vec<_> = columns.iter().map(|(_, ty)| (**ty).clone()).collect();
@@ -999,14 +999,14 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         let tuple_fields_addr = builder.ins().stack_addr(PTR_TYPE, tuple_fields_slot, 0);
 
         // Fill in the tuple fields.
-        let mem_flags = cranelift_codegen::ir::MemFlags::trusted();
+        let mem_flags = cranelift_codegen::ir::MemFlagsData::trusted();
         for (i, &col_tydesc_id) in col_tydescs.iter().enumerate() {
-            let field_base = builder.ins().iadd_imm(tuple_fields_addr, (i * 16) as i64);
+            let field_base = builder.ins().iadd_imm_s(tuple_fields_addr, (i * 16) as i64);
             let offset_val = builder.ins().iconst(cl_types::I32, field_offsets[i] as i64);
             builder.ins().store(mem_flags, offset_val, field_base, 0);
 
             let col_tydesc_gv = self.module.declare_data_in_func(col_tydesc_id, builder.func);
-            let col_tydesc_ptr = builder.ins().global_value(PTR_TYPE, col_tydesc_gv);
+            let col_tydesc_ptr = builder.ins().symbol_value(PTR_TYPE, col_tydesc_gv);
             builder.ins().store(mem_flags, col_tydesc_ptr, field_base, 8);
         }
 
@@ -1051,7 +1051,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             let row_base_offset = (row_idx as u32) * row_stride;
             for (col_idx, col_value) in row_values.iter().enumerate() {
                 let col_offset = row_base_offset + field_offsets[col_idx];
-                let col_addr = builder.ins().iadd_imm(rows_addr, col_offset as i64);
+                let col_addr = builder.ins().iadd_imm_s(rows_addr, col_offset as i64);
                 self.write_const_value_to_addr(builder, col_addr, col_value)?;
             }
         }
@@ -1199,7 +1199,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         addr: cranelift_codegen::ir::Value,
         value: &ConstValue,
     ) -> Result<(), CraneliftError> {
-        let mem_flags = cranelift_codegen::ir::MemFlags::trusted();
+        let mem_flags = cranelift_codegen::ir::MemFlagsData::trusted();
         match value {
             ConstValue::Unit => {
                 // Unit is zero-sized, nothing to write.
@@ -1281,7 +1281,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                     CraneliftError::Codegen("TyDesc not found for Int".into())
                 })?;
                 let tydesc_gv = self.module.declare_data_in_func(tydesc_id, builder.func);
-                let tydesc_ptr = builder.ins().global_value(PTR_TYPE, tydesc_gv);
+                let tydesc_ptr = builder.ins().symbol_value(PTR_TYPE, tydesc_gv);
 
                 let limbs_ptr = if limbs.is_empty() {
                     builder.ins().iconst(PTR_TYPE, 0)
@@ -1291,7 +1291,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                         .collect();
                     let limbs_data_id = self.emit_static_bytes_aligned(&limbs_bytes, 4)?;
                     let limbs_gv = self.module.declare_data_in_func(limbs_data_id, builder.func);
-                    builder.ins().global_value(PTR_TYPE, limbs_gv)
+                    builder.ins().symbol_value(PTR_TYPE, limbs_gv)
                 };
 
                 let limb_count = builder.ins().iconst(cl_types::I32, limbs.len() as i64);
@@ -1313,7 +1313,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                     CraneliftError::Codegen("TyDesc not found for String".into())
                 })?;
                 let tydesc_gv = self.module.declare_data_in_func(tydesc_id, builder.func);
-                let tydesc_ptr = builder.ins().global_value(PTR_TYPE, tydesc_gv);
+                let tydesc_ptr = builder.ins().symbol_value(PTR_TYPE, tydesc_gv);
 
                 let (bytes_ptr, len) = if s.is_empty() {
                     let null_ptr = builder.ins().iconst(PTR_TYPE, 0);
@@ -1323,7 +1323,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                     let bytes = s.as_bytes();
                     let bytes_data_id = self.emit_static_bytes(bytes)?;
                     let bytes_gv = self.module.declare_data_in_func(bytes_data_id, builder.func);
-                    let bytes_ptr = builder.ins().global_value(PTR_TYPE, bytes_gv);
+                    let bytes_ptr = builder.ins().symbol_value(PTR_TYPE, bytes_gv);
                     let len = builder.ins().iconst(cl_types::I32, bytes.len() as i64);
                     (bytes_ptr, len)
                 };
@@ -1343,14 +1343,14 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
 
                 let inner_align = self.align_of_const_value(inner);
                 let payload_offset = datalove_rtdt::layout::option_payload_offset(inner_align);
-                let payload_addr = builder.ins().iadd_imm(addr, payload_offset as i64);
+                let payload_addr = builder.ins().iadd_imm_s(addr, payload_offset as i64);
                 self.write_const_value_to_addr(builder, payload_addr, inner)?;
             }
             ConstValue::Tuple(fields) => {
                 let field_offsets = self.compute_tuple_field_offsets(fields);
                 for (i, field_value) in fields.iter().enumerate() {
                     let field_offset = field_offsets[i];
-                    let field_addr = builder.ins().iadd_imm(addr, field_offset as i64);
+                    let field_addr = builder.ins().iadd_imm_s(addr, field_offset as i64);
                     self.write_const_value_to_addr(builder, field_addr, field_value)?;
                 }
             }
@@ -1359,7 +1359,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 let field_offsets = self.compute_tuple_field_offsets(&field_values);
                 for (i, (_, field_value)) in fields.iter().enumerate() {
                     let field_offset = field_offsets[i];
-                    let field_addr = builder.ins().iadd_imm(addr, field_offset as i64);
+                    let field_addr = builder.ins().iadd_imm_s(addr, field_offset as i64);
                     self.write_const_value_to_addr(builder, field_addr, field_value)?;
                 }
             }
@@ -1370,7 +1370,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
 
                 let inner_align = self.align_of_const_value(inner);
                 let payload_offset = datalove_rtdt::layout::result_payload_offset(inner_align);
-                let payload_addr = builder.ins().iadd_imm(addr, payload_offset as i64);
+                let payload_addr = builder.ins().iadd_imm_s(addr, payload_offset as i64);
                 self.write_const_value_to_addr(builder, payload_addr, inner)?;
             }
             ConstValue::ResultErr(inner) => {
@@ -1381,7 +1381,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 // The Err arm always carries an Error, so the payload sits at
                 // the offset a result with a zero-alignment ok type would use.
                 let payload_offset = datalove_rtdt::layout::result_payload_offset(1);
-                let payload_addr = builder.ins().iadd_imm(addr, payload_offset as i64);
+                let payload_addr = builder.ins().iadd_imm_s(addr, payload_offset as i64);
                 // The inner is a ConstValue::Error which will be written.
                 self.write_const_value_to_addr(builder, payload_addr, inner)?;
             }
@@ -1400,7 +1400,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                     CraneliftError::Codegen(format!("TyDesc not found for inner type {:?}", inner_ir_type))
                 })?;
                 let inner_tydesc_gv = self.module.declare_data_in_func(inner_tydesc_id, builder.func);
-                let inner_tydesc_ptr = builder.ins().global_value(PTR_TYPE, inner_tydesc_gv);
+                let inner_tydesc_ptr = builder.ins().symbol_value(PTR_TYPE, inner_tydesc_gv);
 
                 // Get inner size and alignment.
                 let inner_size = self.size_of_const_value(inner).max(1);
@@ -1437,7 +1437,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                     CraneliftError::Codegen(format!("TyDesc not found for inner type {:?}", inner_ir_type))
                 })?;
                 let inner_tydesc_gv = self.module.declare_data_in_func(inner_tydesc_id, builder.func);
-                let inner_tydesc_ptr = builder.ins().global_value(PTR_TYPE, inner_tydesc_gv);
+                let inner_tydesc_ptr = builder.ins().symbol_value(PTR_TYPE, inner_tydesc_gv);
 
                 // Get inner size and alignment.
                 let inner_size = self.size_of_const_value(inner).max(1);

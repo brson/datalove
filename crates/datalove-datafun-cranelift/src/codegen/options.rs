@@ -1,6 +1,6 @@
 //! Option and Result type instruction compilation.
 
-use cranelift_codegen::ir::{types as cl_types, InstBuilder, MemFlags};
+use cranelift_codegen::ir::{types as cl_types, InstBuilder, MemFlagsData};
 use cranelift_frontend::FunctionBuilder;
 use cranelift_module::Module;
 
@@ -48,16 +48,16 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
 
         // Write tag (Some = 2).
         let tag_val = builder.ins().iconst(cl_types::I8, OptionTag::Some as i64);
-        builder.ins().store(MemFlags::new(), tag_val, dest_addr, 0);
+        builder.ins().store(MemFlagsData::new(), tag_val, dest_addr, 0);
 
         // Get inner value and copy to payload location.
-        let payload_addr = builder.ins().iadd_imm(dest_addr, payload_offset as i64);
+        let payload_addr = builder.ins().iadd_imm_s(dest_addr, payload_offset as i64);
         let inner_repr = types::ir_type_to_cranelift(inner_ty);
 
         match inner_repr {
             CraneliftRepr::Scalar(_) => {
                 let inner_val = self.get_operand_value(builder, inner)?;
-                builder.ins().store(MemFlags::new(), inner_val, payload_addr, 0);
+                builder.ins().store(MemFlagsData::new(), inner_val, payload_addr, 0);
             }
             CraneliftRepr::Aggregate(layout) => {
                 let inner_ptr = self.get_operand_ptr(builder, inner)?;
@@ -86,7 +86,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
 
         // Write tag (None = 1).
         let tag_val = builder.ins().iconst(cl_types::I8, OptionTag::None as i64);
-        builder.ins().store(MemFlags::new(), tag_val, dest_addr, 0);
+        builder.ins().store(MemFlagsData::new(), tag_val, dest_addr, 0);
 
         // Store pointer to Option in values map.
         self.values.insert(dest, dest_addr);
@@ -129,16 +129,16 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
 
         // Write tag (Ok = 1).
         let tag_val = builder.ins().iconst(cl_types::I8, ResultTag::Ok as i64);
-        builder.ins().store(MemFlags::new(), tag_val, dest_addr, 0);
+        builder.ins().store(MemFlagsData::new(), tag_val, dest_addr, 0);
 
         // Get inner value and copy to payload location.
-        let payload_addr = builder.ins().iadd_imm(dest_addr, payload_offset as i64);
+        let payload_addr = builder.ins().iadd_imm_s(dest_addr, payload_offset as i64);
         let ok_repr = types::ir_type_to_cranelift(ok_ty);
 
         match ok_repr {
             CraneliftRepr::Scalar(_) => {
                 let inner_val = self.get_operand_value(builder, inner)?;
-                builder.ins().store(MemFlags::new(), inner_val, payload_addr, 0);
+                builder.ins().store(MemFlagsData::new(), inner_val, payload_addr, 0);
             }
             CraneliftRepr::Aggregate(layout) => {
                 let inner_ptr = self.get_operand_ptr(builder, inner)?;
@@ -189,10 +189,10 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
 
         // Write tag (Err = 2).
         let tag_val = builder.ins().iconst(cl_types::I8, ResultTag::Err as i64);
-        builder.ins().store(MemFlags::new(), tag_val, dest_addr, 0);
+        builder.ins().store(MemFlagsData::new(), tag_val, dest_addr, 0);
 
         // Copy Error value to payload location.
-        let payload_addr = builder.ins().iadd_imm(dest_addr, payload_offset as i64);
+        let payload_addr = builder.ins().iadd_imm_s(dest_addr, payload_offset as i64);
         let inner_ptr = self.get_operand_ptr(builder, inner)?;
         let size = builder.ins().iconst(PTR_TYPE, error_size as i64);
         builder.call_memcpy(self.isa.frontend_config(), payload_addr, inner_ptr, size);
@@ -233,7 +233,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         let src_addr = self.get_operand_ptr(builder, src)?;
 
         // Load tag.
-        let tag = builder.ins().load(cl_types::I8, MemFlags::new(), src_addr, 0);
+        let tag = builder.ins().load(cl_types::I8, MemFlagsData::new(), src_addr, 0);
 
         // is_some = (tag == Some = 2).
         let some_tag = builder.ins().iconst(cl_types::I8, OptionTag::Some as i64);
@@ -245,7 +245,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         self.values.insert(is_some, is_some_val);
 
         // Compute payload address.
-        let payload_addr = builder.ins().iadd_imm(src_addr, payload_offset as i64);
+        let payload_addr = builder.ins().iadd_imm_s(src_addr, payload_offset as i64);
 
         // For dest, either load the value (scalar) or store the pointer (aggregate).
         let inner_repr = types::ir_type_to_cranelift(inner_ty);
@@ -253,7 +253,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             CraneliftRepr::Scalar(cl_ty) => {
                 // Load payload value. Value is undefined if None, but that's ok
                 // since caller should check is_some first.
-                let val = builder.ins().load(cl_ty, MemFlags::new(), payload_addr, 0);
+                let val = builder.ins().load(cl_ty, MemFlagsData::new(), payload_addr, 0);
                 self.values.insert(dest, val);
             }
             CraneliftRepr::Aggregate(_) => {
@@ -272,9 +272,9 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             let live_val = builder.ins().iconst(cl_types::I8, tracking::LIVE as i64);
             let uninit_val = builder.ins().iconst(cl_types::I8, tracking::UNINIT as i64);
 
-            let track_addr = builder.ins().iadd_imm(frame_addr, track_offset as i64);
+            let track_addr = builder.ins().iadd_imm_s(frame_addr, track_offset as i64);
             let track_val = builder.ins().select(is_some_val, live_val, uninit_val);
-            builder.ins().store(MemFlags::new(), track_val, track_addr, 0);
+            builder.ins().store(MemFlagsData::new(), track_val, track_addr, 0);
         }
 
         Ok(())
@@ -314,7 +314,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
 
         // Write discriminant (variant_index as u32) at offset 0.
         let disc_val = builder.ins().iconst(cl_types::I32, variant_index as i64);
-        builder.ins().store(MemFlags::new(), disc_val, dest_addr, 0);
+        builder.ins().store(MemFlagsData::new(), disc_val, dest_addr, 0);
 
         // Copy payload if present.
         if let Some(payload_op) = payload {
@@ -322,12 +322,12 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 CraneliftError::Codegen("EnumVariant has payload but variant has no payload type".into())
             })?;
             let payload_repr = types::ir_type_to_cranelift(payload_ty);
-            let payload_addr = builder.ins().iadd_imm(dest_addr, payload_offset as i64);
+            let payload_addr = builder.ins().iadd_imm_s(dest_addr, payload_offset as i64);
 
             match payload_repr {
                 CraneliftRepr::Scalar(_) => {
                     let val = self.get_operand_value(builder, payload_op)?;
-                    builder.ins().store(MemFlags::new(), val, payload_addr, 0);
+                    builder.ins().store(MemFlagsData::new(), val, payload_addr, 0);
                 }
                 CraneliftRepr::Aggregate(layout) => {
                     let src_ptr = self.get_operand_ptr(builder, payload_op)?;
@@ -355,7 +355,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         let src_addr = self.get_operand_ptr(builder, src)?;
 
         // Load discriminant (u32 at offset 0).
-        let disc = builder.ins().load(cl_types::I32, MemFlags::new(), src_addr, 0);
+        let disc = builder.ins().load(cl_types::I32, MemFlagsData::new(), src_addr, 0);
         self.values.insert(dest, disc);
         Ok(())
     }
@@ -385,13 +385,13 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
 
         // Get source address.
         let src_addr = self.get_operand_ptr(builder, src)?;
-        let payload_addr = builder.ins().iadd_imm(src_addr, payload_offset as i64);
+        let payload_addr = builder.ins().iadd_imm_s(src_addr, payload_offset as i64);
 
         // Copy payload to dest.
         let payload_repr = types::ir_type_to_cranelift(payload_ty);
         match payload_repr {
             CraneliftRepr::Scalar(cl_ty) => {
-                let val = builder.ins().load(cl_ty, MemFlags::new(), payload_addr, 0);
+                let val = builder.ins().load(cl_ty, MemFlagsData::new(), payload_addr, 0);
                 self.values.insert(dest, val);
             }
             CraneliftRepr::Aggregate(layout) => {
@@ -442,7 +442,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         let src_addr = self.get_operand_ptr(builder, src)?;
 
         // Load tag.
-        let tag = builder.ins().load(cl_types::I8, MemFlags::new(), src_addr, 0);
+        let tag = builder.ins().load(cl_types::I8, MemFlagsData::new(), src_addr, 0);
 
         // is_ok = (tag == Ok = 1).
         let ok_tag = builder.ins().iconst(cl_types::I8, ResultTag::Ok as i64);
@@ -454,13 +454,13 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         self.values.insert(is_ok, is_ok_val);
 
         // Compute payload address.
-        let payload_addr = builder.ins().iadd_imm(src_addr, payload_offset as i64);
+        let payload_addr = builder.ins().iadd_imm_s(src_addr, payload_offset as i64);
 
         // For ok_dest, either load value (scalar) or store pointer (aggregate).
         let ok_repr = types::ir_type_to_cranelift(ok_ty);
         match ok_repr {
             CraneliftRepr::Scalar(cl_ty) => {
-                let val = builder.ins().load(cl_ty, MemFlags::new(), payload_addr, 0);
+                let val = builder.ins().load(cl_ty, MemFlagsData::new(), payload_addr, 0);
                 self.values.insert(ok_dest, val);
             }
             CraneliftRepr::Aggregate(_) => {
@@ -486,16 +486,16 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
 
             if let Some(ok_offset) = ok_track_offset {
                 // ok tracking byte = is_ok ? LIVE : UNINIT
-                let ok_track_addr = builder.ins().iadd_imm(frame_addr, ok_offset as i64);
+                let ok_track_addr = builder.ins().iadd_imm_s(frame_addr, ok_offset as i64);
                 let ok_track_val = builder.ins().select(is_ok_val, live_val, uninit_val);
-                builder.ins().store(MemFlags::new(), ok_track_val, ok_track_addr, 0);
+                builder.ins().store(MemFlagsData::new(), ok_track_val, ok_track_addr, 0);
             }
 
             if let Some(err_offset) = err_track_offset {
                 // err tracking byte = is_ok ? UNINIT : LIVE
-                let err_track_addr = builder.ins().iadd_imm(frame_addr, err_offset as i64);
+                let err_track_addr = builder.ins().iadd_imm_s(frame_addr, err_offset as i64);
                 let err_track_val = builder.ins().select(is_ok_val, uninit_val, live_val);
-                builder.ins().store(MemFlags::new(), err_track_val, err_track_addr, 0);
+                builder.ins().store(MemFlagsData::new(), err_track_val, err_track_addr, 0);
             }
         }
 

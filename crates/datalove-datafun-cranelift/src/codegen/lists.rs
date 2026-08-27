@@ -1,6 +1,6 @@
 //! List indexing instruction compilation.
 
-use cranelift_codegen::ir::{self as cl_ir, BlockArg, InstBuilder, MemFlags};
+use cranelift_codegen::ir::{self as cl_ir, BlockArg, InstBuilder, MemFlagsData};
 use cranelift_frontend::FunctionBuilder;
 use cranelift_module::Module;
 
@@ -27,7 +27,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         let idx = self.get_operand_value(builder, index)?;
 
         let size_offset = std::mem::offset_of!(datalove_rtdt::List, size) as i32;
-        let list_size = builder.ins().load(INDEX_TYPE, MemFlags::new(), list_ptr, size_offset);
+        let list_size = builder.ins().load(INDEX_TYPE, MemFlagsData::new(), list_ptr, size_offset);
 
         let is_valid_val = builder.ins().icmp(
             cl_ir::condcodes::IntCC::UnsignedLessThan,
@@ -50,7 +50,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         idx: cl_ir::Value,
         elem_size: u32,
     ) -> cl_ir::Value {
-        let data_ptr = builder.ins().load(PTR_TYPE, MemFlags::new(), list_ptr, 0);
+        let data_ptr = builder.ins().load(PTR_TYPE, MemFlagsData::new(), list_ptr, 0);
         let elem_size_val = builder.ins().iconst(PTR_TYPE, elem_size as i64);
 
         // Widen index to pointer width if needed.
@@ -91,7 +91,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
 
         // Bounds check.
         let size_offset = std::mem::offset_of!(datalove_rtdt::List, size) as i32;
-        let list_size = builder.ins().load(INDEX_TYPE, MemFlags::new(), list_ptr, size_offset);
+        let list_size = builder.ins().load(INDEX_TYPE, MemFlagsData::new(), list_ptr, size_offset);
         let is_valid_val = builder.ins().icmp(
             cl_ir::condcodes::IntCC::UnsignedLessThan,
             idx,
@@ -114,7 +114,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 builder.switch_to_block(load_block);
                 builder.seal_block(load_block);
                 let elem_addr = self.compute_element_addr(builder, list_ptr, idx, elem_size);
-                let val = builder.ins().load(cl_ty, MemFlags::new(), elem_addr, 0);
+                let val = builder.ins().load(cl_ty, MemFlagsData::new(), elem_addr, 0);
                 builder.ins().jump(merge_block, &[BlockArg::from(val)]);
 
                 // Skip block: provide dummy value, jump to merge.
@@ -156,7 +156,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                     ))
                 })?;
                 let tydesc_gv = self.module.declare_data_in_func(tydesc_id, builder.func);
-                let tydesc_ptr = builder.ins().global_value(PTR_TYPE, tydesc_gv);
+                let tydesc_ptr = builder.ins().symbol_value(PTR_TYPE, tydesc_gv);
 
                 let clone_ref = self.module.declare_func_in_func(runtime.clone_local, builder.func);
                 builder.ins().call(clone_ref, &[
@@ -226,7 +226,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             ))
         })?;
         let tydesc_gv = self.module.declare_data_in_func(tydesc_id, builder.func);
-        let tydesc_ptr = builder.ins().global_value(PTR_TYPE, tydesc_gv);
+        let tydesc_ptr = builder.ins().symbol_value(PTR_TYPE, tydesc_gv);
 
         // Destroy old element.
         let destroy_ref = self.module.declare_func_in_func(runtime.destroy_local, builder.func);
@@ -236,7 +236,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         let val = self.get_operand_value(builder, value)?;
         match elem_repr {
             CraneliftRepr::Scalar(_) => {
-                builder.ins().store(MemFlags::new(), val, elem_addr, 0);
+                builder.ins().store(MemFlagsData::new(), val, elem_addr, 0);
             }
             CraneliftRepr::Aggregate(_) => {
                 let move_ref = self.module.declare_func_in_func(runtime.move_value, builder.func);

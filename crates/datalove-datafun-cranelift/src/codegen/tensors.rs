@@ -1,6 +1,6 @@
 //! Tensor indexing instruction compilation.
 
-use cranelift_codegen::ir::{self as cl_ir, BlockArg, InstBuilder, MemFlags};
+use cranelift_codegen::ir::{self as cl_ir, BlockArg, InstBuilder, MemFlagsData};
 use cranelift_frontend::FunctionBuilder;
 use cranelift_module::Module;
 
@@ -28,10 +28,10 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
 
         // Load shape pointer from Tensor struct.
         let shape_offset = std::mem::offset_of!(datalove_rtdt::Tensor, shape) as i32;
-        let shape_ptr = builder.ins().load(PTR_TYPE, MemFlags::new(), tensor_ptr, shape_offset);
+        let shape_ptr = builder.ins().load(PTR_TYPE, MemFlagsData::new(), tensor_ptr, shape_offset);
 
         // Load shape[0].
-        let dim0 = builder.ins().load(INDEX_TYPE, MemFlags::new(), shape_ptr, 0);
+        let dim0 = builder.ins().load(INDEX_TYPE, MemFlagsData::new(), shape_ptr, 0);
 
         let is_valid_val = builder.ins().icmp(
             cl_ir::condcodes::IntCC::UnsignedLessThan,
@@ -54,18 +54,18 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         elem_size: u32,
     ) -> cl_ir::Value {
         let ptr_base = builder.ins().load(
-            PTR_TYPE, MemFlags::new(), tensor_ptr,
+            PTR_TYPE, MemFlagsData::new(), tensor_ptr,
             std::mem::offset_of!(datalove_rtdt::Tensor, ptr_base) as i32,
         );
         let offset_elems = builder.ins().load(
-            INDEX_TYPE, MemFlags::new(), tensor_ptr,
+            INDEX_TYPE, MemFlagsData::new(), tensor_ptr,
             std::mem::offset_of!(datalove_rtdt::Tensor, offset_elems) as i32,
         );
         let strides_ptr = builder.ins().load(
-            PTR_TYPE, MemFlags::new(), tensor_ptr,
+            PTR_TYPE, MemFlagsData::new(), tensor_ptr,
             std::mem::offset_of!(datalove_rtdt::Tensor, strides) as i32,
         );
-        let stride0 = builder.ins().load(INDEX_TYPE, MemFlags::new(), strides_ptr, 0);
+        let stride0 = builder.ins().load(INDEX_TYPE, MemFlagsData::new(), strides_ptr, 0);
 
         // linear_offset = offset + index * stride0
         let idx_stride = builder.ins().imul(idx, stride0);
@@ -109,8 +109,8 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
 
         // Bounds check.
         let shape_offset = std::mem::offset_of!(datalove_rtdt::Tensor, shape) as i32;
-        let shape_ptr = builder.ins().load(PTR_TYPE, MemFlags::new(), tensor_ptr, shape_offset);
-        let dim0 = builder.ins().load(INDEX_TYPE, MemFlags::new(), shape_ptr, 0);
+        let shape_ptr = builder.ins().load(PTR_TYPE, MemFlagsData::new(), tensor_ptr, shape_offset);
+        let dim0 = builder.ins().load(INDEX_TYPE, MemFlagsData::new(), shape_ptr, 0);
         let is_valid_val = builder.ins().icmp(
             cl_ir::condcodes::IntCC::UnsignedLessThan,
             idx,
@@ -136,7 +136,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                     builder.switch_to_block(load_block);
                     builder.seal_block(load_block);
                     let elem_addr = self.compute_tensor_element_addr(builder, tensor_ptr, idx, elem_size);
-                    let val = builder.ins().load(cl_ty, MemFlags::new(), elem_addr, 0);
+                    let val = builder.ins().load(cl_ty, MemFlagsData::new(), elem_addr, 0);
                     builder.ins().jump(merge_block, &[BlockArg::from(val)]);
 
                     builder.switch_to_block(skip_block);
@@ -174,7 +174,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                         ))
                     })?;
                     let tydesc_gv = self.module.declare_data_in_func(tydesc_id, builder.func);
-                    let tydesc_ptr = builder.ins().global_value(PTR_TYPE, tydesc_gv);
+                    let tydesc_ptr = builder.ins().symbol_value(PTR_TYPE, tydesc_gv);
 
                     let clone_ref = self.module.declare_func_in_func(runtime.clone_local, builder.func);
                     builder.ins().call(clone_ref, &[
@@ -220,7 +220,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 ))
             })?;
             let tydesc_gv = self.module.declare_data_in_func(tydesc_id, builder.func);
-            let tydesc_ptr = builder.ins().global_value(PTR_TYPE, tydesc_gv);
+            let tydesc_ptr = builder.ins().symbol_value(PTR_TYPE, tydesc_gv);
 
             let hp_ref = self.module.declare_func_in_func(runtime.tensor_hyperplane_clone, builder.func);
             builder.ins().call(hp_ref, &[
@@ -282,7 +282,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             ))
         })?;
         let tydesc_gv = self.module.declare_data_in_func(tydesc_id, builder.func);
-        let tydesc_ptr = builder.ins().global_value(PTR_TYPE, tydesc_gv);
+        let tydesc_ptr = builder.ins().symbol_value(PTR_TYPE, tydesc_gv);
 
         // Destroy old element.
         let destroy_ref = self.module.declare_func_in_func(runtime.destroy_local, builder.func);
@@ -292,7 +292,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         let val = self.get_operand_value(builder, value)?;
         match elem_repr {
             CraneliftRepr::Scalar(_) => {
-                builder.ins().store(MemFlags::new(), val, elem_addr, 0);
+                builder.ins().store(MemFlagsData::new(), val, elem_addr, 0);
             }
             CraneliftRepr::Aggregate(_) => {
                 let move_ref = self.module.declare_func_in_func(runtime.move_value, builder.func);
@@ -343,28 +343,28 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
 
             // Load fields from parent tensor.
             let ptr_base = builder.ins().load(
-                PTR_TYPE, MemFlags::new(), tensor_ptr,
+                PTR_TYPE, MemFlagsData::new(), tensor_ptr,
                 std::mem::offset_of!(datalove_rtdt::Tensor, ptr_base) as i32,
             );
             let offset_elems = builder.ins().load(
-                INDEX_TYPE, MemFlags::new(), tensor_ptr,
+                INDEX_TYPE, MemFlagsData::new(), tensor_ptr,
                 std::mem::offset_of!(datalove_rtdt::Tensor, offset_elems) as i32,
             );
             let strides_ptr = builder.ins().load(
-                PTR_TYPE, MemFlags::new(), tensor_ptr,
+                PTR_TYPE, MemFlagsData::new(), tensor_ptr,
                 std::mem::offset_of!(datalove_rtdt::Tensor, strides) as i32,
             );
             let shape_ptr = builder.ins().load(
-                PTR_TYPE, MemFlags::new(), tensor_ptr,
+                PTR_TYPE, MemFlagsData::new(), tensor_ptr,
                 std::mem::offset_of!(datalove_rtdt::Tensor, shape) as i32,
             );
             let layout = builder.ins().load(
-                cl_ir::types::I8, MemFlags::new(), tensor_ptr,
+                cl_ir::types::I8, MemFlagsData::new(), tensor_ptr,
                 std::mem::offset_of!(datalove_rtdt::Tensor, layout) as i32,
             );
 
             // Compute new offset: offset + idx * strides[0].
-            let stride0 = builder.ins().load(INDEX_TYPE, MemFlags::new(), strides_ptr, 0);
+            let stride0 = builder.ins().load(INDEX_TYPE, MemFlagsData::new(), strides_ptr, 0);
             let idx_stride = builder.ins().imul(idx, stride0);
             let new_offset = builder.ins().iadd(offset_elems, idx_stride);
 
@@ -378,17 +378,17 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             let zero = builder.ins().iconst(INDEX_TYPE, 0);
 
             // Store all fields into the stack slot.
-            builder.ins().store(MemFlags::new(), ptr_base, view_ptr,
+            builder.ins().store(MemFlagsData::new(), ptr_base, view_ptr,
                 std::mem::offset_of!(datalove_rtdt::Tensor, ptr_base) as i32);
-            builder.ins().store(MemFlags::new(), zero, view_ptr,
+            builder.ins().store(MemFlagsData::new(), zero, view_ptr,
                 std::mem::offset_of!(datalove_rtdt::Tensor, capacity_elems) as i32);
-            builder.ins().store(MemFlags::new(), new_offset, view_ptr,
+            builder.ins().store(MemFlagsData::new(), new_offset, view_ptr,
                 std::mem::offset_of!(datalove_rtdt::Tensor, offset_elems) as i32);
-            builder.ins().store(MemFlags::new(), new_shape, view_ptr,
+            builder.ins().store(MemFlagsData::new(), new_shape, view_ptr,
                 std::mem::offset_of!(datalove_rtdt::Tensor, shape) as i32);
-            builder.ins().store(MemFlags::new(), new_strides, view_ptr,
+            builder.ins().store(MemFlagsData::new(), new_strides, view_ptr,
                 std::mem::offset_of!(datalove_rtdt::Tensor, strides) as i32);
-            builder.ins().store(MemFlags::new(), layout, view_ptr,
+            builder.ins().store(MemFlagsData::new(), layout, view_ptr,
                 std::mem::offset_of!(datalove_rtdt::Tensor, layout) as i32);
 
             self.values.insert(dest, view_ptr);

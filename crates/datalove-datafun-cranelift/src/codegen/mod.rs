@@ -72,7 +72,7 @@ use cranelift_codegen::ir::{
     self as cl_ir,
     types as cl_types,
     InstBuilder,
-    MemFlags,
+    MemFlagsData,
 };
 use cranelift_codegen::isa::TargetIsa;
 use cranelift_frontend::{FunctionBuilder, FunctionBuilderContext, Variable};
@@ -539,7 +539,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         builder.seal_all_blocks();
 
         // Finalize function.
-        builder.finalize();
+        builder.finalize(self.isa.frontend_config());
 
         // Define function in module.
         let mut ctx = cranelift_codegen::Context::new();
@@ -891,7 +891,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                         CraneliftError::Codegen("no frame slot for value spill".into())
                     })?;
                     let addr = builder.ins().stack_addr(PTR_TYPE, frame_slot, offset as i32);
-                    builder.ins().store(MemFlags::new(), val, addr, 0);
+                    builder.ins().store(MemFlagsData::new(), val, addr, 0);
                     return Ok(addr);
                 }
 
@@ -905,7 +905,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 );
                 let temp_slot = builder.create_sized_stack_slot(slot_data);
                 let addr = builder.ins().stack_addr(PTR_TYPE, temp_slot, 0);
-                builder.ins().store(MemFlags::new(), val, addr, 0);
+                builder.ins().store(MemFlagsData::new(), val, addr, 0);
                 Ok(addr)
             }
         }
@@ -942,7 +942,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 match repr {
                     CraneliftRepr::Scalar(cl_ty) => {
                         // Load scalar value from the pointer.
-                        Ok(builder.ins().load(cl_ty, MemFlags::new(), ptr, 0))
+                        Ok(builder.ins().load(cl_ty, MemFlagsData::new(), ptr, 0))
                     }
                     CraneliftRepr::Aggregate(_) => {
                         // For aggregates, return the pointer itself.
@@ -962,7 +962,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 match repr {
                     CraneliftRepr::Scalar(cl_ty) => {
                         // Load scalar value from param pointer.
-                        Ok(builder.ins().load(cl_ty, MemFlags::new(), param_ptr, 0))
+                        Ok(builder.ins().load(cl_ty, MemFlagsData::new(), param_ptr, 0))
                     }
                     CraneliftRepr::Aggregate(_) => {
                         // For aggregates, return the pointer itself.
@@ -983,7 +983,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 match repr {
                     CraneliftRepr::Scalar(cl_ty) => {
                         let addr = builder.ins().stack_addr(PTR_TYPE, frame_slot, slot_offset as i32);
-                        Ok(builder.ins().load(cl_ty, MemFlags::new(), addr, 0))
+                        Ok(builder.ins().load(cl_ty, MemFlagsData::new(), addr, 0))
                     }
                     CraneliftRepr::Aggregate(_) => {
                         // Aggregate: return pointer to slot location.
@@ -1059,7 +1059,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 .expect("tracking requires frame slot");
             let track_addr = builder.ins().stack_addr(PTR_TYPE, frame_slot, track_offset as i32);
             let live_val = builder.ins().iconst(cl_types::I8, tracking::LIVE as i64);
-            builder.ins().store(MemFlags::new(), live_val, track_addr, 0);
+            builder.ins().store(MemFlagsData::new(), live_val, track_addr, 0);
         }
     }
 
@@ -1076,7 +1076,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 .expect("tracking requires frame slot");
             let track_addr = builder.ins().stack_addr(PTR_TYPE, frame_slot, track_offset as i32);
             let moved_val = builder.ins().iconst(cl_types::I8, tracking::MOVED as i64);
-            builder.ins().store(MemFlags::new(), moved_val, track_addr, 0);
+            builder.ins().store(MemFlagsData::new(), moved_val, track_addr, 0);
         }
     }
 
@@ -1104,7 +1104,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 .expect("tracking requires frame slot");
             let track_addr = builder.ins().stack_addr(PTR_TYPE, frame_slot, track_offset as i32);
             let live_val = builder.ins().iconst(cl_types::I8, tracking::LIVE as i64);
-            builder.ins().store(MemFlags::new(), live_val, track_addr, 0);
+            builder.ins().store(MemFlagsData::new(), live_val, track_addr, 0);
         }
     }
 
@@ -1153,9 +1153,9 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             let frame_addr = builder.ins().stack_addr(PTR_TYPE, frame_slot, 0);
             let live_val = builder.ins().iconst(cl_types::I8, tracking::LIVE as i64);
             let uninit_val = builder.ins().iconst(cl_types::I8, tracking::UNINIT as i64);
-            let track_addr = builder.ins().iadd_imm(frame_addr, track_offset as i64);
+            let track_addr = builder.ins().iadd_imm_s(frame_addr, track_offset as i64);
             let track_val = builder.ins().select(is_valid_val, live_val, uninit_val);
-            builder.ins().store(MemFlags::new(), track_val, track_addr, 0);
+            builder.ins().store(MemFlagsData::new(), track_val, track_addr, 0);
         }
     }
 }

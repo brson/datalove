@@ -13,10 +13,10 @@ datalove-datafun-cranelift.path = "../datalove-datafun-cranelift"
 datalove-rtdt.path = "../datalove-rtdt"
 datalove-rt.path = "../datalove-rt"
 
-cranelift-codegen = "0.128"
-cranelift-frontend = "0.128"
-cranelift-module = "0.128"
-cranelift-jit = "0.128"
+cranelift-codegen = "0.135"
+cranelift-frontend = "0.135"
+cranelift-module = "0.135"
+cranelift-jit = "0.135"
 target-lexicon = "0.13"
 
 [dev-dependencies]

@@ -364,7 +364,7 @@ impl AotCompiler {
         let zero = builder.ins().iconst(cl_types::I32, 0);
         builder.ins().return_(&[zero]);
 
-        builder.finalize();
+        builder.finalize(self.isa.frontend_config());
 
         // Define function in module.
         let mut ctx = cranelift_codegen::Context::new();

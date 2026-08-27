@@ -255,7 +255,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             CraneliftError::Codegen("TyDesc not found for Int".into())
         })?;
         let int_tydesc_gv = self.module.declare_data_in_func(int_tydesc_id, builder.func);
-        let int_tydesc_ptr = builder.ins().global_value(PTR_TYPE, int_tydesc_gv);
+        let int_tydesc_ptr = builder.ins().symbol_value(PTR_TYPE, int_tydesc_gv);
 
         // Call runtime function: (rt, a_in, a_tydesc, b_in, b_tydesc, result_out, result_tydesc) -> status
         let func_ref = self.module.declare_func_in_func(func_id, builder.func);
@@ -304,7 +304,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             CraneliftError::Codegen("TyDesc not found for Int".into())
         })?;
         let int_tydesc_gv = self.module.declare_data_in_func(int_tydesc_id, builder.func);
-        let int_tydesc_ptr = builder.ins().global_value(PTR_TYPE, int_tydesc_gv);
+        let int_tydesc_ptr = builder.ins().symbol_value(PTR_TYPE, int_tydesc_gv);
 
         // Call runtime function: (rt, a_in, a_tydesc, result_out, result_tydesc) -> status
         let func_ref = self.module.declare_func_in_func(runtime.int_neg, builder.func);
@@ -352,7 +352,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             CraneliftError::Codegen("TyDesc not found for Int".into())
         })?;
         let int_tydesc_gv = self.module.declare_data_in_func(int_tydesc_id, builder.func);
-        let int_tydesc_ptr = builder.ins().global_value(PTR_TYPE, int_tydesc_gv);
+        let int_tydesc_ptr = builder.ins().symbol_value(PTR_TYPE, int_tydesc_gv);
 
         // Call runtime function: (rt, a_ref, a_tydesc, b_ref, b_tydesc) -> RtOrdering
         let func_ref = self.module.declare_func_in_func(runtime.int_cmp, builder.func);
@@ -637,7 +637,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             CraneliftError::Codegen(format!("TyDesc not found for source type {:?}", src_ty))
         })?;
         let src_tydesc_gv = self.module.declare_data_in_func(src_tydesc_id, builder.func);
-        let src_tydesc_ptr = builder.ins().global_value(PTR_TYPE, src_tydesc_gv);
+        let src_tydesc_ptr = builder.ins().symbol_value(PTR_TYPE, src_tydesc_gv);
 
         // Get frame slot and destination address for Int result.
         let frame_slot = self.frame_slot.ok_or_else(|| {
@@ -651,7 +651,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             CraneliftError::Codegen("TyDesc not found for Int".into())
         })?;
         let int_tydesc_gv = self.module.declare_data_in_func(int_tydesc_id, builder.func);
-        let int_tydesc_ptr = builder.ins().global_value(PTR_TYPE, int_tydesc_gv);
+        let int_tydesc_ptr = builder.ins().symbol_value(PTR_TYPE, int_tydesc_gv);
 
         // Call runtime function: (rt, src_in, src_tydesc, result_out, result_tydesc) -> status
         let func_ref = self.module.declare_func_in_func(runtime.int_from_fixed, builder.func);
@@ -692,7 +692,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             CraneliftError::Codegen(format!("TyDesc not found for source type {:?}", src_ty))
         })?;
         let src_tydesc_gv = self.module.declare_data_in_func(src_tydesc_id, builder.func);
-        let src_tydesc_ptr = builder.ins().global_value(PTR_TYPE, src_tydesc_gv);
+        let src_tydesc_ptr = builder.ins().symbol_value(PTR_TYPE, src_tydesc_gv);
 
         // Get frame slot and destination address for cloned result.
         let frame_slot = self.frame_slot.ok_or_else(|| {

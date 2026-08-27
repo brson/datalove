@@ -1,6 +1,6 @@
 //! Map indexing instruction compilation.
 
-use cranelift_codegen::ir::{self as cl_ir, types as cl_types, BlockArg, InstBuilder, MemFlags};
+use cranelift_codegen::ir::{self as cl_ir, types as cl_types, BlockArg, InstBuilder, MemFlagsData};
 use cranelift_frontend::FunctionBuilder;
 use cranelift_module::Module;
 
@@ -58,13 +58,13 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             CraneliftError::Codegen(format!("TyDesc not found for map type {:?}", map_ty))
         })?;
         let map_tydesc_gv = self.module.declare_data_in_func(map_tydesc_id, builder.func);
-        let map_tydesc_ptr = builder.ins().global_value(PTR_TYPE, map_tydesc_gv);
+        let map_tydesc_ptr = builder.ins().symbol_value(PTR_TYPE, map_tydesc_gv);
 
         let key_tydesc_id = self.tydesc_emitter.get(&key_ty).ok_or_else(|| {
             CraneliftError::Codegen(format!("TyDesc not found for key type {:?}", key_ty))
         })?;
         let key_tydesc_gv = self.module.declare_data_in_func(key_tydesc_id, builder.func);
-        let key_tydesc_ptr = builder.ins().global_value(PTR_TYPE, key_tydesc_gv);
+        let key_tydesc_ptr = builder.ins().symbol_value(PTR_TYPE, key_tydesc_gv);
 
         Ok(MapSetup {
             map_ptr,
@@ -87,7 +87,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             CraneliftError::Codegen(format!("TyDesc not found for type {:?}", ty))
         })?;
         let tydesc_gv = self.module.declare_data_in_func(tydesc_id, builder.func);
-        Ok(builder.ins().global_value(PTR_TYPE, tydesc_gv))
+        Ok(builder.ins().symbol_value(PTR_TYPE, tydesc_gv))
     }
 
     /// Compile a MapContainsKey instruction.
@@ -121,8 +121,8 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         ]);
 
         // Load the bool result.
-        let result_val = builder.ins().load(cl_types::I8, MemFlags::new(), result_addr, 0);
-        let is_valid_val = builder.ins().icmp_imm(
+        let result_val = builder.ins().load(cl_types::I8, MemFlagsData::new(), result_addr, 0);
+        let is_valid_val = builder.ins().icmp_imm_s(
             cl_ir::condcodes::IntCC::NotEqual,
             result_val,
             0,
@@ -164,7 +164,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             vref_addr,
         ]);
 
-        let value_ptr = builder.ins().load(PTR_TYPE, MemFlags::new(), vref_addr, 0);
+        let value_ptr = builder.ins().load(PTR_TYPE, MemFlagsData::new(), vref_addr, 0);
         let null_ptr = builder.ins().iconst(PTR_TYPE, 0);
         let is_valid_val = builder.ins().icmp(
             cl_ir::condcodes::IntCC::NotEqual,
@@ -188,7 +188,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 builder.switch_to_block(load_block);
                 builder.seal_block(load_block);
 
-                let val = builder.ins().load(cl_ty, MemFlags::new(), value_ptr, 0);
+                let val = builder.ins().load(cl_ty, MemFlagsData::new(), value_ptr, 0);
                 builder.ins().jump(merge_block, &[BlockArg::from(val)]);
 
                 // Skip block: dummy value.
@@ -302,7 +302,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             vref_addr,
         ]);
 
-        let value_ptr = builder.ins().load(PTR_TYPE, MemFlags::new(), vref_addr, 0);
+        let value_ptr = builder.ins().load(PTR_TYPE, MemFlagsData::new(), vref_addr, 0);
         self.values.insert(dest, value_ptr);
         Ok(())
     }

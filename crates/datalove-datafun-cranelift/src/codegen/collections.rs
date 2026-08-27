@@ -50,14 +50,14 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             CraneliftError::Codegen(format!("TyDesc not found for {:?}", list_ty))
         })?;
         let list_tydesc_gv = self.module.declare_data_in_func(list_tydesc_id, builder.func);
-        let list_tydesc_ptr = builder.ins().global_value(PTR_TYPE, list_tydesc_gv);
+        let list_tydesc_ptr = builder.ins().symbol_value(PTR_TYPE, list_tydesc_gv);
 
         // Get element TyDesc.
         let elem_tydesc_id = self.tydesc_emitter.get(&elem_ty).ok_or_else(|| {
             CraneliftError::Codegen(format!("TyDesc not found for element type {:?}", elem_ty))
         })?;
         let elem_tydesc_gv = self.module.declare_data_in_func(elem_tydesc_id, builder.func);
-        let elem_tydesc_ptr = builder.ins().global_value(PTR_TYPE, elem_tydesc_gv);
+        let elem_tydesc_ptr = builder.ins().symbol_value(PTR_TYPE, elem_tydesc_gv);
 
         // Create empty list.
         let create_ref = self.module.declare_func_in_func(runtime.list_create, builder.func);
@@ -115,14 +115,14 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             CraneliftError::Codegen(format!("TyDesc not found for {:?}", set_ty))
         })?;
         let set_tydesc_gv = self.module.declare_data_in_func(set_tydesc_id, builder.func);
-        let set_tydesc_ptr = builder.ins().global_value(PTR_TYPE, set_tydesc_gv);
+        let set_tydesc_ptr = builder.ins().symbol_value(PTR_TYPE, set_tydesc_gv);
 
         // Get element TyDesc.
         let elem_tydesc_id = self.tydesc_emitter.get(&elem_ty).ok_or_else(|| {
             CraneliftError::Codegen(format!("TyDesc not found for element type {:?}", elem_ty))
         })?;
         let elem_tydesc_gv = self.module.declare_data_in_func(elem_tydesc_id, builder.func);
-        let elem_tydesc_ptr = builder.ins().global_value(PTR_TYPE, elem_tydesc_gv);
+        let elem_tydesc_ptr = builder.ins().symbol_value(PTR_TYPE, elem_tydesc_gv);
 
         // Create empty set.
         let create_ref = self.module.declare_func_in_func(runtime.set_create, builder.func);
@@ -189,21 +189,21 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             CraneliftError::Codegen(format!("TyDesc not found for {:?}", map_ty))
         })?;
         let map_tydesc_gv = self.module.declare_data_in_func(map_tydesc_id, builder.func);
-        let map_tydesc_ptr = builder.ins().global_value(PTR_TYPE, map_tydesc_gv);
+        let map_tydesc_ptr = builder.ins().symbol_value(PTR_TYPE, map_tydesc_gv);
 
         // Get key TyDesc.
         let key_tydesc_id = self.tydesc_emitter.get(&key_ty).ok_or_else(|| {
             CraneliftError::Codegen(format!("TyDesc not found for key type {:?}", key_ty))
         })?;
         let key_tydesc_gv = self.module.declare_data_in_func(key_tydesc_id, builder.func);
-        let key_tydesc_ptr = builder.ins().global_value(PTR_TYPE, key_tydesc_gv);
+        let key_tydesc_ptr = builder.ins().symbol_value(PTR_TYPE, key_tydesc_gv);
 
         // Get value TyDesc.
         let val_tydesc_id = self.tydesc_emitter.get(&val_ty).ok_or_else(|| {
             CraneliftError::Codegen(format!("TyDesc not found for value type {:?}", val_ty))
         })?;
         let val_tydesc_gv = self.module.declare_data_in_func(val_tydesc_id, builder.func);
-        let val_tydesc_ptr = builder.ins().global_value(PTR_TYPE, val_tydesc_gv);
+        let val_tydesc_ptr = builder.ins().symbol_value(PTR_TYPE, val_tydesc_gv);
 
         // Create empty map.
         let create_ref = self.module.declare_func_in_func(runtime.map_create, builder.func);
@@ -265,14 +265,14 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             CraneliftError::Codegen(format!("TyDesc not found for {:?}", tensor_ty))
         })?;
         let tensor_tydesc_gv = self.module.declare_data_in_func(tensor_tydesc_id, builder.func);
-        let tensor_tydesc_ptr = builder.ins().global_value(PTR_TYPE, tensor_tydesc_gv);
+        let tensor_tydesc_ptr = builder.ins().symbol_value(PTR_TYPE, tensor_tydesc_gv);
 
         // Get element TyDesc.
         let elem_tydesc_id = self.tydesc_emitter.get(&elem_ty).ok_or_else(|| {
             CraneliftError::Codegen(format!("TyDesc not found for element type {:?}", elem_ty))
         })?;
         let elem_tydesc_gv = self.module.declare_data_in_func(elem_tydesc_id, builder.func);
-        let elem_tydesc_ptr = builder.ins().global_value(PTR_TYPE, elem_tydesc_gv);
+        let elem_tydesc_ptr = builder.ins().symbol_value(PTR_TYPE, elem_tydesc_gv);
 
         // Get element size from the type.
         let elem_size = crate::types::ir_type_size(&elem_ty);
@@ -318,7 +318,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         for (i, &dim) in shape.iter().enumerate() {
             let offset = (i * std::mem::size_of::<u32>()) as i32;
             let dim_val = builder.ins().iconst(cl_types::I32, dim as i64);
-            builder.ins().store(cl_ir::MemFlags::new(), dim_val, shape_ptr, offset);
+            builder.ins().store(cl_ir::MemFlagsData::new(), dim_val, shape_ptr, offset);
         }
 
         // Call tensor_init runtime function.
@@ -385,14 +385,14 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             CraneliftError::Codegen(format!("TyDesc not found for {:?}", table_ty))
         })?;
         let table_tydesc_gv = self.module.declare_data_in_func(table_tydesc_id, builder.func);
-        let table_tydesc_ptr = builder.ins().global_value(PTR_TYPE, table_tydesc_gv);
+        let table_tydesc_ptr = builder.ins().symbol_value(PTR_TYPE, table_tydesc_gv);
 
         // Get row (tuple) TyDesc.
         let row_tydesc_id = self.tydesc_emitter.get(&row_ty).ok_or_else(|| {
             CraneliftError::Codegen(format!("TyDesc not found for row type {:?}", row_ty))
         })?;
         let row_tydesc_gv = self.module.declare_data_in_func(row_tydesc_id, builder.func);
-        let row_tydesc_ptr = builder.ins().global_value(PTR_TYPE, row_tydesc_gv);
+        let row_tydesc_ptr = builder.ins().symbol_value(PTR_TYPE, row_tydesc_gv);
 
         // Create empty table.
         let create_ref = self.module.declare_func_in_func(runtime.table_create, builder.func);

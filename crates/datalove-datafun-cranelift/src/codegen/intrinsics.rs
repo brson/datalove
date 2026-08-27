@@ -160,11 +160,11 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             // F32 bit conversion.
             F32ToBits => {
                 let a = self.get_operand_value(builder, &args[0])?;
-                builder.ins().bitcast(cl_ir::types::I32, cl_ir::MemFlags::new(), a)
+                builder.ins().bitcast(cl_ir::types::I32, cl_ir::MemFlagsData::new(), a)
             }
             BitsToF32 => {
                 let a = self.get_operand_value(builder, &args[0])?;
-                builder.ins().bitcast(cl_ir::types::F32, cl_ir::MemFlags::new(), a)
+                builder.ins().bitcast(cl_ir::types::F32, cl_ir::MemFlagsData::new(), a)
             }
 
             // F32 math intrinsics.
@@ -225,11 +225,11 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             // F64 bit conversion.
             F64ToBits => {
                 let a = self.get_operand_value(builder, &args[0])?;
-                builder.ins().bitcast(cl_ir::types::I64, cl_ir::MemFlags::new(), a)
+                builder.ins().bitcast(cl_ir::types::I64, cl_ir::MemFlagsData::new(), a)
             }
             BitsToF64 => {
                 let a = self.get_operand_value(builder, &args[0])?;
-                builder.ins().bitcast(cl_ir::types::F64, cl_ir::MemFlags::new(), a)
+                builder.ins().bitcast(cl_ir::types::F64, cl_ir::MemFlagsData::new(), a)
             }
 
             // F64 math intrinsics.

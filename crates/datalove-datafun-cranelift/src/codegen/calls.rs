@@ -1,6 +1,6 @@
 //! Function call instruction compilation.
 
-use cranelift_codegen::ir::{InstBuilder, MemFlags};
+use cranelift_codegen::ir::{InstBuilder, MemFlagsData};
 use cranelift_frontend::FunctionBuilder;
 use cranelift_module::{FuncId, Module};
 
@@ -88,7 +88,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 let frame_slot = self.frame_slot.unwrap();
                 let dest_offset = self.layout.value_offset(dest.0);
                 let ptr = builder.ins().stack_addr(PTR_TYPE, frame_slot, dest_offset as i32);
-                let loaded = builder.ins().load(scalar_ty, MemFlags::new(), ptr, 0);
+                let loaded = builder.ins().load(scalar_ty, MemFlagsData::new(), ptr, 0);
                 self.values.insert(dest, loaded);
             }
         }
@@ -137,7 +137,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 ))
             })?;
             let tydesc_gv = self.module.declare_data_in_func(tydesc_id, builder.func);
-            let tydesc_addr = builder.ins().global_value(PTR_TYPE, tydesc_gv);
+            let tydesc_addr = builder.ins().symbol_value(PTR_TYPE, tydesc_gv);
 
             call_args.push(arg_ptr);
             call_args.push(tydesc_addr);
@@ -157,7 +157,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             ))
         })?;
         let dest_tydesc_gv = self.module.declare_data_in_func(dest_tydesc_id, builder.func);
-        let dest_tydesc_addr = builder.ins().global_value(PTR_TYPE, dest_tydesc_gv);
+        let dest_tydesc_addr = builder.ins().symbol_value(PTR_TYPE, dest_tydesc_gv);
 
         call_args.push(dest_ptr);
         call_args.push(dest_tydesc_addr);
@@ -170,7 +170,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         // For scalars, load the value; for aggregates, use the pointer.
         match types::ir_type_to_cranelift(dest_ty) {
             CraneliftRepr::Scalar(scalar_ty) => {
-                let loaded = builder.ins().load(scalar_ty, MemFlags::new(), dest_ptr, 0);
+                let loaded = builder.ins().load(scalar_ty, MemFlagsData::new(), dest_ptr, 0);
                 self.values.insert(dest, loaded);
             }
             CraneliftRepr::Aggregate(_) => {

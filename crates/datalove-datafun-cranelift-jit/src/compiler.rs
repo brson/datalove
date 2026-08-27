@@ -431,7 +431,7 @@ impl JitCompiler {
             // Store each arg pointer in the array.
             for (i, &arg) in user_args.iter().enumerate() {
                 let offset = (i * 8) as i32;
-                builder.ins().stack_store(arg, slot, offset);
+                builder.ins().stack_store(PTR_TYPE, arg, slot, offset);
             }
             Some(slot)
         } else {
@@ -472,7 +472,7 @@ impl JitCompiler {
         // All stubs return void. Sret results are written by the callee.
         builder.ins().return_(&[]);
 
-        builder.finalize();
+        builder.finalize(self.jit_module.target_config());
 
         // Define the function in the module.
         let mut ctx = cranelift_codegen::Context::new();
@@ -562,7 +562,7 @@ fn create_indirect_trampoline(
     let results: Vec<_> = builder.inst_results(call).to_vec();
     builder.ins().return_(&results);
 
-    builder.finalize();
+    builder.finalize(jit_module.target_config());
 
     // Define the function in the JIT module.
     let mut ctx = cranelift_codegen::Context::for_function(cl_func);
