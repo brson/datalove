@@ -6,7 +6,6 @@
 
 use rmx::prelude::*;
 use std::collections::{HashMap, HashSet};
-use salsa::plumbing::AsId;
 use datalove_datafun_ast::ast::{Statement, ExprFun, ExprFunKind};
 use datalove_datafun_ir::{
     IrType, IrModuleId, FuncId, ValueId, SlotId, ExportBinding,
@@ -157,13 +156,16 @@ pub fn collect_const_graph<'db>(
 
     let expr_types = typecheck_result.expr_types(db);
 
+    // The expression each binding was collected from, so that the second pass
+    // does not have to go looking for it again.
+    let mut binding_exprs = Vec::new();
+
     for stmt in &statements {
         if let Statement::Const(const_stmt) = stmt {
             let expr = const_stmt.value;
-            // Use the expression's salsa ID as the const's ID (unique per const).
-            let stmt_id = expr.as_id();
+            // Const statements are numbered in the order they appear.
+            let stmt_id = ConstStmtId(bindings.len() as u32);
             let name = const_stmt.name.text(db).to_string();
-            let expr_id = expr.as_id();
 
             // Get the type from the typechecker's table.
             let ir_type = expr_types
@@ -173,10 +175,10 @@ pub fn collect_const_graph<'db>(
 
             const_names.insert(name.clone());
             name_to_stmt.insert(name.clone(), stmt_id);
+            binding_exprs.push(expr);
             bindings.push(ConstBindingInfo {
                 stmt_id,
                 name,
-                expr_id,
                 ir_type,
                 depends_on: Vec::new(), // Filled in second pass.
             });
@@ -184,18 +186,8 @@ pub fn collect_const_graph<'db>(
     }
 
     // Second pass: analyze dependencies.
-    for binding in &mut bindings {
-        // Find the expression for this binding.
-        let expr = statements.iter()
-            .find_map(|s| match s {
-                Statement::Const(c) if c.value.as_id() == binding.stmt_id => Some(c.value),
-                _ => None,
-            });
-
-        if let Some(expr) = expr {
-            let deps = find_const_refs(db, expr, &const_names, &name_to_stmt);
-            binding.depends_on = deps;
-        }
+    for (binding, expr) in bindings.iter_mut().zip(&binding_exprs) {
+        binding.depends_on = find_const_refs(db, *expr, &const_names, &name_to_stmt);
     }
 
     // Topological sort (dependencies before dependents).

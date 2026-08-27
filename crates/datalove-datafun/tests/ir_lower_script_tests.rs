@@ -18,7 +18,6 @@ use datalove_datafun_compiler::tracked_script_ownership::ScriptAnalysisData;
 use datalove_datafun_compiler::IrTypeExt;
 use datalove_datafun_ir::{IrType, ConstBindingInfo, ConstBindingGraph, ConstValue, ResolvedConsts};
 use datalove_datafun_interp::InterpCtfeEvaluator;
-use salsa::plumbing::AsId;
 use bct::input::Source;
 use datalove_datafun_ast::ast::Statement;
 
@@ -44,8 +43,7 @@ fn build_const_graph<'db>(
     for stmt in stmts {
         if let Statement::Const(const_stmt) = stmt {
             let expr = const_stmt.value;
-            let stmt_id = expr.as_id();
-            let expr_id = stmt_id;
+            let stmt_id = datalove_datafun_ir::ConstStmtId(bindings.len() as u32);
             let name = const_stmt.name.text(db).to_string();
             // Get the type from the typechecker's table.
             let ir_type = expr_types
@@ -56,7 +54,6 @@ fn build_const_graph<'db>(
             bindings.push(ConstBindingInfo {
                 stmt_id,
                 name,
-                expr_id,
                 ir_type,
                 depends_on: Vec::new(), // Simple test case: no dependencies.
             });
@@ -184,14 +181,16 @@ fn analyze_file(path: &Path) -> Result<String, String> {
                     let mut resolved_consts_map: HashMap<String, (IrType, ConstValue)> = HashMap::new();
                     let mut ctfe_error = None;
 
+                    // A binding's id is its position among the const statements.
+                    let const_exprs: Vec<_> = stmts.iter()
+                        .filter_map(|s| match s {
+                            Statement::Const(c) => Some(c.value),
+                            _ => None,
+                        })
+                        .collect();
+
                     for binding in &const_graph.bindings {
-                        // Find the expression for this binding.
-                        let expr = stmts.iter()
-                            .find_map(|s| match s {
-                                Statement::Const(c) if c.value.as_id() == binding.stmt_id => Some(c.value),
-                                _ => None,
-                            })
-                            .expect("const binding expression not found");
+                        let expr = const_exprs[binding.stmt_id.0 as usize];
 
                         // Lower the const binding.
                         let lower_result = lower_const_binding(

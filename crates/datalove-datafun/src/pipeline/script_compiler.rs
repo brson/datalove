@@ -28,7 +28,6 @@ use std::collections::HashMap;
 use std::rc::Rc;
 use std::sync::Arc;
 
-use salsa::plumbing::AsId;
 use datalove_datafun_ast::ast::{ExprFun, ParsedStatements, Statement};
 use datalove_datafun_compiler::lower::{
     lower_script_fragment_raw, lower_script_expr, lower_script_functions,
@@ -733,14 +732,17 @@ impl<'db> ScriptCompiler<'db> {
         let mut resolved = ResolvedConsts::new();
         let mut resolved_consts_map: HashMap<String, (IrType, ConstValue)> = HashMap::new();
 
+        // A binding's id is its position among the const statements, so the
+        // expressions only have to be gathered once.
+        let const_exprs: Vec<_> = statements.iter()
+            .filter_map(|s| match s {
+                Statement::Const(c) => Some(c.value),
+                _ => None,
+            })
+            .collect();
+
         for binding in &const_graph.bindings {
-            // Find the expression for this binding.
-            let expr = statements.iter()
-                .find_map(|s| match s {
-                    Statement::Const(c) if c.value.as_id() == binding.stmt_id => Some(c.value),
-                    _ => None,
-                })
-                .expect("const binding expression not found");
+            let expr = const_exprs[binding.stmt_id.0 as usize];
 
             // Lower the const binding to get either a simple value or an IR unit.
             // Pass the module func_id_map for cross-module CTFE function calls.

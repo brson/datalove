@@ -1838,14 +1838,19 @@ impl CtfeEvaluator for NoopCtfeEvaluator {
 // CTFE Memoization Types
 // ============================================================================
 
-/// Identifier for a const statement in the AST.
+/// Identifier for a const statement within a script unit.
 ///
-/// Uses salsa's opaque ID type to reference const statements across
-/// compilation phases without coupling to specific AST types.
-pub type ConstStmtId = salsa::Id;
-
-/// Identifier for a const expression in the AST.
-pub type ConstExprId = salsa::Id;
+/// Const statements are numbered in source order as they are collected, so
+/// the identifier means the same thing to every phase that reads it and
+/// keeps meaning it across edits and across runs.
+///
+/// This used to be a `salsa::Id`, on the grounds that an opaque id avoided
+/// coupling the IR to specific AST types. It coupled it to something worse:
+/// a salsa id is an index and a generation, it is only meaningful in the
+/// revision that minted it, and it renumbers between salsa releases. The IR
+/// is what the backends read, and it should not be able to see any of that.
+#[derive(Clone, Copy, Debug, Hash, Eq, PartialEq, Ord, PartialOrd)]
+pub struct ConstStmtId(pub u32);
 
 /// Global identifier for a const binding across script units.
 ///
@@ -1868,8 +1873,6 @@ pub struct ConstBindingInfo {
     pub stmt_id: ConstStmtId,
     /// Name of the const binding (for error messages and lookup).
     pub name: String,
-    /// ID of the expression to evaluate.
-    pub expr_id: ConstExprId,
     /// Expected type of the const value.
     pub ir_type: IrType,
     /// Other const bindings this one depends on.
