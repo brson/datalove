@@ -1210,7 +1210,65 @@ Key files added:
 
 ### Known Issues Discovered
 
-#### Open: CTFE leaks heap values returned through a call
+#### Fixed: the three faults below, and one they were hiding
+
+All three had one cause. A const in a function body lowers as a let and the
+inlining pass swaps the value in later, orphaning the instructions that computed
+it. `inline_script_consts` had always run dead code elimination for exactly that;
+the two function paths ran only dead *block* elimination. Enabling it there
+exposed why it had never run on a function: `instruction_dest` reports one
+destination and five instructions define more, each extra one the flag a branch
+tests, so removing an unwrap for an unread payload left the branch reading a
+value nothing defined.
+
+Separately `lower_binop` ended with the take-all `emit_expr_temp_drops`, which
+took temporaries an enclosing expression still held. That panicked in `split_off`
+for calls on both sides of an operator, and where it did not panic it dropped
+early: `(x * m) + (y * n) + z` on bigints emitted `drop v0` before `add v0, v1`
+read it.
+
+Fixtures: interp 944, 945, 946 and dual 423. Each was checked by reverting its
+fix and confirming the failure.
+
+#### Open: module-level consts
+
+Rejected with F056. Wanted, and the phasing that got them removed is no longer
+the obstacle it was.
+
+The removed implementation passed module const values *into* lowering as
+`module_consts_ref`, so they had to exist before the module's functions were
+lowered, while evaluating one could call those functions. That cycle is why the
+deleted code had a "simple literals only" fallback. It is not inherent:
+`evaluate_all_module_consts` already runs *after* lowering and evaluates
+function-level consts by calling into already-lowered functions.
+
+What is left is the reference side, and it is more delicate than it looks.
+Typechecking module consts is a small change, confirmed by making it and
+watching lowering panic at `expr.rs:35` instead. The options:
+
+- **Pre-evaluate before lowering.** The original approach, and the original
+  cycle. No.
+- **Placeholder at the reference site,** substituted at inlining. Breaks under
+  `skip_const_inlining`, where the placeholder is what runs.
+- **Lower the const's expression at each reference.** Works in both modes, but
+  the synthetic binding has no `BindingId`, so ownership analysis never schedules
+  its drop and a linear module const leaks. This is the same class of fault as
+  the three above and should not be reintroduced.
+- **Hoist into each referencing function's body before ownership analysis,** as
+  though the const had been written there. Everything downstream then works
+  unchanged: analysis schedules the drop, `evaluate_all_module_consts` finds it
+  by walking function bodies, and inlining folds it under the qualified name.
+  Costs an AST rewrite mid-pipeline.
+- **Stratify.** Lower functions that reference no module const, evaluate the
+  module consts, then lower the rest, with the values reaching `lookup_const` so
+  the existing fresh-const-per-reference path handles drops. A module const
+  calling a function that reads a module const is a genuine cycle and should be
+  a diagnostic, not a fallback.
+
+The last two are the real candidates. Stratifying reuses the existing reference
+path, which is the part that already gets drops right.
+
+#### Was open, now fixed: CTFE leaks heap values returned through a call
 
 A const whose value is produced by calling a function that returns a linear type trips
 the runtime leak detector at `alloc.rs`. A function that returns its argument is enough;
@@ -1226,18 +1284,18 @@ const A: int = id(5)        // leak; `const A: int = 5` and `2 + 3` are fine
 const B: u32 = idu(5)       // fine, copy return type
 ```
 
-#### Open: CTFE leaks collections with linear elements
+#### Was open, now fixed: CTFE leaks collections with linear elements
 
 ```datalove
 const E: [int] = [1, 2, 3]  // leak
 const F: [u32] = [1]        // fine
 ```
 
-The element values are not released. Together with the previous issue this is the main
-thing to fix before CTFE is asked to produce structured values, which anything type-level
-would require.
+The element values are not released. Together with the previous issue this was the main
+thing to fix before CTFE could be asked to produce structured values, which anything
+type-level would require.
 
-#### Open: calls in binary operand position panic lowering
+#### Was open, now fixed: calls in binary operand position panic lowering
 
 ```datalove
 ret fib(n - 1) + fib(n - 2)
