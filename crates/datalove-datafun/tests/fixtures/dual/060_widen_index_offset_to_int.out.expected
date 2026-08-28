@@ -1,0 +1,119 @@
+DualAnalysis(
+    sections: [
+        DualSectionResult(
+            section_type: "scriptunit-fragment",
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            interp_lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 0index
+                        v1 = call @0 u0(v0)
+                        debuglog v1
+                        drop v1
+                        v2 = const 7index
+                        v3 = call @1 u0(v2)
+                        debuglog v3
+                        drop v3
+                        v4 = const 4294967295index
+                        v5 = call @2 u0(v4)
+                        debuglog v5
+                        drop v5
+                        v6 = const 0offset
+                        v7 = call @3 u1(v6)
+                        debuglog v7
+                        drop v7
+                        v8 = const 7offset
+                        v9 = call @4 u1(v8)
+                        debuglog v9
+                        drop v9
+                        v10 = const -7offset
+                        v11 = call @5 u1(v10)
+                        debuglog v11
+                        drop v11
+                        v12 = const -2147483648offset
+                        v13 = call @6 u1(v12)
+                        debuglog v13
+                        drop v13
+                        unit_end
+                    
+                    fn from_index(p0):
+                    block0:
+                        v0 = widen p0
+                        return v0
+                    
+                    fn from_offset(p0):
+                    block0:
+                        v0 = widen p0
+                        return v0
+                """,
+            ),
+            aot_lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 0index
+                        v1 = call @0 u0(v0)
+                        debuglog v1
+                        drop v1
+                        v2 = const 7index
+                        v3 = call @1 u0(v2)
+                        debuglog v3
+                        drop v3
+                        v4 = const 4294967295index
+                        v5 = call @2 u0(v4)
+                        debuglog v5
+                        drop v5
+                        v6 = const 0offset
+                        v7 = call @3 u1(v6)
+                        debuglog v7
+                        drop v7
+                        v8 = const 7offset
+                        v9 = call @4 u1(v8)
+                        debuglog v9
+                        drop v9
+                        v10 = const -7offset
+                        v11 = call @5 u1(v10)
+                        debuglog v11
+                        drop v11
+                        v12 = const -2147483648offset
+                        v13 = call @6 u1(v12)
+                        debuglog v13
+                        drop v13
+                        unit_end
+                    
+                    fn from_index(p0):
+                    block0:
+                        v0 = widen p0
+                        return v0
+                    
+                    fn from_offset(p0):
+                    block0:
+                        v0 = widen p0
+                        return v0
+                """,
+            ),
+            ir_match: true,
+            interp_output: "0\n7\n4294967295\n0\n7\n-7\n-2147483648\n",
+            aot_output: "0\n7\n4294967295\n0\n7\n-7\n-2147483648\n",
+            output_match: true,
+            aot_compile: Some(AotCompileResult(
+                status: "Success",
+            )),
+            link: Some(LinkResult(
+                status: "Success",
+            )),
+            execution: Some(ExecutionResult(
+                status: "Success",
+                exit_code: 0,
+            )),
+        ),
+    ],
+)

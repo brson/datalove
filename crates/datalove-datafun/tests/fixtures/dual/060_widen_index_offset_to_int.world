@@ -1,0 +1,23 @@
+----------
+scriptunit-fragment
+----------
+
+// index and offset widen to int via @. They do not participate in
+// fixed-to-fixed widening, so int is the only target.
+fun from_index(x: index): int
+    let w: int = x@
+    ret w
+end fun
+
+fun from_offset(x: offset): int
+    let w: int = x@
+    ret w
+end fun
+
+debuglog from_index(: index / 0)
+debuglog from_index(: index / 7)
+debuglog from_index(: index / 4294967295)
+debuglog from_offset(: offset / 0)
+debuglog from_offset(: offset / 7)
+debuglog from_offset(: offset / -7)
+debuglog from_offset(: offset / -2147483648)

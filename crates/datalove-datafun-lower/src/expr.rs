@@ -375,7 +375,7 @@ fn emit_owned_copy<'db>(
         }
     } else if is_fixed_width_int(&src_type) && is_fixed_width_int(&dest_type) {
         ctx.emit(Instruction::WidenFixed { dest, src: operand });
-    } else if is_fixed_width_int(&src_type) && matches!(dest_type, IrType::Int) {
+    } else if widens_to_int(&src_type) && matches!(dest_type, IrType::Int) {
         ctx.emit(Instruction::Widen { dest, src: operand });
     } else {
         ctx.emit(Instruction::Clone { dest, src: operand });
@@ -1616,8 +1616,8 @@ fn lower_clone_coerce<'db>(
             // Other copy types - just copy (shouldn't happen in practice).
             ctx.emit(Instruction::Copy { dest, src });
         }
-    } else if is_fixed_width_int(&src_type) && matches!(dest_type, IrType::Int) {
-        // Fixed int to Int (bigint) - widen.
+    } else if widens_to_int(&src_type) && matches!(dest_type, IrType::Int) {
+        // Fixed int, index, or offset to Int (bigint) - widen.
         ctx.emit(Instruction::Widen { dest, src });
     } else {
         // Linear type - clone.
@@ -1693,6 +1693,14 @@ fn is_fixed_width_int(ty: &IrType) -> bool {
             | IrType::I32
             | IrType::I64
     )
+}
+
+/// True if `@` widens this type to `int`.
+///
+/// `index` and `offset` widen to `int` but do not participate in
+/// fixed-to-fixed widening, so they are not [`is_fixed_width_int`].
+fn widens_to_int(ty: &IrType) -> bool {
+    is_fixed_width_int(ty) || matches!(ty, IrType::Index | IrType::Offset)
 }
 
 /// Lower tuple elements into a packed tuple value.

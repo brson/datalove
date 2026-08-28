@@ -707,6 +707,13 @@ pub(crate) unsafe fn int_from_fixed_impl(
                 let v = *(src_in as *const i64);
                 (v.unsigned_abs(), v < 0)
             }
+            // Index and offset widen to int at whatever width they are
+            // configured to; both reprs cast losslessly to 64 bits.
+            rtdt::TyTag::Index => (*(src_in as *const rtdt::IndexRepr) as u64, false),
+            rtdt::TyTag::Offset => {
+                let v = *(src_in as *const rtdt::OffsetRepr) as i64;
+                (v.unsigned_abs(), v < 0)
+            }
             _ => {
                 // Not a fixed-width integer type - shouldn't happen.
                 return RtStatus::Error;
