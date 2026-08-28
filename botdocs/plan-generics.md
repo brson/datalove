@@ -182,6 +182,48 @@ Independent of generics, and worth doing regardless:
 - `ConstValue::Type` may still be wanted, for const generics such as tensor dimensions.
   It is not a step toward type parameters.
 
+## What a first attempt found
+
+Written after building the front end far enough to hit the real boundary, then
+reverting it. Measurements, not estimates.
+
+**`<T>` parses for free.** `Sigil::AngleOpen` is already a bracer with a close
+pair, so `fun identity<T>(x: T): T` arrives at the parser as one branch, the same
+shape as the parameter list. Adding `type_params: Vec<InternedText>` to `StmtFun`
+and reading that branch is about thirty lines, and `T` then reaches the
+typechecker as `UnresolvedTypeAlias("T")`, which is the correct next error.
+
+**A type variable in the datafun `Type` is cheap.** Only five files match on it,
+and adding `Var(InternedText)` needs `types_equivalent` (equal to itself),
+`type_to_string`, and about twenty-five mechanical arms in the type hint
+converter. Resolution then falls out for free: seed the function's type
+parameters into the alias map that `convert_type_hint_with_aliases` already
+consults, and `T` resolves wherever a named type would.
+
+**But that only reaches bare `T`, which is not the goal.** Those twenty-five arms
+are all the same shape, converting a nested type hint into a *datalit* type:
+`[T]`, `?T`, `(T, T)` all require the variable to live in
+`datalit::tycheck::Type`, not in the datafun wrapper. The stdlib motivation is
+`option.unwrap_or(self: ?T, default: T): T`, which is nested. So the front end
+splits in two: bare `T` is a small change to datafun's type, and useful `T` is a
+change to datalit's, which is the type of every data literal in the language.
+
+**The back end is the wall.** `IrType::from_tycheck` is infallible, so a type
+variable has to become some `IrType`. Fifty-four files reference `IrType` and
+about eighty arms match it exhaustively, across the interpreter, Cranelift, the C
+backend, layout, tydesc emission and ownership. Each is a place to answer what a
+generic value's size and representation are, which is one decision but eighty
+edits, and none of it is the calling convention work.
+
+**The erasure shortcut does not exist yet.** `data` looks like it could stand in
+for an erased `T`, since any type coerces to it and it is two words with small
+scalars held inline. It cannot: downcasting back out of `data` is listed as an
+open question in `report-match-downcast.md` and is not implemented, so a value
+can go in and not come back with a static type.
+
+The order below is unchanged by this. It does say where the seams are: step 2 is
+two decisions, not one, and the second is the datalit type.
+
 ## Order of work
 
 1. **Fix CTFE.** The three open issues in
