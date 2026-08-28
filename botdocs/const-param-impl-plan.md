@@ -91,6 +91,10 @@ end fun
 
 ### Why Union-Branch
 
+**WRONG, as built.** The plan was written expecting a branch to be cheaper than a copy
+of the function. `build_dispatch_blocks` clones every body block once per instantiation,
+so `N × branch` is `N × func` and both size and compile time match monomorphization:
+
 | Aspect | Full Mono | Union-Branch |
 |--------|-----------|--------------|
 | Code size | O(N × func) | O(func + N × branch) |
@@ -99,7 +103,12 @@ end fun
 | Branch cost | None | ~2-5 cycles |
 | Const folding | Full | Full (per branch) |
 
-For a scripting language prioritizing compile time, union-branch is the better tradeoff.
+Corrected: size and compile time are O(N × func) either way; the branch cost is real and
+is paid on a discriminant every call site passes as a literal; and fusing the
+instantiations into one function defeats the per-function tiering in `optimizing.rs`.
+For a scripting language prioritizing compile time, monomorphization is the better
+tradeoff, and it is also the simpler code. See
+[Generics and Specialization](plan-generics.md).
 
 ---
 
@@ -1074,6 +1083,14 @@ similar to the existing `skip_const_inlining` option.
 
 ## Future Extensions
 
+> **SUPERSEDED.** Phases B, C and D below plan Zig-style type parameters on top of the
+> union-branch machinery. That path does not exist: union-branch holds one signature by
+> replacing a const parameter with a tag, and a type parameter changes the signature, so
+> there is nothing for the branches to agree on. Generics are planned separately in
+> [Generics and Specialization](plan-generics.md), by erasure and type descriptors, which
+> the runtime already does throughout. `ConstValue::Type` may still be wanted later for
+> const generics; it is not the road to type parameters.
+
 ### Phase B: Type as ConstValue
 
 Add `ConstValue::Type(IrType)` for Zig-style type parameters:
@@ -1192,6 +1209,43 @@ Key files added:
 - `datalove-datafun/tests/fixtures/specialize_differential/*.world`
 
 ### Known Issues Discovered
+
+#### Open: CTFE leaks heap values returned through a call
+
+A const whose value is produced by calling a function that returns a linear type trips
+the runtime leak detector at `alloc.rs`. A function that returns its argument is enough;
+the same function over a copy type is fine, so it is the linear return being materialized
+into a `ConstValue` without releasing the runtime value.
+
+```datalove
+fun id(n: int): int
+  ret n
+end fun
+
+const A: int = id(5)        // leak; `const A: int = 5` and `2 + 3` are fine
+const B: u32 = idu(5)       // fine, copy return type
+```
+
+#### Open: CTFE leaks collections with linear elements
+
+```datalove
+const E: [int] = [1, 2, 3]  // leak
+const F: [u32] = [1]        // fine
+```
+
+The element values are not released. Together with the previous issue this is the main
+thing to fix before CTFE is asked to produce structured values, which anything type-level
+would require.
+
+#### Open: calls in binary operand position panic lowering
+
+```datalove
+ret fib(n - 1) + fib(n - 2)
+```
+
+panics in `emit_expr_temp_drops_since` with `at split index (is 1) should be <= len (is
+0)`. Not specific to const evaluation, but it blocks recursion at the shape anyone would
+write it, which makes CTFE much less useful than it looks.
 
 #### Fixed: Single-param comptime functions returning 0
 

@@ -22,6 +22,7 @@
 
 ---
 
+- [Generics and Specialization](plan-generics.md)
 - [Const Parameter Implementation](const-param-impl-plan.md)
 - [JIT + Inliner Integration](plan-fancy-jit.md)
 - [Unified Code Unit Migration](plan-unified-code-unit.md)

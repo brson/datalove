@@ -154,9 +154,21 @@ Phase 5c: Specialize comptime functions
     v   Output: Specialized IrFunctions
 ```
 
-**Union-branch strategy:** Instead of generating N separate functions (full monomorphization),
-the compiler generates one function with N branches dispatching on an enum tag. This trades
-minimal branch overhead for better instruction cache behavior and faster compile times.
+**Union-branch strategy:** Instead of generating N separate functions (full
+monomorphization), the compiler generates one function with N branches dispatching on a
+tag.
+
+This was adopted for code size and compile time and delivers neither.
+`build_dispatch_blocks` clones every body block once per instantiation, so the output is
+the same size as monomorphization and takes the same time to produce, plus a `Switch`.
+That `Switch` is on a value every call site passes as a literal, since specialization
+emits `Const(discriminant)` followed by `Call` and the const-binding-only restriction
+guarantees the value is known. It also merges instantiations into one function, which
+the tiering in `optimizing.rs` counts and inlines as a unit, so a hot instantiation
+cannot tier separately from a cold one.
+
+Monomorphization is smaller, faster to compile, and gives the tiering what it wants.
+This is worth revisiting; see [Generics and Specialization](plan-generics.md).
 
 **Call site handling:** The lowering phase emits `ComptimeCall` instructions for calls to
 functions with const parameters. During specialization, these are transformed to emit the

@@ -1,5 +1,27 @@
 # Const Parameter Specialization: Research & Design
 
+> **Status, revised after implementation.** The union-branch approach described
+> here was built and works, but the case made for it below does not survive
+> contact with the implementation, and its extension to type arguments does not
+> work at all.
+>
+> - Union-branch was chosen for code size and compile time. It achieves neither:
+>   `build_dispatch_blocks` clones the body once per instantiation, so it is
+>   monomorphization plus a `Switch` on a value that is a compile-time constant
+>   at every call site. See the corrected tables below, marked WRONG.
+> - "Extension to Type Arguments" reaches the right question and stops. Both
+>   paths need `x` and `y` to have one type in a function whose branches give
+>   them different ones. That is not a gap in the sketch, it is the reason the
+>   approach does not extend: union-branch keeps one signature by replacing a
+>   const parameter with a tag, and a type parameter changes the signature.
+> - The recommendation of Zig-style `const T: type` was made without weighing
+>   what it costs in tooling and incremental compilation, which are the things
+>   this compiler is built for.
+>
+> The direction that replaced this is in [Generics and Specialization](plan-generics.md).
+> This document is kept for its survey of the literature, which is still good,
+> and as the record of how the question was reached.
+
 ## Overview
 
 This document analyzes the feasibility of adding Zig-style const parameter specialization to datalove,
@@ -528,6 +550,8 @@ Call sites transform: `f(v1, x)` → `f_unified(ComptimeC::V1, x)`
 
 ### Comparison: Full Monomorphization vs Union-Branch
 
+**WRONG.** Kept as written for the record; corrected immediately below.
+
 | Aspect | Full Mono | Union-Branch |
 |--------|-----------|--------------|
 | Code copies | N functions | 1 function, N branches |
@@ -538,13 +562,43 @@ Call sites transform: `f(v1, x)` → `f_unified(ComptimeC::V1, x)`
 | Debug symbols | N function entries | 1 entry, complex CFG |
 | Compile time | O(N × size) | O(size + N × branch) |
 
+The error is in the last two rows, and it invalidates the first two. A branch is
+not cheaper than a copy of the body, it *is* a copy of the body: the transform
+clones every original block once per instantiation. Corrected:
+
+| Aspect | Full Mono | Union-Branch |
+|--------|-----------|--------------|
+| Code copies | N bodies | N bodies, plus a dispatch block |
+| Instruction cache | N copies | The same N copies in one symbol |
+| Branch prediction | No branch | A `Switch` on a per-call-site constant |
+| Const propagation | Full | Full (within branch) |
+| Inlining | Each copy inlinable | One oversized body, inlined whole or not at all |
+| Debug symbols | N function entries | 1 entry, complex CFG |
+| Compile time | O(N × size) | O(N × size) + dispatch |
+| JIT tiering | Per instantiation | All instantiations share one call count |
+
+The last row is specific to this compiler. `optimizing.rs` inlines at 50 calls and
+JIT-compiles at 100, both counted per function, so fusing the instantiations means a
+hot one cannot tier without dragging the cold ones with it.
+
 ### When Union-Branch Wins
+
+**Mostly WRONG.** Points 1, 3 and 4 assume the body is shared across branches. It is
+not, so the union overhead is not amortized, the single function is the same total code,
+and there is no code generation saved. Point 5 describes a branch that need not exist.
+Point 2 is the only real one, and it is small.
 
 1. **Many instantiations, small body**: Union overhead amortized
 2. **Shared prefix/suffix code**: Not duplicated across branches
 3. **Instruction cache pressure**: Single function stays hot
 4. **Compile time critical**: Less code generation
 5. **Value distribution skewed**: Branch predictor effective
+
+The case where a tag genuinely beats monomorphization is the one this design does not
+have: when the tag is *not* known at the call site. Julia's world-splitting branches
+over up to four candidate types precisely because dispatch is otherwise dynamic. Here
+the const-binding-only restriction guarantees the value is static, so the dispatch is
+overhead by construction.
 
 ### When Full Mono Wins
 
@@ -899,6 +953,13 @@ var x: {first: i32, second: bool} = ...          // MyPair substituted
 | Expressiveness | Bounded | Full dependent types (light) |
 
 ### Recommendation for Datalove
+
+**SUPERSEDED.** See [Generics and Specialization](plan-generics.md). The reasoning
+below is sound about Zig-style being the better fit *for union-branch*, and that is
+the problem: union-branch does not extend to type parameters, so fitting it is not a
+recommendation. What the comparison leaves out is the cost of template-style generics
+in tooling, error locality and incremental compilation, which are the properties this
+compiler is organised around.
 
 **Zig-style is more natural** given the union-branch approach:
 
