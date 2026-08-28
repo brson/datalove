@@ -3,9 +3,11 @@
 
 
 
-## Glorify the pure data types
+## Glorify the plain old data types
 
-
+Good data design leads to good algorithms,
+and most data types should be plain old data,
+not objects.
 
 
 ## Advance interactive scripting design
