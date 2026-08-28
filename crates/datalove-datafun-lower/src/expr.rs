@@ -1595,6 +1595,11 @@ fn lower_clone_coerce<'db>(
     let src_type = ctx.expr_type(cc_expr.operand);
     let dest_type = ctx.expr_type(expr);
 
+    // Only the temps this operand creates are ours to drop. An enclosing
+    // expression that has already lowered a sibling still needs that sibling,
+    // which for `a@ op b@` is the clone the left side left behind.
+    let expr_temp_mark = ctx.expr_temps_mark();
+
     // Use lower_operand to borrow the operand (@ doesn't consume).
     let src = lower_operand(ctx, cc_expr.operand)?;
 
@@ -1625,7 +1630,7 @@ fn lower_clone_coerce<'db>(
     }
 
     // Drop expression temporaries after borrowing operation completes.
-    ctx.emit_expr_temp_drops();
+    ctx.emit_expr_temp_drops_since(expr_temp_mark);
 
     Ok(dest)
 }
