@@ -647,7 +647,7 @@ impl IrInterpreter {
 
     /// Execute checked arithmetic operation.
     pub(crate) fn execute_binop_checked(
-        &self,
+        &mut self,
         op: BinOp,
         lhs: &Value,
         rhs: &Value,
@@ -668,9 +668,42 @@ impl IrInterpreter {
                 rtdt::TyTag::U32 => Self::execute_binop_checked_int::<u32>(op, lhs, rhs, dest, overflow_dest),
                 rtdt::TyTag::U64 => Self::execute_binop_checked_int::<u64>(op, lhs, rhs, dest, overflow_dest),
                 rtdt::TyTag::Index => Self::execute_binop_checked_int::<rtdt::IndexRepr>(op, lhs, rhs, dest, overflow_dest),
-                // Checked ops only apply to fixed-width ints; type checker ensures this.
+                rtdt::TyTag::Int => self.execute_binop_checked_bigint(op, lhs, rhs, dest, overflow_dest),
+                // Checked ops only apply to the integer types; type checker ensures this.
                 _ => unreachable!("unsupported checked binop {:?} for type {:?}", op, tag),
             }
+        }
+    }
+
+    /// Checked bigint division via the runtime.
+    ///
+    /// Division is the only checked bigint operation: the others cannot
+    /// overflow an unbounded integer, so the typechecker never asks for them.
+    /// A zero divisor is the only failure, and the runtime writes a zero
+    /// result for it, so the result is droppable either way.
+    fn execute_binop_checked_bigint(
+        &mut self,
+        op: BinOp,
+        lhs: &Value,
+        rhs: &Value,
+        dest: Destination,
+        overflow_dest: Destination,
+    ) {
+        use datalove_rt::c::RtStatus;
+
+        if op != BinOp::Div {
+            unreachable!("checked bigint binop only supports Div, got {:?}", op);
+        }
+
+        unsafe {
+            let rt_handle = self.runtime.handle();
+            let int_tydesc = self.tydesc_table.get_or_create(&IrType::Int);
+
+            let status = datalove_rt::c::dtlv_rti_int_div_checked(
+                rt_handle, lhs.ptr, int_tydesc, rhs.ptr, int_tydesc, dest.ptr, int_tydesc,
+            );
+
+            *(overflow_dest.ptr as *mut bool) = status != RtStatus::Ok;
         }
     }
 

@@ -7,9 +7,9 @@
 // int is a linear type, so these functions consume their arguments. Use the
 // adapt operator (@) to retain a value across a call.
 //
-// Division is absent: bigint division is only available through the fallible
-// /? and /! operators, which the backends do not yet implement. That also
-// leaves out the functions built on it, such as rem, is_even, and gcd.
+// Division is the one fallible operation, since a zero divisor has no answer.
+// It is reached through /? and /!, so anything built on it returns an option
+// rather than a bare int.
 
 // Predicates.
 
@@ -86,6 +86,27 @@ fun abs_diff(self: int, other: int): int
   else
     ret other - self
   end if
+end fun
+
+// Division.
+
+// Quotient, truncated toward zero. None if other is zero.
+fun div_checked(self: int, other: int): ?int
+  ret some (self /? other)
+end fun
+
+// Remainder, taking the sign of self. None if other is zero.
+fun rem_checked(self: int, other: int): ?int
+  let quotient: int = self@ /? other@
+  ret some (self - quotient * other)
+end fun
+
+// Quotient and remainder together. None if other is zero.
+fun div_rem(self: int, other: int): ?(int, int)
+  let quotient: int = self@ /? other@
+  let scaled: int = quotient@
+  let remainder: int = self - scaled * other
+  ret some (quotient, remainder)
 end fun
 
 // Exponentiation.

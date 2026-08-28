@@ -1,0 +1,37 @@
+require module sys/std/int
+
+import int.div_checked
+import int.rem_checked
+import int.div_rem
+
+// Exact division.
+let a = div_checked(48, 6)
+let b = rem_checked(48, 6)
+
+// Truncation is toward zero, so the remainder takes the sign of the dividend.
+let c = div_checked(7, 2)
+let d = rem_checked(7, 2)
+let e = div_checked(-7, 2)
+let f = rem_checked(-7, 2)
+let g = div_checked(7, -2)
+let h = rem_checked(7, -2)
+let i = div_checked(-7, -2)
+let j = rem_checked(-7, -2)
+
+// A zero divisor has no answer.
+let k = div_checked(7, 0)
+let l = rem_checked(7, 0)
+let m = div_rem(7, 0)
+
+// Zero dividend.
+let n = div_checked(0, 5)
+let o = rem_checked(0, 5)
+
+// Wider than any fixed-width type.
+let p = div_checked(99999999999999999999999999, 3)
+let q = rem_checked(99999999999999999999999999, 7)
+
+let r = div_rem(17, 5)
+let s = div_rem(-17, 5)
+
+let output = (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r, s)

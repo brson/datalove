@@ -424,6 +424,11 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
     ) -> Result<(), CraneliftError> {
         let dest_ty = &self.func.value_types[dest.0 as usize];
 
+        // Bigints divide through the runtime rather than an instruction.
+        if matches!(dest_ty, IrType::Int) {
+            return self.compile_int_binop_checked(builder, dest, overflow_dest, op, lhs, rhs);
+        }
+
         // Only supported for fixed-width integers.
         let (is_signed, bits, cl_ty) = match dest_ty {
             IrType::I8 => (true, 8, cl_types::I8),
@@ -563,6 +568,71 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         };
 
         self.values.insert(dest, result);
+        self.values.insert(overflow_dest, overflow);
+        Ok(())
+    }
+
+    /// Compile checked bigint division through the runtime.
+    ///
+    /// Division is the only checked bigint operation, since nothing else can
+    /// overflow an unbounded integer. A zero divisor is the only failure, and
+    /// the runtime writes a zero result for it, so the result is droppable
+    /// whichever way the call goes.
+    fn compile_int_binop_checked(
+        &mut self,
+        builder: &mut FunctionBuilder,
+        dest: ValueId,
+        overflow_dest: ValueId,
+        op: BinOp,
+        lhs: &Operand,
+        rhs: &Operand,
+    ) -> Result<(), CraneliftError> {
+        if op != BinOp::Div {
+            return Err(CraneliftError::Unsupported(format!(
+                "checked bigint binop only supports Div, got {:?}",
+                op
+            )));
+        }
+
+        let runtime = self.runtime.ok_or_else(|| {
+            CraneliftError::Codegen("Int BinOpChecked requires runtime imports".into())
+        })?;
+        let rt_handle = self.rt_handle_param.ok_or_else(|| {
+            CraneliftError::Codegen("Int BinOpChecked requires runtime handle".into())
+        })?;
+
+        let lhs_ptr = self.get_operand_ptr(builder, lhs)?;
+        let rhs_ptr = self.get_operand_ptr(builder, rhs)?;
+
+        let frame_slot = self.frame_slot.ok_or_else(|| {
+            CraneliftError::Codegen("no frame slot for Int BinOpChecked result".into())
+        })?;
+        let dest_offset = self.layout.value_offset(dest.0);
+        let result_ptr = builder.ins().stack_addr(PTR_TYPE, frame_slot, dest_offset as i32);
+
+        let int_tydesc_id = self.tydesc_emitter.get(&IrType::Int).ok_or_else(|| {
+            CraneliftError::Codegen("TyDesc not found for Int".into())
+        })?;
+        let int_tydesc_gv = self.module.declare_data_in_func(int_tydesc_id, builder.func);
+        let int_tydesc_ptr = builder.ins().symbol_value(PTR_TYPE, int_tydesc_gv);
+
+        let func_ref = self.module.declare_func_in_func(runtime.int_div, builder.func);
+        let call = builder.ins().call(func_ref, &[
+            rt_handle,
+            lhs_ptr,
+            int_tydesc_ptr,
+            rhs_ptr,
+            int_tydesc_ptr,
+            result_ptr,
+            int_tydesc_ptr,
+        ]);
+        let status = builder.inst_results(call)[0];
+
+        // RtStatus::Ok is 1; anything else is the zero divisor.
+        let ok = builder.ins().iconst(cl_types::I8, 1);
+        let overflow = builder.ins().icmp(cl_ir::condcodes::IntCC::NotEqual, status, ok);
+
+        self.values.insert(dest, result_ptr);
         self.values.insert(overflow_dest, overflow);
         Ok(())
     }

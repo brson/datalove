@@ -570,8 +570,12 @@ pub(crate) unsafe fn int_div_checked_impl(
         let a_is_neg = a_size < 0;
         let b_is_neg = b_size < 0;
 
-        // Check for division by zero.
+        // Check for division by zero. The result is still written, as zero, so
+        // that a caller that goes on to drop it has a well formed Int to drop.
         if b_abs_size == 0 {
+            result.data = std::ptr::null();
+            result.size_and_sign = 0;
+            result.capacity = rtdt::Index::ZERO;
             return RtStatus::Error;
         }
 
