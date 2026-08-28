@@ -85,6 +85,12 @@ pub fn inline_function_consts(
     // This is critical because simplified branches may leave unreachable blocks that
     // reference undefined values (like err_dest when is_ok is constant true).
     eliminate_dead_blocks_func(func);
+
+    // Then the instructions left behind computing what the consts replaced, for the
+    // same reason the script path does it. A const folded from a call keeps the
+    // instructions that built its arguments, which now have no consumer and no drop,
+    // and the ones that allocate leak.
+    eliminate_dead_code_unit(func);
 }
 
 /// Inline const values in a single block.
@@ -253,6 +259,9 @@ fn inline_module_function_consts(
 
     // Eliminate dead blocks that are no longer reachable after branch simplification.
     eliminate_dead_blocks_func(func);
+
+    // Then the instructions the inlined consts orphaned. See inline_function_consts.
+    eliminate_dead_code_unit(func);
 }
 
 #[cfg(test)]

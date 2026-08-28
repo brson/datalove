@@ -21,9 +21,7 @@ Analysis(
                     
                     fn negate_res():
                     block0:
-                        v0 = const 50i32
                         v1 = const -50i32
-                        v2 = const false
                         goto block1
                     block1:
                         v6 = ok v1

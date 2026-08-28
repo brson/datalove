@@ -927,6 +927,10 @@ fn lower_binop<'db>(
     expr: ExprFun<'db>,
     binop: ast::ExprBinOp<'db>,
 ) -> Result<ValueId, LowerError> {
+    // Only the temps these operands create are ours to drop. An enclosing
+    // expression that has already lowered something still needs it.
+    let expr_temp_mark = ctx.expr_temps_mark();
+
     // Use lower_operand for borrowing semantics - operands are read by
     // reference, not consumed.
     let lhs = lower_operand(ctx, binop.lhs)?;
@@ -987,7 +991,7 @@ fn lower_binop<'db>(
         rhs,
     });
     // Drop expression temporaries after borrowing operation completes.
-    ctx.emit_expr_temp_drops();
+    ctx.emit_expr_temp_drops_since(expr_temp_mark);
     Ok(dest)
 }
 

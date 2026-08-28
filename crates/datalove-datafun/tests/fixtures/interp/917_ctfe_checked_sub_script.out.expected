@@ -21,10 +21,7 @@ Analysis(
                     
                     fn sub_checked():
                     block0:
-                        v0 = const 100i32
-                        v1 = const 30i32
                         v2 = const 70i32
-                        v3 = const false
                         goto block1
                     block1:
                         v7 = ok v2

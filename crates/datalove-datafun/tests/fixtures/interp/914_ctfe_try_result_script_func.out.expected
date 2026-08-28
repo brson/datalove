@@ -21,10 +21,7 @@ Analysis(
                     
                     fn get_value():
                     block0:
-                        v0 = const 12345i64
-                        v1 = const ok 12345i64
                         v2 = const 12345i64
-                        v4 = const true
                         goto block1
                     block1:
                         v6 = ok v2

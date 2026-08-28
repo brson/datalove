@@ -20,8 +20,6 @@ Analysis(
                     
                     fn check_xor():
                     block0:
-                        v0 = const true
-                        v1 = const true
                         v2 = const false
                         return v2
                 """,

@@ -21,9 +21,7 @@ Analysis(
                     
                     fn negate_value():
                     block0:
-                        v0 = const 9876i64
                         v1 = const -9876i64
-                        v2 = const false
                         goto block1
                     block1:
                         v6 = ok v1

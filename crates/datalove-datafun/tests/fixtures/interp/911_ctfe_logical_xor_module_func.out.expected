@@ -14,8 +14,6 @@ Analysis(
                 ir: """
                     fn test_xor():
                     block0:
-                        v0 = const false
-                        v1 = const true
                         v2 = const true
                         return v2
                 """,

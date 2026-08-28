@@ -21,10 +21,7 @@ Analysis(
                     
                     fn compute():
                     block0:
-                        v0 = const 1000i64
-                        v1 = const 234i64
                         v2 = const 1234i64
-                        v3 = const false
                         goto block1
                     block1:
                         v7 = ok v2

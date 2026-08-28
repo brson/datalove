@@ -14,10 +14,7 @@ Analysis(
                 ir: """
                     fn subtract():
                     block0:
-                        v0 = const 80u32
-                        v1 = const 25u32
                         v2 = const 55u32
-                        v3 = const false
                         goto block1
                     block1:
                         v5 = some v2

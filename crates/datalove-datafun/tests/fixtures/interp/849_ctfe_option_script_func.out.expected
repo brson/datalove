@@ -20,7 +20,6 @@ Analysis(
                     
                     fn get_opt():
                     block0:
-                        v0 = const 100u32
                         v1 = const some 100u32
                         return v1
                 """,

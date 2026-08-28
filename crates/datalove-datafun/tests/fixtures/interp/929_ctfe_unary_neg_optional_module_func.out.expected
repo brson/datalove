@@ -14,9 +14,7 @@ Analysis(
                 ir: """
                     fn get_neg():
                     block0:
-                        v0 = const 77i32
                         v1 = const -77i32
-                        v2 = const false
                         goto block1
                     block1:
                         v4 = some v1

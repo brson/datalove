@@ -16,6 +16,26 @@ use datalove_datafun_ir::{
 ///
 /// This returns the primary dest of an instruction that produces a value.
 /// Instructions that don't produce values (like Drop, Store, etc.) return None.
+/// Every value an instruction defines.
+///
+/// [`instruction_dest`] answers with one, which is all its callers want and is
+/// not enough to decide whether an instruction is dead. Five instructions define
+/// a second or third value, and each of the extra ones is the flag a branch
+/// tests: dropping `UnwrapOption` because nobody reads the payload leaves the
+/// branch on `is_some` reading a value nothing defines.
+pub fn instruction_dests(instr: &Instruction) -> Vec<ValueId> {
+    match instr {
+        Instruction::UnwrapOption { dest, is_some, .. } => vec![*dest, *is_some],
+        Instruction::UnwrapResult { ok_dest, err_dest, is_ok, .. } => {
+            vec![*ok_dest, *err_dest, *is_ok]
+        }
+        Instruction::BinOpChecked { dest, overflow, .. } => vec![*dest, *overflow],
+        Instruction::UnaryOpChecked { dest, overflow, .. } => vec![*dest, *overflow],
+        Instruction::Unpack { dests, .. } => dests.clone(),
+        _ => instruction_dest(instr).into_iter().collect(),
+    }
+}
+
 pub fn instruction_dest(instr: &Instruction) -> Option<ValueId> {
     match instr {
         // Constants and copies
@@ -552,17 +572,15 @@ fn remove_dead_instructions(unit: &mut IrCodeUnit, used: &HashSet<ValueId>) -> b
             if has_side_effects(instr) {
                 return true;
             }
-            // Keep instructions that define used values.
-            if let Some(dest) = instruction_dest(instr) {
-                if used.contains(&dest) {
-                    return true;
-                }
-                // This instruction defines an unused value - remove it.
-                false
-            } else {
+            // Keep instructions that define a used value. All of them have to be
+            // consulted: an instruction defining one dead value and one live one
+            // still has to stay.
+            let dests = instruction_dests(instr);
+            if dests.is_empty() {
                 // No dest means it's a side-effect instruction, already handled above.
-                true
+                return true;
             }
+            dests.iter().any(|d| used.contains(d))
         });
         if block.instructions.len() != original_len {
             changed = true;

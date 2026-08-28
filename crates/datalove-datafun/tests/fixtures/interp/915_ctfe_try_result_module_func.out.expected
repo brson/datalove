@@ -14,10 +14,7 @@ Analysis(
                 ir: """
                     fn unwrap_result():
                     block0:
-                        v0 = const 555u32
-                        v1 = const ok 555u32
                         v2 = const 555u32
-                        v4 = const true
                         goto block1
                     block1:
                         v6 = ok v2

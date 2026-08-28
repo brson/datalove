@@ -14,10 +14,7 @@ Analysis(
                 ir: """
                     fn multiply():
                     block0:
-                        v0 = const 12u32
-                        v1 = const 11u32
                         v2 = const 132u32
-                        v3 = const false
                         goto block1
                     block1:
                         v7 = ok v2

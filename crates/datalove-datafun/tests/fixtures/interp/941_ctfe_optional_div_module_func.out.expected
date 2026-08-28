@@ -14,10 +14,7 @@ Analysis(
                 ir: """
                     fn divide():
                     block0:
-                        v0 = const 81u32
-                        v1 = const 9u32
                         v2 = const 9u32
-                        v3 = const false
                         goto block1
                     block1:
                         v5 = some v2

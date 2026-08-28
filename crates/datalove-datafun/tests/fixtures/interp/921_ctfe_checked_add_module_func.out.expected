@@ -14,10 +14,7 @@ Analysis(
                 ir: """
                     fn add_values():
                     block0:
-                        v0 = const 250u32
-                        v1 = const 350u32
                         v2 = const 600u32
-                        v3 = const false
                         goto block1
                     block1:
                         v7 = ok v2

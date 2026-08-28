@@ -20,10 +20,7 @@ Analysis(
                     
                     fn sub_opt():
                     block0:
-                        v0 = const 100u32
-                        v1 = const 30u32
                         v2 = const 70u32
-                        v3 = const false
                         goto block1
                     block1:
                         v5 = some v2

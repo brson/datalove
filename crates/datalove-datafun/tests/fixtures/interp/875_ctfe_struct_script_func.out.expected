@@ -20,8 +20,6 @@ Analysis(
                     
                     fn make_point():
                     block0:
-                        v0 = const 100u32
-                        v1 = const 200u32
                         v2 = const {x = 100u32, y = 200u32}
                         return v2
                 """,

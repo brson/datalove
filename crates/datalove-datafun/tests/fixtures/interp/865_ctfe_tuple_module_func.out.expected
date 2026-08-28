@@ -14,8 +14,6 @@ Analysis(
                 ir: """
                     fn compute():
                     block0:
-                        v0 = const 77u32
-                        v1 = const false
                         v2 = const (77u32, false)
                         return v2
                 """,

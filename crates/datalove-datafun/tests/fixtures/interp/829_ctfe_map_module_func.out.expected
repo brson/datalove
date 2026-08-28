@@ -14,12 +14,6 @@ Analysis(
                 ir: """
                     fn compute():
                     block0:
-                        v0 = const 10u32
-                        v1 = const 100u32
-                        v2 = const 20u32
-                        v3 = const 200u32
-                        v4 = const 30u32
-                        v5 = const 300u32
                         v6 = const %{10u32 = 100u32, 20u32 = 200u32, 30u32 = 300u32}
                         return v6
                 """,

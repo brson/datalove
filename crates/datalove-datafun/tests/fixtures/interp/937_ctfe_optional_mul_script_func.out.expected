@@ -20,10 +20,7 @@ Analysis(
                     
                     fn compute():
                     block0:
-                        v0 = const 15i32
-                        v1 = const 4i32
                         v2 = const 60i32
-                        v3 = const false
                         goto block1
                     block1:
                         v5 = some v2

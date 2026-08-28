@@ -21,10 +21,7 @@ Analysis(
                     
                     fn div_checked():
                     block0:
-                        v0 = const 100u32
-                        v1 = const 4u32
                         v2 = const 25u32
-                        v3 = const false
                         goto block1
                     block1:
                         v7 = ok v2

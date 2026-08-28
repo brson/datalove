@@ -28,8 +28,8 @@ Analysis(
                     block0:
                         v0 = mul p0, p1
                         v1 = mul p2, p3
-                        drop v0
                         v2 = add v0, v1
+                        drop v0
                         drop v1
                         v3 = add v2, p4
                         drop v2

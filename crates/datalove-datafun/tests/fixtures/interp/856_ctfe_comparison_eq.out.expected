@@ -20,8 +20,6 @@ Analysis(
                     
                     fn check():
                     block0:
-                        v0 = const 10u32
-                        v1 = const 10u32
                         v2 = const true
                         return v2
                 """,
