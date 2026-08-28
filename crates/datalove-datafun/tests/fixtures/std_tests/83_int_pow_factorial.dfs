@@ -1,0 +1,20 @@
+require module sys/std/int
+
+import int.pow
+import int.factorial
+
+let a = pow(2, : index / 0)
+let b = pow(2, : index / 1)
+let c = pow(2, : index / 10)
+let d = pow(-3, : index / 3)
+let e = pow(0, : index / 5)
+
+// Exceeds 64 bits, so this exercises real bigint growth.
+let f = pow(2, : index / 100)
+
+let g = factorial(: index / 0)
+let h = factorial(: index / 1)
+let i = factorial(: index / 5)
+let j = factorial(: index / 25)
+
+let output = (a, b, c, d, e, f, g, h, i, j)

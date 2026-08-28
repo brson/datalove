@@ -1,0 +1,28 @@
+require module sys/std/int
+
+import int.is_zero
+import int.is_positive
+import int.is_negative
+import int.signum
+
+let a = is_zero(0)
+let b = is_zero(7)
+let c = is_zero(-7)
+
+let d = is_positive(7)
+let e = is_positive(0)
+let f = is_positive(-7)
+
+let g = is_negative(-7)
+let h = is_negative(0)
+let i = is_negative(7)
+
+let j = signum(42)
+let k = signum(-42)
+let l = signum(0)
+
+// Bigger than any fixed-width integer.
+let m = is_positive(99999999999999999999999999)
+let n = signum(-99999999999999999999999999)
+
+let output = (a, b, c, d, e, f, g, h, i, j, k, l, m, n)

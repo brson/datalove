@@ -1,0 +1,22 @@
+require module sys/std/int
+
+import int.min
+import int.max
+import int.clamp
+
+let a = min(3, 7)
+let b = min(7, 3)
+let c = min(5, 5)
+let d = min(-7, 3)
+
+let e = max(3, 7)
+let f = max(7, 3)
+let g = max(5, 5)
+let h = max(-7, 3)
+
+let i = clamp(5, 1, 10)
+let j = clamp(0, 1, 10)
+let k = clamp(99, 1, 10)
+let l = clamp(-5, -3, 3)
+
+let output = (a, b, c, d, e, f, g, h, i, j, k, l)
