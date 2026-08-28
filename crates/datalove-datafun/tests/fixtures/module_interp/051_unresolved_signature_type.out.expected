@@ -1,0 +1,13 @@
+ModulesAnalysis(
+    typecheck: TypecheckResult(
+        status: "Error",
+        errors: [
+            "local/test/main: UnresolvedTypeAlias(\"Bogus\")",
+            "local/test/main: UnresolvedTypeAlias(\"Nonesuch\")",
+        ],
+    ),
+    lowering: LoweringResult(
+        status: "Skipped",
+    ),
+    output: "",
+)

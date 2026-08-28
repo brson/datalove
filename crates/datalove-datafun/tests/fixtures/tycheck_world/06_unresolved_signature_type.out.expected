@@ -1,0 +1,26 @@
+{
+  "diagnostics": [],
+  "modules": {
+    "main": {
+      "errors": [
+        {
+          "kind": "UnresolvedTypeAlias",
+          "name": "Bogus"
+        },
+        {
+          "kind": "UnresolvedTypeAlias",
+          "name": "Nonesuch"
+        }
+      ],
+      "functions": [
+        {
+          "name": "good",
+          "params": [
+            "u32"
+          ],
+          "return_type": "u32"
+        }
+      ]
+    }
+  }
+}

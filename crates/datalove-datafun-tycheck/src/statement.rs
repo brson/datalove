@@ -128,9 +128,12 @@ pub fn check_statement<'db>(
             let params = stmt.params(db);
             let body = stmt.body(db);
 
-            // Function signature should already be collected by resolve crate.
-            let func_type = ctx.lookup_function(name)
-                .expect("function should be in context from name resolution");
+            // Name resolution skips functions whose signature types do not
+            // resolve, having already reported the error. Skip the body too,
+            // since there are no parameter types to check it against.
+            let Some(func_type) = ctx.lookup_function(name) else {
+                return;
+            };
 
             let param_types = func_type.param_types(db);
             let ret_ty = func_type.return_type(db);

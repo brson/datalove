@@ -188,7 +188,7 @@ pub fn resolve_module_names<'db>(
         collected.type_aliases,
         collected.functions,
         collected.function_asts,
-        Vec::new(), // No errors from this pass (errors are validation, not collection).
+        collected.errors,
     )
 }
 

@@ -626,6 +626,11 @@ impl<'db> TypeContext<'db> {
         name_resolution: &ModuleNameResolution<'db>,
         module_id: Option<ModuleId<'db>>,
     ) {
+        // Add errors from name resolution.
+        for error in name_resolution.errors(self.db) {
+            self.add_error(error.clone());
+        }
+
         // Add type aliases.
         for (name, ty) in name_resolution.type_aliases(self.db) {
             self.type_aliases.insert(*name, ty.clone());
