@@ -215,14 +215,55 @@ backend, layout, tydesc emission and ownership. Each is a place to answer what a
 generic value's size and representation are, which is one decision but eighty
 edits, and none of it is the calling convention work.
 
-**The erasure shortcut does not exist yet.** `data` looks like it could stand in
-for an erased `T`, since any type coerces to it and it is two words with small
-scalars held inline. It cannot: downcasting back out of `data` is listed as an
-open question in `report-match-downcast.md` and is not implemented, so a value
-can go in and not come back with a static type.
+**Erasing `T` to `data` avoids all of that, and is the better plan.** This
+document first dismissed it, on the grounds that `report-match-downcast.md` lists
+downcasting out of `data` as an open question. That confuses a missing surface
+syntax with a missing mechanism. A generic function never asks a user to write a
+downcast: the compiler erases at the call site, where it knows the concrete type,
+and reifies on the way back. What it needs is an IR instruction, not syntax.
 
-The order below is unchanged by this. It does say where the seams are: step 2 is
-two decisions, not one, and the second is the datalit type.
+The mechanism is already there. `anypack` exposes `value_ptr`, `value_ptr_as<T>`,
+`tydesc` and `tytag`, plus a typed accessor for every type in the language:
+`as_u32`, `as_string`, `as_list`, `as_option`, `as_result` and the rest. Wrapping
+exists as `Instruction::DataFrom`. Only the extract is missing.
+
+What this buys, against the `IrType::Generic` route:
+
+- No new `IrType`. A generic function compiles once with each `T` replaced by
+  `data`, and `data` is an ordinary type every backend already handles. The
+  eighty match arms do not happen.
+- Nested positions come free. `?T` becomes `?data` and `[T]` becomes `[data]`,
+  both ordinary types, so datalit's `Type` does not have to change either.
+- The generic body compiles like any other function. Frames, drops and clones all
+  work, because dropping and cloning a `data` is already tydesc-driven.
+
+Both erased signatures compile and run today, checked before writing this down:
+
+```datalove
+fun identity(x: data): data
+fun unwrap_or(self: ?data, default: data): data
+```
+
+So the remaining work is an extract instruction, wrap and unwrap insertion at
+generic call sites, and the front end. One instruction across three backends
+rather than a representation decision across eighty arms.
+
+Two costs to know about.
+
+**Every wrap allocates.** `data_from_local` heap-allocates and copies
+unconditionally, so erasing a `u32` costs an allocation. `anypack` has
+`can_inline` and `from_immediate` for exactly this case and boxing does not use
+them, so the fix is local and worth doing before measuring anything.
+
+**Containers do not want this.** `[u32]` and `[data]` differ in element size, so
+converting at the boundary is O(n) and allocates per element: `list.len(ref self:
+[T])` would copy the whole list to ask its length. Containers want the tydesc
+route instead, which the runtime already does natively and which the rider ABI
+already speaks. So the split is scalars, options and results by erasure, which is
+the stdlib blocker, and containers by descriptor.
+
+The order below is unchanged by this, but step 2 gets much smaller: `T := data`
+rather than a new IR type.
 
 ## Order of work
 
