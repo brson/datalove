@@ -21,12 +21,12 @@ Analysis(
                     
                     fn get_message():
                     block0:
-                        v0 = const "\"test message\""
+                        v0 = const "test message"
                         return v0
                 """,
             ),
             output: "(fragment executed)",
-            debug_output: Some("\"\\\"test message\\\"\"\n"),
+            debug_output: Some("\"test message\"\n"),
         ),
     ],
 )

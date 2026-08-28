@@ -301,7 +301,10 @@ pub fn try_extract_literal<'db>(
         }
 
         ExprFunKind::String(s) => {
-            Some(ConstValue::String(s.value.as_str(db).to_string()))
+            let raw = s.value.as_str(db);
+            Some(ConstValue::String(
+                super::literal::string_literal_content(raw).to_string(),
+            ))
         }
 
         _ => None,

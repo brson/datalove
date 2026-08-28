@@ -1,0 +1,16 @@
+require module sys/std/string
+
+import string.len
+import string.eq
+
+// A const string used to keep the quotes the source wrote it in, so it was two
+// bytes longer than it should be and equal to nothing. The IR fixtures show the
+// value; this shows what the value does.
+
+const GREETING: string = "hello"
+
+let const_len = len(ref GREETING)
+let literal_len = len(ref "hello")
+let same = eq(ref GREETING, ref "hello")
+
+let output = (const_len, literal_len, same)

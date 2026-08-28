@@ -14,14 +14,14 @@ Analysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = const "\"hello world\""
+                        v0 = const "hello world"
                         debuglog v0
                         unit_end_drop v0
                         unit_end
                 """,
             ),
             output: "(fragment executed)",
-            debug_output: Some("\"\\\"hello world\\\"\"\n"),
+            debug_output: Some("\"hello world\"\n"),
         ),
     ],
 )

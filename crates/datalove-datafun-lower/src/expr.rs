@@ -686,12 +686,7 @@ pub fn lower_expression<'db>(
         }
         ExprFunKind::String(string_expr) => {
             let raw = string_expr.value.as_str(ctx.db);
-            // Strip quotes if present.
-            let content = if raw.starts_with('"') && raw.ends_with('"') && raw.len() >= 2 {
-                &raw[1..raw.len()-1]
-            } else {
-                raw
-            };
+            let content = super::literal::string_literal_content(raw);
             let dest = ctx.fresh_value(IrType::String);
             ctx.emit_const(dest, ConstValue::String(content.to_string()));
             Ok(dest)

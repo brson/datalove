@@ -14,7 +14,7 @@ Analysis(
                 ir: """
                     fn compute():
                     block0:
-                        v0 = const "\"from module\""
+                        v0 = const "from module"
                         return v0
                 """,
             ),
@@ -41,7 +41,7 @@ Analysis(
                 """,
             ),
             output: "(fragment executed)",
-            debug_output: Some("\"\\\"from module\\\"\"\n"),
+            debug_output: Some("\"from module\"\n"),
         ),
     ],
 )

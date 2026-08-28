@@ -27,7 +27,7 @@ ModulesAnalysis(
             
             fn uses_string():
             block0:
-                v0 = const "\"hello\""
+                v0 = const "hello"
                 return v0
             
             fn uses_bigint():

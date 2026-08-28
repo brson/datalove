@@ -117,6 +117,19 @@ pub fn parse_float_const(text: &str, ty: &IrType) -> Result<ConstValue, ()> {
     }
 }
 
+/// The content of a string literal, without the quotes the source wrote it in.
+///
+/// The token carries the literal as it was written. Every path that turns one
+/// into a value has to strip the quotes, and one of them once did not, so the
+/// stripping lives here rather than at each site.
+pub fn string_literal_content(raw: &str) -> &str {
+    if raw.len() >= 2 && raw.starts_with('"') && raw.ends_with('"') {
+        &raw[1..raw.len() - 1]
+    } else {
+        raw
+    }
+}
+
 /// Try to parse a negated integer literal.
 ///
 /// This handles the special case where `-N` fits in the target type but `N` doesn't.
