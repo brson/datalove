@@ -6,7 +6,7 @@
 //! - [`ScriptLowerContext`]: Tracks bindings exported from previous script units.
 
 use std::cell::RefCell;
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::rc::Rc;
 use bct::module_graph::ModuleId;
 use datalove_datafun_ast::ast::{Statement, ExprFun, ExprFunctionCall, ExprKey};
@@ -45,7 +45,10 @@ pub struct FrameState<'db> {
     /// Mapping from variable names to their operands.
     pub variables: HashMap<String, Operand>,
     /// Mapping from BindingId to Operand (built during lowering).
-    pub binding_to_operand: HashMap<BindingId, Operand>,
+    ///
+    /// Ordered, because `compute_tracked_slots` walks it to decide the order
+    /// tracking bytes are assigned in, and that reaches the emitted code.
+    pub binding_to_operand: BTreeMap<BindingId, Operand>,
     /// Reverse mapping from Operand to BindingId (for tracking lookups).
     pub operand_to_binding: HashMap<Operand, BindingId>,
     /// Next BindingId to allocate (must match analysis traversal order).
@@ -104,7 +107,7 @@ impl<'db> FrameState<'db> {
             next_param: 0,
             next_call_site: 0,
             variables: HashMap::new(),
-            binding_to_operand: HashMap::new(),
+            binding_to_operand: BTreeMap::new(),
             operand_to_binding: HashMap::new(),
             next_binding_id: 0,
             param_types: Vec::new(),

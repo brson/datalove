@@ -122,7 +122,7 @@ impl StmtKey {
 // ============================================================================
 
 /// Identifies a binding (parameter or let/var).
-#[derive(Clone, Copy, Debug, Hash, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Hash, Eq, PartialEq, PartialOrd, Ord)]
 pub struct BindingId(pub u32);
 
 /// Tracking category for a binding.

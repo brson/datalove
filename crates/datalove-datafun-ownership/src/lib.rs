@@ -38,7 +38,7 @@
 //! - At loop body end for iteration-scoped bindings
 
 use rmx::prelude::*;
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use datalove_datafun_ast::ast::{
     Statement, StmtFun, StmtLet, StmtVar, StmtSet, StmtRet, StmtIf, StmtLoop, StmtConst,
     StmtMatch, MatchCaseKind,
@@ -126,7 +126,10 @@ struct ScopeFrame<'db> {
     /// Kind of scope (for handling break/continue).
     kind: ScopeKind,
     /// Current state of bindings.
-    current_state: HashMap<BindingId, BindingState>,
+    ///
+    /// Ordered, because `live_bindings_for_return` walks it to build the drop
+    /// schedule, and the order drops are emitted in reaches the emitted code.
+    current_state: BTreeMap<BindingId, BindingState>,
     /// Initialization state for Out params.
     out_param_init: HashMap<BindingId, OutParamInitState>,
     /// Where each binding was moved, for error reporting.
@@ -1611,7 +1614,7 @@ fn analyze_match<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmt: &StmtMatch<'db>, stm
         .map(|f| f.current_state.C())
         .unwrap_or_default();
 
-    let mut arm_states: Vec<HashMap<BindingId, BindingState>> = Vec::new();
+    let mut arm_states: Vec<BTreeMap<BindingId, BindingState>> = Vec::new();
 
     // Analyze each case arm.
     for (arm_idx, case) in stmt.cases.iter().enumerate() {
