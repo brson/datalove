@@ -358,6 +358,11 @@ Operators listed from highest to lowest precedence:
 | 7 | `and` | Logical AND |
 | 8 | `or` `xor` | Logical OR/XOR |
 
+Postfix binds looser than unary prefix, so a postfix operator applies to the
+prefix expression as a whole: `-x@` is `(-x)@`. The payload keywords `some`,
+`ok`, `er`, `data` and `error` are the exception, taking postfix onto their
+payload instead, so `some x@` is `some (x@)`.
+
 ### 6.2 Arithmetic
 
 **Bare arithmetic** (`+`, `-`, `*`, `/`) behaves differently by type:
@@ -394,6 +399,10 @@ end fun
 Bigint division `/?` returns `?int`. Unary `-?` is permitted only for signed
 fixed integers.
 
+Integer division truncates toward zero, so `-7 /? 2` is `-3`. There is no
+remainder operator; derive one from the quotient, which gives it the sign of
+the dividend, or use `int.rem_checked`.
+
 ### 6.3 Comparison
 
 ```datalove
@@ -405,7 +414,10 @@ fixed integers.
 !=    not equal
 ```
 
-All comparison operators return `bool`.
+All comparison operators return `bool`. Both operands must already have the
+same numeric type; there is no implicit widening, and `bool`, `string` and
+the collection types are not comparable with these. Compare strings with
+`string.eq` and `string.cmp`.
 
 ### 6.4 Logical Operators
 
@@ -510,8 +522,26 @@ Valid widening chains:
 - Index/offset: `index` -> `int`, `offset` -> `int`
 
 The `@` operator cannot synthesize a type; it must appear in a context where
-the expected type is known (function argument, let binding with annotation,
-return position, etc.).
+the expected type is known. Those are:
+
+- A `let` or `var` binding with a type annotation.
+- Return position in a function with a declared return type.
+- An argument to a function call.
+- An operand of an operator whose operands have the same type as its result:
+  `+`, `-`, `*` and `/` where that type is one they accept, the checked and
+  optional operators, and `and`, `or` and `xor`. The expected type of the
+  whole expression reaches both operands, so `let c: int = a@ + b@` widens
+  both to `int`.
+- An operand of a comparison, when the other operand has a type of its own.
+  A comparison returns `bool`, which says nothing about its operands, so the
+  type comes from across the operator instead: `a@ .< b` takes `b`'s type,
+  and `a@ .< 0` takes the literal's. With `@` on both sides there is nothing
+  to take, and `a@ .< b@` is an error.
+
+The expected type has to be one the operator accepts, so `@` does not make an
+operator available on a type that does not have it. `let r: u32 = a@ + b@`
+is still an error, because `@` leaves the operands `u32` and bare `+` is not
+defined there; widen to `int`, or use `+!` or `+?`.
 
 ## 7. Place Expressions and Indexing
 
@@ -987,6 +1017,17 @@ u32 -> i64 -> int                (cross-sign)
 index -> int
 offset -> int
 ```
+
+A chain is shorthand for widening directly to any type after the source, so
+`u8` reaches `u64` in one step rather than through `u16`.
+
+Floats do not widen. There is no `f32` to `f64` conversion, by `@` or
+otherwise.
+
+`index` and `offset` widen only to `int`. They are 32-bit or 64-bit
+depending on how the compiler is configured, so a conversion to a fixed
+width would mean something different in each configuration, while `int`
+holds either exactly.
 
 Example requiring explicit widening:
 
