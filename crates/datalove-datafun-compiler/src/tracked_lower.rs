@@ -344,6 +344,16 @@ pub fn lower_module<'db>(
         }
     }
 
+    // Module-level consts, for the from-scratch path below. They are stored
+    // under a bare name; a function-level one is qualified with its function.
+    let module_level_consts: HashMap<String, (IrType, ConstValue)> = pre_resolved_consts
+        .as_ref()
+        .map(|c| c.consts.iter()
+            .filter(|(name, _, _)| !name.contains("::"))
+            .map(|(name, ty, value)| (name.clone(), (ty.clone(), value.clone())))
+            .collect())
+        .unwrap_or_default();
+
     // If lowered functions are provided, use them directly.
     if let Some(ref lf) = lowered_functions {
         functions = lf.functions.clone();
@@ -388,6 +398,7 @@ pub fn lower_module<'db>(
                     analysis,
                     resolved_params,
                     resolved_return,
+                    &module_level_consts,
                 ) {
                     Ok(ir_func) => {
                         functions.push(ir_func);
@@ -479,7 +490,11 @@ pub fn lower_all_module_functions<'db>(
     typecheck_result: ModuleGraphTypecheckResult<'db>,
     ownership_analysis: ModuleGraphAnalysis<'db>,
     func_id_map: FuncIdMap<'db>,
+    module_consts: &HashMap<ModuleId<'db>, HashMap<String, (IrType, ConstValue)>>,
+    deferred: &mut HashMap<ModuleId<'db>, Vec<String>>,
+    restrict: Option<&HashMap<ModuleId<'db>, Vec<String>>>,
 ) -> HashMap<ModuleId<'db>, ModuleLoweredFunctions> {
+    let empty_consts: HashMap<String, (IrType, ConstValue)> = HashMap::new();
     let typecheck_module_results = typecheck_result.module_results(db);
     let ownership_analysis_results = ownership_analysis.module_results(db);
     let func_id_hashmap = func_id_map.to_hashmap(db);
@@ -524,6 +539,18 @@ pub fn lower_all_module_functions<'db>(
 
                 func_name_to_id.push((func_name.clone(), func_id));
 
+                // On the second pass only the deferred functions are lowered.
+                // Their FuncIds still come from statement position, so the
+                // numbering matches whichever pass a function lands in.
+                if let Some(restrict) = restrict {
+                    let wanted = restrict.get(module_id)
+                        .map(|names| names.iter().any(|n| n == &func_name))
+                        .unwrap_or(false);
+                    if !wanted {
+                        continue;
+                    }
+                }
+
                 // Get resolved param and return types for this function.
                 let resolved_params = func_param_types.get(&func_name).map(|v| v.as_slice());
                 let resolved_return = func_return_types.get(&func_name).cloned();
@@ -548,9 +575,16 @@ pub fn lower_all_module_functions<'db>(
                     analysis,
                     resolved_params,
                     resolved_return,
+                    module_consts.get(module_id).unwrap_or(&empty_consts),
                 ) {
                     Ok(ir_func) => {
                         functions.push(ir_func);
+                    }
+                    Err(lower::LowerError::BindingNotAvailable(_)) => {
+                        // Names a module const that has not been evaluated yet.
+                        // Recorded so the caller can lower it once it has.
+                        deferred.entry(*module_id).or_default().push(func_name);
+                        continue;
                     }
                     Err(_) => {
                         // Errors will be reported during the main lowering phase.
@@ -560,7 +594,7 @@ pub fn lower_all_module_functions<'db>(
             }
         }
 
-        if !functions.is_empty() {
+        if !functions.is_empty() || !func_name_to_id.is_empty() {
             result.insert(*module_id, ModuleLoweredFunctions {
                 functions,
                 func_name_to_id,
@@ -592,6 +626,7 @@ pub fn evaluate_all_module_consts<'db>(
     evaluator: Rc<RefCell<dyn CtfeEvaluator>>,
     lowered_functions: &HashMap<ModuleId<'db>, ModuleLoweredFunctions>,
     func_id_map: FuncIdMap<'db>,
+    module_consts: &HashMap<ModuleId<'db>, HashMap<String, (IrType, ConstValue)>>,
 ) -> HashMap<ModuleId<'db>, ModulePreResolvedConsts<'db>> {
     let typecheck_module_results = typecheck_result.module_results(db);
     let mut result = HashMap::new();
@@ -612,8 +647,15 @@ pub fn evaluate_all_module_consts<'db>(
         let mut consts = Vec::new();
         let mut errors = Vec::new();
 
+        // Module-level consts were evaluated between the lowering strata. They
+        // are recorded under a bare name and seeded into every function, so a
+        // function-level const can name one.
+        let module_level = module_consts.get(module_id).cloned().unwrap_or_default();
+        for (name, (ir_type, value)) in &module_level {
+            consts.push((name.clone(), ir_type.clone(), value.clone()));
+        }
+
         // Evaluate function-level consts.
-        // Module-level consts are not allowed (rejected by typechecker).
         for statement in &parsed.statements {
             if let Statement::Fun(func_stmt) = statement {
                 let func_name = func_stmt.name(db).text(db);
@@ -621,7 +663,7 @@ pub fn evaluate_all_module_consts<'db>(
                 let func_return_type = func_stmt.return_type(db)
                     .map(|ty| IrType::from_type_hint(db, &ty));
                 // Track local consts for this function so later consts can reference earlier ones.
-                let mut func_local_consts: HashMap<String, (IrType, ConstValue)> = HashMap::new();
+                let mut func_local_consts: HashMap<String, (IrType, ConstValue)> = module_level.clone();
 
                 for func_body_stmt in func_stmt.body(db).iter() {
                     if let Statement::Const(const_stmt) = func_body_stmt {
@@ -659,6 +701,97 @@ pub fn evaluate_all_module_consts<'db>(
 /// The `lowered_functions` are used when const expressions call functions.
 /// The `func_return_type` is needed for try operators (`?` and `!`) in const expressions.
 /// The `func_id_map` enables cross-module function calls in const expressions.
+/// The first function a const expression calls that is not lowered yet.
+///
+/// `Module` references reach the module's own functions, which is where a cycle
+/// between a const and a function shows up. Local and external references are
+/// resolved against units the caller already holds, so they cannot be missing.
+fn first_uncallable_target(
+    unit: &IrCodeUnit,
+    lowered_functions: &[IrCodeUnit],
+) -> Option<String> {
+    use datalove_datafun_ir::{CodeRef, Instruction};
+
+    for block in &unit.blocks {
+        for instr in &block.instructions {
+            let func = match instr {
+                Instruction::Call { func, .. } | Instruction::ComptimeCall { func, .. } => func,
+                _ => continue,
+            };
+            if let CodeRef::Module { id, .. } = func {
+                if !lowered_functions.iter().any(|f| f.id.0 == id.0) {
+                    return Some(format!("module function #{}", id.0));
+                }
+            }
+        }
+    }
+    None
+}
+
+/// True if any module in the graph declares a const at module level.
+fn module_graph_has_module_consts<'db>(
+    db: &'db dyn salsa::Database,
+    parsed_graph: ParsedModuleGraph<'db>,
+) -> bool {
+    parsed_graph.statements_only(db)
+        .iter()
+        .any(|(_, parsed)| parsed.statements.iter().any(|s| matches!(s, Statement::Const(_))))
+}
+
+/// Evaluate the module-level consts of every module.
+///
+/// Runs between the two lowering strata, so it can call any function that does
+/// not itself name a module const. Consts are evaluated in source order, which
+/// is what lets one name another declared above it.
+fn evaluate_module_level_consts<'db>(
+    db: &'db dyn salsa::Database,
+    parsed_graph: ParsedModuleGraph<'db>,
+    typecheck_result: ModuleGraphTypecheckResult<'db>,
+    evaluator: &Rc<RefCell<dyn CtfeEvaluator>>,
+    lowered_functions: &HashMap<ModuleId<'db>, ModuleLoweredFunctions>,
+    func_id_map: FuncIdMap<'db>,
+    errors_out: &mut HashMap<ModuleId<'db>, Vec<String>>,
+) -> HashMap<ModuleId<'db>, HashMap<String, (IrType, ConstValue)>> {
+    let typecheck_module_results = typecheck_result.module_results(db);
+    let mut result = HashMap::new();
+
+    for (module_id, parsed) in parsed_graph.statements_only(db) {
+        let Some(single_typecheck) = typecheck_module_results.get(module_id) else {
+            continue;
+        };
+        let expr_types = single_typecheck.expr_types(db);
+        let call_targets = single_typecheck.call_targets(db);
+
+        let (funcs, func_map): (&[IrCodeUnit], HashMap<String, FuncId>) = match lowered_functions.get(module_id) {
+            Some(lf) => (lf.functions.as_slice(), lf.func_name_to_id.iter().cloned().collect()),
+            None => (&[], HashMap::new()),
+        };
+
+        let mut consts: HashMap<String, (IrType, ConstValue)> = HashMap::new();
+        for statement in &parsed.statements {
+            if let Statement::Const(const_stmt) = statement {
+                // A module const is outside any function, so there is no return
+                // type for an early-return operator to check against.
+                match evaluate_single_const(
+                    db, const_stmt, expr_types, call_targets, &consts, evaluator,
+                    funcs, &func_map, None, func_id_map,
+                ) {
+                    Ok((name, ir_type, value)) => {
+                        consts.insert(name, (ir_type, value));
+                    }
+                    Err(e) => errors_out.entry(*module_id).or_default().push(e),
+                }
+            }
+        }
+
+        if !consts.is_empty() {
+            result.insert(*module_id, consts);
+        }
+    }
+
+    result
+}
+
 fn evaluate_single_const<'db>(
     db: &'db dyn salsa::Database,
     const_stmt: &datalove_datafun_ast::ast::StmtConst<'db>,
@@ -700,6 +833,17 @@ fn evaluate_single_const<'db>(
     let value = match (unit_opt, value_opt) {
         (None, Some(v)) => v,
         (Some(unit), None) => {
+            // Every function this reaches has to be lowered already, or the
+            // interpreter has nothing to call and panics looking for it. A
+            // module const whose evaluation needs a function that is itself
+            // waiting on a module const is a cycle, and this is where it shows.
+            if let Some(missing) = first_uncallable_target(&unit, lowered_functions) {
+                return Err(format!(
+                    "const '{}': depends on a function that is not available yet, \
+                     which means it and that function depend on each other: {}",
+                    name, missing
+                ));
+            }
             let prepared = PreparedConst::Unit(unit);
             evaluate_prepared_const(&prepared, &ir_type, evaluator)
                 .map_err(|e| format!("const '{}': CTFE error: {}", name, e))?
@@ -743,10 +887,67 @@ pub fn lower_module_graph_with_evaluator<'db>(
     // Compute func_id_map first (needed for lowering).
     let func_id_map = compute_func_id_map(db_salsa, parsed_graph);
 
-    // Phase 5a: Always lower all module functions first.
-    let lowered_functions = lower_all_module_functions(
-        db_salsa, parsed_graph, typecheck_result, ownership_analysis, func_id_map
+    // Phase 5a: lower module functions, in strata.
+    //
+    // A function that names a module-level const needs that const's value to
+    // lower, and evaluating the const may call functions in the same module. So
+    // the functions that name no module const go first, the module consts are
+    // evaluated against those, and the rest follow. A const whose evaluation
+    // needs a function from the second stratum is a cycle, and shows up as the
+    // const failing to evaluate rather than as anything lowering wrongly.
+    let no_consts_yet: HashMap<ModuleId<'db>, HashMap<String, (IrType, ConstValue)>> = HashMap::new();
+    let mut deferred: HashMap<ModuleId<'db>, Vec<String>> = HashMap::new();
+    let mut lowered_functions = lower_all_module_functions(
+        db_salsa, parsed_graph, typecheck_result, ownership_analysis, func_id_map,
+        &no_consts_yet, &mut deferred, None,
     );
+
+    // Phase 5a/b boundary: evaluate module-level consts against what is lowered
+    // so far. Done even when const inlining is skipped, since a module const is
+    // resolved when its reference is lowered rather than by a later pass, so
+    // there is nothing for that flag to skip.
+    let mut module_const_errors: HashMap<ModuleId<'db>, Vec<String>> = HashMap::new();
+    let module_consts = if deferred.is_empty() && !module_graph_has_module_consts(db_salsa, parsed_graph) {
+        HashMap::new()
+    } else {
+        let func_id_hashmap = func_id_map.to_hashmap(db_salsa);
+        let module_registry = build_module_registry_from_lowered(&lowered_functions, &func_id_hashmap);
+        evaluator.borrow_mut().set_module_registry(module_registry);
+        evaluate_module_level_consts(
+            db_salsa, parsed_graph, typecheck_result, &evaluator, &lowered_functions, func_id_map,
+            &mut module_const_errors,
+        )
+    };
+
+    // Second stratum: the functions that were waiting on those values.
+    if !deferred.is_empty() {
+        let mut still_deferred: HashMap<ModuleId<'db>, Vec<String>> = HashMap::new();
+        let second = lower_all_module_functions(
+            db_salsa, parsed_graph, typecheck_result, ownership_analysis, func_id_map,
+            &module_consts, &mut still_deferred, Some(&deferred),
+        );
+        for (module_id, names) in &still_deferred {
+            for name in names {
+                module_const_errors.entry(*module_id).or_default().push(format!(
+                    "function '{}' names a module const that could not be evaluated",
+                    name
+                ));
+            }
+        }
+        for (module_id, mut module_funcs) in second {
+            match lowered_functions.get_mut(&module_id) {
+                Some(existing) => {
+                    existing.functions.append(&mut module_funcs.functions);
+                    // Keep the IR in the order the ids were assigned, so the
+                    // stratum a function landed in does not show in the output.
+                    existing.functions.sort_by_key(|f| f.id.0);
+                }
+                None => {
+                    lowered_functions.insert(module_id, module_funcs);
+                }
+            }
+        }
+    }
 
     // Phase 5b: Evaluate consts (skip if skip_const_inlining is enabled).
     let resolved_consts = if skip_const_inlining {
@@ -757,8 +958,21 @@ pub fn lower_module_graph_with_evaluator<'db>(
         let module_registry = build_module_registry_from_lowered(&lowered_functions, &func_id_hashmap);
         evaluator.borrow_mut().set_module_registry(module_registry);
 
-        evaluate_all_module_consts(db_salsa, parsed_graph, typecheck_result, evaluator, &lowered_functions, func_id_map)
+        evaluate_all_module_consts(db_salsa, parsed_graph, typecheck_result, evaluator, &lowered_functions, func_id_map, &module_consts)
     };
+
+    // Module const failures have to reach the lowering result, or a module
+    // whose const could not be evaluated compiles as though the functions that
+    // name it were never written.
+    let mut resolved_consts = resolved_consts;
+    for (module_id, errors) in module_const_errors {
+        resolved_consts
+            .entry(module_id)
+            .or_insert_with(|| ModulePreResolvedConsts::new(module_id, Vec::new()))
+            .errors
+            .extend(errors);
+    }
+    let resolved_consts = resolved_consts;
 
     // Phase 5c: Specialize const parameter functions (union-branch transformation).
     // This transforms functions with const parameters and rewrites call sites.

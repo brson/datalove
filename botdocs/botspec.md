@@ -698,6 +698,29 @@ var x: u32 = 0
 var y: i32             // uninitialized; must set before use
 ```
 
+**Const** binds a value the compiler evaluates. It is valid at script top
+level, in a script or module function body, and at module top level, where it
+is in scope for every function in the module regardless of where it is written:
+
+```datalove
+const LIMIT: u32 = : u32 / 10
+const DOUBLED: u32 = LIMIT +! LIMIT     // may name a const written above it
+
+fun clamped(x: u32): u32
+    const L: u32 = LIMIT                // and so may a function-level const
+    ret L
+end fun
+```
+
+A const expression may only name other consts, since it is evaluated before
+anything a parameter or a `let` is bound to exists. It may call functions, whose
+parameters are bound by the call. A module-level const has no enclosing
+function, so it cannot use the early-return operators.
+
+A module-level const is evaluated after the functions it calls are compiled. If
+it calls a function that itself names a module-level const, the two depend on
+each other and the compiler reports it.
+
 **Set** mutates a var binding, mutable parameter, or indexed/chained target:
 
 ```datalove

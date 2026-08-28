@@ -188,12 +188,6 @@ pub enum PendingDiagnostic<'db> {
         module_id: Option<ModuleId<'db>>,
         name: InternedText<'db>,
     },
-    /// F056: Const not allowed at module level.
-    ConstNotAllowedInModule {
-        expr_key: ExprKey<'db>,
-        module_id: Option<ModuleId<'db>>,
-        name: InternedText<'db>,
-    },
     /// F058: A const expression referenced a binding that is not itself const.
     NonConstInConstExpr {
         expr_key: ExprKey<'db>,

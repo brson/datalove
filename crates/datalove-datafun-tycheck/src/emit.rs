@@ -387,18 +387,6 @@ fn emit_single_diagnostic<'db>(
                     .emit_type();
             }
         }
-        PendingDiagnostic::ConstNotAllowedInModule { expr_key, module_id: _, name } => {
-            if let Some(ts) = spans.lookup_expr(db, *expr_key) {
-                bct::diagnostic::DiagnosticBuilder::error(
-                    db,
-                    &format!("const `{}` not allowed at module level", name.as_str(db)),
-                )
-                    .code("F056")
-                    .primary_label(ts, "const not allowed at module level")
-                    .note("const bindings are only allowed inside functions and scripts")
-                    .emit_type();
-            }
-        }
         PendingDiagnostic::NonConstInConstExpr { expr_key, module_id: _, name } => {
             if let Some(ts) = spans.lookup_expr(db, *expr_key) {
                 bct::diagnostic::DiagnosticBuilder::error(
@@ -571,11 +559,6 @@ fn format_single_diagnostic<'db>(
             let ts = spans.lookup_expr(db, *expr_key)?;
             let loc = format_location(db, &ts);
             Some(format!("{}: error[F049]: try operator `{}` return type mismatch: expected `{}`, found `{}`", loc, operator.as_str(db), expected.as_str(db), actual.as_str(db)))
-        }
-        PendingDiagnostic::ConstNotAllowedInModule { expr_key, module_id: _, name } => {
-            let ts = spans.lookup_expr(db, *expr_key)?;
-            let loc = format_location(db, &ts);
-            Some(format!("{}: error[F056]: const `{}` not allowed at module level", loc, name.as_str(db)))
         }
         PendingDiagnostic::NonConstInConstExpr { expr_key, module_id: _, name } => {
             let ts = spans.lookup_expr(db, *expr_key)?;

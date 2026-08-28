@@ -469,19 +469,6 @@ impl<'db> TypeContext<'db> {
         TypeError::VariableNotMutable
     }
 
-    /// F056: Const not allowed at module level.
-    pub fn error_const_not_allowed_in_module(&mut self, stmt: &StmtConst<'db>) -> TypeError {
-        let name = stmt.name;
-        // Use the value expression's ID for span lookup.
-        let expr_key = ExprKey::of(self.db, stmt.value);
-        self.pending_diagnostics.push(PendingDiagnostic::ConstNotAllowedInModule {
-            expr_key,
-            module_id: self.current_module_id,
-            name,
-        });
-        TypeError::ConstNotAllowedInModule(name.as_str(self.db).S())
-    }
-
     /// F058: A const expression referenced a binding that is not itself const.
     pub fn error_non_const_in_const_expr(
         &mut self,

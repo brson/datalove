@@ -77,9 +77,16 @@ fn require_option_return_type<'db>(
     op_str: &str,
 ) -> Result<Type<'db>, TypeError> {
     let db = ctx.db;
-    // Scripts always have an expected return type, so this is always Some.
-    let expected_return = ctx.expected_return_type.clone()
-        .expect("try operator used outside function context");
+    // A module-level const is outside any function, so an early-return operator
+    // has nowhere to return to.
+    let Some(expected_return) = ctx.expected_return_type.clone() else {
+        return Err(ctx.error_try_return_type_mismatch(
+            expr,
+            op_str,
+            "Option",
+            "no enclosing function",
+        ));
+    };
     match expected_return {
         Type::Datalit(datalit::tycheck::Type::Option(_)) => Ok(expected_return),
         _ => Err(ctx.error_try_return_type_mismatch(
@@ -100,9 +107,16 @@ fn require_result_return_type<'db>(
     op_str: &str,
 ) -> Result<Type<'db>, TypeError> {
     let db = ctx.db;
-    // Scripts always have an expected return type, so this is always Some.
-    let expected_return = ctx.expected_return_type.clone()
-        .expect("try operator used outside function context");
+    // A module-level const is outside any function, so an early-return operator
+    // has nowhere to return to.
+    let Some(expected_return) = ctx.expected_return_type.clone() else {
+        return Err(ctx.error_try_return_type_mismatch(
+            expr,
+            op_str,
+            "Result",
+            "no enclosing function",
+        ));
+    };
     match expected_return {
         Type::Datalit(datalit::tycheck::Type::Result(_)) => Ok(expected_return),
         _ => Err(ctx.error_try_return_type_mismatch(

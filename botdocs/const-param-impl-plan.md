@@ -1230,43 +1230,36 @@ read it.
 Fixtures: interp 944, 945, 946 and dual 423. Each was checked by reverting its
 fix and confirming the failure.
 
-#### Open: module-level consts
+#### Fixed: module-level consts
 
-Rejected with F056. Wanted, and the phasing that got them removed is no longer
-the obstacle it was.
+Implemented by stratifying lowering, which is the option that reuses the
+reference path that already gets drops right.
 
-The removed implementation passed module const values *into* lowering as
-`module_consts_ref`, so they had to exist before the module's functions were
-lowered, while evaluating one could call those functions. That cycle is why the
-deleted code had a "simple literals only" fallback. It is not inherent:
-`evaluate_all_module_consts` already runs *after* lowering and evaluates
-function-level consts by calling into already-lowered functions.
+Lowering runs in two passes. The first lowers the functions that name no
+module-level const; a function that names one fails with
+`LowerError::BindingNotAvailable` and is recorded rather than reported. The
+module's consts are then evaluated against what is lowered, so a const may call
+a function. The second pass lowers the recorded functions with the values
+seeded into `LowerCtx.const_bindings`, which is where an evaluated
+function-level const already lives, so a reference emits a fresh `Const` and is
+dropped as an expression temporary. Nothing new schedules drops, which is why
+this route was chosen: linear module consts, `string`, `int` and `[int]`, do not
+leak.
 
-What is left is the reference side, and it is more delicate than it looks.
-Typechecking module consts is a small change, confirmed by making it and
-watching lowering panic at `expr.rs:35` instead. The options:
+The cycle case, a const calling a function that names a module const, is
+reported. It is caught before evaluation by scanning the lowered const unit for
+calls whose target is not among the lowered functions; without that the
+interpreter panicked looking for a function that was never lowered. Both ends
+are named, the const and the function.
 
-- **Pre-evaluate before lowering.** The original approach, and the original
-  cycle. No.
-- **Placeholder at the reference site,** substituted at inlining. Breaks under
-  `skip_const_inlining`, where the placeholder is what runs.
-- **Lower the const's expression at each reference.** Works in both modes, but
-  the synthetic binding has no `BindingId`, so ownership analysis never schedules
-  its drop and a linear module const leaks. This is the same class of fault as
-  the three above and should not be reintroduced.
-- **Hoist into each referencing function's body before ownership analysis,** as
-  though the const had been written there. Everything downstream then works
-  unchanged: analysis schedules the drop, `evaluate_all_module_consts` finds it
-  by walking function bodies, and inlining folds it under the qualified name.
-  Costs an AST rewrite mid-pipeline.
-- **Stratify.** Lower functions that reference no module const, evaluate the
-  module consts, then lower the rest, with the values reaching `lookup_const` so
-  the existing fresh-const-per-reference path handles drops. A module const
-  calling a function that reads a module const is a genuine cycle and should be
-  a diagnostic, not a fallback.
+Two things this turned up. `F056`, which rejected module-level consts, is gone
+along with its diagnostic and error variants. And `require_option_return_type`
+and `require_result_return_type` asserted that an enclosing function always
+exists, which stopped being true the moment a const could sit outside one; they
+report instead.
 
-The last two are the real candidates. Stratifying reuses the existing reference
-path, which is the part that already gets drops right.
+Fixtures: module_interp 055 and 056.
+
 
 #### Was open, now fixed: CTFE leaks heap values returned through a call
 

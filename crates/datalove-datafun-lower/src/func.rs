@@ -11,7 +11,7 @@ use bct::module_graph::ModuleId;
 use datalove_datafun_ast::ast;
 use datalove_datafun_ir::{
     IrType, IrCodeUnit, CodeUnitId, CodeUnitContext, FunctionContext,
-    Operand, FuncId, IrModuleId, Terminator, ParamMode, ParamId, SymbolTable,
+    Operand, FuncId, IrModuleId, Terminator, ParamMode, ParamId, SymbolTable, ConstValue,
 };
 use datalove_datafun_sema::FunctionAnalysis;
 use super::context::LowerCtx;
@@ -44,8 +44,16 @@ pub fn lower_function_for_module<'db>(
     analysis: FunctionAnalysis<'db>,
     resolved_param_types: Option<&[IrType]>,
     resolved_return_type: Option<IrType>,
+    module_consts: &HashMap<String, (IrType, ConstValue)>,
 ) -> Result<IrCodeUnit, LowerError> {
     let mut ctx = LowerCtx::new_for_module(db, expr_types, Some(call_targets), Some(func_id_map));
+    // Module-level consts are in scope for the whole module. Seeding them here
+    // puts them on the same path as an already-evaluated function-level const,
+    // so a reference emits a fresh Const and is dropped as an expression
+    // temporary, with no separate substitution step.
+    for (name, (ir_type, value)) in module_consts {
+        ctx.add_const(name.clone(), ir_type.clone(), value.clone());
+    }
     lower_function_body(&mut ctx, func_id, func, analysis, resolved_param_types, resolved_return_type)
 }
 

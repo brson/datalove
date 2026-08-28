@@ -91,6 +91,12 @@ pub enum LowerError {
     InvalidLiteral(String),
     /// Feature not implemented for CTFE or const expressions.
     NotImplemented(String),
+    /// A name the typechecker accepted has no value yet.
+    ///
+    /// Reached for a module-level const, whose value is only known once it has
+    /// been evaluated, which needs the functions it calls to be lowered first.
+    /// The caller defers the function and lowers it again after evaluation.
+    BindingNotAvailable(String),
 }
 
 impl std::fmt::Display for LowerError {
@@ -99,6 +105,7 @@ impl std::fmt::Display for LowerError {
             LowerError::FunctionNotFound(name) => write!(f, "function not found: {}", name),
             LowerError::InvalidLiteral(lit) => write!(f, "invalid literal: {}", lit),
             LowerError::NotImplemented(msg) => write!(f, "not implemented: {}", msg),
+            LowerError::BindingNotAvailable(name) => write!(f, "binding not available yet: {}", name),
         }
     }
 }

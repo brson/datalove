@@ -357,9 +357,20 @@ pub fn typecheck_module<'db>(
     // Seed context from pre-computed name resolution (replaces Pass 0/1).
     ctx.seed_from_name_resolution(&name_resolution, Some(module_id));
 
-    // Pass 2: type check all statements.
+    // Pass 2a: module-level consts, before anything that could name one. A
+    // module const is in scope for every function in the module regardless of
+    // where it is written, and functions are checked in source order below.
     for statement in &parsed.statements {
-        check_statement(&mut ctx, &statement);
+        if matches!(statement, Statement::Const(_)) {
+            check_statement(&mut ctx, &statement);
+        }
+    }
+
+    // Pass 2b: everything else.
+    for statement in &parsed.statements {
+        if !matches!(statement, Statement::Const(_)) {
+            check_statement(&mut ctx, &statement);
+        }
     }
 
     // Use exports from name resolution (already computed).

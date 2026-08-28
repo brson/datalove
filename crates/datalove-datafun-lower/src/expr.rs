@@ -20,7 +20,7 @@ use super::LowerError;
 /// Callers that need drop tracking should call `record_expr_temp` only
 /// when `is_fresh_const` is true, since regular `let` bindings bound to
 /// `Operand::Value` are already managed by the drop schedule.
-fn lower_var_operand(ctx: &mut LowerCtx, name: &str) -> (Operand, bool) {
+fn lower_var_operand(ctx: &mut LowerCtx, name: &str) -> Result<(Operand, bool), LowerError> {
     if let Some((const_type, const_value)) = ctx.lookup_const(name) {
         let const_type = const_type.clone();
         let const_value = const_value.clone();
@@ -29,11 +29,14 @@ fn lower_var_operand(ctx: &mut LowerCtx, name: &str) -> (Operand, bool) {
             dest,
             value: const_value,
         });
-        return (Operand::Value(dest), true);
+        return Ok((Operand::Value(dest), true));
     }
+    // A name the typechecker accepted but nothing here defines is a module-level
+    // const that has not been evaluated yet. The caller lowers this function
+    // again once it has.
     let op = ctx.lookup_var(name)
-        .unwrap_or_else(|| panic!("variable '{}' not found - typechecker should catch this", name));
-    (op, false)
+        .ok_or_else(|| LowerError::BindingNotAvailable(name.to_string()))?;
+    Ok((op, false))
 }
 
 /// Lower an operand for borrowing contexts (binop, unaryop).
@@ -48,7 +51,7 @@ pub fn lower_operand<'db>(
     match expr.expr(ctx.db) {
         ExprFunKind::Place(ref place) if place.steps.is_empty() => {
             let name_str = place.root.text(ctx.db);
-            let (operand, is_fresh_const) = lower_var_operand(ctx, name_str);
+            let (operand, is_fresh_const) = lower_var_operand(ctx, name_str)?;
             if is_fresh_const {
                 if let Operand::Value(vid) = operand {
                     let ty = ctx.body.value_types[vid.0 as usize].clone();
@@ -139,7 +142,7 @@ fn lower_call_arg<'db>(
     match arg.expr(ctx.db) {
         ExprFunKind::Place(ref place) if place.steps.is_empty() => {
             let name_str = place.root.text(ctx.db);
-            let (operand, _) = lower_var_operand(ctx, name_str);
+            let (operand, _) = lower_var_operand(ctx, name_str)?;
             let is_external = matches!(
                 operand,
                 Operand::ExternalValue { .. } | Operand::ExternalSlot { .. },
@@ -330,7 +333,7 @@ pub fn lower_expression_for_ref<'db>(
         }
         ExprFunKind::Place(ref place) if place.steps.is_empty() => {
             let name_str = place.root.text(ctx.db);
-            let (operand, is_fresh_const) = lower_var_operand(ctx, name_str);
+            let (operand, is_fresh_const) = lower_var_operand(ctx, name_str)?;
             if is_fresh_const {
                 if let Operand::Value(vid) = operand {
                     let ty = ctx.body.value_types[vid.0 as usize].clone();
@@ -392,7 +395,7 @@ pub fn lower_expression<'db>(
     match expr.expr(ctx.db) {
         ExprFunKind::Place(ref place) if place.steps.is_empty() => {
             let name_str = place.root.text(ctx.db);
-            let (operand, _) = lower_var_operand(ctx, name_str);
+            let (operand, _) = lower_var_operand(ctx, name_str)?;
 
             // Auto-adapt supplies the `@` here, so clone rather than consume.
             if ctx.is_adapt_site(expr) {
