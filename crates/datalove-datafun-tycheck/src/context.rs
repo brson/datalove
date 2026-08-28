@@ -160,6 +160,28 @@ impl<'db> TypeContext<'db> {
         self.errors.push(error);
     }
 
+    /// Run `attempt`, discarding anything it reported if it does not succeed.
+    ///
+    /// For speculative checks that fall back to another way of typing the same
+    /// expression. Without this the abandoned attempt still reports, and the
+    /// reader sees the failure of a path the compiler chose not to take
+    /// alongside the error it settled on.
+    pub fn try_check<R>(
+        &mut self,
+        attempt: impl FnOnce(&mut Self) -> Option<R>,
+    ) -> Option<R> {
+        let errors = self.errors.len();
+        let diagnostics = self.pending_diagnostics.len();
+        match attempt(self) {
+            Some(result) => Some(result),
+            None => {
+                self.errors.truncate(errors);
+                self.pending_diagnostics.truncate(diagnostics);
+                None
+            }
+        }
+    }
+
     // Error collection helpers that collect pending diagnostics and return TypeError.
     // Diagnostics are emitted at the end of typechecking via emit_pending_diagnostics().
 

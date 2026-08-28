@@ -459,37 +459,48 @@ pub fn check_expr<'db>(
                 true
             };
 
-            // Checked/optional ops on fixed ints: propagate expected type to operands.
-            if return_type_ok && (is_checked || is_optional) && is_fixed_int_type(expected) {
-                let lhs_result = check_expr(ctx, binop.lhs, expected);
-                let rhs_result = check_expr(ctx, binop.rhs, expected);
-
-                if lhs_result.is_ok() && rhs_result.is_ok() {
-                    ctx.store_expr_type(expr, expected);
-                    return Ok(());
+            // Propagate the expected type into both operands, for every
+            // operator whose operands have the same type as its result. This is
+            // what lets `@` appear in an operand: it needs a target to know
+            // whether it clones or which type it widens to, and it has no other
+            // source for one. Comparisons are absent because their result is
+            // bool, which says nothing about the operands; those pair the
+            // operands off against each other in synthesis instead.
+            //
+            // This has to admit exactly what synthesis admits, because it
+            // returns without consulting it. Propagating to a type the operator
+            // does not have would accept the operator for that type: checking
+            // `a@ + b@` against u32 leaves both operands u32, where `@` is a
+            // no-op and bare + is not allowed, and checking `a@ / b@` against
+            // int leaves a bare bigint division the backends do not implement.
+            // Against int, + - and * widen their operands and do exist, which
+            // is the idiom the spec gives for arithmetic on fixed ints.
+            let propagates = if is_checked || is_optional {
+                return_type_ok
+                    && (is_fixed_int_type(expected)
+                        || (matches!(op, BinOp::DivChecked | BinOp::DivOptional)
+                            && is_bigint_type(expected)))
+            } else {
+                match op {
+                    BinOp::Add | BinOp::Sub | BinOp::Mul => {
+                        is_float_type(expected) || is_bigint_type(expected)
+                    }
+                    BinOp::Div => is_float_type(expected),
+                    BinOp::And | BinOp::Or | BinOp::Xor => is_bool_type(expected),
+                    _ => false,
                 }
-                // Fall through to synthesis if checking fails.
-            }
+            };
 
-            // Bigint division: propagate int to operands.
-            if return_type_ok && matches!(op, BinOp::DivChecked | BinOp::DivOptional) && is_bigint_type(expected) {
-                let lhs_result = check_expr(ctx, binop.lhs, expected);
-                let rhs_result = check_expr(ctx, binop.rhs, expected);
-
-                if lhs_result.is_ok() && rhs_result.is_ok() {
-                    ctx.store_expr_type(expr, expected);
-                    return Ok(());
-                }
-            }
-
-            // Bare arithmetic on floats: propagate float type.
-            if matches!(op, BinOp::Add | BinOp::Sub | BinOp::Mul | BinOp::Div)
-                && is_float_type(expected)
-            {
-                let lhs_result = check_expr(ctx, binop.lhs, expected);
-                let rhs_result = check_expr(ctx, binop.rhs, expected);
-
-                if lhs_result.is_ok() && rhs_result.is_ok() {
+            // On failure fall through to synthesis, which reports against the
+            // operands' own types. What this attempt had to say about them is
+            // dropped, since it describes a path not taken.
+            if propagates {
+                let propagated = ctx.try_check(|ctx| {
+                    let lhs_ok = check_expr(ctx, binop.lhs, expected).is_ok();
+                    let rhs_ok = check_expr(ctx, binop.rhs, expected).is_ok();
+                    (lhs_ok && rhs_ok).then_some(())
+                });
+                if propagated.is_some() {
                     ctx.store_expr_type(expr, expected);
                     return Ok(());
                 }

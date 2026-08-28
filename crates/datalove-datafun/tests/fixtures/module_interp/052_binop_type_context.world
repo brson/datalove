@@ -1,0 +1,48 @@
+----------
+module local/test/main
+----------
+
+// The expected type reaches both operands wherever the operands share the
+// result's type, which is what gives @ a target to widen or clone to.
+
+// Bare arithmetic on int, widening fixed operands. Section 10 of the spec.
+fun widen_add(a: u32, b: u32): int
+  let c: int = a@ + b@
+  ret c
+end fun
+
+fun widen_mul_mixed(x: u8, y: u64): int
+  let c: int = x@ * y@
+  ret c
+end fun
+
+// Cloning bigints rather than widening.
+fun keep_both(a: int, b: int): (int, int)
+  let s: int = a@ + b@
+  ret (s, a - b)
+end fun
+
+// Boolean logic.
+fun logic(a: bool, b: bool): bool
+  let r: bool = a@ and b@
+  ret r
+end fun
+
+// Comparisons take the type from the other operand, since bool tells them
+// nothing. A literal can inform @, having a type of its own.
+fun cmp_lit(a: int): bool
+  let r: bool = a@ .< 0
+  ret r
+end fun
+
+fun cmp_widen(a: u32, b: int): bool
+  let r: bool = a@ .< b
+  ret r
+end fun
+
+fun main(): (int, int, bool, bool)
+  ret (widen_add(: u32 / 10, : u32 / 20),
+       widen_mul_mixed(: u8 / 3, : u64 / 5),
+       logic(true, true),
+       cmp_lit(-3))
+end fun

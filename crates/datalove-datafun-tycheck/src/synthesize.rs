@@ -471,6 +471,24 @@ fn is_bare_numeric_literal<'db>(ctx: &TypeContext<'db>, expr: ExprFun<'db>) -> b
     }
 }
 
+/// True if this operand has no type of its own at all.
+///
+/// `@` is the case: it needs a target to know whether it clones or which type
+/// it widens to, and an operator returning bool gives it nothing, so the other
+/// operand is the only source. This is stronger than being a bare numeric
+/// literal, which does have a type of its own, `int`, and merely prefers to
+/// take the other operand's instead.
+fn operand_has_no_type<'db>(ctx: &TypeContext<'db>, expr: ExprFun<'db>) -> bool {
+    match expr.expr(ctx.db) {
+        ExprFunKind::CloneCoerce(_) => true,
+        ExprFunKind::UnaryOp(ref unary) => {
+            matches!(unary.op, UnaryOp::Neg | UnaryOp::NegOptional | UnaryOp::NegResult)
+                && operand_has_no_type(ctx, unary.operand)
+        }
+        _ => false,
+    }
+}
+
 fn synthesize_binop<'db>(
     ctx: &mut TypeContext<'db>,
     expr: ExprFun<'db>,
@@ -495,7 +513,24 @@ fn synthesize_binop<'db>(
     ctx.ref_context = true;
     let lhs_bare = is_bare_numeric_literal(ctx, lhs);
     let rhs_bare = is_bare_numeric_literal(ctx, rhs);
+    let lhs_untyped = operand_has_no_type(ctx, lhs);
+    let rhs_untyped = operand_has_no_type(ctx, rhs);
     let result: Result<(Type<'db>, Type<'db>), TypeError> = (|ctx: &mut TypeContext<'db>| {
+        // An operand with no type of its own takes the other one's, whatever
+        // that is, so `a@ == b` works for any type and `a@ .< 0` takes the
+        // literal's int. With one on each side there is nothing to draw on and
+        // both report that they needed a type context.
+        if lhs_untyped && !rhs_untyped {
+            let rhs_ty = ctx.synthesize_expr(rhs)?;
+            check_expr(ctx, lhs, &rhs_ty)?;
+            return Ok((rhs_ty.clone(), rhs_ty));
+        }
+        if rhs_untyped && !lhs_untyped {
+            let lhs_ty = ctx.synthesize_expr(lhs)?;
+            check_expr(ctx, rhs, &lhs_ty)?;
+            return Ok((lhs_ty.clone(), lhs_ty));
+        }
+
         // Only a numeric type can inform a numeric literal. Against anything
         // else the operands are simply incompatible, and saying so is clearer
         // than reporting that the literal failed to be a string.

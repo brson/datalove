@@ -1,0 +1,19 @@
+ModulesAnalysis(
+    typecheck: TypecheckResult(
+        status: "Error",
+        errors: [
+            "line 8, col 17: error[F011]: @ operator requires type context for coercion",
+            "line 9, col 7: error[F001]: cannot find value `r` in this scope",
+            "line 14, col 17: error[F011]: @ operator requires type context for coercion",
+            "line 15, col 7: error[F001]: cannot find value `r` in this scope",
+            "line 20, col 16: error[F026]: invalid operand type `u32` for operator `+`",
+            "line 21, col 7: error[F001]: cannot find value `r` in this scope",
+            "line 26, col 18: error[F011]: @ operator requires type context for coercion",
+            "line 27, col 7: error[F001]: cannot find value `r` in this scope",
+        ],
+    ),
+    lowering: LoweringResult(
+        status: "Skipped",
+    ),
+    output: "",
+)
