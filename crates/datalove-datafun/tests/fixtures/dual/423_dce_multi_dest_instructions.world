@@ -1,0 +1,38 @@
+----------
+scriptunit-fragment
+----------
+
+// Dead code elimination has to consult every value an instruction defines, not
+// just the first. These all define a second one that a branch tests, so
+// removing them for having an unused primary leaves the branch reading a value
+// nothing defines. AOT codegen is what notices; the interpreter is more
+// forgiving, so this belongs in the dual suite.
+
+// BinOpChecked: the sum is unused, the overflow flag drives the early return.
+fun checked_result_unused(a: u32, b: u32): ?u32
+    let unused: u32 = a +? b
+    ret some (: u32 / 7)
+end fun
+
+// UnaryOpChecked: same shape through negation.
+fun checked_neg_unused(a: i32): ?i32
+    let unused: i32 = -? a
+    ret some (: i32 / 7)
+end fun
+
+// UnwrapOption: the payload is unused, the is_some flag drives the branch.
+fun unwrap_option_unused(o: ?u32): ?u32
+    let unused: u32 = o?
+    ret some (: u32 / 7)
+end fun
+
+// UnwrapResult: the ok value is unused, the is_ok flag drives the branch.
+fun unwrap_result_unused(r: !u32): !u32
+    let unused: u32 = r!
+    ret ok (: u32 / 7)
+end fun
+
+debuglog checked_result_unused(: u32 / 1, : u32 / 2)
+debuglog checked_neg_unused(: i32 / 5)
+debuglog unwrap_option_unused(some (: u32 / 3))
+debuglog unwrap_result_unused(ok (: u32 / 4))

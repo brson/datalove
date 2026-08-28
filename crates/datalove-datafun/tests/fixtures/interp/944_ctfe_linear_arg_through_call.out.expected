@@ -1,0 +1,50 @@
+Analysis(
+    sections: [
+        SectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = call @0 u2()
+                        debuglog v0
+                        v1 = call @1 u3()
+                        debuglog v1
+                        drop v1
+                        unit_end
+                    
+                    fn takes(p0):
+                    block0:
+                        v0 = const 1u32
+                        drop p0
+                        return v0
+                    
+                    fn id(p0):
+                    block0:
+                        v0 = move p0
+                        return v0
+                    
+                    fn consumes_bigint_arg():
+                    block0:
+                        v1 = const 1u32
+                        return v1
+                    
+                    fn bigint_in_and_out():
+                    block0:
+                        v1 = const 7int
+                        return v1
+                """,
+            ),
+            output: "(fragment executed)",
+            debug_output: Some("1\n7\n"),
+        ),
+    ],
+)

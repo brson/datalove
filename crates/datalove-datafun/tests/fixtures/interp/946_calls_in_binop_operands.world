@@ -1,0 +1,27 @@
+----------
+scriptunit-fragment
+----------
+
+// Calls on both sides of a binary operator. Lowering a call takes a mark of the
+// expression temporaries it is allowed to drop, so the operator must not take
+// the whole list: the left call's result is still outstanding while the right
+// call's argument is lowered.
+//
+// This panicked in split_off. Where it did not panic it dropped the left
+// operand before the operator read it, which is what the bigint cases below
+// would catch.
+
+fun fib(n: int): int
+    if n .< 2
+        ret n
+    else
+        ret fib(n - 1) + fib(n - 2)
+    end if
+end fun
+
+fun sum_of_products(x: int, m: int, y: int, n: int, z: int): int
+    ret (x * m) + (y * n) + z
+end fun
+
+debuglog fib(10)
+debuglog sum_of_products(2, 3, 4, 5, 1)

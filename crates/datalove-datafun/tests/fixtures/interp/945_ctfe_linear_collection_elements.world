@@ -1,0 +1,21 @@
+----------
+scriptunit-fragment
+----------
+
+// Same fault as 944, reached through a collection literal rather than a call.
+// The elements are built, the whole literal is folded to one constant, and the
+// element instructions are orphaned. Only linear elements leak, so the u32 list
+// is the control.
+
+fun linear_elements(): [int]
+    const L: [int] = [1, 2, 3]
+    ret L
+end fun
+
+fun copy_elements(): [u32]
+    const M: [u32] = [: u32 / 1, : u32 / 2]
+    ret M
+end fun
+
+debuglog linear_elements()
+debuglog copy_elements()
