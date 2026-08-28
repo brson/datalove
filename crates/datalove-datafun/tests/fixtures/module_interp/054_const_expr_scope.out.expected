@@ -1,0 +1,15 @@
+ModulesAnalysis(
+    typecheck: TypecheckResult(
+        status: "Error",
+        errors: [
+            "line 12, col 18: error[F058]: `n` is not a const binding",
+            "line 13, col 7: error[F001]: cannot find value `D` in this scope",
+            "line 18, col 18: error[F058]: `x` is not a const binding",
+            "line 19, col 7: error[F001]: cannot find value `E` in this scope",
+        ],
+    ),
+    lowering: LoweringResult(
+        status: "Skipped",
+    ),
+    output: "",
+)

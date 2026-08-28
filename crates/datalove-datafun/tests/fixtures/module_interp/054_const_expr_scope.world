@@ -1,0 +1,36 @@
+----------
+module local/test/main
+----------
+
+// A const expression is evaluated before the function runs, so nothing a
+// parameter or a let is bound to exists yet. Naming one used to typecheck
+// against the binding it shadows and reach lowering, which has no value for it
+// and panicked with "variable not found - typechecker should catch this".
+
+fun helper(): u32
+  ret : u32 / 3
+end fun
+
+fun uses_param(n: u32): u32
+  const D: u32 = n
+  ret D
+end fun
+
+fun uses_let(): u32
+  let x: u32 = : u32 / 1
+  const E: u32 = x
+  ret E
+end fun
+
+// What a const expression may name: other consts, and calls, whose parameters
+// are bound by the call rather than by the enclosing scope.
+fun legit(): u32
+  const A: u32 = : u32 / 5
+  const B: u32 = A
+  const C: u32 = helper()
+  ret B
+end fun
+
+fun main(): u32
+  ret legit()
+end fun

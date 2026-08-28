@@ -399,6 +399,18 @@ fn emit_single_diagnostic<'db>(
                     .emit_type();
             }
         }
+        PendingDiagnostic::NonConstInConstExpr { expr_key, module_id: _, name } => {
+            if let Some(ts) = spans.lookup_expr(db, *expr_key) {
+                bct::diagnostic::DiagnosticBuilder::error(
+                    db,
+                    &format!("`{}` is not a const binding", name.as_str(db)),
+                )
+                    .code("F058")
+                    .primary_label(ts, "not a const binding")
+                    .note("a const expression is evaluated at compile time, so it can only name other consts")
+                    .emit_type();
+            }
+        }
         PendingDiagnostic::ArgumentModeMismatch { expr_key, module_id: _, expected, found } => {
             if let Some(ts) = spans.lookup_expr(db, *expr_key) {
                 bct::diagnostic::DiagnosticBuilder::error(
@@ -564,6 +576,11 @@ fn format_single_diagnostic<'db>(
             let ts = spans.lookup_expr(db, *expr_key)?;
             let loc = format_location(db, &ts);
             Some(format!("{}: error[F056]: const `{}` not allowed at module level", loc, name.as_str(db)))
+        }
+        PendingDiagnostic::NonConstInConstExpr { expr_key, module_id: _, name } => {
+            let ts = spans.lookup_expr(db, *expr_key)?;
+            let loc = format_location(db, &ts);
+            Some(format!("{}: error[F058]: `{}` is not a const binding", loc, name.as_str(db)))
         }
         PendingDiagnostic::ArgumentModeMismatch { expr_key, module_id: _, expected, found } => {
             let ts = spans.lookup_expr(db, *expr_key)?;

@@ -418,6 +418,8 @@ pub enum TypeError {
     CannotShadowPrimitive(String),
     /// Const not allowed at module level.
     ConstNotAllowedInModule(String),
+    /// A const expression referenced a binding that is not itself const.
+    NonConstInConstExpr(String),
     /// Call-site mode marker disagrees with the parameter's declared mode.
     ArgumentModeMismatch {
         param_idx: usize,

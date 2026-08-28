@@ -72,6 +72,11 @@ pub struct TypeContext<'db> {
     pub(crate) auto_adaptations: Vec<AutoAdaptation<'db>>,
     /// Names of const bindings (for validating comptime args).
     pub(crate) const_bindings: HashSet<InternedText<'db>>,
+    /// Whether we are checking the value of a const binding.
+    ///
+    /// A const expression may only name other consts, since it is evaluated
+    /// before anything a parameter or a let could be bound to exists.
+    pub(crate) in_const_expr: bool,
     /// Registry of comptime call sites and functions.
     pub(crate) comptime_registry: ComptimeCallSiteRegistry<'db>,
 }
@@ -132,6 +137,7 @@ impl<'db> TypeContext<'db> {
             auto_adapt_mode,
             auto_adaptations: Vec::new(),
             const_bindings: HashSet::new(),
+            in_const_expr: false,
             comptime_registry: ComptimeCallSiteRegistry::new(),
         }
     }
@@ -474,6 +480,20 @@ impl<'db> TypeContext<'db> {
             name,
         });
         TypeError::ConstNotAllowedInModule(name.as_str(self.db).S())
+    }
+
+    /// F058: A const expression referenced a binding that is not itself const.
+    pub fn error_non_const_in_const_expr(
+        &mut self,
+        expr: ExprFun<'db>,
+        name: InternedText<'db>,
+    ) -> TypeError {
+        self.pending_diagnostics.push(PendingDiagnostic::NonConstInConstExpr {
+            expr_key: ExprKey::of(self.db, expr),
+            module_id: self.current_module_id,
+            name,
+        });
+        TypeError::NonConstInConstExpr(name.as_str(self.db).S())
     }
 
     /// F057: Call-site mode marker disagrees with the declared parameter mode.

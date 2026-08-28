@@ -140,6 +140,11 @@ pub fn check_statement<'db>(
 
             // Create new context for function body with parameters in scope.
             let saved_variables = ctx.variables.C();
+            // Const bindings are scoped to the body the same way. Without this a
+            // const parameter, or a const statement, stays registered after its
+            // function ends and the next function's argument of that name passes
+            // the const-binding check on the strength of it.
+            let saved_const_bindings = ctx.const_bindings.C();
             let saved_return_type = ctx.expected_return_type.clone();
             let saved_is_void = ctx.is_void_function;
 
@@ -148,6 +153,11 @@ pub fn check_statement<'db>(
             for (param, param_ty) in params.iter().zip(param_types.iter()) {
                 let is_mutable = matches!(param.mode, datalove_datafun_ast::ast::ParamMode::Mut | datalove_datafun_ast::ast::ParamMode::Out);
                 ctx.add_variable(param.name, param_ty.clone(), is_mutable);
+                // A const parameter is a compile-time constant, so a const
+                // expression in the body may name it like any other const.
+                if param.is_comptime {
+                    ctx.add_const_binding(param.name);
+                }
             }
 
             ctx.expected_return_type = Some(ret_ty);
@@ -160,6 +170,7 @@ pub fn check_statement<'db>(
 
             // Restore context.
             ctx.variables = saved_variables;
+            ctx.const_bindings = saved_const_bindings;
             ctx.expected_return_type = saved_return_type;
             ctx.is_void_function = saved_is_void;
         }
@@ -383,9 +394,13 @@ pub fn check_statement<'db>(
                 ctx.add_error(err);
                 return;
             }
-            // Const bindings are typechecked like let bindings.
-            // The const evaluation happens during lowering.
+            // Const bindings are typechecked like let bindings, except that the
+            // value may only name other consts. The const evaluation happens
+            // during lowering.
+            let saved_in_const_expr = ctx.in_const_expr;
+            ctx.in_const_expr = true;
             check_variable_decl(ctx, stmt.name, stmt.value, stmt.type_hint.clone(), false);
+            ctx.in_const_expr = saved_in_const_expr;
             // Track this as a const binding for comptime arg validation.
             ctx.add_const_binding(stmt.name);
         }

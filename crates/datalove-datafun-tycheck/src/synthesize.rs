@@ -1164,6 +1164,13 @@ fn synthesize_place<'db>(
     let mut current_ty = ctx.lookup_variable(place.root)
         .ok_or_else(|| ctx.error_undefined_variable(expr, place.root))?;
 
+    // Inside a const expression only other consts are in scope. Without this
+    // the name typechecks against the binding it shadows and then reaches
+    // lowering, which has no value for it and panics.
+    if ctx.in_const_expr && !ctx.is_const_binding(place.root) {
+        return Err(ctx.error_non_const_in_const_expr(expr, place.root));
+    }
+
     let old_ref_context = ctx.ref_context;
     let old_mut_context = ctx.mut_context;
     let step_count = place.steps.len();
