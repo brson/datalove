@@ -80,7 +80,8 @@ pub fn instruction_dest(instr: &Instruction) -> Option<ValueId> {
         // Boxing operations
         Instruction::ErrorFrom { dest, .. } => Some(*dest),
         Instruction::DataFrom { dest, .. } => Some(*dest),
-        Instruction::DataInto { dest, .. } => Some(*dest),
+        Instruction::Erase { dest, .. } => Some(*dest),
+        Instruction::Reify { dest, .. } => Some(*dest),
 
         // Collection construction
         Instruction::ListNew { dest, .. } => Some(*dest),
@@ -457,7 +458,8 @@ fn collect_instruction_operands(instr: &Instruction, used: &mut HashSet<ValueId>
         // Boxing operations.
         Instruction::ErrorFrom { inner, .. }
         | Instruction::DataFrom { inner, .. } => add_operand_value(inner, used),
-        Instruction::DataInto { src, .. } => add_operand_value(src, used),
+        Instruction::Erase { src, .. }
+        | Instruction::Reify { src, .. } => add_operand_value(src, used),
 
         // Slot load operations (no operand, just slot reference).
         Instruction::SlotLoadCopy { .. }

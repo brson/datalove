@@ -42,6 +42,152 @@ unsafe fn inline_data(
     }
 }
 
+/// Move a value into its erased shape.
+///
+/// A generic function is compiled with its type parameters replaced by `data`,
+/// so a parameter written `T` becomes `data` and one written `?T` becomes
+/// `?data`. This walks the two type descriptors together and converts a value
+/// of the caller's type into the shape the callee was compiled for.
+///
+/// The value is moved. The source is dead afterwards.
+///
+/// # Safety
+///
+/// `src_in` must be an initialized value of `src_tydesc`, and `dst_tydesc` must
+/// be `src_tydesc` with some positions replaced by `data`.
+pub unsafe fn erase_local(
+    rt: LocalRtHandle,
+    src_in: *const u8,
+    src_tydesc: *const rtdt::TyDesc,
+    dst_out: *mut u8,
+    dst_tydesc: *const rtdt::TyDesc,
+) -> RtStatus {
+    unsafe { convert(rt, src_in, src_tydesc, dst_out, dst_tydesc, Direction::Erase) }
+}
+
+/// Move a value back out of its erased shape.
+///
+/// The inverse of [`erase_local`]. The caller supplies the type it erased from,
+/// so this is a move rather than a checked downcast.
+///
+/// # Safety
+///
+/// `src_in` must be an initialized value of `src_tydesc`, and `src_tydesc` must
+/// be `dst_tydesc` with some positions replaced by `data`.
+pub unsafe fn reify_local(
+    rt: LocalRtHandle,
+    src_in: *const u8,
+    src_tydesc: *const rtdt::TyDesc,
+    dst_out: *mut u8,
+    dst_tydesc: *const rtdt::TyDesc,
+) -> RtStatus {
+    unsafe { convert(rt, src_in, src_tydesc, dst_out, dst_tydesc, Direction::Reify) }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Direction {
+    Erase,
+    Reify,
+}
+
+/// Walk a value and its erased counterpart, converting at the `data` positions.
+///
+/// The two descriptors have the same shape except where one side is `data`.
+/// Reaching such a position is the base case; anywhere else the structure is
+/// the same on both sides and the payload is converted in place.
+unsafe fn convert(
+    rt: LocalRtHandle,
+    src_in: *const u8,
+    src_tydesc: *const rtdt::TyDesc,
+    dst_out: *mut u8,
+    dst_tydesc: *const rtdt::TyDesc,
+    dir: Direction,
+) -> RtStatus {
+    unsafe {
+        let src_tag = (*src_tydesc).type_tag;
+        let dst_tag = (*dst_tydesc).type_tag;
+
+        // The position that was erased.
+        //
+        // A `data` on the erased side is that position whatever the other side
+        // holds, including another `data`: a generic function calling a generic
+        // function passes its own already-erased parameter, and that wraps a
+        // level the return has to take back off. Deciding by whether the two
+        // differ would mistake that for nothing having been erased and leave
+        // the wrap in place.
+        match dir {
+            Direction::Erase if dst_tag == TyTag::Data => {
+                return data_from_local(rt, src_in, src_tydesc, dst_out);
+            }
+            Direction::Reify if src_tag == TyTag::Data => {
+                return data_into_local(rt, src_in, dst_out, dst_tydesc);
+            }
+            _ => {}
+        }
+
+        if src_tag != dst_tag {
+            return RtStatus::Error;
+        }
+
+        match src_tag {
+            TyTag::Option => {
+                let src_ty = rtdt::TyDescRef::from_ptr(src_tydesc);
+                let dst_ty = rtdt::TyDescRef::from_ptr(dst_tydesc);
+                let src_layout = rtdt::layout::compute_option_layout(src_ty);
+                let dst_layout = rtdt::layout::compute_option_layout(dst_ty);
+
+                let tag = *(src_in as *const u8);
+                *(dst_out as *mut u8) = tag;
+                if tag == rtdt::OptionTag::None as u8 {
+                    return RtStatus::Ok;
+                }
+                convert(
+                    rt,
+                    src_in.add(src_layout.payload_offset as usize),
+                    src_ty.option_inner_ty().as_ptr(),
+                    dst_out.add(dst_layout.payload_offset as usize),
+                    dst_ty.option_inner_ty().as_ptr(),
+                    dir,
+                )
+            }
+            TyTag::Result => {
+                let src_ty = rtdt::TyDescRef::from_ptr(src_tydesc);
+                let dst_ty = rtdt::TyDescRef::from_ptr(dst_tydesc);
+                let src_layout = rtdt::layout::compute_result_layout(src_ty);
+                let dst_layout = rtdt::layout::compute_result_layout(dst_ty);
+
+                let tag = *(src_in as *const u8);
+                *(dst_out as *mut u8) = tag;
+                if tag != rtdt::ResultTag::Ok as u8 {
+                    // The error side is an Error value, which is the same type
+                    // on both sides, so it moves across unchanged.
+                    let size = std::mem::size_of::<rtdt::Error>();
+                    std::ptr::copy_nonoverlapping(
+                        src_in.add(src_layout.payload_offset as usize),
+                        dst_out.add(dst_layout.payload_offset as usize),
+                        size,
+                    );
+                    return RtStatus::Ok;
+                }
+                convert(
+                    rt,
+                    src_in.add(src_layout.payload_offset as usize),
+                    src_ty.result_ok_ty().as_ptr(),
+                    dst_out.add(dst_layout.payload_offset as usize),
+                    dst_ty.result_ok_ty().as_ptr(),
+                    dir,
+                )
+            }
+            // Nothing was erased here, so the value moves across as it is.
+            _ => {
+                let size = (*src_tydesc).size as usize;
+                std::ptr::copy_nonoverlapping(src_in, dst_out, size);
+                RtStatus::Ok
+            }
+        }
+    }
+}
+
 /// Move the value back out of a Data.
 ///
 /// The inverse of [`data_from_local`]. The caller knows what type it put in and

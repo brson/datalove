@@ -642,7 +642,8 @@ fn trampoline_all_runtime_imports(
     tramp(jit_module, &mut runtime.clone_local, c::dtlv_rti_clone_local as *const u8)?;
     tramp(jit_module, &mut runtime.error_from, c::dtlv_rti_error_from_local as *const u8)?;
     tramp(jit_module, &mut runtime.data_from, c::dtlv_rti_data_from_local as *const u8)?;
-    tramp(jit_module, &mut runtime.data_into, c::dtlv_rti_data_into_local as *const u8)?;
+    tramp(jit_module, &mut runtime.erase, c::dtlv_rti_erase_local as *const u8)?;
+    tramp(jit_module, &mut runtime.reify, c::dtlv_rti_reify_local as *const u8)?;
 
     Ok(())
 }
@@ -703,7 +704,8 @@ fn register_runtime_symbols(jit_builder: &mut JITBuilder) {
     // Boxing functions.
     jit_builder.symbol("dtlv_rti_error_from_local", c::dtlv_rti_error_from_local as *const u8);
     jit_builder.symbol("dtlv_rti_data_from_local", c::dtlv_rti_data_from_local as *const u8);
-    jit_builder.symbol("dtlv_rti_data_into_local", c::dtlv_rti_data_into_local as *const u8);
+    jit_builder.symbol("dtlv_rti_erase_local", c::dtlv_rti_erase_local as *const u8);
+    jit_builder.symbol("dtlv_rti_reify_local", c::dtlv_rti_reify_local as *const u8);
 
     // Math libcalls used by Cranelift when legalizing float instructions.
     // On some platforms dlsym can't find these (e.g. static linking), so

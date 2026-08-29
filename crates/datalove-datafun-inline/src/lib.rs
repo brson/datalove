@@ -780,7 +780,11 @@ impl RemapContext {
                 dest: self.remap_value(*dest),
                 inner: self.remap_operand(inner),
             },
-            Instruction::DataInto { dest, src } => Instruction::DataInto {
+            Instruction::Erase { dest, src } => Instruction::Erase {
+                dest: self.remap_value(*dest),
+                src: self.remap_operand(src),
+            },
+            Instruction::Reify { dest, src } => Instruction::Reify {
                 dest: self.remap_value(*dest),
                 src: self.remap_operand(src),
             },
@@ -1370,7 +1374,11 @@ fn replace_params_in_instruction(
             dest: *dest,
             inner: replace_operand(inner),
         },
-        Instruction::DataInto { dest, src } => Instruction::DataInto {
+        Instruction::Erase { dest, src } => Instruction::Erase {
+            dest: *dest,
+            src: replace_operand(src),
+        },
+        Instruction::Reify { dest, src } => Instruction::Reify {
             dest: *dest,
             src: replace_operand(src),
         },

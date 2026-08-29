@@ -456,8 +456,11 @@ impl fmt::Display for Instruction {
             Instruction::DataFrom { dest, inner } => {
                 write!(f, "{} = data_from {}", dest, inner)
             }
-            Instruction::DataInto { dest, src } => {
-                write!(f, "{} = data_into {}", dest, src)
+            Instruction::Erase { dest, src } => {
+                write!(f, "{} = erase {}", dest, src)
+            }
+            Instruction::Reify { dest, src } => {
+                write!(f, "{} = reify {}", dest, src)
             }
             Instruction::ListNew { dest, elements } => {
                 write!(f, "{} = list [", dest)?;

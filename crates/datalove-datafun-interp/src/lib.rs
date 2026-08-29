@@ -934,10 +934,17 @@ impl IrInterpreter {
                 frame.mark_value_live(*dest);
                 Self::mark_source_dropped_local(inner, frame);
             }
-            Instruction::DataInto { dest, src } => {
+            Instruction::Erase { dest, src } => {
                 let src_val = self.read_operand(src, frame, frames);
                 let dest_slot = frame.value_dest(*dest);
-                self.execute_data_into(&src_val, dest_slot);
+                self.execute_erase(&src_val, dest_slot);
+                frame.mark_value_live(*dest);
+                Self::mark_source_dropped_local(src, frame);
+            }
+            Instruction::Reify { dest, src } => {
+                let src_val = self.read_operand(src, frame, frames);
+                let dest_slot = frame.value_dest(*dest);
+                self.execute_reify(&src_val, dest_slot);
                 frame.mark_value_live(*dest);
                 Self::mark_source_dropped_local(src, frame);
             }

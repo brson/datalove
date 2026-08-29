@@ -535,11 +535,11 @@ pub fn lower_expression<'db>(
                 let mode = param_modes.get(i).copied().unwrap_or(ParamMode::In);
                 let arg_type = param_types.get(i);
                 let mut operand = lower_call_arg(ctx, *arg, mode, arg_type)?;
-                // Wrap into a data where the callee's parameter was erased.
+                // Convert into the shape the erased callee was compiled for.
                 if param_is_erased.get(i).copied().unwrap_or(false) {
-                    let wrapped = ctx.fresh_value(IrType::Data);
-                    ctx.emit(Instruction::DataFrom { dest: wrapped, inner: operand });
-                    operand = Operand::Value(wrapped);
+                    let erased = ctx.fresh_value(IrType::Data);
+                    ctx.emit(Instruction::Erase { dest: erased, src: operand });
+                    operand = Operand::Value(erased);
                 }
                 // Track in-mode args as pending intermediate.
                 // Ref/mut/out args are tracked via lower_operand's expr_temps.
@@ -587,7 +587,7 @@ pub fn lower_expression<'db>(
             // Move the value back out of the data the erased callee returned.
             if return_is_erased {
                 let unwrapped = ctx.fresh_value(result_type);
-                ctx.emit(Instruction::DataInto { dest: unwrapped, src: Operand::Value(dest) });
+                ctx.emit(Instruction::Reify { dest: unwrapped, src: Operand::Value(dest) });
                 return Ok(unwrapped);
             }
             Ok(dest)

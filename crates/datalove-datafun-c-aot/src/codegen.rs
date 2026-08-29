@@ -262,8 +262,11 @@ impl<'a> FunctionCodegenContext<'a> {
             Instruction::DataFrom { dest, inner } => {
                 self.emit_data_from(out, *dest, inner)?;
             }
-            Instruction::DataInto { dest, src } => {
-                self.emit_data_into(out, *dest, src)?;
+            Instruction::Erase { dest, src } => {
+                self.emit_erasure(out, *dest, src, true)?;
+            }
+            Instruction::Reify { dest, src } => {
+                self.emit_erasure(out, *dest, src, false)?;
             }
             Instruction::ListNew { dest, elements } => {
                 self.emit_list_new(out, *dest, elements)?;
@@ -1395,19 +1398,23 @@ impl<'a> FunctionCodegenContext<'a> {
         Ok(())
     }
 
-    /// Emit moving a value back out of a data.
+    /// Emit an erasure conversion, in either direction.
     ///
-    /// The destination's type is what went in, so its tydesc says how much to
-    /// move. The source data is zeroed after, the same way the wrap zeroes what
-    /// it consumed, since the value now belongs to the destination.
-    fn emit_data_into(&mut self, out: &mut String, dest: ValueId, src: &Operand) -> Result<(), CAotError> {
+    /// The two tydescs differ only where the erased shape has a data, and the
+    /// runtime walks them together. The source is zeroed after, the way the
+    /// wrap zeroes what it consumed, since the value now belongs to the
+    /// destination.
+    fn emit_erasure(&mut self, out: &mut String, dest: ValueId, src: &Operand, erasing: bool) -> Result<(), CAotError> {
         let dest_addr = self.value_addr(dest);
         let src_addr = self.operand_addr(src);
         let dest_ty = self.value_type(dest).clone();
+        let src_ty = self.operand_type(src).clone();
         let dest_tydesc = self.tydesc_name(&dest_ty);
-        let src_size = types::ir_type_to_crepr(&self.operand_type(src).clone()).layout().size;
+        let src_tydesc = self.tydesc_name(&src_ty);
+        let src_size = types::ir_type_to_crepr(&src_ty).layout().size;
+        let func = if erasing { "dtlv_rti_erase_local" } else { "dtlv_rti_reify_local" };
 
-        writeln!(out, "    dtlv_rti_data_into_local(rt, {}, {}, &{});", src_addr, dest_addr, dest_tydesc).unwrap();
+        writeln!(out, "    {}(rt, {}, &{}, {}, &{});", func, src_addr, src_tydesc, dest_addr, dest_tydesc).unwrap();
 
         if src_size > 0 {
             writeln!(out, "    memset({}, 0, {});", src_addr, src_size).unwrap();

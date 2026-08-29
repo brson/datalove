@@ -100,8 +100,10 @@ pub struct RuntimeImports {
     pub error_from: FuncId,
     /// `dtlv_rti_data_from_local(rt, inner_in, inner_tydesc, dest_out) -> RtStatus`
     pub data_from: FuncId,
-    /// `dtlv_rti_data_into_local(rt, data_in, dest_out, dest_tydesc) -> RtStatus`
-    pub data_into: FuncId,
+    /// `dtlv_rti_erase_local(rt, src_in, src_tydesc, dst_out, dst_tydesc) -> RtStatus`
+    pub erase: FuncId,
+    /// `dtlv_rti_reify_local(rt, src_in, src_tydesc, dst_out, dst_tydesc) -> RtStatus`
+    pub reify: FuncId,
 }
 
 impl RuntimeImports {
@@ -586,11 +588,26 @@ impl RuntimeImports {
             .declare_function("dtlv_rti_data_from_local", Linkage::Import, &boxing_sig())
             .map_err(|e| CraneliftError::Module(format!("declare dtlv_rti_data_from_local: {}", e)))?;
 
-        // Same shape as the wraps: four pointers in, a status out. The middle
-        // two are swapped, since the tydesc describes the destination here.
-        let data_into = module
-            .declare_function("dtlv_rti_data_into_local", Linkage::Import, &boxing_sig())
-            .map_err(|e| CraneliftError::Module(format!("declare dtlv_rti_data_into_local: {}", e)))?;
+        // Erasure conversions: five pointers in, a status out. Both tydescs
+        // are needed because the two shapes differ only where one has `data`.
+        let erasure_sig = || {
+            let mut sig = cl_ir::Signature::new(call_conv);
+            sig.params.push(AbiParam::new(PTR_TYPE)); // rt handle
+            sig.params.push(AbiParam::new(PTR_TYPE)); // src_in
+            sig.params.push(AbiParam::new(PTR_TYPE)); // src_tydesc
+            sig.params.push(AbiParam::new(PTR_TYPE)); // dst_out
+            sig.params.push(AbiParam::new(PTR_TYPE)); // dst_tydesc
+            sig.returns.push(AbiParam::new(cl_types::I8));
+            sig
+        };
+
+        let erase = module
+            .declare_function("dtlv_rti_erase_local", Linkage::Import, &erasure_sig())
+            .map_err(|e| CraneliftError::Module(format!("declare dtlv_rti_erase_local: {}", e)))?;
+
+        let reify = module
+            .declare_function("dtlv_rti_reify_local", Linkage::Import, &erasure_sig())
+            .map_err(|e| CraneliftError::Module(format!("declare dtlv_rti_reify_local: {}", e)))?;
 
         Ok(Self {
             init,
@@ -631,7 +648,8 @@ impl RuntimeImports {
             clone_local,
             error_from,
             data_from,
-            data_into,
+            erase,
+            reify,
         })
     }
 }

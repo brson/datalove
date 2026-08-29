@@ -561,6 +561,47 @@ pub unsafe extern "C-unwind" fn dtlv_rti_data_into_local(
     }
 }
 
+/// Move a value into the erased shape a generic callee was compiled for.
+///
+/// The two tydescs have the same shape except where the callee's has `data`.
+/// See `boxing::erase_local`.
+#[unsafe(no_mangle)]
+pub unsafe extern "C-unwind" fn dtlv_rti_erase_local(
+    rt: LocalRtHandle,
+    src_in: *const u8,
+    src_tydesc: *const rtdt::TyDesc,
+    dst_out: *mut u8,
+    dst_tydesc: *const rtdt::TyDesc,
+) -> RtStatus {
+    debug_assert!(!rt.is_null(), "rt is null");
+    debug_assert!(!src_in.is_null(), "src_in is null");
+    debug_assert!(!src_tydesc.is_null(), "src_tydesc is null");
+    debug_assert!(!dst_out.is_null(), "dst_out is null");
+    debug_assert!(!dst_tydesc.is_null(), "dst_tydesc is null");
+    unsafe {
+        crate::impls::boxing::erase_local(rt, src_in, src_tydesc, dst_out, dst_tydesc)
+    }
+}
+
+/// Move a value back out of its erased shape. The inverse of `dtlv_rti_erase_local`.
+#[unsafe(no_mangle)]
+pub unsafe extern "C-unwind" fn dtlv_rti_reify_local(
+    rt: LocalRtHandle,
+    src_in: *const u8,
+    src_tydesc: *const rtdt::TyDesc,
+    dst_out: *mut u8,
+    dst_tydesc: *const rtdt::TyDesc,
+) -> RtStatus {
+    debug_assert!(!rt.is_null(), "rt is null");
+    debug_assert!(!src_in.is_null(), "src_in is null");
+    debug_assert!(!src_tydesc.is_null(), "src_tydesc is null");
+    debug_assert!(!dst_out.is_null(), "dst_out is null");
+    debug_assert!(!dst_tydesc.is_null(), "dst_tydesc is null");
+    unsafe {
+        crate::impls::boxing::reify_local(rt, src_in, src_tydesc, dst_out, dst_tydesc)
+    }
+}
+
 #[unsafe(no_mangle)]
 pub unsafe extern "C-unwind" fn dtlv_rti_string_create_local(
     rt: LocalRtHandle,

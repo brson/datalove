@@ -1059,6 +1059,15 @@ pub enum Instruction {
     /// **Ownership:** Consumes `inner`, produces `dest`.
     DataFrom { dest: ValueId, inner: Operand },
 
+    /// Move a value into the erased shape a generic callee expects.
+    ///
+    /// The destination's type is the source's with the erased positions
+    /// replaced by `data`. Emitted at a call site of a generic function, which
+    /// is where the concrete type is known.
+    ///
+    /// **Ownership:** Consumes `src`, produces `dest`.
+    Erase { dest: ValueId, src: Operand },
+
     /// Move the value back out of a Data, as the type of `dest`.
     ///
     /// The inverse of `DataFrom`. Emitted where the compiler knows what went
@@ -1066,7 +1075,7 @@ pub enum Instruction {
     /// this is a move rather than a checked downcast.
     ///
     /// **Ownership:** Consumes `src`, produces `dest`.
-    DataInto { dest: ValueId, src: Operand },
+    Reify { dest: ValueId, src: Operand },
 
     // ========================================================================
     // Collection Construction

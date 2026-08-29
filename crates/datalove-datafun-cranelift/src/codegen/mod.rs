@@ -775,8 +775,11 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             Instruction::DataFrom { dest, inner } => {
                 self.compile_data_from(builder, *dest, inner)?;
             }
-            Instruction::DataInto { dest, src } => {
-                self.compile_data_into(builder, *dest, src)?;
+            Instruction::Erase { dest, src } => {
+                self.compile_erasure(builder, *dest, src, true)?;
+            }
+            Instruction::Reify { dest, src } => {
+                self.compile_erasure(builder, *dest, src, false)?;
             }
             Instruction::Intrinsic { dest, intrinsic, args } => {
                 self.compile_intrinsic(builder, *dest, *intrinsic, args)?;
