@@ -7,6 +7,8 @@ use std::collections::{HashMap, BTreeMap};
 use bct::text::InternedText;
 use bct::module_graph::ModuleId;
 use datalove_datalit as datalit;
+
+pub mod generics;
 use datalit::ast::TypeHint;
 
 use salsa::Database as Db;
@@ -282,12 +284,6 @@ pub enum Type<'db> {
     Datalit(datalove_datalit::tycheck::Type<'db>),
     /// Function type: (param_types) -> return_type.
     Function(TypeFunction<'db>),
-    /// A type parameter of the enclosing function.
-    ///
-    /// Stands for whatever type the call site supplies. Nothing in the function
-    /// may inspect it, so it is equal only to itself, and it is erased to `data`
-    /// on the way to the IR.
-    Var(InternedText<'db>),
 }
 
 /// Function type with parameter types and return type.
@@ -418,6 +414,8 @@ pub enum TypeError {
     VariableNotMutable,
     /// Unresolved type alias (forward reference).
     UnresolvedTypeAlias(String),
+    /// A type parameter sat somewhere erasure could not reach.
+    TypeParamNotErasable(String),
     /// Duplicate type alias definition.
     DuplicateTypeAlias(String),
     /// Cannot shadow primitive type name.
@@ -429,8 +427,6 @@ pub enum TypeError {
     /// Erasure replaces the parameter itself with `data`, which works wherever
     /// the parameter stands alone. Inside a list or an option the element type
     /// would have to change too, and converting a caller's collection to match
-    /// costs a copy per element, so those are rejected for now.
-    TypeParamNotNestable(String),
     /// Call-site mode marker disagrees with the parameter's declared mode.
     ArgumentModeMismatch {
         param_idx: usize,
@@ -603,7 +599,6 @@ pub fn is_bool_type(ty: &Type<'_>) -> bool {
 pub fn types_equivalent<'db>(db: &'db dyn Db, t1: &Type<'db>, t2: &Type<'db>) -> bool {
     match (t1, t2) {
         (Type::Datalit(dt1), Type::Datalit(dt2)) => datalit::tycheck::types_equivalent(db, dt1, dt2),
-        (Type::Var(a), Type::Var(b)) => a == b,
         (Type::Function(f1), Type::Function(f2)) => {
             f1.param_types(db).len() == f2.param_types(db).len()
                 && f1.param_types(db).iter().zip(f2.param_types(db).iter())
@@ -669,7 +664,6 @@ fn convert_type_hint_inner<'db>(
                     match f_ty {
                         Type::Datalit(dt) => Ok(dt.clone()),
                         Type::Function(_) => unreachable!("type hint cannot produce function type"),
-                        Type::Var(name) => return Err(TypeError::TypeParamNotNestable(name.as_str(db).to_string())),
                     }
                 })
                 .collect();
@@ -686,7 +680,6 @@ fn convert_type_hint_inner<'db>(
                     let dt = match f_ty {
                         Type::Datalit(dt) => dt.clone(),
                         Type::Function(_) => unreachable!("type hint cannot produce function type"),
-                        Type::Var(name) => return Err(TypeError::TypeParamNotNestable(name.as_str(db).to_string())),
                     };
                     Ok(datalit::tycheck::TypeNamedField {
                         name,
@@ -705,7 +698,6 @@ fn convert_type_hint_inner<'db>(
             let dt = match elem_ty {
                 Type::Datalit(dt) => dt.clone(),
                 Type::Function(_) => unreachable!("type hint cannot produce function type"),
-                        Type::Var(name) => return Err(TypeError::TypeParamNotNestable(name.as_str(db).to_string())),
             };
             Type::Datalit(datalit::tycheck::Type::List(
                 datalit::tycheck::TypeList {
@@ -719,13 +711,11 @@ fn convert_type_hint_inner<'db>(
             let key_dt = match key_ty {
                 Type::Datalit(dt) => dt.clone(),
                 Type::Function(_) => unreachable!("type hint cannot produce function type"),
-                        Type::Var(name) => return Err(TypeError::TypeParamNotNestable(name.as_str(db).to_string())),
             };
             let value_ty = convert_type_hint_inner(db, (*m.value_type).clone())?;
             let value_dt = match value_ty {
                 Type::Datalit(dt) => dt.clone(),
                 Type::Function(_) => unreachable!("type hint cannot produce function type"),
-                        Type::Var(name) => return Err(TypeError::TypeParamNotNestable(name.as_str(db).to_string())),
             };
             Type::Datalit(datalit::tycheck::Type::Map(
                 datalit::tycheck::TypeMap {
@@ -740,7 +730,6 @@ fn convert_type_hint_inner<'db>(
             let dt = match elem_ty {
                 Type::Datalit(dt) => dt.clone(),
                 Type::Function(_) => unreachable!("type hint cannot produce function type"),
-                        Type::Var(name) => return Err(TypeError::TypeParamNotNestable(name.as_str(db).to_string())),
             };
             Type::Datalit(datalit::tycheck::Type::Set(
                 datalit::tycheck::TypeSet {
@@ -754,7 +743,6 @@ fn convert_type_hint_inner<'db>(
             let dt = match inner_ty {
                 Type::Datalit(dt) => dt.clone(),
                 Type::Function(_) => unreachable!("type hint cannot produce function type"),
-                        Type::Var(name) => return Err(TypeError::TypeParamNotNestable(name.as_str(db).to_string())),
             };
             Type::Datalit(datalit::tycheck::Type::Option(
                 datalit::tycheck::TypeOption {
@@ -768,7 +756,6 @@ fn convert_type_hint_inner<'db>(
             let dt = match inner_ty {
                 Type::Datalit(dt) => dt.clone(),
                 Type::Function(_) => unreachable!("type hint cannot produce function type"),
-                        Type::Var(name) => return Err(TypeError::TypeParamNotNestable(name.as_str(db).to_string())),
             };
             Type::Datalit(datalit::tycheck::Type::Result(
                 datalit::tycheck::TypeResult {
@@ -782,7 +769,6 @@ fn convert_type_hint_inner<'db>(
             let dt = match elem_ty {
                 Type::Datalit(dt) => dt.clone(),
                 Type::Function(_) => unreachable!("type hint cannot produce function type"),
-                        Type::Var(name) => return Err(TypeError::TypeParamNotNestable(name.as_str(db).to_string())),
             };
             Type::Datalit(datalit::tycheck::Type::Tensor(
                 datalit::tycheck::TypeTensor {
@@ -803,7 +789,6 @@ fn convert_type_hint_inner<'db>(
             let dt = match payload_ty {
                 Type::Datalit(dt) => dt.clone(),
                 Type::Function(_) => unreachable!("type hint cannot produce function type"),
-                        Type::Var(name) => return Err(TypeError::TypeParamNotNestable(name.as_str(db).to_string())),
             };
             Type::Datalit(datalit::tycheck::Type::Term(
                 datalit::tycheck::TypeTerm { name: t.name, payload: Box::new(dt) }
@@ -819,7 +804,6 @@ fn convert_type_hint_inner<'db>(
                             let dt = match p_ty {
                                 Type::Datalit(dt) => dt.clone(),
                                 Type::Function(_) => unreachable!("type hint cannot produce function type"),
-                        Type::Var(name) => return Err(TypeError::TypeParamNotNestable(name.as_str(db).to_string())),
                             };
                             Some(Box::new(dt))
                         }
@@ -848,7 +832,6 @@ fn convert_type_hint_inner<'db>(
                     let dt = match c_ty {
                         Type::Datalit(dt) => dt.clone(),
                         Type::Function(_) => unreachable!("type hint cannot produce function type"),
-                        Type::Var(name) => return Err(TypeError::TypeParamNotNestable(name.as_str(db).to_string())),
                     };
                     Ok(datalit::tycheck::TypeNamedField {
                         name,
@@ -905,7 +888,6 @@ fn convert_type_hint_with_aliases_inner<'db>(
                     match f_ty {
                         Type::Datalit(dt) => Ok(dt.clone()),
                         Type::Function(_) => unreachable!("type hint cannot produce function type"),
-                        Type::Var(name) => return Err(TypeError::TypeParamNotNestable(name.as_str(db).to_string())),
                     }
                 })
                 .collect();
@@ -922,7 +904,6 @@ fn convert_type_hint_with_aliases_inner<'db>(
                     let dt = match f_ty {
                         Type::Datalit(dt) => dt.clone(),
                         Type::Function(_) => unreachable!("type hint cannot produce function type"),
-                        Type::Var(name) => return Err(TypeError::TypeParamNotNestable(name.as_str(db).to_string())),
                     };
                     Ok(datalit::tycheck::TypeNamedField {
                         name,
@@ -941,7 +922,6 @@ fn convert_type_hint_with_aliases_inner<'db>(
             let dt = match elem_ty {
                 Type::Datalit(dt) => dt.clone(),
                 Type::Function(_) => unreachable!("type hint cannot produce function type"),
-                        Type::Var(name) => return Err(TypeError::TypeParamNotNestable(name.as_str(db).to_string())),
             };
             Type::Datalit(datalit::tycheck::Type::List(
                 datalit::tycheck::TypeList {
@@ -955,13 +935,11 @@ fn convert_type_hint_with_aliases_inner<'db>(
             let key_dt = match key_ty {
                 Type::Datalit(dt) => dt.clone(),
                 Type::Function(_) => unreachable!("type hint cannot produce function type"),
-                        Type::Var(name) => return Err(TypeError::TypeParamNotNestable(name.as_str(db).to_string())),
             };
             let value_ty = convert_type_hint_with_aliases_inner(db, (*m.value_type).clone(), aliases)?;
             let value_dt = match value_ty {
                 Type::Datalit(dt) => dt.clone(),
                 Type::Function(_) => unreachable!("type hint cannot produce function type"),
-                        Type::Var(name) => return Err(TypeError::TypeParamNotNestable(name.as_str(db).to_string())),
             };
             Type::Datalit(datalit::tycheck::Type::Map(
                 datalit::tycheck::TypeMap {
@@ -976,7 +954,6 @@ fn convert_type_hint_with_aliases_inner<'db>(
             let dt = match elem_ty {
                 Type::Datalit(dt) => dt.clone(),
                 Type::Function(_) => unreachable!("type hint cannot produce function type"),
-                        Type::Var(name) => return Err(TypeError::TypeParamNotNestable(name.as_str(db).to_string())),
             };
             Type::Datalit(datalit::tycheck::Type::Set(
                 datalit::tycheck::TypeSet {
@@ -990,7 +967,6 @@ fn convert_type_hint_with_aliases_inner<'db>(
             let dt = match inner_ty {
                 Type::Datalit(dt) => dt.clone(),
                 Type::Function(_) => unreachable!("type hint cannot produce function type"),
-                        Type::Var(name) => return Err(TypeError::TypeParamNotNestable(name.as_str(db).to_string())),
             };
             Type::Datalit(datalit::tycheck::Type::Option(
                 datalit::tycheck::TypeOption {
@@ -1004,7 +980,6 @@ fn convert_type_hint_with_aliases_inner<'db>(
             let dt = match inner_ty {
                 Type::Datalit(dt) => dt.clone(),
                 Type::Function(_) => unreachable!("type hint cannot produce function type"),
-                        Type::Var(name) => return Err(TypeError::TypeParamNotNestable(name.as_str(db).to_string())),
             };
             Type::Datalit(datalit::tycheck::Type::Result(
                 datalit::tycheck::TypeResult {
@@ -1018,7 +993,6 @@ fn convert_type_hint_with_aliases_inner<'db>(
             let dt = match elem_ty {
                 Type::Datalit(dt) => dt.clone(),
                 Type::Function(_) => unreachable!("type hint cannot produce function type"),
-                        Type::Var(name) => return Err(TypeError::TypeParamNotNestable(name.as_str(db).to_string())),
             };
             Type::Datalit(datalit::tycheck::Type::Tensor(
                 datalit::tycheck::TypeTensor {
@@ -1039,7 +1013,6 @@ fn convert_type_hint_with_aliases_inner<'db>(
             let dt = match payload_ty {
                 Type::Datalit(dt) => dt.clone(),
                 Type::Function(_) => unreachable!("type hint cannot produce function type"),
-                        Type::Var(name) => return Err(TypeError::TypeParamNotNestable(name.as_str(db).to_string())),
             };
             Type::Datalit(datalit::tycheck::Type::Term(
                 datalit::tycheck::TypeTerm { name: t.name, payload: Box::new(dt) }
@@ -1055,7 +1028,6 @@ fn convert_type_hint_with_aliases_inner<'db>(
                             let dt = match p_ty {
                                 Type::Datalit(dt) => dt.clone(),
                                 Type::Function(_) => unreachable!("type hint cannot produce function type"),
-                        Type::Var(name) => return Err(TypeError::TypeParamNotNestable(name.as_str(db).to_string())),
                             };
                             Some(Box::new(dt))
                         }
@@ -1089,7 +1061,6 @@ fn convert_type_hint_with_aliases_inner<'db>(
                     let dt = match c_ty {
                         Type::Datalit(dt) => dt.clone(),
                         Type::Function(_) => unreachable!("type hint cannot produce function type"),
-                        Type::Var(name) => return Err(TypeError::TypeParamNotNestable(name.as_str(db).to_string())),
                     };
                     Ok(datalit::tycheck::TypeNamedField {
                         name,
@@ -1114,7 +1085,6 @@ fn convert_type_hint_with_aliases_inner<'db>(
 pub fn type_to_string<'db>(db: &'db dyn Db, ty: &Type<'db>) -> String {
     match ty {
         Type::Datalit(dt) => datalit::tycheck::type_to_string(db, dt),
-        Type::Var(name) => name.as_str(db).to_string(),
         Type::Function(f) => {
             let params: Vec<_> = f.param_types(db).iter()
                 .map(|p| type_to_string(db, p))
@@ -1210,6 +1180,5 @@ pub fn to_datalit_type<'db>(
     match ty {
         Type::Datalit(dt) => Ok(Type::Datalit(dt.clone())),
         Type::Function(_) => Err(TypeError::CannotSynthesize),
-        Type::Var(_) => Err(TypeError::CannotSynthesize),
     }
 }

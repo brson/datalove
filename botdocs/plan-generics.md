@@ -16,6 +16,8 @@ monomorphization.
 - [Cost](#user-content-cost)
 - [Surface syntax](#user-content-surface-syntax)
 - [Const parameters after this](#user-content-const-parameters-after-this)
+- [What a first attempt found](#user-content-what-a-first-attempt-found)
+- [What landed](#user-content-what-landed)
 - [Order of work](#user-content-order-of-work)
 - [Prior art](#user-content-prior-art)
 
@@ -264,6 +266,63 @@ the stdlib blocker, and containers by descriptor.
 
 The order below is unchanged by this, but step 2 gets much smaller: `T := data`
 rather than a new IR type.
+
+## What landed
+
+Type parameters nest, up to the boundary the section above predicted. A
+parameter may sit at any depth inside options and results; a parameter under a
+collection is refused.
+
+**The type variable went into datalit after all, and it was cheap.** The section
+above treats that as the expensive branch, on an estimate of eighty match arms.
+Measured instead of estimated, adding `Var(InternedText)` to
+`datalit::tycheck::Type` costs seven sites in the whole workspace: printing it
+in two places, `types_equivalent` (a variable is equal only to itself),
+`is_copy_type` (an unconstrained parameter is move, since the caller may supply
+a linear type), two `unreachable!`s where a parameter cannot occur, and one arm
+in `IrType::from_datalit` that maps it to `data`. The eighty-arm figure was for
+`IrType`, which every backend matches exhaustively; `datalit::Type` is mostly
+consumed through predicates and constructors that already have fallbacks.
+
+That last arm is the whole of erasure. `from_datalit` recurses structurally, so
+one line erases a parameter at any depth: `?T` lowers as `?data`, `??T` as
+`??data`. The twenty-four "cannot nest a type parameter" arms in the type hint
+converter were deleted rather than written.
+
+**This does not add generics to the surface language.** A bare `T` already
+parsed as `TypeHint::Alias("T")`, and datalit's own resolver rejects every alias
+(`Type aliases are resolved by datafun typechecker, not datalit`). The single
+place a `Var` is built is datafun-resolve seeding the alias map with the
+enclosing signature's type parameters, in a crate datalit does not depend on. A
+data literal mentioning `T` fails exactly as it did before.
+
+**Call sites unify resolved types, not the callee's AST.** `bind_type_params`
+walks the parameter's type and the argument's in step, binding at each `Var`;
+the first argument reaching a parameter fixes it and later ones must agree.
+An argument that cannot synthesize on its own, such as a bare `none`, binds
+nothing and is checked afterwards against whatever another argument fixed, so
+`unwrap_or(none, "fallback")` infers. Speculative synthesis runs under
+`try_check` so the abandoned attempt does not report.
+
+**Why collections stop here.** The runtime's `convert` recurses properly through
+options and results, converting the payload and writing it at the other side's
+offset. For everything else it memcpys, which is a reinterpretation rather than
+a conversion, and a collection's elements are packed by size: `[u32]` and
+`[data]` disagree about where every element after the first begins. Passing one
+through appears to work because nothing touches the elements, but the callee
+holds a tydesc that lies about them, and the drop at the end of a generic that
+merely ignores its argument corrupts the allocator. That was checked, not
+reasoned about. `first_unerasable_type_param` now refuses those signatures with
+`TypeParamNotErasable`.
+
+Two adjacent facts worth knowing, both predating this work:
+
+- Indexing a `[T]` fails with `NonCopyIndexProjection`, because reading an
+  element out copies it and an unconstrained parameter is not copy. This is
+  correct, and it means a by-erasure `[T]` would have been of little use even
+  where it is sound.
+- `m[key]?` fails on maps for concrete types too, and no fixture in
+  `module_interp` indexes a map at all. Unrelated to generics.
 
 ## Order of work
 

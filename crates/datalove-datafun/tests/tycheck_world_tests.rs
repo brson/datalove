@@ -184,6 +184,12 @@ fn error_to_json(error: &datalove_datafun_tycheck::TypeError) -> rmx::serde_json
                 "kind": "VariableNotMutable"
             })
         }
+        TypeError::TypeParamNotErasable(name) => {
+            json!({
+                "kind": "TypeParamNotErasable",
+                "name": name
+            })
+        }
         TypeError::UnresolvedTypeAlias(name) => {
             json!({
                 "kind": "UnresolvedTypeAlias",
@@ -205,12 +211,6 @@ fn error_to_json(error: &datalove_datafun_tycheck::TypeError) -> rmx::serde_json
         TypeError::NonConstInConstExpr(name) => {
             json!({
                 "kind": "NonConstInConstExpr",
-                "name": name
-            })
-        }
-        TypeError::TypeParamNotNestable(name) => {
-            json!({
-                "kind": "TypeParamNotNestable",
                 "name": name
             })
         }
@@ -237,7 +237,6 @@ fn type_to_string(db: &dyn datalove_datafun::Db, ty: &datalove_datafun_tycheck::
 
     match ty {
         Type::Datalit(dt) => datalove_datalit::tycheck::type_to_string(db, dt),
-        Type::Var(name) => name.as_str(db).to_string(),
         Type::Function(func) => {
             let params: Vec<_> = func.param_types(db).iter()
                 .map(|p| type_to_string(db, p))

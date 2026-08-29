@@ -500,14 +500,17 @@ pub fn lower_expression<'db>(
             let param_modes: Vec<ParamMode> = target
                 .map(|t| t.func(ctx.db).params(ctx.db).iter().map(|p| p.mode).collect())
                 .unwrap_or_default();
-            // A parameter written as one of the callee's type parameters was
-            // erased to `data` when the callee was lowered, so the argument has
-            // to be wrapped on the way in. Everything else keeps its own type.
+            // A parameter whose type mentions one of the callee's type
+            // parameters was erased to `data` at that position when the callee
+            // was lowered, so the argument has to be converted on the way in.
+            // The parameter need not be the whole type: `[T]` was lowered as
+            // `[data]`, and the conversion walks into the list. Everything else
+            // keeps its own type.
             let type_params: Vec<bct::text::InternedText<'db>> = target
                 .map(|t| t.func(ctx.db).type_params(ctx.db).clone())
                 .unwrap_or_default();
             let names_a_type_param = |hint: &datalove_datafun_ast::datalit::ast::TypeHint<'db>| {
-                matches!(hint, datalove_datafun_ast::datalit::ast::TypeHint::Alias(name) if type_params.contains(name))
+                datalove_datafun_ir::type_hint_mentions_param(hint, &type_params)
             };
             let param_is_erased: Vec<bool> = target
                 .map(|t| t.func(ctx.db).params(ctx.db).iter()
@@ -516,17 +519,16 @@ pub fn lower_expression<'db>(
                 .unwrap_or_default();
             let param_types: Vec<IrType> = target
                 .map(|t| t.func(ctx.db).params(ctx.db).iter()
-                    .map(|p| if names_a_type_param(&p.type_hint) {
-                        IrType::Data
-                    } else {
-                        IrType::from_type_hint(ctx.db, &p.type_hint)
-                    })
+                    .map(|p| IrType::from_type_hint_erasing(ctx.db, &p.type_hint, &type_params))
                     .collect())
                 .unwrap_or_default();
-            let return_is_erased = target
+            // The erased return shape is the callee's return type with `data`
+            // at each type parameter, which for a bare `T` is `data` itself and
+            // for a `?T` is `?data`.
+            let erased_return_type = target
                 .and_then(|t| t.func(ctx.db).return_type(ctx.db))
-                .map(|hint| names_a_type_param(&hint))
-                .unwrap_or(false);
+                .filter(|hint| names_a_type_param(hint))
+                .map(|hint| IrType::from_type_hint_erasing(ctx.db, &hint, &type_params));
 
             // Lower each arg, tracking in-mode args as pending intermediates.
             let call_args = call.args(ctx.db);
@@ -535,9 +537,12 @@ pub fn lower_expression<'db>(
                 let mode = param_modes.get(i).copied().unwrap_or(ParamMode::In);
                 let arg_type = param_types.get(i);
                 let mut operand = lower_call_arg(ctx, *arg, mode, arg_type)?;
-                // Convert into the shape the erased callee was compiled for.
+                // Convert into the shape the erased callee was compiled for,
+                // which is the parameter's own type with `data` at each type
+                // parameter rather than `data` outright.
                 if param_is_erased.get(i).copied().unwrap_or(false) {
-                    let erased = ctx.fresh_value(IrType::Data);
+                    let erased_shape = param_types[i].clone();
+                    let erased = ctx.fresh_value(erased_shape);
                     ctx.emit(Instruction::Erase { dest: erased, src: operand });
                     operand = Operand::Value(erased);
                 }
@@ -554,9 +559,9 @@ pub fn lower_expression<'db>(
             }
 
             let result_type = ctx.expr_type(expr);
-            // An erased return arrives as a data, and the value is moved back
-            // out of it below into a value of the type this call site expects.
-            let call_result_type = if return_is_erased { IrType::Data } else { result_type.clone() };
+            // An erased return arrives in the erased shape, and the value is
+            // moved back out of it below into the type this call site expects.
+            let call_result_type = erased_return_type.clone().unwrap_or_else(|| result_type.clone());
             let dest = ctx.fresh_value(call_result_type);
 
             // Check if this is a call to a function with comptime params.
@@ -584,8 +589,8 @@ pub fn lower_expression<'db>(
             ctx.pop_pending_scope();
             ctx.emit_expr_temp_drops_since(expr_temp_mark);
 
-            // Move the value back out of the data the erased callee returned.
-            if return_is_erased {
+            // Move the value back out of the shape the erased callee returned.
+            if erased_return_type.is_some() {
                 let unwrapped = ctx.fresh_value(result_type);
                 ctx.emit(Instruction::Reify { dest: unwrapped, src: Operand::Value(dest) });
                 return Ok(unwrapped);

@@ -234,14 +234,69 @@ impl std::fmt::Display for IrType {
     }
 }
 
+/// Whether a type hint names one of the given type parameters anywhere in it.
+///
+/// A parameter whose type mentions one has a different shape inside the callee
+/// than at the call site, so the argument has to be converted rather than
+/// passed along as it stands.
+pub fn type_hint_mentions_param<'db>(
+    ty: &datalove_datalit::ast::TypeHint<'db>,
+    type_params: &[bct::text::InternedText<'db>],
+) -> bool {
+    use datalove_datalit::ast::TypeHint;
+
+    let mentions = |t: &TypeHint<'db>| type_hint_mentions_param(t, type_params);
+
+    match ty {
+        TypeHint::Alias(name) => type_params.contains(name),
+
+        TypeHint::List(t) => mentions(&t.element_type),
+        TypeHint::Set(t) => mentions(&t.element_type),
+        TypeHint::Option(t) => mentions(&t.inner_type),
+        TypeHint::Result(t) => mentions(&t.inner_type),
+        TypeHint::Tensor(t) => mentions(&t.element_type),
+        TypeHint::Term(t) => mentions(&t.payload),
+        TypeHint::Map(t) => mentions(&t.key_type) || mentions(&t.value_type),
+
+        TypeHint::AnonTuple(t) => t.fields.iter().any(mentions),
+        TypeHint::AnonStruct(t) => t.fields.iter().any(|f| mentions(&f.type_hint)),
+        TypeHint::Table(t) => t.columns.iter().any(|c| mentions(&c.type_hint)),
+        TypeHint::Enum(t) => t.variants.iter()
+            .any(|v| v.payload.as_ref().is_some_and(|p| mentions(p))),
+
+        TypeHint::Bool | TypeHint::U8 | TypeHint::I8 | TypeHint::U16 | TypeHint::I16
+        | TypeHint::U32 | TypeHint::I32 | TypeHint::U64 | TypeHint::I64
+        | TypeHint::Index | TypeHint::Offset | TypeHint::F32 | TypeHint::F64
+        | TypeHint::Int | TypeHint::String | TypeHint::Data | TypeHint::Error
+        | TypeHint::Atom(_) | TypeHint::ParseError(_) => false,
+    }
+}
+
 impl IrType {
     /// Convert from AST type hint to IR type.
     pub fn from_type_hint<'db>(db: &'db dyn salsa::Database, ty: &datalove_datalit::ast::TypeHint<'db>) -> Self {
-        Self::from_type_hint_inner(db, ty)
+        Self::from_type_hint_inner(db, ty, &[])
+    }
+
+    /// Convert from AST type hint to IR type, erasing the given type parameters.
+    ///
+    /// A hint naming one of `type_params` becomes `data` wherever it appears,
+    /// however deep, because that is the shape the generic function was
+    /// compiled for.
+    pub fn from_type_hint_erasing<'db>(
+        db: &'db dyn salsa::Database,
+        ty: &datalove_datalit::ast::TypeHint<'db>,
+        type_params: &[bct::text::InternedText<'db>],
+    ) -> Self {
+        Self::from_type_hint_inner(db, ty, type_params)
     }
 
     /// Convert from AST TypeHint to IR type.
-    fn from_type_hint_inner<'db>(db: &'db dyn salsa::Database, ty: &datalove_datalit::ast::TypeHint<'db>) -> Self {
+    fn from_type_hint_inner<'db>(
+        db: &'db dyn salsa::Database,
+        ty: &datalove_datalit::ast::TypeHint<'db>,
+        type_params: &[bct::text::InternedText<'db>],
+    ) -> Self {
         use datalove_datalit::ast::TypeHint;
 
         match ty {
@@ -265,7 +320,7 @@ impl IrType {
             TypeHint::AnonTuple(tuple) => {
                 let fields: Vec<_> = tuple.fields
                     .iter()
-                    .map(|f| Self::from_type_hint(db, f))
+                    .map(|f| Self::from_type_hint_inner(db, f, type_params))
                     .collect();
                 if fields.is_empty() {
                     IrType::Unit
@@ -276,34 +331,34 @@ impl IrType {
             TypeHint::AnonStruct(struct_) => {
                 let fields: Vec<_> = struct_.fields
                     .iter()
-                    .map(|f| (f.name.text(db).to_string(), Self::from_type_hint(db, &f.type_hint)))
+                    .map(|f| (f.name.text(db).to_string(), Self::from_type_hint_inner(db, &f.type_hint, type_params)))
                     .collect();
                 IrType::Struct(fields)
             }
 
             TypeHint::List(list) => {
-                let elem = Self::from_type_hint(db, &list.element_type);
+                let elem = Self::from_type_hint_inner(db, &list.element_type, type_params);
                 IrType::List(Box::new(elem))
             }
             TypeHint::Set(set) => {
-                let elem = Self::from_type_hint(db, &set.element_type);
+                let elem = Self::from_type_hint_inner(db, &set.element_type, type_params);
                 IrType::Set(Box::new(elem))
             }
             TypeHint::Map(map) => {
-                let key = Self::from_type_hint(db, &map.key_type);
-                let val = Self::from_type_hint(db, &map.value_type);
+                let key = Self::from_type_hint_inner(db, &map.key_type, type_params);
+                let val = Self::from_type_hint_inner(db, &map.value_type, type_params);
                 IrType::Map(Box::new(key), Box::new(val))
             }
             TypeHint::Option(opt) => {
-                let inner = Self::from_type_hint(db, &opt.inner_type);
+                let inner = Self::from_type_hint_inner(db, &opt.inner_type, type_params);
                 IrType::Option(Box::new(inner))
             }
             TypeHint::Result(res) => {
-                let ok = Self::from_type_hint(db, &res.inner_type);
+                let ok = Self::from_type_hint_inner(db, &res.inner_type, type_params);
                 IrType::Result(Box::new(ok))
             }
             TypeHint::Tensor(t) => {
-                let elem = Self::from_type_hint(db, &t.element_type);
+                let elem = Self::from_type_hint_inner(db, &t.element_type, type_params);
                 IrType::Tensor(Box::new(elem), t.rank)
             }
             TypeHint::Table(table) => {
@@ -311,7 +366,7 @@ impl IrType {
                     .iter()
                     .map(|c| {
                         let name = c.name.text(db).to_string();
-                        let ty = Self::from_type_hint(db, &c.type_hint);
+                        let ty = Self::from_type_hint_inner(db, &c.type_hint, type_params);
                         (name, Box::new(ty))
                     })
                     .collect();
@@ -325,14 +380,14 @@ impl IrType {
             }
             TypeHint::Term(t) => {
                 let name = t.name.text(db).to_string();
-                let payload = Self::from_type_hint(db, &t.payload);
+                let payload = Self::from_type_hint_inner(db, &t.payload, type_params);
                 IrType::Term(name, Box::new(payload))
             }
             TypeHint::Enum(e) => {
                 let mut variants: Vec<_> = e.variants.iter()
                     .map(|v| {
                         let name = v.name.text(db).to_string();
-                        let payload = v.payload.as_ref().map(|p| Self::from_type_hint(db, p));
+                        let payload = v.payload.as_ref().map(|p| Self::from_type_hint_inner(db, p, type_params));
                         (name, payload)
                     })
                     .collect();
@@ -342,9 +397,16 @@ impl IrType {
             TypeHint::ParseError(_) => {
                 IrType::Error
             }
-            TypeHint::Alias(_) => {
-                // Type aliases should be resolved before IR generation.
-                IrType::Error
+            TypeHint::Alias(name) => {
+                if type_params.contains(name) {
+                    // A type parameter is erased: the function is compiled once
+                    // over `data`, and the call site converts on the way in and
+                    // back out.
+                    IrType::Data
+                } else {
+                    // Type aliases should be resolved before IR generation.
+                    IrType::Error
+                }
             }
         }
     }
@@ -354,6 +416,9 @@ impl IrType {
         use datalove_datalit::tycheck::Type as DlType;
 
         match ty {
+            // Erasure happens here, and only here: a type parameter is `data`
+            // in the IR no matter how deeply it is nested in the source type.
+            DlType::Var(_) => IrType::Data,
             DlType::Bool => IrType::Bool,
             DlType::U8 => IrType::U8,
             DlType::I8 => IrType::I8,

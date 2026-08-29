@@ -219,6 +219,10 @@ pub enum PendingDiagnostic<'db> {
 pub fn is_copy_type<'db>(db: &'db dyn salsa::Database, ty: &datalove_datalit::tycheck::Type<'db>) -> bool {
     use datalove_datalit::tycheck::Type as DatalitType;
     match ty {
+        // A type parameter is unconstrained, so it has to be treated as move:
+        // it stands for a type the caller picks, which may well be linear.
+        DatalitType::Var(_) => false,
+
         // Fixed-size scalars are copy.
         DatalitType::Bool
         | DatalitType::U8 | DatalitType::I8

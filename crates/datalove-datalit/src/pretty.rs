@@ -109,6 +109,7 @@ fn pretty_type<'db>(
     out: &mut String,
 ) {
     match ty {
+        Type::Var(name) => out.push_str(name.as_str(db)),
         Type::Bool => out.push_str("bool"),
         Type::U8 => out.push_str("u8"),
         Type::I8 => out.push_str("i8"),

@@ -15,4 +15,5 @@ ron = "0.8"
 salsa.workspace = true
 datalove-datafun-intrinsics.path = "../datalove-datafun-intrinsics"
 datalove-datalit.path = "../datalove-datalit"
+bct.workspace = true
 datalove-rtdt.path = "../datalove-rtdt"

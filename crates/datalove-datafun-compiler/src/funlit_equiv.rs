@@ -378,6 +378,9 @@ fn datalit_type_to_serde<'db>(
 ) -> TypeSerde {
     use datalit::tycheck::Type;
     match &ty {
+        // A funlit is a data literal, and a data literal has no enclosing
+        // generic function to take a type parameter from.
+        Type::Var(name) => unreachable!("type parameter {name:?} in a data literal"),
         Type::Bool => TypeSerde::Bool,
         Type::U8 => TypeSerde::U8,
         Type::I8 => TypeSerde::I8,
@@ -449,7 +452,6 @@ fn datafun_type_to_serde<'db>(
     match ty {
         Type::Datalit(inner) => datalit_type_to_serde(db, inner.clone()),
         Type::Function(_) => panic!("Unexpected Function type in funlit_equiv"),
-        Type::Var(_) => panic!("Unexpected type parameter in funlit_equiv"),
     }
 }
 

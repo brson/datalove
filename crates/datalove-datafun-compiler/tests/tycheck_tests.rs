@@ -240,6 +240,12 @@ fn error_to_json(error: &datalove_datafun_tycheck::TypeError) -> rmx::serde_json
                 "kind": "VariableNotMutable"
             })
         }
+        TypeError::TypeParamNotErasable(name) => {
+            json!({
+                "kind": "TypeParamNotErasable",
+                "name": name
+            })
+        }
         TypeError::UnresolvedTypeAlias(name) => {
             json!({
                 "kind": "UnresolvedTypeAlias",
@@ -261,12 +267,6 @@ fn error_to_json(error: &datalove_datafun_tycheck::TypeError) -> rmx::serde_json
         TypeError::NonConstInConstExpr(name) => {
             json!({
                 "kind": "NonConstInConstExpr",
-                "name": name
-            })
-        }
-        TypeError::TypeParamNotNestable(name) => {
-            json!({
-                "kind": "TypeParamNotNestable",
                 "name": name
             })
         }

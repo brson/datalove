@@ -106,7 +106,7 @@ pub fn resolve_names_impl<'db>(
         } else {
             let mut scoped = type_aliases_map.clone();
             for name in &type_params {
-                scoped.insert(*name, Type::Var(*name));
+                scoped.insert(*name, Type::Datalit(datalove_datalit::tycheck::Type::Var(*name)));
             }
             scoped
         };
@@ -119,6 +119,11 @@ pub fn resolve_names_impl<'db>(
         for param in &params {
             match convert_type_hint_with_aliases(db, param.type_hint.clone(), &type_aliases_map) {
                 Ok(ty) => {
+                    if let Some(e) = unerasable_type_param_error(db, &ty) {
+                        errors.push(e);
+                        has_error = true;
+                        break;
+                    }
                     param_types.push(ty);
                     param_modes.push(param.mode);
                     param_comptime.push(param.is_comptime);
@@ -139,7 +144,13 @@ pub fn resolve_names_impl<'db>(
         let ret_ty = match return_type {
             Some(type_hint) => {
                 match convert_type_hint_with_aliases(db, type_hint, &type_aliases_map) {
-                    Ok(ty) => ty,
+                    Ok(ty) => match unerasable_type_param_error(db, &ty) {
+                        Some(e) => {
+                            errors.push(e);
+                            continue;
+                        }
+                        None => ty,
+                    },
                     Err(e) => {
                         errors.push(e);
                         continue;
@@ -365,4 +376,16 @@ pub fn build_all_function_ast_maps<'db>(
     }
 
     AllModuleFunctionAsts::new(db, module_function_asts)
+}
+
+/// Reject a signature whose type parameter sits where erasure cannot reach it.
+///
+/// See `first_unerasable_type_param` for which positions those are.
+fn unerasable_type_param_error<'db>(
+    db: &'db dyn Db,
+    ty: &Type<'db>,
+) -> Option<TypeError> {
+    let Type::Datalit(dt) = ty else { return None };
+    let name = datalove_datafun_common::generics::first_unerasable_type_param(dt)?;
+    Some(TypeError::TypeParamNotErasable(name.as_str(db).to_string()))
 }

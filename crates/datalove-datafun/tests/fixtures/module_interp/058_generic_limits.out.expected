@@ -2,8 +2,9 @@ ModulesAnalysis(
     typecheck: TypecheckResult(
         status: "Error",
         errors: [
-            "local/test/main: TypeParamNotNestable(\"T\")",
-            "local/test/main: TypeParamNotNestable(\"T\")",
+            "local/test/main: TypeParamNotErasable(\"T\")",
+            "local/test/main: TypeParamNotErasable(\"K\")",
+            "local/test/main: TypeParamNotErasable(\"T\")",
             "local/test/main: TypeMismatch { expected: \"u32\", actual: \"string\" }",
         ],
     ),

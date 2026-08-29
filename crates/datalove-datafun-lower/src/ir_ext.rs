@@ -17,12 +17,12 @@ pub trait IrTypeExt {
 impl IrTypeExt for IrType {
     fn from_tycheck<'db>(db: &'db dyn salsa::Database, ty: &Type<'db>) -> IrType {
         match ty {
+            // A type parameter is erased to `data` inside this, at whatever
+            // depth it sits: the function is compiled once over `data`, which
+            // holds a value of any type and carries what it needs to clone and
+            // drop it. The call site wraps on the way in and moves the value
+            // back out on the way back.
             Type::Datalit(dl_ty) => IrType::from_datalit(db, dl_ty),
-            // A type parameter is erased. The function is compiled once over
-            // `data`, which holds a value of any type and carries what it needs
-            // to clone and drop it; the call site wraps on the way in and moves
-            // the value back out on the way back.
-            Type::Var(_) => IrType::Data,
             Type::Function(_) => {
                 todo!("function types in IR")
             }

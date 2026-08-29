@@ -54,6 +54,8 @@ pub enum Type<'db> {
     Atom(TypeAtom<'db>),
     Term(TypeTerm<'db>),
     Enum(TypeEnum<'db>),
+    /// A type parameter of the enclosing generic function.
+    Var(InternedText<'db>),
 }
 
 
@@ -237,6 +239,10 @@ pub fn types_equivalent<'db>(db: &'db dyn crate::Db, t1: &Type<'db>, t2: &Type<'
         (Type::Int, Type::Int) => true,
         (Type::String, Type::String) => true,
         (Type::Data, Type::Data) => true,
+
+        // Two type parameters are the same type only when they are the same
+        // parameter. Nothing else is equivalent to one.
+        (Type::Var(a), Type::Var(b)) => a == b,
         (Type::Error, Type::Error) => true,
 
         (Type::AnonTuple(t1), Type::AnonTuple(t2)) => {
@@ -488,6 +494,7 @@ pub fn type_to_string<'db>(db: &'db dyn crate::Db, ty: &Type<'db>) -> String {
         Type::F64 => "f64".S(),
         Type::Int => "int".S(),
         Type::String => "string".S(),
+        Type::Var(name) => name.as_str(db).to_string(),
         Type::Data => "data".S(),
         Type::Error => "error".S(),
         Type::AnonTuple(t) => {

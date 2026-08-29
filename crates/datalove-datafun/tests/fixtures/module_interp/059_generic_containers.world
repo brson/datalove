@@ -1,0 +1,49 @@
+----------
+module local/test/main
+----------
+
+// A type parameter is a type like any other, so it can sit inside an option or
+// a result rather than only standing alone. The function is still compiled
+// once: `?T` is lowered as `?data`, and the call site converts its argument
+// into that shape on the way in and back out on the way back. Converting an
+// option means converting its payload and writing it where the other side
+// keeps it, which is what makes this reach a parameter below the top.
+
+// The one that the standard library wanted first.
+fun unwrap_or<T>(x: ?T, default: T): T
+  if x |v|
+    ret v
+  else
+    ret default
+  end if
+end fun
+
+// A type parameter under a result, on the ok side.
+fun ok_or<T>(x: !T, default: T): T
+  if x |v|
+    ret v
+  else |e|
+    ret default
+  end if
+end fun
+
+// An option of an option: the parameter is two levels down, and the inner
+// option is itself what the inner call binds its own parameter to.
+fun flatten_or<T>(x: ??T, default: T): T
+  ret unwrap_or(unwrap_or(x, none), default)
+end fun
+
+// A generic function passing a container through another generic function,
+// where neither one ever sees the concrete type.
+fun pass_through<T>(x: ?T, default: T): T
+  ret unwrap_or(x, default)
+end fun
+
+fun main(): (u32, string, int, string, int, u32)
+  ret (unwrap_or(some (: u32 / 7), : u32 / 0),
+       unwrap_or(none, "fallback"),
+       unwrap_or(some 12345678901234567890, 0),
+       flatten_or(some (some "deep"), "missing"),
+       pass_through(some 99, 0),
+       ok_or(ok (: u32 / 3), : u32 / 0))
+end fun

@@ -206,6 +206,10 @@ impl<'db> TyDescTable<'db> {
     /// Create a new TyDesc for the given type.
     fn create_tydesc(&mut self, ty: &Type<'db>) -> Box<rtdt::TyDesc> {
         match ty {
+            Type::Var(name) => unreachable!(
+                "type parameter {name:?} reached tydesc construction; \
+                 type parameters are erased to data during lowering",
+            ),
             Type::Bool => {
                 Box::new(rtdt::TyDesc {
                     type_tag: rtdt::TyTag::Bool,

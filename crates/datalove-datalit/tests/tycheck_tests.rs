@@ -6,6 +6,7 @@ fn type_to_json(db: &datalove_datalit::Database, ty: &datalove_datalit::tycheck:
     use datalove_datalit::tycheck::Type;
 
     match ty {
+        Type::Var(name) => json!(name.as_str(db)),
         Type::Bool => json!("bool"),
         Type::U8 => json!("u8"),
         Type::I8 => json!("i8"),
