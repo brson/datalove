@@ -42,6 +42,95 @@ unsafe fn inline_data(
     }
 }
 
+/// Move the value back out of a Data.
+///
+/// The inverse of [`data_from_local`]. The caller knows what type it put in and
+/// passes the tydesc for it; nothing here decides that, so this is not a
+/// checked downcast. A generic call site is the caller that knows.
+///
+/// The value is moved, not copied: the payload is written to `dest_out` and the
+/// box, if there was one, is freed without destroying what it held. The `Data`
+/// is dead afterwards and must not be dropped.
+///
+/// # Safety
+///
+/// `data_in` must be an initialized `Data` holding a value of the type
+/// `dest_tydesc` describes.
+pub unsafe fn data_into_local(
+    rt: LocalRtHandle,
+    data_in: *const u8,
+    dest_out: *mut u8,
+    dest_tydesc: *const rtdt::TyDesc,
+) -> RtStatus {
+    unsafe {
+        let data = &*(data_in as *const rtdt::Data);
+        let size = (*dest_tydesc).size as usize;
+
+        match data.tag() {
+            rtdt::anypack::Tag::TwoPointers => {
+                let value_ptr = data.value_ptr();
+                let inner_tydesc = data.tydesc();
+                if value_ptr.is_null() || inner_tydesc.is_null() {
+                    return RtStatus::Error;
+                }
+                // Move the payload out, then release the box it sat in. The
+                // payload is not destroyed: it now belongs to the destination.
+                std::ptr::copy_nonoverlapping(value_ptr, dest_out, size);
+                let inner_ty = rtdt::TyDescRef::from_ptr(inner_tydesc);
+                let rt_ref = &mut *(rt as *mut crate::impls::rt_local::RtLocal);
+                rt_ref.alloc.free(
+                    inner_ty.size(),
+                    inner_ty.align(),
+                    1,
+                    value_ptr as *mut u8,
+                );
+                RtStatus::Ok
+            }
+            rtdt::anypack::Tag::SmallImmediate | rtdt::anypack::Tag::InlineWithTyDesc => {
+                // Packed in the two words, so there is nothing to free and the
+                // accessor for the tag reads it back.
+                unpack_scalar(data, dest_out)
+            }
+            _ => RtStatus::Error,
+        }
+    }
+}
+
+/// Write a packed scalar to `dest_out`.
+///
+/// # Safety
+///
+/// `dest_out` must have room for a value of the type `data`'s tag names.
+unsafe fn unpack_scalar(data: &rtdt::Data, dest_out: *mut u8) -> RtStatus {
+    unsafe {
+        macro_rules! write_as {
+            ($accessor:ident, $ty:ty) => {{
+                match data.$accessor() {
+                    Some(v) => {
+                        std::ptr::write(dest_out as *mut $ty, v);
+                        RtStatus::Ok
+                    }
+                    None => RtStatus::Error,
+                }
+            }};
+        }
+        match data.tytag() {
+            TyTag::Bool => write_as!(as_bool, bool),
+            TyTag::U8 => write_as!(as_u8, u8),
+            TyTag::I8 => write_as!(as_i8, i8),
+            TyTag::U16 => write_as!(as_u16, u16),
+            TyTag::I16 => write_as!(as_i16, i16),
+            TyTag::U32 => write_as!(as_u32, u32),
+            TyTag::I32 => write_as!(as_i32, i32),
+            TyTag::U64 => write_as!(as_u64, u64),
+            TyTag::I64 => write_as!(as_i64, i64),
+            TyTag::F32 => write_as!(as_f32, f32),
+            TyTag::F64 => write_as!(as_f64, f64),
+            _ => RtStatus::Error,
+        }
+    }
+}
+
 /// Create an Error from any value (moves the value to heap).
 ///
 /// Allocates heap storage, copies the inner value, and creates an Error

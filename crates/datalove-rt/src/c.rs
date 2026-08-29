@@ -540,6 +540,27 @@ pub unsafe extern "C-unwind" fn dtlv_rti_data_from_local(
     }
 }
 
+/// Move the value back out of a Data, given the type that went in.
+///
+/// The caller supplies the tydesc, so this is a move rather than a checked
+/// downcast; the Data is dead afterwards. See `boxing::data_into_local`.
+#[unsafe(no_mangle)]
+pub unsafe extern "C-unwind" fn dtlv_rti_data_into_local(
+    rt: LocalRtHandle,
+    data_in: *const u8,
+    dest_out: *mut u8,
+    dest_tydesc: *const rtdt::TyDesc,
+) -> RtStatus {
+    debug_assert!(!rt.is_null(), "rt is null");
+    debug_assert!(!data_in.is_null(), "data_in is null");
+    debug_assert!(!dest_out.is_null(), "dest_out is null");
+    debug_assert!(!dest_tydesc.is_null(), "dest_tydesc is null");
+    debug_assert_aligned(dest_out, dest_tydesc, "data_into_local:dest_out");
+    unsafe {
+        crate::impls::boxing::data_into_local(rt, data_in, dest_out, dest_tydesc)
+    }
+}
+
 #[unsafe(no_mangle)]
 pub unsafe extern "C-unwind" fn dtlv_rti_string_create_local(
     rt: LocalRtHandle,
