@@ -254,24 +254,22 @@ impl IrInterpreter {
     ///
     /// Panics on allocation failure (OOM).
     pub(crate) fn execute_data_from(&self, inner: &Value, dest: Destination) {
-        let rt_handle = self.runtime.handle();
-        let inner_size = unsafe { (*inner.tydesc).size as usize };
-
-        // Allocate heap storage for the inner value.
-        let moved_ptr = unsafe {
-            datalove_rt::c::dtlv_rti_mem_alloc_local(rt_handle, inner.tydesc, 1)
+        // The runtime owns the encoding, including which values are small
+        // enough to sit in the two words rather than on the heap. This used to
+        // be a second copy of it, so the interpreter kept boxing scalars after
+        // the runtime stopped, and the two disagreed on what a `data` was.
+        let status = unsafe {
+            datalove_rt::c::dtlv_rti_data_from_local(
+                self.runtime.handle(),
+                inner.ptr,
+                inner.tydesc,
+                dest.ptr,
+            )
         };
-        assert!(!moved_ptr.is_null(), "OOM: failed to allocate Data inner storage");
-
-        // Move inner value to heap storage (bitwise copy).
-        unsafe {
-            std::ptr::copy_nonoverlapping(inner.ptr, moved_ptr, inner_size);
-        }
-
-        // Write Data struct to destination.
-        unsafe {
-            let data = rtdt::Data::from_pointers(inner.tydesc, moved_ptr);
-            std::ptr::write(dest.ptr as *mut rtdt::Data, data);
-        }
+        assert_eq!(
+            status,
+            datalove_rt::c::RtStatus::Ok,
+            "failed to build a data value",
+        );
     }
 }

@@ -607,6 +607,42 @@ unsafe fn pretty_result(
     }
 }
 
+/// Print a scalar held in the two words rather than behind a pointer.
+///
+/// A small immediate carries no tydesc, so the type comes from the tag and the
+/// value from the accessor for it. The value is materialized into a local of the
+/// right type so the ordinary printers can read it, which keeps this independent
+/// of byte order.
+unsafe fn pretty_packed(
+    rt: LocalRtHandle,
+    data: &rtdt::Data,
+    string_mut: *mut u8,
+    string_tydesc: *const rtdt::TyDesc,
+) -> Result<(), ()> {
+    unsafe {
+        macro_rules! print_as {
+            ($accessor:ident, $printer:ident, $ty:ty) => {{
+                let v: $ty = data.$accessor().ok_or(())?;
+                $printer(rt, &v as *const $ty as *const u8, string_mut, string_tydesc)
+            }};
+        }
+        match data.tytag() {
+            rtdt::TyTag::Bool => print_as!(as_bool, pretty_bool, bool),
+            rtdt::TyTag::U8 => print_as!(as_u8, pretty_u8, u8),
+            rtdt::TyTag::I8 => print_as!(as_i8, pretty_i8, i8),
+            rtdt::TyTag::U16 => print_as!(as_u16, pretty_u16, u16),
+            rtdt::TyTag::I16 => print_as!(as_i16, pretty_i16, i16),
+            rtdt::TyTag::U32 => print_as!(as_u32, pretty_u32, u32),
+            rtdt::TyTag::I32 => print_as!(as_i32, pretty_i32, i32),
+            rtdt::TyTag::U64 => print_as!(as_u64, pretty_u64, u64),
+            rtdt::TyTag::I64 => print_as!(as_i64, pretty_i64, i64),
+            rtdt::TyTag::F32 => print_as!(as_f32, pretty_f32, f32),
+            rtdt::TyTag::F64 => print_as!(as_f64, pretty_f64, f64),
+            _ => Err(()),
+        }
+    }
+}
+
 unsafe fn pretty_data(
     rt: LocalRtHandle,
     value_ref: *const u8,
@@ -616,6 +652,12 @@ unsafe fn pretty_data(
     unsafe {
         let data = &*(value_ref as *const rtdt::Data);
         push_str(rt, string_mut, string_tydesc, b"data ")?;
+
+        // A scalar small enough to pack sits in the two words. Only the pointer
+        // form has a value to follow, and only it has a tydesc to follow it with.
+        if data.tag() != rtdt::anypack::Tag::TwoPointers {
+            return pretty_packed(rt, data, string_mut, string_tydesc);
+        }
 
         let tydesc_ptr = data.tydesc();
         if tydesc_ptr.is_null() {
@@ -638,6 +680,13 @@ unsafe fn pretty_error(
     unsafe {
         let error = &*(value_ref as *const rtdt::Error);
         push_str(rt, string_mut, string_tydesc, b"error ")?;
+
+        // Error uses the same encoding as Data, so a packed scalar reads the
+        // same way. The transmute is what `Error::tydesc` does internally.
+        let as_data = &*(error as *const rtdt::Error as *const rtdt::Data);
+        if as_data.tag() != rtdt::anypack::Tag::TwoPointers {
+            return pretty_packed(rt, as_data, string_mut, string_tydesc);
+        }
 
         let tydesc_ptr = error.tydesc();
         if tydesc_ptr.is_null() {

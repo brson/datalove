@@ -1,0 +1,62 @@
+----------
+scriptunit-fragment
+----------
+
+// `data` holds a value one of three ways: packed into the two words with just a
+// type tag, packed alongside a tydesc, or behind a pointer on the heap. Which
+// one a value gets depends on its type, and everything that reads a `data` has
+// to handle all three. Only the pointer form was exercised until scalars stopped
+// being boxed, at which point printing a packed one read a null tydesc.
+//
+// This covers every type across the three forms, and the operations that read
+// one back: printing, cloning, passing through a call, and nesting.
+
+// Small immediate: value in the primary word, type tag in the secondary.
+debuglog data true
+debuglog data (: u8 / 200)
+debuglog data (: i8 / -100)
+debuglog data (: u16 / 60000)
+debuglog data (: i16 / -30000)
+debuglog data (: u32 / 4000000000)
+debuglog data (: i32 / -2000000000)
+
+// Inline with tydesc: value fills the secondary word, so the type comes from
+// the tydesc in the primary.
+debuglog data (: u64 / 18000000000000000000)
+debuglog data (: i64 / -9000000000000000000)
+debuglog data (: f32 / 1.5)
+debuglog data (: f64 / 2.25)
+
+// Not packed: index and offset are scalars but are not in the inline set, and
+// the rest are too large or heap-allocated already.
+debuglog data (: index / 42)
+debuglog data (: offset / -42)
+debuglog data 12345678901234567890123
+debuglog data "hello"
+debuglog data [1, 2, 3]
+debuglog data (1, 2)
+
+// Reading a packed value back out, rather than only printing it.
+fun clone_it(d: data): (data, data)
+    let c: data = d@
+    ret (c, d)
+end fun
+
+fun through(d: data): data
+    ret d
+end fun
+
+debuglog clone_it(data (: u32 / 7))
+debuglog through(data true)
+debuglog through(data (: f64 / 2.5))
+
+// Nested in the collection and wrapper types.
+debuglog [data (: u32 / 1), data (: i8 / -2)]
+debuglog some (data (: u16 / 3))
+debuglog (data true, data "heap")
+
+// Error uses the same encoding, so it packs and reads back the same way.
+debuglog error true
+debuglog error (: i32 / -5)
+debuglog error (: f32 / 0.5)
+debuglog error "heap"
