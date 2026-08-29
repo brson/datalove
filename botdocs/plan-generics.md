@@ -318,11 +318,17 @@ reasoned about. `first_unerasable_type_param` now refuses those signatures with
 Two adjacent facts worth knowing, both predating this work:
 
 - Indexing a `[T]` fails with `NonCopyIndexProjection`, because reading an
-  element out copies it and an unconstrained parameter is not copy. This is
-  correct, and it means a by-erasure `[T]` would have been of little use even
-  where it is sound.
-- `m[key]?` fails on maps for concrete types too, and no fixture in
-  `module_interp` indexes a map at all. Unrelated to generics.
+  element out consumes it from a container the caller still owns and an
+  unconstrained parameter is not copy. For a concrete non-copy element the
+  answer is `@`, which clones: `m[k]?@`. Whether `@` can clone an element whose
+  type is only known from a descriptor is the question the collection work has
+  to answer, since cloning is already tydesc-driven.
+- Map indexing itself is sound and was never the problem; an earlier draft of
+  this section said otherwise on the strength of three bad test programs, which
+  wrote `{u32 = u32}` as `{u32: u32}` (a struct), read `?` as producing an
+  option rather than propagating, and omitted the `@`. Fixture
+  `module_interp/060_map_index` now covers hit, miss, non-copy value and
+  non-copy key.
 
 ## Order of work
 
