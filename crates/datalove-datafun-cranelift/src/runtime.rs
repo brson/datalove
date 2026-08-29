@@ -100,6 +100,8 @@ pub struct RuntimeImports {
     pub error_from: FuncId,
     /// `dtlv_rti_data_from_local(rt, inner_in, inner_tydesc, dest_out) -> RtStatus`
     pub data_from: FuncId,
+    /// `dtlv_rti_data_into_local(rt, data_in, dest_out, dest_tydesc) -> RtStatus`
+    pub data_into: FuncId,
 }
 
 impl RuntimeImports {
@@ -584,6 +586,12 @@ impl RuntimeImports {
             .declare_function("dtlv_rti_data_from_local", Linkage::Import, &boxing_sig())
             .map_err(|e| CraneliftError::Module(format!("declare dtlv_rti_data_from_local: {}", e)))?;
 
+        // Same shape as the wraps: four pointers in, a status out. The middle
+        // two are swapped, since the tydesc describes the destination here.
+        let data_into = module
+            .declare_function("dtlv_rti_data_into_local", Linkage::Import, &boxing_sig())
+            .map_err(|e| CraneliftError::Module(format!("declare dtlv_rti_data_into_local: {}", e)))?;
+
         Ok(Self {
             init,
             shutdown,
@@ -623,6 +631,7 @@ impl RuntimeImports {
             clone_local,
             error_from,
             data_from,
+            data_into,
         })
     }
 }

@@ -262,6 +262,9 @@ impl<'a> FunctionCodegenContext<'a> {
             Instruction::DataFrom { dest, inner } => {
                 self.emit_data_from(out, *dest, inner)?;
             }
+            Instruction::DataInto { dest, src } => {
+                self.emit_data_into(out, *dest, src)?;
+            }
             Instruction::ListNew { dest, elements } => {
                 self.emit_list_new(out, *dest, elements)?;
             }
@@ -1388,6 +1391,26 @@ impl<'a> FunctionCodegenContext<'a> {
         // Zero source to implement move semantics (prevents double-free/leak).
         if inner_size > 0 {
             writeln!(out, "    memset({}, 0, {});", inner_addr, inner_size).unwrap();
+        }
+        Ok(())
+    }
+
+    /// Emit moving a value back out of a data.
+    ///
+    /// The destination's type is what went in, so its tydesc says how much to
+    /// move. The source data is zeroed after, the same way the wrap zeroes what
+    /// it consumed, since the value now belongs to the destination.
+    fn emit_data_into(&mut self, out: &mut String, dest: ValueId, src: &Operand) -> Result<(), CAotError> {
+        let dest_addr = self.value_addr(dest);
+        let src_addr = self.operand_addr(src);
+        let dest_ty = self.value_type(dest).clone();
+        let dest_tydesc = self.tydesc_name(&dest_ty);
+        let src_size = types::ir_type_to_crepr(&self.operand_type(src).clone()).layout().size;
+
+        writeln!(out, "    dtlv_rti_data_into_local(rt, {}, {}, &{});", src_addr, dest_addr, dest_tydesc).unwrap();
+
+        if src_size > 0 {
+            writeln!(out, "    memset({}, 0, {});", src_addr, src_size).unwrap();
         }
         Ok(())
     }

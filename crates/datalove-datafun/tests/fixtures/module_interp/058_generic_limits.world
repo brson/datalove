@@ -1,0 +1,32 @@
+----------
+module local/test/main
+----------
+
+// What generics do not do yet.
+
+fun pick_first<T>(a: T, b: T): T
+  ret a
+end fun
+
+// One type parameter means one type. The first argument in a position written
+// as T fixes it, and a later one has to agree, so this is a mismatch rather
+// than a reinterpretation of the bytes.
+fun mismatch(): u32
+  ret pick_first(: u32 / 1, "not a u32")
+end fun
+
+// Erasure replaces the parameter itself with data, which works wherever the
+// parameter stands alone. Inside an option the element type would have to
+// change too, and converting a caller's value to match costs a copy, so a
+// nested type parameter is rejected instead of silently doing that.
+fun nested_option<T>(x: ?T): ?T
+  ret x
+end fun
+
+fun nested_list<T>(x: [T]): [T]
+  ret x
+end fun
+
+fun main(): u32
+  ret : u32 / 1
+end fun

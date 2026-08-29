@@ -264,6 +264,12 @@ fn error_to_json(error: &datalove_datafun_tycheck::TypeError) -> rmx::serde_json
                 "name": name
             })
         }
+        TypeError::TypeParamNotNestable(name) => {
+            json!({
+                "kind": "TypeParamNotNestable",
+                "name": name
+            })
+        }
         TypeError::ComptimeArgNotConstBinding { param_idx, reason } => {
             json!({
                 "kind": "ComptimeArgNotConstBinding",

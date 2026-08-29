@@ -1,0 +1,14 @@
+ModulesAnalysis(
+    typecheck: TypecheckResult(
+        status: "Error",
+        errors: [
+            "local/test/main: TypeParamNotNestable(\"T\")",
+            "local/test/main: TypeParamNotNestable(\"T\")",
+            "local/test/main: TypeMismatch { expected: \"u32\", actual: \"string\" }",
+        ],
+    ),
+    lowering: LoweringResult(
+        status: "Skipped",
+    ),
+    output: "",
+)

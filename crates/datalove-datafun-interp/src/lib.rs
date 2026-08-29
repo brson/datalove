@@ -934,6 +934,13 @@ impl IrInterpreter {
                 frame.mark_value_live(*dest);
                 Self::mark_source_dropped_local(inner, frame);
             }
+            Instruction::DataInto { dest, src } => {
+                let src_val = self.read_operand(src, frame, frames);
+                let dest_slot = frame.value_dest(*dest);
+                self.execute_data_into(&src_val, dest_slot);
+                frame.mark_value_live(*dest);
+                Self::mark_source_dropped_local(src, frame);
+            }
             Instruction::Call { site_id, dest, func, args } => {
                 let callee = ctx.get_unit(func, registry);
                 let arg_vals = self.prepare_call_args(callee, args, frame, frames);

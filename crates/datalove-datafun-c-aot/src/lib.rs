@@ -338,6 +338,7 @@ impl CAotCompiler {
         writeln!(out, "extern uint8_t dtlv_rti_clone_local(void* rt, const void* src_ref, const dtlv_tydesc_t* src_tydesc, void* dst_out, const dtlv_tydesc_t* dst_tydesc);").unwrap();
         writeln!(out, "extern uint8_t dtlv_rti_error_from_local(void* rt, void* inner_in, const dtlv_tydesc_t* inner_tydesc, void* dest_out);").unwrap();
         writeln!(out, "extern uint8_t dtlv_rti_data_from_local(void* rt, void* inner_in, const dtlv_tydesc_t* inner_tydesc, void* dest_out);").unwrap();
+        writeln!(out, "extern uint8_t dtlv_rti_data_into_local(void* rt, const void* data_in, void* dest_out, const dtlv_tydesc_t* dest_tydesc);").unwrap();
         writeln!(out).unwrap();
 
         // Tracking byte values.

@@ -500,11 +500,33 @@ pub fn lower_expression<'db>(
             let param_modes: Vec<ParamMode> = target
                 .map(|t| t.func(ctx.db).params(ctx.db).iter().map(|p| p.mode).collect())
                 .unwrap_or_default();
-            let param_types: Vec<IrType> = target
+            // A parameter written as one of the callee's type parameters was
+            // erased to `data` when the callee was lowered, so the argument has
+            // to be wrapped on the way in. Everything else keeps its own type.
+            let type_params: Vec<bct::text::InternedText<'db>> = target
+                .map(|t| t.func(ctx.db).type_params(ctx.db).clone())
+                .unwrap_or_default();
+            let names_a_type_param = |hint: &datalove_datafun_ast::datalit::ast::TypeHint<'db>| {
+                matches!(hint, datalove_datafun_ast::datalit::ast::TypeHint::Alias(name) if type_params.contains(name))
+            };
+            let param_is_erased: Vec<bool> = target
                 .map(|t| t.func(ctx.db).params(ctx.db).iter()
-                    .map(|p| IrType::from_type_hint(ctx.db, &p.type_hint))
+                    .map(|p| names_a_type_param(&p.type_hint))
                     .collect())
                 .unwrap_or_default();
+            let param_types: Vec<IrType> = target
+                .map(|t| t.func(ctx.db).params(ctx.db).iter()
+                    .map(|p| if names_a_type_param(&p.type_hint) {
+                        IrType::Data
+                    } else {
+                        IrType::from_type_hint(ctx.db, &p.type_hint)
+                    })
+                    .collect())
+                .unwrap_or_default();
+            let return_is_erased = target
+                .and_then(|t| t.func(ctx.db).return_type(ctx.db))
+                .map(|hint| names_a_type_param(&hint))
+                .unwrap_or(false);
 
             // Lower each arg, tracking in-mode args as pending intermediates.
             let call_args = call.args(ctx.db);
@@ -512,7 +534,13 @@ pub fn lower_expression<'db>(
             for (i, arg) in call_args.iter().enumerate() {
                 let mode = param_modes.get(i).copied().unwrap_or(ParamMode::In);
                 let arg_type = param_types.get(i);
-                let operand = lower_call_arg(ctx, *arg, mode, arg_type)?;
+                let mut operand = lower_call_arg(ctx, *arg, mode, arg_type)?;
+                // Wrap into a data where the callee's parameter was erased.
+                if param_is_erased.get(i).copied().unwrap_or(false) {
+                    let wrapped = ctx.fresh_value(IrType::Data);
+                    ctx.emit(Instruction::DataFrom { dest: wrapped, inner: operand });
+                    operand = Operand::Value(wrapped);
+                }
                 // Track in-mode args as pending intermediate.
                 // Ref/mut/out args are tracked via lower_operand's expr_temps.
                 if mode == ParamMode::In {
@@ -526,7 +554,10 @@ pub fn lower_expression<'db>(
             }
 
             let result_type = ctx.expr_type(expr);
-            let dest = ctx.fresh_value(result_type);
+            // An erased return arrives as a data, and the value is moved back
+            // out of it below into a value of the type this call site expects.
+            let call_result_type = if return_is_erased { IrType::Data } else { result_type.clone() };
+            let dest = ctx.fresh_value(call_result_type);
 
             // Check if this is a call to a function with comptime params.
             // If so, emit ComptimeCall with discriminant=0 as placeholder.
@@ -552,6 +583,13 @@ pub fn lower_expression<'db>(
             ctx.clear_pending_intermediates();
             ctx.pop_pending_scope();
             ctx.emit_expr_temp_drops_since(expr_temp_mark);
+
+            // Move the value back out of the data the erased callee returned.
+            if return_is_erased {
+                let unwrapped = ctx.fresh_value(result_type);
+                ctx.emit(Instruction::DataInto { dest: unwrapped, src: Operand::Value(dest) });
+                return Ok(unwrapped);
+            }
             Ok(dest)
         }
         ExprFunKind::Some(some_expr) => {

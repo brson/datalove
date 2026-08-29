@@ -17,6 +17,8 @@ use datalove_datalit as datalit;
 use crate::context::TypeContext;
 use crate::check::{check_expr, check_list_elements, check_set_elements, check_map_entries, check_tensor_shape_and_elements, check_tuple_elements, check_struct_fields, check_table_rows};
 use crate::types::*;
+use std::collections::HashMap;
+use bct::text::InternedText;
 
 pub use crate::{Type, TypeError, is_copy_type};
 use crate::types::ComptimeCallSite;
@@ -167,6 +169,9 @@ pub fn synthesize_expr<'db>(
                 match elem_ty {
                     Type::Datalit(datalit_ty) => {
                         datalit_element_types.push(datalit_ty.clone());
+                    }
+                    Type::Var(name) => {
+                        return Err(TypeError::TypeParamNotNestable(name.as_str(ctx.db).to_string()));
                     }
                     Type::Function(_) => {
                         unreachable!("function types cannot appear in tuple elements");
@@ -345,6 +350,9 @@ pub fn synthesize_expr<'db>(
             let inner_datalit_ty = match inner_ty {
                 Type::Datalit(dt) => dt.clone(),
                 Type::Function(_) => unreachable!("synthesized expression type is always Datalit"),
+                Type::Var(name) => {
+                    return Err(TypeError::TypeParamNotNestable(name.as_str(ctx.db).to_string()));
+                }
             };
             let option_ty = datalit::tycheck::Type::Option(
                 datalit::tycheck::TypeOption { inner_type: Box::new(inner_datalit_ty) }
@@ -362,6 +370,9 @@ pub fn synthesize_expr<'db>(
             let inner_datalit_ty = match inner_ty {
                 Type::Datalit(dt) => dt.clone(),
                 Type::Function(_) => unreachable!("synthesized expression type is always Datalit"),
+                Type::Var(name) => {
+                    return Err(TypeError::TypeParamNotNestable(name.as_str(ctx.db).to_string()));
+                }
             };
             let result_ty = datalit::tycheck::Type::Result(
                 datalit::tycheck::TypeResult { inner_type: Box::new(inner_datalit_ty) }
@@ -431,6 +442,9 @@ pub fn synthesize_expr<'db>(
             let payload_datalit = match payload_ty {
                 Type::Datalit(dt) => dt.clone(),
                 Type::Function(_) => unreachable!("synthesized expression type is always Datalit"),
+                Type::Var(name) => {
+                    return Err(TypeError::TypeParamNotNestable(name.as_str(ctx.db).to_string()));
+                }
             };
             let ty = Type::Datalit(datalit::tycheck::Type::Term(
                 datalit::tycheck::TypeTerm {
@@ -873,17 +887,52 @@ fn synthesize_function_call<'db>(
         ctx.add_error(err);
     }
 
+    // Bind the type parameters from the arguments standing in their positions.
+    //
+    // A parameter written as a bare `T` is the only place a binding can come
+    // from, since that is where erasure applies. The first argument in such a
+    // position fixes it, and later ones are checked against what it fixed, so
+    // `swap(a, b)` on two different types is a mismatch rather than a silent
+    // reinterpretation.
+    let mut bindings: HashMap<InternedText<'db>, Type<'db>> = HashMap::new();
+    for (arg, param_ty) in args.iter().zip(param_types.iter()) {
+        let Type::Var(var) = param_ty else { continue };
+        let old_ref_context = ctx.ref_context;
+        ctx.ref_context = true;
+        let arg_ty = ctx.synthesize_expr(*arg);
+        ctx.ref_context = old_ref_context;
+        let arg_ty = arg_ty?;
+        match bindings.get(var) {
+            Some(bound) if !types_equivalent(db, bound, &arg_ty) => {
+                let err = ctx.error_type_mismatch(
+                    *arg,
+                    &type_to_string(db, bound),
+                    &type_to_string(db, &arg_ty),
+                    "type parameter already fixed by an earlier argument",
+                );
+                return Err(err);
+            }
+            Some(_) => {}
+            None => {
+                bindings.insert(*var, arg_ty);
+            }
+        }
+    }
+
     // Check each argument type, setting ref/mut context for ref/mut/out params.
     for ((arg, expected_param_ty), mode) in args.iter().zip(param_types.iter()).zip(param_modes.iter()) {
+        let expected_param_ty = substitute_type_vars(expected_param_ty, &bindings);
         let old_ref_context = ctx.ref_context;
         let old_mut_context = ctx.mut_context;
         ctx.ref_context = matches!(mode, ParamMode::Ref | ParamMode::Mut | ParamMode::Out);
         ctx.mut_context = matches!(mode, ParamMode::Mut | ParamMode::Out);
-        let result = check_expr(ctx, *arg, expected_param_ty);
+        let result = check_expr(ctx, *arg, &expected_param_ty);
         ctx.ref_context = old_ref_context;
         ctx.mut_context = old_mut_context;
         result?;
     }
+
+    let return_type = substitute_type_vars(&return_type, &bindings);
 
     // Store resolved call target for interpreter.
     if let Some((func_ast, module_id)) = ctx.lookup_function_ast(name) {
@@ -892,6 +941,21 @@ fn synthesize_function_call<'db>(
 
     // Return the function's return type.
     Ok(return_type)
+}
+
+/// Replace a bound type parameter with what the call site bound it to.
+///
+/// Only a bare `T` is substituted. A parameter nested inside a composite is
+/// rejected earlier, when the signature is resolved, so there is nothing to
+/// walk into here.
+fn substitute_type_vars<'db>(
+    ty: &Type<'db>,
+    bindings: &HashMap<InternedText<'db>, Type<'db>>,
+) -> Type<'db> {
+    match ty {
+        Type::Var(name) => bindings.get(name).cloned().unwrap_or_else(|| ty.clone()),
+        _ => ty.clone(),
+    }
 }
 
 /// The marker a parameter mode requires at a call site.
@@ -1449,6 +1513,9 @@ fn synthesize_inline_list<'db>(
     let first_datalit = match first_ty {
         Type::Datalit(ref dt) => dt.clone(),
         Type::Function(_) => unreachable!("synthesized expression type is always Datalit"),
+                Type::Var(name) => {
+                    return Err(TypeError::TypeParamNotNestable(name.as_str(ctx.db).to_string()));
+                }
     };
 
     // Check remaining elements for type compatibility.
@@ -1481,6 +1548,9 @@ fn synthesize_inline_set<'db>(
     let first_datalit = match first_ty {
         Type::Datalit(ref dt) => dt.clone(),
         Type::Function(_) => unreachable!("synthesized expression type is always Datalit"),
+                Type::Var(name) => {
+                    return Err(TypeError::TypeParamNotNestable(name.as_str(ctx.db).to_string()));
+                }
     };
 
     // Check remaining elements for type compatibility.
@@ -1513,11 +1583,17 @@ fn synthesize_inline_map<'db>(
     let first_key_datalit = match first_key_ty {
         Type::Datalit(ref dt) => dt.clone(),
         Type::Function(_) => unreachable!("synthesized expression type is always Datalit"),
+                Type::Var(name) => {
+                    return Err(TypeError::TypeParamNotNestable(name.as_str(ctx.db).to_string()));
+                }
     };
     let first_value_ty = ctx.synthesize_expr(entries[0].value)?;
     let first_value_datalit = match first_value_ty {
         Type::Datalit(ref dt) => dt.clone(),
         Type::Function(_) => unreachable!("synthesized expression type is always Datalit"),
+                Type::Var(name) => {
+                    return Err(TypeError::TypeParamNotNestable(name.as_str(ctx.db).to_string()));
+                }
     };
 
     // Check remaining entries for type compatibility.
@@ -1556,6 +1632,9 @@ fn synthesize_inline_tensor<'db>(
     let first_datalit = match first_ty {
         Type::Datalit(ref dt) => dt.clone(),
         Type::Function(_) => unreachable!("synthesized expression type is always Datalit"),
+                Type::Var(name) => {
+                    return Err(TypeError::TypeParamNotNestable(name.as_str(ctx.db).to_string()));
+                }
     };
 
     // Check remaining elements for type compatibility.
@@ -1585,6 +1664,9 @@ fn synthesize_inline_anon_tuple<'db>(
         let elem_datalit = match elem_ty {
             Type::Datalit(dt) => dt.clone(),
             Type::Function(_) => unreachable!("synthesized expression type is always Datalit"),
+                Type::Var(name) => {
+                    return Err(TypeError::TypeParamNotNestable(name.as_str(ctx.db).to_string()));
+                }
         };
         elem_types.push(elem_datalit);
     }
@@ -1610,6 +1692,9 @@ fn synthesize_inline_anon_struct<'db>(
         let field_datalit = match field_ty {
             Type::Datalit(dt) => dt.clone(),
             Type::Function(_) => unreachable!("synthesized expression type is always Datalit"),
+                Type::Var(name) => {
+                    return Err(TypeError::TypeParamNotNestable(name.as_str(ctx.db).to_string()));
+                }
         };
         field_types.push(datalit::tycheck::TypeNamedField { name: field.name, ty: Box::new(field_datalit) });
     }

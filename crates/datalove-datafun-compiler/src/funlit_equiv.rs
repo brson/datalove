@@ -449,6 +449,7 @@ fn datafun_type_to_serde<'db>(
     match ty {
         Type::Datalit(inner) => datalit_type_to_serde(db, inner.clone()),
         Type::Function(_) => panic!("Unexpected Function type in funlit_equiv"),
+        Type::Var(_) => panic!("Unexpected type parameter in funlit_equiv"),
     }
 }
 

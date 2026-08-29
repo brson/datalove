@@ -306,6 +306,18 @@ impl<'db> Parser<'db> {
             }
         };
 
+        // Type parameters, if the name is followed by `<...>`. Angle brackets
+        // are bracers, so this arrives as a single branch.
+        let type_params = match self.peek() {
+            Some(TreeToken::Branch { sigil: Sigil::AngleOpen, .. }) => {
+                match self.next() {
+                    Some(TreeToken::Branch { inner, .. }) => self.parse_type_params(inner),
+                    _ => unreachable!("peeked an angle branch"),
+                }
+            }
+            _ => Vec::new(),
+        };
+
         // Parse parameters in parentheses.
         let params = match self.next() {
             Some(TreeToken::Branch { sigil: Sigil::ParenOpen, open, inner, .. }) => {
@@ -369,11 +381,22 @@ impl<'db> Parser<'db> {
             self.db,
             self.module_id(),
             name,
+            type_params,
             params,
             return_type,
             body,
             local_index,
         ))
+    }
+
+    /// Parse the names inside `<...>` on a function signature.
+    fn parse_type_params(&mut self, inner: BracerIter<'db>) -> Vec<InternedText<'db>> {
+        let mut sub = Parser::from_branch_with_context(
+            self.db, inner, self.source_text(), None, self.module_id());
+        let names = sub.parse_comma_separated(|p| p.eat_name());
+        sub.error_if_not_exhausted();
+        self.had_error |= sub.had_error;
+        names.into_iter().flatten().collect()
     }
 
     fn parse_fun_params(

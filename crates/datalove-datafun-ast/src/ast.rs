@@ -227,6 +227,13 @@ pub struct StmtFun<'db> {
     /// Function name (identity key).
     #[returns(copy)]
     pub name: InternedText<'db>,
+    /// Type parameters, in declaration order.
+    ///
+    /// A parameter or return type may name one, and it stands for whatever type
+    /// the call site supplies. Empty for a function written without `<...>`.
+    #[tracked]
+    #[returns(ref)]
+    pub type_params: Vec<InternedText<'db>>,
     #[tracked]
     #[returns(ref)]
     pub params: Vec<FunParam<'db>>,

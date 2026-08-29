@@ -740,6 +740,8 @@ fn resolve_module_imports_internal<'db>(
                         db,
                         Some(synthetic_module_id),
                         item_name,
+                        // A rider function is not generic.
+                        Vec::new(),
                         synthetic_params,
                         None,
                         vec![],

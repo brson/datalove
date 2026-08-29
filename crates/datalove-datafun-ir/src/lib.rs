@@ -1059,6 +1059,15 @@ pub enum Instruction {
     /// **Ownership:** Consumes `inner`, produces `dest`.
     DataFrom { dest: ValueId, inner: Operand },
 
+    /// Move the value back out of a Data, as the type of `dest`.
+    ///
+    /// The inverse of `DataFrom`. Emitted where the compiler knows what went
+    /// in, which is a call site of a function whose signature was erased, so
+    /// this is a move rather than a checked downcast.
+    ///
+    /// **Ownership:** Consumes `src`, produces `dest`.
+    DataInto { dest: ValueId, src: Operand },
+
     // ========================================================================
     // Collection Construction
     // ========================================================================

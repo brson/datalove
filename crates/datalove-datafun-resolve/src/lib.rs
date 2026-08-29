@@ -88,14 +88,27 @@ pub fn resolve_names_impl<'db>(
 
     for statement in statements {
         // Extract function signature from either regular or native fun.
-        let (name, params, return_type, func_ast) = match statement {
+        let (name, type_params, params, return_type, func_ast) = match statement {
             Statement::Fun(stmt) => {
-                (stmt.name(db), stmt.params(db).clone(), stmt.return_type(db), Some(*stmt))
+                (stmt.name(db), stmt.type_params(db).clone(), stmt.params(db).clone(), stmt.return_type(db), Some(*stmt))
             }
             Statement::NativeFun(stmt) => {
-                (stmt.name, stmt.params.clone(), stmt.return_type.clone(), None)
+                (stmt.name, Vec::new(), stmt.params.clone(), stmt.return_type.clone(), None)
             }
             _ => continue,
+        };
+
+        // A type parameter resolves like a named type, so it goes in the alias
+        // map for the length of this signature. Nothing else can see it, which
+        // is what keeps one function's `T` from meaning another's.
+        let type_aliases_map = if type_params.is_empty() {
+            type_aliases_map.clone()
+        } else {
+            let mut scoped = type_aliases_map.clone();
+            for name in &type_params {
+                scoped.insert(*name, Type::Var(*name));
+            }
+            scoped
         };
 
         // Convert parameter types and collect modes/comptime flags.
