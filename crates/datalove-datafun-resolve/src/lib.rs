@@ -88,12 +88,18 @@ pub fn resolve_names_impl<'db>(
 
     for statement in statements {
         // Extract function signature from either regular or native fun.
+        // A native function's arguments are passed as they stand, each with a
+        // descriptor saying what it is, so its implementation can read the
+        // element type off a container at runtime. Nothing is converted, so
+        // the positions erasure cannot reach do not apply to one.
+        let is_native = matches!(statement, Statement::NativeFun(_));
+
         let (name, type_params, params, return_type, func_ast) = match statement {
             Statement::Fun(stmt) => {
                 (stmt.name(db), stmt.type_params(db).clone(), stmt.params(db).clone(), stmt.return_type(db), Some(*stmt))
             }
             Statement::NativeFun(stmt) => {
-                (stmt.name, Vec::new(), stmt.params.clone(), stmt.return_type.clone(), None)
+                (stmt.name, stmt.type_params.clone(), stmt.params.clone(), stmt.return_type.clone(), None)
             }
             _ => continue,
         };
@@ -119,7 +125,19 @@ pub fn resolve_names_impl<'db>(
         for param in &params {
             match convert_type_hint_with_aliases(db, param.type_hint.clone(), &type_aliases_map) {
                 Ok(ty) => {
-                    if let Some(e) = unerasable_type_param_error(db, &ty) {
+                    // A borrowed parameter is not converted at the boundary: it
+                    // is passed as it stands, with the caller's descriptor
+                    // saying what it is, and the callee never drops it. So a
+                    // type parameter under a container is reachable there even
+                    // though erasing one is not, and the same is true of every
+                    // parameter of a native function, whose implementation
+                    // reads the descriptors directly.
+                    let borrowed = matches!(param.mode, ParamMode::Ref | ParamMode::Mut);
+                    let passed_as_it_stands = is_native || borrowed;
+                    if let Some(e) = (!passed_as_it_stands)
+                        .then(|| unerasable_type_param_error(db, &ty))
+                        .flatten()
+                    {
                         errors.push(e);
                         has_error = true;
                         break;
@@ -144,7 +162,7 @@ pub fn resolve_names_impl<'db>(
         let ret_ty = match return_type {
             Some(type_hint) => {
                 match convert_type_hint_with_aliases(db, type_hint, &type_aliases_map) {
-                    Ok(ty) => match unerasable_type_param_error(db, &ty) {
+                    Ok(ty) => match (!is_native).then(|| unerasable_type_param_error(db, &ty)).flatten() {
                         Some(e) => {
                             errors.push(e);
                             continue;

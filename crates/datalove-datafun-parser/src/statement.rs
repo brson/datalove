@@ -949,6 +949,17 @@ impl<'db> Parser<'db> {
             }
         };
 
+        // Type parameters, spelled as they are on a regular function.
+        let type_params = match self.peek() {
+            Some(TreeToken::Branch { sigil: Sigil::AngleOpen, .. }) => {
+                match self.next() {
+                    Some(TreeToken::Branch { inner, .. }) => self.parse_type_params(inner),
+                    _ => unreachable!("peeked an angle branch"),
+                }
+            }
+            _ => Vec::new(),
+        };
+
         // Parse parameters in parentheses.
         let params = match self.next() {
             Some(TreeToken::Branch { sigil: Sigil::ParenOpen, open, inner, .. }) => {
@@ -975,6 +986,7 @@ impl<'db> Parser<'db> {
 
         ast::Statement::NativeFun(ast::StmtNativeFun {
             name,
+            type_params,
             params,
             return_type,
         })

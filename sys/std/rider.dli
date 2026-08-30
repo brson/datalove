@@ -101,3 +101,10 @@ native fun string_join(ref parts: [string], ref separator: string): string
 // Bigint conversion.
 native fun string_from_int(ref n: int): string
 native fun string_parse_int(ref self: string): ?int
+
+// Lists. Each is generic over the element type: the implementation reads it
+// off the list's descriptor, so there is one of each for every element type.
+native fun list_len<T>(ref self: [T]): index
+native fun list_get<T>(ref self: [T], i: index): ?T
+native fun list_push<T>(mut self: [T], elem: T)
+native fun list_pop<T>(mut self: [T]): ?T

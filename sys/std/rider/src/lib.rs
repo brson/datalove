@@ -1017,3 +1017,79 @@ pub extern "C-unwind" fn dlr_std__string_parse_int(
     let status = unsafe { rider_helpers::write_option_int_from_str(rt, out, s) };
     status as u8
 }
+
+// --- Lists ---
+//
+// These are generic over the element type. Each parameter arrives as a pointer
+// and a descriptor, so the element type is read off the list at runtime rather
+// than being known when this is compiled, and the caller supplies the
+// descriptor for the result too. That is what lets one implementation serve
+// every element type without the list being converted at the boundary.
+
+#[no_mangle]
+pub extern "C-unwind" fn dlr_std__list_len(
+    rt: *mut u8,
+    list_ptr: *const u8, list_td: *const u8,
+    out: *mut u8, _out_td: *const u8,
+) -> u8 {
+    unsafe {
+        datalove_rt::c::dtlv_rti_list_len_local(
+            rt, list_ptr, list_td as *const rtdt::TyDesc, out,
+        ) as u8
+    }
+}
+
+#[no_mangle]
+pub extern "C-unwind" fn dlr_std__list_get(
+    rt: *mut u8,
+    list_ptr: *const u8, list_td: *const u8,
+    index_ptr: *const u8, _index_td: *const u8,
+    out: *mut u8, out_td: *const u8,
+) -> u8 {
+    let index = unsafe { *(index_ptr as *const rtdt::Index) };
+    unsafe {
+        datalove_rt::c::dtlv_rti_list_get_local(
+            rt,
+            list_ptr,
+            list_td as *const rtdt::TyDesc,
+            index.0,
+            out,
+            out_td as *const rtdt::TyDesc,
+        ) as u8
+    }
+}
+
+#[no_mangle]
+pub extern "C-unwind" fn dlr_std__list_push(
+    rt: *mut u8,
+    list_ptr: *mut u8, list_td: *const u8,
+    elem_ptr: *mut u8, elem_td: *const u8,
+    _out: *mut u8, _out_td: *const u8,
+) -> u8 {
+    unsafe {
+        datalove_rt::c::dtlv_rti_list_push_local(
+            rt,
+            list_ptr,
+            list_td as *const rtdt::TyDesc,
+            elem_ptr,
+            elem_td as *const rtdt::TyDesc,
+        ) as u8
+    }
+}
+
+#[no_mangle]
+pub extern "C-unwind" fn dlr_std__list_pop(
+    rt: *mut u8,
+    list_ptr: *mut u8, list_td: *const u8,
+    out: *mut u8, out_td: *const u8,
+) -> u8 {
+    unsafe {
+        datalove_rt::c::dtlv_rti_list_pop_local(
+            rt,
+            list_ptr,
+            list_td as *const rtdt::TyDesc,
+            out,
+            out_td as *const rtdt::TyDesc,
+        ) as u8
+    }
+}

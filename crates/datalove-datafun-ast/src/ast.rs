@@ -374,6 +374,7 @@ pub struct StmtTypeAlias<'db> {
 #[derive(salsa::SalsaValue)]
 pub struct StmtNativeFun<'db> {
     pub name: InternedText<'db>,
+    pub type_params: Vec<InternedText<'db>>,
     pub params: Vec<FunParam<'db>>,
     pub return_type: Option<datalit::ast::TypeHint<'db>>,
 }
