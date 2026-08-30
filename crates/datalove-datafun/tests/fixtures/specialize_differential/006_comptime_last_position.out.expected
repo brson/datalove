@@ -40,9 +40,11 @@ Analysis(
                     block0:
                         v0 = const 3int
                         v1 = const 7int
-                        v2 = comptime_call m0.u0(v1, v0) [disc=0, comptime_params=[1]]
-                        debuglog v2
-                        unit_end_drop v2
+                        v2 = const 3int
+                        v3 = comptime_call m0.u0(v1, v2) [disc=0, comptime_params=[1]]
+                        debuglog v3
+                        unit_end_drop v0
+                        unit_end_drop v3
                         unit_end
                 """,
             ),

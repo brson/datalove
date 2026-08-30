@@ -46,38 +46,54 @@ Analysis(
                         v5 = const 6int
                         v6 = const 7int
                         v7 = const 8int
-                        v8 = const 10int
-                        v9 = comptime_call m0.u0(v0, v8) [disc=0, comptime_params=[0]]
-                        v10 = const 10int
-                        v11 = comptime_call m0.u0(v1, v10) [disc=0, comptime_params=[0]]
+                        v8 = const 1int
+                        v9 = const 10int
+                        v10 = comptime_call m0.u0(v8, v9) [disc=0, comptime_params=[0]]
+                        v11 = const 2int
                         v12 = const 10int
-                        v13 = comptime_call m0.u0(v2, v12) [disc=0, comptime_params=[0]]
-                        v14 = const 10int
-                        v15 = comptime_call m0.u0(v3, v14) [disc=0, comptime_params=[0]]
-                        v16 = const 10int
-                        v17 = comptime_call m0.u0(v4, v16) [disc=0, comptime_params=[0]]
+                        v13 = comptime_call m0.u0(v11, v12) [disc=0, comptime_params=[0]]
+                        v14 = const 3int
+                        v15 = const 10int
+                        v16 = comptime_call m0.u0(v14, v15) [disc=0, comptime_params=[0]]
+                        v17 = const 4int
                         v18 = const 10int
-                        v19 = comptime_call m0.u0(v5, v18) [disc=0, comptime_params=[0]]
-                        v20 = const 10int
-                        v21 = comptime_call m0.u0(v6, v20) [disc=0, comptime_params=[0]]
-                        v22 = const 10int
-                        v23 = comptime_call m0.u0(v7, v22) [disc=0, comptime_params=[0]]
-                        debuglog v9
-                        debuglog v11
+                        v19 = comptime_call m0.u0(v17, v18) [disc=0, comptime_params=[0]]
+                        v20 = const 5int
+                        v21 = const 10int
+                        v22 = comptime_call m0.u0(v20, v21) [disc=0, comptime_params=[0]]
+                        v23 = const 6int
+                        v24 = const 10int
+                        v25 = comptime_call m0.u0(v23, v24) [disc=0, comptime_params=[0]]
+                        v26 = const 7int
+                        v27 = const 10int
+                        v28 = comptime_call m0.u0(v26, v27) [disc=0, comptime_params=[0]]
+                        v29 = const 8int
+                        v30 = const 10int
+                        v31 = comptime_call m0.u0(v29, v30) [disc=0, comptime_params=[0]]
+                        debuglog v10
                         debuglog v13
-                        debuglog v15
-                        debuglog v17
+                        debuglog v16
                         debuglog v19
-                        debuglog v21
-                        debuglog v23
-                        unit_end_drop v9
-                        unit_end_drop v11
+                        debuglog v22
+                        debuglog v25
+                        debuglog v28
+                        debuglog v31
+                        unit_end_drop v0
+                        unit_end_drop v1
+                        unit_end_drop v2
+                        unit_end_drop v3
+                        unit_end_drop v4
+                        unit_end_drop v5
+                        unit_end_drop v6
+                        unit_end_drop v7
+                        unit_end_drop v10
                         unit_end_drop v13
-                        unit_end_drop v15
-                        unit_end_drop v17
+                        unit_end_drop v16
                         unit_end_drop v19
-                        unit_end_drop v21
-                        unit_end_drop v23
+                        unit_end_drop v22
+                        unit_end_drop v25
+                        unit_end_drop v28
+                        unit_end_drop v31
                         unit_end
                 """,
             ),
@@ -98,18 +114,18 @@ Analysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = add unit0.v9, unit0.v11
-                        v1 = add v0, unit0.v13
+                        v0 = add unit0.v10, unit0.v13
+                        v1 = add v0, unit0.v16
                         drop v0
-                        v2 = add v1, unit0.v15
+                        v2 = add v1, unit0.v19
                         drop v1
-                        v3 = add v2, unit0.v17
+                        v3 = add v2, unit0.v22
                         drop v2
-                        v4 = add v3, unit0.v19
+                        v4 = add v3, unit0.v25
                         drop v3
-                        v5 = add v4, unit0.v21
+                        v5 = add v4, unit0.v28
                         drop v4
-                        v6 = add v5, unit0.v23
+                        v6 = add v5, unit0.v31
                         drop v5
                         unit_end v6
                 """,

@@ -15,7 +15,9 @@ Analysis(
                     fn compute():
                     block0:
                         v0 = const "from module"
-                        return v0
+                        v1 = const "from module"
+                        drop v0
+                        return v1
                 """,
             ),
             output: "",

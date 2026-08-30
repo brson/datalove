@@ -38,9 +38,11 @@ Analysis(
                     scriptunit:
                     block0:
                         v0 = const 2int
-                        v1 = comptime_call m0.u0(v0) [disc=0, comptime_params=[0]]
-                        debuglog v1
-                        unit_end_drop v1
+                        v1 = const 2int
+                        v2 = comptime_call m0.u0(v1) [disc=0, comptime_params=[0]]
+                        debuglog v2
+                        unit_end_drop v0
+                        unit_end_drop v2
                         unit_end
                 """,
             ),

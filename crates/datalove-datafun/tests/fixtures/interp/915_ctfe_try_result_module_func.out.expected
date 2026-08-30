@@ -14,11 +14,13 @@ Analysis(
                 ir: """
                     fn unwrap_result():
                     block0:
-                        v2 = const 555u32
+                        v1 = const ok 555u32
+                        v3 = const 555u32
                         goto block1
                     block1:
-                        v6 = ok v2
-                        return v6
+                        v7 = ok v3
+                        drop v1
+                        return v7
                 """,
             ),
             output: "",

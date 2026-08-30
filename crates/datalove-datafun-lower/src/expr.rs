@@ -36,6 +36,29 @@ fn lower_var_operand(ctx: &mut LowerCtx, name: &str) -> Result<(Operand, bool), 
     // again once it has.
     let op = ctx.lookup_var(name)
         .ok_or_else(|| LowerError::BindingNotAvailable(name.to_string()))?;
+
+    // A const written in this body is evaluated after this body is lowered, so
+    // its value is not available here the way a module-level const's is. What
+    // this can do is give the reference a value of its own, by cloning, and
+    // record it under the const's name, so that the pass which replaces a
+    // const's definition with its literal replaces this clone too. Where that
+    // pass runs, each reference reaches the backend as its own literal; where
+    // it does not, the clone stands and is still a value of its own. Either
+    // way reading a const does not consume it.
+    //
+    // A copy type needs none of this: reading one never consumed it.
+    if ctx.const_let_names.contains(name) {
+        let ty = ctx.operand_type(op.clone())
+            .ok_or_else(|| LowerError::BindingNotAvailable(name.to_string()))?
+            .clone();
+        if !ty.is_copy() {
+            let dest = ctx.fresh_value(ty);
+            ctx.emit(Instruction::Clone { dest, src: op });
+            ctx.body.const_values.push((name.to_string(), dest));
+            return Ok((Operand::Value(dest), true));
+        }
+    }
+
     Ok((op, false))
 }
 

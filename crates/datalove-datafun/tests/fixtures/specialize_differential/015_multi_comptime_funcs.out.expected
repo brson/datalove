@@ -48,30 +48,63 @@ Analysis(
                 status: "Success",
             ),
             ownership: OwnershipResult(
-                status: "Error",
-                message: "error[D001]: use of moved value: `TWO`\n  help: use `@` to clone `TWO` before the earlier use",
+                status: "Success",
             ),
             lowering: LoweringResult(
-                status: "Skipped",
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 2int
+                        v1 = const 3int
+                        v2 = const 5int
+                        v3 = const 2int
+                        v4 = const 10int
+                        v5 = comptime_call m0.u0(v3, v4) [disc=0, comptime_params=[0]]
+                        v6 = const 3int
+                        v7 = const 10int
+                        v8 = comptime_call m0.u1(v6, v7) [disc=0, comptime_params=[0]]
+                        v9 = const 2int
+                        v10 = const 5int
+                        v11 = const 10int
+                        v12 = comptime_call m0.u2(v9, v10, v11) [disc=0, comptime_params=[0, 1]]
+                        debuglog v5
+                        debuglog v8
+                        debuglog v12
+                        unit_end_drop v0
+                        unit_end_drop v1
+                        unit_end_drop v2
+                        unit_end_drop v5
+                        unit_end_drop v8
+                        unit_end_drop v12
+                        unit_end
+                """,
             ),
-            output: "",
+            output: "(fragment executed)",
+            debug_output: Some("12\n30\n60\n"),
         ),
         SectionResult(
             section_type: "scriptunit-expr",
             name: None,
             typecheck: TypecheckResult(
-                status: "Error",
-                errors: [
-                    "UnresolvedName(\"r1\")",
-                ],
+                status: "Success",
             ),
             ownership: OwnershipResult(
-                status: "Skipped",
+                status: "Success",
             ),
             lowering: LoweringResult(
-                status: "Skipped",
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = clone unit0.v5
+                        v1 = clone unit0.v8
+                        v2 = clone unit0.v12
+                        v3 = pack Tuple3 {v0, v1, v2}
+                        unit_end v3
+                """,
             ),
-            output: "",
+            output: "(12, 30, 60)",
         ),
     ],
 )

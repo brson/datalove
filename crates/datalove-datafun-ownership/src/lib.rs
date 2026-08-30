@@ -234,6 +234,15 @@ impl<'a, 'db> AnalysisCtx<'a, 'db> {
 
     /// Allocate a new binding ID.
     fn alloc_binding(&mut self, name: String, ty: IrType, is_slot: bool, param_mode: Option<ParamMode>) -> BindingId {
+        self.alloc_binding_inner(name, ty, is_slot, param_mode, false)
+    }
+
+    /// Allocate a binding for a const, which reading does not consume.
+    fn alloc_const_binding(&mut self, name: String, ty: IrType) -> BindingId {
+        self.alloc_binding_inner(name, ty, false, None, true)
+    }
+
+    fn alloc_binding_inner(&mut self, name: String, ty: IrType, is_slot: bool, param_mode: Option<ParamMode>, is_const: bool) -> BindingId {
         let id = BindingId(self.next_binding);
         self.next_binding += 1;
 
@@ -242,7 +251,7 @@ impl<'a, 'db> AnalysisCtx<'a, 'db> {
             .map(|f| f.kind == ScopeKind::ScriptUnit)
             .unwrap_or(false);
 
-        self.bindings.push(BindingInfo { name: name.C(), ty, is_slot, is_script_unit, param_mode });
+        self.bindings.push(BindingInfo { name: name.C(), ty, is_slot, is_script_unit, param_mode, is_const });
 
         // Record in current scope.
         if let Some(frame) = self.scope_stack.last_mut() {
@@ -870,7 +879,12 @@ impl<'a, 'db> AnalysisCtx<'a, 'db> {
                                 return None;
                             }
                         }
-                        if is_consumed && !self.bindings[id.0 as usize].ty.is_copy() {
+                        // Reading a const does not consume it. It names a
+                        // value the compiler computed rather than a place
+                        // holding the only copy of one, and lowering gives each
+                        // read its own, so any number of reads is fine.
+                        let binding = &self.bindings[id.0 as usize];
+                        if is_consumed && !binding.ty.is_copy() && !binding.is_const {
                             self.mark_moved(id, expr_key);
                             return Some(id);
                         }
@@ -1322,10 +1336,11 @@ fn analyze_const<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmt: &StmtConst<'db>, stm
         }
     }
 
-    // Create binding for the const (same as let).
+    // Create binding for the const. It is dropped at the end of the scope like
+    // a let, but reading it does not consume it.
     let name = stmt.name.text(ctx.db).S();
     let ty = ctx.expr_type(expr);
-    ctx.alloc_binding(name, ty, false, None);
+    ctx.alloc_const_binding(name, ty);
 }
 
 fn analyze_var<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmt: &StmtVar<'db>, stmt_idx: usize) {

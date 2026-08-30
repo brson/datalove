@@ -154,6 +154,12 @@ pub struct BindingInfo {
     pub is_script_unit: bool,
     /// Parameter mode if this binding is a param (None for let/var).
     pub param_mode: Option<ParamMode>,
+    /// Whether this binding is a const.
+    ///
+    /// A const names a value the compiler computed, not a place holding the
+    /// only copy of one, so reading it does not consume it however many times
+    /// it is read. Lowering makes each read its own value.
+    pub is_const: bool,
 }
 
 impl BindingInfo {

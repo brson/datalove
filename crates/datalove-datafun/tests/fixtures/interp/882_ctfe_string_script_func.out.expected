@@ -22,7 +22,9 @@ Analysis(
                     fn get_message():
                     block0:
                         v0 = const "test message"
-                        return v0
+                        v1 = const "test message"
+                        drop v0
+                        return v1
                 """,
             ),
             output: "(fragment executed)",

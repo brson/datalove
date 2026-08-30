@@ -22,9 +22,13 @@ Analysis(
                     fn negate():
                     block0:
                         v0 = const 100int
-                        v1 = const -100int
+                        v1 = const 100int
+                        v2 = const -100int
+                        drop v1
+                        v3 = const -100int
                         drop v0
-                        return v1
+                        drop v2
+                        return v3
                 """,
             ),
             output: "(fragment executed)",

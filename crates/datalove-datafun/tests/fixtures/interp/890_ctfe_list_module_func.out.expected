@@ -15,7 +15,9 @@ Analysis(
                     fn compute():
                     block0:
                         v3 = const [7u32, 8u32, 9u32]
-                        return v3
+                        v4 = const [7u32, 8u32, 9u32]
+                        drop v3
+                        return v4
                 """,
             ),
             output: "",

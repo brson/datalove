@@ -21,11 +21,13 @@ Analysis(
                     
                     fn get_value():
                     block0:
-                        v2 = const 12345i64
+                        v1 = const ok 12345i64
+                        v3 = const 12345i64
                         goto block1
                     block1:
-                        v6 = ok v2
-                        return v6
+                        v7 = ok v3
+                        drop v1
+                        return v7
                 """,
             ),
             output: "(fragment executed)",

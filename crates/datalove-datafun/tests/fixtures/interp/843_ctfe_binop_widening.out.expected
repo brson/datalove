@@ -19,7 +19,9 @@ Analysis(
                         v2 = const 15int
                         drop v0
                         drop v1
-                        debuglog v2
+                        v3 = const 15int
+                        debuglog v3
+                        drop v3
                         unit_end_drop v2
                         unit_end
                 """,

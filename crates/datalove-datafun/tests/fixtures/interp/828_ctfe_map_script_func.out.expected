@@ -22,7 +22,9 @@ Analysis(
                     fn get_mapping():
                     block0:
                         v6 = const %{10u32 = 1u32, 20u32 = 2u32, 30u32 = 3u32}
-                        return v6
+                        v7 = const %{10u32 = 1u32, 20u32 = 2u32, 30u32 = 3u32}
+                        drop v6
+                        return v7
                 """,
             ),
             output: "(fragment executed)",

@@ -689,8 +689,20 @@ fn build_const_value_map(func: &IrCodeUnit) -> HashMap<ValueId, ConstValue> {
 
     for block in &func.blocks {
         for instr in &block.instructions {
-            if let Instruction::Const { dest, value } = instr {
-                map.insert(*dest, value.clone());
+            match instr {
+                Instruction::Const { dest, value } => {
+                    map.insert(*dest, value.clone());
+                }
+                // A clone of a constant is that constant. Reading a const of a
+                // linear type clones it, so that each read has a value of its
+                // own, and a comptime argument read that way is still the
+                // constant the call site wrote.
+                Instruction::Clone { dest, src: Operand::Value(src) } => {
+                    if let Some(value) = map.get(src).cloned() {
+                        map.insert(*dest, value);
+                    }
+                }
+                _ => {}
             }
         }
     }

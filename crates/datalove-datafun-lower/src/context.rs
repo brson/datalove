@@ -263,6 +263,14 @@ pub struct LowerCtx<'db> {
     pub(super) is_script_unit: bool,
     /// Const bindings evaluated at compile time: name -> (type, value).
     pub(super) const_bindings: HashMap<String, (IrType, ConstValue)>,
+    /// Const bindings written in this body, whose value is not known here.
+    ///
+    /// A module-level const arrives already evaluated and goes in
+    /// `const_bindings`, so a reference to one becomes a fresh `Const`. One
+    /// written here is evaluated after this body is lowered, so a reference has
+    /// to name the value the initializer produced. Reading a const does not
+    /// consume it, so each reference takes its own copy.
+    pub(super) const_let_names: std::collections::HashSet<String>,
     /// CTFE evaluator for const expressions.
     pub(super) ctfe_evaluator: Option<Rc<RefCell<dyn CtfeEvaluator>>>,
 }
@@ -288,6 +296,7 @@ impl<'db> LowerCtx<'db> {
             return_type: None,
             is_script_unit: false,
             const_bindings: HashMap::new(),
+            const_let_names: std::collections::HashSet::new(),
             ctfe_evaluator: None,
         }
     }
@@ -314,6 +323,7 @@ impl<'db> LowerCtx<'db> {
             return_type: None,
             is_script_unit: false,
             const_bindings: HashMap::new(),
+            const_let_names: std::collections::HashSet::new(),
             ctfe_evaluator: None,
         }
     }
@@ -381,6 +391,7 @@ impl<'db> LowerCtx<'db> {
             return_type: Some(IrType::Result(Box::new(IrType::Unit))),
             is_script_unit: true,
             const_bindings: HashMap::new(),
+            const_let_names: std::collections::HashSet::new(),
             ctfe_evaluator: None,
         }
     }

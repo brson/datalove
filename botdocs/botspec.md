@@ -738,11 +738,15 @@ const BIG: int = 99999999999999999999
 const LST: [int] = [1, 2, 3]
 ```
 
-A const names a value, not a place. In a function body each mention produces a
-fresh one, so a const of a linear type can be named as often as it is wanted and
-each use owns what it gets. At script top level a const of a linear type is
-currently treated as a binding that moves, so a second mention needs `@` to
-clone; the two contexts should agree and do not.
+A const names a value, not a place, so reading one does not consume it. Each
+mention produces a value of its own, and a const of a linear type can therefore
+be named as often as it is wanted, wherever it is written:
+
+```datalove
+const LST: [int] = [1, 2, 3]
+let a = LST
+let b = LST                    // no `@` needed: reading a const does not move it
+```
 
 **Ordering.** A module-level const is evaluated after the functions it calls are
 compiled, and before the functions that name it. Functions naming no

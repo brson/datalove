@@ -15,7 +15,9 @@ Analysis(
                     scriptunit:
                     block0:
                         v5 = const {items = [1u32, 2u32, 3u32], name = "test"}
-                        debuglog v5
+                        v6 = const {items = [1u32, 2u32, 3u32], name = "test"}
+                        debuglog v6
+                        drop v6
                         unit_end_drop v5
                         unit_end
                 """,

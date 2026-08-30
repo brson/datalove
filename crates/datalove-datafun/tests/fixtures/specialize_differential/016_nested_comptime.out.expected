@@ -9,11 +9,11 @@ Analysis(
                 status: "Success",
             ),
             ownership: OwnershipResult(
-                status: "Error",
-                message: "Ownership error in double_add: UseAfterMove { expr_key: ExprKey(fn #4), moved_at: ExprKey(fn #1), name: \"N\", recovery_hint: InsertAdapt { description: \"clone `N` before the earlier use\" } }",
+                status: "Success",
             ),
             lowering: LoweringResult(
-                status: "Skipped",
+                status: "Error",
+                message: "double_add::const \'N\': lowering error: binding not available yet: n",
             ),
             output: "",
         ),

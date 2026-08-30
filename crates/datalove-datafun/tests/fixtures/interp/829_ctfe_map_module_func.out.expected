@@ -15,7 +15,9 @@ Analysis(
                     fn compute():
                     block0:
                         v6 = const %{10u32 = 100u32, 20u32 = 200u32, 30u32 = 300u32}
-                        return v6
+                        v7 = const %{10u32 = 100u32, 20u32 = 200u32, 30u32 = 300u32}
+                        drop v6
+                        return v7
                 """,
             ),
             output: "",

@@ -1,0 +1,19 @@
+// A const names a value, not a place, so reading one does not consume it.
+// These are linear types: naming one twice used to be a use-after-move at
+// script top level while the same thing in a module function was fine.
+
+const S: string = "hi"
+const BIG: int = 99999999999999999999
+const LST: [int] = [1, 2, 3]
+const N: u32 = : u32 / 5
+
+let s1 = S
+let s2 = S
+let b1 = BIG
+let b2 = BIG
+let l1 = LST
+let l2 = LST
+let n1 = N
+let n2 = N
+
+let output = (s1, s2, b1, b2, l1, l2, n1, n2)
