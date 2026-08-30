@@ -1,0 +1,17 @@
+require module sys/std/option
+
+import option.flatten
+import option.ok_or
+
+let nested: ??string = some (some "deep")
+let nested_none: ??string = some none
+let outer_none: ??string = none
+
+let present: ?int = some 42
+let missing: ?int = none
+
+let output = (flatten(nested),
+              flatten(nested_none),
+              flatten(outer_none),
+              ok_or(present, error "absent"),
+              ok_or(missing, error "absent"))

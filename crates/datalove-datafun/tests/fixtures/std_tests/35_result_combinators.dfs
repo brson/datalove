@@ -1,0 +1,27 @@
+require module sys/std/result
+
+import result.and_result
+import result.or_result
+import result.err_of
+
+// These were long noted as impossible under the linear rules. Returning the
+// `self` that was just destructured is what does not work; rebuilding it does.
+let ok_first: !string = ok "first"
+let ok_second: !string = ok "second"
+let bad: !string = er error "broke"
+let bad2: !string = er error "also broke"
+let fallback: !string = ok "fallback"
+
+let anded = and_result(ok_first, ok_second)
+let anded_err = and_result(bad, fallback)
+
+let ok_left: !string = ok "kept"
+let other: !string = ok "unused"
+let ored = or_result(ok_left, other)
+let ored_err = or_result(bad2, ok "recovered")
+
+let probe_ok: !u32 = ok 7
+let probe_err: !u32 = er error "why"
+let errs = (err_of(probe_ok), err_of(probe_err))
+
+let output = (anded, anded_err, ored, ored_err, errs)

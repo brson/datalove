@@ -52,7 +52,7 @@ fun implies(self: bool, other: bool): bool
 end fun
 
 // Returns Some(value) if self is true, else None.
-fun then_some(self: bool, value: u32): ?u32
+fun then_some<T>(self: bool, value: T): ?T
   if self
     ret some value
   else

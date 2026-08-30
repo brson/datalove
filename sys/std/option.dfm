@@ -72,6 +72,24 @@ fun and_option<T>(self: ?T, other: ?T): ?T
   end if
 end fun
 
+// Removes one level of nesting.
+fun flatten<T>(self: ??T): ?T
+  if self |inner|
+    ret inner
+  else
+    ret none
+  end if
+end fun
+
+// Converts to a result, using the given error for none.
+fun ok_or<T>(self: ?T, err: error): !T
+  if self |value|
+    ret ok value
+  else
+    ret er err
+  end if
+end fun
+
 // Returns the contained value or zero.
 fun unwrap_or_zero(self: ?u32): u32
   if self |value|

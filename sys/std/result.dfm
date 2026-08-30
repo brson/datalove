@@ -42,9 +42,32 @@ fun unwrap_or_zero(self: !u32): u32
   end if
 end fun
 
-// Note: or_result and and_result cannot be reliably implemented due to
-// linear semantics. The current analysis incorrectly flags valid patterns
-// as UseAfterMove when using parameters across if branches.
+// Returns other if self is Ok, otherwise self's error.
+fun and_result<T>(self: !T, other: !T): !T
+  if self |value|
+    ret other
+  else |e|
+    ret er e
+  end if
+end fun
+
+// Returns self if it is Ok, otherwise other.
+fun or_result<T>(self: !T, other: !T): !T
+  if self |value|
+    ret ok value
+  else |e|
+    ret other
+  end if
+end fun
+
+// The error, if there is one.
+fun err_of<T>(self: !T): ?error
+  if self |value|
+    ret none
+  else |e|
+    ret some e
+  end if
+end fun
 
 // Convert to option, discarding error.
 fun to_option<T>(self: !T): ?T

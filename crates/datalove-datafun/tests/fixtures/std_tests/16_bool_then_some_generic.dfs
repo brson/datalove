@@ -1,0 +1,9 @@
+require module sys/std/bool
+
+import bool.then_some
+
+// One compiled `then_some`, whatever it is asked to carry.
+let output = (then_some(true, "a string"),
+              then_some(false, "a string"),
+              then_some(true, 12345678901234567890),
+              then_some(true, (: u32 / 7)))
