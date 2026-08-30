@@ -1038,6 +1038,30 @@ fn boxes_the_element(slot_ty: rtdt::TyDescRef, element_ty: rtdt::TyDescRef) -> b
     slot_ty.type_tag() == rtdt::TyTag::Data && element_ty.type_tag() != rtdt::TyTag::Data
 }
 
+/// Report whether an element-taking operation succeeded, destroying the
+/// element if it did not.
+///
+/// These take ownership of the element whatever happens, because the call site
+/// gave it up to make the call. An index past the end is a `false` rather than
+/// a failed call, so the element it could not place is dropped here rather
+/// than left to no one.
+unsafe fn placed_or_dropped(
+    rt: *mut u8,
+    status: datalove_rt::c::RtStatus,
+    elem_ptr: *mut u8,
+    elem_td: *const u8,
+) -> bool {
+    if status == datalove_rt::c::RtStatus::Ok {
+        return true;
+    }
+    unsafe {
+        datalove_rt::c::dtlv_rti_any_destroy_local(
+            rt, elem_ptr, elem_td as *const rtdt::TyDesc,
+        );
+    }
+    false
+}
+
 #[no_mangle]
 pub extern "C-unwind" fn dlr_std__list_len(
     rt: *mut u8,
@@ -1129,6 +1153,101 @@ pub extern "C-unwind" fn dlr_std__list_clear(
     unsafe {
         datalove_rt::c::dtlv_rti_list_clear_local(
             rt, list_ptr, list_td as *const rtdt::TyDesc,
+        ) as u8
+    }
+}
+
+#[no_mangle]
+pub extern "C-unwind" fn dlr_std__list_set(
+    rt: *mut u8,
+    list_ptr: *mut u8, list_td: *const u8,
+    index_ptr: *const u8, _index_td: *const u8,
+    elem_ptr: *mut u8, elem_td: *const u8,
+    _out: *mut u8, _out_td: *const u8,
+) -> u8 {
+    let index = unsafe { *(index_ptr as *const rtdt::Index) };
+    let list_ty = unsafe { rtdt::TyDescRef::from_ptr(list_td as *const rtdt::TyDesc) };
+    let elem_ty = unsafe { rtdt::TyDescRef::from_ptr(elem_td as *const rtdt::TyDesc) };
+
+    let status = unsafe {
+        if boxes_the_element(elem_ty, list_ty.list_element_ty()) {
+            datalove_rt::c::dtlv_rti_list_set_data_local(
+                rt, list_ptr, list_ty.as_ptr(), index.0, elem_ptr,
+            )
+        } else {
+            datalove_rt::c::dtlv_rti_list_set_local(
+                rt, list_ptr, list_ty.as_ptr(), index.0, elem_ptr, elem_ty.as_ptr(),
+            )
+        }
+    };
+    let placed = unsafe { placed_or_dropped(rt, status, elem_ptr, elem_td) };
+    unsafe { write_result(_out, placed) };
+    OK
+}
+
+#[no_mangle]
+pub extern "C-unwind" fn dlr_std__list_insert(
+    rt: *mut u8,
+    list_ptr: *mut u8, list_td: *const u8,
+    index_ptr: *const u8, _index_td: *const u8,
+    elem_ptr: *mut u8, elem_td: *const u8,
+    _out: *mut u8, _out_td: *const u8,
+) -> u8 {
+    let index = unsafe { *(index_ptr as *const rtdt::Index) };
+    let list_ty = unsafe { rtdt::TyDescRef::from_ptr(list_td as *const rtdt::TyDesc) };
+    let elem_ty = unsafe { rtdt::TyDescRef::from_ptr(elem_td as *const rtdt::TyDesc) };
+
+    let status = unsafe {
+        if boxes_the_element(elem_ty, list_ty.list_element_ty()) {
+            datalove_rt::c::dtlv_rti_list_insert_data_local(
+                rt, list_ptr, list_ty.as_ptr(), index.0, elem_ptr,
+            )
+        } else {
+            datalove_rt::c::dtlv_rti_list_insert_local(
+                rt, list_ptr, list_ty.as_ptr(), index.0, elem_ptr, elem_ty.as_ptr(),
+            )
+        }
+    };
+    let placed = unsafe { placed_or_dropped(rt, status, elem_ptr, elem_td) };
+    unsafe { write_result(_out, placed) };
+    OK
+}
+
+#[no_mangle]
+pub extern "C-unwind" fn dlr_std__list_remove(
+    rt: *mut u8,
+    list_ptr: *mut u8, list_td: *const u8,
+    index_ptr: *const u8, _index_td: *const u8,
+    out: *mut u8, out_td: *const u8,
+) -> u8 {
+    let index = unsafe { *(index_ptr as *const rtdt::Index) };
+    let list_ty = unsafe { rtdt::TyDescRef::from_ptr(list_td as *const rtdt::TyDesc) };
+    let out_ty = unsafe { rtdt::TyDescRef::from_ptr(out_td as *const rtdt::TyDesc) };
+
+    unsafe {
+        if boxes_the_element(out_ty.option_inner_ty(), list_ty.list_element_ty()) {
+            datalove_rt::c::dtlv_rti_list_remove_as_data_local(
+                rt, list_ptr, list_ty.as_ptr(), index.0, out, out_ty.as_ptr(),
+            ) as u8
+        } else {
+            datalove_rt::c::dtlv_rti_list_remove_local(
+                rt, list_ptr, list_ty.as_ptr(), index.0, out, out_ty.as_ptr(),
+            ) as u8
+        }
+    }
+}
+
+#[no_mangle]
+pub extern "C-unwind" fn dlr_std__list_reserve(
+    rt: *mut u8,
+    list_ptr: *mut u8, list_td: *const u8,
+    n_ptr: *const u8, _n_td: *const u8,
+    _out: *mut u8, _out_td: *const u8,
+) -> u8 {
+    let n = unsafe { *(n_ptr as *const rtdt::Index) };
+    unsafe {
+        datalove_rt::c::dtlv_rti_list_reserve_local(
+            rt, list_ptr, list_td as *const rtdt::TyDesc, n.0,
         ) as u8
     }
 }

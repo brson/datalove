@@ -109,3 +109,7 @@ native fun list_get<T>(ref self: [T], i: index): ?T
 native fun list_push<T>(mut self: [T], elem: T)
 native fun list_pop<T>(mut self: [T]): ?T
 native fun list_clear<T>(mut self: [T])
+native fun list_set<T>(mut self: [T], i: index, elem: T): bool
+native fun list_insert<T>(mut self: [T], i: index, elem: T): bool
+native fun list_remove<T>(mut self: [T], i: index): ?T
+native fun list_reserve<T>(mut self: [T], n: index)

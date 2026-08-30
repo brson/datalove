@@ -513,3 +513,230 @@ fn test_pop_as_data_on_empty_is_none() -> AnyResult<()> {
     unsafe { datalove_rt::c::dtlv_rti_shutdown(rt) };
     Ok(())
 }
+
+// ============================================================================
+// set, insert and remove through data
+// ============================================================================
+
+#[test]
+fn test_set_data_replaces_and_destroys_the_old_element() -> AnyResult<()> {
+    let rt = datalove_rt::c::dtlv_rti_init();
+    let arena = TyDescArena::new();
+    assert!(!rt.is_null());
+
+    let element_tydesc = create_string_tydesc(&arena);
+    let list_tydesc = create_list_tydesc(&arena, element_tydesc);
+    let data_tydesc = create_data_tydesc(&arena);
+    let option_data_tydesc = create_option_tydesc(&arena, data_tydesc);
+
+    let mut list = empty_list();
+    let list_ptr = &mut list as *mut rtdt::List as *mut u8;
+
+    let mut original = unsafe { create_runtime_string(rt, "replaced", element_tydesc) };
+    unsafe {
+        datalove_rt::c::dtlv_rti_list_push_local(
+            rt, list_ptr, list_tydesc,
+            &mut original as *mut rtdt::String as *mut u8, element_tydesc,
+        )
+    };
+
+    // Wrap the replacement the way a generic call site would.
+    let replacement = unsafe { create_runtime_string(rt, "written", element_tydesc) };
+    let mut data = std::mem::MaybeUninit::<rtdt::Data>::uninit();
+    unsafe {
+        datalove_rt::c::dtlv_rti_data_from_local(
+            rt, &replacement as *const rtdt::String as *const u8, element_tydesc,
+            data.as_mut_ptr() as *mut u8,
+        )
+    };
+    let data = unsafe { data.assume_init() };
+
+    let status = unsafe {
+        datalove_rt::c::dtlv_rti_list_set_data_local(
+            rt, list_ptr, list_tydesc, 0, &data as *const rtdt::Data as *const u8,
+        )
+    };
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
+
+    // The old element is gone rather than leaked, and the new one is in place.
+    let mut option_buf = vec![0u8; unsafe { (*option_data_tydesc).size } as usize];
+    unsafe {
+        datalove_rt::c::dtlv_rti_list_get_as_data_local(
+            rt, list_ptr, list_tydesc, 0, option_buf.as_mut_ptr(), option_data_tydesc,
+        )
+    };
+    let mut got = unsafe { option_data_payload(option_buf.as_ptr(), option_data_tydesc) }
+        .expect("in-bounds get should be some");
+    let seen = unsafe { &*(got.value_ptr() as *const rtdt::String) };
+    let bytes = unsafe { std::slice::from_raw_parts(seen.data, seen.size.0 as usize) };
+    assert_eq!(std::str::from_utf8(bytes)?, "written");
+
+    unsafe {
+        datalove_rt::c::dtlv_rti_any_destroy_local(
+            rt, &mut got as *mut rtdt::Data as *mut u8, data_tydesc,
+        )
+    };
+    unsafe { datalove_rt::c::dtlv_rti_list_destroy_local(rt, list_ptr, list_tydesc) };
+    unsafe { datalove_rt::c::dtlv_rti_shutdown(rt) };
+    Ok(())
+}
+
+#[test]
+fn test_insert_data_shifts_the_rest_along() -> AnyResult<()> {
+    let rt = datalove_rt::c::dtlv_rti_init();
+    let arena = TyDescArena::new();
+    assert!(!rt.is_null());
+
+    let element_tydesc = create_u32_tydesc(&arena);
+    let list_tydesc = create_list_tydesc(&arena, element_tydesc);
+    let data_tydesc = create_data_tydesc(&arena);
+    let option_data_tydesc = create_option_tydesc(&arena, data_tydesc);
+
+    let mut list = empty_list();
+    let list_ptr = &mut list as *mut rtdt::List as *mut u8;
+
+    for i in [10u32, 30] {
+        let mut value = i;
+        unsafe {
+            datalove_rt::c::dtlv_rti_list_push_local(
+                rt, list_ptr, list_tydesc,
+                &mut value as *mut u32 as *mut u8, element_tydesc,
+            )
+        };
+    }
+
+    let mut value = 20u32;
+    let mut data = std::mem::MaybeUninit::<rtdt::Data>::uninit();
+    unsafe {
+        datalove_rt::c::dtlv_rti_data_from_local(
+            rt, &mut value as *mut u32 as *const u8, element_tydesc,
+            data.as_mut_ptr() as *mut u8,
+        )
+    };
+    let data = unsafe { data.assume_init() };
+
+    let status = unsafe {
+        datalove_rt::c::dtlv_rti_list_insert_data_local(
+            rt, list_ptr, list_tydesc, 1, &data as *const rtdt::Data as *const u8,
+        )
+    };
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
+
+    let mut option_buf = vec![0u8; unsafe { (*option_data_tydesc).size } as usize];
+    let mut seen = Vec::new();
+    for i in 0..3 {
+        unsafe {
+            datalove_rt::c::dtlv_rti_list_get_as_data_local(
+                rt, list_ptr, list_tydesc, i, option_buf.as_mut_ptr(), option_data_tydesc,
+            )
+        };
+        let d = unsafe { option_data_payload(option_buf.as_ptr(), option_data_tydesc) }
+            .expect("in-bounds get should be some");
+        seen.push(d.as_u32().expect("element is a u32"));
+    }
+    assert_eq!(seen, vec![10, 20, 30]);
+
+    unsafe { datalove_rt::c::dtlv_rti_list_destroy_local(rt, list_ptr, list_tydesc) };
+    unsafe { datalove_rt::c::dtlv_rti_shutdown(rt) };
+    Ok(())
+}
+
+#[test]
+fn test_remove_as_data_takes_the_element_and_closes_the_gap() -> AnyResult<()> {
+    let rt = datalove_rt::c::dtlv_rti_init();
+    let arena = TyDescArena::new();
+    assert!(!rt.is_null());
+
+    let element_tydesc = create_string_tydesc(&arena);
+    let list_tydesc = create_list_tydesc(&arena, element_tydesc);
+    let data_tydesc = create_data_tydesc(&arena);
+    let option_data_tydesc = create_option_tydesc(&arena, data_tydesc);
+
+    let mut list = empty_list();
+    let list_ptr = &mut list as *mut rtdt::List as *mut u8;
+
+    for text in ["first", "second"] {
+        let mut s = unsafe { create_runtime_string(rt, text, element_tydesc) };
+        unsafe {
+            datalove_rt::c::dtlv_rti_list_push_local(
+                rt, list_ptr, list_tydesc,
+                &mut s as *mut rtdt::String as *mut u8, element_tydesc,
+            )
+        };
+    }
+
+    let mut option_buf = vec![0u8; unsafe { (*option_data_tydesc).size } as usize];
+    let status = unsafe {
+        datalove_rt::c::dtlv_rti_list_remove_as_data_local(
+            rt, list_ptr, list_tydesc, 0, option_buf.as_mut_ptr(), option_data_tydesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
+
+    let mut taken = unsafe { option_data_payload(option_buf.as_ptr(), option_data_tydesc) }
+        .expect("in-bounds remove should be some");
+
+    // Destroying the list must not touch what was taken out of it.
+    unsafe { datalove_rt::c::dtlv_rti_list_destroy_local(rt, list_ptr, list_tydesc) };
+
+    let seen = unsafe { &*(taken.value_ptr() as *const rtdt::String) };
+    let bytes = unsafe { std::slice::from_raw_parts(seen.data, seen.size.0 as usize) };
+    assert_eq!(std::str::from_utf8(bytes)?, "first");
+
+    unsafe {
+        datalove_rt::c::dtlv_rti_any_destroy_local(
+            rt, &mut taken as *mut rtdt::Data as *mut u8, data_tydesc,
+        )
+    };
+    unsafe { datalove_rt::c::dtlv_rti_shutdown(rt) };
+    Ok(())
+}
+
+#[test]
+fn test_out_of_bounds_set_and_insert_report_error() -> AnyResult<()> {
+    let rt = datalove_rt::c::dtlv_rti_init();
+    let arena = TyDescArena::new();
+    assert!(!rt.is_null());
+
+    let element_tydesc = create_u32_tydesc(&arena);
+    let list_tydesc = create_list_tydesc(&arena, element_tydesc);
+
+    let mut list = empty_list();
+    let list_ptr = &mut list as *mut rtdt::List as *mut u8;
+
+    let mut value = 1u32;
+    let mut data = std::mem::MaybeUninit::<rtdt::Data>::uninit();
+    unsafe {
+        datalove_rt::c::dtlv_rti_data_from_local(
+            rt, &mut value as *mut u32 as *const u8, element_tydesc,
+            data.as_mut_ptr() as *mut u8,
+        )
+    };
+    let mut data = unsafe { data.assume_init() };
+
+    // The element is not consumed when the index is refused, so the caller
+    // still owns it and has to destroy it.
+    let status = unsafe {
+        datalove_rt::c::dtlv_rti_list_set_data_local(
+            rt, list_ptr, list_tydesc, 5, &data as *const rtdt::Data as *const u8,
+        )
+    };
+    assert_eq!(status, datalove_rt::c::RtStatus::Error);
+
+    let status = unsafe {
+        datalove_rt::c::dtlv_rti_list_insert_data_local(
+            rt, list_ptr, list_tydesc, 5, &data as *const rtdt::Data as *const u8,
+        )
+    };
+    assert_eq!(status, datalove_rt::c::RtStatus::Error);
+
+    unsafe {
+        datalove_rt::c::dtlv_rti_any_destroy_local(
+            rt, &mut data as *mut rtdt::Data as *mut u8,
+            create_data_tydesc(&arena),
+        )
+    };
+    unsafe { datalove_rt::c::dtlv_rti_list_destroy_local(rt, list_ptr, list_tydesc) };
+    unsafe { datalove_rt::c::dtlv_rti_shutdown(rt) };
+    Ok(())
+}

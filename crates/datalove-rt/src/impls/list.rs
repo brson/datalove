@@ -493,6 +493,133 @@ pub unsafe fn list_push_data_impl(
     RtStatus::Ok
 }
 
+/// Replace the element at `index` with the value a `data` holds.
+///
+/// The data is consumed and what it held becomes the list's. The old element
+/// is destroyed. Out of bounds is an error, as it is for the typed form.
+pub unsafe fn list_set_data_impl(
+    rt: &mut RtLocal,
+    list_value_mut: *mut u8,
+    list_tydesc: rtdt::TyDescRef,
+    index: rtdt::IndexRepr,
+    data_in: *const u8,
+) -> RtStatus {
+    let element_ty = list_tydesc.list_element_ty();
+    let mut list = unsafe { ListMut::new(list_value_mut as *mut List, element_ty) };
+
+    if index >= list.size() {
+        return RtStatus::Error;
+    }
+
+    let rt_handle = rt as *mut RtLocal as crate::c::LocalRtHandle;
+    let element_ptr = list.element_ptr_mut(index);
+    let status = unsafe {
+        crate::impls::destroy::any_destroy_local(rt_handle, element_ptr, element_ty.as_ptr())
+    };
+    if status != RtStatus::Ok {
+        return status;
+    }
+
+    unsafe {
+        crate::impls::boxing::data_into_local(rt_handle, data_in, element_ptr, element_ty.as_ptr())
+    }
+}
+
+/// Insert the value a `data` holds at `index`, shifting the rest right.
+///
+/// `index` may be the length, which appends. The data is consumed.
+pub unsafe fn list_insert_data_impl(
+    rt: &mut RtLocal,
+    list_value_mut: *mut u8,
+    list_tydesc: rtdt::TyDescRef,
+    index: rtdt::IndexRepr,
+    data_in: *const u8,
+) -> RtStatus {
+    let element_ty = list_tydesc.list_element_ty();
+    let list_ptr = list_value_mut as *mut List;
+    let mut list = unsafe { ListMut::new(list_ptr, element_ty) };
+    let size = list.size();
+
+    if index > size {
+        return RtStatus::Error;
+    }
+
+    if list.needs_grow() {
+        let new_capacity = calculate_new_capacity(list.capacity(), size + 1);
+        let status = unsafe { grow_buffer(rt, list_ptr, element_ty, new_capacity) };
+        if status != RtStatus::Ok {
+            return status;
+        }
+        list = unsafe { ListMut::new(list_ptr, element_ty) };
+    }
+
+    // Open a hole at `index` by moving what follows one element along.
+    let element_size = element_ty.size() as usize;
+    if index < size {
+        let src = list.element_ptr_mut(index);
+        let count = (size - index) as usize * element_size;
+        unsafe { std::ptr::copy(src, src.add(element_size), count) };
+    }
+
+    let rt_handle = rt as *mut RtLocal as crate::c::LocalRtHandle;
+    let hole = list.element_ptr_mut(index);
+    let status = unsafe {
+        crate::impls::boxing::data_into_local(rt_handle, data_in, hole, element_ty.as_ptr())
+    };
+    if status != RtStatus::Ok {
+        return status;
+    }
+
+    list.set_size(size + 1);
+    RtStatus::Ok
+}
+
+/// Take the element at `index` out of the list, as a `data`.
+///
+/// The element is moved rather than cloned: the list gives it up, and what
+/// follows shifts down. Out of bounds gives none.
+pub unsafe fn list_remove_as_data_impl(
+    rt: &mut RtLocal,
+    list_value_mut: *mut u8,
+    list_tydesc: rtdt::TyDescRef,
+    index: rtdt::IndexRepr,
+    option_value_out: *mut u8,
+    option_tydesc: rtdt::TyDescRef,
+) -> RtStatus {
+    let element_ty = list_tydesc.list_element_ty();
+    let mut list = unsafe { ListMut::new(list_value_mut as *mut List, element_ty) };
+    let size = list.size();
+    let option_layout = rtdt::layout::compute_option_layout(option_tydesc);
+    let mut opt = unsafe { OptionWriter::new(option_value_out, &option_layout) };
+
+    if index >= size {
+        opt.write_none();
+        return RtStatus::Ok;
+    }
+
+    let rt_handle = rt as *mut RtLocal as crate::c::LocalRtHandle;
+    let element_size = element_ty.size() as usize;
+    let element_ptr = list.element_ptr_mut(index);
+    let status = unsafe {
+        crate::impls::boxing::data_from_local(
+            rt_handle, element_ptr, element_ty.as_ptr(), opt.payload_ptr(),
+        )
+    };
+    if status != RtStatus::Ok {
+        return status;
+    }
+
+    if index < size - 1 {
+        let src = unsafe { element_ptr.add(element_size) };
+        let count = (size - index - 1) as usize * element_size;
+        unsafe { std::ptr::copy(src, element_ptr, count) };
+    }
+
+    list.set_size(size - 1);
+    opt.write_some_tag();
+    RtStatus::Ok
+}
+
 // ============================================================================
 // Insert and Remove Operations
 // ============================================================================
