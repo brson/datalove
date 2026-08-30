@@ -1,32 +1,31 @@
 require module sys/std/list
 
-import list.len
-import list.is_empty
+import list.len_u32
+import list.len_string
 import list.get_u32
 import list.get_string
 import list.push_u32
+import list.push_string
 import list.pop_string
 
-// `len` and `is_empty` are one compiled function each, serving both element
-// types. The list is not converted on the way in: it is borrowed, and the
-// implementation reads the element type off the descriptor that came with it.
+// One native implementation each, serving both element types. The list is not
+// converted on the way in: it is borrowed, and the implementation reads the
+// element type off the descriptor that came with it.
 let nums: [u32] = [10, 20, 30]
 let strs: [string] = ["alpha", "beta"]
 let empty: [u32] = []
 
-let lens = (len(ref nums), len(ref strs), len(ref empty))
-let empties = (is_empty(ref nums), is_empty(ref empty))
-
-// The generic natives underneath, reached from call sites that know the type.
+let lens = (len_u32(ref nums), len_string(ref strs), len_u32(ref empty))
 let reads = (get_u32(ref nums, (: index / 1)), get_string(ref strs, (: index / 0)))
 let past_end = get_u32(ref nums, (: index / 9))
 
 var growing: [u32] = [1]
 push_u32(mut growing, 2)
-let grown = len(ref growing)
+let grown = len_u32(ref growing)
 
-var shrinking: [string] = ["last"]
-let taken = pop_string(mut shrinking)
-let shrunk = len(ref shrinking)
+var words: [string] = ["first"]
+push_string(mut words, "second")
+let taken = pop_string(mut words)
+let left = len_string(ref words)
 
-let output = (lens, empties, reads, past_end, grown, taken, shrunk)
+let output = (lens, reads, past_end, grown, taken, left)

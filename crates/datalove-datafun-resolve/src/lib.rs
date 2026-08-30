@@ -125,16 +125,23 @@ pub fn resolve_names_impl<'db>(
         for param in &params {
             match convert_type_hint_with_aliases(db, param.type_hint.clone(), &type_aliases_map) {
                 Ok(ty) => {
-                    // A borrowed parameter is not converted at the boundary: it
-                    // is passed as it stands, with the caller's descriptor
-                    // saying what it is, and the callee never drops it. So a
-                    // type parameter under a container is reachable there even
-                    // though erasing one is not, and the same is true of every
-                    // parameter of a native function, whose implementation
-                    // reads the descriptors directly.
-                    let borrowed = matches!(param.mode, ParamMode::Ref | ParamMode::Mut);
-                    let passed_as_it_stands = is_native || borrowed;
-                    if let Some(e) = (!passed_as_it_stands)
+                    // A native function's parameters are exempt: each arrives
+                    // as a pointer and a descriptor, and the implementation
+                    // reads the element type off that rather than being
+                    // compiled against it.
+                    //
+                    // A borrowed parameter of an ordinary function looks like
+                    // it should be exempt too, and in the interpreter it is:
+                    // values carry their descriptors, so the callee sees what
+                    // it was really given. The compiled backends choose the
+                    // descriptor for an argument from its static type when they
+                    // emit the call, and a generic function's static type says
+                    // `data` where the parameter stood, so they would hand the
+                    // callee a descriptor that misdescribes the elements.
+                    // Until a generic function carries descriptors for its type
+                    // parameters, this stays refused rather than working in one
+                    // backend and corrupting memory in the other two.
+                    if let Some(e) = (!is_native)
                         .then(|| unerasable_type_param_error(db, &ty))
                         .flatten()
                     {

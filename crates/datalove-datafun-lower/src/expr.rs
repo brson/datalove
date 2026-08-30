@@ -512,32 +512,14 @@ pub fn lower_expression<'db>(
             let names_a_type_param = |hint: &datalove_datafun_ast::datalit::ast::TypeHint<'db>| {
                 datalove_datafun_ir::type_hint_mentions_param(hint, &type_params)
             };
-            // A borrowed parameter is not converted. The callee gets the
-            // value as it stands along with the descriptor saying what it is,
-            // and never drops it, so there is nothing to convert into and
-            // nothing to convert back. Only a parameter the callee takes
-            // ownership of is erased.
             let param_is_erased: Vec<bool> = target
                 .map(|t| t.func(ctx.db).params(ctx.db).iter()
-                    .map(|p| {
-                        let borrowed = matches!(p.mode, ast::ParamMode::Ref | ast::ParamMode::Mut);
-                        !borrowed && names_a_type_param(&p.type_hint)
-                    })
+                    .map(|p| names_a_type_param(&p.type_hint))
                     .collect())
                 .unwrap_or_default();
             let param_types: Vec<IrType> = target
                 .map(|t| t.func(ctx.db).params(ctx.db).iter()
-                    .enumerate()
-                    .map(|(i, p)| {
-                        if param_is_erased.get(i).copied().unwrap_or(false) {
-                            IrType::from_type_hint_erasing(ctx.db, &p.type_hint, &type_params)
-                        } else {
-                            // Left as the callee wrote it, which for a borrowed
-                            // generic parameter means the argument keeps its
-                            // own type all the way in.
-                            IrType::from_type_hint(ctx.db, &p.type_hint)
-                        }
-                    })
+                    .map(|p| IrType::from_type_hint_erasing(ctx.db, &p.type_hint, &type_params))
                     .collect())
                 .unwrap_or_default();
             // The erased return shape is the callee's return type with `data`

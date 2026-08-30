@@ -1,33 +1,31 @@
 // List module.
 //
-// These are generic over the element type. A list is not converted when it is
-// passed to one: a borrowed parameter goes across as it stands, with a
-// descriptor saying what it holds, and the implementation reads the element
-// type from that. So there is one of each of these however many element types
-// go through them, and passing a list to one costs nothing.
+// The natives underneath are generic over the element type: each parameter
+// arrives as a pointer and a descriptor, so one implementation reads the
+// element type off the list it was handed and serves every element type.
 //
-// What is generic here is exactly what can be: a parameter the callee only
-// borrows. A parameter the callee takes ownership of has to be erased, because
-// its slot needs a size, and a `data` is the one shape that fits any value. A
-// return is the same problem seen from the other end, which is why `get` and
-// `pop` are spelled out per type below rather than written once: the generic
-// natives they call are already generic, but a generic wrapper would need a
-// local of a type it does not know.
+// The wrappers here are per type. A generic wrapper would be the natural
+// spelling, and in the interpreter it works, because a value there carries its
+// descriptor and a borrowed parameter therefore reaches the callee describing
+// what it really is. The compiled backends pick the descriptor for an argument
+// from its static type when they emit the call, and a generic function's
+// static type says `data` where the parameter stood, so they would describe a
+// list of u32 as a list of data. Until a generic function carries descriptors
+// for its type parameters, the call site has to be the place that knows.
 
 require rider std
 import std.list_len
 import std.list_get
-import std.list_pop
 import std.list_push
+import std.list_pop
 
 // The number of elements.
-fun len<T>(ref self: [T]): index
+fun len_u32(ref self: [u32]): index
   ret list_len(ref self)
 end fun
 
-// True if there are no elements.
-fun is_empty<T>(ref self: [T]): bool
-  ret list_len(ref self) == (: index / 0)
+fun len_string(ref self: [string]): index
+  ret list_len(ref self)
 end fun
 
 // The element at an index, or none if the index is past the end.

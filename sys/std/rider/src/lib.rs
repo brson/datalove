@@ -1022,9 +1022,21 @@ pub extern "C-unwind" fn dlr_std__string_parse_int(
 //
 // These are generic over the element type. Each parameter arrives as a pointer
 // and a descriptor, so the element type is read off the list at runtime rather
-// than being known when this is compiled, and the caller supplies the
-// descriptor for the result too. That is what lets one implementation serve
-// every element type without the list being converted at the boundary.
+// than being known when this is compiled.
+//
+// The descriptor also says which side of the boundary the caller is on. A call
+// site that knows the element type asks for the element itself, and its
+// descriptor names that type. A generic function calling one of these has no
+// such type, so its slot is a `data` and its descriptor says so; the element
+// then has to be packed into one on the way out and unpacked on the way in. A
+// list of `data` is the case where the two readings coincide, so the element
+// type is compared as well: a position is boxed only when the caller asks for
+// a `data` and the element is not one already.
+
+/// Whether an element has to be packed into a `data` to reach `slot_ty`.
+fn boxes_the_element(slot_ty: rtdt::TyDescRef, element_ty: rtdt::TyDescRef) -> bool {
+    slot_ty.type_tag() == rtdt::TyTag::Data && element_ty.type_tag() != rtdt::TyTag::Data
+}
 
 #[no_mangle]
 pub extern "C-unwind" fn dlr_std__list_len(
@@ -1047,15 +1059,19 @@ pub extern "C-unwind" fn dlr_std__list_get(
     out: *mut u8, out_td: *const u8,
 ) -> u8 {
     let index = unsafe { *(index_ptr as *const rtdt::Index) };
+    let list_ty = unsafe { rtdt::TyDescRef::from_ptr(list_td as *const rtdt::TyDesc) };
+    let out_ty = unsafe { rtdt::TyDescRef::from_ptr(out_td as *const rtdt::TyDesc) };
+
     unsafe {
-        datalove_rt::c::dtlv_rti_list_get_local(
-            rt,
-            list_ptr,
-            list_td as *const rtdt::TyDesc,
-            index.0,
-            out,
-            out_td as *const rtdt::TyDesc,
-        ) as u8
+        if boxes_the_element(out_ty.option_inner_ty(), list_ty.list_element_ty()) {
+            datalove_rt::c::dtlv_rti_list_get_as_data_local(
+                rt, list_ptr, list_ty.as_ptr(), index.0, out, out_ty.as_ptr(),
+            ) as u8
+        } else {
+            datalove_rt::c::dtlv_rti_list_get_local(
+                rt, list_ptr, list_ty.as_ptr(), index.0, out, out_ty.as_ptr(),
+            ) as u8
+        }
     }
 }
 
@@ -1066,14 +1082,19 @@ pub extern "C-unwind" fn dlr_std__list_push(
     elem_ptr: *mut u8, elem_td: *const u8,
     _out: *mut u8, _out_td: *const u8,
 ) -> u8 {
+    let list_ty = unsafe { rtdt::TyDescRef::from_ptr(list_td as *const rtdt::TyDesc) };
+    let elem_ty = unsafe { rtdt::TyDescRef::from_ptr(elem_td as *const rtdt::TyDesc) };
+
     unsafe {
-        datalove_rt::c::dtlv_rti_list_push_local(
-            rt,
-            list_ptr,
-            list_td as *const rtdt::TyDesc,
-            elem_ptr,
-            elem_td as *const rtdt::TyDesc,
-        ) as u8
+        if boxes_the_element(elem_ty, list_ty.list_element_ty()) {
+            datalove_rt::c::dtlv_rti_list_push_data_local(
+                rt, list_ptr, list_ty.as_ptr(), elem_ptr,
+            ) as u8
+        } else {
+            datalove_rt::c::dtlv_rti_list_push_local(
+                rt, list_ptr, list_ty.as_ptr(), elem_ptr, elem_ty.as_ptr(),
+            ) as u8
+        }
     }
 }
 
@@ -1083,13 +1104,18 @@ pub extern "C-unwind" fn dlr_std__list_pop(
     list_ptr: *mut u8, list_td: *const u8,
     out: *mut u8, out_td: *const u8,
 ) -> u8 {
+    let list_ty = unsafe { rtdt::TyDescRef::from_ptr(list_td as *const rtdt::TyDesc) };
+    let out_ty = unsafe { rtdt::TyDescRef::from_ptr(out_td as *const rtdt::TyDesc) };
+
     unsafe {
-        datalove_rt::c::dtlv_rti_list_pop_local(
-            rt,
-            list_ptr,
-            list_td as *const rtdt::TyDesc,
-            out,
-            out_td as *const rtdt::TyDesc,
-        ) as u8
+        if boxes_the_element(out_ty.option_inner_ty(), list_ty.list_element_ty()) {
+            datalove_rt::c::dtlv_rti_list_pop_as_data_local(
+                rt, list_ptr, list_ty.as_ptr(), out, out_ty.as_ptr(),
+            ) as u8
+        } else {
+            datalove_rt::c::dtlv_rti_list_pop_local(
+                rt, list_ptr, list_ty.as_ptr(), out, out_ty.as_ptr(),
+            ) as u8
+        }
     }
 }

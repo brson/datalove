@@ -337,9 +337,24 @@ impl IrInterpreter {
                 let src = &args[i];
                 let mode = func_ctx.param_modes.get(i).copied().unwrap_or(ParamMode::In);
 
-                // Get tydesc for this param from param_types.
-                let param_type = &func_ctx.param_types[i];
-                let tydesc = self.tydesc_table.get_or_create(param_type);
+                // A borrowed parameter keeps the descriptor it came with. The
+                // callee's own type for it can be less than the whole truth:
+                // a generic function was compiled with `data` where its type
+                // parameter stood, and the value at that pointer is whatever
+                // the caller actually has. Nothing is converted at the
+                // boundary, so the accurate descriptor is the caller's, and
+                // for a function that is not generic the two agree anyway.
+                //
+                // A parameter the callee owns is different: the caller has
+                // already converted it into the shape the callee was compiled
+                // for, so the callee's own type is the one that describes it.
+                let tydesc = match mode {
+                    ParamMode::Ref | ParamMode::Mut => src.tydesc,
+                    ParamMode::In | ParamMode::Out => {
+                        let param_type = &func_ctx.param_types[i];
+                        self.tydesc_table.get_or_create(param_type)
+                    }
+                };
 
                 // Initialized: true for In/Ref/Mut (data exists), false for Out (callee writes first).
                 let initialized = !matches!(mode, ParamMode::Out);
