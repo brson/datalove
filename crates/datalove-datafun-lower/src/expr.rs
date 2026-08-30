@@ -668,14 +668,17 @@ pub fn lower_expression<'db>(
                             ctx.emit_slot_store_move(SlotDest::Local(slot), Operand::Value(reified));
                         }
                     }
-                    // Anything else the argument lowered to is a reference to
-                    // where the caller keeps the value: a field, or an element.
-                    // The old value there was dropped before the call.
-                    reference => {
-                        ctx.emit(Instruction::RefStore {
-                            dest: reference,
-                            value: Operand::Value(reified),
-                        });
+                    // Anything else is a reference to where the caller keeps
+                    // the value: a field, or an element. Storing back through
+                    // one loses the value and leaks what it replaced, so it is
+                    // refused rather than written wrong. Only a whole binding
+                    // takes an out parameter of a generic function for now.
+                    other => {
+                        return Err(LowerError::NotImplemented(format!(
+                            "out parameter of a generic function written to {:?}; \
+                             only a whole binding works so far",
+                            other,
+                        )));
                     }
                 }
             }

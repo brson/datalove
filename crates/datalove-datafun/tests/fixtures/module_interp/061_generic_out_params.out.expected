@@ -72,26 +72,15 @@ ModulesAnalysis(
                 store.copy s4, v33
                 v34 = reify v31
                 store.move.tracked s5, v34
-                v35 = const 1u32
-                v36 = const "old"
-                v37 = pack Tuple2 {v35, v36}
-                store.move.tracked s6, v37
-                v38 = const 5u32
-                v39 = erase v38
-                v40 = getfieldref s6.0
-                v42 = call @5 m0.u0(v39, v41)
-                v43 = reify v41
-                refstore *v40, v43
-                v44 = load.copy s0
-                v45 = load.move.tracked s1
-                v46 = load.move.tracked s2
-                v47 = load.move.tracked s3
-                v48 = load.copy s4
-                v49 = load.move.tracked s5
-                v50 = load.move.tracked s6
-                v51 = pack Tuple7 {v44, v45, v46, v47, v48, v49, v50}
-                return v51
+                v35 = load.copy s0
+                v36 = load.move.tracked s1
+                v37 = load.move.tracked s2
+                v38 = load.move.tracked s3
+                v39 = load.copy s4
+                v40 = load.move.tracked s5
+                v41 = pack Tuple6 {v35, v36, v37, v38, v39, v40}
+                return v41
         """,
     ),
-    output: "(42, \"after\", 99999999999999999999, some \"wrapped\", 7, \"second\", (5, \"old\"))",
+    output: "(42, \"after\", 99999999999999999999, some \"wrapped\", 7, \"second\")",
 )
