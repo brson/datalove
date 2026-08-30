@@ -1251,3 +1251,201 @@ pub extern "C-unwind" fn dlr_std__list_reserve(
         ) as u8
     }
 }
+
+// --- Maps and sets ---
+//
+// Same shape as the lists above: the container comes with a descriptor naming
+// its key, value or element type, and a position the caller has no static type
+// for is carried as a `data`. A key being looked up is borrowed rather than
+// given away, so it arrives as itself and needs none of this.
+
+#[no_mangle]
+pub extern "C-unwind" fn dlr_std__map_len(
+    rt: *mut u8,
+    map_ptr: *const u8, map_td: *const u8,
+    out: *mut u8, _out_td: *const u8,
+) -> u8 {
+    unsafe {
+        datalove_rt::c::dtlv_rti_btreemap_len_local(
+            rt, map_ptr, map_td as *const rtdt::TyDesc, out,
+        ) as u8
+    }
+}
+
+#[no_mangle]
+pub extern "C-unwind" fn dlr_std__map_clear(
+    rt: *mut u8,
+    map_ptr: *mut u8, map_td: *const u8,
+    _out: *mut u8, _out_td: *const u8,
+) -> u8 {
+    unsafe {
+        datalove_rt::c::dtlv_rti_btreemap_clear_local(
+            rt, map_ptr, map_td as *const rtdt::TyDesc,
+        ) as u8
+    }
+}
+
+#[no_mangle]
+pub extern "C-unwind" fn dlr_std__map_contains_key(
+    rt: *mut u8,
+    map_ptr: *const u8, map_td: *const u8,
+    key_ptr: *const u8, key_td: *const u8,
+    out: *mut u8, _out_td: *const u8,
+) -> u8 {
+    unsafe {
+        datalove_rt::c::dtlv_rti_btreemap_contains_key_local(
+            rt, map_ptr, map_td as *const rtdt::TyDesc,
+            key_ptr, key_td as *const rtdt::TyDesc,
+            out as *mut bool,
+        ) as u8
+    }
+}
+
+#[no_mangle]
+pub extern "C-unwind" fn dlr_std__map_get(
+    rt: *mut u8,
+    map_ptr: *const u8, map_td: *const u8,
+    key_ptr: *const u8, key_td: *const u8,
+    out: *mut u8, out_td: *const u8,
+) -> u8 {
+    let map_ty = unsafe { rtdt::TyDescRef::from_ptr(map_td as *const rtdt::TyDesc) };
+    let out_ty = unsafe { rtdt::TyDescRef::from_ptr(out_td as *const rtdt::TyDesc) };
+
+    unsafe {
+        if boxes_the_element(out_ty.option_inner_ty(), map_ty.map_value_ty()) {
+            datalove_rt::c::dtlv_rti_btreemap_get_as_data_local(
+                rt, map_ptr, map_ty.as_ptr(), key_ptr, key_td as *const rtdt::TyDesc,
+                out, out_ty.as_ptr(),
+            ) as u8
+        } else {
+            datalove_rt::c::dtlv_rti_btreemap_get_local(
+                rt, map_ptr, map_ty.as_ptr(), key_ptr, key_td as *const rtdt::TyDesc,
+                out, out_ty.as_ptr(),
+            ) as u8
+        }
+    }
+}
+
+#[no_mangle]
+pub extern "C-unwind" fn dlr_std__map_insert(
+    rt: *mut u8,
+    map_ptr: *mut u8, map_td: *const u8,
+    key_ptr: *mut u8, key_td: *const u8,
+    value_ptr: *mut u8, value_td: *const u8,
+    _out: *mut u8, _out_td: *const u8,
+) -> u8 {
+    let map_ty = unsafe { rtdt::TyDescRef::from_ptr(map_td as *const rtdt::TyDesc) };
+    let key_ty = unsafe { rtdt::TyDescRef::from_ptr(key_td as *const rtdt::TyDesc) };
+    let value_ty = unsafe { rtdt::TyDescRef::from_ptr(value_td as *const rtdt::TyDesc) };
+
+    unsafe {
+        // Both positions are boxed together or neither is, since a generic
+        // caller has a static type for neither.
+        if boxes_the_element(key_ty, map_ty.map_key_ty())
+            || boxes_the_element(value_ty, map_ty.map_value_ty())
+        {
+            datalove_rt::c::dtlv_rti_btreemap_insert_data_local(
+                rt, map_ptr, map_ty.as_ptr(), key_ptr, value_ptr,
+            ) as u8
+        } else {
+            datalove_rt::c::dtlv_rti_btreemap_insert_local(
+                rt, map_ptr, map_ty.as_ptr(),
+                key_ptr, key_ty.as_ptr(), value_ptr, value_ty.as_ptr(),
+            ) as u8
+        }
+    }
+}
+
+#[no_mangle]
+pub extern "C-unwind" fn dlr_std__map_remove(
+    rt: *mut u8,
+    map_ptr: *mut u8, map_td: *const u8,
+    key_ptr: *const u8, key_td: *const u8,
+    _out: *mut u8, _out_td: *const u8,
+) -> u8 {
+    unsafe {
+        datalove_rt::c::dtlv_rti_btreemap_remove_local(
+            rt, map_ptr, map_td as *const rtdt::TyDesc,
+            key_ptr, key_td as *const rtdt::TyDesc,
+        ) as u8
+    }
+}
+
+#[no_mangle]
+pub extern "C-unwind" fn dlr_std__set_len(
+    rt: *mut u8,
+    set_ptr: *const u8, set_td: *const u8,
+    out: *mut u8, _out_td: *const u8,
+) -> u8 {
+    unsafe {
+        datalove_rt::c::dtlv_rti_btreeset_len_local(
+            rt, set_ptr, set_td as *const rtdt::TyDesc, out,
+        ) as u8
+    }
+}
+
+#[no_mangle]
+pub extern "C-unwind" fn dlr_std__set_clear(
+    rt: *mut u8,
+    set_ptr: *mut u8, set_td: *const u8,
+    _out: *mut u8, _out_td: *const u8,
+) -> u8 {
+    unsafe {
+        datalove_rt::c::dtlv_rti_btreeset_clear_local(
+            rt, set_ptr, set_td as *const rtdt::TyDesc,
+        ) as u8
+    }
+}
+
+#[no_mangle]
+pub extern "C-unwind" fn dlr_std__set_contains(
+    rt: *mut u8,
+    set_ptr: *const u8, set_td: *const u8,
+    elem_ptr: *const u8, elem_td: *const u8,
+    out: *mut u8, _out_td: *const u8,
+) -> u8 {
+    unsafe {
+        datalove_rt::c::dtlv_rti_btreeset_contains_local(
+            rt, set_ptr, set_td as *const rtdt::TyDesc,
+            elem_ptr, elem_td as *const rtdt::TyDesc, out,
+        ) as u8
+    }
+}
+
+#[no_mangle]
+pub extern "C-unwind" fn dlr_std__set_remove(
+    rt: *mut u8,
+    set_ptr: *mut u8, set_td: *const u8,
+    elem_ptr: *const u8, elem_td: *const u8,
+    out: *mut u8, _out_td: *const u8,
+) -> u8 {
+    unsafe {
+        datalove_rt::c::dtlv_rti_btreeset_remove_local(
+            rt, set_ptr, set_td as *const rtdt::TyDesc,
+            elem_ptr, elem_td as *const rtdt::TyDesc, out,
+        ) as u8
+    }
+}
+
+#[no_mangle]
+pub extern "C-unwind" fn dlr_std__set_insert(
+    rt: *mut u8,
+    set_ptr: *mut u8, set_td: *const u8,
+    elem_ptr: *mut u8, elem_td: *const u8,
+    out: *mut u8, _out_td: *const u8,
+) -> u8 {
+    let set_ty = unsafe { rtdt::TyDescRef::from_ptr(set_td as *const rtdt::TyDesc) };
+    let elem_ty = unsafe { rtdt::TyDescRef::from_ptr(elem_td as *const rtdt::TyDesc) };
+
+    unsafe {
+        if boxes_the_element(elem_ty, set_ty.set_element_ty()) {
+            datalove_rt::c::dtlv_rti_btreeset_insert_data_local(
+                rt, set_ptr, set_ty.as_ptr(), elem_ptr, out,
+            ) as u8
+        } else {
+            datalove_rt::c::dtlv_rti_btreeset_insert_local(
+                rt, set_ptr, set_ty.as_ptr(), elem_ptr, elem_ty.as_ptr(), out,
+            ) as u8
+        }
+    }
+}

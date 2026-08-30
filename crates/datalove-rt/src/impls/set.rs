@@ -567,6 +567,18 @@ pub unsafe fn set_destroy_impl(
 }
 
 /// Clears all elements from a set, leaving it empty.
+/// The number of elements in a set.
+pub unsafe fn btreeset_len_impl(
+    set_value_ref: *const u8,
+    len_out: *mut u8,
+) -> RtStatus {
+    unsafe {
+        let set = &*(set_value_ref as *const rtdt::Set);
+        std::ptr::write(len_out as *mut rtdt::Index, set.len);
+    }
+    RtStatus::Ok
+}
+
 pub unsafe fn btreeset_clear_impl(
     rt: &mut RtLocal,
     value_mut: *mut u8,
@@ -1146,6 +1158,45 @@ unsafe fn propagate_split_up(
 }
 
 /// Inserts an element into a set.
+/// Insert an element that arrives packed into a `data`.
+///
+/// The element is moved out into a value of the set's own element type, which
+/// the set's descriptor names, and the typed insert takes it from there. The
+/// data is consumed.
+pub unsafe fn btreeset_insert_data_impl(
+    rt: &mut RtLocal,
+    btreeset_value_mut: *mut u8,
+    btreeset_tydesc: rtdt::TyDescRef,
+    data_in: *const u8,
+    bool_out: *mut u8,
+) -> RtStatus {
+    unsafe {
+        let element_ty = btreeset_tydesc.set_element_ty();
+        let rt_handle = rt as *mut RtLocal as crate::c::LocalRtHandle;
+
+        let slot = crate::c::dtlv_rti_mem_alloc_local(rt_handle, element_ty.as_ptr(), 1);
+        if slot.is_null() {
+            return RtStatus::Error;
+        }
+
+        let status = crate::impls::boxing::data_into_local(
+            rt_handle, data_in, slot, element_ty.as_ptr(),
+        );
+        let status = if status == RtStatus::Ok {
+            btreeset_insert_impl(
+                rt, btreeset_value_mut, btreeset_tydesc.as_ptr(),
+                slot, element_ty.as_ptr(), bool_out,
+            )
+        } else {
+            status
+        };
+
+        // The slot held the element only on the way in.
+        rt.alloc.free(element_ty.size(), element_ty.align(), 1, slot);
+        status
+    }
+}
+
 pub unsafe fn btreeset_insert_impl(
     rt: &mut RtLocal,
     btreeset_value_ref: *mut u8,

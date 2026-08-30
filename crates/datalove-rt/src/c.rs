@@ -942,6 +942,111 @@ pub unsafe extern "C-unwind" fn dtlv_rti_btreemap_get_local(
 }
 
 #[unsafe(no_mangle)]
+pub unsafe extern "C-unwind" fn dtlv_rti_btreemap_get_as_data_local(
+    rt: LocalRtHandle,
+    map_value_ref: *const u8,
+    map_tydesc: *const rtdt::TyDesc,
+    key_ref: *const u8,
+    key_tydesc: *const rtdt::TyDesc,
+    option_value_out: *mut u8,
+    option_tydesc: *const rtdt::TyDesc,
+) -> RtStatus {
+    debug_assert!(!rt.is_null(), "rt is null");
+    debug_assert!(!map_value_ref.is_null(), "map_value_ref is null");
+    debug_assert!(!map_tydesc.is_null(), "map_tydesc is null");
+    debug_assert!(!key_ref.is_null(), "key_ref is null");
+    debug_assert!(!option_value_out.is_null(), "option_value_out is null");
+    unsafe {
+        let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
+        crate::impls::btreemap::btreemap_get_as_data_impl(
+            rt_ref,
+            map_value_ref,
+            rtdt::TyDescRef::from_ptr(map_tydesc),
+            key_ref,
+            rtdt::TyDescRef::from_ptr(key_tydesc),
+            option_value_out,
+            rtdt::TyDescRef::from_ptr(option_tydesc),
+        )
+    }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C-unwind" fn dtlv_rti_btreemap_insert_data_local(
+    rt: LocalRtHandle,
+    map_value_mut: *mut u8,
+    map_tydesc: *const rtdt::TyDesc,
+    key_data_in: *const u8,
+    value_data_in: *const u8,
+) -> RtStatus {
+    debug_assert!(!rt.is_null(), "rt is null");
+    debug_assert!(!map_value_mut.is_null(), "map_value_mut is null");
+    debug_assert!(!map_tydesc.is_null(), "map_tydesc is null");
+    debug_assert!(!key_data_in.is_null(), "key_data_in is null");
+    debug_assert!(!value_data_in.is_null(), "value_data_in is null");
+    unsafe {
+        let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
+        crate::impls::btreemap::btreemap_insert_data_impl(
+            rt_ref,
+            map_value_mut,
+            rtdt::TyDescRef::from_ptr(map_tydesc),
+            key_data_in,
+            value_data_in,
+        )
+    }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C-unwind" fn dtlv_rti_btreeset_insert_data_local(
+    rt: LocalRtHandle,
+    set_value_mut: *mut u8,
+    set_tydesc: *const rtdt::TyDesc,
+    data_in: *const u8,
+    bool_out: *mut u8,
+) -> RtStatus {
+    debug_assert!(!rt.is_null(), "rt is null");
+    debug_assert!(!set_value_mut.is_null(), "set_value_mut is null");
+    debug_assert!(!set_tydesc.is_null(), "set_tydesc is null");
+    debug_assert!(!data_in.is_null(), "data_in is null");
+    debug_assert!(!bool_out.is_null(), "bool_out is null");
+    unsafe {
+        let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
+        crate::impls::set::btreeset_insert_data_impl(
+            rt_ref,
+            set_value_mut,
+            rtdt::TyDescRef::from_ptr(set_tydesc),
+            data_in,
+            bool_out,
+        )
+    }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C-unwind" fn dtlv_rti_btreemap_len_local(
+    _rt: LocalRtHandle,
+    map_value_ref: *const u8,
+    map_tydesc: *const rtdt::TyDesc,
+    len_out: *mut u8,
+) -> RtStatus {
+    debug_assert!(!map_value_ref.is_null(), "map_value_ref is null");
+    debug_assert!(!len_out.is_null(), "len_out is null");
+    debug_assert_aligned(map_value_ref, map_tydesc, "btreemap_len:map");
+    unsafe { crate::impls::btreemap::btreemap_len_impl(map_value_ref, len_out) }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C-unwind" fn dtlv_rti_btreeset_len_local(
+    _rt: LocalRtHandle,
+    set_value_ref: *const u8,
+    set_tydesc: *const rtdt::TyDesc,
+    len_out: *mut u8,
+) -> RtStatus {
+    debug_assert!(!set_value_ref.is_null(), "set_value_ref is null");
+    debug_assert!(!len_out.is_null(), "len_out is null");
+    debug_assert_aligned(set_value_ref, set_tydesc, "btreeset_len:set");
+    unsafe { crate::impls::set::btreeset_len_impl(set_value_ref, len_out) }
+}
+
+#[unsafe(no_mangle)]
 pub unsafe extern "C-unwind" fn dtlv_rti_btreemap_clear_local(
     rt: LocalRtHandle,
     btreemap_value_mut: *mut u8,

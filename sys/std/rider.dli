@@ -113,3 +113,19 @@ native fun list_set<T>(mut self: [T], i: index, elem: T): bool
 native fun list_insert<T>(mut self: [T], i: index, elem: T): bool
 native fun list_remove<T>(mut self: [T], i: index): ?T
 native fun list_reserve<T>(mut self: [T], n: index)
+
+// Maps and sets. Generic over their key, value or element type, which the
+// implementation reads off the container's descriptor. A key or element being
+// looked up is borrowed, so it arrives as itself.
+native fun map_len<K, V>(ref self: %{K = V}): index
+native fun map_clear<K, V>(mut self: %{K = V})
+native fun map_contains_key<K, V>(ref self: %{K = V}, ref key: K): bool
+native fun map_get<K, V>(ref self: %{K = V}, ref key: K): ?V
+native fun map_insert<K, V>(mut self: %{K = V}, key: K, value: V)
+native fun map_remove<K, V>(mut self: %{K = V}, ref key: K)
+
+native fun set_len<T>(ref self: #{T}): index
+native fun set_clear<T>(mut self: #{T})
+native fun set_contains<T>(ref self: #{T}, ref elem: T): bool
+native fun set_insert<T>(mut self: #{T}, elem: T): bool
+native fun set_remove<T>(mut self: #{T}, ref elem: T): bool

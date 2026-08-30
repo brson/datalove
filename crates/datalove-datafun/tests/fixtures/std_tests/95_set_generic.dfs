@@ -1,0 +1,35 @@
+require module sys/std/set
+
+import set.len
+import set.is_empty
+import set.contains
+import set.insert
+import set.remove
+import set.clear
+
+let one = : u32 / 1
+let two = : u32 / 2
+let nine = : u32 / 9
+
+var nums: #{u32} = #{(: u32 / 1), (: u32 / 2)}
+let added = insert(mut nums, (: u32 / 3))
+let again = insert(mut nums, (: u32 / 1))
+let has = (contains(ref nums, ref two), contains(ref nums, ref nine))
+let dropped = remove(mut nums, ref two)
+let missing = remove(mut nums, ref nine)
+let counted = len(ref nums)
+
+// An element that owns memory.
+let beta = "beta"
+var words: #{string} = #{}
+let empty_at_first = is_empty(ref words)
+let w1 = insert(mut words, "alpha")
+let w2 = insert(mut words, "beta")
+let w3 = insert(mut words, "alpha")
+let word_count = len(ref words)
+let seen = contains(ref words, ref beta)
+clear(mut words)
+let cleared = len(ref words)
+
+let output = ((added, again), has, (dropped, missing), counted,
+              empty_at_first, (w1, w2, w3), word_count, seen, cleared)

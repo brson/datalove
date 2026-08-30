@@ -308,6 +308,21 @@ unsafe fn destroy_tree_recursive(
 }
 
 /// Clear a BTreeMap (destroy and recreate empty).
+/// The number of entries in a map.
+///
+/// A generic function has no static type for the keys or values, but the count
+/// does not need one.
+pub unsafe fn btreemap_len_impl(
+    map_value_ref: *const u8,
+    len_out: *mut u8,
+) -> RtStatus {
+    unsafe {
+        let map = &*(map_value_ref as *const rtdt::Map);
+        std::ptr::write(len_out as *mut rtdt::Index, map.len);
+    }
+    RtStatus::Ok
+}
+
 pub unsafe fn btreemap_clear_impl(
     rt: &mut RtLocal,
     value_mut: *mut u8,
@@ -1031,6 +1046,59 @@ unsafe fn propagate_split_up(
 /// Returns the value as an Option<V>:
 /// - If the key is found, sets the option to Some and clones the value.
 /// - If the key is not found, sets the option to None.
+/// Insert an entry whose key and value arrive packed into `data`.
+///
+/// Each is moved out into a value of the map's own key or value type, which
+/// the map's descriptor names, and the typed insert takes it from there. Both
+/// datas are consumed.
+pub unsafe fn btreemap_insert_data_impl(
+    rt: &mut RtLocal,
+    btreemap_value_mut: *mut u8,
+    btreemap_tydesc: rtdt::TyDescRef,
+    key_data_in: *const u8,
+    value_data_in: *const u8,
+) -> RtStatus {
+    unsafe {
+        let key_ty = btreemap_tydesc.map_key_ty();
+        let value_ty = btreemap_tydesc.map_value_ty();
+        let rt_handle = rt as *mut RtLocal as crate::c::LocalRtHandle;
+
+        let key_slot = crate::c::dtlv_rti_mem_alloc_local(rt_handle, key_ty.as_ptr(), 1);
+        if key_slot.is_null() {
+            return RtStatus::Error;
+        }
+        let value_slot = crate::c::dtlv_rti_mem_alloc_local(rt_handle, value_ty.as_ptr(), 1);
+        if value_slot.is_null() {
+            rt.alloc.free(key_ty.size(), key_ty.align(), 1, key_slot);
+            return RtStatus::Error;
+        }
+
+        let status = crate::impls::boxing::data_into_local(
+            rt_handle, key_data_in, key_slot, key_ty.as_ptr(),
+        );
+        if status == RtStatus::Ok {
+            let status = crate::impls::boxing::data_into_local(
+                rt_handle, value_data_in, value_slot, value_ty.as_ptr(),
+            );
+            if status == RtStatus::Ok {
+                let status = btreemap_insert_impl(
+                    rt, btreemap_value_mut, btreemap_tydesc,
+                    key_slot, key_ty, value_slot, value_ty,
+                );
+                // The slots held the values only on the way in; the map has
+                // them now, so the storage goes back and what it held does not.
+                rt.alloc.free(key_ty.size(), key_ty.align(), 1, key_slot);
+                rt.alloc.free(value_ty.size(), value_ty.align(), 1, value_slot);
+                return status;
+            }
+        }
+
+        rt.alloc.free(key_ty.size(), key_ty.align(), 1, key_slot);
+        rt.alloc.free(value_ty.size(), value_ty.align(), 1, value_slot);
+        RtStatus::Error
+    }
+}
+
 pub unsafe fn btreemap_get_impl(
     rt: &mut RtLocal,
     btreemap_value_ref: *const u8,
@@ -1039,6 +1107,45 @@ pub unsafe fn btreemap_get_impl(
     key_tydesc: rtdt::TyDescRef,
     option_value_out: *mut u8,
     option_tydesc: rtdt::TyDescRef,
+) -> RtStatus {
+    unsafe {
+        btreemap_get_inner(
+            rt, btreemap_value_ref, btreemap_tydesc, key_ref, key_tydesc,
+            option_value_out, option_tydesc, false,
+        )
+    }
+}
+
+/// Look a key up, giving the value back packed into a `data`.
+///
+/// What a generic function asks for: it has no static type for the values, so
+/// its option is an option of `data`, and the value is packed to reach it.
+pub unsafe fn btreemap_get_as_data_impl(
+    rt: &mut RtLocal,
+    btreemap_value_ref: *const u8,
+    btreemap_tydesc: rtdt::TyDescRef,
+    key_ref: *const u8,
+    key_tydesc: rtdt::TyDescRef,
+    option_value_out: *mut u8,
+    option_tydesc: rtdt::TyDescRef,
+) -> RtStatus {
+    unsafe {
+        btreemap_get_inner(
+            rt, btreemap_value_ref, btreemap_tydesc, key_ref, key_tydesc,
+            option_value_out, option_tydesc, true,
+        )
+    }
+}
+
+unsafe fn btreemap_get_inner(
+    rt: &mut RtLocal,
+    btreemap_value_ref: *const u8,
+    btreemap_tydesc: rtdt::TyDescRef,
+    key_ref: *const u8,
+    key_tydesc: rtdt::TyDescRef,
+    option_value_out: *mut u8,
+    option_tydesc: rtdt::TyDescRef,
+    as_data: bool,
 ) -> RtStatus {
     unsafe {
         if btreemap_value_ref.is_null()
@@ -1086,15 +1193,26 @@ pub unsafe fn btreemap_get_impl(
 
             match cmp_result {
                 crate::c::RtOrdering::Equal => {
-                    // Key found! Clone the value into the option payload.
+                    // Key found! Clone the value into the option payload. A
+                    // caller with no static type for the value asks for it
+                    // packed into a `data`, which is the shape it does have.
                     let value_slot = values_ptr.add(i * value_size);
                     let rt_handle = rt as *mut RtLocal as crate::c::LocalRtHandle;
-                    let status = crate::impls::clone::clone_value(
-                        rt_handle,
-                        value_slot,
-                        map_value_ty.as_ptr(),
-                        option_payload_ptr,
-                    );
+                    let status = if as_data {
+                        crate::impls::boxing::data_clone_from_local(
+                            rt_handle,
+                            value_slot,
+                            map_value_ty.as_ptr(),
+                            option_payload_ptr,
+                        )
+                    } else {
+                        crate::impls::clone::clone_value(
+                            rt_handle,
+                            value_slot,
+                            map_value_ty.as_ptr(),
+                            option_payload_ptr,
+                        )
+                    };
 
                     if status != RtStatus::Ok {
                         return status;

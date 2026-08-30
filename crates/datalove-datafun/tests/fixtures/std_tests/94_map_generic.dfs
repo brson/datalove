@@ -1,0 +1,41 @@
+require module sys/std/map
+
+import map.len
+import map.is_empty
+import map.contains_key
+import map.get
+import map.insert
+import map.remove
+import map.clear
+
+// One compiled function each, over two different key and value types. A key
+// being looked up is borrowed, so it carries the `ref` marker and has to be
+// something there is a name for.
+let k_a = "a"
+let k_b = "b"
+let k_missing = "missing"
+let k_zz = "zz"
+
+var scores: %{string = u32} = %{"a" = (: u32 / 1)}
+insert(mut scores, "b", (: u32 / 2))
+insert(mut scores, "c", (: u32 / 3))
+
+let looked_up = (get(ref scores, ref k_b), get(ref scores, ref k_missing))
+let present = (contains_key(ref scores, ref k_a), contains_key(ref scores, ref k_zz))
+let counted = len(ref scores)
+
+remove(mut scores, ref k_a)
+let after_remove = (len(ref scores), contains_key(ref scores, ref k_a))
+
+// A value that owns memory, so a missed drop shows up as a leak.
+let k1 = : u32 / 1
+let k2 = : u32 / 2
+var names: %{u32 = string} = %{}
+let started_empty = is_empty(ref names)
+insert(mut names, k1, "one")
+insert(mut names, k2, "two")
+let name = get(ref names, ref k2)
+clear(mut names)
+let cleared = len(ref names)
+
+let output = (looked_up, present, counted, after_remove, started_empty, name, cleared)
