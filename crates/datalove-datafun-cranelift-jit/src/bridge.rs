@@ -4,7 +4,7 @@
 //! All function returns use sret (pointer-based), so the bridge only needs void dispatch.
 
 use datalove_datafun_interp::{Destination, Value};
-use datalove_datafun_ir::IrType;
+use datalove_datafun_ir::{IrType, ParamId};
 use datalove_rt::c::LocalRtHandle;
 
 use crate::JitError;
@@ -27,11 +27,13 @@ pub unsafe fn call_jit(
     args: &[Value],
     ret_dest: Destination,
     _return_type: &IrType,
+    descriptor_params: &[ParamId],
 ) -> Result<(), JitError> {
-    if args.len() > MAX_DIRECT_ARGS {
+    if args.len() + descriptor_params.len() > MAX_DIRECT_ARGS {
         return Err(JitError::BridgeCallFailed(format!(
-            "too many arguments: {} (max {})",
+            "too many arguments: {} with {} descriptors (max {})",
             args.len(),
+            descriptor_params.len(),
             MAX_DIRECT_ARGS
         )));
     }
@@ -53,6 +55,20 @@ pub unsafe fn call_jit(
     // User arguments (all passed by pointer).
     for arg in args {
         raw_args[arg_idx] = arg.ptr as usize;
+        arg_idx += 1;
+    }
+
+    // Then the descriptors a generic callee cannot work out for itself. Here
+    // they are simply the ones the argument values carry.
+    for param_id in descriptor_params {
+        let arg = args.get(param_id.0 as usize).ok_or_else(|| {
+            JitError::BridgeCallFailed(format!(
+                "callee wants a descriptor for parameter {} but got {} arguments",
+                param_id.0,
+                args.len(),
+            ))
+        })?;
+        raw_args[arg_idx] = arg.tydesc as usize;
         arg_idx += 1;
     }
 

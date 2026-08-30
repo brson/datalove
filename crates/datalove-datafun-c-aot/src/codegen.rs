@@ -26,6 +26,18 @@ pub fn emit_function(
     let func_ctx = unit.function_context()
         .ok_or_else(|| CAotError::Codegen("expected function context".into()))?;
 
+    // This backend has no native functions, and a descriptor a caller supplies
+    // is only ever read by one, so nothing here would use it and neither the
+    // signature nor the call sites carry it. That is self-consistent as long as
+    // it stays true. Whoever adds native calls here has to pass the descriptors
+    // through as well, and should see this rather than a wrong element type.
+    if !func_ctx.descriptor_params.is_empty() {
+        return Err(CAotError::Unsupported(format!(
+            "'{}' takes a caller-supplied descriptor, which this backend does not pass",
+            func_name,
+        )));
+    }
+
     let layout = FrameLayout::compute(
         &func_ctx.param_types,
         &unit.value_types,

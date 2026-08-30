@@ -32,6 +32,7 @@ fn make_func_unit(
         const_values: vec![],
         symbols: datalove_datafun_ir::SymbolTable::new(),
         context: CodeUnitContext::Function(FunctionContext {
+            descriptor_params: Vec::new(),
             params,
             param_modes: vec![],
             param_types,

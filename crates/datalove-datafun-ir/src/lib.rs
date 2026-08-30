@@ -1660,6 +1660,21 @@ pub struct FunctionContext {
     /// Out params that need runtime tracking.
     #[serde(default)]
     pub tracked_params: Vec<ParamId>,
+    /// Parameters whose descriptor the caller supplies, in parameter order.
+    ///
+    /// A generic function is compiled once, with `data` standing where a type
+    /// parameter was written, so `param_types` does not describe the value at
+    /// such a parameter: a `[T]` is compiled as `[data]` and the caller may
+    /// hand it a list of anything. Where the callee only borrows the value
+    /// nothing is converted at the boundary, so the descriptor has to come from
+    /// the call site, which is the place that knows the type.
+    ///
+    /// How it is carried is up to the backend. The interpreter needs nothing:
+    /// its values are a pointer and a descriptor already. The compiled
+    /// backends take one extra pointer parameter for each entry here, after
+    /// the ordinary parameters and in this order.
+    #[serde(default)]
+    pub descriptor_params: Vec<ParamId>,
 }
 
 /// Context for script unit execution.

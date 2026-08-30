@@ -233,6 +233,11 @@ pub fn transform_function(
             param_types: new_param_types,
             return_type: func_ctx.return_type.clone(),
             tracked_params: Vec::new(),
+            // Specialization drops the comptime parameters and renumbers what
+            // is left, so the descriptor-carrying ones move with them.
+            descriptor_params: func_ctx.descriptor_params.iter()
+                .filter_map(|p| param_remap.get(&p.0).copied().map(ParamId))
+                .collect(),
         }),
         nested_units: vec![],
     }

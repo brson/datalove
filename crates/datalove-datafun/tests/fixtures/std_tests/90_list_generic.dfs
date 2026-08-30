@@ -1,31 +1,33 @@
 require module sys/std/list
 
-import list.len_u32
-import list.len_string
-import list.get_u32
-import list.get_string
-import list.push_u32
-import list.push_string
-import list.pop_string
+import list.len
+import list.is_empty
+import list.get
+import list.push
+import list.pop
 
-// One native implementation each, serving both element types. The list is not
-// converted on the way in: it is borrowed, and the implementation reads the
-// element type off the descriptor that came with it.
+// One compiled function each, serving both element types. The list is not
+// converted on the way in: it is borrowed, and the descriptor saying what it
+// holds comes from here, where the type is known.
 let nums: [u32] = [10, 20, 30]
 let strs: [string] = ["alpha", "beta"]
 let empty: [u32] = []
 
-let lens = (len_u32(ref nums), len_string(ref strs), len_u32(ref empty))
-let reads = (get_u32(ref nums, (: index / 1)), get_string(ref strs, (: index / 0)))
-let past_end = get_u32(ref nums, (: index / 9))
+let lens = (len(ref nums), len(ref strs), len(ref empty))
+let empties = (is_empty(ref nums), is_empty(ref empty))
+
+// An element crossing the generic boundary is carried as a data and moved back
+// out at the call site, which is the place that knows the type.
+let reads = (get(ref nums, (: index / 1)), get(ref strs, (: index / 0)))
+let past_end = get(ref nums, (: index / 9))
 
 var growing: [u32] = [1]
-push_u32(mut growing, 2)
-let grown = len_u32(ref growing)
+push(mut growing, 2)
+let grown = len(ref growing)
 
 var words: [string] = ["first"]
-push_string(mut words, "second")
-let taken = pop_string(mut words)
-let left = len_string(ref words)
+push(mut words, "second")
+let taken = pop(mut words)
+let left = len(ref words)
 
-let output = (lens, reads, past_end, grown, taken, left)
+let output = (lens, empties, reads, past_end, grown, taken, left)

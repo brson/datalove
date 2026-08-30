@@ -219,7 +219,7 @@ pub unsafe extern "C" fn __jit_dispatch_call(
             // Call JIT code directly.
             // SAFETY: code_ptr is valid JIT code.
             let result = unsafe {
-                crate::bridge::call_jit(code_ptr, uses_sret, rt_handle, &arg_vals, dest, &func_ctx.return_type)
+                crate::bridge::call_jit(code_ptr, uses_sret, rt_handle, &arg_vals, dest, &func_ctx.return_type, &func_ctx.descriptor_params)
             };
             if let Err(e) = result {
                 panic!("JIT dispatch: JIT call failed: {}", e);

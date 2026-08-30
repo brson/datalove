@@ -374,7 +374,7 @@ impl OptimizingDispatcher {
                 let func_ctx = func.function_context()
                     .expect("JIT function must have function context");
                 let result = unsafe {
-                    bridge::call_jit(code_ptr, uses_sret, rt_handle, args, ret_dest, &func_ctx.return_type)
+                    bridge::call_jit(code_ptr, uses_sret, rt_handle, args, ret_dest, &func_ctx.return_type, &func_ctx.descriptor_params)
                 };
 
                 clear_dispatch_context();

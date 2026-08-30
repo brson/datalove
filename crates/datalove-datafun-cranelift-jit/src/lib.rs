@@ -305,9 +305,10 @@ impl JitEngine {
         args: &[Value],
         ret_dest: Destination,
         return_type: &IrType,
+        descriptor_params: &[datalove_datafun_ir::ParamId],
     ) -> Result<(), JitError> {
         // SAFETY: caller guarantees code_ptr and args are valid.
-        unsafe { bridge::call_jit(code_ptr, uses_sret, rt_handle, args, ret_dest, return_type) }
+        unsafe { bridge::call_jit(code_ptr, uses_sret, rt_handle, args, ret_dest, return_type, descriptor_params) }
     }
 }
 
@@ -346,6 +347,7 @@ mod tests {
             const_values: vec![],
             symbols: SymbolTable::default(),
             context: CodeUnitContext::Function(FunctionContext {
+            descriptor_params: Vec::new(),
                 params,
                 param_modes: vec![],
                 param_types,
@@ -448,7 +450,7 @@ mod tests {
         // Call the JIT code. Result written to ret_dest via sret.
         let return_type = IrType::I32;
         unsafe {
-            jit.call_jit(code_ptr, uses_sret, rt_handle, &[], ret_dest, &return_type).unwrap();
+            jit.call_jit(code_ptr, uses_sret, rt_handle, &[], ret_dest, &return_type, &[]).unwrap();
         }
 
         // Extract i32 from the buffer.
@@ -657,7 +659,7 @@ mod tests {
         // SAFETY: code_ptr is valid JIT code.
         let return_type = IrType::I32;
         unsafe {
-            bridge::call_jit(code_ptr, uses_sret, rt_handle, &[], ret_dest, &return_type)
+            bridge::call_jit(code_ptr, uses_sret, rt_handle, &[], ret_dest, &return_type, &[])
                 .expect("JIT call failed");
         }
 
@@ -728,7 +730,11 @@ impl CallDispatcher for JitEngine {
 
                 // SAFETY: code_ptr is a valid JIT-compiled function for this signature.
                 let result = unsafe {
-                    bridge::call_jit(code_ptr, uses_sret, rt_handle, args, ret_dest, func.return_type().expect("JIT dispatch requires function return type"))
+                    bridge::call_jit(
+                        code_ptr, uses_sret, rt_handle, args, ret_dest,
+                        func.return_type().expect("JIT dispatch requires function return type"),
+                        func.function_context().map_or(&[][..], |c| &c.descriptor_params),
+                    )
                 };
 
                 // Clear dispatch context.

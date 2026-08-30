@@ -109,6 +109,12 @@ pub fn lower_function_body<'db>(
     // Record binding operands to match analysis order.
     let mut params: Vec<ParamId> = Vec::new();
     let mut param_modes = Vec::new();
+    // A borrowed parameter whose type mentions one of this function's type
+    // parameters is not converted at the boundary, so this function's own type
+    // for it does not describe what arrives. The caller supplies the
+    // descriptor; see `FunctionContext::descriptor_params`.
+    let mut descriptor_params: Vec<ParamId> = Vec::new();
+    let type_params = func.type_params(ctx.db).clone();
     let func_params = func.params(ctx.db);
     for (i, p) in func_params.iter().enumerate() {
         let param_name = p.name.text(ctx.db).to_string();
@@ -130,6 +136,13 @@ pub fn lower_function_body<'db>(
         ctx.record_binding_operand(operand);
         params.push(id);
         param_modes.push(mode);
+
+        let borrowed = matches!(mode, ParamMode::Ref | ParamMode::Mut);
+        if borrowed
+            && datalove_datafun_ir::type_hint_mentions_param(&p.type_hint, &type_params)
+        {
+            descriptor_params.push(id);
+        }
     }
 
     // Lower the function body with statement indices.
@@ -176,6 +189,7 @@ pub fn lower_function_body<'db>(
             param_types: std::mem::take(&mut ctx.body.param_types),
             return_type,
             tracked_params: ctx.compute_tracked_params(),
+            descriptor_params,
         }),
         nested_units: Vec::new(),
     })

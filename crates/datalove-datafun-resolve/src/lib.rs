@@ -125,23 +125,15 @@ pub fn resolve_names_impl<'db>(
         for param in &params {
             match convert_type_hint_with_aliases(db, param.type_hint.clone(), &type_aliases_map) {
                 Ok(ty) => {
-                    // A native function's parameters are exempt: each arrives
-                    // as a pointer and a descriptor, and the implementation
-                    // reads the element type off that rather than being
-                    // compiled against it.
-                    //
-                    // A borrowed parameter of an ordinary function looks like
-                    // it should be exempt too, and in the interpreter it is:
-                    // values carry their descriptors, so the callee sees what
-                    // it was really given. The compiled backends choose the
-                    // descriptor for an argument from its static type when they
-                    // emit the call, and a generic function's static type says
-                    // `data` where the parameter stood, so they would hand the
-                    // callee a descriptor that misdescribes the elements.
-                    // Until a generic function carries descriptors for its type
-                    // parameters, this stays refused rather than working in one
-                    // backend and corrupting memory in the other two.
-                    if let Some(e) = (!is_native)
+                    // Nothing is converted at a borrowed parameter: the value
+                    // goes across as it stands and the callee never drops it,
+                    // so a type parameter under a container is reachable there
+                    // even though erasing one is not. What the callee lacks is
+                    // a descriptor, since its own type says `data` where the
+                    // parameter was written, and the call site supplies that.
+                    // A native's parameters are the same case by construction.
+                    let borrowed = matches!(param.mode, ParamMode::Ref | ParamMode::Mut);
+                    if let Some(e) = (!is_native && !borrowed)
                         .then(|| unerasable_type_param_error(db, &ty))
                         .flatten()
                     {

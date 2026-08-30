@@ -416,8 +416,10 @@ impl JitCompiler {
             (None, 1)
         };
 
-        // User arguments.
-        let user_args = &params[user_args_start..];
+        // User arguments. The descriptors a generic callee takes after them are
+        // not arguments and are not forwarded: this stub hands the call to the
+        // interpreter, whose values carry their descriptors already.
+        let user_args = &params[user_args_start..user_args_start + callee_ctx.param_types.len()];
 
         // Build args array on stack.
         // Allocate stack slot for args array.

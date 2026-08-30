@@ -1,10 +1,10 @@
 //! Function call instruction compilation.
 
-use cranelift_codegen::ir::{InstBuilder, MemFlagsData};
+use cranelift_codegen::ir::{self as cl_ir, InstBuilder, MemFlagsData};
 use cranelift_frontend::FunctionBuilder;
 use cranelift_module::{FuncId, Module};
 
-use datalove_datafun_ir::{CodeRef, CodeUnitId, Operand, ValueId};
+use datalove_datafun_ir::{CodeRef, CodeUnitId, IrType, Operand, ParamId, ValueId};
 
 use crate::types::{self, CraneliftRepr, PTR_TYPE};
 use crate::CraneliftError;
@@ -17,6 +17,61 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
     /// Threads rt_handle as implicit first argument to callee.
     /// For native rider functions, marshals args from pointers to i64 scalars
     /// and converts the i64 return value back to the destination type.
+    /// The parameters of `code_ref` whose descriptor the call site supplies.
+    ///
+    /// Empty for anything this compiler cannot see the body of, which is
+    /// correct because a function only asks for these if it is generic, and a
+    /// generic function is always compiled alongside its callers.
+    fn callee_descriptor_params(&self, code_ref: &CodeRef) -> Vec<ParamId> {
+        let CodeRef::Module { module, id } = code_ref else {
+            return Vec::new();
+        };
+        let Some(registry) = self.registry else {
+            return Vec::new();
+        };
+        registry.get_module_function_as_unit(*module, CodeUnitId(id.0))
+            .and_then(|unit| unit.function_context().map(|c| c.descriptor_params.clone()))
+            .unwrap_or_default()
+    }
+
+    /// The descriptor for an operand, as a runtime pointer.
+    ///
+    /// A parameter whose descriptor was supplied by our own caller uses that:
+    /// its static type says `data` where a type parameter stood, so a
+    /// descriptor built from that type would misdescribe the value. Everything
+    /// else is described by its type, and the descriptor is a static symbol.
+    fn operand_tydesc(
+        &mut self,
+        builder: &mut FunctionBuilder,
+        operand: &Operand,
+    ) -> Result<cl_ir::Value, CraneliftError> {
+        if let Operand::Param(param_id) = operand {
+            if let Some(&supplied) = self.descriptor_values.get(param_id) {
+                return Ok(supplied);
+            }
+        }
+        let ty = self.get_operand_type(operand)?;
+        self.static_tydesc(builder, &ty)
+    }
+
+    /// The static descriptor symbol for a type, as a runtime pointer.
+    fn static_tydesc(
+        &mut self,
+        builder: &mut FunctionBuilder,
+        ty: &IrType,
+    ) -> Result<cl_ir::Value, CraneliftError> {
+        // A reference describes the type it points at.
+        let ty = match ty {
+            IrType::Ref(inner) => inner.as_ref().clone(),
+            other => other.clone(),
+        };
+        let tydesc_id = self.tydesc_emitter.get(&ty).ok_or_else(|| {
+            CraneliftError::Codegen(format!("TyDesc not found for type {:?}", ty))
+        })?;
+        let tydesc_gv = self.module.declare_data_in_func(tydesc_id, builder.func);
+        Ok(builder.ins().symbol_value(PTR_TYPE, tydesc_gv))
+    }
+
     pub(super) fn compile_call(
         &mut self,
         builder: &mut FunctionBuilder,
@@ -78,6 +133,20 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             call_args.push(arg_val);
         }
 
+        // Then a descriptor for each parameter whose own type does not describe
+        // what it will receive. This is the place that knows: the argument here
+        // has a concrete type, or a descriptor our own caller handed us.
+        for param_id in self.callee_descriptor_params(code_ref) {
+            let arg = args.get(param_id.0 as usize).ok_or_else(|| {
+                CraneliftError::Codegen(format!(
+                    "callee wants a descriptor for parameter {} but got {} arguments",
+                    param_id.0, args.len(),
+                ))
+            })?.clone();
+            let tydesc_addr = self.operand_tydesc(builder, &arg)?;
+            call_args.push(tydesc_addr);
+        }
+
         // Declare callee in this function and emit call.
         let callee_ref = self.module.declare_func_in_func(callee_func_id, builder.func);
         builder.ins().call(callee_ref, &call_args);
@@ -122,22 +191,8 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         call_args.push(rt_handle);
 
         for arg in args.iter() {
-            let arg_ty = self.get_operand_type(arg)?;
             let arg_ptr = self.get_operand_ptr(builder, arg)?;
-
-            // Resolve the actual type for tydesc (strip Ref wrapper).
-            let tydesc_ty = match &arg_ty {
-                IrType::Ref(inner) => inner.as_ref().clone(),
-                other => other.clone(),
-            };
-
-            let tydesc_id = self.tydesc_emitter.get(&tydesc_ty).ok_or_else(|| {
-                CraneliftError::Codegen(format!(
-                    "TyDesc not found for type {:?} in native call", tydesc_ty
-                ))
-            })?;
-            let tydesc_gv = self.module.declare_data_in_func(tydesc_id, builder.func);
-            let tydesc_addr = builder.ins().symbol_value(PTR_TYPE, tydesc_gv);
+            let tydesc_addr = self.operand_tydesc(builder, arg)?;
 
             call_args.push(arg_ptr);
             call_args.push(tydesc_addr);

@@ -512,14 +512,28 @@ pub fn lower_expression<'db>(
             let names_a_type_param = |hint: &datalove_datafun_ast::datalit::ast::TypeHint<'db>| {
                 datalove_datafun_ir::type_hint_mentions_param(hint, &type_params)
             };
+            // A borrowed parameter is not converted: the callee gets the value
+            // as it stands, and a descriptor saying what it is, and never drops
+            // it. Only a parameter the callee takes ownership of is erased,
+            // because that one needs a slot and `data` is the shape that fits.
             let param_is_erased: Vec<bool> = target
                 .map(|t| t.func(ctx.db).params(ctx.db).iter()
-                    .map(|p| names_a_type_param(&p.type_hint))
+                    .map(|p| {
+                        let borrowed = matches!(p.mode, ast::ParamMode::Ref | ast::ParamMode::Mut);
+                        !borrowed && names_a_type_param(&p.type_hint)
+                    })
                     .collect())
                 .unwrap_or_default();
             let param_types: Vec<IrType> = target
                 .map(|t| t.func(ctx.db).params(ctx.db).iter()
-                    .map(|p| IrType::from_type_hint_erasing(ctx.db, &p.type_hint, &type_params))
+                    .enumerate()
+                    .map(|(i, p)| {
+                        if param_is_erased.get(i).copied().unwrap_or(false) {
+                            IrType::from_type_hint_erasing(ctx.db, &p.type_hint, &type_params)
+                        } else {
+                            IrType::from_type_hint(ctx.db, &p.type_hint)
+                        }
+                    })
                     .collect())
                 .unwrap_or_default();
             // The erased return shape is the callee's return type with `data`

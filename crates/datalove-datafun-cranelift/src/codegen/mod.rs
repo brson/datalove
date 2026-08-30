@@ -124,6 +124,12 @@ pub fn build_signature_for_func(
         sig.params.push(cl_ir::AbiParam::new(PTR_TYPE));
     }
 
+    // Then a descriptor for each parameter whose type does not describe what
+    // arrives, which the call site knows and this function does not.
+    for _ in &func_ctx.descriptor_params {
+        sig.params.push(cl_ir::AbiParam::new(PTR_TYPE));
+    }
+
     // No register return values. All returns use sret.
 
     sig
@@ -189,6 +195,9 @@ pub struct FunctionCompiler<'a, M: Module> {
     blocks: HashMap<BlockId, cl_ir::Block>,
     /// Mapping from IR ParamId to Cranelift Value (user params, not rt_handle).
     param_values: HashMap<ParamId, cl_ir::Value>,
+    /// Descriptors the caller supplied, for parameters whose own type does not
+    /// describe what arrives. See `FunctionContext::descriptor_params`.
+    descriptor_values: HashMap<ParamId, cl_ir::Value>,
     /// Mapping from local IR FuncId to Cranelift FuncId.
     local_funcs: HashMap<datalove_datafun_ir::CodeUnitId, FuncId>,
     /// Mapping from module function (IrModuleId, FuncId) to Cranelift FuncId.
@@ -243,6 +252,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             values: HashMap::new(),
             blocks: HashMap::new(),
             param_values: HashMap::new(),
+            descriptor_values: HashMap::new(),
             local_funcs: HashMap::new(),
             module_funcs: HashMap::new(),
             registry: None,
@@ -287,6 +297,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             values: HashMap::new(),
             blocks: HashMap::new(),
             param_values: HashMap::new(),
+            descriptor_values: HashMap::new(),
             local_funcs: HashMap::new(),
             module_funcs: HashMap::new(),
             registry: None,
@@ -333,6 +344,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             values: HashMap::new(),
             blocks: HashMap::new(),
             param_values: HashMap::new(),
+            descriptor_values: HashMap::new(),
             local_funcs: HashMap::new(),
             module_funcs: HashMap::new(),
             registry,
@@ -434,12 +446,19 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             1
         };
 
-        // User params start after implicit params.
-        // Store them for lookup by ParamId.
-        for (i, &val) in param_values[user_param_start..].iter().enumerate() {
+        // User params start after implicit params, and the descriptors the
+        // caller supplied follow them.
+        let user_param_count = self.func_ctx.param_types.len();
+        for (i, &val) in param_values[user_param_start..].iter().take(user_param_count).enumerate() {
             let param_id = ParamId(i as u32);
             // Track param values for get_operand_value.
             self.param_values.insert(param_id, val);
+        }
+        let descriptor_start = user_param_start + user_param_count;
+        for (&param_id, &val) in self.func_ctx.descriptor_params.iter()
+            .zip(param_values[descriptor_start..].iter())
+        {
+            self.descriptor_values.insert(param_id, val);
         }
 
         // Initialize aggregate slots and tracking bytes region.
@@ -1216,6 +1235,7 @@ mod tests {
             const_values: vec![],
             symbols: SymbolTable::default(),
             context: CodeUnitContext::Function(FunctionContext {
+            descriptor_params: Vec::new(),
                 params: vec![],
                 param_modes: vec![],
                 param_types: vec![],
@@ -1397,6 +1417,7 @@ mod tests {
             const_values: vec![],
             symbols: SymbolTable::default(),
             context: CodeUnitContext::Function(FunctionContext {
+            descriptor_params: Vec::new(),
                 params: vec![],
                 param_modes: vec![],
                 param_types: vec![],
