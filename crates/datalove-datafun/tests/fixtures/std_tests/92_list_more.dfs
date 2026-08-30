@@ -1,0 +1,22 @@
+require module sys/std/list
+
+import list.first
+import list.last
+import list.clear
+import list.len
+
+// first and last are written over the generic natives in datafun, with no
+// native of their own.
+let nums: [u32] = [10, 20, 30]
+let strs: [string] = ["alpha", "beta"]
+let empty: [u32] = []
+
+let ends = (first(ref nums), last(ref nums), first(ref strs), last(ref strs))
+let no_ends = (first(ref empty), last(ref empty))
+
+var doomed: [string] = ["a", "b", "c"]
+let before = len(ref doomed)
+clear(mut doomed)
+let after = len(ref doomed)
+
+let output = (ends, no_ends, before, after)

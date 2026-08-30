@@ -17,6 +17,7 @@ import std.list_len
 import std.list_get
 import std.list_push
 import std.list_pop
+import std.list_clear
 
 // The number of elements.
 fun len<T>(ref self: [T]): index
@@ -36,6 +37,22 @@ end fun
 // Append an element.
 fun push<T>(mut self: [T], elem: T)
   list_push(mut self, elem)
+end fun
+
+// The first element, or none if there are none.
+fun first<T>(ref self: [T]): ?T
+  ret list_get(ref self, : index / 0)
+end fun
+
+// The last element, or none if there are none. The subtraction carries the
+// empty case: `-?` gives up on underflow, which returns none from here.
+fun last<T>(ref self: [T]): ?T
+  ret list_get(ref self, list_len(ref self) -? (: index / 1))
+end fun
+
+// Drop every element, leaving an empty list.
+fun clear<T>(mut self: [T])
+  list_clear(mut self)
 end fun
 
 // Take the last element off, or none if there are none.

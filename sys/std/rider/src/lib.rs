@@ -1119,3 +1119,16 @@ pub extern "C-unwind" fn dlr_std__list_pop(
         }
     }
 }
+
+#[no_mangle]
+pub extern "C-unwind" fn dlr_std__list_clear(
+    rt: *mut u8,
+    list_ptr: *mut u8, list_td: *const u8,
+    _out: *mut u8, _out_td: *const u8,
+) -> u8 {
+    unsafe {
+        datalove_rt::c::dtlv_rti_list_clear_local(
+            rt, list_ptr, list_td as *const rtdt::TyDesc,
+        ) as u8
+    }
+}
