@@ -10,6 +10,8 @@
 - [6. Expressions](#user-content-6-expressions)
 - [7. Place Expressions and Indexing](#user-content-7-place-expressions-and-indexing)
 - [8. Statements](#user-content-8-statements)
+  - [8.4 Const Parameters](#user-content-84-const-parameters)
+  - [8.5 Generic Functions](#user-content-85-generic-functions)
 - [9. Module System](#user-content-9-module-system)
   - [9.4 Native Riders](#user-content-94-native-riders)
 - [10. Numeric Widening](#user-content-10-numeric-widening)
@@ -285,7 +287,7 @@ type:
 let c: enum { atom Red, atom Blue } = (atom Red)@
 ```
 
-**Match.** Enums are destructured with `match` (see Section 8.5).
+**Match.** Enums are destructured with `match` (see Section 8.6).
 
 ### 3.7 Type Aliases
 
@@ -319,6 +321,10 @@ Examples:
 : f32 / 0xABABABAB     // hex as bit pattern
 ```
 
+A bare name in type position is a type alias (Section 3.7), or, within a generic
+function's signature or body, one of its type parameters (Section 8.5). Data
+literals have neither, so a name in a data literal's type is always an error.
+
 ## 5. Copy and Linear Types
 
 Types are classified as *copy* or *linear*.
@@ -331,6 +337,10 @@ Enums are copy if all variant payloads are copy.
 **Linear types** have move semantics: `int`, `string`, `[T]`, `%{K = V}`,
 `#{T}`, `{| ... |}`, `[|T, N|]`, `data`, `error`. Terms and enums with
 linear payloads are linear.
+
+A **type parameter** is linear, whatever it is instantiated with, because the
+caller may supply a linear type and the function is compiled once for all of
+them (Section 8.5).
 
 A linear value can be used exactly once. After a value is moved, subsequent
 uses are compile-time errors:
@@ -713,13 +723,33 @@ end fun
 ```
 
 A const expression may only name other consts, since it is evaluated before
-anything a parameter or a `let` is bound to exists. It may call functions, whose
-parameters are bound by the call. A module-level const has no enclosing
-function, so it cannot use the early-return operators.
+anything a parameter or a `let` is bound to exists. Naming a parameter or a
+`let` is an error (F058) even where a const of the same name is in scope.
+It may call functions, whose parameters are bound by the call. A module-level
+const has no enclosing function, so it cannot use the early-return operators.
 
-A module-level const is evaluated after the functions it calls are compiled. If
-it calls a function that itself names a module-level const, the two depend on
-each other and the compiler reports it.
+**Evaluation** runs the expression at compile time, by the same means that runs
+it at run time, so anything a function can compute a const can hold: not only
+scalars but `string`, `int`, and collections.
+
+```datalove
+const MSG: string = "hello"
+const BIG: int = 99999999999999999999
+const LST: [int] = [1, 2, 3]
+```
+
+A const names a value, not a place. In a function body each mention produces a
+fresh one, so a const of a linear type can be named as often as it is wanted and
+each use owns what it gets. At script top level a const of a linear type is
+currently treated as a binding that moves, so a second mention needs `@` to
+clone; the two contexts should agree and do not.
+
+**Ordering.** A module-level const is evaluated after the functions it calls are
+compiled, and before the functions that name it. Functions naming no
+module-level const are therefore compiled first, which is what lets a const call
+a function while another function reads that const. If a const calls a function
+that itself names a module-level const, the two depend on each other and the
+compiler reports it rather than choosing an order.
 
 **Set** mutates a var binding, mutable parameter, or indexed/chained target:
 
@@ -839,7 +869,118 @@ let x = repeat(COUNT, "ab")  // COUNT is a const binding
 function with dispatch over a tag of known instantiations. See
 `const-param-specialization.md` for design details.
 
-### 8.5 Control Flow
+### 8.5 Generic Functions
+
+A function may take type parameters, written after its name:
+
+```datalove
+fun pick_first<T>(a: T, b: T): T
+    ret a
+end fun
+
+fun unwrap_or<T>(x: ?T, default: T): T
+    if x |value|
+        ret value
+    else
+        ret default
+    end if
+end fun
+```
+
+A type parameter is a type like any other within the signature and the body. It
+is equal only to itself, so nothing in the body can inspect a value of that type
+or convert it to anything else.
+
+**Binding.** The call site does not name the types; they are read off the
+arguments. Each argument is matched against its parameter's type, and wherever
+the parameter has a type parameter, whatever the argument has in that position
+is what it stands for:
+
+```datalove
+unwrap_or(some (: u32 / 7), : u32 / 0)      // T is u32
+unwrap_or(some "hello", "fallback")         // T is string
+```
+
+The first argument to reach a type parameter fixes it, and the rest are checked
+against the result, so a disagreement is a type mismatch rather than a
+reinterpretation:
+
+```datalove
+pick_first(: u32 / 1, "not a u32")          // error: expected u32, found string
+```
+
+An argument that cannot say what it is on its own binds nothing, and is checked
+afterwards against whatever another argument fixed. So `none` is usable where
+something else determines the type:
+
+```datalove
+unwrap_or(none, "fallback")                 // T is string, from the second
+```
+
+Because the first argument fixes it, argument order decides which type a
+parameter is when more than one would do. An unsuffixed integer literal is
+`int`, so `pick_first(99, : u32 / 1)` makes `T` `int` and widens the `u32` into
+it, while the two written the other way round make `T` `u32`.
+
+**Where a type parameter may appear.** Anywhere on its own, and under `?` or `!`
+to any depth:
+
+```datalove
+fun flatten_or<T>(x: ??T, default: T): T
+fun ok_or<T>(x: !T, default: T): T
+```
+
+Under a collection -- a list, map, set, tensor, table, tuple, struct, or enum
+payload -- it may appear only in a `ref` or `mut` parameter, or in any parameter
+of a `native fun` (Section 9.4):
+
+```datalove
+fun len<T>(ref self: [T]): index               // ok
+fun sorted<T>(x: [T]): [T]                     // error: not erasable
+```
+
+The reason is representation, described below.
+
+**Representation.** A generic function is compiled once, not once per type. A
+type parameter has no fixed size, so where the callee takes ownership of a value
+of that type -- an `in` or `out` parameter, or the return -- the value is
+carried as a `data`, which holds a value of any type along with what is needed
+to clone and drop it. The call site converts into that shape on the way in and
+moves the value back out on the way back, because it is the place that knows the
+type.
+
+An option or a result holds its payload inline, so converting one means
+converting the payload and writing it where the other side keeps it, and a type
+parameter below one is reachable that way. A collection packs its elements by
+size, so converting `[u32]` to a list of `data` would mean rebuilding the
+collection element by element at every call. That is why an owned collection
+parameter is refused rather than silently paid for.
+
+A `ref` or `mut` parameter is not converted at all: the value is passed as it
+stands, and the descriptor saying what it really is comes from the call site.
+This costs nothing, which is why a type parameter under a collection is allowed
+there.
+
+**Copy and linearity.** A type parameter is never a copy type, because the
+caller may supply a linear one. A value taken out of an option by
+`if x |value|` has therefore moved out of `x`, so a function that wants to
+return the option it destructured must rebuild it:
+
+```datalove
+fun or_option<T>(self: ?T, other: ?T): ?T
+    if self |value|
+        ret some value        // not `ret self`, which has been moved out of
+    else
+        ret other
+    end if
+end fun
+```
+
+Reading an element out of a borrowed collection copies it, so it needs `@` to
+clone when the element type is a type parameter, as it does for any other
+non-copy element (Section 7.3).
+
+### 8.6 Control Flow
 
 **If statement:**
 
@@ -907,7 +1048,7 @@ are an error.
 
 The input expression is consumed (moved) by the match.
 
-### 8.6 Return
+### 8.7 Return
 
 `ret` returns a value from a function:
 
@@ -963,8 +1104,14 @@ using restricted syntax (`native fun` declarations and `type` aliases only):
 ```datalove
 native fun string_len(ref self: string): index
 native fun string_contains(ref haystack: string, ref needle: string): bool
-native fun list_push(mut self: [data], elem: data)
+native fun list_push<T>(mut self: [T], elem: T)
 ```
+
+A native function may take type parameters, and they are less restricted than
+on an ordinary function: because every parameter arrives as a pointer and a
+descriptor, a type parameter may sit under a collection in any parameter, not
+only a borrowed one (Section 8.5). The implementation reads the element type
+off the descriptor at runtime, so one implementation serves every element type.
 
 #### Rider Crate
 
