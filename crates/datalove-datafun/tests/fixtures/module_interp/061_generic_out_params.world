@@ -1,0 +1,59 @@
+----------
+module local/test/main
+----------
+
+// An out parameter of a generic function. The callee has no slot that fits a
+// value of a type it does not know, so it writes a `data`, and the call site
+// moves the value back out into the type it keeps there. That is what the
+// return value does, in the other direction.
+
+fun copy_out<T>(src: T, out dst: T): bool
+  set dst = src
+  ret true
+end fun
+
+// A type parameter under an option, on the way out.
+fun wrap_out<T>(src: T, out dst: ?T): bool
+  set dst = some src
+  ret true
+end fun
+
+// Two out parameters at once, of different types.
+fun pair_out<A, B>(a: A, b: B, out first: A, out second: B): bool
+  set first = a
+  set second = b
+  ret true
+end fun
+
+fun main(): (u32, string, int, ?string, u32, string, (u32, string))
+  // A copy type: nothing was dropped before the call, so the write back is a
+  // copying store.
+  var n: u32 = 1
+  let _1 = copy_out(: u32 / 42, out n)
+
+  // A linear type: the old value is dropped before the call and the written
+  // one moves in.
+  var s: string = "before"
+  let _2 = copy_out("after", out s)
+
+  var big: int = 1
+  let _3 = copy_out(99999999999999999999, out big)
+
+  var opt: ?string = none
+  let _4 = wrap_out("wrapped", out opt)
+
+  var p1: u32 = 0
+  var p2: string = ""
+  let _5 = pair_out(: u32 / 7, "second", out p1, out p2)
+
+  // A destination that is not a whole binding: the value is written through a
+  // reference to where the caller keeps it.
+  //
+  // Only the copy field is written here. Writing an out parameter over a
+  // linear field leaks what was there, generic or not, which is a bug in out
+  // parameters rather than in these.
+  var tup: (u32, string) = ((: u32 / 1), "old")
+  let _6 = copy_out(: u32 / 5, out tup.0)
+
+  ret (n, s, big, opt, p1, p2, tup)
+end fun

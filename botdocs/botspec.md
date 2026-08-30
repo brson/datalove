@@ -951,7 +951,9 @@ of that type -- an `in` or `out` parameter, or the return -- the value is
 carried as a `data`, which holds a value of any type along with what is needed
 to clone and drop it. The call site converts into that shape on the way in and
 moves the value back out on the way back, because it is the place that knows the
-type.
+type. An `out` parameter is the way back only: nothing worth converting arrives
+at one, so the callee is given a value of its own in the erased shape and what
+it writes is moved back out into whatever the caller keeps there.
 
 An option or a result holds its payload inline, so converting one means
 converting the payload and writing it where the other side keeps it, and a type

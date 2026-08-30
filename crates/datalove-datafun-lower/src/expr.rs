@@ -6,6 +6,7 @@
 use datalove_datafun_ast::ast::{self, ExprFun, ExprFunKind, ParamMode, ExprKey};
 use datalove_datafun_ir::{
     IrType, Operand, ValueId, BinOp, UnaryOp, Instruction, ConstValue, Terminator, TypeRef,
+    SlotDest,
 };
 use super::context::LowerCtx;
 use super::literal::{parse_int_const, parse_hex_const, parse_float_const, try_parse_negated_int_const};
@@ -570,17 +571,43 @@ pub fn lower_expression<'db>(
             // Lower each arg, tracking in-mode args as pending intermediates.
             let call_args = call.args(ctx.db);
             let mut args = Vec::with_capacity(call_args.len());
+            // Out parameters the callee writes in the erased shape, paired with
+            // where the caller wants the value once it is moved back out.
+            let mut erased_out_params: Vec<(Operand, ValueId)> = Vec::new();
             for (i, arg) in call_args.iter().enumerate() {
                 let mode = param_modes.get(i).copied().unwrap_or(ParamMode::In);
-                let arg_type = param_types.get(i);
+                // What is already at an out parameter has to be dropped before
+                // the callee writes, and whether it needs dropping is a
+                // question about the caller's type, not the erased one the
+                // callee was compiled for.
+                let erased_out = mode == ParamMode::Out
+                    && param_is_erased.get(i).copied().unwrap_or(false);
+                let callers_type;
+                let arg_type = if erased_out {
+                    callers_type = ctx.expr_type(*arg);
+                    Some(&callers_type)
+                } else {
+                    param_types.get(i)
+                };
                 let mut operand = lower_call_arg(ctx, *arg, mode, arg_type)?;
                 // Convert into the shape the erased callee was compiled for,
                 // which is the parameter's own type with `data` at each type
                 // parameter rather than `data` outright.
+                //
+                // An out parameter goes the other way. Nothing worth converting
+                // arrives at one: what was there has just been dropped, and the
+                // callee is going to write. So the callee is given a value of
+                // its own in the erased shape and what it writes is moved back
+                // out into the caller's, below, which is the same thing the
+                // return value does.
                 if param_is_erased.get(i).copied().unwrap_or(false) {
                     let erased_shape = param_types[i].clone();
                     let erased = ctx.fresh_value(erased_shape);
-                    ctx.emit(Instruction::Erase { dest: erased, src: operand });
+                    if mode == ParamMode::Out {
+                        erased_out_params.push((operand.clone(), erased));
+                    } else {
+                        ctx.emit(Instruction::Erase { dest: erased, src: operand });
+                    }
                     operand = Operand::Value(erased);
                 }
                 // Track in-mode args as pending intermediate.
@@ -621,6 +648,38 @@ pub fn lower_expression<'db>(
             } else {
                 ctx.emit_call(dest, func_ref, args);
             }
+            // Move what the callee wrote to an erased out parameter back out
+            // into the type the caller keeps there.
+            for (dest_operand, written) in erased_out_params {
+                let real_ty = ctx.operand_type(dest_operand.clone())
+                    .ok_or_else(|| LowerError::NotImplemented(
+                        "out parameter of a generic function has no type here".to_string()
+                    ))?
+                    .clone();
+                let reified = ctx.fresh_value(real_ty.clone());
+                ctx.emit(Instruction::Reify { dest: reified, src: Operand::Value(written) });
+                match dest_operand {
+                    Operand::Slot(slot) => {
+                        // A copy type was not dropped before the call, so its
+                        // slot still holds something and takes a copying store.
+                        if real_ty.is_copy() {
+                            ctx.emit_slot_store_copy(SlotDest::Local(slot), Operand::Value(reified));
+                        } else {
+                            ctx.emit_slot_store_move(SlotDest::Local(slot), Operand::Value(reified));
+                        }
+                    }
+                    // Anything else the argument lowered to is a reference to
+                    // where the caller keeps the value: a field, or an element.
+                    // The old value there was dropped before the call.
+                    reference => {
+                        ctx.emit(Instruction::RefStore {
+                            dest: reference,
+                            value: Operand::Value(reified),
+                        });
+                    }
+                }
+            }
+
             // Args consumed by Call/ComptimeCall; pop scope.
             ctx.clear_pending_intermediates();
             ctx.pop_pending_scope();

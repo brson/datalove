@@ -1,0 +1,97 @@
+ModulesAnalysis(
+    typecheck: TypecheckResult(
+        status: "Success",
+    ),
+    lowering: LoweringResult(
+        status: "Success",
+        ir: """
+            fn copy_out(p0, p1):
+            block0:
+                v0 = move p0
+                store.tracked p1, v0
+                v1 = const true
+                return v1
+            
+            fn wrap_out(p0, p1):
+            block0:
+                v0 = move p0
+                v1 = some v0
+                store.tracked p1, v1
+                v2 = const true
+                return v2
+            
+            fn pair_out(p0, p1, p2, p3):
+            block0:
+                v0 = move p0
+                store.tracked p2, v0
+                v1 = move p1
+                store.tracked p3, v1
+                v2 = const true
+                return v2
+            
+            fn main():
+            block0:
+                v0 = const 1u32
+                store.copy s0, v0
+                v1 = const 42u32
+                v2 = erase v1
+                v4 = call @0 m0.u0(v2, v3)
+                v5 = reify v3
+                store.copy s0, v5
+                v6 = const "before"
+                store.move.tracked s1, v6
+                v7 = const "after"
+                v8 = erase v7
+                v10 = call @1 m0.u0(v8, v9)
+                v11 = reify v9
+                store.move.tracked s1, v11
+                v12 = const 1int
+                store.move.tracked s2, v12
+                v13 = const 99999999999999999999int
+                v14 = erase v13
+                v16 = call @2 m0.u0(v14, v15)
+                v17 = reify v15
+                store.move.tracked s2, v17
+                v18 = none
+                store.move.tracked s3, v18
+                v19 = const "wrapped"
+                v20 = erase v19
+                v22 = call @3 m0.u1(v20, v21)
+                v23 = reify v21
+                store.move.tracked s3, v23
+                v24 = const 0u32
+                store.copy s4, v24
+                v25 = const ""
+                store.move.tracked s5, v25
+                v26 = const 7u32
+                v27 = erase v26
+                v28 = const "second"
+                v29 = erase v28
+                v32 = call @4 m0.u2(v27, v29, v30, v31)
+                v33 = reify v30
+                store.copy s4, v33
+                v34 = reify v31
+                store.move.tracked s5, v34
+                v35 = const 1u32
+                v36 = const "old"
+                v37 = pack Tuple2 {v35, v36}
+                store.move.tracked s6, v37
+                v38 = const 5u32
+                v39 = erase v38
+                v40 = getfieldref s6.0
+                v42 = call @5 m0.u0(v39, v41)
+                v43 = reify v41
+                refstore *v40, v43
+                v44 = load.copy s0
+                v45 = load.move.tracked s1
+                v46 = load.move.tracked s2
+                v47 = load.move.tracked s3
+                v48 = load.copy s4
+                v49 = load.move.tracked s5
+                v50 = load.move.tracked s6
+                v51 = pack Tuple7 {v44, v45, v46, v47, v48, v49, v50}
+                return v51
+        """,
+    ),
+    output: "(42, \"after\", 99999999999999999999, some \"wrapped\", 7, \"second\", (5, \"old\"))",
+)
