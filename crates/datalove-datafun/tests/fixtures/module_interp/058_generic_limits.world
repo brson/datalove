@@ -15,6 +15,15 @@ fun mismatch(): u32
   ret pick_first(: u32 / 1, "not a u32")
 end fun
 
+// Which type a parameter is fixed at depends on argument order. An unsuffixed
+// integer literal stands for `int` on its own, so it fixes T at `int` here and
+// the `u32` after it is accepted by widening into that. Written the other way
+// round T would be `u32` and the literal would check against it. Both are
+// fine; they just do not name the same T.
+fun order_chooses_the_type(): int
+  ret pick_first(99, : u32 / 1)
+end fun
+
 // Erasure converts a value into the shape the callee was compiled for. An
 // option holds its payload inline, so converting one means converting the
 // payload and writing it at the other side's offset, and a parameter under an

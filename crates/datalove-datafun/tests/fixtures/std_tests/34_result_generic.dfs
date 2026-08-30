@@ -1,0 +1,25 @@
+require module sys/std/result
+
+import result.unwrap_or
+import result.is_ok
+import result.is_err
+import result.to_option
+
+// The same result functions over types that are not copy.
+let ok_str: !string = ok "fine"
+let err_str: !string = er error "broke"
+let ok_big: !int = ok 12345678901234567890
+
+let from_ok = unwrap_or(ok_str, "fallback")
+let from_err = unwrap_or(err_str, "fallback")
+let from_int = unwrap_or(ok_big, 0)
+
+let probe_ok: !string = ok "yes"
+let probe_err: !string = er error "no"
+let flags = (is_ok(probe_ok), is_err(probe_err))
+
+let conv_ok: !string = ok "converted"
+let conv_err: !string = er error "dropped"
+let opts = (to_option(conv_ok), to_option(conv_err))
+
+let output = (from_ok, from_err, from_int, flags, opts)

@@ -1,0 +1,39 @@
+require module sys/std/option
+
+import option.unwrap_or
+import option.is_some
+import option.or_option
+import option.and_option
+import option.xor_option
+
+// The same option functions over types that are not copy, which is what the
+// monomorphic `?u32` versions could not serve.
+let s: ?string = some "present"
+let s_missing: ?string = none
+let big: ?int = some 12345678901234567890
+
+let from_string = unwrap_or(s, "absent")
+let from_missing = unwrap_or(s_missing, "absent")
+let from_int = unwrap_or(big, 0)
+
+// A tuple element type, to show the parameter is not restricted to scalars.
+let pair: ?(u32, string) = some ((: u32 / 7), "seven")
+let from_pair = unwrap_or(pair, ((: u32 / 0), "none"))
+
+// The combinators over a non-copy type.
+let first: ?string = some "first"
+let second: ?string = some "second"
+let picked = or_option(first, second)
+
+let present: ?string = some "yes"
+let absent: ?string = none
+let anded = and_option(present, absent)
+
+let only_left: ?string = some "left"
+let no_right: ?string = none
+let xored = xor_option(only_left, no_right)
+
+let flag: ?string = some "here"
+let has = is_some(flag)
+
+let output = (from_string, from_missing, from_int, from_pair, picked, anded, xored, has)

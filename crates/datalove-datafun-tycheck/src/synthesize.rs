@@ -902,15 +902,7 @@ fn synthesize_function_call<'db>(
             arg_ty.ok()
         });
         let Some(Type::Datalit(arg_dt)) = arg_ty else { continue };
-        if let Err(conflict) = bind_type_params(db, param_dt, &arg_dt, &mut bindings) {
-            let err = ctx.error_type_mismatch(
-                *arg,
-                &datalit::tycheck::type_to_string(db, &conflict.bound),
-                &datalit::tycheck::type_to_string(db, &conflict.found),
-                "type parameter already fixed by an earlier argument",
-            );
-            return Err(err);
-        }
+        bind_type_params(db, param_dt, &arg_dt, &mut bindings);
     }
 
     // Check each argument type, setting ref/mut context for ref/mut/out params.

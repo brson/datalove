@@ -18,43 +18,24 @@ use salsa::Database as Db;
 /// What the type parameters of one call were bound to.
 pub type TypeParamBindings<'db> = HashMap<InternedText<'db>, Type<'db>>;
 
-/// A type parameter that two arguments wanted to be two different types.
-///
-/// `swap(a, b)` over an `int` and a `string` produces one of these rather than
-/// silently reinterpreting the second argument as the first one's type.
-pub struct TypeParamConflict<'db> {
-    pub name: InternedText<'db>,
-    pub bound: Type<'db>,
-    pub found: Type<'db>,
-}
-
 /// Bind the type parameters in `param` from the corresponding parts of `arg`.
 ///
-/// Shape disagreements are not errors here. A call that passes a `{int: int}`
-/// where the signature wants a `[T]` binds nothing and is reported by the
-/// argument check that follows, which knows the expression to blame.
+/// Nothing here reports. The first argument reaching a parameter fixes it and
+/// later ones do not disturb it, and every argument is then checked against
+/// the parameter type with the bindings applied, which is the pass that knows
+/// which expression to blame. Deciding a disagreement here would be wrong as
+/// well as redundant: an argument's synthesized type is not what it will be
+/// checked at, so `unwrap_or(ok_u32, 99)` would look like `u32` against `int`
+/// when `99` checks against `u32` perfectly well.
 pub fn bind_type_params<'db>(
     db: &'db dyn Db,
     param: &Type<'db>,
     arg: &Type<'db>,
     bindings: &mut TypeParamBindings<'db>,
-) -> Result<(), TypeParamConflict<'db>> {
+) {
     match (param, arg) {
         (Type::Var(name), found) => {
-            match bindings.get(name) {
-                Some(bound) if !datalit::tycheck::types_equivalent(db, bound, found) => {
-                    Err(TypeParamConflict {
-                        name: *name,
-                        bound: bound.clone(),
-                        found: found.clone(),
-                    })
-                }
-                Some(_) => Ok(()),
-                None => {
-                    bindings.insert(*name, found.clone());
-                    Ok(())
-                }
-            }
+            bindings.entry(*name).or_insert_with(|| found.clone());
         }
 
         (Type::List(p), Type::List(a)) => {
@@ -77,52 +58,48 @@ pub fn bind_type_params<'db>(
         }
 
         (Type::Map(p), Type::Map(a)) => {
-            bind_type_params(db, &p.key_type, &a.key_type, bindings)?;
-            bind_type_params(db, &p.value_type, &a.value_type, bindings)
+            bind_type_params(db, &p.key_type, &a.key_type, bindings);
+            bind_type_params(db, &p.value_type, &a.value_type, bindings);
         }
 
         (Type::AnonTuple(p), Type::AnonTuple(a)) => {
             for (pf, af) in p.fields.iter().zip(a.fields.iter()) {
-                bind_type_params(db, pf, af, bindings)?;
+                bind_type_params(db, pf, af, bindings);
             }
-            Ok(())
         }
 
         (Type::AnonStruct(p), Type::AnonStruct(a)) => {
             for (pf, af) in p.fields.iter().zip(a.fields.iter()) {
                 if pf.name != af.name {
-                    return Ok(());
+                    return;
                 }
-                bind_type_params(db, &pf.ty, &af.ty, bindings)?;
+                bind_type_params(db, &pf.ty, &af.ty, bindings);
             }
-            Ok(())
         }
 
         (Type::Table(p), Type::Table(a)) => {
             for (pc, ac) in p.columns.iter().zip(a.columns.iter()) {
                 if pc.name != ac.name {
-                    return Ok(());
+                    return;
                 }
-                bind_type_params(db, &pc.ty, &ac.ty, bindings)?;
+                bind_type_params(db, &pc.ty, &ac.ty, bindings);
             }
-            Ok(())
         }
 
         (Type::Enum(p), Type::Enum(a)) => {
             for (pv, av) in p.variants.iter().zip(a.variants.iter()) {
                 if pv.name != av.name {
-                    return Ok(());
+                    return;
                 }
                 if let (Some(pp), Some(ap)) = (&pv.payload, &av.payload) {
-                    bind_type_params(db, pp, ap, bindings)?;
+                    bind_type_params(db, pp, ap, bindings);
                 }
             }
-            Ok(())
         }
 
         // Either the parameter holds no type parameter here, or the two shapes
         // disagree. Both are for the argument check to speak to.
-        _ => Ok(()),
+        _ => {}
     }
 }
 

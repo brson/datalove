@@ -181,7 +181,7 @@
     },
     "eval": {
       "SuccessExpr": {
-        "ty": "u32",
+        "ty": "int",
         "value": "3"
       }
     },
