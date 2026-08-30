@@ -2,10 +2,7 @@ ModulesAnalysis(
     typecheck: TypecheckResult(
         status: "Error",
         errors: [
-            "local/test/main: TypeParamNotErasable(\"T\")",
-            "local/test/main: TypeParamNotErasable(\"K\")",
-            "local/test/main: TypeParamNotErasable(\"T\")",
-            "local/test/main: TypeMismatch { expected: \"u32\", actual: \"string\" }",
+            "line 57, col 15: error[F011]: cannot index [T], whose element type is a type parameter; use the list functions in sys/std/list, which read the element type at run time",
         ],
     ),
     lowering: LoweringResult(

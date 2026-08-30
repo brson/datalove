@@ -1350,6 +1350,23 @@ pub(crate) fn resolve_index_types<'db>(
     db: &'db dyn crate::Db,
     base_ty: &Type<'db>,
 ) -> Result<(Type<'db>, Type<'db>), String> {
+    // Indexing works out where an element sits from the type of the collection,
+    // and a generic function's type for one says `data` where its type
+    // parameter was written, so the stride would be a `data`'s and the read
+    // would land between elements. The descriptor that says what the elements
+    // really are reaches the native list functions but not this, so a
+    // collection whose elements are a type parameter is indexed through those.
+    if let Type::Datalit(dt) = base_ty {
+        if contains_type_param(dt) {
+            return Err(format!(
+                "cannot index {}, whose element type is a type parameter; \
+                 use the list functions in sys/std/list, which read the \
+                 element type at run time",
+                type_to_string(db, base_ty),
+            ));
+        }
+    }
+
     match base_ty {
         Type::Datalit(datalit::tycheck::Type::List(list)) => {
             Ok((

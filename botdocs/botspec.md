@@ -983,9 +983,12 @@ fun or_option<T>(self: ?T, other: ?T): ?T
 end fun
 ```
 
-Reading an element out of a borrowed collection copies it, so it needs `@` to
-clone when the element type is a type parameter, as it does for any other
-non-copy element (Section 7.3).
+A collection whose elements are a type parameter cannot be indexed. Indexing
+works out where an element sits from the type of the collection, and a generic
+function's type for one says `data` where the parameter was written, so the
+stride would be wrong. The native list functions read the element type from the
+descriptor that travels with the collection, so `sys/std/list` reaches an
+element where the index operator cannot.
 
 ### 8.6 Control Flow
 
