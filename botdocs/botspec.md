@@ -990,6 +990,9 @@ stride would be wrong. The native list functions read the element type from the
 descriptor that travels with the collection, so `sys/std/list` reaches an
 element where the index operator cannot.
 
+The rest of what generics do not reach, and why each is where it is, is in
+[Where this stands](plan-generics.md#user-content-where-this-stands).
+
 ### 8.6 Control Flow
 
 **If statement:**
@@ -1389,8 +1392,6 @@ The following features appear in design documents but are not yet implemented:
   Mutation of sub-tensor views via `mut` params is rejected;
   element-level mutation through a view requires direct `set` on the
   original tensor with chained indexing.
-- Set membership operations (contains, insert, remove) -- sets exist as a
-  type but have no element-level operations beyond literals
 - Arena blocks
 - Memoization
 - Type introspection (`@type`)

@@ -9,6 +9,7 @@ Reference for the datalove-datafun compiler architecture.
   - [Phase 5: IR Lowering Detail](#user-content-phase-5-ir-lowering-detail)
   - [Const Parameter Specialization](#user-content-const-parameter-specialization)
   - [Const Evaluation](#user-content-const-evaluation)
+- [Generics](#user-content-generics)
 - [Script Compilation Pipeline](#user-content-script-compilation-pipeline)
 - [IR Types](#user-content-ir-types)
   - [IDs](#user-content-ids)
@@ -169,6 +170,24 @@ cannot tier separately from a cold one.
 
 Monomorphization is smaller, faster to compile, and gives the tiering what it wants.
 This is worth revisiting; see [Generics and Specialization](plan-generics.md).
+
+## Generics
+
+A generic function is compiled once, with `data` standing where a type parameter
+was written. A parameter the callee owns is converted into that shape at the
+call site and the value moved back out on the way back; a parameter it borrows
+is not converted at all, and the descriptor saying what the value really is
+comes from the call site, recorded in `FunctionContext::descriptor_params`.
+
+The pieces: `Var` in `datalit::tycheck::Type`, built only by datafun-resolve
+seeding the alias map; `IrType::from_datalit` mapping it to `data`, which is
+the whole of erasure; `bind_type_params` and `substitute_type_params` in
+`datafun-common::generics`; `Erase` and `Reify` at call boundaries.
+
+What it does not do yet -- owned collections, indexing a collection of a type
+parameter, bounds -- and why, is in
+[Where this stands](plan-generics.md#user-content-where-this-stands). Read that
+before assuming something is a bug.
 
 **Call site handling:** The lowering phase emits `ComptimeCall` instructions for calls to
 functions with const parameters. During specialization, these are transformed to emit the

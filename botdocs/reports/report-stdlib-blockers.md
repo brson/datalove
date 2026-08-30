@@ -8,6 +8,13 @@ seventeen modules and 699 functions with most of its stated blockers gone. Its c
 claim, that linear types made `int` unwritable, was wrong when written or shortly after.
 Treat the numbers here as a snapshot too, and check them before relying on them.
 
+**Since this was written, generics landed.** `option`, `result`, `list`, `map` and `set`
+are generic over what they hold, so the largest blocker below is gone and the `list` and
+set-operation gaps with it. What generics do and do not reach now is
+[Where this stands](../plan-generics.md#user-content-where-this-stands); read that rather
+than inferring it from this report. The rest of what follows -- the numeric duplication,
+closures, `for` -- still holds.
+
 ## Current state
 
 Seventeen modules, 699 functions, 74 test fixtures. Each fixture runs on the interpreter
@@ -64,11 +71,14 @@ comparison wrappers written out eight times.
 of it. Backburner on the roadmap.
 
 **No `for` loop.** Only `loop` and `loop while`. Iterating a collection means an index
-variable and manual bounds handling, which is why no list module has been attempted even
-monomorphically.
+variable and manual bounds handling. The `list` module exists now, over generic natives,
+but iterating one in datafun is still hand-rolled -- and a generic collection cannot be
+indexed at all, so a generic function has to reach elements through `sys/std/list`.
 
-**No set operations.** Sets exist as a type with literals and no `contains`, `insert` or
-`remove`. Noted in botspec appendix B.
+~~**No set operations.**~~ Fixed: `sys/std/set` has `contains`, `insert`, `remove`,
+`len`, `is_empty` and `clear`, generic over the element type, and `sys/std/map` the
+same for maps. `map.remove` gives back nothing rather than the value it removed,
+because the runtime's remove destroys the entry rather than yielding it.
 
 **No `==` on strings.** Comparisons are numeric-only; string equality goes through
 `string.eq` and `string.cmp`. Deliberate, but worth knowing before reaching for it.

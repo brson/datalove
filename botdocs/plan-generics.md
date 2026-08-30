@@ -17,7 +17,8 @@ monomorphization.
 - [Surface syntax](#user-content-surface-syntax)
 - [Const parameters after this](#user-content-const-parameters-after-this)
 - [What a first attempt found](#user-content-what-a-first-attempt-found)
-- [What landed](#user-content-what-landed)
+- [Where this stands](#user-content-where-this-stands) -- what works, and the
+  current limitations
 - [Order of work](#user-content-order-of-work)
 - [Prior art](#user-content-prior-art)
 
@@ -267,13 +268,80 @@ the stdlib blocker, and containers by descriptor.
 The order below is unchanged by this, but step 2 gets much smaller: `T := data`
 rather than a new IR type.
 
-## What landed
+## Where this stands
 
-Type parameters nest, up to the boundary the section above predicted. A
-parameter may sit at any depth inside options and results; a parameter under a
-collection is refused.
+Type parameters nest inside options and results to any depth, and sit under a
+collection in a borrowed parameter. What follows is the state of it, then the
+limitations, then how each was arrived at.
 
-**The type variable went into datalit after all, and it was cheap.** The section
+### What works
+
+Each of these was checked by compiling it, not by reading the rules.
+
+| Position | Bare `T` | `?T` `!T` `??T` | Collection: `[T]`, `%{K = V}`, `#{T}`, tuple, struct |
+|---|---|---|---|
+| `in`, owned | yes | yes | **no** |
+| `ref`, `mut` | yes | yes | yes |
+| `out` | yes | yes | **no** |
+| return | yes | yes | **no** |
+| any parameter of a `native fun` | yes | yes | yes |
+
+A call site names no types: each argument is matched against its parameter and
+the first to reach a parameter fixes it. `sys/std`'s `option`, `result`,
+`list`, `map` and `set` are written this way.
+
+### Limitations
+
+**A collection cannot be owned, returned, or written to an out parameter.**
+Refused with `TypeParamNotErasable`. A parameter the callee owns is carried as
+a `data`, since a type parameter has no size, and converting `[u32]` into a
+list of `data` means rebuilding it element by element at every call. A return
+and an out parameter are the same thing from the other end. Options and results
+escape this because they hold their payload inline, so converting one is
+converting the payload and writing it at the other side's offset.
+
+**A collection of a type parameter cannot be indexed.** Refused with F011.
+Indexing works out where an element sits from the static type, which inside a
+generic says `data`, so the stride would be a `data`'s and the read would land
+between elements. It typechecked and died at run time before this was refused.
+`sys/std/list` reaches an element instead, because the native list functions
+read the element type from the descriptor that travels with the collection.
+Making the index operator do the same needs an instruction meaning "use the
+descriptor this parameter came with" rather than the one the static type
+implies, in the IR and in each backend.
+
+**A generic out parameter has to be a whole binding or a field.** Both work;
+anything else is refused rather than written wrong.
+
+**The C backend refuses a function that takes a descriptor.** It has no native
+functions, and a supplied descriptor is only ever read by one, so it neither
+passes nor needs them. It says so rather than compiling a function that expects
+one. Whoever adds native calls there has to pass descriptors through as well.
+
+**No bounds, so no operations on a `T`.** A type parameter is equal only to
+itself and nothing can be done with a value of that type but move it, drop it,
+clone it, and hand it back. That rules out `map`, `and_then`, `filter` and
+anything else needing a function argument, though those want closures first.
+
+**A type parameter is always linear**, because the caller may supply a linear
+type. A value taken out of an option by `if x |v|` has moved out of `x`, so a
+function returning the option it destructured has to rebuild it with `some v`.
+
+**Which type a parameter is fixed at depends on argument order.** An unsuffixed
+integer literal is `int`, so `pick_first(99, : u32 / 1)` makes `T` `int` and
+widens the `u32` into it, while the two the other way round make `T` `u32`.
+Both check; they just do not name the same `T`.
+
+**Nothing is monomorphized.** One compiled function serves every
+instantiation, and every owned crossing costs a wrap and an unwrap. That is the
+intended trade for compilation speed; specializing hot instantiations is step 5
+below and may never be needed.
+
+### How it works
+
+**The type variable went into datalit, and it was cheap.**
+
+The section
 above treats that as the expensive branch, on an estimate of eighty match arms.
 Measured instead of estimated, adding `Var(InternedText)` to
 `datalit::tycheck::Type` costs seven sites in the whole workspace: printing it
@@ -312,40 +380,60 @@ a conversion, and a collection's elements are packed by size: `[u32]` and
 through appears to work because nothing touches the elements, but the callee
 holds a tydesc that lies about them, and the drop at the end of a generic that
 merely ignores its argument corrupts the allocator. That was checked, not
-reasoned about. `first_unerasable_type_param` now refuses those signatures with
+reasoned about. `first_unerasable_type_param` refuses those signatures with
 `TypeParamNotErasable`.
 
-Two adjacent facts worth knowing, both predating this work:
+**A borrowed collection escapes that, by not being converted.** Nothing happens
+to a `ref` or `mut` parameter at the boundary: the value goes across as it
+stands and the callee never drops it. What it lacks is a descriptor, since its
+own type says `data` where the parameter was written, and the call site has
+that. `FunctionContext::descriptor_params` records which parameters need one,
+and how it is carried is left to each backend: the interpreter needs nothing,
+because a value there is a pointer and a descriptor already, while the compiled
+backends take one extra pointer after the ordinary parameters.
 
-- Indexing a `[T]` fails with `NonCopyIndexProjection`, because reading an
-  element out consumes it from a container the caller still owns and an
-  unconstrained parameter is not copy. For a concrete non-copy element the
-  answer is `@`, which clones: `m[k]?@`. Whether `@` can clone an element whose
-  type is only known from a descriptor is the question the collection work has
-  to answer, since cloning is already tydesc-driven.
-- Map indexing itself is sound and was never the problem; an earlier draft of
-  this section said otherwise on the strength of three bad test programs, which
-  wrote `{u32 = u32}` as `{u32: u32}` (a struct), read `?` as producing an
-  option rather than propagating, and omitted the `@`. Fixture
-  `module_interp/060_map_index` now covers hit, miss, non-copy value and
-  non-copy key.
+That distinction is about ownership rather than shape. A parameter the callee
+owns needs a slot, and `data` is the one shape that fits any value. A parameter
+it borrows needs a pointer, which fits anything already.
+
+**The all-backends suite is what makes this safe to have.** Descriptor passing
+worked in the interpreter for a while before it worked anywhere else, because
+interpreter values carry their descriptors and the compiled backends pick one
+from the static type when they emit the call. Left enabled, that would have
+been a feature that worked in one backend and corrupted memory in the other
+two. It was caught by `std_all_tests`, with a segfault rather than a wrong
+answer, and refused until the backends agreed. Generic `len` passed all three
+even then, because `list_len` happens not to look at the element type, which is
+exactly the kind of accident that makes a wrong descriptor look like a working
+feature.
 
 ## Order of work
 
-1. **Fix CTFE.** The three open issues in
-   [Const Parameter Implementation](const-param-impl-plan.md): heap values leaking
-   through a call, collections of linear elements leaking, and calls in binary operand
-   position panicking lowering. These are prerequisites on every path, they are small,
-   and each is independently testable.
-2. **Add a type variable to `IrType`** and teach lowering to emit descriptor parameters
-   alongside erased values. This is the bulk of the work.
-3. **Erase and reify at call boundaries**, reusing the rider convention.
-4. **Write the stdlib that motivated this**: `option` and `result` over any `T`, then
-   `list`, `map` and `set`. This is the point of the exercise and should happen before
-   any optimization.
-5. **Only then**, if measurement says so, specialize hot instantiations in the JIT tier.
+Steps 1 to 4 are done. The type variable went into datalit rather than `IrType`,
+which is why step 2 reads as it does.
 
-Steps 1 and 4 are where the value is. Step 5 may never be needed.
+1. ~~**Fix CTFE.**~~ Done, along with module-level consts and const bindings no
+   longer moving when read.
+2. ~~**Add a type variable**~~ and teach lowering to emit descriptor parameters
+   alongside erased values. Done, in `datalit::tycheck::Type` and
+   `FunctionContext::descriptor_params`.
+3. ~~**Erase and reify at call boundaries**, reusing the rider convention.~~ Done.
+4. ~~**Write the stdlib that motivated this**~~: `option`, `result`, `list`,
+   `map` and `set` are all generic.
+5. **Only then**, if measurement says so, specialize hot instantiations in the
+   JIT tier. Nothing is monomorphized today.
+
+What is left, in the order it is worth doing:
+
+- **Descriptor-driven indexing**, which removes the largest remaining
+  limitation and is the one place the language still refuses something a reader
+  expects to work. Needs an IR instruction naming a descriptor a parameter came
+  with, plus its handling in each backend.
+- **Owned collections**, which need either that same instruction or
+  monomorphization. Whether they are worth the conversion is a question the
+  descriptor route answers by not converting at all.
+- **Bounds of some kind**, without which nothing can be done to a `T` but move
+  it. Closures are the bigger prerequisite for the functions people ask for.
 
 ## Prior art
 
