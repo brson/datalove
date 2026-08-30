@@ -1423,6 +1423,104 @@ pub unsafe extern "C-unwind" fn dtlv_rti_list_clear_local(
 }
 
 #[unsafe(no_mangle)]
+pub unsafe extern "C-unwind" fn dtlv_rti_list_len_local(
+    rt: LocalRtHandle,
+    list_value_ref: *const u8,
+    list_tydesc: *const rtdt::TyDesc,
+    len_out: *mut u8,
+) -> RtStatus {
+    debug_assert!(!rt.is_null(), "rt is null");
+    debug_assert!(!list_value_ref.is_null(), "list_value_ref is null");
+    debug_assert!(!list_tydesc.is_null(), "list_tydesc is null");
+    debug_assert!(!len_out.is_null(), "len_out is null");
+    debug_assert_aligned(list_value_ref, list_tydesc, "list_len:list");
+    unsafe {
+        let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
+        let list_tydesc_ref = rtdt::TyDescRef::from_ptr(list_tydesc);
+        crate::impls::list::list_len_impl(rt_ref, list_value_ref, list_tydesc_ref, len_out)
+    }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C-unwind" fn dtlv_rti_list_get_as_data_local(
+    rt: LocalRtHandle,
+    list_value_ref: *const u8,
+    list_tydesc: *const rtdt::TyDesc,
+    index: rtdt::IndexRepr,
+    option_value_out: *mut u8,
+    option_tydesc: *const rtdt::TyDesc,
+) -> RtStatus {
+    debug_assert!(!rt.is_null(), "rt is null");
+    debug_assert!(!list_value_ref.is_null(), "list_value_ref is null");
+    debug_assert!(!list_tydesc.is_null(), "list_tydesc is null");
+    debug_assert!(!option_value_out.is_null(), "option_value_out is null");
+    debug_assert!(!option_tydesc.is_null(), "option_tydesc is null");
+    debug_assert_aligned(list_value_ref, list_tydesc, "list_get_as_data:list");
+    debug_assert_aligned(option_value_out, option_tydesc, "list_get_as_data:option");
+    unsafe {
+        let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
+        let list_tydesc_ref = rtdt::TyDescRef::from_ptr(list_tydesc);
+        let option_tydesc_ref = rtdt::TyDescRef::from_ptr(option_tydesc);
+        crate::impls::list::list_get_as_data_impl(
+            rt_ref,
+            list_value_ref,
+            list_tydesc_ref,
+            index,
+            option_value_out,
+            option_tydesc_ref,
+        )
+    }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C-unwind" fn dtlv_rti_list_pop_as_data_local(
+    rt: LocalRtHandle,
+    list_value_mut: *mut u8,
+    list_tydesc: *const rtdt::TyDesc,
+    option_value_out: *mut u8,
+    option_tydesc: *const rtdt::TyDesc,
+) -> RtStatus {
+    debug_assert!(!rt.is_null(), "rt is null");
+    debug_assert!(!list_value_mut.is_null(), "list_value_mut is null");
+    debug_assert!(!list_tydesc.is_null(), "list_tydesc is null");
+    debug_assert!(!option_value_out.is_null(), "option_value_out is null");
+    debug_assert!(!option_tydesc.is_null(), "option_tydesc is null");
+    debug_assert_aligned(list_value_mut, list_tydesc, "list_pop_as_data:list");
+    debug_assert_aligned(option_value_out, option_tydesc, "list_pop_as_data:option");
+    unsafe {
+        let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
+        let list_tydesc_ref = rtdt::TyDescRef::from_ptr(list_tydesc);
+        let option_tydesc_ref = rtdt::TyDescRef::from_ptr(option_tydesc);
+        crate::impls::list::list_pop_as_data_impl(
+            rt_ref,
+            list_value_mut,
+            list_tydesc_ref,
+            option_value_out,
+            option_tydesc_ref,
+        )
+    }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C-unwind" fn dtlv_rti_list_push_data_local(
+    rt: LocalRtHandle,
+    list_value_mut: *mut u8,
+    list_tydesc: *const rtdt::TyDesc,
+    data_in: *const u8,
+) -> RtStatus {
+    debug_assert!(!rt.is_null(), "rt is null");
+    debug_assert!(!list_value_mut.is_null(), "list_value_mut is null");
+    debug_assert!(!list_tydesc.is_null(), "list_tydesc is null");
+    debug_assert!(!data_in.is_null(), "data_in is null");
+    debug_assert_aligned(list_value_mut, list_tydesc, "list_push_data:list");
+    unsafe {
+        let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
+        let list_tydesc_ref = rtdt::TyDescRef::from_ptr(list_tydesc);
+        crate::impls::list::list_push_data_impl(rt_ref, list_value_mut, list_tydesc_ref, data_in)
+    }
+}
+
+#[unsafe(no_mangle)]
 pub unsafe extern "C-unwind" fn dtlv_rti_list_get_local(
     rt: LocalRtHandle,
     list_value_ref: *const u8,

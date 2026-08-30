@@ -345,6 +345,155 @@ pub unsafe fn list_pop_impl(
 }
 
 // ============================================================================
+// Operations for a list whose element type is only known at runtime
+// ============================================================================
+//
+// A generic function is compiled once, so it has no static type for the
+// elements of the list it was handed and no descriptor for them either. What
+// it does have is the list's own descriptor, which names the element type, and
+// a static descriptor for `data`, which holds a value of any type along with
+// what is needed to clone and drop it. So these carry elements in and out as
+// `data`: the runtime reads the element type from the list and packs or
+// unpacks against it, and the caller only ever names `data`.
+
+/// The number of elements in a list.
+///
+/// The one list operation that needs nothing of the element type beyond its
+/// size, which the descriptor gives.
+pub unsafe fn list_len_impl(
+    _rt: &mut RtLocal,
+    list_value_ref: *const u8,
+    list_tydesc: rtdt::TyDescRef,
+    len_out: *mut u8,
+) -> RtStatus {
+    let element_ty = list_tydesc.list_element_ty();
+    let list = unsafe { ListRef::new(list_value_ref as *const List, element_ty) };
+    unsafe { std::ptr::write(len_out as *mut rtdt::Index, rtdt::Index(list.size())) };
+    RtStatus::Ok
+}
+
+/// Read the element at `index`, as a `data`, leaving the list intact.
+///
+/// `option_tydesc` describes a `?data`, which a generic caller has statically
+/// however little it knows about the elements.
+pub unsafe fn list_get_as_data_impl(
+    rt: &mut RtLocal,
+    list_value_ref: *const u8,
+    list_tydesc: rtdt::TyDescRef,
+    index: rtdt::IndexRepr,
+    option_value_out: *mut u8,
+    option_tydesc: rtdt::TyDescRef,
+) -> RtStatus {
+    let element_ty = list_tydesc.list_element_ty();
+    let list = unsafe { ListRef::new(list_value_ref as *const List, element_ty) };
+    let option_layout = rtdt::layout::compute_option_layout(option_tydesc);
+    let mut opt = unsafe { OptionWriter::new(option_value_out, &option_layout) };
+
+    if index >= list.size() {
+        opt.write_none();
+        return RtStatus::Ok;
+    }
+
+    // The list keeps its element, so the data gets a clone of it.
+    let rt_handle = rt as *mut RtLocal as crate::c::LocalRtHandle;
+    let status = unsafe {
+        crate::impls::boxing::data_clone_from_local(
+            rt_handle,
+            list.element_ptr(index),
+            element_ty.as_ptr(),
+            opt.payload_ptr(),
+        )
+    };
+    if status != RtStatus::Ok {
+        return status;
+    }
+
+    opt.write_some_tag();
+    RtStatus::Ok
+}
+
+/// Take the last element off the list, as a `data`.
+///
+/// The element is moved rather than cloned: the list gives it up.
+pub unsafe fn list_pop_as_data_impl(
+    rt: &mut RtLocal,
+    list_value_mut: *mut u8,
+    list_tydesc: rtdt::TyDescRef,
+    option_value_out: *mut u8,
+    option_tydesc: rtdt::TyDescRef,
+) -> RtStatus {
+    let element_ty = list_tydesc.list_element_ty();
+    let mut list = unsafe { ListMut::new(list_value_mut as *mut List, element_ty) };
+    let option_layout = rtdt::layout::compute_option_layout(option_tydesc);
+    let mut opt = unsafe { OptionWriter::new(option_value_out, &option_layout) };
+
+    if list.size() == 0 {
+        opt.write_none();
+        return RtStatus::Ok;
+    }
+
+    let last_index = list.size() - 1;
+    let rt_handle = rt as *mut RtLocal as crate::c::LocalRtHandle;
+    let status = unsafe {
+        crate::impls::boxing::data_from_local(
+            rt_handle,
+            list.element_ptr(last_index),
+            element_ty.as_ptr(),
+            opt.payload_ptr(),
+        )
+    };
+    if status != RtStatus::Ok {
+        return status;
+    }
+
+    list.set_size(last_index);
+    opt.write_some_tag();
+    RtStatus::Ok
+}
+
+/// Append the value a `data` holds to the list.
+///
+/// The data is consumed: what it held becomes the list's. It has to hold a
+/// value of the list's element type, which is the generic call site's
+/// responsibility, exactly as it is for reifying a return value.
+pub unsafe fn list_push_data_impl(
+    rt: &mut RtLocal,
+    list_value_mut: *mut u8,
+    list_tydesc: rtdt::TyDescRef,
+    data_in: *const u8,
+) -> RtStatus {
+    let element_ty = list_tydesc.list_element_ty();
+    let list_ptr = list_value_mut as *mut List;
+    let mut list = unsafe { ListMut::new(list_ptr, element_ty) };
+
+    if list.needs_grow() {
+        let new_capacity = calculate_new_capacity(list.capacity(), list.size() + 1);
+        let status = unsafe { grow_buffer(rt, list_ptr, element_ty, new_capacity) };
+        if status != RtStatus::Ok {
+            return status;
+        }
+        list = unsafe { ListMut::new(list_ptr, element_ty) };
+    }
+
+    // Move the value out of the data and straight into the new slot.
+    let rt_handle = rt as *mut RtLocal as crate::c::LocalRtHandle;
+    let status = unsafe {
+        crate::impls::boxing::data_into_local(
+            rt_handle,
+            data_in,
+            list.end_ptr(),
+            element_ty.as_ptr(),
+        )
+    };
+    if status != RtStatus::Ok {
+        return status;
+    }
+
+    list.set_size(list.size() + 1);
+    RtStatus::Ok
+}
+
+// ============================================================================
 // Insert and Remove Operations
 // ============================================================================
 

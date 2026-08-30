@@ -322,6 +322,59 @@ pub unsafe fn error_from_local(
     RtStatus::Ok
 }
 
+/// Create a Data holding a clone of a value the caller keeps.
+///
+/// The moving form, [`data_from_local`], is what a generic call site wants: it
+/// is handing the value over. Reading an element out of a container the caller
+/// still owns is the other case, and it has to leave the original intact, so
+/// the value is cloned rather than copied.
+///
+/// A scalar goes in the two words as it does for the moving form, because
+/// cloning one is copying it.
+///
+/// # Safety
+///
+/// `inner_in` must be an initialized value of the type `inner_tydesc`
+/// describes, and `dest_out` must have room for a `Data`.
+pub unsafe fn data_clone_from_local(
+    rt: LocalRtHandle,
+    inner_in: *const u8,
+    inner_tydesc: *const rtdt::TyDesc,
+    dest_out: *mut u8,
+) -> RtStatus {
+    let tytag = unsafe { (*inner_tydesc).type_tag };
+    if tytag.can_inline() {
+        unsafe {
+            let data = inline_data(inner_in, inner_tydesc, tytag);
+            std::ptr::write(dest_out as *mut rtdt::Data, data);
+        }
+        return RtStatus::Ok;
+    }
+
+    // Clone straight into the box the data will own, rather than cloning to a
+    // temporary and moving that in.
+    let box_ptr = unsafe {
+        crate::c::dtlv_rti_mem_alloc_local(rt, inner_tydesc, 1)
+    };
+    if box_ptr.is_null() {
+        return RtStatus::Error;
+    }
+
+    let status = unsafe {
+        crate::impls::clone::clone_value(rt, inner_in, inner_tydesc, box_ptr)
+    };
+    if status != RtStatus::Ok {
+        return status;
+    }
+
+    unsafe {
+        let data = rtdt::Data::from_pointers(inner_tydesc, box_ptr);
+        std::ptr::write(dest_out as *mut rtdt::Data, data);
+    }
+
+    RtStatus::Ok
+}
+
 /// Create a Data from any value (moves the value to heap).
 ///
 /// Allocates heap storage, copies the inner value, and creates a Data
