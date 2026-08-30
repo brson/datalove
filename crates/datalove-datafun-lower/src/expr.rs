@@ -576,38 +576,31 @@ pub fn lower_expression<'db>(
             let mut erased_out_params: Vec<(Operand, ValueId)> = Vec::new();
             for (i, arg) in call_args.iter().enumerate() {
                 let mode = param_modes.get(i).copied().unwrap_or(ParamMode::In);
-                // What is already at an out parameter has to be dropped before
-                // the callee writes, and whether it needs dropping is a
-                // question about the caller's type, not the erased one the
-                // callee was compiled for.
+                // An erased out parameter drops what was already there by
+                // erasing it into the value the callee is given, which the call
+                // then destroys as it does for any out parameter. So no
+                // separate drop is wanted, and passing no type asks for none.
                 let erased_out = mode == ParamMode::Out
                     && param_is_erased.get(i).copied().unwrap_or(false);
-                let callers_type;
-                let arg_type = if erased_out {
-                    callers_type = ctx.expr_type(*arg);
-                    Some(&callers_type)
-                } else {
-                    param_types.get(i)
-                };
+                let arg_type = if erased_out { None } else { param_types.get(i) };
                 let mut operand = lower_call_arg(ctx, *arg, mode, arg_type)?;
                 // Convert into the shape the erased callee was compiled for,
                 // which is the parameter's own type with `data` at each type
                 // parameter rather than `data` outright.
                 //
-                // An out parameter goes the other way. Nothing worth converting
-                // arrives at one: what was there has just been dropped, and the
-                // callee is going to write. So the callee is given a value of
-                // its own in the erased shape and what it writes is moved back
-                // out into the caller's, below, which is the same thing the
-                // return value does.
+                // An out parameter also comes back. What was there is erased
+                // into the value the callee is given, so that the call destroys
+                // it exactly once as it does for any out parameter, and what
+                // the callee writes there is moved back out into the caller's
+                // type below. That is the same thing the return value does, in
+                // the other direction.
                 if param_is_erased.get(i).copied().unwrap_or(false) {
                     let erased_shape = param_types[i].clone();
                     let erased = ctx.fresh_value(erased_shape);
                     if mode == ParamMode::Out {
                         erased_out_params.push((operand.clone(), erased));
-                    } else {
-                        ctx.emit(Instruction::Erase { dest: erased, src: operand });
                     }
+                    ctx.emit(Instruction::Erase { dest: erased, src: operand.clone() });
                     operand = Operand::Value(erased);
                 }
                 // Track in-mode args as pending intermediate.
@@ -656,6 +649,12 @@ pub fn lower_expression<'db>(
                         "out parameter of a generic function has no type here".to_string()
                     ))?
                     .clone();
+                // A reference names the type it points at, and that is what the
+                // value moved back out of the erased shape has to be.
+                let real_ty = match real_ty {
+                    IrType::Ref(inner) => (*inner).clone(),
+                    other => other,
+                };
                 let reified = ctx.fresh_value(real_ty.clone());
                 ctx.emit(Instruction::Reify { dest: reified, src: Operand::Value(written) });
                 match dest_operand {
@@ -673,12 +672,16 @@ pub fn lower_expression<'db>(
                     // one loses the value and leaks what it replaced, so it is
                     // refused rather than written wrong. Only a whole binding
                     // takes an out parameter of a generic function for now.
-                    other => {
-                        return Err(LowerError::NotImplemented(format!(
-                            "out parameter of a generic function written to {:?}; \
-                             only a whole binding works so far",
-                            other,
-                        )));
+                    // Anything else is a reference to where the caller keeps
+                    // the value: a field, or an element. What was there was
+                    // dropped before the call, so this is a write into a place
+                    // holding nothing, which is what the tracked store is for.
+                    // The plain one would destroy the old value a second time.
+                    reference => {
+                        ctx.emit(Instruction::RefStoreTracked {
+                            dest: reference,
+                            value: Operand::Value(reified),
+                        });
                     }
                 }
             }

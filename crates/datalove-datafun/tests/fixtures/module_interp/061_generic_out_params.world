@@ -7,8 +7,9 @@ module local/test/main
 // moves the value back out into the type it keeps there. That is what the
 // return value does, in the other direction.
 //
-// The destination has to be a whole binding. Writing back through a reference
-// to a field or an element loses the value, so that is refused for now.
+// What was already at the out parameter is erased into the value the callee is
+// given, so the call destroys it exactly once, the way it does for any out
+// parameter.
 
 fun copy_out<T>(src: T, out dst: T): bool
   set dst = src
@@ -28,7 +29,7 @@ fun pair_out<A, B>(a: A, b: B, out first: A, out second: B): bool
   ret true
 end fun
 
-fun main(): (u32, string, int, ?string, u32, string)
+fun main(): (u32, string, int, ?string, u32, string, (u32, string))
   // A copy type: nothing was dropped before the call, so the write back is a
   // copying store.
   var n: u32 = 1
@@ -49,5 +50,13 @@ fun main(): (u32, string, int, ?string, u32, string)
   var p2: string = ""
   let _5 = pair_out(: u32 / 7, "second", out p1, out p2)
 
-  ret (n, s, big, opt, p1, p2)
+  // A destination that is not a whole binding: the value goes back through a
+  // reference to where the caller keeps it. The linear field is the one worth
+  // having, since a wrong width there shows up as garbage and a missed drop as
+  // a leak.
+  var tup: (u32, string) = ((: u32 / 1), "replaced")
+  let _6 = copy_out(: u32 / 5, out tup.0)
+  let _7 = copy_out("written", out tup.1)
+
+  ret (n, s, big, opt, p1, p2, tup)
 end fun
