@@ -315,11 +315,11 @@ Execution:
     no work dir - a worldfile-derived one, for instance - cannot build them.
 
   Both end at `register_native`, so the interpreter sees no difference. Both
-  also return the raw addresses, which the JIT needs: it calls natives
-  directly rather than through the interpreter's table, so a driver must feed
-  them to `JitEngine::register_native_symbol`. `std_all_tests` does this; the
-  CLI does not, which is why `datalove script --jit` aborts on a script that
-  calls a rider function.
+  also return the raw addresses, which the JIT needs: it calls natives through
+  a trampoline built from the address rather than through the interpreter's
+  table, so a driver must feed them to `JitEngine::register_native_symbol` as
+  well. Missing that is not a fallback to the interpreter but a panic inside
+  JIT compilation, which aborts the process.
 
 Rider implementations follow the runtime C ABI:
 `extern "C-unwind" fn(rt, arg0_ptr, arg0_tydesc, ..., result_out, result_tydesc) -> u8`,
@@ -1048,6 +1048,7 @@ The three `module-change-*` kinds drive the memoization tests.
 | `datafun/src/pipeline/workspace.rs` | `WorkspaceDescriptor`, `WorkspaceDelta` |
 | `datafun/src/pipeline/rider_build.rs` | Native component synthesis and cargo build, for riders found on disk |
 | `datafun/src/pipeline/rider_load.rs` | `register_linked_natives`, `load_rider_library`, the C ABI bridge |
+| `cli/src/main.rs` | `register_natives()`, which wires both the interpreter table and the JIT |
 | `stdlib/build.rs` | Embeds `sys/` and builds and embeds the native component |
 | `stdlib/src/lib.rs` | `system_library()`, `native_component_staticlib()` |
 | `sys/std/rider/build.rs` | Generates `symbols()` from `rider.dli` |

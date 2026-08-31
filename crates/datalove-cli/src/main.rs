@@ -7,6 +7,36 @@ mod render;
 
 use datalove_datafun::pipeline::rider_load::register_linked_natives;
 
+/// Point an executor at the rider functions linked into this binary.
+///
+/// The interpreter calls them through its native table, and the JIT calls
+/// them directly, so it needs the addresses as well; a script that reaches a
+/// native call with a JIT that has not been told about it aborts the process.
+fn register_natives(
+    compiled: &datalove_datafun::pipeline::CompiledModules,
+    sys: &datalove_datafun::pipeline::SystemLibrary,
+    executor: &mut datalove_datafun::pipeline::ScriptExecutor,
+) -> AnyResult<()> {
+    use datalove_datafun_cranelift_jit::JitEngine;
+
+    let native_fn_ptrs = register_linked_natives(
+        &compiled.native_symbols(),
+        &sys.natives,
+        executor.native_table_mut(),
+    )?;
+
+    if let Some(dispatcher) = executor.take_dispatcher() {
+        if let Some(jit) = dispatcher.as_any().downcast_ref::<JitEngine>() {
+            for (symbol, ptr) in &native_fn_ptrs {
+                jit.register_native_symbol(symbol, *ptr);
+            }
+        }
+        executor.set_dispatcher(dispatcher);
+    }
+
+    Ok(())
+}
+
 fn main() -> AnyResult<()> {
     rmx::extras::init_crate_name(env!("CARGO_CRATE_NAME"));
 
@@ -421,12 +451,7 @@ impl ScriptCommand {
         let mut executor = compiled.script_executor(datafun::DebugOutputMode::Stderr, call_dispatcher)
             .expect("script_executor should succeed after error check");
 
-        // Point the interpreter at the rider functions linked into this binary.
-        register_linked_natives(
-            &compiled.native_symbols(),
-            &sys.natives,
-            executor.native_table_mut(),
-        )?;
+        register_natives(&compiled, &sys, &mut executor)?;
 
         // Read the script file.
         let script_source = rmx::std::fs::read_to_string(file_path)
@@ -732,12 +757,7 @@ impl ScriptWorldCommand {
         let mut executor = compiled.script_executor(datafun::DebugOutputMode::Stderr, None)
             .expect("script_executor should succeed after error check");
 
-        // Point the interpreter at the rider functions linked into this binary.
-        register_linked_natives(
-            &compiled.native_symbols(),
-            &sys.natives,
-            executor.native_table_mut(),
-        )?;
+        register_natives(&compiled, &sys, &mut executor)?;
 
         // Compile and execute the script section.
         let script_section = script_sections[0];
