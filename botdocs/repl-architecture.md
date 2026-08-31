@@ -10,7 +10,7 @@ are `mandocs/script-semantics.md`.
 ```
 datalove-repl-rat/      Widgets, rendering, and the terminal that drives them
   src/lib.rs            RatatuiApp: ReplApp plus a TextArea
-  src/render.rs         The three-panel layout, cards, menu, crash modal
+  src/render.rs         The three-panel layout, cards, menu, crash and engine modals
   src/term.rs           Terminal setup, event loop, key bindings
 
 datalove-repl/          Engine and the UI-agnostic app
@@ -21,7 +21,8 @@ datalove-repl/          Engine and the UI-agnostic app
 ```
 
 `datalove-cli` calls `datalove_repl_rat::run()` for the interactive REPL and
-`Engine::run_script` for `repl --script`.
+`Engine::run_script` for `repl --script`. Both take the system library from
+the caller - see below.
 
 There was a `datalove-repl-term` crate holding the terminal half. The split
 existed so a wasm frontend could reuse the widgets; that frontend was deleted
@@ -54,11 +55,18 @@ what lets the tests drive the state machine with a scripted mock.
 
 ## The engine
 
-`Engine::new` loads the system library through
-`WorkspaceDescriptor::load_default_sys()` and builds the native riders that
-`sys/std/string` needs, so a session can `require module sys/std/string` and
-call into it. It keeps the descriptor so a crash reset can rebuild the
-compiler and executor without re-reading `sys` from disk.
+`Engine::new(db, sys)` takes a `SystemLibrary` rather than going looking for
+one, and compiles it. The library carries the addresses of the native rider
+functions alongside the sources, so `register_linked_natives` can point the
+interpreter at them and a session can `require module sys/std/string` and call
+into it. The engine keeps the library and the descriptor it built, so a crash
+reset rebuilds the compiler and executor from them.
+
+`ThreadedExecutor::spawn` takes `fn() -> SystemLibrary` instead of a value:
+those addresses are raw pointers and so not `Send`, and the worker thread
+builds its own. `datalove-cli` passes `datalove_stdlib::system_library`, which
+is the copy embedded in the binary; see the compiler guide under "The Shipped
+Binary".
 
 Evaluation reports what a fragment defined by reading the compiled unit's
 `script_context().exports` - values, slots, and functions - rather than by
@@ -69,6 +77,30 @@ inside a fragment used to slip through as a successful binding.
 `Engine::run_source` is the one loop over a `---`-separated script. Both
 `repl --script` and the fixture tests use it, so the driver and the tests
 cannot drift.
+
+## When there is no engine
+
+Everything above assumes the engine started. When it does not, the app has to
+say so, because the request/response shape hides the failure perfectly: input
+is submitted, an entry is pushed as `Parsing`, and a response never comes.
+
+That was a real bug. Startup used to run `cargo build --release` to build the
+native riders; the worker unwrapped the result, so anything that stopped that
+build - no cargo, a stale checkout, another cargo holding the package cache
+lock - killed the thread, and every line the user typed sat at "parsing..."
+with nothing on screen to say why.
+
+So the worker reports its lifecycle. `start_engine` catches both a failed and
+a panicking startup and sends `WorkerResponse::EngineDead { message }`;
+success sends `EngineReady`. `ThreadedExecutor::try_recv_response` also turns
+a channel disconnect into `EngineDead`, once - reporting it repeatedly would
+spin `poll_results` - so a worker that dies mid-session cannot wedge the UI
+either. The renderer shows "starting engine..." until ready and an "Engine
+Gone" modal after, and `run()` prints the message again once the terminal is
+restored, so it survives in the scrollback.
+
+Startup no longer runs cargo, so the original cause is gone. The reporting
+stays because it is the difference between an error and a hang.
 
 ## Ownership at the prompt
 
@@ -95,10 +127,13 @@ an earlier unit stops being available.
 
 - **engine_tests** - 21 `.repl` fixtures through `Engine::run_source`,
   snapshotting the parse, eval, and environment after every input as JSON.
+  They run against `datalove_stdlib::system_library()`, so the suite covers
+  the library and the linked riders the binary actually ships.
   `BLESS=1` updates them; unset `RUST_BACKTRACE` first.
 - **app_tests** - the state machine against a scripted `MockExecutor`, with no
   engine at all, which is how the interleavings are reachable: a result
-  arriving after a later input, a crash reset, the multiline round trip.
+  arriving after a later input, a crash reset, the multiline round trip, and
+  the engine reporting itself ready or dead.
 
 Neither the rendering nor the key bindings have tests. `render.rs` would take
 ratatui's `TestBackend`; `term.rs` has no seam, since `run()` does terminal

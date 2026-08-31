@@ -1166,13 +1166,15 @@ backend.
 
 All three execution backends support native rider calls:
 
-- **Interpreter**: Rider `.so` files are loaded via `dlopen`. Function pointers
-  are registered in `NativeFunctionTable` and dispatched by symbol name.
+- **Interpreter**: function pointers are registered in `NativeFunctionTable`
+  and dispatched by symbol name. A rider linked into the running binary
+  supplies its own addresses; one found on disk is built into a `.so` and
+  loaded via `dlopen`.
 - **AOT**: Native functions are declared as `Linkage::Import` and resolved by
-  the linker against the rider shared library.
+  the linker against the archive holding the runtime and the riders.
 - **JIT**: Native functions are declared as Cranelift imports with their C ABI
   signatures. Symbol addresses are registered via the JIT's symbol lookup
-  mechanism after rider libraries are loaded.
+  mechanism from the same table the interpreter uses.
 
 ## 10. Numeric Widening
 

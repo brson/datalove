@@ -9,6 +9,13 @@ The system library (`sys/std`) uses the same mechanism as user packages -- std i
 A new compiler driver layer above the current pipeline orchestrates workspace discovery,
 rider compilation, and linking.
 
+This is the design document. For what was built, see
+[compiler-guide.md](compiler-guide.md) under "Native Riders" and "The Shipped
+Binary". The one place the two diverge is loading: `sys/std`'s rider is linked
+into the datalove binary and its addresses come from a generated table, rather
+than being dlopened out of a library cargo built at startup. Riders found on
+disk still take the path described below.
+
 ## Structural Model
 
 ```
@@ -161,7 +168,11 @@ When executing a call to a native code unit:
 
 The `NativeFunctionTable` is populated by the driver before execution:
 load the rider's `.so`/`.dylib` via `dlopen`, look up each symbol.
-For development (rider compiled into the same binary), populate with static function pointers.
+For a rider compiled into the same binary, populate with static function pointers.
+
+Both were built. The second is what the datalove binary uses for `sys/std`, so
+that an installed binary needs no cargo at startup; the first is for riders
+discovered on disk.
 
 ## AOT Path
 
@@ -171,7 +182,9 @@ Native functions fit the existing three-pass AOT compilation:
   Identical to how `dtlv_rti_*` functions are declared today.
 - **Pass 3** (compile): call instructions targeting native functions generate the same code
   as any other call. No special case.
-- **Linking**: the rider's `.a` is linked alongside the runtime `.a`.
+- **Linking**: the rider's `.a` is linked alongside the runtime `.a`. As built,
+  the two are one archive - `datalove-native-component` - which the datalove
+  binary carries compressed and unpacks to a cache directory on first use.
 
 ## Compiler Driver
 
