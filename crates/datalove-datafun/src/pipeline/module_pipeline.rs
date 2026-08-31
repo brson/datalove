@@ -164,19 +164,6 @@ impl ModuleCompilationPipeline {
         Ok(())
     }
 
-    /// Load sys library from default location.
-    pub async fn load_sys_library_default(&mut self, db: &dyn salsa::Database) -> AnyResult<()> {
-        let manifest_dir = env!("CARGO_MANIFEST_DIR");
-        let manifest_path = std::path::PathBuf::from(manifest_dir);
-        let parent = manifest_path.parent()
-            .ok_or_else(|| anyhow!("Failed to get parent directory"))?;
-        let grandparent = parent.parent()
-            .ok_or_else(|| anyhow!("Failed to get grandparent directory"))?;
-        let sys_dir = grandparent.join("sys");
-
-        self.load_sys_library_from_dir(db, sys_dir).await
-    }
-
     /// Add rider sources and crate directories from a loaded package world.
     pub fn add_riders_from_package_world(&mut self, world: &datalove_datafun_pkg::package_load::PackageWorld) {
         self.rider_sources.extend(world.rider_sources());

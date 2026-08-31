@@ -1420,15 +1420,14 @@ dependencies = [
  "datalove-datafun-interp",
  "datalove-datafun-parser",
  "datalove-datafun-pkg",
- "datalove-datafun-resolve",
  "datalove-datafun-sema",
- "datalove-datafun-tycheck",
  "datalove-datalit",
  "datalove-diagnostic",
  "datalove-exampletest",
  "datalove-repl",
  "datalove-repl-rat",
  "datalove-rt",
+ "datalove-stdlib",
  "datalove-worldgen",
  "megaspace-pipeliner",
  "pulldown-cmark",
@@ -1767,12 +1766,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "datalove-native-component"
+version = "0.1.0"
+dependencies = [
+ "datalove-rider-std",
+ "datalove-rt",
+]
+
+[[package]]
 name = "datalove-repl"
 version = "0.1.0"
 dependencies = [
  "datalove-datafun",
  "datalove-datafun-ir",
  "datalove-exampletest",
+ "datalove-stdlib",
  "rustmax 0.0.10",
  "serde",
 ]
@@ -1786,6 +1794,14 @@ dependencies = [
  "ratatui",
  "rustmax 0.0.10",
  "tui-textarea-2",
+]
+
+[[package]]
+name = "datalove-rider-std"
+version = "0.1.0"
+dependencies = [
+ "datalove-rt",
+ "datalove-rtdt",
 ]
 
 [[package]]
@@ -1812,6 +1828,15 @@ dependencies = [
 [[package]]
 name = "datalove-rtdt"
 version = "0.1.0"
+
+[[package]]
+name = "datalove-stdlib"
+version = "0.1.0"
+dependencies = [
+ "datalove-datafun",
+ "datalove-rider-std",
+ "rustmax 0.0.10",
+]
 
 [[package]]
 name = "datalove-tests"

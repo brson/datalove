@@ -69,7 +69,7 @@ pub use script_compiler::ScriptCompiler;
 pub use script_executor::ScriptExecutor;
 pub use module_pipeline::{ModuleCompilationPipeline, ConstInlining};
 pub use workspace::{
-    WorkspaceDescriptor, WorkspaceDelta,
+    WorkspaceDescriptor, WorkspaceDelta, SystemLibrary,
     PackageLibrary, PackageDescriptor, ModuleDescriptor,
     RiderDescriptor, CompilerOptions,
 };

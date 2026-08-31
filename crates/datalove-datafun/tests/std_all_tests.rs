@@ -19,14 +19,17 @@ fn setup_and_compile(db: &datafun::Database) -> Result<(
     WorkspaceDescriptor,
     datafun::pipeline::CompiledModules<'_>,
 ), String> {
+    // These are the standard library's own tests, so they compile the sources
+    // in the tree rather than the copy embedded in the datalove binary.
+    let repo_root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .parent().unwrap()
+        .parent().unwrap()
+        .to_path_buf();
     // The work dir is unique to this suite so a concurrently running suite
     // builds its own component rather than rebuilding over this one's.
-    let work_dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .parent().unwrap()
-        .parent().unwrap()
-        .join("target").join("datalove-work").join("std_all_tests");
+    let work_dir = repo_root.join("target").join("datalove-work").join("std_all_tests");
     let descriptor = rmx::futures::executor::block_on(
-        WorkspaceDescriptor::load_default_sys()
+        WorkspaceDescriptor::load_sys_dir(repo_root.join("sys"))
     ).map_err(|e| format!("Failed to load package world: {}", e))?
         .with_work_dir(work_dir);
 

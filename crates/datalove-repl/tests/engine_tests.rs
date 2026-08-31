@@ -10,7 +10,7 @@ fn analyze_file(path: &Path) -> Result<String, String> {
         .map_err(|e| format!("Failed to read file: {}", e))?;
 
     let db = datalove_datafun::Database::default();
-    let mut engine = repl::Engine::new(&db)
+    let mut engine = repl::Engine::new(&db, datalove_stdlib::system_library())
         .map_err(|e| format!("Failed to create engine: {}", e))?;
 
     let results = engine.run_source(&source_text);

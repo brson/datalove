@@ -10,6 +10,10 @@
 use datalove_rtdt as rtdt;
 use datalove_rt::rust::rider_helpers;
 
+// The `symbols` table, generated from `rider.dli`. A binary that links this
+// crate uses it to find these functions without a shared library.
+include!(concat!(env!("OUT_DIR"), "/symbols.rs"));
+
 const OK: u8 = 1;
 
 /// Write a new string result by allocating through the runtime.

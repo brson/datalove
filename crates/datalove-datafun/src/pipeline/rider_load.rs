@@ -85,13 +85,7 @@ pub fn load_rider_library(
         // Save raw pointer for JIT registration.
         native_fn_ptrs.push((symbol.clone(), fn_ptr as *const u8));
 
-        let symbol_name = symbol.clone();
-        let bridge: Box<dyn Fn(LocalRtHandle, &[Value], Destination) -> Result<(), InterpError>> =
-            Box::new(move |rt, args, dest| {
-                call_native_bridge(fn_ptr, rt, args, dest, &symbol_name)
-            });
-
-        native_table.register(symbol.clone(), bridge);
+        register_native(symbol, fn_ptr, native_table);
     }
 
     Ok(LoadedRider {
@@ -99,6 +93,46 @@ pub fn load_rider_library(
         native_fn_ptrs,
         _lib: lib,
     })
+}
+
+/// Register rider functions that are linked into this binary.
+///
+/// `natives` is the whole table the binary carries, as
+/// [`SystemLibrary::natives`](super::SystemLibrary::natives); `symbols` names
+/// the subset the compiled modules actually call. Returns the raw pointers,
+/// which the JIT needs to call natives directly.
+pub fn register_linked_natives(
+    symbols: &[String],
+    natives: &[(String, *const ())],
+    native_table: &mut NativeFunctionTable,
+) -> AnyResult<Vec<(String, *const u8)>> {
+    let mut native_fn_ptrs = Vec::new();
+
+    for symbol in symbols {
+        let (_, fn_ptr) = natives.iter().find(|(name, _)| name == symbol)
+            .ok_or_else(|| anyhow!("native function '{}' is not linked into this binary", symbol))?;
+
+        native_fn_ptrs.push((symbol.clone(), *fn_ptr as *const u8));
+
+        register_native(symbol, *fn_ptr, native_table);
+    }
+
+    Ok(native_fn_ptrs)
+}
+
+/// Register one native function under the symbol the compiler calls it by.
+fn register_native(
+    symbol: &str,
+    fn_ptr: *const (),
+    native_table: &mut NativeFunctionTable,
+) {
+    let symbol_name = symbol.to_string();
+    let bridge: Box<dyn Fn(LocalRtHandle, &[Value], Destination) -> Result<(), InterpError>> =
+        Box::new(move |rt, args, dest| {
+            call_native_bridge(fn_ptr, rt, args, dest, &symbol_name)
+        });
+
+    native_table.register(symbol.to_string(), bridge);
 }
 
 /// Bridge from interpreter values to rider C ABI.

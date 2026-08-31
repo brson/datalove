@@ -6,6 +6,7 @@ use rmx::prelude::*;
 use datalove_repl as repl;
 pub use repl::app::{ReplApp, ReplExecutor, UiAction, HistoryEntry, EntryStatus};
 pub use repl::ThreadedExecutor;
+pub use repl::SystemLibrary;
 
 mod render;
 mod term;

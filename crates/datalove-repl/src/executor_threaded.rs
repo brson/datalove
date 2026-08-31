@@ -4,6 +4,7 @@ use rmx::prelude::*;
 use crate::app::{ReplExecutor, WorkerResponse};
 use crate::{Input, Command};
 use datalove_datafun as datafun;
+use datafun::pipeline::SystemLibrary;
 use crate::engine::Engine;
 use std::sync::mpsc::{channel, Sender, Receiver};
 use std::thread;
@@ -28,14 +29,17 @@ pub struct ThreadedExecutor {
 
 impl ThreadedExecutor {
     /// Spawn the worker thread, which constructs the engine it owns.
-    pub fn spawn() -> Self {
+    ///
+    /// The system library is built on the worker thread rather than handed to
+    /// it, because the addresses of its native functions are not `Send`.
+    pub fn spawn(sys: fn() -> SystemLibrary) -> Self {
         let (main_tx, worker_rx) = channel();
         let (worker_tx, main_rx) = channel();
 
         thread::spawn(move || {
             // The database is created here and lives for the thread's lifetime.
             let db = datafun::Database::default();
-            let engine = Engine::new(&db).X();
+            let engine = Engine::new(&db, sys()).X();
             worker_thread(engine, worker_rx, worker_tx);
         });
 

@@ -1,26 +1,11 @@
 use rmx::prelude::*;
 
-use datalove_datafun_resolve::{resolve_all_names, resolve_all_exports, build_all_function_ast_maps};
 use rmx::clap::{self, Parser as _};
 use rmx::std::path::PathBuf;
 
 mod render;
 
-/// Build the native component (runtime + riders) and return the static library path for AOT linking.
-fn build_native_component_for_aot(
-    descriptor: &datalove_datafun::pipeline::WorkspaceDescriptor,
-) -> AnyResult<Vec<std::path::PathBuf>> {
-    use datalove_datafun::pipeline::rider_build;
-
-    let rider_crate_dirs = descriptor.rider_crate_dirs();
-    let work_dir = descriptor.work_dir.as_ref()
-        .ok_or_else(|| anyhow!("workspace has riders but no work dir"))?;
-    let result = rider_build::build_native_component(work_dir, &rider_crate_dirs)
-        .map_err(|e| anyhow!("{}", e))?;
-    Ok(vec![result.staticlib_path])
-}
-
-use datalove_datafun::pipeline::rider_load::build_and_load_riders;
+use datalove_datafun::pipeline::rider_load::register_linked_natives;
 
 fn main() -> AnyResult<()> {
     rmx::extras::init_crate_name(env!("CARGO_CRATE_NAME"));
@@ -374,9 +359,9 @@ impl ReplCommand {
     fn run(&self, _args: &Args) -> AnyResult<()> {
         if let Some(script_path) = &self.script {
             let db = datalove_datafun::Database::default();
-            datalove_repl::Engine::run_script(&db, script_path)
+            datalove_repl::Engine::run_script(&db, datalove_stdlib::system_library(), script_path)
         } else {
-            datalove_repl_rat::run()
+            datalove_repl_rat::run(datalove_stdlib::system_library)
         }
     }
 }
@@ -403,10 +388,11 @@ impl ScriptCommand {
         let db = datafun::Database::default();
 
         // Build workspace descriptor.
+        let sys = datalove_stdlib::system_library();
         let descriptor = if no_sys {
             WorkspaceDescriptor::empty()
         } else {
-            rmx::futures::executor::block_on(WorkspaceDescriptor::load_default_sys())?
+            WorkspaceDescriptor::from_system_library(&sys)
         };
 
         // Create pipeline from descriptor and compile.
@@ -435,8 +421,12 @@ impl ScriptCommand {
         let mut executor = compiled.script_executor(datafun::DebugOutputMode::Stderr, call_dispatcher)
             .expect("script_executor should succeed after error check");
 
-        // Build and load rider shared libraries.
-        let _loaded_riders = build_and_load_riders(&descriptor, &compiled, &mut executor)?;
+        // Point the interpreter at the rider functions linked into this binary.
+        register_linked_natives(
+            &compiled.native_symbols(),
+            &sys.natives,
+            executor.native_table_mut(),
+        )?;
 
         // Read the script file.
         let script_source = rmx::std::fs::read_to_string(file_path)
@@ -506,10 +496,11 @@ impl ScriptIrCommand {
         let db = datafun::Database::default();
 
         // Build workspace descriptor.
+        let sys = datalove_stdlib::system_library();
         let descriptor = if self.no_sys {
             WorkspaceDescriptor::empty()
         } else {
-            rmx::futures::executor::block_on(WorkspaceDescriptor::load_default_sys())?
+            WorkspaceDescriptor::from_system_library(&sys)
         };
 
         let mut pipeline = descriptor.to_pipeline(&db);
@@ -566,10 +557,11 @@ impl AotCompileCommand {
         let db = datafun::Database::default();
 
         // Build workspace descriptor.
+        let sys = datalove_stdlib::system_library();
         let descriptor = if self.no_sys {
             WorkspaceDescriptor::empty()
         } else {
-            rmx::futures::executor::block_on(WorkspaceDescriptor::load_default_sys())?
+            WorkspaceDescriptor::from_system_library(&sys)
         };
 
         let mut pipeline = descriptor.to_pipeline(&db);
@@ -615,8 +607,8 @@ impl AotCompileCommand {
         let ir_unit = compiled_unit.ir_unit
             .ok_or_else(|| anyhow!("IR unit not available after lowering"))?;
 
-        // Build rider crates for linking.
-        let rider_libs = build_native_component_for_aot(&descriptor)?;
+        // The runtime and riders the emitted program links against.
+        let rider_libs = vec![datalove_stdlib::native_component_staticlib()?];
 
         // Compile to object bytes using pipeline::aot.
         let obj_bytes = aot::compile_script_to_object_with_world(
@@ -700,10 +692,11 @@ impl ScriptWorldCommand {
         }
 
         // Build workspace descriptor from sys library + worldfile sections.
+        let sys = datalove_stdlib::system_library();
         let sys_descriptor = if self.no_sys {
             WorkspaceDescriptor::empty()
         } else {
-            rmx::futures::executor::block_on(WorkspaceDescriptor::load_default_sys())?
+            WorkspaceDescriptor::from_system_library(&sys)
         };
         let worldfile_descriptor = WorkspaceDescriptor::from_worldfile_sections(
             &parsed.sections,
@@ -739,8 +732,12 @@ impl ScriptWorldCommand {
         let mut executor = compiled.script_executor(datafun::DebugOutputMode::Stderr, None)
             .expect("script_executor should succeed after error check");
 
-        // Build and load rider shared libraries.
-        let _loaded_riders = build_and_load_riders(&descriptor, &compiled, &mut executor)?;
+        // Point the interpreter at the rider functions linked into this binary.
+        register_linked_natives(
+            &compiled.native_symbols(),
+            &sys.natives,
+            executor.native_table_mut(),
+        )?;
 
         // Compile and execute the script section.
         let script_section = script_sections[0];
@@ -815,65 +812,29 @@ impl TypecheckStdCommand {
 
         let db = datafun::Database::default();
 
-        // Load package world from sys/ directory.
-        let manifest_dir = env!("CARGO_MANIFEST_DIR");
-        let manifest_path = rmx::std::path::PathBuf::from(manifest_dir);
-        let parent = match manifest_path.parent() {
-            Some(p) => p,
-            None => bail!("Failed to get parent directory"),
-        };
-        let grandparent = match parent.parent() {
-            Some(p) => p,
-            None => bail!("Failed to get grandparent directory"),
-        };
-        let sys_dir = grandparent.join("sys");
+        let sys = datalove_stdlib::system_library();
+        let descriptor = datafun::pipeline::WorkspaceDescriptor::from_system_library(&sys);
 
-        println!("Loading sys/ from: {}", sys_dir.display());
+        let mut pipeline = descriptor.to_pipeline(&db);
+        let compiled = pipeline.compile_fresh(&db);
 
-        let config = datafun::package_load::PackageWorldConfig {
-            dir_pkglib_system: sys_dir,
-            dir_pkglib_local: None,
-        };
+        if let Some(err) = &compiled.resolution_error {
+            bail!("Package resolution failed: {}", err);
+        }
 
-        let package_world_raw = rmx::futures::executor::block_on(
-            datafun::package_load::load_world(config)
-        )?;
+        let errors: Vec<(&String, &String)> = compiled.path_to_errors.iter()
+            .flat_map(|(path, errors)| errors.iter().map(move |err| (path, err)))
+            .collect();
 
-        // Extract rider sources before converting to Salsa types.
-        let rider_sources = package_world_raw.rider_sources();
-
-        let package_world = datafun::package::import_from_loader(&db, package_world_raw);
-
-        // Resolve and convert to ModuleGraph.
-        let resolution = datafun::package_resolve::resolve_package_world_with_imports(&db, package_world);
-        let pkg_graph = match resolution.result(&db) {
-            Ok(g) => g,
-            Err(e) => bail!("Package resolution failed: {:?}", e),
-        };
-
-        // Convert to package-agnostic ModuleGraph, parse, and typecheck.
-        let graph_with_requires = datafun::to_module_graph(&db, package_world, pkg_graph);
-        let module_graph = graph_with_requires.graph;
-        let parsed_graph = datafun::module_graph::parse_module_graph(&db, module_graph, graph_with_requires.resolved_requires, rider_sources);
-        let all_names = resolve_all_names(&db, parsed_graph);
-        let all_exports = resolve_all_exports(&db, parsed_graph);
-        let all_function_asts = build_all_function_ast_maps(&db, parsed_graph);
-        let typecheck_result = datalove_datafun_tycheck::typecheck_module_graph(&db, parsed_graph, all_names, all_exports, all_function_asts, datalove_datafun_tycheck::AutoAdaptMode::Disabled);
-
-        // Report typecheck errors.
-        let module_errors = typecheck_result.module_errors(&db);
-        if module_errors.is_empty() {
+        if errors.is_empty() {
             println!("No typecheck errors found in sys/std.");
             Ok(())
         } else {
-            let error_count: usize = module_errors.values().map(|v| v.len()).sum();
-            println!("Found {} typecheck error(s):", error_count);
-            for (module_id, errors) in module_errors.iter() {
-                for err in errors {
-                    println!("  {}: {:?}", module_id.path(&db), err);
-                }
+            println!("Found {} typecheck error(s):", errors.len());
+            for (path, err) in &errors {
+                println!("  {}: {}", path, err);
             }
-            bail!("Typecheck failed with {} error(s)", error_count);
+            bail!("Typecheck failed with {} error(s)", errors.len());
         }
     }
 }

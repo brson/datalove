@@ -11,9 +11,6 @@ resolver = "2"
 
 members = [
   "crates/*",
-]
-
-exclude = [
   "sys/std/rider",
 ]
 
@@ -45,4 +42,14 @@ overflow-checks = true
 lto = "thin"
 codegen-units = 1
 opt-level = "s"
+
+# The native component is an archive that AOT-compiled programs link, and it
+# is embedded in the datalove binary, so it is built for the code it emits
+# rather than for datalove itself. Link-time optimization is off because it
+# only fattens the archive with bitcode nothing here consumes.
+[profile.native-component]
+inherits = "release"
+lto = false
+codegen-units = 16
+opt-level = 3
 

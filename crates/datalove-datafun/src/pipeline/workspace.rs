@@ -46,6 +46,21 @@ pub struct WorkspaceDescriptor {
     pub work_dir: Option<PathBuf>,
 }
 
+/// The system library a driver carries, ready to compile against.
+///
+/// Sources and native rider addresses travel together: a rider interface
+/// declares functions that must be linked into the running binary for the
+/// library to work. A driver that has no stdlib of its own, like a test
+/// compiling from a directory, does not need this type.
+pub struct SystemLibrary {
+    /// The packages that make up the library.
+    pub library: PackageLibrary,
+
+    /// Address of every native rider function linked into this binary,
+    /// by the linker symbol the compiler emits calls to.
+    pub natives: Vec<(String, *const ())>,
+}
+
 /// A named collection of packages.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PackageLibrary {
@@ -166,18 +181,23 @@ impl WorkspaceDescriptor {
         self
     }
 
-    /// Load the default system library from disk and return a descriptor.
-    ///
-    /// The work dir defaults to `target/datalove-work` in the repository, which
-    /// is only meaningful while the compiler runs from its own source tree.
-    pub async fn load_default_sys() -> rmx::anyhow::Result<Self> {
-        use datalove_datafun_pkg::package_load;
+    /// Build a workspace around the system library the driver carries.
+    pub fn from_system_library(sys: &SystemLibrary) -> Self {
+        Self {
+            system_library: Some(sys.library.clone()),
+            user_libraries: Vec::new(),
+            options: CompilerOptions::default(),
+            work_dir: None,
+        }
+    }
 
-        let manifest_dir = env!("CARGO_MANIFEST_DIR");
-        let manifest_path = std::path::PathBuf::from(manifest_dir);
-        let repo_root = manifest_path.parent().unwrap().parent().unwrap();
-        let sys_dir = repo_root.join("sys");
-        let work_dir = repo_root.join("target").join("datalove-work");
+    /// Load a system library from a directory of packages.
+    ///
+    /// This reads the library the compiler was built from, so it is for use
+    /// inside the source tree; a distributed binary carries its own library
+    /// and uses [`from_system_library`](Self::from_system_library).
+    pub async fn load_sys_dir(sys_dir: PathBuf) -> rmx::anyhow::Result<Self> {
+        use datalove_datafun_pkg::package_load;
 
         let config = package_load::PackageWorldConfig {
             dir_pkglib_system: sys_dir,
@@ -185,8 +205,7 @@ impl WorkspaceDescriptor {
         };
 
         let world = package_load::load_world(config).await?;
-        Ok(Self::from_package_world(&world, CompilerOptions::default())
-            .with_work_dir(work_dir))
+        Ok(Self::from_package_world(&world, CompilerOptions::default()))
     }
 
     /// Build from a loaded [`PackageWorld`].

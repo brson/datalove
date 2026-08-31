@@ -5,21 +5,21 @@ use serde::Serialize;
 
 use crate::{Command, ReplCommand, Eval, EvalBinding, EvalExpr, InputParse, Input};
 use datalove_datafun as datafun;
-use datafun::pipeline::{ScriptCompiler, ScriptExecutor, TypecheckResult, OwnershipResult, LoweringResult, WorkspaceDescriptor};
-use datafun::pipeline::rider_load::{build_and_load_riders, LoadedRider};
+use datafun::pipeline::{ScriptCompiler, ScriptExecutor, TypecheckResult, OwnershipResult, LoweringResult, SystemLibrary, WorkspaceDescriptor};
+use datafun::pipeline::rider_load::register_linked_natives;
 use datalove_datafun_ir::ExportBinding;
 
 pub struct Engine<'db> {
     db: &'db datafun::Database,
     /// The system library the session compiles against, kept so the engine can
     /// rebuild its compiler and executor after a crash reset.
+    sys: SystemLibrary,
+    /// The workspace built from `sys`.
     workspace: WorkspaceDescriptor,
     /// Script compiler for incremental compilation.
     compiler: ScriptCompiler<'db>,
     /// Script executor for running compiled units.
     executor: ScriptExecutor,
-    /// Loaded native rider libraries, which must outlive the executor.
-    riders: Vec<LoadedRider>,
 }
 
 /// One input's parse and eval, and the environment it left behind.
@@ -43,12 +43,15 @@ pub struct EnvBinding {
 struct Session<'db> {
     compiler: ScriptCompiler<'db>,
     executor: ScriptExecutor,
-    riders: Vec<LoadedRider>,
 }
 
 impl<'db> Session<'db> {
-    /// Compile a workspace's modules and load its native riders.
-    fn compile(db: &'db datafun::Database, workspace: &WorkspaceDescriptor) -> AnyResult<Session<'db>> {
+    /// Compile the workspace's modules and register its native riders.
+    fn compile(
+        db: &'db datafun::Database,
+        workspace: &WorkspaceDescriptor,
+        sys: &SystemLibrary,
+    ) -> AnyResult<Session<'db>> {
         let mut pipeline = workspace.to_pipeline(db);
         let compiled = pipeline.compile_fresh(db);
 
@@ -62,24 +65,27 @@ impl<'db> Session<'db> {
             .expect("script_compiler should succeed after error check");
         let mut executor = compiled.script_executor(datafun::DebugOutputMode::Disabled, None)
             .expect("script_executor should succeed after error check");
-        let riders = build_and_load_riders(workspace, &compiled, &mut executor)?;
+        register_linked_natives(
+            &compiled.native_symbols(),
+            &sys.natives,
+            executor.native_table_mut(),
+        )?;
 
-        Ok(Session { compiler, executor, riders })
+        Ok(Session { compiler, executor })
     }
 }
 
 impl<'db> Engine<'db> {
-    pub fn new(db: &'db datafun::Database) -> AnyResult<Engine<'db>> {
-        let workspace = rmx::futures::executor::block_on(WorkspaceDescriptor::load_default_sys())
-            .context("failed to load the system library")?;
-        let session = Session::compile(db, &workspace)?;
+    pub fn new(db: &'db datafun::Database, sys: SystemLibrary) -> AnyResult<Engine<'db>> {
+        let workspace = WorkspaceDescriptor::from_system_library(&sys);
+        let session = Session::compile(db, &workspace, &sys)?;
 
         Ok(Engine {
             db,
+            sys,
             workspace,
             compiler: session.compiler,
             executor: session.executor,
-            riders: session.riders,
         })
     }
 
@@ -87,12 +93,10 @@ impl<'db> Engine<'db> {
         // Cleanup the current executor.
         self.executor.destroy_live_values();
         // The system library compiled at startup, so it compiles again here.
-        let session = Session::compile(self.db, &self.workspace)
+        let session = Session::compile(self.db, &self.workspace, &self.sys)
             .expect("system library compiled successfully at startup");
         self.compiler = session.compiler;
-        // The old executor must go before the riders its native table points into.
         self.executor = session.executor;
-        self.riders = session.riders;
     }
 
     pub fn parse_input(&mut self, input: Input) -> InputParse {
@@ -346,8 +350,12 @@ impl<'db> Engine<'db> {
     }
 
     /// Execute a script file and print one JSON result per input.
-    pub fn run_script(db: &'db datafun::Database, script_path: &std::path::Path) -> AnyResult<()> {
-        let mut engine = Self::new(db)?;
+    pub fn run_script(
+        db: &'db datafun::Database,
+        sys: SystemLibrary,
+        script_path: &std::path::Path,
+    ) -> AnyResult<()> {
+        let mut engine = Self::new(db, sys)?;
         let contents = std::fs::read_to_string(script_path)
             .context("failed to read script file")?;
 
