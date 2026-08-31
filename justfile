@@ -115,6 +115,10 @@ test-miri-interp-all *ARGS='':
     just test-miri-interp3 {{ARGS}}
     just test-miri-module-interp3 {{ARGS}}
 
+# Install the `datalove` binary from this working copy.
+install:
+    cargo install --path crates/datalove-cli --locked
+
 check:
     cargo check --all
 
