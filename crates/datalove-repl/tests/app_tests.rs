@@ -238,3 +238,36 @@ fn results_from_before_a_crash_reset_are_dropped() {
     assert_eq!(app.history().len(), 0);
     assert!(app.environment().is_empty());
 }
+
+/// The engine reports when it is ready, so the UI can say it is starting.
+#[test]
+fn engine_readiness_is_reported() {
+    let executor = MockExecutor::default();
+    let mut app = ReplApp::with_executor(executor.clone());
+
+    assert!(!app.engine_is_ready());
+
+    executor.queue(WorkerResponse::EngineReady);
+    app.poll_results();
+
+    assert!(app.engine_is_ready());
+    assert!(app.engine_dead_message().is_none());
+}
+
+/// An engine that never starts is reported, rather than leaving every entry
+/// waiting on a parse that will never come back.
+#[test]
+fn a_dead_engine_is_reported() {
+    let executor = MockExecutor::default();
+    let mut app = ReplApp::with_executor(executor.clone());
+
+    app.submit_input("let x = 1".to_string());
+
+    executor.queue(WorkerResponse::EngineDead {
+        message: "cargo is not installed".to_string(),
+    });
+    app.poll_results();
+
+    assert_eq!(app.engine_dead_message(), Some("cargo is not installed"));
+    assert!(matches!(app.history()[0].status, EntryStatus::Parsing));
+}

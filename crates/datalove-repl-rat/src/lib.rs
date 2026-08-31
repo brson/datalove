@@ -133,6 +133,10 @@ impl<E: ReplExecutor> RatatuiApp<E> {
     pub fn crash_modal_is_open(&self) -> bool {
         self.repl.crash_modal_message().is_some()
     }
+
+    pub fn engine_is_dead(&self) -> bool {
+        self.repl.engine_dead_message().is_some()
+    }
 }
 
 /// Re-export the UI rendering function from the render module.

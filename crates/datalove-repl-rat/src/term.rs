@@ -66,14 +66,24 @@ pub fn run(sys: fn() -> SystemLibrary) -> AnyResult<()> {
     enable_raw_mode()?;
     let mut stdout = io::stdout();
     execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
-    let _guard = TerminalGuard { stderr_log_path: stderr_log_path.C() };
+    let guard = TerminalGuard { stderr_log_path: stderr_log_path.C() };
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
 
     // Create app and run it, passing the stderr log path.
     let executor = ThreadedExecutor::spawn(sys);
     let mut app = RatatuiApp::with_stderr_log(executor, stderr_log_path);
-    run_app(&mut terminal, &mut app)
+    let result = run_app(&mut terminal, &mut app);
+
+    // Restore the terminal before saying anything, so an engine failure lands
+    // in the scrollback the user keeps instead of the alternate screen.
+    drop(guard);
+
+    if let Some(msg) = app.repl.engine_dead_message() {
+        println!("{msg}");
+    }
+
+    result
 }
 
 /// Run the application loop.
@@ -117,7 +127,13 @@ fn handle_key_event<E: ReplExecutor>(
         return;
     }
 
-    if app.crash_modal_is_open() {
+    if app.engine_is_dead() {
+        // Nothing works without an engine; Enter leaves.
+        match key.code {
+            KeyCode::Enter => app.set_should_exit(true),
+            _ => {}
+        }
+    } else if app.crash_modal_is_open() {
         // Crash modal is open - wait for Enter to dismiss.
         match key.code {
             KeyCode::Enter => app.dismiss_crash_modal(),

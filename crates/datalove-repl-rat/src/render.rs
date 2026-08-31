@@ -61,6 +61,11 @@ pub fn ui<E: ReplExecutor>(f: &mut Frame, app: &RatatuiApp<E>) {
     if let Some(msg) = app.repl.crash_modal_message() {
         render_crash_modal(f, &app.repl, msg);
     }
+
+    // A dead engine outranks everything: nothing else can make progress.
+    if let Some(msg) = app.repl.engine_dead_message() {
+        render_engine_dead_modal(f, &app.repl, msg);
+    }
 }
 
 /// Render one binding a fragment defined.
@@ -92,6 +97,22 @@ fn render_history<E: ReplExecutor>(f: &mut Frame, repl: &ReplApp<E>, area: Rect)
         .title("History");
 
     let mut lines: Vec<Line> = Vec::new();
+
+    // Startup compiles the system library and builds the native riders, which
+    // takes seconds at best; say so, or every entry just reads "parsing...".
+    if !repl.engine_is_ready() {
+        lines.push(Line::from(vec![
+            ratatui::text::Span::styled(
+                "  ⏱ ",
+                Style::default().fg(Color::Yellow),
+            ),
+            ratatui::text::Span::styled(
+                "starting engine...",
+                Style::default().fg(Color::Yellow),
+            ),
+        ]));
+        lines.push(Line::from(""));
+    }
 
     for entry in repl.history() {
         // Input line with prompt.
@@ -434,6 +455,40 @@ fn render_crash_modal<E: ReplExecutor>(f: &mut Frame, repl: &ReplApp<E>, msg: &s
 
     let modal = Paragraph::new(lines)
         .block(modal_block);
+
+    f.render_widget(modal, area);
+}
+
+/// Render the modal shown when the engine failed to start or died.
+fn render_engine_dead_modal<E: ReplExecutor>(f: &mut Frame, repl: &ReplApp<E>, msg: &str) {
+    let area = centered_rect(70, 50, f.area());
+
+    f.render_widget(Clear, area);
+
+    let modal_block = Block::default()
+        .borders(Borders::ALL)
+        .title("Engine Gone - Press Enter to Exit")
+        .style(Style::default().fg(Color::Red));
+
+    let mut lines = vec![
+        Line::from(""),
+        Line::from("The repl engine is not running, so nothing can be evaluated."),
+        Line::from(""),
+    ];
+
+    for line in msg.lines() {
+        lines.push(Line::from(line).style(Style::default().fg(Color::Yellow)));
+    }
+
+    if let Some(log_path) = repl.stderr_log_path() {
+        lines.push(Line::from(""));
+        lines.push(Line::from("Engine output was written to:"));
+        lines.push(Line::from(log_path.display().S()).style(Style::default().fg(Color::Cyan)));
+    }
+
+    let modal = Paragraph::new(lines)
+        .block(modal_block)
+        .wrap(ratatui::widgets::Wrap { trim: false });
 
     f.render_widget(modal, area);
 }

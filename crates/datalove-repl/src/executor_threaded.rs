@@ -6,7 +6,7 @@ use crate::{Input, Command};
 use datalove_datafun as datafun;
 use datafun::pipeline::SystemLibrary;
 use crate::engine::Engine;
-use std::sync::mpsc::{channel, Sender, Receiver};
+use std::sync::mpsc::{channel, Sender, Receiver, TryRecvError};
 use std::thread;
 
 /// Request sent to the worker thread.
@@ -25,6 +25,10 @@ enum WorkerRequest {
 pub struct ThreadedExecutor {
     worker_tx: Sender<WorkerRequest>,
     worker_rx: Receiver<WorkerResponse>,
+    /// Whether the worker's death has already been reported to the app.
+    ///
+    /// It is reported once; repeating it would spin the app's poll loop.
+    death_reported: bool,
 }
 
 impl ThreadedExecutor {
@@ -39,13 +43,46 @@ impl ThreadedExecutor {
         thread::spawn(move || {
             // The database is created here and lives for the thread's lifetime.
             let db = datafun::Database::default();
-            let engine = Engine::new(&db, sys()).X();
-            worker_thread(engine, worker_rx, worker_tx);
+            match start_engine(&db, sys()) {
+                Ok(engine) => {
+                    let _ = worker_tx.send(WorkerResponse::EngineReady);
+                    worker_thread(engine, worker_rx, worker_tx);
+                }
+                Err(message) => {
+                    let _ = worker_tx.send(WorkerResponse::EngineDead { message });
+                }
+            }
         });
 
         Self {
             worker_tx: main_tx,
             worker_rx: main_rx,
+            death_reported: false,
+        }
+    }
+}
+
+/// Build the engine, turning a failed or panicking startup into a message.
+///
+/// Startup compiles the whole system library, which is where a bad stdlib
+/// shows up.
+fn start_engine(db: &datafun::Database, sys: SystemLibrary) -> Result<Engine<'_>, String> {
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        Engine::new(db, sys)
+    }));
+
+    match result {
+        Ok(Ok(engine)) => Ok(engine),
+        Ok(Err(e)) => Err(fmt!("the engine failed to start: {e:#}")),
+        Err(panic_info) => {
+            let panic_msg = if let Some(s) = panic_info.downcast_ref::<&str>() {
+                s.S()
+            } else if let Some(s) = panic_info.downcast_ref::<String>() {
+                s.C()
+            } else {
+                "Unknown panic".S()
+            };
+            Err(fmt!("the engine panicked while starting: {panic_msg}"))
         }
     }
 }
@@ -60,7 +97,27 @@ impl ReplExecutor for ThreadedExecutor {
     }
 
     fn try_recv_response(&mut self) -> Option<WorkerResponse> {
-        self.worker_rx.try_recv().ok()
+        match self.worker_rx.try_recv() {
+            Ok(response) => {
+                // The worker says why it is dying before it dies; the
+                // disconnect that follows adds nothing.
+                if matches!(response, WorkerResponse::EngineDead { .. }) {
+                    self.death_reported = true;
+                }
+                Some(response)
+            }
+            Err(TryRecvError::Empty) => None,
+            Err(TryRecvError::Disconnected) => {
+                if self.death_reported {
+                    None
+                } else {
+                    self.death_reported = true;
+                    Some(WorkerResponse::EngineDead {
+                        message: "the engine thread exited".S(),
+                    })
+                }
+            }
+        }
     }
 }
 

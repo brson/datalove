@@ -75,6 +75,12 @@ impl HistoryEntry {
 /// Response from the worker/executor.
 #[derive(Debug, Serialize, Deserialize)]
 pub enum WorkerResponse {
+    /// The engine finished starting and is ready to take requests.
+    EngineReady,
+    /// The engine could not be started, or died after starting.
+    ///
+    /// Nothing the user submits will ever be answered after this.
+    EngineDead { message: String },
     ParseResult { id: u64, parse: repl::InputParse },
     EvalResult { id: u64, eval: repl::Eval, environment: Vec<(String, String, String)> },
 }
@@ -113,6 +119,13 @@ pub struct ReplApp<E: ReplExecutor> {
     menu_selection: usize,
     /// Whether to exit the app.
     should_exit: bool,
+    /// Whether the engine has reported itself ready.
+    ///
+    /// The engine compiles the system library before it can answer anything,
+    /// which takes long enough that the UI says so.
+    engine_ready: bool,
+    /// Why the engine is gone, once it is.
+    engine_dead: Option<String>,
     /// Crash modal state (contains crash message if open).
     crash_modal: Option<String>,
     /// Path to stderr log file (for displaying in crash modal).
@@ -137,6 +150,8 @@ impl<E: ReplExecutor> ReplApp<E> {
             menu_open: false,
             menu_selection: 0,
             should_exit: false,
+            engine_ready: false,
+            engine_dead: None,
             crash_modal: None,
             stderr_log_path: None,
         }
@@ -176,6 +191,12 @@ impl<E: ReplExecutor> ReplApp<E> {
 
         while let Some(response) = self.executor.try_recv_response() {
             match response {
+                WorkerResponse::EngineReady => {
+                    self.engine_ready = true;
+                }
+                WorkerResponse::EngineDead { message } => {
+                    self.engine_dead = Some(message);
+                }
                 WorkerResponse::ParseResult { id, parse } => {
                     let action = self.handle_parse_result(id, parse);
                     actions.push(action);
@@ -344,6 +365,16 @@ impl<E: ReplExecutor> ReplApp<E> {
 
     pub fn crash_modal_is_open(&self) -> bool {
         self.crash_modal.is_some()
+    }
+
+    /// Whether the engine has finished starting.
+    pub fn engine_is_ready(&self) -> bool {
+        self.engine_ready
+    }
+
+    /// Why the engine is gone, if it is.
+    pub fn engine_dead_message(&self) -> Option<&str> {
+        self.engine_dead.as_deref()
     }
 
     /// Get the crash modal message if present.
