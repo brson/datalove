@@ -1628,3 +1628,116 @@ fn test_int_from_limbs_large() -> AnyResult<()> {
     }
     Ok(())
 }
+
+// ============================================================================
+// Multi-limb division
+// ============================================================================
+
+/// A quotient digit large enough to make one partial product exceed the range
+/// of a signed 64-bit integer.
+///
+/// The subtraction step works a limb at a time, so it has only the low half of
+/// each partial product to subtract and carries the high half. Taking the
+/// whole product instead overflows here, which is what this divisor is chosen
+/// to provoke.
+#[test]
+fn test_int_div_wide_partial_product() -> AnyResult<()> {
+    let db = Database::default();
+    let rt = Runtime::new();
+    let mut tydesc_table = TyDescTable::new(&db);
+
+    unsafe {
+        test_binary_int_op(
+            &db, &rt, &mut tydesc_table,
+            ": int / 83362684186361745304358588555239549351",
+            ": int / 1185984975656608777",
+            ": int / 70289831572452108813",
+            |rt, a, a_td, b, b_td, out, out_td| {
+                datalove_rt::c::dtlv_rti_int_div_checked(rt, a, a_td, b, b_td, out, out_td)
+            },
+        )?;
+    }
+    Ok(())
+}
+
+/// Division across limb counts, against the same arithmetic done in u128.
+#[test]
+fn test_int_div_matches_u128() -> AnyResult<()> {
+    let db = Database::default();
+    let rt = Runtime::new();
+    let mut tydesc_table = TyDescTable::new(&db);
+
+    // Values that put large limbs at the top of the divisor, where the
+    // quotient digit estimate is largest, at every limb count from two up.
+    // Literals are limited to what fits a signed 128-bit integer, so these
+    // stay below that while still putting large limbs at the top of the
+    // divisor, where the quotient digit estimate is largest.
+    let cases: &[(u128, u128)] = &[
+        (i128::MAX as u128, u64::MAX as u128),
+        (i128::MAX as u128, (u64::MAX as u128) - 1),
+        (i128::MAX as u128, 0xFFFF_FFFF_0000_0001),
+        (i128::MAX as u128, 0x7FFF_FFFF_FFFF_FFFF_FFFF_FFFF),
+        (i128::MAX as u128 - 1, 0x8000_0000_0000_0000),
+        (0x7FFF_FFFF_FFFF_FFFF_FFFF_FFFF_FFFF_0000, 0xFFFF_FFFF_FFFF_FFFF_0001),
+        (0x1234_5678_9ABC_DEF0_1234_5678_9ABC_DEF0, 0xFEDC_BA98_7654_3210),
+        (0x1234_5678_9ABC_DEF0_1234_5678_9ABC_DEF0, 0xFFFF_FFFF_FFFF_FFFF_FFFF),
+        (1 << 126, (1 << 64) + 1),
+        (1 << 126, (1 << 96) - 1),
+        (83362684186361745304358588555239549351, 1185984975656608777),
+    ];
+
+    for &(dividend, divisor) in cases {
+        let expected = dividend / divisor;
+        unsafe {
+            test_binary_int_op(
+                &db, &rt, &mut tydesc_table,
+                &format!(": int / {dividend}"),
+                &format!(": int / {divisor}"),
+                &format!(": int / {expected}"),
+                |rt, a, a_td, b, b_td, out, out_td| {
+                    datalove_rt::c::dtlv_rti_int_div_checked(rt, a, a_td, b, b_td, out, out_td)
+                },
+            ).with_context(|| format!("{dividend} / {divisor}"))?;
+        }
+    }
+    Ok(())
+}
+
+use rmx::proptest::prelude::*;
+
+proptest! {
+    #![proptest_config(ProptestConfig {
+        cases: 256,
+        max_shrink_iters: 0,
+        ..ProptestConfig::default()
+    })]
+
+    /// Property: a quotient of values that fit 128 bits is the one 128-bit
+    /// arithmetic gives, whatever limb counts the two sides come to.
+    ///
+    /// The divisor is held to half the width of the dividend, which is where
+    /// the quotient digits are largest and the partial products widest. An
+    /// even spread would mostly generate quotients of nought or one.
+    #[test]
+    fn proptest_int_div_matches_u128(
+        dividend in (1u128 << 64)..=(i128::MAX as u128),
+        divisor in 1u128..=(u64::MAX as u128),
+    ) {
+        let db = Database::default();
+        let rt = Runtime::new();
+        let mut tydesc_table = TyDescTable::new(&db);
+
+        let expected = dividend / divisor;
+        unsafe {
+            test_binary_int_op(
+                &db, &rt, &mut tydesc_table,
+                &format!(": int / {dividend}"),
+                &format!(": int / {divisor}"),
+                &format!(": int / {expected}"),
+                |rt, a, a_td, b, b_td, out, out_td| {
+                    datalove_rt::c::dtlv_rti_int_div_checked(rt, a, a_td, b, b_td, out, out_td)
+                },
+            ).expect("division matches");
+        }
+    }
+}

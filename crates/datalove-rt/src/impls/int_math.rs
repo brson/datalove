@@ -500,25 +500,31 @@ unsafe fn div_magnitude(
             }
 
             // Multiply and subtract.
-            let mut borrow: i64 = 0;
+            //
+            // Each partial product is a full 64 bits, so only its low half
+            // belongs at this position and the high half is carried into the
+            // next one. Subtracting the whole product from a single limb
+            // would need a range no 64-bit integer has.
+            //
+            // The carry holds that high half plus whatever the subtraction
+            // borrowed, which the arithmetic shift reads off the difference's
+            // sign. Both stay within a few billion of zero.
+            let mut carry: i64 = 0;
             for i in 0..n {
                 let product = q_hat * (norm_divisor[i] as u64);
-                let sub = (norm_dividend[j + i] as i64) - (product as i64) - borrow;
-                norm_dividend[j + i] = sub as u32;
-                borrow = if sub < 0 {
-                    ((-(sub as i64)) + 0xFFFFFFFF) / 0x100000000
-                } else {
-                    0
-                };
+                let difference =
+                    (norm_dividend[j + i] as i64) - carry - ((product & 0xFFFF_FFFF) as i64);
+                norm_dividend[j + i] = difference as u32;
+                carry = ((product >> 32) as i64) - (difference >> 32);
             }
-            let sub = (norm_dividend[j + n] as i64) - borrow;
-            norm_dividend[j + n] = sub as u32;
+            let difference = (norm_dividend[j + n] as i64) - carry;
+            norm_dividend[j + n] = difference as u32;
 
             // Store quotient digit.
             quotient[j] = q_hat as u32;
 
             // Add back if we subtracted too much.
-            if sub < 0 {
+            if difference < 0 {
                 quotient[j] -= 1;
                 let mut carry: u64 = 0;
                 for i in 0..n {
