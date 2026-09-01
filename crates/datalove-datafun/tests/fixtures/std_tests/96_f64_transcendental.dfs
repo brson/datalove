@@ -1,0 +1,44 @@
+require module sys/std/f64
+
+import f64.sin
+import f64.cos
+import f64.tan
+import f64.asin
+import f64.acos
+import f64.atan
+import f64.atan2
+import f64.sinh
+import f64.cosh
+import f64.tanh
+import f64.exp
+import f64.exp2
+import f64.ln
+import f64.log2
+import f64.log10
+import f64.log
+import f64.pow
+import f64.cbrt
+import f64.hypot
+import f64.rem
+import f64.pi
+import f64.e
+import f64.tau
+import f64.to_degrees
+import f64.to_radians
+
+// Every case here has an exactly representable answer, so the expected output
+// does not depend on how the platform's math library rounds the last bit.
+
+let trig = (sin(0.0), cos(0.0), tan(0.0), asin(0.0), acos(1.0), atan(0.0))
+let quadrant = (atan2(0.0, 1.0), atan2(0.0, 2.0))
+let hyperbolic = (sinh(0.0), cosh(0.0), tanh(0.0))
+let exponential = (exp(0.0), exp2(0.0), exp2(10.0))
+let logarithm = (ln(1.0), log2(1024.0), log10(1000.0), log(81.0, 3.0))
+let powers = (pow(2.0, 10.0), pow(9.0, 0.5), pow(5.0, 0.0), cbrt(27.0), cbrt(8.0))
+let geometry = (hypot(3.0, 4.0), hypot(5.0, 12.0))
+let remainder = (rem(7.0, 2.0), rem(7.5, 2.5))
+let angles = (to_degrees(pi()), to_degrees(tau()), to_radians(180.0) == pi())
+let constants = (e() .> 2.7, pi() .> 3.14)
+
+let output = (trig, quadrant, hyperbolic, exponential, logarithm, powers,
+              geometry, remainder, angles, constants)

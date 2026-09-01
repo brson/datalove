@@ -1,3 +1,10 @@
+require rider std
+require module sys/std/index
+import std.int_from_f64
+import std.int_from_f32
+import index.bitand
+import index.shift_right_wrapping
+
 // Arbitrary-precision signed integers.
 //
 // Unlike the fixed-width integer modules, int is unbounded, so there are no
@@ -114,18 +121,84 @@ end fun
 // Raises self to the power of exp.
 //
 // The exponent is an index because it counts repetitions, matching the other
-// repetition counts in the library. This performs exp multiplications rather
-// than the usual squaring ladder, which needs bit operations int does not have.
+// repetition counts in the library. It is walked a bit at a time, so this
+// costs a multiplication per bit rather than one per repetition; the bit
+// operations are index's, since int has none of its own.
 fun pow(self: int, exp: index): int
-  let limit: int = exp@
   var acc: int = 1
-  var i: int = 0
-  loop while i .< limit
-    let factor: int = self@
-    set acc = acc * factor
-    set i = i + 1
+  var base: int = self
+  var rest: index = exp
+  loop while rest .> (: index / 0)
+    if bitand(rest, (: index / 1)) == (: index / 1)
+      let factor: int = base@
+      set acc = acc * factor
+    end if
+    let squared: int = base@
+    set base = base * squared
+    set rest = shift_right_wrapping(rest, : u32 / 1)
   end loop
   ret acc
+end fun
+
+// Greatest common divisor of the magnitudes, by Euclid.
+//
+// Zero divides nothing, so gcd(n, 0) and gcd(0, n) are abs(n), and gcd(0, 0)
+// is zero.
+fun gcd(self: int, other: int): int
+  var a: int = abs(self)
+  var b: int = abs(other)
+  loop while b != 0
+    let divisor: int = b@
+    if rem_checked(a, divisor) |remainder|
+      set a = b
+      set b = remainder
+    else
+      // Unreachable: the loop condition rules out a zero divisor.
+      set a = b
+      set b = 0
+    end if
+  end loop
+  ret a
+end fun
+
+// The largest integer whose square is at most self, by Newton's method.
+//
+// None for a negative self, which has no integer square root.
+fun sqrt(self: int): ?int
+  if self .< 0
+    ret none
+  else
+    if self .< 2
+      ret some self
+    else
+      // Newton's method, descending to the root from an overestimate. The
+      // divisors are the successive estimates, which stay at or above one,
+      // so /? is reached only where it answers.
+      var x: int = self@
+      var y: int = (self@ + 1) /? 2
+      loop while y .< x
+        let next: int = y@
+        set x = next
+        let divisor: int = x@
+        let quotient: int = self@ /? divisor
+        set y = (x@ + quotient) /? 2
+      end loop
+      ret some x
+    end if
+  end if
+end fun
+
+// Conversion from the floats.
+//
+// The language does not widen between integers and floats, so this is the way
+// across. The value is truncated toward zero; a nan or an infinity has no
+// integer to name and gives none.
+fun from_f64(x: f64): ?int
+  ret int_from_f64(x)
+end fun
+
+fun from_f32(x: f32): ?int
+  ret int_from_f32(x)
 end fun
 
 // Returns n factorial, or 1 when n is zero.

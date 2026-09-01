@@ -1,3 +1,26 @@
+require rider std
+import std.f32_sin
+import std.f32_cos
+import std.f32_tan
+import std.f32_asin
+import std.f32_acos
+import std.f32_atan
+import std.f32_sinh
+import std.f32_cosh
+import std.f32_tanh
+import std.f32_exp
+import std.f32_exp2
+import std.f32_ln
+import std.f32_log2
+import std.f32_log10
+import std.f32_cbrt
+import std.f32_atan2
+import std.f32_log
+import std.f32_pow
+import std.f32_hypot
+import std.f32_rem
+import std.f32_from_int
+
 // Constants.
 
 fun nan(): f32
@@ -209,4 +232,146 @@ fun total_cmp(self: f32, other: f32): i32
       ret : i32 / 0
     end if
   end if
+end fun
+
+// Transcendental functions.
+//
+// Unlike the rest of this module these are calls into the platform's math
+// library rather than machine instructions, so they cost a call and are
+// correctly rounded only as far as that library is.
+
+// Sine of an angle in radians.
+fun sin(self: f32): f32
+  ret f32_sin(self)
+end fun
+
+// Cosine of an angle in radians.
+fun cos(self: f32): f32
+  ret f32_cos(self)
+end fun
+
+// Tangent of an angle in radians.
+fun tan(self: f32): f32
+  ret f32_tan(self)
+end fun
+
+// Arcsine in radians, in [-pi/2, pi/2]. Nan outside [-1, 1].
+fun asin(self: f32): f32
+  ret f32_asin(self)
+end fun
+
+// Arccosine in radians, in [0, pi]. Nan outside [-1, 1].
+fun acos(self: f32): f32
+  ret f32_acos(self)
+end fun
+
+// Arctangent in radians, in [-pi/2, pi/2].
+fun atan(self: f32): f32
+  ret f32_atan(self)
+end fun
+
+// Hyperbolic sine.
+fun sinh(self: f32): f32
+  ret f32_sinh(self)
+end fun
+
+// Hyperbolic cosine.
+fun cosh(self: f32): f32
+  ret f32_cosh(self)
+end fun
+
+// Hyperbolic tangent.
+fun tanh(self: f32): f32
+  ret f32_tanh(self)
+end fun
+
+// e raised to the power of self.
+fun exp(self: f32): f32
+  ret f32_exp(self)
+end fun
+
+// 2 raised to the power of self.
+fun exp2(self: f32): f32
+  ret f32_exp2(self)
+end fun
+
+// Natural logarithm. Nan for a negative self, -inf for zero.
+fun ln(self: f32): f32
+  ret f32_ln(self)
+end fun
+
+// Base 2 logarithm.
+fun log2(self: f32): f32
+  ret f32_log2(self)
+end fun
+
+// Base 10 logarithm.
+fun log10(self: f32): f32
+  ret f32_log10(self)
+end fun
+
+// Cube root, defined for negative values as well.
+fun cbrt(self: f32): f32
+  ret f32_cbrt(self)
+end fun
+
+// Arctangent of self/other in radians, using the signs of both to place the result in the right quadrant.
+fun atan2(self: f32, other: f32): f32
+  ret f32_atan2(self, other)
+end fun
+
+// Logarithm of self in the given base.
+fun log(self: f32, base: f32): f32
+  ret f32_log(self, base)
+end fun
+
+// self raised to the power of exp.
+fun pow(self: f32, exp: f32): f32
+  ret f32_pow(self, exp)
+end fun
+
+// The length of the hypotenuse, without the overflow that squaring both sides invites.
+fun hypot(self: f32, other: f32): f32
+  ret f32_hypot(self, other)
+end fun
+
+// The remainder of self/other, taking the sign of self. This is what fmod computes, not a modulo.
+fun rem(self: f32, other: f32): f32
+  ret f32_rem(self, other)
+end fun
+
+// Constants.
+
+// The ratio of a circle's circumference to its diameter.
+fun pi(): f32
+  ret 3.1415927410125732421875
+end fun
+
+// The base of the natural logarithm.
+fun e(): f32
+  ret 2.71828174591064453125
+end fun
+
+// Two pi: one full turn in radians.
+fun tau(): f32
+  ret 6.283185482025146484375
+end fun
+
+// Angle conversion.
+
+fun to_degrees(self: f32): f32
+  ret self * (180.0 / pi())
+end fun
+
+fun to_radians(self: f32): f32
+  ret self * (pi() / 180.0)
+end fun
+
+// Conversion from the integers.
+//
+// The language does not widen between integers and floats, so this is the
+// way across. None when the value is too large for a f32 to hold; a value
+// that fits but has more digits than the format carries is rounded.
+fun from_int(ref n: int): ?f32
+  ret f32_from_int(ref n)
 end fun

@@ -129,3 +129,64 @@ native fun set_clear<T>(mut self: #{T})
 native fun set_contains<T>(ref self: #{T}, ref elem: T): bool
 native fun set_insert<T>(mut self: #{T}, elem: T): bool
 native fun set_remove<T>(mut self: #{T}, ref elem: T): bool
+
+// Floating point math, from the platform's libm. These are the operations
+// that have no machine instruction behind them, which is why they are here
+// rather than among the intrinsics f64 and f32 otherwise call.
+
+native fun f64_sin(self: f64): f64
+native fun f64_cos(self: f64): f64
+native fun f64_tan(self: f64): f64
+native fun f64_asin(self: f64): f64
+native fun f64_acos(self: f64): f64
+native fun f64_atan(self: f64): f64
+native fun f64_atan2(self: f64, other: f64): f64
+native fun f64_sinh(self: f64): f64
+native fun f64_cosh(self: f64): f64
+native fun f64_tanh(self: f64): f64
+native fun f64_exp(self: f64): f64
+native fun f64_exp2(self: f64): f64
+native fun f64_ln(self: f64): f64
+native fun f64_log2(self: f64): f64
+native fun f64_log10(self: f64): f64
+native fun f64_log(self: f64, base: f64): f64
+native fun f64_pow(self: f64, exp: f64): f64
+native fun f64_cbrt(self: f64): f64
+native fun f64_hypot(self: f64, other: f64): f64
+native fun f64_rem(self: f64, other: f64): f64
+
+native fun f32_sin(self: f32): f32
+native fun f32_cos(self: f32): f32
+native fun f32_tan(self: f32): f32
+native fun f32_asin(self: f32): f32
+native fun f32_acos(self: f32): f32
+native fun f32_atan(self: f32): f32
+native fun f32_atan2(self: f32, other: f32): f32
+native fun f32_sinh(self: f32): f32
+native fun f32_cosh(self: f32): f32
+native fun f32_tanh(self: f32): f32
+native fun f32_exp(self: f32): f32
+native fun f32_exp2(self: f32): f32
+native fun f32_ln(self: f32): f32
+native fun f32_log2(self: f32): f32
+native fun f32_log10(self: f32): f32
+native fun f32_log(self: f32, base: f32): f32
+native fun f32_pow(self: f32, exp: f32): f32
+native fun f32_cbrt(self: f32): f32
+native fun f32_hypot(self: f32, other: f32): f32
+native fun f32_rem(self: f32, other: f32): f32
+
+// Conversion between the integers and the floats. The language does not widen
+// between them - see botspec section 10 - so these are named conversions, and
+// each says what it cannot represent by returning none.
+
+native fun f64_from_int(ref n: int): ?f64
+native fun f32_from_int(ref n: int): ?f32
+native fun int_from_f64(x: f64): ?int
+native fun int_from_f32(x: f32): ?int
+
+// Float formatting and parsing.
+
+native fun string_from_f64(x: f64): string
+native fun string_from_f32(x: f32): string
+native fun string_parse_f64(ref self: string): ?f64

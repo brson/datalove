@@ -1,0 +1,19 @@
+require module sys/std/int
+
+import int.pow
+import int.gcd
+import int.sqrt
+
+// pow walks the exponent a bit at a time, so a large exponent is cheap and
+// the result is exact however many digits it runs to.
+let powers = (pow(2, 64), pow(3, 5), pow(7, 0), pow(10, 30), pow(1, 100))
+
+let divisors = (gcd(48, 180), gcd(17, 5), gcd(0, 9), gcd(9, 0), gcd(0, 0))
+
+let roots = (sqrt(0), sqrt(1), sqrt(144), sqrt(1000000), sqrt(2), sqrt(99))
+
+// The root of a square no float could hold.
+let big = pow(10, 30)
+let big_root = sqrt(big)
+
+let output = (powers, divisors, roots, big_root)

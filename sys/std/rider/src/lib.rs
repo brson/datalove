@@ -1453,3 +1453,593 @@ pub extern "C-unwind" fn dlr_std__set_insert(
         }
     }
 }
+
+// --- Floating point math ---
+//
+// Every one of these is a call into the platform's libm. The operations with
+// a machine instruction behind them - sqrt, the roundings, abs, min and max -
+// are intrinsics instead, and are not here.
+
+#[no_mangle]
+pub extern "C-unwind" fn dlr_std__f64_sin(
+    _rt: *mut u8,
+    x_ptr: *const u8, _x_td: *const u8,
+    out: *mut u8, _out_td: *const u8,
+) -> u8 {
+    let x = unsafe { *(x_ptr as *const f64) };
+    unsafe { write_result(out, x.sin()) };
+    OK
+}
+
+#[no_mangle]
+pub extern "C-unwind" fn dlr_std__f64_cos(
+    _rt: *mut u8,
+    x_ptr: *const u8, _x_td: *const u8,
+    out: *mut u8, _out_td: *const u8,
+) -> u8 {
+    let x = unsafe { *(x_ptr as *const f64) };
+    unsafe { write_result(out, x.cos()) };
+    OK
+}
+
+#[no_mangle]
+pub extern "C-unwind" fn dlr_std__f64_tan(
+    _rt: *mut u8,
+    x_ptr: *const u8, _x_td: *const u8,
+    out: *mut u8, _out_td: *const u8,
+) -> u8 {
+    let x = unsafe { *(x_ptr as *const f64) };
+    unsafe { write_result(out, x.tan()) };
+    OK
+}
+
+#[no_mangle]
+pub extern "C-unwind" fn dlr_std__f64_asin(
+    _rt: *mut u8,
+    x_ptr: *const u8, _x_td: *const u8,
+    out: *mut u8, _out_td: *const u8,
+) -> u8 {
+    let x = unsafe { *(x_ptr as *const f64) };
+    unsafe { write_result(out, x.asin()) };
+    OK
+}
+
+#[no_mangle]
+pub extern "C-unwind" fn dlr_std__f64_acos(
+    _rt: *mut u8,
+    x_ptr: *const u8, _x_td: *const u8,
+    out: *mut u8, _out_td: *const u8,
+) -> u8 {
+    let x = unsafe { *(x_ptr as *const f64) };
+    unsafe { write_result(out, x.acos()) };
+    OK
+}
+
+#[no_mangle]
+pub extern "C-unwind" fn dlr_std__f64_atan(
+    _rt: *mut u8,
+    x_ptr: *const u8, _x_td: *const u8,
+    out: *mut u8, _out_td: *const u8,
+) -> u8 {
+    let x = unsafe { *(x_ptr as *const f64) };
+    unsafe { write_result(out, x.atan()) };
+    OK
+}
+
+#[no_mangle]
+pub extern "C-unwind" fn dlr_std__f64_sinh(
+    _rt: *mut u8,
+    x_ptr: *const u8, _x_td: *const u8,
+    out: *mut u8, _out_td: *const u8,
+) -> u8 {
+    let x = unsafe { *(x_ptr as *const f64) };
+    unsafe { write_result(out, x.sinh()) };
+    OK
+}
+
+#[no_mangle]
+pub extern "C-unwind" fn dlr_std__f64_cosh(
+    _rt: *mut u8,
+    x_ptr: *const u8, _x_td: *const u8,
+    out: *mut u8, _out_td: *const u8,
+) -> u8 {
+    let x = unsafe { *(x_ptr as *const f64) };
+    unsafe { write_result(out, x.cosh()) };
+    OK
+}
+
+#[no_mangle]
+pub extern "C-unwind" fn dlr_std__f64_tanh(
+    _rt: *mut u8,
+    x_ptr: *const u8, _x_td: *const u8,
+    out: *mut u8, _out_td: *const u8,
+) -> u8 {
+    let x = unsafe { *(x_ptr as *const f64) };
+    unsafe { write_result(out, x.tanh()) };
+    OK
+}
+
+#[no_mangle]
+pub extern "C-unwind" fn dlr_std__f64_exp(
+    _rt: *mut u8,
+    x_ptr: *const u8, _x_td: *const u8,
+    out: *mut u8, _out_td: *const u8,
+) -> u8 {
+    let x = unsafe { *(x_ptr as *const f64) };
+    unsafe { write_result(out, x.exp()) };
+    OK
+}
+
+#[no_mangle]
+pub extern "C-unwind" fn dlr_std__f64_exp2(
+    _rt: *mut u8,
+    x_ptr: *const u8, _x_td: *const u8,
+    out: *mut u8, _out_td: *const u8,
+) -> u8 {
+    let x = unsafe { *(x_ptr as *const f64) };
+    unsafe { write_result(out, x.exp2()) };
+    OK
+}
+
+#[no_mangle]
+pub extern "C-unwind" fn dlr_std__f64_ln(
+    _rt: *mut u8,
+    x_ptr: *const u8, _x_td: *const u8,
+    out: *mut u8, _out_td: *const u8,
+) -> u8 {
+    let x = unsafe { *(x_ptr as *const f64) };
+    unsafe { write_result(out, x.ln()) };
+    OK
+}
+
+#[no_mangle]
+pub extern "C-unwind" fn dlr_std__f64_log2(
+    _rt: *mut u8,
+    x_ptr: *const u8, _x_td: *const u8,
+    out: *mut u8, _out_td: *const u8,
+) -> u8 {
+    let x = unsafe { *(x_ptr as *const f64) };
+    unsafe { write_result(out, x.log2()) };
+    OK
+}
+
+#[no_mangle]
+pub extern "C-unwind" fn dlr_std__f64_log10(
+    _rt: *mut u8,
+    x_ptr: *const u8, _x_td: *const u8,
+    out: *mut u8, _out_td: *const u8,
+) -> u8 {
+    let x = unsafe { *(x_ptr as *const f64) };
+    unsafe { write_result(out, x.log10()) };
+    OK
+}
+
+#[no_mangle]
+pub extern "C-unwind" fn dlr_std__f64_cbrt(
+    _rt: *mut u8,
+    x_ptr: *const u8, _x_td: *const u8,
+    out: *mut u8, _out_td: *const u8,
+) -> u8 {
+    let x = unsafe { *(x_ptr as *const f64) };
+    unsafe { write_result(out, x.cbrt()) };
+    OK
+}
+
+#[no_mangle]
+pub extern "C-unwind" fn dlr_std__f64_atan2(
+    _rt: *mut u8,
+    x_ptr: *const u8, _x_td: *const u8,
+    y_ptr: *const u8, _y_td: *const u8,
+    out: *mut u8, _out_td: *const u8,
+) -> u8 {
+    let x = unsafe { *(x_ptr as *const f64) };
+    let y = unsafe { *(y_ptr as *const f64) };
+    unsafe { write_result(out, x.atan2(y)) };
+    OK
+}
+
+#[no_mangle]
+pub extern "C-unwind" fn dlr_std__f64_log(
+    _rt: *mut u8,
+    x_ptr: *const u8, _x_td: *const u8,
+    y_ptr: *const u8, _y_td: *const u8,
+    out: *mut u8, _out_td: *const u8,
+) -> u8 {
+    let x = unsafe { *(x_ptr as *const f64) };
+    let y = unsafe { *(y_ptr as *const f64) };
+    unsafe { write_result(out, x.log(y)) };
+    OK
+}
+
+#[no_mangle]
+pub extern "C-unwind" fn dlr_std__f64_pow(
+    _rt: *mut u8,
+    x_ptr: *const u8, _x_td: *const u8,
+    y_ptr: *const u8, _y_td: *const u8,
+    out: *mut u8, _out_td: *const u8,
+) -> u8 {
+    let x = unsafe { *(x_ptr as *const f64) };
+    let y = unsafe { *(y_ptr as *const f64) };
+    unsafe { write_result(out, x.powf(y)) };
+    OK
+}
+
+#[no_mangle]
+pub extern "C-unwind" fn dlr_std__f64_hypot(
+    _rt: *mut u8,
+    x_ptr: *const u8, _x_td: *const u8,
+    y_ptr: *const u8, _y_td: *const u8,
+    out: *mut u8, _out_td: *const u8,
+) -> u8 {
+    let x = unsafe { *(x_ptr as *const f64) };
+    let y = unsafe { *(y_ptr as *const f64) };
+    unsafe { write_result(out, x.hypot(y)) };
+    OK
+}
+
+#[no_mangle]
+pub extern "C-unwind" fn dlr_std__f64_rem(
+    _rt: *mut u8,
+    x_ptr: *const u8, _x_td: *const u8,
+    y_ptr: *const u8, _y_td: *const u8,
+    out: *mut u8, _out_td: *const u8,
+) -> u8 {
+    let x = unsafe { *(x_ptr as *const f64) };
+    let y = unsafe { *(y_ptr as *const f64) };
+    unsafe { write_result(out, x % y) };
+    OK
+}
+
+#[no_mangle]
+pub extern "C-unwind" fn dlr_std__f32_sin(
+    _rt: *mut u8,
+    x_ptr: *const u8, _x_td: *const u8,
+    out: *mut u8, _out_td: *const u8,
+) -> u8 {
+    let x = unsafe { *(x_ptr as *const f32) };
+    unsafe { write_result(out, x.sin()) };
+    OK
+}
+
+#[no_mangle]
+pub extern "C-unwind" fn dlr_std__f32_cos(
+    _rt: *mut u8,
+    x_ptr: *const u8, _x_td: *const u8,
+    out: *mut u8, _out_td: *const u8,
+) -> u8 {
+    let x = unsafe { *(x_ptr as *const f32) };
+    unsafe { write_result(out, x.cos()) };
+    OK
+}
+
+#[no_mangle]
+pub extern "C-unwind" fn dlr_std__f32_tan(
+    _rt: *mut u8,
+    x_ptr: *const u8, _x_td: *const u8,
+    out: *mut u8, _out_td: *const u8,
+) -> u8 {
+    let x = unsafe { *(x_ptr as *const f32) };
+    unsafe { write_result(out, x.tan()) };
+    OK
+}
+
+#[no_mangle]
+pub extern "C-unwind" fn dlr_std__f32_asin(
+    _rt: *mut u8,
+    x_ptr: *const u8, _x_td: *const u8,
+    out: *mut u8, _out_td: *const u8,
+) -> u8 {
+    let x = unsafe { *(x_ptr as *const f32) };
+    unsafe { write_result(out, x.asin()) };
+    OK
+}
+
+#[no_mangle]
+pub extern "C-unwind" fn dlr_std__f32_acos(
+    _rt: *mut u8,
+    x_ptr: *const u8, _x_td: *const u8,
+    out: *mut u8, _out_td: *const u8,
+) -> u8 {
+    let x = unsafe { *(x_ptr as *const f32) };
+    unsafe { write_result(out, x.acos()) };
+    OK
+}
+
+#[no_mangle]
+pub extern "C-unwind" fn dlr_std__f32_atan(
+    _rt: *mut u8,
+    x_ptr: *const u8, _x_td: *const u8,
+    out: *mut u8, _out_td: *const u8,
+) -> u8 {
+    let x = unsafe { *(x_ptr as *const f32) };
+    unsafe { write_result(out, x.atan()) };
+    OK
+}
+
+#[no_mangle]
+pub extern "C-unwind" fn dlr_std__f32_sinh(
+    _rt: *mut u8,
+    x_ptr: *const u8, _x_td: *const u8,
+    out: *mut u8, _out_td: *const u8,
+) -> u8 {
+    let x = unsafe { *(x_ptr as *const f32) };
+    unsafe { write_result(out, x.sinh()) };
+    OK
+}
+
+#[no_mangle]
+pub extern "C-unwind" fn dlr_std__f32_cosh(
+    _rt: *mut u8,
+    x_ptr: *const u8, _x_td: *const u8,
+    out: *mut u8, _out_td: *const u8,
+) -> u8 {
+    let x = unsafe { *(x_ptr as *const f32) };
+    unsafe { write_result(out, x.cosh()) };
+    OK
+}
+
+#[no_mangle]
+pub extern "C-unwind" fn dlr_std__f32_tanh(
+    _rt: *mut u8,
+    x_ptr: *const u8, _x_td: *const u8,
+    out: *mut u8, _out_td: *const u8,
+) -> u8 {
+    let x = unsafe { *(x_ptr as *const f32) };
+    unsafe { write_result(out, x.tanh()) };
+    OK
+}
+
+#[no_mangle]
+pub extern "C-unwind" fn dlr_std__f32_exp(
+    _rt: *mut u8,
+    x_ptr: *const u8, _x_td: *const u8,
+    out: *mut u8, _out_td: *const u8,
+) -> u8 {
+    let x = unsafe { *(x_ptr as *const f32) };
+    unsafe { write_result(out, x.exp()) };
+    OK
+}
+
+#[no_mangle]
+pub extern "C-unwind" fn dlr_std__f32_exp2(
+    _rt: *mut u8,
+    x_ptr: *const u8, _x_td: *const u8,
+    out: *mut u8, _out_td: *const u8,
+) -> u8 {
+    let x = unsafe { *(x_ptr as *const f32) };
+    unsafe { write_result(out, x.exp2()) };
+    OK
+}
+
+#[no_mangle]
+pub extern "C-unwind" fn dlr_std__f32_ln(
+    _rt: *mut u8,
+    x_ptr: *const u8, _x_td: *const u8,
+    out: *mut u8, _out_td: *const u8,
+) -> u8 {
+    let x = unsafe { *(x_ptr as *const f32) };
+    unsafe { write_result(out, x.ln()) };
+    OK
+}
+
+#[no_mangle]
+pub extern "C-unwind" fn dlr_std__f32_log2(
+    _rt: *mut u8,
+    x_ptr: *const u8, _x_td: *const u8,
+    out: *mut u8, _out_td: *const u8,
+) -> u8 {
+    let x = unsafe { *(x_ptr as *const f32) };
+    unsafe { write_result(out, x.log2()) };
+    OK
+}
+
+#[no_mangle]
+pub extern "C-unwind" fn dlr_std__f32_log10(
+    _rt: *mut u8,
+    x_ptr: *const u8, _x_td: *const u8,
+    out: *mut u8, _out_td: *const u8,
+) -> u8 {
+    let x = unsafe { *(x_ptr as *const f32) };
+    unsafe { write_result(out, x.log10()) };
+    OK
+}
+
+#[no_mangle]
+pub extern "C-unwind" fn dlr_std__f32_cbrt(
+    _rt: *mut u8,
+    x_ptr: *const u8, _x_td: *const u8,
+    out: *mut u8, _out_td: *const u8,
+) -> u8 {
+    let x = unsafe { *(x_ptr as *const f32) };
+    unsafe { write_result(out, x.cbrt()) };
+    OK
+}
+
+#[no_mangle]
+pub extern "C-unwind" fn dlr_std__f32_atan2(
+    _rt: *mut u8,
+    x_ptr: *const u8, _x_td: *const u8,
+    y_ptr: *const u8, _y_td: *const u8,
+    out: *mut u8, _out_td: *const u8,
+) -> u8 {
+    let x = unsafe { *(x_ptr as *const f32) };
+    let y = unsafe { *(y_ptr as *const f32) };
+    unsafe { write_result(out, x.atan2(y)) };
+    OK
+}
+
+#[no_mangle]
+pub extern "C-unwind" fn dlr_std__f32_log(
+    _rt: *mut u8,
+    x_ptr: *const u8, _x_td: *const u8,
+    y_ptr: *const u8, _y_td: *const u8,
+    out: *mut u8, _out_td: *const u8,
+) -> u8 {
+    let x = unsafe { *(x_ptr as *const f32) };
+    let y = unsafe { *(y_ptr as *const f32) };
+    unsafe { write_result(out, x.log(y)) };
+    OK
+}
+
+#[no_mangle]
+pub extern "C-unwind" fn dlr_std__f32_pow(
+    _rt: *mut u8,
+    x_ptr: *const u8, _x_td: *const u8,
+    y_ptr: *const u8, _y_td: *const u8,
+    out: *mut u8, _out_td: *const u8,
+) -> u8 {
+    let x = unsafe { *(x_ptr as *const f32) };
+    let y = unsafe { *(y_ptr as *const f32) };
+    unsafe { write_result(out, x.powf(y)) };
+    OK
+}
+
+#[no_mangle]
+pub extern "C-unwind" fn dlr_std__f32_hypot(
+    _rt: *mut u8,
+    x_ptr: *const u8, _x_td: *const u8,
+    y_ptr: *const u8, _y_td: *const u8,
+    out: *mut u8, _out_td: *const u8,
+) -> u8 {
+    let x = unsafe { *(x_ptr as *const f32) };
+    let y = unsafe { *(y_ptr as *const f32) };
+    unsafe { write_result(out, x.hypot(y)) };
+    OK
+}
+
+#[no_mangle]
+pub extern "C-unwind" fn dlr_std__f32_rem(
+    _rt: *mut u8,
+    x_ptr: *const u8, _x_td: *const u8,
+    y_ptr: *const u8, _y_td: *const u8,
+    out: *mut u8, _out_td: *const u8,
+) -> u8 {
+    let x = unsafe { *(x_ptr as *const f32) };
+    let y = unsafe { *(y_ptr as *const f32) };
+    unsafe { write_result(out, x % y) };
+    OK
+}
+
+// --- Conversion between the integers and the floats ---
+//
+// A bigint travels as decimal text in both directions. The digits are exact
+// either way, so the only rounding is the one the float itself imposes, and
+// an integer too large to represent parses as infinity, which is the case
+// these report as none.
+
+/// Convert a bigint to the nearest `f64`, or none if it is out of range.
+#[no_mangle]
+pub extern "C-unwind" fn dlr_std__f64_from_int(
+    _rt: *mut u8,
+    n_ptr: *const u8, _n_td: *const u8,
+    out: *mut u8, _out_td: *const u8,
+) -> u8 {
+    let text = unsafe { rider_helpers::int_to_string(n_ptr) };
+    match text.parse::<f64>() {
+        Ok(value) if value.is_finite() => unsafe { rider_helpers::write_option_some(out, value) },
+        _ => unsafe { rider_helpers::write_option_none(out) },
+    }
+    OK
+}
+
+/// Convert a bigint to the nearest `f32`, or none if it is out of range.
+#[no_mangle]
+pub extern "C-unwind" fn dlr_std__f32_from_int(
+    _rt: *mut u8,
+    n_ptr: *const u8, _n_td: *const u8,
+    out: *mut u8, _out_td: *const u8,
+) -> u8 {
+    let text = unsafe { rider_helpers::int_to_string(n_ptr) };
+    match text.parse::<f32>() {
+        Ok(value) if value.is_finite() => unsafe { rider_helpers::write_option_some(out, value) },
+        _ => unsafe { rider_helpers::write_option_none(out) },
+    }
+    OK
+}
+
+/// The decimal digits of a float's integer part, truncated toward zero.
+///
+/// `None` for a value with no integer part to name, which is a nan or an
+/// infinity. Every finite float is an exact decimal, so no digits are lost.
+fn truncated_digits(value: f64) -> Option<String> {
+    if !value.is_finite() {
+        return None;
+    }
+    let truncated = value.trunc();
+    if truncated == 0.0 {
+        // Covers -0.0, which would otherwise print as "-0".
+        Some("0".to_string())
+    } else {
+        Some(format!("{truncated:.0}"))
+    }
+}
+
+/// Convert an `f64` to a bigint, truncating toward zero.
+#[no_mangle]
+pub extern "C-unwind" fn dlr_std__int_from_f64(
+    rt: *mut u8,
+    x_ptr: *const u8, _x_td: *const u8,
+    out: *mut u8, _out_td: *const u8,
+) -> u8 {
+    let x = unsafe { *(x_ptr as *const f64) };
+    match truncated_digits(x) {
+        Some(digits) => unsafe { rider_helpers::write_option_int_from_str(rt, out, &digits) as u8 },
+        None => {
+            unsafe { rider_helpers::write_option_none(out) };
+            OK
+        }
+    }
+}
+
+/// Convert an `f32` to a bigint, truncating toward zero.
+#[no_mangle]
+pub extern "C-unwind" fn dlr_std__int_from_f32(
+    rt: *mut u8,
+    x_ptr: *const u8, _x_td: *const u8,
+    out: *mut u8, _out_td: *const u8,
+) -> u8 {
+    let x = unsafe { *(x_ptr as *const f32) };
+    match truncated_digits(x as f64) {
+        Some(digits) => unsafe { rider_helpers::write_option_int_from_str(rt, out, &digits) as u8 },
+        None => {
+            unsafe { rider_helpers::write_option_none(out) };
+            OK
+        }
+    }
+}
+
+// --- Float formatting and parsing ---
+
+#[no_mangle]
+pub extern "C-unwind" fn dlr_std__string_from_f64(
+    rt: *mut u8,
+    x_ptr: *const u8, _x_td: *const u8,
+    out: *mut u8, out_td: *const u8,
+) -> u8 {
+    let x = unsafe { *(x_ptr as *const f64) };
+    unsafe { write_string_result(rt, out, out_td, &x.to_string()) }
+}
+
+#[no_mangle]
+pub extern "C-unwind" fn dlr_std__string_from_f32(
+    rt: *mut u8,
+    x_ptr: *const u8, _x_td: *const u8,
+    out: *mut u8, out_td: *const u8,
+) -> u8 {
+    let x = unsafe { *(x_ptr as *const f32) };
+    unsafe { write_string_result(rt, out, out_td, &x.to_string()) }
+}
+
+#[no_mangle]
+pub extern "C-unwind" fn dlr_std__string_parse_f64(
+    _rt: *mut u8,
+    s_ptr: *const u8, _s_td: *const u8,
+    out: *mut u8, _out_td: *const u8,
+) -> u8 {
+    let s = unsafe { as_str(s_ptr) };
+    match s.parse::<f64>() {
+        Ok(val) => unsafe { rider_helpers::write_option_some(out, val) },
+        Err(_) => unsafe { rider_helpers::write_option_none(out) },
+    }
+    OK
+}

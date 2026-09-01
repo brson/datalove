@@ -48,6 +48,7 @@ import std.string_slice_to
 import std.string_parse_u32
 import std.string_parse_i32
 import std.string_parse_f32
+import std.string_parse_f64
 import std.string_from_u32
 import std.string_from_i32
 import std.string_split_once
@@ -57,6 +58,8 @@ import std.string_lines
 import std.string_split_whitespace
 import std.string_join
 import std.string_from_int
+import std.string_from_f32
+import std.string_from_f64
 import std.string_parse_int
 
 // --- Basic Properties ---
@@ -357,6 +360,11 @@ fun parse_f32(ref self: string): ?f32
   ret string_parse_f32(ref self)
 end fun
 
+// Parses the string as f64.
+fun parse_f64(ref self: string): ?f64
+  ret string_parse_f64(ref self)
+end fun
+
 // Parses the string as bool ("true" or "false").
 fun parse_bool(ref self: string): ?bool
   if eq(ref self, ref "true")
@@ -385,6 +393,17 @@ end fun
 // Converts i32 to string.
 fun from_i32(n: i32): string
   ret string_from_i32(n)
+end fun
+
+// Converts f32 to string. A value with no fractional part gets no decimal
+// point, so "2" rather than "2.0".
+fun from_f32(x: f32): string
+  ret string_from_f32(x)
+end fun
+
+// Converts f64 to string, on the same terms as from_f32.
+fun from_f64(x: f64): string
+  ret string_from_f64(x)
 end fun
 
 // Converts bool to "true" or "false".
