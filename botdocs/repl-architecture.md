@@ -102,6 +102,20 @@ restored, so it survives in the scrollback.
 Startup no longer runs cargo, so the original cause is gone. The reporting
 stays because it is the difference between an error and a hang.
 
+## Scrolling the history
+
+The history pane follows the newest output, which is where a session spends
+nearly all of its time, so the scroll position is held as a distance *up from
+the bottom* rather than down from the top. Zero needs no maintenance as
+entries arrive, and submitting resets it: someone who submits wants to see
+what it did, wherever they had scrolled to read.
+
+Only the renderer knows how tall the pane is or how many lines the entries
+came to, and both change every frame. It returns them as a `HistoryView`,
+which is what `record_history_view` bounds the scroll against - so paging past
+the oldest entry lands on it. The offset itself lives on `ReplApp`, out of the
+widgets, which is what lets `app_tests` page around with no terminal at all.
+
 ## Ownership at the prompt
 
 Every line is a script unit, which makes the linear rules that are right
@@ -132,8 +146,8 @@ an earlier unit stops being available.
   `BLESS=1` updates them; unset `RUST_BACKTRACE` first.
 - **app_tests** - the state machine against a scripted `MockExecutor`, with no
   engine at all, which is how the interleavings are reachable: a result
-  arriving after a later input, a crash reset, the multiline round trip, and
-  the engine reporting itself ready or dead.
+  arriving after a later input, a crash reset, the multiline round trip, the
+  engine reporting itself ready or dead, and paging through the history.
 
 Neither the rendering nor the key bindings have tests. `render.rs` would take
 ratatui's `TestBackend`; `term.rs` has no seam, since `run()` does terminal
@@ -151,4 +165,7 @@ setup and the loop together.
 - Mouse capture is enabled while only key events are read, which disables
   terminal text selection for no benefit.
 - History entries are two plain lines rather than the cards `repl-ui.md`
-  describes, and nothing scrolls the history panel.
+  describes.
+- PageUp and PageDown are the only way to scroll the history. The mouse wheel
+  is captured and dropped, and the pane cannot be scrolled while the menu or a
+  modal is open.

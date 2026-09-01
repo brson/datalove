@@ -271,3 +271,67 @@ fn a_dead_engine_is_reported() {
     assert_eq!(app.engine_dead_message(), Some("cargo is not installed"));
     assert!(matches!(app.history()[0].status, EntryStatus::Parsing));
 }
+
+/// Paging through the history stops at the oldest entry and at the newest,
+/// and the renderer is what says where those are.
+#[test]
+fn history_scrolls_by_the_page_within_its_bounds() {
+    let executor = MockExecutor::default();
+    let mut app = ReplApp::with_executor(executor.clone());
+
+    // Nothing has been rendered, so there is nowhere to scroll yet.
+    app.scroll_history_up();
+    assert_eq!(app.history_scroll_back(), 0);
+
+    // A ten-line pane over thirty lines of history: a page is nine, and the
+    // view can go twenty lines up.
+    app.record_history_view(10, 20);
+
+    app.scroll_history_up();
+    assert_eq!(app.history_scroll_back(), 9);
+
+    app.scroll_history_up();
+    assert_eq!(app.history_scroll_back(), 18);
+
+    // Past the oldest entry lands on it, once the renderer has said so.
+    app.scroll_history_up();
+    app.record_history_view(10, 20);
+    assert_eq!(app.history_scroll_back(), 20);
+
+    app.scroll_history_down();
+    assert_eq!(app.history_scroll_back(), 11);
+
+    // And back down stops at the newest.
+    app.scroll_history_down();
+    app.scroll_history_down();
+    assert_eq!(app.history_scroll_back(), 0);
+}
+
+/// History that fits in the pane has nowhere to scroll.
+#[test]
+fn a_short_history_does_not_scroll() {
+    let executor = MockExecutor::default();
+    let mut app = ReplApp::with_executor(executor.clone());
+
+    app.record_history_view(10, 0);
+    app.scroll_history_up();
+    app.record_history_view(10, 0);
+
+    assert_eq!(app.history_scroll_back(), 0);
+}
+
+/// Submitting returns the view to the newest output, since that is what the
+/// submission is going to produce.
+#[test]
+fn submitting_returns_to_the_newest_entry() {
+    let executor = MockExecutor::default();
+    let mut app = ReplApp::with_executor(executor.clone());
+
+    app.record_history_view(10, 20);
+    app.scroll_history_up();
+    assert_eq!(app.history_scroll_back(), 9);
+
+    app.submit_input("let x = 1".to_string());
+
+    assert_eq!(app.history_scroll_back(), 0);
+}

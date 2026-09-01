@@ -173,6 +173,10 @@ fn handle_key_event<E: ReplExecutor>(
                 }
             }
             KeyCode::Esc => app.open_menu(),
+            // Ahead of the textarea, which would otherwise take these to move
+            // its cursor.
+            KeyCode::PageUp => app.scroll_history_up(),
+            KeyCode::PageDown => app.scroll_history_down(),
             _ => {
                 // Pass all other keys to the textarea for handling.
                 app.handle_input_key(key);

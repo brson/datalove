@@ -119,6 +119,15 @@ pub struct ReplApp<E: ReplExecutor> {
     menu_selection: usize,
     /// Whether to exit the app.
     should_exit: bool,
+    /// How far up from the bottom of the history the view is scrolled, in
+    /// lines.
+    ///
+    /// Zero keeps the newest output in sight, which is where a session spends
+    /// nearly all its time. Only the renderer knows how tall the pane is or
+    /// how many lines the entries came to, so it is what bounds this.
+    history_scroll_back: usize,
+    /// Lines the history pane last showed, which is what a page scrolls by.
+    history_page: usize,
     /// Whether the engine has reported itself ready.
     ///
     /// The engine compiles the system library before it can answer anything,
@@ -150,6 +159,8 @@ impl<E: ReplExecutor> ReplApp<E> {
             menu_open: false,
             menu_selection: 0,
             should_exit: false,
+            history_scroll_back: 0,
+            history_page: 0,
             engine_ready: false,
             engine_dead: None,
             crash_modal: None,
@@ -179,6 +190,10 @@ impl<E: ReplExecutor> ReplApp<E> {
 
         let entry = HistoryEntry::new(input_text, id);
         self.history.push(entry);
+
+        // Someone who submits wants to see what it did, wherever they had
+        // scrolled to read.
+        self.history_scroll_back = 0;
 
         self.executor.submit_parse(id, input);
 
@@ -365,6 +380,31 @@ impl<E: ReplExecutor> ReplApp<E> {
 
     pub fn crash_modal_is_open(&self) -> bool {
         self.crash_modal.is_some()
+    }
+
+    /// Scroll the history a page towards the oldest entry.
+    pub fn scroll_history_up(&mut self) {
+        self.history_scroll_back += self.history_page;
+    }
+
+    /// Scroll the history a page towards the newest entry.
+    pub fn scroll_history_down(&mut self) {
+        self.history_scroll_back = self.history_scroll_back.saturating_sub(self.history_page);
+    }
+
+    /// How far up from the bottom the history is scrolled.
+    pub fn history_scroll_back(&self) -> usize {
+        self.history_scroll_back
+    }
+
+    /// Tell the app the shape of the history the renderer just laid out.
+    ///
+    /// A page is the pane less a line, so that scrolling leaves one line of
+    /// what was just read on screen. Scrolling past the oldest entry lands on
+    /// it rather than running off into nothing.
+    pub fn record_history_view(&mut self, pane_lines: usize, scroll_back_limit: usize) {
+        self.history_page = pane_lines.saturating_sub(1).max(1);
+        self.history_scroll_back = self.history_scroll_back.min(scroll_back_limit);
     }
 
     /// Whether the engine has finished starting.

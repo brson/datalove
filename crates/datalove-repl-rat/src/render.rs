@@ -14,7 +14,7 @@ use ratatui::{
 use crate::{RatatuiApp, ReplApp, ReplExecutor, EntryStatus};
 
 /// Render the UI.
-pub fn ui<E: ReplExecutor>(f: &mut Frame, app: &RatatuiApp<E>) {
+pub fn ui<E: ReplExecutor>(f: &mut Frame, app: &mut RatatuiApp<E>) {
     // Three-panel layout: history (top), input (middle), debug (bottom).
     // Single-line mode: Input centered like a Cylon visor.
     // Multi-line mode: Input grows downward from center to 1/3 screen.
@@ -44,7 +44,8 @@ pub fn ui<E: ReplExecutor>(f: &mut Frame, app: &RatatuiApp<E>) {
         .split(f.area());
 
     // History panel - scrollable display of interactive cards.
-    render_history(f, &app.repl, chunks[0]);
+    let history_view = render_history(f, &app.repl, chunks[0]);
+    app.repl.record_history_view(history_view.pane_lines, history_view.scroll_back_limit);
 
     // Input panel - current text input with multiline indicators.
     render_input(f, app, chunks[1]);
@@ -90,8 +91,19 @@ fn binding_line(binding: &repl::EvalBinding) -> Line<'_> {
     }
 }
 
+/// The shape of the history pane a frame laid out.
+///
+/// The renderer is the only thing that knows either number, and the app needs
+/// both to bound scrolling.
+struct HistoryView {
+    /// Lines the pane showed.
+    pane_lines: usize,
+    /// The furthest up from the bottom the view can scroll.
+    scroll_back_limit: usize,
+}
+
 /// Render the history panel with interactive cards.
-fn render_history<E: ReplExecutor>(f: &mut Frame, repl: &ReplApp<E>, area: Rect) {
+fn render_history<E: ReplExecutor>(f: &mut Frame, repl: &ReplApp<E>, area: Rect) -> HistoryView {
     let history_block = Block::default()
         .borders(Borders::ALL)
         .title("History");
@@ -287,10 +299,11 @@ fn render_history<E: ReplExecutor>(f: &mut Frame, repl: &ReplApp<E>, area: Rect)
         lines.push(Line::from(""));
     }
 
-    // Calculate scroll position to keep bottom visible.
+    // The pane sits at the bottom of the history unless the user paged up.
     let content_height = lines.len();
     let viewport_height = area.height.saturating_sub(2) as usize; // Subtract borders.
-    let scroll_offset = content_height.saturating_sub(viewport_height) as u16;
+    let bottom = content_height.saturating_sub(viewport_height);
+    let scroll_offset = (bottom - repl.history_scroll_back().min(bottom)) as u16;
 
     let history = Paragraph::new(lines)
         .block(history_block)
@@ -311,6 +324,8 @@ fn render_history<E: ReplExecutor>(f: &mut Frame, repl: &ReplApp<E>, area: Rect)
         area.inner(ratatui::layout::Margin { vertical: 1, horizontal: 0 }),
         &mut scrollbar_state,
     );
+
+    HistoryView { pane_lines: viewport_height, scroll_back_limit: bottom }
 }
 
 /// Render the input panel with multiline indicators.

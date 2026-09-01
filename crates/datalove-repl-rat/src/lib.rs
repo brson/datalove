@@ -110,6 +110,14 @@ impl<E: ReplExecutor> RatatuiApp<E> {
         self.repl.execute_menu_action();
     }
 
+    pub fn scroll_history_up(&mut self) {
+        self.repl.scroll_history_up();
+    }
+
+    pub fn scroll_history_down(&mut self) {
+        self.repl.scroll_history_down();
+    }
+
     pub fn dismiss_crash_modal(&mut self) {
         self.repl.dismiss_crash_modal();
     }
