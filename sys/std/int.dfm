@@ -161,6 +161,28 @@ fun gcd(self: int, other: int): int
   ret a
 end fun
 
+// Least common multiple of the magnitudes.
+//
+// Reduced by the divisor before multiplying, so the intermediate stays near
+// the answer rather than growing to the product of both sides.
+//
+// The only multiple of zero is zero, so lcm(n, 0) and lcm(0, 0) are zero.
+fun lcm(self: int, other: int): int
+  let a: int = abs(self)
+  let b: int = abs(other)
+  let divisor: int = gcd(a@, b@)
+  if is_zero(divisor@)
+    ret 0
+  else
+    if div_checked(a, divisor) |reduced|
+      ret reduced * b
+    else
+      // Unreachable: the branch above took the zero divisor.
+      ret 0
+    end if
+  end if
+end fun
+
 // The largest integer whose square is at most self, by Newton's method.
 //
 // None for a negative self, which has no integer square root.

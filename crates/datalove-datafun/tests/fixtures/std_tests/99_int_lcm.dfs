@@ -1,0 +1,26 @@
+require module sys/std/int
+
+import int.lcm
+import int.gcd
+import int.pow
+
+let common = (lcm(4, 6), lcm(21, 6), lcm(17, 5), lcm(7, 7))
+
+// Signs do not reach the answer: it is the multiple of both magnitudes.
+let signed = (lcm(-4, 6), lcm(4, -6), lcm(-4, -6))
+
+// The only multiple of zero is zero.
+let zeroes = (lcm(9, 0), lcm(0, 9), lcm(0, 0))
+
+// lcm times gcd is the product of the two, which is the identity the
+// reduction relies on.
+let a = 5040
+let b = 594
+let identity = (lcm(a@, b@) * gcd(a@, b@), a * b)
+
+// Reduced before multiplying, so this stays a hundred digits rather than two
+// hundred on the way through.
+let big = pow(10, 100)
+let big_lcm = lcm(big@, big)
+
+let output = (common, signed, zeroes, identity, big_lcm)
