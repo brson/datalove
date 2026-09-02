@@ -38,6 +38,15 @@ const CASES: &[Case] = &[
     ("f64", "5"),
     ("f64", "-5"),
     ("f32", "-5"),
+    // Underscores group digits and say nothing about the value. They go
+    // between digits, so a run begins and ends with one.
+    ("int", "1_000"),
+    ("int", "1_000_000"),
+    ("u32", "1_000"),
+    ("f64", "1_0.5"),
+    ("f64", "1.000_1"),
+    ("f64", "1.0e1_0"),
+    ("u8", "25_6"),
     // Integers take what fits, with the sign counted in.
     ("int", "5"),
     ("int", "-5"),
@@ -56,6 +65,18 @@ const CASES: &[Case] = &[
     ("u32", "5"),
     ("u32", "-5"),
     ("index", "-5"),
+];
+
+/// Text that is not a numeric literal in either language.
+///
+/// These are compared on the verdict alone rather than the error, because
+/// the two reject them for reasons that differ legitimately: datafun has
+/// names, so `_1` is one that happens to be unbound, while datalit has
+/// nothing but literals and can only say it cannot read this as a value.
+const NOT_LITERALS: &[Case] = &[
+    ("int", "1_"),
+    ("int", "_1"),
+    ("u32", "0x_FF"),
 ];
 
 /// The name of each error a typechecker raised, without its payload.
@@ -112,6 +133,23 @@ fn literal_types_agree_between_datalit_and_datafun() {
     );
 }
 
+/// Neither language reads a separator outside a run of digits as one.
+#[test]
+fn separators_belong_between_digits() {
+    let db = datalove_datafun_compiler::Database::default();
+
+    for (ty, literal) in NOT_LITERALS {
+        assert!(
+            !datalit_errors(&db, ty, literal).is_empty(),
+            "datalit read {literal} as a literal",
+        );
+        assert!(
+            !datafun_errors(&db, ty, literal).is_empty(),
+            "datafun read {literal} as a literal",
+        );
+    }
+}
+
 /// The cases above are only worth comparing if they reach a verdict at all.
 ///
 /// Two typecheckers that both fell over would agree perfectly, so this pins
@@ -141,6 +179,12 @@ fn literal_types_are_decided_as_expected() {
             ("f64", "1e-7"),
             ("f64", "-1.0e-7"),
             ("f32", "1e30"),
+            ("int", "1_000"),
+            ("int", "1_000_000"),
+            ("u32", "1_000"),
+            ("f64", "1_0.5"),
+            ("f64", "1.000_1"),
+            ("f64", "1.0e1_0"),
             ("int", "5"),
             ("int", "-5"),
             ("i32", "5"),

@@ -1,7 +1,8 @@
 //! Re-export parser utilities from bcts.
 
 pub use bct::parser_util::{
-    eat_exponent_tail, float_exponent, is_numeric_literal,
+    eat_exponent_tail, float_exponent, is_decimal_run, is_numeric_literal,
+    strip_separators,
     FloatExponent, TokenStream, TokenStreamExt,
 };
 

@@ -74,6 +74,16 @@ true      type      var       while     xor
 Bare integer literals synthesize as `int` (arbitrary-precision).
 Use a type hint for fixed-width types: `: u32 / 42`.
 
+Underscores may group digits, and say nothing about the value:
+
+```datalove
+1_000_000
+0xFF_FF
+```
+
+A separator goes between digits, so a literal begins and ends with one.
+`_1` is a name rather than a number, and `1_` is neither.
+
 **Floating-point** numbers use decimal notation, with an optional exponent:
 
 ```datalove
@@ -87,7 +97,8 @@ Use a type hint for fixed-width types: `: u32 / 42`.
 A point or an exponent is what makes a literal a float; `42` is an integer
 and `42.0` and `4.2e1` are floats. The exponent's sign may be written or
 left out, and its marker may be `e` or `E`. The fraction may be left out
-when there is an exponent: `1e-7` needs no `.0`.
+when there is an exponent: `1e-7` needs no `.0`. Separators group the
+digits here too, in any of the three runs: `1_0.000_1e1_0`.
 
 This is also how floats are printed, so a value that comes out of the
 compiler can be typed back into it. Magnitudes from `1e-5` up to `1e16`

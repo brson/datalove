@@ -1,0 +1,67 @@
+{
+  "ast": {
+    "statements": [
+      {
+        "kind": "Let",
+        "name": "a",
+        "type_hint": null,
+        "value": {
+          "expr": {
+            "kind": "Int",
+            "type_hint": null,
+            "value": "1_000_000"
+          }
+        }
+      },
+      {
+        "kind": "Let",
+        "name": "b",
+        "type_hint": null,
+        "value": {
+          "expr": {
+            "kind": "Hex",
+            "type_hint": null,
+            "value": "0xFF_FF"
+          }
+        }
+      },
+      {
+        "kind": "Let",
+        "name": "c",
+        "type_hint": null,
+        "value": {
+          "expr": {
+            "kind": "Float",
+            "type_hint": null,
+            "value": "1_0.000_1"
+          }
+        }
+      },
+      {
+        "kind": "Let",
+        "name": "d",
+        "type_hint": null,
+        "value": {
+          "expr": {
+            "kind": "Float",
+            "type_hint": null,
+            "value": "1.0e1_0"
+          }
+        }
+      },
+      {
+        "kind": "Let",
+        "name": "e",
+        "type_hint": "U32",
+        "value": {
+          "expr": {
+            "kind": "Int",
+            "type_hint": null,
+            "value": "4_294_967_295"
+          }
+        }
+      }
+    ]
+  },
+  "diagnostics": []
+}

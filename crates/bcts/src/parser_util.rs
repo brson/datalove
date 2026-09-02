@@ -177,11 +177,40 @@ impl<'db, T: TokenStream<'db>> TokenStreamExt<'db> for T {}
 /// Check if a word is a numeric literal (decimal or hex).
 pub fn is_numeric_literal(word: &str) -> bool {
     if word.starts_with("0x") || word.starts_with("0X") {
-        // Hex literal: 0x followed by hex digits.
-        word.len() > 2 && word[2..].chars().all(|c| c.is_ascii_hexdigit())
+        is_digit_run(&word[2..], |c| c.is_ascii_hexdigit())
     } else {
-        // Decimal literal: all digits.
-        word.chars().all(|c| c.is_ascii_digit())
+        is_digit_run(word, |c| c.is_ascii_digit())
+    }
+}
+
+/// Check a run of digits, which may be grouped by underscores.
+///
+/// An underscore separates digits for a reader and means nothing to the
+/// value, so it goes between them: a run begins and ends with a digit. That
+/// also leaves `_1` the name it looks like.
+pub fn is_digit_run(text: &str, is_digit: impl Fn(char) -> bool) -> bool {
+    let mut chars = text.chars();
+    let (Some(first), Some(last)) = (chars.next(), text.chars().next_back()) else {
+        return false;
+    };
+    is_digit(first) && is_digit(last) && chars.all(|c| is_digit(c) || c == '_')
+}
+
+/// Check a run of decimal digits, which may be grouped by underscores.
+pub fn is_decimal_run(text: &str) -> bool {
+    is_digit_run(text, |c| c.is_ascii_digit())
+}
+
+/// A numeric literal's text with its digit separators removed.
+///
+/// Underscores mean nothing to the value, so they come off before anything
+/// reads the text as a number. Text carrying none is passed through
+/// untouched, which is nearly all of it.
+pub fn strip_separators(text: &str) -> std::borrow::Cow<'_, str> {
+    if text.contains('_') {
+        std::borrow::Cow::Owned(text.chars().filter(|c| *c != '_').collect())
+    } else {
+        std::borrow::Cow::Borrowed(text)
     }
 }
 
@@ -226,7 +255,7 @@ pub fn float_exponent(word: &str) -> Option<FloatExponent<'_>> {
     let (digits, rest) = word.split_at(marker);
     let exponent = &rest[1..];
 
-    if digits.is_empty() || !digits.chars().all(|c| c.is_ascii_digit()) {
+    if !is_decimal_run(digits) {
         return None;
     }
     // A second marker is not an exponent, it is a name.
@@ -236,7 +265,7 @@ pub fn float_exponent(word: &str) -> Option<FloatExponent<'_>> {
 
     if exponent.is_empty() {
         Some(FloatExponent::Pending { digits })
-    } else if exponent.chars().all(|c| c.is_ascii_digit()) {
+    } else if is_decimal_run(exponent) {
         Some(FloatExponent::Complete { digits, exponent })
     } else {
         None
@@ -262,7 +291,7 @@ pub fn eat_exponent_tail<'db, S: TokenStreamExt<'db>>(stream: &mut S) -> Option<
     };
 
     let digits = stream.peek_word()?;
-    if digits.is_empty() || !digits.chars().all(|c| c.is_ascii_digit()) {
+    if !is_decimal_run(digits) {
         return None;
     }
     stream.next();

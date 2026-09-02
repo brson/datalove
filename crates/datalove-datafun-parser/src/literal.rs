@@ -289,7 +289,7 @@ impl<'db> Parser<'db> {
             return FloatTail::Malformed;
         };
 
-        if fraction.chars().all(|c| c.is_ascii_digit()) {
+        if bct::parser_util::is_decimal_run(fraction) {
             self.next();
             return FloatTail::Text(fmt!("{word}.{fraction}"));
         }
@@ -326,18 +326,10 @@ impl<'db> Parser<'db> {
     }
 
     /// Helper to check if a string is a numeric literal.
+    ///
+    /// Shared with datalit, so that the two read the same words as numbers.
     pub(super) fn is_numeric_literal(s: &str) -> bool {
-        if s.is_empty() {
-            return false;
-        }
-        if s.starts_with("0x") || s.starts_with("0X") {
-            // Hex literal - allow hex digits after prefix.
-            let s = &s[2..];
-            !s.is_empty() && s.chars().all(|c| c.is_ascii_hexdigit() || c == '_')
-        } else {
-            // Decimal literal - only allow decimal digits.
-            s.chars().all(|c| c.is_ascii_digit() || c == '_')
-        }
+        bct::parser_util::is_numeric_literal(s)
     }
 
     /// Parse anonymous tuple: (expr, expr, ...)

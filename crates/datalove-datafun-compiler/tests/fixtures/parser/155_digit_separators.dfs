@@ -1,0 +1,7 @@
+// Underscores group digits and say nothing about the value. They go between
+// digits, in any of the runs a number is made of.
+let a = 1_000_000
+let b = 0xFF_FF
+let c = 1_0.000_1
+let d = 1.0e1_0
+let e: u32 = 4_294_967_295

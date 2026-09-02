@@ -98,7 +98,7 @@ impl<'db> Parser<'db> {
         };
         let fraction = fraction.S();
 
-        if fraction.chars().all(|c| c.is_ascii_digit()) {
+        if parser_util::is_decimal_run(&fraction) {
             self.next();
             return FloatTail::Text(fmt!("{word}.{fraction}"));
         }

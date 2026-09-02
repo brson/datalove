@@ -110,6 +110,38 @@ fn test_parse_not_float_exponent() {
     }
 }
 
+/// Underscores group digits and are not part of the value.
+#[test]
+fn test_parse_digit_separators() {
+    let ref db = crate::Database::default();
+    for source_text in ["1_000", "1_000_000", "0xFF_FF", "1_0.000_1", "1.0e1_0"] {
+        let source = Source::new(db, S(source_text));
+        let ast = parse_for_test(db, source);
+        let text = match ast.expr(db).clone() {
+            ast::Expr::Int(e) => e.value.as_str(db).S(),
+            ast::Expr::Hex(e) => e.value.as_str(db).S(),
+            ast::Expr::Float(e) => e.value.as_str(db).S(),
+            _ => panic!("expected {source_text} to be a number"),
+        };
+        assert_eq!(text, source_text, "the literal is kept as written");
+    }
+}
+
+/// A separator outside a run of digits is not one.
+#[test]
+fn test_parse_separator_needs_digits() {
+    let ref db = crate::Database::default();
+    for source_text in ["1_", "_1", "0x_FF"] {
+        let source = Source::new(db, S(source_text));
+        let ast = parse_for_test(db, source);
+        let is_number = matches!(
+            ast.expr(db).clone(),
+            ast::Expr::Int(_) | ast::Expr::Hex(_) | ast::Expr::Float(_),
+        );
+        assert!(!is_number, "{source_text} was read as a number");
+    }
+}
+
 #[test]
 fn test_parse_float_with_type() {
     let ref db = crate::Database::default();

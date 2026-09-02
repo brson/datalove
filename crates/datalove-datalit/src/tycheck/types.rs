@@ -720,6 +720,9 @@ fn check_coercion_arity_or_mismatch<'db>(
 ///
 /// Only valid for integer types (fixed-size or bigint).
 pub fn check_int_fits_type(value_str: &str, ty: &Type<'_>) -> Result<(), TypeError> {
+    // Underscores group digits for a reader; the value is what is left.
+    let value_str = crate::parser_util::strip_separators(value_str);
+    let value_str = value_str.as_ref();
     match ty {
         Type::U8 => value_str.parse::<u8>().map(|_| ()).map_err(|_| TypeError::IntOutOfRange),
         Type::I8 => value_str.parse::<i8>().map(|_| ()).map_err(|_| TypeError::IntOutOfRange),
@@ -750,6 +753,8 @@ pub fn check_int_fits_wrapped_type<'db>(
 
 /// Check if a hex value fits within a given type.
 pub fn check_hex_fits_type(value_str: &str, ty: &Type<'_>) -> Result<(), TypeError> {
+    let value_str = crate::parser_util::strip_separators(value_str);
+    let value_str = value_str.as_ref();
     let is_negative = value_str.starts_with('-');
     let hex_part = value_str
         .trim_start_matches('-')

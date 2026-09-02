@@ -4,8 +4,19 @@
 
 use datalove_datafun_ir::{IrType, ConstValue};
 
+/// A literal's text with its digit separators removed.
+///
+/// Every function here takes the literal as the source wrote it, and
+/// underscores group digits for a reader rather than saying anything about
+/// the value, so they come off before any of it is read as a number.
+fn digits(text: &str) -> std::borrow::Cow<'_, str> {
+    bct::parser_util::strip_separators(text)
+}
+
 /// Convert a decimal string to bigint limbs (little-endian base 2^32).
 pub fn parse_decimal_to_limbs(text: &str) -> Result<(Vec<u32>, bool), ()> {
+    let text = digits(text);
+    let text = text.as_ref();
     let (negative, text) = if let Some(rest) = text.strip_prefix('-') {
         (true, rest)
     } else {
@@ -60,6 +71,8 @@ pub fn parse_decimal_to_limbs(text: &str) -> Result<(Vec<u32>, bool), ()> {
 
 /// Convert a hex string to bigint limbs (little-endian base 2^32).
 pub fn parse_hex_to_limbs(hex_str: &str) -> Result<(Vec<u32>, bool), ()> {
+    let hex_str = digits(hex_str);
+    let hex_str = hex_str.as_ref();
     // Parse from right to left, 8 hex digits at a time = 1 u32 limb.
     let mut limbs = Vec::new();
     let len = hex_str.len();
@@ -89,6 +102,8 @@ pub fn parse_hex_to_limbs(hex_str: &str) -> Result<(Vec<u32>, bool), ()> {
 
 /// Parse an integer literal into a ConstValue based on the target type.
 pub fn parse_int_const(text: &str, ty: &IrType) -> Result<ConstValue, ()> {
+    let text = digits(text);
+    let text = text.as_ref();
     match ty {
         IrType::U8 => text.parse::<u8>().map(ConstValue::U8).map_err(|_| ()),
         IrType::U16 => text.parse::<u16>().map(ConstValue::U16).map_err(|_| ()),
@@ -110,6 +125,8 @@ pub fn parse_int_const(text: &str, ty: &IrType) -> Result<ConstValue, ()> {
 
 /// Parse a float literal into a ConstValue based on the target type.
 pub fn parse_float_const(text: &str, ty: &IrType) -> Result<ConstValue, ()> {
+    let text = digits(text);
+    let text = text.as_ref();
     match ty {
         IrType::F32 => text.parse::<f32>().map(ConstValue::F32).map_err(|_| ()),
         IrType::F64 => text.parse::<f64>().map(ConstValue::F64).map_err(|_| ()),
@@ -136,6 +153,8 @@ pub fn string_literal_content(raw: &str) -> &str {
 /// For example, `-2147483648` fits in i32 but `2147483648` doesn't.
 /// Returns Some(ConstValue) if successful, None if the negated value doesn't fit.
 pub fn try_parse_negated_int_const(text: &str, ty: &IrType) -> Option<ConstValue> {
+    let text = digits(text);
+    let text = text.as_ref();
     let negated = format!("-{}", text);
     match ty {
         IrType::I8 => negated.parse::<i8>().map(ConstValue::I8).ok(),
@@ -155,6 +174,8 @@ pub fn try_parse_negated_int_const(text: &str, ty: &IrType) -> Option<ConstValue
 
 /// Parse a hex literal into a ConstValue based on the target type.
 pub fn parse_hex_const(hex_str: &str, ty: &IrType) -> Result<ConstValue, ()> {
+    let hex_str = digits(hex_str);
+    let hex_str = hex_str.as_ref();
     match ty {
         IrType::U8 => u8::from_str_radix(hex_str, 16).map(ConstValue::U8).map_err(|_| ()),
         IrType::U16 => u16::from_str_radix(hex_str, 16).map(ConstValue::U16).map_err(|_| ()),

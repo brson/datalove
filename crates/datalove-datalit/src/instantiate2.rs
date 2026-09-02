@@ -234,7 +234,7 @@ fn instantiate_bool(_rt: datalove_rt::c::LocalRtHandle, value: bool, dest_ptr: *
 
 fn instantiate_u8(_rt: datalove_rt::c::LocalRtHandle, db: &dyn crate::Db, int_expr: &ExprInt, dest_ptr: *mut u8) -> AnyResult<*const u8> {
     debug_assert!(!dest_ptr.is_null());
-    let value_str = int_expr.value.as_str(db);
+    let value_str = crate::parser_util::strip_separators(int_expr.value.as_str(db));
     let value: u8 = value_str.parse()?;
     unsafe {
         *dest_ptr = value;
@@ -244,7 +244,7 @@ fn instantiate_u8(_rt: datalove_rt::c::LocalRtHandle, db: &dyn crate::Db, int_ex
 
 fn instantiate_i8(_rt: datalove_rt::c::LocalRtHandle, db: &dyn crate::Db, int_expr: &ExprInt, dest_ptr: *mut u8) -> AnyResult<*const u8> {
     debug_assert!(!dest_ptr.is_null());
-    let value_str = int_expr.value.as_str(db);
+    let value_str = crate::parser_util::strip_separators(int_expr.value.as_str(db));
     let value: i8 = value_str.parse()?;
     unsafe {
         *(dest_ptr as *mut i8) = value;
@@ -254,7 +254,7 @@ fn instantiate_i8(_rt: datalove_rt::c::LocalRtHandle, db: &dyn crate::Db, int_ex
 
 fn instantiate_u16(_rt: datalove_rt::c::LocalRtHandle, db: &dyn crate::Db, int_expr: &ExprInt, dest_ptr: *mut u8) -> AnyResult<*const u8> {
     debug_assert!(!dest_ptr.is_null());
-    let value_str = int_expr.value.as_str(db);
+    let value_str = crate::parser_util::strip_separators(int_expr.value.as_str(db));
     let value: u16 = value_str.parse()?;
     unsafe {
         *(dest_ptr as *mut u16) = value;
@@ -264,7 +264,7 @@ fn instantiate_u16(_rt: datalove_rt::c::LocalRtHandle, db: &dyn crate::Db, int_e
 
 fn instantiate_i16(_rt: datalove_rt::c::LocalRtHandle, db: &dyn crate::Db, int_expr: &ExprInt, dest_ptr: *mut u8) -> AnyResult<*const u8> {
     debug_assert!(!dest_ptr.is_null());
-    let value_str = int_expr.value.as_str(db);
+    let value_str = crate::parser_util::strip_separators(int_expr.value.as_str(db));
     let value: i16 = value_str.parse()?;
     unsafe {
         *(dest_ptr as *mut i16) = value;
@@ -274,7 +274,7 @@ fn instantiate_i16(_rt: datalove_rt::c::LocalRtHandle, db: &dyn crate::Db, int_e
 
 fn instantiate_u32(_rt: datalove_rt::c::LocalRtHandle, db: &dyn crate::Db, int_expr: &ExprInt, dest_ptr: *mut u8) -> AnyResult<*const u8> {
     debug_assert!(!dest_ptr.is_null());
-    let value_str = int_expr.value.as_str(db);
+    let value_str = crate::parser_util::strip_separators(int_expr.value.as_str(db));
     let value: u32 = value_str.parse()?;
     unsafe {
         *(dest_ptr as *mut u32) = value;
@@ -284,7 +284,7 @@ fn instantiate_u32(_rt: datalove_rt::c::LocalRtHandle, db: &dyn crate::Db, int_e
 
 fn instantiate_i32(_rt: datalove_rt::c::LocalRtHandle, db: &dyn crate::Db, int_expr: &ExprInt, dest_ptr: *mut u8) -> AnyResult<*const u8> {
     debug_assert!(!dest_ptr.is_null());
-    let value_str = int_expr.value.as_str(db);
+    let value_str = crate::parser_util::strip_separators(int_expr.value.as_str(db));
     let value: i32 = value_str.parse()?;
     unsafe {
         *(dest_ptr as *mut i32) = value;
@@ -294,7 +294,7 @@ fn instantiate_i32(_rt: datalove_rt::c::LocalRtHandle, db: &dyn crate::Db, int_e
 
 fn instantiate_u64(_rt: datalove_rt::c::LocalRtHandle, db: &dyn crate::Db, int_expr: &ExprInt, dest_ptr: *mut u8) -> AnyResult<*const u8> {
     debug_assert!(!dest_ptr.is_null());
-    let value_str = int_expr.value.as_str(db);
+    let value_str = crate::parser_util::strip_separators(int_expr.value.as_str(db));
     let value: u64 = value_str.parse()?;
     unsafe {
         *(dest_ptr as *mut u64) = value;
@@ -304,7 +304,7 @@ fn instantiate_u64(_rt: datalove_rt::c::LocalRtHandle, db: &dyn crate::Db, int_e
 
 fn instantiate_i64(_rt: datalove_rt::c::LocalRtHandle, db: &dyn crate::Db, int_expr: &ExprInt, dest_ptr: *mut u8) -> AnyResult<*const u8> {
     debug_assert!(!dest_ptr.is_null());
-    let value_str = int_expr.value.as_str(db);
+    let value_str = crate::parser_util::strip_separators(int_expr.value.as_str(db));
     let value: i64 = value_str.parse()?;
     unsafe {
         *(dest_ptr as *mut i64) = value;
@@ -314,7 +314,7 @@ fn instantiate_i64(_rt: datalove_rt::c::LocalRtHandle, db: &dyn crate::Db, int_e
 
 fn instantiate_usize(_rt: datalove_rt::c::LocalRtHandle, db: &dyn crate::Db, int_expr: &ExprInt, dest_ptr: *mut u8) -> AnyResult<*const u8> {
     debug_assert!(!dest_ptr.is_null());
-    let value_str = int_expr.value.as_str(db);
+    let value_str = crate::parser_util::strip_separators(int_expr.value.as_str(db));
     let value: datalove_rtdt::IndexRepr = value_str.parse()?;
     unsafe {
         *(dest_ptr as *mut datalove_rtdt::Index) = datalove_rtdt::Index(value);
@@ -324,7 +324,7 @@ fn instantiate_usize(_rt: datalove_rt::c::LocalRtHandle, db: &dyn crate::Db, int
 
 fn instantiate_isize(_rt: datalove_rt::c::LocalRtHandle, db: &dyn crate::Db, int_expr: &ExprInt, dest_ptr: *mut u8) -> AnyResult<*const u8> {
     debug_assert!(!dest_ptr.is_null());
-    let value_str = int_expr.value.as_str(db);
+    let value_str = crate::parser_util::strip_separators(int_expr.value.as_str(db));
     let value: datalove_rtdt::OffsetRepr = value_str.parse()?;
     unsafe {
         *(dest_ptr as *mut datalove_rtdt::Offset) = datalove_rtdt::Offset(value);
@@ -334,7 +334,7 @@ fn instantiate_isize(_rt: datalove_rt::c::LocalRtHandle, db: &dyn crate::Db, int
 
 fn instantiate_f32(_rt: datalove_rt::c::LocalRtHandle, db: &dyn crate::Db, float_expr: &ExprFloat, dest_ptr: *mut u8) -> AnyResult<*const u8> {
     debug_assert!(!dest_ptr.is_null());
-    let value_str = float_expr.value.as_str(db);
+    let value_str = crate::parser_util::strip_separators(float_expr.value.as_str(db));
     let value: f32 = value_str.parse()?;
     unsafe {
         *(dest_ptr as *mut f32) = value;
@@ -344,7 +344,7 @@ fn instantiate_f32(_rt: datalove_rt::c::LocalRtHandle, db: &dyn crate::Db, float
 
 fn instantiate_f64(_rt: datalove_rt::c::LocalRtHandle, db: &dyn crate::Db, float_expr: &ExprFloat, dest_ptr: *mut u8) -> AnyResult<*const u8> {
     debug_assert!(!dest_ptr.is_null());
-    let value_str = float_expr.value.as_str(db);
+    let value_str = crate::parser_util::strip_separators(float_expr.value.as_str(db));
     let value: f64 = value_str.parse()?;
     unsafe {
         *(dest_ptr as *mut f64) = value;
@@ -357,14 +357,16 @@ fn instantiate_f64(_rt: datalove_rt::c::LocalRtHandle, db: &dyn crate::Db, float
 // ============================================================================
 
 /// Parse hex string, stripping the `0x` or `0X` prefix.
-fn parse_hex_str(s: &str) -> &str {
-    s.strip_prefix("0x").or_else(|| s.strip_prefix("0X")).unwrap_or(s)
+/// A hex literal's digits: no prefix, and no separators either.
+fn parse_hex_str(s: &str) -> String {
+    let digits = s.strip_prefix("0x").or_else(|| s.strip_prefix("0X")).unwrap_or(s);
+    crate::parser_util::strip_separators(digits).into_owned()
 }
 
 fn instantiate_hex_u8(_rt: datalove_rt::c::LocalRtHandle, db: &dyn crate::Db, hex_expr: &ExprHex, dest_ptr: *mut u8) -> AnyResult<*const u8> {
     debug_assert!(!dest_ptr.is_null());
     let value_str = hex_expr.value.as_str(db);
-    let value = u8::from_str_radix(parse_hex_str(value_str), 16)?;
+    let value = u8::from_str_radix(&parse_hex_str(value_str), 16)?;
     unsafe {
         *dest_ptr = value;
         Ok(dest_ptr as *const u8)
@@ -375,7 +377,7 @@ fn instantiate_hex_i8(_rt: datalove_rt::c::LocalRtHandle, db: &dyn crate::Db, he
     debug_assert!(!dest_ptr.is_null());
     let value_str = hex_expr.value.as_str(db);
     // Parse as u8, then reinterpret bits as i8.
-    let value = u8::from_str_radix(parse_hex_str(value_str), 16)?;
+    let value = u8::from_str_radix(&parse_hex_str(value_str), 16)?;
     unsafe {
         *(dest_ptr as *mut i8) = value as i8;
         Ok(dest_ptr as *const u8)
@@ -385,7 +387,7 @@ fn instantiate_hex_i8(_rt: datalove_rt::c::LocalRtHandle, db: &dyn crate::Db, he
 fn instantiate_hex_u16(_rt: datalove_rt::c::LocalRtHandle, db: &dyn crate::Db, hex_expr: &ExprHex, dest_ptr: *mut u8) -> AnyResult<*const u8> {
     debug_assert!(!dest_ptr.is_null());
     let value_str = hex_expr.value.as_str(db);
-    let value = u16::from_str_radix(parse_hex_str(value_str), 16)?;
+    let value = u16::from_str_radix(&parse_hex_str(value_str), 16)?;
     unsafe {
         *(dest_ptr as *mut u16) = value;
         Ok(dest_ptr as *const u8)
@@ -395,7 +397,7 @@ fn instantiate_hex_u16(_rt: datalove_rt::c::LocalRtHandle, db: &dyn crate::Db, h
 fn instantiate_hex_i16(_rt: datalove_rt::c::LocalRtHandle, db: &dyn crate::Db, hex_expr: &ExprHex, dest_ptr: *mut u8) -> AnyResult<*const u8> {
     debug_assert!(!dest_ptr.is_null());
     let value_str = hex_expr.value.as_str(db);
-    let value = u16::from_str_radix(parse_hex_str(value_str), 16)?;
+    let value = u16::from_str_radix(&parse_hex_str(value_str), 16)?;
     unsafe {
         *(dest_ptr as *mut i16) = value as i16;
         Ok(dest_ptr as *const u8)
@@ -405,7 +407,7 @@ fn instantiate_hex_i16(_rt: datalove_rt::c::LocalRtHandle, db: &dyn crate::Db, h
 fn instantiate_hex_u32(_rt: datalove_rt::c::LocalRtHandle, db: &dyn crate::Db, hex_expr: &ExprHex, dest_ptr: *mut u8) -> AnyResult<*const u8> {
     debug_assert!(!dest_ptr.is_null());
     let value_str = hex_expr.value.as_str(db);
-    let value = u32::from_str_radix(parse_hex_str(value_str), 16)?;
+    let value = u32::from_str_radix(&parse_hex_str(value_str), 16)?;
     unsafe {
         *(dest_ptr as *mut u32) = value;
         Ok(dest_ptr as *const u8)
@@ -415,7 +417,7 @@ fn instantiate_hex_u32(_rt: datalove_rt::c::LocalRtHandle, db: &dyn crate::Db, h
 fn instantiate_hex_i32(_rt: datalove_rt::c::LocalRtHandle, db: &dyn crate::Db, hex_expr: &ExprHex, dest_ptr: *mut u8) -> AnyResult<*const u8> {
     debug_assert!(!dest_ptr.is_null());
     let value_str = hex_expr.value.as_str(db);
-    let value = u32::from_str_radix(parse_hex_str(value_str), 16)?;
+    let value = u32::from_str_radix(&parse_hex_str(value_str), 16)?;
     unsafe {
         *(dest_ptr as *mut i32) = value as i32;
         Ok(dest_ptr as *const u8)
@@ -425,7 +427,7 @@ fn instantiate_hex_i32(_rt: datalove_rt::c::LocalRtHandle, db: &dyn crate::Db, h
 fn instantiate_hex_u64(_rt: datalove_rt::c::LocalRtHandle, db: &dyn crate::Db, hex_expr: &ExprHex, dest_ptr: *mut u8) -> AnyResult<*const u8> {
     debug_assert!(!dest_ptr.is_null());
     let value_str = hex_expr.value.as_str(db);
-    let value = u64::from_str_radix(parse_hex_str(value_str), 16)?;
+    let value = u64::from_str_radix(&parse_hex_str(value_str), 16)?;
     unsafe {
         *(dest_ptr as *mut u64) = value;
         Ok(dest_ptr as *const u8)
@@ -435,7 +437,7 @@ fn instantiate_hex_u64(_rt: datalove_rt::c::LocalRtHandle, db: &dyn crate::Db, h
 fn instantiate_hex_i64(_rt: datalove_rt::c::LocalRtHandle, db: &dyn crate::Db, hex_expr: &ExprHex, dest_ptr: *mut u8) -> AnyResult<*const u8> {
     debug_assert!(!dest_ptr.is_null());
     let value_str = hex_expr.value.as_str(db);
-    let value = u64::from_str_radix(parse_hex_str(value_str), 16)?;
+    let value = u64::from_str_radix(&parse_hex_str(value_str), 16)?;
     unsafe {
         *(dest_ptr as *mut i64) = value as i64;
         Ok(dest_ptr as *const u8)
@@ -445,7 +447,7 @@ fn instantiate_hex_i64(_rt: datalove_rt::c::LocalRtHandle, db: &dyn crate::Db, h
 fn instantiate_hex_usize(_rt: datalove_rt::c::LocalRtHandle, db: &dyn crate::Db, hex_expr: &ExprHex, dest_ptr: *mut u8) -> AnyResult<*const u8> {
     debug_assert!(!dest_ptr.is_null());
     let value_str = hex_expr.value.as_str(db);
-    let value = datalove_rtdt::IndexRepr::from_str_radix(parse_hex_str(value_str), 16)?;
+    let value = datalove_rtdt::IndexRepr::from_str_radix(&parse_hex_str(value_str), 16)?;
     unsafe {
         *(dest_ptr as *mut datalove_rtdt::Index) = datalove_rtdt::Index(value);
         Ok(dest_ptr as *const u8)
@@ -455,7 +457,7 @@ fn instantiate_hex_usize(_rt: datalove_rt::c::LocalRtHandle, db: &dyn crate::Db,
 fn instantiate_hex_isize(_rt: datalove_rt::c::LocalRtHandle, db: &dyn crate::Db, hex_expr: &ExprHex, dest_ptr: *mut u8) -> AnyResult<*const u8> {
     debug_assert!(!dest_ptr.is_null());
     let value_str = hex_expr.value.as_str(db);
-    let value = datalove_rtdt::IndexRepr::from_str_radix(parse_hex_str(value_str), 16)?;
+    let value = datalove_rtdt::IndexRepr::from_str_radix(&parse_hex_str(value_str), 16)?;
     unsafe {
         *(dest_ptr as *mut datalove_rtdt::Offset) = datalove_rtdt::Offset(value as datalove_rtdt::OffsetRepr);
         Ok(dest_ptr as *const u8)
@@ -466,7 +468,7 @@ fn instantiate_hex_isize(_rt: datalove_rt::c::LocalRtHandle, db: &dyn crate::Db,
 fn instantiate_hex_f32(_rt: datalove_rt::c::LocalRtHandle, db: &dyn crate::Db, hex_expr: &ExprHex, dest_ptr: *mut u8) -> AnyResult<*const u8> {
     debug_assert!(!dest_ptr.is_null());
     let value_str = hex_expr.value.as_str(db);
-    let bits = u32::from_str_radix(parse_hex_str(value_str), 16)?;
+    let bits = u32::from_str_radix(&parse_hex_str(value_str), 16)?;
     let value = f32::from_bits(bits);
     unsafe {
         *(dest_ptr as *mut f32) = value;
@@ -478,7 +480,7 @@ fn instantiate_hex_f32(_rt: datalove_rt::c::LocalRtHandle, db: &dyn crate::Db, h
 fn instantiate_hex_f64(_rt: datalove_rt::c::LocalRtHandle, db: &dyn crate::Db, hex_expr: &ExprHex, dest_ptr: *mut u8) -> AnyResult<*const u8> {
     debug_assert!(!dest_ptr.is_null());
     let value_str = hex_expr.value.as_str(db);
-    let bits = u64::from_str_radix(parse_hex_str(value_str), 16)?;
+    let bits = u64::from_str_radix(&parse_hex_str(value_str), 16)?;
     let value = f64::from_bits(bits);
     unsafe {
         *(dest_ptr as *mut f64) = value;
@@ -489,7 +491,7 @@ fn instantiate_hex_f64(_rt: datalove_rt::c::LocalRtHandle, db: &dyn crate::Db, h
 fn instantiate_hex_bigint(rt: datalove_rt::c::LocalRtHandle, db: &dyn crate::Db, hex_expr: &ExprHex, dest_ptr: *mut u8) -> AnyResult<*const u8> {
     debug_assert!(!dest_ptr.is_null());
     let value_str = hex_expr.value.as_str(db);
-    let value = u128::from_str_radix(parse_hex_str(value_str), 16)?;
+    let value = u128::from_str_radix(&parse_hex_str(value_str), 16)?;
 
     // BigInt is always non-negative when parsed from hex.
     let is_negative = false;
@@ -530,7 +532,7 @@ fn instantiate_hex_bigint(rt: datalove_rt::c::LocalRtHandle, db: &dyn crate::Db,
 
 fn instantiate_bigint(rt: datalove_rt::c::LocalRtHandle, db: &dyn crate::Db, int_expr: &ExprInt, dest_ptr: *mut u8) -> AnyResult<*const u8> {
     debug_assert!(!dest_ptr.is_null());
-    let value_str = int_expr.value.as_str(db);
+    let value_str = crate::parser_util::strip_separators(int_expr.value.as_str(db));
     let value: i128 = value_str.parse()?;
 
     let abs_value = value.unsigned_abs();
