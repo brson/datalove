@@ -1,0 +1,21 @@
+{
+  "diagnostics": [],
+  "errors": [],
+  "judgements": [
+    {
+      "kind": "variable",
+      "name": "a",
+      "type": "f64"
+    },
+    {
+      "kind": "variable",
+      "name": "b",
+      "type": "f32"
+    },
+    {
+      "kind": "variable",
+      "name": "c",
+      "type": "f64"
+    }
+  ]
+}

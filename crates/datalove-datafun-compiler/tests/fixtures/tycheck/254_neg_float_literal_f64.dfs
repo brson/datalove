@@ -1,0 +1,5 @@
+// A negated float literal takes its precision from context, the same as an
+// unnegated one: the sign says nothing about the width.
+let a: f64 = -3.9
+let b: f32 = -0.5
+let c: f64 = -0.0

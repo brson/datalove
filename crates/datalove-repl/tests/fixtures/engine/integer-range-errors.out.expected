@@ -19,7 +19,7 @@
       }
     },
     "eval": {
-      "Error": "TypeMismatch { expected: \"u8\", actual: \"int\" }"
+      "Error": "IntOutOfRange"
     },
     "environment": []
   },
@@ -67,7 +67,7 @@
       }
     },
     "eval": {
-      "Error": "TypeMismatch { expected: \"u16\", actual: \"int\" }"
+      "Error": "IntOutOfRange"
     },
     "environment": []
   },
@@ -115,7 +115,7 @@
       }
     },
     "eval": {
-      "Error": "TypeMismatch { expected: \"u32\", actual: \"int\" }"
+      "Error": "IntOutOfRange"
     },
     "environment": []
   },
@@ -163,7 +163,7 @@
       }
     },
     "eval": {
-      "Error": "TypeMismatch { expected: \"u64\", actual: \"int\" }"
+      "Error": "IntOutOfRange"
     },
     "environment": []
   },

@@ -1,0 +1,8 @@
+// The expected type reaches a negated literal in argument position too.
+fun scale(x: f64): f64
+    ret x
+end fun
+
+fun apply(): f64
+    ret scale(-2.5)
+end fun

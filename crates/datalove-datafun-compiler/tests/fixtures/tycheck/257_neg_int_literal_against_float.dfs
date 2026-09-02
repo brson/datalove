@@ -1,0 +1,2 @@
+// The same holds under a negation.
+let x: f64 = -5

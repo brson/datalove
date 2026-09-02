@@ -1,0 +1,3 @@
+// A negated integer literal is checked with its sign attached, so this is out
+// of range rather than a mismatch, which is how datalit reads it too.
+let x: u32 = -5

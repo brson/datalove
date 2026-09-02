@@ -1,0 +1,23 @@
+{
+  "diagnostics": [],
+  "errors": [],
+  "judgements": [
+    {
+      "kind": "function",
+      "name": "scale",
+      "params": [
+        {
+          "name": "x",
+          "type": "f64"
+        }
+      ],
+      "return_type": "f64"
+    },
+    {
+      "kind": "function",
+      "name": "apply",
+      "params": [],
+      "return_type": "f64"
+    }
+  ]
+}

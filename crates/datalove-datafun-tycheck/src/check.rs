@@ -286,8 +286,12 @@ pub fn check_expr<'db>(
         ExprFunKind::Int(int_expr) => {
             match expected {
                 Type::Datalit(expected_datalit_ty) => {
-                    // Check if expected type is a numeric type.
-                    if is_numeric_type(expected) {
+                    // An integer type takes the literal if the value fits.
+                    // A float does not take one at all - there is no implicit
+                    // conversion between the two families - so it falls
+                    // through to the mismatch below rather than reaching a
+                    // range check that has no answer for it.
+                    if is_fixed_int_type(expected) || is_bigint_type(expected) {
                         // Validate the literal value fits in the expected type.
                         let value_str = int_expr.value.as_str(db);
                         check_int_fits_wrapped_type(value_str, expected_datalit_ty, db)?;
@@ -382,13 +386,21 @@ pub fn check_expr<'db>(
             }
         }
 
-        // Handle unary negation on signed fixed integers.
-        // When expected type is a signed fixed int (i8, i16, i32, i64), check operand against it.
+        // Handle unary negation against a numeric type.
+        //
+        // A negated literal is still a literal: the sign says nothing about
+        // the width, so the expected type reaches through the negation to the
+        // operand, the same as it would without one.
         ExprFunKind::UnaryOp(unary) if unary.op == UnaryOp::Neg => {
-            if is_signed_fixed_int_type(expected) {
-                // Special case: integer literal operand needs negated value validation.
-                // e.g., -2147483648 is valid i32 even though 2147483648 isn't.
-                if let ExprFunKind::Int(int_expr) = unary.operand.expr(db) {
+            if is_fixed_int_type(expected) || is_float_type(expected) {
+                // An integer literal is checked with its sign attached, since
+                // that is what decides the range: -2147483648 is an i32 even
+                // though 2147483648 is not, and -5 is no u32 even though 5 is.
+                // This is how datalit reads a signed literal, which carries
+                // its sign in the token rather than under an operator.
+                if let (true, ExprFunKind::Int(int_expr)) =
+                    (is_fixed_int_type(expected), unary.operand.expr(db))
+                {
                     if let Type::Datalit(expected_datalit_ty) = expected {
                         let value_str = int_expr.value.as_str(db);
                         let negated = format!("-{}", value_str);

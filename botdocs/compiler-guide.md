@@ -148,6 +148,22 @@ With an expected type from context (binding annotation, function parameter,
 checked arithmetic operand), the literal checks against that type instead.
 Both `datalove-datafun-tycheck` and `datalove-datalit` follow this rule.
 
+Float literals take their precision from context the same way, `f32` being
+only the fallback when nothing supplies one. A negation does not stop the
+expected type reaching the literal under it: the sign says nothing about the
+width, so `-3.9` checks against `f64` exactly as `3.9` does, and `-5` is out
+of range for a `u32` rather than merely the wrong type.
+
+The two languages reach that by different routes - datalit carries a sign
+inside the literal token, datafun parses a negation as an operator over an
+unsigned literal - which is a place they can drift apart, and did.
+`literal_type_equiv_tests` holds them to the same answers.
+
+Neither takes an integer literal where a float is expected, or the reverse.
+There is no implicit conversion between the two families; see
+[Numeric Widening](botspec.md) in the spec, and `f64.from_int` and
+`int.from_f64` for the named conversions.
+
 ### Phase 5: IR Lowering Detail
 
 Lowering has three internal phases that handle const evaluation correctly:

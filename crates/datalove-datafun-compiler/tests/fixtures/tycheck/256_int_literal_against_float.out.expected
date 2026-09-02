@@ -1,0 +1,32 @@
+{
+  "diagnostics": [
+    {
+      "code": "F016",
+      "labels": [
+        {
+          "message": "type mismatch",
+          "span": [
+            160,
+            161
+          ],
+          "text": "5"
+        }
+      ],
+      "message": "mismatched types: expected `f64`, found `int`"
+    }
+  ],
+  "errors": [
+    {
+      "actual": "int",
+      "expected": "f64",
+      "kind": "TypeMismatch"
+    }
+  ],
+  "judgements": [
+    {
+      "kind": "variable",
+      "name": "x",
+      "type": "int"
+    }
+  ]
+}

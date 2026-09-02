@@ -1,0 +1,9 @@
+{
+  "diagnostics": [],
+  "errors": [
+    {
+      "kind": "IntOutOfRange"
+    }
+  ],
+  "judgements": []
+}
