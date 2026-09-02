@@ -49,7 +49,10 @@ none_lit       = "none" ;
 bool_lit       = "true" | "false" ;
 numeric_lit    = float_lit | hex_lit | int_lit ;
 int_lit        = [ "-" ], digit, { digit } ;
-float_lit      = [ "-" ], digit, { digit }, ".", digit, { digit } ;
+float_lit      = [ "-" ], digit, { digit },
+                 ( ".", digit, { digit }, [ exponent ]
+                 | exponent ) ;
+exponent       = ( "e" | "E" ), [ "+" | "-" ], digit, { digit } ;
 hex_lit        = [ "-" ], "0", ( "x" | "X" ), hex_digit, { hex_digit } ;
 string_lit     = '"', { string_char }, '"' ;
 

@@ -20,7 +20,7 @@ Analysis(
                 """,
             ),
             output: "(fragment executed)",
-            debug_output: Some("15\n"),
+            debug_output: Some("15.0\n"),
         ),
     ],
 )

@@ -74,6 +74,42 @@ fn test_parse_float() {
     }
 }
 
+/// An exponent belongs to the float, whichever way its pieces are lexed.
+///
+/// A word runs to the first character that is neither alphanumeric nor an
+/// underscore, so `2.5e10` arrives in three tokens and `2.5e-10` in five.
+#[test]
+fn test_parse_float_exponent() {
+    let ref db = crate::Database::default();
+    for source_text in [
+        "1.0e300", "1.0E300", "2.5e-10", "2.5e+10", "1e300", "1e-7", "1E7",
+        "-1.0e-7", "-1e300",
+    ] {
+        let source = Source::new(db, S(source_text));
+        let ast = parse_for_test(db, source);
+        match ast.expr(db).clone() {
+            ast::Expr::Float(e) => assert_eq!(
+                e.value.as_str(db), source_text,
+                "{source_text} did not survive parsing",
+            ),
+            _ => panic!("expected {source_text} to be a float"),
+        }
+    }
+}
+
+/// A number is not a float just for having an `e` somewhere.
+#[test]
+fn test_parse_not_float_exponent() {
+    let ref db = crate::Database::default();
+    for source_text in ["1", "-1", "0x1e5", "1.0"] {
+        let source = Source::new(db, S(source_text));
+        let ast = parse_for_test(db, source);
+        let expr = ast.expr(db).clone();
+        let is_exponent = matches!(&expr, ast::Expr::Float(e) if e.value.as_str(db).contains(['e', 'E']));
+        assert!(!is_exponent, "{source_text} was read as having an exponent");
+    }
+}
+
 #[test]
 fn test_parse_float_with_type() {
     let ref db = crate::Database::default();

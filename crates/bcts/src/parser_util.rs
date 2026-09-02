@@ -184,3 +184,88 @@ pub fn is_numeric_literal(word: &str) -> bool {
         word.chars().all(|c| c.is_ascii_digit())
     }
 }
+
+/// A word carrying the digits of a float and an exponent.
+///
+/// A word runs to the first character that is neither alphanumeric nor an
+/// underscore, so an exponent arrives in one piece or two: `2.5e10` puts
+/// `5e10` in a single word, while `2.5e-10` breaks after the marker into
+/// `5e`, `-` and `10`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FloatExponent<'a> {
+    /// The whole exponent is in this word, as in the `5e10` of `2.5e10`.
+    Complete { digits: &'a str, exponent: &'a str },
+    /// The exponent's sign and digits are the tokens after this word, as in
+    /// the `5e` of `2.5e-10`.
+    Pending { digits: &'a str },
+}
+
+impl<'a> FloatExponent<'a> {
+    /// The digits before the exponent marker.
+    pub fn digits(&self) -> &'a str {
+        match self {
+            FloatExponent::Complete { digits, .. } => digits,
+            FloatExponent::Pending { digits } => digits,
+        }
+    }
+}
+
+/// Read a word as decimal digits followed by an exponent, if it is one.
+///
+/// `None` for a word with no exponent marker, which is a plain integer or
+/// something that is not a number at all, and for one whose marker is not
+/// where an exponent could be.
+pub fn float_exponent(word: &str) -> Option<FloatExponent<'_>> {
+    // A hex literal carries its own `e`s, which are digits rather than a
+    // marker.
+    if word.starts_with("0x") || word.starts_with("0X") {
+        return None;
+    }
+
+    let marker = word.find(['e', 'E'])?;
+    let (digits, rest) = word.split_at(marker);
+    let exponent = &rest[1..];
+
+    if digits.is_empty() || !digits.chars().all(|c| c.is_ascii_digit()) {
+        return None;
+    }
+    // A second marker is not an exponent, it is a name.
+    if exponent.contains(['e', 'E']) {
+        return None;
+    }
+
+    if exponent.is_empty() {
+        Some(FloatExponent::Pending { digits })
+    } else if exponent.chars().all(|c| c.is_ascii_digit()) {
+        Some(FloatExponent::Complete { digits, exponent })
+    } else {
+        None
+    }
+}
+
+/// The sign and digits of an exponent whose word ended at its marker.
+///
+/// Consumes them, so it is for a caller that has already committed to
+/// reading a float. `None` when what follows is not an exponent, which
+/// leaves the literal malformed rather than meaning something else: a word
+/// ending in `e` where a number belongs is not a name.
+pub fn eat_exponent_tail<'db, S: TokenStreamExt<'db>>(stream: &mut S) -> Option<String> {
+    // The sign is kept as written. It carries no meaning a reader of the
+    // text needs, but rewriting someone's source is not this function's
+    // business.
+    let sign = if stream.eat_sigil(Sigil::Minus) {
+        "-"
+    } else if stream.eat_sigil(Sigil::Plus) {
+        "+"
+    } else {
+        ""
+    };
+
+    let digits = stream.peek_word()?;
+    if digits.is_empty() || !digits.chars().all(|c| c.is_ascii_digit()) {
+        return None;
+    }
+    stream.next();
+
+    Some(format!("{sign}{digits}"))
+}

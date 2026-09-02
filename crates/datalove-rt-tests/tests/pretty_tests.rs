@@ -184,14 +184,41 @@ fn test_pretty_f32() -> AnyResult<()> {
     test_pretty(": f32 / 3.14", "3.14")
 }
 
+/// A float with nothing after the point keeps one, so that it does not read
+/// as an integer.
 #[test]
 fn test_pretty_f32_integer() -> AnyResult<()> {
-    test_pretty(": f32 / 42.0", "42")
+    test_pretty(": f32 / 42.0", "42.0")
 }
 
 #[test]
 fn test_pretty_f32_negative() -> AnyResult<()> {
     test_pretty(": f32 / -2.5", "-2.5")
+}
+
+/// Magnitudes outside the positional range take an exponent, whose mantissa
+/// carries a point for the same reason.
+#[test]
+fn test_pretty_f64_exponent_large() -> AnyResult<()> {
+    test_pretty(": f64 / 1.0e300", "1.0e300")
+}
+
+#[test]
+fn test_pretty_f64_exponent_small() -> AnyResult<()> {
+    test_pretty(": f64 / 1.0e-12", "1.0e-12")
+}
+
+/// The bounds of that range, which stay positional.
+#[test]
+fn test_pretty_f64_positional_bounds() -> AnyResult<()> {
+    test_pretty(": f64 / 0.0001", "0.0001")?;
+    test_pretty(": f64 / 1000000000000000.0", "1000000000000000.0")
+}
+
+#[test]
+fn test_pretty_f64_zero() -> AnyResult<()> {
+    test_pretty(": f64 / 0.0", "0.0")?;
+    test_pretty(": f64 / -0.0", "-0.0")
 }
 
 // Bigints

@@ -1,0 +1,115 @@
+{
+  "ast": {
+    "statements": [
+      {
+        "kind": "Let",
+        "name": "a",
+        "type_hint": null,
+        "value": {
+          "expr": {
+            "kind": "Float",
+            "type_hint": null,
+            "value": "1.0e300"
+          }
+        }
+      },
+      {
+        "kind": "Let",
+        "name": "b",
+        "type_hint": null,
+        "value": {
+          "expr": {
+            "kind": "Float",
+            "type_hint": null,
+            "value": "1.0E300"
+          }
+        }
+      },
+      {
+        "kind": "Let",
+        "name": "c",
+        "type_hint": null,
+        "value": {
+          "expr": {
+            "kind": "Float",
+            "type_hint": null,
+            "value": "2.5e-10"
+          }
+        }
+      },
+      {
+        "kind": "Let",
+        "name": "d",
+        "type_hint": null,
+        "value": {
+          "expr": {
+            "kind": "Float",
+            "type_hint": null,
+            "value": "2.5e+10"
+          }
+        }
+      },
+      {
+        "kind": "Let",
+        "name": "e",
+        "type_hint": null,
+        "value": {
+          "expr": {
+            "kind": "Float",
+            "type_hint": null,
+            "value": "1e300"
+          }
+        }
+      },
+      {
+        "kind": "Let",
+        "name": "f",
+        "type_hint": null,
+        "value": {
+          "expr": {
+            "kind": "Float",
+            "type_hint": null,
+            "value": "1e-7"
+          }
+        }
+      },
+      {
+        "kind": "Let",
+        "name": "g",
+        "type_hint": null,
+        "value": {
+          "expr": {
+            "kind": "UnaryOp",
+            "op": "Neg",
+            "operand": {
+              "expr": {
+                "kind": "Float",
+                "type_hint": null,
+                "value": "1.0e-7"
+              }
+            }
+          }
+        }
+      },
+      {
+        "kind": "Let",
+        "name": "h",
+        "type_hint": null,
+        "value": {
+          "expr": {
+            "kind": "UnaryOp",
+            "op": "Neg",
+            "operand": {
+              "expr": {
+                "kind": "Float",
+                "type_hint": null,
+                "value": "1e300"
+              }
+            }
+          }
+        }
+      }
+    ]
+  },
+  "diagnostics": []
+}

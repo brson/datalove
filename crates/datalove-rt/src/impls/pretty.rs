@@ -230,6 +230,31 @@ unsafe fn pretty_isize(
     }
 }
 
+
+/// The magnitudes that print in positional notation.
+///
+/// Outside this an exponent is shorter as well as clearer: `1e16` is the
+/// first magnitude past the range where a float counts whole numbers
+/// exactly, and `1e-5` the first with more leading zeros than digits.
+const POSITIONAL: std::ops::Range<f64> = 1e-5..1e16;
+
+/// Give a float's text a point or an exponent, so that it reads as a float.
+///
+/// Rust's own formatting drops the point on a whole number, which leaves a
+/// float indistinguishable from an integer, and writes an exponent's
+/// mantissa the same way. Every finite float gets one or the other here, so
+/// that what is printed is also what can be typed back in.
+fn float_text(text: String) -> String {
+    let Some(marker) = text.find('e') else {
+        return if text.contains('.') { text } else { format!("{text}.0") };
+    };
+    if text[..marker].contains('.') {
+        text
+    } else {
+        format!("{}.0{}", &text[..marker], &text[marker..])
+    }
+}
+
 unsafe fn pretty_f32(
     rt: LocalRtHandle,
     value_ref: *const u8,
@@ -246,8 +271,10 @@ unsafe fn pretty_f32(
             } else {
                 "-inf".to_string()
             }
+        } else if POSITIONAL.contains(&(f.0.abs() as f64)) || f.0 == 0.0 {
+            float_text(f.0.to_string())
         } else {
-            f.0.to_string()
+            float_text(format!("{:e}", f.0))
         };
         push_str(rt, string_mut, string_tydesc, s.as_bytes())
     }
@@ -269,8 +296,10 @@ unsafe fn pretty_f64(
             } else {
                 "-inf".to_string()
             }
+        } else if POSITIONAL.contains(&f.0.abs()) || f.0 == 0.0 {
+            float_text(f.0.to_string())
         } else {
-            f.0.to_string()
+            float_text(format!("{:e}", f.0))
         };
         push_str(rt, string_mut, string_tydesc, s.as_bytes())
     }

@@ -74,11 +74,26 @@ true      type      var       while     xor
 Bare integer literals synthesize as `int` (arbitrary-precision).
 Use a type hint for fixed-width types: `: u32 / 42`.
 
-**Floating-point** numbers use decimal notation:
+**Floating-point** numbers use decimal notation, with an optional exponent:
 
 ```datalove
 3.14
+1.0e300
+2.5e-10
+1e-7
+6.022E23
 ```
+
+A point or an exponent is what makes a literal a float; `42` is an integer
+and `42.0` and `4.2e1` are floats. The exponent's sign may be written or
+left out, and its marker may be `e` or `E`. The fraction may be left out
+when there is an exponent: `1e-7` needs no `.0`.
+
+This is also how floats are printed, so a value that comes out of the
+compiler can be typed back into it. Magnitudes from `1e-5` up to `1e16`
+print positionally, the rest with an exponent, and every finite float
+prints with a point or an exponent so that none of them reads as an
+integer: `42.0`, not `42`.
 
 **Strings** are enclosed in double quotes:
 
@@ -1371,6 +1386,14 @@ fun pi(): f64
     ret 3.14159        // infers f64
 end fun
 ```
+
+`f32` is what a literal falls back to with nothing to infer from. A negation
+does not interrupt this: `-3.14159` infers `f64` in the same position, since
+the sign says nothing about the width.
+
+Neither family takes the other's literals. An integer literal where a float
+is expected is a mismatch rather than a conversion, and the same in reverse;
+`f64.from_int` and `int.from_f64` are the named conversions.
 
 ## Appendix A. Command-Line Interface
 

@@ -17,6 +17,16 @@ use bct::diagnostic::DiagnosticBuilder;
 use datalove_diagnostic::DiagnosticBuilderExt;
 use super::state::Parser;
 
+/// What follows a literal's leading digits.
+enum FloatTail {
+    /// No float here: nothing was consumed, so the digits are an integer.
+    None,
+    /// The text of a whole float literal.
+    Text(String),
+    /// A float that ran out, having consumed the tokens that started it.
+    Malformed,
+}
+
 impl<'db> Parser<'db> {
     /// Parse a literal expression into new inline variants.
     ///
@@ -57,30 +67,18 @@ impl<'db> Parser<'db> {
             self.eat_sigil(Sigil::Minus);
             if let Some(TreeToken::Token(token)) = self.peek() {
                 if let Some(word) = token.word_str(self.db) {
-                    if Self::is_numeric_literal(word) {
+                    if Self::is_numeric_literal(word) || Self::is_float_word(word) {
                         self.next();
                         let is_hex = word.starts_with("0x") || word.starts_with("0X");
-                        // Check for float: consume dot, then check for decimal digits.
-                        if !is_hex && self.peek_sigil(Sigil::Dot) {
-                            self.eat_sigil(Sigil::Dot);
-                            if let Some(TreeToken::Token(next)) = self.peek() {
-                                if let Some(decimal) = next.word_str(self.db) {
-                                    if decimal.chars().all(|c| c.is_ascii_digit()) {
-                                        // Safe: we verified above that peek is a word token.
-                                        let decimal_name = self.eat_name().X();
-                                        let float_str = format!("-{}.{}", word, decimal_name.as_str(self.db));
-                                        let value = InternedText::new(self.db, float_str.S());
-                                        return ast::ExprFunKind::Float(ast::ExprFloat { type_hint, value });
-                                    }
+                        if !is_hex {
+                            match self.parse_float_tail(word) {
+                                FloatTail::Text(text) => {
+                                    let value = InternedText::new(self.db, fmt!("-{text}"));
+                                    return ast::ExprFunKind::Float(ast::ExprFloat { type_hint, value });
                                 }
+                                FloatTail::Malformed => return self.malformed_float(),
+                                FloatTail::None => {}
                             }
-                            // Dot was consumed but no valid decimal follows.
-                            let ts = self.peek_text_span();
-                            return ast::ExprFunKind::ParseError(ast::ExprFunParseError {
-                                text: ts.text,
-                                span: ts.span.C(),
-                                message: InternedText::new(self.db, "expected decimal digits after '.'".S()),
-                            });
                         }
                         if is_hex {
                             let hex_str = format!("-{}", word);
@@ -153,32 +151,18 @@ impl<'db> Parser<'db> {
                 match token.kind {
                     TokenKind::Word => {
                         let word = token.word_str(self.db).X();
-                        if Self::is_numeric_literal(word) {
+                        if Self::is_numeric_literal(word) || Self::is_float_word(word) {
                             self.next();
                             let is_hex = word.starts_with("0x") || word.starts_with("0X");
-                            // Check for float: consume dot, then check for decimal digits.
-                            if !is_hex && self.peek_sigil(Sigil::Dot) {
-                                self.eat_sigil(Sigil::Dot);
-                                if let Some(TreeToken::Token(next)) = self.peek() {
-                                    if let Some(decimal) = next.word_str(self.db) {
-                                        if decimal.chars().all(|c| c.is_ascii_digit()) {
-                                            // Safe: we verified above that peek is a word token.
-                                            let decimal_name = self.eat_name().X();
-                                            let float_str = format!("{}.{}", word, decimal_name.as_str(self.db));
-                                            let value = InternedText::new(self.db, float_str.S());
-                                            return ast::ExprFunKind::Float(ast::ExprFloat { type_hint, value });
-                                        }
+                            if !is_hex {
+                                match self.parse_float_tail(word) {
+                                    FloatTail::Text(text) => {
+                                        let value = InternedText::new(self.db, text);
+                                        return ast::ExprFunKind::Float(ast::ExprFloat { type_hint, value });
                                     }
+                                    FloatTail::Malformed => return self.malformed_float(),
+                                    FloatTail::None => {}
                                 }
-                                // Dot was consumed but no valid decimal follows - treat as member access.
-                                // This is a parse error for datalit, but we need to handle it.
-                                // For now, return an error.
-                                let ts = self.peek_text_span();
-                                return ast::ExprFunKind::ParseError(ast::ExprFunParseError {
-                                    text: ts.text,
-                                    span: ts.span.C(),
-                                    message: InternedText::new(self.db, "expected decimal digits after '.'".S()),
-                                });
                             }
                             let value = InternedText::new(self.db, word.S());
                             if is_hex {
@@ -269,6 +253,76 @@ impl<'db> Parser<'db> {
                 });
             }
         }
+    }
+
+
+    /// What follows a literal's leading digits.
+    /// Read the fraction and exponent after a literal's leading digits.
+    ///
+    /// The digits have already been consumed. Their word is passed back in
+    /// because an exponent without a fraction is part of it: `2e10` is one
+    /// word, where `2.5e10` is three.
+    pub(super) fn parse_float_tail(&mut self, word: &str) -> FloatTail {
+        // An exponent on the leading digits means there is no fraction.
+        match bct::parser_util::float_exponent(word) {
+            Some(bct::parser_util::FloatExponent::Complete { .. }) => {
+                return FloatTail::Text(word.S());
+            }
+            Some(bct::parser_util::FloatExponent::Pending { .. }) => {
+                return match bct::parser_util::eat_exponent_tail(self) {
+                    Some(tail) => FloatTail::Text(fmt!("{word}{tail}")),
+                    None => FloatTail::Malformed,
+                };
+            }
+            None => {}
+        }
+
+        if !self.peek_sigil(Sigil::Dot) {
+            return FloatTail::None;
+        }
+
+        // Past this point the dot is consumed, so there is no reading the
+        // digits as an integer any more.
+        self.eat_sigil(Sigil::Dot);
+
+        let Some(fraction) = self.peek_word() else {
+            return FloatTail::Malformed;
+        };
+
+        if fraction.chars().all(|c| c.is_ascii_digit()) {
+            self.next();
+            return FloatTail::Text(fmt!("{word}.{fraction}"));
+        }
+
+        match bct::parser_util::float_exponent(fraction) {
+            Some(bct::parser_util::FloatExponent::Complete { .. }) => {
+                self.next();
+                FloatTail::Text(fmt!("{word}.{fraction}"))
+            }
+            Some(bct::parser_util::FloatExponent::Pending { .. }) => {
+                self.next();
+                match bct::parser_util::eat_exponent_tail(self) {
+                    Some(tail) => FloatTail::Text(fmt!("{word}.{fraction}{tail}")),
+                    None => FloatTail::Malformed,
+                }
+            }
+            None => FloatTail::Malformed,
+        }
+    }
+
+    /// True if a word begins a float by carrying an exponent marker.
+    pub(super) fn is_float_word(word: &str) -> bool {
+        bct::parser_util::float_exponent(word).is_some()
+    }
+
+    /// The error for a literal that started as a float and did not finish.
+    fn malformed_float(&mut self) -> ast::ExprFunKind<'db> {
+        let ts = self.peek_text_span();
+        ast::ExprFunKind::ParseError(ast::ExprFunParseError {
+            text: ts.text,
+            span: ts.span.C(),
+            message: InternedText::new(self.db, "expected the digits of a float".S()),
+        })
     }
 
     /// Helper to check if a string is a numeric literal.

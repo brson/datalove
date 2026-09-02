@@ -1,0 +1,11 @@
+// An exponent belongs to the float, whichever way its pieces are lexed: a
+// word runs to the first character that is neither alphanumeric nor an
+// underscore, so these arrive in anything from one token to five.
+let a = 1.0e300
+let b = 1.0E300
+let c = 2.5e-10
+let d = 2.5e+10
+let e = 1e300
+let f = 1e-7
+let g = -1.0e-7
+let h = -1e300

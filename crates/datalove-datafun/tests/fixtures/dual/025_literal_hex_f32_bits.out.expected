@@ -29,8 +29,8 @@ DualAnalysis(
                 """,
             ),
             ir_match: true,
-            interp_output: "1\n",
-            aot_output: "1\n",
+            interp_output: "1.0\n",
+            aot_output: "1.0\n",
             output_match: true,
             aot_compile: Some(AotCompileResult(
                 status: "Success",

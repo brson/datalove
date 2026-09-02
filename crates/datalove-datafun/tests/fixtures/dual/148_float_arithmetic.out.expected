@@ -49,8 +49,8 @@ DualAnalysis(
                 """,
             ),
             ir_match: true,
-            interp_output: "5\n1\n6\n1.5\n-3\n",
-            aot_output: "5\n1\n6\n1.5\n-3\n",
+            interp_output: "5.0\n1.0\n6.0\n1.5\n-3.0\n",
+            aot_output: "5.0\n1.0\n6.0\n1.5\n-3.0\n",
             output_match: true,
             aot_compile: Some(AotCompileResult(
                 status: "Success",
