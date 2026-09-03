@@ -376,3 +376,32 @@ fun from_int(ref n: int): ?f32
   ret f32_from_int(ref n)
 end fun
 
+// Conversion from the other width.
+//
+// The language does not widen between the float widths on its own - see
+// botspec section 10 - so this is the way down. `f64.from_f32` is the way up.
+//
+// Narrowing rounds to the nearest f32, so it loses precision by design. A
+// value too small to hold rounds to zero, which is the nearest f32 to it and
+// so an answer like any other. A value too large does not: an infinity is not
+// near anything, so that is none rather than a number the caller did not
+// mean. A nan or an infinity converts to itself, being the same value in
+// either width.
+fun from_f64(x: f64): ?f32
+  let narrowed: f32 = icall f64_to_f32(x)
+  if is_finite(narrowed) or is_nan(narrowed)
+    ret some narrowed
+  else
+    // The result is infinite, which is either the infinity that went in or a
+    // value too large to hold. Widening back is exact, so the two are told
+    // apart by whether what comes back is what went in. The intrinsics are
+    // reached directly because f64's own predicates answer to names this
+    // module already has.
+    let widened: f64 = icall f32_to_f64(narrowed)
+    if widened == x
+      ret some narrowed
+    else
+      ret none
+    end if
+  end if
+end fun
