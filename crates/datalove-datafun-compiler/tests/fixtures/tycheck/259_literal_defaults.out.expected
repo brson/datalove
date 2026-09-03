@@ -1,0 +1,41 @@
+{
+  "diagnostics": [],
+  "errors": [],
+  "judgements": [
+    {
+      "kind": "variable",
+      "name": "float_default",
+      "type": "f64"
+    },
+    {
+      "kind": "variable",
+      "name": "exponent_default",
+      "type": "f64"
+    },
+    {
+      "kind": "variable",
+      "name": "int_default",
+      "type": "int"
+    },
+    {
+      "kind": "variable",
+      "name": "narrow",
+      "type": "f32"
+    },
+    {
+      "kind": "variable",
+      "name": "wide",
+      "type": "f64"
+    },
+    {
+      "kind": "variable",
+      "name": "floats",
+      "type": "[f64]"
+    },
+    {
+      "kind": "variable",
+      "name": "narrow_floats",
+      "type": "[f32]"
+    }
+  ]
+}

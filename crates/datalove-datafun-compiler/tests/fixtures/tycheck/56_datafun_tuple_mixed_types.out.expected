@@ -10,7 +10,7 @@
     {
       "kind": "variable",
       "name": "b",
-      "type": "f32"
+      "type": "f64"
     },
     {
       "kind": "variable",
@@ -20,7 +20,7 @@
     {
       "kind": "variable",
       "name": "output",
-      "type": "(int, f32, bool)"
+      "type": "(int, f64, bool)"
     }
   ]
 }

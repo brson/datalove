@@ -1399,9 +1399,16 @@ fun pi(): f64
 end fun
 ```
 
-`f32` is what a literal falls back to with nothing to infer from. A negation
-does not interrupt this: `-3.14159` infers `f64` in the same position, since
-the sign says nothing about the width.
+`f64` is what a literal falls back to with nothing to infer from, the same
+way a bare integer literal falls back to `int`: a width nobody asked for
+should be the one that keeps what was written. An `f32` is had by saying so,
+with an annotation or a type hint. A negation does not interrupt any of this:
+`-3.14159` infers `f64` in the same position, since the sign says nothing
+about the width.
+
+The fallback reaches inside collections built from bare literals, so
+`[1.0, 2.0]` is a `[f64]`. Where the width is the point rather than the
+precision, write it: `let xs: [f32] = [1.0, 2.0]`.
 
 Neither family takes the other's literals. An integer literal where a float
 is expected is a mismatch rather than a conversion, and the same in reverse;

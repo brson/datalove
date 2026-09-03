@@ -148,8 +148,10 @@ With an expected type from context (binding annotation, function parameter,
 checked arithmetic operand), the literal checks against that type instead.
 Both `datalove-datafun-tycheck` and `datalove-datalit` follow this rule.
 
-Float literals take their precision from context the same way, `f32` being
-only the fallback when nothing supplies one. A negation does not stop the
+Float literals take their precision from context the same way, `f64` being
+the fallback when nothing supplies one. Both defaults are the widest of their
+family, on the grounds that a type chosen without knowing what it is for
+should lose the least. A negation does not stop the
 expected type reaching the literal under it: the sign says nothing about the
 width, so `-3.9` checks against `f64` exactly as `3.9` does, and `-5` is out
 of range for a `u32` rather than merely the wrong type.

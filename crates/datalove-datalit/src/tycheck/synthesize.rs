@@ -36,8 +36,8 @@ pub fn synthesize<'db>(
         // Rule: Syn-Int - default to int (bigint).
         Expr::Int(_) => Type::Int,
 
-        // Rule: Syn-Float - default to f32.
-        Expr::Float(_) => Type::F32,
+        // Rule: Syn-Float - default to f64.
+        Expr::Float(_) => Type::F64,
 
         // Rule: Syn-Hex - default to int (bigint).
         Expr::Hex(_) => Type::Int,

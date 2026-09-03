@@ -251,7 +251,11 @@ pub fn synthesize_expr<'db>(
             if let Some(type_hint) = float_expr.type_hint.clone() {
                 return convert_type_hint(db, type_hint);
             }
-            let ty = Type::Datalit(datalit::tycheck::Type::F32);
+            // A literal with nothing to infer from is an f64, the same way a
+            // bare integer literal is an int: a default that has to be chosen
+            // without knowing what it is for should be the one that keeps the
+            // most of what was written. An f32 is asked for by saying so.
+            let ty = Type::Datalit(datalit::tycheck::Type::F64);
             Ok(ty)
         }
         ExprFunKind::Hex(hex_expr) => {

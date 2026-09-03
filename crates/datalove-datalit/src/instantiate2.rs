@@ -1499,7 +1499,7 @@ mod tests {
     #[test]
     fn test_instantiate_f32() -> AnyResult<()> {
         let db = Database::default();
-        let typechecked = compile_str(&db, "3.14")?;
+        let typechecked = compile_str(&db, ": f32 / 3.14")?;
         let rt = datalove_rt::rust::Runtime::new();
         let guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);
@@ -1512,6 +1512,28 @@ mod tests {
         unsafe {
             assert_eq!(inst.tydesc.type_tag(), rtdt::TyTag::F32);
             assert_eq!(*(inst.ptr as *const f32), 3.14);
+        }
+        Ok(())
+    }
+
+    /// A literal with nothing to infer from is an f64, so that a default
+    /// nobody asked for keeps what was written.
+    #[test]
+    fn test_instantiate_float_default() -> AnyResult<()> {
+        let db = Database::default();
+        let typechecked = compile_str(&db, "3.14")?;
+        let rt = datalove_rt::rust::Runtime::new();
+        let guard = RtGuard::new(rt);
+        let mut tydesc_table = TyDescTable::new(&db);
+        let inst_guard = InstGuard::new(
+            guard.handle(),
+            instantiate_value(&db, guard.handle(), &mut tydesc_table, typechecked)?
+        );
+        let inst = inst_guard.value();
+
+        unsafe {
+            assert_eq!(inst.tydesc.type_tag(), rtdt::TyTag::F64);
+            assert_eq!(*(inst.ptr as *const f64), 3.14);
         }
         Ok(())
     }

@@ -1,0 +1,13 @@
+// A literal with nothing to infer from falls back to the widest of its
+// family: a width nobody asked for should lose the least. A narrower one is
+// had by saying so.
+let float_default = 3.14
+let exponent_default = 1e300
+let int_default = 42
+
+let narrow: f32 = 3.14
+let wide: f64 = 3.14
+
+// The fallback reaches inside a collection built from bare literals.
+let floats = [1.0, 2.0]
+let narrow_floats: [f32] = [1.0, 2.0]

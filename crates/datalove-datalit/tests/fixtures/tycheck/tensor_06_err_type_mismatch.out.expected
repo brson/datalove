@@ -54,7 +54,7 @@
       "code": "T032",
       "labels": [
         {
-          "message": "expected `u32`, found `f32`",
+          "message": "expected `u32`, found `f64`",
           "span": [
             25,
             26
@@ -67,7 +67,7 @@
   ],
   "errors": [
     {
-      "actual": "f32",
+      "actual": "f64",
       "expected": "u32",
       "kind": "TypeMismatch"
     }

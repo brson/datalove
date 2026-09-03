@@ -198,3 +198,4 @@ fn literal_types_are_decided_as_expected() {
         ],
     );
 }
+

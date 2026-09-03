@@ -34,7 +34,7 @@
     "fields": [
       "bool",
       "int",
-      "f32"
+      "f64"
     ],
     "kind": "AnonTuple"
   }
