@@ -106,13 +106,17 @@ pub(crate) enum InputKind {
 }
 
 pub(crate) fn classify_input(input: &str) -> InputKind {
-    let is_whitespace = input.chars().all(char::is_whitespace);
-    let is_repl_command = input.trim().starts_with(REPL_COMMAND_SIGIL);
-    let is_oneline_statement_keyword = parse_ident(input).map(|ident| match ident {
+    // A comment is not a command. Both begin with the sigil, and the one a
+    // reader means by `// note to self` is the comment.
+    let code = first_code_line(input);
+    let is_whitespace = code.is_empty();
+    let is_repl_command = !starts_a_comment(input.trim())
+        && input.trim().starts_with(REPL_COMMAND_SIGIL);
+    let is_oneline_statement_keyword = parse_ident(code).map(|ident| match ident {
         "let" | "var" | "const" | "set" | "require" | "import" => true,
         _ => false
     }).unwrap_or(false);
-    let is_multiline_statement_keyword = parse_ident(input).map(|ident| match ident {
+    let is_multiline_statement_keyword = parse_ident(code).map(|ident| match ident {
         "fun" => true,
         _ => false
     }).unwrap_or(false);
@@ -131,6 +135,33 @@ pub(crate) fn classify_input(input: &str) -> InputKind {
     } else {
         InputKind::Expression
     }
+}
+
+/// True if a line opens a comment rather than naming a command.
+fn starts_a_comment(line: &str) -> bool {
+    line.starts_with("//") || line.starts_with("/*")
+}
+
+/// The first line with something on it other than a comment.
+///
+/// What an input is, is decided by the first line of code in it, so that a
+/// note written above a definition does not change what the definition is
+/// read as. Empty when the input is nothing but blank lines and comments,
+/// which is an input with nothing to do.
+///
+/// A block comment is only recognised where it opens and closes on one line.
+/// One spanning several would need the nesting the lexer tracks, and the
+/// answer for it is the same either way: whatever it is, it is not a command.
+fn first_code_line(input: &str) -> &str {
+    input.lines()
+        .map(|line| line.trim())
+        .find(|line| !line.is_empty() && !is_whole_line_comment(line))
+        .unwrap_or("")
+}
+
+/// True if a line is a comment and nothing else.
+fn is_whole_line_comment(line: &str) -> bool {
+    line.starts_with("//") || (line.starts_with("/*") && line.ends_with("*/"))
 }
 
 fn parse_ident(input: &str) -> Option<&str> {

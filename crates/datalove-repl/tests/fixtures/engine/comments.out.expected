@@ -1,0 +1,139 @@
+[
+  {
+    "input": "// A note is a note, not a command, though both open with the sigil.",
+    "parse": "Empty",
+    "eval": null,
+    "environment": []
+  },
+  {
+    "input": "/* And so is this one. */",
+    "parse": "Empty",
+    "eval": null,
+    "environment": []
+  },
+  {
+    "input": "let x = 1",
+    "parse": {
+      "Command": {
+        "ScriptStatement": "let x = 1"
+      }
+    },
+    "eval": {
+      "Success": [
+        {
+          "Value": {
+            "name": "x",
+            "ty": "int",
+            "value": "1"
+          }
+        }
+      ]
+    },
+    "environment": [
+      {
+        "name": "x",
+        "ty": "int",
+        "value": "1"
+      }
+    ]
+  },
+  {
+    "input": "// A note above an expression leaves the expression what it was.\nx + 1",
+    "parse": {
+      "Command": {
+        "Expression": "// A note above an expression leaves the expression what it was.\nx + 1"
+      }
+    },
+    "eval": {
+      "SuccessExpr": {
+        "ty": "int",
+        "value": "2"
+      }
+    },
+    "environment": [
+      {
+        "name": "x",
+        "ty": "int",
+        "value": "1"
+      }
+    ]
+  },
+  {
+    "input": "// The same above a definition, which is read from its first line of code.\nfun double(n: int): int\n  ret n + n\nend fun",
+    "parse": {
+      "Command": {
+        "ScriptStatement": "// The same above a definition, which is read from its first line of code.\nfun double(n: int): int\n  ret n + n\nend fun"
+      }
+    },
+    "eval": {
+      "Success": [
+        {
+          "Function": {
+            "name": "double"
+          }
+        }
+      ]
+    },
+    "environment": [
+      {
+        "name": "double",
+        "ty": "function",
+        "value": "-"
+      },
+      {
+        "name": "x",
+        "ty": "int",
+        "value": "1"
+      }
+    ]
+  },
+  {
+    "input": "double(21)",
+    "parse": {
+      "Command": {
+        "Expression": "double(21)"
+      }
+    },
+    "eval": {
+      "SuccessExpr": {
+        "ty": "int",
+        "value": "42"
+      }
+    },
+    "environment": [
+      {
+        "name": "double",
+        "ty": "function",
+        "value": "-"
+      },
+      {
+        "name": "x",
+        "ty": "int",
+        "value": "1"
+      }
+    ]
+  },
+  {
+    "input": "/exit-is-not-a-command",
+    "parse": {
+      "Command": {
+        "ReplCommand": "Unknown"
+      }
+    },
+    "eval": {
+      "Error": "unknown command"
+    },
+    "environment": [
+      {
+        "name": "double",
+        "ty": "function",
+        "value": "-"
+      },
+      {
+        "name": "x",
+        "ty": "int",
+        "value": "1"
+      }
+    ]
+  }
+]

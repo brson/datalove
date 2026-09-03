@@ -1,0 +1,17 @@
+// A note is a note, not a command, though both open with the sigil.
+---
+/* And so is this one. */
+---
+let x = 1
+---
+// A note above an expression leaves the expression what it was.
+x + 1
+---
+// The same above a definition, which is read from its first line of code.
+fun double(n: int): int
+  ret n + n
+end fun
+---
+double(21)
+---
+/exit-is-not-a-command
