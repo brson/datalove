@@ -43,6 +43,12 @@ enum TokenSource<'db> {
 pub(super) struct ScriptCounters {
     pub expr: u32,
     pub call: u32,
+    /// Imports seen so far, which is where the next import's span is filed.
+    ///
+    /// A script is parsed a line at a time, each by its own parser, and the
+    /// spans are concatenated afterwards. The count has to survive that or
+    /// every line would file its import at nought.
+    pub import: u32,
 }
 
 /// Parser state for datafun parsing.
@@ -68,6 +74,7 @@ pub(super) struct Parser<'db> {
     fun_spans: Vec<SpanEntry>,
     /// Accumulated type alias spans, indexed by local_index.
     type_alias_spans: Vec<SpanEntry>,
+    import_spans: Vec<SpanEntry>,
     /// Optional context for error messages showing the enclosing branch's opening token.
     branch_context: Option<(TextSpan<'db>, &'static str)>,
     /// Current function name for expression identity (None for script-level).
@@ -78,6 +85,7 @@ pub(super) struct Parser<'db> {
     /// At script level it runs for the whole parse, across the per-line
     /// parsers, so that script-level keys stay distinct.
     expr_counter: u32,
+    import_counter: u32,
     /// Script-level expression counter, saved while inside a function.
     script_expr_counter: u32,
     /// Counter for function calls within current function.
@@ -110,9 +118,11 @@ impl<'db> Parser<'db> {
             set_spans: Vec::new(),
             fun_spans: Vec::new(),
             type_alias_spans: Vec::new(),
+            import_spans: Vec::new(),
             branch_context: None,
             current_fn_name: None,
             expr_counter: counters.expr,
+            import_counter: counters.import,
             script_expr_counter: counters.expr,
             call_counter: counters.call,
             script_call_counter: counters.call,
@@ -135,6 +145,7 @@ impl<'db> Parser<'db> {
         sub.current_fn_name = self.current_fn_name;
         sub.expr_counter = self.expr_counter;
         sub.script_expr_counter = self.script_expr_counter;
+        sub.import_counter = self.import_counter;
         sub.call_counter = self.call_counter;
         sub.script_call_counter = self.script_call_counter;
         sub
@@ -144,6 +155,7 @@ impl<'db> Parser<'db> {
     pub(super) fn script_counters(&self) -> ScriptCounters {
         ScriptCounters {
             expr: if self.current_fn_name.is_some() { self.script_expr_counter } else { self.expr_counter },
+            import: self.import_counter,
             call: if self.current_fn_name.is_some() { self.script_call_counter } else { self.call_counter },
         }
     }
@@ -181,9 +193,11 @@ impl<'db> Parser<'db> {
             set_spans: Vec::new(),
             fun_spans: Vec::new(),
             type_alias_spans: Vec::new(),
+            import_spans: Vec::new(),
             branch_context: context,
             current_fn_name: None,
             expr_counter: 0,
+            import_counter: 0,
             script_expr_counter: 0,
             call_counter: 0,
             script_call_counter: 0,
@@ -219,9 +233,11 @@ impl<'db> Parser<'db> {
             set_spans: Vec::new(),
             fun_spans: Vec::new(),
             type_alias_spans: Vec::new(),
+            import_spans: Vec::new(),
             branch_context: context,
             current_fn_name: self.current_fn_name,
             expr_counter: self.expr_counter,
+            import_counter: self.import_counter,
             script_expr_counter: self.script_expr_counter,
             call_counter: self.call_counter,
             script_call_counter: self.script_call_counter,
@@ -554,6 +570,18 @@ impl<'db> Parser<'db> {
     }
 
     /// Record a type alias span and return its local_index.
+    /// File an import's span, returning the index its diagnostics find it by.
+    pub(super) fn record_import_span(&mut self, ts: TextSpan<'db>) -> u32 {
+        let index = self.import_counter;
+        self.import_counter += 1;
+        self.import_spans.push(SpanEntry::new(ts.text.source(self.db), ts.span));
+        index
+    }
+
+    pub(super) fn take_import_spans(&mut self) -> Vec<SpanEntry> {
+        rmx::std::mem::take(&mut self.import_spans)
+    }
+
     pub(super) fn record_type_alias_span(&mut self, ts: TextSpan<'db>) -> u32 {
         let index = self.next_stmt_index();
         self.type_alias_spans.push(SpanEntry::new(ts.text.source(self.db), ts.span));

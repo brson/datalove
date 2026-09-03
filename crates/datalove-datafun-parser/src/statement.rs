@@ -626,6 +626,9 @@ impl<'db> Parser<'db> {
     }
 
     fn parse_import(&mut self) -> ast::Statement<'db> {
+        // The whole statement is what a diagnostic about this import points
+        // at, so the span is taken before any of it is consumed.
+        let ts = self.peek_text_span();
         self.eat_word("import");
 
         // Parse module name.
@@ -665,10 +668,12 @@ impl<'db> Parser<'db> {
             }
         };
 
+        let local_index = self.record_import_span(ts);
         ast::Statement::Import(
             ast::StmtImport {
                 module_name,
                 item_name,
+                local_index,
             }
         )
     }

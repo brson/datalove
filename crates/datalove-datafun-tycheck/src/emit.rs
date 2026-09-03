@@ -33,6 +33,9 @@ pub trait SpanLookup<'db> {
     /// Look up span for a function definition by local_index.
     fn lookup_fun(&self, db: &'db dyn crate::Db, local_index: u32) -> Option<TextSpan<'db>>;
 
+    /// Look up span for an import statement by local_index.
+    fn lookup_import(&self, db: &'db dyn crate::Db, local_index: u32) -> Option<TextSpan<'db>>;
+
     /// Look up span for a function definition in a specific module.
     ///
     /// For local spans, module_id is ignored. For module graph spans,
@@ -88,6 +91,13 @@ impl<'db> SpanLookup<'db> for LocalSpanLookup<'_, 'db> {
 
     fn lookup_set(&self, db: &'db dyn crate::Db, local_index: u32) -> Option<TextSpan<'db>> {
         self.spans.lookup_set(local_index).map(|entry| {
+            let (text, span) = entry.to_text_and_span(db);
+            TextSpan::new(text, span)
+        })
+    }
+
+    fn lookup_import(&self, db: &'db dyn crate::Db, local_index: u32) -> Option<TextSpan<'db>> {
+        self.spans.lookup_import(local_index).map(|entry| {
             let (text, span) = entry.to_text_and_span(db);
             TextSpan::new(text, span)
         })
@@ -164,6 +174,14 @@ impl<'db> SpanLookup<'db> for ModuleGraphSpanLookup<'_, 'db> {
         })
     }
 
+    fn lookup_import(&self, db: &'db dyn crate::Db, local_index: u32) -> Option<TextSpan<'db>> {
+        let spans = self.parsed_graph.get_spans(db, self.module_id)?;
+        spans.lookup_import(local_index).map(|entry| {
+            let (text, span) = entry.to_text_and_span(db);
+            TextSpan::new(text, span)
+        })
+    }
+
     fn lookup_fun(&self, db: &'db dyn crate::Db, local_index: u32) -> Option<TextSpan<'db>> {
         let spans = self.parsed_graph.get_spans(db, self.module_id)?;
         spans.lookup_fun(local_index).map(|entry| {
@@ -221,6 +239,18 @@ fn emit_single_diagnostic<'db>(
                 bct::diagnostic::DiagnosticBuilder::error(db, &msg)
                     .code("F002")
                     .primary_label(ts, "not found in this scope")
+                    .emit_type();
+            }
+        }
+        PendingDiagnostic::DuplicateImport { local_index, module_id: _, name, first } => {
+            if let Some(ts) = spans.lookup_import(db, *local_index) {
+                let msg = format!(
+                    "`{}` is imported already, from `{}`",
+                    name.as_str(db), first.as_str(db),
+                );
+                bct::diagnostic::DiagnosticBuilder::error(db, &msg)
+                    .code("F059")
+                    .primary_label(ts, "a name binds one function")
                     .emit_type();
             }
         }
@@ -489,6 +519,14 @@ fn format_single_diagnostic<'db>(
             let ts = spans.lookup_expr(db, *expr_key)?;
             let loc = format_location(db, &ts);
             Some(format!("{}: error[F002]: cannot find function `{}` in this scope", loc, name.as_str(db)))
+        }
+        PendingDiagnostic::DuplicateImport { local_index, module_id: _, name, first } => {
+            let ts = spans.lookup_import(db, *local_index)?;
+            let loc = format_location(db, &ts);
+            Some(format!(
+                "{}: error[F059]: `{}` is imported already, from `{}`",
+                loc, name.as_str(db), first.as_str(db),
+            ))
         }
         PendingDiagnostic::CannotSynthesize { expr_key, module_id: _, message } => {
             let ts = spans.lookup_expr(db, *expr_key)?;

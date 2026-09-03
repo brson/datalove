@@ -93,6 +93,16 @@ pub enum PendingDiagnostic<'db> {
         module_id: Option<ModuleId<'db>>,
         name: InternedText<'db>,
     },
+    /// F059: A name imported twice.
+    ///
+    /// Filed against the second import, which is the one that would have
+    /// taken the name over.
+    DuplicateImport {
+        local_index: u32,
+        module_id: Option<ModuleId<'db>>,
+        name: InternedText<'db>,
+        first: InternedText<'db>,
+    },
     /// F011: Cannot synthesize type.
     CannotSynthesize {
         expr_key: ExprKey<'db>,
@@ -488,9 +498,10 @@ pub struct ModuleImportResolution<'db> {
     #[returns(copy)]
     pub module_id: ModuleId<'db>,
 
-    /// Resolved imports: (local_name, func_type, func_ast, source_module_id).
+    /// Resolved imports: (local_name, func_type, func_ast, source_module_id,
+    /// local_index), the last being where the import's span is filed.
     #[returns(ref)]
-    pub imports: Vec<(InternedText<'db>, TypeFunction<'db>, Option<StmtFun<'db>>, ModuleId<'db>)>,
+    pub imports: Vec<(InternedText<'db>, TypeFunction<'db>, Option<StmtFun<'db>>, ModuleId<'db>, u32)>,
 
     /// Import resolution errors.
     #[returns(ref)]

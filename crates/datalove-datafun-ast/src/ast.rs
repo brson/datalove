@@ -107,6 +107,8 @@ pub struct ParseResult<'db> {
     pub fun_spans: Vec<SpanEntry>,
     /// Type alias spans, indexed by local_index.
     pub type_alias_spans: Vec<SpanEntry>,
+    /// Import statement spans, indexed by position among the imports.
+    pub import_spans: Vec<SpanEntry>,
 }
 
 #[derive(Clone, Hash, PartialEq, Eq)]
@@ -310,6 +312,7 @@ pub struct StmtRequireRider<'db> {
 pub struct StmtImport<'db> {
     pub module_name: InternedText<'db>,
     pub item_name: InternedText<'db>,
+    pub local_index: u32,
 }
 
 #[derive(Clone, Hash, PartialEq, Eq)]

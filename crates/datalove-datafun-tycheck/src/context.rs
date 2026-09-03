@@ -201,6 +201,30 @@ impl<'db> TypeContext<'db> {
         TypeError::UnresolvedName(name.as_str(self.db).S())
     }
 
+    /// F059: A name imported twice.
+    ///
+    /// Filed against the second import, which is the one that would have
+    /// taken over a name the first had already bound.
+    pub fn error_duplicate_import(
+        &mut self,
+        local_index: u32,
+        name: InternedText<'db>,
+        first: &str,
+        second: &str,
+    ) -> TypeError {
+        self.pending_diagnostics.push(PendingDiagnostic::DuplicateImport {
+            local_index,
+            module_id: self.current_module_id,
+            name,
+            first: InternedText::new(self.db, first.S()),
+        });
+        TypeError::DuplicateImport {
+            name: name.as_str(self.db).S(),
+            first: first.S(),
+            second: second.S(),
+        }
+    }
+
     /// F002: Undefined function.
     pub fn error_undefined_function(&mut self, expr: ExprFun<'db>, name: InternedText<'db>) -> TypeError {
         self.pending_diagnostics.push(PendingDiagnostic::UndefinedFunction {

@@ -170,22 +170,25 @@ pub fn typecheck_script_unit<'db>(
             // import of a different function under it would decide the calls
             // that one is answering. In a session the two arrive on separate
             // lines, which is exactly where the shadowing is hardest to see.
-            let bound: HashMap<InternedText<'db>, Option<ModuleId<'db>>> = accumulated
+            let mut bound: HashMap<InternedText<'db>, Option<ModuleId<'db>>> = accumulated
                 .fn_asts.iter()
                 .map(|(name, _, module_id)| (*name, *module_id))
                 .collect();
 
-            for (item_name, func_ty, func_ast, source_module_id) in resolved_imports {
+            for (item_name, func_ty, func_ast, source_module_id, local_index) in resolved_imports {
                 if let Some(first) = bound.get(&item_name) {
                     if *first != source_module_id {
-                        ctx.add_error(TypeError::DuplicateImport {
-                            name: item_name.as_str(db).to_string(),
-                            first: module_description(db, *first),
-                            second: module_description(db, source_module_id),
-                        });
-                        continue;
+                        let err = ctx.error_duplicate_import(
+                            local_index,
+                            item_name,
+                            &module_description(db, *first),
+                            &module_description(db, source_module_id),
+                        );
+                        ctx.add_error(err);
                     }
+                    continue;
                 }
+                bound.insert(item_name, source_module_id);
                 ctx.add_function(item_name, func_ty);
                 ctx.function_asts.insert(item_name, (func_ast, source_module_id));
                 new_fns.push((item_name, func_ty));
@@ -331,7 +334,8 @@ use bct::module_graph::Module;
 /// Resolved import data as plain tuple (not tracked).
 ///
 /// Contains: (local_name, func_type, func_ast, source_module)
-pub type ResolvedImportData<'db> = (InternedText<'db>, TypeFunction<'db>, Option<StmtFun<'db>>, ModuleId<'db>);
+pub type ResolvedImportData<'db> =
+    (InternedText<'db>, TypeFunction<'db>, Option<StmtFun<'db>>, ModuleId<'db>, u32);
 
 /// Typecheck a single module with logging.
 ///
@@ -366,7 +370,21 @@ pub fn typecheck_module<'db>(
     }
 
     // Add imported functions to context.
-    for (local_name, func_type, func_ast, source_module) in &resolved_imports {
+    //
+    // A name binds one function, so a second import under one already bound
+    // is refused rather than allowed to take it over. The first stays, which
+    // keeps the rest of the module resolving to what it was written against.
+    let mut import_sources: HashMap<InternedText<'db>, String> = HashMap::new();
+    for (local_name, func_type, func_ast, source_module, local_index) in &resolved_imports {
+        let source = source_module.path(db).to_string();
+        if let Some(first) = import_sources.get(local_name) {
+            if *first != source {
+                let err = ctx.error_duplicate_import(*local_index, *local_name, first, &source);
+                ctx.add_error(err);
+            }
+            continue;
+        }
+        import_sources.insert(*local_name, source);
         if let Some(ast) = func_ast {
             ctx.add_imported_function(*local_name, *func_type, *ast, *source_module);
         } else {
@@ -399,7 +417,7 @@ pub fn typecheck_module<'db>(
 
     // Build imports list for result.
     let imports: Vec<_> = resolved_imports.iter()
-        .map(|(local_name, _, _, source_module)| (*local_name, *source_module, *local_name))
+        .map(|(local_name, _, _, source_module, _)| (*local_name, *source_module, *local_name))
         .collect();
 
     // Extract comptime registry from context.
@@ -679,36 +697,6 @@ pub fn resolve_module_imports<'db>(
 /// ResolvedImport tracked structs. This allows the function to be called from
 /// inside tracked functions without the "cannot create tracked struct outside
 /// tracked function" issue.
-/// Record an import, reporting a name bound twice rather than overwriting.
-///
-/// A name resolves to one function, so a second import under the same name
-/// used to decide the calls the first was already answering. Which of the two
-/// won depended on the order they were written in, and nothing said so.
-fn push_import<'db>(
-    db: &'db dyn crate::Db,
-    imports: &mut Vec<ResolvedImportData<'db>>,
-    sources: &mut HashMap<InternedText<'db>, String>,
-    errors: &mut Vec<TypeError>,
-    import: &ResolvedImportData<'db>,
-    source: String,
-) {
-    let name = import.0;
-    if let Some(first) = sources.get(&name) {
-        // The same import written twice binds what is already bound, which is
-        // redundant rather than ambiguous.
-        if *first != source {
-            errors.push(TypeError::DuplicateImport {
-                name: name.as_str(db).to_string(),
-                first: first.clone(),
-                second: source,
-            });
-        }
-        return;
-    }
-    sources.insert(name, source);
-    imports.push(*import);
-}
-
 fn resolve_module_imports_internal<'db>(
     db: &'db dyn crate::Db,
     module_id: ModuleId<'db>,
@@ -716,7 +704,7 @@ fn resolve_module_imports_internal<'db>(
     parsed_graph: &ParsedModuleGraph<'db>,
     all_exports: &BTreeMap<ModuleId<'db>, Vec<(InternedText<'db>, TypeFunction<'db>)>>,
     module_function_asts: &BTreeMap<ModuleId<'db>, Vec<(InternedText<'db>, StmtFun<'db>)>>,
-) -> (Vec<(InternedText<'db>, TypeFunction<'db>, Option<StmtFun<'db>>, ModuleId<'db>)>, Vec<TypeError>) {
+) -> (Vec<ResolvedImportData<'db>>, Vec<TypeError>) {
     // Build module alias map from pre-resolved requires.
     let resolved_requires = parsed_graph.get_requires(db, module_id);
     let alias_map: HashMap<InternedText<'db>, ModuleId<'db>> = resolved_requires.iter()
@@ -732,7 +720,6 @@ fn resolve_module_imports_internal<'db>(
 
     let mut resolved_imports = Vec::new();
     let mut import_errors = Vec::new();
-    let mut import_sources: HashMap<InternedText<'db>, String> = HashMap::new();
 
     for statement in &parsed.statements {
         if let Statement::Import(import) = statement {
@@ -752,10 +739,8 @@ fn resolve_module_imports_internal<'db>(
                             .and_then(|funcs| funcs.iter().find(|(n, _)| *n == item_name))
                             .map(|(_, ast)| *ast);
 
-                        push_import(
-                            db, &mut resolved_imports, &mut import_sources, &mut import_errors,
-                            &(item_name, func_type, func_ast, source_module_id),
-                            format!("{}.{}", module_name.as_str(db), item_name.as_str(db)),
+                        resolved_imports.push(
+                            (item_name, func_type, func_ast, source_module_id, import.local_index),
                         );
                     } else {
                         import_errors.push(TypeError::UnresolvedName(
@@ -802,10 +787,8 @@ fn resolve_module_imports_internal<'db>(
                         vec![],
                         0,
                     );
-                    push_import(
-                        db, &mut resolved_imports, &mut import_sources, &mut import_errors,
-                        &(item_name, func_type, Some(synthetic_fun), synthetic_module_id),
-                        format!("{}.{}", module_name.as_str(db), item_name.as_str(db)),
+                    resolved_imports.push(
+                        (item_name, func_type, Some(synthetic_fun), synthetic_module_id, import.local_index),
                     );
                 } else {
                     import_errors.push(TypeError::UnresolvedName(
@@ -902,11 +885,10 @@ fn resolve_script_imports<'db>(
     alias_to_path: &HashMap<InternedText<'db>, String>,
     module_functions: &HashMap<String, HashMap<InternedText<'db>, (TypeFunction<'db>, StmtFun<'db>)>>,
     path_to_module_id: &HashMap<String, ModuleId<'db>>,
-) -> (Vec<(InternedText<'db>, TypeFunction<'db>, StmtFun<'db>, Option<ModuleId<'db>>)>, Vec<TypeError>) {
+) -> (Vec<(InternedText<'db>, TypeFunction<'db>, StmtFun<'db>, Option<ModuleId<'db>>, u32)>, Vec<TypeError>) {
     // Resolve import statements.
     let mut resolved = Vec::new();
     let mut errors = Vec::new();
-    let mut sources: HashMap<InternedText<'db>, String> = HashMap::new();
 
     for statement in &script.statements {
         if let Statement::Import(import) = statement {
@@ -921,21 +903,9 @@ fn resolve_script_imports<'db>(
             if let Some(funcs) = module_functions.get(module_path) {
                 if let Some((func_ty, func_ast)) = funcs.get(&item_name) {
                     let source_module_id = path_to_module_id.get(module_path).cloned();
-                    let source = format!("{}.{}", module_path, item_name.as_str(db));
-                    // One name, one function: see push_import.
-                    if let Some(first) = sources.get(&item_name) {
-                        // The same import twice is redundant, not ambiguous.
-                        if *first != source {
-                            errors.push(TypeError::DuplicateImport {
-                                name: item_name.as_str(db).to_string(),
-                                first: first.clone(),
-                                second: source,
-                            });
-                        }
-                    } else {
-                        sources.insert(item_name, source);
-                        resolved.push((item_name, *func_ty, *func_ast, source_module_id));
-                    }
+                    resolved.push(
+                        (item_name, *func_ty, *func_ast, source_module_id, import.local_index),
+                    );
                 } else {
                     errors.push(TypeError::UnresolvedName(
                         format!("{}.{}", module_path, item_name.as_str(db))

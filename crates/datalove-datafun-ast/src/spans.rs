@@ -33,6 +33,8 @@ pub struct DatafunSpans<'db> {
     pub fun_spans: Vec<SpanEntry>,
     /// Type alias spans, indexed by local_index.
     pub type_alias_spans: Vec<SpanEntry>,
+    /// Import statement spans, indexed by local_index.
+    pub import_spans: Vec<SpanEntry>,
 }
 
 impl<'db> DatafunSpans<'db> {
@@ -46,6 +48,7 @@ impl<'db> DatafunSpans<'db> {
             set_spans: vec![],
             fun_spans: vec![],
             type_alias_spans: vec![],
+            import_spans: vec![],
         }
     }
 
@@ -58,8 +61,12 @@ impl<'db> DatafunSpans<'db> {
         set_spans: Vec<SpanEntry>,
         fun_spans: Vec<SpanEntry>,
         type_alias_spans: Vec<SpanEntry>,
+        import_spans: Vec<SpanEntry>,
     ) -> Self {
-        Self { entries, break_spans, continue_spans, ret_spans, set_spans, fun_spans, type_alias_spans }
+        Self {
+            entries, break_spans, continue_spans, ret_spans, set_spans, fun_spans,
+            type_alias_spans, import_spans,
+        }
     }
 
     /// Look up span for an expression.
@@ -102,5 +109,10 @@ impl<'db> DatafunSpans<'db> {
     /// Look up span for a type alias by local_index.
     pub fn lookup_type_alias(&self, index: u32) -> Option<&SpanEntry> {
         self.type_alias_spans.get(index as usize)
+    }
+
+    /// Look up span for an import statement by local_index.
+    pub fn lookup_import(&self, index: u32) -> Option<&SpanEntry> {
+        self.import_spans.get(index as usize)
     }
 }
