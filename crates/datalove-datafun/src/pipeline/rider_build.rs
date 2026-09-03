@@ -147,6 +147,21 @@ fn build_native_component_uncached(
     write_if_changed(&synth_dir.join("Cargo.toml"), &cargo_toml)
         .map_err(|e| build_err("native-component", format!("failed to write Cargo.toml: {}", e)))?;
 
+    // Start from the workspace's own resolution.
+    //
+    // This crate's dependencies are a subset of the workspace's, but it
+    // resolves them by itself, and left to do that it takes the newest of
+    // everything rather than the versions the workspace is known to build
+    // with. Cargo adapts the lock to what is actually needed here; what it
+    // does not do is go looking for newer.
+    let synth_lock = synth_dir.join("Cargo.lock");
+    if !synth_lock.exists() {
+        let workspace_lock = workspace_root_dir().join("Cargo.lock");
+        if workspace_lock.is_file() {
+            let _ = std::fs::copy(&workspace_lock, &synth_lock);
+        }
+    }
+
     // Generate lib.rs that pulls in the runtime and all rider crates.
     // The extern crate declarations ensure #[no_mangle] symbols are included.
     let mut lib_rs = String::from("extern crate datalove_rt;\n");
