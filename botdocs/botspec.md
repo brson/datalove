@@ -1129,6 +1129,13 @@ import u32.negate
 import std.string_len
 ```
 
+A name binds one function, so importing a second under a name already bound
+is an error rather than a shadowing. Two modules exporting the same name is
+ordinary - `min` is in every numeric module - so only one of them can be
+imported into a given scope. In a session the imports arrive on separate
+lines and the rule is the same across them; importing the same function
+again is redundant rather than ambiguous, and allowed.
+
 ### 9.4 Native Riders
 
 A **rider** is a Rust crate that provides native functions to a package's

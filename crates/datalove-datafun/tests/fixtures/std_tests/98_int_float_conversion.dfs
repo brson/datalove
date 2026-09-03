@@ -1,15 +1,12 @@
 require module sys/std/int
 require module sys/std/f64
-require module sys/std/f32
 
 import int.from_f64
-import int.from_f32
 import int.pow
 import f64.from_int
 import f64.sqrt
 import f64.nan
 import f64.infinity
-import f32.from_int
 
 // The language does not widen between integers and floats, so crossing takes
 // a named conversion in one direction or the other.
@@ -31,9 +28,4 @@ let undefined = (from_f64(nan()), from_f64(infinity()))
 let nine = 9
 let root = from_f64(sqrt(9.0))
 
-let seven = 7
-let seven_as_f32 = from_int(ref seven)
-let from_f32_value = from_f32(2.5)
-
-let output = (three_as_float, truncated, unrepresentable, undefined,
-              nine, root, seven_as_f32, from_f32_value)
+let output = (three_as_float, truncated, unrepresentable, undefined, nine, root)

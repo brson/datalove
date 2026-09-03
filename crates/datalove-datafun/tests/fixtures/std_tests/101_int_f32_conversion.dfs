@@ -1,0 +1,22 @@
+require module sys/std/int
+require module sys/std/f32
+
+import int.from_f32
+import int.pow
+import f32.from_int
+
+// The f32 half of the crossing. It is a separate unit because `from_int`
+// names a different function in each float module and one name binds one
+// function, so importing both would be importing over the first.
+
+let seven = 7
+let seven_as_f32 = from_int(ref seven)
+
+let truncated = (from_f32(2.5), from_f32(3.9))
+
+// A bigint past what an f32 holds, which is a much smaller bigint than the
+// one an f64 gives up on.
+let huge = pow(10, 40)
+let unrepresentable = from_int(ref huge)
+
+let output = (seven_as_f32, truncated, unrepresentable)

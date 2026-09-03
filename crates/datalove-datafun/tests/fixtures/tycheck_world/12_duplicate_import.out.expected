@@ -1,0 +1,40 @@
+{
+  "diagnostics": [],
+  "modules": {
+    "collide": {
+      "errors": [
+        {
+          "first": "first.value",
+          "kind": "DuplicateImport",
+          "name": "value",
+          "second": "second.value"
+        }
+      ],
+      "functions": []
+    },
+    "first": {
+      "errors": [],
+      "functions": [
+        {
+          "name": "value",
+          "params": [
+            "u32"
+          ],
+          "return_type": "u32"
+        }
+      ]
+    },
+    "second": {
+      "errors": [],
+      "functions": [
+        {
+          "name": "value",
+          "params": [
+            "u32"
+          ],
+          "return_type": "u32"
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,11 @@
+require module sys/std/int
+---
+require module sys/std/i32
+---
+import int.abs
+---
+import i32.abs
+---
+abs(-5)
+---
+import int.abs

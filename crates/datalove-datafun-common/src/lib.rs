@@ -418,6 +418,11 @@ pub enum TypeError {
     TypeParamNotErasable(String),
     /// Duplicate type alias definition.
     DuplicateTypeAlias(String),
+    /// Two imports bound the same name.
+    ///
+    /// The second used to overwrite the first without a word, which made a
+    /// call resolve to whichever import came last.
+    DuplicateImport { name: String, first: String, second: String },
     /// Cannot shadow primitive type name.
     CannotShadowPrimitive(String),
     /// A const expression referenced a binding that is not itself const.

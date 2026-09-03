@@ -1,0 +1,69 @@
+[
+  {
+    "input": "require module sys/std/int",
+    "parse": {
+      "Command": {
+        "ScriptStatement": "require module sys/std/int"
+      }
+    },
+    "eval": "Nothing",
+    "environment": []
+  },
+  {
+    "input": "require module sys/std/i32",
+    "parse": {
+      "Command": {
+        "ScriptStatement": "require module sys/std/i32"
+      }
+    },
+    "eval": "Nothing",
+    "environment": []
+  },
+  {
+    "input": "import int.abs",
+    "parse": {
+      "Command": {
+        "ScriptStatement": "import int.abs"
+      }
+    },
+    "eval": "Nothing",
+    "environment": []
+  },
+  {
+    "input": "import i32.abs",
+    "parse": {
+      "Command": {
+        "ScriptStatement": "import i32.abs"
+      }
+    },
+    "eval": {
+      "Error": "DuplicateImport { name: \"abs\", first: \"sys/std/int\", second: \"sys/std/i32\" }"
+    },
+    "environment": []
+  },
+  {
+    "input": "abs(-5)",
+    "parse": {
+      "Command": {
+        "Expression": "abs(-5)"
+      }
+    },
+    "eval": {
+      "SuccessExpr": {
+        "ty": "int",
+        "value": "5"
+      }
+    },
+    "environment": []
+  },
+  {
+    "input": "import int.abs",
+    "parse": {
+      "Command": {
+        "ScriptStatement": "import int.abs"
+      }
+    },
+    "eval": "Nothing",
+    "environment": []
+  }
+]

@@ -37,6 +37,19 @@ fn register_natives(
     Ok(())
 }
 
+/// The failure for a type error, saying what it was when nothing else did.
+///
+/// A diagnostic carries a span and renders itself. An error without one - a
+/// duplicate import or type alias, say - renders nothing, and a bare "type
+/// error" is all the user would otherwise get.
+fn type_error(diagnostics: &[&datalove_diagnostic::TypeDiagnostic], errors: &[String]) -> AnyError {
+    if diagnostics.is_empty() && !errors.is_empty() {
+        anyhow!("Type error:\n{}", errors.join("\n"))
+    } else {
+        anyhow!("Type error")
+    }
+}
+
 fn main() -> AnyResult<()> {
     rmx::extras::init_crate_name(env!("CARGO_CRATE_NAME"));
 
@@ -467,10 +480,10 @@ impl ScriptCommand {
             render::render_parse_diagnostics(compiler.db(), &parse_diags, file_path, &cwd);
             bail!("Parse error");
         }
-        if let datafun::pipeline::TypecheckResult::Error { errors: _ } = &compiled_unit.typecheck {
+        if let datafun::pipeline::TypecheckResult::Error { errors } = &compiled_unit.typecheck {
             let type_diags = compiler.get_type_diagnostics();
             render::render_type_diagnostics(compiler.db(), &type_diags, file_path, &cwd);
-            bail!("Type error");
+            return Err(type_error(&type_diags, errors));
         }
         if let datafun::pipeline::OwnershipResult::Error { message: _ } = &compiled_unit.ownership {
             // Render ownership diagnostics directly using structured errors and spans.
@@ -555,10 +568,10 @@ impl ScriptIrCommand {
             render::render_parse_diagnostics(compiler.db(), &parse_diags, &self.file_path, &cwd);
             bail!("Parse error");
         }
-        if let datafun::pipeline::TypecheckResult::Error { errors: _ } = &compiled_unit.typecheck {
+        if let datafun::pipeline::TypecheckResult::Error { errors } = &compiled_unit.typecheck {
             let type_diags = compiler.get_type_diagnostics();
             render::render_type_diagnostics(compiler.db(), &type_diags, &self.file_path, &cwd);
-            bail!("Type error");
+            return Err(type_error(&type_diags, errors));
         }
         if let datafun::pipeline::LoweringResult::Error { message } = &compiled_unit.lowering {
             bail!("Lowering error: {}", message);
@@ -619,10 +632,10 @@ impl AotCompileCommand {
             render::render_parse_diagnostics(compiler.db(), &parse_diags, &self.file_path, &cwd);
             bail!("Parse error");
         }
-        if let datafun::pipeline::TypecheckResult::Error { errors: _ } = &compiled_unit.typecheck {
+        if let datafun::pipeline::TypecheckResult::Error { errors } = &compiled_unit.typecheck {
             let type_diags = compiler.get_type_diagnostics();
             render::render_type_diagnostics(compiler.db(), &type_diags, &self.file_path, &cwd);
-            bail!("Type error");
+            return Err(type_error(&type_diags, errors));
         }
         if let datafun::pipeline::LoweringResult::Error { message } = &compiled_unit.lowering {
             bail!("Lowering error: {}", message);
@@ -790,10 +803,10 @@ impl ScriptWorldCommand {
             render::render_parse_diagnostics(compiler.db(), &parse_diags, &self.file_path, &cwd);
             bail!("Parse error");
         }
-        if let datafun::pipeline::TypecheckResult::Error { errors: _ } = &compiled_unit.typecheck {
+        if let datafun::pipeline::TypecheckResult::Error { errors } = &compiled_unit.typecheck {
             let type_diags = compiler.get_type_diagnostics();
             render::render_type_diagnostics(compiler.db(), &type_diags, &self.file_path, &cwd);
-            bail!("Type error");
+            return Err(type_error(&type_diags, errors));
         }
         if let datafun::pipeline::OwnershipResult::Error { message: _ } = &compiled_unit.ownership {
             if let Some(spans) = compiler.get_last_spans() {

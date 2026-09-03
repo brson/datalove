@@ -1,6 +1,7 @@
 //! Module generation.
 
 use rand::Rng;
+use std::collections::HashSet;
 use crate::config::WorldGenConfig;
 use crate::context::{GenContext, ModuleInfo, TypeAlias, FunctionSig};
 use crate::gen_type::{gen_type_alias, format_type_alias};
@@ -85,13 +86,18 @@ pub fn gen_module<'db, R: Rng>(
     let mut lines = Vec::new();
 
     // Generate require/import for prior modules.
+    //
+    // A name is imported once: two modules may export the same one, and a
+    // second import under a name already bound is an error rather than a
+    // shadowing.
+    let mut imported_names: HashSet<String> = HashSet::new();
     for prior in prior_modules {
         if !prior.functions.is_empty() && rng.gen_bool(0.5) {
             lines.push(format!("require module {}", prior.path()));
 
             // Import some functions.
             for func in &prior.functions {
-                if rng.gen_bool(0.7) {
+                if rng.gen_bool(0.7) && imported_names.insert(func.name.clone()) {
                     lines.push(format!("import {}.{}", prior.alias(), func.name));
                 }
             }

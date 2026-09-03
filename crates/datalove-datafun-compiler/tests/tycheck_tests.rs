@@ -258,6 +258,14 @@ fn error_to_json(error: &datalove_datafun_tycheck::TypeError) -> rmx::serde_json
                 "name": name
             })
         }
+        TypeError::DuplicateImport { name, first, second } => {
+            json!({
+                "kind": "DuplicateImport",
+                "name": name,
+                "first": first,
+                "second": second
+            })
+        }
         TypeError::CannotShadowPrimitive(name) => {
             json!({
                 "kind": "CannotShadowPrimitive",

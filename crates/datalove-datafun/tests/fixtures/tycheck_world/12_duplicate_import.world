@@ -1,0 +1,29 @@
+----------
+module sys/std/first
+----------
+
+fun value(x: u32): u32
+  ret x
+end fun
+
+----------
+module sys/std/second
+----------
+
+fun value(x: u32): u32
+  ret x
+end fun
+
+----------
+module sys/util/collide
+----------
+
+// A name resolves to one function, so a second import under the same name
+// used to decide the calls the first was already answering, with the order
+// the two were written in as the only thing saying which won.
+
+require module sys/std/first
+require module sys/std/second
+
+import first.value
+import second.value

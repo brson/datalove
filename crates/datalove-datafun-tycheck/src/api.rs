@@ -165,7 +165,27 @@ pub fn typecheck_script_unit<'db>(
             );
 
             // Add resolved imports to context and track as new bindings.
+            //
+            // A name carried in from an earlier unit is bound already, so an
+            // import of a different function under it would decide the calls
+            // that one is answering. In a session the two arrive on separate
+            // lines, which is exactly where the shadowing is hardest to see.
+            let bound: HashMap<InternedText<'db>, Option<ModuleId<'db>>> = accumulated
+                .fn_asts.iter()
+                .map(|(name, _, module_id)| (*name, *module_id))
+                .collect();
+
             for (item_name, func_ty, func_ast, source_module_id) in resolved_imports {
+                if let Some(first) = bound.get(&item_name) {
+                    if *first != source_module_id {
+                        ctx.add_error(TypeError::DuplicateImport {
+                            name: item_name.as_str(db).to_string(),
+                            first: module_description(db, *first),
+                            second: module_description(db, source_module_id),
+                        });
+                        continue;
+                    }
+                }
                 ctx.add_function(item_name, func_ty);
                 ctx.function_asts.insert(item_name, (func_ast, source_module_id));
                 new_fns.push((item_name, func_ty));
@@ -659,6 +679,36 @@ pub fn resolve_module_imports<'db>(
 /// ResolvedImport tracked structs. This allows the function to be called from
 /// inside tracked functions without the "cannot create tracked struct outside
 /// tracked function" issue.
+/// Record an import, reporting a name bound twice rather than overwriting.
+///
+/// A name resolves to one function, so a second import under the same name
+/// used to decide the calls the first was already answering. Which of the two
+/// won depended on the order they were written in, and nothing said so.
+fn push_import<'db>(
+    db: &'db dyn crate::Db,
+    imports: &mut Vec<ResolvedImportData<'db>>,
+    sources: &mut HashMap<InternedText<'db>, String>,
+    errors: &mut Vec<TypeError>,
+    import: &ResolvedImportData<'db>,
+    source: String,
+) {
+    let name = import.0;
+    if let Some(first) = sources.get(&name) {
+        // The same import written twice binds what is already bound, which is
+        // redundant rather than ambiguous.
+        if *first != source {
+            errors.push(TypeError::DuplicateImport {
+                name: name.as_str(db).to_string(),
+                first: first.clone(),
+                second: source,
+            });
+        }
+        return;
+    }
+    sources.insert(name, source);
+    imports.push(*import);
+}
+
 fn resolve_module_imports_internal<'db>(
     db: &'db dyn crate::Db,
     module_id: ModuleId<'db>,
@@ -682,6 +732,7 @@ fn resolve_module_imports_internal<'db>(
 
     let mut resolved_imports = Vec::new();
     let mut import_errors = Vec::new();
+    let mut import_sources: HashMap<InternedText<'db>, String> = HashMap::new();
 
     for statement in &parsed.statements {
         if let Statement::Import(import) = statement {
@@ -701,7 +752,11 @@ fn resolve_module_imports_internal<'db>(
                             .and_then(|funcs| funcs.iter().find(|(n, _)| *n == item_name))
                             .map(|(_, ast)| *ast);
 
-                        resolved_imports.push((item_name, func_type, func_ast, source_module_id));
+                        push_import(
+                            db, &mut resolved_imports, &mut import_sources, &mut import_errors,
+                            &(item_name, func_type, func_ast, source_module_id),
+                            format!("{}.{}", module_name.as_str(db), item_name.as_str(db)),
+                        );
                     } else {
                         import_errors.push(TypeError::UnresolvedName(
                             format!("{}.{}", module_name.as_str(db), item_name.as_str(db))
@@ -747,7 +802,11 @@ fn resolve_module_imports_internal<'db>(
                         vec![],
                         0,
                     );
-                    resolved_imports.push((item_name, func_type, Some(synthetic_fun), synthetic_module_id));
+                    push_import(
+                        db, &mut resolved_imports, &mut import_sources, &mut import_errors,
+                        &(item_name, func_type, Some(synthetic_fun), synthetic_module_id),
+                        format!("{}.{}", module_name.as_str(db), item_name.as_str(db)),
+                    );
                 } else {
                     import_errors.push(TypeError::UnresolvedName(
                         format!("{}.{} (not found in rider)", module_name.as_str(db), item_name.as_str(db))
@@ -823,6 +882,16 @@ fn collect_module_aliases<'db>(
     aliases
 }
 
+/// Name a module for an error message, or say it has none.
+///
+/// A function defined in the session itself has no module to name.
+fn module_description<'db>(db: &'db dyn crate::Db, module_id: Option<ModuleId<'db>>) -> String {
+    match module_id {
+        Some(id) => id.path(db).to_string(),
+        None => "this session".to_string(),
+    }
+}
+
 /// Resolve imports for a script unit using path-based module lookup.
 ///
 /// Resolves import statements against the provided module functions, using
@@ -837,6 +906,7 @@ fn resolve_script_imports<'db>(
     // Resolve import statements.
     let mut resolved = Vec::new();
     let mut errors = Vec::new();
+    let mut sources: HashMap<InternedText<'db>, String> = HashMap::new();
 
     for statement in &script.statements {
         if let Statement::Import(import) = statement {
@@ -851,7 +921,21 @@ fn resolve_script_imports<'db>(
             if let Some(funcs) = module_functions.get(module_path) {
                 if let Some((func_ty, func_ast)) = funcs.get(&item_name) {
                     let source_module_id = path_to_module_id.get(module_path).cloned();
-                    resolved.push((item_name, *func_ty, *func_ast, source_module_id));
+                    let source = format!("{}.{}", module_path, item_name.as_str(db));
+                    // One name, one function: see push_import.
+                    if let Some(first) = sources.get(&item_name) {
+                        // The same import twice is redundant, not ambiguous.
+                        if *first != source {
+                            errors.push(TypeError::DuplicateImport {
+                                name: item_name.as_str(db).to_string(),
+                                first: first.clone(),
+                                second: source,
+                            });
+                        }
+                    } else {
+                        sources.insert(item_name, source);
+                        resolved.push((item_name, *func_ty, *func_ast, source_module_id));
+                    }
                 } else {
                     errors.push(TypeError::UnresolvedName(
                         format!("{}.{}", module_path, item_name.as_str(db))

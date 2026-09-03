@@ -1,1 +1,2 @@
-Error: Type error
+Error: Type error:
+UnresolvedTypeAlias("list")
