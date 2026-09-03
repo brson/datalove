@@ -184,6 +184,10 @@ pub enum IntrinsicId {
     NegWrappingOffset = 251,
     SshrOffset = 252,
     SremOffset = 253,
+
+    // Float width conversion (270-279).
+    F32ToF64 = 270,
+    F64ToF32 = 271,
 }
 
 /// Simplified type for intrinsic parameters and return values.
@@ -457,6 +461,22 @@ pub static INTRINSICS: &[IntrinsicDef] = &[
         name: "is_infinite_f64",
         params: &[IntrinsicType::F64],
         ret: IntrinsicType::Bool,
+    },
+
+    // Float width conversion. Widening is exact; narrowing rounds, and gives
+    // an infinity for a value too large to hold, which `f32.from_f64` reads
+    // as the absence of an answer.
+    IntrinsicDef {
+        id: IntrinsicId::F32ToF64,
+        name: "f32_to_f64",
+        params: &[IntrinsicType::F32],
+        ret: IntrinsicType::F64,
+    },
+    IntrinsicDef {
+        id: IntrinsicId::F64ToF32,
+        name: "f64_to_f32",
+        params: &[IntrinsicType::F64],
+        ret: IntrinsicType::F32,
     },
 
     // F64 bit conversion.

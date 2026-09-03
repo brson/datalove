@@ -1232,8 +1232,9 @@ offset -> int
 A chain is shorthand for widening directly to any type after the source, so
 `u8` reaches `u64` in one step rather than through `u16`.
 
-Floats do not widen. There is no `f32` to `f64` conversion, by `@` or
-otherwise.
+Floats do not widen, by `@` or otherwise. `f64.from_f32` converts a value of
+the narrower width, exactly, and `f64.to_f32` converts one the other way,
+rounding, and gives none for a finite value too large for an `f32` to hold.
 
 `index` and `offset` widen only to `int`. They are 32-bit or 64-bit
 depending on how the compiler is configured, so a conversion to a fixed

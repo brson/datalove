@@ -2451,6 +2451,12 @@ impl<'a> FunctionCodegenContext<'a> {
             IntrinsicId::IsInfiniteF64 => {
                 writeln!(out, "    *(bool_t*){} = isinf(*(double*){});", dest_addr, arg0()).unwrap();
             }
+            IntrinsicId::F32ToF64 => {
+                writeln!(out, "    *(double*){} = (double)*(float*){};", dest_addr, arg0()).unwrap();
+            }
+            IntrinsicId::F64ToF32 => {
+                writeln!(out, "    *(float*){} = (float)*(double*){};", dest_addr, arg0()).unwrap();
+            }
             IntrinsicId::F64ToBits => {
                 writeln!(out, "    memcpy({}, {}, 8);", dest_addr, arg0()).unwrap();
             }

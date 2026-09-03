@@ -1,0 +1,46 @@
+require module sys/std/f64
+
+import f64.from_f32
+import f64.to_f32
+import f64.infinity
+import f64.nan
+import f64.max_value
+import f64.is_nan
+
+// The language does not widen between the float widths on its own, so these
+// are the way across.
+
+// Widening is exact and cannot fail.
+let narrow: f32 = 0.5
+let widened = from_f32(narrow)
+
+// Narrowing rounds. A value an f32 holds exactly comes back unchanged; one it
+// does not comes back changed, which is what the narrower type cost.
+fun round_trip(x: f64): f64
+  if to_f32(x) |narrow|
+    ret from_f32(narrow)
+  else
+    ret 0.0
+  end if
+end fun
+
+let exact = (0.5, round_trip(0.5))
+let rounded = (0.1, round_trip(0.1))
+
+// A finite value past what an f32 holds has no answer, rather than the
+// infinity the hardware would give.
+let too_large = to_f32(max_value())
+
+// A nan or an infinity is the same value in either width.
+let infinite = to_f32(infinity())
+fun narrows_to_nan(x: f64): bool
+  if to_f32(x) |narrow|
+    ret is_nan(from_f32(narrow))
+  else
+    ret false
+  end if
+end fun
+
+let not_a_number = narrows_to_nan(nan())
+
+let output = (widened, exact, rounded, too_large, infinite, not_a_number)

@@ -204,6 +204,14 @@ impl IrInterpreter {
             }
 
             // F64 bit conversion.
+            F32ToF64 => {
+                let a = self.read_f32(&args[0], frame, frames);
+                self.write_f64(a as f64, dest);
+            }
+            F64ToF32 => {
+                let a = self.read_f64(&args[0], frame, frames);
+                self.write_f32(a as f32, dest);
+            }
             F64ToBits => {
                 let a = self.read_f64(&args[0], frame, frames);
                 self.write_u64(a.to_bits(), dest);

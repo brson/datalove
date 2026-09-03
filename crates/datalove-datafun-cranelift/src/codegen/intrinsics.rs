@@ -223,6 +223,14 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             }
 
             // F64 bit conversion.
+            F32ToF64 => {
+                let a = self.get_operand_value(builder, &args[0])?;
+                builder.ins().fpromote(cl_ir::types::F64, a)
+            }
+            F64ToF32 => {
+                let a = self.get_operand_value(builder, &args[0])?;
+                builder.ins().fdemote(cl_ir::types::F32, a)
+            }
             F64ToBits => {
                 let a = self.get_operand_value(builder, &args[0])?;
                 builder.ins().bitcast(cl_ir::types::I64, cl_ir::MemFlagsData::new(), a)

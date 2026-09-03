@@ -375,3 +375,4 @@ end fun
 fun from_int(ref n: int): ?f32
   ret f32_from_int(ref n)
 end fun
+
