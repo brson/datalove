@@ -43,11 +43,25 @@ enum TokenSource<'db> {
 pub(super) struct ScriptCounters {
     pub expr: u32,
     pub call: u32,
-    /// Imports seen so far, which is where the next import's span is filed.
-    ///
-    /// A script is parsed a line at a time, each by its own parser, and the
-    /// spans are concatenated afterwards. The count has to survive that or
-    /// every line would file its import at nought.
+    pub stmts: StatementCounters,
+}
+
+/// How many statements of each kind have had their span filed.
+///
+/// A statement's span is looked up by its position in the vector for its own
+/// kind, so the count has to be per kind and has to survive being carried
+/// from one line's parser to the next: a script is parsed a line at a time
+/// and the vectors are concatenated afterwards. A single counter shared by
+/// every kind, restarting with each parser, gives a `ret` in the second
+/// function the index of the one in the first.
+#[derive(Clone, Copy, Default)]
+pub(super) struct StatementCounters {
+    pub brk: u32,
+    pub cont: u32,
+    pub ret: u32,
+    pub set: u32,
+    pub fun: u32,
+    pub type_alias: u32,
     pub import: u32,
 }
 
@@ -85,15 +99,13 @@ pub(super) struct Parser<'db> {
     /// At script level it runs for the whole parse, across the per-line
     /// parsers, so that script-level keys stay distinct.
     expr_counter: u32,
-    import_counter: u32,
+    stmt_counters: StatementCounters,
     /// Script-level expression counter, saved while inside a function.
     script_expr_counter: u32,
     /// Counter for function calls within current function.
     call_counter: u32,
     /// Script-level call counter, saved while inside a function.
     script_call_counter: u32,
-    /// Counter for statements needing spans (break, continue).
-    stmt_counter: u32,
 }
 
 impl<'db> Parser<'db> {
@@ -122,11 +134,10 @@ impl<'db> Parser<'db> {
             branch_context: None,
             current_fn_name: None,
             expr_counter: counters.expr,
-            import_counter: counters.import,
+            stmt_counters: counters.stmts,
             script_expr_counter: counters.expr,
             call_counter: counters.call,
             script_call_counter: counters.call,
-            stmt_counter: 0,
         }
     }
 
@@ -145,7 +156,7 @@ impl<'db> Parser<'db> {
         sub.current_fn_name = self.current_fn_name;
         sub.expr_counter = self.expr_counter;
         sub.script_expr_counter = self.script_expr_counter;
-        sub.import_counter = self.import_counter;
+        sub.stmt_counters = self.stmt_counters;
         sub.call_counter = self.call_counter;
         sub.script_call_counter = self.script_call_counter;
         sub
@@ -155,7 +166,7 @@ impl<'db> Parser<'db> {
     pub(super) fn script_counters(&self) -> ScriptCounters {
         ScriptCounters {
             expr: if self.current_fn_name.is_some() { self.script_expr_counter } else { self.expr_counter },
-            import: self.import_counter,
+            stmts: self.stmt_counters,
             call: if self.current_fn_name.is_some() { self.script_call_counter } else { self.call_counter },
         }
     }
@@ -197,11 +208,10 @@ impl<'db> Parser<'db> {
             branch_context: context,
             current_fn_name: None,
             expr_counter: 0,
-            import_counter: 0,
+            stmt_counters: StatementCounters::default(),
             script_expr_counter: 0,
             call_counter: 0,
             script_call_counter: 0,
-            stmt_counter: 0,
         };
         // Prime the buffer.
         parser.fill_iter_buffer();
@@ -237,11 +247,10 @@ impl<'db> Parser<'db> {
             branch_context: context,
             current_fn_name: self.current_fn_name,
             expr_counter: self.expr_counter,
-            import_counter: self.import_counter,
+            stmt_counters: self.stmt_counters,
             script_expr_counter: self.script_expr_counter,
             call_counter: self.call_counter,
             script_call_counter: self.script_call_counter,
-            stmt_counter: self.stmt_counter,
         };
         parser.fill_iter_buffer();
         parser
@@ -255,6 +264,7 @@ impl<'db> Parser<'db> {
         self.script_expr_counter = sub.script_expr_counter;
         self.call_counter = sub.call_counter;
         self.script_call_counter = sub.script_call_counter;
+        self.stmt_counters = sub.stmt_counters;
         self.merge_spans_from(sub);
     }
 
@@ -265,7 +275,7 @@ impl<'db> Parser<'db> {
         self.script_expr_counter = sub.script_expr_counter;
         self.call_counter = sub.call_counter;
         self.script_call_counter = sub.script_call_counter;
-        self.stmt_counter = sub.stmt_counter;
+        self.stmt_counters = sub.stmt_counters;
         self.merge_spans_from(sub);
     }
 
@@ -525,66 +535,64 @@ impl<'db> Parser<'db> {
         self.set_spans.append(&mut sub.set_spans);
         self.fun_spans.append(&mut sub.fun_spans);
         self.type_alias_spans.append(&mut sub.type_alias_spans);
-    }
-
-    /// Get next statement index and increment counter.
-    pub(super) fn next_stmt_index(&mut self) -> u32 {
-        let idx = self.stmt_counter;
-        self.stmt_counter += 1;
-        idx
+        self.import_spans.append(&mut sub.import_spans);
     }
 
     /// Record a break statement span and return its local_index.
     pub(super) fn record_break_span(&mut self, ts: TextSpan<'db>) -> u32 {
-        let index = self.next_stmt_index();
-        self.break_spans.push(SpanEntry::new(ts.text.source(self.db), ts.span));
-        index
+        self.record_stmt_span(ts, |c| &mut c.brk, |p| &mut p.break_spans)
     }
 
     /// Record a continue statement span and return its local_index.
     pub(super) fn record_continue_span(&mut self, ts: TextSpan<'db>) -> u32 {
-        let index = self.next_stmt_index();
-        self.continue_spans.push(SpanEntry::new(ts.text.source(self.db), ts.span));
-        index
+        self.record_stmt_span(ts, |c| &mut c.cont, |p| &mut p.continue_spans)
     }
 
     /// Record a return statement span and return its local_index.
     pub(super) fn record_ret_span(&mut self, ts: TextSpan<'db>) -> u32 {
-        let index = self.next_stmt_index();
-        self.ret_spans.push(SpanEntry::new(ts.text.source(self.db), ts.span));
-        index
+        self.record_stmt_span(ts, |c| &mut c.ret, |p| &mut p.ret_spans)
     }
 
     /// Record a set statement span and return its local_index.
     pub(super) fn record_set_span(&mut self, ts: TextSpan<'db>) -> u32 {
-        let index = self.next_stmt_index();
-        self.set_spans.push(SpanEntry::new(ts.text.source(self.db), ts.span));
-        index
+        self.record_stmt_span(ts, |c| &mut c.set, |p| &mut p.set_spans)
     }
 
     /// Record a function definition span and return its local_index.
     pub(super) fn record_fun_span(&mut self, ts: TextSpan<'db>) -> u32 {
-        let index = self.next_stmt_index();
-        self.fun_spans.push(SpanEntry::new(ts.text.source(self.db), ts.span));
-        index
+        self.record_stmt_span(ts, |c| &mut c.fun, |p| &mut p.fun_spans)
     }
 
     /// Record a type alias span and return its local_index.
-    /// File an import's span, returning the index its diagnostics find it by.
+    pub(super) fn record_type_alias_span(&mut self, ts: TextSpan<'db>) -> u32 {
+        self.record_stmt_span(ts, |c| &mut c.type_alias, |p| &mut p.type_alias_spans)
+    }
+
+    /// Record an import span and return its local_index.
     pub(super) fn record_import_span(&mut self, ts: TextSpan<'db>) -> u32 {
-        let index = self.import_counter;
-        self.import_counter += 1;
-        self.import_spans.push(SpanEntry::new(ts.text.source(self.db), ts.span));
-        index
+        self.record_stmt_span(ts, |c| &mut c.import, |p| &mut p.import_spans)
     }
 
     pub(super) fn take_import_spans(&mut self) -> Vec<SpanEntry> {
         rmx::std::mem::take(&mut self.import_spans)
     }
 
-    pub(super) fn record_type_alias_span(&mut self, ts: TextSpan<'db>) -> u32 {
-        let index = self.next_stmt_index();
-        self.type_alias_spans.push(SpanEntry::new(ts.text.source(self.db), ts.span));
+    /// File a statement's span under the count for its kind.
+    ///
+    /// The index handed back is where the span sits in that kind's vector
+    /// once every parser's vectors have been concatenated, which is what a
+    /// diagnostic looks it up by.
+    fn record_stmt_span(
+        &mut self,
+        ts: TextSpan<'db>,
+        count: impl Fn(&mut StatementCounters) -> &mut u32,
+        spans: impl Fn(&mut Self) -> &mut Vec<SpanEntry>,
+    ) -> u32 {
+        let counter = count(&mut self.stmt_counters);
+        let index = *counter;
+        *counter += 1;
+        let entry = SpanEntry::new(ts.text.source(self.db), ts.span);
+        spans(self).push(entry);
         index
     }
 

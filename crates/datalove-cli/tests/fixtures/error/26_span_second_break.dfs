@@ -1,0 +1,12 @@
+// Each break gets its own, rather than both getting the first one's.
+fun a(): int
+  break
+  ret 1
+end fun
+
+fun b(): int
+  break
+  ret 2
+end fun
+
+let output = 0

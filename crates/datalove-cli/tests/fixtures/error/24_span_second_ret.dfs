@@ -1,0 +1,10 @@
+// The diagnostic belongs on the second function's ret, not the first's.
+fun first(): int
+  ret 1
+end fun
+
+fun second()
+  ret 2
+end fun
+
+let output = first()
