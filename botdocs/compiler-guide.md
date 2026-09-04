@@ -1032,10 +1032,10 @@ Most live in `crates/datalove-datafun/tests`.
 | `interp_jit_tests`, `interp_dispatch_tuned_tests`, `interp_dispatch_chaos_tests` | JIT tiering and dispatch |
 | `interp_specialize_tests`, `interp_constlet_tests` | Specialization and const bindings |
 | `aot_tests`, `aot_layout_tests` | Cranelift AOT compilation and layout compatibility |
-| `dual_tests`, `c_dual_tests` | Compare interp vs Cranelift AOT, and vs C AOT |
+| `dual_tests`, `c_dual_tests` | Compare interp vs Cranelift AOT, and vs C AOT. Both are behind `slow_tests`, so `just test` does not run them |
 | `layout_conformance_tests` | `ir::layout` against `rtdt::layout`, both directions |
 | `native_rider_tests` | End-to-end native rider calls |
-| `std_tests`, `std_all_tests` | The `sys/std` library, compiled from `sys/` on disk |
+| `std_tests`, `std_all_tests` | The `sys/std` library, compiled from `sys/` on disk. `std_all_tests` runs every fixture through all four backends and requires agreement, and is the only suite that puts a rider call, a bigint or a type parameter through the C backend |
 | `embedded_matches_tree` | The embedded stdlib against `sys/`, and every declared native linked (in `datalove-stdlib`) |
 | `module_memo_tests`, `incremental_memo_tests`, `no_op_recompile_tests`, `parse_firewall_tests` | Salsa memoization behavior |
 | `database_memory_tests` | Database growth |

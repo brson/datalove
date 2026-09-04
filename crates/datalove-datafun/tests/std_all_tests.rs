@@ -1,8 +1,13 @@
 //! Standard library tests across all backends.
 //!
-//! Runs each `.dfs` fixture through all three backends (interpreter, JIT, AOT)
-//! and verifies they produce the same output. Uses the same fixtures and expected
-//! output as `std_tests`.
+//! Runs each `.dfs` fixture through all four backends (interpreter, JIT,
+//! cranelift AOT, C AOT) and verifies they produce the same output. Uses the
+//! same fixtures and expected output as `std_tests`.
+//!
+//! The C backend is here because it was not, and fell seven months behind on
+//! the strength of nobody noticing. `c_dual_tests` has no fixture that reaches
+//! the standard library, so this is the only suite that puts a rider call, a
+//! bigint or a type parameter through it.
 
 use rmx::prelude::*;
 use std::path::{Path, PathBuf};
@@ -11,7 +16,7 @@ use datalove_datafun_cranelift_jit::JitEngine;
 use datalove_datafun_interp::CallDispatcher;
 use datafun::pipeline::{
     WorkspaceDescriptor, TypecheckResult, LoweringResult,
-    aot as pipeline_aot,
+    aot as pipeline_aot, c_aot as pipeline_c_aot,
 };
 
 /// Load the package world, set up the pipeline, and compile modules.
@@ -199,7 +204,48 @@ fn run_aot(
     Ok(exec_output.stderr.trim_end().to_string())
 }
 
-/// Analyze a single .dfs file across all three backends.
+/// Run through the C backend, returning the debuglog output.
+///
+/// The same shape as `run_aot`, differing only in what turns the IR into an
+/// executable: C source and a C compiler rather than an object and a linker.
+fn run_c_aot(
+    db: &datafun::Database,
+    compiled: &datafun::pipeline::CompiledModules<'_>,
+    script_text: &str,
+    rider_lib_paths: &[PathBuf],
+) -> Result<String, String> {
+    let modified_source = format!("{}\ndebuglog output", script_text);
+
+    let mut compiler = compiled.script_compiler_default(db)
+        .ok_or("C AOT: module compilation failed (compiler)")?;
+
+    let result = compiler.compile_fragment(&modified_source);
+    if let TypecheckResult::Error { errors } = &result.typecheck {
+        return Err(format!("C AOT typecheck errors: {:?}", errors));
+    }
+    if let LoweringResult::Error { message } = &result.lowering {
+        return Err(format!("C AOT lowering error: {}", message));
+    }
+
+    let ir_unit = result.ir_unit.ok_or("C AOT: IR unit not available")?;
+    let registry = compiled.module_registry();
+
+    let sources = pipeline_c_aot::compile_world(&ir_unit, &registry)
+        .map_err(|e| format!("C AOT compile error: {}", e))?;
+
+    let dir = rmx::tempfile::tempdir()
+        .map_err(|e| format!("C AOT temp dir error: {}", e))?;
+    let exe_path = dir.path().join("test");
+    pipeline_c_aot::link_sources_to_path(&sources, &exe_path, rider_lib_paths)
+        .map_err(|e| format!("C AOT link error: {}", e))?;
+
+    let exec_output = pipeline_aot::run_executable(&exe_path)
+        .map_err(|e| format!("C AOT execution error: {}", e))?;
+
+    Ok(exec_output.stderr.trim_end().to_string())
+}
+
+/// Analyze a single .dfs file across all four backends.
 fn analyze_file(path: &Path) -> Result<String, String> {
     let script_text = std::fs::read_to_string(path)
         .map_err(|e| format!("Failed to read file: {}", e))?;
@@ -239,6 +285,13 @@ fn analyze_file(path: &Path) -> Result<String, String> {
         run_aot(&db, compiled, &script_text, &rider_lib_paths)
     };
 
+    // Backend 4: C AOT.
+    let c_aot_result = {
+        let db = datafun::Database::default();
+        let (ref _descriptor, ref compiled) = setup_and_compile(&db)?;
+        run_c_aot(&db, compiled, &script_text, &rider_lib_paths)
+    };
+
     // Compare all backends against interpreter. All errors are fatal.
     let mut mismatches = Vec::new();
     match &jit_result {
@@ -262,6 +315,18 @@ fn analyze_file(path: &Path) -> Result<String, String> {
         }
         Err(e) => {
             mismatches.push(format!("AOT error: {}", e));
+        }
+        _ => {}
+    }
+    match &c_aot_result {
+        Ok(c_value) if c_value != &interp_value => {
+            mismatches.push(format!(
+                "C AOT output mismatch:\n  interp: {}\n  c aot: {}",
+                interp_value, c_value
+            ));
+        }
+        Err(e) => {
+            mismatches.push(format!("C AOT error: {}", e));
         }
         _ => {}
     }

@@ -479,10 +479,27 @@ impl<'a> FunctionCodegenContext<'a> {
         self.compiler.get_tydesc_name(ty)
     }
 
-    /// Emit a constant.
+    /// Emit a constant into a value.
     fn emit_const(&mut self, out: &mut String, dest: ValueId, value: &ConstValue) -> Result<(), CAotError> {
         let dest_addr = self.value_addr(dest);
-        let ty = self.value_type(dest);
+        let ty = self.value_type(dest).clone();
+        self.emit_const_at(out, &dest_addr, &ty, value)
+    }
+
+    /// Emit a constant into an address.
+    ///
+    /// Written against an address rather than a value so that a constant made
+    /// of constants can put its parts somewhere: a list's elements go into a
+    /// scratch buffer one at a time on their way into the list.
+    fn emit_const_at(
+        &mut self,
+        out: &mut String,
+        dest_addr: &str,
+        ty: &IrType,
+        value: &ConstValue,
+    ) -> Result<(), CAotError> {
+        let ty = ty.clone();
+        let ty = &ty;
 
         match value {
             ConstValue::Unit => {
@@ -521,33 +538,19 @@ impl<'a> FunctionCodegenContext<'a> {
             ConstValue::Offset(v) => {
                 writeln!(out, "    *(offset_t*){} = {};", dest_addr, v).unwrap();
             }
+            // A float goes across as its bits rather than as a number written
+            // out and read back. Decimal loses nothing for most values but
+            // says nothing about the rest: a literal is allowed to name a
+            // particular NaN by its bit pattern, and `0.0/0.0` produces
+            // whichever one the target likes, which on x86_64 has the sign bit
+            // set where the literal did not.
             ConstValue::F32(v) => {
-                if v.is_nan() {
-                    writeln!(out, "    *(float*){} = (0.0f/0.0f);", dest_addr).unwrap();
-                } else if v.is_infinite() {
-                    if *v > 0.0 {
-                        writeln!(out, "    *(float*){} = (1.0f/0.0f);", dest_addr).unwrap();
-                    } else {
-                        writeln!(out, "    *(float*){} = (-1.0f/0.0f);", dest_addr).unwrap();
-                    }
-                } else {
-                    // Use {:e} to ensure scientific notation with decimal point.
-                    writeln!(out, "    *(float*){} = {:e}f;", dest_addr, v).unwrap();
-                }
+                writeln!(out, "    {{ uint32_t __bits = {:#010x}u; memcpy({}, &__bits, 4); }}",
+                    v.to_bits(), dest_addr).unwrap();
             }
             ConstValue::F64(v) => {
-                if v.is_nan() {
-                    writeln!(out, "    *(double*){} = (0.0/0.0);", dest_addr).unwrap();
-                } else if v.is_infinite() {
-                    if *v > 0.0 {
-                        writeln!(out, "    *(double*){} = (1.0/0.0);", dest_addr).unwrap();
-                    } else {
-                        writeln!(out, "    *(double*){} = (-1.0/0.0);", dest_addr).unwrap();
-                    }
-                } else {
-                    // Use {:e} to ensure scientific notation with decimal point.
-                    writeln!(out, "    *(double*){} = {:e};", dest_addr, v).unwrap();
-                }
+                writeln!(out, "    {{ uint64_t __bits = {:#018x}ull; memcpy({}, &__bits, 8); }}",
+                    v.to_bits(), dest_addr).unwrap();
             }
             ConstValue::Int { limbs, negative } => {
                 let ty = ty.clone();
@@ -575,9 +578,57 @@ impl<'a> FunctionCodegenContext<'a> {
                         hex_bytes.join(", "), bytes.len(), dest_addr, tydesc).unwrap();
                 }
             }
-            // Handle other const values as TODO for now.
+            ConstValue::List(elements) => {
+                let IrType::List(elem_ty) = ty else {
+                    return Err(CAotError::Codegen(format!(
+                        "a list constant wants a list type, not {:?}", ty)));
+                };
+                let elem_ty = (**elem_ty).clone();
+                let list_tydesc = self.tydesc_name(ty);
+                let elem_tydesc = self.tydesc_name(&elem_ty);
+                let elem_size = types::ir_type_to_crepr(&elem_ty).layout().size.max(1);
+
+                writeln!(out, "    dtlv_rti_list_create_local(rt, {}, &{});",
+                    dest_addr, list_tydesc).unwrap();
+                for element in elements {
+                    // Each element is built in a scratch buffer and pushed,
+                    // which moves it into the list. The buffer goes out of
+                    // scope with nothing left in it to release.
+                    writeln!(out, "    {{ _Alignas(8) uint8_t __ce[{}] = {{0}};", elem_size).unwrap();
+                    self.emit_const_at(out, "__ce", &elem_ty, element)?;
+                    writeln!(out, "    dtlv_rti_list_push_local(rt, {}, &{}, __ce, &{}); }}",
+                        dest_addr, list_tydesc, elem_tydesc).unwrap();
+                }
+            }
+            // An atom is one value of a type that has only that value, so it
+            // occupies nothing and there is nothing to write.
+            ConstValue::Enum { .. } if matches!(ty, IrType::Atom(_)) => {}
+            ConstValue::Enum { variant, payload } => {
+                let IrType::Enum(variants) = ty else {
+                    return Err(CAotError::Codegen(format!(
+                        "an enum constant wants an enum type, not {:?}", ty)));
+                };
+                let index = variants.iter().position(|(name, _)| name == variant)
+                    .ok_or_else(|| CAotError::Codegen(format!(
+                        "enum constant names variant '{}', which {:?} does not have",
+                        variant, ty)))?;
+                writeln!(out, "    *(uint32_t*){} = {};", dest_addr, index).unwrap();
+
+                if let Some(payload) = payload {
+                    let payload_ty = variants[index].1.clone()
+                        .ok_or_else(|| CAotError::Codegen(format!(
+                            "enum constant gives variant '{}' a payload it does not take",
+                            variant)))?;
+                    let offset = ir_layout::enum_payload_offset(&payload_ty);
+                    let payload_addr = format!("({} + {})", dest_addr, offset);
+                    self.emit_const_at(out, &payload_addr, &payload_ty, payload)?;
+                }
+            }
+            // Anything else would be written as a comment and read as whatever
+            // the frame happened to hold, which for a list is an empty one.
             _ => {
-                writeln!(out, "    /* TODO: const value {:?} */", value).unwrap();
+                return Err(CAotError::Unsupported(format!(
+                    "constant of this shape: {:?}", value)));
             }
         }
         Ok(())
@@ -798,6 +849,23 @@ impl<'a> FunctionCodegenContext<'a> {
             _ => (None, None),
         };
 
+        // Division and modulo are checked the same way at every width: what
+        // they report is a zero divisor, and the check has to come before the
+        // divide rather than after. This is ahead of the widening below
+        // because a narrow type would otherwise reach the fallback there and
+        // divide unchecked, which faults rather than reporting.
+        if matches!(op, BinOp::Div | BinOp::Mod) {
+            writeln!(out, "    if (*({c_ty}*){rhs_addr} == 0) {{").unwrap();
+            writeln!(out, "        *(bool_t*){overflow_addr} = 1;").unwrap();
+            writeln!(out, "        *({c_ty}*){dest_addr} = 0;").unwrap();
+            writeln!(out, "    }} else {{").unwrap();
+            writeln!(out, "        *(bool_t*){overflow_addr} = 0;").unwrap();
+            writeln!(out, "        *({c_ty}*){dest_addr} = *({c_ty}*){lhs_addr} {} *({c_ty}*){rhs_addr};",
+                if op == BinOp::Div { "/" } else { "%" }).unwrap();
+            writeln!(out, "    }}").unwrap();
+            return Ok(());
+        }
+
         if let (Some(min_val), Some(max_val)) = (min_val, max_val) {
             // Widen to 32-bit, do operation, check range.
             let op_str = match op {
@@ -836,19 +904,6 @@ impl<'a> FunctionCodegenContext<'a> {
             (IrType::Offset, BinOp::Add) => offset_add,
             (IrType::Offset, BinOp::Sub) => offset_sub,
             (IrType::Offset, BinOp::Mul) => offset_mul,
-            // Division and modulo need explicit zero-check.
-            (_, BinOp::Div) | (_, BinOp::Mod) => {
-                // Check for division by zero.
-                writeln!(out, "    if (*({c_ty}*){rhs_addr} == 0) {{").unwrap();
-                writeln!(out, "        *(bool_t*){overflow_addr} = 1;").unwrap();
-                writeln!(out, "        *({c_ty}*){dest_addr} = 0;").unwrap();
-                writeln!(out, "    }} else {{").unwrap();
-                writeln!(out, "        *(bool_t*){overflow_addr} = 0;").unwrap();
-                writeln!(out, "        *({c_ty}*){dest_addr} = *({c_ty}*){lhs_addr} {} *({c_ty}*){rhs_addr};",
-                    if op == BinOp::Div { "/" } else { "%" }).unwrap();
-                writeln!(out, "    }}").unwrap();
-                return Ok(());
-            }
             _ => {
                 // Fall back to unchecked operation.
                 self.emit_binop(out, dest, op, lhs, rhs)?;
@@ -1431,14 +1486,13 @@ impl<'a> FunctionCodegenContext<'a> {
         let src_ty = self.operand_type(src).clone();
         let dest_tydesc = self.tydesc_name(&dest_ty);
         let src_tydesc = self.tydesc_name(&src_ty);
-        let src_size = types::ir_type_to_crepr(&src_ty).layout().size;
         let func = if erasing { "dtlv_rti_erase_local" } else { "dtlv_rti_reify_local" };
 
+        // The source is left as it stands. Zeroing it here would say the value
+        // has gone, which is the drop schedule's to decide and not true of a
+        // copy type: a `u32` erased into two calls is read twice from the same
+        // place, and the second read would find the zero the first wrote.
         writeln!(out, "    {}(rt, {}, &{}, {}, &{});", func, src_addr, src_tydesc, dest_addr, dest_tydesc).unwrap();
-
-        if src_size > 0 {
-            writeln!(out, "    memset({}, 0, {});", src_addr, src_size).unwrap();
-        }
         Ok(())
     }
 
