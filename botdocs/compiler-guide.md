@@ -265,6 +265,13 @@ seeding the alias map; `IrType::from_datalit` mapping it to `data`, which is
 the whole of erasure; `bind_type_params` and `substitute_type_params` in
 `datafun-common::generics`; `Erase` and `Reify` at call boundaries.
 
+A generic function calling another passes its own type parameter along, and the
+value is already in the erased shape when it does. `Erase` and `Reify` are
+skipped in that case -- the argument's `IrType` already equals the parameter's
+erased shape, and the result type already equals the erased return shape.
+Erasing an erased value boxes the box, and the callee finds a `data` where the
+value should be.
+
 What it does not do yet -- owned collections, indexing a collection of a type
 parameter, bounds -- and why, is in
 [Where this stands](plan-generics.md#user-content-where-this-stands). Read that

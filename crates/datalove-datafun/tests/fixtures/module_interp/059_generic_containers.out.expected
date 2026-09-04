@@ -37,19 +37,13 @@ ModulesAnalysis(
                 v2 = erase v1
                 v3 = call @0 m0.u0(v0, v2)
                 v4 = reify v3
-                v5 = erase v4
-                v6 = erase p1
-                v7 = call @1 m0.u0(v5, v6)
-                v8 = reify v7
-                return v8
+                v5 = call @1 m0.u0(v4, p1)
+                return v5
             
             fn pass_through(p0, p1):
             block0:
-                v0 = erase p0
-                v1 = erase p1
-                v2 = call @0 m0.u0(v0, v1)
-                v3 = reify v2
-                return v3
+                v0 = call @0 m0.u0(p0, p1)
+                return v0
             
             fn main():
             block0:

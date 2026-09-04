@@ -594,7 +594,13 @@ pub fn lower_expression<'db>(
                 // the callee writes there is moved back out into the caller's
                 // type below. That is the same thing the return value does, in
                 // the other direction.
-                if param_is_erased.get(i).copied().unwrap_or(false) {
+                // An argument already in the erased shape is one the caller
+                // holds under a type parameter of its own, which is what a
+                // generic function passing its `T` to another has. Erasing it
+                // again would box the box, and the callee would find a `data`
+                // where the value it was told to expect should be.
+                let param_erased = param_is_erased.get(i).copied().unwrap_or(false);
+                if param_erased && param_types.get(i) != Some(&operand_type(ctx, &operand)) {
                     let erased_shape = param_types[i].clone();
                     let erased = ctx.fresh_value(erased_shape);
                     if mode == ParamMode::Out {
@@ -691,8 +697,11 @@ pub fn lower_expression<'db>(
             ctx.pop_pending_scope();
             ctx.emit_expr_temp_drops_since(expr_temp_mark);
 
-            // Move the value back out of the shape the erased callee returned.
-            if erased_return_type.is_some() {
+            // Move the value back out of the shape the erased callee returned,
+            // unless the caller keeps it in that shape too, which is the case
+            // when a generic function returns what another gave it under a
+            // type parameter of its own.
+            if erased_return_type.is_some() && erased_return_type != Some(result_type.clone()) {
                 let unwrapped = ctx.fresh_value(result_type);
                 ctx.emit(Instruction::Reify { dest: unwrapped, src: Operand::Value(dest) });
                 return Ok(unwrapped);
