@@ -1,0 +1,12 @@
+// Bigint arithmetic runs in the runtime, which every backend shares, but the
+// paths that reach it are not.
+require module sys/std/int
+
+import int.pow
+import int.gcd
+import int.sqrt
+
+let big = pow(10, 40)
+let copy: int = big@
+let computed = (copy, gcd(48, 180), sqrt(big))
+debuglog computed

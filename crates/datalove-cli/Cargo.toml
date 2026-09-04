@@ -56,3 +56,7 @@ harness = false
 name = "world_error_tests"
 path = "tests/world_error_tests.rs"
 harness = false
+
+[[test]]
+name = "backend_tests"
+harness = false

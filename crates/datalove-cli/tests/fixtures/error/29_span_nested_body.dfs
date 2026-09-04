@@ -1,0 +1,12 @@
+// A statement inside a nested body is filed where it sits, which needs the
+// count to come back out of the parser that read the body.
+fun outer(): int
+  var a: int = 1
+  loop while false
+    set a = 2
+  end loop
+  set b = 3
+  ret a
+end fun
+
+let output = outer()

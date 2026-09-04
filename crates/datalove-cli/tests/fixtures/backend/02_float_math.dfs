@@ -1,0 +1,12 @@
+// The transcendentals are rider functions too, and the widths have to agree
+// across the backends as well as the values.
+require module sys/std/f64
+
+import f64.sqrt
+import f64.pow
+import f64.hypot
+import f64.ln
+import f64.pi
+
+let computed = (sqrt(2.0), pow(2.0, 10.0), hypot(3.0, 4.0), ln(1.0), pi())
+debuglog computed

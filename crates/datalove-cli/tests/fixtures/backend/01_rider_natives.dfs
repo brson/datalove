@@ -1,0 +1,17 @@
+// Rider functions, which each backend reaches its own way: through the
+// interpreter's table, through a trampoline the jit builds from the address,
+// and through the component an AOT-compiled program links against.
+//
+// The value is written with debuglog rather than left in `output`, which is
+// a convention of the script drivers that an AOT-compiled program has no
+// part in.
+require module sys/std/string
+
+import string.len
+import string.to_ascii_uppercase
+import string.contains
+
+let greeting = "hello, world"
+let needle = "world"
+let measured = (len(ref greeting), to_ascii_uppercase(ref greeting), contains(ref greeting, ref needle))
+debuglog measured

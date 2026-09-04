@@ -1,0 +1,11 @@
+// The definition a call is measured against is the one it named, not
+// whichever function was defined first.
+fun one(a: int): int
+  ret a
+end fun
+
+fun two(a: int, b: int): int
+  ret a + b
+end fun
+
+let output = two(1)

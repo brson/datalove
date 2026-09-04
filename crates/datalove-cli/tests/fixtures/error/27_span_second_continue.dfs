@@ -1,0 +1,12 @@
+// Each continue gets its own span, rather than both getting the first's.
+fun a(): int
+  continue
+  ret 1
+end fun
+
+fun b(): int
+  continue
+  ret 2
+end fun
+
+let output = 0
