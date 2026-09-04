@@ -75,6 +75,12 @@ pub struct CAotCompiler {
     next_tydesc_id: u32,
     /// Mapping from IrType to tydesc variable name.
     tydesc_names: HashMap<IrType, String>,
+    /// One `extern` line per rider function the world can reach.
+    ///
+    /// Every file gets all of them. A declaration for a function the file does
+    /// not call costs nothing, and working out which file calls what would
+    /// have to walk the same instructions twice.
+    native_decls: Vec<String>,
 }
 
 impl Default for CAotCompiler {
@@ -89,6 +95,7 @@ impl CAotCompiler {
         Self {
             next_tydesc_id: 0,
             tydesc_names: HashMap::new(),
+            native_decls: Vec::new(),
         }
     }
 
@@ -106,10 +113,21 @@ impl CAotCompiler {
 
         // Group module functions by module ID. Ordered, because both the file
         // list and the extern declarations below are emitted in this order.
+        // A native unit has no body to emit: it is a name the linker resolves
+        // to the rider, so it is declared and never defined.
         let mut modules_by_id: BTreeMap<IrModuleId, Vec<&IrCodeUnit>> = BTreeMap::new();
+        let mut natives: Vec<&IrCodeUnit> = Vec::new();
         for ((module_id, _func_id), ir_unit) in registry.iter_module_code_units_with_ids() {
-            modules_by_id.entry(module_id).or_default().push(ir_unit);
+            if ir_unit.native_context().is_some() {
+                natives.push(ir_unit);
+            } else {
+                modules_by_id.entry(module_id).or_default().push(ir_unit);
+            }
         }
+        self.native_decls = natives.iter()
+            .filter_map(|unit| unit.native_context())
+            .map(native_declaration)
+            .collect();
 
         // Emit one file per module.
         for (module_id, units) in &modules_by_id {
@@ -233,6 +251,9 @@ impl CAotCompiler {
         writeln!(out, "#include <stdint.h>").unwrap();
         writeln!(out, "#include <stddef.h>").unwrap();
         writeln!(out, "#include <string.h>").unwrap();
+        // The float intrinsics lower to the C library's own names, so this is
+        // the same header they come from anywhere else.
+        writeln!(out, "#include <math.h>").unwrap();
         writeln!(out).unwrap();
 
         // Runtime type definitions (must match datalove-rtdt).
@@ -342,6 +363,16 @@ impl CAotCompiler {
         writeln!(out, "extern uint8_t dtlv_rti_reify_local(void* rt, const void* src_in, const dtlv_tydesc_t* src_tydesc, void* dst_out, const dtlv_tydesc_t* dst_tydesc);").unwrap();
         writeln!(out).unwrap();
 
+        // Rider functions, which the linker resolves against the native
+        // component the way it does the runtime above.
+        if !self.native_decls.is_empty() {
+            writeln!(out, "// Native rider functions").unwrap();
+            for decl in &self.native_decls {
+                writeln!(out, "{}", decl).unwrap();
+            }
+            writeln!(out).unwrap();
+        }
+
         // Tracking byte values.
         writeln!(out, "// Tracking byte values").unwrap();
         writeln!(out, "#define TRACK_UNINIT 0x00").unwrap();
@@ -421,6 +452,14 @@ impl CAotCompiler {
         // User parameters are passed by pointer.
         for (i, _param_ty) in func_ctx.param_types.iter().enumerate() {
             write!(&mut params, ", void* p{}", i).unwrap();
+        }
+
+        // Then a descriptor for each parameter whose own type does not say what
+        // arrives at it, in the order `descriptor_params` names them. A generic
+        // function's type for a borrowed parameter reads `data` where its type
+        // parameter stood, so the caller has to say what the value really is.
+        for (i, _) in func_ctx.descriptor_params.iter().enumerate() {
+            write!(&mut params, ", const dtlv_tydesc_t* d{}", i).unwrap();
         }
 
         let return_type = if func_ctx.return_type == IrType::Unit || uses_sret {
@@ -535,4 +574,18 @@ mod tests {
         let compiler = CAotCompiler::new();
         assert_eq!(compiler.next_tydesc_id, 0);
     }
+}
+
+/// The `extern` line declaring one rider function.
+///
+/// Every parameter is a pointer and a descriptor, the result is written
+/// through a pair given the same way, and the status says whether it was.
+fn native_declaration(ctx: &datalove_datafun_ir::NativeContext) -> String {
+    let mut params = String::from("void* rt");
+    for i in 0..ctx.param_types.len() {
+        params.push_str(&format!(
+            ", void* a{i}, const dtlv_tydesc_t* t{i}"));
+    }
+    params.push_str(", void* result_out, const dtlv_tydesc_t* result_tydesc");
+    format!("extern uint8_t {}({});", ctx.symbol, params)
 }

@@ -26,18 +26,6 @@ pub fn emit_function(
     let func_ctx = unit.function_context()
         .ok_or_else(|| CAotError::Codegen("expected function context".into()))?;
 
-    // This backend has no native functions, and a descriptor a caller supplies
-    // is only ever read by one, so nothing here would use it and neither the
-    // signature nor the call sites carry it. That is self-consistent as long as
-    // it stays true. Whoever adds native calls here has to pass the descriptors
-    // through as well, and should see this rather than a wrong element type.
-    if !func_ctx.descriptor_params.is_empty() {
-        return Err(CAotError::Unsupported(format!(
-            "'{}' takes a caller-supplied descriptor, which this backend does not pass",
-            func_name,
-        )));
-    }
-
     let layout = FrameLayout::compute(
         &func_ctx.param_types,
         &unit.value_types,
@@ -54,6 +42,9 @@ pub fn emit_function(
     }
     for (i, _) in func_ctx.param_types.iter().enumerate() {
         write!(&mut params, ", void* p{}", i).unwrap();
+    }
+    for (i, _) in func_ctx.descriptor_params.iter().enumerate() {
+        write!(&mut params, ", const dtlv_tydesc_t* d{}", i).unwrap();
     }
 
     let return_type = if func_ctx.return_type == IrType::Unit || uses_sret {
@@ -751,8 +742,25 @@ impl<'a> FunctionCodegenContext<'a> {
         let overflow_addr = self.value_addr(overflow);
         let lhs_addr = self.operand_addr(lhs);
         let rhs_addr = self.operand_addr(rhs);
-        let lhs_ty = self.operand_type(lhs);
-        let c_ty = types::ir_type_to_c(lhs_ty);
+        let lhs_ty = self.operand_type(lhs).clone();
+
+        // A bigint has no width to overflow, so the only checked operation
+        // over one is division, and what it reports is a zero divisor. The
+        // runtime says so with its status, the same way it does for the
+        // cranelift backends.
+        if matches!(lhs_ty, IrType::Int) {
+            if op != BinOp::Div {
+                return Err(CAotError::Unsupported(format!(
+                    "checked bigint binop only supports Div, got {:?}", op)));
+            }
+            let tydesc = self.tydesc_name(&IrType::Int);
+            writeln!(out,
+                "    *(bool_t*){} = dtlv_rti_int_div_checked(rt, {}, &{}, {}, &{}, {}, &{}) != 1;",
+                overflow_addr, lhs_addr, tydesc, rhs_addr, tydesc, dest_addr, tydesc).unwrap();
+            return Ok(());
+        }
+
+        let c_ty = types::ir_type_to_c(&lhs_ty);
 
         // Use GCC/Clang builtins for overflow checking.
         // Index and Offset are platform-dependent sizes.
@@ -1661,11 +1669,22 @@ impl<'a> FunctionCodegenContext<'a> {
 
     /// Emit function call.
     fn emit_call(&mut self, out: &mut String, dest: ValueId, func: &CodeRef, args: &[Operand]) -> Result<(), CAotError> {
+        // A rider function is reached through the runtime C ABI rather than
+        // this backend's own convention, so it is a different call entirely.
+        if let CodeRef::Module { module, id } = func {
+            if let Some(unit) = self.registry.get_module_function_as_unit(*module, *id) {
+                if let Some(native) = unit.native_context() {
+                    let symbol = native.symbol.clone();
+                    return self.emit_native_call(out, dest, &symbol, args);
+                }
+            }
+        }
+
         // For local function lookup, use parent_unit if available (for nested functions).
         let lookup_unit = self.parent_unit.unwrap_or(self.unit);
         let func_name = self.compiler.resolve_func_name_with_registry(func, lookup_unit, self.registry);
-        let dest_ty = self.value_type(dest);
-        let uses_sret = types::uses_sret(dest_ty);
+        let dest_ty = self.value_type(dest).clone();
+        let uses_sret = types::uses_sret(&dest_ty);
 
         // Build argument list.
         let mut call_args = String::from("rt");
@@ -1676,13 +1695,103 @@ impl<'a> FunctionCodegenContext<'a> {
             write!(&mut call_args, ", {}", self.operand_addr(arg)).unwrap();
         }
 
-        if uses_sret || *dest_ty == IrType::Unit {
+        // Then a descriptor for each parameter whose own type does not say what
+        // arrives at it. This is the place that knows: the argument here either
+        // has a concrete type, or is a parameter our own caller described.
+        for param_id in self.callee_descriptor_params(func) {
+            let arg = args.get(param_id.0 as usize).ok_or_else(|| CAotError::Codegen(format!(
+                "callee wants a descriptor for parameter {} but got {} arguments",
+                param_id.0, args.len(),
+            )))?;
+            write!(&mut call_args, ", {}", self.operand_tydesc(arg)).unwrap();
+        }
+
+        if uses_sret || dest_ty == IrType::Unit {
             writeln!(out, "    {}({});", func_name, call_args).unwrap();
         } else {
             let dest_addr = self.value_addr(dest);
-            let c_ty = types::ir_type_to_c(dest_ty);
+            let c_ty = types::ir_type_to_c(&dest_ty);
             writeln!(out, "    *({c_ty}*){dest_addr} = {}({});", func_name, call_args).unwrap();
         }
+        Ok(())
+    }
+
+    /// The parameters of `func` whose descriptor this call site supplies.
+    ///
+    /// Has to agree with what `build_signature` put in the callee's signature,
+    /// so both read the same `descriptor_params`.
+    fn callee_descriptor_params(&self, func: &CodeRef) -> Vec<ParamId> {
+        let unit = match func {
+            CodeRef::Module { module, id } => {
+                self.registry.get_module_function_as_unit(*module, *id)
+            }
+            CodeRef::Local(id) => {
+                let lookup_unit = self.parent_unit.unwrap_or(self.unit);
+                lookup_unit.nested_units.iter().find(|nested| nested.id == *id)
+            }
+            CodeRef::External { .. } => None,
+        };
+        unit.and_then(|u| u.function_context())
+            .map(|ctx| ctx.descriptor_params.clone())
+            .unwrap_or_default()
+    }
+
+    /// The descriptor for an operand, as a C expression of pointer type.
+    ///
+    /// A parameter our own caller described uses that descriptor: this
+    /// function's static type for it says `data` where a type parameter stood,
+    /// so one built from that type would misdescribe the value. Everything
+    /// else is described by its own type, which is a static descriptor.
+    fn operand_tydesc(&mut self, operand: &Operand) -> String {
+        if let Operand::Param(param_id) = operand {
+            if let Some(i) = self.func_descriptor_index(*param_id) {
+                return format!("d{}", i);
+            }
+        }
+        let ty = self.operand_type(operand).clone();
+        format!("&{}", self.tydesc_name(&ty))
+    }
+
+    /// Where this function's own supplied descriptor for `param` arrives, if
+    /// its signature asks for one.
+    fn func_descriptor_index(&self, param: ParamId) -> Option<usize> {
+        self.unit.function_context()?
+            .descriptor_params
+            .iter()
+            .position(|p| *p == param)
+    }
+
+    /// Emit a call to a native rider function.
+    ///
+    /// The runtime C ABI, which is the same one the interpreter and the
+    /// cranelift backends use: every argument is a pointer and a descriptor
+    /// saying what is behind it, the result is written through an out
+    /// parameter given the same way, and the status the function returns says
+    /// whether it wrote one.
+    ///
+    /// A descriptor comes from the argument's own type, which is what it is
+    /// here because a caller-supplied one never reaches this backend: a
+    /// function that takes one is refused in `emit_function`.
+    fn emit_native_call(
+        &mut self,
+        out: &mut String,
+        dest: ValueId,
+        symbol: &str,
+        args: &[Operand],
+    ) -> Result<(), CAotError> {
+        let mut call_args = String::from("rt");
+        for arg in args {
+            let addr = self.operand_addr(arg);
+            let tydesc = self.operand_tydesc(arg);
+            write!(&mut call_args, ", {}, {}", addr, tydesc).unwrap();
+        }
+
+        let dest_ty = self.value_type(dest).clone();
+        let dest_addr = self.value_addr(dest);
+        let dest_tydesc = self.tydesc_name(&dest_ty);
+        write!(&mut call_args, ", {}, &{}", dest_addr, dest_tydesc).unwrap();
+
+        writeln!(out, "    {}({});", symbol, call_args).unwrap();
         Ok(())
     }
 

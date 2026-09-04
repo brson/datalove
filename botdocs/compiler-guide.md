@@ -880,7 +880,18 @@ All of them consume `IrCodeUnit` and agree with `ir::layout`.
 - **Cranelift AOT** (`datalove-datafun-cranelift-aot`) compiles ahead of time.
 - **C AOT** (`datalove-datafun-c-aot`) emits C11 in one pass: type descriptors,
   then functions (module functions prefixed `__mod_N_`), then
-  `__script_body(void* rt)` and a `main()` that initializes the runtime.
+  `__script_body(void* rt)` and a `main()` that initializes the runtime. One
+  file per module plus one for the script, so a C compiler produces the
+  executable in a single step and there is no unlinked halfway point;
+  `pipeline::c_aot` drives it and `aot-compile --c` reaches it.
+
+  Its function ABI is its own: `RET f(rt, [sret,] p0..pn, d0..dk)`, where the
+  descriptors are the ones `descriptor_params` names. It differs from
+  cranelift's in returning small scalars by value where cranelift always uses
+  sret, which is allowed because no program mixes the two -- the one ABI they
+  must agree on is the runtime's, and that one is fixed. A rider is called
+  through it the same way every backend does: `(ptr, tydesc)` per argument, the
+  result through an out pair, and a status back.
 - **Inlining** (`datalove-datafun-inline`) transforms IR under
   `InlineDirective`s, and also drives the interpreter's dynamic inliner.
 

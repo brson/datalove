@@ -57,6 +57,7 @@ pub mod workspace;
 pub mod aot;
 pub mod rider_build;
 pub mod rider_load;
+pub mod c_aot;
 
 // Re-export main types.
 pub use result::{

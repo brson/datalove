@@ -1418,6 +1418,7 @@ dependencies = [
  "datalove-datafun-ast",
  "datalove-datafun-cranelift-jit",
  "datalove-datafun-interp",
+ "datalove-datafun-ir",
  "datalove-datafun-parser",
  "datalove-datafun-pkg",
  "datalove-datafun-sema",

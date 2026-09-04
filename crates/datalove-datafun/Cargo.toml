@@ -24,6 +24,7 @@ datalove-datafun-pkg.path = "../datalove-datafun-pkg"
 datalove-rt.path = "../datalove-rt"
 datalove-diagnostic.path = "../datalove-diagnostic"
 datalove-datafun-cranelift-aot.path = "../datalove-datafun-cranelift-aot"
+datalove-datafun-c-aot.path = "../datalove-datafun-c-aot"
 libloading = "0.8"
 
 [features]
@@ -48,7 +49,6 @@ datalove-datalit.path = "../datalove-datalit"
 datalove-diagnostic.path = "../datalove-diagnostic"
 datalove-datafun-cranelift-jit.path = "../datalove-datafun-cranelift-jit"
 datalove-datafun-inline.path = "../datalove-datafun-inline"
-datalove-datafun-c-aot.path = "../datalove-datafun-c-aot"
 datalove-rtdt.path = "../datalove-rtdt"
 ron = "0.8"
 

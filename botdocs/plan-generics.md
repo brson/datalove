@@ -313,10 +313,12 @@ implies, in the IR and in each backend.
 **A generic out parameter has to be a whole binding or a field.** Both work;
 anything else is refused rather than written wrong.
 
-**The C backend refuses a function that takes a descriptor.** It has no native
-functions, and a supplied descriptor is only ever read by one, so it neither
-passes nor needs them. It says so rather than compiling a function that expects
-one. Whoever adds native calls there has to pass descriptors through as well.
+**The C backend calls riders and takes descriptors like the others.** It was
+written before generics existed and had neither, which is why nothing in its
+386 fixtures reaches the standard library. It now compiles all of `sys/std`,
+so a program that calls a rider, does bigint arithmetic or passes a borrowed
+collection of a type parameter builds and runs the same under it as under the
+interpreter and the two cranelift backends.
 
 **No bounds, so no operations on a `T`.** A type parameter is equal only to
 itself and nothing can be done with a value of that type but move it, drop it,

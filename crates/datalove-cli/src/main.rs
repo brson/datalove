@@ -171,6 +171,13 @@ struct AotCompileCommand {
     /// Run without loading the sys library.
     #[arg(long)]
     no_sys: bool,
+    /// Emit C and compile it, rather than emitting an object directly.
+    ///
+    /// The two backends produce the same program by different routes. This one
+    /// needs a C compiler on the path and always writes an executable, since
+    /// there is no single object file to hand back.
+    #[arg(long)]
+    c: bool,
 }
 
 #[derive(clap::Args)]
@@ -588,6 +595,61 @@ impl ScriptIrCommand {
 }
 
 impl AotCompileCommand {
+    /// Compile through C rather than straight to an object.
+    ///
+    /// The C backend produces one source file per module plus one for the
+    /// script, and a C compiler turns the set of them into the executable in
+    /// one step, so there is no unlinked halfway point to write out.
+    fn compile_via_c(
+        &self,
+        ir_unit: &datalove_datafun_ir::IrCodeUnit,
+        registry: &datalove_datafun_ir::FunctionRegistry,
+        rider_libs: &[PathBuf],
+        should_link: bool,
+    ) -> AnyResult<()> {
+        use datalove_datafun::pipeline::{aot, c_aot};
+
+        let sources = c_aot::compile_world(ir_unit, registry)
+            .map_err(|e| anyhow!("{}", e))?;
+
+        if !should_link {
+            for (name, body) in &sources.files {
+                println!("// === {} ===", name);
+                print!("{}", body);
+            }
+            return Ok(());
+        }
+
+        let output_path = match &self.output {
+            Some(out) => out.C(),
+            None => {
+                let stem = self.file_path.file_stem()
+                    .ok_or_else(|| anyhow!("Invalid input filename"))?;
+                PathBuf::from(stem)
+            }
+        };
+
+        c_aot::link_sources_to_path(&sources, &output_path, rider_libs)
+            .map_err(|e| anyhow!("{}", e))?;
+        println!("Linked executable: {}", output_path.display());
+
+        if self.run {
+            let exe_path = if output_path.is_absolute() {
+                output_path.C()
+            } else {
+                std::env::current_dir()?.join(&output_path)
+            };
+            let result = aot::run_executable(&exe_path).map_err(|e| anyhow!("{}", e))?;
+            if !result.stdout.is_empty() {
+                print!("{}", result.stdout);
+            }
+            if !result.stderr.is_empty() {
+                eprint!("{}", result.stderr);
+            }
+        }
+        Ok(())
+    }
+
     fn run(&self, _args: &Args) -> AnyResult<()> {
         use datalove_datafun as datafun;
         use datafun::pipeline::{WorkspaceDescriptor, aot};
@@ -648,15 +710,19 @@ impl AotCompileCommand {
         // The runtime and riders the emitted program links against.
         let rider_libs = vec![datalove_stdlib::native_component_staticlib()?];
 
+        // --run implies --link.
+        let should_link = self.link || self.run;
+
+        if self.c {
+            return self.compile_via_c(&ir_unit, &registry, &rider_libs, should_link);
+        }
+
         // Compile to object bytes using pipeline::aot.
         let obj_bytes = aot::compile_script_to_object_with_world(
             &ir_unit,
             registry.iter_all_code_units(),
             &registry,
         )?;
-
-        // --run implies --link.
-        let should_link = self.link || self.run;
 
         // Determine output path.
         let output_path = if let Some(ref out) = self.output {
