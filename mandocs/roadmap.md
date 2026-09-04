@@ -24,8 +24,8 @@ Thorough compiler architecture, bare language.
 - [x] interpreter
 - [x] jit
 - [x] aot
-- [ ] compute-only core library
-- [x] core->runtime calls
+- [ ] compute-only std library
+- [x] std->runtime calls
 - [ ] intrinsics and core functions
 - [x] field projections
 - [x] match for enums
@@ -35,29 +35,22 @@ Thorough compiler architecture, bare language.
 
 ## In progress
 
-- human docs
-
+- std
+- generics
+- repl
 
 
 
 ## On deck
 
+- better generative testing
+- parser token-swallowing fixes
+- const param specialization
+- human docs
 - datalit synthesis for enums, etc.
-- new repl
-- rtcalls - waiting for design
-- workspaces - waiting for design
 - match syntax / switch ir instruction
   - use switch during specialization
-- native riders - built-in runtime for now
-- std.string - waiting for rtcalls
 - fully reactive scripts, undo/redo
-- const param specialization fixes
-- generics
-
-
-
-
-## Backlog
 
 
 
