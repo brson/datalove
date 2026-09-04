@@ -313,6 +313,28 @@ implies, in the IR and in each backend.
 **A generic out parameter has to be a whole binding or a field.** Both work;
 anything else is refused rather than written wrong.
 
+**A script-local generic function is not handed the descriptors it asks for.**
+One written in a module is: `sys/std/list` works, and a module generic
+forwarding `ref [T]` on to another module generic works too. The same function
+written in a script does not, because `callee_descriptor_params` in
+datafun-cranelift only looks the callee up when the reference is
+`CodeRef::Module`, and a script-local function is `CodeRef::Local`. Its
+signature is built with the descriptor parameters and every call site passes
+none.
+
+The cranelift aot catches the arity mismatch as a verifier error, so the
+program does not compile. The jit accepts it, and the descriptor is silently
+lost: the callee falls back to the static descriptor of its own erased type,
+which says `[data]` where the memory is `[u32]`. Nothing goes wrong until
+something reads it, at which point a native gets the wrong element type. The
+comment above the guard says it is correct because a generic is always
+compiled alongside its callers, which is true of script-local functions too;
+the guard just does not cover them.
+
+Neither is covered by a fixture. The suites that own the standard library run
+every backend, so a fixture for this would have to fail on two of them until
+it is fixed.
+
 **The C backend refuses a function that takes a descriptor.** It has no native
 functions, and a supplied descriptor is only ever read by one, so it neither
 passes nor needs them. It says so rather than compiling a function that expects
