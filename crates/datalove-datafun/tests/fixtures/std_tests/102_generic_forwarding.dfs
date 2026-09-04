@@ -1,0 +1,53 @@
+require module sys/std/list
+
+import list.push
+import list.len
+import list.get
+
+// A generic function handing its own type parameter to another generic
+// function, written in a script rather than a module.
+//
+// Three things had to be right for this to work, and none of them were. The
+// call site erased a value that was already erased, so the native underneath
+// found a box holding a box. The descriptors a script-local generic asks for
+// were never passed to it, because the call site only looked them up for a
+// callee in a module. And the jit's stub dropped them on the way to its
+// dispatch, which then worked each argument's type out from the callee's own
+// signature, where a type parameter reads as `data`.
+//
+// All three are silent. The first gives a wrong number for a `u32` and a
+// fault for a `string`; the second is a verifier error under the cranelift
+// aot and a wrong element type under the jit; the third is the same wrong
+// element type by another route.
+
+fun push_through<T>(mut self: [T], elem: T)
+  push(mut self, elem)
+end fun
+
+// Two levels, so the second call forwards a parameter that reached it through
+// the first rather than one the caller supplied directly.
+fun push_through_twice<T>(mut self: [T], elem: T)
+  push_through(mut self, elem)
+end fun
+
+var numbers: [u32] = [1, 2, 3]
+push_through(mut numbers, 4)
+push_through_twice(mut numbers, 5)
+
+let counted = len(ref numbers)
+let last = get(ref numbers, 4)
+
+// A move type, where a lost level faults rather than reading wrong.
+var words: [string] = ["a"]
+push_through(mut words, "b")
+push_through_twice(mut words, "c")
+
+// A borrowed collection forwarded on without anything being pushed, which is
+// the descriptor travelling a second hop on its own.
+fun count_through<T>(ref self: [T]): index
+  ret len(ref self)
+end fun
+
+let counted_through = count_through(ref words)
+
+let output = (numbers, counted, last, words, counted_through)

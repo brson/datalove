@@ -23,6 +23,7 @@ use datalove_datafun_interp::{
     Destination, ExecutionContext, FrameStore, FunctionRegistry, IrInterpreter, Value,
 };
 use datalove_rt::c::LocalRtHandle;
+use datalove_rtdt as rtdt;
 
 use crate::{FunctionKey, JitEngine};
 
@@ -170,6 +171,7 @@ pub unsafe extern "C" fn __jit_dispatch_call(
     _ret_is_sret: u8,
     arg_count: u32,
     args: *const *const u8,
+    descriptors: *const *const rtdt::TyDesc,
 ) {
     // Get dispatch context.
     let ctx_ptr = match get_dispatch_context() {
@@ -192,16 +194,24 @@ pub unsafe extern "C" fn __jit_dispatch_call(
         .expect("trampoline dispatch requires a function code unit");
 
     // Build argument Values.
+    //
+    // A parameter's own type describes what arrives at it, except where the
+    // callee is generic and that type says `data` in place of a type
+    // parameter. For those the caller supplied the real one, and using the
+    // signature's would say `[data]` of memory that holds a `[u32]`.
     let mut arg_vals = Vec::with_capacity(arg_count as usize);
     for i in 0..arg_count as usize {
         let arg_ptr = unsafe { *args.add(i) };
-        // Get tydesc for this arg type.
         let arg_ty = &func_ctx.param_types[i];
         let tydesc = ctx.interp.tydesc_table_mut().get_or_create(arg_ty);
         arg_vals.push(Value {
             ptr: arg_ptr as *mut u8,
             tydesc,
         });
+    }
+    for (k, param_id) in func_ctx.descriptor_params.iter().enumerate() {
+        let supplied = unsafe { *descriptors.add(k) };
+        arg_vals[param_id.0 as usize].tydesc = supplied;
     }
 
     // Build return destination.

@@ -186,14 +186,15 @@ impl AotCompiler {
         // === Three-pass compilation for local and module functions ===
 
         // Pass 1: Declare all local functions (nested units) to get Cranelift FuncIds.
-        let mut local_funcs: HashMap<datalove_datafun_ir::CodeUnitId, FuncId> = HashMap::new();
+        let mut local_funcs: HashMap<datalove_datafun_ir::CodeUnitId, codegen::LocalCallee> =
+            HashMap::new();
         for func in &unit.nested_units {
             let sig = codegen::build_signature_for_func(func, self.isa.as_ref());
             let func_id = datalove_datafun_ir::CodeUnitId(func.id.0);
             let cl_func_id = obj_module
                 .declare_function(&func.name, Linkage::Local, &sig)
                 .map_err(|e| AotError::Module(format!("declare function {}: {}", func.name, e)))?;
-            local_funcs.insert(func_id, cl_func_id);
+            local_funcs.insert(func_id, codegen::LocalCallee::of(func, cl_func_id));
         }
 
         // Pass 2: Declare all module functions to get Cranelift FuncIds.
@@ -222,7 +223,7 @@ impl AotCompiler {
         // Pass 3a: Compile all local functions with pre-declared FuncIds.
         for func in &unit.nested_units {
             let func_id = datalove_datafun_ir::CodeUnitId(func.id.0);
-            let cl_func_id = local_funcs[&func_id];
+            let cl_func_id = local_funcs[&func_id].func_id;
             let mut compiler = codegen::FunctionCompiler::new_with_runtime_and_tydescs(
                 func,
                 self.isa.as_ref(),

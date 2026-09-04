@@ -177,6 +177,30 @@ pub fn uses_sret(ret_ty: &IrType) -> bool {
     !matches!(ret_ty, IrType::Unit)
 }
 
+/// A function compiled beside this one, and what its signature asks for.
+///
+/// The two travel together because a call has to supply exactly what the
+/// callee's signature declares. Recording only the `FuncId` is what let a
+/// script-local generic be declared with descriptor parameters and called
+/// without them, which cranelift reports as a verifier error at best and
+/// which loses the descriptor silently at worst.
+#[derive(Clone)]
+pub struct LocalCallee {
+    pub func_id: FuncId,
+    /// Parameters whose descriptor the call site supplies, in signature order.
+    pub descriptor_params: Vec<ParamId>,
+}
+
+impl LocalCallee {
+    /// What a call to `unit` has to pass, given the id it was declared under.
+    pub fn of(unit: &IrCodeUnit, func_id: FuncId) -> Self {
+        let descriptor_params = unit.function_context()
+            .map(|ctx| ctx.descriptor_params.clone())
+            .unwrap_or_default();
+        LocalCallee { func_id, descriptor_params }
+    }
+}
+
 /// Compiles a single IR function to Cranelift IR.
 pub struct FunctionCompiler<'a, M: Module> {
     /// The IR code unit being compiled.
@@ -198,8 +222,8 @@ pub struct FunctionCompiler<'a, M: Module> {
     /// Descriptors the caller supplied, for parameters whose own type does not
     /// describe what arrives. See `FunctionContext::descriptor_params`.
     descriptor_values: HashMap<ParamId, cl_ir::Value>,
-    /// Mapping from local IR FuncId to Cranelift FuncId.
-    local_funcs: HashMap<datalove_datafun_ir::CodeUnitId, FuncId>,
+    /// Functions compiled beside this one, by their IR id.
+    local_funcs: HashMap<datalove_datafun_ir::CodeUnitId, LocalCallee>,
     /// Mapping from module function (IrModuleId, FuncId) to Cranelift FuncId.
     module_funcs: HashMap<(IrModuleId, datalove_datafun_ir::CodeUnitId), FuncId>,
     /// Function registry for looking up module functions.
@@ -829,22 +853,13 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         Ok(())
     }
 
-    /// Register a local function that has been declared.
-    ///
-    /// Call this for each local function before compiling any function bodies
-    /// that may call them.
-    pub fn register_local_func(
-        &mut self,
-        ir_func_id: datalove_datafun_ir::CodeUnitId,
-        cl_func_id: FuncId,
-    ) {
-        self.local_funcs.insert(ir_func_id, cl_func_id);
-    }
-
     /// Set all local function mappings at once.
     ///
     /// Use this for two-pass compilation where all functions are declared first.
-    pub fn set_local_funcs(&mut self, local_funcs: HashMap<datalove_datafun_ir::CodeUnitId, FuncId>) {
+    pub fn set_local_funcs(
+        &mut self,
+        local_funcs: HashMap<datalove_datafun_ir::CodeUnitId, LocalCallee>,
+    ) {
         self.local_funcs = local_funcs;
     }
 

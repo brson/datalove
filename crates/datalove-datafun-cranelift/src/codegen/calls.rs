@@ -19,19 +19,27 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
     /// and converts the i64 return value back to the destination type.
     /// The parameters of `code_ref` whose descriptor the call site supplies.
     ///
-    /// Empty for anything this compiler cannot see the body of, which is
-    /// correct because a function only asks for these if it is generic, and a
-    /// generic function is always compiled alongside its callers.
+    /// This has to agree with what `build_signature_for_func` put in the
+    /// callee's signature, so both read the same `descriptor_params`. A
+    /// function compiled beside this one carries its own on the `LocalCallee`
+    /// it was declared as; one in a module is read back off the registry.
     fn callee_descriptor_params(&self, code_ref: &CodeRef) -> Vec<ParamId> {
-        let CodeRef::Module { module, id } = code_ref else {
-            return Vec::new();
-        };
-        let Some(registry) = self.registry else {
-            return Vec::new();
-        };
-        registry.get_module_function_as_unit(*module, CodeUnitId(id.0))
-            .and_then(|unit| unit.function_context().map(|c| c.descriptor_params.clone()))
-            .unwrap_or_default()
+        match code_ref {
+            CodeRef::Local(id) | CodeRef::External { id, .. } => {
+                self.local_funcs.get(&CodeUnitId(id.0))
+                    .expect("resolve_code_ref rejects a local callee never declared")
+                    .descriptor_params
+                    .clone()
+            }
+            CodeRef::Module { module, id } => {
+                let Some(registry) = self.registry else {
+                    return Vec::new();
+                };
+                registry.get_module_function_as_unit(*module, CodeUnitId(id.0))
+                    .and_then(|unit| unit.function_context().map(|c| c.descriptor_params.clone()))
+                    .unwrap_or_default()
+            }
+        }
     }
 
     /// The descriptor for an operand, as a runtime pointer.
@@ -241,8 +249,8 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         match code_ref {
             CodeRef::Local(id) => {
                 let ir_func_id = CodeUnitId(id.0);
-                if let Some(&func_id) = self.local_funcs.get(&ir_func_id) {
-                    return Ok(func_id);
+                if let Some(callee) = self.local_funcs.get(&ir_func_id) {
+                    return Ok(callee.func_id);
                 }
 
                 Err(CraneliftError::Unsupported(format!(

@@ -128,7 +128,8 @@ impl JitCompiler {
             .map_err(|e| JitError::CompilationFailed(format!("runtime imports: {}", e)))?;
 
         // Declare the dispatch function signature.
-        // __jit_dispatch_call(rt_handle, encoded_key, ret_dest, ret_is_sret, arg_count, args) -> void
+        // __jit_dispatch_call(rt_handle, encoded_key, ret_dest, ret_is_sret,
+        //                     arg_count, args, descriptors) -> void
         let mut dispatch_sig = cl_ir::Signature::new(call_conv);
         dispatch_sig.params.push(AbiParam::new(cl_types::I64)); // rt_handle
         dispatch_sig.params.push(AbiParam::new(cl_types::I64)); // encoded_key
@@ -136,6 +137,7 @@ impl JitCompiler {
         dispatch_sig.params.push(AbiParam::new(cl_types::I8));  // ret_is_sret
         dispatch_sig.params.push(AbiParam::new(cl_types::I32)); // arg_count
         dispatch_sig.params.push(AbiParam::new(cl_types::I64)); // args
+        dispatch_sig.params.push(AbiParam::new(cl_types::I64)); // descriptors
         // No return value - all results written via ret_dest sret pointer.
 
         let dispatch_func_id = jit_module
@@ -235,7 +237,7 @@ impl JitCompiler {
         tydesc_emit::collect_types_from_code_unit(func, &mut types);
 
         // Create stubs for each callee.
-        let mut local_funcs: HashMap<CodeUnitId, FuncId> = HashMap::new();
+        let mut local_funcs: HashMap<CodeUnitId, codegen::LocalCallee> = HashMap::new();
         let mut module_funcs: HashMap<(IrModuleId, CodeUnitId), FuncId> = HashMap::new();
 
         for code_ref in callees {
@@ -268,7 +270,8 @@ impl JitCompiler {
             // Register in appropriate map.
             match &code_ref {
                 CodeRef::Local(id) => {
-                    local_funcs.insert(CodeUnitId(id.0), stub_id);
+                    local_funcs.insert(
+                        CodeUnitId(id.0), codegen::LocalCallee::of(&callee_ir, stub_id));
                 }
                 CodeRef::Module { module, id } => {
                     module_funcs.insert((*module, CodeUnitId(id.0)), stub_id);
@@ -276,7 +279,8 @@ impl JitCompiler {
                 CodeRef::External { unit, id } => {
                     // External functions go in local_funcs for now.
                     // The stub handles the dispatch correctly.
-                    local_funcs.insert(CodeUnitId(id.0), stub_id);
+                    local_funcs.insert(
+                        CodeUnitId(id.0), codegen::LocalCallee::of(&callee_ir, stub_id));
                     let _ = unit; // Silence warning; actual unit is encoded in stub.
                 }
             }
@@ -416,10 +420,14 @@ impl JitCompiler {
             (None, 1)
         };
 
-        // User arguments. The descriptors a generic callee takes after them are
-        // not arguments and are not forwarded: this stub hands the call to the
-        // interpreter, whose values carry their descriptors already.
-        let user_args = &params[user_args_start..user_args_start + callee_ctx.param_types.len()];
+        // User arguments, and after them the descriptors for the parameters
+        // whose own type does not describe what arrives. Both have to go
+        // across: what the stub hands the call to works out each argument's
+        // type from the callee's signature, and for those parameters the
+        // signature says `data` where the caller has something else.
+        let user_args_end = user_args_start + callee_ctx.param_types.len();
+        let user_args = &params[user_args_start..user_args_end].to_vec();
+        let descriptors = params[user_args_end..].to_vec();
 
         // Build args array on stack.
         // Allocate stack slot for args array.
@@ -447,6 +455,22 @@ impl JitCompiler {
             builder.ins().iconst(PTR_TYPE, 0)
         };
 
+        // The descriptors travel the same way, in the order the callee's
+        // `descriptor_params` names, which is the order they arrived in.
+        let descriptors_ptr = if descriptors.is_empty() {
+            builder.ins().iconst(PTR_TYPE, 0)
+        } else {
+            let slot = builder.create_sized_stack_slot(cl_ir::StackSlotData::new(
+                cl_ir::StackSlotKind::ExplicitSlot,
+                (descriptors.len() * 8) as u32,
+                8,
+            ));
+            for (i, &tydesc) in descriptors.iter().enumerate() {
+                builder.ins().stack_store(PTR_TYPE, tydesc, slot, (i * 8) as i32);
+            }
+            builder.ins().stack_addr(PTR_TYPE, slot, 0)
+        };
+
         // Encode function key.
         let encoded_key = EncodedFuncKey::from_code_ref(code_ref);
         let encoded_key_val = builder.ins().iconst(cl_types::I64, encoded_key.as_u64() as i64);
@@ -468,7 +492,10 @@ impl JitCompiler {
 
         // Call __jit_dispatch_call (void return - result written via ret_dest).
         let dispatch_ref = self.jit_module.declare_func_in_func(self.dispatch_func_id, builder.func);
-        let call_args = [rt_handle, encoded_key_val, ret_dest, ret_is_sret_val, arg_count_val, args_ptr];
+        let call_args = [
+            rt_handle, encoded_key_val, ret_dest, ret_is_sret_val, arg_count_val,
+            args_ptr, descriptors_ptr,
+        ];
         builder.ins().call(dispatch_ref, &call_args);
 
         // All stubs return void. Sret results are written by the callee.

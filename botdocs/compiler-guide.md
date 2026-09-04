@@ -272,6 +272,15 @@ erased shape, and the result type already equals the erased return shape.
 Erasing an erased value boxes the box, and the callee finds a `data` where the
 value should be.
 
+A descriptor a caller supplies has to reach every point that reads it, and the
+three places it can be dropped are all now closed. `LocalCallee` pairs a
+locally-declared function with the `descriptor_params` its signature asks for,
+so a call site cannot declare one and pass the other -- reading only the
+`FuncId` is what let a script-local generic be called without its descriptors.
+The jit's stub forwards the descriptors it was handed to `__jit_dispatch_call`,
+which uses them in place of the ones its callee's signature implies, since for
+these parameters that signature says `data`.
+
 What it does not do yet -- owned collections, indexing a collection of a type
 parameter, bounds -- and why, is in
 [Where this stands](plan-generics.md#user-content-where-this-stands). Read that
