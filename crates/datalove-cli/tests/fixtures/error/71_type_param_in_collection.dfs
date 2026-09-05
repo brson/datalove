@@ -1,0 +1,13 @@
+// Erasure replaces the parameter itself, which works where it stands alone
+// and under `?` or `!`. Under a collection the element type would have to
+// change too, so this is refused.
+//
+// The call below reports F002 as well, because a signature that does not
+// resolve leaves its function unregistered. That one used to be the only
+// thing said, which named the symptom and left the reader to guess.
+fun f<T>(x: [T]): [T]
+  ret x
+end fun
+
+let numbers: [u32] = [1]
+let output = f(numbers)

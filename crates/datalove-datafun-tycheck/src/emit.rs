@@ -254,6 +254,22 @@ fn emit_single_diagnostic<'db>(
                     .emit_type();
             }
         }
+        PendingDiagnostic::TypeParamNotErasable { local_index, module_id: _, param, position } => {
+            if let Some(ts) = spans.lookup_fun(db, *local_index) {
+                let msg = format!(
+                    "`{}` cannot stand inside a type at {}",
+                    param.as_str(db), position.as_str(db),
+                );
+                bct::diagnostic::DiagnosticBuilder::error(db, &msg)
+                    .code("F060")
+                    .primary_label(ts, "this signature does not resolve, so calls to it are not found either")
+                    .note("a type parameter is erased to `data`, which fits where the parameter stands alone \
+or under `?` or `!`. Under a collection the element type would have to change too, which would mean \
+converting the caller's collection element by element. Take it by `ref` or `mut` instead, where nothing \
+is converted.")
+                    .emit_type();
+            }
+        }
         PendingDiagnostic::CannotSynthesize { expr_key, module_id: _, message } => {
             if let Some(ts) = spans.lookup_expr(db, *expr_key) {
                 bct::diagnostic::DiagnosticBuilder::error(db, message.as_str(db))
@@ -526,6 +542,14 @@ fn format_single_diagnostic<'db>(
             Some(format!(
                 "{}: error[F059]: `{}` is imported already, from `{}`",
                 loc, name.as_str(db), first.as_str(db),
+            ))
+        }
+        PendingDiagnostic::TypeParamNotErasable { local_index, module_id: _, param, position } => {
+            let ts = spans.lookup_fun(db, *local_index)?;
+            let loc = format_location(db, &ts);
+            Some(format!(
+                "{}: error[F060]: `{}` cannot stand inside a type at {}",
+                loc, param.as_str(db), position.as_str(db),
             ))
         }
         PendingDiagnostic::CannotSynthesize { expr_key, module_id: _, message } => {

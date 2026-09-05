@@ -2,6 +2,9 @@ ModulesAnalysis(
     typecheck: TypecheckResult(
         status: "Error",
         errors: [
+            "line 34, col 1: error[F060]: `T` cannot stand inside a type at parameter `x`",
+            "line 38, col 1: error[F060]: `K` cannot stand inside a type at parameter `m`",
+            "line 42, col 1: error[F060]: `T` cannot stand inside a type at parameter `x`",
             "line 57, col 15: error[F011]: cannot index [T], whose element type is a type parameter; use the list functions in sys/std/list, which read the element type at run time",
         ],
     ),

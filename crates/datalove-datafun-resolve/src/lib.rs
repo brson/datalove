@@ -103,6 +103,10 @@ pub fn resolve_names_impl<'db>(
             }
             _ => continue,
         };
+        // Where the signature is, for a diagnostic to point at. A native's
+        // interface has no span table, and a native is exempt from the check
+        // below anyway.
+        let fun_local_index = func_ast.map_or(0, |stmt| stmt.local_index(db));
 
         // A type parameter resolves like a named type, so it goes in the alias
         // map for the length of this signature. Nothing else can see it, which
@@ -133,8 +137,9 @@ pub fn resolve_names_impl<'db>(
                     // parameter was written, and the call site supplies that.
                     // A native's parameters are the same case by construction.
                     let borrowed = matches!(param.mode, ParamMode::Ref | ParamMode::Mut);
+                    let position = format!("parameter `{}`", param.name.as_str(db));
                     if let Some(e) = (!is_native && !borrowed)
-                        .then(|| unerasable_type_param_error(db, &ty))
+                        .then(|| unerasable_type_param_error(db, &ty, &position, fun_local_index))
                         .flatten()
                     {
                         errors.push(e);
@@ -161,7 +166,10 @@ pub fn resolve_names_impl<'db>(
         let ret_ty = match return_type {
             Some(type_hint) => {
                 match convert_type_hint_with_aliases(db, type_hint, &type_aliases_map) {
-                    Ok(ty) => match (!is_native).then(|| unerasable_type_param_error(db, &ty)).flatten() {
+                    Ok(ty) => match (!is_native)
+                        .then(|| unerasable_type_param_error(db, &ty, "the return type", fun_local_index))
+                        .flatten()
+                    {
                         Some(e) => {
                             errors.push(e);
                             continue;
@@ -401,8 +409,14 @@ pub fn build_all_function_ast_maps<'db>(
 fn unerasable_type_param_error<'db>(
     db: &'db dyn Db,
     ty: &Type<'db>,
+    position: &str,
+    fun_local_index: u32,
 ) -> Option<TypeError> {
     let Type::Datalit(dt) = ty else { return None };
     let name = datalove_datafun_common::generics::first_unerasable_type_param(dt)?;
-    Some(TypeError::TypeParamNotErasable(name.as_str(db).to_string()))
+    Some(TypeError::TypeParamNotErasable {
+        param: name.as_str(db).to_string(),
+        position: position.to_string(),
+        fun_local_index,
+    })
 }

@@ -679,10 +679,7 @@ impl<'db> TypeContext<'db> {
         name_resolution: &ModuleNameResolution<'db>,
         module_id: Option<ModuleId<'db>>,
     ) {
-        // Add errors from name resolution.
-        for error in name_resolution.errors(self.db) {
-            self.add_error(error.clone());
-        }
+        self.record_resolution_errors(name_resolution.errors(self.db), module_id);
 
         // Add type aliases.
         for (name, ty) in name_resolution.type_aliases(self.db) {
@@ -707,6 +704,30 @@ impl<'db> TypeContext<'db> {
 
     /// Seed context from collected names (used by scripts).
     ///
+    /// Take the errors name resolution found, and give a span to the ones
+    /// that have somewhere to point.
+    ///
+    /// A signature that does not resolve leaves its function unregistered, so
+    /// every call to it reports F002 as well. That one names a real symptom
+    /// and no cause, which is why the cause is not left as a line in a list.
+    fn record_resolution_errors(
+        &mut self,
+        errors: &[TypeError],
+        module_id: Option<ModuleId<'db>>,
+    ) {
+        for error in errors {
+            if let TypeError::TypeParamNotErasable { param, position, fun_local_index } = error {
+                self.pending_diagnostics.push(PendingDiagnostic::TypeParamNotErasable {
+                    local_index: *fun_local_index,
+                    module_id,
+                    param: InternedText::new(self.db, param.S()),
+                    position: InternedText::new(self.db, position.S()),
+                });
+            }
+            self.add_error(error.clone());
+        }
+    }
+
     /// Like `seed_from_name_resolution` but takes `CollectedNames` directly
     /// instead of the tracked `ModuleNameResolution` struct.
     pub fn seed_from_collected_names(
@@ -714,10 +735,7 @@ impl<'db> TypeContext<'db> {
         collected: &CollectedNames<'db>,
         module_id: Option<ModuleId<'db>>,
     ) {
-        // Add errors from name resolution.
-        for error in &collected.errors {
-            self.add_error(error.clone());
-        }
+        self.record_resolution_errors(&collected.errors, module_id);
 
         // Add type aliases.
         for (name, ty) in &collected.type_aliases {

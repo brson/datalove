@@ -1,0 +1,7 @@
+// The return type is checked the same way, and says so.
+fun pair_up<T>(ref xs: [T]): (T, T)
+  ret (xs, xs)
+end fun
+
+let numbers: [u32] = [1]
+let output = pair_up(ref numbers)
