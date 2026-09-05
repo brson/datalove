@@ -104,6 +104,8 @@ pub struct RuntimeImports {
     pub erase: FuncId,
     /// `dtlv_rti_reify_local(rt, src_in, src_tydesc, dst_out, dst_tydesc) -> RtStatus`
     pub reify: FuncId,
+    /// `dtlv_rti_data_parts(data_in, value_out, tydesc_out) -> RtStatus`
+    pub data_parts: FuncId,
 }
 
 impl RuntimeImports {
@@ -609,6 +611,20 @@ impl RuntimeImports {
             .declare_function("dtlv_rti_reify_local", Linkage::Import, &erasure_sig())
             .map_err(|e| CraneliftError::Module(format!("declare dtlv_rti_reify_local: {}", e)))?;
 
+        // Borrowing what a wrapper holds takes no runtime handle: it reads two
+        // words out of the wrapper and lends them, allocating nothing.
+        let data_parts = {
+            let mut sig = module.make_signature();
+            sig.params.push(AbiParam::new(PTR_TYPE)); // data_in
+            sig.params.push(AbiParam::new(PTR_TYPE)); // value_out
+            sig.params.push(AbiParam::new(PTR_TYPE)); // tydesc_out
+            sig.returns.push(AbiParam::new(cl_types::I8));
+            module
+                .declare_function("dtlv_rti_data_parts", Linkage::Import, &sig)
+                .map_err(|e| CraneliftError::Module(
+                    format!("declare dtlv_rti_data_parts: {}", e)))?
+        };
+
         Ok(Self {
             init,
             shutdown,
@@ -649,6 +665,7 @@ impl RuntimeImports {
             error_from,
             data_from,
             erase,
+            data_parts,
             reify,
         })
     }

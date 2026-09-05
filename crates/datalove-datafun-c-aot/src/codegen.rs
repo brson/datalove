@@ -1736,6 +1736,27 @@ impl<'a> FunctionCodegenContext<'a> {
 
         self.destroy_out_destinations(out, func, args)?;
 
+        // An argument that arrives wrapped where the callee wants it borrowed
+        // is read through first, and the descriptor that comes with it is used
+        // for that parameter below. Both come out of the wrapper together.
+        let modes = self.callee_param_modes(func);
+        let mut borrowed: Vec<Option<String>> = vec![None; args.len()];
+        for (i, arg) in args.iter().enumerate() {
+            let wants_borrow = matches!(
+                modes.get(i),
+                Some(datalove_datafun_ir::ParamMode::Ref) | Some(datalove_datafun_ir::ParamMode::Mut));
+            if !wants_borrow || *self.operand_type(arg) != IrType::Data {
+                continue;
+            }
+            // Named for the call's destination as well as the argument, since
+            // two calls in one block would otherwise declare the same locals.
+            let name = format!("__bw{}_{}", dest.0, i);
+            writeln!(out, "    const void* {name}_v; const dtlv_tydesc_t* {name}_t;").unwrap();
+            writeln!(out, "    dtlv_rti_data_parts({}, &{name}_v, &{name}_t);",
+                self.operand_addr(arg)).unwrap();
+            borrowed[i] = Some(name);
+        }
+
         // For local function lookup, use parent_unit if available (for nested functions).
         let lookup_unit = self.parent_unit.unwrap_or(self.unit);
         let func_name = self.compiler.resolve_func_name_with_registry(func, lookup_unit, self.registry);
@@ -1747,19 +1768,27 @@ impl<'a> FunctionCodegenContext<'a> {
         if uses_sret {
             write!(&mut call_args, ", {}", self.value_addr(dest)).unwrap();
         }
-        for arg in args {
-            write!(&mut call_args, ", {}", self.operand_addr(arg)).unwrap();
+        for (i, arg) in args.iter().enumerate() {
+            match &borrowed[i] {
+                Some(name) => write!(&mut call_args, ", (void*){name}_v").unwrap(),
+                None => write!(&mut call_args, ", {}", self.operand_addr(arg)).unwrap(),
+            }
         }
 
         // Then a descriptor for each parameter whose own type does not say what
         // arrives at it. This is the place that knows: the argument here either
-        // has a concrete type, or is a parameter our own caller described.
+        // has a concrete type, was read out of a wrapper just above, or is a
+        // parameter our own caller described.
         for param_id in self.callee_descriptor_params(func) {
-            let arg = args.get(param_id.0 as usize).ok_or_else(|| CAotError::Codegen(format!(
+            let index = param_id.0 as usize;
+            let arg = args.get(index).ok_or_else(|| CAotError::Codegen(format!(
                 "callee wants a descriptor for parameter {} but got {} arguments",
                 param_id.0, args.len(),
             )))?;
-            write!(&mut call_args, ", {}", self.operand_tydesc(arg)).unwrap();
+            match borrowed.get(index).and_then(|b| b.as_ref()) {
+                Some(name) => write!(&mut call_args, ", {name}_t").unwrap(),
+                None => write!(&mut call_args, ", {}", self.operand_tydesc(arg)).unwrap(),
+            }
         }
 
         if uses_sret || dest_ty == IrType::Unit {

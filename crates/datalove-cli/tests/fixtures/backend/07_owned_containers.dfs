@@ -6,6 +6,7 @@
 // happens twice faults. A `[u32]` would say nothing.
 require module sys/std/list
 import list.len
+import list.push
 
 // Taken and dropped.
 fun take<T>(xs: [T]): bool
@@ -41,6 +42,25 @@ debuglog len(ref relay(c))
 
 let d: [string] = ["g", "h"]
 debuglog len(ref relay_twice(d))
+
+// Used, not just moved. A borrowed parameter wants the container itself with
+// a descriptor beside it, and both come out of the wrapper together.
+fun count<T>(xs: [T]): index
+  ret len(ref xs)
+end fun
+
+let e: [string] = ["i", "j", "k", "l"]
+debuglog count(e)
+
+// Mutated through the wrapper, so what push writes lands inside it.
+fun grow<T>(xs: [T], v: T): index
+  var ys = xs
+  push(mut ys, v)
+  ret len(ref ys)
+end fun
+
+let f: [string] = ["m"]
+debuglog grow(f, "n")
 
 // A map, to show this is about containers rather than about lists.
 fun take_map<K, V>(m: %{K = V}): bool

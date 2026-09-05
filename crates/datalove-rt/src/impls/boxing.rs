@@ -208,6 +208,43 @@ unsafe fn convert(
     }
 }
 
+/// The value a wrapped one holds, and the descriptor saying what it is.
+///
+/// Borrowing rather than moving: the `Data` keeps what it holds, and both of
+/// these point into it. A container of a type parameter crosses an owned
+/// boundary wrapped, and anything wanting to read it as the container it is
+/// needs the pair the rest of the runtime speaks in.
+///
+/// Only a wrapper holding its value on the heap has a value to point at, which
+/// is every wrapper a container makes: `can_inline` admits no container, so one
+/// is never packed into the two words.
+///
+/// # Safety
+///
+/// `data_in` must be an initialized `Data`.
+pub unsafe fn data_parts(
+    data_in: *const u8,
+    value_out: *mut *const u8,
+    tydesc_out: *mut *const rtdt::TyDesc,
+) -> RtStatus {
+    unsafe {
+        let data = &*(data_in as *const rtdt::Data);
+        if data.tag() != rtdt::anypack::Tag::TwoPointers {
+            // A value packed into the words has no address to lend, and
+            // nothing that reaches here should be packed.
+            return RtStatus::Error;
+        }
+        let value_ptr = data.value_ptr();
+        let tydesc = data.tydesc();
+        if value_ptr.is_null() || tydesc.is_null() {
+            return RtStatus::Error;
+        }
+        std::ptr::write(value_out, value_ptr);
+        std::ptr::write(tydesc_out, tydesc);
+        RtStatus::Ok
+    }
+}
+
 /// Move the value back out of a Data.
 ///
 /// The inverse of [`data_from_local`]. The caller knows what type it put in and

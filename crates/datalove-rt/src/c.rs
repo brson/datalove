@@ -540,6 +540,22 @@ pub unsafe extern "C-unwind" fn dtlv_rti_data_from_local(
     }
 }
 
+/// Borrow what a Data holds, as a value pointer and its descriptor.
+///
+/// The Data keeps ownership; both outputs point into it. See
+/// `boxing::data_parts`.
+#[unsafe(no_mangle)]
+pub unsafe extern "C-unwind" fn dtlv_rti_data_parts(
+    data_in: *const u8,
+    value_out: *mut *const u8,
+    tydesc_out: *mut *const rtdt::TyDesc,
+) -> RtStatus {
+    debug_assert!(!data_in.is_null(), "data_in is null");
+    debug_assert!(!value_out.is_null(), "value_out is null");
+    debug_assert!(!tydesc_out.is_null(), "tydesc_out is null");
+    unsafe { crate::impls::boxing::data_parts(data_in, value_out, tydesc_out) }
+}
+
 /// Move the value back out of a Data, given the type that went in.
 ///
 /// The caller supplies the tydesc, so this is a move rather than a checked

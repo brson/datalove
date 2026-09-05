@@ -419,10 +419,22 @@ two indices -- sixteen bytes. The elements are never touched. The O(n) figure
 that ruled this out was the cost of the structural erasure, which nobody has to
 perform.
 
-What it needs that does not exist: a way to borrow the inside of a box as the
-`(pointer, descriptor)` pair the native ABI already speaks, so that a boxed
-`[T]` can still be handed to `sys/std/list`. `Data::value_ptr` and
-`Data::tydesc` are that pair; what is missing is an IR operation naming it.
+What this needs beyond the wrapping is a way to read back through the wrapper,
+so a wrapped `[T]` can still be handed to `sys/std/list`.
+`dtlv_rti_data_parts` is it: the value pointer and the descriptor together,
+borrowed rather than moved, which is the pair the native ABI already speaks.
+A call site reads through it where an argument arrives wrapped and the callee
+wants it borrowed, passing what comes out as the pointer and as that
+parameter's descriptor. Both leave the same call, so neither can be taken from
+somewhere the other was not.
+
+### What this leaves
+
+An owned container can be taken, moved into a local, returned, forwarded to
+another generic, dropped, read and mutated, on all four backends. What is left
+is what was never part of this: a tuple or a struct holding a type parameter,
+whose width depends on what it holds and which therefore does need the bounded
+walk described above.
 
 ### What was weighed against it
 

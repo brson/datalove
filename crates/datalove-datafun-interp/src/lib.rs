@@ -1939,10 +1939,39 @@ impl IrInterpreter {
                 }
                 arg_vals.push(val);
             } else {
-                arg_vals.push(self.read_operand(op, frame, frames));
+                let mut val = self.read_operand(op, frame, frames);
+                // A container of a type parameter travels wrapped once it is
+                // owned, and a borrowed parameter wants the container itself
+                // with a descriptor beside it. Both are inside the wrapper.
+                if matches!(mode, ParamMode::Ref | ParamMode::Mut) {
+                    val = Self::borrow_through_wrapper(val);
+                }
+                arg_vals.push(val);
             }
         }
         arg_vals
+    }
+
+    /// Read through a wrapper, where one is what arrived.
+    ///
+    /// Only a wrapped value has anything to read through, and only a borrowed
+    /// parameter asks: an owned one takes the wrapper as it stands, since
+    /// owning it means dropping it and the wrapper is what knows how.
+    fn borrow_through_wrapper(val: Value) -> Value {
+        if unsafe { (*val.tydesc).type_tag } != rtdt::TyTag::Data {
+            return val;
+        }
+        let mut inner_ptr: *const u8 = std::ptr::null();
+        let mut inner_tydesc: *const rtdt::TyDesc = std::ptr::null();
+        let status = unsafe {
+            datalove_rt::c::dtlv_rti_data_parts(val.ptr, &mut inner_ptr, &mut inner_tydesc)
+        };
+        // A wrapper a container made always holds its value on the heap, so
+        // there is always something to point at. Anything else reaching here
+        // is a shape the lowering should not have produced.
+        assert_eq!(status, datalove_rt::c::RtStatus::Ok,
+            "borrowing through a wrapper that holds nothing to borrow");
+        Value { ptr: inner_ptr as *mut u8, tydesc: inner_tydesc }
     }
 
     /// Mark consumed arguments as dropped after preparing a call.

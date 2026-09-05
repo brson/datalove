@@ -136,6 +136,50 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         Ok(())
     }
 
+    /// Borrow what a wrapped argument holds: its value pointer and descriptor.
+    ///
+    /// A container of a type parameter travels wrapped once it is owned, and a
+    /// borrowed parameter wants the container itself with a descriptor beside
+    /// it. Both come out of the wrapper together, so they are read together
+    /// and neither can be taken from somewhere the other was not.
+    fn borrow_through_wrapper(
+        &mut self,
+        builder: &mut FunctionBuilder,
+        arg: &Operand,
+    ) -> Result<(cl_ir::Value, cl_ir::Value), CraneliftError> {
+        let parts = self.runtime.as_ref()
+            .ok_or_else(|| CraneliftError::Codegen(
+                "borrowing through a wrapper requires runtime imports".into()))?
+            .data_parts;
+
+        let slot = builder.create_sized_stack_slot(cl_ir::StackSlotData::new(
+            cl_ir::StackSlotKind::ExplicitSlot, 16, 3));
+        let value_out = builder.ins().stack_addr(PTR_TYPE, slot, 0);
+        let tydesc_out = builder.ins().stack_addr(PTR_TYPE, slot, 8);
+
+        let data_ptr = self.get_operand_ptr(builder, arg)?;
+        let parts_ref = self.module.declare_func_in_func(parts, builder.func);
+        builder.ins().call(parts_ref, &[data_ptr, value_out, tydesc_out]);
+
+        let value = builder.ins().load(PTR_TYPE, MemFlagsData::new(), value_out, 0);
+        let tydesc = builder.ins().load(PTR_TYPE, MemFlagsData::new(), tydesc_out, 0);
+        Ok((value, tydesc))
+    }
+
+    /// Whether an argument arrives wrapped where the callee wants it borrowed.
+    fn arg_needs_unwrapping(
+        &self,
+        code_ref: &CodeRef,
+        args: &[Operand],
+        index: usize,
+    ) -> Result<bool, CraneliftError> {
+        let modes = self.callee_param_modes(code_ref);
+        if !matches!(modes.get(index), Some(ParamMode::Ref) | Some(ParamMode::Mut)) {
+            return Ok(false);
+        }
+        Ok(self.get_operand_type(&args[index])? == IrType::Data)
+    }
+
     /// The descriptor for an operand, as a runtime pointer.
     ///
     /// A parameter whose descriptor was supplied by our own caller uses that:
@@ -231,9 +275,21 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
 
         self.destroy_out_destinations(builder, code_ref, args)?;
 
-        // Add user arguments (passed by pointer).
-        for arg in args {
-            let arg_val = self.get_operand_ptr(builder, arg)?;
+        // Add user arguments (passed by pointer). An argument that arrives
+        // wrapped where the callee wants it borrowed is read through first,
+        // and the descriptor that comes with it is used below.
+        let mut borrowed_parts: Vec<Option<(cl_ir::Value, cl_ir::Value)>> =
+            vec![None; args.len()];
+        for (i, arg) in args.iter().enumerate() {
+            if self.arg_needs_unwrapping(code_ref, args, i)? {
+                borrowed_parts[i] = Some(self.borrow_through_wrapper(builder, arg)?);
+            }
+        }
+        for (i, arg) in args.iter().enumerate() {
+            let arg_val = match borrowed_parts[i] {
+                Some((value, _)) => value,
+                None => self.get_operand_ptr(builder, arg)?,
+            };
             call_args.push(arg_val);
         }
 
@@ -241,13 +297,17 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         // what it will receive. This is the place that knows: the argument here
         // has a concrete type, or a descriptor our own caller handed us.
         for param_id in self.callee_descriptor_params(code_ref) {
-            let arg = args.get(param_id.0 as usize).ok_or_else(|| {
+            let index = param_id.0 as usize;
+            let arg = args.get(index).ok_or_else(|| {
                 CraneliftError::Codegen(format!(
                     "callee wants a descriptor for parameter {} but got {} arguments",
                     param_id.0, args.len(),
                 ))
             })?.clone();
-            let tydesc_addr = self.operand_tydesc(builder, &arg)?;
+            let tydesc_addr = match borrowed_parts.get(index).copied().flatten() {
+                Some((_, tydesc)) => tydesc,
+                None => self.operand_tydesc(builder, &arg)?,
+            };
             call_args.push(tydesc_addr);
         }
 
