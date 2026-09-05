@@ -1888,6 +1888,13 @@ impl IrInterpreter {
                 // Dereference to get the pointed-to destination.
                 frame.value_deref(*id)
             }
+            Operand::Param(id) => {
+                // This function's own out parameter, passed straight on to
+                // another. What it names is the caller's place, which is
+                // where the callee should write, so it goes across as it is.
+                let dest = frame.param_dest(*id);
+                Value { ptr: dest.ptr, tydesc: dest.tydesc }
+            }
             _ => panic!("get_operand_dest: invalid operand {:?} for out param", op),
         }
     }
@@ -1913,13 +1920,22 @@ impl IrInterpreter {
             let mode = param_mode(callee, i);
             if mode == ParamMode::Out {
                 // Out param: get destination pointer, destroy existing value.
+                //
+                // Except where this function's own out parameter is being
+                // passed straight on. That destination was cleared by whoever
+                // called this one and nothing has been written there since, so
+                // destroying it again would free what was already freed.
                 let val = self.get_operand_dest(op, frame);
-                unsafe {
-                    datalove_rt::c::dtlv_rti_any_destroy_local(
-                        self.runtime.handle(),
-                        val.ptr,
-                        val.tydesc,
-                    );
+                let already_cleared = matches!(op, Operand::Param(id)
+                    if frame.param(*id).is_none());
+                if !already_cleared {
+                    unsafe {
+                        datalove_rt::c::dtlv_rti_any_destroy_local(
+                            self.runtime.handle(),
+                            val.ptr,
+                            val.tydesc,
+                        );
+                    }
                 }
                 arg_vals.push(val);
             } else {
