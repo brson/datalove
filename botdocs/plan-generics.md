@@ -336,6 +336,58 @@ Which makes the value-level descriptor the keystone rather than one item among
 several: owned containers are not a separate cost problem sitting behind it,
 they are one of the things it unlocks.
 
+### What a prototype of that found
+
+Built and thrown away, to find where the line actually falls rather than argue
+about it. The change was small: a predicate saying a container of a type
+parameter crosses unconverted, read by the caller so it emits no `Erase`, by
+the callee so the parameter joins `descriptor_params`, by the interpreter so it
+keys the descriptor on that list rather than on the mode, and by `compile_drop`
+in both compiled backends so destroying uses the supplied descriptor rather
+than the static type. About a hundred lines across eight files.
+
+Four of five cases worked, on all four backends, with a `[string]` so that a
+lost drop would leak and a doubled one would crash:
+
+- taking an owned `[T]` and reading it
+- returning it
+- forwarding it to another generic
+- an owned `%{K = V}`
+
+The fifth is where it stops. Moving the parameter into a local:
+
+```datalove
+fun grow<T>(xs: [T], v: T): index
+  var ys = xs
+  push(mut ys, v)
+  ret len(ref ys)
+end fun
+```
+
+lowers to
+
+```
+v0 = move p0
+store.move.tracked s0, v0
+...
+drop.tracked s0
+```
+
+The descriptor was supplied for `p0`. `s0` is typed `[data]`, and both the
+`push` and the drop read that, so the elements are walked as anypacks. It
+segfaults, and it segfaults in every backend, because nothing carries the
+descriptor across the store.
+
+So the boundary is not owned against borrowed, and not container against
+scalar. It is whether the value stays in the parameter it arrived in. That is
+the same boundary indexing runs into, and the same one behind the modes and
+return types a type parameter cannot reach, which is the argument for doing the
+value-level descriptor rather than four point fixes that each stop here.
+
+The prototype is not committed. Shipping the four working cases would mean
+shipping the fifth as a crash, and the check that would refuse it -- knowing a
+value carries a supplied descriptor -- is the feature itself.
+
 ## Where this stands
 
 Type parameters nest inside options and results to any depth, and sit under a
