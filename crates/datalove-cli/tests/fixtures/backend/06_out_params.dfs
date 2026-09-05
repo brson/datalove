@@ -1,0 +1,34 @@
+// An out parameter's destination holds something before the call, and the
+// callee does not destroy it: its tracking byte starts uninitialized, so its
+// first store destroys nothing. The caller clears it, which the interpreter
+// always did and the compiled backends did not. With a copy type nothing is
+// lost either way, so this needs a move type to say anything.
+//
+// Forwarding one is here too. The interpreter used to panic on it, generic or
+// not, because a parameter was not a shape it accepted as a destination.
+
+fun take_out<T>(out x: T, src: T)
+  set x = src
+end fun
+
+fun forward_out<T>(out x: T, src: T)
+  take_out(out x, src)
+end fun
+
+var word: string = "before"
+take_out(out word, "after")
+debuglog word
+
+var forwarded: string = "before"
+forward_out(out forwarded, "after")
+debuglog forwarded
+
+// Into a field rather than a whole binding, which is the other place an out
+// parameter is allowed to point.
+var pair = ("a", "b")
+take_out(out pair.1, "z")
+debuglog pair
+
+var counter: u32 = 0
+forward_out(out counter, 42)
+debuglog counter

@@ -4,7 +4,8 @@ use cranelift_codegen::ir::{self as cl_ir, InstBuilder, MemFlagsData};
 use cranelift_frontend::FunctionBuilder;
 use cranelift_module::{FuncId, Module};
 
-use datalove_datafun_ir::{CodeRef, CodeUnitId, IrType, Operand, ParamId, ValueId};
+use cranelift_codegen::ir::types as cl_types;
+use datalove_datafun_ir::{CodeRef, CodeUnitId, IrType, Operand, ParamId, ParamMode, ValueId};
 
 use crate::types::{self, CraneliftRepr, PTR_TYPE};
 use crate::CraneliftError;
@@ -40,6 +41,99 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                     .unwrap_or_default()
             }
         }
+    }
+
+    /// How `code_ref` takes each of its parameters.
+    ///
+    /// Read from the same place the descriptor list is, and for the same
+    /// reason: the instruction says what to pass but not how the callee
+    /// takes it, and an `out` parameter is the caller's to clear.
+    fn callee_param_modes(&self, code_ref: &CodeRef) -> Vec<ParamMode> {
+        match code_ref {
+            CodeRef::Local(id) | CodeRef::External { id, .. } => {
+                self.local_funcs.get(&CodeUnitId(id.0))
+                    .map(|callee| callee.param_modes.clone())
+                    .unwrap_or_default()
+            }
+            CodeRef::Module { module, id } => {
+                let Some(registry) = self.registry else {
+                    return Vec::new();
+                };
+                registry.get_module_function_as_unit(*module, CodeUnitId(id.0))
+                    .and_then(|unit| unit.function_context().map(|c| c.param_modes.clone()))
+                    .unwrap_or_default()
+            }
+        }
+    }
+
+    /// Destroy whatever an `out` argument's destination holds now.
+    ///
+    /// The callee writes a fresh value there and its tracking byte starts
+    /// uninitialized, so its first store destroys nothing. Something has to,
+    /// or the old value is simply dropped on the floor: this is the same step
+    /// the interpreter takes before it binds an out parameter.
+    fn destroy_out_destinations(
+        &mut self,
+        builder: &mut FunctionBuilder,
+        code_ref: &CodeRef,
+        args: &[Operand],
+    ) -> Result<(), CraneliftError> {
+        let modes = self.callee_param_modes(code_ref);
+        if !modes.iter().any(|m| *m == ParamMode::Out) {
+            return Ok(());
+        }
+
+        let rt_handle = self.rt_handle_param.ok_or_else(|| {
+            CraneliftError::Codegen("out parameter requires runtime handle".into())
+        })?;
+        let destroy = self.runtime.as_ref()
+            .ok_or_else(|| CraneliftError::Codegen(
+                "out parameter requires runtime imports".into()))?
+            .destroy_local;
+
+        for (i, arg) in args.iter().enumerate() {
+            if modes.get(i) != Some(&ParamMode::Out) {
+                continue;
+            }
+            let ptr = self.get_operand_ptr(builder, arg)?;
+            let tydesc = self.operand_tydesc(builder, arg)?;
+            let destroy_ref = self.module.declare_func_in_func(destroy, builder.func);
+
+            // This function's own out parameter, passed straight on, names a
+            // destination its caller already cleared and nothing has written
+            // to since. Its tracking byte says so, and freeing what was freed
+            // is worse than leaking it.
+            let guard = match arg {
+                Operand::Param(param) => self.param_tracking_byte_offset(*param),
+                _ => None,
+            };
+            let Some(track_offset) = guard else {
+                builder.ins().call(destroy_ref, &[rt_handle, ptr, tydesc]);
+                continue;
+            };
+
+            let frame_slot = self.frame_slot.ok_or_else(|| {
+                CraneliftError::Codegen("out parameter tracking requires frame slot".into())
+            })?;
+            let track_addr = builder.ins().stack_addr(PTR_TYPE, frame_slot, track_offset as i32);
+            let track_val = builder.ins().load(cl_types::I8, MemFlagsData::new(), track_addr, 0);
+            let live = builder.ins().iconst(cl_types::I8, crate::layout::tracking::LIVE as i64);
+            let is_live = builder.ins().icmp(
+                cranelift_codegen::ir::condcodes::IntCC::Equal, track_val, live);
+
+            let destroy_block = builder.create_block();
+            let after_block = builder.create_block();
+            builder.ins().brif(is_live, destroy_block, &[], after_block, &[]);
+
+            builder.switch_to_block(destroy_block);
+            builder.seal_block(destroy_block);
+            builder.ins().call(destroy_ref, &[rt_handle, ptr, tydesc]);
+            builder.ins().jump(after_block, &[]);
+
+            builder.switch_to_block(after_block);
+            builder.seal_block(after_block);
+        }
+        Ok(())
     }
 
     /// The descriptor for an operand, as a runtime pointer.
@@ -134,6 +228,8 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 }
             }
         }
+
+        self.destroy_out_destinations(builder, code_ref, args)?;
 
         // Add user arguments (passed by pointer).
         for arg in args {

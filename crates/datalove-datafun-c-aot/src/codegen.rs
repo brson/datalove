@@ -1734,6 +1734,8 @@ impl<'a> FunctionCodegenContext<'a> {
             }
         }
 
+        self.destroy_out_destinations(out, func, args)?;
+
         // For local function lookup, use parent_unit if available (for nested functions).
         let lookup_unit = self.parent_unit.unwrap_or(self.unit);
         let func_name = self.compiler.resolve_func_name_with_registry(func, lookup_unit, self.registry);
@@ -1788,6 +1790,62 @@ impl<'a> FunctionCodegenContext<'a> {
         unit.and_then(|u| u.function_context())
             .map(|ctx| ctx.descriptor_params.clone())
             .unwrap_or_default()
+    }
+
+    /// How `func` takes each of its parameters.
+    fn callee_param_modes(&self, func: &CodeRef) -> Vec<datalove_datafun_ir::ParamMode> {
+        let unit = match func {
+            CodeRef::Module { module, id } => {
+                self.registry.get_module_function_as_unit(*module, *id)
+            }
+            CodeRef::Local(id) => {
+                let lookup_unit = self.parent_unit.unwrap_or(self.unit);
+                lookup_unit.nested_units.iter().find(|nested| nested.id == *id)
+            }
+            CodeRef::External { .. } => None,
+        };
+        unit.and_then(|u| u.function_context())
+            .map(|ctx| ctx.param_modes.clone())
+            .unwrap_or_default()
+    }
+
+    /// Destroy whatever an `out` argument's destination holds now.
+    ///
+    /// The callee writes a fresh value there and its tracking byte starts
+    /// uninitialized, so its first store destroys nothing. Something has to,
+    /// or the old value is dropped on the floor.
+    fn destroy_out_destinations(
+        &mut self,
+        out: &mut String,
+        func: &CodeRef,
+        args: &[Operand],
+    ) -> Result<(), CAotError> {
+        use datalove_datafun_ir::ParamMode;
+        let modes = self.callee_param_modes(func);
+        for (i, arg) in args.iter().enumerate() {
+            if modes.get(i) != Some(&ParamMode::Out) {
+                continue;
+            }
+            let addr = self.operand_addr(arg);
+            let tydesc = self.operand_tydesc(arg);
+
+            // This function's own out parameter, passed straight on, names a
+            // destination its caller already cleared and nothing has written
+            // to since. Its tracking byte says so, and freeing what was freed
+            // is worse than leaking it.
+            let guard = match arg {
+                Operand::Param(param) => self.layout.param_tracking_byte(param.0),
+                _ => None,
+            };
+            match guard {
+                Some(offset) => writeln!(out,
+                    "    if (__frame[{}] == TRACK_LIVE) dtlv_rti_any_destroy_local(rt, {}, {});",
+                    offset, addr, tydesc).unwrap(),
+                None => writeln!(out,
+                    "    dtlv_rti_any_destroy_local(rt, {}, {});", addr, tydesc).unwrap(),
+            }
+        }
+        Ok(())
     }
 
     /// The descriptor for an operand, as a C expression of pointer type.

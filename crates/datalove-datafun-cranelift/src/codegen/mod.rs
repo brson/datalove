@@ -79,7 +79,7 @@ use cranelift_frontend::{FunctionBuilder, FunctionBuilderContext, Variable};
 use cranelift_module::{FuncId, Linkage, Module};
 
 use datalove_datafun_ir::{
-    BlockId, FunctionContext, FunctionRegistry, IrCodeUnit,
+    BlockId, FunctionContext, FunctionRegistry, IrCodeUnit, ParamMode,
     IrModuleId, IrType, Instruction, NativeContext, Operand, ParamId, SlotDest, SlotId,
     ValueId,
 };
@@ -189,15 +189,20 @@ pub struct LocalCallee {
     pub func_id: FuncId,
     /// Parameters whose descriptor the call site supplies, in signature order.
     pub descriptor_params: Vec<ParamId>,
+    /// How the callee takes each parameter, which the call site needs because
+    /// an `out` one has its old value dropped here rather than there.
+    pub param_modes: Vec<ParamMode>,
 }
 
 impl LocalCallee {
     /// What a call to `unit` has to pass, given the id it was declared under.
     pub fn of(unit: &IrCodeUnit, func_id: FuncId) -> Self {
-        let descriptor_params = unit.function_context()
-            .map(|ctx| ctx.descriptor_params.clone())
-            .unwrap_or_default();
-        LocalCallee { func_id, descriptor_params }
+        let ctx = unit.function_context();
+        LocalCallee {
+            func_id,
+            descriptor_params: ctx.map(|c| c.descriptor_params.clone()).unwrap_or_default(),
+            param_modes: ctx.map(|c| c.param_modes.clone()).unwrap_or_default(),
+        }
     }
 }
 

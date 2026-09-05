@@ -310,8 +310,15 @@ Making the index operator do the same needs an instruction meaning "use the
 descriptor this parameter came with" rather than the one the static type
 implies, in the IR and in each backend.
 
-**A generic out parameter has to be a whole binding or a field.** Both work;
-anything else is refused rather than written wrong.
+**A generic out parameter has to be a whole binding or a field.** Both work,
+and so does passing one straight on to another function; anything else is
+refused rather than written wrong.
+
+Whatever the destination held is destroyed by the caller, before the call.
+The callee cannot do it: its tracking byte for an out parameter starts
+uninitialized, so its first store destroys nothing. A destination that is
+itself an out parameter being forwarded has already been cleared once, and
+its tracking byte is what says not to do it again.
 
 **The C backend calls riders and takes descriptors like the others.** It was
 written before generics existed and had neither, which is why nothing in its
