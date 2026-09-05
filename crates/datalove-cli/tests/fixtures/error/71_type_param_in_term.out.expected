@@ -1,0 +1,17 @@
+[31m[F060] Error:[0m `T` cannot stand inside a type at parameter `x`
+    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0mtests/fixtures/error/71_type_param_in_term.dfs:10:1[38;5;246m][0m
+    [38;5;246m│[0m
+ [38;5;246m10 │[0m [38;5;201mf[0m[38;5;201mu[0m[38;5;201mn[0m[38;5;249m [0m[38;5;249mf[0m[38;5;249m<[0m[38;5;249mT[0m[38;5;249m>[0m[38;5;249m([0m[38;5;249mx[0m[38;5;249m:[0m[38;5;249m [0m[38;5;249mt[0m[38;5;249me[0m[38;5;249mr[0m[38;5;249mm[0m[38;5;249m [0m[38;5;249mW[0m[38;5;249mr[0m[38;5;249ma[0m[38;5;249mp[0m[38;5;249mp[0m[38;5;249me[0m[38;5;249md[0m[38;5;249m [0m[38;5;249mT[0m[38;5;249m)[0m[38;5;249m:[0m[38;5;249m [0m[38;5;249mb[0m[38;5;249mo[0m[38;5;249mo[0m[38;5;249ml[0m
+ [38;5;240m   │[0m [38;5;201m─[0m[38;5;201m┬[0m[38;5;201m─[0m  
+ [38;5;240m   │[0m  [38;5;201m╰[0m[38;5;201m─[0m[38;5;201m─[0m[38;5;201m─[0m this signature does not resolve, so calls to it are not found either
+ [38;5;240m   │[0m 
+ [38;5;240m   │[0m [38;5;115mNote[0m: a type parameter is erased to `data`, which fits where the parameter stands alone or under `?` or `!`. Under a collection the element type would have to change too, which would mean converting the caller's collection element by element. Take it by `ref` or `mut` instead, where nothing is converted.
+[38;5;246m────╯[0m
+[31m[F002] Error:[0m cannot find function `f` in this scope
+    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0mtests/fixtures/error/71_type_param_in_term.dfs:14:14[38;5;246m][0m
+    [38;5;246m│[0m
+ [38;5;246m14 │[0m [38;5;249ml[0m[38;5;249me[0m[38;5;249mt[0m[38;5;249m [0m[38;5;249mo[0m[38;5;249mu[0m[38;5;249mt[0m[38;5;249mp[0m[38;5;249mu[0m[38;5;249mt[0m[38;5;249m [0m[38;5;249m=[0m[38;5;249m [0m[38;5;155mf[0m[38;5;249m([0m[38;5;249mt[0m[38;5;249me[0m[38;5;249mr[0m[38;5;249mm[0m[38;5;249m [0m[38;5;249mW[0m[38;5;249mr[0m[38;5;249ma[0m[38;5;249mp[0m[38;5;249mp[0m[38;5;249me[0m[38;5;249md[0m[38;5;249m [0m[38;5;249m1[0m[38;5;249m)[0m
+ [38;5;240m   │[0m              [38;5;155m┬[0m  
+ [38;5;240m   │[0m              [38;5;155m╰[0m[38;5;155m─[0m[38;5;155m─[0m not found in this scope
+[38;5;246m────╯[0m
+Error: Type error

@@ -40,11 +40,13 @@ end fun
 // type has rather than over anything the value holds, so it is converted
 // rather than refused.
 //
-// A container inside a tuple is what is left. The tuple is converted field by
-// field, so the field would be converted too, and the only conversion for a
-// container is the structural one none of this performs. The two shapes are
-// even the same size, so nothing downstream would refuse it; it is refused at
-// the signature instead.
+// A container inside a tuple is converted the way a container anywhere is, by
+// wrapping it: the tuple's walk reaches the field and the field's conversion is
+// the wrapping one, and the two compose without either knowing about the other.
+//
+// A term is what is left, and an enum, which is a payload chosen by a tag.
+// Both hold one payload inline the way an option does, so both are the same
+// shape of work; there is simply no arm for either in the runtime's walk.
 fun in_list<T>(x: [T]): [T]
   ret x
 end fun
@@ -59,6 +61,10 @@ end fun
 
 fun container_in_tuple<T>(x: ([T], u32)): u32
   ret x.1
+end fun
+
+fun in_term<T>(x: term Wrapped T): bool
+  ret true
 end fun
 
 fun main(): u32

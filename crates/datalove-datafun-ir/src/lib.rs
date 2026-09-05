@@ -262,10 +262,45 @@ pub fn erased_param_type<'db>(
     type_params: &[bct::text::InternedText<'db>],
     borrowed: bool,
 ) -> IrType {
-    if !borrowed && type_hint_is_container_of_param(ty, type_params) {
+    if borrowed {
+        // Nothing is converted here, so the shape stays as it was written and
+        // the call site supplies a descriptor for what is really behind it.
+        return IrType::from_type_hint_erasing(db, ty, type_params);
+    }
+    erased_owned_type(db, ty, type_params)
+}
+
+/// The shape an owned value takes once erased.
+///
+/// Structural, except that a container of a type parameter becomes `data`
+/// wherever it appears rather than only at the top. A tuple is converted field
+/// by field, so a container field is converted too, and wrapping is the only
+/// conversion a container has: `[u32]` to `[data]` would mean rebuilding it,
+/// and leaving it alone would hand the callee a stride that does not match
+/// what it was given -- silently, since the two are the same size.
+fn erased_owned_type<'db>(
+    db: &'db dyn salsa::Database,
+    ty: &datalove_datalit::ast::TypeHint<'db>,
+    type_params: &[bct::text::InternedText<'db>],
+) -> IrType {
+    use datalove_datalit::ast::TypeHint;
+
+    if type_hint_is_container_of_param(ty, type_params) {
         return IrType::Data;
     }
-    IrType::from_type_hint_erasing(db, ty, type_params)
+    let recurse = |t: &TypeHint<'db>| erased_owned_type(db, t, type_params);
+    match ty {
+        TypeHint::AnonTuple(t) if t.fields.is_empty() => IrType::Unit,
+        TypeHint::AnonTuple(t) => IrType::Tuple(t.fields.iter().map(recurse).collect()),
+        TypeHint::AnonStruct(t) => IrType::Struct(
+            t.fields.iter()
+                .map(|f| (f.name.text(db).to_string(), recurse(&f.type_hint)))
+                .collect(),
+        ),
+        TypeHint::Option(t) => IrType::Option(Box::new(recurse(&t.inner_type))),
+        TypeHint::Result(t) => IrType::Result(Box::new(recurse(&t.inner_type))),
+        other => IrType::from_type_hint_erasing(db, other, type_params),
+    }
 }
 
 /// Whether a typechecker type is a container holding a type parameter.

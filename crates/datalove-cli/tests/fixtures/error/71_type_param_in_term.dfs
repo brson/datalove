@@ -1,0 +1,14 @@
+// A term holds one payload inline, the way an option does, so converting one
+// is the same shape of work and there is no reason it could not be done. There
+// is just no arm for it in the runtime's walk, and admitting it without one
+// would mean two descriptors of different sizes reaching the arm that copies,
+// which refuses rather than corrupts but refuses at run time.
+//
+// The call below reports F002 as well, because a signature that does not
+// resolve leaves its function unregistered. That one used to be the only thing
+// said, which named the symptom and left the reader to guess.
+fun f<T>(x: term Wrapped T): bool
+  ret true
+end fun
+
+let output = f(term Wrapped 1)

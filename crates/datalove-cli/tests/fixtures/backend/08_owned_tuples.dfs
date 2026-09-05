@@ -6,6 +6,10 @@
 // Strings in the fields, so a conversion that loses a move leaks and one that
 // doubles it faults.
 
+require module sys/std/list
+import list.len
+import list.get
+
 fun through<T>(x: (T, u32)): (T, u32)
   ret x
 end fun
@@ -24,9 +28,34 @@ fun through_optional<T>(x: ?(T, u32)): ?(T, u32)
   ret x
 end fun
 
+// A container as a field. The tuple converts field by field, so the field is
+// converted too, and wrapping is the only conversion a container has: leaving
+// it alone would hand the callee a stride that does not match what it was
+// given, silently, since `[u32]` and `[data]` are the same size.
+fun with_container<T>(x: ([T], u32)): ([T], u32)
+  ret x
+end fun
+
+// Two levels down, and beside a container the generic does not name.
+fun deeper<T>(x: (u32, ([T], #{u32}))): (u32, ([T], #{u32}))
+  ret x
+end fun
+
 debuglog through(("one", 1))
 debuglog through((2, 2))
 debuglog through_struct({ a = "three", n = 3 })
 debuglog through_nested(("four", ("five", 5)))
 debuglog through_optional(some ("six", 6))
 debuglog through_optional(: ?(string, u32) / none)
+
+// The elements have to come back readable, not just the scalar beside them.
+let items: [string] = ["seven", "eight", "nine"]
+let kept = with_container((items, 7))
+debuglog len(ref kept.0)
+debuglog get(ref kept.0, 1)
+debuglog kept.1
+
+let more: [string] = ["ten"]
+let nested = deeper((10, (more, #{ 1 })))
+debuglog nested.0
+debuglog len(ref nested.1.0)

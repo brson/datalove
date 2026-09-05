@@ -1,7 +1,7 @@
-// The return is checked the same way, and says which part of the signature.
-fun wrap_up<T>(ref xs: [T]): (%{u32 = T}, u32)
-  ret (%{}, 1)
+// An enum is a payload chosen by a tag, which is the same case again, and the
+// return is checked the same way as a parameter and says which part it was.
+fun pick<T>(n: u32): enum { term Some T, atom None }
+  ret atom None
 end fun
 
-let numbers: [u32] = [1]
-let output = wrap_up(ref numbers)
+let output = pick(1)

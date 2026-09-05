@@ -444,12 +444,15 @@ the destination and the rest in the source. Only allocation failure does that,
 and neither side is destroyed by the walk, so nothing is freed twice; what is
 lost is the prefix.
 
-What is left is a container inside a tuple. The tuple is converted field by
-field, so a container field would be converted too, and the only conversion for
-one is the structural `[u32]` to `[data]` this design exists to avoid -- and
-the two are the same size, so nothing refuses it. It is refused at the
-signature instead. Wrapping such a field the way a parameter is wrapped would
-work; erasure reaching inside a composite is not written.
+A container inside a tuple is converted the way a container anywhere is: by
+wrapping it. The tuple's walk reaches the field, the field's conversion is the
+`data` one, and the two compose without either knowing about the other. That
+is why erasing an owned value reaches inside a composite rather than stopping
+at the top: `([T], u32)` becomes `(data, u32)`, and `(u32, ([T], #{u32}))`
+becomes `(u32, (data, #{u32}))`.
+
+A borrowed parameter is still structural, because nothing is converted at one
+and the descriptor the call site supplies covers the whole of it.
 
 ### What was weighed against it
 

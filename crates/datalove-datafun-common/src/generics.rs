@@ -235,33 +235,10 @@ pub fn first_unerasable_type_param<'db>(ty: &Type<'db>) -> Option<InternedText<'
         // means converting each field and writing it at the other side's
         // offset. That is real work, unlike a container, but it is a walk of
         // as many fields as the type has rather than of what the value holds.
-        Type::AnonTuple(t) => t.fields.iter().find_map(first_unerasable_field),
-        Type::AnonStruct(t) => t.fields.iter().find_map(|f| first_unerasable_field(&f.ty)),
+        Type::AnonTuple(t) => t.fields.iter().find_map(first_unerasable_type_param),
+        Type::AnonStruct(t) => t.fields.iter()
+            .find_map(|f| first_unerasable_type_param(&f.ty)),
 
-        other => first_type_param(other),
-    }
-}
-
-/// The first type parameter in a field that erasure cannot reach.
-///
-/// Stricter than the whole-parameter rule, and deliberately. A container of a
-/// type parameter is admitted in its own right because it is wrapped whole,
-/// and the wrapper is what carries the descriptor. Under a tuple there is no
-/// wrapper: the tuple is converted field by field, so a container field would
-/// be converted too, and the only conversion for one is the structural
-/// `[u32]` to `[data]` that this design exists to avoid -- same size, so
-/// nothing would refuse it, and the callee would hold a stride that does not
-/// match what it was given.
-///
-/// Wrapping a field the way a parameter is wrapped would work. It needs the
-/// erasure to reach inside a composite, which is not written.
-fn first_unerasable_field<'db>(ty: &Type<'db>) -> Option<InternedText<'db>> {
-    match ty {
-        Type::Option(t) => first_unerasable_field(&t.inner_type),
-        Type::Result(t) => first_unerasable_field(&t.inner_type),
-        Type::Var(_) => None,
-        Type::AnonTuple(t) => t.fields.iter().find_map(first_unerasable_field),
-        Type::AnonStruct(t) => t.fields.iter().find_map(|f| first_unerasable_field(&f.ty)),
         other => first_type_param(other),
     }
 }

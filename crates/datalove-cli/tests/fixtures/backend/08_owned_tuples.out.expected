@@ -4,3 +4,8 @@
 ("four", ("five", 5))
 some ("six", 6)
 none
+3
+some "eight"
+7
+10
+1
