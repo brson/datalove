@@ -1,0 +1,6 @@
+("one", 1)
+(2, 2)
+{a = "three", n = 3}
+("four", ("five", 5))
+some ("six", 6)
+none

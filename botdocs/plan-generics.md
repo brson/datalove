@@ -431,10 +431,25 @@ somewhere the other was not.
 ### What this leaves
 
 An owned container can be taken, moved into a local, returned, forwarded to
-another generic, dropped, read and mutated, on all four backends. What is left
-is what was never part of this: a tuple or a struct holding a type parameter,
-whose width depends on what it holds and which therefore does need the bounded
-walk described above.
+another generic, dropped, read and mutated, on all four backends.
+
+A tuple or a struct is the other half, and it is the case that does need
+converting: `(u32, u32)` is eight bytes where `(data, data)` is thirty-two.
+`convert` walks the fields, taking the offsets from `compute_tuple_layout` and
+the descriptors from `iter_tuple_fields`, which is the Option arm with more
+than one payload. Nesting composes, and so does a tuple under an option.
+
+A field that fails after an earlier one succeeded leaves the moved prefix in
+the destination and the rest in the source. Only allocation failure does that,
+and neither side is destroyed by the walk, so nothing is freed twice; what is
+lost is the prefix.
+
+What is left is a container inside a tuple. The tuple is converted field by
+field, so a container field would be converted too, and the only conversion for
+one is the structural `[u32]` to `[data]` this design exists to avoid -- and
+the two are the same size, so nothing refuses it. It is refused at the
+signature instead. Wrapping such a field the way a parameter is wrapped would
+work; erasure reaching inside a composite is not written.
 
 ### What was weighed against it
 

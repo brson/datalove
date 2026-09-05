@@ -1,7 +1,7 @@
-// The return type is checked the same way, and says so.
-fun pair_up<T>(ref xs: [T]): (T, T)
-  ret (xs, xs)
+// The return is checked the same way, and says which part of the signature.
+fun wrap_up<T>(ref xs: [T]): (%{u32 = T}, u32)
+  ret (%{}, 1)
 end fun
 
 let numbers: [u32] = [1]
-let output = pair_up(ref numbers)
+let output = wrap_up(ref numbers)

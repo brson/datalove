@@ -1,0 +1,32 @@
+// A tuple or a struct holding a type parameter, owned. Unlike a container it
+// does need converting -- `(u32, u32)` is eight bytes where `(data, data)` is
+// thirty-two -- and the conversion is a walk over as many fields as the type
+// has, not over anything the value holds.
+//
+// Strings in the fields, so a conversion that loses a move leaks and one that
+// doubles it faults.
+
+fun through<T>(x: (T, u32)): (T, u32)
+  ret x
+end fun
+
+fun through_struct<T>(x: { a: T, n: u32 }): { a: T, n: u32 }
+  ret x
+end fun
+
+// Nested, so the walk has to recurse rather than handle one level.
+fun through_nested<T>(x: (T, (T, u32))): (T, (T, u32))
+  ret x
+end fun
+
+// Under an option, which converts its payload and hands the walk a tuple.
+fun through_optional<T>(x: ?(T, u32)): ?(T, u32)
+  ret x
+end fun
+
+debuglog through(("one", 1))
+debuglog through((2, 2))
+debuglog through_struct({ a = "three", n = 3 })
+debuglog through_nested(("four", ("five", 5)))
+debuglog through_optional(some ("six", 6))
+debuglog through_optional(: ?(string, u32) / none)

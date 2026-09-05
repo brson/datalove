@@ -178,6 +178,69 @@ unsafe fn convert(
                     dir,
                 )
             }
+            // A tuple and a struct hold their fields inline, packed by size, so
+            // converting one means converting each field and writing it at the
+            // other side's offset. How many fields there are is fixed by the
+            // type rather than by the data, which is what separates these from
+            // a collection: `(u32, u32)` is eight bytes where `(data, data)`
+            // is thirty-two, so there is real work, but it is a walk of known
+            // length rather than of the value's contents.
+            //
+            // A field that fails after an earlier one succeeded leaves what
+            // was already moved in the destination and the rest in the source.
+            // Only allocation failure can do that, and neither side is
+            // destroyed here, so nothing is freed twice; what is lost is the
+            // moved prefix.
+            TyTag::Tuple => {
+                let src_ty = rtdt::TyDescRef::from_ptr(src_tydesc);
+                let dst_ty = rtdt::TyDescRef::from_ptr(dst_tydesc);
+                let src_layout = rtdt::layout::compute_tuple_layout(src_ty);
+                let dst_layout = rtdt::layout::compute_tuple_layout(dst_ty);
+                if src_layout.field_offsets.len() != dst_layout.field_offsets.len() {
+                    return RtStatus::Error;
+                }
+                let src_fields: Vec<_> = src_ty.iter_tuple_fields().collect();
+                let dst_fields: Vec<_> = dst_ty.iter_tuple_fields().collect();
+                for i in 0..src_layout.field_offsets.len() {
+                    let status = convert(
+                        rt,
+                        src_in.add(src_layout.field_offsets[i] as usize),
+                        src_fields[i].tydesc().as_ptr(),
+                        dst_out.add(dst_layout.field_offsets[i] as usize),
+                        dst_fields[i].tydesc().as_ptr(),
+                        dir,
+                    );
+                    if status != RtStatus::Ok {
+                        return status;
+                    }
+                }
+                RtStatus::Ok
+            }
+            TyTag::Struct => {
+                let src_ty = rtdt::TyDescRef::from_ptr(src_tydesc);
+                let dst_ty = rtdt::TyDescRef::from_ptr(dst_tydesc);
+                let src_layout = rtdt::layout::compute_struct_layout(src_ty);
+                let dst_layout = rtdt::layout::compute_struct_layout(dst_ty);
+                if src_layout.field_offsets.len() != dst_layout.field_offsets.len() {
+                    return RtStatus::Error;
+                }
+                let src_fields: Vec<_> = src_ty.iter_struct_fields().collect();
+                let dst_fields: Vec<_> = dst_ty.iter_struct_fields().collect();
+                for i in 0..src_layout.field_offsets.len() {
+                    let status = convert(
+                        rt,
+                        src_in.add(src_layout.field_offsets[i] as usize),
+                        src_fields[i].tydesc().as_ptr(),
+                        dst_out.add(dst_layout.field_offsets[i] as usize),
+                        dst_fields[i].tydesc().as_ptr(),
+                        dir,
+                    );
+                    if status != RtStatus::Ok {
+                        return status;
+                    }
+                }
+                RtStatus::Ok
+            }
             // Nothing was erased here, so the value moves across as it is.
             //
             // That holds only while the two descriptors say the same thing,
