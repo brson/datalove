@@ -18,6 +18,7 @@ monomorphization.
 - [Const parameters after this](#user-content-const-parameters-after-this)
 - [What a first attempt found](#user-content-what-a-first-attempt-found)
 - [What the erased shape is for](#user-content-what-the-erased-shape-is-for)
+- [Carrying the descriptor with the value](#user-content-carrying-the-descriptor-with-the-value)
 - [Where this stands](#user-content-where-this-stands) -- what works, and the
   current limitations
 - [Order of work](#user-content-order-of-work)
@@ -388,6 +389,76 @@ The prototype is not committed. Shipping the four working cases would mean
 shipping the fifth as a crash, and the check that would refuse it -- knowing a
 value carries a supplied descriptor -- is the feature itself.
 
+## Carrying the descriptor with the value
+
+A bare `T` has never had any of these problems, and the reason is worth saying
+plainly: erased to `data`, it becomes an anypack, and an anypack is a value and
+its descriptor together. Move it, drop it, clone it, compare it, print it --
+all of that reads the descriptor out of the value. It is already a value-level
+descriptor and has been all along.
+
+`[T]` erased to `[data]` is not. The memory holds a `[u32]`, and `[data]`
+describes neither the element type nor the stride, so the truth has to travel
+beside the value. Today it travels as an argument keyed to a parameter, which
+holds for exactly as long as the value stays in the parameter it arrived in.
+
+So the work is not to invent a mechanism. It is to give the second case the
+property the first already has.
+
+### The route
+
+**Erase a container whole rather than structurally.** `[T]` becomes `data`,
+not `[data]`. The value is then self-describing, and everything that failed
+above works without being taught anything: storing in a local, returning,
+dropping, and passing on are all things `data` already does.
+
+What this costs is one allocation and one struct copy at each owned crossing.
+That is O(1) and not O(n): `data_from_local` allocates `inner_tydesc.size`
+bytes and copies the value there, and for a list that value is a pointer and
+two indices -- sixteen bytes. The elements are never touched. The O(n) figure
+that ruled this out was the cost of the structural erasure, which nobody has to
+perform.
+
+What it needs that does not exist: a way to borrow the inside of a box as the
+`(pointer, descriptor)` pair the native ABI already speaks, so that a boxed
+`[T]` can still be handed to `sys/std/list`. `Data::value_ptr` and
+`Data::tydesc` are that pair; what is missing is an IR operation naming it.
+
+### What was weighed against it
+
+**Fat values.** An erased container as an inline `(List, *TyDesc)` -- twenty
+four bytes rather than sixteen, no allocation, the boundary writing the
+descriptor beside the value. Faster, and a new representation kind that
+`IrType`, the layout, all four backends and the runtime each have to learn.
+The right destination if the allocation turns up in a measurement, and the
+language surface does not change between the two, so it is a migration rather
+than a redesign.
+
+**Descriptors as dataflow in the IR.** Descriptor values propagated alongside,
+with `Drop`, `Call`, indexing and every store taking one. No representation
+change, and the largest surface of the three: two things that have to stay in
+agreement, spread over every instruction and four backends. Every generics bug
+found so far has been that shape, and the failure mode is silent corruption
+rather than a refusal.
+
+**Specialization instead.** `specialize.rs` already turns a `const` parameter
+into one function with a branch per instantiation, dispatching on a
+discriminant. Pointed at a type parameter it would remove the problem rather
+than solve it, since inside a branch `T` is `u32`. It keeps one function per
+source function, so compile time and incrementality survive, and it costs code
+in proportion to how many instantiations there are. Worth a real comparison
+before the second half of this is built, rather than assuming erasure is the
+design.
+
+### Not blocked by this
+
+Indexing a `[T]`. The refusal is a typecheck test on the element type
+(`contains_type_param` in datafun-tycheck), raised whether or not a descriptor
+is in reach -- and when the container is a parameter it is in reach, because
+that is the only way to have one today. The fix is to lower `xs[i]` on a
+generic container to the descriptor-driven runtime call `list.get` already
+makes. Contained, and independent of everything above.
+
 ## Where this stands
 
 Type parameters nest inside options and results to any depth, and sit under a
@@ -554,14 +625,15 @@ which is why step 2 reads as it does.
 
 What is left, in the order it is worth doing:
 
-- **Descriptor-driven indexing**, which removes the largest remaining
-  limitation and is the one place the language still refuses something a reader
-  expects to work. Needs an IR instruction naming a descriptor a parameter came
-  with, plus its handling in each backend.
-- **Owned collections**, which need the same instruction and nothing else: a
-  container is already the right shape, and what an owned one adds over a
-  borrowed one is that the callee drops it. See
-  [What the erased shape is for](#user-content-what-the-erased-shape-is-for).
+- **Owned collections**, by erasing a container whole rather than structurally
+  so that the value carries its own descriptor. The route and what was weighed
+  against it are in
+  [Carrying the descriptor with the value](#user-content-carrying-the-descriptor-with-the-value).
+  This is the one being built.
+- **Descriptor-driven indexing**, which is the other place the language refuses
+  something a reader expects to work, and which turns out not to depend on the
+  above: when the container is a parameter the descriptor is already in reach,
+  and `xs[i]` wants lowering to the runtime call `list.get` already makes.
 - **Owned tuples and structs**, which unlike collections do need converting,
   but by a walk whose length the type fixes rather than the data.
 - **Bounds of some kind**, without which nothing can be done to a `T` but move
