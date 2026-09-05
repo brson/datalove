@@ -179,9 +179,29 @@ unsafe fn convert(
                 )
             }
             // Nothing was erased here, so the value moves across as it is.
+            //
+            // That holds only while the two descriptors say the same thing,
+            // which is the front end's to guarantee: it admits a type
+            // parameter alone or under `?` and `!`, and those are handled
+            // above. A shape it starts admitting without a case here would
+            // arrive as two descriptors that differ, and copying one size
+            // over the other is how that becomes silent corruption rather
+            // than a refusal -- a `(u32, u32)` is eight bytes where a
+            // `(data, data)` wants thirty-two.
+            //
+            // Sizes agreeing does not prove the two are the same type, only
+            // that this copy is not the obviously wrong length. A container
+            // holds its element type in its descriptor rather than its
+            // layout, so `[u32]` and `[data]` are the same size and moving
+            // one as the other moves the container correctly and says nothing
+            // about the elements. Admitting those means deciding who carries
+            // the element descriptor, not writing a case here.
             _ => {
-                let size = (*src_tydesc).size as usize;
-                std::ptr::copy_nonoverlapping(src_in, dst_out, size);
+                let src_size = (*src_tydesc).size;
+                if src_size != (*dst_tydesc).size {
+                    return RtStatus::Error;
+                }
+                std::ptr::copy_nonoverlapping(src_in, dst_out, src_size as usize);
                 RtStatus::Ok
             }
         }
