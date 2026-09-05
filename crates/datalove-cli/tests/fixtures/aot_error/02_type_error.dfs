@@ -1,0 +1,2 @@
+// A type error, to show this command renders those too.
+let output: u32 = "not a number"

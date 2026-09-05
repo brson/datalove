@@ -222,6 +222,34 @@ impl Cli {
     }
 }
 
+/// Report an ownership failure the way the interpreter does, and stop.
+///
+/// Every command that compiles a script has to do this. One that skips it gets
+/// as far as asking for the IR, finds none, and says "IR unit not available
+/// after lowering" -- which names the step that produced nothing rather than
+/// the analysis that refused to produce it.
+fn bail_on_ownership_error(
+    compiled_unit: &datalove_datafun::pipeline::ScriptCompilationResult,
+    compiler: &datalove_datafun::pipeline::ScriptCompiler<'_>,
+    file_path: &std::path::Path,
+    cwd: &std::path::Path,
+) -> AnyResult<()> {
+    use datalove_datafun as datafun;
+    if let datafun::pipeline::OwnershipResult::Error { message: _ } = &compiled_unit.ownership {
+        if let Some(spans) = compiler.get_last_spans() {
+            render::render_ownership_errors_direct(
+                compiler.db(),
+                compiler.get_ownership_errors(),
+                spans,
+                file_path,
+                cwd,
+            );
+        }
+        bail!("Ownership error");
+    }
+    Ok(())
+}
+
 impl LitTycheckCommand {
     fn run(&self, _args: &Args) -> AnyResult<()> {
         use datalove_datalit as datalit;
@@ -492,19 +520,7 @@ impl ScriptCommand {
             render::render_type_diagnostics(compiler.db(), &type_diags, file_path, &cwd);
             return Err(type_error(&type_diags, errors));
         }
-        if let datafun::pipeline::OwnershipResult::Error { message: _ } = &compiled_unit.ownership {
-            // Render ownership diagnostics directly using structured errors and spans.
-            if let Some(spans) = compiler.get_last_spans() {
-                render::render_ownership_errors_direct(
-                    compiler.db(),
-                    compiler.get_ownership_errors(),
-                    spans,
-                    file_path,
-                    &cwd,
-                );
-            }
-            bail!("Ownership error");
-        }
+        bail_on_ownership_error(&compiled_unit, &compiler, file_path, &cwd)?;
         if let datafun::pipeline::LoweringResult::Error { message } = &compiled_unit.lowering {
             bail!("Lowering error: {}", message);
         }
@@ -580,6 +596,7 @@ impl ScriptIrCommand {
             render::render_type_diagnostics(compiler.db(), &type_diags, &self.file_path, &cwd);
             return Err(type_error(&type_diags, errors));
         }
+        bail_on_ownership_error(&compiled_unit, &compiler, &self.file_path, &cwd)?;
         if let datafun::pipeline::LoweringResult::Error { message } = &compiled_unit.lowering {
             bail!("Lowering error: {}", message);
         }
@@ -699,6 +716,7 @@ impl AotCompileCommand {
             render::render_type_diagnostics(compiler.db(), &type_diags, &self.file_path, &cwd);
             return Err(type_error(&type_diags, errors));
         }
+        bail_on_ownership_error(&compiled_unit, &compiler, &self.file_path, &cwd)?;
         if let datafun::pipeline::LoweringResult::Error { message } = &compiled_unit.lowering {
             bail!("Lowering error: {}", message);
         }
@@ -874,18 +892,7 @@ impl ScriptWorldCommand {
             render::render_type_diagnostics(compiler.db(), &type_diags, &self.file_path, &cwd);
             return Err(type_error(&type_diags, errors));
         }
-        if let datafun::pipeline::OwnershipResult::Error { message: _ } = &compiled_unit.ownership {
-            if let Some(spans) = compiler.get_last_spans() {
-                render::render_ownership_errors_direct(
-                    compiler.db(),
-                    compiler.get_ownership_errors(),
-                    spans,
-                    &self.file_path,
-                    &cwd,
-                );
-            }
-            bail!("Ownership error");
-        }
+        bail_on_ownership_error(&compiled_unit, &compiler, &self.file_path, &cwd)?;
         if let datafun::pipeline::LoweringResult::Error { message } = &compiled_unit.lowering {
             bail!("Lowering error: {}", message);
         }

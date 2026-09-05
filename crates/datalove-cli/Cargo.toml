@@ -49,6 +49,11 @@ path = "tests/error_tests.rs"
 harness = false
 
 [[test]]
+name = "aot_error_tests"
+path = "tests/aot_error_tests.rs"
+harness = false
+
+[[test]]
 name = "aot_run_tests"
 path = "tests/aot_run_tests.rs"
 harness = false

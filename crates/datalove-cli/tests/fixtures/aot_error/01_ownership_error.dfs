@@ -1,0 +1,10 @@
+// Ownership analysis refuses this, and the reason reaches the reader rather
+// than being replaced by whatever the next step noticed was missing.
+fun pick(x: string, flag: bool): string
+  if flag
+    ret x
+  end if
+  ret "other"
+end fun
+
+let output = pick("a", true)

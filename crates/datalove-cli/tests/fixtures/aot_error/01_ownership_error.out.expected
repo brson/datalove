@@ -1,0 +1,2 @@
+error[D008]: `x` moved in then branch but not the other
+Error: Ownership error
