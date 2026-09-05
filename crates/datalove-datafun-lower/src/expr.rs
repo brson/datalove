@@ -552,21 +552,23 @@ pub fn lower_expression<'db>(
                 .map(|t| t.func(ctx.db).params(ctx.db).iter()
                     .enumerate()
                     .map(|(i, p)| {
+                        let borrowed = matches!(p.mode, ast::ParamMode::Ref | ast::ParamMode::Mut);
                         if param_is_erased.get(i).copied().unwrap_or(false) {
-                            IrType::from_type_hint_erasing(ctx.db, &p.type_hint, &type_params)
+                            datalove_datafun_ir::erased_param_type(
+                                ctx.db, &p.type_hint, &type_params, borrowed)
                         } else {
                             IrType::from_type_hint(ctx.db, &p.type_hint)
                         }
                     })
                     .collect())
                 .unwrap_or_default();
-            // The erased return shape is the callee's return type with `data`
-            // at each type parameter, which for a bare `T` is `data` itself and
-            // for a `?T` is `?data`.
+            // The erased return shape, by the same rule the callee shaped it
+            // with: `data` for a bare `T`, `?data` for a `?T`, and `data` for
+            // a container, which is wrapped whole rather than walked.
             let erased_return_type = target
                 .and_then(|t| t.func(ctx.db).return_type(ctx.db))
                 .filter(|hint| names_a_type_param(hint))
-                .map(|hint| IrType::from_type_hint_erasing(ctx.db, &hint, &type_params));
+                .map(|hint| datalove_datafun_ir::erased_return_type(ctx.db, &hint, &type_params));
 
             // Lower each arg, tracking in-mode args as pending intermediates.
             let call_args = call.args(ctx.db);

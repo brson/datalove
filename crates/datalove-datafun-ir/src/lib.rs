@@ -234,6 +234,112 @@ impl std::fmt::Display for IrType {
     }
 }
 
+/// The type a parameter has inside the callee.
+///
+/// The one place that decides, because a call site converting into a shape the
+/// callee was not compiled for is not a mismatch anything reports: it is two
+/// sizes disagreeing about the same bytes.
+///
+/// A borrowed parameter is not converted at all. Its value crosses as it
+/// stands and the call site supplies a descriptor, so what this returns for
+/// one describes the shape but not the contents, and nothing reads it as
+/// though it did.
+///
+/// An owned parameter is converted, and how depends on where the type
+/// parameter sits:
+///
+/// - Standing alone, or under `?` or `!`, the erasure is structural: `T`
+///   becomes `data` and `?T` becomes `?data`, and the runtime walks the two
+///   shapes together writing each payload where the other side keeps it.
+/// - Under a container, the whole parameter becomes `data`. Erasing `[T]` to
+///   `[data]` would mean rebuilding the list element by element into a
+///   different stride; wrapping the list itself is one allocation and a copy
+///   of a pointer and two indices, and leaves a value that carries its own
+///   descriptor.
+pub fn erased_param_type<'db>(
+    db: &'db dyn salsa::Database,
+    ty: &datalove_datalit::ast::TypeHint<'db>,
+    type_params: &[bct::text::InternedText<'db>],
+    borrowed: bool,
+) -> IrType {
+    if !borrowed && type_hint_is_container_of_param(ty, type_params) {
+        return IrType::Data;
+    }
+    IrType::from_type_hint_erasing(db, ty, type_params)
+}
+
+/// Whether a typechecker type is a container holding a type parameter.
+///
+/// The same question `type_hint_is_container_of_param` asks of a type hint and
+/// `datafun-common::generics::is_container_of_type_param` asks when deciding
+/// whether the signature is allowed. All three have to agree.
+fn datalit_is_container_of_var(ty: &datalove_datalit::tycheck::Type<'_>) -> bool {
+    use datalove_datalit::tycheck::Type as DlType;
+
+    fn has_var(ty: &DlType<'_>) -> bool {
+        match ty {
+            DlType::Var(_) => true,
+            DlType::List(t) => has_var(&t.element_type),
+            DlType::Set(t) => has_var(&t.element_type),
+            DlType::Tensor(t) => has_var(&t.element_type),
+            DlType::Option(t) => has_var(&t.inner_type),
+            DlType::Result(t) => has_var(&t.inner_type),
+            DlType::Term(t) => has_var(&t.payload),
+            DlType::Map(t) => has_var(&t.key_type) || has_var(&t.value_type),
+            DlType::AnonTuple(t) => t.fields.iter().any(has_var),
+            DlType::AnonStruct(t) => t.fields.iter().any(|f| has_var(&f.ty)),
+            DlType::Table(t) => t.columns.iter().any(|c| has_var(&c.ty)),
+            DlType::Enum(t) => t.variants.iter()
+                .any(|v| v.payload.as_ref().is_some_and(|p| has_var(p))),
+            _ => false,
+        }
+    }
+
+    match ty {
+        DlType::List(t) => has_var(&t.element_type),
+        DlType::Set(t) => has_var(&t.element_type),
+        DlType::Tensor(t) => has_var(&t.element_type),
+        DlType::Map(t) => has_var(&t.key_type) || has_var(&t.value_type),
+        DlType::Table(t) => t.columns.iter().any(|c| has_var(&c.ty)),
+        _ => false,
+    }
+}
+
+/// The type a return has inside the callee.
+///
+/// The same rule as a parameter the callee owns, because a return is one: the
+/// value crosses with nobody keeping a copy, so a container is wrapped whole
+/// and everything else is erased structurally.
+pub fn erased_return_type<'db>(
+    db: &'db dyn salsa::Database,
+    ty: &datalove_datalit::ast::TypeHint<'db>,
+    type_params: &[bct::text::InternedText<'db>],
+) -> IrType {
+    erased_param_type(db, ty, type_params, false)
+}
+
+/// Whether this position holds a container of a type parameter.
+///
+/// Such a parameter is wrapped whole rather than erased structurally, so an
+/// owned one arrives as a `data` carrying the descriptor that says what its
+/// elements really are.
+pub fn type_hint_is_container_of_param<'db>(
+    ty: &datalove_datalit::ast::TypeHint<'db>,
+    type_params: &[bct::text::InternedText<'db>],
+) -> bool {
+    use datalove_datalit::ast::TypeHint;
+
+    let mentions = |t: &TypeHint<'db>| type_hint_mentions_param(t, type_params);
+    match ty {
+        TypeHint::List(t) => mentions(&t.element_type),
+        TypeHint::Set(t) => mentions(&t.element_type),
+        TypeHint::Tensor(t) => mentions(&t.element_type),
+        TypeHint::Map(t) => mentions(&t.key_type) || mentions(&t.value_type),
+        TypeHint::Table(t) => t.columns.iter().any(|c| mentions(&c.type_hint)),
+        _ => false,
+    }
+}
+
 /// Whether a type hint names one of the given type parameters anywhere in it.
 ///
 /// A parameter whose type mentions one has a different shape inside the callee
@@ -419,6 +525,13 @@ impl IrType {
             // Erasure happens here, and only here: a type parameter is `data`
             // in the IR no matter how deeply it is nested in the source type.
             DlType::Var(_) => IrType::Data,
+
+            // A container of a type parameter is wrapped whole rather than
+            // erased structurally, so inside the generic that wrote it the
+            // value is a `data` -- in a parameter, in a local, and as the
+            // result of a call alike. Shaping only the parameters would leave
+            // the body holding one shape and calling with another.
+            _ if datalit_is_container_of_var(ty) => IrType::Data,
             DlType::Bool => IrType::Bool,
             DlType::U8 => IrType::U8,
             DlType::I8 => IrType::I8,

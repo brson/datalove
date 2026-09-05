@@ -1,0 +1,51 @@
+// A container of a type parameter, owned. It is wrapped whole on the way in
+// rather than rebuilt element by element, so the value carries the descriptor
+// that says what its elements are and keeps it wherever it goes.
+//
+// A `[string]` throughout, so a drop that goes missing leaks and one that
+// happens twice faults. A `[u32]` would say nothing.
+require module sys/std/list
+import list.len
+
+// Taken and dropped.
+fun take<T>(xs: [T]): bool
+  ret true
+end fun
+
+// Returned, which needs the return shaped by the same rule as the parameter.
+fun give_back<T>(xs: [T]): [T]
+  ret xs
+end fun
+
+// Moved out of the parameter into a local first. This is the one that faulted
+// in every backend while the descriptor was keyed to the parameter.
+fun relay<T>(xs: [T]): [T]
+  var ys = xs
+  ret ys
+end fun
+
+// Forwarded to another generic, which erases nothing because the value is
+// already in the shape that callee was compiled for.
+fun relay_twice<T>(xs: [T]): [T]
+  ret relay(xs)
+end fun
+
+let a: [string] = ["a", "b"]
+debuglog take(a)
+
+let b: [string] = ["c", "d", "e"]
+debuglog len(ref give_back(b))
+
+let c: [string] = ["f"]
+debuglog len(ref relay(c))
+
+let d: [string] = ["g", "h"]
+debuglog len(ref relay_twice(d))
+
+// A map, to show this is about containers rather than about lists.
+fun take_map<K, V>(m: %{K = V}): bool
+  ret true
+end fun
+
+let m: %{u32 = string} = %{ 1 = "x" }
+debuglog take_map(m)

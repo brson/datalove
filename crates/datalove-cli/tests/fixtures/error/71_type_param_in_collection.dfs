@@ -1,13 +1,14 @@
-// Erasure replaces the parameter itself, which works where it stands alone
-// and under `?` or `!`. Under a collection the element type would have to
-// change too, so this is refused.
+// A tuple's width depends on what it holds, so an owned one mentioning a type
+// parameter does need converting, and that is not written yet. A container is
+// a different case: it is wrapped whole, which costs a pointer copy and no
+// walk at all, so `fun f<T>(x: [T]): [T]` is allowed.
 //
 // The call below reports F002 as well, because a signature that does not
 // resolve leaves its function unregistered. That one used to be the only
 // thing said, which named the symptom and left the reader to guess.
-fun f<T>(x: [T]): [T]
-  ret x
+fun f<T>(x: (T, T)): T
+  ret x.0
 end fun
 
-let numbers: [u32] = [1]
-let output = f(numbers)
+let pair = (1, 2)
+let output = f(pair)

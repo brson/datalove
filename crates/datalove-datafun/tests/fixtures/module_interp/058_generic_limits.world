@@ -27,13 +27,19 @@ end fun
 // Erasure converts a value into the shape the callee was compiled for. An
 // option holds its payload inline, so converting one means converting the
 // payload and writing it at the other side's offset, and a parameter under an
-// option is reachable that way. A collection packs its elements by size, so
-// `[T]` and `[data]` disagree about where every element after the first
-// begins; converting between them would mean rebuilding the collection element
-// by element, which costs a walk of the whole thing at every call. Until that
-// is worth paying for, a parameter under a collection is refused rather than
-// reinterpreted, because reinterpreting it hands the callee a length and a
-// stride that do not match what it was given.
+// option is reachable that way.
+//
+// A collection is reachable by not converting it at all: it is wrapped whole,
+// which copies a pointer and two indices and leaves the elements where they
+// are, and the wrapper carries the descriptor that says what they are. So
+// `in_list` and `in_map` below are accepted, and their bodies hand the value
+// back the way they were given it.
+//
+// A tuple is the case that is left. Its width depends on what it holds --
+// `(u32, u32)` is eight bytes where `(data, data)` is thirty-two -- so one does
+// need converting, by a walk over as many fields as the type has. That walk is
+// not written, so this is refused rather than reinterpreted, because
+// reinterpreting it hands the callee one size where another was given.
 fun in_list<T>(x: [T]): [T]
   ret x
 end fun

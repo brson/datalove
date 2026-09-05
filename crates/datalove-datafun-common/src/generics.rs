@@ -225,7 +225,32 @@ pub fn first_unerasable_type_param<'db>(ty: &Type<'db>) -> Option<InternedText<'
         // A parameter standing alone is the position erasure is built for.
         Type::Var(_) => None,
 
+        // A container of one is wrapped whole rather than erased structurally,
+        // so it reaches the callee as a `data` carrying the descriptor that
+        // says what its elements are. Nothing walks the elements and nothing
+        // is rebuilt.
+        _ if is_container_of_type_param(ty) => None,
+
         other => first_type_param(other),
+    }
+}
+
+/// Whether this is a container holding a type parameter.
+///
+/// The same question is asked of a type hint by
+/// `datafun-ir::type_hint_is_container_of_param`, which decides the shape the
+/// parameter takes. This one decides whether the signature is allowed to say
+/// it at all, and the two have to agree.
+pub fn is_container_of_type_param(ty: &Type<'_>) -> bool {
+    match ty {
+        Type::List(t) => first_type_param(&t.element_type).is_some(),
+        Type::Set(t) => first_type_param(&t.element_type).is_some(),
+        Type::Tensor(t) => first_type_param(&t.element_type).is_some(),
+        Type::Map(t) => {
+            first_type_param(&t.key_type).is_some() || first_type_param(&t.value_type).is_some()
+        }
+        Type::Table(t) => t.columns.iter().any(|c| first_type_param(&c.ty).is_some()),
+        _ => false,
     }
 }
 

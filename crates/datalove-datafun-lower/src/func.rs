@@ -99,10 +99,18 @@ pub fn lower_function_body<'db>(
     let saved_is_script_unit = ctx.is_script_unit;
     ctx.is_script_unit = false;
 
-    // Set return type from resolved type if available, otherwise from AST type hint.
-    ctx.return_type = match resolved_return_type {
-        Some(ty) => Some(ty),
-        None => func.return_type(ctx.db).map(|ty| IrType::from_type_hint(ctx.db, &ty)),
+    let type_params = func.type_params(ctx.db).clone();
+
+    // A return mentioning a type parameter is shaped by the erasure rule, the
+    // same one the call site reads. Everything else keeps its resolved type.
+    ctx.return_type = match func.return_type(ctx.db) {
+        Some(hint) if datalove_datafun_ir::type_hint_mentions_param(&hint, &type_params) => {
+            Some(datalove_datafun_ir::erased_return_type(ctx.db, &hint, &type_params))
+        }
+        _ => match resolved_return_type {
+            Some(ty) => Some(ty),
+            None => func.return_type(ctx.db).map(|ty| IrType::from_type_hint(ctx.db, &ty)),
+        },
     };
 
     // Allocate ParamIds for parameters with correct types and modes.
@@ -114,20 +122,27 @@ pub fn lower_function_body<'db>(
     // for it does not describe what arrives. The caller supplies the
     // descriptor; see `FunctionContext::descriptor_params`.
     let mut descriptor_params: Vec<ParamId> = Vec::new();
-    let type_params = func.type_params(ctx.db).clone();
     let func_params = func.params(ctx.db);
     for (i, p) in func_params.iter().enumerate() {
         let param_name = p.name.text(ctx.db).to_string();
-        // Use resolved type if available, otherwise fall back to AST type hint.
-        let param_type = match resolved_param_types {
-            Some(types) => types[i].clone(),
-            None => IrType::from_type_hint(ctx.db, &p.type_hint),
-        };
         let mode = match p.mode {
             ast::ParamMode::In => ParamMode::In,
             ast::ParamMode::Out => ParamMode::Out,
             ast::ParamMode::Ref => ParamMode::Ref,
             ast::ParamMode::Mut => ParamMode::Mut,
+        };
+        // A parameter mentioning a type parameter is shaped by the erasure
+        // rule rather than by what it was written as, and the call site reads
+        // the same rule so the two cannot disagree about the same bytes.
+        // Everything else keeps its resolved type.
+        let borrowed = matches!(mode, ParamMode::Ref | ParamMode::Mut);
+        let param_type = if datalove_datafun_ir::type_hint_mentions_param(&p.type_hint, &type_params) {
+            datalove_datafun_ir::erased_param_type(ctx.db, &p.type_hint, &type_params, borrowed)
+        } else {
+            match resolved_param_types {
+                Some(types) => types[i].clone(),
+                None => IrType::from_type_hint(ctx.db, &p.type_hint),
+            }
         };
         let id = ctx.fresh_param(param_type.clone(), mode);
         let operand = Operand::Param(id);
@@ -137,7 +152,11 @@ pub fn lower_function_body<'db>(
         params.push(id);
         param_modes.push(mode);
 
-        let borrowed = matches!(mode, ParamMode::Ref | ParamMode::Mut);
+        // A parameter whose own type does not say what arrives at it takes a
+        // descriptor from the call site. That is every borrowed one mentioning
+        // a type parameter, since nothing is converted at one. An owned
+        // container needs none: it arrives wrapped, and the wrapper carries
+        // the descriptor with it.
         if borrowed
             && datalove_datafun_ir::type_hint_mentions_param(&p.type_hint, &type_params)
         {
