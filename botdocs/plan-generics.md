@@ -17,6 +17,7 @@ monomorphization.
 - [Surface syntax](#user-content-surface-syntax)
 - [Const parameters after this](#user-content-const-parameters-after-this)
 - [What a first attempt found](#user-content-what-a-first-attempt-found)
+- [What the erased shape is for](#user-content-what-the-erased-shape-is-for)
 - [Where this stands](#user-content-where-this-stands) -- what works, and the
   current limitations
 - [Order of work](#user-content-order-of-work)
@@ -258,15 +259,82 @@ unconditionally, so erasing a `u32` costs an allocation. `anypack` has
 `can_inline` and `from_immediate` for exactly this case and boxing does not use
 them, so the fix is local and worth doing before measuring anything.
 
-**Containers do not want this.** `[u32]` and `[data]` differ in element size, so
-converting at the boundary is O(n) and allocates per element: `list.len(ref self:
-[T])` would copy the whole list to ask its length. Containers want the tydesc
-route instead, which the runtime already does natively and which the rider ABI
-already speaks. So the split is scalars, options and results by erasure, which is
-the stdlib blocker, and containers by descriptor.
+**Containers do not want this.** Converting one element by element at the
+boundary would be O(n) and would allocate per element: `list.len(ref self: [T])`
+would copy the whole list to ask its length. Containers want the tydesc route
+instead, which the runtime already does natively and which the rider ABI already
+speaks. So the split is scalars, options and results by erasure, which is the
+stdlib blocker, and containers by descriptor.
+
+Written before it was clear that a container never needs converting at all. See
+[What the erased shape is for](#user-content-what-the-erased-shape-is-for).
 
 The order below is unchanged by this, but step 2 gets much smaller: `T := data`
 rather than a new IR type.
+
+## What the erased shape is for
+
+Erasure exists to make a value of unknown size fit a slot of known size. A
+function compiled once has one frame layout, and a `T` standing alone could be
+a four-byte `u32` or a sixteen-byte string or a struct of any width, so the
+slot holding it is a `data`: two words, with the value inside or on the heap.
+
+That reasoning is about size, and it does not reach every type a parameter can
+sit inside. Three cases, and they are not alike.
+
+**A container is already the right shape.** `IrType::List(_)` computes its
+layout as `struct_layout::<rtdt::List>()`, and the `_` is the point: a list is
+a pointer, a length and a capacity whatever its elements are. `[u32]` and
+`[data]` are the same size and the same alignment. Sets, maps, tensors and
+tables are the same. The element type lives in the descriptor and nowhere else,
+which is exactly why `sys/std/list.get(ref self: [T], i)` reads `u32`s out of a
+real `[u32]` today. Converting `[u32]` into `[data]` would be O(n), but nothing
+asks for it: there is no shape to convert into.
+
+**A tuple or a struct is not.** `(u32, u32)` is eight bytes and `(data, data)`
+is thirty-two, so those do need converting. The cost is a walk over the fields,
+and the type fixes how many there are: `compute_tuple_layout` gives the offsets
+and `iter_tuple_fields` gives the descriptors, so it is the walk `?T` already
+does with more than one payload. Bounded by the type rather than by the data,
+which is the distinction the O(n) argument was reaching for and missed.
+
+**A bare `T` genuinely needs the box.** Nothing else makes an arbitrary type
+fit a fixed slot short of sizing frames at run time.
+
+So the line is not scalar against composite. It is: does the erased shape
+differ from the concrete one, and if so, is the walk between them bounded by
+the type or by the data.
+
+### What owned containers actually need
+
+Not a conversion. A borrowed container already crosses unconverted, with the
+call site supplying the descriptor its own type cannot give. An owned one would
+cross the same way. What owning it adds is that the callee drops it, and drop
+takes a descriptor:
+
+```rust
+let ty = self.get_operand_type(operand)?;   // compile_drop
+```
+
+That reads the static type, which inside a generic says `[data]`. Destroying a
+real `[u32]` through it would walk each four-byte element as a sixteen-byte
+anypack. That is the corruption the current refusal prevents, by accident
+rather than by design -- a borrowed container never reaches it because the
+callee never drops one.
+
+So owned containers split by what the body does with the parameter:
+
+- Only forwards it or lets it drop. The descriptor is the one the call site
+  supplied, keyed to the parameter, which is what `descriptor_params` already
+  carries. Drop has to prefer it over the static type.
+- Moves it into a local, into another container, or returns it. Then the
+  descriptor has to travel with the value rather than the parameter, which is
+  the same missing piece behind indexing and behind the modes and return types
+  a type parameter cannot reach.
+
+Which makes the value-level descriptor the keystone rather than one item among
+several: owned containers are not a separate cost problem sitting behind it,
+they are one of the things it unlocks.
 
 ## Where this stands
 
@@ -438,9 +506,12 @@ What is left, in the order it is worth doing:
   limitation and is the one place the language still refuses something a reader
   expects to work. Needs an IR instruction naming a descriptor a parameter came
   with, plus its handling in each backend.
-- **Owned collections**, which need either that same instruction or
-  monomorphization. Whether they are worth the conversion is a question the
-  descriptor route answers by not converting at all.
+- **Owned collections**, which need the same instruction and nothing else: a
+  container is already the right shape, and what an owned one adds over a
+  borrowed one is that the callee drops it. See
+  [What the erased shape is for](#user-content-what-the-erased-shape-is-for).
+- **Owned tuples and structs**, which unlike collections do need converting,
+  but by a walk whose length the type fixes rather than the data.
 - **Bounds of some kind**, without which nothing can be done to a `T` but move
   it. Closures are the bigger prerequisite for the functions people ask for.
 

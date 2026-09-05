@@ -210,3 +210,48 @@ pub fn result_layout(ok_ty: &IrType) -> TypeLayout {
         align,
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A container's layout does not depend on its element type.
+    ///
+    /// This is what lets a borrowed `[T]` cross a generic boundary without
+    /// being converted: the slot a generic was compiled with fits whatever
+    /// the caller really has, and the element type rides on the descriptor.
+    /// An owned one could cross the same way, which is why this is worth
+    /// stating rather than reading off the `_` in the match above.
+    #[test]
+    fn a_container_is_the_same_shape_whatever_it_holds() {
+        let cases: Vec<(IrType, IrType)> = vec![
+            (IrType::List(Box::new(IrType::U32)), IrType::List(Box::new(IrType::Data))),
+            (IrType::Set(Box::new(IrType::String)), IrType::Set(Box::new(IrType::Data))),
+            (
+                IrType::Map(Box::new(IrType::U32), Box::new(IrType::String)),
+                IrType::Map(Box::new(IrType::Data), Box::new(IrType::Data)),
+            ),
+            (
+                IrType::Table(vec![("c".to_string(), Box::new(IrType::U8))]),
+                IrType::Table(vec![("c".to_string(), Box::new(IrType::Data))]),
+            ),
+        ];
+        for (concrete, erased) in cases {
+            assert_eq!(
+                layout_of(&concrete), layout_of(&erased),
+                "{:?} and {:?} should occupy the same slot", concrete, erased,
+            );
+        }
+    }
+
+    /// A tuple's is not, so one does need converting.
+    ///
+    /// By a walk over as many fields as the type has, which is the difference
+    /// that matters: bounded by the type rather than by the data.
+    #[test]
+    fn a_tuple_is_a_different_shape_once_erased() {
+        let concrete = IrType::Tuple(vec![IrType::U32, IrType::U32]);
+        let erased = IrType::Tuple(vec![IrType::Data, IrType::Data]);
+        assert_ne!(layout_of(&concrete), layout_of(&erased));
+    }
+}
