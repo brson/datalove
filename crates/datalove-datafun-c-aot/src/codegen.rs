@@ -2024,11 +2024,30 @@ impl<'a> FunctionCodegenContext<'a> {
         }
 
         if tracked {
-            // Tracked (RefStoreTracked): destination was uninitialized, no destroy needed.
-            // Mark tracking byte as LIVE.
-            todo!("RefStoreTracked tracking byte write not yet implemented in C AOT");
+            // The destination was uninitialized, so nothing was destroyed
+            // above and this only records that something is there now. A
+            // reference into a place this frame does not own has no tracking
+            // byte here, and then there is nothing to record.
+            self.mark_tracking_live(out, dest);
         }
         Ok(())
+    }
+
+    /// Note that an operand's storage holds a value again.
+    ///
+    /// Only a place this frame tracks has a byte to write. A reference
+    /// pointing into a caller's frame does not, and its liveness is that
+    /// frame's to know.
+    fn mark_tracking_live(&self, out: &mut String, operand: &Operand) {
+        let offset = match operand {
+            Operand::Slot(id) => self.layout.slot_tracking_byte(id.0),
+            Operand::Value(id) | Operand::ValueRef(id) => self.layout.value_tracking_byte(id.0),
+            Operand::Param(id) => self.layout.param_tracking_byte(id.0),
+            Operand::ExternalSlot { .. } | Operand::ExternalValue { .. } => None,
+        };
+        if let Some(offset) = offset {
+            writeln!(out, "    __frame[{}] = TRACK_LIVE;", offset).unwrap();
+        }
     }
 
     /// Emit ref set field.
