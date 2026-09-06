@@ -605,10 +605,16 @@ impl<'db> TypeContext<'db> {
     }
 
     /// Store resolved call target for a function call expression.
-    pub fn store_call_target(&mut self, call: ExprFunctionCall<'db>, func: StmtFun<'db>, module_id: Option<ModuleId<'db>>) {
+    pub fn store_call_target(
+        &mut self,
+        call: ExprFunctionCall<'db>,
+        func: StmtFun<'db>,
+        module_id: Option<ModuleId<'db>>,
+        type_args: Vec<datalove_datalit::tycheck::Type<'db>>,
+    ) {
         self.call_targets.insert(
             ExprKey::of_call(self.db, call),
-            ResolvedCallTarget::new(self.db, func, module_id),
+            ResolvedCallTarget::new(self.db, func, module_id, type_args),
         );
     }
 

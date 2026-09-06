@@ -983,9 +983,19 @@ pub(crate) fn synthesize_function_call_expecting<'db>(
 
     let return_type = substitute_type_vars(&return_type, &bindings);
 
-    // Store resolved call target for interpreter.
+    // Store resolved call target for interpreter, along with what the type
+    // parameters were bound to. Lowering needs the second to hand the callee a
+    // descriptor for each, and this is the only place it is known.
     if let Some((func_ast, module_id)) = ctx.lookup_function_ast(name) {
-        ctx.store_call_target(call, func_ast, module_id);
+        let type_args: Vec<datalove_datalit::tycheck::Type<'db>> = func_ast
+            .type_params(db)
+            .iter()
+            .map(|p| {
+                bindings.get(p).cloned()
+                    .unwrap_or(datalove_datalit::tycheck::Type::Data)
+            })
+            .collect();
+        ctx.store_call_target(call, func_ast, module_id, type_args);
     }
 
     // Return the function's return type.

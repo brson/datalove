@@ -130,6 +130,13 @@ pub fn build_signature_for_func(
         sig.params.push(cl_ir::AbiParam::new(PTR_TYPE));
     }
 
+    // Then one for each type parameter the body builds a collection of. Those
+    // have no value to carry a descriptor with, so they are handed over on
+    // their own, after the ones that describe a parameter.
+    for _ in &func_ctx.descriptor_type_params {
+        sig.params.push(cl_ir::AbiParam::new(PTR_TYPE));
+    }
+
     // No register return values. All returns use sret.
 
     sig
@@ -189,6 +196,8 @@ pub struct LocalCallee {
     pub func_id: FuncId,
     /// Parameters whose descriptor the call site supplies, in signature order.
     pub descriptor_params: Vec<ParamId>,
+    /// Type parameters whose descriptor the call site supplies, after those.
+    pub descriptor_type_params: Vec<u32>,
     /// How the callee takes each parameter, which the call site needs because
     /// an `out` one has its old value dropped here rather than there.
     pub param_modes: Vec<ParamMode>,
@@ -201,6 +210,8 @@ impl LocalCallee {
         LocalCallee {
             func_id,
             descriptor_params: ctx.map(|c| c.descriptor_params.clone()).unwrap_or_default(),
+            descriptor_type_params: ctx.map(|c| c.descriptor_type_params.clone())
+                .unwrap_or_default(),
             param_modes: ctx.map(|c| c.param_modes.clone()).unwrap_or_default(),
         }
     }
@@ -227,6 +238,9 @@ pub struct FunctionCompiler<'a, M: Module> {
     /// Descriptors the caller supplied, for parameters whose own type does not
     /// describe what arrives. See `FunctionContext::descriptor_params`.
     descriptor_values: HashMap<ParamId, cl_ir::Value>,
+    /// Descriptors the call site supplied for this function's type parameters,
+    /// by type parameter index.
+    type_descriptor_values: HashMap<u32, cl_ir::Value>,
     /// Functions compiled beside this one, by their IR id.
     local_funcs: HashMap<datalove_datafun_ir::CodeUnitId, LocalCallee>,
     /// Mapping from module function (IrModuleId, FuncId) to Cranelift FuncId.
@@ -282,6 +296,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             blocks: HashMap::new(),
             param_values: HashMap::new(),
             descriptor_values: HashMap::new(),
+            type_descriptor_values: HashMap::new(),
             local_funcs: HashMap::new(),
             module_funcs: HashMap::new(),
             registry: None,
@@ -327,6 +342,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             blocks: HashMap::new(),
             param_values: HashMap::new(),
             descriptor_values: HashMap::new(),
+            type_descriptor_values: HashMap::new(),
             local_funcs: HashMap::new(),
             module_funcs: HashMap::new(),
             registry: None,
@@ -374,6 +390,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             blocks: HashMap::new(),
             param_values: HashMap::new(),
             descriptor_values: HashMap::new(),
+            type_descriptor_values: HashMap::new(),
             local_funcs: HashMap::new(),
             module_funcs: HashMap::new(),
             registry,
@@ -488,6 +505,12 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             .zip(param_values[descriptor_start..].iter())
         {
             self.descriptor_values.insert(param_id, val);
+        }
+        let type_descriptor_start = descriptor_start + self.func_ctx.descriptor_params.len();
+        for (&index, &val) in self.func_ctx.descriptor_type_params.iter()
+            .zip(param_values[type_descriptor_start..].iter())
+        {
+            self.type_descriptor_values.insert(index, val);
         }
 
         // Initialize aggregate slots and tracking bytes region.
@@ -705,14 +728,15 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             Instruction::DebugLog { operand } => {
                 self.compile_debuglog(builder, operand)?;
             }
-            Instruction::Call { dest, func, args, .. } => {
-                self.compile_call(builder, *dest, func, args)?;
+            Instruction::Call { dest, func, args, type_descriptors, .. } => {
+                self.compile_call(builder, *dest, func, args, type_descriptors)?;
             }
             // ComptimeCall behaves exactly like Call - the specialization metadata is
             // only used by the specialization pass. Without specialization, this calls
             // the original function with original args.
             Instruction::ComptimeCall { dest, func, args, .. } => {
-                self.compile_call(builder, *dest, func, args)?;
+                // A comptime call is not generic, so it describes nothing.
+                self.compile_call(builder, *dest, func, args, &[])?;
             }
             Instruction::SlotStoreCopy { dest, value } => {
                 self.compile_slot_store(builder, dest, value, true)?;
@@ -773,10 +797,13 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 // Tracked binding: conditional drop (checks tracking byte).
                 self.compile_drop_tracked(builder, operand)?;
             }
-            Instruction::ListNew { dest, elements } => {
-                self.compile_list_new(builder, *dest, elements)?;
+            Instruction::ListNew { dest, elements, descriptor } => {
+                match descriptor {
+                    Some(d) => self.compile_list_new_erased(builder, *dest, elements, d)?,
+                    None => self.compile_list_new(builder, *dest, elements)?,
+                }
             }
-            Instruction::SetNew { dest, elements } => {
+            Instruction::SetNew { dest, elements, .. } => {
                 self.compile_set_new(builder, *dest, elements)?;
             }
             Instruction::MapNew { dest, entries } => {
@@ -1261,6 +1288,7 @@ mod tests {
                 param_types: vec![],
                 return_type,
                 tracked_params: vec![],
+            descriptor_type_params: Vec::new(),
             }),
             nested_units: vec![],
         }
@@ -1443,6 +1471,7 @@ mod tests {
                 param_types: vec![],
                 return_type: IrType::I32,
                 tracked_params: vec![],
+            descriptor_type_params: Vec::new(),
             }),
             nested_units: vec![],
         };

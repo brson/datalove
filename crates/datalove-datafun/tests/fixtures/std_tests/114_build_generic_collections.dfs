@@ -1,0 +1,54 @@
+// Building a collection whose element type is a type parameter.
+//
+// A `[T]` that arrives carries a descriptor saying what its elements are; one
+// written here has no value to read a descriptor off. So the call site, which
+// is the only place that knows what `T` was bound to, passes a descriptor for
+// each type parameter the body builds with, and the descriptor for the shape
+// -- a list of that -- is put together from it at run time and interned.
+//
+// Only a function that builds asks for one, so a generic that merely passes
+// values along carries nothing extra.
+//
+// `nothing_at_all` has a type parameter that appears solely in its return
+// type, which is bound by what the call site expects. It needs both halves:
+// the inference to be callable at all, and the descriptor to be buildable.
+
+require module sys/std/list
+import list.push
+import list.len
+import list.pop
+
+fun singleton<T>(x: T): [T]
+  var out: [T] = []
+  push(mut out, x)
+  ret out
+end fun
+
+// Genuinely empty, with T fixed only by the return position.
+fun nothing_at_all<T>(): [T]
+  var out: [T] = []
+  ret out
+end fun
+
+fun reversed<T>(ref xs: [T]): [T]
+  var out: [T] = []
+  var src: [T] = xs@
+  loop
+    if pop(mut src) |elem|
+      push(mut out, elem)
+    else
+      break
+    end if
+  end loop
+  ret out
+end fun
+
+let one = singleton("a")
+let e: [string] = nothing_at_all()
+let empty_len = len(ref e)
+let words: [string] = ["a", "b", "c"]
+let rev_words = reversed(ref words)
+let nums: [u32] = [1, 2, 3]
+let rev_nums = reversed(ref nums)
+
+let output = (one, e, empty_len, rev_words, rev_nums)

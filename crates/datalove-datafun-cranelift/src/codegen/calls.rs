@@ -18,6 +18,30 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
     /// Threads rt_handle as implicit first argument to callee.
     /// For native rider functions, marshals args from pointers to i64 scalars
     /// and converts the i64 return value back to the destination type.
+    /// Which type parameters `code_ref` wants a descriptor for.
+    ///
+    /// Read from the same place, and kept beside, `callee_descriptor_params`:
+    /// the two together are the trailing arguments the callee's signature has,
+    /// in that order.
+    fn callee_descriptor_type_params(&self, code_ref: &CodeRef) -> Vec<u32> {
+        match code_ref {
+            CodeRef::Local(id) | CodeRef::External { id, .. } => {
+                self.local_funcs.get(&CodeUnitId(id.0))
+                    .map(|callee| callee.descriptor_type_params.clone())
+                    .unwrap_or_default()
+            }
+            CodeRef::Module { module, id } => {
+                let Some(registry) = self.registry else {
+                    return Vec::new();
+                };
+                registry.get_module_function_as_unit(*module, CodeUnitId(id.0))
+                    .and_then(|unit| unit.function_context()
+                        .map(|c| c.descriptor_type_params.clone()))
+                    .unwrap_or_default()
+            }
+        }
+    }
+
     /// The parameters of `code_ref` whose descriptor the call site supplies.
     ///
     /// This has to agree with what `build_signature_for_func` put in the
@@ -209,6 +233,59 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         self.static_tydesc(builder, &ty)
     }
 
+    /// Turn a `DescriptorExpr` into a runtime descriptor pointer.
+    ///
+    /// A concrete type has a static symbol; a type parameter's descriptor came
+    /// in as a trailing argument; a shape over either is built by a runtime
+    /// call that interns what it makes.
+    pub(super) fn resolve_descriptor(
+        &mut self,
+        builder: &mut FunctionBuilder,
+        expr: &datalove_datafun_ir::DescriptorExpr,
+    ) -> Result<cl_ir::Value, CraneliftError> {
+        use datalove_datafun_ir::DescriptorExpr as D;
+        match expr {
+            D::Static(ty) => self.static_tydesc(builder, ty),
+            D::TypeParam(index) => {
+                self.type_descriptor_values.get(index).copied().ok_or_else(|| {
+                    CraneliftError::Codegen(format!("a descriptor for type parameter {} was never supplied: this function forwards it to one that builds a collection of it, and only a call site that bound the parameter to a concrete type has one to give. Build the collection where the parameter is bound, or take a collection of it as a parameter", index))
+                })
+            }
+            D::List(inner) => {
+                let elem = self.resolve_descriptor(builder, inner)?;
+                self.call_tydesc_builder(builder, "list", &[elem])
+            }
+            D::Set(inner) => {
+                let elem = self.resolve_descriptor(builder, inner)?;
+                self.call_tydesc_builder(builder, "set", &[elem])
+            }
+            D::Map(k, v) => {
+                let key = self.resolve_descriptor(builder, k)?;
+                let value = self.resolve_descriptor(builder, v)?;
+                self.call_tydesc_builder(builder, "map", &[key, value])
+            }
+        }
+    }
+
+    fn call_tydesc_builder(
+        &mut self,
+        builder: &mut FunctionBuilder,
+        which: &str,
+        args: &[cl_ir::Value],
+    ) -> Result<cl_ir::Value, CraneliftError> {
+        let runtime = self.runtime.ok_or_else(|| {
+            CraneliftError::Codegen("deriving a descriptor requires runtime imports".into())
+        })?;
+        let func_id = match which {
+            "list" => runtime.tydesc_list_of,
+            "set" => runtime.tydesc_set_of,
+            _ => runtime.tydesc_map_of,
+        };
+        let callee = self.module.declare_func_in_func(func_id, builder.func);
+        let call = builder.ins().call(callee, args);
+        Ok(builder.inst_results(call)[0])
+    }
+
     /// The static descriptor symbol for a type, as a runtime pointer.
     pub(super) fn static_tydesc(
         &mut self,
@@ -233,6 +310,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         dest: ValueId,
         code_ref: &CodeRef,
         args: &[Operand],
+        type_descriptors: &[datalove_datafun_ir::DescriptorExpr],
     ) -> Result<(), CraneliftError> {
         // Check if target is a native rider function.
         if let CodeRef::Module { module, id } = code_ref {
@@ -318,6 +396,17 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 None => self.operand_tydesc(builder, &arg)?,
             };
             call_args.push(tydesc_addr);
+        }
+
+        // Then one for each type parameter the callee builds a collection of.
+        for index in self.callee_descriptor_type_params(code_ref) {
+            let expr = type_descriptors.get(index as usize).cloned().ok_or_else(|| {
+                CraneliftError::Codegen(format!(
+                    "callee wants a descriptor for type parameter {} but the call \
+                     site bound {}", index, type_descriptors.len()))
+            })?;
+            let value = self.resolve_descriptor(builder, &expr)?;
+            call_args.push(value);
         }
 
         // Declare callee in this function and emit call.

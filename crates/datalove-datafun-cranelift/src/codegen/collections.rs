@@ -15,6 +15,59 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
     /// Compile a ListNew instruction.
     ///
     /// Creates an empty list, then pushes each element.
+    /// Compile a ListNew whose element type only a descriptor says.
+    ///
+    /// The destination is a `data`, because a list of a type parameter erases
+    /// to one, so the list is built in a stack temporary described by the
+    /// resolved descriptor and moved into the destination afterwards. That is
+    /// what a collection of a type parameter looks like once it is owned.
+    pub(super) fn compile_list_new_erased(
+        &mut self,
+        builder: &mut FunctionBuilder,
+        dest: ValueId,
+        elements: &[Operand],
+        descriptor: &datalove_datafun_ir::DescriptorExpr,
+    ) -> Result<(), CraneliftError> {
+        let runtime = self.runtime.ok_or_else(|| {
+            CraneliftError::Codegen("ListNew requires runtime imports".into())
+        })?;
+        let rt_handle = self.rt_handle_param.ok_or_else(|| {
+            CraneliftError::Codegen("ListNew requires runtime handle".into())
+        })?;
+        let list_tydesc_ptr = self.resolve_descriptor(builder, descriptor)?;
+
+        let temp = builder.create_sized_stack_slot(cl_ir::StackSlotData::new(
+            cl_ir::StackSlotKind::ExplicitSlot,
+            std::mem::size_of::<datalove_rtdt::List>() as u32,
+            3,
+        ));
+        let list_ptr = builder.ins().stack_addr(PTR_TYPE, temp, 0);
+
+        let create_ref = self.module.declare_func_in_func(runtime.list_create, builder.func);
+        builder.ins().call(create_ref, &[rt_handle, list_ptr, list_tydesc_ptr]);
+
+        // Every element is a `data` here, which is what a `T` is anywhere.
+        let elem_tydesc_ptr = self.static_tydesc(builder, &IrType::Data)?;
+        let push_ref = self.module.declare_func_in_func(runtime.list_push, builder.func);
+        for elem in elements {
+            let elem_ptr = self.get_operand_ptr(builder, elem)?;
+            builder.ins().call(push_ref, &[
+                rt_handle, list_ptr, list_tydesc_ptr, elem_ptr, elem_tydesc_ptr
+            ]);
+        }
+
+        let frame_slot = self.frame_slot.ok_or_else(|| {
+            CraneliftError::Codegen("no frame slot for ListNew".into())
+        })?;
+        let dest_offset = self.layout.value_offset(dest.0);
+        let dest_ptr = builder.ins().stack_addr(PTR_TYPE, frame_slot, dest_offset as i32);
+        let wrap_ref = self.module.declare_func_in_func(runtime.data_from_local, builder.func);
+        builder.ins().call(wrap_ref, &[rt_handle, list_ptr, list_tydesc_ptr, dest_ptr]);
+
+        self.values.insert(dest, dest_ptr);
+        Ok(())
+    }
+
     pub(super) fn compile_list_new(
         &mut self,
         builder: &mut FunctionBuilder,

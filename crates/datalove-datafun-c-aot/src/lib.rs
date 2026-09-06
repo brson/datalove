@@ -362,6 +362,12 @@ impl CAotCompiler {
         writeln!(out, "extern uint8_t dtlv_rti_erase_local(void* rt, const void* src_in, const dtlv_tydesc_t* src_tydesc, void* dst_out, const dtlv_tydesc_t* dst_tydesc);").unwrap();
         writeln!(out, "extern uint8_t dtlv_rti_reify_local(void* rt, const void* src_in, const dtlv_tydesc_t* src_tydesc, void* dst_out, const dtlv_tydesc_t* dst_tydesc);").unwrap();
         writeln!(out, "extern uint8_t dtlv_rti_data_parts(const void* data_in, const void** value_out, const dtlv_tydesc_t** tydesc_out);").unwrap();
+        // Descriptors for a collection of a type parameter, derived from the
+        // one the call site supplied for the parameter itself. Without these
+        // prototypes C takes the return for an `int` and truncates the pointer.
+        writeln!(out, "extern const dtlv_tydesc_t* dtlv_rti_tydesc_list_of(const dtlv_tydesc_t* element);").unwrap();
+        writeln!(out, "extern const dtlv_tydesc_t* dtlv_rti_tydesc_set_of(const dtlv_tydesc_t* element);").unwrap();
+        writeln!(out, "extern const dtlv_tydesc_t* dtlv_rti_tydesc_map_of(const dtlv_tydesc_t* key, const dtlv_tydesc_t* value);").unwrap();
         writeln!(out, "extern uint8_t dtlv_rti_list_get_erased_local(void* rt, const void* list_ref, const dtlv_tydesc_t* list_tydesc, index_t index, void* option_out, const dtlv_tydesc_t* option_tydesc);").unwrap();
         writeln!(out, "extern uint8_t dtlv_rti_clone_erased_local(void* rt, const void* src_in, const dtlv_tydesc_t* src_tydesc, void* dst_out, const dtlv_tydesc_t* dst_tydesc);").unwrap();
         writeln!(out).unwrap();
@@ -463,6 +469,11 @@ impl CAotCompiler {
         // parameter stood, so the caller has to say what the value really is.
         for (i, _) in func_ctx.descriptor_params.iter().enumerate() {
             write!(&mut params, ", const dtlv_tydesc_t* d{}", i).unwrap();
+        }
+        // Then one for each type parameter the body builds a collection of,
+        // which no value carries.
+        for index in &func_ctx.descriptor_type_params {
+            write!(&mut params, ", const dtlv_tydesc_t* t{}", index).unwrap();
         }
 
         let return_type = if func_ctx.return_type == IrType::Unit || uses_sret {

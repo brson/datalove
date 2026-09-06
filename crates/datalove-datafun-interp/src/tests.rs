@@ -38,6 +38,7 @@ fn make_func_unit(
             param_types,
             return_type,
             tracked_params: vec![],
+            descriptor_type_params: Vec::new(),
         }),
         nested_units: vec![],
     }
@@ -219,6 +220,7 @@ fn test_simple_function_call() {
                             Operand::Value(ValueId(0)),
                             Operand::Value(ValueId(1)),
                         ],
+                        type_descriptors: Vec::new(),
                     },
                 ],
                 terminator: Terminator::Return {
@@ -293,6 +295,7 @@ fn test_nested_function_calls() {
                         dest: ValueId(0),
                         func: CodeRef::Local(CodeUnitId(0)),
                         args: vec![Operand::Param(ParamId(0))],
+                        type_descriptors: Vec::new(),
                     },
                     // Second call: passthrough(result)
                     Instruction::Call {
@@ -300,6 +303,7 @@ fn test_nested_function_calls() {
                         dest: ValueId(1),
                         func: CodeRef::Local(CodeUnitId(0)),
                         args: vec![Operand::Value(ValueId(0))],
+                        type_descriptors: Vec::new(),
                     },
                 ],
                 terminator: Terminator::Return {
@@ -1696,6 +1700,7 @@ fn test_crossunit_external_function() {
                         dest: ValueId(1),
                         func: CodeRef::External { unit: 0, id: CodeUnitId(0) },
                         args: vec![Operand::Value(ValueId(0))],
+                        type_descriptors: Vec::new(),
                     },
                 ],
                 terminator: Terminator::UnitEnd { result: Some(Operand::Value(ValueId(1))) },
@@ -1878,6 +1883,7 @@ fn test_list_with_explicit_drop() {
                             Operand::Value(ValueId(0)),
                             Operand::Value(ValueId(1)),
                         ],
+                        descriptor: None,
                     },
                     // Explicit drop - this is required since list is not tracked.
                     Instruction::Drop { operand: Operand::Value(ValueId(2)) },
@@ -1956,6 +1962,7 @@ fn test_script_with_function_and_list_drop() {
                             Operand::Value(ValueId(2)),
                             Operand::Value(ValueId(3)),
                         ],
+                        descriptor: None,
                     },
                     // Call the function (just to exercise it).
                     Instruction::Const { dest: ValueId(5), value: ConstValue::I64(10) },
@@ -1965,6 +1972,7 @@ fn test_script_with_function_and_list_drop() {
                         dest: ValueId(7),
                         func: CodeRef::Local(CodeUnitId(0)),
                         args: vec![Operand::Value(ValueId(5)), Operand::Value(ValueId(6))],
+                        type_descriptors: Vec::new(),
                     },
                     // Explicit drop of list (values are precise).
                     Instruction::Drop { operand: Operand::Value(ValueId(4)) },
@@ -2020,6 +2028,7 @@ fn test_multiple_explicit_drops() {
                             Operand::Value(ValueId(0)),
                             Operand::Value(ValueId(1)),
                         ],
+                        descriptor: None,
                     },
                     // Second list [3, 4].
                     Instruction::Const { dest: ValueId(3), value: ConstValue::I64(3) },
@@ -2030,6 +2039,7 @@ fn test_multiple_explicit_drops() {
                             Operand::Value(ValueId(3)),
                             Operand::Value(ValueId(4)),
                         ],
+                        descriptor: None,
                     },
                     // Explicit drops for both lists.
                     Instruction::Drop { operand: Operand::Value(ValueId(2)) },

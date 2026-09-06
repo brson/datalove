@@ -18,6 +18,7 @@ index-64 = [
 rmx.workspace = true
 salsa.workspace = true
 bct.workspace = true
+datalove-datalit.path = "../datalove-datalit"
 datalove-datafun-ast.path = "../datalove-datafun-ast"
 datalove-datafun-common.path = "../datalove-datafun-common"
 datalove-datafun-intrinsics.path = "../datalove-datafun-intrinsics"

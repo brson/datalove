@@ -683,11 +683,12 @@ impl RemapContext {
                 dest: self.remap_value(*dest),
                 src: self.remap_operand(src),
             },
-            Instruction::Call { site_id, dest, func, args } => Instruction::Call {
+            Instruction::Call { site_id, dest, func, args, type_descriptors } => Instruction::Call {
                 site_id: self.remap_call_site(*site_id),
                 dest: self.remap_value(*dest),
                 func: func.clone(),
                 args: args.iter().map(|a| self.remap_operand(a)).collect(),
+                type_descriptors: type_descriptors.clone(),
             },
             Instruction::ComptimeCall { dest, func, args, discriminant, comptime_param_indices } => Instruction::ComptimeCall {
                 dest: self.remap_value(*dest),
@@ -788,13 +789,15 @@ impl RemapContext {
                 dest: self.remap_value(*dest),
                 src: self.remap_operand(src),
             },
-            Instruction::ListNew { dest, elements } => Instruction::ListNew {
+            Instruction::ListNew { dest, elements, descriptor } => Instruction::ListNew {
                 dest: self.remap_value(*dest),
                 elements: elements.iter().map(|e| self.remap_operand(e)).collect(),
+                descriptor: descriptor.clone(),
             },
-            Instruction::SetNew { dest, elements } => Instruction::SetNew {
+            Instruction::SetNew { dest, elements, descriptor } => Instruction::SetNew {
                 dest: self.remap_value(*dest),
                 elements: elements.iter().map(|e| self.remap_operand(e)).collect(),
+                descriptor: descriptor.clone(),
             },
             Instruction::MapNew { dest, entries } => Instruction::MapNew {
                 dest: self.remap_value(*dest),
@@ -1071,6 +1074,17 @@ pub fn inline_call_site(
     let _caller_ctx = caller.function_context()?;
     let callee_ctx = callee.function_context()?;
 
+    // A generic callee works from descriptors its caller passes alongside the
+    // arguments, and its body reads them as things belonging to its own frame.
+    // Pasting that body into a caller that has no such descriptors would leave
+    // those reads pointing at nothing, so a callee asking for any is left as a
+    // call.
+    if !callee_ctx.descriptor_params.is_empty()
+        || !callee_ctx.descriptor_type_params.is_empty()
+    {
+        return None;
+    }
+
     let mut new_unit = caller.clone();
 
     // Set up remapping context.
@@ -1280,11 +1294,12 @@ fn replace_params_in_instruction(
             dest: *dest,
             src: replace_operand(src),
         },
-        Instruction::Call { site_id, dest, func, args } => Instruction::Call {
+        Instruction::Call { site_id, dest, func, args, type_descriptors } => Instruction::Call {
             site_id: *site_id,
             dest: *dest,
             func: func.clone(),
             args: args.iter().map(replace_operand).collect(),
+            type_descriptors: type_descriptors.clone(),
         },
         Instruction::ComptimeCall { dest, func, args, discriminant, comptime_param_indices } => Instruction::ComptimeCall {
             dest: *dest,
@@ -1382,13 +1397,15 @@ fn replace_params_in_instruction(
             dest: *dest,
             src: replace_operand(src),
         },
-        Instruction::ListNew { dest, elements } => Instruction::ListNew {
+        Instruction::ListNew { dest, elements, descriptor } => Instruction::ListNew {
             dest: *dest,
             elements: elements.iter().map(replace_operand).collect(),
+            descriptor: descriptor.clone(),
         },
-        Instruction::SetNew { dest, elements } => Instruction::SetNew {
+        Instruction::SetNew { dest, elements, descriptor } => Instruction::SetNew {
             dest: *dest,
             elements: elements.iter().map(replace_operand).collect(),
+            descriptor: descriptor.clone(),
         },
         Instruction::MapNew { dest, entries } => Instruction::MapNew {
             dest: *dest,

@@ -373,7 +373,7 @@ impl fmt::Display for Instruction {
             Instruction::Clone { dest, src } => {
                 write!(f, "{} = clone {}", dest, src)
             }
-            Instruction::Call { site_id, dest, func, args } => {
+            Instruction::Call { site_id, dest, func, args, .. } => {
                 write!(f, "{} = call @{} {}(", dest, site_id.0, func)?;
                 for (i, arg) in args.iter().enumerate() {
                     if i > 0 {
@@ -462,7 +462,7 @@ impl fmt::Display for Instruction {
             Instruction::Reify { dest, src } => {
                 write!(f, "{} = reify {}", dest, src)
             }
-            Instruction::ListNew { dest, elements } => {
+            Instruction::ListNew { dest, elements, .. } => {
                 write!(f, "{} = list [", dest)?;
                 for (i, elem) in elements.iter().enumerate() {
                     if i > 0 {
@@ -472,7 +472,7 @@ impl fmt::Display for Instruction {
                 }
                 write!(f, "]")
             }
-            Instruction::SetNew { dest, elements } => {
+            Instruction::SetNew { dest, elements, .. } => {
                 write!(f, "{} = #{{", dest)?;
                 for (i, elem) in elements.iter().enumerate() {
                     if i > 0 {

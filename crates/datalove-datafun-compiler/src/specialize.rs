@@ -228,6 +228,7 @@ pub fn transform_function(
         const_values: Vec::new(),
         symbols: SymbolTable::default(),
         context: CodeUnitContext::Function(FunctionContext {
+            descriptor_type_params: Vec::new(),
             params: new_params,
             param_modes: new_param_modes,
             param_types: new_param_types,
@@ -426,11 +427,12 @@ fn rewrite_comptime_params_in_instruction(
             op: *op,
             operand: rewrite_operand(operand),
         },
-        Instruction::Call { site_id, dest, func, args } => Instruction::Call {
+        Instruction::Call { site_id, dest, func, args, type_descriptors } => Instruction::Call {
             site_id: *site_id,
             dest: *dest,
             func: func.clone(),
             args: args.iter().map(rewrite_operand).collect(),
+            type_descriptors: type_descriptors.clone(),
         },
         Instruction::Copy { dest, src } => Instruction::Copy {
             dest: *dest,
@@ -620,6 +622,9 @@ pub fn rewrite_comptime_calls(
                                     dest: *dest,
                                     func: func_ref.clone(),
                                     args: new_args,
+                                    // A comptime call is not generic, so there
+                                    // is no type parameter to describe.
+                                    type_descriptors: Vec::new(),
                                 });
                                 continue;
                             }

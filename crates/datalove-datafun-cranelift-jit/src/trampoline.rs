@@ -214,6 +214,20 @@ pub unsafe extern "C" fn __jit_dispatch_call(
         arg_vals[param_id.0 as usize].tydesc = supplied;
     }
 
+    // After those come the descriptors for the type parameters the callee
+    // builds a collection of. Nothing here can work one out: no argument
+    // carries it, and the callee's own signature says `data` where the
+    // parameter stood. Dropping them was how the stub used to lose the
+    // parameter descriptors, and the symptom is the same -- a wrong element
+    // type rather than a failure.
+    let type_descriptor_start = func_ctx.descriptor_params.len();
+    let supplied_type_descriptors: Vec<(u32, *const datalove_rtdt::TyDesc)> = func_ctx
+        .descriptor_type_params
+        .iter()
+        .enumerate()
+        .map(|(k, index)| (*index, unsafe { *descriptors.add(type_descriptor_start + k) }))
+        .collect();
+
     // Build return destination.
     let ret_ty = &func_ctx.return_type;
     let ret_tydesc = ctx.interp.tydesc_table_mut().get_or_create(ret_ty);
@@ -229,7 +243,13 @@ pub unsafe extern "C" fn __jit_dispatch_call(
             // Call JIT code directly.
             // SAFETY: code_ptr is valid JIT code.
             let result = unsafe {
-                crate::bridge::call_jit(code_ptr, uses_sret, rt_handle, &arg_vals, dest, &func_ctx.return_type, &func_ctx.descriptor_params)
+                {
+                    let forwarded: Vec<*const datalove_rtdt::TyDesc> =
+                        supplied_type_descriptors.iter().map(|(_, d)| *d).collect();
+                    crate::bridge::call_jit(
+                        code_ptr, uses_sret, rt_handle, &arg_vals, dest,
+                        &func_ctx.return_type, &func_ctx.descriptor_params, &forwarded)
+                }
             };
             if let Err(e) = result {
                 panic!("JIT dispatch: JIT call failed: {}", e);

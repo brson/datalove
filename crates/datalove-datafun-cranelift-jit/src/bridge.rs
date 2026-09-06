@@ -28,8 +28,9 @@ pub unsafe fn call_jit(
     ret_dest: Destination,
     _return_type: &IrType,
     descriptor_params: &[ParamId],
+    type_descriptors: &[*const datalove_rtdt::TyDesc],
 ) -> Result<(), JitError> {
-    if args.len() + descriptor_params.len() > MAX_DIRECT_ARGS {
+    if args.len() + descriptor_params.len() + type_descriptors.len() > MAX_DIRECT_ARGS {
         return Err(JitError::BridgeCallFailed(format!(
             "too many arguments: {} with {} descriptors (max {})",
             args.len(),
@@ -69,6 +70,14 @@ pub unsafe fn call_jit(
             ))
         })?;
         raw_args[arg_idx] = arg.tydesc as usize;
+        arg_idx += 1;
+    }
+
+    // Then the descriptors for the type parameters the callee builds with,
+    // which no argument carries. They come from this call's own caller and go
+    // on in the order the callee's signature has them.
+    for tydesc in type_descriptors {
+        raw_args[arg_idx] = *tydesc as usize;
         arg_idx += 1;
     }
 

@@ -24,6 +24,17 @@ use datalove_datafun_sema::{BindingId, DropSchedule, BindingInfo, TrackingCatego
 /// When lowering a nested function, this state is swapped for a fresh
 /// instance, then restored after.
 pub struct FrameState<'db> {
+    /// The type parameters this function declared, in order.
+    ///
+    /// A type parameter is written as a name, and a descriptor for it arrives
+    /// by position, so this is what turns one into the other.
+    pub type_params: Vec<bct::text::InternedText<'db>>,
+    /// Which of those the body turned out to need a descriptor for.
+    ///
+    /// Collected while lowering rather than read off the signature, because it
+    /// is a fact about what the body builds. A generic that only passes values
+    /// along needs none and is not made to carry any.
+    pub needed_type_params: std::collections::BTreeSet<u32>,
     /// Blocks being built.
     pub blocks: Vec<IrBlock>,
     /// Instructions for current block.
@@ -97,6 +108,8 @@ pub struct FrameState<'db> {
 impl<'db> FrameState<'db> {
     pub fn new() -> Self {
         Self {
+            type_params: Vec::new(),
+            needed_type_params: std::collections::BTreeSet::new(),
             blocks: Vec::new(),
             current_instructions: Vec::new(),
             current_block: BlockId(0),
@@ -329,6 +342,100 @@ impl<'db> LowerCtx<'db> {
     }
 
     /// Get the IrType for an expression from the typechecker.
+    /// The type a descriptor for `ty` would be built from, if it needs one.
+    ///
+    /// A type with no parameter in it describes itself, and `None` says so.
+    /// Anything else is a shape over the descriptors the call site supplied,
+    /// and asking for one records that this function wants them.
+    pub fn descriptor_for(
+        &mut self,
+        ty: &datalove_datafun_common::Type<'db>,
+    ) -> Option<datalove_datafun_ir::DescriptorExpr> {
+        use datalove_datafun_common::Type as CT;
+        let CT::Datalit(dt) = ty else { return None };
+        if !datalove_datafun_common::generics::contains_type_param(dt) {
+            return None;
+        }
+        self.descriptor_for_datalit(dt, true)
+    }
+
+    /// Build the descriptor expression for a type.
+    ///
+    /// `record` says whether reaching a type parameter means this function has
+    /// to be handed a descriptor for it. Building a collection does: the
+    /// descriptor is read there and then. Naming what a call site bound a
+    /// callee's parameter to does not, because whether the callee wants it is a
+    /// fact about the callee's body, and asking for one at every generic call
+    /// would put a parameter on every generic in the standard library.
+    fn descriptor_for_datalit(
+        &mut self,
+        ty: &datalove_datalit::tycheck::Type<'db>,
+        record: bool,
+    ) -> Option<datalove_datafun_ir::DescriptorExpr> {
+        use datalove_datalit::tycheck::Type as DT;
+        use datalove_datafun_ir::DescriptorExpr as D;
+        if !datalove_datafun_common::generics::contains_type_param(ty) {
+            return Some(D::Static(IrType::from_datalit(self.db, ty)));
+        }
+        match ty {
+            DT::Var(name) => {
+                let index = self.body.type_params.iter().position(|p| p == name)? as u32;
+                if record {
+                    self.body.needed_type_params.insert(index);
+                }
+                Some(D::TypeParam(index))
+            }
+            DT::List(t) => Some(D::List(Box::new(
+                self.descriptor_for_datalit(&t.element_type, record)?))),
+            DT::Set(t) => Some(D::Set(Box::new(
+                self.descriptor_for_datalit(&t.element_type, record)?))),
+            DT::Map(t) => Some(D::Map(
+                Box::new(self.descriptor_for_datalit(&t.key_type, record)?),
+                Box::new(self.descriptor_for_datalit(&t.value_type, record)?),
+            )),
+            // Every other shape holding a type parameter is erased to a static
+            // layout, so it never asks for one of these.
+            _ => None,
+        }
+    }
+
+    /// A descriptor for what a call site bound one of the callee's type
+    /// parameters to.
+    ///
+    /// Concrete nearly always, and then it is a static descriptor. Where the
+    /// caller is itself generic and bound the callee's parameter to one of its
+    /// own, the caller's descriptor for that is forwarded, and the caller asks
+    /// its own caller for it in turn. That bottoms out at a call site that
+    /// knows a concrete type, which every callable generic has.
+    pub fn descriptor_for_type_arg(
+        &mut self,
+        ty: &datalove_datalit::tycheck::Type<'db>,
+    ) -> datalove_datafun_ir::DescriptorExpr {
+        // Not recorded as a need. Whether the callee wants this descriptor is
+        // a fact about its body, which this side cannot see without looking
+        // into another function, and asking for one at every generic call put
+        // a parameter on most of the standard library -- which several of the
+        // paths into compiled code have nothing to fill in. So a generic that
+        // forwards a type parameter to one that builds with it is refused
+        // rather than made to carry a descriptor it usually does not need.
+        self.descriptor_for_datalit(ty, false)
+            .unwrap_or_else(|| {
+                datalove_datafun_ir::DescriptorExpr::Static(IrType::from_datalit(self.db, ty))
+            })
+    }
+
+    /// The unerased type the typechecker gave an expression.
+    ///
+    /// `expr_type` erases, which is what the rest of lowering wants. Building a
+    /// collection of a type parameter is the exception: `[T]` and `[data]` are
+    /// the same `IrType`, and only this says which parameter.
+    pub fn expr_source_type(
+        &self,
+        expr: ExprFun<'db>,
+    ) -> Option<datalove_datafun_common::Type<'db>> {
+        self.expr_types.get(&ExprKey::of(self.db, expr)).cloned()
+    }
+
     pub fn expr_type(&self, expr: ExprFun<'db>) -> IrType {
         let key = ExprKey::of(self.db, expr);
         match self.expr_types.get(&key) {
@@ -938,9 +1045,20 @@ impl<'db> LowerCtx<'db> {
 
     /// Emit Call.
     pub fn emit_call(&mut self, dest: ValueId, func: CodeRef, args: Vec<Operand>) {
+        self.emit_call_with_descriptors(dest, func, args, Vec::new());
+    }
+
+    /// Emit Call, supplying descriptors for the callee's type parameters.
+    pub fn emit_call_with_descriptors(
+        &mut self,
+        dest: ValueId,
+        func: CodeRef,
+        args: Vec<Operand>,
+        type_descriptors: Vec<datalove_datafun_ir::DescriptorExpr>,
+    ) {
         let site_id = CallSiteId(self.body.next_call_site);
         self.body.next_call_site += 1;
-        self.emit(Instruction::Call { site_id, dest, func, args });
+        self.emit(Instruction::Call { site_id, dest, func, args, type_descriptors });
     }
 
     /// Emit ComptimeCall (for calls to functions with const parameters).
@@ -1007,12 +1125,32 @@ impl<'db> LowerCtx<'db> {
 
     /// Emit ListNew.
     pub fn emit_list_new(&mut self, dest: ValueId, elements: Vec<Operand>) {
-        self.emit(Instruction::ListNew { dest, elements });
+        self.emit(Instruction::ListNew { dest, elements, descriptor: None });
+    }
+
+    /// Emit ListNew for a list whose element type is a type parameter.
+    pub fn emit_list_new_erased(
+        &mut self,
+        dest: ValueId,
+        elements: Vec<Operand>,
+        descriptor: datalove_datafun_ir::DescriptorExpr,
+    ) {
+        self.emit(Instruction::ListNew { dest, elements, descriptor: Some(descriptor) });
     }
 
     /// Emit SetNew.
     pub fn emit_set_new(&mut self, dest: ValueId, elements: Vec<Operand>) {
-        self.emit(Instruction::SetNew { dest, elements });
+        self.emit(Instruction::SetNew { dest, elements, descriptor: None });
+    }
+
+    /// Emit SetNew for a set whose element type is a type parameter.
+    pub fn emit_set_new_erased(
+        &mut self,
+        dest: ValueId,
+        elements: Vec<Operand>,
+        descriptor: datalove_datafun_ir::DescriptorExpr,
+    ) {
+        self.emit(Instruction::SetNew { dest, elements, descriptor: Some(descriptor) });
     }
 
     /// Emit MapNew.

@@ -164,6 +164,11 @@ pub fn lower_function_body<'db>(
         }
     }
 
+    // The body may build a collection of one of these, and asking for a
+    // descriptor is by position, so the names have to be to hand.
+    ctx.body.type_params = type_params.clone();
+    ctx.body.needed_type_params.clear();
+
     // Lower the function body with statement indices.
     let body = func.body(ctx.db);
     for (idx, stmt) in body.iter().enumerate() {
@@ -185,6 +190,7 @@ pub fn lower_function_body<'db>(
 
     // Get return type from context (set from function signature) before restoring.
     let return_type = ctx.return_type.clone().unwrap_or(IrType::Unit);
+    let descriptor_type_params = std::mem::take(&mut ctx.body.needed_type_params);
 
     // Restore saved context.
     ctx.return_type = saved_return_type;
@@ -203,6 +209,7 @@ pub fn lower_function_body<'db>(
         const_values: std::mem::take(&mut ctx.body.const_values),
         symbols: SymbolTable::new(),
         context: CodeUnitContext::Function(FunctionContext {
+            descriptor_type_params: descriptor_type_params.into_iter().collect(),
             params,
             param_modes,
             param_types: std::mem::take(&mut ctx.body.param_types),

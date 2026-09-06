@@ -133,6 +133,7 @@ impl ChaosDispatcher {
                                 ret_dest,
                                 &func_ctx.return_type,
                                 &func_ctx.descriptor_params,
+                                &[],
                             )
                         };
 
@@ -225,6 +226,7 @@ impl CallDispatcher for ChaosDispatcher {
                             ret_dest,
                             func.return_type().expect("JIT dispatch requires function return type"),
                             func.function_context().map_or(&[][..], |c| &c.descriptor_params),
+                            &[],
                         )
                     };
 

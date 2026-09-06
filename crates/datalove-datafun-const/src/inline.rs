@@ -350,6 +350,7 @@ mod tests {
                     dest: ValueId(0),
                     func: datalove_datafun_ir::CodeRef::Local(datalove_datafun_ir::CodeUnitId(0)),
                     args: vec![],
+                    type_descriptors: Vec::new(),
                 },
             ],
             terminator: Terminator::UnitEnd { result: None },

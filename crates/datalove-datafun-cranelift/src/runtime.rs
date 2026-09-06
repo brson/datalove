@@ -106,6 +106,14 @@ pub struct RuntimeImports {
     pub reify: FuncId,
     /// `dtlv_rti_data_parts(data_in, value_out, tydesc_out) -> RtStatus`
     pub data_parts: FuncId,
+    /// `dtlv_rti_data_from_local(rt, inner, inner_tydesc, dest) -> RtStatus`
+    pub data_from_local: FuncId,
+    /// `dtlv_rti_tydesc_list_of(element) -> *const TyDesc`
+    pub tydesc_list_of: FuncId,
+    /// `dtlv_rti_tydesc_set_of(element) -> *const TyDesc`
+    pub tydesc_set_of: FuncId,
+    /// `dtlv_rti_tydesc_map_of(key, value) -> *const TyDesc`
+    pub tydesc_map_of: FuncId,
     /// `dtlv_rti_list_get_erased_local(rt, list, list_td, index, opt_out, opt_td) -> RtStatus`
     pub list_get_erased: FuncId,
     /// `dtlv_rti_clone_erased_local(rt, src, src_td, dst, dst_td) -> RtStatus`
@@ -629,6 +637,56 @@ impl RuntimeImports {
                     format!("declare dtlv_rti_data_parts: {}", e)))?
         };
 
+        // Building a collection of a type parameter needs a descriptor for the
+        // collection, and the call site supplied one only for the parameter.
+        // These take no runtime handle: what they make is interned and lives
+        // as long as the program.
+        let derive_sig_1 = {
+            let mut sig = module.make_signature();
+            sig.params.push(AbiParam::new(PTR_TYPE));
+            sig.returns.push(AbiParam::new(PTR_TYPE));
+            sig
+        };
+        let derive_sig_2 = {
+            let mut sig = module.make_signature();
+            sig.params.push(AbiParam::new(PTR_TYPE));
+            sig.params.push(AbiParam::new(PTR_TYPE));
+            sig.returns.push(AbiParam::new(PTR_TYPE));
+            sig
+        };
+        // Moving a freshly built collection into the wrapper that carries its
+        // descriptor with it.
+        let data_from_local = {
+            let mut sig = module.make_signature();
+            sig.params.push(AbiParam::new(PTR_TYPE)); // rt
+            sig.params.push(AbiParam::new(PTR_TYPE)); // inner
+            sig.params.push(AbiParam::new(PTR_TYPE)); // inner tydesc
+            sig.params.push(AbiParam::new(PTR_TYPE)); // dest
+            sig.returns.push(AbiParam::new(cl_types::I8));
+            module.declare_function("dtlv_rti_data_from_local", Linkage::Import, &sig)
+                .map_err(|e| CraneliftError::Module(
+                    format!("declare dtlv_rti_data_from_local: {}", e)))?
+        };
+
+        let tydesc_list_of = {
+            let sig = derive_sig_1.clone();
+            module.declare_function("dtlv_rti_tydesc_list_of", Linkage::Import, &sig)
+                .map_err(|e| CraneliftError::Module(
+                    format!("declare dtlv_rti_tydesc_list_of: {}", e)))?
+        };
+        let tydesc_set_of = {
+            let sig = derive_sig_1;
+            module.declare_function("dtlv_rti_tydesc_set_of", Linkage::Import, &sig)
+                .map_err(|e| CraneliftError::Module(
+                    format!("declare dtlv_rti_tydesc_set_of: {}", e)))?
+        };
+        let tydesc_map_of = {
+            let sig = derive_sig_2;
+            module.declare_function("dtlv_rti_tydesc_map_of", Linkage::Import, &sig)
+                .map_err(|e| CraneliftError::Module(
+                    format!("declare dtlv_rti_tydesc_map_of: {}", e)))?
+        };
+
         // Indexing a list whose elements a generic cannot name. The runtime
         // decides whether the element wants packing, since a list of `data`
         // does not.
@@ -697,6 +755,10 @@ impl RuntimeImports {
             data_from,
             erase,
             data_parts,
+            data_from_local,
+            tydesc_list_of,
+            tydesc_set_of,
+            tydesc_map_of,
             list_get_erased,
             clone_erased,
             reify,
