@@ -10,8 +10,8 @@ Datalove is built around one core idea:
 first let us define a simple but complete language
 for writing, typing, serializing, and transforming a sufficient variety
 of modern pure data types.
-Let's do that really well.
-Then we'll add I/O to it &mdash; carefully.
+Do that really well.
+Then add I/O to it &mdash; carefully.
 
 
 
@@ -47,14 +47,17 @@ Then we'll add I/O to it &mdash; carefully.
        and a focus on <em>numerical correctness.</em></p>
   </div>
   <div class="thing-box">
-    <p>todo</p>
+    <p>With an <em>interactive scripting environment</em>
+       for <em>rapid script iteration</em>,
+       with incremental typechecking and evaluation,
+       and a <em>fully-reversible REPL</em>
+       where undo rewinds both the typechecker and the evaluator.</p>
   </div>
   <div class="thing-box">
-    <p>Modern compilation and execution architecture with
+    <p>With a modern compilation and execution architecture with
        <em>fully memoized and parallelized</em> compilation,
-       <em>rapid script iteration</em>,
-       interactive (<em>REPL</em>) interpreter with <em>JIT</em>,
-       compiles to <em>staticly-linked binaries</em>.</p>
+       an IR-based interpreter with per-function <em>JIT</em>,
+       optionally compiling to <em>statically-linked binaries</em>.</p>
   </div>
 </div>
 
