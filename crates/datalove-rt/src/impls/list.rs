@@ -593,7 +593,12 @@ pub unsafe fn list_insert_data_impl(
     }
 
     let rt_handle = rt as *mut RtLocal as crate::c::LocalRtHandle;
-    let hole = list.element_ptr_mut(index);
+    // Inserting at `size` appends, and there is no element there to point at.
+    let hole = if index < size {
+        list.element_ptr_mut(index)
+    } else {
+        list.end_ptr()
+    };
     let status = unsafe {
         crate::impls::boxing::data_into_local(rt_handle, data_in, hole, element_ty.as_ptr())
     };
