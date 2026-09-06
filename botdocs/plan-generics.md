@@ -512,21 +512,26 @@ this area has had.
 
 ## Where this stands
 
-Type parameters nest inside options and results to any depth, and sit under a
-collection in a borrowed parameter. What follows is the state of it, then the
-limitations, then how each was arrived at.
+Type parameters nest to any depth inside options, results, tuples, structs,
+terms and enums, and a collection of one can be passed and returned in any
+mode. What follows is the state of it, then the limitations, then how each was
+arrived at.
 
 ### What works
 
 Each of these was checked by compiling it, not by reading the rules.
 
-| Position | Bare `T` | `?T` `!T` `??T` | Collection: `[T]`, `%{K = V}`, `#{T}`, tuple, struct |
-|---|---|---|---|
-| `in`, owned | yes | yes | **no** |
-| `ref`, `mut` | yes | yes | yes |
-| `out` | yes | yes | **no** |
-| return | yes | yes | **no** |
-| any parameter of a `native fun` | yes | yes | yes |
+| Position | Bare `T` | `?T` `!T` `??T` | Tuple, struct, term, enum | Collection: `[T]`, `%{K = V}`, `#{T}` |
+|---|---|---|---|---|
+| `in`, owned | yes | yes | yes | yes |
+| `ref`, `mut` | yes | yes | yes | yes |
+| `out` | yes | yes | yes | yes |
+| return | yes | yes | yes | yes |
+| any parameter of a `native fun` | yes | yes | yes | yes |
+
+Every position a type parameter can occupy is one erasure reaches. The three
+cases it splits into are in the section below: a bare `T` becomes a `data`, a
+composite is converted field by field, and a collection is wrapped whole.
 
 A call site names no types: each argument is matched against its parameter and
 the first to reach a parameter fixes it. `sys/std`'s `option`, `result`,
@@ -534,23 +539,18 @@ the first to reach a parameter fixes it. `sys/std`'s `option`, `result`,
 
 ### Limitations
 
-**A collection cannot be owned, returned, or written to an out parameter.**
-Refused with `TypeParamNotErasable`. A parameter the callee owns is carried as
-a `data`, since a type parameter has no size, and converting `[u32]` into a
-list of `data` means rebuilding it element by element at every call. A return
-and an out parameter are the same thing from the other end. Options and results
-escape this because they hold their payload inline, so converting one is
-converting the payload and writing it at the other side's offset.
+**A collection over a type parameter cannot be built.** Refused with F011.
+One that arrives is fine at any position, because it arrives wrapped and the
+wrapper carries the descriptor saying what its elements are. `var out: [T] = []`
+written inside a generic has no descriptor and nowhere to get one: the function
+knows a `T` only as something a caller described, and an empty list was
+described by nobody. `%{K = V}` and `#{T}` are the same. This is what keeps
+`reversed` and `concat` out of `sys/std/list`; `swap` is there because it only
+moves elements the list already holds. Lifting it needs a descriptor for a type
+parameter itself at run time, which is the value-level descriptor work.
 
-**A collection of a type parameter cannot be indexed.** Refused with F011.
-Indexing works out where an element sits from the static type, which inside a
-generic says `data`, so the stride would be a `data`'s and the read would land
-between elements. It typechecked and died at run time before this was refused.
-`sys/std/list` reaches an element instead, because the native list functions
-read the element type from the descriptor that travels with the collection.
-Making the index operator do the same needs an instruction meaning "use the
-descriptor this parameter came with" rather than the one the static type
-implies, in the IR and in each backend.
+Before this was refused the lowering reached a `[T]` with no element type
+behind it and panicked.
 
 **A generic out parameter has to be a whole binding or a field.** Both work,
 and so does passing one straight on to another function; anything else is
@@ -571,7 +571,9 @@ interpreter and the two cranelift backends.
 
 **No bounds, so no operations on a `T`.** A type parameter is equal only to
 itself and nothing can be done with a value of that type but move it, drop it,
-clone it, and hand it back. That rules out `map`, `and_then`, `filter` and
+clone it, print it, and hand it back. Printing is the exception because the
+descriptor travelling with the value is enough to format it; `==` is not, so
+`contains`, `index_of` and `max` stay unwritable. That rules out `map`, `and_then`, `filter` and
 anything else needing a function argument, though those want closures first.
 
 **A type parameter is always linear**, because the caller may supply a linear
@@ -623,16 +625,25 @@ nothing and is checked afterwards against whatever another argument fixed, so
 `unwrap_or(none, "fallback")` infers. Speculative synthesis runs under
 `try_check` so the abandoned attempt does not report.
 
-**Why collections stop here.** The runtime's `convert` recurses properly through
-options and results, converting the payload and writing it at the other side's
-offset. For everything else it memcpys, which is a reinterpretation rather than
-a conversion, and a collection's elements are packed by size: `[u32]` and
-`[data]` disagree about where every element after the first begins. Passing one
-through appears to work because nothing touches the elements, but the callee
-holds a tydesc that lies about them, and the drop at the end of a generic that
-merely ignores its argument corrupts the allocator. That was checked, not
-reasoned about. `first_unerasable_type_param` refuses those signatures with
+**Why collections looked impossible, and what they cost instead.** The
+runtime's `convert` recursed properly through options and results and memcpyd
+everything else, which is a reinterpretation rather than a conversion. A
+collection's elements are packed by size, so `[u32]` and `[data]` disagree
+about where every element after the first begins: passing one through appeared
+to work because nothing touched the elements, but the callee held a tydesc that
+lied about them, and the drop at the end of a generic that merely ignored its
+argument corrupted the allocator. That was checked, not reasoned about, and
+`first_unerasable_type_param` refused those signatures with
 `TypeParamNotErasable`.
+
+Rebuilding element by element is what that reasoning assumed, and it is what
+made the cost look prohibitive. Wrapping the collection whole avoids it: the
+`data` holds a pointer and the collection's own descriptor, so a crossing
+copies one wrapper and leaves every element where it is. It is O(1) and one
+allocation, not O(n), and the elements are never touched, so their packing
+never has to agree with anything. `first_unerasable_type_param` now returns
+`None` for every type form the language has; it is kept as a backstop for
+future ones rather than because anything reaches it.
 
 **A borrowed collection escapes that, by not being converted.** Nothing happens
 to a `ref` or `mut` parameter at the boundary: the value goes across as it

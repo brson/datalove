@@ -1006,14 +1006,22 @@ end fun
 ```
 
 **What a type parameter does not admit.** Anything that would need to know what
-the type is. A `T` can be moved, dropped, cloned, compared, printed, stored,
-returned and handed on, and that is the whole of it: `x + y` on two values of
-type `T` is an error, whatever the call site supplied. Bounds are what would
-change that, and there are none.
+the type is. A `T` can be moved, dropped, cloned, printed, stored, returned and
+handed on, and that is the whole of it: `x + y` and `x == y` on two values of
+type `T` are both errors, whatever the call site supplied. Printing is the
+exception because the descriptor travelling with the value is enough to format
+it. Bounds are what would change the rest, and there are none.
 
 Indexing does work, including on a collection whose elements are a type
 parameter: the stride is read from the descriptor that travels with the
 collection rather than from the static type.
+
+A collection over a type parameter can be taken, stored, handed on and
+returned, but not built. `var out: [T] = []` inside a generic is refused: a
+collection that arrives carries a descriptor saying what its elements are, and
+one written here has none and nowhere to get one. This is what keeps `reversed`
+and `concat` out of `sys/std/list`, where `swap` — which only moves elements a
+list already holds — is fine.
 
 Why each of these is where it is, and what is planned, is in
 [Where this stands](plan-generics.md#user-content-where-this-stands).
