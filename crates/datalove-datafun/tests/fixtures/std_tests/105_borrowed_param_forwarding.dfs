@@ -1,0 +1,65 @@
+require module sys/std/map
+require module sys/std/set
+
+import map.get
+import map.contains_key
+import set.contains
+
+// A generic handing a bare borrowed type parameter on to another generic.
+//
+// `102_generic_forwarding` covers forwarding a borrowed *container* of a type
+// parameter. This is the other borrowed shape: the type parameter itself.
+//
+// Both read `data` in the erased signature, and the compiled backends decided
+// from that type alone that an argument the callee wants borrowed must be a
+// wrapper to read through. A borrowed type parameter is not one: it arrives as
+// a pointer at the value with its descriptor passed beside it, because nothing
+// is converted at a borrow. Reading through it took the value's first bytes
+// for a wrapper's two pointers, so the descriptor handed to the rider was
+// whatever those bytes happened to be. The interpreter was right here already,
+// because it looks at the descriptor that actually came with the value rather
+// than at the static type.
+
+fun has_key<K, V>(ref self: %{K = V}, ref key: K): bool
+  ret contains_key(ref self, ref key)
+end fun
+
+fun get_or<K, V>(ref self: %{K = V}, ref key: K, default: V): V
+  if get(ref self, ref key) |value|
+    ret value
+  else
+    ret default
+  end if
+end fun
+
+// Two hops, so the second call forwards a descriptor that reached it through
+// the first rather than one a concrete call site supplied.
+fun has_key_twice<K, V>(ref self: %{K = V}, ref key: K): bool
+  ret has_key(ref self, ref key)
+end fun
+
+fun set_has<T>(ref self: #{T}, ref elem: T): bool
+  ret contains(ref self, ref elem)
+end fun
+
+let scores = %{"a" = 1, "b" = 2}
+let one_hop = has_key(ref scores, ref "a")
+let two_hops = has_key_twice(ref scores, ref "b")
+let missing = has_key(ref scores, ref "zz")
+let found_value = get_or(ref scores, ref "b", 99)
+let default_value = get_or(ref scores, ref "zz", 99)
+
+// A key type that is not a pointer, where a misread descriptor gives a wrong
+// answer rather than a fault.
+let counts = %{7 = "seven"}
+let numeric_hit = has_key(ref counts, ref 7)
+let numeric_miss = has_key(ref counts, ref 8)
+
+let names = #{"x", "y"}
+let in_set = set_has(ref names, ref "x")
+let not_in_set = set_has(ref names, ref "z")
+
+let output = (
+  one_hop, two_hops, missing, found_value, default_value,
+  numeric_hit, numeric_miss, in_set, not_in_set,
+)

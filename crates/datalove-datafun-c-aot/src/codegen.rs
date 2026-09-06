@@ -1754,6 +1754,15 @@ impl<'a> FunctionCodegenContext<'a> {
             if !wants_borrow || *self.operand_type(arg) != IrType::Data {
                 continue;
             }
+            // One of our own borrowed parameters is already a pointer at the
+            // value with a descriptor beside it, never a wrapper around it,
+            // even though its type reads `data`. Reading through it would take
+            // the first bytes of the value for a wrapper's two pointers.
+            if let Operand::Param(param_id) = arg {
+                if self.func_descriptor_index(*param_id).is_some() {
+                    continue;
+                }
+            }
             // Named for the call's destination as well as the argument, since
             // two calls in one block would otherwise declare the same locals.
             let name = format!("__bw{}_{}", dest.0, i);
