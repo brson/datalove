@@ -249,11 +249,42 @@ Function calls in const expressions work because `lowered_functions` are passed 
 
 ## Generics
 
-A generic function is compiled once, with `data` standing where a type parameter
-was written. A parameter the callee owns is converted into that shape at the
+A generic function is compiled once, over shapes that fit whatever the call
+site supplies. A parameter the callee owns is converted into that shape at the
 call site and the value moved back out on the way back; a parameter it borrows
 is not converted at all, and the descriptor saying what the value really is
 comes from the call site, recorded in `FunctionContext::descriptor_params`.
+
+`erased_param_type` in datafun-ir is the one place that decides what an owned
+position becomes, read by the caller and the callee both, because a call site
+converting into a shape the callee was not compiled for is not a mismatch
+anything reports -- it is two sizes disagreeing about the same bytes. Three
+answers:
+
+| Written | Becomes | Cost |
+|---------|---------|------|
+| `T` | `data` | already carries its own descriptor |
+| `?T`, `!T`, `(T, u32)`, `{ a: T }`, `term W T`, an enum payload | the same shape with the parts converted | a walk over as many parts as the type has |
+| `[T]`, `#{T}`, `%{K = V}`, a tensor, a table | `data`, wrapped whole | one small allocation, elements untouched |
+
+The third is the one worth explaining. A list is a pointer, a length and a
+capacity whatever its elements are -- `IrType::List(_)` computes its layout as
+`struct_layout::<rtdt::List>()`, and the `_` is the point -- so it is already
+the right size and there is nothing to convert it into. What it lacks is the
+element type, and wrapping is what gives it somewhere to keep one. Converting
+`[u32]` into a list of `data` would mean rebuilding it element by element; that
+is the O(n) the design avoids, and it is avoided by not doing it rather than by
+refusing the signature.
+
+The rule reaches inside a composite, so `([T], u32)` becomes `(data, u32)`: a
+tuple converts field by field, so a container field is converted too, and
+wrapping is the only conversion a container has.
+
+`dtlv_rti_data_parts` reads back through a wrapper, lending the value pointer
+and the descriptor together, which is what lets a wrapped `[T]` still be handed
+to `sys/std/list`. A call site reads through it where an argument arrives
+wrapped and the callee wants it borrowed. Both leave the same call, so neither
+can be taken from somewhere the other was not.
 
 How the descriptor is carried is up to the backend. The interpreter needs
 nothing, since its values are already a pointer and a descriptor. The compiled
@@ -281,8 +312,17 @@ The jit's stub forwards the descriptors it was handed to `__jit_dispatch_call`,
 which uses them in place of the ones its callee's signature implies, since for
 these parameters that signature says `data`.
 
-What it does not do yet -- owned collections, indexing a collection of a type
-parameter, bounds -- and why, is in
+Indexing a collection whose elements are a type parameter reads the stride from
+the list's descriptor rather than from the static element type, which inside a
+generic is a `data`'s and lands between elements. Whether the element wants
+packing on the way out is decided in `dtlv_rti_list_get_erased_local` rather
+than at each call site, because a generic asking for an element it cannot name
+wants one packed while a list whose elements really are `data` does not, and
+from a call site the two look alike. Deciding it per backend is four answers to
+one question.
+
+What it does not do yet -- bounds, so nothing can be done to a `T` but move it,
+drop it, clone it and hand it back -- and why, is in
 [Where this stands](plan-generics.md#user-content-where-this-stands). Read that
 before assuming something is a bug.
 

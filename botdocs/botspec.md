@@ -952,47 +952,43 @@ parameter is when more than one would do. An unsuffixed integer literal is
 `int`, so `pick_first(99, : u32 / 1)` makes `T` `int` and widens the `u32` into
 it, while the two written the other way round make `T` `u32`.
 
-**Where a type parameter may appear.** Anywhere on its own, and under `?` or `!`
-to any depth:
+**Where a type parameter may appear.** Anywhere: on its own, under `?` or `!`
+to any depth, and inside a list, set, map, tensor, table, tuple, struct, term
+or enum payload, in any parameter mode and in the return.
 
 ```datalove
 fun flatten_or<T>(x: ??T, default: T): T
-fun ok_or<T>(x: !T, default: T): T
+fun sorted<T>(x: [T]): [T]
+fun swap<T>(x: (T, T)): (T, T)
+fun tagged<T>(x: enum { term Some T, atom None }): bool
 ```
 
-Under a collection -- a list, map, set, tensor, table, tuple, struct, or enum
-payload -- it may appear only in a `ref` or `mut` parameter, or in any parameter
-of a `native fun` (Section 9.4):
+**Representation.** A generic function is compiled once, not once per type, so
+a type parameter has no fixed size and the shapes it stands in have to be made
+to fit one. The mode decides whether a value is converted at all, and the shape
+decides how:
 
-```datalove
-fun len<T>(ref self: [T]): index               // ok
-fun sorted<T>(x: [T]): [T]                     // error: not erasable
-```
+A type parameter standing alone is carried as a `data`, which holds a value of
+any type along with what is needed to clone and drop it. An option, a result, a
+tuple, a struct, a term and an enum payload hold what they hold inline, so
+converting one means converting each part and writing it where the other side
+keeps it -- a walk over as many parts as the type has, and no more.
 
-The reason is representation, described below.
+A collection is a different case. A list is a pointer, a length and a capacity
+whatever its elements are, so it is already the right size; what it lacks is the
+element type. An owned one is wrapped whole into a `data`, which costs one small
+allocation and leaves the elements untouched.
 
-**Representation.** A generic function is compiled once, not once per type. A
-type parameter has no fixed size, so where the callee takes ownership of a value
-of that type -- an `in` or `out` parameter, or the return -- the value is
-carried as a `data`, which holds a value of any type along with what is needed
-to clone and drop it. The call site converts into that shape on the way in and
-moves the value back out on the way back, because it is the place that knows the
-type. An `out` parameter goes both ways: what was already there is erased into
-the value the callee is given, so that the call drops it exactly once as it does
-for any out parameter, and what the callee writes is moved back out into
-whatever the caller keeps there.
+That is all for a value the callee owns -- an `in` or `out` parameter, or the
+return. A `ref` or `mut` parameter is not converted at all: the value is passed
+as it stands, and the descriptor saying what it really is comes from the call
+site.
 
-An option or a result holds its payload inline, so converting one means
-converting the payload and writing it where the other side keeps it, and a type
-parameter below one is reachable that way. A collection packs its elements by
-size, so converting `[u32]` to a list of `data` would mean rebuilding the
-collection element by element at every call. That is why an owned collection
-parameter is refused rather than silently paid for.
-
-A `ref` or `mut` parameter is not converted at all: the value is passed as it
-stands, and the descriptor saying what it really is comes from the call site.
-This costs nothing, which is why a type parameter under a collection is allowed
-there.
+None of this is visible in a program except in what it costs. The call site
+converts on the way in and moves the value back out on the way back, because it
+is the place that knows the type. An `out` parameter goes both ways: whatever
+the destination held is dropped at the call, and what the callee writes is moved
+back out into whatever the caller keeps there.
 
 **Copy and linearity.** A type parameter is never a copy type, because the
 caller may supply a linear one. A value taken out of an option by
@@ -1009,14 +1005,17 @@ fun or_option<T>(self: ?T, other: ?T): ?T
 end fun
 ```
 
-A collection whose elements are a type parameter cannot be indexed. Indexing
-works out where an element sits from the type of the collection, and a generic
-function's type for one says `data` where the parameter was written, so the
-stride would be wrong. The native list functions read the element type from the
-descriptor that travels with the collection, so `sys/std/list` reaches an
-element where the index operator cannot.
+**What a type parameter does not admit.** Anything that would need to know what
+the type is. A `T` can be moved, dropped, cloned, compared, printed, stored,
+returned and handed on, and that is the whole of it: `x + y` on two values of
+type `T` is an error, whatever the call site supplied. Bounds are what would
+change that, and there are none.
 
-The rest of what generics do not reach, and why each is where it is, is in
+Indexing does work, including on a collection whose elements are a type
+parameter: the stride is read from the descriptor that travels with the
+collection rather than from the static type.
+
+Why each of these is where it is, and what is planned, is in
 [Where this stands](plan-generics.md#user-content-where-this-stands).
 
 ### 8.6 Control Flow
@@ -1153,11 +1152,12 @@ native fun string_contains(ref haystack: string, ref needle: string): bool
 native fun list_push<T>(mut self: [T], elem: T)
 ```
 
-A native function may take type parameters, and they are less restricted than
-on an ordinary function: because every parameter arrives as a pointer and a
-descriptor, a type parameter may sit under a collection in any parameter, not
-only a borrowed one (Section 8.5). The implementation reads the element type
-off the descriptor at runtime, so one implementation serves every element type.
+A native function may take type parameters. Nothing is converted at one:
+because every parameter arrives as a pointer and a descriptor, the value goes
+across as it stands whatever the mode, where an ordinary function converts an
+owned one into the shape it was compiled for (Section 8.5). The implementation
+reads the element type off the descriptor at runtime, so one implementation
+serves every element type.
 
 #### Rider Crate
 
