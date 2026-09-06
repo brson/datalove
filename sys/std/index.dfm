@@ -77,6 +77,102 @@ fun ilog2(self: index): ?u32
   end if
 end fun
 
+// Returns the smallest power of two >= self. Returns none on overflow.
+fun next_power_of_two(self: index): ?index
+  if self <= (: index / 1)
+    ret some (: index / 1)
+  else
+    if is_power_of_two(self)
+      ret some self
+    else
+      // self > 1 and not a power of two, so we need 2^(ilog2(self) + 1).
+      if ilog2(self) |log|
+        let next_exp = icall add_wrapping_u32(log, : u32 / 1)
+        if next_exp >= bits()
+          ret none
+        else
+          ret shift_left(: index / 1, next_exp)
+        end if
+      else
+        // Unreachable: ilog2 only returns none for 0.
+        ret some (: index / 1)
+      end if
+    end if
+  end if
+end fun
+
+// Binary exponentiation with overflow detection.
+fun pow_checked(self: index, exp: u32): ?index
+  var result: index = : index / 1
+  var base: index = self
+  var e: u32 = exp
+  loop while e .> (: u32 / 0)
+    if icall bitand_u32(e, : u32 / 1) == (: u32 / 1)
+      if mul_checked(result, base) |next_result|
+        set result = next_result
+      else
+        ret none
+      end if
+    end if
+    set e = icall shr_u32(e, : u32 / 1)
+    if e .> (: u32 / 0)
+      if mul_checked(base, base) |next_base|
+        set base = next_base
+      else
+        ret none
+      end if
+    end if
+  end loop
+  ret some result
+end fun
+
+// Binary exponentiation saturating at max_value on overflow.
+fun pow_saturating(self: index, exp: u32): index
+  var result: index = : index / 1
+  var base: index = self
+  var e: u32 = exp
+  var overflow: bool = false
+  loop while e .> (: u32 / 0)
+    if icall bitand_u32(e, : u32 / 1) == (: u32 / 1)
+      if mul_checked(result, base) |next_result|
+        set result = next_result
+      else
+        set overflow = true
+      end if
+    end if
+    set e = icall shr_u32(e, : u32 / 1)
+    if e .> (: u32 / 0)
+      if mul_checked(base, base) |next_base|
+        set base = next_base
+      else
+        set overflow = true
+      end if
+    end if
+  end loop
+  if overflow
+    ret max_value()
+  else
+    ret result
+  end if
+end fun
+
+// Binary exponentiation with wrapping on overflow.
+fun pow_wrapping(self: index, exp: u32): index
+  var result: index = : index / 1
+  var base: index = self
+  var e: u32 = exp
+  loop while e .> (: u32 / 0)
+    if icall bitand_u32(e, : u32 / 1) == (: u32 / 1)
+      set result = mul_wrapping(result, base)
+    end if
+    set e = icall shr_u32(e, : u32 / 1)
+    if e .> (: u32 / 0)
+      set base = mul_wrapping(base, base)
+    end if
+  end loop
+  ret result
+end fun
+
 // Byte manipulation.
 
 fun swap_bytes(self: index): index
@@ -167,6 +263,30 @@ fun rem_checked(self: index, other: index): ?index
   end if
 end fun
 
+// Returns none on overflow (positive other) or underflow (negative other).
+fun add_checked_signed(self: index, other: offset): ?index
+  if other >= (: offset / 0)
+    let other_index = icall offset_to_index(other)
+    ret some (self +? other_index)
+  else
+    let neg_other = icall neg_wrapping_offset(other)
+    let abs_other = icall offset_to_index(neg_other)
+    ret some (self -? abs_other)
+  end if
+end fun
+
+// Returns none on underflow (positive other) or overflow (negative other).
+fun sub_checked_signed(self: index, other: offset): ?index
+  if other >= (: offset / 0)
+    let other_index = icall offset_to_index(other)
+    ret some (self -? other_index)
+  else
+    let neg_other = icall neg_wrapping_offset(other)
+    let abs_other = icall offset_to_index(neg_other)
+    ret some (self +? abs_other)
+  end if
+end fun
+
 // Saturating arithmetic.
 
 fun add_saturating(self: index, other: index): index
@@ -198,6 +318,28 @@ fun div_saturating(self: index, other: index): ?index
   ret div_checked(self, other)
 end fun
 
+fun add_saturating_signed(self: index, other: offset): index
+  if other >= (: offset / 0)
+    let other_index = icall offset_to_index(other)
+    ret add_saturating(self, other_index)
+  else
+    let neg_other = icall neg_wrapping_offset(other)
+    let abs_other = icall offset_to_index(neg_other)
+    ret sub_saturating(self, abs_other)
+  end if
+end fun
+
+fun sub_saturating_signed(self: index, other: offset): index
+  if other >= (: offset / 0)
+    let other_index = icall offset_to_index(other)
+    ret sub_saturating(self, other_index)
+  else
+    let neg_other = icall neg_wrapping_offset(other)
+    let abs_other = icall offset_to_index(neg_other)
+    ret add_saturating(self, abs_other)
+  end if
+end fun
+
 // Wrapping arithmetic.
 
 fun add_wrapping(self: index, other: index): index
@@ -215,6 +357,28 @@ end fun
 // index division cannot overflow.
 fun div_wrapping(self: index, other: index): ?index
   ret div_checked(self, other)
+end fun
+
+fun add_wrapping_signed(self: index, other: offset): index
+  if other >= (: offset / 0)
+    let other_index = icall offset_to_index(other)
+    ret add_wrapping(self, other_index)
+  else
+    let neg_other = icall neg_wrapping_offset(other)
+    let abs_other = icall offset_to_index(neg_other)
+    ret sub_wrapping(self, abs_other)
+  end if
+end fun
+
+fun sub_wrapping_signed(self: index, other: offset): index
+  if other >= (: offset / 0)
+    let other_index = icall offset_to_index(other)
+    ret sub_wrapping(self, other_index)
+  else
+    let neg_other = icall neg_wrapping_offset(other)
+    let abs_other = icall offset_to_index(neg_other)
+    ret add_wrapping(self, abs_other)
+  end if
 end fun
 
 // Shifts.

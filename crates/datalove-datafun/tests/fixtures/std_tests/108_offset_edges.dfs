@@ -1,0 +1,38 @@
+require module sys/std/offset
+
+import offset.min_value
+import offset.max_value
+import offset.neg_checked
+import offset.div_checked
+import offset.rem_checked
+import offset.shift_right
+import offset.cast_unsigned
+import offset.abs_diff
+import offset.midpoint
+import offset.add_checked
+import offset.add_saturating
+import offset.add_wrapping
+
+// The edges of `offset`, which had no test on any backend before this. It is a
+// thirty-two bit signed integer, so each of these agrees with the `i32` of the
+// same name.
+
+// Overflow at the top, under all three policies.
+let over = (add_checked(max_value(), : offset / 1),
+            add_saturating(max_value(), : offset / 1),
+            add_wrapping(max_value(), : offset / 1))
+
+// The two signed overflows: negating the most negative value, and dividing it
+// by -1. Both land on a value the type cannot hold.
+let signed_edges = (neg_checked(min_value()),
+                    div_checked(min_value(), : offset / -1),
+                    rem_checked(min_value(), : offset / -1))
+
+// An arithmetic shift keeps the sign, so a negative stays negative.
+let signed_shift = (shift_right(: offset / -8, : u32 / 2), shift_right(: offset / -1, : u32 / 31))
+
+let signed_spreads = (abs_diff(: offset / -3, : offset / 9), midpoint(: offset / -7, : offset / -3))
+
+let recast = cast_unsigned(: offset / -1)
+
+let output = (over, signed_edges, signed_shift, signed_spreads, recast)

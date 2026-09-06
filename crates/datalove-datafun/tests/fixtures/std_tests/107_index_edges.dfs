@@ -1,0 +1,55 @@
+require module sys/std/index
+
+import index.max_value
+import index.add_checked
+import index.sub_checked
+import index.add_saturating
+import index.sub_saturating
+import index.add_wrapping
+import index.sub_wrapping
+import index.div_checked
+import index.rem_checked
+import index.shift_left
+import index.shift_left_wrapping
+import index.rotate_left
+import index.ilog2
+import index.cast_signed
+import index.midpoint
+import index.abs_diff
+
+// The edges of `index`, which had no test on any backend before this. It is a
+// thirty-two bit unsigned integer, so each of these agrees with the `u32` of
+// the same name.
+//
+// These are the cases where a backend has gone its own way before: a narrow
+// type reaching a division it did not implement, and a shift at exactly the
+// bit width.
+
+// Overflow at the top and underflow at the bottom, under all three policies.
+let over = (add_checked(max_value(), : index / 1),
+            add_saturating(max_value(), : index / 1),
+            add_wrapping(max_value(), : index / 1))
+let under = (sub_checked(: index / 0, : index / 1),
+             sub_saturating(: index / 0, : index / 1),
+             sub_wrapping(: index / 0, : index / 1))
+
+// Division and remainder by zero have no answer rather than a fault.
+let by_zero = (div_checked(: index / 7, : index / 0),
+               rem_checked(: index / 7, : index / 0))
+
+// A shift is refused at the bit width, where wrapping takes it modulo instead.
+let shifts = (shift_left(: index / 1, : u32 / 31),
+              shift_left(: index / 1, : u32 / 32),
+              shift_left_wrapping(: index / 1, : u32 / 32),
+              rotate_left(: index / 1, : u32 / 32))
+
+// Only zero has no logarithm.
+let logs = (ilog2(: index / 0), ilog2(: index / 1), ilog2(max_value()))
+
+// Reinterpreting the bits, not converting the value.
+let recast = (cast_signed(max_value()), cast_signed(: index / 0))
+
+// Midpoint does not overflow on the way, and abs_diff has no sign to lose.
+let spreads = (midpoint(max_value(), max_value()), abs_diff(: index / 3, : index / 9))
+
+let output = (over, under, by_zero, shifts, logs, recast, spreads)
