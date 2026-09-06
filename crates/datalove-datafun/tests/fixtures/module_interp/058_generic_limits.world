@@ -79,3 +79,31 @@ end fun
 fun first<T>(ref xs: [T]): ?T
   ret some (xs[: index / 0]?@)
 end fun
+
+// The one thing erasure genuinely cannot reach: a collection built here rather
+// than passed in.
+//
+// A `[T]` that arrives is fine, because it arrives wrapped and the wrapper
+// carries the descriptor saying what its elements are. A `[T]` written here
+// has no such descriptor and nowhere to get one: the function knows a `T` only
+// as something its caller described, and an empty list was described by
+// nobody. So `reversed`, `concat` and anything else that returns a new
+// collection stay out of reach until a type parameter can be asked what it is
+// at runtime.
+//
+// This is refused rather than lowered. Before it was refused the lowering
+// reached a `[T]` with no element type behind it and panicked.
+fun build_a_list<T>(): [T]
+  var out: [T] = []
+  ret out
+end fun
+
+fun build_a_map<K, V>(): %{K = V}
+  var out: %{K = V} = %{}
+  ret out
+end fun
+
+fun build_a_set<T>(): #{T}
+  var out: #{T} = #{}
+  ret out
+end fun

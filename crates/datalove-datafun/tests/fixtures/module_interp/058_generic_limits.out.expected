@@ -2,7 +2,12 @@ ModulesAnalysis(
     typecheck: TypecheckResult(
         status: "Error",
         errors: [
-            "local/test/main: TypeMismatch { expected: \"u32\", actual: \"string\" }",
+            "line 94, col 18: error[F011]: cannot build a [T] here: it is written over a type parameter, and nothing at hand says what one is. A collection of a type parameter can be taken, stored, passed on and returned, because it arrives with a descriptor saying what it holds; one made here would have none",
+            "line 95, col 7: error[F001]: cannot find value `out` in this scope",
+            "line 99, col 23: error[F011]: cannot build a %{K = V} here: it is written over a type parameter, and nothing at hand says what one is. A collection of a type parameter can be taken, stored, passed on and returned, because it arrives with a descriptor saying what it holds; one made here would have none",
+            "line 100, col 7: error[F001]: cannot find value `out` in this scope",
+            "line 104, col 19: error[F011]: cannot build a #{T} here: it is written over a type parameter, and nothing at hand says what one is. A collection of a type parameter can be taken, stored, passed on and returned, because it arrives with a descriptor saying what it holds; one made here would have none",
+            "line 105, col 7: error[F001]: cannot find value `out` in this scope",
         ],
     ),
     lowering: LoweringResult(

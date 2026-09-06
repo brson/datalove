@@ -140,6 +140,17 @@ pub fn check_statement<'db>(
 
             // Create new context for function body with parameters in scope.
             let saved_variables = ctx.variables.C();
+            // A type parameter is in scope in the body as well as the
+            // signature, so a binding there can be annotated with one:
+            // `var x: T` and `let pair: (T, T)` name a type the function has,
+            // and without this they read as an unresolved alias.
+            let saved_type_aliases = ctx.type_aliases.C();
+            for name in stmt.type_params(db) {
+                ctx.type_aliases.insert(
+                    *name,
+                    Type::Datalit(datalove_datalit::tycheck::Type::Var(*name)),
+                );
+            }
             // Const bindings are scoped to the body the same way. Without this a
             // const parameter, or a const statement, stays registered after its
             // function ends and the next function's argument of that name passes
@@ -170,6 +181,7 @@ pub fn check_statement<'db>(
 
             // Restore context.
             ctx.variables = saved_variables;
+            ctx.type_aliases = saved_type_aliases;
             ctx.const_bindings = saved_const_bindings;
             ctx.expected_return_type = saved_return_type;
             ctx.is_void_function = saved_is_void;
