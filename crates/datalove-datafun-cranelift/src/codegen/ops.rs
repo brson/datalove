@@ -700,14 +700,17 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             CraneliftError::Codegen("Widen requires runtime handle".into())
         })?;
 
-        // Get pointer to source operand and its type.
+        // The source's descriptor says what is really there, which inside a
+        // generic its static type does not: a borrowed `T` is a `data` by
+        // that reading and a string by the caller's.
         let src_ptr = self.get_operand_ptr(builder, src)?;
-        let src_ty = self.get_operand_type(src)?;
-        let src_tydesc_id = self.tydesc_emitter.get(&src_ty).ok_or_else(|| {
-            CraneliftError::Codegen(format!("TyDesc not found for source type {:?}", src_ty))
-        })?;
-        let src_tydesc_gv = self.module.declare_data_in_func(src_tydesc_id, builder.func);
-        let src_tydesc_ptr = builder.ins().symbol_value(PTR_TYPE, src_tydesc_gv);
+        let src_tydesc_ptr = self.operand_tydesc(builder, src)?;
+
+        // The destination's says what shape the clone has to arrive in. Where
+        // the two differ the value is wrapped on the way, which the runtime
+        // decides rather than this.
+        let dest_ty = self.func.value_types[dest.0 as usize].clone();
+        let dest_tydesc_ptr = self.static_tydesc(builder, &dest_ty)?;
 
         // Get frame slot and destination address for Int result.
         let frame_slot = self.frame_slot.ok_or_else(|| {
@@ -755,14 +758,17 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             CraneliftError::Codegen("Clone requires runtime handle".into())
         })?;
 
-        // Get pointer to source operand and its type.
+        // The source's descriptor says what is really there, which inside a
+        // generic its static type does not: a borrowed `T` reads as a `data`
+        // there and as a string at the call site.
         let src_ptr = self.get_operand_ptr(builder, src)?;
-        let src_ty = self.get_operand_type(src)?;
-        let src_tydesc_id = self.tydesc_emitter.get(&src_ty).ok_or_else(|| {
-            CraneliftError::Codegen(format!("TyDesc not found for source type {:?}", src_ty))
-        })?;
-        let src_tydesc_gv = self.module.declare_data_in_func(src_tydesc_id, builder.func);
-        let src_tydesc_ptr = builder.ins().symbol_value(PTR_TYPE, src_tydesc_gv);
+        let src_tydesc_ptr = self.operand_tydesc(builder, src)?;
+
+        // The destination's says what shape the clone has to arrive in. Where
+        // the two differ the value is wrapped on the way, which the runtime
+        // decides rather than this.
+        let dest_ty = self.func.value_types[dest.0 as usize].clone();
+        let dest_tydesc_ptr = self.static_tydesc(builder, &dest_ty)?;
 
         // Get frame slot and destination address for cloned result.
         let frame_slot = self.frame_slot.ok_or_else(|| {
@@ -772,13 +778,13 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         let result_ptr = builder.ins().stack_addr(PTR_TYPE, frame_slot, dest_offset as i32);
 
         // Call runtime function: dtlv_rti_clone_local(rt, src_ref, src_tydesc, dst_out, dst_tydesc) -> status
-        let func_ref = self.module.declare_func_in_func(runtime.clone_local, builder.func);
+        let func_ref = self.module.declare_func_in_func(runtime.clone_erased, builder.func);
         builder.ins().call(func_ref, &[
             rt_handle,
             src_ptr,
             src_tydesc_ptr,
             result_ptr,
-            src_tydesc_ptr, // Same type for clone
+            dest_tydesc_ptr,
         ]);
 
         // Store pointer to result.

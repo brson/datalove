@@ -324,6 +324,35 @@ unsafe fn convert(
     }
 }
 
+/// Clone a value into a destination that may be the erased shape.
+///
+/// A `@` inside a generic clones something whose type only the descriptor
+/// knows, into a slot the function was compiled to hold a `data` in. Deciding
+/// between cloning and cloning-then-wrapping needs both descriptors, and the
+/// call site has only one of them statically, so the decision is here.
+///
+/// # Safety
+///
+/// `src_in` must be an initialized value of `src_tydesc`, and `dst_out` must
+/// have room for a value of `dst_tydesc`.
+pub unsafe fn clone_erased_local(
+    rt: LocalRtHandle,
+    src_in: *const u8,
+    src_tydesc: *const rtdt::TyDesc,
+    dst_out: *mut u8,
+    dst_tydesc: *const rtdt::TyDesc,
+) -> RtStatus {
+    unsafe {
+        let wraps = (*dst_tydesc).type_tag == TyTag::Data
+            && (*src_tydesc).type_tag != TyTag::Data;
+        if wraps {
+            data_clone_from_local(rt, src_in, src_tydesc, dst_out)
+        } else {
+            crate::impls::clone::clone_value(rt, src_in, src_tydesc, dst_out)
+        }
+    }
+}
+
 /// The value a wrapped one holds, and the descriptor saying what it is.
 ///
 /// Borrowing rather than moving: the `Data` keeps what it holds, and both of

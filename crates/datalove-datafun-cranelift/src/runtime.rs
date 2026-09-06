@@ -108,6 +108,8 @@ pub struct RuntimeImports {
     pub data_parts: FuncId,
     /// `dtlv_rti_list_get_erased_local(rt, list, list_td, index, opt_out, opt_td) -> RtStatus`
     pub list_get_erased: FuncId,
+    /// `dtlv_rti_clone_erased_local(rt, src, src_td, dst, dst_td) -> RtStatus`
+    pub clone_erased: FuncId,
 }
 
 impl RuntimeImports {
@@ -646,6 +648,14 @@ impl RuntimeImports {
                     format!("declare dtlv_rti_list_get_erased_local: {}", e)))?
         };
 
+        // Cloning into a destination that may be the erased shape. The
+        // runtime decides whether the clone wants wrapping, since only the
+        // descriptors say and a call site has one of them statically.
+        let clone_erased = module
+            .declare_function("dtlv_rti_clone_erased_local", Linkage::Import, &erasure_sig())
+            .map_err(|e| CraneliftError::Module(
+                format!("declare dtlv_rti_clone_erased_local: {}", e)))?;
+
         Ok(Self {
             init,
             shutdown,
@@ -688,6 +698,7 @@ impl RuntimeImports {
             erase,
             data_parts,
             list_get_erased,
+            clone_erased,
             reify,
         })
     }

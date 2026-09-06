@@ -540,6 +540,28 @@ pub unsafe extern "C-unwind" fn dtlv_rti_data_from_local(
     }
 }
 
+/// Clone a value into a destination that may be the erased shape.
+///
+/// A `@` inside a generic clones something whose type only the descriptor
+/// knows, into a slot holding a `data`. See `boxing::clone_erased_local`.
+#[unsafe(no_mangle)]
+pub unsafe extern "C-unwind" fn dtlv_rti_clone_erased_local(
+    rt: LocalRtHandle,
+    src_in: *const u8,
+    src_tydesc: *const rtdt::TyDesc,
+    dst_out: *mut u8,
+    dst_tydesc: *const rtdt::TyDesc,
+) -> RtStatus {
+    debug_assert!(!rt.is_null(), "rt is null");
+    debug_assert!(!src_in.is_null(), "src_in is null");
+    debug_assert!(!src_tydesc.is_null(), "src_tydesc is null");
+    debug_assert!(!dst_out.is_null(), "dst_out is null");
+    debug_assert!(!dst_tydesc.is_null(), "dst_tydesc is null");
+    unsafe {
+        crate::impls::boxing::clone_erased_local(rt, src_in, src_tydesc, dst_out, dst_tydesc)
+    }
+}
+
 /// Borrow what a Data holds, as a value pointer and its descriptor.
 ///
 /// The Data keeps ownership; both outputs point into it. See

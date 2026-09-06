@@ -1608,14 +1608,19 @@ impl IrInterpreter {
                 // Clone a linear value (deep copy for @ operator).
                 let src_val = self.read_operand(src, frame, frames);
                 let dest_slot = frame.value_dest(*dest);
-                // Use runtime clone function.
+                // The source's descriptor says what is really there, which
+                // inside a generic its static type does not, and the
+                // destination's says what shape the clone has to arrive in.
+                // Where those differ the value is wrapped on the way, and the
+                // runtime decides that rather than the four backends each
+                // deciding it.
                 unsafe {
-                    datalove_rt::c::dtlv_rti_clone_local(
+                    datalove_rt::c::dtlv_rti_clone_erased_local(
                         self.runtime.handle(),
                         src_val.ptr,
                         src_val.tydesc,
                         dest_slot.ptr,
-                        src_val.tydesc, // Same type for clone
+                        dest_slot.tydesc,
                     );
                 }
                 frame.mark_value_live(*dest);

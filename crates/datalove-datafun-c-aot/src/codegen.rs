@@ -658,10 +658,16 @@ impl<'a> FunctionCodegenContext<'a> {
     fn emit_clone(&mut self, out: &mut String, dest: ValueId, src: &Operand) -> Result<(), CAotError> {
         let dest_addr = self.value_addr(dest);
         let src_addr = self.operand_addr(src);
-        let ty = self.operand_type(src).clone();
-        let tydesc = self.tydesc_name(&ty);
+        // The source's descriptor says what is really there, which inside a
+        // generic its static type does not, and the destination's says what
+        // shape the clone has to arrive in. Where the two differ the value is
+        // wrapped on the way, which the runtime decides rather than this.
+        let src_tydesc = self.operand_tydesc(src);
+        let dest_ty = self.value_type(dest).clone();
+        let dest_tydesc = self.tydesc_name(&dest_ty);
 
-        writeln!(out, "    dtlv_rti_clone_local(rt, {}, &{}, {}, &{});", src_addr, tydesc, dest_addr, tydesc).unwrap();
+        writeln!(out, "    dtlv_rti_clone_erased_local(rt, {}, {}, {}, &{});",
+            src_addr, src_tydesc, dest_addr, dest_tydesc).unwrap();
         Ok(())
     }
 
