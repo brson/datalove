@@ -2,8 +2,7 @@ ModulesAnalysis(
     typecheck: TypecheckResult(
         status: "Error",
         errors: [
-            "line 63, col 1: error[F060]: `T` cannot stand inside a type at parameter `x`",
-            "line 78, col 15: error[F011]: cannot index [T], whose element type is a type parameter; use the list functions in sys/std/list, which read the element type at run time",
+            "line 79, col 15: error[F011]: cannot index [T], whose element type is a type parameter; use the list functions in sys/std/list, which read the element type at run time",
         ],
     ),
     lowering: LoweringResult(

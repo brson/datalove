@@ -299,6 +299,22 @@ fn erased_owned_type<'db>(
         ),
         TypeHint::Option(t) => IrType::Option(Box::new(recurse(&t.inner_type))),
         TypeHint::Result(t) => IrType::Result(Box::new(recurse(&t.inner_type))),
+        TypeHint::Term(t) => IrType::Term(
+            t.name.text(db).to_string(), Box::new(recurse(&t.payload))),
+        TypeHint::Enum(t) => {
+            // Sorted by name, the way `from_type_hint_inner` builds one. The
+            // discriminant is an index into this list, so the two sides of a
+            // conversion have to agree on the order or the walk reads one
+            // variant's payload at another's offset.
+            let mut variants: Vec<_> = t.variants.iter()
+                .map(|v| (
+                    v.name.text(db).to_string(),
+                    v.payload.as_ref().map(|p| recurse(p)),
+                ))
+                .collect();
+            variants.sort_by(|a, b| a.0.cmp(&b.0));
+            IrType::Enum(variants)
+        }
         other => IrType::from_type_hint_erasing(db, other, type_params),
     }
 }

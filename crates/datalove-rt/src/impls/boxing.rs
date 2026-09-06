@@ -178,6 +178,59 @@ unsafe fn convert(
                     dir,
                 )
             }
+            // A term is its payload under a name, laid out exactly as the
+            // payload is, so converting one is converting that at the same
+            // address with a different descriptor.
+            TyTag::Term => {
+                let src_ty = rtdt::TyDescRef::from_ptr(src_tydesc);
+                let dst_ty = rtdt::TyDescRef::from_ptr(dst_tydesc);
+                let (_, src_payload) = src_ty.term_info();
+                let (_, dst_payload) = dst_ty.term_info();
+                convert(rt, src_in, src_payload.as_ptr(), dst_out, dst_payload.as_ptr(), dir)
+            }
+
+            // An enum is a payload chosen by a discriminant, which is the
+            // option arm with more than one thing it could be. The
+            // discriminant crosses as it stands and the variant it names says
+            // which payload to convert and where each side keeps it.
+            TyTag::Enum => {
+                let src_ty = rtdt::TyDescRef::from_ptr(src_tydesc);
+                let dst_ty = rtdt::TyDescRef::from_ptr(dst_tydesc);
+                let src_info = src_ty.enum_info();
+                let dst_info = dst_ty.enum_info();
+
+                let discriminant = *(src_in as *const u32);
+                *(dst_out as *mut u32) = discriminant;
+
+                let index = discriminant as usize;
+                if index >= src_info.num_variants() as usize
+                    || index >= dst_info.num_variants() as usize
+                {
+                    return RtStatus::Error;
+                }
+                let (Some(src_variant), Some(dst_variant)) =
+                    (src_info.variant(index), dst_info.variant(index))
+                else {
+                    return RtStatus::Error;
+                };
+                match (src_variant.payload(), dst_variant.payload()) {
+                    (Some(src_payload), Some(dst_payload)) => convert(
+                        rt,
+                        src_in.add(src_variant.offset() as usize),
+                        src_payload.as_ptr(),
+                        dst_out.add(dst_variant.offset() as usize),
+                        dst_payload.as_ptr(),
+                        dir,
+                    ),
+                    // An atom carries nothing, so the discriminant was all of
+                    // it. The two sides disagreeing about that is the front
+                    // end having admitted two shapes that are not the same
+                    // enum.
+                    (None, None) => RtStatus::Ok,
+                    _ => RtStatus::Error,
+                }
+            }
+
             // A tuple and a struct hold their fields inline, packed by size, so
             // converting one means converting each field and writing it at the
             // other side's offset. How many fields there are is fixed by the

@@ -44,9 +44,10 @@ end fun
 // wrapping it: the tuple's walk reaches the field and the field's conversion is
 // the wrapping one, and the two compose without either knowing about the other.
 //
-// A term is what is left, and an enum, which is a payload chosen by a tag.
-// Both hold one payload inline the way an option does, so both are the same
-// shape of work; there is simply no arm for either in the runtime's walk.
+// A term is its payload under a name, and an enum is a payload chosen by a
+// discriminant, so both convert the way an option does. Every position a type
+// parameter can occupy is now one erasure reaches, which is why nothing below
+// is refused for its signature and the only thing left is the index operator.
 fun in_list<T>(x: [T]): [T]
   ret x
 end fun

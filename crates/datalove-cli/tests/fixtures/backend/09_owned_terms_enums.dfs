@@ -1,0 +1,37 @@
+// A term is its payload under a name, laid out exactly as the payload is, so
+// converting one is converting that at the same address with a different
+// descriptor. An enum is a payload chosen by a discriminant, which is the
+// option's case with more than one thing it could be.
+//
+// The discriminant is an index into the variant list, and that list is sorted
+// by name, so both sides of a conversion have to sort it the same way or the
+// walk reads one variant's payload at another's offset. Building the erased
+// enum in source order rather than sorted is what this first did, and an
+// `atom None` came out as a variant that wanted a payload.
+//
+// Strings for the payloads, so a conversion that loses a move leaks and one
+// that doubles it faults.
+
+fun through_term<T>(x: term Wrapped T): term Wrapped T
+  ret x
+end fun
+
+fun through_enum<T>(x: enum { term Some T, atom None }): enum { term Some T, atom None }
+  ret x
+end fun
+
+// A term nested inside a tuple, so the two walks meet.
+fun through_both<T>(x: (term Wrapped T, u32)): (term Wrapped T, u32)
+  ret x
+end fun
+
+let present: enum { term Some string, atom None } = term Some "there"
+let absent: enum { term Some string, atom None } = atom None
+let numeric: enum { term Some u32, atom None } = term Some 5
+
+debuglog through_term(term Wrapped "hello")
+debuglog through_term(term Wrapped 7)
+debuglog through_enum(present)
+debuglog through_enum(absent)
+debuglog through_enum(numeric)
+debuglog through_both((term Wrapped "nested", 9))

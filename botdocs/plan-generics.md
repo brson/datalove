@@ -454,6 +454,20 @@ becomes `(u32, (data, #{u32}))`.
 A borrowed parameter is still structural, because nothing is converted at one
 and the descriptor the call site supplies covers the whole of it.
 
+A term is its payload under a name, laid out exactly as the payload is, and an
+enum is a payload chosen by a discriminant. Both convert the way an option
+does. The discriminant is an index into the variant list and that list is
+sorted by name, so both sides have to sort it the same way; building the erased
+enum in source order is what this first did, and an `atom None` came out as a
+variant that wanted a payload.
+
+With those, erasure reaches every position a type parameter can occupy, and
+`TypeParamNotErasable` has nothing left to refuse. The check stays: it is the
+decision procedure for whether erasure reaches a shape, and a type form nobody
+has taught it about falls through to being refused rather than to the arm in
+`convert` that copies one size over another. What it is not any more is
+something a program written today can provoke, so there is no fixture for it.
+
 ### What was weighed against it
 
 **Fat values.** An erased container as an inline `(List, *TyDesc)` -- twenty

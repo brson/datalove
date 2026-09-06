@@ -1,7 +1,0 @@
-// An enum is a payload chosen by a tag, which is the same case again, and the
-// return is checked the same way as a parameter and says which part it was.
-fun pick<T>(n: u32): enum { term Some T, atom None }
-  ret atom None
-end fun
-
-let output = pick(1)

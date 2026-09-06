@@ -239,6 +239,13 @@ pub fn first_unerasable_type_param<'db>(ty: &Type<'db>) -> Option<InternedText<'
         Type::AnonStruct(t) => t.fields.iter()
             .find_map(|f| first_unerasable_type_param(&f.ty)),
 
+        // A term is its payload under a name, and an enum is a payload chosen
+        // by a discriminant. Both convert the way an option does, one payload
+        // at a time.
+        Type::Term(t) => first_unerasable_type_param(&t.payload),
+        Type::Enum(t) => t.variants.iter()
+            .find_map(|v| v.payload.as_ref().and_then(|p| first_unerasable_type_param(p))),
+
         other => first_type_param(other),
     }
 }
