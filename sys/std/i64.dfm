@@ -8,8 +8,8 @@ fun max_value(): i64
   ret : i64 / 9223372036854775807
 end fun
 
-fun bits(): u64
-  ret : u64 / 64
+fun bits(): u32
+  ret (: u32 / 64)
 end fun
 
 // Sign functions.
@@ -93,32 +93,30 @@ end fun
 
 // Bit counting (delegate to u64 via cast).
 
-fun count_ones(self: i64): u64
+fun count_ones(self: i64): u32
   let u = icall i64_to_u64(self)
   ret icall popcount_u64(u)
 end fun
 
-fun count_zeros(self: i64): u64
-  let u = icall i64_to_u64(self)
-  let ones = icall popcount_u64(u)
-  ret icall sub_wrapping_u64((: u64 / 64), ones)
+fun count_zeros(self: i64): u32
+  ret icall sub_wrapping_u32(bits(), count_ones(self))
 end fun
 
-fun leading_zeros(self: i64): u64
+fun leading_zeros(self: i64): u32
   let u = icall i64_to_u64(self)
   ret icall clz_u64(u)
 end fun
 
-fun trailing_zeros(self: i64): u64
+fun trailing_zeros(self: i64): u32
   let u = icall i64_to_u64(self)
   ret icall ctz_u64(u)
 end fun
 
-fun leading_ones(self: i64): u64
+fun leading_ones(self: i64): u32
   ret leading_zeros(bitnot(self))
 end fun
 
-fun trailing_ones(self: i64): u64
+fun trailing_ones(self: i64): u32
   ret trailing_zeros(bitnot(self))
 end fun
 
@@ -253,8 +251,8 @@ end fun
 // Shifts.
 
 // Checked left shift. Returns none if n >= 64.
-fun shift_left(self: i64, n: u64): ?i64
-  if n >= (: u64 / 64)
+fun shift_left(self: i64, n: u32): ?i64
+  if n >= bits()
     ret none
   else
     let u = icall i64_to_u64(self)
@@ -264,16 +262,16 @@ fun shift_left(self: i64, n: u64): ?i64
 end fun
 
 // Checked arithmetic right shift. Returns none if n >= 64.
-fun shift_right(self: i64, n: u64): ?i64
-  if n >= (: u64 / 64)
+fun shift_right(self: i64, n: u32): ?i64
+  if n >= bits()
     ret none
   else
     ret some icall sshr_i64(self, n)
   end if
 end fun
 
-fun shift_left_wrapping(self: i64, n: u64): i64
-  let n_mod = icall bitand_u64(n, (: u64 / 63))
+fun shift_left_wrapping(self: i64, n: u32): i64
+  let n_mod = icall bitand_u32(n, : u32 / 63)
   if shift_left(self, n_mod) |value|
     ret value
   else
@@ -281,8 +279,8 @@ fun shift_left_wrapping(self: i64, n: u64): i64
   end if
 end fun
 
-fun shift_right_wrapping(self: i64, n: u64): i64
-  let n_mod = icall bitand_u64(n, (: u64 / 63))
+fun shift_right_wrapping(self: i64, n: u32): i64
+  let n_mod = icall bitand_u32(n, : u32 / 63)
   if shift_right(self, n_mod) |value|
     ret value
   else
@@ -290,8 +288,8 @@ fun shift_right_wrapping(self: i64, n: u64): i64
   end if
 end fun
 
-fun shift_left_saturating(self: i64, n: u64): i64
-  if n >= (: u64 / 64)
+fun shift_left_saturating(self: i64, n: u32): i64
+  if n >= bits()
     if is_negative(self)
       ret min_value()
     else
@@ -310,8 +308,8 @@ fun shift_left_saturating(self: i64, n: u64): i64
   end if
 end fun
 
-fun shift_right_saturating(self: i64, n: u64): i64
-  if n >= (: u64 / 64)
+fun shift_right_saturating(self: i64, n: u32): i64
+  if n >= bits()
     // Arithmetic shift fills with sign bit.
     if is_negative(self)
       ret (: i64 / -1)
@@ -333,21 +331,21 @@ end fun
 
 // Rotations (delegate to u64).
 
-fun rotate_left(self: i64, n: u64): i64
-  let n_mod = icall bitand_u64(n, (: u64 / 63))
+fun rotate_left(self: i64, n: u32): i64
+  let n_mod = icall bitand_u32(n, : u32 / 63)
   let u = icall i64_to_u64(self)
   let left_part = icall shl_u64(u, n_mod)
-  let right_amount = icall sub_wrapping_u64((: u64 / 64), n_mod)
+  let right_amount = icall sub_wrapping_u32(: u32 / 64, n_mod)
   let right_part = icall shr_u64(u, right_amount)
   let result = icall bitor_u64(left_part, right_part)
   ret icall u64_to_i64(result)
 end fun
 
-fun rotate_right(self: i64, n: u64): i64
-  let n_mod = icall bitand_u64(n, (: u64 / 63))
+fun rotate_right(self: i64, n: u32): i64
+  let n_mod = icall bitand_u32(n, : u32 / 63)
   let u = icall i64_to_u64(self)
   let right_part = icall shr_u64(u, n_mod)
-  let left_amount = icall sub_wrapping_u64((: u64 / 64), n_mod)
+  let left_amount = icall sub_wrapping_u32(: u32 / 64, n_mod)
   let left_part = icall shl_u64(u, left_amount)
   let result = icall bitor_u64(left_part, right_part)
   ret icall u64_to_i64(result)
@@ -458,6 +456,6 @@ end fun
 fun midpoint(self: i64, other: i64): i64
   let common = bitand(self, other)
   let diff = bitxor(self, other)
-  let half_diff = shift_right_wrapping(diff, : u64 / 1)
+  let half_diff = shift_right_wrapping(diff, : u32 / 1)
   ret add_wrapping(common, half_diff)
 end fun

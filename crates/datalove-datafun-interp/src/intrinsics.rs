@@ -309,27 +309,27 @@ impl IrInterpreter {
             // U8 shift operations.
             ShlU8 => {
                 let a = self.read_u8(&args[0], frame, frames);
-                let b = self.read_u8(&args[1], frame, frames);
-                self.write_u8(a.wrapping_shl(b as u32), dest);
+                let b = self.read_u32(&args[1], frame, frames);
+                self.write_u8(a.wrapping_shl(b), dest);
             }
             ShrU8 => {
                 let a = self.read_u8(&args[0], frame, frames);
-                let b = self.read_u8(&args[1], frame, frames);
-                self.write_u8(a.wrapping_shr(b as u32), dest);
+                let b = self.read_u32(&args[1], frame, frames);
+                self.write_u8(a.wrapping_shr(b), dest);
             }
 
             // U8 bit counting operations.
             PopcountU8 => {
                 let a = self.read_u8(&args[0], frame, frames);
-                self.write_u8(a.count_ones() as u8, dest);
+                self.write_u32(a.count_ones(), dest);
             }
             ClzU8 => {
                 let a = self.read_u8(&args[0], frame, frames);
-                self.write_u8(a.leading_zeros() as u8, dest);
+                self.write_u32(a.leading_zeros(), dest);
             }
             CtzU8 => {
                 let a = self.read_u8(&args[0], frame, frames);
-                self.write_u8(a.trailing_zeros() as u8, dest);
+                self.write_u32(a.trailing_zeros(), dest);
             }
 
             // U8 bit manipulation.
@@ -377,8 +377,8 @@ impl IrInterpreter {
             }
             SshrI8 => {
                 let a = self.read_i8(&args[0], frame, frames);
-                let b = self.read_u8(&args[1], frame, frames);
-                self.write_i8(a.wrapping_shr(b as u32), dest);
+                let b = self.read_u32(&args[1], frame, frames);
+                self.write_i8(a.wrapping_shr(b), dest);
             }
             SremI8 => {
                 let a = self.read_i8(&args[0], frame, frames);
@@ -410,27 +410,27 @@ impl IrInterpreter {
             // U16 shift operations.
             ShlU16 => {
                 let a = self.read_u16(&args[0], frame, frames);
-                let b = self.read_u16(&args[1], frame, frames);
-                self.write_u16(a.wrapping_shl(b as u32), dest);
+                let b = self.read_u32(&args[1], frame, frames);
+                self.write_u16(a.wrapping_shl(b), dest);
             }
             ShrU16 => {
                 let a = self.read_u16(&args[0], frame, frames);
-                let b = self.read_u16(&args[1], frame, frames);
-                self.write_u16(a.wrapping_shr(b as u32), dest);
+                let b = self.read_u32(&args[1], frame, frames);
+                self.write_u16(a.wrapping_shr(b), dest);
             }
 
             // U16 bit counting operations.
             PopcountU16 => {
                 let a = self.read_u16(&args[0], frame, frames);
-                self.write_u16(a.count_ones() as u16, dest);
+                self.write_u32(a.count_ones(), dest);
             }
             ClzU16 => {
                 let a = self.read_u16(&args[0], frame, frames);
-                self.write_u16(a.leading_zeros() as u16, dest);
+                self.write_u32(a.leading_zeros(), dest);
             }
             CtzU16 => {
                 let a = self.read_u16(&args[0], frame, frames);
-                self.write_u16(a.trailing_zeros() as u16, dest);
+                self.write_u32(a.trailing_zeros(), dest);
             }
 
             // U16 byte/bit manipulation.
@@ -482,8 +482,8 @@ impl IrInterpreter {
             }
             SshrI16 => {
                 let a = self.read_i16(&args[0], frame, frames);
-                let b = self.read_u16(&args[1], frame, frames);
-                self.write_i16(a.wrapping_shr(b as u32), dest);
+                let b = self.read_u32(&args[1], frame, frames);
+                self.write_i16(a.wrapping_shr(b), dest);
             }
             SremI16 => {
                 let a = self.read_i16(&args[0], frame, frames);
@@ -505,27 +505,27 @@ impl IrInterpreter {
             // U64 shift operations.
             ShlU64 => {
                 let a = self.read_u64(&args[0], frame, frames);
-                let b = self.read_u64(&args[1], frame, frames);
-                self.write_u64(a.wrapping_shl(b as u32), dest);
+                let b = self.read_u32(&args[1], frame, frames);
+                self.write_u64(a.wrapping_shl(b), dest);
             }
             ShrU64 => {
                 let a = self.read_u64(&args[0], frame, frames);
-                let b = self.read_u64(&args[1], frame, frames);
-                self.write_u64(a.wrapping_shr(b as u32), dest);
+                let b = self.read_u32(&args[1], frame, frames);
+                self.write_u64(a.wrapping_shr(b), dest);
             }
 
             // U64 bit counting operations.
             PopcountU64 => {
                 let a = self.read_u64(&args[0], frame, frames);
-                self.write_u64(a.count_ones() as u64, dest);
+                self.write_u32(a.count_ones(), dest);
             }
             ClzU64 => {
                 let a = self.read_u64(&args[0], frame, frames);
-                self.write_u64(a.leading_zeros() as u64, dest);
+                self.write_u32(a.leading_zeros(), dest);
             }
             CtzU64 => {
                 let a = self.read_u64(&args[0], frame, frames);
-                self.write_u64(a.trailing_zeros() as u64, dest);
+                self.write_u32(a.trailing_zeros(), dest);
             }
 
             // U64 byte/bit manipulation.
@@ -567,8 +567,8 @@ impl IrInterpreter {
             }
             SshrI64 => {
                 let a = self.read_i64(&args[0], frame, frames);
-                let b = self.read_u64(&args[1], frame, frames);
-                self.write_i64(a.wrapping_shr(b as u32), dest);
+                let b = self.read_u32(&args[1], frame, frames);
+                self.write_i64(a.wrapping_shr(b), dest);
             }
             SremI64 => {
                 let a = self.read_i64(&args[0], frame, frames);

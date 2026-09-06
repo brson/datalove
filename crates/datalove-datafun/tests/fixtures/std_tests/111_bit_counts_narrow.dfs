@@ -1,0 +1,45 @@
+require module sys/std/u8
+
+import u8.bits
+import u8.count_ones
+import u8.count_zeros
+import u8.leading_zeros
+import u8.trailing_zeros
+import u8.leading_ones
+import u8.trailing_ones
+import u8.ilog2
+import u8.shift_left
+import u8.shift_right
+import u8.shift_left_wrapping
+import u8.rotate_left
+import u8.pow_checked
+import u8.next_power_of_two
+
+// A count is a `u32` whatever width it counted, and a shift amount is a `u32`
+// whatever it shifts. This is the narrow half: the count comes out of an
+// eight-bit value, so the cranelift backends have to widen the result of
+// `popcnt` and the C backend has to stop casting it back down.
+//
+// The values are the same as they were when a `u8` count came back as a `u8`.
+// What changed is that the result now composes with everything else, and a
+// shift amount can say 255 without being a `u8` first.
+
+let widths = (bits(), count_ones(: u8 / 255), count_zeros(: u8 / 255),
+              count_ones(: u8 / 0), count_zeros(: u8 / 0))
+
+let edges = (leading_zeros(: u8 / 0), leading_zeros(: u8 / 1), leading_zeros(: u8 / 255),
+             trailing_zeros(: u8 / 0), trailing_zeros(: u8 / 8),
+             leading_ones(: u8 / 255), trailing_ones(: u8 / 7))
+
+let logs = (ilog2(: u8 / 0), ilog2(: u8 / 1), ilog2(: u8 / 255))
+
+// A shift amount at and past the width, which is where the u32 matters: it can
+// name an amount the shifted type could not hold.
+let shifts = (shift_left(: u8 / 1, : u32 / 7), shift_left(: u8 / 1, : u32 / 8),
+              shift_left(: u8 / 1, : u32 / 300), shift_right(: u8 / 128, : u32 / 7),
+              shift_left_wrapping(: u8 / 1, : u32 / 8), rotate_left(: u8 / 129, : u32 / 1))
+
+let powers = (pow_checked(: u8 / 2, : u32 / 7), pow_checked(: u8 / 2, : u32 / 8),
+              next_power_of_two(: u8 / 5), next_power_of_two(: u8 / 129))
+
+let output = (widths, edges, logs, shifts, powers)

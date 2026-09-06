@@ -140,6 +140,21 @@ The `index` and `offset` types are 32-bit by default, or 64-bit when the
 which is not exposed to the language.
 The size of `index` is less than or equal to the platform pointer size.
 
+**A count is always a `u32`.** Every bit count, shift amount, rotate amount
+and exponent in `sys/std` is a `u32`, whatever the width of the value it
+counts or shifts: `u8.count_ones(self: u8): u32`, `u64.bits(): u32`,
+`i64.shift_left(self: i64, n: u32): ?i64`, `u8.pow_checked(self: u8, exp: u32)`.
+This is Rust's rule, and it is here for the same two reasons. A count is
+bounded by the widest integer, so `u32` always holds it and never needs a
+register wider than one; and hardware takes a shift amount in a fixed narrow
+place and masks it, so a shift amount of the shifted type asks a question the
+machine does not answer. It also lets counts compose: a count out of one width
+feeds a shift at another, which a same-width rule cannot express.
+
+`abs_diff` is the exception, because a magnitude is not a count: it gives the
+unsigned type of the same width, so `i32.abs_diff` gives a `u32` and
+`offset.abs_diff` gives an `index`.
+
 ### 3.2 Collection Types
 
 **List.** An ordered sequence of elements.

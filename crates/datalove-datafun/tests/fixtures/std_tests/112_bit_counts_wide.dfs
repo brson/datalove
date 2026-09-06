@@ -1,0 +1,43 @@
+require module sys/std/u64
+
+import u64.bits
+import u64.count_ones
+import u64.count_zeros
+import u64.leading_zeros
+import u64.trailing_zeros
+import u64.leading_ones
+import u64.trailing_ones
+import u64.ilog2
+import u64.shift_left
+import u64.shift_right
+import u64.shift_left_wrapping
+import u64.rotate_left
+import u64.pow_checked
+import u64.next_power_of_two
+
+// The wide half of `111`: the count comes out of a sixty-four bit value, so
+// the cranelift backends have to narrow the result of `popcnt` rather than
+// widen it, and the C backend has to cast down from `__builtin_popcountll`.
+//
+// This is the direction that used to return the count as a `u64` -- the number
+// 64 carried in a sixty-four bit register.
+
+let widths = (bits(), count_ones(: u64 / 18446744073709551615), count_zeros(: u64 / 18446744073709551615),
+              count_ones(: u64 / 0), count_zeros(: u64 / 0))
+
+let edges = (leading_zeros(: u64 / 0), leading_zeros(: u64 / 1), leading_zeros(: u64 / 18446744073709551615),
+             trailing_zeros(: u64 / 0), trailing_zeros(: u64 / 8),
+             leading_ones(: u64 / 18446744073709551615), trailing_ones(: u64 / 7))
+
+let logs = (ilog2(: u64 / 0), ilog2(: u64 / 1), ilog2(: u64 / 18446744073709551615))
+
+// A shift amount at and past the width, which is where the u32 matters: it can
+// name an amount the shifted type could not hold.
+let shifts = (shift_left(: u64 / 1, : u32 / 63), shift_left(: u64 / 1, : u32 / 64),
+              shift_left(: u64 / 1, : u32 / 300), shift_right(: u64 / 9223372036854775808, : u32 / 63),
+              shift_left_wrapping(: u64 / 1, : u32 / 64), rotate_left(: u64 / 129, : u32 / 1))
+
+let powers = (pow_checked(: u64 / 2, : u32 / 63), pow_checked(: u64 / 2, : u32 / 64),
+              next_power_of_two(: u64 / 5), next_power_of_two(: u64 / 9223372036854775809))
+
+let output = (widths, edges, logs, shifts, powers)

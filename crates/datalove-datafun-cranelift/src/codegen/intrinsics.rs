@@ -4,7 +4,6 @@
 
 use cranelift_frontend::FunctionBuilder;
 use cranelift_codegen::ir::{self as cl_ir};
-#[cfg(feature = "index-64")]
 use cranelift_codegen::ir::types as cl_types;
 use cranelift_codegen::ir::InstBuilder;
 use cranelift_module::Module;
@@ -337,16 +336,22 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
 
             // U8 bit counting operations.
             PopcountU8 => {
+                // A bit count is a u32 whatever width it counted.
                 let a = self.get_operand_value(builder, &args[0])?;
-                builder.ins().popcnt(a)
+                let result = builder.ins().popcnt(a);
+                builder.ins().uextend(cl_types::I32, result)
             }
             ClzU8 => {
+                // A bit count is a u32 whatever width it counted.
                 let a = self.get_operand_value(builder, &args[0])?;
-                builder.ins().clz(a)
+                let result = builder.ins().clz(a);
+                builder.ins().uextend(cl_types::I32, result)
             }
             CtzU8 => {
+                // A bit count is a u32 whatever width it counted.
                 let a = self.get_operand_value(builder, &args[0])?;
-                builder.ins().ctz(a)
+                let result = builder.ins().ctz(a);
+                builder.ins().uextend(cl_types::I32, result)
             }
 
             // U8 bit manipulation.
@@ -436,16 +441,22 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
 
             // U16 bit counting operations.
             PopcountU16 => {
+                // A bit count is a u32 whatever width it counted.
                 let a = self.get_operand_value(builder, &args[0])?;
-                builder.ins().popcnt(a)
+                let result = builder.ins().popcnt(a);
+                builder.ins().uextend(cl_types::I32, result)
             }
             ClzU16 => {
+                // A bit count is a u32 whatever width it counted.
                 let a = self.get_operand_value(builder, &args[0])?;
-                builder.ins().clz(a)
+                let result = builder.ins().clz(a);
+                builder.ins().uextend(cl_types::I32, result)
             }
             CtzU16 => {
+                // A bit count is a u32 whatever width it counted.
                 let a = self.get_operand_value(builder, &args[0])?;
-                builder.ins().ctz(a)
+                let result = builder.ins().ctz(a);
+                builder.ins().uextend(cl_types::I32, result)
             }
 
             // U16 byte/bit manipulation.
@@ -529,16 +540,22 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
 
             // U64 bit counting operations.
             PopcountU64 => {
+                // A bit count is a u32 whatever width it counted.
                 let a = self.get_operand_value(builder, &args[0])?;
-                builder.ins().popcnt(a)
+                let result = builder.ins().popcnt(a);
+                builder.ins().ireduce(cl_types::I32, result)
             }
             ClzU64 => {
+                // A bit count is a u32 whatever width it counted.
                 let a = self.get_operand_value(builder, &args[0])?;
-                builder.ins().clz(a)
+                let result = builder.ins().clz(a);
+                builder.ins().ireduce(cl_types::I32, result)
             }
             CtzU64 => {
+                // A bit count is a u32 whatever width it counted.
                 let a = self.get_operand_value(builder, &args[0])?;
-                builder.ins().ctz(a)
+                let result = builder.ins().ctz(a);
+                builder.ins().ireduce(cl_types::I32, result)
             }
 
             // U64 byte/bit manipulation.

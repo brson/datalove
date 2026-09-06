@@ -8,8 +8,8 @@ fun max_value(): i8
   ret : i8 / 127
 end fun
 
-fun bits(): u8
-  ret : u8 / 8
+fun bits(): u32
+  ret (: u32 / 8)
 end fun
 
 // Sign functions.
@@ -93,32 +93,30 @@ end fun
 
 // Bit counting (delegate to u8 via cast).
 
-fun count_ones(self: i8): u8
+fun count_ones(self: i8): u32
   let u = icall i8_to_u8(self)
   ret icall popcount_u8(u)
 end fun
 
-fun count_zeros(self: i8): u8
-  let u = icall i8_to_u8(self)
-  let ones = icall popcount_u8(u)
-  ret icall sub_wrapping_u8((: u8 / 8), ones)
+fun count_zeros(self: i8): u32
+  ret icall sub_wrapping_u32(bits(), count_ones(self))
 end fun
 
-fun leading_zeros(self: i8): u8
+fun leading_zeros(self: i8): u32
   let u = icall i8_to_u8(self)
   ret icall clz_u8(u)
 end fun
 
-fun trailing_zeros(self: i8): u8
+fun trailing_zeros(self: i8): u32
   let u = icall i8_to_u8(self)
   ret icall ctz_u8(u)
 end fun
 
-fun leading_ones(self: i8): u8
+fun leading_ones(self: i8): u32
   ret leading_zeros(bitnot(self))
 end fun
 
-fun trailing_ones(self: i8): u8
+fun trailing_ones(self: i8): u32
   ret trailing_zeros(bitnot(self))
 end fun
 
@@ -253,8 +251,8 @@ end fun
 // Shifts.
 
 // Checked left shift. Returns none if n >= 8.
-fun shift_left(self: i8, n: u8): ?i8
-  if n >= (: u8 / 8)
+fun shift_left(self: i8, n: u32): ?i8
+  if n >= bits()
     ret none
   else
     let u = icall i8_to_u8(self)
@@ -264,16 +262,16 @@ fun shift_left(self: i8, n: u8): ?i8
 end fun
 
 // Checked arithmetic right shift. Returns none if n >= 8.
-fun shift_right(self: i8, n: u8): ?i8
-  if n >= (: u8 / 8)
+fun shift_right(self: i8, n: u32): ?i8
+  if n >= bits()
     ret none
   else
     ret some icall sshr_i8(self, n)
   end if
 end fun
 
-fun shift_left_wrapping(self: i8, n: u8): i8
-  let n_mod = icall bitand_u8(n, (: u8 / 7))
+fun shift_left_wrapping(self: i8, n: u32): i8
+  let n_mod = icall bitand_u32(n, : u32 / 7)
   if shift_left(self, n_mod) |value|
     ret value
   else
@@ -281,8 +279,8 @@ fun shift_left_wrapping(self: i8, n: u8): i8
   end if
 end fun
 
-fun shift_right_wrapping(self: i8, n: u8): i8
-  let n_mod = icall bitand_u8(n, (: u8 / 7))
+fun shift_right_wrapping(self: i8, n: u32): i8
+  let n_mod = icall bitand_u32(n, : u32 / 7)
   if shift_right(self, n_mod) |value|
     ret value
   else
@@ -290,8 +288,8 @@ fun shift_right_wrapping(self: i8, n: u8): i8
   end if
 end fun
 
-fun shift_left_saturating(self: i8, n: u8): i8
-  if n >= (: u8 / 8)
+fun shift_left_saturating(self: i8, n: u32): i8
+  if n >= bits()
     if is_negative(self)
       ret min_value()
     else
@@ -310,8 +308,8 @@ fun shift_left_saturating(self: i8, n: u8): i8
   end if
 end fun
 
-fun shift_right_saturating(self: i8, n: u8): i8
-  if n >= (: u8 / 8)
+fun shift_right_saturating(self: i8, n: u32): i8
+  if n >= bits()
     // Arithmetic shift fills with sign bit.
     if is_negative(self)
       ret (: i8 / -1)
@@ -333,21 +331,21 @@ end fun
 
 // Rotations (delegate to u8).
 
-fun rotate_left(self: i8, n: u8): i8
-  let n_mod = icall bitand_u8(n, (: u8 / 7))
+fun rotate_left(self: i8, n: u32): i8
+  let n_mod = icall bitand_u32(n, : u32 / 7)
   let u = icall i8_to_u8(self)
   let left_part = icall shl_u8(u, n_mod)
-  let right_amount = icall sub_wrapping_u8((: u8 / 8), n_mod)
+  let right_amount = icall sub_wrapping_u32(: u32 / 8, n_mod)
   let right_part = icall shr_u8(u, right_amount)
   let result = icall bitor_u8(left_part, right_part)
   ret icall u8_to_i8(result)
 end fun
 
-fun rotate_right(self: i8, n: u8): i8
-  let n_mod = icall bitand_u8(n, (: u8 / 7))
+fun rotate_right(self: i8, n: u32): i8
+  let n_mod = icall bitand_u32(n, : u32 / 7)
   let u = icall i8_to_u8(self)
   let right_part = icall shr_u8(u, n_mod)
-  let left_amount = icall sub_wrapping_u8((: u8 / 8), n_mod)
+  let left_amount = icall sub_wrapping_u32(: u32 / 8, n_mod)
   let left_part = icall shl_u8(u, left_amount)
   let result = icall bitor_u8(left_part, right_part)
   ret icall u8_to_i8(result)
@@ -414,6 +412,6 @@ end fun
 fun midpoint(self: i8, other: i8): i8
   let common = bitand(self, other)
   let diff = bitxor(self, other)
-  let half_diff = shift_right_wrapping(diff, : u8 / 1)
+  let half_diff = shift_right_wrapping(diff, : u32 / 1)
   ret add_wrapping(common, half_diff)
 end fun

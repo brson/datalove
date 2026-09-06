@@ -607,13 +607,13 @@ pub static INTRINSICS: &[IntrinsicDef] = &[
     IntrinsicDef {
         id: IntrinsicId::ShlU8,
         name: "shl_u8",
-        params: &[IntrinsicType::U8, IntrinsicType::U8],
+        params: &[IntrinsicType::U8, IntrinsicType::U32],
         ret: IntrinsicType::U8,
     },
     IntrinsicDef {
         id: IntrinsicId::ShrU8,
         name: "shr_u8",
-        params: &[IntrinsicType::U8, IntrinsicType::U8],
+        params: &[IntrinsicType::U8, IntrinsicType::U32],
         ret: IntrinsicType::U8,
     },
 
@@ -622,19 +622,19 @@ pub static INTRINSICS: &[IntrinsicDef] = &[
         id: IntrinsicId::PopcountU8,
         name: "popcount_u8",
         params: &[IntrinsicType::U8],
-        ret: IntrinsicType::U8,
+        ret: IntrinsicType::U32,
     },
     IntrinsicDef {
         id: IntrinsicId::ClzU8,
         name: "clz_u8",
         params: &[IntrinsicType::U8],
-        ret: IntrinsicType::U8,
+        ret: IntrinsicType::U32,
     },
     IntrinsicDef {
         id: IntrinsicId::CtzU8,
         name: "ctz_u8",
         params: &[IntrinsicType::U8],
-        ret: IntrinsicType::U8,
+        ret: IntrinsicType::U32,
     },
 
     // U8 bit manipulation.
@@ -695,7 +695,7 @@ pub static INTRINSICS: &[IntrinsicDef] = &[
     IntrinsicDef {
         id: IntrinsicId::SshrI8,
         name: "sshr_i8",
-        params: &[IntrinsicType::I8, IntrinsicType::U8],
+        params: &[IntrinsicType::I8, IntrinsicType::U32],
         ret: IntrinsicType::I8,
     },
     IntrinsicDef {
@@ -735,13 +735,13 @@ pub static INTRINSICS: &[IntrinsicDef] = &[
     IntrinsicDef {
         id: IntrinsicId::ShlU16,
         name: "shl_u16",
-        params: &[IntrinsicType::U16, IntrinsicType::U16],
+        params: &[IntrinsicType::U16, IntrinsicType::U32],
         ret: IntrinsicType::U16,
     },
     IntrinsicDef {
         id: IntrinsicId::ShrU16,
         name: "shr_u16",
-        params: &[IntrinsicType::U16, IntrinsicType::U16],
+        params: &[IntrinsicType::U16, IntrinsicType::U32],
         ret: IntrinsicType::U16,
     },
 
@@ -750,19 +750,19 @@ pub static INTRINSICS: &[IntrinsicDef] = &[
         id: IntrinsicId::PopcountU16,
         name: "popcount_u16",
         params: &[IntrinsicType::U16],
-        ret: IntrinsicType::U16,
+        ret: IntrinsicType::U32,
     },
     IntrinsicDef {
         id: IntrinsicId::ClzU16,
         name: "clz_u16",
         params: &[IntrinsicType::U16],
-        ret: IntrinsicType::U16,
+        ret: IntrinsicType::U32,
     },
     IntrinsicDef {
         id: IntrinsicId::CtzU16,
         name: "ctz_u16",
         params: &[IntrinsicType::U16],
-        ret: IntrinsicType::U16,
+        ret: IntrinsicType::U32,
     },
 
     // U16 byte/bit manipulation.
@@ -829,7 +829,7 @@ pub static INTRINSICS: &[IntrinsicDef] = &[
     IntrinsicDef {
         id: IntrinsicId::SshrI16,
         name: "sshr_i16",
-        params: &[IntrinsicType::I16, IntrinsicType::U16],
+        params: &[IntrinsicType::I16, IntrinsicType::U32],
         ret: IntrinsicType::I16,
     },
     IntrinsicDef {
@@ -857,13 +857,13 @@ pub static INTRINSICS: &[IntrinsicDef] = &[
     IntrinsicDef {
         id: IntrinsicId::ShlU64,
         name: "shl_u64",
-        params: &[IntrinsicType::U64, IntrinsicType::U64],
+        params: &[IntrinsicType::U64, IntrinsicType::U32],
         ret: IntrinsicType::U64,
     },
     IntrinsicDef {
         id: IntrinsicId::ShrU64,
         name: "shr_u64",
-        params: &[IntrinsicType::U64, IntrinsicType::U64],
+        params: &[IntrinsicType::U64, IntrinsicType::U32],
         ret: IntrinsicType::U64,
     },
 
@@ -872,19 +872,19 @@ pub static INTRINSICS: &[IntrinsicDef] = &[
         id: IntrinsicId::PopcountU64,
         name: "popcount_u64",
         params: &[IntrinsicType::U64],
-        ret: IntrinsicType::U64,
+        ret: IntrinsicType::U32,
     },
     IntrinsicDef {
         id: IntrinsicId::ClzU64,
         name: "clz_u64",
         params: &[IntrinsicType::U64],
-        ret: IntrinsicType::U64,
+        ret: IntrinsicType::U32,
     },
     IntrinsicDef {
         id: IntrinsicId::CtzU64,
         name: "ctz_u64",
         params: &[IntrinsicType::U64],
-        ret: IntrinsicType::U64,
+        ret: IntrinsicType::U32,
     },
 
     // U64 byte/bit manipulation.
@@ -937,7 +937,7 @@ pub static INTRINSICS: &[IntrinsicDef] = &[
     IntrinsicDef {
         id: IntrinsicId::SshrI64,
         name: "sshr_i64",
-        params: &[IntrinsicType::I64, IntrinsicType::U64],
+        params: &[IntrinsicType::I64, IntrinsicType::U32],
         ret: IntrinsicType::I64,
     },
     IntrinsicDef {

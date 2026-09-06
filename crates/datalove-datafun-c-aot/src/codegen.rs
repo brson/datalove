@@ -2833,19 +2833,19 @@ impl<'a> FunctionCodegenContext<'a> {
                 writeln!(out, "    *(uint64_t*){} = *(uint64_t*){} ^ *(uint64_t*){};", dest_addr, arg0(), arg1()).unwrap();
             }
             IntrinsicId::ShlU64 => {
-                writeln!(out, "    *(uint64_t*){} = *(uint64_t*){} << *(uint64_t*){};", dest_addr, arg0(), arg1()).unwrap();
+                writeln!(out, "    *(uint64_t*){} = *(uint64_t*){} << *(uint32_t*){};", dest_addr, arg0(), arg1()).unwrap();
             }
             IntrinsicId::ShrU64 => {
-                writeln!(out, "    *(uint64_t*){} = *(uint64_t*){} >> *(uint64_t*){};", dest_addr, arg0(), arg1()).unwrap();
+                writeln!(out, "    *(uint64_t*){} = *(uint64_t*){} >> *(uint32_t*){};", dest_addr, arg0(), arg1()).unwrap();
             }
             IntrinsicId::PopcountU64 => {
-                writeln!(out, "    *(uint64_t*){} = __builtin_popcountll(*(uint64_t*){});", dest_addr, arg0()).unwrap();
+                writeln!(out, "    *(uint32_t*){} = (uint32_t)__builtin_popcountll(*(uint64_t*){});", dest_addr, arg0()).unwrap();
             }
             IntrinsicId::ClzU64 => {
-                writeln!(out, "    *(uint64_t*){} = *(uint64_t*){} ? __builtin_clzll(*(uint64_t*){}) : 64;", dest_addr, arg0(), arg0()).unwrap();
+                writeln!(out, "    *(uint32_t*){} = *(uint64_t*){} ? (uint32_t)__builtin_clzll(*(uint64_t*){}) : 64;", dest_addr, arg0(), arg0()).unwrap();
             }
             IntrinsicId::CtzU64 => {
-                writeln!(out, "    *(uint64_t*){} = *(uint64_t*){} ? __builtin_ctzll(*(uint64_t*){}) : 64;", dest_addr, arg0(), arg0()).unwrap();
+                writeln!(out, "    *(uint32_t*){} = *(uint64_t*){} ? (uint32_t)__builtin_ctzll(*(uint64_t*){}) : 64;", dest_addr, arg0(), arg0()).unwrap();
             }
             IntrinsicId::SwapBytesU64 => {
                 writeln!(out, "    *(uint64_t*){} = __builtin_bswap64(*(uint64_t*){});", dest_addr, arg0()).unwrap();
@@ -2875,7 +2875,7 @@ impl<'a> FunctionCodegenContext<'a> {
                 writeln!(out, "    *(int64_t*){} = -*(int64_t*){};", dest_addr, arg0()).unwrap();
             }
             IntrinsicId::SshrI64 => {
-                writeln!(out, "    *(int64_t*){} = *(int64_t*){} >> *(uint64_t*){};", dest_addr, arg0(), arg1()).unwrap();
+                writeln!(out, "    *(int64_t*){} = *(int64_t*){} >> *(uint32_t*){};", dest_addr, arg0(), arg1()).unwrap();
             }
             IntrinsicId::SremI64 => {
                 writeln!(out, "    *(int64_t*){} = *(int64_t*){} % *(int64_t*){};", dest_addr, arg0(), arg1()).unwrap();
@@ -2895,19 +2895,19 @@ impl<'a> FunctionCodegenContext<'a> {
                 writeln!(out, "    *(uint8_t*){} = *(uint8_t*){} ^ *(uint8_t*){};", dest_addr, arg0(), arg1()).unwrap();
             }
             IntrinsicId::ShlU8 => {
-                writeln!(out, "    *(uint8_t*){} = *(uint8_t*){} << *(uint8_t*){};", dest_addr, arg0(), arg1()).unwrap();
+                writeln!(out, "    *(uint8_t*){} = *(uint8_t*){} << *(uint32_t*){};", dest_addr, arg0(), arg1()).unwrap();
             }
             IntrinsicId::ShrU8 => {
-                writeln!(out, "    *(uint8_t*){} = *(uint8_t*){} >> *(uint8_t*){};", dest_addr, arg0(), arg1()).unwrap();
+                writeln!(out, "    *(uint8_t*){} = *(uint8_t*){} >> *(uint32_t*){};", dest_addr, arg0(), arg1()).unwrap();
             }
             IntrinsicId::PopcountU8 => {
-                writeln!(out, "    *(uint8_t*){} = (uint8_t)__builtin_popcount(*(uint8_t*){});", dest_addr, arg0()).unwrap();
+                writeln!(out, "    *(uint32_t*){} = __builtin_popcount(*(uint8_t*){});", dest_addr, arg0()).unwrap();
             }
             IntrinsicId::ClzU8 => {
-                writeln!(out, "    *(uint8_t*){} = *(uint8_t*){} ? (uint8_t)(__builtin_clz(*(uint8_t*){}) - 24) : 8;", dest_addr, arg0(), arg0()).unwrap();
+                writeln!(out, "    *(uint32_t*){} = *(uint8_t*){} ? (uint32_t)(__builtin_clz(*(uint8_t*){}) - 24) : 8;", dest_addr, arg0(), arg0()).unwrap();
             }
             IntrinsicId::CtzU8 => {
-                writeln!(out, "    *(uint8_t*){} = *(uint8_t*){} ? (uint8_t)__builtin_ctz(*(uint8_t*){}) : 8;", dest_addr, arg0(), arg0()).unwrap();
+                writeln!(out, "    *(uint32_t*){} = *(uint8_t*){} ? (uint32_t)__builtin_ctz(*(uint8_t*){}) : 8;", dest_addr, arg0(), arg0()).unwrap();
             }
             IntrinsicId::ReverseBitsU8 => {
                 writeln!(out, "    {{ uint8_t __v = *(uint8_t*){}; __v = ((__v >> 1) & 0x55) | ((__v & 0x55) << 1); __v = ((__v >> 2) & 0x33) | ((__v & 0x33) << 2); *(uint8_t*){} = (__v >> 4) | (__v << 4); }}", arg0(), dest_addr).unwrap();
@@ -2934,7 +2934,7 @@ impl<'a> FunctionCodegenContext<'a> {
                 writeln!(out, "    *(int8_t*){} = -*(int8_t*){};", dest_addr, arg0()).unwrap();
             }
             IntrinsicId::SshrI8 => {
-                writeln!(out, "    *(int8_t*){} = *(int8_t*){} >> *(uint8_t*){};", dest_addr, arg0(), arg1()).unwrap();
+                writeln!(out, "    *(int8_t*){} = *(int8_t*){} >> *(uint32_t*){};", dest_addr, arg0(), arg1()).unwrap();
             }
             IntrinsicId::SremI8 => {
                 writeln!(out, "    *(int8_t*){} = *(int8_t*){} % *(int8_t*){};", dest_addr, arg0(), arg1()).unwrap();
@@ -2954,19 +2954,19 @@ impl<'a> FunctionCodegenContext<'a> {
                 writeln!(out, "    *(uint16_t*){} = *(uint16_t*){} ^ *(uint16_t*){};", dest_addr, arg0(), arg1()).unwrap();
             }
             IntrinsicId::ShlU16 => {
-                writeln!(out, "    *(uint16_t*){} = *(uint16_t*){} << *(uint16_t*){};", dest_addr, arg0(), arg1()).unwrap();
+                writeln!(out, "    *(uint16_t*){} = *(uint16_t*){} << *(uint32_t*){};", dest_addr, arg0(), arg1()).unwrap();
             }
             IntrinsicId::ShrU16 => {
-                writeln!(out, "    *(uint16_t*){} = *(uint16_t*){} >> *(uint16_t*){};", dest_addr, arg0(), arg1()).unwrap();
+                writeln!(out, "    *(uint16_t*){} = *(uint16_t*){} >> *(uint32_t*){};", dest_addr, arg0(), arg1()).unwrap();
             }
             IntrinsicId::PopcountU16 => {
-                writeln!(out, "    *(uint16_t*){} = (uint16_t)__builtin_popcount(*(uint16_t*){});", dest_addr, arg0()).unwrap();
+                writeln!(out, "    *(uint32_t*){} = __builtin_popcount(*(uint16_t*){});", dest_addr, arg0()).unwrap();
             }
             IntrinsicId::ClzU16 => {
-                writeln!(out, "    *(uint16_t*){} = *(uint16_t*){} ? (uint16_t)(__builtin_clz(*(uint16_t*){}) - 16) : 16;", dest_addr, arg0(), arg0()).unwrap();
+                writeln!(out, "    *(uint32_t*){} = *(uint16_t*){} ? (uint32_t)(__builtin_clz(*(uint16_t*){}) - 16) : 16;", dest_addr, arg0(), arg0()).unwrap();
             }
             IntrinsicId::CtzU16 => {
-                writeln!(out, "    *(uint16_t*){} = *(uint16_t*){} ? (uint16_t)__builtin_ctz(*(uint16_t*){}) : 16;", dest_addr, arg0(), arg0()).unwrap();
+                writeln!(out, "    *(uint32_t*){} = *(uint16_t*){} ? (uint32_t)__builtin_ctz(*(uint16_t*){}) : 16;", dest_addr, arg0(), arg0()).unwrap();
             }
             IntrinsicId::SwapBytesU16 => {
                 writeln!(out, "    *(uint16_t*){} = __builtin_bswap16(*(uint16_t*){});", dest_addr, arg0()).unwrap();
@@ -2996,7 +2996,7 @@ impl<'a> FunctionCodegenContext<'a> {
                 writeln!(out, "    *(int16_t*){} = -*(int16_t*){};", dest_addr, arg0()).unwrap();
             }
             IntrinsicId::SshrI16 => {
-                writeln!(out, "    *(int16_t*){} = *(int16_t*){} >> *(uint16_t*){};", dest_addr, arg0(), arg1()).unwrap();
+                writeln!(out, "    *(int16_t*){} = *(int16_t*){} >> *(uint32_t*){};", dest_addr, arg0(), arg1()).unwrap();
             }
             IntrinsicId::SremI16 => {
                 writeln!(out, "    *(int16_t*){} = *(int16_t*){} % *(int16_t*){};", dest_addr, arg0(), arg1()).unwrap();
@@ -3016,28 +3016,28 @@ impl<'a> FunctionCodegenContext<'a> {
                 writeln!(out, "    *(index_t*){} = *(index_t*){} ^ *(index_t*){};", dest_addr, arg0(), arg1()).unwrap();
             }
             IntrinsicId::ShlIndex => {
-                writeln!(out, "    *(index_t*){} = *(index_t*){} << *(index_t*){};", dest_addr, arg0(), arg1()).unwrap();
+                writeln!(out, "    *(index_t*){} = *(index_t*){} << *(uint32_t*){};", dest_addr, arg0(), arg1()).unwrap();
             }
             IntrinsicId::ShrIndex => {
-                writeln!(out, "    *(index_t*){} = *(index_t*){} >> *(index_t*){};", dest_addr, arg0(), arg1()).unwrap();
+                writeln!(out, "    *(index_t*){} = *(index_t*){} >> *(uint32_t*){};", dest_addr, arg0(), arg1()).unwrap();
             }
             IntrinsicId::PopcountIndex => {
                 #[cfg(not(feature = "index-64"))]
-                writeln!(out, "    *(index_t*){} = __builtin_popcount(*(index_t*){});", dest_addr, arg0()).unwrap();
+                writeln!(out, "    *(uint32_t*){} = __builtin_popcount(*(index_t*){});", dest_addr, arg0()).unwrap();
                 #[cfg(feature = "index-64")]
-                writeln!(out, "    *(index_t*){} = __builtin_popcountll(*(index_t*){});", dest_addr, arg0()).unwrap();
+                writeln!(out, "    *(uint32_t*){} = (uint32_t)__builtin_popcountll(*(index_t*){});", dest_addr, arg0()).unwrap();
             }
             IntrinsicId::ClzIndex => {
                 #[cfg(not(feature = "index-64"))]
-                writeln!(out, "    *(index_t*){} = *(index_t*){} ? __builtin_clz(*(index_t*){}) : 32;", dest_addr, arg0(), arg0()).unwrap();
+                writeln!(out, "    *(uint32_t*){} = *(index_t*){} ? __builtin_clz(*(index_t*){}) : 32;", dest_addr, arg0(), arg0()).unwrap();
                 #[cfg(feature = "index-64")]
-                writeln!(out, "    *(index_t*){} = *(index_t*){} ? __builtin_clzll(*(index_t*){}) : 64;", dest_addr, arg0(), arg0()).unwrap();
+                writeln!(out, "    *(uint32_t*){} = *(index_t*){} ? __builtin_clzll(*(index_t*){}) : 64;", dest_addr, arg0(), arg0()).unwrap();
             }
             IntrinsicId::CtzIndex => {
                 #[cfg(not(feature = "index-64"))]
-                writeln!(out, "    *(index_t*){} = *(index_t*){} ? __builtin_ctz(*(index_t*){}) : 32;", dest_addr, arg0(), arg0()).unwrap();
+                writeln!(out, "    *(uint32_t*){} = *(index_t*){} ? __builtin_ctz(*(index_t*){}) : 32;", dest_addr, arg0(), arg0()).unwrap();
                 #[cfg(feature = "index-64")]
-                writeln!(out, "    *(index_t*){} = *(index_t*){} ? __builtin_ctzll(*(index_t*){}) : 64;", dest_addr, arg0(), arg0()).unwrap();
+                writeln!(out, "    *(uint32_t*){} = *(index_t*){} ? __builtin_ctzll(*(index_t*){}) : 64;", dest_addr, arg0(), arg0()).unwrap();
             }
             IntrinsicId::SwapBytesIndex => {
                 #[cfg(not(feature = "index-64"))]
