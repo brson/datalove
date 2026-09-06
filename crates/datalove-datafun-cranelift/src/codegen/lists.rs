@@ -1,6 +1,7 @@
 //! List indexing instruction compilation.
 
 use cranelift_codegen::ir::{self as cl_ir, BlockArg, InstBuilder, MemFlagsData};
+use cranelift_codegen::ir::types as cl_types;
 use cranelift_frontend::FunctionBuilder;
 use cranelift_module::Module;
 
@@ -68,6 +69,66 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
     ///
     /// Performs bounds check and conditionally loads the element. Uses branching
     /// to avoid loading from out-of-bounds memory.
+    /// Read an element whose type only the list's descriptor knows.
+    ///
+    /// The runtime writes an option, which is where the bounds answer comes
+    /// from as well: a `none` is an index past the end. The payload is the
+    /// element in whichever shape the out descriptor asked for.
+    fn compile_list_get_erased(
+        &mut self,
+        builder: &mut FunctionBuilder,
+        dest: ValueId,
+        is_valid: ValueId,
+        list: &Operand,
+        index: &Operand,
+    ) -> Result<(), CraneliftError> {
+        let runtime = self.runtime.as_ref()
+            .ok_or_else(|| CraneliftError::Codegen(
+                "indexing through a descriptor requires runtime imports".into()))?;
+        let get = runtime.list_get_erased;
+        let rt_handle = self.rt_handle_param.ok_or_else(|| {
+            CraneliftError::Codegen("indexing through a descriptor requires a runtime handle".into())
+        })?;
+
+        let option_ty = IrType::Option(Box::new(IrType::Data));
+        let option_layout = datalove_datafun_ir::layout::layout_of(&option_ty);
+        let slot = builder.create_sized_stack_slot(cl_ir::StackSlotData::new(
+            cl_ir::StackSlotKind::ExplicitSlot, option_layout.size, 3));
+        let option_out = builder.ins().stack_addr(PTR_TYPE, slot, 0);
+
+        let option_tydesc = self.static_tydesc(builder, &option_ty)?;
+        let list_ptr = self.get_operand_ptr(builder, list)?;
+        let list_tydesc = self.operand_tydesc(builder, list)?;
+        let idx = self.get_operand_value(builder, index)?;
+
+        let get_ref = self.module.declare_func_in_func(get, builder.func);
+        builder.ins().call(get_ref,
+            &[rt_handle, list_ptr, list_tydesc, idx, option_out, option_tydesc]);
+
+        // A `some` tag is the bounds answer, and the payload is the element.
+        let tag = builder.ins().load(cl_types::I8, MemFlagsData::new(), option_out, 0);
+        let some = builder.ins().iconst(
+            cl_types::I8, datalove_rtdt::OptionTag::Some as i64);
+        let valid = builder.ins().icmp(
+            cl_ir::condcodes::IntCC::Equal, tag, some);
+        self.values.insert(is_valid, valid);
+
+        // The payload sits after the tag, aligned to what it holds, which for
+        // a `data` is the pointer alignment.
+        let payload_offset = std::mem::align_of::<datalove_rtdt::Data>() as u32;
+        let payload = builder.ins().stack_addr(PTR_TYPE, slot, payload_offset as i32);
+        let frame_slot = self.frame_slot.ok_or_else(|| {
+            CraneliftError::Codegen("no frame slot for an indexed element".into())
+        })?;
+        let dest_offset = self.layout.value_offset(dest.0);
+        let dest_addr = builder.ins().stack_addr(PTR_TYPE, frame_slot, dest_offset as i32);
+        let size = builder.ins().iconst(
+            PTR_TYPE, std::mem::size_of::<datalove_rtdt::Data>() as i64);
+        builder.call_memcpy(self.isa.frontend_config(), dest_addr, payload, size);
+        self.values.insert(dest, dest_addr);
+        Ok(())
+    }
+
     pub(super) fn compile_list_get(
         &mut self,
         builder: &mut FunctionBuilder,
@@ -83,6 +144,15 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 "ListGet on non-list type: {:?}", list_ty
             ))),
         };
+        // An element the callee cannot name is read through the list's
+        // descriptor rather than at a stride taken from the static type, which
+        // inside a generic is a `data`'s and lands between elements. The
+        // runtime decides whether the element wants packing on the way out,
+        // since a list whose elements really are `data` does not.
+        if self.get_operand_type(&Operand::Value(dest))? == IrType::Data {
+            return self.compile_list_get_erased(builder, dest, is_valid, list, index);
+        }
+
         let elem_repr = types::ir_type_to_cranelift(&elem_ty);
         let elem_size = elem_repr.layout().size;
 

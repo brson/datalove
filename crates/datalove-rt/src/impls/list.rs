@@ -412,6 +412,37 @@ pub unsafe fn list_get_as_data_impl(
     RtStatus::Ok
 }
 
+/// Read an element, packing it into a `data` only if it is not one already.
+///
+/// The two readings of a `data`-shaped slot coincide for a list of `data`: a
+/// generic asking for an element it cannot name wants one packed, and a list
+/// whose elements really are `data` wants one copied. Comparing the element
+/// type as well as the slot's is what tells them apart, and doing it here
+/// rather than at each call site is what keeps the four backends from each
+/// having their own answer.
+pub unsafe fn list_get_erased_impl(
+    rt: &mut RtLocal,
+    list_value_ref: *const u8,
+    list_tydesc: rtdt::TyDescRef,
+    index: rtdt::IndexRepr,
+    option_value_out: *mut u8,
+    option_tydesc: rtdt::TyDescRef,
+) -> RtStatus {
+    let element_ty = list_tydesc.list_element_ty();
+    let slot_ty = option_tydesc.option_inner_ty();
+    let packs = slot_ty.type_tag() == rtdt::TyTag::Data
+        && element_ty.type_tag() != rtdt::TyTag::Data;
+    unsafe {
+        if packs {
+            list_get_as_data_impl(rt, list_value_ref, list_tydesc, index,
+                option_value_out, option_tydesc)
+        } else {
+            list_get_impl(rt, list_value_ref, list_tydesc, index,
+                option_value_out, option_tydesc)
+        }
+    }
+}
+
 /// Take the last element off the list, as a `data`.
 ///
 /// The element is moved rather than cloned: the list gives it up.

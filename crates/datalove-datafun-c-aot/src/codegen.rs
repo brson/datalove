@@ -2293,6 +2293,27 @@ impl<'a> FunctionCodegenContext<'a> {
                 "ListGet on non-list type: {:?}", list_ty
             ))),
         };
+        // An element the callee cannot name is read through the list's
+        // descriptor rather than at a stride taken from the static type, which
+        // inside a generic is a `data`'s and lands between elements. The
+        // runtime decides whether the element wants packing on the way out,
+        // since a list whose elements really are `data` does not.
+        if *self.value_type(dest) == IrType::Data {
+            let option_ty = IrType::Option(Box::new(IrType::Data));
+            let option_layout = ir_layout::layout_of(&option_ty);
+            let option_tydesc = self.tydesc_name(&option_ty);
+            let list_tydesc = self.operand_tydesc(list);
+            let name = format!("__ix{}", dest.0);
+            writeln!(out, "    _Alignas(8) uint8_t {name}[{}] = {{0}};", option_layout.size).unwrap();
+            writeln!(out, "    dtlv_rti_list_get_erased_local(rt, {}, {}, *(index_t*){}, {name}, &{});",
+                list_addr, list_tydesc, index_addr, option_tydesc).unwrap();
+            writeln!(out, "    *(bool_t*){} = ({name}[0] == OPTION_SOME);", is_valid_addr).unwrap();
+            writeln!(out, "    memcpy({}, {name} + {}, {});",
+                dest_addr, std::mem::align_of::<datalove_rtdt::Data>(),
+                std::mem::size_of::<datalove_rtdt::Data>()).unwrap();
+            return Ok(());
+        }
+
         let elem_repr = types::ir_type_to_crepr(&elem_ty);
         let elem_size = elem_repr.layout().size;
 

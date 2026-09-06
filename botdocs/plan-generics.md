@@ -494,14 +494,21 @@ in proportion to how many instantiations there are. Worth a real comparison
 before the second half of this is built, rather than assuming erasure is the
 design.
 
-### Not blocked by this
+### Indexing, which was never blocked by this
 
-Indexing a `[T]`. The refusal is a typecheck test on the element type
-(`contains_type_param` in datafun-tycheck), raised whether or not a descriptor
-is in reach -- and when the container is a parameter it is in reach, because
-that is the only way to have one today. The fix is to lower `xs[i]` on a
-generic container to the descriptor-driven runtime call `list.get` already
-makes. Contained, and independent of everything above.
+The refusal was a typecheck test on the element type, raised whether or not a
+descriptor was in reach. It is in reach: `ListGet` in the interpreter already
+read the element type off the list's descriptor, and the compiled backends
+took the stride from the static type instead, which inside a generic is a
+`data`'s and lands between elements.
+
+So indexing now reads the stride from the descriptor everywhere. Whether the
+element wants packing on the way out is the runtime's to decide, in
+`dtlv_rti_list_get_erased_local`: a generic asking for an element it cannot
+name wants one packed, a list whose elements really are `data` wants one
+copied, and the two look alike from a call site. Deciding it in each backend
+would be four answers to one question, which is the shape of most of the bugs
+this area has had.
 
 ## Where this stands
 

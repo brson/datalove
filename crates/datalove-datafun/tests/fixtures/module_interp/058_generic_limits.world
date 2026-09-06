@@ -72,12 +72,10 @@ fun main(): u32
   ret : u32 / 1
 end fun
 
-// Indexing works out where an element sits from the type of the collection, and
-// a generic function's type for one says `data` where the type parameter was
-// written, so the stride would be a `data`'s and the read would land between
-// elements. The descriptor saying what the elements really are reaches the
-// native list functions but not the index operator, so this is refused rather
-// than read wrong. `sys/std/list` is the way to reach an element.
+// Indexing reads the stride from the list's descriptor rather than from the
+// static element type, so this works too. What is left in this file is not a
+// limit of erasure at all: it is that nothing can be done to a `T` but move
+// it, drop it, clone it and hand it back, which is what bounds are for.
 fun first<T>(ref xs: [T]): ?T
   ret some (xs[: index / 0]?@)
 end fun

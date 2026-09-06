@@ -186,7 +186,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
     /// its static type says `data` where a type parameter stood, so a
     /// descriptor built from that type would misdescribe the value. Everything
     /// else is described by its type, and the descriptor is a static symbol.
-    fn operand_tydesc(
+    pub(super) fn operand_tydesc(
         &mut self,
         builder: &mut FunctionBuilder,
         operand: &Operand,
@@ -201,7 +201,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
     }
 
     /// The static descriptor symbol for a type, as a runtime pointer.
-    fn static_tydesc(
+    pub(super) fn static_tydesc(
         &mut self,
         builder: &mut FunctionBuilder,
         ty: &IrType,

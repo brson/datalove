@@ -1151,20 +1151,64 @@ impl IrInterpreter {
                 frame.mark_value_live(*is_valid);
 
                 if valid {
-                    // Clone element to dest.
-                    let element_ptr = unsafe { list_struct.data.add(idx as usize * element_size) };
                     let dest_slot = frame.value_dest(*dest);
                     let rt_handle = self.runtime.handle();
-                    let status = unsafe {
-                        datalove_rt::c::dtlv_rti_clone_local(
-                            rt_handle,
-                            element_ptr,
-                            element_tydesc,
-                            dest_slot.ptr,
-                            element_tydesc,
-                        )
-                    };
-                    assert_eq!(status, datalove_rt::c::RtStatus::Ok, "ListGet clone failed");
+                    let dest_is_erased =
+                        unsafe { (*dest_slot.tydesc).type_tag } == rtdt::TyTag::Data;
+                    let element_is_data =
+                        unsafe { (*element_tydesc).type_tag } == rtdt::TyTag::Data;
+
+                    if dest_is_erased && !element_is_data {
+                        // Indexing inside a generic. The elements are whatever
+                        // the list's descriptor says, and the destination is
+                        // the erased shape, so the element is cloned and then
+                        // wrapped. The runtime decides whether wrapping is
+                        // wanted, since a list of `data` needs none, and hands
+                        // back an option; the bounds were checked above, so
+                        // this one is always `some`.
+                        let option_tydesc = self.tydesc_table.get_or_create(
+                            &IrType::Option(Box::new(IrType::Data)));
+                        let layout = unsafe {
+                            rtdt::layout::compute_option_layout(
+                                rtdt::TyDescRef::from_ptr(option_tydesc))
+                        };
+                        #[repr(C, align(8))]
+                        struct OptionData([u8; 32]);
+                        let mut got = OptionData([0; 32]);
+                        let status = unsafe {
+                            datalove_rt::c::dtlv_rti_list_get_erased_local(
+                                rt_handle,
+                                list_val.ptr,
+                                list_val.tydesc,
+                                idx,
+                                got.0.as_mut_ptr(),
+                                option_tydesc,
+                            )
+                        };
+                        assert_eq!(status, datalove_rt::c::RtStatus::Ok,
+                            "ListGet through a descriptor failed");
+                        unsafe {
+                            std::ptr::copy_nonoverlapping(
+                                got.0.as_ptr().add(layout.payload_offset as usize),
+                                dest_slot.ptr,
+                                std::mem::size_of::<rtdt::Data>(),
+                            );
+                        }
+                    } else {
+                        // Clone element to dest.
+                        let element_ptr =
+                            unsafe { list_struct.data.add(idx as usize * element_size) };
+                        let status = unsafe {
+                            datalove_rt::c::dtlv_rti_clone_local(
+                                rt_handle,
+                                element_ptr,
+                                element_tydesc,
+                                dest_slot.ptr,
+                                element_tydesc,
+                            )
+                        };
+                        assert_eq!(status, datalove_rt::c::RtStatus::Ok, "ListGet clone failed");
+                    }
                     frame.mark_value_live(*dest);
                 }
                 // If invalid, dest is uninitialized — caller must not use it.

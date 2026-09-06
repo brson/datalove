@@ -1,0 +1,34 @@
+// Indexing a collection whose elements a generic cannot name. The stride comes
+// from the list's descriptor rather than from the static element type, which
+// inside a generic is a `data`'s and would land between elements.
+//
+// Whether the element wants packing on the way out is the runtime's to decide,
+// because a list whose elements really are `data` wants none and the two cases
+// look alike from here. Deciding it in each backend would be four answers to
+// one question.
+
+fun first<T>(ref xs: [T]): ?T
+  ret some (xs[: index / 0]?@)
+end fun
+
+fun at<T>(ref xs: [T], i: index): ?T
+  ret some (xs[i]?@)
+end fun
+
+let words: [string] = ["alpha", "beta", "gamma"]
+debuglog first(ref words)
+debuglog at(ref words, 2)
+
+// Out of bounds is a none rather than a fault, the same as for a concrete list.
+debuglog at(ref words, 9)
+
+// A copy element, where the stride differs from a `data`'s by more than the
+// element's own size.
+let numbers: [u32] = [7, 8, 9]
+debuglog first(ref numbers)
+debuglog at(ref numbers, 1)
+
+// A list whose elements really are `data`, which is the case that must not be
+// packed a second time.
+let boxed: [data] = [data 1, data "two"]
+debuglog at(ref boxed, 1)

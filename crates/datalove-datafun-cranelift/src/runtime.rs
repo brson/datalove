@@ -106,6 +106,8 @@ pub struct RuntimeImports {
     pub reify: FuncId,
     /// `dtlv_rti_data_parts(data_in, value_out, tydesc_out) -> RtStatus`
     pub data_parts: FuncId,
+    /// `dtlv_rti_list_get_erased_local(rt, list, list_td, index, opt_out, opt_td) -> RtStatus`
+    pub list_get_erased: FuncId,
 }
 
 impl RuntimeImports {
@@ -625,6 +627,25 @@ impl RuntimeImports {
                     format!("declare dtlv_rti_data_parts: {}", e)))?
         };
 
+        // Indexing a list whose elements a generic cannot name. The runtime
+        // decides whether the element wants packing, since a list of `data`
+        // does not.
+        let list_get_erased = {
+            use crate::index_types::INDEX_TYPE;
+            let mut sig = module.make_signature();
+            sig.params.push(AbiParam::new(PTR_TYPE));      // rt
+            sig.params.push(AbiParam::new(PTR_TYPE));      // list
+            sig.params.push(AbiParam::new(PTR_TYPE));      // list tydesc
+            sig.params.push(AbiParam::new(INDEX_TYPE));    // index
+            sig.params.push(AbiParam::new(PTR_TYPE));      // option out
+            sig.params.push(AbiParam::new(PTR_TYPE));      // option tydesc
+            sig.returns.push(AbiParam::new(cl_types::I8));
+            module
+                .declare_function("dtlv_rti_list_get_erased_local", Linkage::Import, &sig)
+                .map_err(|e| CraneliftError::Module(
+                    format!("declare dtlv_rti_list_get_erased_local: {}", e)))?
+        };
+
         Ok(Self {
             init,
             shutdown,
@@ -666,6 +687,7 @@ impl RuntimeImports {
             data_from,
             erase,
             data_parts,
+            list_get_erased,
             reify,
         })
     }

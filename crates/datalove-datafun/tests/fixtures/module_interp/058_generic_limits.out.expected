@@ -2,7 +2,7 @@ ModulesAnalysis(
     typecheck: TypecheckResult(
         status: "Error",
         errors: [
-            "line 79, col 15: error[F011]: cannot index [T], whose element type is a type parameter; use the list functions in sys/std/list, which read the element type at run time",
+            "local/test/main: TypeMismatch { expected: \"u32\", actual: \"string\" }",
         ],
     ),
     lowering: LoweringResult(

@@ -674,6 +674,8 @@ fn trampoline_all_runtime_imports(
     tramp(jit_module, &mut runtime.erase, c::dtlv_rti_erase_local as *const u8)?;
     tramp(jit_module, &mut runtime.reify, c::dtlv_rti_reify_local as *const u8)?;
     tramp(jit_module, &mut runtime.data_parts, c::dtlv_rti_data_parts as *const u8)?;
+    tramp(jit_module, &mut runtime.list_get_erased,
+        c::dtlv_rti_list_get_erased_local as *const u8)?;
 
     Ok(())
 }
@@ -737,6 +739,8 @@ fn register_runtime_symbols(jit_builder: &mut JITBuilder) {
     jit_builder.symbol("dtlv_rti_erase_local", c::dtlv_rti_erase_local as *const u8);
     jit_builder.symbol("dtlv_rti_reify_local", c::dtlv_rti_reify_local as *const u8);
     jit_builder.symbol("dtlv_rti_data_parts", c::dtlv_rti_data_parts as *const u8);
+    jit_builder.symbol("dtlv_rti_list_get_erased_local",
+        c::dtlv_rti_list_get_erased_local as *const u8);
 
     // Math libcalls used by Cranelift when legalizing float instructions.
     // On some platforms dlsym can't find these (e.g. static linking), so

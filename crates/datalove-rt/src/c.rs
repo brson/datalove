@@ -1707,6 +1707,37 @@ pub unsafe extern "C-unwind" fn dtlv_rti_list_push_data_local(
     }
 }
 
+/// Read an element, packing it into a `data` only if it is not one already.
+///
+/// The decision is here rather than at each call site so that the four
+/// backends cannot each have their own answer. See `list_get_erased_impl`.
+#[unsafe(no_mangle)]
+pub unsafe extern "C-unwind" fn dtlv_rti_list_get_erased_local(
+    rt: LocalRtHandle,
+    list_value_ref: *const u8,
+    list_tydesc: *const rtdt::TyDesc,
+    index: rtdt::IndexRepr,
+    option_value_out: *mut u8,
+    option_tydesc: *const rtdt::TyDesc,
+) -> RtStatus {
+    debug_assert!(!rt.is_null(), "rt is null");
+    debug_assert!(!list_value_ref.is_null(), "list_value_ref is null");
+    debug_assert!(!list_tydesc.is_null(), "list_tydesc is null");
+    debug_assert!(!option_value_out.is_null(), "option_value_out is null");
+    debug_assert!(!option_tydesc.is_null(), "option_tydesc is null");
+    unsafe {
+        let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
+        crate::impls::list::list_get_erased_impl(
+            rt_ref,
+            list_value_ref,
+            rtdt::TyDescRef::from_ptr(list_tydesc),
+            index,
+            option_value_out,
+            rtdt::TyDescRef::from_ptr(option_tydesc),
+        )
+    }
+}
+
 #[unsafe(no_mangle)]
 pub unsafe extern "C-unwind" fn dtlv_rti_list_get_local(
     rt: LocalRtHandle,
