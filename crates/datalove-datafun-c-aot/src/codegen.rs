@@ -855,15 +855,38 @@ impl<'a> FunctionCodegenContext<'a> {
             _ => (None, None),
         };
 
-        // Division and modulo are checked the same way at every width: what
-        // they report is a zero divisor, and the check has to come before the
-        // divide rather than after. This is ahead of the widening below
+        // Division and modulo are checked the same way at every width, and
+        // every check has to come before the divide rather than after. This
+        // is ahead of the widening below
         // because a narrow type would otherwise reach the fallback there and
         // divide unchecked, which faults rather than reporting.
         if matches!(op, BinOp::Div | BinOp::Mod) {
+            // A signed type has a second divisor with no answer: its most
+            // negative value over -1 is one past the top of the range. On x86
+            // the divide instruction faults on it rather than wrapping, so it
+            // has to be caught before the divide, the same as a zero divisor.
+            // At eight and sixteen bits it does not fault, because both sides
+            // promote to `int` first, but it does give the wrong answer.
+            //
+            // The remainder there is zero rather than an overflow, which is
+            // what the interpreter and both cranelift backends report.
+            let signed_min = match lhs_ty {
+                IrType::I8 => Some("INT8_MIN"),
+                IrType::I16 => Some("INT16_MIN"),
+                IrType::I32 => Some("INT32_MIN"),
+                IrType::I64 => Some("INT64_MIN"),
+                IrType::Offset => Some("INT32_MIN"),
+                _ => None,
+            };
             writeln!(out, "    if (*({c_ty}*){rhs_addr} == 0) {{").unwrap();
             writeln!(out, "        *(bool_t*){overflow_addr} = 1;").unwrap();
             writeln!(out, "        *({c_ty}*){dest_addr} = 0;").unwrap();
+            if let Some(min) = signed_min {
+                writeln!(out, "    }} else if (*({c_ty}*){lhs_addr} == {min} && *({c_ty}*){rhs_addr} == -1) {{").unwrap();
+                writeln!(out, "        *(bool_t*){overflow_addr} = {};",
+                    if op == BinOp::Div { 1 } else { 0 }).unwrap();
+                writeln!(out, "        *({c_ty}*){dest_addr} = 0;").unwrap();
+            }
             writeln!(out, "    }} else {{").unwrap();
             writeln!(out, "        *(bool_t*){overflow_addr} = 0;").unwrap();
             writeln!(out, "        *({c_ty}*){dest_addr} = *({c_ty}*){lhs_addr} {} *({c_ty}*){rhs_addr};",

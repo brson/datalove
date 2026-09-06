@@ -1,0 +1,30 @@
+require module sys/std/i8
+
+import i8.min_value
+import i8.div_checked
+import i8.rem_checked
+
+// The other divisor with no answer, at a width that does not fault.
+//
+// Every signed type's most negative value over -1 is one past the top of its
+// range. The C backend guarded only against a zero divisor. At eight and
+// sixteen bits that came back with the wrong value rather than faulting,
+// because both operands promote to `int` first, so nothing is out of range
+// until the result is truncated back to the narrow type.
+//
+// The remainder is zero here rather than an overflow, which is what the
+// interpreter and both cranelift backends report, so the two are not checked
+// the same way. `110` is the same thing at a width where the divide faults,
+// and `108` covers `offset`; `i16` and `i32` are these two shapes again.
+
+let divided = div_checked(min_value(), : i8 / -1)
+let remainder = rem_checked(min_value(), : i8 / -1)
+
+// A zero divisor, which was already caught, so the new branch is not the only
+// one exercised.
+let by_zero = (div_checked(: i8 / 7, : i8 / 0), rem_checked(: i8 / 7, : i8 / 0))
+
+// Ordinary division, to show the guard does not swallow the normal path.
+let ordinary = (div_checked(: i8 / -100, : i8 / 3), rem_checked(: i8 / -100, : i8 / 3))
+
+let output = (divided, remainder, by_zero, ordinary)

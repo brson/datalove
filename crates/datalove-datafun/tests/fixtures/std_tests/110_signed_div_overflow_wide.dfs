@@ -1,0 +1,18 @@
+require module sys/std/i64
+
+import i64.min_value
+import i64.div_checked
+import i64.rem_checked
+
+// The most negative value over -1, at a width where the divide instruction
+// faults rather than truncating. See `109` for the whole of it.
+//
+// This one crashed the C backend outright, where the eight-bit case merely
+// gave a wrong answer.
+
+let divided = div_checked(min_value(), : i64 / -1)
+let remainder = rem_checked(min_value(), : i64 / -1)
+let by_zero = (div_checked(: i64 / 7, : i64 / 0), rem_checked(: i64 / 7, : i64 / 0))
+let ordinary = (div_checked(: i64 / -100, : i64 / 3), rem_checked(: i64 / -100, : i64 / 3))
+
+let output = (divided, remainder, by_zero, ordinary)
