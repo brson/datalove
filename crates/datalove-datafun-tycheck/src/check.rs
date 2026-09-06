@@ -642,6 +642,25 @@ pub fn check_expr<'db>(
 
         // For other non-datalit expressions, use synthesis + comparison.
         // No implicit widening - numeric conversions require @.
+        // A call is checked rather than only synthesized, so that what the call
+        // site expects can fix a type parameter no argument reached.
+        ExprFunKind::FunctionCall(call) => {
+            let synthesized = crate::synthesize::synthesize_function_call_expecting(
+                ctx, expr, call, Some(expected),
+            )?;
+            // `ctx.synthesize_expr` is what usually records this, and going
+            // straight to the call skips it. Lowering reads the table and
+            // panics rather than guessing.
+            ctx.store_expr_type(expr, &synthesized);
+            if types_equivalent(db, &synthesized, expected) {
+                return Ok(());
+            }
+            if let Type::Datalit(datalit::tycheck::Type::Data) = expected {
+                return Ok(());
+            }
+            ctx.check_type_mismatch_or_adapt(expr, expected, &synthesized, "type mismatch")
+        }
+
         _ => {
             let synthesized = ctx.synthesize_expr(expr)?;
 

@@ -1,0 +1,50 @@
+require module sys/std/option
+
+import option.zip_option
+
+// A type parameter fixed by what the call site expects, not by an argument.
+//
+// Inference used to flow only from arguments, so a type parameter appearing
+// solely in the return type could never be bound and the function could never
+// be called: `let x: ?u32 = nothing()` was a mismatch between `?u32` and `?T`.
+// A call was the one expression kind `check_expr` had no arm for, so it was
+// always synthesized and then compared, and the expectation never reached it.
+//
+// This is what rust does first, and turbofish is its fallback for where there
+// is no expectation to read. Arguments still win: they are bound first, and
+// binding from the expectation only fills what is still open.
+
+fun nothing<T>(): ?T
+  ret none
+end fun
+
+fun first_of<A, B>(a: A): (A, ?B)
+  ret (a, none)
+end fun
+
+fun pass_through<T>(x: ?T): ?T
+  ret x
+end fun
+
+let an_int: ?u32 = nothing()
+let a_string: ?string = nothing()
+
+// The expectation reaches through a shape, not just a bare parameter.
+let a_list: ?[u32] = nothing()
+let a_tuple: ?(u32, string) = nothing()
+let nested: ??string = nothing()
+
+// One parameter fixed by an argument and the other by the expectation, in the
+// same call.
+let mixed: (u32, ?string) = first_of(: u32 / 7)
+
+// An argument that does not know its own type binds nothing, so the
+// expectation gets to decide for both calls rather than the inner one fixing
+// the outer to a placeholder.
+let through: ?string = pass_through(nothing())
+
+// A call whose parameter an argument does fix still takes the argument's
+// answer, which is what keeps `zip_option` reading off its two sides.
+let zipped: ?(string, u32) = zip_option(some "a", some (: u32 / 1))
+
+let output = (an_int, a_string, a_list, a_tuple, nested, mixed, through, zipped)

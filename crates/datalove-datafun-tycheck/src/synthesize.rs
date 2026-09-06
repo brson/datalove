@@ -809,10 +809,48 @@ fn synthesize_unaryop<'db>(
 // ============================================================================
 
 /// Synthesize type for function call.
+/// Whether a type mentions a type parameter that is not one of the enclosing
+/// function's.
+///
+/// The enclosing function's own parameters stand for something the caller
+/// already chose, so a type mentioning one is forwarding it. Anything else is a
+/// parameter still waiting to be fixed, and reading a binding out of it would
+/// fix the callee's to a placeholder.
+fn has_undetermined_type_param<'db>(
+    ctx: &TypeContext<'db>,
+    ty: &datalove_datalit::tycheck::Type<'db>,
+) -> bool {
+    if !contains_type_param(ty) {
+        return false;
+    }
+    let mut in_scope: TypeParamBindings<'db> = TypeParamBindings::new();
+    for (name, aliased) in ctx.type_aliases.iter() {
+        if matches!(aliased,
+            Type::Datalit(datalove_datalit::tycheck::Type::Var(v)) if v == name)
+        {
+            in_scope.insert(*name, datalove_datalit::tycheck::Type::Data);
+        }
+    }
+    contains_type_param(&substitute_type_params(ty, &in_scope))
+}
+
 fn synthesize_function_call<'db>(
     ctx: &mut TypeContext<'db>,
     expr: ExprFun<'db>,
     call: ExprFunctionCall<'db>,
+) -> Result<Type<'db>, TypeError> {
+    synthesize_function_call_expecting(ctx, expr, call, None)
+}
+
+/// A call, with what the call site expects of its result if it knows.
+///
+/// The expectation is what fixes a type parameter that no argument reaches,
+/// which is the only way to bind one appearing solely in the return type.
+pub(crate) fn synthesize_function_call_expecting<'db>(
+    ctx: &mut TypeContext<'db>,
+    expr: ExprFun<'db>,
+    call: ExprFunctionCall<'db>,
+    expected: Option<&Type<'db>>,
 ) -> Result<Type<'db>, TypeError> {
     let db = ctx.db;
     let name = call.name(db);
@@ -906,7 +944,28 @@ fn synthesize_function_call<'db>(
             arg_ty.ok()
         });
         let Some(Type::Datalit(arg_dt)) = arg_ty else { continue };
+        // An argument whose own type still carries a type parameter nobody has
+        // fixed says nothing about the callee's, so it binds nothing and
+        // something else gets to decide. Forwarding the caller's own type
+        // parameter does say something, and the two are told apart by whether
+        // the parameter is one this function declared.
+        if has_undetermined_type_param(ctx, &arg_dt) {
+            continue;
+        }
         bind_type_params(db, param_dt, &arg_dt, &mut bindings);
+    }
+
+    // Whatever the arguments did not fix, the expected result may. Arguments
+    // are bound first and win, because `bind_type_params` keeps a binding that
+    // is already there; this only fills what is still open. It is what lets
+    // `let x: ?u32 = nothing()` say which `T` it wanted, where nothing in the
+    // argument list could.
+    if let Some(expected) = expected {
+        if let (Type::Datalit(ret_dt), Type::Datalit(expected_dt)) = (&return_type, expected) {
+            if contains_type_param(ret_dt) {
+                bind_type_params(db, ret_dt, expected_dt, &mut bindings);
+            }
+        }
     }
 
     // Check each argument type, setting ref/mut context for ref/mut/out params.
