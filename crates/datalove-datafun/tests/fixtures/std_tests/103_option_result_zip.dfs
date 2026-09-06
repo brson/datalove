@@ -1,0 +1,21 @@
+require module sys/std/option
+require module sys/std/result
+
+import option.zip_option
+import result.zip_result
+
+
+// Pairing two options or two results, which needs a tuple of type parameters:
+// a shape a generic could not name until erasure learned to convert one field
+// by field. The two sides need not hold the same type, and the function that
+// builds the pair knows neither.
+
+let both = zip_option(some "a", some 1)
+let first_missing = zip_option(: ?string / none, some 1)
+let second_missing = zip_option(some "b", : ?u32 / none)
+
+let both_ok = zip_result(ok "c", ok 2)
+let first_failed = zip_result(: !string / er error "left", ok 3)
+let second_failed = zip_result(ok "d", : !u32 / er error "right")
+
+let output = (both, first_missing, second_missing, both_ok, first_failed, second_failed)

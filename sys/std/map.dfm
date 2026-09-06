@@ -49,3 +49,25 @@ end fun
 fun clear<K, V>(mut self: %{K = V})
   map_clear(mut self)
 end fun
+
+// The value under a key, or a default if there is none.
+fun get_or<K, V>(ref self: %{K = V}, ref key: K, default: V): V
+  if get(ref self, ref key) |value|
+    ret value
+  else
+    ret default
+  end if
+end fun
+
+// Insert only if the key is not already there. True if it was inserted.
+//
+// Unlike `insert`, this hands back whether anything happened, which is what
+// `set.insert` already does for a set.
+fun insert_if_absent<K, V>(mut self: %{K = V}, key: K, value: V): bool
+  if contains_key(ref self, ref key)
+    ret false
+  else
+    insert(mut self, key, value)
+    ret true
+  end if
+end fun

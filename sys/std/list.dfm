@@ -70,6 +70,39 @@ fun remove<T>(mut self: [T], i: index): ?T
   ret list_remove(mut self, i)
 end fun
 
+// Exchange the elements at two indices. False if either is past the end.
+//
+// This is written here rather than in the rider because it needs nothing the
+// language cannot say about a `T`: the two elements are taken out and put
+// back, and are only ever moved.
+fun swap<T>(mut self: [T], i: index, j: index): bool
+  if i == j
+    ret i .< len(ref self)
+  end if
+  var lo = i
+  var hi = j
+  if i .> j
+    set lo = j
+    set hi = i
+  end if
+  // The higher one comes out first so that the lower index still means what
+  // it did.
+  if remove(mut self, hi) |high_elem|
+    if remove(mut self, lo) |low_elem|
+      let put_low = insert(mut self, lo, high_elem)
+      let put_high = insert(mut self, hi, low_elem)
+      ret put_low and put_high
+    else
+      // `lo` is below `hi`, which was in bounds, so the list is still long
+      // enough and this does not happen. The element has to go somewhere
+      // regardless, and where it came from is the only honest place.
+      let restored = insert(mut self, hi, high_elem)
+      ret false
+    end if
+  end if
+  ret false
+end fun
+
 // Make room for at least n more elements.
 fun reserve<T>(mut self: [T], n: index)
   list_reserve(mut self, n)

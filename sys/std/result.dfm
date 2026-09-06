@@ -51,6 +51,23 @@ fun and_result<T>(self: !T, other: !T): !T
   end if
 end fun
 
+// Pairs two results, which is ok only when both are, and otherwise carries the
+// first error.
+//
+// The two need not hold the same type, and the pair is built inside a function
+// that knows neither.
+fun zip_result<A, B>(self: !A, other: !B): !(A, B)
+  if self |a|
+    if other |b|
+      ret ok (a, b)
+    else |e|
+      ret er e
+    end if
+  else |e|
+    ret er e
+  end if
+end fun
+
 // Returns self if it is Ok, otherwise other.
 fun or_result<T>(self: !T, other: !T): !T
   if self |value|

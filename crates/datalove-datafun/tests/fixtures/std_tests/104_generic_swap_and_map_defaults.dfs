@@ -1,0 +1,46 @@
+require module sys/std/list
+require module sys/std/map
+
+import list.swap
+import list.insert
+import list.len
+import map.get_or
+import map.insert_if_absent
+
+// Functions written over a type parameter that only move it: `swap` takes two
+// elements out and puts them back, `get_or` returns one of two values it was
+// handed. None of this needs to know what a `T` is, which is why these can
+// live in the language rather than the rider.
+
+// Swapping at the ends also exercises inserting at the length. The erased
+// insert took the pointer to element `i` without checking whether `i` was the
+// length, so appending to a list whose element type is a type parameter wrote
+// one element past the end. Under a debug runtime that tripped an assert;
+// without one it silently corrupted the allocation next door.
+var words: [string] = ["a", "b", "c", "d"]
+let swapped_ends = swap(mut words, 0, 3)
+let swapped_middle = swap(mut words, 1, 2)
+
+// Backwards indices, an index onto itself, and one off the end.
+var numbers: [u32] = [1, 2, 3]
+let swapped_backwards = swap(mut numbers, 2, 0)
+let swapped_onto_itself = swap(mut numbers, 1, 1)
+let swapped_past_end = swap(mut numbers, 0, 9)
+
+// Appending through the documented insert-at-length position.
+var appended: [string] = ["x"]
+let did_append = insert(mut appended, 1, "y")
+let appended_len = len(ref appended)
+
+var scores: %{string = u32} = %{"a" = 1}
+let present = get_or(ref scores, ref "a", 99)
+let absent = get_or(ref scores, ref "zz", 99)
+let inserted = insert_if_absent(mut scores, "b", 2)
+let already_there = insert_if_absent(mut scores, "a", 7)
+
+let output = (
+  words, swapped_ends, swapped_middle,
+  numbers, swapped_backwards, swapped_onto_itself, swapped_past_end,
+  appended, did_append, appended_len,
+  scores, present, absent, inserted, already_there,
+)

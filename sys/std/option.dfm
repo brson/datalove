@@ -90,6 +90,23 @@ fun ok_or<T>(self: ?T, err: error): !T
   end if
 end fun
 
+// Pairs two options, which is some only when both are.
+//
+// The two need not hold the same type, and the pair is built inside a function
+// that knows neither: a tuple of type parameters is a shape erasure reaches,
+// converted field by field on the way across.
+fun zip_option<A, B>(self: ?A, other: ?B): ?(A, B)
+  if self |a|
+    if other |b|
+      ret some (a, b)
+    else
+      ret none
+    end if
+  else
+    ret none
+  end if
+end fun
+
 // Returns the contained value or zero.
 fun unwrap_or_zero(self: ?u32): u32
   if self |value|
