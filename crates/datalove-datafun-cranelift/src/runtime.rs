@@ -106,6 +106,8 @@ pub struct RuntimeImports {
     pub reify: FuncId,
     /// `dtlv_rti_data_parts(data_in, value_out, tydesc_out) -> RtStatus`
     pub data_parts: FuncId,
+    /// `dtlv_rti_data_from_local(rt, inner, inner_tydesc, dest) -> RtStatus`
+    pub data_from_local: FuncId,
     /// `dtlv_rti_list_get_erased_local(rt, list, list_td, index, opt_out, opt_td) -> RtStatus`
     pub list_get_erased: FuncId,
     /// `dtlv_rti_clone_erased_local(rt, src, src_td, dst, dst_td) -> RtStatus`
@@ -629,6 +631,20 @@ impl RuntimeImports {
                     format!("declare dtlv_rti_data_parts: {}", e)))?
         };
 
+        // Moving a freshly built collection into the wrapper that carries its
+        // descriptor with it.
+        let data_from_local = {
+            let mut sig = module.make_signature();
+            sig.params.push(AbiParam::new(PTR_TYPE)); // rt
+            sig.params.push(AbiParam::new(PTR_TYPE)); // inner
+            sig.params.push(AbiParam::new(PTR_TYPE)); // inner tydesc
+            sig.params.push(AbiParam::new(PTR_TYPE)); // dest
+            sig.returns.push(AbiParam::new(cl_types::I8));
+            module.declare_function("dtlv_rti_data_from_local", Linkage::Import, &sig)
+                .map_err(|e| CraneliftError::Module(
+                    format!("declare dtlv_rti_data_from_local: {}", e)))?
+        };
+
         // Indexing a list whose elements a generic cannot name. The runtime
         // decides whether the element wants packing, since a list of `data`
         // does not.
@@ -697,6 +713,7 @@ impl RuntimeImports {
             data_from,
             erase,
             data_parts,
+            data_from_local,
             list_get_erased,
             clone_erased,
             reify,

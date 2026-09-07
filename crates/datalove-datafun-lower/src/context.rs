@@ -24,6 +24,14 @@ use datalove_datafun_sema::{BindingId, DropSchedule, BindingInfo, TrackingCatego
 /// When lowering a nested function, this state is swapped for a fresh
 /// instance, then restored after.
 pub struct FrameState<'db> {
+    /// The type parameters this function declared, in order, so that a name in
+    /// a type can be turned into the position a descriptor arrives at.
+    pub type_params: Vec<bct::text::InternedText<'db>>,
+    /// Shapes this function's own body builds, in the order first seen.
+    ///
+    /// What the call sites add on top is worked out afterwards, once every
+    /// function's own shapes are known; see the shape closure pass.
+    pub built_shapes: Vec<datalove_datafun_ir::DescriptorShape>,
     /// Blocks being built.
     pub blocks: Vec<IrBlock>,
     /// Instructions for current block.
@@ -97,6 +105,8 @@ pub struct FrameState<'db> {
 impl<'db> FrameState<'db> {
     pub fn new() -> Self {
         Self {
+            type_params: Vec::new(),
+            built_shapes: Vec::new(),
             blocks: Vec::new(),
             current_instructions: Vec::new(),
             current_block: BlockId(0),
@@ -329,6 +339,68 @@ impl<'db> LowerCtx<'db> {
     }
 
     /// Get the IrType for an expression from the typechecker.
+    /// The shape a type stands for, over this function's type parameters.
+    ///
+    /// `None` where the type has no parameter in it, which describes itself.
+    pub fn shape_of(
+        &self,
+        ty: &datalove_datalit::tycheck::Type<'db>,
+    ) -> Option<datalove_datafun_ir::DescriptorShape> {
+        use datalove_datafun_ir::DescriptorShape as S;
+        use datalove_datalit::tycheck::Type as DT;
+        if !datalove_datafun_common::generics::contains_type_param(ty) {
+            return Some(S::Concrete(IrType::from_datalit(self.db, ty)));
+        }
+        Some(match ty {
+            DT::Var(name) => {
+                S::Param(self.body.type_params.iter().position(|p| p == name)? as u32)
+            }
+            DT::List(t) => S::List(Box::new(self.shape_of(&t.element_type)?)),
+            DT::Set(t) => S::Set(Box::new(self.shape_of(&t.element_type)?)),
+            DT::Option(t) => S::Option(Box::new(self.shape_of(&t.inner_type)?)),
+            DT::Result(t) => S::Result(Box::new(self.shape_of(&t.inner_type)?)),
+            DT::Map(t) => S::Map(
+                Box::new(self.shape_of(&t.key_type)?),
+                Box::new(self.shape_of(&t.value_type)?),
+            ),
+            DT::AnonTuple(t) => S::Tuple(
+                t.fields.iter().map(|f| self.shape_of(f)).collect::<Option<Vec<_>>>()?,
+            ),
+            // Any other shape holding a type parameter is one no collection
+            // literal can be written over here.
+            _ => return None,
+        })
+    }
+
+    /// Record that this body builds a collection of `ty`, and say where its
+    /// descriptor will arrive.
+    pub fn build_shape(
+        &mut self,
+        ty: &datalove_datalit::tycheck::Type<'db>,
+    ) -> Option<u32> {
+        let shape = self.shape_of(ty)?;
+        if !shape.mentions_param() {
+            return None;
+        }
+        if let Some(i) = self.body.built_shapes.iter().position(|s| *s == shape) {
+            return Some(i as u32);
+        }
+        self.body.built_shapes.push(shape);
+        Some((self.body.built_shapes.len() - 1) as u32)
+    }
+
+    /// The unerased type the typechecker gave an expression.
+    ///
+    /// `expr_type` erases, which is what the rest of lowering wants. A
+    /// collection built over a type parameter is the exception: `[T]` and
+    /// `[data]` are the same `IrType`, and only this says which parameter.
+    pub fn expr_source_type(
+        &self,
+        expr: ExprFun<'db>,
+    ) -> Option<datalove_datafun_common::Type<'db>> {
+        self.expr_types.get(&ExprKey::of(self.db, expr)).cloned()
+    }
+
     pub fn expr_type(&self, expr: ExprFun<'db>) -> IrType {
         let key = ExprKey::of(self.db, expr);
         match self.expr_types.get(&key) {
@@ -938,9 +1010,20 @@ impl<'db> LowerCtx<'db> {
 
     /// Emit Call.
     pub fn emit_call(&mut self, dest: ValueId, func: CodeRef, args: Vec<Operand>) {
+        self.emit_call_with_type_args(dest, func, args, Vec::new());
+    }
+
+    /// Emit Call, handing the callee a descriptor for each shape it declared.
+    pub fn emit_call_with_type_args(
+        &mut self,
+        dest: ValueId,
+        func: CodeRef,
+        args: Vec<Operand>,
+        type_args: Vec<datalove_datafun_ir::DescriptorShape>,
+    ) {
         let site_id = CallSiteId(self.body.next_call_site);
         self.body.next_call_site += 1;
-        self.emit(Instruction::Call { site_id, dest, func, args });
+        self.emit(Instruction::Call { site_id, dest, func, args, type_args });
     }
 
     /// Emit ComptimeCall (for calls to functions with const parameters).
@@ -1007,17 +1090,35 @@ impl<'db> LowerCtx<'db> {
 
     /// Emit ListNew.
     pub fn emit_list_new(&mut self, dest: ValueId, elements: Vec<Operand>) {
-        self.emit(Instruction::ListNew { dest, elements });
+        self.emit(Instruction::ListNew { dest, elements, descriptor: None });
+    }
+
+    /// Emit ListNew for a collection whose element type only a declared shape
+    /// says, naming which of this function's shapes describes it.
+    pub fn emit_list_new_erased(&mut self, dest: ValueId, elements: Vec<Operand>, descriptor: u32) {
+        self.emit(Instruction::ListNew { dest, elements, descriptor: Some(descriptor) });
     }
 
     /// Emit SetNew.
     pub fn emit_set_new(&mut self, dest: ValueId, elements: Vec<Operand>) {
-        self.emit(Instruction::SetNew { dest, elements });
+        self.emit(Instruction::SetNew { dest, elements, descriptor: None });
+    }
+
+    /// Emit SetNew for a collection whose element type only a declared shape
+    /// says, naming which of this function's shapes describes it.
+    pub fn emit_set_new_erased(&mut self, dest: ValueId, elements: Vec<Operand>, descriptor: u32) {
+        self.emit(Instruction::SetNew { dest, elements, descriptor: Some(descriptor) });
     }
 
     /// Emit MapNew.
     pub fn emit_map_new(&mut self, dest: ValueId, entries: Vec<(Operand, Operand)>) {
-        self.emit(Instruction::MapNew { dest, entries });
+        self.emit(Instruction::MapNew { dest, entries, descriptor: None });
+    }
+
+    /// Emit MapNew for a collection whose element type only a declared shape
+    /// says, naming which of this function's shapes describes it.
+    pub fn emit_map_new_erased(&mut self, dest: ValueId, entries: Vec<(Operand, Operand)>, descriptor: u32) {
+        self.emit(Instruction::MapNew { dest, entries, descriptor: Some(descriptor) });
     }
 
     /// Emit TensorNew.

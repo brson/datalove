@@ -46,6 +46,11 @@ pub fn emit_function(
     for (i, _) in func_ctx.descriptor_params.iter().enumerate() {
         write!(&mut params, ", const dtlv_tydesc_t* d{}", i).unwrap();
     }
+    // Then one for each shape the body builds a collection of, which no value
+    // carries.
+    for (i, _) in func_ctx.descriptor_shapes.iter().enumerate() {
+        write!(&mut params, ", const dtlv_tydesc_t* s{}", i).unwrap();
+    }
 
     let return_type = if func_ctx.return_type == IrType::Unit || uses_sret {
         "void"
@@ -271,13 +276,16 @@ impl<'a> FunctionCodegenContext<'a> {
             Instruction::Reify { dest, src } => {
                 self.emit_erasure(out, *dest, src, false)?;
             }
-            Instruction::ListNew { dest, elements } => {
-                self.emit_list_new(out, *dest, elements)?;
+            Instruction::ListNew { dest, elements, descriptor } => {
+                match descriptor {
+                    Some(i) => self.emit_list_new_erased(out, *dest, elements, *i)?,
+                    None => self.emit_list_new(out, *dest, elements)?,
+                }
             }
-            Instruction::SetNew { dest, elements } => {
+            Instruction::SetNew { dest, elements, .. } => {
                 self.emit_set_new(out, *dest, elements)?;
             }
-            Instruction::MapNew { dest, entries } => {
+            Instruction::MapNew { dest, entries, .. } => {
                 self.emit_map_new(out, *dest, entries)?;
             }
             Instruction::TensorNew { dest, shape, elements } => {
@@ -286,9 +294,12 @@ impl<'a> FunctionCodegenContext<'a> {
             Instruction::TableNew { dest, rows } => {
                 self.emit_table_new(out, *dest, rows)?;
             }
-            Instruction::Call { dest, func, args, .. } |
+            Instruction::Call { dest, func, args, type_args, .. } => {
+                self.emit_call(out, *dest, func, args, type_args)?;
+            }
+            // A comptime call is not generic, so it binds nothing.
             Instruction::ComptimeCall { dest, func, args, .. } => {
-                self.emit_call(out, *dest, func, args)?;
+                self.emit_call(out, *dest, func, args, &[])?;
             }
             Instruction::SlotStoreCopy { dest, value } => {
                 self.emit_slot_store(out, dest, value, true, false)?;
@@ -1751,7 +1762,14 @@ impl<'a> FunctionCodegenContext<'a> {
     }
 
     /// Emit function call.
-    fn emit_call(&mut self, out: &mut String, dest: ValueId, func: &CodeRef, args: &[Operand]) -> Result<(), CAotError> {
+    fn emit_call(
+        &mut self,
+        out: &mut String,
+        dest: ValueId,
+        func: &CodeRef,
+        args: &[Operand],
+        type_args: &[datalove_datafun_ir::DescriptorShape],
+    ) -> Result<(), CAotError> {
         // A rider function is reached through the runtime C ABI rather than
         // this backend's own convention, so it is a different call entirely.
         if let CodeRef::Module { module, id } = func {
@@ -1829,6 +1847,30 @@ impl<'a> FunctionCodegenContext<'a> {
             }
         }
 
+        // Then one for each shape the callee builds a collection of, worked out
+        // by the shared rule so that this side and the callee's signature
+        // cannot disagree about the trailing arguments.
+        let callee_shapes = self.callee_descriptor_shapes(func);
+        if !callee_shapes.is_empty() {
+            let own = self.unit_descriptor_shapes();
+            let refs = datalove_datafun_ir::shape_descriptors_for(
+                &callee_shapes, type_args, &own,
+            ).map_err(|missing| CAotError::Codegen(format!(
+                "no descriptor for `{}`: this function forwards a type parameter to \
+                 one that builds a collection of it, and was handed nothing to \
+                 forward", missing)))?;
+            for r in refs {
+                match r {
+                    datalove_datafun_ir::DescriptorRef::Static(ty) => {
+                        write!(&mut call_args, ", &{}", self.tydesc_name(&ty)).unwrap()
+                    }
+                    datalove_datafun_ir::DescriptorRef::Own(i) => {
+                        write!(&mut call_args, ", s{}", i).unwrap()
+                    }
+                }
+            }
+        }
+
         if uses_sret || dest_ty == IrType::Unit {
             writeln!(out, "    {}({});", func_name, call_args).unwrap();
         } else {
@@ -1836,6 +1878,58 @@ impl<'a> FunctionCodegenContext<'a> {
             let c_ty = types::ir_type_to_c(&dest_ty);
             writeln!(out, "    *({c_ty}*){dest_addr} = {}({});", func_name, call_args).unwrap();
         }
+        Ok(())
+    }
+
+    /// The shapes `func` declared, found beside its parameter descriptors.
+    fn callee_descriptor_shapes(
+        &self,
+        func: &CodeRef,
+    ) -> Vec<datalove_datafun_ir::DescriptorShape> {
+        let unit = match func {
+            CodeRef::Module { module, id } => {
+                self.registry.get_module_function_as_unit(*module, *id)
+            }
+            CodeRef::Local(id) => {
+                let lookup_unit = self.parent_unit.unwrap_or(self.unit);
+                lookup_unit.nested_units.iter().find(|nested| nested.id == *id)
+            }
+            CodeRef::External { .. } => None,
+        };
+        unit.and_then(|u| u.function_context())
+            .map(|ctx| ctx.descriptor_shapes.clone())
+            .unwrap_or_default()
+    }
+
+    /// The shapes this function itself declared.
+    fn unit_descriptor_shapes(&self) -> Vec<datalove_datafun_ir::DescriptorShape> {
+        self.unit.function_context()
+            .map(|c| c.descriptor_shapes.clone())
+            .unwrap_or_default()
+    }
+
+    /// Build a list described by a handed-over descriptor, then wrap it.
+    ///
+    /// The destination is a `data`, because a list built over a type parameter
+    /// erases to one. The elements are `data` too, which is what a `T` is
+    /// anywhere.
+    fn emit_list_new_erased(
+        &mut self,
+        out: &mut String,
+        dest: ValueId,
+        elements: &[Operand],
+        shape: u32,
+    ) -> Result<(), CAotError> {
+        let name = format!("__nl{}", dest.0);
+        let data_td = self.tydesc_name(&IrType::Data);
+        writeln!(out, "    dtlv_list_t {name};").unwrap();
+        writeln!(out, "    dtlv_rti_list_create_local(rt, &{name}, s{shape});").unwrap();
+        for elem in elements {
+            let elem_addr = self.operand_addr(elem);
+            writeln!(out, "    dtlv_rti_list_push_local(rt, &{name}, s{shape}, {elem_addr}, &{data_td});").unwrap();
+        }
+        let dest_addr = self.value_addr(dest);
+        writeln!(out, "    dtlv_rti_data_from_local(rt, &{name}, s{shape}, {dest_addr});").unwrap();
         Ok(())
     }
 

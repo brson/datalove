@@ -1120,6 +1120,17 @@ pub enum Instruction {
         dest: ValueId,
         func: CodeRef,
         args: Vec<Operand>,
+        /// What this call site bound each of the callee's type parameters to,
+        /// in the callee's declaration order, written over *this* function's
+        /// type parameters.
+        ///
+        /// Concrete at a call site that named concrete types, and mentioning
+        /// this function's own parameters where it passed them along. Together
+        /// with the callee's declared shapes it says what descriptors to hand
+        /// over, which `shape_descriptors_for` works out. Empty for a
+        /// non-generic callee.
+        #[serde(default)]
+        type_args: Vec<DescriptorShape>,
     },
 
     /// Call to a function with const parameters.
@@ -1316,6 +1327,11 @@ pub enum Instruction {
     ListNew {
         dest: ValueId,
         elements: Vec<Operand>,
+        /// Which of this function's declared shapes describes the collection,
+        /// where its own type does not say. `None` is a collection whose
+        /// element type is concrete, which is every one outside a generic.
+        #[serde(default)]
+        descriptor: Option<u32>,
     },
 
     /// Create a new set.
@@ -1324,6 +1340,11 @@ pub enum Instruction {
     SetNew {
         dest: ValueId,
         elements: Vec<Operand>,
+        /// Which of this function's declared shapes describes the collection,
+        /// where its own type does not say. `None` is a collection whose
+        /// element type is concrete, which is every one outside a generic.
+        #[serde(default)]
+        descriptor: Option<u32>,
     },
 
     /// Create a new map.
@@ -1332,6 +1353,9 @@ pub enum Instruction {
     MapNew {
         dest: ValueId,
         entries: Vec<(Operand, Operand)>,
+        /// See `ListNew::descriptor`.
+        #[serde(default)]
+        descriptor: Option<u32>,
     },
 
     /// Create a new tensor.
@@ -1810,7 +1834,244 @@ pub enum ExportBinding {
 // Unified Code Unit
 // ============================================================================
 
-/// Context for function execution.
+/// A type a function needs a descriptor for, written over its own type
+/// parameters.
+///
+/// A generic is compiled once with `data` standing where a type parameter was
+/// written, so `IrType` cannot say this: `[T]` and `[data]` are the same there.
+/// A function that *builds* a collection has to know what its elements are, and
+/// nothing in the frame says. So it declares the shape and the call site, which
+/// is the only place that knows what the parameter was bound to, hands over a
+/// descriptor for it.
+///
+/// The call site's descriptor is a static symbol. Nothing is put together at
+/// run time: substituting `[T0]` with `T0 = string` gives `[string]`, and that
+/// has a descriptor already.
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum DescriptorShape {
+    /// One of this function's type parameters, by declaration order.
+    Param(u32),
+    /// A subtree with no type parameter in it, which describes itself.
+    Concrete(IrType),
+    List(Box<DescriptorShape>),
+    Set(Box<DescriptorShape>),
+    Map(Box<DescriptorShape>, Box<DescriptorShape>),
+    Option(Box<DescriptorShape>),
+    Result(Box<DescriptorShape>),
+    Tuple(Vec<DescriptorShape>),
+}
+
+impl std::fmt::Display for DescriptorShape {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            // Written the way the source writes it, so an error naming a shape
+            // names something the reader typed.
+            DescriptorShape::Param(i) => write!(f, "T{}", i),
+            DescriptorShape::Concrete(t) => write!(f, "{:?}", t),
+            DescriptorShape::List(i) => write!(f, "[{}]", i),
+            DescriptorShape::Set(i) => write!(f, "#{{{}}}", i),
+            DescriptorShape::Option(i) => write!(f, "?{}", i),
+            DescriptorShape::Result(i) => write!(f, "!{}", i),
+            DescriptorShape::Map(k, v) => write!(f, "%{{{} = {}}}", k, v),
+            DescriptorShape::Tuple(fields) => {
+                write!(f, "(")?;
+                for (n, field) in fields.iter().enumerate() {
+                    if n > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{}", field)?;
+                }
+                write!(f, ")")
+            }
+        }
+    }
+}
+
+impl DescriptorShape {
+    /// Whether a type parameter appears anywhere in this shape.
+    pub fn mentions_param(&self) -> bool {
+        match self {
+            DescriptorShape::Param(_) => true,
+            DescriptorShape::Concrete(_) => false,
+            DescriptorShape::List(i)
+            | DescriptorShape::Set(i)
+            | DescriptorShape::Option(i)
+            | DescriptorShape::Result(i) => i.mentions_param(),
+            DescriptorShape::Map(k, v) => k.mentions_param() || v.mentions_param(),
+            DescriptorShape::Tuple(fields) => fields.iter().any(|f| f.mentions_param()),
+        }
+    }
+
+    /// How deeply this shape nests, used to notice a cycle that grows one.
+    pub fn depth(&self) -> u32 {
+        match self {
+            DescriptorShape::Param(_) | DescriptorShape::Concrete(_) => 1,
+            DescriptorShape::List(i)
+            | DescriptorShape::Set(i)
+            | DescriptorShape::Option(i)
+            | DescriptorShape::Result(i) => 1 + i.depth(),
+            DescriptorShape::Map(k, v) => 1 + k.depth().max(v.depth()),
+            DescriptorShape::Tuple(fields) => {
+                1 + fields.iter().map(|f| f.depth()).max().unwrap_or(0)
+            }
+        }
+    }
+
+    /// Replace each type parameter with what a call site bound it to.
+    ///
+    /// The result is written over the *caller's* type parameters, so it is
+    /// concrete when the caller bound them all to concrete types, and mentions
+    /// the caller's own where it did not.
+    pub fn substitute(&self, args: &[DescriptorShape]) -> Option<DescriptorShape> {
+        Some(match self {
+            DescriptorShape::Param(i) => args.get(*i as usize)?.clone(),
+            DescriptorShape::Concrete(t) => DescriptorShape::Concrete(t.clone()),
+            DescriptorShape::List(i) => DescriptorShape::List(Box::new(i.substitute(args)?)),
+            DescriptorShape::Set(i) => DescriptorShape::Set(Box::new(i.substitute(args)?)),
+            DescriptorShape::Option(i) => DescriptorShape::Option(Box::new(i.substitute(args)?)),
+            DescriptorShape::Result(i) => DescriptorShape::Result(Box::new(i.substitute(args)?)),
+            DescriptorShape::Map(k, v) => DescriptorShape::Map(
+                Box::new(k.substitute(args)?),
+                Box::new(v.substitute(args)?),
+            ),
+            DescriptorShape::Tuple(fields) => DescriptorShape::Tuple(
+                fields.iter().map(|f| f.substitute(args)).collect::<Option<Vec<_>>>()?,
+            ),
+        })
+    }
+
+    /// The concrete type this shape stands for, where no parameter is left.
+    pub fn as_concrete(&self) -> Option<IrType> {
+        Some(match self {
+            DescriptorShape::Param(_) => return None,
+            DescriptorShape::Concrete(t) => t.clone(),
+            DescriptorShape::List(i) => IrType::List(Box::new(i.as_concrete()?)),
+            DescriptorShape::Set(i) => IrType::Set(Box::new(i.as_concrete()?)),
+            DescriptorShape::Option(i) => IrType::Option(Box::new(i.as_concrete()?)),
+            DescriptorShape::Result(i) => IrType::Result(Box::new(i.as_concrete()?)),
+            DescriptorShape::Map(k, v) => {
+                IrType::Map(Box::new(k.as_concrete()?), Box::new(v.as_concrete()?))
+            }
+            DescriptorShape::Tuple(fields) => IrType::Tuple(
+                fields.iter().map(|f| f.as_concrete()).collect::<Option<Vec<_>>>()?,
+            ),
+        })
+    }
+}
+
+/// How deeply a shape may nest before its growth is taken for unbounded.
+///
+/// Only a cycle that makes shapes bigger can reach this. A program without
+/// polymorphic recursion draws its shapes from the ones its bodies wrote, and
+/// those are as deep as the source says.
+pub const MAX_SHAPE_DEPTH: u32 = 12;
+
+/// Give each function the shapes it has to carry on its callees' behalf.
+///
+/// Lowering knows what a function's own body builds. That is not the whole set:
+/// a function handing its type parameter to one that builds a collection of it
+/// has to be handed a descriptor too, and pass it on. Which shapes those are
+/// depends on the callee, so it cannot be settled while a function is lowered
+/// on its own.
+///
+/// The rule is one step, applied until nothing changes:
+///
+/// > For every call, substitute the callee's shapes with what the call site
+/// > bound the callee's type parameters to. Whatever still mentions this
+/// > function's own parameters is a shape this function needs as well.
+///
+/// Each round only adds, and where a cycle passes its type parameters along
+/// unchanged the substitution is a renaming and cannot make a shape bigger, so
+/// the set is drawn from what the cycle's bodies already wrote and the
+/// iteration settles. Mutual recursion is no different from a chain here.
+///
+/// What does not settle is a cycle whose substitution *grows* a shape:
+/// polymorphic recursion, a generic calling itself at a strictly larger type.
+/// Building a `[T]` and calling itself with it needs `[T]`, then `[[T]]`,
+/// without end. That is refused rather than chased.
+///
+/// `calls` gives, for each function, the callee and what the call site bound
+/// the callee's type parameters to. `shapes` starts as what each body builds
+/// and is grown in place.
+pub fn close_shapes<K: Copy + Eq + std::hash::Hash>(
+    calls: &std::collections::HashMap<K, Vec<(K, Vec<DescriptorShape>)>>,
+    shapes: &mut std::collections::HashMap<K, Vec<DescriptorShape>>,
+) -> Result<(), DescriptorShape> {
+    loop {
+        let mut added = false;
+        for (caller, sites) in calls {
+            let mut wanted: Vec<DescriptorShape> = Vec::new();
+            for (callee, type_args) in sites {
+                let Some(callee_shapes) = shapes.get(callee) else { continue };
+                for shape in callee_shapes {
+                    let Some(here) = shape.substitute(type_args) else { continue };
+                    // Concrete means this call site names a static descriptor,
+                    // and nothing has to be passed in for it.
+                    if !here.mentions_param() {
+                        continue;
+                    }
+                    if here.depth() > MAX_SHAPE_DEPTH {
+                        return Err(here);
+                    }
+                    wanted.push(here);
+                }
+            }
+            let own = shapes.entry(*caller).or_default();
+            for shape in wanted {
+                if !own.contains(&shape) {
+                    own.push(shape);
+                    added = true;
+                }
+            }
+        }
+        if !added {
+            return Ok(());
+        }
+    }
+}
+
+/// What a call site has to hand over for each shape the callee declared./// What a call site has to hand over for each shape the callee declared.
+///
+/// Substituting the callee's shape with what this site bound its type
+/// parameters to gives the type the descriptor has to describe. Concrete means
+/// a static symbol; anything still mentioning this function's own parameters
+/// has to be forwarded from what this function was handed, and if it was handed
+/// no such thing the call cannot be made.
+///
+/// One implementation, read by every backend, because a call site and a callee
+/// signature disagreeing about the trailing arguments is the failure this area
+/// keeps producing.
+pub fn shape_descriptors_for(
+    callee_shapes: &[DescriptorShape],
+    type_args: &[DescriptorShape],
+    own_shapes: &[DescriptorShape],
+) -> Result<Vec<DescriptorRef>, DescriptorShape> {
+    let mut out = Vec::with_capacity(callee_shapes.len());
+    for shape in callee_shapes {
+        let wanted = shape.substitute(type_args).ok_or_else(|| shape.clone())?;
+        if let Some(concrete) = wanted.as_concrete() {
+            out.push(DescriptorRef::Static(concrete));
+            continue;
+        }
+        match own_shapes.iter().position(|s| *s == wanted) {
+            Some(i) => out.push(DescriptorRef::Own(i as u32)),
+            None => return Err(wanted),
+        }
+    }
+    Ok(out)
+}
+
+/// What a call site hands over for one of the callee's shapes./// What a call site hands over for one of the callee's shapes.
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum DescriptorRef {
+    /// A static descriptor for a type this call site knows outright.
+    Static(IrType),
+    /// The descriptor this function was itself handed, by index into its own
+    /// `descriptor_shapes`.
+    Own(u32),
+}
+
+/// Context for function execution./// Context for function execution.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct FunctionContext {
     /// Parameter IDs (references to caller's data).
@@ -1824,6 +2085,16 @@ pub struct FunctionContext {
     /// Out params that need runtime tracking.
     #[serde(default)]
     pub tracked_params: Vec<ParamId>,
+    /// Shapes this function needs a descriptor for, in the order they arrive
+    /// as trailing arguments, after `descriptor_params`.
+    ///
+    /// `descriptor_params` describes a value that *arrived*, which is enough to
+    /// work on one. Building a fresh collection has no value to read a
+    /// descriptor off, so the shape is declared here and the call site hands
+    /// one over. Only a function that builds declares any, so a generic that
+    /// passes values along carries nothing extra.
+    #[serde(default)]
+    pub descriptor_shapes: Vec<DescriptorShape>,
     /// Parameters whose descriptor the caller supplies, in parameter order.
     ///
     /// A generic function is compiled once, with `data` standing where a type

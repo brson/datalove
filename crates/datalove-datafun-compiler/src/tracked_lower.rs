@@ -478,7 +478,84 @@ fn build_module_registry_from_lowered<'db>(
     Arc::new(registry)
 }
 
-/// Lower all module functions.
+/// Give each module function the descriptor shapes its callees need of it.
+///
+/// Lowering knows what a function's own body builds; this adds what it carries
+/// on a callee's behalf. See `close_shapes` for why the iteration settles and
+/// what it refuses. Done before anything reads a signature, because the shapes
+/// are part of one: they say what trailing arguments a call has to pass.
+fn close_shapes_over_calls<'db>(
+    db: &'db dyn salsa::Database,
+    func_id_map: FuncIdMap<'db>,
+    lowered_functions: &mut HashMap<ModuleId<'db>, ModuleLoweredFunctions>,
+    errors: &mut HashMap<ModuleId<'db>, Vec<String>>,
+) {
+    use datalove_datafun_ir::{CodeRef, DescriptorShape, Instruction};
+
+    type Key = (IrModuleId, FuncId);
+
+    // Where each lowered unit sits, so a `CodeRef` can find it and so the
+    // answers can be written back.
+    let mut placement: HashMap<Key, (ModuleId<'db>, usize)> = HashMap::new();
+    for ((module_id, _), (ir_module_id, func_id)) in func_id_map.to_hashmap(db) {
+        let Some(lowered) = lowered_functions.get(&module_id) else { continue };
+        let Some(idx) = lowered.functions.iter().position(|f| f.id.0 == func_id.0) else {
+            continue;
+        };
+        placement.insert((ir_module_id, func_id), (module_id, idx));
+    }
+
+    let mut calls: HashMap<Key, Vec<(Key, Vec<DescriptorShape>)>> = HashMap::new();
+    let mut shapes: HashMap<Key, Vec<DescriptorShape>> = HashMap::new();
+    for (key, (module_id, idx)) in &placement {
+        let unit = &lowered_functions[module_id].functions[*idx];
+        shapes.insert(
+            *key,
+            unit.function_context().map(|c| c.descriptor_shapes.clone()).unwrap_or_default(),
+        );
+        let mut sites = Vec::new();
+        for block in &unit.blocks {
+            for instr in &block.instructions {
+                let Instruction::Call { func, type_args, .. } = instr else { continue };
+                if type_args.is_empty() {
+                    continue;
+                }
+                let callee = match func {
+                    CodeRef::Module { module, id } => (*module, FuncId(id.0)),
+                    // A local reference inside a module names that module's own.
+                    CodeRef::Local(id) => (key.0, FuncId(id.0)),
+                    CodeRef::External { .. } => continue,
+                };
+                sites.push((callee, type_args.clone()));
+            }
+        }
+        calls.insert(*key, sites);
+    }
+
+    if let Err(unbounded) = datalove_datafun_ir::close_shapes(&calls, &mut shapes) {
+        let module_id = placement.values().next().map(|(m, _)| *m);
+        if let Some(module_id) = module_id {
+            errors.entry(module_id).or_default().push(format!(
+                "a descriptor would be needed for `{}`, a collection that grows \
+                 without end: a generic builds a collection of its type parameter and \
+                 calls a generic at a strictly larger type, so every call needs a \
+                 description one level deeper than the last",
+                unbounded,
+            ));
+        }
+        return;
+    }
+
+    for (key, shape_set) in shapes {
+        let Some((module_id, idx)) = placement.get(&key).copied() else { continue };
+        let unit = &mut lowered_functions.get_mut(&module_id).unwrap().functions[idx];
+        if let datalove_datafun_ir::CodeUnitContext::Function(ctx) = &mut unit.context {
+            ctx.descriptor_shapes = shape_set;
+        }
+    }
+}
+
+/// Lower all module functions./// Lower all module functions.
 ///
 /// This lowers all functions across all modules. The lowered functions are
 /// reused for const evaluation and final module assembly.
@@ -902,7 +979,17 @@ pub fn lower_module_graph_with_evaluator<'db>(
         &no_consts_yet, &mut deferred, None,
     );
 
-    // Phase 5a/b boundary: evaluate module-level consts against what is lowered
+    // Phase 5a/b boundary is where every module function is lowered, so this is
+    // where a function's descriptor shapes stop being only what its own body
+    // builds. See `shape_closure`: a function handing its type parameter to one
+    // that builds a collection of it has to be handed a descriptor too.
+    //
+    // Done before anything reads a signature, because the shapes are part of
+    // one: they say what trailing arguments a call has to pass.
+    let mut shape_errors: HashMap<ModuleId<'db>, Vec<String>> = HashMap::new();
+    close_shapes_over_calls(db_salsa, func_id_map, &mut lowered_functions, &mut shape_errors);
+
+    // Phase 5a/b boundary: evaluate module-level consts against what is lowered    // Phase 5a/b boundary: evaluate module-level consts against what is lowered
     // so far. Done even when const inlining is skipped, since a module const is
     // resolved when its reference is lowered rather than by a later pass, so
     // there is nothing for that flag to skip.
@@ -965,7 +1052,7 @@ pub fn lower_module_graph_with_evaluator<'db>(
     // whose const could not be evaluated compiles as though the functions that
     // name it were never written.
     let mut resolved_consts = resolved_consts;
-    for (module_id, errors) in module_const_errors {
+    for (module_id, errors) in module_const_errors.into_iter().chain(shape_errors) {
         resolved_consts
             .entry(module_id)
             .or_insert_with(|| ModulePreResolvedConsts::new(module_id, Vec::new()))

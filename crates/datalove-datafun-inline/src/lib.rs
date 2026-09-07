@@ -683,11 +683,12 @@ impl RemapContext {
                 dest: self.remap_value(*dest),
                 src: self.remap_operand(src),
             },
-            Instruction::Call { site_id, dest, func, args } => Instruction::Call {
+            Instruction::Call { site_id, dest, func, args, type_args } => Instruction::Call {
                 site_id: self.remap_call_site(*site_id),
                 dest: self.remap_value(*dest),
                 func: func.clone(),
                 args: args.iter().map(|a| self.remap_operand(a)).collect(),
+                type_args: type_args.clone(),
             },
             Instruction::ComptimeCall { dest, func, args, discriminant, comptime_param_indices } => Instruction::ComptimeCall {
                 dest: self.remap_value(*dest),
@@ -788,20 +789,23 @@ impl RemapContext {
                 dest: self.remap_value(*dest),
                 src: self.remap_operand(src),
             },
-            Instruction::ListNew { dest, elements } => Instruction::ListNew {
+            Instruction::ListNew { dest, elements, descriptor } => Instruction::ListNew {
                 dest: self.remap_value(*dest),
                 elements: elements.iter().map(|e| self.remap_operand(e)).collect(),
+                descriptor: *descriptor,
             },
-            Instruction::SetNew { dest, elements } => Instruction::SetNew {
+            Instruction::SetNew { dest, elements, descriptor } => Instruction::SetNew {
                 dest: self.remap_value(*dest),
                 elements: elements.iter().map(|e| self.remap_operand(e)).collect(),
+                descriptor: *descriptor,
             },
-            Instruction::MapNew { dest, entries } => Instruction::MapNew {
+            Instruction::MapNew { dest, entries, descriptor } => Instruction::MapNew {
                 dest: self.remap_value(*dest),
                 entries: entries
                     .iter()
                     .map(|(k, v)| (self.remap_operand(k), self.remap_operand(v)))
                     .collect(),
+                descriptor: *descriptor,
             },
             Instruction::TensorNew {
                 dest,
@@ -1280,11 +1284,12 @@ fn replace_params_in_instruction(
             dest: *dest,
             src: replace_operand(src),
         },
-        Instruction::Call { site_id, dest, func, args } => Instruction::Call {
+        Instruction::Call { site_id, dest, func, args, type_args } => Instruction::Call {
             site_id: *site_id,
             dest: *dest,
             func: func.clone(),
             args: args.iter().map(replace_operand).collect(),
+            type_args: type_args.clone(),
         },
         Instruction::ComptimeCall { dest, func, args, discriminant, comptime_param_indices } => Instruction::ComptimeCall {
             dest: *dest,
@@ -1382,20 +1387,23 @@ fn replace_params_in_instruction(
             dest: *dest,
             src: replace_operand(src),
         },
-        Instruction::ListNew { dest, elements } => Instruction::ListNew {
+        Instruction::ListNew { dest, elements, descriptor } => Instruction::ListNew {
             dest: *dest,
             elements: elements.iter().map(replace_operand).collect(),
+            descriptor: *descriptor,
         },
-        Instruction::SetNew { dest, elements } => Instruction::SetNew {
+        Instruction::SetNew { dest, elements, descriptor } => Instruction::SetNew {
             dest: *dest,
             elements: elements.iter().map(replace_operand).collect(),
+            descriptor: *descriptor,
         },
-        Instruction::MapNew { dest, entries } => Instruction::MapNew {
+        Instruction::MapNew { dest, entries, descriptor } => Instruction::MapNew {
             dest: *dest,
             entries: entries
                 .iter()
                 .map(|(k, v)| (replace_operand(k), replace_operand(v)))
                 .collect(),
+            descriptor: *descriptor,
         },
         Instruction::TensorNew {
             dest,

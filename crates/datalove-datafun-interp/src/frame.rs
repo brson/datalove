@@ -28,9 +28,32 @@ pub struct Frame {
     param_tydescs: Vec<*const TyDesc>,
     /// Track which params are initialized (Out params start uninitialized).
     param_initialized: Vec<bool>,
+    /// Descriptors handed over for this function's declared shapes, in order.
+    ///
+    /// A shape has no value to carry a descriptor with, so unlike everything
+    /// else here it arrives on its own.
+    shape_descriptors: Vec<*const TyDesc>,
+    /// The shapes this function declared, so a call site inside it can tell
+    /// which of them a callee's need matches.
+    own_shapes: Vec<datalove_datafun_ir::DescriptorShape>,
 }
 
 impl Frame {
+    /// Hand this frame the descriptors for the function's declared shapes.
+    pub fn set_shape_descriptors(&mut self, descriptors: Vec<*const TyDesc>) {
+        self.shape_descriptors = descriptors;
+    }
+
+    /// The descriptor handed over for the shape declared at `index`.
+    pub fn shape_descriptor(&self, index: u32) -> Option<*const TyDesc> {
+        self.shape_descriptors.get(index as usize).copied()
+    }
+
+    /// The shapes this function declared.
+    pub fn own_shapes(&self) -> &[datalove_datafun_ir::DescriptorShape] {
+        &self.own_shapes
+    }
+
     /// Create a new frame for code unit execution.
     ///
     /// Dispatches on the unit's context:
@@ -43,6 +66,11 @@ impl Frame {
             layout.frame_align as usize,
         );
 
+        let own_shapes = match &unit.context {
+            CodeUnitContext::Function(ctx) => ctx.descriptor_shapes.clone(),
+            _ => Vec::new(),
+        };
+
         match &unit.context {
             CodeUnitContext::Function(ctx) => {
                 let param_count = ctx.params.len();
@@ -54,6 +82,8 @@ impl Frame {
                     param_ptrs: vec![std::ptr::null_mut(); param_count],
                     param_tydescs: vec![std::ptr::null(); param_count],
                     param_initialized: vec![false; param_count],
+                    shape_descriptors: Vec::new(),
+                    own_shapes,
                 }
             }
             CodeUnitContext::Script(_) => {
@@ -66,6 +96,8 @@ impl Frame {
                     param_ptrs: Vec::new(),
                     param_tydescs: Vec::new(),
                     param_initialized: Vec::new(),
+                    shape_descriptors: Vec::new(),
+                    own_shapes: own_shapes.clone(),
                 }
             }
             CodeUnitContext::Native(ctx) => {

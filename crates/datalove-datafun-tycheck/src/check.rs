@@ -126,7 +126,6 @@ pub fn check_expr<'db>(
         ExprFunKind::List(list_expr) => {
             match expected {
                 Type::Datalit(datalit::tycheck::Type::List(_)) => {
-                    refuse_building_over_a_type_param(ctx, expr, &expected)?;
                     // Check elements against expected element type (with coercion).
                     check_list_elements(ctx, &list_expr.elements, &expected)?;
                     ctx.store_expr_type(expr, &expected);
@@ -150,7 +149,6 @@ pub fn check_expr<'db>(
         ExprFunKind::Set(set_expr) => {
             match expected {
                 Type::Datalit(datalit::tycheck::Type::Set(_)) => {
-                    refuse_building_over_a_type_param(ctx, expr, &expected)?;
                     // Check elements against expected element type (with coercion).
                     check_set_elements(ctx, &set_expr.elements, &expected)?;
                     ctx.store_expr_type(expr, &expected);
@@ -174,7 +172,6 @@ pub fn check_expr<'db>(
         ExprFunKind::Map(map_expr) => {
             match expected {
                 Type::Datalit(datalit::tycheck::Type::Map(_)) => {
-                    refuse_building_over_a_type_param(ctx, expr, &expected)?;
                     // Check entries against expected key/value types (with coercion).
                     check_map_entries(ctx, &map_expr.entries, &expected)?;
                     ctx.store_expr_type(expr, &expected);

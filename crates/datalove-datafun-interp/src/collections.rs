@@ -13,6 +13,27 @@ use crate::IrInterpreter;
 
 impl IrInterpreter {
     /// Execute ListNew: create a list from operands.
+    /// Build a list described by `list_tydesc`, then move it into the wrapper.
+    pub(crate) fn execute_list_new_erased(
+        &mut self,
+        elements: &[Operand],
+        dest: Destination,
+        list_tydesc: *const rtdt::TyDesc,
+        frame: &Frame,
+        frames: &FrameStore,
+    ) {
+        let mut temp = std::mem::MaybeUninit::<rtdt::List>::uninit();
+        let temp_ptr = temp.as_mut_ptr() as *mut u8;
+        let temp_dest = Destination { ptr: temp_ptr, tydesc: list_tydesc };
+        self.execute_list_new(elements, temp_dest, frame, frames);
+        let status = unsafe {
+            datalove_rt::c::dtlv_rti_data_from_local(
+                self.runtime.handle(), temp_ptr, list_tydesc, dest.ptr)
+        };
+        assert_eq!(status, datalove_rt::c::RtStatus::Ok,
+            "wrapping a freshly built list");
+    }
+
     pub(crate) fn execute_list_new(
         &mut self,
         elements: &[Operand],

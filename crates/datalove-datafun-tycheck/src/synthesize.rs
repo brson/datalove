@@ -985,7 +985,15 @@ pub(crate) fn synthesize_function_call_expecting<'db>(
 
     // Store resolved call target for interpreter.
     if let Some((func_ast, module_id)) = ctx.lookup_function_ast(name) {
-        ctx.store_call_target(call, func_ast, module_id);
+        // What the type parameters were bound to, which lowering needs in order
+        // to say what descriptors the callee gets.
+        let type_args: Vec<datalove_datalit::tycheck::Type<'db>> = func_ast
+            .type_params(db)
+            .iter()
+            .map(|p| bindings.get(p).cloned()
+                .unwrap_or(datalove_datalit::tycheck::Type::Data))
+            .collect();
+        ctx.store_call_target(call, func_ast, module_id, type_args);
     }
 
     // Return the function's return type.

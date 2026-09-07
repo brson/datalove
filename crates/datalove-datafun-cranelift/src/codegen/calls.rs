@@ -18,6 +18,28 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
     /// Threads rt_handle as implicit first argument to callee.
     /// For native rider functions, marshals args from pointers to i64 scalars
     /// and converts the i64 return value back to the destination type.
+    /// The shapes `code_ref` declared, read from the same place its parameter
+    /// descriptors are, since the two together are its trailing arguments.
+    fn callee_descriptor_shapes(
+        &self,
+        code_ref: &CodeRef,
+    ) -> Vec<datalove_datafun_ir::DescriptorShape> {
+        match code_ref {
+            CodeRef::Local(id) | CodeRef::External { id, .. } => {
+                self.local_funcs.get(&CodeUnitId(id.0))
+                    .map(|callee| callee.descriptor_shapes.clone())
+                    .unwrap_or_default()
+            }
+            CodeRef::Module { module, id } => {
+                let Some(registry) = self.registry else { return Vec::new() };
+                registry.get_module_function_as_unit(*module, CodeUnitId(id.0))
+                    .and_then(|unit| unit.function_context()
+                        .map(|c| c.descriptor_shapes.clone()))
+                    .unwrap_or_default()
+            }
+        }
+    }
+
     /// The parameters of `code_ref` whose descriptor the call site supplies.
     ///
     /// This has to agree with what `build_signature_for_func` put in the
@@ -233,6 +255,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         dest: ValueId,
         code_ref: &CodeRef,
         args: &[Operand],
+        type_args: &[datalove_datafun_ir::DescriptorShape],
     ) -> Result<(), CraneliftError> {
         // Check if target is a native rider function.
         if let CodeRef::Module { module, id } = code_ref {
@@ -318,6 +341,34 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 None => self.operand_tydesc(builder, &arg)?,
             };
             call_args.push(tydesc_addr);
+        }
+
+        // Then one for each shape the callee builds a collection of. What to
+        // hand over is worked out by the shared rule, so this side and the
+        // callee's signature cannot disagree about the trailing arguments.
+        let callee_shapes = self.callee_descriptor_shapes(code_ref);
+        if !callee_shapes.is_empty() {
+            let own = self.func_ctx.descriptor_shapes.clone();
+            let refs = datalove_datafun_ir::shape_descriptors_for(
+                &callee_shapes, type_args, &own,
+            ).map_err(|missing| CraneliftError::Codegen(format!(
+                "no descriptor for `{}`: this function forwards a type parameter to \
+                 one that builds a collection of it, and was handed nothing to \
+                 forward", missing)))?;
+            for r in refs {
+                let value = match r {
+                    datalove_datafun_ir::DescriptorRef::Static(ty) => {
+                        self.static_tydesc(builder, &ty)?
+                    }
+                    datalove_datafun_ir::DescriptorRef::Own(i) => {
+                        *self.shape_descriptor_values.get(i as usize).ok_or_else(|| {
+                            CraneliftError::Codegen(format!(
+                                "shape {} was declared but never passed", i))
+                        })?
+                    }
+                };
+                call_args.push(value);
+            }
         }
 
         // Declare callee in this function and emit call.

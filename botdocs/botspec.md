@@ -1031,12 +1031,24 @@ Indexing does work, including on a collection whose elements are a type
 parameter: the stride is read from the descriptor that travels with the
 collection rather than from the static type.
 
-A collection over a type parameter can be taken, stored, handed on and
-returned, but not built. `var out: [T] = []` inside a generic is refused: a
-collection that arrives carries a descriptor saying what its elements are, and
-one written here has none and nowhere to get one. This is what keeps `reversed`
-and `concat` out of `sys/std/list`, where `swap` — which only moves elements a
-list already holds — is fine.
+A collection over a type parameter can be built as well as taken, stored,
+handed on and returned. `var out: [T] = []` works. A collection that arrives
+carries a descriptor saying what its elements are; one written here has no value
+to read one off, so the call site hands one over — it is the only place that
+knows what the parameter was bound to. Nothing is worked out at run time,
+because `[T]` with `T` bound to a concrete type is a concrete type, and that
+has a descriptor already.
+
+Which descriptors a function is handed is what its own body builds, closed over
+its calls: a generic that passes its type parameter to one that builds a
+collection of it carries a descriptor too, and forwards it. A generic that
+builds nothing carries none.
+
+One program is refused. A generic that builds a collection of its type
+parameter and calls a generic at a strictly larger type needs a description one
+level deeper at every call, so the set never settles. Erasure means such a
+function compiles to one body and would simply recurse for ever at run time;
+what cannot be written down is the descriptors, not the code.
 
 Why each of these is where it is, and what is planned, is in
 [Where this stands](plan-generics.md#user-content-where-this-stands).

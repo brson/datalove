@@ -1,0 +1,65 @@
+require module sys/std/list
+
+import list.push
+import list.len
+import list.pop
+
+// Building a collection whose element type is a type parameter.
+//
+// A `[T]` that arrives carries a descriptor saying what its elements are; one
+// written here has no value to read a descriptor off. So the call site, which
+// is the only place that knows what `T` was bound to, hands one over. Nothing
+// is put together at run time: `[T0]` with `T0 = string` is `[string]`, and
+// that has a static descriptor already.
+//
+// Which shapes a function needs is what its own body builds, plus what its
+// callees need of it. `two_of` builds nothing itself and still carries a
+// descriptor, because it hands its `T` to `singleton`, which does.
+//
+// `nothing_at_all` has a type parameter appearing solely in its return type.
+// It needs both halves: return-position inference to be callable at all, and a
+// handed-over descriptor to be buildable.
+
+fun singleton<T>(x: T): [T]
+  var out: [T] = []
+  push(mut out, x)
+  ret out
+end fun
+
+fun two_of<T>(a: T, b: T): [T]
+  var out: [T] = singleton(a)
+  push(mut out, b)
+  ret out
+end fun
+
+fun nothing_at_all<T>(): [T]
+  var out: [T] = []
+  ret out
+end fun
+
+fun reversed<T>(ref xs: [T]): [T]
+  var out: [T] = []
+  var src: [T] = xs@
+  loop
+    if pop(mut src) |elem|
+      push(mut out, elem)
+    else
+      break
+    end if
+  end loop
+  ret out
+end fun
+
+let one = singleton("a")
+let two_numbers = two_of(: u32 / 1, : u32 / 2)
+let two_words = two_of("x", "y")
+
+let empty: [string] = nothing_at_all()
+let empty_len = len(ref empty)
+
+let words: [string] = ["a", "b", "c"]
+let rev_words = reversed(ref words)
+let numbers: [u32] = [1, 2, 3]
+let rev_numbers = reversed(ref numbers)
+
+let output = (one, two_numbers, two_words, empty, empty_len, rev_words, rev_numbers)

@@ -46,8 +46,8 @@ end fun
 //
 // A term is its payload under a name, and an enum is a payload chosen by a
 // discriminant, so both convert the way an option does. Every position a type
-// parameter can occupy is now one erasure reaches, which is why nothing below
-// is refused for its signature and the only thing left is the index operator.
+// parameter can occupy is one erasure reaches, which is why nothing below is
+// refused for its signature.
 fun in_list<T>(x: [T]): [T]
   ret x
 end fun
@@ -80,19 +80,21 @@ fun first<T>(ref xs: [T]): ?T
   ret some (xs[: index / 0]?@)
 end fun
 
-// The one thing erasure genuinely cannot reach: a collection built here rather
-// than passed in.
+// Building a collection of a type parameter, which used to be the one thing
+// erasure could not reach.
 //
-// A `[T]` that arrives is fine, because it arrives wrapped and the wrapper
-// carries the descriptor saying what its elements are. A `[T]` written here
-// has no such descriptor and nowhere to get one: the function knows a `T` only
-// as something its caller described, and an empty list was described by
-// nobody. So `reversed`, `concat` and anything else that returns a new
-// collection stay out of reach until a type parameter can be asked what it is
-// at runtime.
+// A `[T]` that arrives carries a descriptor saying what its elements are. One
+// written here has no value to read one off, so the call site hands one over:
+// it is the only place that knows what the parameter was bound to. Nothing is
+// put together at run time, because `[T]` with `T` bound to a concrete type is
+// a concrete type, and that has a static descriptor already.
 //
-// This is refused rather than lowered. Before it was refused the lowering
-// reached a `[T]` with no element type behind it and panicked.
+// Which shapes a function is handed is what its own body builds, closed over
+// its calls: one that passes its type parameter to a function that builds a
+// collection of it carries a descriptor too, and forwards it.
+//
+// A type parameter appearing solely in the return type is bound by what the
+// call site expects, so these are callable as well as compilable.
 fun build_a_list<T>(): [T]
   var out: [T] = []
   ret out
@@ -107,3 +109,7 @@ fun build_a_set<T>(): #{T}
   var out: #{T} = #{}
   ret out
 end fun
+
+// What is left is not a limit of erasure at all: it is that nothing can be done
+// to a `T` but move it, drop it, clone it, print it and hand it back, which is
+// what bounds are for.

@@ -164,7 +164,11 @@ pub fn lower_script_fragment_raw<'db>(
             result_name: None,
             exports: ctx.exports,
         }),
-        nested_units: ctx.functions,
+        nested_units: {
+            let mut units = ctx.functions;
+            close_shapes_in_units(&mut units)?;
+            units
+        },
     })
 }
 
@@ -297,7 +301,11 @@ pub fn lower_script_expr<'db>(
             result_name,
             exports: ctx.exports,
         }),
-        nested_units: ctx.functions,
+        nested_units: {
+            let mut units = ctx.functions;
+            close_shapes_in_units(&mut units)?;
+            units
+        },
     })
 }
 
@@ -619,4 +627,53 @@ fn lower_statement_for_script<'db>(
             panic!("parse error node reached lowering - callers should check for parse errors before lowering")
         }
     }
+}
+
+/// Give each script-local function the shapes its callees need of it.
+///
+/// The same step the module path takes, over the functions defined beside a
+/// script unit. See `close_shapes`.
+pub(crate) fn close_shapes_in_units(units: &mut [IrCodeUnit]) -> Result<(), LowerError> {
+    use datalove_datafun_ir::{CodeRef, DescriptorShape, Instruction};
+    use std::collections::HashMap;
+
+    let mut calls: HashMap<u32, Vec<(u32, Vec<DescriptorShape>)>> = HashMap::new();
+    let mut shapes: HashMap<u32, Vec<DescriptorShape>> = HashMap::new();
+    for unit in units.iter() {
+        shapes.insert(
+            unit.id.0,
+            unit.function_context().map(|c| c.descriptor_shapes.clone()).unwrap_or_default(),
+        );
+        let mut sites = Vec::new();
+        for block in &unit.blocks {
+            for instr in &block.instructions {
+                let Instruction::Call { func, type_args, .. } = instr else { continue };
+                if type_args.is_empty() {
+                    continue;
+                }
+                if let CodeRef::Local(id) = func {
+                    sites.push((id.0, type_args.clone()));
+                }
+            }
+        }
+        calls.insert(unit.id.0, sites);
+    }
+
+    if let Err(unbounded) = datalove_datafun_ir::close_shapes(&calls, &mut shapes) {
+        return Err(LowerError::UnboundedDescriptorShape(format!(
+            "a descriptor would be needed for `{}`, a collection that grows without \
+             end: a generic builds a collection of its type parameter and calls a \
+             generic at a strictly larger type, so every call needs a description one \
+             level deeper than the last",
+            unbounded,
+        )));
+    }
+
+    for unit in units.iter_mut() {
+        let Some(shape_set) = shapes.remove(&unit.id.0) else { continue };
+        if let datalove_datafun_ir::CodeUnitContext::Function(ctx) = &mut unit.context {
+            ctx.descriptor_shapes = shape_set;
+        }
+    }
+    Ok(())
 }

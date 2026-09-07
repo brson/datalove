@@ -238,6 +238,7 @@ pub fn transform_function(
             descriptor_params: func_ctx.descriptor_params.iter()
                 .filter_map(|p| param_remap.get(&p.0).copied().map(ParamId))
                 .collect(),
+            descriptor_shapes: Vec::new(),
         }),
         nested_units: vec![],
     }
@@ -426,11 +427,12 @@ fn rewrite_comptime_params_in_instruction(
             op: *op,
             operand: rewrite_operand(operand),
         },
-        Instruction::Call { site_id, dest, func, args } => Instruction::Call {
+        Instruction::Call { site_id, dest, func, args, .. } => Instruction::Call {
             site_id: *site_id,
             dest: *dest,
             func: func.clone(),
             args: args.iter().map(rewrite_operand).collect(),
+            type_args: Vec::new(),
         },
         Instruction::Copy { dest, src } => Instruction::Copy {
             dest: *dest,
@@ -620,6 +622,7 @@ pub fn rewrite_comptime_calls(
                                     dest: *dest,
                                     func: func_ref.clone(),
                                     args: new_args,
+                                    type_args: Vec::new(),
                                 });
                                 continue;
                             }

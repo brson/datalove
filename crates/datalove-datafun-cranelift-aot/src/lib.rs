@@ -307,6 +307,7 @@ impl AotCompiler {
                     param_types: vec![],
                     return_type: datalove_datafun_ir::IrType::Unit,
                     tracked_params: vec![],
+                    descriptor_shapes: Vec::new(),
                 }
             ),
             nested_units: vec![], // Functions don't have nested units

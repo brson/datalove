@@ -317,6 +317,27 @@ impl IrInterpreter {
         registry: &FunctionRegistry,
         frames: &mut FrameStore,
     ) -> Result<(), InterpError> {
+        self.call_in_context_with_shapes(
+            func, code_ref, args, Vec::new(), ret_dest, ctx, registry, frames)
+    }
+
+    /// Call, handing the callee a descriptor for each shape it declared.
+    ///
+    /// Every other value here carries its own descriptor, so this is the only
+    /// thing passed beside the arguments: a collection the callee builds has no
+    /// value to read one off.
+    #[allow(clippy::too_many_arguments)]
+    pub fn call_in_context_with_shapes(
+        &mut self,
+        func: &IrCodeUnit,
+        code_ref: Option<CodeRef>,
+        args: Vec<Value>,
+        shape_descriptors: Vec<*const rtdt::TyDesc>,
+        ret_dest: Destination,
+        ctx: &ExecutionContext,
+        registry: &FunctionRegistry,
+        frames: &mut FrameStore,
+    ) -> Result<(), InterpError> {
         let func_ctx = func.function_context()
             .expect("call_in_context requires a function code unit");
 
@@ -329,6 +350,7 @@ impl IrInterpreter {
 
         // Create frame with param storage (no live value tracking for functions).
         let mut frame = Frame::new(func, layout);
+        frame.set_shape_descriptors(shape_descriptors);
 
         // Set up parameters as pointers to caller's data.
         // All params store pointers - mode determines ownership semantics.
@@ -963,11 +985,28 @@ impl IrInterpreter {
                 frame.mark_value_live(*dest);
                 Self::mark_source_dropped_local(src, frame);
             }
-            Instruction::Call { site_id, dest, func, args } => {
+            Instruction::Call { site_id, dest, func, args, type_args } => {
                 let callee = ctx.get_unit(func, registry);
                 let arg_vals = self.prepare_call_args(callee, args, frame, frames);
                 let dest_slot = frame.value_dest(*dest);
                 Self::mark_consumed_call_args(callee, args, frame);
+
+                // What the callee declared it needs, answered from what this
+                // call site bound its type parameters to. One implementation,
+                // shared with the compiled backends.
+                let callee_shapes = callee.function_context()
+                    .map(|c| c.descriptor_shapes.clone())
+                    .unwrap_or_default();
+                let own_shapes = frame.own_shapes().to_vec();
+                let refs = datalove_datafun_ir::shape_descriptors_for(
+                    &callee_shapes, type_args, &own_shapes,
+                ).unwrap_or_else(|missing| panic!(
+                    "no descriptor for `{}`: this function forwards a type parameter \
+                     to one that builds a collection of it, and was handed nothing \
+                     to forward", missing));
+                let supplied: Vec<*const rtdt::TyDesc> = refs.iter()
+                    .map(|r| self.resolve_shape_ref(r, frame))
+                    .collect();
 
                 if let datalove_datafun_ir::CodeUnitContext::Native(native_ctx) = &callee.context {
                     // Native function dispatch.
@@ -983,8 +1022,14 @@ impl IrInterpreter {
                         }
                     });
 
-                    // Try dispatcher first, fall back to interpreter.
-                    let call_result = if let Some(result) = self.try_dispatch_call(
+                    // A callee taking shape descriptors goes straight to the
+                    // interpreter. The dispatcher's stubs carry arguments only,
+                    // and a dropped descriptor is a wrong element type rather
+                    // than a failure.
+                    let call_result = if !supplied.is_empty() {
+                        self.execute_call_with_shapes(
+                            callee, func, arg_vals, supplied, dest_slot, ctx, registry, frames)
+                    } else if let Some(result) = self.try_dispatch_call(
                         func, callee, &arg_vals, dest_slot, ctx, registry, frames, call_site_info
                     ) {
                         result
@@ -1027,16 +1072,28 @@ impl IrInterpreter {
                 frame.mark_value_live(*dest);
                 Self::mark_out_params_initialized(callee, args, frame);
             }
-            Instruction::ListNew { dest, elements } => {
+            Instruction::ListNew { dest, elements, descriptor } => {
                 let dest_slot = frame.value_dest(*dest);
-                self.execute_list_new(elements, dest_slot, frame, frames);
+                match descriptor {
+                    // The destination is a `data`, because a list built over a
+                    // type parameter erases to one. So the list is made against
+                    // the descriptor handed over and moved into the wrapper,
+                    // which is what any owned collection of a type parameter is.
+                    Some(index) => {
+                        let list_tydesc = frame.shape_descriptor(*index)
+                            .expect("a shape built with is one this function declared");
+                        self.execute_list_new_erased(
+                            elements, dest_slot, list_tydesc, frame, frames);
+                    }
+                    None => self.execute_list_new(elements, dest_slot, frame, frames),
+                }
                 frame.mark_value_live(*dest);
                 // Mark source elements as moved (linear semantics - consumes elements).
                 for elem in elements {
                     Self::mark_source_dropped_local(elem, frame);
                 }
             }
-            Instruction::SetNew { dest, elements } => {
+            Instruction::SetNew { dest, elements, .. } => {
                 let dest_slot = frame.value_dest(*dest);
                 self.execute_set_new(elements, dest_slot, frame, frames);
                 frame.mark_value_live(*dest);
@@ -1045,7 +1102,7 @@ impl IrInterpreter {
                     Self::mark_source_dropped_local(elem, frame);
                 }
             }
-            Instruction::MapNew { dest, entries } => {
+            Instruction::MapNew { dest, entries, .. } => {
                 let dest_slot = frame.value_dest(*dest);
                 self.execute_map_new(entries, dest_slot, frame, frames);
                 frame.mark_value_live(*dest);
@@ -2001,7 +2058,27 @@ impl IrInterpreter {
         arg_vals
     }
 
-    /// Read through a wrapper, where one is what arrived.
+    /// The descriptor a `DescriptorRef` names.
+    ///
+    /// A static one is built from its type the way any type's is; a forwarded
+    /// one is what this function was itself handed. Nothing is put together
+    /// here: the call site named a whole type.
+    fn resolve_shape_ref(
+        &mut self,
+        r: &datalove_datafun_ir::DescriptorRef,
+        frame: &Frame,
+    ) -> *const rtdt::TyDesc {
+        match r {
+            datalove_datafun_ir::DescriptorRef::Static(ty) => {
+                self.tydesc_table.get_or_create(ty)
+            }
+            datalove_datafun_ir::DescriptorRef::Own(index) => frame
+                .shape_descriptor(*index)
+                .expect("a forwarded shape is one this function declared"),
+        }
+    }
+
+    /// Read through a wrapper, where one is what arrived.    /// Read through a wrapper, where one is what arrived.
     ///
     /// Only a wrapped value has anything to read through, and only a borrowed
     /// parameter asks: an owned one takes the wrapper as it stands, since
@@ -2114,6 +2191,34 @@ impl IrInterpreter {
     /// Uses `code_ref` to look up optimized versions and to identify the function
     /// for call site tracking. External functions need a context with that unit's
     /// local functions; local and module functions use the current context.
+    #[allow(clippy::too_many_arguments)]
+    fn execute_call_with_shapes(
+        &mut self,
+        callee: &IrCodeUnit,
+        code_ref: &CodeRef,
+        arg_vals: Vec<Value>,
+        shape_descriptors: Vec<*const rtdt::TyDesc>,
+        dest: Destination,
+        ctx: &ExecutionContext,
+        registry: &FunctionRegistry,
+        frames: &mut FrameStore,
+    ) -> Result<(), InterpError> {
+        let optimized = self.get_optimized_function(code_ref);
+        let func_to_use = optimized.as_ref().unwrap_or(callee);
+        if let CodeRef::External { unit, .. } = code_ref {
+            let unit_funcs = registry.unit_functions(*unit)
+                .unwrap_or_else(|| panic!("external unit {} not found", unit));
+            let callee_ctx = ExecutionContext::new(unit_funcs);
+            self.call_in_context_with_shapes(
+                func_to_use, Some(code_ref.clone()), arg_vals, shape_descriptors,
+                dest, &callee_ctx, registry, frames)
+        } else {
+            self.call_in_context_with_shapes(
+                func_to_use, Some(code_ref.clone()), arg_vals, shape_descriptors,
+                dest, ctx, registry, frames)
+        }
+    }
+
     fn execute_call(
         &mut self,
         callee: &IrCodeUnit,

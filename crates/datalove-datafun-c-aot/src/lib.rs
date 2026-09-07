@@ -464,6 +464,11 @@ impl CAotCompiler {
         for (i, _) in func_ctx.descriptor_params.iter().enumerate() {
             write!(&mut params, ", const dtlv_tydesc_t* d{}", i).unwrap();
         }
+        // Then one for each shape the body builds a collection of, which no
+        // value carries.
+        for (i, _) in func_ctx.descriptor_shapes.iter().enumerate() {
+            write!(&mut params, ", const dtlv_tydesc_t* s{}", i).unwrap();
+        }
 
         let return_type = if func_ctx.return_type == IrType::Unit || uses_sret {
             "void".to_string()

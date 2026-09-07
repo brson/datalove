@@ -353,6 +353,7 @@ mod tests {
                 param_types,
                 return_type,
                 tracked_params: vec![],
+            descriptor_shapes: Vec::new(),
             }),
             nested_units: vec![],
         }
@@ -505,6 +506,7 @@ mod tests {
                         args: vec![
                             Operand::Value(ValueId(0)),
                         ],
+                        type_args: Vec::new(),
                     },
                 ],
                 terminator: Terminator::Return {
@@ -594,6 +596,7 @@ mod tests {
                         args: vec![
                             Operand::Value(ValueId(0)),
                         ],
+                        type_args: Vec::new(),
                     },
                 ],
                 terminator: Terminator::Return {

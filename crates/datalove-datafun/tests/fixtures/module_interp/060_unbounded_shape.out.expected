@@ -1,0 +1,10 @@
+ModulesAnalysis(
+    typecheck: TypecheckResult(
+        status: "Success",
+    ),
+    lowering: LoweringResult(
+        status: "Error",
+        message: "a descriptor would be needed for `[[[[[[[[[[[[T0]]]]]]]]]]]]`, a collection that grows without end: a generic builds a collection of its type parameter and calls a generic at a strictly larger type, so every call needs a description one level deeper than the last",
+    ),
+    output: "",
+)

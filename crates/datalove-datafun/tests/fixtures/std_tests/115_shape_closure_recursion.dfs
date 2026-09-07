@@ -1,0 +1,50 @@
+require module sys/std/list
+
+import list.push
+import list.len
+
+// Which shapes a function is handed is its own body's, closed over its calls.
+// Mutual recursion is no different from a chain there: the step only ever adds,
+// and where a cycle passes its type parameter along unchanged the substitution
+// is a renaming and cannot make a shape bigger, so it settles.
+//
+// `make_b` builds nothing. It carries a descriptor anyway, because it hands its
+// type parameter to `make_a`, which does, and `make_a` needs one back from
+// `make_b` in turn.
+
+fun make_a<T>(x: T, n: u32): [T]
+  if n == (: u32 / 0)
+    var out: [T] = []
+    push(mut out, x)
+    ret out
+  else
+    ret make_b(x, icall sub_wrapping_u32(n, : u32 / 1))
+  end if
+end fun
+
+fun make_b<T>(x: T, n: u32): [T]
+  ret make_a(x, n)
+end fun
+
+// A chain three deep, where only the far end builds.
+fun outer<T>(x: T): [T]
+  ret middle(x)
+end fun
+
+fun middle<T>(x: T): [T]
+  ret inner(x)
+end fun
+
+fun inner<T>(x: T): [T]
+  var out: [T] = []
+  push(mut out, x)
+  ret out
+end fun
+
+let straight = make_a("z", : u32 / 0)
+let bounced = make_a("z", : u32 / 5)
+let numbers = make_a(: u32 / 9, : u32 / 4)
+let chained = outer("through")
+let chained_len = len(ref chained)
+
+let output = (straight, bounced, numbers, chained, chained_len)

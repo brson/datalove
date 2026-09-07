@@ -89,6 +89,13 @@ pub enum LowerError {
     FunctionNotFound(String),
     /// Invalid literal value (e.g., integer out of range for target type).
     InvalidLiteral(String),
+    /// A descriptor would be needed for a collection that grows without end.
+    ///
+    /// Reached only by polymorphic recursion over a built collection: a generic
+    /// that builds a collection of its type parameter and calls a generic at a
+    /// strictly larger type, so each call needs a description one level deeper
+    /// than the last.
+    UnboundedDescriptorShape(String),
     /// Feature not implemented for CTFE or const expressions.
     NotImplemented(String),
     /// A name the typechecker accepted has no value yet.
@@ -106,6 +113,7 @@ impl std::fmt::Display for LowerError {
             LowerError::InvalidLiteral(lit) => write!(f, "invalid literal: {}", lit),
             LowerError::NotImplemented(msg) => write!(f, "not implemented: {}", msg),
             LowerError::BindingNotAvailable(name) => write!(f, "binding not available yet: {}", name),
+            LowerError::UnboundedDescriptorShape(msg) => write!(f, "{}", msg),
         }
     }
 }
