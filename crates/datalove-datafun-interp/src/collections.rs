@@ -13,32 +13,6 @@ use crate::IrInterpreter;
 
 impl IrInterpreter {
     /// Execute ListNew: create a list from operands.
-    /// Build a list whose element type only a descriptor says, then wrap it.
-    ///
-    /// The destination is a `data`, because a list of a type parameter erases
-    /// to one. So the list is built in a temporary described by `list_tydesc`
-    /// and moved into the destination, which is what every other collection of
-    /// a type parameter looks like once it is owned.
-    pub(crate) fn execute_list_new_erased(
-        &mut self,
-        elements: &[Operand],
-        dest: Destination,
-        list_tydesc: *const rtdt::TyDesc,
-        frame: &Frame,
-        frames: &FrameStore,
-    ) {
-        let mut temp = std::mem::MaybeUninit::<rtdt::List>::uninit();
-        let temp_ptr = temp.as_mut_ptr() as *mut u8;
-        let temp_dest = Destination { ptr: temp_ptr, tydesc: list_tydesc };
-        self.execute_list_new(elements, temp_dest, frame, frames);
-        let status = unsafe {
-            datalove_rt::c::dtlv_rti_data_from_local(
-                self.runtime.handle(), temp_ptr, list_tydesc, dest.ptr)
-        };
-        assert_eq!(status, datalove_rt::c::RtStatus::Ok,
-            "wrapping a freshly built list");
-    }
-
     pub(crate) fn execute_list_new(
         &mut self,
         elements: &[Operand],

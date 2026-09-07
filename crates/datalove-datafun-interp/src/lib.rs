@@ -317,29 +317,6 @@ impl IrInterpreter {
         registry: &FunctionRegistry,
         frames: &mut FrameStore,
     ) -> Result<(), InterpError> {
-        self.call_in_context_with_descriptors(
-            func, code_ref, args, Vec::new(), ret_dest, ctx, registry, frames,
-        )
-    }
-
-    /// Call, handing the callee descriptors for the type parameters it asked
-    /// for.
-    ///
-    /// Every other value carries its own descriptor here, so this is the only
-    /// thing that has to be passed beside the arguments: a type parameter that
-    /// the body builds with has no value to read one off.
-    #[allow(clippy::too_many_arguments)]
-    pub fn call_in_context_with_descriptors(
-        &mut self,
-        func: &IrCodeUnit,
-        code_ref: Option<CodeRef>,
-        args: Vec<Value>,
-        type_descriptors: Vec<(u32, *const rtdt::TyDesc)>,
-        ret_dest: Destination,
-        ctx: &ExecutionContext,
-        registry: &FunctionRegistry,
-        frames: &mut FrameStore,
-    ) -> Result<(), InterpError> {
         let func_ctx = func.function_context()
             .expect("call_in_context requires a function code unit");
 
@@ -352,7 +329,6 @@ impl IrInterpreter {
 
         // Create frame with param storage (no live value tracking for functions).
         let mut frame = Frame::new(func, layout);
-        frame.set_type_descriptors(type_descriptors);
 
         // Set up parameters as pointers to caller's data.
         // All params store pointers - mode determines ownership semantics.
@@ -987,27 +963,11 @@ impl IrInterpreter {
                 frame.mark_value_live(*dest);
                 Self::mark_source_dropped_local(src, frame);
             }
-            Instruction::Call { site_id, dest, func, args, type_descriptors } => {
+            Instruction::Call { site_id, dest, func, args } => {
                 let callee = ctx.get_unit(func, registry);
                 let arg_vals = self.prepare_call_args(callee, args, frame, frames);
                 let dest_slot = frame.value_dest(*dest);
                 Self::mark_consumed_call_args(callee, args, frame);
-
-                // A callee that builds a collection of one of its type
-                // parameters asked for a descriptor for it. Which ones it asked
-                // for is a fact about its body; what they are is a fact about
-                // this call site, and only here are both known.
-                let wanted = callee.function_context()
-                    .map(|c| c.descriptor_type_params.clone())
-                    .unwrap_or_default();
-                let supplied: Vec<(u32, *const rtdt::TyDesc)> = wanted.iter()
-                    .map(|index| {
-                        let expr = type_descriptors.get(*index as usize).expect(
-                            "a type parameter the callee builds with is one the \
-                             call site bound");
-                        (*index, self.resolve_descriptor(expr, frame))
-                    })
-                    .collect();
 
                 if let datalove_datafun_ir::CodeUnitContext::Native(native_ctx) = &callee.context {
                     // Native function dispatch.
@@ -1023,14 +983,8 @@ impl IrInterpreter {
                         }
                     });
 
-                    // A callee taking descriptors goes straight to the
-                    // interpreter: the dispatcher's stubs carry arguments only,
-                    // and a dropped descriptor is a wrong element type rather
-                    // than a failure.
-                    let call_result = if !supplied.is_empty() {
-                        self.execute_call_with_descriptors(
-                            callee, func, arg_vals, supplied, dest_slot, ctx, registry, frames)
-                    } else if let Some(result) = self.try_dispatch_call(
+                    // Try dispatcher first, fall back to interpreter.
+                    let call_result = if let Some(result) = self.try_dispatch_call(
                         func, callee, &arg_vals, dest_slot, ctx, registry, frames, call_site_info
                     ) {
                         result
@@ -1073,27 +1027,16 @@ impl IrInterpreter {
                 frame.mark_value_live(*dest);
                 Self::mark_out_params_initialized(callee, args, frame);
             }
-            Instruction::ListNew { dest, elements, descriptor } => {
+            Instruction::ListNew { dest, elements } => {
                 let dest_slot = frame.value_dest(*dest);
-                match descriptor {
-                    // The list's own type says `data`, so the descriptor the
-                    // destination carries describes the wrapper rather than
-                    // what goes in it. Build the list against the descriptor
-                    // the call site supplied, then move it into the wrapper.
-                    Some(d) => {
-                        let list_tydesc = self.resolve_descriptor(d, frame);
-                        self.execute_list_new_erased(
-                            elements, dest_slot, list_tydesc, frame, frames);
-                    }
-                    None => self.execute_list_new(elements, dest_slot, frame, frames),
-                }
+                self.execute_list_new(elements, dest_slot, frame, frames);
                 frame.mark_value_live(*dest);
                 // Mark source elements as moved (linear semantics - consumes elements).
                 for elem in elements {
                     Self::mark_source_dropped_local(elem, frame);
                 }
             }
-            Instruction::SetNew { dest, elements, .. } => {
+            Instruction::SetNew { dest, elements } => {
                 let dest_slot = frame.value_dest(*dest);
                 self.execute_set_new(elements, dest_slot, frame, frames);
                 frame.mark_value_live(*dest);
@@ -2058,38 +2001,6 @@ impl IrInterpreter {
         arg_vals
     }
 
-    /// Work out the descriptor a `DescriptorExpr` stands for.
-    ///
-    /// A concrete type has a static descriptor; a type parameter's came from
-    /// the caller; a shape over either is put together by the runtime, which
-    /// interns what it builds so the same shape is always the same pointer.
-    fn resolve_descriptor(
-        &mut self,
-        expr: &datalove_datafun_ir::DescriptorExpr,
-        frame: &Frame,
-    ) -> *const rtdt::TyDesc {
-        use datalove_datafun_ir::DescriptorExpr as D;
-        match expr {
-            D::Static(ty) => self.tydesc_table.get_or_create(ty),
-            D::TypeParam(index) => {
-                frame.type_descriptor_for(*index).unwrap_or_else(|| panic!("a descriptor for type parameter {} was never supplied: this function forwards it to one that builds a collection of it, and only a call site that bound the parameter to a concrete type has one to give. Build the collection where the parameter is bound, or take a collection of it as a parameter", index))
-            }
-            D::List(inner) => {
-                let elem = self.resolve_descriptor(inner, frame);
-                unsafe { datalove_rt::c::dtlv_rti_tydesc_list_of(elem) }
-            }
-            D::Set(inner) => {
-                let elem = self.resolve_descriptor(inner, frame);
-                unsafe { datalove_rt::c::dtlv_rti_tydesc_set_of(elem) }
-            }
-            D::Map(k, v) => {
-                let key = self.resolve_descriptor(k, frame);
-                let value = self.resolve_descriptor(v, frame);
-                unsafe { datalove_rt::c::dtlv_rti_tydesc_map_of(key, value) }
-            }
-        }
-    }
-
     /// Read through a wrapper, where one is what arrived.
     ///
     /// Only a wrapped value has anything to read through, and only a borrowed
@@ -2203,34 +2114,6 @@ impl IrInterpreter {
     /// Uses `code_ref` to look up optimized versions and to identify the function
     /// for call site tracking. External functions need a context with that unit's
     /// local functions; local and module functions use the current context.
-    #[allow(clippy::too_many_arguments)]
-    fn execute_call_with_descriptors(
-        &mut self,
-        callee: &IrCodeUnit,
-        code_ref: &CodeRef,
-        arg_vals: Vec<Value>,
-        type_descriptors: Vec<(u32, *const rtdt::TyDesc)>,
-        dest: Destination,
-        ctx: &ExecutionContext,
-        registry: &FunctionRegistry,
-        frames: &mut FrameStore,
-    ) -> Result<(), InterpError> {
-        let optimized = self.get_optimized_function(code_ref);
-        let func_to_use = optimized.as_ref().unwrap_or(callee);
-        if let CodeRef::External { unit, .. } = code_ref {
-            let unit_funcs = registry.unit_functions(*unit)
-                .unwrap_or_else(|| panic!("external unit {} not found", unit));
-            let callee_ctx = ExecutionContext::new(unit_funcs);
-            self.call_in_context_with_descriptors(
-                func_to_use, Some(code_ref.clone()), arg_vals, type_descriptors,
-                dest, &callee_ctx, registry, frames)
-        } else {
-            self.call_in_context_with_descriptors(
-                func_to_use, Some(code_ref.clone()), arg_vals, type_descriptors,
-                dest, ctx, registry, frames)
-        }
-    }
-
     fn execute_call(
         &mut self,
         callee: &IrCodeUnit,

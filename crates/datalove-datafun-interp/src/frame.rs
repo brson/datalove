@@ -28,29 +28,9 @@ pub struct Frame {
     param_tydescs: Vec<*const TyDesc>,
     /// Track which params are initialized (Out params start uninitialized).
     param_initialized: Vec<bool>,
-    /// Descriptors the caller supplied for this function's type parameters.
-    ///
-    /// Indexed by the position in `FunctionContext::descriptor_type_params`,
-    /// not by type parameter index. A type parameter has no value to carry a
-    /// descriptor with, so unlike everything else in this interpreter it has to
-    /// be handed over on its own.
-    type_descriptors: Vec<(u32, *const TyDesc)>,
 }
 
 impl Frame {
-    /// Hand this frame the descriptors its caller supplied for the function's
-    /// type parameters.
-    pub fn set_type_descriptors(&mut self, descriptors: Vec<(u32, *const TyDesc)>) {
-        self.type_descriptors = descriptors;
-    }
-
-    /// The descriptor supplied for the type parameter declared at `index`.
-    pub fn type_descriptor_for(&self, index: u32) -> Option<*const TyDesc> {
-        self.type_descriptors.iter()
-            .find(|(i, _)| *i == index)
-            .map(|(_, d)| *d)
-    }
-
     /// Create a new frame for code unit execution.
     ///
     /// Dispatches on the unit's context:
@@ -74,7 +54,6 @@ impl Frame {
                     param_ptrs: vec![std::ptr::null_mut(); param_count],
                     param_tydescs: vec![std::ptr::null(); param_count],
                     param_initialized: vec![false; param_count],
-            type_descriptors: Vec::new(),
                 }
             }
             CodeUnitContext::Script(_) => {
@@ -87,7 +66,6 @@ impl Frame {
                     param_ptrs: Vec::new(),
                     param_tydescs: Vec::new(),
                     param_initialized: Vec::new(),
-                    type_descriptors: Vec::new(),
                 }
             }
             CodeUnitContext::Native(ctx) => {

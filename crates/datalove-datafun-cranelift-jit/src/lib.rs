@@ -243,19 +243,6 @@ impl JitEngine {
         ctx: &datalove_datafun_interp::ExecutionContext<'a>,
         registry: &datalove_datafun_interp::FunctionRegistry,
     ) -> Result<Option<(*const u8, bool)>, JitError> {
-        // A function that builds a collection of one of its type parameters
-        // takes a descriptor for it beside the arguments. Only a call site that
-        // bound the parameter has one, and several of the paths that reach
-        // compiled code -- the optimizing dispatcher, the chaos harness --
-        // stand outside any call site and have none to hand over. Rather than
-        // call with the wrong number of arguments, such a function stays
-        // interpreted.
-        if func.function_context()
-            .is_some_and(|c| !c.descriptor_type_params.is_empty())
-        {
-            return Ok(None);
-        }
-
         let state = self.states.entry(key).or_insert(FunctionState::Interpreted { call_count: 0 });
 
         match state {
@@ -321,7 +308,7 @@ impl JitEngine {
         descriptor_params: &[datalove_datafun_ir::ParamId],
     ) -> Result<(), JitError> {
         // SAFETY: caller guarantees code_ptr and args are valid.
-        unsafe { bridge::call_jit(code_ptr, uses_sret, rt_handle, args, ret_dest, return_type, descriptor_params, &[]) }
+        unsafe { bridge::call_jit(code_ptr, uses_sret, rt_handle, args, ret_dest, return_type, descriptor_params) }
     }
 }
 
@@ -366,7 +353,6 @@ mod tests {
                 param_types,
                 return_type,
                 tracked_params: vec![],
-            descriptor_type_params: Vec::new(),
             }),
             nested_units: vec![],
         }
@@ -519,7 +505,6 @@ mod tests {
                         args: vec![
                             Operand::Value(ValueId(0)),
                         ],
-                        type_descriptors: Vec::new(),
                     },
                 ],
                 terminator: Terminator::Return {
@@ -609,7 +594,6 @@ mod tests {
                         args: vec![
                             Operand::Value(ValueId(0)),
                         ],
-                        type_descriptors: Vec::new(),
                     },
                 ],
                 terminator: Terminator::Return {
@@ -675,7 +659,7 @@ mod tests {
         // SAFETY: code_ptr is valid JIT code.
         let return_type = IrType::I32;
         unsafe {
-            bridge::call_jit(code_ptr, uses_sret, rt_handle, &[], ret_dest, &return_type, &[], &[])
+            bridge::call_jit(code_ptr, uses_sret, rt_handle, &[], ret_dest, &return_type, &[])
                 .expect("JIT call failed");
         }
 
@@ -750,7 +734,6 @@ impl CallDispatcher for JitEngine {
                         code_ptr, uses_sret, rt_handle, args, ret_dest,
                         func.return_type().expect("JIT dispatch requires function return type"),
                         func.function_context().map_or(&[][..], |c| &c.descriptor_params),
-                        &[],
                     )
                 };
 

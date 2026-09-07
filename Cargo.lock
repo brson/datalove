@@ -1650,7 +1650,6 @@ dependencies = [
  "datalove-datafun-intrinsics",
  "datalove-datafun-ir",
  "datalove-datafun-sema",
- "datalove-datalit",
  "datalove-rtdt",
  "rustmax 0.0.10",
  "salsa",
@@ -1715,7 +1714,6 @@ dependencies = [
  "datalove-datafun-ast",
  "datalove-datafun-common",
  "datalove-datafun-ir",
- "datalove-datalit",
  "rustmax 0.0.10",
  "salsa",
 ]

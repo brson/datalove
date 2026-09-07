@@ -647,18 +647,7 @@ pub fn lower_expression<'db>(
                 // Specialization pass will fill in correct discriminant from const values.
                 ctx.emit_comptime_call(dest, func_ref, args, 0, comptime_param_indices);
             } else {
-                // A descriptor for each of the callee's type parameters, in the
-                // callee's order, written in terms of what this function has.
-                // The callee takes the ones it turned out to need; this says
-                // what they are for every one, because which it needs is a fact
-                // about its body rather than its signature.
-                let type_descriptors: Vec<datalove_datafun_ir::DescriptorExpr> = target
-                    .map(|t| t.type_args(ctx.db).clone())
-                    .unwrap_or_default()
-                    .iter()
-                    .map(|ty| ctx.descriptor_for_type_arg(ty))
-                    .collect();
-                ctx.emit_call_with_descriptors(dest, func_ref, args, type_descriptors);
+                ctx.emit_call(dest, func_ref, args);
             }
             // Move what the callee wrote to an erased out parameter back out
             // into the type the caller keeps there.
@@ -765,15 +754,8 @@ pub fn lower_expression<'db>(
             ctx.push_pending_scope();
 
             let result_type = ctx.expr_type(expr);
-            // A list of a type parameter erases to `data`, so its own type does
-            // not say what the elements are and it needs a descriptor built
-            // from the ones the call site supplied. The elements are erased
-            // too, which is what they would be as a `T` anywhere else.
-            let source_type = ctx.expr_source_type(expr);
-            let descriptor = source_type.as_ref().and_then(|t| ctx.descriptor_for(t));
-            let elem_type = match (&result_type, &descriptor) {
-                (IrType::List(t), _) => (**t).clone(),
-                (_, Some(_)) => IrType::Data,
+            let elem_type = match &result_type {
+                IrType::List(t) => (**t).clone(),
                 _ => panic!("expected List type from typechecker"),
             };
             // Lower each element and track as pending intermediate.
@@ -784,10 +766,7 @@ pub fn lower_expression<'db>(
                 elements.push(Operand::Value(value));
             }
             let dest = ctx.fresh_value(result_type);
-            match descriptor {
-                Some(d) => ctx.emit_list_new_erased(dest, elements, d),
-                None => ctx.emit_list_new(dest, elements),
-            }
+            ctx.emit_list_new(dest, elements);
             ctx.clear_pending_intermediates();
             ctx.pop_pending_scope();
             Ok(dest)

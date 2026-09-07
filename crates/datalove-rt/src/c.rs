@@ -562,38 +562,6 @@ pub unsafe extern "C-unwind" fn dtlv_rti_clone_erased_local(
     }
 }
 
-/// The descriptor for a list of `element`, derived and interned.
-///
-/// See `tydesc_derive`. The result is never freed and may be held for as long
-/// as the program runs.
-#[unsafe(no_mangle)]
-pub unsafe extern "C-unwind" fn dtlv_rti_tydesc_list_of(
-    element: *const rtdt::TyDesc,
-) -> *const rtdt::TyDesc {
-    debug_assert!(!element.is_null(), "element is null");
-    crate::impls::tydesc_derive::list_of(element)
-}
-
-/// The descriptor for a set of `element`, derived and interned.
-#[unsafe(no_mangle)]
-pub unsafe extern "C-unwind" fn dtlv_rti_tydesc_set_of(
-    element: *const rtdt::TyDesc,
-) -> *const rtdt::TyDesc {
-    debug_assert!(!element.is_null(), "element is null");
-    crate::impls::tydesc_derive::set_of(element)
-}
-
-/// The descriptor for a map from `key` to `value`, derived and interned.
-#[unsafe(no_mangle)]
-pub unsafe extern "C-unwind" fn dtlv_rti_tydesc_map_of(
-    key: *const rtdt::TyDesc,
-    value: *const rtdt::TyDesc,
-) -> *const rtdt::TyDesc {
-    debug_assert!(!key.is_null(), "key is null");
-    debug_assert!(!value.is_null(), "value is null");
-    crate::impls::tydesc_derive::map_of(key, value)
-}
-
 /// Borrow what a Data holds, as a value pointer and its descriptor.
 ///
 /// The Data keeps ownership; both outputs point into it. See

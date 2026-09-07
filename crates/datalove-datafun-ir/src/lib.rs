@@ -1120,12 +1120,6 @@ pub enum Instruction {
         dest: ValueId,
         func: CodeRef,
         args: Vec<Operand>,
-        /// A descriptor for each of the callee's type parameters that asks for
-        /// one, in the callee's declaration order, written in terms of what
-        /// this function has. Empty for a callee that asks for none, which is
-        /// every non-generic one.
-        #[serde(default)]
-        type_descriptors: Vec<DescriptorExpr>,
     },
 
     /// Call to a function with const parameters.
@@ -1322,11 +1316,6 @@ pub enum Instruction {
     ListNew {
         dest: ValueId,
         elements: Vec<Operand>,
-        /// Where the element descriptor comes from, when the static type does
-        /// not say. `None` is a list whose element type is concrete, which is
-        /// every list outside a generic.
-        #[serde(default)]
-        descriptor: Option<DescriptorExpr>,
     },
 
     /// Create a new set.
@@ -1335,9 +1324,6 @@ pub enum Instruction {
     SetNew {
         dest: ValueId,
         elements: Vec<Operand>,
-        /// See `ListNew::descriptor`.
-        #[serde(default)]
-        descriptor: Option<DescriptorExpr>,
     },
 
     /// Create a new map.
@@ -1824,36 +1810,7 @@ pub enum ExportBinding {
 // Unified Code Unit
 // ============================================================================
 
-/// How to come by a type descriptor that a static type cannot name.
-///
-/// A generic is compiled once with `data` standing where a type parameter was
-/// written, so `[T]` and `[data]` are the same `IrType` and neither says what
-/// the elements are. Where a value has to be *built* rather than passed along,
-/// something has to say. This is that something: the call site supplies a
-/// descriptor for each type parameter it bound, and a shape built out of them
-/// is put together from those at run time.
-///
-/// Only the collections appear here. A tuple or an option over a type parameter
-/// needs none, because erasure gives it a static layout: `?T` is compiled as
-/// `?data`, and a `none` written there is a tag store that does not depend on
-/// what `T` is. A collection is different only because its descriptor is what
-/// says how far apart its elements sit.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub enum DescriptorExpr {
-    /// The descriptor the caller supplied for this function's type parameter,
-    /// by declaration order.
-    TypeParam(u32),
-    /// A type with no parameter in it, which its own static descriptor names.
-    Static(IrType),
-    /// A list of whatever the inner one describes, derived at run time.
-    List(Box<DescriptorExpr>),
-    /// A set of whatever the inner one describes.
-    Set(Box<DescriptorExpr>),
-    /// A map from the first to the second.
-    Map(Box<DescriptorExpr>, Box<DescriptorExpr>),
-}
-
-/// Context for function execution./// Context for function execution.
+/// Context for function execution.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct FunctionContext {
     /// Parameter IDs (references to caller's data).
@@ -1867,20 +1824,6 @@ pub struct FunctionContext {
     /// Out params that need runtime tracking.
     #[serde(default)]
     pub tracked_params: Vec<ParamId>,
-    /// Type parameters whose descriptor the caller supplies, in declaration
-    /// order.
-    ///
-    /// This is what lets a generic build a collection of its own type
-    /// parameter. `descriptor_params` describes a *value* that arrived, and is
-    /// enough to work on one; building a new one needs to know the element
-    /// type with no value to read it off, so the call site passes it. Only the
-    /// parameters the body actually builds with appear here, so a generic that
-    /// merely passes values along costs nothing.
-    ///
-    /// Carried the same way as `descriptor_params`, as trailing pointer
-    /// arguments, and after them.
-    #[serde(default)]
-    pub descriptor_type_params: Vec<u32>,
     /// Parameters whose descriptor the caller supplies, in parameter order.
     ///
     /// A generic function is compiled once, with `data` standing where a type

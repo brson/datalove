@@ -301,7 +301,6 @@ impl AotCompiler {
             symbols: unit.symbols.clone(),
             context: datalove_datafun_ir::CodeUnitContext::Function(
                 datalove_datafun_ir::FunctionContext {
-                    descriptor_type_params: Vec::new(),
                     descriptor_params: Vec::new(),
                     params: vec![],
                     param_modes: vec![],

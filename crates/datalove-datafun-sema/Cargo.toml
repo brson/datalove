@@ -14,5 +14,4 @@ salsa.workspace = true
 bct.workspace = true
 datalove-datafun-ast.path = "../datalove-datafun-ast"
 datalove-datafun-common.path = "../datalove-datafun-common"
-datalove-datalit.path = "../datalove-datalit"
 datalove-datafun-ir.path = "../datalove-datafun-ir"

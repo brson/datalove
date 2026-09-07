@@ -47,16 +47,6 @@ pub struct ResolvedCallTarget<'db> {
     /// The source module (None for script-local functions).
     #[returns(copy)]
     pub module_id: Option<ModuleId<'db>>,
-    /// What this call site bound the callee's type parameters to, in the
-    /// callee's declaration order.
-    ///
-    /// Empty for a callee with no type parameters. A generic that builds a
-    /// collection of one of its type parameters needs a descriptor for it, and
-    /// this is the only place the answer exists: the call site worked it out
-    /// from the arguments and what it expected back, and nothing downstream
-    /// can work it out again.
-    #[returns(ref)]
-    pub type_args: Vec<datalove_datalit::tycheck::Type<'db>>,
 }
 
 // ============================================================================

@@ -46,11 +46,6 @@ pub fn emit_function(
     for (i, _) in func_ctx.descriptor_params.iter().enumerate() {
         write!(&mut params, ", const dtlv_tydesc_t* d{}", i).unwrap();
     }
-    // Then one for each type parameter the body builds a collection of, which
-    // no value carries.
-    for index in &func_ctx.descriptor_type_params {
-        write!(&mut params, ", const dtlv_tydesc_t* t{}", index).unwrap();
-    }
 
     let return_type = if func_ctx.return_type == IrType::Unit || uses_sret {
         "void"
@@ -276,13 +271,10 @@ impl<'a> FunctionCodegenContext<'a> {
             Instruction::Reify { dest, src } => {
                 self.emit_erasure(out, *dest, src, false)?;
             }
-            Instruction::ListNew { dest, elements, descriptor } => {
-                match descriptor {
-                    Some(d) => self.emit_list_new_erased(out, *dest, elements, d)?,
-                    None => self.emit_list_new(out, *dest, elements)?,
-                }
+            Instruction::ListNew { dest, elements } => {
+                self.emit_list_new(out, *dest, elements)?;
             }
-            Instruction::SetNew { dest, elements, .. } => {
+            Instruction::SetNew { dest, elements } => {
                 self.emit_set_new(out, *dest, elements)?;
             }
             Instruction::MapNew { dest, entries } => {
@@ -294,12 +286,9 @@ impl<'a> FunctionCodegenContext<'a> {
             Instruction::TableNew { dest, rows } => {
                 self.emit_table_new(out, *dest, rows)?;
             }
-            Instruction::Call { dest, func, args, type_descriptors, .. } => {
-                self.emit_call(out, *dest, func, args, type_descriptors)?;
-            }
-            // A comptime call is not generic, so it describes nothing.
+            Instruction::Call { dest, func, args, .. } |
             Instruction::ComptimeCall { dest, func, args, .. } => {
-                self.emit_call(out, *dest, func, args, &[])?;
+                self.emit_call(out, *dest, func, args)?;
             }
             Instruction::SlotStoreCopy { dest, value } => {
                 self.emit_slot_store(out, dest, value, true, false)?;
@@ -1537,32 +1526,6 @@ impl<'a> FunctionCodegenContext<'a> {
     }
 
     /// Emit list new.
-    /// Build a list whose element type only a descriptor says, then wrap it.
-    ///
-    /// The destination is a `data`, because a list of a type parameter erases
-    /// to one, so the list is built in a local and moved into the destination.
-    /// The elements are `data` too, which is what a `T` is anywhere.
-    fn emit_list_new_erased(
-        &mut self,
-        out: &mut String,
-        dest: ValueId,
-        elements: &[Operand],
-        descriptor: &datalove_datafun_ir::DescriptorExpr,
-    ) -> Result<(), CAotError> {
-        let list_td = self.descriptor_expr(out, dest, 0, descriptor);
-        let name = format!("__nl{}", dest.0);
-        let data_td = self.tydesc_name(&IrType::Data);
-        writeln!(out, "    dtlv_list_t {name};").unwrap();
-        writeln!(out, "    dtlv_rti_list_create_local(rt, &{name}, {list_td});").unwrap();
-        for elem in elements {
-            let elem_addr = self.operand_addr(elem);
-            writeln!(out, "    dtlv_rti_list_push_local(rt, &{name}, {list_td}, {elem_addr}, &{data_td});").unwrap();
-        }
-        let dest_addr = self.value_addr(dest);
-        writeln!(out, "    dtlv_rti_data_from_local(rt, &{name}, {list_td}, {dest_addr});").unwrap();
-        Ok(())
-    }
-
     fn emit_list_new(&mut self, out: &mut String, dest: ValueId, elements: &[Operand]) -> Result<(), CAotError> {
         let dest_addr = self.value_addr(dest);
         let dest_ty = self.value_type(dest).clone();
@@ -1788,14 +1751,7 @@ impl<'a> FunctionCodegenContext<'a> {
     }
 
     /// Emit function call.
-    fn emit_call(
-        &mut self,
-        out: &mut String,
-        dest: ValueId,
-        func: &CodeRef,
-        args: &[Operand],
-        type_descriptors: &[datalove_datafun_ir::DescriptorExpr],
-    ) -> Result<(), CAotError> {
+    fn emit_call(&mut self, out: &mut String, dest: ValueId, func: &CodeRef, args: &[Operand]) -> Result<(), CAotError> {
         // A rider function is reached through the runtime C ABI rather than
         // this backend's own convention, so it is a different call entirely.
         if let CodeRef::Module { module, id } = func {
@@ -1873,17 +1829,6 @@ impl<'a> FunctionCodegenContext<'a> {
             }
         }
 
-        // Then one for each type parameter the callee builds a collection of.
-        for index in self.callee_descriptor_type_params(func) {
-            let expr = type_descriptors.get(index as usize).ok_or_else(|| {
-                CAotError::Codegen(format!(
-                    "callee wants a descriptor for type parameter {} but the call \
-                     site bound {}", index, type_descriptors.len()))
-            })?.clone();
-            let value = self.descriptor_expr(out, dest, index, &expr);
-            write!(&mut call_args, ", {}", value).unwrap();
-        }
-
         if uses_sret || dest_ty == IrType::Unit {
             writeln!(out, "    {}({});", func_name, call_args).unwrap();
         } else {
@@ -1894,61 +1839,7 @@ impl<'a> FunctionCodegenContext<'a> {
         Ok(())
     }
 
-    /// Which type parameters `func` wants a descriptor for.
-    ///
-    /// Found the same way, and kept beside, `callee_descriptor_params`: the two
-    /// together are the trailing arguments the callee's signature has.
-    fn callee_descriptor_type_params(&self, func: &CodeRef) -> Vec<u32> {
-        let unit = match func {
-            CodeRef::Module { module, id } => {
-                self.registry.get_module_function_as_unit(*module, *id)
-            }
-            CodeRef::Local(id) => {
-                let lookup_unit = self.parent_unit.unwrap_or(self.unit);
-                lookup_unit.nested_units.iter().find(|nested| nested.id == *id)
-            }
-            CodeRef::External { .. } => None,
-        };
-        unit.and_then(|u| u.function_context())
-            .map(|ctx| ctx.descriptor_type_params.clone())
-            .unwrap_or_default()
-    }
-
-    /// A C expression for the descriptor a `DescriptorExpr` stands for.
-    ///
-    /// A concrete type names its own static descriptor and a type parameter's
-    /// arrived as a parameter, so both are expressions. A shape over them is
-    /// a runtime call, which needs a statement, so it is emitted into a local
-    /// named for where it is going.
-    fn descriptor_expr(
-        &mut self,
-        out: &mut String,
-        dest: ValueId,
-        slot: u32,
-        expr: &datalove_datafun_ir::DescriptorExpr,
-    ) -> String {
-        use datalove_datafun_ir::DescriptorExpr as D;
-        match expr {
-            D::Static(ty) => format!("&{}", self.tydesc_name(ty)),
-            D::TypeParam(index) => format!("t{}", index),
-            D::List(inner) | D::Set(inner) => {
-                let elem = self.descriptor_expr(out, dest, slot, inner);
-                let name = format!("__td{}_{}_{}", dest.0, slot, out.len());
-                let which = if matches!(expr, D::List(_)) { "list" } else { "set" };
-                writeln!(out, "    const dtlv_tydesc_t* {name} = dtlv_rti_tydesc_{which}_of({elem});").unwrap();
-                name
-            }
-            D::Map(k, v) => {
-                let key = self.descriptor_expr(out, dest, slot, k);
-                let value = self.descriptor_expr(out, dest, slot, v);
-                let name = format!("__td{}_{}_{}", dest.0, slot, out.len());
-                writeln!(out, "    const dtlv_tydesc_t* {name} = dtlv_rti_tydesc_map_of({key}, {value});").unwrap();
-                name
-            }
-        }
-    }
-
-    /// The parameters of `func` whose descriptor this call site supplies.    /// The parameters of `func` whose descriptor this call site supplies.
+    /// The parameters of `func` whose descriptor this call site supplies.
     ///
     /// Has to agree with what `build_signature` put in the callee's signature,
     /// so both read the same `descriptor_params`.
