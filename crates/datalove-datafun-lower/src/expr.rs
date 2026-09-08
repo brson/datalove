@@ -771,15 +771,35 @@ pub fn lower_expression<'db>(
             // type says nothing about its elements and a descriptor has to come
             // from the call site. The elements are erased too, which is what a
             // `T` is anywhere.
-            let built = ctx.expr_source_type(expr).and_then(|t| match t {
-                datalove_datafun_common::Type::Datalit(dt) => ctx.build_shape(&dt),
+            let source = ctx.expr_source_type(expr);
+            let source_dt = match &source {
+                Some(datalove_datafun_common::Type::Datalit(dt)) => Some(dt.clone()),
                 _ => None,
-            });
-            let elem_type = match (&result_type, &built) {
-                (IrType::List(t), _) => (**t).clone(),
-                (_, Some(_)) => IrType::Data,
+            };
+            let built = source_dt.as_ref().and_then(|dt| ctx.build_shape(dt));
+            let elem_type = match (&result_type, &source_dt, &built) {
+                (IrType::List(t), _, _) => (**t).clone(),
+                (_, Some(datalove_datalit::tycheck::Type::List(t)), Some(_)) => {
+                    ctx.erased_element(&t.element_type)
+                }
                 _ => panic!("expected List type from typechecker"),
             };
+            // A built collection's elements are converted on the way in, and
+            // the only conversion there is takes a whole `data`. An element
+            // that erases to something composite -- `(A, B)` becoming a tuple
+            // of two `data`, `?T` becoming an option of one -- has no such
+            // conversion, and pushing it as though it were a `data` writes the
+            // wrong number of bytes. Refused rather than written wrongly.
+            //
+            // A collection of one of those is broken the same way when it
+            // merely arrives, so this is a hole in the collections rather than
+            // in building them.
+            if built.is_some() && elem_type != IrType::Data {
+                return Err(crate::LowerError::NotImplemented(format!(
+                    "a list whose elements are {:?} cannot be built here: an element \
+                     of a collection built over a type parameter has to be carried as \
+                     a single `data`, and this one is not", elem_type)));
+            }
             // Lower each element and track as pending intermediate.
             let mut elements = Vec::new();
             for e in list.elements.iter() {
@@ -804,15 +824,26 @@ pub fn lower_expression<'db>(
             // A set built over a type parameter erases to `data`, so its own
             // type says nothing about its elements and a descriptor has to come
             // from the call site. See the list arm above.
-            let built = ctx.expr_source_type(expr).and_then(|t| match t {
-                datalove_datafun_common::Type::Datalit(dt) => ctx.build_shape(&dt),
+            let source = ctx.expr_source_type(expr);
+            let source_dt = match &source {
+                Some(datalove_datafun_common::Type::Datalit(dt)) => Some(dt.clone()),
                 _ => None,
-            });
-            let elem_type = match (&result_type, &built) {
-                (IrType::Set(t), _) => (**t).clone(),
-                (_, Some(_)) => IrType::Data,
+            };
+            let built = source_dt.as_ref().and_then(|dt| ctx.build_shape(dt));
+            let elem_type = match (&result_type, &source_dt, &built) {
+                (IrType::Set(t), _, _) => (**t).clone(),
+                (_, Some(datalove_datalit::tycheck::Type::Set(t)), Some(_)) => {
+                    ctx.erased_element(&t.element_type)
+                }
                 _ => panic!("expected Set type from typechecker"),
             };
+            // See the list arm.
+            if built.is_some() && elem_type != IrType::Data {
+                return Err(crate::LowerError::NotImplemented(format!(
+                    "a set whose elements are {:?} cannot be built here: an element of \
+                     a collection built over a type parameter has to be carried as a \
+                     single `data`, and this one is not", elem_type)));
+            }
             // Lower each element and track as pending intermediate.
             let mut elements = Vec::new();
             for e in set.elements.iter() {
@@ -836,15 +867,27 @@ pub fn lower_expression<'db>(
             let result_type = ctx.expr_type(expr);
             // A map built over a type parameter erases the same way, and both
             // its key and its value become `data`.
-            let built = ctx.expr_source_type(expr).and_then(|t| match t {
-                datalove_datafun_common::Type::Datalit(dt) => ctx.build_shape(&dt),
+            let source = ctx.expr_source_type(expr);
+            let source_dt = match &source {
+                Some(datalove_datafun_common::Type::Datalit(dt)) => Some(dt.clone()),
                 _ => None,
-            });
-            let (key_type, val_type) = match (&result_type, &built) {
-                (IrType::Map(k, v), _) => ((**k).clone(), (**v).clone()),
-                (_, Some(_)) => (IrType::Data, IrType::Data),
+            };
+            let built = source_dt.as_ref().and_then(|dt| ctx.build_shape(dt));
+            let (key_type, val_type) = match (&result_type, &source_dt, &built) {
+                (IrType::Map(k, v), _, _) => ((**k).clone(), (**v).clone()),
+                (_, Some(datalove_datalit::tycheck::Type::Map(t)), Some(_)) => (
+                    ctx.erased_element(&t.key_type),
+                    ctx.erased_element(&t.value_type),
+                ),
                 _ => panic!("expected Map type from typechecker"),
             };
+            // See the list arm.
+            if built.is_some() && (key_type != IrType::Data || val_type != IrType::Data) {
+                return Err(crate::LowerError::NotImplemented(format!(
+                    "a map from {:?} to {:?} cannot be built here: a key or value of a \
+                     collection built over a type parameter has to be carried as a \
+                     single `data`, and this one is not", key_type, val_type)));
+            }
             // Lower each entry and track keys/values as pending intermediates.
             let mut entries = Vec::new();
             for e in map.entries.iter() {

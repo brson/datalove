@@ -389,6 +389,17 @@ impl<'db> LowerCtx<'db> {
         Some((self.body.built_shapes.len() - 1) as u32)
     }
 
+    /// The shape an element of a built collection is carried in.
+    ///
+    /// A bare type parameter is a `data`, but a tuple of them is a tuple of
+    /// `data` and an option of one is an option of `data`: erasure reaches
+    /// inside. The descriptor the call site hands over describes the same
+    /// shape, so the two have to agree. Assuming `data` here made a
+    /// `[(A, B)]` push thirty-two byte elements as sixteen.
+    pub fn erased_element(&self, ty: &datalove_datalit::tycheck::Type<'db>) -> IrType {
+        IrType::from_datalit(self.db, ty)
+    }
+
     /// The unerased type the typechecker gave an expression.
     ///
     /// `expr_type` erases, which is what the rest of lowering wants. A

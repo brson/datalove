@@ -48,11 +48,14 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         let create_ref = self.module.declare_func_in_func(runtime.list_create, builder.func);
         builder.ins().call(create_ref, &[rt_handle, list_ptr, list_tydesc_ptr]);
 
-        // Every element is a `data`, which is what a `T` is anywhere.
-        let elem_tydesc_ptr = self.static_tydesc(builder, &IrType::Data)?;
+        // Pushed rather than copied in, and described as what it really is. An
+        // element here is in the erased shape -- a `data` for a bare type
+        // parameter, a tuple of them for a tuple of parameters -- and the list
+        // holds its elements as what they really are, so the push converts.
         let push_ref = self.module.declare_func_in_func(runtime.list_push, builder.func);
         for elem in elements {
             let elem_ptr = self.get_operand_ptr(builder, elem)?;
+            let elem_tydesc_ptr = self.operand_tydesc(builder, elem)?;
             builder.ins().call(push_ref, &[
                 rt_handle, list_ptr, list_tydesc_ptr, elem_ptr, elem_tydesc_ptr
             ]);
@@ -168,10 +171,10 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         let bool_slot = builder.create_sized_stack_slot(cl_ir::StackSlotData::new(
             cl_ir::StackSlotKind::ExplicitSlot, 1, 0));
         let bool_ptr = builder.ins().stack_addr(PTR_TYPE, bool_slot, 0);
-        let elem_tydesc_ptr = self.static_tydesc(builder, &IrType::Data)?;
         let insert_ref = self.module.declare_func_in_func(runtime.set_insert, builder.func);
         for elem in elements {
             let elem_ptr = self.get_operand_ptr(builder, elem)?;
+            let elem_tydesc_ptr = self.operand_tydesc(builder, elem)?;
             builder.ins().call(insert_ref, &[
                 rt_handle, set_ptr, set_tydesc_ptr, elem_ptr, elem_tydesc_ptr, bool_ptr
             ]);
@@ -207,14 +210,15 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         let create_ref = self.module.declare_func_in_func(runtime.map_create, builder.func);
         builder.ins().call(create_ref, &[rt_handle, map_ptr, map_tydesc_ptr]);
 
-        let data_tydesc_ptr = self.static_tydesc(builder, &IrType::Data)?;
         let insert_ref = self.module.declare_func_in_func(runtime.map_insert, builder.func);
         for (key, val) in entries {
             let key_ptr = self.get_operand_ptr(builder, key)?;
+            let key_tydesc_ptr = self.operand_tydesc(builder, key)?;
             let val_ptr = self.get_operand_ptr(builder, val)?;
+            let val_tydesc_ptr = self.operand_tydesc(builder, val)?;
             builder.ins().call(insert_ref, &[
                 rt_handle, map_ptr, map_tydesc_ptr,
-                key_ptr, data_tydesc_ptr, val_ptr, data_tydesc_ptr
+                key_ptr, key_tydesc_ptr, val_ptr, val_tydesc_ptr
             ]);
         }
 

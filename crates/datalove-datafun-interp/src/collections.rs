@@ -22,10 +22,24 @@ impl IrInterpreter {
         frame: &Frame,
         frames: &FrameStore,
     ) {
+        let rt_handle = self.runtime.handle();
         let mut temp = std::mem::MaybeUninit::<rtdt::List>::uninit();
         let temp_ptr = temp.as_mut_ptr() as *mut u8;
-        let temp_dest = Destination { ptr: temp_ptr, tydesc: list_tydesc };
-        self.execute_list_new(elements, temp_dest, frame, frames);
+        unsafe {
+            datalove_rt::c::dtlv_rti_list_create_local(rt_handle, temp_ptr, list_tydesc);
+        }
+        // Pushed rather than copied in. The list holds its elements as what
+        // they really are, and an element here is in the erased shape -- a
+        // `data` for a bare type parameter, a tuple of them for a tuple of
+        // parameters -- so it has to be converted on the way in. The copy the
+        // concrete path does would put a wrapper where a value belongs.
+        for elem_op in elements {
+            let elem = self.read_operand(elem_op, frame, frames);
+            unsafe {
+                datalove_rt::c::dtlv_rti_list_push_local(
+                    rt_handle, temp_ptr, list_tydesc, elem.ptr, elem.tydesc);
+            }
+        }
         let status = unsafe {
             datalove_rt::c::dtlv_rti_data_from_local(
                 self.runtime.handle(), temp_ptr, list_tydesc, dest.ptr)
@@ -104,10 +118,22 @@ impl IrInterpreter {
         frame: &Frame,
         frames: &FrameStore,
     ) {
+        let rt_handle = self.runtime.handle();
         let mut temp = std::mem::MaybeUninit::<rtdt::Set>::uninit();
         let temp_ptr = temp.as_mut_ptr() as *mut u8;
-        let temp_dest = Destination { ptr: temp_ptr, tydesc: set_tydesc };
-        self.execute_set_new(elements, temp_dest, frame, frames);
+        unsafe {
+            datalove_rt::c::dtlv_rti_btreeset_create_local(rt_handle, temp_ptr, set_tydesc);
+        }
+        // Inserted rather than copied in; see `execute_list_new_erased`.
+        for elem_op in elements {
+            let elem = self.read_operand(elem_op, frame, frames);
+            let mut added = false;
+            unsafe {
+                datalove_rt::c::dtlv_rti_btreeset_insert_local(
+                    rt_handle, temp_ptr, set_tydesc, elem.ptr, elem.tydesc,
+                    &mut added as *mut bool as *mut u8);
+            }
+        }
         let status = unsafe {
             datalove_rt::c::dtlv_rti_data_from_local(
                 self.runtime.handle(), temp_ptr, set_tydesc, dest.ptr)
@@ -210,10 +236,22 @@ impl IrInterpreter {
         frame: &Frame,
         frames: &FrameStore,
     ) {
+        let rt_handle = self.runtime.handle();
         let mut temp = std::mem::MaybeUninit::<rtdt::Map>::uninit();
         let temp_ptr = temp.as_mut_ptr() as *mut u8;
-        let temp_dest = Destination { ptr: temp_ptr, tydesc: map_tydesc };
-        self.execute_map_new(entries, temp_dest, frame, frames);
+        unsafe {
+            datalove_rt::c::dtlv_rti_btreemap_create_local(rt_handle, temp_ptr, map_tydesc);
+        }
+        // Inserted rather than copied in; see `execute_list_new_erased`.
+        for (key_op, val_op) in entries {
+            let key = self.read_operand(key_op, frame, frames);
+            let val = self.read_operand(val_op, frame, frames);
+            unsafe {
+                datalove_rt::c::dtlv_rti_btreemap_insert_local(
+                    rt_handle, temp_ptr, map_tydesc,
+                    key.ptr, key.tydesc, val.ptr, val.tydesc);
+            }
+        }
         let status = unsafe {
             datalove_rt::c::dtlv_rti_data_from_local(
                 self.runtime.handle(), temp_ptr, map_tydesc, dest.ptr)
