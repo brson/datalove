@@ -103,6 +103,84 @@ fun swap<T>(mut self: [T], i: index, j: index): bool
   ret false
 end fun
 
+// A list holding just one element.
+fun of<T>(elem: T): [T]
+  var built: [T] = []
+  push(mut built, elem)
+  ret built
+end fun
+
+// A list of n clones of one element.
+fun repeated<T>(ref elem: T, n: index): [T]
+  var built: [T] = []
+  var i: index = : index / 0
+  loop while i .< n
+    push(mut built, elem@)
+    set i = icall add_wrapping_index(i, : index / 1)
+  end loop
+  ret built
+end fun
+
+// The first n elements, or all of them if there are fewer.
+fun take<T>(ref self: [T], n: index): [T]
+  var built: [T] = []
+  var i: index = : index / 0
+  loop while i .< n
+    if get(ref self, i) |elem|
+      push(mut built, elem)
+    else
+      break
+    end if
+    set i = icall add_wrapping_index(i, : index / 1)
+  end loop
+  ret built
+end fun
+
+// Everything after the first n elements.
+fun skip<T>(ref self: [T], n: index): [T]
+  var built: [T] = []
+  let total = len(ref self)
+  var i: index = n
+  loop while i .< total
+    if get(ref self, i) |elem|
+      push(mut built, elem)
+    end if
+    set i = icall add_wrapping_index(i, : index / 1)
+  end loop
+  ret built
+end fun
+
+// One list holding every element of every inner list, in order.
+fun flattened<T>(ref self: [[T]]): [T]
+  var built: [T] = []
+  var i: index = : index / 0
+  let n = len(ref self)
+  loop while i .< n
+    if get(ref self, i) |inner|
+      // Taken apart from the back and put back the right way round, because
+      // reaching an element of a list one owns means popping it.
+      var src: [T] = inner
+      var back: [T] = []
+      loop
+        if pop(mut src) |elem|
+          push(mut back, elem)
+        else
+          break
+        end if
+      end loop
+      loop
+        if pop(mut back) |elem|
+          push(mut built, elem)
+        else
+          break
+        end if
+      end loop
+    end if
+    set i = icall add_wrapping_index(i, : index / 1)
+  end loop
+  ret built
+end fun
+
 // A new list with the elements in the opposite order.
 //
 // This and `concat` build a list whose element type this function does not

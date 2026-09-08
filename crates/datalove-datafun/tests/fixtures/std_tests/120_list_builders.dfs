@@ -1,0 +1,41 @@
+require module sys/std/list
+
+import list.of
+import list.repeated
+import list.take
+import list.skip
+import list.flattened
+import list.len
+
+// Functions that return a list of a type they do not know. Each needs a
+// descriptor from the call site; none of them could be written before that.
+//
+// `of` and `repeated` build from nothing, so no collection of `T` reaches them
+// at all -- the descriptor is the only thing that says what a `T` is.
+
+let words: [string] = ["a", "b", "c", "d"]
+let numbers: [u32] = [1, 2, 3]
+
+let single = of("solo")
+let single_number = of(: u32 / 9)
+let thrice = repeated(ref "x", : index / 3)
+let none_of_them = repeated(ref "x", : index / 0)
+
+let first_two = take(ref words, : index / 2)
+let past_two = skip(ref words, : index / 2)
+// Asking for more than there is gives what there is.
+let all_of_it = take(ref words, : index / 99)
+let past_the_end = skip(ref words, : index / 99)
+
+// A list of lists is fine: an inner list is carried as one `data`, the same as
+// any other collection of a type parameter.
+let nested: [[string]] = [["a", "b"], [], ["c"]]
+let flat = flattened(ref nested)
+let flat_numbers = flattened(ref (: [[u32]] / [[1, 2], [3]]))
+
+let flat_len = len(ref flat)
+let sources = (words, numbers)
+
+let output = (single, single_number, thrice, none_of_them,
+              first_two, past_two, all_of_it, past_the_end,
+              flat, flat_numbers, flat_len, sources)
