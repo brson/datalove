@@ -103,6 +103,38 @@ fun swap<T>(mut self: [T], i: index, j: index): bool
   ret false
 end fun
 
+// A new list with the elements in the opposite order.
+//
+// This and `concat` build a list whose element type this function does not
+// know. That works because the caller hands over a descriptor for it: the
+// call site is the only place that knows what `T` was bound to.
+fun reversed<T>(ref self: [T]): [T]
+  var out: [T] = []
+  var src: [T] = self@
+  loop
+    if pop(mut src) |elem|
+      push(mut out, elem)
+    else
+      break
+    end if
+  end loop
+  ret out
+end fun
+
+// A new list with other's elements after self's. Neither is disturbed.
+fun concat<T>(ref self: [T], ref other: [T]): [T]
+  var out: [T] = self@
+  let n = len(ref other)
+  var i: index = : index / 0
+  loop while i .< n
+    if get(ref other, i) |elem|
+      push(mut out, elem)
+    end if
+    set i = icall add_wrapping_index(i, : index / 1)
+  end loop
+  ret out
+end fun
+
 // Make room for at least n more elements.
 fun reserve<T>(mut self: [T], n: index)
   list_reserve(mut self, n)

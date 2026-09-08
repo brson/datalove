@@ -539,18 +539,31 @@ the first to reach a parameter fixes it. `sys/std`'s `option`, `result`,
 
 ### Limitations
 
-**A collection over a type parameter cannot be built.** Refused with F011.
-One that arrives is fine at any position, because it arrives wrapped and the
-wrapper carries the descriptor saying what its elements are. `var out: [T] = []`
-written inside a generic has no descriptor and nowhere to get one: the function
-knows a `T` only as something a caller described, and an empty list was
-described by nobody. `%{K = V}` and `#{T}` are the same. This is what keeps
-`reversed` and `concat` out of `sys/std/list`; `swap` is there because it only
-moves elements the list already holds. Lifting it needs a descriptor for a type
-parameter itself at run time, which is the value-level descriptor work.
+**A generic that builds a collection and recurses at a larger type is
+refused.** That is the only thing left here, and it is narrow.
 
-Before this was refused the lowering reached a `[T]` with no element type
-behind it and panicked.
+A collection over a type parameter can be built: `var out: [T] = []` works, and
+so do `#{T}` and `%{K = V}`. One that arrives carries a descriptor saying what
+its elements are; one written in the body has no value to read one off, so the
+call site hands one over as a trailing argument. Nothing is worked out at run
+time, because `[T]` with `T` bound to a concrete type is a concrete type and
+that has a static descriptor already. `sys/std/list` gained `reversed` and
+`concat` on the strength of it.
+
+Which descriptors a function takes is what its own body builds, closed over its
+calls: a generic passing its type parameter to one that builds a collection of
+it carries a descriptor too, and forwards it. That closure is a query on a
+callee's signature, not an analysis over the program -- the same thing a caller
+already does for parameter types, except that this part of a signature is
+derived from a body, so it is answered before anything reads one.
+
+What is refused is a cycle whose substitution *grows* a shape: a generic
+building a `[T]` and calling a generic at a strictly larger type needs `[T]`,
+then `[[T]]`, without end. Erasure means such a function compiles to one body
+and would merely recurse for ever at run time, the way any missing base case
+does; what cannot be written down is the descriptors, not the code. It was
+unreachable before collections could be built, because a `[[T]]` could not be
+obtained without building one.
 
 **A generic out parameter has to be a whole binding or a field.** Both work,
 and so does passing one straight on to another function; anything else is

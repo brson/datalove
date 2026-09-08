@@ -1,0 +1,32 @@
+require module sys/std/list
+
+import list.reversed
+import list.concat
+import list.len
+
+// The two functions this whole line of work was for. Both return a list whose
+// element type the function does not know, which needs a descriptor from the
+// call site; before that they could only be written by cloning a list that
+// arrived and emptying it, which threw away an O(n) clone to obtain a pointer.
+//
+// Neither disturbs what it was given.
+
+let words: [string] = ["a", "b", "c"]
+let numbers: [u32] = [1, 2, 3]
+let empty: [string] = []
+
+let reversed_words = reversed(ref words)
+let reversed_numbers = reversed(ref numbers)
+let reversed_empty = reversed(ref empty)
+
+let joined = concat(ref words, ref words)
+let joined_mixed = concat(ref empty, ref words)
+let joined_numbers = concat(ref numbers, ref numbers)
+
+let joined_len = len(ref joined)
+
+// The sources are unchanged, which is what `ref` promises.
+let sources = (words, numbers, empty)
+
+let output = (reversed_words, reversed_numbers, reversed_empty,
+              joined, joined_mixed, joined_numbers, joined_len, sources)
