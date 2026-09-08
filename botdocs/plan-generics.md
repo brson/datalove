@@ -559,7 +559,13 @@ derived from a body, so it is answered before anything reads one.
 
 What is refused is a cycle whose substitution *grows* a shape: a generic
 building a `[T]` and calling a generic at a strictly larger type needs `[T]`,
-then `[[T]]`, without end. Erasure means such a function compiles to one body
+then `[[T]]`, without end. Whether that happens is decided from the call graph
+rather than from how big a shape gets. Each call draws an edge from the callee's
+type parameter to the caller's, strict when the binding puts a type constructor
+around it; a cycle of plain edges is a renaming and cannot enlarge anything,
+while a cycle holding one strict edge adds a level every lap. That is the occurs
+check read across the call graph, and it is what keeps a merely deep type from
+being mistaken for a growing one. Erasure means such a function compiles to one body
 and would merely recurse for ever at run time, the way any missing base case
 does; what cannot be written down is the descriptors, not the code. It was
 unreachable before collections could be built, because a `[[T]]` could not be

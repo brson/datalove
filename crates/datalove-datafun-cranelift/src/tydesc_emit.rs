@@ -1456,6 +1456,23 @@ pub fn collect_types_from_code_unit(unit: &IrCodeUnit, types: &mut BTreeSet<IrTy
         types.insert(native_ctx.return_type.clone());
     }
 
+    // A descriptor handed to a generic that builds a collection names a type
+    // that may appear nowhere else: a `#{string}` built inside a function
+    // returning an index is named only here. Without this the emitter makes no
+    // descriptor for it and codegen has nothing to point at.
+    for block in &unit.blocks {
+        for instr in &block.instructions {
+            let datalove_datafun_ir::Instruction::Call { shape_descriptors, .. } = instr else {
+                continue;
+            };
+            for r in shape_descriptors {
+                if let datalove_datafun_ir::DescriptorRef::Static(ty) = r {
+                    types.insert(ty.clone());
+                }
+            }
+        }
+    }
+
     // Recursively collect from nested units.
     for nested in &unit.nested_units {
         collect_types_from_code_unit(nested, types);

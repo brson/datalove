@@ -1131,6 +1131,18 @@ pub enum Instruction {
         /// non-generic callee.
         #[serde(default)]
         type_args: Vec<DescriptorShape>,
+        /// What this call hands over for each shape the callee declared, worked
+        /// out once the shape sets have settled.
+        ///
+        /// Derived from `type_args` and the callee's shapes by
+        /// `shape_descriptors_for`, and stored rather than recomputed so that
+        /// everything downstream reads the same answer: the backends emit these
+        /// and the descriptor emitter makes a descriptor for each static one.
+        /// A type named only here -- a `#{string}` built inside a generic whose
+        /// caller never mentions one -- would otherwise have no descriptor made
+        /// for it.
+        #[serde(default)]
+        shape_descriptors: Vec<DescriptorRef>,
     },
 
     /// Call to a function with const parameters.
@@ -1902,6 +1914,33 @@ impl DescriptorShape {
         }
     }
 
+    /// Every type parameter occurring in this shape.
+    pub fn params(&self) -> Vec<u32> {
+        let mut out = Vec::new();
+        self.collect_params(&mut out);
+        out
+    }
+
+    fn collect_params(&self, out: &mut Vec<u32>) {
+        match self {
+            DescriptorShape::Param(i) => out.push(*i),
+            DescriptorShape::Concrete(_) => {}
+            DescriptorShape::List(i)
+            | DescriptorShape::Set(i)
+            | DescriptorShape::Option(i)
+            | DescriptorShape::Result(i) => i.collect_params(out),
+            DescriptorShape::Map(k, v) => {
+                k.collect_params(out);
+                v.collect_params(out);
+            }
+            DescriptorShape::Tuple(fields) => {
+                for f in fields {
+                    f.collect_params(out);
+                }
+            }
+        }
+    }
+
     /// How deeply this shape nests, used to notice a cycle that grows one.
     pub fn depth(&self) -> u32 {
         match self {
@@ -1959,12 +1998,25 @@ impl DescriptorShape {
     }
 }
 
-/// How deeply a shape may nest before its growth is taken for unbounded.
+/// Why a shape set cannot be closed.
 ///
-/// Only a cycle that makes shapes bigger can reach this. A program without
-/// polymorphic recursion draws its shapes from the ones its bodies wrote, and
-/// those are as deep as the source says.
-pub const MAX_SHAPE_DEPTH: u32 = 12;
+/// Carries the call that makes it grow, so the message can name the thing the
+/// reader wrote rather than the deeply nested type it would have produced.
+#[derive(Clone, Debug)]
+pub struct GrowingShape<K> {
+    /// The function that would be handed a shape that never stops growing.
+    pub function: K,
+    /// A shape it would be handed.
+    pub shape: DescriptorShape,
+    /// The call responsible: `caller` calls `callee` binding the callee's type
+    /// parameter number `param` to `bound`, and `bound` holds one of the
+    /// caller's own parameters underneath a type constructor. Going round that
+    /// cycle adds a level every time.
+    pub caller: K,
+    pub callee: K,
+    pub param: u32,
+    pub bound: DescriptorShape,
+}
 
 /// Give each function the shapes it has to carry on its callees' behalf.
 ///
@@ -1980,15 +2032,14 @@ pub const MAX_SHAPE_DEPTH: u32 = 12;
 /// > bound the callee's type parameters to. Whatever still mentions this
 /// > function's own parameters is a shape this function needs as well.
 ///
-/// Each round only adds, and where a cycle passes its type parameters along
-/// unchanged the substitution is a renaming and cannot make a shape bigger, so
-/// the set is drawn from what the cycle's bodies already wrote and the
-/// iteration settles. Mutual recursion is no different from a chain here.
+/// Each round only adds. Where a cycle of calls passes its type parameters
+/// along unchanged the substitution is a renaming, which cannot enlarge a
+/// shape, so the set is drawn from what the cycle's bodies already wrote and
+/// the iteration settles. Mutual recursion is no different from a chain.
 ///
-/// What does not settle is a cycle whose substitution *grows* a shape:
-/// polymorphic recursion, a generic calling itself at a strictly larger type.
-/// Building a `[T]` and calling itself with it needs `[T]`, then `[[T]]`,
-/// without end. That is refused rather than chased.
+/// What does not settle is a cycle whose substitution *grows* a shape. That is
+/// decided before the iteration, by `growing_parameters`, so this loop is only
+/// ever run on something known to terminate.
 ///
 /// `calls` gives, for each function, the callee and what the call site bound
 /// the callee's type parameters to. `shapes` starts as what each body builds
@@ -1996,7 +2047,9 @@ pub const MAX_SHAPE_DEPTH: u32 = 12;
 pub fn close_shapes<K: Copy + Eq + std::hash::Hash>(
     calls: &std::collections::HashMap<K, Vec<(K, Vec<DescriptorShape>)>>,
     shapes: &mut std::collections::HashMap<K, Vec<DescriptorShape>>,
-) -> Result<(), DescriptorShape> {
+) -> Result<(), GrowingShape<K>> {
+    let (growing, blame) = growing_parameters(calls);
+
     loop {
         let mut added = false;
         for (caller, sites) in calls {
@@ -2010,8 +2063,22 @@ pub fn close_shapes<K: Copy + Eq + std::hash::Hash>(
                     if !here.mentions_param() {
                         continue;
                     }
-                    if here.depth() > MAX_SHAPE_DEPTH {
-                        return Err(here);
+                    // A shape riding a parameter that reaches a growing cycle
+                    // is one that never stops growing, however small it looks
+                    // right now.
+                    for j in here.params() {
+                        if growing.contains(&(*caller, j)) {
+                            let (bl_caller, bl_callee, bl_param, bl_bound) =
+                                blame.clone().expect("a growing parameter has a cause");
+                            return Err(GrowingShape {
+                                function: *caller,
+                                shape: here,
+                                caller: bl_caller,
+                                callee: bl_callee,
+                                param: bl_param,
+                                bound: bl_bound,
+                            });
+                        }
                     }
                     wanted.push(here);
                 }
@@ -2028,6 +2095,127 @@ pub fn close_shapes<K: Copy + Eq + std::hash::Hash>(
             return Ok(());
         }
     }
+}
+
+/// Work out what each call in `unit` hands over, now that the shapes are
+/// settled.
+///
+/// Run once, after the closure, so that the backends and the descriptor emitter
+/// read one answer rather than each deriving it.
+pub fn resolve_call_descriptors(
+    unit: &mut IrCodeUnit,
+    own_shapes: &[DescriptorShape],
+    callee_shapes: &dyn Fn(&CodeRef) -> Vec<DescriptorShape>,
+) -> Result<(), DescriptorShape> {
+    for block in &mut unit.blocks {
+        for instr in &mut block.instructions {
+            let Instruction::Call { func, type_args, shape_descriptors, .. } = instr else {
+                continue;
+            };
+            let wanted = callee_shapes(func);
+            if wanted.is_empty() {
+                shape_descriptors.clear();
+                continue;
+            }
+            *shape_descriptors = shape_descriptors_for(&wanted, type_args, own_shapes)?;
+        }
+    }
+    Ok(())
+}
+
+/// The type parameters whose shapes would grow without end./// The type parameters whose shapes would grow without end.
+///
+/// Nodes are a function and one of its type parameters. A call from `f` to `g`
+/// binding `g`'s parameter `i` to a shape holding `f`'s parameter `j` draws an
+/// edge from `(g, i)` to `(f, j)`, which is the direction shapes travel: `g`'s
+/// shapes become `f`'s. The edge is *strict* when the binding is not simply
+/// `j` itself, meaning the shape gains a type constructor crossing it.
+///
+/// A cycle of plain edges is a renaming, and a shape going round it comes back
+/// the same size. A cycle holding one strict edge adds a level every lap, so
+/// any shape reaching it grows without end. That is the occurs check, read
+/// across the call graph rather than within one term.
+///
+/// Returns the nodes that can reach such a cycle, and a strict edge on one, for
+/// the error to point at.
+#[allow(clippy::type_complexity)]
+fn growing_parameters<K: Copy + Eq + std::hash::Hash>(
+    calls: &std::collections::HashMap<K, Vec<(K, Vec<DescriptorShape>)>>,
+) -> (
+    std::collections::HashSet<(K, u32)>,
+    Option<(K, K, u32, DescriptorShape)>,
+) {
+    use std::collections::{HashMap, HashSet, VecDeque};
+
+    type Node<K> = (K, u32);
+    let mut forward: HashMap<Node<K>, Vec<Node<K>>> = HashMap::new();
+    let mut backward: HashMap<Node<K>, Vec<Node<K>>> = HashMap::new();
+    let mut strict: Vec<(Node<K>, Node<K>, K, K, u32, DescriptorShape)> = Vec::new();
+
+    for (caller, sites) in calls {
+        for (callee, type_args) in sites {
+            for (i, bound) in type_args.iter().enumerate() {
+                for j in bound.params() {
+                    let from = (*callee, i as u32);
+                    let to = (*caller, j);
+                    forward.entry(from).or_default().push(to);
+                    backward.entry(to).or_default().push(from);
+                    if *bound != DescriptorShape::Param(j) {
+                        strict.push((from, to, *caller, *callee, i as u32, bound.clone()));
+                    }
+                }
+            }
+        }
+    }
+
+    // A strict edge lies on a cycle exactly when its head can get back to its
+    // tail.
+    let reaches = |start: Node<K>, target: Node<K>| -> bool {
+        let mut seen: HashSet<Node<K>> = HashSet::new();
+        let mut queue = VecDeque::new();
+        queue.push_back(start);
+        seen.insert(start);
+        while let Some(n) = queue.pop_front() {
+            if n == target {
+                return true;
+            }
+            for next in forward.get(&n).into_iter().flatten() {
+                if seen.insert(*next) {
+                    queue.push_back(*next);
+                }
+            }
+        }
+        false
+    };
+
+    let mut on_cycle: Vec<Node<K>> = Vec::new();
+    let mut blame = None;
+    for (from, to, caller, callee, param, bound) in &strict {
+        if reaches(*to, *from) {
+            on_cycle.push(*from);
+            if blame.is_none() {
+                blame = Some((*caller, *callee, *param, bound.clone()));
+            }
+        }
+    }
+
+    // Anything that can reach such a cycle feeds it, and what it feeds grows.
+    let mut growing: HashSet<Node<K>> = HashSet::new();
+    let mut queue: VecDeque<Node<K>> = VecDeque::new();
+    for node in on_cycle {
+        if growing.insert(node) {
+            queue.push_back(node);
+        }
+    }
+    while let Some(n) = queue.pop_front() {
+        for prev in backward.get(&n).into_iter().flatten() {
+            if growing.insert(*prev) {
+                queue.push_back(*prev);
+            }
+        }
+    }
+
+    (growing, blame)
 }
 
 /// What a call site has to hand over for each shape the callee declared./// What a call site has to hand over for each shape the callee declared.

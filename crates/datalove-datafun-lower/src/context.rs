@@ -1023,7 +1023,11 @@ impl<'db> LowerCtx<'db> {
     ) {
         let site_id = CallSiteId(self.body.next_call_site);
         self.body.next_call_site += 1;
-        self.emit(Instruction::Call { site_id, dest, func, args, type_args });
+        self.emit(Instruction::Call {
+            site_id, dest, func, args, type_args,
+            // Filled in once the shape sets have settled.
+            shape_descriptors: Vec::new(),
+        });
     }
 
     /// Emit ComptimeCall (for calls to functions with const parameters).

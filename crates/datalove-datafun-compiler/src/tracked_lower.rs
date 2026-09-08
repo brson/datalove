@@ -532,25 +532,57 @@ fn close_shapes_over_calls<'db>(
         calls.insert(*key, sites);
     }
 
-    if let Err(unbounded) = datalove_datafun_ir::close_shapes(&calls, &mut shapes) {
-        let module_id = placement.values().next().map(|(m, _)| *m);
+    if let Err(growing) = datalove_datafun_ir::close_shapes(&calls, &mut shapes) {
+        let name = |key: Key| placement.get(&key)
+            .map(|(m, i)| lowered_functions[m].functions[*i].name.clone())
+            .unwrap_or_else(|| "?".to_string());
+        let module_id = placement.get(&growing.function).map(|(m, _)| *m)
+            .or_else(|| placement.values().next().map(|(m, _)| *m));
         if let Some(module_id) = module_id {
             errors.entry(module_id).or_default().push(format!(
-                "a descriptor would be needed for `{}`, a collection that grows \
-                 without end: a generic builds a collection of its type parameter and \
-                 calls a generic at a strictly larger type, so every call needs a \
-                 description one level deeper than the last",
-                unbounded,
+                "`{}` calls `{}` binding its type parameter {} to `{}`, which holds \
+                 one of `{}`'s own, so every call round that cycle needs a descriptor \
+                 one level deeper than the last. `{}` would be handed `{}` and there \
+                 is no end to it",
+                name(growing.caller), name(growing.callee), growing.param, growing.bound,
+                name(growing.caller), name(growing.function), growing.shape,
             ));
         }
         return;
     }
 
-    for (key, shape_set) in shapes {
-        let Some((module_id, idx)) = placement.get(&key).copied() else { continue };
+    for (key, shape_set) in &shapes {
+        let Some((module_id, idx)) = placement.get(key).copied() else { continue };
         let unit = &mut lowered_functions.get_mut(&module_id).unwrap().functions[idx];
         if let datalove_datafun_ir::CodeUnitContext::Function(ctx) = &mut unit.context {
-            ctx.descriptor_shapes = shape_set;
+            ctx.descriptor_shapes = shape_set.clone();
+        }
+    }
+
+    // With the sets settled, say what each call hands over. Stored rather than
+    // worked out again in each backend, so that the descriptor emitter makes a
+    // descriptor for every type named only here.
+    let lookup: HashMap<Key, Vec<DescriptorShape>> = shapes;
+    for (key, (module_id, idx)) in &placement {
+        let own = lookup.get(key).cloned().unwrap_or_default();
+        let module_key = key.0;
+        let callee_shapes = |code_ref: &CodeRef| -> Vec<DescriptorShape> {
+            let callee = match code_ref {
+                CodeRef::Module { module, id } => (*module, FuncId(id.0)),
+                CodeRef::Local(id) => (module_key, FuncId(id.0)),
+                CodeRef::External { .. } => return Vec::new(),
+            };
+            lookup.get(&callee).cloned().unwrap_or_default()
+        };
+        let unit = &mut lowered_functions.get_mut(module_id).unwrap().functions[*idx];
+        if let Err(missing) = datalove_datafun_ir::resolve_call_descriptors(
+            unit, &own, &callee_shapes,
+        ) {
+            errors.entry(*module_id).or_default().push(format!(
+                "`{}` hands a type parameter to a function that builds a collection \
+                 of it and was given no descriptor for `{}` to pass on",
+                unit.name, missing,
+            ));
         }
     }
 }

@@ -395,6 +395,7 @@ impl<'db> ScriptCompiler<'db> {
         // Replaces const initializer expressions with their evaluated values.
         // Skipped in skip_const_inlining mode (consts evaluated at runtime).
         let ir_unit = self.phase_const_inline(ir_unit, &consts);
+        let ir_unit = self.phase_resolve_shape_descriptors(ir_unit);
 
         // Update accumulated state
         self.update_accumulated_state(&ir_unit, &ownership);
@@ -996,6 +997,41 @@ impl<'db> ScriptCompiler<'db> {
     /// This replaces const initializer expressions with their pre-computed
     /// literal values. In skip_const_inlining mode, this is skipped so const
     /// expressions are evaluated at runtime instead of compile time.
+    /// Say what each call in the script's own body hands a generic that builds
+    /// a collection of its type parameter.
+    ///
+    /// The functions defined beside the script settled this among themselves
+    /// while they were lowered, but the script's body can also call into a
+    /// module, and only here are both to hand.
+    ///
+    /// A script has no type parameters of its own, so it never forwards one;
+    /// everything it hands over is a descriptor for a type it named outright.
+    fn phase_resolve_shape_descriptors(&self, mut ir_unit: IrCodeUnit) -> IrCodeUnit {
+        use datalove_datafun_ir::{CodeRef, CodeUnitId, DescriptorShape};
+
+        let registry = self.shared_context.module_registry.clone();
+        let nested: HashMap<u32, Vec<DescriptorShape>> = ir_unit.nested_units.iter()
+            .map(|u| (u.id.0, u.function_context()
+                .map(|c| c.descriptor_shapes.clone()).unwrap_or_default()))
+            .collect();
+        let callee_shapes = |code_ref: &CodeRef| -> Vec<DescriptorShape> {
+            match code_ref {
+                CodeRef::Local(id) => nested.get(&id.0).cloned().unwrap_or_default(),
+                CodeRef::Module { module, id } => registry
+                    .get_module_function_as_unit(*module, CodeUnitId(id.0))
+                    .and_then(|u| u.function_context()
+                        .map(|c| c.descriptor_shapes.clone()))
+                    .unwrap_or_default(),
+                CodeRef::External { .. } => Vec::new(),
+            }
+        };
+        // Failure here means the script would forward a type parameter, which
+        // it has none of, so it cannot happen.
+        let _ = datalove_datafun_ir::resolve_call_descriptors(
+            &mut ir_unit, &[], &callee_shapes);
+        ir_unit
+    }
+
     fn phase_const_inline(
         &self,
         ir_unit: IrCodeUnit,

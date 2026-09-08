@@ -35,6 +35,28 @@ pub fn collect_types_from_code_unit(unit: &IrCodeUnit, types: &mut BTreeSet<IrTy
         }
         collect_type_recursive(&func_ctx.return_type, types);
     }
+
+    // A descriptor handed to a generic that builds a collection names a type
+    // that may appear nowhere else: a `#{string}` built inside a function
+    // returning an index is named only here. Without this the name is emitted
+    // at the call and the definition never is.
+    for block in &unit.blocks {
+        for instr in &block.instructions {
+            let datalove_datafun_ir::Instruction::Call { shape_descriptors, .. } = instr else {
+                continue;
+            };
+            for r in shape_descriptors {
+                if let datalove_datafun_ir::DescriptorRef::Static(ty) = r {
+                    collect_type_recursive(ty, types);
+                }
+            }
+        }
+    }
+
+    // And from the functions defined beside a script unit.
+    for nested in &unit.nested_units {
+        collect_types_from_code_unit(nested, types);
+    }
 }
 
 /// Collect a type and all its nested types.

@@ -427,13 +427,19 @@ fn rewrite_comptime_params_in_instruction(
             op: *op,
             operand: rewrite_operand(operand),
         },
-        Instruction::Call { site_id, dest, func, args, .. } => Instruction::Call {
-            site_id: *site_id,
-            dest: *dest,
-            func: func.clone(),
-            args: args.iter().map(rewrite_operand).collect(),
-            type_args: Vec::new(),
-        },
+        // Rewriting operands leaves the descriptors alone: they say what the
+        // callee's type parameters were bound to, which no operand rewrite
+        // changes. Blanking them would drop the descriptors a generic callee
+        // needs.
+        Instruction::Call { site_id, dest, func, args, type_args, shape_descriptors } =>
+            Instruction::Call {
+                site_id: *site_id,
+                dest: *dest,
+                func: func.clone(),
+                args: args.iter().map(rewrite_operand).collect(),
+                type_args: type_args.clone(),
+                shape_descriptors: shape_descriptors.clone(),
+            },
         Instruction::Copy { dest, src } => Instruction::Copy {
             dest: *dest,
             src: rewrite_operand(src),
@@ -622,7 +628,9 @@ pub fn rewrite_comptime_calls(
                                     dest: *dest,
                                     func: func_ref.clone(),
                                     args: new_args,
+                                    // A comptime call is not generic.
                                     type_args: Vec::new(),
+                                    shape_descriptors: Vec::new(),
                                 });
                                 continue;
                             }

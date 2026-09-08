@@ -10,10 +10,15 @@ module local/test/main
 // needs `[[[T]]]`. The set grows by one level per hop and never settles, so it
 // is refused rather than chased.
 //
-// This is the only shape that does not settle. Where a cycle passes its type
-// parameters along unchanged the substitution is a renaming and cannot make a
-// shape bigger, so mutual recursion and ordinary recursion both close after as
-// many rounds as the cycle is long.
+// Whether a set settles is a question about the substitution a cycle composes,
+// not about how big a shape is. Each call draws an edge from the callee's type
+// parameter to the caller's, strict when the binding puts a type constructor
+// around it. A cycle of plain edges is a renaming and cannot enlarge anything;
+// a cycle holding one strict edge adds a level every lap. That is the occurs
+// check, read across the call graph rather than within one term.
+//
+// So mutual recursion and ordinary recursion both close, and a merely deep
+// shape is fine. Only this is refused.
 //
 // Erasure means this is one compiled body, and at run time it would merely
 // recurse for ever the way any missing base case does. What cannot be written

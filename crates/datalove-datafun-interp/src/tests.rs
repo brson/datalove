@@ -221,6 +221,7 @@ fn test_simple_function_call() {
                             Operand::Value(ValueId(1)),
                         ],
                         type_args: Vec::new(),
+                        shape_descriptors: Vec::new(),
                     },
                 ],
                 terminator: Terminator::Return {
@@ -296,6 +297,7 @@ fn test_nested_function_calls() {
                         func: CodeRef::Local(CodeUnitId(0)),
                         args: vec![Operand::Param(ParamId(0))],
                         type_args: Vec::new(),
+                        shape_descriptors: Vec::new(),
                     },
                     // Second call: passthrough(result)
                     Instruction::Call {
@@ -304,6 +306,7 @@ fn test_nested_function_calls() {
                         func: CodeRef::Local(CodeUnitId(0)),
                         args: vec![Operand::Value(ValueId(0))],
                         type_args: Vec::new(),
+                        shape_descriptors: Vec::new(),
                     },
                 ],
                 terminator: Terminator::Return {
@@ -1701,6 +1704,7 @@ fn test_crossunit_external_function() {
                         func: CodeRef::External { unit: 0, id: CodeUnitId(0) },
                         args: vec![Operand::Value(ValueId(0))],
                         type_args: Vec::new(),
+                        shape_descriptors: Vec::new(),
                     },
                 ],
                 terminator: Terminator::UnitEnd { result: Some(Operand::Value(ValueId(1))) },
@@ -1973,6 +1977,7 @@ fn test_script_with_function_and_list_drop() {
                         func: CodeRef::Local(CodeUnitId(0)),
                         args: vec![Operand::Value(ValueId(5)), Operand::Value(ValueId(6))],
                         type_args: Vec::new(),
+                        shape_descriptors: Vec::new(),
                     },
                     // Explicit drop of list (values are precise).
                     Instruction::Drop { operand: Operand::Value(ValueId(4)) },

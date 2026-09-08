@@ -1,0 +1,42 @@
+require module sys/std/set
+
+import set.insert
+import set.len
+
+// Two things that used to go wrong about the descriptors a call site hands
+// over, neither of them about growth.
+
+// One: a deeply nested shape that does not grow.
+//
+// Whether a shape set settles is a question about the substitution a cycle
+// composes, not about how big a shape is. `carry` hands its type parameter to
+// `deep` unchanged, so nothing grows however deep the type is written. This was
+// refused while the check was a limit on nesting depth, with a message claiming
+// the shape grew without end. There is no cycle here at all.
+fun deep<T>(x: T): index
+  var built: [[[[[[[[[[[[T]]]]]]]]]]]] = []
+  ret : index / 0
+end fun
+
+fun carry<T>(x: T): index
+  ret deep(x)
+end fun
+
+// Two: a shape whose concrete type is named nowhere else.
+//
+// `count_one` builds a `#{T}` and returns an index, so with `T` bound to
+// `string` the descriptor handed over describes a `#{string}` that appears in
+// no value type, no parameter and no return. The compiled backends emit
+// descriptors for the types they can see, and saw none for this one.
+fun count_one<T>(x: T): index
+  var seen: #{T} = #{}
+  let added = insert(mut seen, x)
+  ret len(ref seen)
+end fun
+
+let from_a_string = carry("a")
+let from_a_number = carry(: u32 / 7)
+let counted = count_one("a")
+let counted_number = count_one(: u32 / 5)
+
+let output = (from_a_string, from_a_number, counted, counted_number)

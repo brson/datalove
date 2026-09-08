@@ -659,20 +659,45 @@ pub(crate) fn close_shapes_in_units(units: &mut [IrCodeUnit]) -> Result<(), Lowe
         calls.insert(unit.id.0, sites);
     }
 
-    if let Err(unbounded) = datalove_datafun_ir::close_shapes(&calls, &mut shapes) {
+    if let Err(growing) = datalove_datafun_ir::close_shapes(&calls, &mut shapes) {
+        let name = |id: u32| units.iter().find(|u| u.id.0 == id)
+            .map(|u| u.name.clone())
+            .unwrap_or_else(|| format!("#{}", id));
         return Err(LowerError::UnboundedDescriptorShape(format!(
-            "a descriptor would be needed for `{}`, a collection that grows without \
-             end: a generic builds a collection of its type parameter and calls a \
-             generic at a strictly larger type, so every call needs a description one \
-             level deeper than the last",
-            unbounded,
+            "`{}` calls `{}` binding its type parameter {} to `{}`, which holds one of \
+             `{}`'s own, so every call round that cycle needs a descriptor one level \
+             deeper than the last. `{}` would be handed `{}` and there is no end to it",
+            name(growing.caller), name(growing.callee), growing.param, growing.bound,
+            name(growing.caller), name(growing.function), growing.shape,
         )));
     }
 
     for unit in units.iter_mut() {
-        let Some(shape_set) = shapes.remove(&unit.id.0) else { continue };
+        let Some(shape_set) = shapes.get(&unit.id.0) else { continue };
         if let datalove_datafun_ir::CodeUnitContext::Function(ctx) = &mut unit.context {
-            ctx.descriptor_shapes = shape_set;
+            ctx.descriptor_shapes = shape_set.clone();
+        }
+    }
+
+    // With the sets settled, say what each call hands over. Stored rather than
+    // worked out again in each backend, so that the descriptor emitter makes a
+    // descriptor for every type named only here.
+    for unit in units.iter_mut() {
+        let own = shapes.get(&unit.id.0).cloned().unwrap_or_default();
+        let callee_shapes = |code_ref: &CodeRef| -> Vec<DescriptorShape> {
+            match code_ref {
+                CodeRef::Local(id) => shapes.get(&id.0).cloned().unwrap_or_default(),
+                _ => Vec::new(),
+            }
+        };
+        if let Err(missing) = datalove_datafun_ir::resolve_call_descriptors(
+            unit, &own, &callee_shapes,
+        ) {
+            return Err(LowerError::UnboundedDescriptorShape(format!(
+                "`{}` hands a type parameter to a function that builds a collection \
+                 of it and was given no descriptor for `{}` to pass on",
+                unit.name, missing,
+            )));
         }
     }
     Ok(())

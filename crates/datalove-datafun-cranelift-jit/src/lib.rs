@@ -507,6 +507,7 @@ mod tests {
                             Operand::Value(ValueId(0)),
                         ],
                         type_args: Vec::new(),
+                        shape_descriptors: Vec::new(),
                     },
                 ],
                 terminator: Terminator::Return {
@@ -597,6 +598,7 @@ mod tests {
                             Operand::Value(ValueId(0)),
                         ],
                         type_args: Vec::new(),
+                        shape_descriptors: Vec::new(),
                     },
                 ],
                 terminator: Terminator::Return {

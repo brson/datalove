@@ -255,7 +255,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         dest: ValueId,
         code_ref: &CodeRef,
         args: &[Operand],
-        type_args: &[datalove_datafun_ir::DescriptorShape],
+        shape_descriptors: &[datalove_datafun_ir::DescriptorRef],
     ) -> Result<(), CraneliftError> {
         // Check if target is a native rider function.
         if let CodeRef::Module { module, id } = code_ref {
@@ -343,32 +343,23 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             call_args.push(tydesc_addr);
         }
 
-        // Then one for each shape the callee builds a collection of. What to
-        // hand over is worked out by the shared rule, so this side and the
-        // callee's signature cannot disagree about the trailing arguments.
-        let callee_shapes = self.callee_descriptor_shapes(code_ref);
-        if !callee_shapes.is_empty() {
-            let own = self.func_ctx.descriptor_shapes.clone();
-            let refs = datalove_datafun_ir::shape_descriptors_for(
-                &callee_shapes, type_args, &own,
-            ).map_err(|missing| CraneliftError::Codegen(format!(
-                "no descriptor for `{}`: this function forwards a type parameter to \
-                 one that builds a collection of it, and was handed nothing to \
-                 forward", missing)))?;
-            for r in refs {
-                let value = match r {
-                    datalove_datafun_ir::DescriptorRef::Static(ty) => {
-                        self.static_tydesc(builder, &ty)?
-                    }
-                    datalove_datafun_ir::DescriptorRef::Own(i) => {
-                        *self.shape_descriptor_values.get(i as usize).ok_or_else(|| {
-                            CraneliftError::Codegen(format!(
-                                "shape {} was declared but never passed", i))
-                        })?
-                    }
-                };
-                call_args.push(value);
-            }
+        // Then one for each shape the callee builds a collection of, as worked
+        // out when the shape sets settled. Read rather than derived, so this
+        // side and the callee's signature cannot disagree about the trailing
+        // arguments, and so the descriptor emitter saw the same types.
+        for r in shape_descriptors {
+            let value = match r {
+                datalove_datafun_ir::DescriptorRef::Static(ty) => {
+                    self.static_tydesc(builder, ty)?
+                }
+                datalove_datafun_ir::DescriptorRef::Own(i) => {
+                    *self.shape_descriptor_values.get(*i as usize).ok_or_else(|| {
+                        CraneliftError::Codegen(format!(
+                            "shape {} was declared but never passed", i))
+                    })?
+                }
+            };
+            call_args.push(value);
         }
 
         // Declare callee in this function and emit call.

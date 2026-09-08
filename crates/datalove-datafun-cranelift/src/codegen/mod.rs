@@ -724,8 +724,8 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             Instruction::DebugLog { operand } => {
                 self.compile_debuglog(builder, operand)?;
             }
-            Instruction::Call { dest, func, args, type_args, .. } => {
-                self.compile_call(builder, *dest, func, args, type_args)?;
+            Instruction::Call { dest, func, args, shape_descriptors, .. } => {
+                self.compile_call(builder, *dest, func, args, shape_descriptors)?;
             }
             // ComptimeCall behaves exactly like Call - the specialization metadata is
             // only used by the specialization pass. Without specialization, this calls

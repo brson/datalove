@@ -683,12 +683,13 @@ impl RemapContext {
                 dest: self.remap_value(*dest),
                 src: self.remap_operand(src),
             },
-            Instruction::Call { site_id, dest, func, args, type_args } => Instruction::Call {
+            Instruction::Call { site_id, dest, func, args, type_args, .. } => Instruction::Call {
                 site_id: self.remap_call_site(*site_id),
                 dest: self.remap_value(*dest),
                 func: func.clone(),
                 args: args.iter().map(|a| self.remap_operand(a)).collect(),
                 type_args: type_args.clone(),
+                shape_descriptors: Vec::new(),
             },
             Instruction::ComptimeCall { dest, func, args, discriminant, comptime_param_indices } => Instruction::ComptimeCall {
                 dest: self.remap_value(*dest),
@@ -1284,12 +1285,13 @@ fn replace_params_in_instruction(
             dest: *dest,
             src: replace_operand(src),
         },
-        Instruction::Call { site_id, dest, func, args, type_args } => Instruction::Call {
+        Instruction::Call { site_id, dest, func, args, type_args, .. } => Instruction::Call {
             site_id: *site_id,
             dest: *dest,
             func: func.clone(),
             args: args.iter().map(replace_operand).collect(),
             type_args: type_args.clone(),
+            shape_descriptors: Vec::new(),
         },
         Instruction::ComptimeCall { dest, func, args, discriminant, comptime_param_indices } => Instruction::ComptimeCall {
             dest: *dest,

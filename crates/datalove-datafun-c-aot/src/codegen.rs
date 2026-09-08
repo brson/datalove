@@ -300,8 +300,8 @@ impl<'a> FunctionCodegenContext<'a> {
             Instruction::TableNew { dest, rows } => {
                 self.emit_table_new(out, *dest, rows)?;
             }
-            Instruction::Call { dest, func, args, type_args, .. } => {
-                self.emit_call(out, *dest, func, args, type_args)?;
+            Instruction::Call { dest, func, args, shape_descriptors, .. } => {
+                self.emit_call(out, *dest, func, args, shape_descriptors)?;
             }
             // A comptime call is not generic, so it binds nothing.
             Instruction::ComptimeCall { dest, func, args, .. } => {
@@ -1774,7 +1774,7 @@ impl<'a> FunctionCodegenContext<'a> {
         dest: ValueId,
         func: &CodeRef,
         args: &[Operand],
-        type_args: &[datalove_datafun_ir::DescriptorShape],
+        shape_descriptors: &[datalove_datafun_ir::DescriptorRef],
     ) -> Result<(), CAotError> {
         // A rider function is reached through the runtime C ABI rather than
         // this backend's own convention, so it is a different call entirely.
@@ -1853,26 +1853,17 @@ impl<'a> FunctionCodegenContext<'a> {
             }
         }
 
-        // Then one for each shape the callee builds a collection of, worked out
-        // by the shared rule so that this side and the callee's signature
-        // cannot disagree about the trailing arguments.
-        let callee_shapes = self.callee_descriptor_shapes(func);
-        if !callee_shapes.is_empty() {
-            let own = self.unit_descriptor_shapes();
-            let refs = datalove_datafun_ir::shape_descriptors_for(
-                &callee_shapes, type_args, &own,
-            ).map_err(|missing| CAotError::Codegen(format!(
-                "no descriptor for `{}`: this function forwards a type parameter to \
-                 one that builds a collection of it, and was handed nothing to \
-                 forward", missing)))?;
-            for r in refs {
-                match r {
-                    datalove_datafun_ir::DescriptorRef::Static(ty) => {
-                        write!(&mut call_args, ", &{}", self.tydesc_name(&ty)).unwrap()
-                    }
-                    datalove_datafun_ir::DescriptorRef::Own(i) => {
-                        write!(&mut call_args, ", s{}", i).unwrap()
-                    }
+        // Then one for each shape the callee builds a collection of, as worked
+        // out when the shape sets settled. Read rather than derived, so this
+        // side and the callee's signature cannot disagree.
+        for r in shape_descriptors {
+            match r {
+                datalove_datafun_ir::DescriptorRef::Static(ty) => {
+                    let name = self.tydesc_name(ty);
+                    write!(&mut call_args, ", &{}", name).unwrap()
+                }
+                datalove_datafun_ir::DescriptorRef::Own(i) => {
+                    write!(&mut call_args, ", s{}", i).unwrap()
                 }
             }
         }

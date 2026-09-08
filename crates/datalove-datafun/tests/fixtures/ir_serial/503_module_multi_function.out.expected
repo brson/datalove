@@ -27,7 +27,7 @@ IrSerialAnalysis(
             ),
             direct_interp_output: "ok 6\nok 4\nok 25\n",
             direct_aot_output: "ok 6\nok 4\nok 25\n",
-            serialized_ir_size: 2889,
+            serialized_ir_size: 3018,
             serialized_registry_size: 10993,
             deser_success: true,
             deser_interp_output: "ok 6\nok 4\nok 25\n",

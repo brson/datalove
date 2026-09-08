@@ -985,26 +985,15 @@ impl IrInterpreter {
                 frame.mark_value_live(*dest);
                 Self::mark_source_dropped_local(src, frame);
             }
-            Instruction::Call { site_id, dest, func, args, type_args } => {
+            Instruction::Call { site_id, dest, func, args, shape_descriptors, .. } => {
                 let callee = ctx.get_unit(func, registry);
                 let arg_vals = self.prepare_call_args(callee, args, frame, frames);
                 let dest_slot = frame.value_dest(*dest);
                 Self::mark_consumed_call_args(callee, args, frame);
 
-                // What the callee declared it needs, answered from what this
-                // call site bound its type parameters to. One implementation,
-                // shared with the compiled backends.
-                let callee_shapes = callee.function_context()
-                    .map(|c| c.descriptor_shapes.clone())
-                    .unwrap_or_default();
-                let own_shapes = frame.own_shapes().to_vec();
-                let refs = datalove_datafun_ir::shape_descriptors_for(
-                    &callee_shapes, type_args, &own_shapes,
-                ).unwrap_or_else(|missing| panic!(
-                    "no descriptor for `{}`: this function forwards a type parameter \
-                     to one that builds a collection of it, and was handed nothing \
-                     to forward", missing));
-                let supplied: Vec<*const rtdt::TyDesc> = refs.iter()
+                // What to hand over was worked out when the shape sets
+                // settled; this only turns each answer into a descriptor.
+                let supplied: Vec<*const rtdt::TyDesc> = shape_descriptors.iter()
                     .map(|r| self.resolve_shape_ref(r, frame))
                     .collect();
 
