@@ -1,0 +1,35 @@
+require module sys/std/map
+
+import map.insert
+import map.get
+import map.len
+
+// A map built over its type parameters, where both the key and the value
+// become `data` and one descriptor describes the whole `%{K = V}`.
+
+fun single<K, V>(k: K, v: V): %{K = V}
+  var out: %{K = V} = %{}
+  insert(mut out, k, v)
+  ret out
+end fun
+
+fun two_entries<K, V>(k1: K, v1: V, k2: K, v2: V): %{K = V}
+  var out: %{K = V} = single(k1, v1)
+  insert(mut out, k2, v2)
+  ret out
+end fun
+
+fun empty_map<K, V>(): %{K = V}
+  var out: %{K = V} = %{}
+  ret out
+end fun
+
+let one = single("a", : u32 / 1)
+let two = two_entries("a", : u32 / 1, "b", : u32 / 2)
+let flipped = single(: u32 / 7, "seven")
+let nothing: %{string = u32} = empty_map()
+
+let sizes = (len(ref one), len(ref two), len(ref nothing))
+let looked_up = (get(ref two, ref "b"), get(ref two, ref "zz"))
+
+let output = (one, two, flipped, nothing, sizes, looked_up)

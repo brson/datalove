@@ -91,6 +91,31 @@ impl IrInterpreter {
     }
 
     /// Execute SetNew: create a set from operands.
+    /// Build a set described by `set_tydesc`, then move it into the wrapper.
+    ///
+    /// The same two steps as the list: a set built over a type parameter has a
+    /// `data` for its destination, so it is made in a temporary the descriptor
+    /// describes and moved in.
+    pub(crate) fn execute_set_new_erased(
+        &mut self,
+        elements: &[Operand],
+        dest: Destination,
+        set_tydesc: *const rtdt::TyDesc,
+        frame: &Frame,
+        frames: &FrameStore,
+    ) {
+        let mut temp = std::mem::MaybeUninit::<rtdt::Set>::uninit();
+        let temp_ptr = temp.as_mut_ptr() as *mut u8;
+        let temp_dest = Destination { ptr: temp_ptr, tydesc: set_tydesc };
+        self.execute_set_new(elements, temp_dest, frame, frames);
+        let status = unsafe {
+            datalove_rt::c::dtlv_rti_data_from_local(
+                self.runtime.handle(), temp_ptr, set_tydesc, dest.ptr)
+        };
+        assert_eq!(status, datalove_rt::c::RtStatus::Ok,
+            "wrapping a freshly built set");
+    }
+
     pub(crate) fn execute_set_new(
         &mut self,
         elements: &[Operand],
@@ -176,6 +201,27 @@ impl IrInterpreter {
     }
 
     /// Execute MapNew: create a map from key-value pairs.
+    /// Build a map described by `map_tydesc`, then move it into the wrapper.
+    pub(crate) fn execute_map_new_erased(
+        &mut self,
+        entries: &[(Operand, Operand)],
+        dest: Destination,
+        map_tydesc: *const rtdt::TyDesc,
+        frame: &Frame,
+        frames: &FrameStore,
+    ) {
+        let mut temp = std::mem::MaybeUninit::<rtdt::Map>::uninit();
+        let temp_ptr = temp.as_mut_ptr() as *mut u8;
+        let temp_dest = Destination { ptr: temp_ptr, tydesc: map_tydesc };
+        self.execute_map_new(entries, temp_dest, frame, frames);
+        let status = unsafe {
+            datalove_rt::c::dtlv_rti_data_from_local(
+                self.runtime.handle(), temp_ptr, map_tydesc, dest.ptr)
+        };
+        assert_eq!(status, datalove_rt::c::RtStatus::Ok,
+            "wrapping a freshly built map");
+    }
+
     pub(crate) fn execute_map_new(
         &mut self,
         entries: &[(Operand, Operand)],

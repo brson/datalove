@@ -799,11 +799,17 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                     None => self.compile_list_new(builder, *dest, elements)?,
                 }
             }
-            Instruction::SetNew { dest, elements, .. } => {
-                self.compile_set_new(builder, *dest, elements)?;
+            Instruction::SetNew { dest, elements, descriptor } => {
+                match descriptor {
+                    Some(i) => self.compile_set_new_erased(builder, *dest, elements, *i)?,
+                    None => self.compile_set_new(builder, *dest, elements)?,
+                }
             }
-            Instruction::MapNew { dest, entries, .. } => {
-                self.compile_map_new(builder, *dest, entries)?;
+            Instruction::MapNew { dest, entries, descriptor } => {
+                match descriptor {
+                    Some(i) => self.compile_map_new_erased(builder, *dest, entries, *i)?,
+                    None => self.compile_map_new(builder, *dest, entries)?,
+                }
             }
             Instruction::TensorNew { dest, shape, elements } => {
                 self.compile_tensor_new(builder, *dest, shape, elements)?;

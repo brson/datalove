@@ -801,8 +801,16 @@ pub fn lower_expression<'db>(
             ctx.push_pending_scope();
 
             let result_type = ctx.expr_type(expr);
-            let elem_type = match &result_type {
-                IrType::Set(t) => (**t).clone(),
+            // A set built over a type parameter erases to `data`, so its own
+            // type says nothing about its elements and a descriptor has to come
+            // from the call site. See the list arm above.
+            let built = ctx.expr_source_type(expr).and_then(|t| match t {
+                datalove_datafun_common::Type::Datalit(dt) => ctx.build_shape(&dt),
+                _ => None,
+            });
+            let elem_type = match (&result_type, &built) {
+                (IrType::Set(t), _) => (**t).clone(),
+                (_, Some(_)) => IrType::Data,
                 _ => panic!("expected Set type from typechecker"),
             };
             // Lower each element and track as pending intermediate.
@@ -813,7 +821,10 @@ pub fn lower_expression<'db>(
                 elements.push(Operand::Value(value));
             }
             let dest = ctx.fresh_value(result_type);
-            ctx.emit_set_new(dest, elements);
+            match built {
+                Some(shape) => ctx.emit_set_new_erased(dest, elements, shape),
+                None => ctx.emit_set_new(dest, elements),
+            }
             ctx.clear_pending_intermediates();
             ctx.pop_pending_scope();
             Ok(dest)
@@ -823,8 +834,15 @@ pub fn lower_expression<'db>(
             ctx.push_pending_scope();
 
             let result_type = ctx.expr_type(expr);
-            let (key_type, val_type) = match &result_type {
-                IrType::Map(k, v) => ((**k).clone(), (**v).clone()),
+            // A map built over a type parameter erases the same way, and both
+            // its key and its value become `data`.
+            let built = ctx.expr_source_type(expr).and_then(|t| match t {
+                datalove_datafun_common::Type::Datalit(dt) => ctx.build_shape(&dt),
+                _ => None,
+            });
+            let (key_type, val_type) = match (&result_type, &built) {
+                (IrType::Map(k, v), _) => ((**k).clone(), (**v).clone()),
+                (_, Some(_)) => (IrType::Data, IrType::Data),
                 _ => panic!("expected Map type from typechecker"),
             };
             // Lower each entry and track keys/values as pending intermediates.
@@ -837,7 +855,10 @@ pub fn lower_expression<'db>(
                 entries.push((Operand::Value(k), Operand::Value(v)));
             }
             let dest = ctx.fresh_value(result_type);
-            ctx.emit_map_new(dest, entries);
+            match built {
+                Some(shape) => ctx.emit_map_new_erased(dest, entries, shape),
+                None => ctx.emit_map_new(dest, entries),
+            }
             ctx.clear_pending_intermediates();
             ctx.pop_pending_scope();
             Ok(dest)

@@ -282,11 +282,17 @@ impl<'a> FunctionCodegenContext<'a> {
                     None => self.emit_list_new(out, *dest, elements)?,
                 }
             }
-            Instruction::SetNew { dest, elements, .. } => {
-                self.emit_set_new(out, *dest, elements)?;
+            Instruction::SetNew { dest, elements, descriptor } => {
+                match descriptor {
+                    Some(i) => self.emit_set_new_erased(out, *dest, elements, *i)?,
+                    None => self.emit_set_new(out, *dest, elements)?,
+                }
             }
-            Instruction::MapNew { dest, entries, .. } => {
-                self.emit_map_new(out, *dest, entries)?;
+            Instruction::MapNew { dest, entries, descriptor } => {
+                match descriptor {
+                    Some(i) => self.emit_map_new_erased(out, *dest, entries, *i)?,
+                    None => self.emit_map_new(out, *dest, entries)?,
+                }
             }
             Instruction::TensorNew { dest, shape, elements } => {
                 self.emit_tensor_new(out, *dest, shape, elements)?;
@@ -1878,6 +1884,49 @@ impl<'a> FunctionCodegenContext<'a> {
             let c_ty = types::ir_type_to_c(&dest_ty);
             writeln!(out, "    *({c_ty}*){dest_addr} = {}({});", func_name, call_args).unwrap();
         }
+        Ok(())
+    }
+
+    /// Build a set described by a handed-over descriptor, then wrap it.
+    fn emit_set_new_erased(
+        &mut self,
+        out: &mut String,
+        dest: ValueId,
+        elements: &[Operand],
+        shape: u32,
+    ) -> Result<(), CAotError> {
+        let name = format!("__ns{}", dest.0);
+        let data_td = self.tydesc_name(&IrType::Data);
+        writeln!(out, "    dtlv_set_t {name}; bool_t {name}_added;").unwrap();
+        writeln!(out, "    dtlv_rti_btreeset_create_local(rt, &{name}, s{shape});").unwrap();
+        for elem in elements {
+            let elem_addr = self.operand_addr(elem);
+            writeln!(out, "    dtlv_rti_btreeset_insert_local(rt, &{name}, s{shape}, {elem_addr}, &{data_td}, &{name}_added);").unwrap();
+        }
+        let dest_addr = self.value_addr(dest);
+        writeln!(out, "    dtlv_rti_data_from_local(rt, &{name}, s{shape}, {dest_addr});").unwrap();
+        Ok(())
+    }
+
+    /// Build a map described by a handed-over descriptor, then wrap it.
+    fn emit_map_new_erased(
+        &mut self,
+        out: &mut String,
+        dest: ValueId,
+        entries: &[(Operand, Operand)],
+        shape: u32,
+    ) -> Result<(), CAotError> {
+        let name = format!("__nm{}", dest.0);
+        let data_td = self.tydesc_name(&IrType::Data);
+        writeln!(out, "    dtlv_map_t {name};").unwrap();
+        writeln!(out, "    dtlv_rti_btreemap_create_local(rt, &{name}, s{shape});").unwrap();
+        for (key, val) in entries {
+            let key_addr = self.operand_addr(key);
+            let val_addr = self.operand_addr(val);
+            writeln!(out, "    dtlv_rti_btreemap_insert_local(rt, &{name}, s{shape}, {key_addr}, &{data_td}, {val_addr}, &{data_td});").unwrap();
+        }
+        let dest_addr = self.value_addr(dest);
+        writeln!(out, "    dtlv_rti_data_from_local(rt, &{name}, s{shape}, {dest_addr});").unwrap();
         Ok(())
     }
 

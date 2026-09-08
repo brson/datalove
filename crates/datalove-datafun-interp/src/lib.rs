@@ -1093,18 +1093,34 @@ impl IrInterpreter {
                     Self::mark_source_dropped_local(elem, frame);
                 }
             }
-            Instruction::SetNew { dest, elements, .. } => {
+            Instruction::SetNew { dest, elements, descriptor } => {
                 let dest_slot = frame.value_dest(*dest);
-                self.execute_set_new(elements, dest_slot, frame, frames);
+                match descriptor {
+                    Some(index) => {
+                        let set_tydesc = frame.shape_descriptor(*index)
+                            .expect("a shape built with is one this function declared");
+                        self.execute_set_new_erased(
+                            elements, dest_slot, set_tydesc, frame, frames);
+                    }
+                    None => self.execute_set_new(elements, dest_slot, frame, frames),
+                }
                 frame.mark_value_live(*dest);
                 // Mark source elements as moved (linear semantics - consumes elements).
                 for elem in elements {
                     Self::mark_source_dropped_local(elem, frame);
                 }
             }
-            Instruction::MapNew { dest, entries, .. } => {
+            Instruction::MapNew { dest, entries, descriptor } => {
                 let dest_slot = frame.value_dest(*dest);
-                self.execute_map_new(entries, dest_slot, frame, frames);
+                match descriptor {
+                    Some(index) => {
+                        let map_tydesc = frame.shape_descriptor(*index)
+                            .expect("a shape built with is one this function declared");
+                        self.execute_map_new_erased(
+                            entries, dest_slot, map_tydesc, frame, frames);
+                    }
+                    None => self.execute_map_new(entries, dest_slot, frame, frames),
+                }
                 frame.mark_value_live(*dest);
                 // Mark source entries as moved (linear semantics - consumes entries).
                 for (key, val) in entries {

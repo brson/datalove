@@ -135,6 +135,115 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
     /// Compile a SetNew instruction.
     ///
     /// Creates an empty set, then inserts each element.
+    /// Compile a SetNew whose element type only a handed-over descriptor says.
+    ///
+    /// The same two steps as the list: build in a temporary the descriptor
+    /// describes, then move it into the `data` the destination is.
+    pub(super) fn compile_set_new_erased(
+        &mut self,
+        builder: &mut FunctionBuilder,
+        dest: ValueId,
+        elements: &[Operand],
+        shape: u32,
+    ) -> Result<(), CraneliftError> {
+        let runtime = self.runtime.ok_or_else(|| {
+            CraneliftError::Codegen("SetNew requires runtime imports".into())
+        })?;
+        let rt_handle = self.rt_handle_param.ok_or_else(|| {
+            CraneliftError::Codegen("SetNew requires runtime handle".into())
+        })?;
+        let set_tydesc_ptr = *self.shape_descriptor_values.get(shape as usize)
+            .ok_or_else(|| CraneliftError::Codegen(format!(
+                "shape {} was built with but never passed", shape)))?;
+
+        let temp = builder.create_sized_stack_slot(cl_ir::StackSlotData::new(
+            cl_ir::StackSlotKind::ExplicitSlot,
+            std::mem::size_of::<datalove_rtdt::Set>() as u32,
+            3,
+        ));
+        let set_ptr = builder.ins().stack_addr(PTR_TYPE, temp, 0);
+        let create_ref = self.module.declare_func_in_func(runtime.set_create, builder.func);
+        builder.ins().call(create_ref, &[rt_handle, set_ptr, set_tydesc_ptr]);
+
+        let bool_slot = builder.create_sized_stack_slot(cl_ir::StackSlotData::new(
+            cl_ir::StackSlotKind::ExplicitSlot, 1, 0));
+        let bool_ptr = builder.ins().stack_addr(PTR_TYPE, bool_slot, 0);
+        let elem_tydesc_ptr = self.static_tydesc(builder, &IrType::Data)?;
+        let insert_ref = self.module.declare_func_in_func(runtime.set_insert, builder.func);
+        for elem in elements {
+            let elem_ptr = self.get_operand_ptr(builder, elem)?;
+            builder.ins().call(insert_ref, &[
+                rt_handle, set_ptr, set_tydesc_ptr, elem_ptr, elem_tydesc_ptr, bool_ptr
+            ]);
+        }
+
+        self.wrap_built_collection(builder, dest, set_ptr, set_tydesc_ptr, runtime)
+    }
+
+    /// Compile a MapNew whose key and value types a handed-over descriptor says.
+    pub(super) fn compile_map_new_erased(
+        &mut self,
+        builder: &mut FunctionBuilder,
+        dest: ValueId,
+        entries: &[(Operand, Operand)],
+        shape: u32,
+    ) -> Result<(), CraneliftError> {
+        let runtime = self.runtime.ok_or_else(|| {
+            CraneliftError::Codegen("MapNew requires runtime imports".into())
+        })?;
+        let rt_handle = self.rt_handle_param.ok_or_else(|| {
+            CraneliftError::Codegen("MapNew requires runtime handle".into())
+        })?;
+        let map_tydesc_ptr = *self.shape_descriptor_values.get(shape as usize)
+            .ok_or_else(|| CraneliftError::Codegen(format!(
+                "shape {} was built with but never passed", shape)))?;
+
+        let temp = builder.create_sized_stack_slot(cl_ir::StackSlotData::new(
+            cl_ir::StackSlotKind::ExplicitSlot,
+            std::mem::size_of::<datalove_rtdt::Map>() as u32,
+            3,
+        ));
+        let map_ptr = builder.ins().stack_addr(PTR_TYPE, temp, 0);
+        let create_ref = self.module.declare_func_in_func(runtime.map_create, builder.func);
+        builder.ins().call(create_ref, &[rt_handle, map_ptr, map_tydesc_ptr]);
+
+        let data_tydesc_ptr = self.static_tydesc(builder, &IrType::Data)?;
+        let insert_ref = self.module.declare_func_in_func(runtime.map_insert, builder.func);
+        for (key, val) in entries {
+            let key_ptr = self.get_operand_ptr(builder, key)?;
+            let val_ptr = self.get_operand_ptr(builder, val)?;
+            builder.ins().call(insert_ref, &[
+                rt_handle, map_ptr, map_tydesc_ptr,
+                key_ptr, data_tydesc_ptr, val_ptr, data_tydesc_ptr
+            ]);
+        }
+
+        self.wrap_built_collection(builder, dest, map_ptr, map_tydesc_ptr, runtime)
+    }
+
+    /// Move a freshly built collection into the `data` its destination is.
+    fn wrap_built_collection(
+        &mut self,
+        builder: &mut FunctionBuilder,
+        dest: ValueId,
+        built_ptr: cl_ir::Value,
+        tydesc_ptr: cl_ir::Value,
+        runtime: crate::runtime::RuntimeImports,
+    ) -> Result<(), CraneliftError> {
+        let rt_handle = self.rt_handle_param.ok_or_else(|| {
+            CraneliftError::Codegen("wrapping requires runtime handle".into())
+        })?;
+        let frame_slot = self.frame_slot.ok_or_else(|| {
+            CraneliftError::Codegen("no frame slot for a built collection".into())
+        })?;
+        let dest_offset = self.layout.value_offset(dest.0);
+        let dest_ptr = builder.ins().stack_addr(PTR_TYPE, frame_slot, dest_offset as i32);
+        let wrap_ref = self.module.declare_func_in_func(runtime.data_from_local, builder.func);
+        builder.ins().call(wrap_ref, &[rt_handle, built_ptr, tydesc_ptr, dest_ptr]);
+        self.values.insert(dest, dest_ptr);
+        Ok(())
+    }
+
     pub(super) fn compile_set_new(
         &mut self,
         builder: &mut FunctionBuilder,

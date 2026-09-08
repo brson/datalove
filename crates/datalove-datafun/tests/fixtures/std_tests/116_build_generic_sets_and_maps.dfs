@@ -1,0 +1,41 @@
+require module sys/std/set
+
+import set.insert
+import set.contains
+import set.len
+
+// A set built over a type parameter, the same way a list is: the destination is
+// a `data`, so the set is made against the descriptor the call site handed over
+// and moved into the wrapper.
+//
+// Inserting twice shows the elements are compared as what they really are
+// rather than as the `data` they are carried in: two equal strings collapse to
+// one entry.
+
+fun singleton<T>(x: T): #{T}
+  var out: #{T} = #{}
+  let added = insert(mut out, x)
+  ret out
+end fun
+
+fun pair<T>(a: T, b: T): #{T}
+  var out: #{T} = singleton(a)
+  let added = insert(mut out, b)
+  ret out
+end fun
+
+fun empty_set<T>(): #{T}
+  var out: #{T} = #{}
+  ret out
+end fun
+
+let one = singleton("a")
+let two = pair("a", "b")
+let collapsed = pair("a", "a")
+let numbers = pair(: u32 / 3, : u32 / 1)
+let nothing: #{string} = empty_set()
+
+let sizes = (len(ref one), len(ref two), len(ref collapsed), len(ref nothing))
+let found = (contains(ref two, ref "b"), contains(ref two, ref "zz"))
+
+let output = (one, two, collapsed, numbers, nothing, sizes, found)
