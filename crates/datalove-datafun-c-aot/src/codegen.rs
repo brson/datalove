@@ -1593,35 +1593,26 @@ impl<'a> FunctionCodegenContext<'a> {
             IrType::Set(e) => e.as_ref().clone(),
             _ => return Err(CAotError::Codegen("set_new requires Set type".into())),
         };
-
         let elem_tydesc = self.tydesc_name(&elem_ty);
-        let elem_layout = types::ir_type_to_crepr(&elem_ty).layout();
+        let set_tydesc = self.tydesc_name(&dest_ty);
 
+        writeln!(out, "    dtlv_rti_btreeset_create_local(rt, {}, &{});", dest_addr, elem_tydesc).unwrap();
         if elements.is_empty() {
-            writeln!(out, "    dtlv_rti_btreeset_create_local(rt, {}, &{});", dest_addr, elem_tydesc).unwrap();
-        } else {
-            // Allocate temp buffer for elements.
-            let total_size = elem_layout.size * elements.len() as u32;
-            writeln!(out, "    {{ uint8_t __elems[{}];", total_size).unwrap();
+            return Ok(());
+        }
 
-            for (i, elem_op) in elements.iter().enumerate() {
-                let elem_addr = self.operand_addr(elem_op);
-                let offset = i as u32 * elem_layout.size;
-
-                match types::ir_type_to_crepr(&elem_ty) {
-                    CRepr::Scalar(c_ty) => {
-                        writeln!(out, "    *({}*)(__elems + {}) = *({}*){};", c_ty, offset, c_ty, elem_addr).unwrap();
-                    }
-                    CRepr::Aggregate(layout) => {
-                        if layout.size > 0 {
-                            writeln!(out, "    memcpy(__elems + {}, {}, {});", offset, elem_addr, layout.size).unwrap();
-                        }
-                    }
-                }
-            }
-
-            writeln!(out, "    dtlv_rti_btreeset_build_from_sorted_slice_local(rt, {}, &{}, __elems, {}); }}",
-                dest_addr, elem_tydesc, elements.len()).unwrap();
+        // Inserted one at a time. Building from a slice takes the elements for
+        // sorted, and a literal is written in whatever order the author liked:
+        // `#{"c", "a", "b"}` built that way is a tree whose keys are out of
+        // order, and every lookup afterwards binary-searches into the wrong
+        // place. `contains` said false for an element that was there.
+        let added = format!("__sa{}", dest.0);
+        writeln!(out, "    bool_t {added};").unwrap();
+        for elem_op in elements {
+            let elem_addr = self.operand_addr(elem_op);
+            let elem_td = self.operand_tydesc(elem_op);
+            writeln!(out, "    dtlv_rti_btreeset_insert_local(rt, {}, &{}, {}, {}, &{added});",
+                dest_addr, set_tydesc, elem_addr, elem_td).unwrap();
         }
         Ok(())
     }
@@ -1635,51 +1626,25 @@ impl<'a> FunctionCodegenContext<'a> {
             IrType::Map(k, v) => (k.as_ref().clone(), v.as_ref().clone()),
             _ => return Err(CAotError::Codegen("map_new requires Map type".into())),
         };
-
         let key_tydesc = self.tydesc_name(&key_ty);
         let val_tydesc = self.tydesc_name(&val_ty);
-        let key_layout = types::ir_type_to_crepr(&key_ty).layout();
-        let val_layout = types::ir_type_to_crepr(&val_ty).layout();
+        let map_tydesc = self.tydesc_name(&dest_ty);
 
+        writeln!(out, "    dtlv_rti_btreemap_create_local(rt, {}, &{});", dest_addr, map_tydesc).unwrap();
         if entries.is_empty() {
-            writeln!(out, "    dtlv_rti_btreemap_create_local(rt, {}, &{});", dest_addr, key_tydesc).unwrap();
-        } else {
-            let keys_size = key_layout.size * entries.len() as u32;
-            let vals_size = val_layout.size * entries.len() as u32;
+            return Ok(());
+        }
 
-            writeln!(out, "    {{ uint8_t __keys[{}]; uint8_t __vals[{}];", keys_size, vals_size).unwrap();
-
-            for (i, (key_op, val_op)) in entries.iter().enumerate() {
-                let key_addr = self.operand_addr(key_op);
-                let val_addr = self.operand_addr(val_op);
-                let key_offset = i as u32 * key_layout.size;
-                let val_offset = i as u32 * val_layout.size;
-
-                match types::ir_type_to_crepr(&key_ty) {
-                    CRepr::Scalar(c_ty) => {
-                        writeln!(out, "    *({}*)(__keys + {}) = *({}*){};", c_ty, key_offset, c_ty, key_addr).unwrap();
-                    }
-                    CRepr::Aggregate(layout) => {
-                        if layout.size > 0 {
-                            writeln!(out, "    memcpy(__keys + {}, {}, {});", key_offset, key_addr, layout.size).unwrap();
-                        }
-                    }
-                }
-
-                match types::ir_type_to_crepr(&val_ty) {
-                    CRepr::Scalar(c_ty) => {
-                        writeln!(out, "    *({}*)(__vals + {}) = *({}*){};", c_ty, val_offset, c_ty, val_addr).unwrap();
-                    }
-                    CRepr::Aggregate(layout) => {
-                        if layout.size > 0 {
-                            writeln!(out, "    memcpy(__vals + {}, {}, {});", val_offset, val_addr, layout.size).unwrap();
-                        }
-                    }
-                }
-            }
-
-            writeln!(out, "    dtlv_rti_btreemap_build_from_sorted_slices_local(rt, {}, &{}, &{}, __keys, __vals, {}); }}",
-                dest_addr, key_tydesc, val_tydesc, entries.len()).unwrap();
+        // Inserted one at a time; see `emit_set_new`. Building from slices
+        // takes the entries for sorted by key, and a literal is not.
+        let _ = (&key_tydesc, &val_tydesc);
+        for (key_op, val_op) in entries {
+            let key_addr = self.operand_addr(key_op);
+            let key_td = self.operand_tydesc(key_op);
+            let val_addr = self.operand_addr(val_op);
+            let val_td = self.operand_tydesc(val_op);
+            writeln!(out, "    dtlv_rti_btreemap_insert_local(rt, {}, &{}, {}, {}, {}, {});",
+                dest_addr, map_tydesc, key_addr, key_td, val_addr, val_td).unwrap();
         }
         Ok(())
     }
@@ -1782,7 +1747,8 @@ impl<'a> FunctionCodegenContext<'a> {
             if let Some(unit) = self.registry.get_module_function_as_unit(*module, *id) {
                 if let Some(native) = unit.native_context() {
                     let symbol = native.symbol.clone();
-                    return self.emit_native_call(out, dest, &symbol, args);
+                    let param_modes = native.param_modes.clone();
+                    return self.emit_native_call(out, dest, &symbol, args, &param_modes);
                 }
             }
         }
@@ -2095,9 +2061,39 @@ impl<'a> FunctionCodegenContext<'a> {
         dest: ValueId,
         symbol: &str,
         args: &[Operand],
+        native_param_modes: &[datalove_datafun_ir::ParamMode],
     ) -> Result<(), CAotError> {
         let mut call_args = String::from("rt");
-        for arg in args {
+        // A collection of a type parameter is wrapped once it is owned, and a
+        // rider works on the collection itself with a descriptor beside it.
+        // An argument that arrives wrapped where the native wants the thing
+        // itself is read through first; see the same step in the cranelift
+        // backend.
+        for (i, arg) in args.iter().enumerate() {
+            // Decided by the mode, not by the native's own parameter type: a
+            // generic native's types are erased too, so `mut self: [T]` reads
+            // `data` there just as the argument does. What tells them apart is
+            // that the native borrows its collection and takes its element, and
+            // only a borrow is passed through a wrapper.
+            // One of our own borrowed parameters is already a pointer at the
+            // value with a descriptor beside it, never a wrapper around it,
+            // even though its type reads `data`. Same as at a call to a module
+            // function.
+            let forwarded = matches!(arg, Operand::Param(p)
+                if self.func_descriptor_index(*p).is_some());
+            let wrapped = !forwarded
+                && *self.operand_type(arg) == IrType::Data
+                && matches!(native_param_modes.get(i),
+                    Some(datalove_datafun_ir::ParamMode::Ref)
+                    | Some(datalove_datafun_ir::ParamMode::Mut));
+            if wrapped {
+                let name = format!("__nb{}_{}", dest.0, i);
+                writeln!(out, "    const void* {name}_v; const dtlv_tydesc_t* {name}_t;").unwrap();
+                writeln!(out, "    dtlv_rti_data_parts({}, &{name}_v, &{name}_t);",
+                    self.operand_addr(arg)).unwrap();
+                write!(&mut call_args, ", (void*){name}_v, {name}_t").unwrap();
+                continue;
+            }
             let addr = self.operand_addr(arg);
             let tydesc = self.operand_tydesc(arg);
             write!(&mut call_args, ", {}, {}", addr, tydesc).unwrap();
