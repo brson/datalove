@@ -92,10 +92,10 @@ end fun
 
 // Every element of both.
 //
-// The element is cloned into the result rather than moved, because a linear
-// value has to go somewhere on every path and there is no way to say "drop
-// this one". Moving it only when it is wanted leaves the other branch holding
-// it, which the ownership checker refuses.
+// The element is disposed of on both paths, because a value moved on one path
+// has to be moved on every one: drop points here are static, so the checker
+// will not take a value whose fate depends on the branch. The element that is
+// not wanted goes into a binding that ends with the branch.
 fun intersection_with<T>(ref self: #{T}, ref other: #{T}): #{T}
   var built: #{T} = #{}
   let n = len(ref self)
@@ -103,7 +103,9 @@ fun intersection_with<T>(ref self: #{T}, ref other: #{T}): #{T}
   loop while i .< n
     if get(ref self, i) |elem|
       if contains(ref other, ref elem)
-        let added = insert(mut built, elem@)
+        let added = insert(mut built, elem)
+      else
+        let unwanted = elem
       end if
     end if
     set i = icall add_wrapping_index(i, : index / 1)
@@ -119,8 +121,9 @@ fun difference_with<T>(ref self: #{T}, ref other: #{T}): #{T}
   loop while i .< n
     if get(ref self, i) |elem|
       if contains(ref other, ref elem)
+        let unwanted = elem
       else
-        let added = insert(mut built, elem@)
+        let added = insert(mut built, elem)
       end if
     end if
     set i = icall add_wrapping_index(i, : index / 1)
@@ -131,8 +134,8 @@ end fun
 // True if every element of self is in other.
 //
 // The answer is accumulated rather than returned as soon as it is known,
-// because returning out of `if get(...) |elem|` leaves that branch having
-// disposed of `elem` and the other not, which the ownership checker refuses.
+// because returning out of `if get(...) |elem|` disposes of `elem` on that path
+// and not the other, and a value's fate has to be the same on every one.
 fun is_subset_of<T>(ref self: #{T}, ref other: #{T}): bool
   var all_present: bool = true
   let n = len(ref self)
