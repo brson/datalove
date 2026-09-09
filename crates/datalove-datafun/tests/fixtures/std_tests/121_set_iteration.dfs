@@ -1,0 +1,47 @@
+require module sys/std/set
+
+import set.get
+import set.len
+import set.to_list
+import set.union_with
+import set.intersection_with
+import set.difference_with
+import set.is_subset_of
+
+// A set reached by position, which is what gives it the same reach a list has.
+//
+// Everything written over a collection here is a loop over `len` and an index,
+// because that is all a list ever offered. A set had no such thing at all: the
+// rider gave it `len`, `contains`, `insert`, `remove` and `clear`, and no way
+// to reach an element. So `union`, `intersection` and the rest could not be
+// written -- not for want of a language feature, but for want of a native.
+//
+// The order is the elements' own, which is what a tree keeps them in.
+
+let names = #{"c", "a", "b"}
+let numbers = #{3, 1, 2}
+
+let by_position = (get(ref names, : index / 0), get(ref names, : index / 1),
+                   get(ref names, : index / 2), get(ref names, : index / 9))
+let listed = to_list(ref names)
+let listed_numbers = to_list(ref numbers)
+
+let left = #{"x", "y", "z"}
+let right = #{"y", "z", "w"}
+let both = #{"y", "z"}
+
+let joined = union_with(ref left, ref right)
+let shared = intersection_with(ref left, ref right)
+let only_left = difference_with(ref left, ref right)
+let subset = (is_subset_of(ref both, ref left), is_subset_of(ref left, ref both))
+
+// A set of an empty set is still an answer.
+let empty: #{string} = #{}
+let empty_listed = to_list(ref empty)
+let empty_joined = union_with(ref empty, ref left)
+
+let joined_len = len(ref joined)
+
+let output = (by_position, listed, listed_numbers,
+              joined, shared, only_left, subset,
+              empty_listed, empty_joined, joined_len)

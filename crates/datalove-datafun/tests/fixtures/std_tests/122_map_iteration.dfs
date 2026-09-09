@@ -1,0 +1,32 @@
+require module sys/std/map
+
+import map.key_at
+import map.value_at
+import map.keys
+import map.values
+import map.len
+
+// A map reached by position, for the same reason a set is.
+//
+// The key and the value are reached separately rather than as a pair, because
+// a collection whose elements are a pair of two type parameters is a shape
+// erasure cannot yet carry. Reaching them one at a time needs nothing of the
+// sort and gives `keys` and `values` directly.
+
+let scores = %{"c" = 3, "a" = 1, "b" = 2}
+let by_number = %{7 = "seven", 1 = "one"}
+
+// The same position gives a key and its own value.
+let paired = (key_at(ref scores, : index / 1), value_at(ref scores, : index / 1))
+let past_end = (key_at(ref scores, : index / 9), value_at(ref scores, : index / 9))
+
+let all_keys = keys(ref scores)
+let all_values = values(ref scores)
+let numeric_keys = keys(ref by_number)
+let numeric_values = values(ref by_number)
+
+let empty: %{string = u32} = %{}
+let empty_keys = keys(ref empty)
+
+let output = (paired, past_end, all_keys, all_values,
+              numeric_keys, numeric_values, empty_keys, len(ref scores))

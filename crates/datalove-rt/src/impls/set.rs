@@ -1437,7 +1437,92 @@ pub unsafe fn btreeset_remove_impl(
     }
 }
 
-/// Checks if a set contains an element.
+/// The element at `index` in sort order, or none past the end.
+///
+/// A set has no positional access of its own -- it is a tree, and its order is
+/// its elements' -- but a list has one, and everything written over a
+/// collection here is a loop over `len` and an index. This is what gives a set
+/// the same reach.
+///
+/// The leaves hold every element in order and are chained, so this walks to the
+/// leftmost leaf and follows the chain. That is O(index) per call, so a loop
+/// over the whole set is quadratic in its length. A cursor would be linear, and
+/// wants a kind of value the language does not have yet.
+pub unsafe fn btreeset_get_at_impl(
+    rt: &mut RtLocal,
+    set_value_ref: *const u8,
+    set_tydesc: rtdt::TyDescRef,
+    index: rtdt::IndexRepr,
+    option_value_out: *mut u8,
+    option_tydesc: rtdt::TyDescRef,
+    as_data: bool,
+) -> RtStatus {
+    unsafe {
+        if set_value_ref.is_null() || option_value_out.is_null() {
+            return RtStatus::Error;
+        }
+
+        let element_ty = set_tydesc.set_element_ty();
+        let set_ptr = set_value_ref as *const Set;
+
+        let option_layout = rtdt::layout::compute_option_layout(option_tydesc);
+        let option_tag_ptr = option_value_out as *mut u8;
+        let option_payload_ptr = option_value_out.add(option_layout.payload_offset as usize);
+
+        if index >= (*set_ptr).len.0 {
+            *option_tag_ptr = rtdt::OptionTag::None as u8;
+            return RtStatus::Ok;
+        }
+
+        let mut node = (*set_ptr).root as *mut SetNode;
+        if node.is_null() {
+            *option_tag_ptr = rtdt::OptionTag::None as u8;
+            return RtStatus::Ok;
+        }
+        // Down the left spine to the first leaf, then along the chain.
+        while matches!(read_node_tag(node), SetNodeTag::Internal) {
+            node = *internal_child_ptrs_ptr(node, element_ty.as_ptr());
+        }
+
+        let mut remaining = index;
+        loop {
+            let len = read_node_len(node) as rtdt::IndexRepr;
+            if remaining < len {
+                break;
+            }
+            remaining -= len;
+            let layout = rtdt::layout::compute_set_leaf_node_layout(element_ty);
+            let next = *((node as *mut u8).add(layout.next_leaf_offset as usize)
+                as *mut *mut SetNode);
+            if next.is_null() {
+                // The length said this element was there, so the chain and the
+                // length disagree.
+                *option_tag_ptr = rtdt::OptionTag::None as u8;
+                return RtStatus::Ok;
+            }
+            node = next;
+        }
+
+        let keys_ptr = leaf_keys_ptr(node, element_ty.as_ptr());
+        let slot = keys_ptr.add(remaining as usize * element_ty.size() as usize);
+
+        let rt_handle = rt as *mut RtLocal as crate::c::LocalRtHandle;
+        let status = if as_data {
+            crate::impls::boxing::data_clone_from_local(
+                rt_handle, slot, element_ty.as_ptr(), option_payload_ptr)
+        } else {
+            crate::impls::clone::clone_value(
+                rt_handle, slot, element_ty.as_ptr(), option_payload_ptr)
+        };
+        if status != RtStatus::Ok {
+            return status;
+        }
+        *option_tag_ptr = rtdt::OptionTag::Some as u8;
+        RtStatus::Ok
+    }
+}
+
+/// Checks if a set contains an element./// Checks if a set contains an element.
 pub unsafe fn btreeset_contains_impl(
     _rt: &mut RtLocal,
     btreeset_value_ref: *const u8,

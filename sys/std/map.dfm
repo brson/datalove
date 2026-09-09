@@ -14,6 +14,9 @@ import std.map_contains_key
 import std.map_get
 import std.map_insert
 import std.map_remove
+import std.map_key_at
+import std.map_value_at
+import std.list_push
 
 // The number of entries.
 fun len<K, V>(ref self: %{K = V}): index
@@ -70,4 +73,50 @@ fun insert_if_absent<K, V>(mut self: %{K = V}, key: K, value: V): bool
     insert(mut self, key, value)
     ret true
   end if
+end fun
+
+// The key of the entry at a position in sort order, or none past the end.
+//
+// A map is a tree, so this walks to the position rather than jumping to it, and
+// reaching every entry in turn costs more than it does for a list. It is here
+// so that anything written as a loop over `len` and an index -- which is how
+// everything over a collection is written -- can be written over a map too.
+//
+// The key and the value are reached separately rather than as a pair, because
+// a pair of two type parameters is a shape a collection of cannot yet hold.
+fun key_at<K, V>(ref self: %{K = V}, i: index): ?K
+  ret map_key_at(ref self, i)
+end fun
+
+// The value of the entry at a position in sort order.
+fun value_at<K, V>(ref self: %{K = V}, i: index): ?V
+  ret map_value_at(ref self, i)
+end fun
+
+// Every key, in sort order.
+fun keys<K, V>(ref self: %{K = V}): [K]
+  var built: [K] = []
+  let n = len(ref self)
+  var i: index = : index / 0
+  loop while i .< n
+    if key_at(ref self, i) |k|
+      list_push(mut built, k)
+    end if
+    set i = icall add_wrapping_index(i, : index / 1)
+  end loop
+  ret built
+end fun
+
+// Every value, in the order of its key.
+fun values<K, V>(ref self: %{K = V}): [V]
+  var built: [V] = []
+  let n = len(ref self)
+  var i: index = : index / 0
+  loop while i .< n
+    if value_at(ref self, i) |v|
+      list_push(mut built, v)
+    end if
+    set i = icall add_wrapping_index(i, : index / 1)
+  end loop
+  ret built
 end fun

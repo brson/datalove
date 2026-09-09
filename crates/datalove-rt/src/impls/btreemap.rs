@@ -1239,7 +1239,125 @@ unsafe fn btreemap_get_inner(
     }
 }
 
-/// Check if a map contains a given key.
+/// The key of the entry at `index` in sort order, or none past the end.
+///
+/// A map has no positional access of its own -- it is a tree, and its order is
+/// its keys' -- but a list has one, and everything written over a collection
+/// here is written as a loop over `len` and an index. This is what gives a map
+/// the same reach.
+///
+/// The leaves hold every entry in order and are chained, so this walks to the
+/// leftmost leaf and follows the chain. That is O(index) per call, so a loop
+/// over the whole map is quadratic in its length. A cursor would be linear, and
+/// wants a kind of value the language does not have yet.
+pub unsafe fn btreemap_key_at_impl(
+    rt: &mut RtLocal,
+    btreemap_value_ref: *const u8,
+    btreemap_tydesc: rtdt::TyDescRef,
+    index: rtdt::IndexRepr,
+    option_value_out: *mut u8,
+    option_tydesc: rtdt::TyDescRef,
+    as_data: bool,
+) -> RtStatus {
+    unsafe { btreemap_at_inner(rt, btreemap_value_ref, btreemap_tydesc, index,
+                               option_value_out, option_tydesc, as_data, true) }
+}
+
+/// The value of the entry at `index` in sort order. See `btreemap_key_at_impl`.
+pub unsafe fn btreemap_value_at_impl(
+    rt: &mut RtLocal,
+    btreemap_value_ref: *const u8,
+    btreemap_tydesc: rtdt::TyDescRef,
+    index: rtdt::IndexRepr,
+    option_value_out: *mut u8,
+    option_tydesc: rtdt::TyDescRef,
+    as_data: bool,
+) -> RtStatus {
+    unsafe { btreemap_at_inner(rt, btreemap_value_ref, btreemap_tydesc, index,
+                               option_value_out, option_tydesc, as_data, false) }
+}
+
+#[allow(clippy::too_many_arguments)]
+unsafe fn btreemap_at_inner(
+    rt: &mut RtLocal,
+    btreemap_value_ref: *const u8,
+    btreemap_tydesc: rtdt::TyDescRef,
+    index: rtdt::IndexRepr,
+    option_value_out: *mut u8,
+    option_tydesc: rtdt::TyDescRef,
+    as_data: bool,
+    want_key: bool,
+) -> RtStatus {
+    unsafe {
+        if btreemap_value_ref.is_null() || option_value_out.is_null() {
+            return RtStatus::Error;
+        }
+
+        let map_key_ty = btreemap_tydesc.map_key_ty();
+        let map_value_ty = btreemap_tydesc.map_value_ty();
+        let map_ptr = btreemap_value_ref as *const Map;
+
+        let option_layout = rtdt::layout::compute_option_layout(option_tydesc);
+        let option_tag_ptr = option_value_out as *mut u8;
+        let option_payload_ptr = option_value_out.add(option_layout.payload_offset as usize);
+
+        if index >= (*map_ptr).len.0 {
+            *option_tag_ptr = rtdt::OptionTag::None as u8;
+            return RtStatus::Ok;
+        }
+
+        // Down the left spine to the first leaf, then along the chain.
+        let mut node = (*map_ptr).root as *mut MapNode;
+        if node.is_null() {
+            *option_tag_ptr = rtdt::OptionTag::None as u8;
+            return RtStatus::Ok;
+        }
+        while matches!(read_node_tag(node), MapNodeTag::Internal) {
+            node = *internal_child_ptrs_ptr(node, map_key_ty);
+        }
+
+        let mut remaining = index;
+        loop {
+            let len = read_node_len(node) as rtdt::IndexRepr;
+            if remaining < len {
+                break;
+            }
+            remaining -= len;
+            let next = *leaf_next_ptr_mut(node, map_key_ty, map_value_ty);
+            if next.is_null() {
+                // The length said this entry was there, so the chain and the
+                // length disagree.
+                *option_tag_ptr = rtdt::OptionTag::None as u8;
+                return RtStatus::Ok;
+            }
+            node = next;
+        }
+
+        let (slot, slot_ty) = if want_key {
+            let keys_ptr = leaf_keys_ptr(node, map_key_ty, map_value_ty);
+            (keys_ptr.add(remaining as usize * map_key_ty.size() as usize), map_key_ty)
+        } else {
+            let values_ptr = leaf_values_ptr(node, map_key_ty, map_value_ty);
+            (values_ptr.add(remaining as usize * map_value_ty.size() as usize), map_value_ty)
+        };
+
+        let rt_handle = rt as *mut RtLocal as crate::c::LocalRtHandle;
+        let status = if as_data {
+            crate::impls::boxing::data_clone_from_local(
+                rt_handle, slot, slot_ty.as_ptr(), option_payload_ptr)
+        } else {
+            crate::impls::clone::clone_value(
+                rt_handle, slot, slot_ty.as_ptr(), option_payload_ptr)
+        };
+        if status != RtStatus::Ok {
+            return status;
+        }
+        *option_tag_ptr = rtdt::OptionTag::Some as u8;
+        RtStatus::Ok
+    }
+}
+
+/// Check if a map contains a given key./// Check if a map contains a given key.
 ///
 /// Writes `true` to `result_out` if the key is found, `false` otherwise.
 pub unsafe fn btreemap_contains_key_impl(
