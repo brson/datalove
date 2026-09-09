@@ -18,6 +18,15 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
     /// Threads rt_handle as implicit first argument to callee.
     /// For native rider functions, marshals args from pointers to i64 scalars
     /// and converts the i64 return value back to the destination type.
+    /// How a rider takes each of its parameters.
+    fn native_param_modes(&self, code_ref: &CodeRef) -> Vec<ParamMode> {
+        let CodeRef::Module { module, id } = code_ref else { return Vec::new() };
+        let Some(registry) = self.registry else { return Vec::new() };
+        registry.get_module_function_as_unit(*module, CodeUnitId(id.0))
+            .and_then(|unit| unit.native_context().map(|c| c.param_modes.clone()))
+            .unwrap_or_default()
+    }
+
     /// The shapes `code_ref` declared, read from the same place its parameter
     /// descriptors are, since the two together are its trailing arguments.
     fn callee_descriptor_shapes(
@@ -405,9 +414,35 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         let mut call_args = Vec::with_capacity(1 + args.len() * 2 + 2);
         call_args.push(rt_handle);
 
-        for arg in args.iter() {
-            let arg_ptr = self.get_operand_ptr(builder, arg)?;
-            let tydesc_addr = self.operand_tydesc(builder, arg)?;
+        // A collection of a type parameter is wrapped once it is owned, and a
+        // rider works on the collection itself with a descriptor beside it.
+        // Both are inside the wrapper, so an argument that arrives wrapped
+        // where the native wants the thing itself is read through first. The
+        // interpreter does this for every call; here it was done for calls to
+        // module functions and not for calls to riders, so a generic handing a
+        // list it had built to `list_push` gave it a `data`.
+        // Decided by the mode, not by the native's own parameter type: a
+        // generic native's types are erased too, so `mut self: [T]` reads
+        // `data` there just as the argument does. What tells them apart is that
+        // the native borrows its collection and takes its element, and only a
+        // borrow is passed through a wrapper.
+        let native_param_modes = self.native_param_modes(code_ref);
+        for (i, arg) in args.iter().enumerate() {
+            // One of our own borrowed parameters is already a pointer at the
+            // value with a descriptor beside it, never a wrapper around it,
+            // even though its type reads `data`. Same as at a call to a module
+            // function.
+            let forwarded = matches!(arg, Operand::Param(p)
+                if self.descriptor_values.contains_key(p));
+            let wants_unwrapping = !forwarded
+                && self.get_operand_type(arg)? == IrType::Data
+                && matches!(native_param_modes.get(i),
+                    Some(ParamMode::Ref) | Some(ParamMode::Mut));
+            let (arg_ptr, tydesc_addr) = if wants_unwrapping {
+                self.borrow_through_wrapper(builder, arg)?
+            } else {
+                (self.get_operand_ptr(builder, arg)?, self.operand_tydesc(builder, arg)?)
+            };
 
             call_args.push(arg_ptr);
             call_args.push(tydesc_addr);
