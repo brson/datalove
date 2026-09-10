@@ -204,6 +204,41 @@ pub fn contains_type_param(ty: &Type<'_>) -> bool {
     }
 }
 
+/// Whether one particular type parameter appears anywhere in a type.
+///
+/// Asked of a native's parameters, to find out whether an argument will bring
+/// the type along. A descriptor is structural, so a parameter under a
+/// collection or an option is named by the descriptor of the whole and does
+/// not need one of its own.
+pub fn mentions_type_param<'db>(ty: &Type<'db>, name: InternedText<'db>) -> bool {
+    match ty {
+        Type::Var(v) => *v == name,
+
+        Type::List(t) => mentions_type_param(&t.element_type, name),
+        Type::Set(t) => mentions_type_param(&t.element_type, name),
+        Type::Option(t) => mentions_type_param(&t.inner_type, name),
+        Type::Result(t) => mentions_type_param(&t.inner_type, name),
+        Type::Tensor(t) => mentions_type_param(&t.element_type, name),
+        Type::Term(t) => mentions_type_param(&t.payload, name),
+        Type::Map(t) => {
+            mentions_type_param(&t.key_type, name) || mentions_type_param(&t.value_type, name)
+        }
+
+        Type::AnonTuple(t) => t.fields.iter().any(|f| mentions_type_param(f, name)),
+        Type::AnonStruct(t) => t.fields.iter().any(|f| mentions_type_param(&f.ty, name)),
+        Type::Table(t) => t.columns.iter().any(|c| mentions_type_param(&c.ty, name)),
+        Type::Enum(t) => t.variants.iter().any(|v| {
+            v.payload.as_ref().is_some_and(|p| mentions_type_param(p, name))
+        }),
+
+        Type::Bool | Type::U8 | Type::I8 | Type::U16 | Type::I16
+        | Type::U32 | Type::I32 | Type::U64 | Type::I64
+        | Type::Index | Type::Offset | Type::F32 | Type::F64
+        | Type::Int | Type::String | Type::Data | Type::Error
+        | Type::Atom(_) => false,
+    }
+}
+
 /// The first type parameter sitting somewhere erasure cannot convert.
 ///
 /// Erasing a value into the shape a generic callee was compiled for converts

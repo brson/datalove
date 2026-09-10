@@ -13,7 +13,7 @@ use datalit::ast::TypeHint;
 
 use salsa::Database as Db;
 
-use datalove_datafun_ast::ast::{ParsedStatements, StmtFun, ParamMode};
+use datalove_datafun_ast::ast::{ParsedStatements, StmtFun, ParamMode, TypeBound};
 use datalove_datafun_ast::spans::DatafunSpans;
 
 // ============================================================================
@@ -114,6 +114,34 @@ pub struct RiderInterface<'db> {
     pub module_id: ModuleId<'db>,
     pub functions: Vec<(InternedText<'db>, TypeFunction<'db>)>,
     pub type_aliases: Vec<(InternedText<'db>, Type<'db>)>,
+    /// The generic natives, by name. A native with no type parameters is left
+    /// out, which is nearly all of them.
+    pub generic_functions: Vec<(InternedText<'db>, NativeGenerics<'db>)>,
+}
+
+/// What a call site needs to know about a generic native.
+///
+/// A native has no body to read, so all of this comes from its declaration.
+#[derive(Clone, Debug, Hash, PartialEq, Eq)]
+#[derive(salsa::SalsaValue)]
+pub struct NativeGenerics<'db> {
+    /// The type parameters as declared, in the order a call site's type
+    /// arguments are written.
+    pub type_params: Vec<InternedText<'db>>,
+
+    /// The bound on each, if it has one.
+    pub type_bounds: Vec<Option<TypeBound>>,
+
+    /// Which of the type parameters no argument determines.
+    ///
+    /// A native reads a type off a descriptor that came with a value, and a
+    /// descriptor is structural, so any parameter mentioned anywhere in the
+    /// arguments is already known -- `[T]` names its element type, `?T` names
+    /// its payload. One that appears only in the return type is not known, and
+    /// the call site has to hand a descriptor over for it.
+    ///
+    /// Held as indices into `type_params`.
+    pub undetermined: Vec<u32>,
 }
 
 // ============================================================================

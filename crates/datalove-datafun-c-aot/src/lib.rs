@@ -599,5 +599,10 @@ fn native_declaration(ctx: &datalove_datafun_ir::NativeContext) -> String {
             ", void* a{i}, const dtlv_tydesc_t* t{i}"));
     }
     params.push_str(", void* result_out, const dtlv_tydesc_t* result_tydesc");
+    // Then a descriptor for each type parameter no argument determines. See
+    // `NativeContext::descriptor_shapes` and `botdocs/native-abi.md`.
+    for i in 0..ctx.descriptor_shapes.len() {
+        params.push_str(&format!(", const dtlv_tydesc_t* s{i}"));
+    }
     format!("extern uint8_t {}({});", ctx.symbol, params)
 }

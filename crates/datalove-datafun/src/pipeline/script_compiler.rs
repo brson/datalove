@@ -997,34 +997,107 @@ impl<'db> ScriptCompiler<'db> {
     /// This replaces const initializer expressions with their pre-computed
     /// literal values. In skip_const_inlining mode, this is skipped so const
     /// expressions are evaluated at runtime instead of compile time.
-    /// Say what each call in the script's own body hands a generic that builds
-    /// a collection of its type parameter.
+    /// Say what each call in the script hands a generic that needs a
+    /// descriptor, and give the script's own functions the shapes their
+    /// callees need of them.
     ///
     /// The functions defined beside the script settled this among themselves
-    /// while they were lowered, but the script's body can also call into a
-    /// module, and only here are both to hand.
+    /// while they were lowered, but only what they said to each other: a call
+    /// into a module was not in front of them, because the modules are lowered
+    /// elsewhere. Here both are to hand, so the closure is run again with the
+    /// module functions and the natives standing as fixed points -- their
+    /// signatures are settled and nothing here may add to them.
     ///
     /// A script has no type parameters of its own, so it never forwards one;
     /// everything it hands over is a descriptor for a type it named outright.
     fn phase_resolve_shape_descriptors(&self, mut ir_unit: IrCodeUnit) -> IrCodeUnit {
-        use datalove_datafun_ir::{CodeRef, CodeUnitId, DescriptorShape};
+        use datalove_datafun_ir::{CodeRef, CodeUnitId, DescriptorShape, Instruction, IrModuleId};
+
+        /// A function this closure has to name, whether beside the script or
+        /// in a module.
+        #[derive(Clone, Copy, PartialEq, Eq, Hash)]
+        enum Key {
+            Local(u32),
+            Module(u32, u32),
+        }
 
         let registry = self.shared_context.module_registry.clone();
-        let nested: HashMap<u32, Vec<DescriptorShape>> = ir_unit.nested_units.iter()
-            .map(|u| (u.id.0, u.function_context()
-                .map(|c| c.descriptor_shapes.clone()).unwrap_or_default()))
-            .collect();
+        let module_shapes = |module: IrModuleId, id: CodeUnitId| -> Vec<DescriptorShape> {
+            let Some(unit) = registry.get_module_function_as_unit(module, id) else {
+                return Vec::new();
+            };
+            // A native says this from its own context, having no function
+            // context to say it in.
+            if let Some(native) = unit.native_context() {
+                return native.descriptor_shapes.clone();
+            }
+            unit.function_context()
+                .map(|c| c.descriptor_shapes.clone())
+                .unwrap_or_default()
+        };
+        let key_of = |code_ref: &CodeRef| -> Option<Key> {
+            match code_ref {
+                CodeRef::Local(id) => Some(Key::Local(id.0)),
+                CodeRef::Module { module, id } => Some(Key::Module(module.0, id.0)),
+                CodeRef::External { .. } => None,
+            }
+        };
+
+        let mut shapes: HashMap<Key, Vec<DescriptorShape>> = HashMap::new();
+        let mut calls: HashMap<Key, Vec<(Key, Vec<DescriptorShape>)>> = HashMap::new();
+
+        for unit in &ir_unit.nested_units {
+            let key = Key::Local(unit.id.0);
+            shapes.insert(key, unit.function_context()
+                .map(|c| c.descriptor_shapes.clone()).unwrap_or_default());
+            let mut sites = Vec::new();
+            for block in &unit.blocks {
+                for instr in &block.instructions {
+                    let Instruction::Call { func, type_args, .. } = instr else { continue };
+                    // Every callee's set is wanted, whether or not this site
+                    // binds anything: a module callee is a fixed point that has
+                    // to be in `shapes` for the closure to see it.
+                    if let CodeRef::Module { module, id } = func {
+                        shapes.entry(Key::Module(module.0, id.0)).or_insert_with(
+                            || module_shapes(*module, CodeUnitId(id.0)));
+                    }
+                    if type_args.is_empty() {
+                        continue;
+                    }
+                    if let Some(callee) = key_of(func) {
+                        sites.push((callee, type_args.clone()));
+                    }
+                }
+            }
+            calls.insert(key, sites);
+        }
+
+        // Refused only by a shape that grows without end, which the module path
+        // reports against the module that wrote it; a script naming the same
+        // functions gets the same answer there.
+        let _ = datalove_datafun_ir::close_shapes(&calls, &mut shapes);
+
+        for unit in &mut ir_unit.nested_units {
+            let Some(shape_set) = shapes.get(&Key::Local(unit.id.0)) else { continue };
+            if let datalove_datafun_ir::CodeUnitContext::Function(ctx) = &mut unit.context {
+                ctx.descriptor_shapes = shape_set.clone();
+            }
+        }
+
+        // A module function's set is read from the registry rather than from
+        // `shapes`, which holds only the ones some nested unit happened to
+        // call. The script's own body may call others.
         let callee_shapes = |code_ref: &CodeRef| -> Vec<DescriptorShape> {
             match code_ref {
-                CodeRef::Local(id) => nested.get(&id.0).cloned().unwrap_or_default(),
-                CodeRef::Module { module, id } => registry
-                    .get_module_function_as_unit(*module, CodeUnitId(id.0))
-                    .and_then(|u| u.function_context()
-                        .map(|c| c.descriptor_shapes.clone()))
-                    .unwrap_or_default(),
+                CodeRef::Local(id) => shapes.get(&Key::Local(id.0)).cloned().unwrap_or_default(),
+                CodeRef::Module { module, id } => module_shapes(*module, CodeUnitId(id.0)),
                 CodeRef::External { .. } => Vec::new(),
             }
         };
+        for unit in &mut ir_unit.nested_units {
+            let own = shapes.get(&Key::Local(unit.id.0)).cloned().unwrap_or_default();
+            let _ = datalove_datafun_ir::resolve_call_descriptors(unit, &own, &callee_shapes);
+        }
         // Failure here means the script would forward a type parameter, which
         // it has none of, so it cannot happen.
         let _ = datalove_datafun_ir::resolve_call_descriptors(

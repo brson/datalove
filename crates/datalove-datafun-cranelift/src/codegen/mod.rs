@@ -169,6 +169,12 @@ pub fn build_native_signature(
     sig.params.push(cl_ir::AbiParam::new(PTR_TYPE)); // result out ptr
     sig.params.push(cl_ir::AbiParam::new(PTR_TYPE)); // result tydesc ptr
 
+    // Then a descriptor for each type parameter no argument determines. See
+    // `NativeContext::descriptor_shapes`; almost every native has none.
+    for _ in &ctx.descriptor_shapes {
+        sig.params.push(cl_ir::AbiParam::new(PTR_TYPE));
+    }
+
     // RtStatus return (i8).
     sig.returns.push(cl_ir::AbiParam::new(cl_ir::types::I8));
 

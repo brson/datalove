@@ -2245,3 +2245,63 @@ pub extern "C-unwind" fn dlr_std__float_neg(
         ) as u8
     }
 }
+
+// Constants of a type parameter bounded to `fixedint`. The type parameter
+// appears only in the return, so no argument brings its descriptor and the
+// call site hands one over after the out parameter.
+
+#[no_mangle]
+pub extern "C-unwind" fn dlr_std__fixedint_zero(
+    rt: *mut u8,
+    out: *mut u8, out_td: *const u8,
+    value_td: *const u8,
+) -> u8 {
+    unsafe {
+        datalove_rt::c::dtlv_rti_dyn_const(
+            rt, 0, out, out_td as *const rtdt::TyDesc,
+            value_td as *const rtdt::TyDesc,
+        ) as u8
+    }
+}
+
+#[no_mangle]
+pub extern "C-unwind" fn dlr_std__fixedint_one(
+    rt: *mut u8,
+    out: *mut u8, out_td: *const u8,
+    value_td: *const u8,
+) -> u8 {
+    unsafe {
+        datalove_rt::c::dtlv_rti_dyn_const(
+            rt, 1, out, out_td as *const rtdt::TyDesc,
+            value_td as *const rtdt::TyDesc,
+        ) as u8
+    }
+}
+
+#[no_mangle]
+pub extern "C-unwind" fn dlr_std__fixedint_min_value(
+    rt: *mut u8,
+    out: *mut u8, out_td: *const u8,
+    value_td: *const u8,
+) -> u8 {
+    unsafe {
+        datalove_rt::c::dtlv_rti_dyn_const(
+            rt, 2, out, out_td as *const rtdt::TyDesc,
+            value_td as *const rtdt::TyDesc,
+        ) as u8
+    }
+}
+
+#[no_mangle]
+pub extern "C-unwind" fn dlr_std__fixedint_max_value(
+    rt: *mut u8,
+    out: *mut u8, out_td: *const u8,
+    value_td: *const u8,
+) -> u8 {
+    unsafe {
+        datalove_rt::c::dtlv_rti_dyn_const(
+            rt, 3, out, out_td as *const rtdt::TyDesc,
+            value_td as *const rtdt::TyDesc,
+        ) as u8
+    }
+}

@@ -1798,7 +1798,8 @@ impl<'a> FunctionCodegenContext<'a> {
                 if let Some(native) = unit.native_context() {
                     let symbol = native.symbol.clone();
                     let param_modes = native.param_modes.clone();
-                    return self.emit_native_call(out, dest, &symbol, args, &param_modes);
+                    return self.emit_native_call(
+                        out, dest, &symbol, args, &param_modes, shape_descriptors);
                 }
             }
         }
@@ -1936,26 +1937,6 @@ impl<'a> FunctionCodegenContext<'a> {
         let dest_addr = self.value_addr(dest);
         writeln!(out, "    dtlv_rti_data_from_local(rt, &{name}, s{shape}, {dest_addr});").unwrap();
         Ok(())
-    }
-
-    /// The shapes `func` declared, found beside its parameter descriptors.
-    fn callee_descriptor_shapes(
-        &self,
-        func: &CodeRef,
-    ) -> Vec<datalove_datafun_ir::DescriptorShape> {
-        let unit = match func {
-            CodeRef::Module { module, id } => {
-                self.registry.get_module_function_as_unit(*module, *id)
-            }
-            CodeRef::Local(id) => {
-                let lookup_unit = self.parent_unit.unwrap_or(self.unit);
-                lookup_unit.nested_units.iter().find(|nested| nested.id == *id)
-            }
-            CodeRef::External { .. } => None,
-        };
-        unit.and_then(|u| u.function_context())
-            .map(|ctx| ctx.descriptor_shapes.clone())
-            .unwrap_or_default()
     }
 
     /// The shapes this function itself declared.
@@ -2102,9 +2083,8 @@ impl<'a> FunctionCodegenContext<'a> {
     /// parameter given the same way, and the status the function returns says
     /// whether it wrote one.
     ///
-    /// A descriptor comes from the argument's own type, which is what it is
-    /// here because a caller-supplied one never reaches this backend: a
-    /// function that takes one is refused in `emit_function`.
+    /// A type parameter no argument determines has its descriptor handed over
+    /// after the out parameter, in the order the native declared its shapes.
     fn emit_native_call(
         &mut self,
         out: &mut String,
@@ -2112,6 +2092,7 @@ impl<'a> FunctionCodegenContext<'a> {
         symbol: &str,
         args: &[Operand],
         native_param_modes: &[datalove_datafun_ir::ParamMode],
+        shape_descriptors: &[datalove_datafun_ir::DescriptorRef],
     ) -> Result<(), CAotError> {
         let mut call_args = String::from("rt");
         // A collection of a type parameter is wrapped once it is owned, and a
@@ -2153,6 +2134,18 @@ impl<'a> FunctionCodegenContext<'a> {
         let dest_addr = self.value_addr(dest);
         let dest_tydesc = self.tydesc_name(&dest_ty);
         write!(&mut call_args, ", {}, &{}", dest_addr, dest_tydesc).unwrap();
+
+        for r in shape_descriptors {
+            match r {
+                datalove_datafun_ir::DescriptorRef::Static(ty) => {
+                    let name = self.tydesc_name(ty);
+                    write!(&mut call_args, ", &{}", name).unwrap()
+                }
+                datalove_datafun_ir::DescriptorRef::Own(i) => {
+                    write!(&mut call_args, ", s{}", i).unwrap()
+                }
+            }
+        }
 
         writeln!(out, "    {}({});", symbol, call_args).unwrap();
         Ok(())

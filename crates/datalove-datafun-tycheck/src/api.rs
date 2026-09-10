@@ -776,13 +776,23 @@ fn resolve_module_imports_internal<'db>(
                             }
                         })
                         .collect();
+                    // A rider function may be generic, and a call site needs
+                    // its type parameters in order: that is how the type
+                    // arguments are recorded, which is how the descriptors a
+                    // native wants are worked out. See `NativeGenerics`.
+                    let generics = rider.generic_functions.iter()
+                        .find(|(n, _)| *n == item_name)
+                        .map(|(_, g)| g.clone());
+                    let (type_params, type_bounds) = match &generics {
+                        Some(g) => (g.type_params.clone(), g.type_bounds.clone()),
+                        None => (Vec::new(), Vec::new()),
+                    };
                     let synthetic_fun = StmtFun::new(
                         db,
                         Some(synthetic_module_id),
                         item_name,
-                        // A rider function is not generic.
-                        Vec::new(),
-                        Vec::new(),
+                        type_params,
+                        type_bounds,
                         synthetic_params,
                         None,
                         vec![],

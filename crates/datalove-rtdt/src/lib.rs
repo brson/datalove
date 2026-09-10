@@ -729,6 +729,34 @@ impl DynOp {
     }
 }
 
+/// A constant every fixed-width integer has.
+///
+/// A literal has to be written at some type, and inside a generic the type is
+/// not known where the literal is written. These are asked for by number and
+/// made at whatever type the call site's descriptor names.
+///
+/// Numbered like `DynOp`, and for the same reason: the number is the ABI.
+#[repr(u8)]
+#[derive(Debug, PartialEq, Eq, Copy, Clone)]
+pub enum DynConst {
+    Zero = 0,
+    One = 1,
+    MinValue = 2,
+    MaxValue = 3,
+}
+
+impl DynConst {
+    pub fn from_code(code: u8) -> core::option::Option<DynConst> {
+        core::option::Option::Some(match code {
+            0 => DynConst::Zero,
+            1 => DynConst::One,
+            2 => DynConst::MinValue,
+            3 => DynConst::MaxValue,
+            _ => return None,
+        })
+    }
+}
+
 /// A one-operand operation on a value whose type only a descriptor says.
 ///
 /// Numbered like `DynOp`, and for the same reason: the number is the ABI.

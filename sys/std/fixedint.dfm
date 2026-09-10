@@ -12,13 +12,48 @@
 // -- `abs` is not a thing an unsigned integer does, and `count_ones` returns a
 // width the caller has to name -- they keep their own.
 //
-// Nothing here can write a literal, because a literal has to be written at
-// some type and the type is what nobody has picked yet. So there is no
-// `zero`, no `min_value` and nothing built on one; those stay per-width.
+// A literal still cannot be written at a type nobody has named, so the
+// constants every fixed-width integer has -- `zero`, `one`, `min_value`,
+// `max_value` -- come from the rider instead, which is handed a descriptor by
+// the call site and makes the value from that.
 
 require rider std
 import std.list_len
 import std.list_get
+import std.fixedint_zero
+import std.fixedint_one
+import std.fixedint_min_value
+import std.fixedint_max_value
+
+// Zero, at whatever type the caller wants.
+//
+// A literal has to be written at some type, and inside a generic the type is
+// what nobody has picked yet. So the constants come from the rider, which is
+// handed a descriptor by the call site and makes the value from that.
+fun zero<T>(): T with { T is fixedint, }
+  ret fixedint_zero()
+end fun
+
+// One.
+fun one<T>(): T with { T is fixedint, }
+  ret fixedint_one()
+end fun
+
+// The smallest value the type can hold, which is zero when it is unsigned.
+fun min_value<T>(): T with { T is fixedint, }
+  ret fixedint_min_value()
+end fun
+
+// The largest value the type can hold.
+fun max_value<T>(): T with { T is fixedint, }
+  ret fixedint_max_value()
+end fun
+
+// Whether self is zero.
+fun is_zero<T>(self: T): bool with { T is fixedint, }
+  let z: T = zero()
+  ret self == z
+end fun
 
 // The smaller of two, or self when they are equal.
 fun min<T>(self: T, other: T): T with { T is fixedint, }
@@ -84,6 +119,78 @@ fun sorted_pair<T>(self: T, other: T): (T, T) with { T is fixedint, }
   end if
 end fun
 
+// Whether self is positive, which no unsigned value but zero is.
+fun is_positive<T>(self: T): bool with { T is fixedint, }
+  let z: T = zero()
+  ret self .> z
+end fun
+
+// Whether self is negative, which no unsigned value is.
+fun is_negative<T>(self: T): bool with { T is fixedint, }
+  let z: T = zero()
+  ret self .< z
+end fun
+
+// The sum, or none when it runs past the width.
+//
+// The bare operators early-return, which is what makes them worth having; a
+// caller that wants the answer as a value rather than as a return asks here.
+fun add_checked<T>(self: T, other: T): ?T with { T is fixedint, }
+  ret some (self +? other)
+end fun
+
+// The difference, or none when it runs past the width.
+fun sub_checked<T>(self: T, other: T): ?T with { T is fixedint, }
+  ret some (self -? other)
+end fun
+
+// The product, or none when it runs past the width.
+fun mul_checked<T>(self: T, other: T): ?T with { T is fixedint, }
+  ret some (self *? other)
+end fun
+
+// The quotient, or none when the divisor is zero or the answer will not fit.
+fun div_checked<T>(self: T, other: T): ?T with { T is fixedint, }
+  ret some (self /? other)
+end fun
+
+// The negation, or an error when the value has no counterpart.
+//
+// A result rather than an option because `-?` is refused for unsigned
+// operands, and a bounded parameter may turn out to be one.
+fun neg_checked<T>(self: T): !T with { T is fixedint, }
+  ret ok (-! self)
+end fun
+
+// The sum, stopped at the end of the range rather than running past it.
+//
+// Which end depends on the sign of what was added, and an unsigned type has
+// only the one it can reach.
+fun add_saturating<T>(self: T, other: T): T with { T is fixedint, }
+  if add_checked(self, other@) |total|
+    ret total
+  else
+    if is_negative(other)
+      ret min_value()
+    else
+      ret max_value()
+    end if
+  end if
+end fun
+
+// The difference, stopped at the end of the range rather than running past it.
+fun sub_saturating<T>(self: T, other: T): T with { T is fixedint, }
+  if sub_checked(self, other@) |total|
+    ret total
+  else
+    if is_negative(other)
+      ret max_value()
+    else
+      ret min_value()
+    end if
+  end if
+end fun
+
 // Whether self lies in the range, which is min_val below and max_val above.
 fun in_range<T>(self: T, min_val: T, max_val: T): bool with { T is fixedint, }
   let inside = self >= min_val and self <= max_val
@@ -141,13 +248,13 @@ fun greatest<T>(ref self: [T]): ?T with { T is fixedint, }
   ret best
 end fun
 
-// Every element added together, or none when there are none.
+// Every element added together, and zero when there are none.
 //
-// The running total starts at the first element rather than at zero, because
-// a zero cannot be written at a type nobody has named. None also comes back
-// when the total runs past the width, which is what `+?` reports.
+// None comes back when the total runs past the width, which is what `+?`
+// reports.
 fun sum<T>(ref self: [T]): ?T with { T is fixedint, }
-  var total: ?T = none
+  let start: T = zero()
+  var total: ?T = some start
   let n = list_len(ref self)
   var i: index = : index / 0
   loop while i .< n
@@ -166,11 +273,12 @@ fun sum<T>(ref self: [T]): ?T with { T is fixedint, }
   ret total
 end fun
 
-// Every element multiplied together, or none when there are none.
+// Every element multiplied together, and one when there are none.
 //
-// None also comes back when the product runs past the width, as `sum`'s does.
+// None comes back when the product runs past the width, as `sum`'s does.
 fun product<T>(ref self: [T]): ?T with { T is fixedint, }
-  var running: ?T = none
+  let start: T = one()
+  var running: ?T = some start
   let n = list_len(ref self)
   var i: index = : index / 0
   loop while i .< n

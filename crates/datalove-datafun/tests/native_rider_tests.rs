@@ -70,7 +70,8 @@ end fun
 
     // Register the native int_add implementation.
     interp.native_table_mut().register("dlr_testlib__int_add", Box::new(
-        |_rt: datalove_rt::c::LocalRtHandle, args: &[Value], dest: Destination| {
+        |_rt: datalove_rt::c::LocalRtHandle, args: &[Value], dest: Destination,
+         _supplied: &[*const datalove_rtdt::TyDesc]| {
             unsafe {
                 let a = *(args[0].ptr as *const i32);
                 let b = *(args[1].ptr as *const i32);

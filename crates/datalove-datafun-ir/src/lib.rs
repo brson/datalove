@@ -2145,7 +2145,7 @@ pub fn resolve_call_descriptors(
     Ok(())
 }
 
-/// The type parameters whose shapes would grow without end./// The type parameters whose shapes would grow without end.
+/// The type parameters whose shapes would grow without end.
 ///
 /// Nodes are a function and one of its type parameters. A call from `f` to `g`
 /// binding `g`'s parameter `i` to a shape holding `f`'s parameter `j` draws an
@@ -2359,6 +2359,16 @@ pub struct NativeContext {
     pub return_type: IrType,
     /// Linker symbol, e.g. "dlr_std__list_push".
     pub symbol: String,
+    /// Descriptors the call site has to hand over, after the arguments.
+    ///
+    /// A native reads a type off a descriptor that came with a value. A type
+    /// parameter appearing only in the return type has no such value, so it is
+    /// listed here as `Param(i)` and the call site passes a descriptor for it.
+    /// Every other native has this empty and is called exactly as before.
+    ///
+    /// A native makes no calls, so unlike a function's this never grows in the
+    /// closure: it is what the signature says and nothing more.
+    pub descriptor_shapes: Vec<DescriptorShape>,
 }
 
 /// Context determining how a code unit executes.

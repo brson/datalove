@@ -640,6 +640,27 @@ pub unsafe extern "C-unwind" fn dtlv_rti_dyn_unop(
     unsafe { crate::impls::dyn_ops::dyn_unop(rt, op, value, value_tydesc, out, out_tydesc) }
 }
 
+/// Make a constant at the type `value_tydesc` names.
+///
+/// `which` is a `rtdt::DynConst`. The descriptor is the one the call site had
+/// to hand over, because a type parameter appearing only in a native's return
+/// type has no argument to bring it along.
+#[unsafe(no_mangle)]
+pub unsafe extern "C-unwind" fn dtlv_rti_dyn_const(
+    rt: LocalRtHandle,
+    which: u8,
+    out: *mut u8,
+    out_tydesc: *const rtdt::TyDesc,
+    value_tydesc: *const rtdt::TyDesc,
+) -> RtStatus {
+    debug_assert!(!out.is_null(), "out is null");
+    debug_assert!(!value_tydesc.is_null(), "value_tydesc is null");
+    let Some(which) = rtdt::DynConst::from_code(which) else {
+        return RtStatus::Error;
+    };
+    unsafe { crate::impls::dyn_ops::dyn_const(rt, which, out, out_tydesc, value_tydesc) }
+}
+
 /// Negate an integer whose type only its descriptor says, writing to
 /// `overflow_out` whether the answer fit.
 #[unsafe(no_mangle)]

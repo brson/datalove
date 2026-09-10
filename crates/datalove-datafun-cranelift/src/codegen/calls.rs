@@ -27,28 +27,6 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             .unwrap_or_default()
     }
 
-    /// The shapes `code_ref` declared, read from the same place its parameter
-    /// descriptors are, since the two together are its trailing arguments.
-    fn callee_descriptor_shapes(
-        &self,
-        code_ref: &CodeRef,
-    ) -> Vec<datalove_datafun_ir::DescriptorShape> {
-        match code_ref {
-            CodeRef::Local(id) | CodeRef::External { id, .. } => {
-                self.local_funcs.get(&CodeUnitId(id.0))
-                    .map(|callee| callee.descriptor_shapes.clone())
-                    .unwrap_or_default()
-            }
-            CodeRef::Module { module, id } => {
-                let Some(registry) = self.registry else { return Vec::new() };
-                registry.get_module_function_as_unit(*module, CodeUnitId(id.0))
-                    .and_then(|unit| unit.function_context()
-                        .map(|c| c.descriptor_shapes.clone()))
-                    .unwrap_or_default()
-            }
-        }
-    }
-
     /// The parameters of `code_ref` whose descriptor the call site supplies.
     ///
     /// This has to agree with what `build_signature_for_func` put in the
@@ -272,7 +250,8 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             if let Some(registry) = self.registry {
                 if let Some(unit) = registry.get_module_function_as_unit(*module, ir_func_id) {
                     if unit.native_context().is_some() {
-                        return self.compile_native_call(builder, dest, code_ref, args);
+                        return self.compile_native_call(
+                            builder, dest, code_ref, args, shape_descriptors);
                     }
                 }
             }
@@ -401,6 +380,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         dest: ValueId,
         code_ref: &CodeRef,
         args: &[Operand],
+        shape_descriptors: &[datalove_datafun_ir::DescriptorRef],
     ) -> Result<(), CraneliftError> {
         use datalove_datafun_ir::IrType;
 
@@ -466,6 +446,24 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
 
         call_args.push(dest_ptr);
         call_args.push(dest_tydesc_addr);
+
+        // Then a descriptor for each type parameter no argument determines,
+        // read from what the shape closure settled rather than derived here,
+        // so this side and `build_native_signature` cannot disagree.
+        for r in shape_descriptors {
+            let value = match r {
+                datalove_datafun_ir::DescriptorRef::Static(ty) => {
+                    self.static_tydesc(builder, ty)?
+                }
+                datalove_datafun_ir::DescriptorRef::Own(i) => {
+                    *self.shape_descriptor_values.get(*i as usize).ok_or_else(|| {
+                        CraneliftError::Codegen(format!(
+                            "shape {} was declared but never passed", i))
+                    })?
+                }
+            };
+            call_args.push(value);
+        }
 
         // Declare callee and emit call.
         let callee_ref = self.module.declare_func_in_func(callee_func_id, builder.func);

@@ -149,6 +149,48 @@ pub fn parse_module_graph_with_mode<'db>(
     }
 }
 
+/// What each generic native declares about its type parameters.
+///
+/// The declaration order comes from the statement, because that is the order a
+/// call site writes its type arguments in; whether a parameter is determined
+/// comes from the resolved signature, because that is where a type hint has
+/// become a type. See `NativeGenerics`.
+fn generic_natives<'db>(
+    db: &'db dyn salsa::Database,
+    statements: &[datalove_datafun_ast::ast::Statement<'db>],
+    functions: &[(InternedText<'db>, datalove_datafun_common::TypeFunction<'db>)],
+) -> Vec<(InternedText<'db>, datalove_datafun_common::NativeGenerics<'db>)> {
+    use datalove_datafun_ast::ast::Statement;
+    use datalove_datafun_common::{NativeGenerics, generics::mentions_type_param};
+
+    let mut found = Vec::new();
+    for statement in statements {
+        let Statement::NativeFun(native) = statement else { continue };
+        if native.type_params.is_empty() {
+            continue;
+        }
+        let Some((_, signature)) = functions.iter().find(|(n, _)| *n == native.name) else {
+            continue;
+        };
+        let param_types = signature.param_types(db);
+        let undetermined: Vec<u32> = native.type_params.iter().enumerate()
+            .filter(|(_, name)| !param_types.iter().any(|ty| match ty {
+                datalove_datafun_common::Type::Datalit(dt) =>
+                    mentions_type_param(dt, **name),
+                // A function type has no type parameters inside it to find.
+                datalove_datafun_common::Type::Function(_) => false,
+            }))
+            .map(|(i, _)| i as u32)
+            .collect();
+        found.push((native.name, NativeGenerics {
+            type_params: native.type_params.clone(),
+            type_bounds: native.type_bounds.clone(),
+            undetermined,
+        }));
+    }
+    found
+}
+
 /// Build resolved riders from raw source strings inside a tracked context.
 ///
 /// Parses each rider source, extracts function signatures via name resolution,
@@ -174,11 +216,14 @@ fn build_resolved_riders_from_sources<'db>(
         let rider_name = InternedText::new(db, name.clone());
         let rider_path = format!("@rider/{}", name);
         let module_id = ModuleId::new(db, rider_path);
+        let generic_functions = generic_natives(
+            db, &parse_result.parsed.statements, &collected.functions);
         rider_interfaces.insert(name.clone(), RiderInterface {
             name: rider_name,
             module_id,
             functions: collected.functions,
             type_aliases: collected.type_aliases,
+            generic_functions,
         });
     }
 

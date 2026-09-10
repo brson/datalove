@@ -1056,10 +1056,25 @@ call site that binds the parameter to anything else is refused.
 
 A value of a bounded parameter is still linear, so handing one to a function
 twice asks for a clone; reading one as the operand of an operator does not move
-it. A literal cannot be written at type `T`, so a function wanting a constant
-has to be given one — which is why `sys/std/fixedint` has no `zero` and no
-`min_value`, and why its folds start from the first element rather than from a
-neutral one.
+it.
+
+A literal cannot be written at type `T`, because a literal has to be written at
+some type and inside a generic the type is what nobody has picked yet. The
+constants every fixed-width integer has come from `sys/std/fixedint` instead —
+`zero`, `one`, `min_value`, `max_value` — which take theirs from a descriptor
+the call site hands over. That works because the type parameter appears only in
+the return, so the call site is the one place that knows; see
+[the native ABI](native-abi.md). The consequence is that such a call has to say
+what it wants:
+
+```
+let z: T = zero()      -- the binding says `T`, so this works
+ret self == zero()     -- refused: nothing on this line says what `T` is
+```
+
+An operand is read for what it is rather than checked against what is wanted,
+so a call in operand position has nothing to take its type from. That is
+refused rather than guessed at.
 
 **What a bare type parameter does not admit.** Anything that would need to know
 what the type is. A `T` can be moved, dropped, cloned, printed, stored, returned and

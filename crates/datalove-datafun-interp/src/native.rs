@@ -13,7 +13,19 @@ use crate::error::InterpError;
 /// Receives the runtime handle, argument values, and a destination for the return value.
 /// Argument values follow the same conventions as interpreter calls: In params are
 /// moved values, Out params are destination pointers, Ref/Mut params are borrowed pointers.
-pub type NativeFnImpl = Box<dyn Fn(LocalRtHandle, &[Value], Destination) -> Result<(), InterpError>>;
+/// A native's implementation, called with the arguments, the destination, and
+/// the descriptors the call site had to supply.
+///
+/// The descriptors are for the type parameters no argument determines; see
+/// `NativeContext::descriptor_shapes`. Almost every native has none.
+pub type NativeFnImpl = Box<
+    dyn Fn(
+        LocalRtHandle,
+        &[Value],
+        Destination,
+        &[*const datalove_rtdt::TyDesc],
+    ) -> Result<(), InterpError>,
+>;
 
 /// Table of registered native function implementations.
 ///
@@ -40,10 +52,11 @@ impl NativeFunctionTable {
         rt: LocalRtHandle,
         args: &[Value],
         dest: Destination,
+        supplied: &[*const datalove_rtdt::TyDesc],
     ) -> Result<(), InterpError> {
         let f = self.table.get(symbol)
             .unwrap_or_else(|| panic!("native function not registered: {}", symbol));
-        f(rt, args, dest)
+        f(rt, args, dest, supplied)
     }
 
     /// Check if a symbol is registered.

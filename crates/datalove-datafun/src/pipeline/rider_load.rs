@@ -8,6 +8,7 @@ use rmx::std::path::Path;
 
 use datalove_datafun_interp::{NativeFunctionTable, Value, Destination, InterpError};
 use datalove_rt::c::LocalRtHandle;
+use datalove_rtdt as rtdt;
 
 use super::{CompiledModules, ScriptExecutor, WorkspaceDescriptor, rider_build};
 
@@ -127,30 +128,34 @@ fn register_native(
     native_table: &mut NativeFunctionTable,
 ) {
     let symbol_name = symbol.to_string();
-    let bridge: Box<dyn Fn(LocalRtHandle, &[Value], Destination) -> Result<(), InterpError>> =
-        Box::new(move |rt, args, dest| {
-            call_native_bridge(fn_ptr, rt, args, dest, &symbol_name)
+    let bridge: datalove_datafun_interp::NativeFnImpl =
+        Box::new(move |rt, args, dest, supplied| {
+            call_native_bridge(fn_ptr, rt, args, dest, supplied, &symbol_name)
         });
 
     native_table.register(symbol.to_string(), bridge);
 }
 
-/// Bridge from interpreter values to rider C ABI.
+/// Bridge from interpreter values to the rider C ABI.
 ///
-/// Builds a flat array of pointer-sized args: `[rt, arg0_ptr, arg0_tydesc, ..., result_out, result_tydesc]`
-/// and calls the native function via `libffi`-style dispatch.
+/// See `botdocs/native-abi.md` for the shape this builds. In short:
 ///
-/// The C function signature is:
-/// `extern "C-unwind" fn(rt, ptr, tydesc, ptr, tydesc, ..., out_ptr, out_tydesc) -> u8`
+/// ```text
+/// fn(rt, arg0_ptr, arg0_td, ..., out_ptr, out_td, shape_td...) -> u8
+/// ```
+///
+/// Every word is pointer-sized, so the call is made by transmuting to a
+/// function type of the right arity. The arities are listed rather than
+/// generated because there is no variadic form that would keep the C ABI.
 fn call_native_bridge(
     fn_ptr: *const (),
     rt: LocalRtHandle,
     args: &[Value],
     dest: Destination,
+    supplied: &[*const rtdt::TyDesc],
     _symbol: &str,
 ) -> Result<(), InterpError> {
-    // Build flat arg array: [rt, arg0_ptr, arg0_tydesc, ..., dest_ptr, dest_tydesc]
-    let mut c_args: Vec<usize> = Vec::with_capacity(1 + args.len() * 2 + 2);
+    let mut c_args: Vec<usize> = Vec::with_capacity(1 + args.len() * 2 + 2 + supplied.len());
     c_args.push(rt as usize);
     for arg in args {
         c_args.push(arg.ptr as usize);
@@ -158,44 +163,38 @@ fn call_native_bridge(
     }
     c_args.push(dest.ptr as usize);
     c_args.push(dest.tydesc as usize);
+    for tydesc in supplied {
+        c_args.push(*tydesc as usize);
+    }
 
-    // Call the C function. Dispatch based on total C arg count.
+    /// Transmute to a function of `n` pointer arguments and call it.
+    macro_rules! arity {
+        ($($n:literal => $($i:literal),+ ;)+) => {
+            match c_args.len() {
+                $($n => {
+                    let f: extern "C-unwind" fn($(arity!(@ptr $i)),+) -> u8 =
+                        std::mem::transmute(fn_ptr);
+                    f($(c_args[$i]),+)
+                })+
+                n => todo!("native functions with {} C args not yet supported", n),
+            }
+        };
+        (@ptr $i:literal) => { usize };
+    }
+
     let _status: u8 = unsafe {
-        type Ptr = usize;
-        match c_args.len() {
-            // 0 args + result = rt, out, out_td
-            3 => {
-                let f: extern "C-unwind" fn(Ptr, Ptr, Ptr) -> u8 =
-                    std::mem::transmute(fn_ptr);
-                f(c_args[0], c_args[1], c_args[2])
-            }
-            // 1 arg + result = rt, p, td, out, out_td
-            5 => {
-                let f: extern "C-unwind" fn(Ptr, Ptr, Ptr, Ptr, Ptr) -> u8 =
-                    std::mem::transmute(fn_ptr);
-                f(c_args[0], c_args[1], c_args[2], c_args[3], c_args[4])
-            }
-            // 2 args + result = rt, p, td, p, td, out, out_td
-            7 => {
-                let f: extern "C-unwind" fn(Ptr, Ptr, Ptr, Ptr, Ptr, Ptr, Ptr) -> u8 =
-                    std::mem::transmute(fn_ptr);
-                f(c_args[0], c_args[1], c_args[2], c_args[3], c_args[4], c_args[5], c_args[6])
-            }
-            // 3 args + result
-            9 => {
-                let f: extern "C-unwind" fn(Ptr, Ptr, Ptr, Ptr, Ptr, Ptr, Ptr, Ptr, Ptr) -> u8 =
-                    std::mem::transmute(fn_ptr);
-                f(c_args[0], c_args[1], c_args[2], c_args[3], c_args[4], c_args[5], c_args[6], c_args[7], c_args[8])
-            }
-            // 4 args + result
-            11 => {
-                let f: extern "C-unwind" fn(Ptr, Ptr, Ptr, Ptr, Ptr, Ptr, Ptr, Ptr, Ptr, Ptr, Ptr) -> u8 =
-                    std::mem::transmute(fn_ptr);
-                f(c_args[0], c_args[1], c_args[2], c_args[3], c_args[4], c_args[5], c_args[6], c_args[7], c_args[8], c_args[9], c_args[10])
-            }
-            n => {
-                todo!("native functions with {} C args not yet supported", n);
-            }
+        arity! {
+            3  => 0, 1, 2;
+            4  => 0, 1, 2, 3;
+            5  => 0, 1, 2, 3, 4;
+            6  => 0, 1, 2, 3, 4, 5;
+            7  => 0, 1, 2, 3, 4, 5, 6;
+            8  => 0, 1, 2, 3, 4, 5, 6, 7;
+            9  => 0, 1, 2, 3, 4, 5, 6, 7, 8;
+            10 => 0, 1, 2, 3, 4, 5, 6, 7, 8, 9;
+            11 => 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10;
+            12 => 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11;
+            13 => 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12;
         }
     };
 

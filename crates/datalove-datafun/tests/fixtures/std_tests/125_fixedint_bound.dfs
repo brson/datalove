@@ -11,6 +11,20 @@ import fixedint.greatest
 import fixedint.sum
 import fixedint.product
 import fixedint.is_sorted
+import fixedint.zero
+import fixedint.one
+import fixedint.min_value
+import fixedint.max_value
+import fixedint.is_zero
+import fixedint.is_positive
+import fixedint.is_negative
+import fixedint.add_checked
+import fixedint.sub_checked
+import fixedint.mul_checked
+import fixedint.div_checked
+import fixedint.neg_checked
+import fixedint.add_saturating
+import fixedint.sub_saturating
 
 // A type parameter bounded to `fixedint`.
 //
@@ -113,9 +127,44 @@ let folded = (least(ref ns), greatest(ref ns), sum(ref ns), product(ref ns),
 let overflowed = (sum(ref over), product(ref over))
 let ascending = (is_sorted(ref sorted), sum(ref sorted), least(ref sorted),
                  greatest(ref sorted))
+// The folds start from the type's own zero and one now, so an empty list has
+// an answer rather than none. `least` and `greatest` still have none, having
+// no element to pick.
 let nothing = (least(ref empty), greatest(ref empty), sum(ref empty),
                product(ref empty), is_sorted(ref empty))
 
-let output = (narrow_unsigned, wide_unsigned, narrow_signed, wide_signed,
+// The constants, which no literal can spell at a type nobody has named. These
+// come from the rider, which is handed a descriptor by the call site because
+// the type parameter appears only in the return. A call has to say what it
+// wants, so each of these is bound to a name carrying the type.
+let zeros: (u8, i8, index, offset) = (zero(), zero(), zero(), zero())
+let ones: (u16, i64) = (one(), one())
+let lows: (i8, i16, i32, u8, index) = (min_value(), min_value(), min_value(),
+                                       min_value(), min_value())
+let highs: (i8, u8, u16, i32, u64) = (max_value(), max_value(), max_value(),
+                                      max_value(), max_value())
+
+let signs = (is_zero(: u16 / 0), is_zero(: u16 / 3), is_positive(: i8 / 3),
+             is_positive(: i8 / -3), is_negative(: i8 / -3), is_negative(: u8 / 0),
+             is_positive(: u8 / 0))
+
+// The operators again, as values rather than as early returns.
+let checked = (add_checked(: u8 / 3, : u8 / 200), add_checked(: u8 / 100, : u8 / 200),
+               sub_checked(: u8 / 3, : u8 / 200), sub_checked(: u8 / 200, : u8 / 3),
+               mul_checked(: i32 / -3, : i32 / 7), div_checked(: i32 / 7, : i32 / 0),
+               neg_checked(: i32 / 5), neg_checked(: u32 / 5))
+
+// Stopping at the end of the range rather than running past it. Which end
+// depends on the sign of what was added, and an unsigned type has only one.
+let saturating = (add_saturating(: u8 / 200, : u8 / 100),
+                  add_saturating(: i8 / 100, : i8 / 100),
+                  add_saturating(: i8 / -100, : i8 / -100),
+                  sub_saturating(: u8 / 3, : u8 / 200),
+                  sub_saturating(: i8 / -100, : i8 / 100),
+                  sub_saturating(: i8 / 100, : i8 / -100),
+                  sub_saturating(: index / 1, : index / 9))
+
+let output = (zeros, ones, lows, highs, signs, checked, saturating,
+              narrow_unsigned, wide_unsigned, narrow_signed, wide_signed,
               products, quotients, negations, comparisons, forwarded, repeated,
               picking, pairs, distances, folded, overflowed, ascending, nothing)

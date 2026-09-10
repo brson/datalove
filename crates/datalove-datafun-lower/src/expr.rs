@@ -1299,6 +1299,21 @@ fn lower_unaryop<'db>(
 /// - Performs checked arithmetic
 /// - On success: returns the result value
 /// - On overflow/error: early returns with None
+/// Drop the result a checked operator wrote, on the path that throws it away.
+///
+/// The operator writes its answer whether or not it fit, so that the overflow
+/// branch has something whole to leave behind. For every fixed-width integer
+/// that is free -- the answer is a scalar the frame owns nothing of. Inside a
+/// generic it is a `data`, which for `index` and `offset` is on the heap,
+/// because those are the two the erased shape cannot pack into its own words.
+/// So the early return has to let it go.
+fn drop_discarded_checked_result<'db>(ctx: &mut LowerCtx<'db>, dest: ValueId) {
+    if ctx.body.value_types[dest.0 as usize] != IrType::Data {
+        return;
+    }
+    ctx.emit(Instruction::Drop { operand: Operand::Value(dest) });
+}
+
 fn lower_optional_binop<'db>(
     ctx: &mut LowerCtx<'db>,
     op: BinOp,
@@ -1332,6 +1347,7 @@ fn lower_optional_binop<'db>(
 
     // Early return block: wrap None and return.
     ctx.start_block(early_return_block);
+    drop_discarded_checked_result(ctx, dest);
     ctx.emit_early_return_none(false);
 
     // Continue block: dest already has the computed value.
@@ -1378,6 +1394,7 @@ fn lower_checked_result_binop<'db>(
 
     // Early return block: create error and return Err.
     ctx.start_block(early_return_block);
+    drop_discarded_checked_result(ctx, dest);
     ctx.emit_early_return_err_message("arithmetic overflow", false);
 
     // Continue block: dest already has the computed value.
@@ -1422,6 +1439,7 @@ fn lower_optional_unaryop<'db>(
 
     // Early return block: wrap None and return.
     ctx.start_block(early_return_block);
+    drop_discarded_checked_result(ctx, dest);
     ctx.emit_early_return_none(false);
 
     // Continue block: dest already has the computed value.
@@ -1466,6 +1484,7 @@ fn lower_checked_result_unaryop<'db>(
 
     // Early return block: create error and return Err.
     ctx.start_block(early_return_block);
+    drop_discarded_checked_result(ctx, dest);
     ctx.emit_early_return_err_message("negation overflow", false);
 
     // Continue block: dest already has the computed value.

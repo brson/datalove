@@ -1030,12 +1030,28 @@ pub(crate) fn synthesize_function_call_expecting<'db>(
     if let Some((func_ast, module_id)) = ctx.lookup_function_ast(name) {
         // What the type parameters were bound to, which lowering needs in order
         // to say what descriptors the callee gets.
-        let type_args: Vec<datalove_datalit::tycheck::Type<'db>> = func_ast
-            .type_params(db)
-            .iter()
-            .map(|p| bindings.get(p).cloned()
-                .unwrap_or(datalove_datalit::tycheck::Type::Data))
-            .collect();
+        //
+        // A parameter no argument mentions is bound by what the call site says
+        // the answer is, so `let z: T = zero()` fixes it and `self == zero()`
+        // does not: an operand is read for what it is, not against what is
+        // wanted. One left over is refused here rather than stood in for,
+        // because standing in for it would hand the callee a descriptor for
+        // `data` and it would build the wrong thing.
+        let mut type_args = Vec::new();
+        for param in func_ast.type_params(db).iter() {
+            match bindings.get(param) {
+                Some(bound_to) => type_args.push(bound_to.clone()),
+                None => {
+                    return Err(ctx.error_cannot_synthesize(expr, &format!(
+                        "nothing here says what `{}` is. No argument mentions it, so \
+                         the type has to come from what the answer is bound to: write \
+                         `let x: <type> = {}(...)` rather than using the call where \
+                         its type is only read",
+                        param.text(db), name.text(db),
+                    )));
+                }
+            }
+        }
         ctx.store_call_target(call, func_ast, module_id, type_args);
     }
 

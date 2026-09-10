@@ -481,11 +481,43 @@ fn build_module_registry_from_lowered<'db>(
 /// Give each module function the descriptor shapes its callees need of it.
 ///
 /// Lowering knows what a function's own body builds; this adds what it carries
+/// Every native that wants a descriptor, keyed the way a `CodeRef` names it.
+///
+/// See `RiderInterface::undetermined_type_params` for which those are. The keys
+/// have to match `compute_func_id_map`'s numbering, so the position of a
+/// function in `rider.functions` is its `FuncId` here as it is there.
+fn native_shape_keys<'db>(
+    db: &'db dyn salsa::Database,
+    parsed_graph: ParsedModuleGraph<'db>,
+    func_id_map: FuncIdMap<'db>,
+) -> Vec<(((IrModuleId, FuncId)), Vec<datalove_datafun_ir::DescriptorShape>)> {
+    use datalove_datafun_ir::DescriptorShape;
+
+    let ids = func_id_map.to_hashmap(db);
+    let mut found = Vec::new();
+    for (_module_id, riders) in parsed_graph.resolved_riders(db).iter() {
+        for (_alias, rider) in riders {
+            for (func_name, generics) in &rider.generic_functions {
+                if generics.undetermined.is_empty() {
+                    continue;
+                }
+                let key = (rider.module_id, func_name.text(db).S());
+                let Some(&(ir_module_id, func_id)) = ids.get(&key) else { continue };
+                let shapes = generics.undetermined.iter()
+                    .map(|i| DescriptorShape::Param(*i)).collect();
+                found.push(((ir_module_id, func_id), shapes));
+            }
+        }
+    }
+    found
+}
+
 /// on a callee's behalf. See `close_shapes` for why the iteration settles and
 /// what it refuses. Done before anything reads a signature, because the shapes
 /// are part of one: they say what trailing arguments a call has to pass.
 fn close_shapes_over_calls<'db>(
     db: &'db dyn salsa::Database,
+    parsed_graph: ParsedModuleGraph<'db>,
     func_id_map: FuncIdMap<'db>,
     lowered_functions: &mut HashMap<ModuleId<'db>, ModuleLoweredFunctions>,
     errors: &mut HashMap<ModuleId<'db>, Vec<String>>,
@@ -507,6 +539,17 @@ fn close_shapes_over_calls<'db>(
 
     let mut calls: HashMap<Key, Vec<(Key, Vec<DescriptorShape>)>> = HashMap::new();
     let mut shapes: HashMap<Key, Vec<DescriptorShape>> = HashMap::new();
+
+    // The natives go in first. They are not lowered units, so they are not in
+    // `placement` and nothing writes an answer back to them; they are here so
+    // that a caller of one learns it has to be handed a descriptor. A native
+    // makes no calls of its own, so the closure never adds to its set and what
+    // goes in is what comes out -- which is why `add_native_rider_units` can
+    // say the same thing from the signature alone and still agree.
+    for key in native_shape_keys(db, parsed_graph, func_id_map) {
+        shapes.insert(key.0, key.1);
+    }
+
     for (key, (module_id, idx)) in &placement {
         let unit = &lowered_functions[module_id].functions[*idx];
         shapes.insert(
@@ -552,6 +595,8 @@ fn close_shapes_over_calls<'db>(
     }
 
     for (key, shape_set) in &shapes {
+        // A native has no lowered unit to write to; its own set was settled
+        // from its signature and is stored on its `NativeContext`.
         let Some((module_id, idx)) = placement.get(key).copied() else { continue };
         let unit = &mut lowered_functions.get_mut(&module_id).unwrap().functions[idx];
         if let datalove_datafun_ir::CodeUnitContext::Function(ctx) = &mut unit.context {
@@ -587,7 +632,7 @@ fn close_shapes_over_calls<'db>(
     }
 }
 
-/// Lower all module functions./// Lower all module functions.
+/// Lower all module functions.
 ///
 /// This lowers all functions across all modules. The lowered functions are
 /// reused for const evaluation and final module assembly.
@@ -1019,9 +1064,10 @@ pub fn lower_module_graph_with_evaluator<'db>(
     // Done before anything reads a signature, because the shapes are part of
     // one: they say what trailing arguments a call has to pass.
     let mut shape_errors: HashMap<ModuleId<'db>, Vec<String>> = HashMap::new();
-    close_shapes_over_calls(db_salsa, func_id_map, &mut lowered_functions, &mut shape_errors);
+    close_shapes_over_calls(
+        db_salsa, parsed_graph, func_id_map, &mut lowered_functions, &mut shape_errors);
 
-    // Phase 5a/b boundary: evaluate module-level consts against what is lowered    // Phase 5a/b boundary: evaluate module-level consts against what is lowered
+    // Phase 5a/b boundary: evaluate module-level consts against what is lowered
     // so far. Done even when const inlining is skipped, since a module const is
     // resolved when its reference is lowered rather than by a later pass, so
     // there is nothing for that flag to skip.

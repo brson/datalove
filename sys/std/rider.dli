@@ -212,3 +212,15 @@ native fun float_fract<T>(self: T): T with { T is float, }
 native fun float_recip<T>(self: T): T with { T is float, }
 native fun float_signum<T>(self: T): T with { T is float, }
 native fun float_neg<T>(self: T): T with { T is float, }
+
+// Constants of a type parameter bounded to `fixedint`.
+//
+// A literal has to be written at some type, and inside a generic the type is
+// what nobody has picked yet. These take theirs from the descriptor the call
+// site hands over -- the type parameter appears only in the return, so no
+// argument brings it and the call site passes one after the out parameter.
+// See `botdocs/native-abi.md`.
+native fun fixedint_zero<T>(): T with { T is fixedint, }
+native fun fixedint_one<T>(): T with { T is fixedint, }
+native fun fixedint_min_value<T>(): T with { T is fixedint, }
+native fun fixedint_max_value<T>(): T with { T is fixedint, }

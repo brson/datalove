@@ -166,6 +166,28 @@ fn pack_unsigned(value: u128, tag: TyTag) -> (u64, bool) {
     }
 }
 
+/// Narrow a result that may have gone below zero into an unsigned width.
+///
+/// The bits come back wrapped either way, as `pack_signed`'s do: a negative
+/// value taken to the width is that width's two's complement, which is the
+/// answer the instruction would have given.
+fn pack_unsigned_wide(value: i128, tag: TyTag) -> (u64, bool) {
+    macro_rules! narrow {
+        ($t:ty) => {{
+            let fits = value >= 0 && value <= <$t>::MAX as i128;
+            (value as u64 as $t as u64, !fits)
+        }};
+    }
+    match tag {
+        TyTag::U8 => narrow!(u8),
+        TyTag::U16 => narrow!(u16),
+        TyTag::U32 => narrow!(u32),
+        TyTag::U64 => narrow!(u64),
+        TyTag::Index => narrow!(rtdt::IndexRepr),
+        _ => unreachable!("{:?} is not an unsigned integer", tag),
+    }
+}
+
 /// Put a freshly computed value where the destination wants it, wrapping it if
 /// the destination is a `data`.
 unsafe fn place_bits(
@@ -298,6 +320,10 @@ pub unsafe fn dyn_binop_checked(
             },
             (Num::Unsigned(a), Num::Unsigned(b)) => match op {
                 DynOp::Div if b == 0 => (0, true),
+                // Taken signed, because this is the one unsigned operation
+                // whose answer can be below the bottom of the range and the
+                // wide subtraction would go below zero too.
+                DynOp::Sub => pack_unsigned_wide(a as i128 - b as i128, tag),
                 _ => pack_unsigned(arithmetic(op, a, b), tag),
             },
             // Checked arithmetic is for the fixed-width integers alone.
@@ -396,6 +422,81 @@ pub unsafe fn dyn_neg_checked(
         *overflow_out = overflowed;
         place_bits(rt, bits, tag, x_ty, out, out_tydesc)
     }
+}
+
+/// Make a constant at the type a descriptor names.
+///
+/// The descriptor comes from the call site, because a type parameter that
+/// appears only in a native's return type has no argument to bring it. See
+/// `NativeContext::descriptor_shapes`.
+pub unsafe fn dyn_const(
+    rt: LocalRtHandle,
+    which: rtdt::DynConst,
+    out: *mut u8,
+    out_tydesc: *const rtdt::TyDesc,
+    value_tydesc: *const rtdt::TyDesc,
+) -> RtStatus {
+    use rtdt::DynConst;
+
+    unsafe {
+        let tag = (*value_tydesc).type_tag;
+
+        // Written as the widest of each signedness and narrowed, so that the
+        // bounds are read off the target type in one place rather than listed
+        // per width twice over.
+        let bits = match which {
+            DynConst::Zero => 0,
+            DynConst::One => match signedness(tag) {
+                core::option::Option::Some(true) => pack_signed(1, tag).0,
+                core::option::Option::Some(false) => pack_unsigned(1, tag).0,
+                core::option::Option::None => return RtStatus::Error,
+            },
+            DynConst::MinValue => match limits(tag) {
+                core::option::Option::Some((low, _)) => low,
+                core::option::Option::None => return RtStatus::Error,
+            },
+            DynConst::MaxValue => match limits(tag) {
+                core::option::Option::Some((_, high)) => high,
+                core::option::Option::None => return RtStatus::Error,
+            },
+        };
+
+        place_bits(rt, bits, tag, value_tydesc, out, out_tydesc)
+    }
+}
+
+/// Whether a tag is a signed integer, or none when it is not an integer.
+fn signedness(tag: TyTag) -> core::option::Option<bool> {
+    core::option::Option::Some(match tag {
+        TyTag::I8 | TyTag::I16 | TyTag::I32 | TyTag::I64 | TyTag::Offset => true,
+        TyTag::U8 | TyTag::U16 | TyTag::U32 | TyTag::U64 | TyTag::Index => false,
+        _ => return core::option::Option::None,
+    })
+}
+
+/// The smallest and largest value of a fixed-width integer, as its own bits.
+fn limits(tag: TyTag) -> core::option::Option<(u64, u64)> {
+    macro_rules! signed {
+        ($t:ty) => {
+            (pack_signed(<$t>::MIN as i128, tag).0, pack_signed(<$t>::MAX as i128, tag).0)
+        };
+    }
+    macro_rules! unsigned {
+        ($t:ty) => { (0, pack_unsigned(<$t>::MAX as u128, tag).0) };
+    }
+    core::option::Option::Some(match tag {
+        TyTag::I8 => signed!(i8),
+        TyTag::I16 => signed!(i16),
+        TyTag::I32 => signed!(i32),
+        TyTag::I64 => signed!(i64),
+        TyTag::Offset => signed!(rtdt::OffsetRepr),
+        TyTag::U8 => unsigned!(u8),
+        TyTag::U16 => unsigned!(u16),
+        TyTag::U32 => unsigned!(u32),
+        TyTag::U64 => unsigned!(u64),
+        TyTag::Index => unsigned!(rtdt::IndexRepr),
+        _ => return core::option::Option::None,
+    })
 }
 
 fn unary_f32(op: DynUnOp, x: f32) -> f32 {

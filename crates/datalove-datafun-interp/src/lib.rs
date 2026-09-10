@@ -1046,9 +1046,11 @@ impl IrInterpreter {
                     .collect();
 
                 if let datalove_datafun_ir::CodeUnitContext::Native(native_ctx) = &callee.context {
-                    // Native function dispatch.
+                    // Native function dispatch. The descriptors go after the
+                    // arguments, as they do at a call to a module function.
                     self.native_table.call(
                         &native_ctx.symbol, self.runtime.handle(), &arg_vals, dest_slot,
+                        &supplied,
                     )?;
                 } else {
                     // Build call site info for dispatcher if we have caller context.
@@ -1089,9 +1091,10 @@ impl IrInterpreter {
                 Self::mark_consumed_call_args(callee, args, frame);
 
                 if let datalove_datafun_ir::CodeUnitContext::Native(native_ctx) = &callee.context {
-                    // Native function dispatch.
+                    // Native function dispatch. A comptime call carries no
+                    // shapes, so there is nothing after the arguments.
                     self.native_table.call(
-                        &native_ctx.symbol, self.runtime.handle(), &arg_vals, dest_slot,
+                        &native_ctx.symbol, self.runtime.handle(), &arg_vals, dest_slot, &[],
                     )?;
                 } else {
                     // Try dispatcher first, fall back to interpreter.
