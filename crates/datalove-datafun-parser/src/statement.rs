@@ -308,14 +308,14 @@ impl<'db> Parser<'db> {
 
         // Type parameters, if the name is followed by `<...>`. Angle brackets
         // are bracers, so this arrives as a single branch.
-        let type_params = match self.peek() {
+        let (type_params, type_bounds) = match self.peek() {
             Some(TreeToken::Branch { sigil: Sigil::AngleOpen, .. }) => {
                 match self.next() {
                     Some(TreeToken::Branch { inner, .. }) => self.parse_type_params(inner),
                     _ => unreachable!("peeked an angle branch"),
                 }
             }
-            _ => Vec::new(),
+            _ => (Vec::new(), Vec::new()),
         };
 
         // Parse parameters in parentheses.
@@ -382,6 +382,7 @@ impl<'db> Parser<'db> {
             self.module_id(),
             name,
             type_params,
+            type_bounds,
             params,
             return_type,
             body,
@@ -390,13 +391,49 @@ impl<'db> Parser<'db> {
     }
 
     /// Parse the names inside `<...>` on a function signature.
-    fn parse_type_params(&mut self, inner: BracerIter<'db>) -> Vec<InternedText<'db>> {
+    /// Parse `<T>` or `<T: bound>`, giving the names and their bounds.
+    ///
+    /// The two come back together because they are one parse: nothing can put
+    /// a bound against a name that is not there.
+    fn parse_type_params(
+        &mut self,
+        inner: BracerIter<'db>,
+    ) -> (Vec<InternedText<'db>>, Vec<Option<ast::TypeBound>>) {
         let mut sub = Parser::from_branch_with_context(
             self.db, inner, self.source_text(), None, self.module_id());
-        let names = sub.parse_comma_separated(|p| p.eat_name());
+        let parsed = sub.parse_comma_separated(|p| p.parse_type_param());
         sub.error_if_not_exhausted();
         self.had_error |= sub.had_error;
-        names.into_iter().flatten().collect()
+        let mut names = Vec::new();
+        let mut bounds = Vec::new();
+        for (name, bound) in parsed.into_iter().flatten() {
+            names.push(name);
+            bounds.push(bound);
+        }
+        (names, bounds)
+    }
+
+    /// One type parameter: a name, and after a colon the bound it must satisfy.
+    fn parse_type_param(&mut self) -> Option<(InternedText<'db>, Option<ast::TypeBound>)> {
+        let name = self.eat_name()?;
+        if !self.peek_sigil(Sigil::Colon) {
+            return Some((name, None));
+        }
+        self.eat_sigil(Sigil::Colon);
+        let ts = self.peek_text_span();
+        let bound_name = self.eat_name()?;
+        match ast::TypeBound::from_name(bound_name.text(self.db)) {
+            Some(bound) => Some((name, Some(bound))),
+            None => {
+                self.had_error = true;
+                DiagnosticBuilder::error(self.db, &format!(
+                    "unknown bound `{}`", bound_name.text(self.db)))
+                    .code("P060")
+                    .primary_label(ts, "not a bound this language has")
+                    .emit_parse();
+                Some((name, None))
+            }
+        }
     }
 
     fn parse_fun_params(
@@ -955,14 +992,14 @@ impl<'db> Parser<'db> {
         };
 
         // Type parameters, spelled as they are on a regular function.
-        let type_params = match self.peek() {
+        let (type_params, type_bounds) = match self.peek() {
             Some(TreeToken::Branch { sigil: Sigil::AngleOpen, .. }) => {
                 match self.next() {
                     Some(TreeToken::Branch { inner, .. }) => self.parse_type_params(inner),
                     _ => unreachable!("peeked an angle branch"),
                 }
             }
-            _ => Vec::new(),
+            _ => (Vec::new(), Vec::new()),
         };
 
         // Parse parameters in parentheses.
@@ -992,6 +1029,7 @@ impl<'db> Parser<'db> {
         ast::Statement::NativeFun(ast::StmtNativeFun {
             name,
             type_params,
+            type_bounds,
             params,
             return_type,
         })

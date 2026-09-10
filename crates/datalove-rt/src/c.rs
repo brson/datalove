@@ -562,6 +562,53 @@ pub unsafe extern "C-unwind" fn dtlv_rti_clone_erased_local(
     }
 }
 
+/// Apply an operator to two floats whose type only their descriptors say.
+///
+/// `op` is a `rtdt::DynOp`. See `dyn_ops`: this is how a generic bounded to
+/// `float` adds or compares its type parameter, since one compiled body cannot
+/// hold the instruction for both widths.
+#[unsafe(no_mangle)]
+pub unsafe extern "C-unwind" fn dtlv_rti_float_binop(
+    rt: LocalRtHandle,
+    op: u8,
+    lhs: *const u8,
+    lhs_tydesc: *const rtdt::TyDesc,
+    rhs: *const u8,
+    rhs_tydesc: *const rtdt::TyDesc,
+    out: *mut u8,
+    out_tydesc: *const rtdt::TyDesc,
+) -> RtStatus {
+    debug_assert!(!lhs.is_null(), "lhs is null");
+    debug_assert!(!rhs.is_null(), "rhs is null");
+    debug_assert!(!out.is_null(), "out is null");
+    let Some(op) = rtdt::DynOp::from_code(op) else {
+        return RtStatus::Error;
+    };
+    unsafe {
+        crate::impls::dyn_ops::float_binop(
+            rt, op, lhs, lhs_tydesc, rhs, rhs_tydesc, out, out_tydesc)
+    }
+}
+
+/// Apply a one-operand operation to a float whose type only its descriptor
+/// says. `op` is a `rtdt::DynUnOp`.
+#[unsafe(no_mangle)]
+pub unsafe extern "C-unwind" fn dtlv_rti_float_unop(
+    rt: LocalRtHandle,
+    op: u8,
+    value: *const u8,
+    value_tydesc: *const rtdt::TyDesc,
+    out: *mut u8,
+    out_tydesc: *const rtdt::TyDesc,
+) -> RtStatus {
+    debug_assert!(!value.is_null(), "value is null");
+    debug_assert!(!out.is_null(), "out is null");
+    let Some(op) = rtdt::DynUnOp::from_code(op) else {
+        return RtStatus::Error;
+    };
+    unsafe { crate::impls::dyn_ops::float_unop(rt, op, value, value_tydesc, out, out_tydesc) }
+}
+
 /// Borrow what a Data holds, as a value pointer and its descriptor.
 ///
 /// The Data keeps ownership; both outputs point into it. See

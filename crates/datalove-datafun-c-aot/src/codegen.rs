@@ -701,6 +701,23 @@ impl<'a> FunctionCodegenContext<'a> {
             return self.emit_int_binop(out, dest, op, lhs, rhs);
         }
 
+        // An operand whose type only a descriptor says: a type parameter
+        // bounded to `float`, fixed at one width or the other by the call site.
+        // This body was compiled once and cannot hold both, so the runtime
+        // reads the descriptor and picks.
+        if matches!(lhs_ty, IrType::Data) || matches!(self.operand_type(rhs), IrType::Data) {
+            let code = datalove_datafun_ir::dyn_op_code(op).ok_or_else(|| {
+                CAotError::Codegen(format!("no dynamic form of {:?}", op))
+            })? as u8;
+            let lhs_td = self.operand_tydesc(lhs);
+            let rhs_td = self.operand_tydesc(rhs);
+            let dest_ty = self.value_type(dest).clone();
+            let dest_td = self.tydesc_name(&dest_ty);
+            writeln!(out, "    dtlv_rti_float_binop(rt, {code}, {lhs_addr}, {lhs_td}, \
+                {rhs_addr}, {rhs_td}, {dest_addr}, &{dest_td});").unwrap();
+            return Ok(());
+        }
+
         let lhs_c_ty = types::ir_type_to_c(lhs_ty);
         let dest_c_ty = types::ir_type_to_c(dest_ty);
 

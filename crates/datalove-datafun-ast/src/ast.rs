@@ -236,6 +236,13 @@ pub struct StmtFun<'db> {
     #[tracked]
     #[returns(ref)]
     pub type_params: Vec<InternedText<'db>>,
+    /// The bound each type parameter was written with, by the same index.
+    ///
+    /// Built beside `type_params` from one parse, so the two cannot disagree
+    /// about how many there are.
+    #[tracked]
+    #[returns(ref)]
+    pub type_bounds: Vec<Option<TypeBound>>,
     #[tracked]
     #[returns(ref)]
     pub params: Vec<FunParam<'db>>,
@@ -373,11 +380,42 @@ pub struct StmtTypeAlias<'db> {
 ///
 /// Declares a function signature without a body. Used in `.dli` rider
 /// interface files to describe functions implemented in Rust.
+/// What a type parameter was constrained to.
+///
+/// A parameter written bare stands for any type at all, and nothing can be
+/// done to a value of it but move, drop, clone, print and hand it on. A bound
+/// says which types it may be, and in exchange the body may do what all of
+/// those have in common.
+#[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
+#[derive(salsa::SalsaValue)]
+pub enum TypeBound {
+    /// `f32` or `f64`.
+    Float,
+}
+
+impl TypeBound {
+    /// The bound a name in `<T: name>` stands for.
+    pub fn from_name(name: &str) -> Option<TypeBound> {
+        match name {
+            "float" => Some(TypeBound::Float),
+            _ => None,
+        }
+    }
+
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            TypeBound::Float => "float",
+        }
+    }
+}
+
 #[derive(Clone, Hash, PartialEq, Eq)]
 #[derive(salsa::SalsaValue)]
 pub struct StmtNativeFun<'db> {
     pub name: InternedText<'db>,
     pub type_params: Vec<InternedText<'db>>,
+    /// See `StmtFun::type_bounds`.
+    pub type_bounds: Vec<Option<TypeBound>>,
     pub params: Vec<FunParam<'db>>,
     pub return_type: Option<datalit::ast::TypeHint<'db>>,
 }

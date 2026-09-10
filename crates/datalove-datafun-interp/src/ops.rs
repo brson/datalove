@@ -314,6 +314,11 @@ impl IrInterpreter {
                 rtdt::TyTag::F32 => Self::execute_binop_f32(op, lhs, rhs, dest),
                 rtdt::TyTag::F64 => Self::execute_binop_f64(op, lhs, rhs, dest),
                 rtdt::TyTag::Bool => Self::execute_binop_bool(op, lhs, rhs, dest),
+                // A value whose type only its descriptor says: a type parameter
+                // bounded to `float`, which the call site fixed at one width or
+                // the other. The runtime reads the descriptor and picks; this
+                // body was compiled once and cannot.
+                rtdt::TyTag::Data => self.execute_binop_dynamic(op, lhs, rhs, dest),
                 // Type checker ensures only valid types reach here.
                 _ => unreachable!("unsupported binop {:?} for type {:?}", op, lhs_tag),
             }
@@ -479,6 +484,24 @@ impl IrInterpreter {
     }
 
     /// Boolean binary operations.
+    /// A binop whose operands are carried as `data`.
+    ///
+    /// Reached only through a bound: without one nothing may be done to a type
+    /// parameter, so nothing else can get here.
+    fn execute_binop_dynamic(&mut self, op: BinOp, lhs: &Value, rhs: &Value, dest: Destination) {
+        let Some(code) = datalove_datafun_ir::dyn_op_code(op) else {
+            unreachable!("no dynamic form of {:?}", op);
+        };
+        let status = unsafe {
+            datalove_rt::c::dtlv_rti_float_binop(
+                self.runtime.handle(), code as u8,
+                lhs.ptr, lhs.tydesc, rhs.ptr, rhs.tydesc, dest.ptr, dest.tydesc,
+            )
+        };
+        assert_eq!(status, datalove_rt::c::RtStatus::Ok,
+            "applying {:?} to a bounded type parameter", op);
+    }
+
     fn execute_binop_bool(
         op: BinOp,
         lhs: &Value,

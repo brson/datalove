@@ -1,0 +1,85 @@
+require module sys/std/float
+
+import float.abs
+import float.sqrt
+import float.floor
+import float.ceil
+import float.round
+import float.trunc
+import float.fract
+import float.recip
+import float.signum
+import float.neg
+import float.min
+import float.max
+import float.clamp
+import float.lerp
+import float.is_nan
+import float.distance
+
+// A type parameter bounded to `float`.
+//
+// A bare type parameter admits nothing but moving, dropping, cloning, printing
+// and handing on, because nothing is known about it. `T: float` says it is one
+// of two types, and in exchange the body may do what both have in common: the
+// arithmetic, the comparisons, and the operations the rider offers.
+//
+// Erasure still compiles one body, so the machine code cannot hold an `fadd`
+// for one width and another for the other. The operands arrive with their
+// descriptors and the runtime reads which float it is, exactly as a collection
+// of a type parameter has its elements walked by size read off a descriptor.
+//
+// So each of these is one function serving both widths, and the same call
+// written twice gives answers of two different types.
+
+fun scaled<T: float>(a: T, b: T): T
+  ret a * b
+end fun
+
+fun span<T: float>(low: T, high: T): T
+  ret high - low
+end fun
+
+fun ordered<T: float>(a: T, b: T): bool
+  ret a .< b
+end fun
+
+// A bounded generic handing its parameter to another one: the bound travels
+// with it, because whatever the outer call picked is what the inner gets.
+fun blend<T: float>(a: T, b: T, t: T): T
+  // Cloned because handing a value to a function moves it, and these are
+  // wanted twice. Reading one as the operand of an operator does not move it,
+  // which is why `lerp` below needs no clone.
+  ret clamp(lerp(a@, b@, t), a, b)
+end fun
+
+// A value of a bounded parameter is still linear, so using one twice asks for
+// a clone. Being a float does not make it copy here: what is copy is read off
+// the type, and a type parameter's type is not known where it is written.
+fun squared<T: float>(x: T): T
+  ret x@ * x
+end fun
+
+let wide = (scaled(: f64 / 2.0, : f64 / 3.0), span(: f64 / 1.0, : f64 / 4.5),
+            ordered(: f64 / 1.0, : f64 / 2.0))
+let narrow = (scaled(: f32 / 2.0, : f32 / 3.0), span(: f32 / 1.0, : f32 / 4.5),
+              ordered(: f32 / 2.0, : f32 / 1.0))
+
+let rounding = (floor(: f64 / 2.7), ceil(: f64 / 2.1), round(: f64 / 2.5),
+                trunc(: f64 / -2.7), fract(: f32 / 2.25))
+let signs = (abs(: f64 / -3.5), neg(: f32 / 4.0), signum(: f64 / -0.5),
+             recip(: f64 / 4.0))
+let picking = (min(: f32 / 2.0, : f32 / 7.0), max(: f64 / 2.0, : f64 / 7.0),
+               clamp(: f64 / 12.0, : f64 / 0.0, : f64 / 10.0))
+let derived = (sqrt(: f64 / 9.0), lerp(: f32 / 0.0, : f32 / 8.0, : f32 / 0.5),
+               distance(: f64 / 2.0, : f64 / 9.0))
+
+// A nan is the one value not equal to itself, which needs only the comparison.
+let nans = (is_nan(: f64 / 1.0), is_nan(: f32 / 0.0))
+
+let forwarded = (blend(: f64 / 0.0, : f64 / 10.0, : f64 / 0.25),
+                 blend(: f32 / 0.0, : f32 / 10.0, : f32 / 0.25))
+let repeated = (squared(: f64 / 3.0), squared(: f32 / 1.5))
+
+let output = (wide, narrow, rounding, signs, picking, derived, nans,
+              forwarded, repeated)

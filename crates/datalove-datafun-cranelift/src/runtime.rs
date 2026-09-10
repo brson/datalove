@@ -108,6 +108,8 @@ pub struct RuntimeImports {
     pub data_parts: FuncId,
     /// `dtlv_rti_data_from_local(rt, inner, inner_tydesc, dest) -> RtStatus`
     pub data_from_local: FuncId,
+    /// `dtlv_rti_float_binop(rt, op, lhs, lhs_td, rhs, rhs_td, out, out_td)`
+    pub float_binop: FuncId,
     /// `dtlv_rti_list_get_erased_local(rt, list, list_td, index, opt_out, opt_td) -> RtStatus`
     pub list_get_erased: FuncId,
     /// `dtlv_rti_clone_erased_local(rt, src, src_td, dst, dst_td) -> RtStatus`
@@ -645,6 +647,24 @@ impl RuntimeImports {
                     format!("declare dtlv_rti_data_from_local: {}", e)))?
         };
 
+        // An operator on a type parameter bounded to `float`, whose width only
+        // the descriptor says.
+        let float_binop = {
+            let mut sig = module.make_signature();
+            sig.params.push(AbiParam::new(PTR_TYPE));       // rt
+            sig.params.push(AbiParam::new(cl_types::I8));   // op
+            sig.params.push(AbiParam::new(PTR_TYPE));       // lhs
+            sig.params.push(AbiParam::new(PTR_TYPE));       // lhs tydesc
+            sig.params.push(AbiParam::new(PTR_TYPE));       // rhs
+            sig.params.push(AbiParam::new(PTR_TYPE));       // rhs tydesc
+            sig.params.push(AbiParam::new(PTR_TYPE));       // out
+            sig.params.push(AbiParam::new(PTR_TYPE));       // out tydesc
+            sig.returns.push(AbiParam::new(cl_types::I8));
+            module.declare_function("dtlv_rti_float_binop", Linkage::Import, &sig)
+                .map_err(|e| CraneliftError::Module(
+                    format!("declare dtlv_rti_float_binop: {}", e)))?
+        };
+
         // Indexing a list whose elements a generic cannot name. The runtime
         // decides whether the element wants packing, since a list of `data`
         // does not.
@@ -714,6 +734,7 @@ impl RuntimeImports {
             erase,
             data_parts,
             data_from_local,
+            float_binop,
             list_get_erased,
             clone_erased,
             reify,

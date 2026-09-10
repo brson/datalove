@@ -49,6 +49,14 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             return self.compile_int_binop(builder, dest, op, lhs, rhs);
         }
 
+        // An operand whose type only a descriptor says: a type parameter bounded
+        // to `float`, which the call site fixed at one width or the other. This
+        // body was compiled once and cannot hold the instruction for both, so
+        // the runtime reads the descriptor and picks.
+        if matches!(lhs_ty, IrType::Data) || matches!(rhs_ty, IrType::Data) {
+            return self.compile_binop_dynamic(builder, dest, op, lhs, rhs);
+        }
+
         let lhs_val = self.get_operand_value(builder, lhs)?;
         let rhs_val = self.get_operand_value(builder, rhs)?;
 
@@ -413,6 +421,60 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
     }
 
     /// Compile a checked binary operation (produces result + overflow flag).
+    /// Compile a binop whose operands are carried as `data`.
+    ///
+    /// Reached only through a bound: without one nothing may be done to a type
+    /// parameter, so nothing else gets here.
+    fn compile_binop_dynamic(
+        &mut self,
+        builder: &mut FunctionBuilder,
+        dest: ValueId,
+        op: BinOp,
+        lhs: &Operand,
+        rhs: &Operand,
+    ) -> Result<(), CraneliftError> {
+        let code = datalove_datafun_ir::dyn_op_code(op).ok_or_else(|| {
+            CraneliftError::Codegen(format!("no dynamic form of {:?}", op))
+        })?;
+        let runtime = self.runtime.ok_or_else(|| {
+            CraneliftError::Codegen("a dynamic binop requires runtime imports".into())
+        })?;
+        let rt_handle = self.rt_handle_param.ok_or_else(|| {
+            CraneliftError::Codegen("a dynamic binop requires runtime handle".into())
+        })?;
+
+        let op_val = builder.ins().iconst(cl_types::I8, code as u8 as i64);
+        let lhs_ptr = self.get_operand_ptr(builder, lhs)?;
+        let lhs_td = self.operand_tydesc(builder, lhs)?;
+        let rhs_ptr = self.get_operand_ptr(builder, rhs)?;
+        let rhs_td = self.operand_tydesc(builder, rhs)?;
+
+        let dest_ty = self.func.value_types[dest.0 as usize].clone();
+        let frame_slot = self.frame_slot.ok_or_else(|| {
+            CraneliftError::Codegen("no frame slot for a dynamic binop".into())
+        })?;
+        let dest_offset = self.layout.value_offset(dest.0);
+        let dest_ptr = builder.ins().stack_addr(PTR_TYPE, frame_slot, dest_offset as i32);
+        let dest_td = self.static_tydesc(builder, &dest_ty)?;
+
+        let callee = self.module.declare_func_in_func(runtime.float_binop, builder.func);
+        builder.ins().call(callee, &[
+            rt_handle, op_val, lhs_ptr, lhs_td, rhs_ptr, rhs_td, dest_ptr, dest_td,
+        ]);
+
+        // A scalar destination is read back out of the frame, the way a call
+        // with an sret return is.
+        if let crate::types::CraneliftRepr::Scalar(scalar_ty) =
+            crate::types::ir_type_to_cranelift(&dest_ty)
+        {
+            let loaded = builder.ins().load(scalar_ty, cl_ir::MemFlagsData::new(), dest_ptr, 0);
+            self.values.insert(dest, loaded);
+        } else {
+            self.values.insert(dest, dest_ptr);
+        }
+        Ok(())
+    }
+
     pub(super) fn compile_binop_checked(
         &mut self,
         builder: &mut FunctionBuilder,

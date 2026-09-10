@@ -592,6 +592,16 @@ fn synthesize_binop<'db>(
 
     let operand_ty = lhs_ty.clone();
 
+    // A bounded type parameter is whichever of its types the call site picks,
+    // and the operators they all have go through. `float` is `f32` or `f64`,
+    // both of which take the bare arithmetic and the comparisons, so a `T:
+    // float` takes them too. Which one it turns out to be is read off the
+    // descriptor at run time, the same way a collection's elements are.
+    let float_bounded = matches!(&operand_ty,
+        Type::Datalit(datalit::tycheck::Type::Var(name))
+            if ctx.type_param_bounds.get(name)
+                == Some(&datalove_datafun_ast::ast::TypeBound::Float));
+
     // Boolean logic operators require bool operands.
     if matches!(op, BinOp::And | BinOp::Or | BinOp::Xor) {
         if !is_bool_type(&operand_ty) {
@@ -601,6 +611,8 @@ fn synthesize_binop<'db>(
                 &type_to_string(db, &operand_ty)
             ));
         }
+    } else if float_bounded {
+        // Nothing more to check: every type the bound admits is numeric.
     } else {
         // All other operators require numeric types.
         if !is_numeric_type(&operand_ty) {
@@ -618,7 +630,7 @@ fn synthesize_binop<'db>(
         // Basic arithmetic: floats and bigints only.
         // Fixed ints must use @ to widen, or use checked/optional operators.
         Add | Sub | Mul => {
-            if is_float_type(&operand_ty) {
+            if float_bounded || is_float_type(&operand_ty) {
                 // Floats return float.
                 lhs_ty
             } else if is_bigint_type(&operand_ty) {
@@ -636,7 +648,7 @@ fn synthesize_binop<'db>(
 
         // Bare division: only floats (bigints must use /! or /?).
         Div => {
-            if !is_float_type(&operand_ty) {
+            if !float_bounded && !is_float_type(&operand_ty) {
                 return Err(ctx.error_invalid_operand_type(
                     expr,
                     binop_to_str(op),
@@ -984,6 +996,23 @@ pub(crate) fn synthesize_function_call_expecting<'db>(
     let return_type = substitute_type_vars(&return_type, &bindings);
 
     // Store resolved call target for interpreter.
+    // A bound says which types its parameter may be, and this is where that is
+    // settled: the call site is what picks one.
+    if let Some((func_ast, _)) = ctx.lookup_function_ast(name) {
+        let bounds = func_ast.type_bounds(db);
+        for (i, param) in func_ast.type_params(db).iter().enumerate() {
+            let Some(Some(bound)) = bounds.get(i) else { continue };
+            let Some(bound_to) = bindings.get(param) else { continue };
+            if !bound_admits(ctx, *bound, bound_to) {
+                let shown = type_to_string(db, &Type::Datalit(bound_to.clone()));
+                return Err(ctx.error_type_mismatch(
+                    expr, bound.as_str(), &shown,
+                    "this type parameter is bounded, and that is not one of the types \
+                     it admits"));
+            }
+        }
+    }
+
     if let Some((func_ast, module_id)) = ctx.lookup_function_ast(name) {
         // What the type parameters were bound to, which lowering needs in order
         // to say what descriptors the callee gets.
@@ -1000,7 +1029,29 @@ pub(crate) fn synthesize_function_call_expecting<'db>(
     Ok(return_type)
 }
 
-/// Replace a bound type parameter with what the call site bound it to.
+/// Whether a bound admits a type.
+///
+/// `float` is `f32` or `f64` and nothing else. A bare integer literal is `int`
+/// here, which is not a float, so `lerp(0, 1, 0.5)` is refused for its first
+/// two arguments rather than quietly widening them.
+fn bound_admits<'db>(
+    ctx: &TypeContext<'db>,
+    bound: datalove_datafun_ast::ast::TypeBound,
+    ty: &datalit::tycheck::Type<'db>,
+) -> bool {
+    use datalove_datafun_ast::ast::TypeBound;
+    // A bounded generic handing its own parameter to another one satisfies the
+    // bound by carrying it: the caller of the outer function already picked a
+    // type that admits it, and the inner one gets whatever that was.
+    if let datalit::tycheck::Type::Var(name) = ty {
+        return ctx.type_param_bounds.get(name) == Some(&bound);
+    }
+    match bound {
+        TypeBound::Float => matches!(ty, datalit::tycheck::Type::F32 | datalit::tycheck::Type::F64),
+    }
+}
+
+/// Replace a bound type parameter with what the call site bound it to./// Replace a bound type parameter with what the call site bound it to.
 ///
 /// A parameter may sit at any depth, so this rebuilds the type around it. A
 /// function type has no type parameters inside it to replace.

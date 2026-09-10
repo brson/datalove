@@ -45,6 +45,13 @@ pub struct TypeContext<'db> {
     pub(crate) function_asts: HashMap<InternedText<'db>, (StmtFun<'db>, Option<ModuleId<'db>>)>,
     /// Type aliases (name -> resolved type).
     pub(crate) type_aliases: HashMap<InternedText<'db>, Type<'db>>,
+    /// The bound each of the enclosing function's type parameters carries.
+    ///
+    /// A bare parameter is absent here and nothing may be done to a value of
+    /// it. A bound one says which types it may be, and the operators those
+    /// types have in common are allowed on it.
+    pub(crate) type_param_bounds:
+        HashMap<InternedText<'db>, datalove_datafun_ast::ast::TypeBound>,
     /// Expected return type for current function (if inside a function).
     pub(crate) expected_return_type: Option<Type<'db>>,
     /// Whether current function has no declared return type (void function).
@@ -124,6 +131,7 @@ impl<'db> TypeContext<'db> {
             functions: HashMap::new(),
             function_asts: HashMap::new(),
             type_aliases: HashMap::new(),
+            type_param_bounds: HashMap::new(),
             expected_return_type: None,
             is_void_function: false,
             errors: Vec::new(),

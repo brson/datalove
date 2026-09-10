@@ -1846,7 +1846,29 @@ pub enum ExportBinding {
 // Unified Code Unit
 // ============================================================================
 
-/// A type a function needs a descriptor for, written over its own type
+/// The runtime's code for an operator applied to a value whose type only a
+/// descriptor says.
+///
+/// `None` for an operator no bound admits. One function, read by every backend,
+/// so that what they pass and what the runtime reads cannot drift apart.
+pub fn dyn_op_code(op: BinOp) -> Option<datalove_rtdt::DynOp> {
+    use datalove_rtdt::DynOp;
+    Some(match op {
+        BinOp::Add => DynOp::Add,
+        BinOp::Sub => DynOp::Sub,
+        BinOp::Mul => DynOp::Mul,
+        BinOp::Div => DynOp::Div,
+        BinOp::Eq => DynOp::Eq,
+        BinOp::Ne => DynOp::Ne,
+        BinOp::Lt => DynOp::Lt,
+        BinOp::Le => DynOp::Le,
+        BinOp::Gt => DynOp::Gt,
+        BinOp::Ge => DynOp::Ge,
+        _ => return None,
+    })
+}
+
+/// A type a function needs a descriptor for, written over its own type/// A type a function needs a descriptor for, written over its own type
 /// parameters.
 ///
 /// A generic is compiled once with `data` standing where a type parameter was

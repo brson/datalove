@@ -2101,3 +2101,147 @@ pub extern "C-unwind" fn dlr_std__string_parse_f64(
     }
     OK
 }
+
+// One-operand operations on a type parameter bounded to `float`. Each is the
+// same shim: the runtime reads the width off the descriptor, because the one
+// compiled body of a generic cannot hold the instruction for both.
+
+#[no_mangle]
+pub extern "C-unwind" fn dlr_std__float_abs(
+    rt: *mut u8,
+    x: *const u8, x_td: *const u8,
+    out: *mut u8, out_td: *const u8,
+) -> u8 {
+    unsafe {
+        datalove_rt::c::dtlv_rti_float_unop(
+            rt, 0, x, x_td as *const rtdt::TyDesc,
+            out, out_td as *const rtdt::TyDesc,
+        ) as u8
+    }
+}
+
+#[no_mangle]
+pub extern "C-unwind" fn dlr_std__float_sqrt(
+    rt: *mut u8,
+    x: *const u8, x_td: *const u8,
+    out: *mut u8, out_td: *const u8,
+) -> u8 {
+    unsafe {
+        datalove_rt::c::dtlv_rti_float_unop(
+            rt, 1, x, x_td as *const rtdt::TyDesc,
+            out, out_td as *const rtdt::TyDesc,
+        ) as u8
+    }
+}
+
+#[no_mangle]
+pub extern "C-unwind" fn dlr_std__float_floor(
+    rt: *mut u8,
+    x: *const u8, x_td: *const u8,
+    out: *mut u8, out_td: *const u8,
+) -> u8 {
+    unsafe {
+        datalove_rt::c::dtlv_rti_float_unop(
+            rt, 2, x, x_td as *const rtdt::TyDesc,
+            out, out_td as *const rtdt::TyDesc,
+        ) as u8
+    }
+}
+
+#[no_mangle]
+pub extern "C-unwind" fn dlr_std__float_ceil(
+    rt: *mut u8,
+    x: *const u8, x_td: *const u8,
+    out: *mut u8, out_td: *const u8,
+) -> u8 {
+    unsafe {
+        datalove_rt::c::dtlv_rti_float_unop(
+            rt, 3, x, x_td as *const rtdt::TyDesc,
+            out, out_td as *const rtdt::TyDesc,
+        ) as u8
+    }
+}
+
+#[no_mangle]
+pub extern "C-unwind" fn dlr_std__float_round(
+    rt: *mut u8,
+    x: *const u8, x_td: *const u8,
+    out: *mut u8, out_td: *const u8,
+) -> u8 {
+    unsafe {
+        datalove_rt::c::dtlv_rti_float_unop(
+            rt, 4, x, x_td as *const rtdt::TyDesc,
+            out, out_td as *const rtdt::TyDesc,
+        ) as u8
+    }
+}
+
+#[no_mangle]
+pub extern "C-unwind" fn dlr_std__float_trunc(
+    rt: *mut u8,
+    x: *const u8, x_td: *const u8,
+    out: *mut u8, out_td: *const u8,
+) -> u8 {
+    unsafe {
+        datalove_rt::c::dtlv_rti_float_unop(
+            rt, 5, x, x_td as *const rtdt::TyDesc,
+            out, out_td as *const rtdt::TyDesc,
+        ) as u8
+    }
+}
+
+#[no_mangle]
+pub extern "C-unwind" fn dlr_std__float_fract(
+    rt: *mut u8,
+    x: *const u8, x_td: *const u8,
+    out: *mut u8, out_td: *const u8,
+) -> u8 {
+    unsafe {
+        datalove_rt::c::dtlv_rti_float_unop(
+            rt, 6, x, x_td as *const rtdt::TyDesc,
+            out, out_td as *const rtdt::TyDesc,
+        ) as u8
+    }
+}
+
+#[no_mangle]
+pub extern "C-unwind" fn dlr_std__float_recip(
+    rt: *mut u8,
+    x: *const u8, x_td: *const u8,
+    out: *mut u8, out_td: *const u8,
+) -> u8 {
+    unsafe {
+        datalove_rt::c::dtlv_rti_float_unop(
+            rt, 7, x, x_td as *const rtdt::TyDesc,
+            out, out_td as *const rtdt::TyDesc,
+        ) as u8
+    }
+}
+
+#[no_mangle]
+pub extern "C-unwind" fn dlr_std__float_signum(
+    rt: *mut u8,
+    x: *const u8, x_td: *const u8,
+    out: *mut u8, out_td: *const u8,
+) -> u8 {
+    unsafe {
+        datalove_rt::c::dtlv_rti_float_unop(
+            rt, 8, x, x_td as *const rtdt::TyDesc,
+            out, out_td as *const rtdt::TyDesc,
+        ) as u8
+    }
+}
+
+#[no_mangle]
+pub extern "C-unwind" fn dlr_std__float_neg(
+    rt: *mut u8,
+    x: *const u8, x_td: *const u8,
+    out: *mut u8, out_td: *const u8,
+) -> u8 {
+    unsafe {
+        datalove_rt::c::dtlv_rti_float_unop(
+            rt, 9, x, x_td as *const rtdt::TyDesc,
+            out, out_td as *const rtdt::TyDesc,
+        ) as u8
+    }
+}

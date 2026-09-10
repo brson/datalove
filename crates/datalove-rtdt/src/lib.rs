@@ -683,6 +683,88 @@ pub struct TyDesc {
     pub type_info: TyInfo,
 }
 
+/// An operator applied to values whose type only a descriptor says.
+///
+/// A generic bounded to `float` may add, subtract, multiply, divide and compare
+/// its parameter, but which float it is is not known until the call. The
+/// operation travels as one of these and the runtime reads the descriptor.
+///
+/// The numbering is the ABI: every backend passes it and the runtime reads it,
+/// so it is written down once here rather than in each of them.
+#[repr(u8)]
+#[derive(Debug, PartialEq, Eq, Copy, Clone)]
+pub enum DynOp {
+    Add = 0,
+    Sub = 1,
+    Mul = 2,
+    Div = 3,
+    Eq = 4,
+    Ne = 5,
+    Lt = 6,
+    Le = 7,
+    Gt = 8,
+    Ge = 9,
+}
+
+impl DynOp {
+    pub fn from_code(code: u8) -> core::option::Option<DynOp> {
+        core::option::Option::Some(match code {
+            0 => DynOp::Add,
+            1 => DynOp::Sub,
+            2 => DynOp::Mul,
+            3 => DynOp::Div,
+            4 => DynOp::Eq,
+            5 => DynOp::Ne,
+            6 => DynOp::Lt,
+            7 => DynOp::Le,
+            8 => DynOp::Gt,
+            9 => DynOp::Ge,
+            _ => return None,
+        })
+    }
+
+    /// Whether the result is a bool rather than the operands' own type.
+    pub fn gives_bool(&self) -> bool {
+        matches!(self, DynOp::Eq | DynOp::Ne | DynOp::Lt | DynOp::Le | DynOp::Gt | DynOp::Ge)
+    }
+}
+
+/// A one-operand operation on a value whose type only a descriptor says.
+///
+/// Numbered like `DynOp`, and for the same reason: the number is the ABI.
+#[repr(u8)]
+#[derive(Debug, PartialEq, Eq, Copy, Clone)]
+pub enum DynUnOp {
+    Abs = 0,
+    Sqrt = 1,
+    Floor = 2,
+    Ceil = 3,
+    Round = 4,
+    Trunc = 5,
+    Fract = 6,
+    Recip = 7,
+    Signum = 8,
+    Neg = 9,
+}
+
+impl DynUnOp {
+    pub fn from_code(code: u8) -> core::option::Option<DynUnOp> {
+        core::option::Option::Some(match code {
+            0 => DynUnOp::Abs,
+            1 => DynUnOp::Sqrt,
+            2 => DynUnOp::Floor,
+            3 => DynUnOp::Ceil,
+            4 => DynUnOp::Round,
+            5 => DynUnOp::Trunc,
+            6 => DynUnOp::Fract,
+            7 => DynUnOp::Recip,
+            8 => DynUnOp::Signum,
+            9 => DynUnOp::Neg,
+            _ => return core::option::Option::None,
+        })
+    }
+}
+
 #[repr(u8)]
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
 pub enum TyTag {

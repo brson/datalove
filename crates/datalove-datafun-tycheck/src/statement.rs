@@ -145,11 +145,16 @@ pub fn check_statement<'db>(
             // `var x: T` and `let pair: (T, T)` name a type the function has,
             // and without this they read as an unresolved alias.
             let saved_type_aliases = ctx.type_aliases.C();
-            for name in stmt.type_params(db) {
+            let saved_type_param_bounds = ctx.type_param_bounds.C();
+            let bounds = stmt.type_bounds(db);
+            for (i, name) in stmt.type_params(db).iter().enumerate() {
                 ctx.type_aliases.insert(
                     *name,
                     Type::Datalit(datalove_datalit::tycheck::Type::Var(*name)),
                 );
+                if let Some(Some(bound)) = bounds.get(i) {
+                    ctx.type_param_bounds.insert(*name, *bound);
+                }
             }
             // Const bindings are scoped to the body the same way. Without this a
             // const parameter, or a const statement, stays registered after its
@@ -182,6 +187,7 @@ pub fn check_statement<'db>(
             // Restore context.
             ctx.variables = saved_variables;
             ctx.type_aliases = saved_type_aliases;
+            ctx.type_param_bounds = saved_type_param_bounds;
             ctx.const_bindings = saved_const_bindings;
             ctx.expected_return_type = saved_return_type;
             ctx.is_void_function = saved_is_void;

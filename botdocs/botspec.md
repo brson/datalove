@@ -1020,8 +1020,24 @@ fun or_option<T>(self: ?T, other: ?T): ?T
 end fun
 ```
 
-**What a type parameter does not admit.** Anything that would need to know what
-the type is. A `T` can be moved, dropped, cloned, printed, stored, returned and
+**Bounds.** A type parameter may be written `<T: float>`, which says it is one
+of a fixed set of types — `f32` or `f64` — and in exchange the body may do what
+all of them have in common. For `float` that is the arithmetic, the comparisons,
+and what `sys/std/float` offers.
+
+Erasure still compiles one body, so the machine code cannot hold the
+instruction for both widths. The operands arrive with their descriptors and the
+runtime reads which float it is, the same way a collection of a type parameter
+has its elements walked by a size read off a descriptor. A call site that binds
+the parameter to anything else is refused.
+
+`float` is the only bound so far. A value of a bounded parameter is still
+linear, so handing one to a function twice asks for a clone; reading one as the
+operand of an operator does not move it. A float literal cannot be written at
+type `T`, so a function wanting a constant has to be given one.
+
+**What a bare type parameter does not admit.** Anything that would need to know
+what the type is. A `T` can be moved, dropped, cloned, printed, stored, returned and
 handed on, and that is the whole of it: `x + y` and `x == y` on two values of
 type `T` are both errors, whatever the call site supplied. Printing is the
 exception because the descriptor travelling with the value is enough to format
