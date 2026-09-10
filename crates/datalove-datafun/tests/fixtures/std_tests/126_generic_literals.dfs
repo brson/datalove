@@ -1,0 +1,70 @@
+require module sys/std/list
+require module sys/std/set
+require module sys/std/map
+
+import list.len
+import set.contains
+import map.get
+
+// Collection literals written inside a generic.
+//
+// A collection built over a type parameter is made against the descriptor the
+// call site handed over, so it holds its elements as what they really are.
+// The elements in hand are in the erased shape -- a `data` for a bare type
+// parameter -- so each has to be unpacked on the way in. Copying one in as it
+// stands would put a two-word wrapper where a value of the element type
+// belongs, which for a narrow element writes past it.
+//
+// The same three literals with concrete elements take neither step, and are
+// here so that the two paths stay told apart.
+
+fun one_of<T>(x: T): [T]
+  ret [x]
+end fun
+
+fun two_of<T>(x: T, y: T): [T]
+  ret [x, y]
+end fun
+
+fun set_of<T>(x: T, y: T): #{T}
+  ret #{x, y}
+end fun
+
+fun map_of<K, V>(k: K, v: V): %{K = V}
+  ret %{k = v}
+end fun
+
+// Built inside a generic, then read back through the module functions, which
+// take the descriptor the other way.
+fun round_trip<T>(x: T): index
+  let built = one_of(x)
+  ret len(ref built)
+end fun
+
+// Every width, because the wrapper is two words and an element narrower than
+// that is where copying it in writes past the end.
+let narrow = (one_of(: u8 / 3), one_of(: i8 / -3), one_of(: u16 / 300),
+              one_of(: i16 / -300))
+let wide = (one_of(: u32 / 70000), one_of(: i64 / -5), one_of(: index / 9),
+            one_of(: offset / -9))
+let floats = (one_of(: f32 / 1.5), one_of(: f64 / 2.5))
+
+// A heap element rather than a packed one, which takes the other path through
+// the wrapper.
+let strings = (one_of("hi"), two_of("a", "b"))
+
+let several = (two_of(: u8 / 1, : u8 / 2), two_of(: i32 / -1, : i32 / 2))
+
+let sets = (set_of(: u32 / 5, : u32 / 2), set_of("b", "a"))
+let maps = (map_of("a", : u32 / 3), map_of(: u8 / 1, "v"))
+
+let read_back = (round_trip(: u8 / 3), round_trip("hi"))
+
+// Concrete literals, which take neither step.
+let concrete = ([: u32 / 1, : u32 / 2], #{"b", "a"}, %{"k" = : u32 / 9})
+
+let found = (contains(ref set_of(: u32 / 5, : u32 / 2), ref : u32 / 5),
+             contains(ref set_of(: u32 / 5, : u32 / 2), ref : u32 / 7))
+
+let output = (narrow, wide, floats, strings, several, sets, maps, read_back,
+              concrete, found)

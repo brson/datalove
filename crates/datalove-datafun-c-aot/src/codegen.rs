@@ -1909,7 +1909,7 @@ impl<'a> FunctionCodegenContext<'a> {
         for elem in elements {
             let elem_addr = self.operand_addr(elem);
             let elem_td = self.operand_tydesc(elem);
-            writeln!(out, "    dtlv_rti_btreeset_insert_local(rt, &{name}, s{shape}, {elem_addr}, {elem_td}, &{name}_added);").unwrap();
+            writeln!(out, "    dtlv_rti_btreeset_insert_erased_local(rt, &{name}, s{shape}, {elem_addr}, {elem_td}, &{name}_added);").unwrap();
         }
         let dest_addr = self.value_addr(dest);
         writeln!(out, "    dtlv_rti_data_from_local(rt, &{name}, s{shape}, {dest_addr});").unwrap();
@@ -1932,7 +1932,7 @@ impl<'a> FunctionCodegenContext<'a> {
             let key_td = self.operand_tydesc(key);
             let val_addr = self.operand_addr(val);
             let val_td = self.operand_tydesc(val);
-            writeln!(out, "    dtlv_rti_btreemap_insert_local(rt, &{name}, s{shape}, {key_addr}, {key_td}, {val_addr}, {val_td});").unwrap();
+            writeln!(out, "    dtlv_rti_btreemap_insert_erased_local(rt, &{name}, s{shape}, {key_addr}, {key_td}, {val_addr}, {val_td});").unwrap();
         }
         let dest_addr = self.value_addr(dest);
         writeln!(out, "    dtlv_rti_data_from_local(rt, &{name}, s{shape}, {dest_addr});").unwrap();
@@ -1967,7 +1967,7 @@ impl<'a> FunctionCodegenContext<'a> {
         for elem in elements {
             let elem_addr = self.operand_addr(elem);
             let elem_td = self.operand_tydesc(elem);
-            writeln!(out, "    dtlv_rti_list_push_local(rt, &{name}, s{shape}, {elem_addr}, {elem_td});").unwrap();
+            writeln!(out, "    dtlv_rti_list_push_erased_local(rt, &{name}, s{shape}, {elem_addr}, {elem_td});").unwrap();
         }
         let dest_addr = self.value_addr(dest);
         writeln!(out, "    dtlv_rti_data_from_local(rt, &{name}, s{shape}, {dest_addr});").unwrap();

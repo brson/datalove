@@ -342,6 +342,9 @@ impl CAotCompiler {
         writeln!(out, "extern uint8_t dtlv_rti_btreeset_build_from_sorted_slice_local(void* rt, void* set_out, const dtlv_tydesc_t* elem_tydesc, const void* elems_ptr, index_t num_elems);").unwrap();
         writeln!(out, "extern uint8_t dtlv_rti_btreemap_create_local(void* rt, void* value_out, const dtlv_tydesc_t* tydesc);").unwrap();
         writeln!(out, "extern uint8_t dtlv_rti_btreemap_insert_local(void* rt, void* map_mut, const dtlv_tydesc_t* map_tydesc, void* key_in, const dtlv_tydesc_t* key_tydesc, void* val_in, const dtlv_tydesc_t* val_tydesc);").unwrap();
+        writeln!(out, "extern uint8_t dtlv_rti_list_push_erased_local(void* rt, void* list_mut, const dtlv_tydesc_t* list_tydesc, void* elem_in, const dtlv_tydesc_t* elem_tydesc);").unwrap();
+        writeln!(out, "extern uint8_t dtlv_rti_btreeset_insert_erased_local(void* rt, void* set_mut, const dtlv_tydesc_t* set_tydesc, void* elem_in, const dtlv_tydesc_t* elem_tydesc, void* bool_out);").unwrap();
+        writeln!(out, "extern uint8_t dtlv_rti_btreemap_insert_erased_local(void* rt, void* map_mut, const dtlv_tydesc_t* map_tydesc, void* key_in, const dtlv_tydesc_t* key_tydesc, void* val_in, const dtlv_tydesc_t* val_tydesc);").unwrap();
         writeln!(out, "extern uint8_t dtlv_rti_btreemap_build_from_sorted_slices_local(void* rt, void* map_out, const dtlv_tydesc_t* key_tydesc, const dtlv_tydesc_t* val_tydesc, const void* keys_ptr, const void* vals_ptr, index_t num_entries);").unwrap();
         writeln!(out, "extern uint8_t dtlv_rti_tensor_init_local(void* rt, void* elem_data_in, index_t elem_count, const dtlv_tydesc_t* elem_tydesc, const index_t* shape_ptr, uint32_t rank, void* tensor_out, const dtlv_tydesc_t* tensor_tydesc);").unwrap();
         writeln!(out, "extern uint8_t dtlv_rti_table_create_local(void* rt, void* value_out, const dtlv_tydesc_t* tydesc);").unwrap();

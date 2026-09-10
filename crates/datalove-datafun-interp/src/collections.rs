@@ -36,7 +36,7 @@ impl IrInterpreter {
         for elem_op in elements {
             let elem = self.read_operand(elem_op, frame, frames);
             unsafe {
-                datalove_rt::c::dtlv_rti_list_push_local(
+                datalove_rt::c::dtlv_rti_list_push_erased_local(
                     rt_handle, temp_ptr, list_tydesc, elem.ptr, elem.tydesc);
             }
         }
@@ -129,7 +129,7 @@ impl IrInterpreter {
             let elem = self.read_operand(elem_op, frame, frames);
             let mut added = false;
             unsafe {
-                datalove_rt::c::dtlv_rti_btreeset_insert_local(
+                datalove_rt::c::dtlv_rti_btreeset_insert_erased_local(
                     rt_handle, temp_ptr, set_tydesc, elem.ptr, elem.tydesc,
                     &mut added as *mut bool as *mut u8);
             }
@@ -247,7 +247,7 @@ impl IrInterpreter {
             let key = self.read_operand(key_op, frame, frames);
             let val = self.read_operand(val_op, frame, frames);
             unsafe {
-                datalove_rt::c::dtlv_rti_btreemap_insert_local(
+                datalove_rt::c::dtlv_rti_btreemap_insert_erased_local(
                     rt_handle, temp_ptr, map_tydesc,
                     key.ptr, key.tydesc, val.ptr, val.tydesc);
             }

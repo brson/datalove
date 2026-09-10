@@ -52,7 +52,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         // element here is in the erased shape -- a `data` for a bare type
         // parameter, a tuple of them for a tuple of parameters -- and the list
         // holds its elements as what they really are, so the push converts.
-        let push_ref = self.module.declare_func_in_func(runtime.list_push, builder.func);
+        let push_ref = self.module.declare_func_in_func(runtime.list_push_erased, builder.func);
         for elem in elements {
             let elem_ptr = self.get_operand_ptr(builder, elem)?;
             let elem_tydesc_ptr = self.operand_tydesc(builder, elem)?;
@@ -171,7 +171,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         let bool_slot = builder.create_sized_stack_slot(cl_ir::StackSlotData::new(
             cl_ir::StackSlotKind::ExplicitSlot, 1, 0));
         let bool_ptr = builder.ins().stack_addr(PTR_TYPE, bool_slot, 0);
-        let insert_ref = self.module.declare_func_in_func(runtime.set_insert, builder.func);
+        let insert_ref = self.module.declare_func_in_func(runtime.set_insert_erased, builder.func);
         for elem in elements {
             let elem_ptr = self.get_operand_ptr(builder, elem)?;
             let elem_tydesc_ptr = self.operand_tydesc(builder, elem)?;
@@ -210,7 +210,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         let create_ref = self.module.declare_func_in_func(runtime.map_create, builder.func);
         builder.ins().call(create_ref, &[rt_handle, map_ptr, map_tydesc_ptr]);
 
-        let insert_ref = self.module.declare_func_in_func(runtime.map_insert, builder.func);
+        let insert_ref = self.module.declare_func_in_func(runtime.map_insert_erased, builder.func);
         for (key, val) in entries {
             let key_ptr = self.get_operand_ptr(builder, key)?;
             let key_tydesc_ptr = self.operand_tydesc(builder, key)?;

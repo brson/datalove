@@ -650,6 +650,12 @@ fn trampoline_all_runtime_imports(
     tramp(jit_module, &mut runtime.set_build_from_sorted, c::dtlv_rti_btreeset_build_from_sorted_slice_local as *const u8)?;
     tramp(jit_module, &mut runtime.map_create, c::dtlv_rti_btreemap_create_local as *const u8)?;
     tramp(jit_module, &mut runtime.map_insert, c::dtlv_rti_btreemap_insert_local as *const u8)?;
+    tramp(jit_module, &mut runtime.list_push_erased,
+        c::dtlv_rti_list_push_erased_local as *const u8)?;
+    tramp(jit_module, &mut runtime.set_insert_erased,
+        c::dtlv_rti_btreeset_insert_erased_local as *const u8)?;
+    tramp(jit_module, &mut runtime.map_insert_erased,
+        c::dtlv_rti_btreemap_insert_erased_local as *const u8)?;
     tramp(jit_module, &mut runtime.map_build_from_sorted, c::dtlv_rti_btreemap_build_from_sorted_slices_local as *const u8)?;
     tramp(jit_module, &mut runtime.map_contains_key, c::dtlv_rti_btreemap_contains_key_local as *const u8)?;
     tramp(jit_module, &mut runtime.map_get_value_ref, c::dtlv_rti_btreemap_get_value_ref_local as *const u8)?;
@@ -718,6 +724,12 @@ fn register_runtime_symbols(jit_builder: &mut JITBuilder) {
     jit_builder.symbol("dtlv_rti_btreeset_build_from_sorted_slice_local", c::dtlv_rti_btreeset_build_from_sorted_slice_local as *const u8);
     jit_builder.symbol("dtlv_rti_btreemap_create_local", c::dtlv_rti_btreemap_create_local as *const u8);
     jit_builder.symbol("dtlv_rti_btreemap_insert_local", c::dtlv_rti_btreemap_insert_local as *const u8);
+    jit_builder.symbol("dtlv_rti_list_push_erased_local",
+        c::dtlv_rti_list_push_erased_local as *const u8);
+    jit_builder.symbol("dtlv_rti_btreeset_insert_erased_local",
+        c::dtlv_rti_btreeset_insert_erased_local as *const u8);
+    jit_builder.symbol("dtlv_rti_btreemap_insert_erased_local",
+        c::dtlv_rti_btreemap_insert_erased_local as *const u8);
     jit_builder.symbol("dtlv_rti_btreemap_build_from_sorted_slices_local", c::dtlv_rti_btreemap_build_from_sorted_slices_local as *const u8);
     jit_builder.symbol("dtlv_rti_btreemap_contains_key_local", c::dtlv_rti_btreemap_contains_key_local as *const u8);
     jit_builder.symbol("dtlv_rti_btreemap_get_value_ref_local", c::dtlv_rti_btreemap_get_value_ref_local as *const u8);

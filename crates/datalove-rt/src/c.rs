@@ -1199,6 +1199,114 @@ pub unsafe extern "C-unwind" fn dtlv_rti_btreemap_get_as_data_local(
     }
 }
 
+/// Whether an element has to be unpacked from a `data` to reach a slot.
+///
+/// A collection built inside a generic is made against the descriptor the call
+/// site handed over, so its elements are the real type. The element in hand is
+/// in the erased shape, which for a single type parameter is a `data`. The one
+/// case where the two readings coincide is a collection whose elements really
+/// are `data`, so the slot's own type is compared as well.
+///
+/// Here rather than at each call site, so that the four backends cannot each
+/// have their own answer. The same reading as `boxes_the_element` in the rider,
+/// running the other way.
+unsafe fn unwraps_the_element(
+    element_in_hand: *const rtdt::TyDesc,
+    slot_ty: rtdt::TyDescRef,
+) -> bool {
+    unsafe {
+        (*element_in_hand).type_tag == rtdt::TyTag::Data
+            && slot_ty.type_tag() != rtdt::TyTag::Data
+    }
+}
+
+/// Push an element that may have arrived in the erased shape.
+///
+/// A collection literal written inside a generic has its elements as `data`
+/// and its list as the caller's real type, so the two disagree and the element
+/// has to be unpacked on the way in. Copying it in as it stands would put a
+/// two-word wrapper where a value of the element type belongs.
+#[unsafe(no_mangle)]
+pub unsafe extern "C-unwind" fn dtlv_rti_list_push_erased_local(
+    rt: LocalRtHandle,
+    list_value_mut: *mut u8,
+    list_tydesc: *const rtdt::TyDesc,
+    element_in: *mut u8,
+    element_tydesc: *const rtdt::TyDesc,
+) -> RtStatus {
+    debug_assert!(!list_tydesc.is_null(), "list_tydesc is null");
+    debug_assert!(!element_tydesc.is_null(), "element_tydesc is null");
+    unsafe {
+        let list_ty = rtdt::TyDescRef::from_ptr(list_tydesc);
+        if unwraps_the_element(element_tydesc, list_ty.list_element_ty()) {
+            return dtlv_rti_list_push_data_local(
+                rt, list_value_mut, list_tydesc, element_in as *const u8);
+        }
+        dtlv_rti_list_push_local(rt, list_value_mut, list_tydesc, element_in, element_tydesc)
+    }
+}
+
+/// Insert an element that may have arrived in the erased shape.
+/// See `dtlv_rti_list_push_erased_local`.
+#[unsafe(no_mangle)]
+pub unsafe extern "C-unwind" fn dtlv_rti_btreeset_insert_erased_local(
+    rt: LocalRtHandle,
+    set_value_mut: *mut u8,
+    set_tydesc: *const rtdt::TyDesc,
+    element_in: *mut u8,
+    element_tydesc: *const rtdt::TyDesc,
+    bool_out: *mut u8,
+) -> RtStatus {
+    debug_assert!(!set_tydesc.is_null(), "set_tydesc is null");
+    debug_assert!(!element_tydesc.is_null(), "element_tydesc is null");
+    unsafe {
+        let set_ty = rtdt::TyDescRef::from_ptr(set_tydesc);
+        if unwraps_the_element(element_tydesc, set_ty.set_element_ty()) {
+            return dtlv_rti_btreeset_insert_data_local(
+                rt, set_value_mut, set_tydesc, element_in as *const u8, bool_out);
+        }
+        dtlv_rti_btreeset_insert_local(
+            rt, set_value_mut, set_tydesc, element_in, element_tydesc, bool_out)
+    }
+}
+
+/// Insert an entry whose key or value may have arrived in the erased shape.
+///
+/// The two are decided separately, because a map may be generic in one and
+/// concrete in the other. See `dtlv_rti_list_push_erased_local`.
+#[unsafe(no_mangle)]
+#[allow(clippy::too_many_arguments)]
+pub unsafe extern "C-unwind" fn dtlv_rti_btreemap_insert_erased_local(
+    rt: LocalRtHandle,
+    map_value_mut: *mut u8,
+    map_tydesc: *const rtdt::TyDesc,
+    key_in: *mut u8,
+    key_tydesc: *const rtdt::TyDesc,
+    value_in: *mut u8,
+    value_tydesc: *const rtdt::TyDesc,
+) -> RtStatus {
+    debug_assert!(!map_tydesc.is_null(), "map_tydesc is null");
+    debug_assert!(!key_tydesc.is_null(), "key_tydesc is null");
+    debug_assert!(!value_tydesc.is_null(), "value_tydesc is null");
+    unsafe {
+        let map_ty = rtdt::TyDescRef::from_ptr(map_tydesc);
+        let key_wrapped = unwraps_the_element(key_tydesc, map_ty.map_key_ty());
+        let value_wrapped = unwraps_the_element(value_tydesc, map_ty.map_value_ty());
+        if key_wrapped != value_wrapped {
+            // The insert entries take both sides the same way, so a map erased
+            // on one side only has no path through here yet. Lowering refuses
+            // to build one, so nothing arrives in this state.
+            return RtStatus::Error;
+        }
+        if key_wrapped {
+            return dtlv_rti_btreemap_insert_data_local(
+                rt, map_value_mut, map_tydesc, key_in as *const u8, value_in as *const u8);
+        }
+        dtlv_rti_btreemap_insert_local(
+            rt, map_value_mut, map_tydesc, key_in, key_tydesc, value_in, value_tydesc)
+    }
+}
+
 #[unsafe(no_mangle)]
 pub unsafe extern "C-unwind" fn dtlv_rti_btreemap_insert_data_local(
     rt: LocalRtHandle,

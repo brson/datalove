@@ -46,6 +46,12 @@ pub struct RuntimeImports {
     pub set_build_from_sorted: FuncId,
     /// `dtlv_rti_btreemap_create_local(rt, value_out, tydesc) -> RtStatus`
     pub map_create: FuncId,
+    /// `dtlv_rti_list_push_erased_local(rt, list, list_td, element_in, element_td) -> RtStatus`
+    pub list_push_erased: FuncId,
+    /// `dtlv_rti_btreeset_insert_erased_local(rt, set, set_td, element_in, element_td, bool_out) -> RtStatus`
+    pub set_insert_erased: FuncId,
+    /// `dtlv_rti_btreemap_insert_erased_local(rt, map, map_td, key_in, key_td, value_in, value_td) -> RtStatus`
+    pub map_insert_erased: FuncId,
     /// `dtlv_rti_btreemap_insert_local(rt, map_value_mut, map_tydesc, key_in, key_tydesc, value_in, value_tydesc) -> RtStatus`
     pub map_insert: FuncId,
     /// `dtlv_rti_btreemap_build_from_sorted_slices_local(rt, map_out, key_tydesc, value_tydesc, keys_ptr, values_ptr, num_entries) -> RtStatus`
@@ -257,6 +263,42 @@ impl RuntimeImports {
             module
                 .declare_function("dtlv_rti_list_push_local", Linkage::Import, &sig)
                 .map_err(|e| CraneliftError::Module(format!("declare dtlv_rti_list_push_local: {}", e)))?
+        };
+
+        // The same three again, taking an element that may have arrived in the
+        // erased shape. See `dtlv_rti_list_push_erased_local`.
+        let list_push_erased = {
+            let mut sig = cl_ir::Signature::new(call_conv);
+            for _ in 0..5 {
+                sig.params.push(AbiParam::new(PTR_TYPE));
+            }
+            sig.returns.push(AbiParam::new(cl_types::I8));
+            module
+                .declare_function("dtlv_rti_list_push_erased_local", Linkage::Import, &sig)
+                .map_err(|e| CraneliftError::Module(
+                    format!("declare dtlv_rti_list_push_erased_local: {}", e)))?
+        };
+        let set_insert_erased = {
+            let mut sig = cl_ir::Signature::new(call_conv);
+            for _ in 0..6 {
+                sig.params.push(AbiParam::new(PTR_TYPE));
+            }
+            sig.returns.push(AbiParam::new(cl_types::I8));
+            module
+                .declare_function("dtlv_rti_btreeset_insert_erased_local", Linkage::Import, &sig)
+                .map_err(|e| CraneliftError::Module(
+                    format!("declare dtlv_rti_btreeset_insert_erased_local: {}", e)))?
+        };
+        let map_insert_erased = {
+            let mut sig = cl_ir::Signature::new(call_conv);
+            for _ in 0..7 {
+                sig.params.push(AbiParam::new(PTR_TYPE));
+            }
+            sig.returns.push(AbiParam::new(cl_types::I8));
+            module
+                .declare_function("dtlv_rti_btreemap_insert_erased_local", Linkage::Import, &sig)
+                .map_err(|e| CraneliftError::Module(
+                    format!("declare dtlv_rti_btreemap_insert_erased_local: {}", e)))?
         };
 
         // dtlv_rti_list_build_from_slice_local(rt, list_out, element_tydesc, elements_ptr, num_elements) -> u8
@@ -733,6 +775,9 @@ impl RuntimeImports {
             string_from_bytes,
             list_create,
             list_push,
+            list_push_erased,
+            set_insert_erased,
+            map_insert_erased,
             list_build_from_slice,
             set_create,
             set_insert,
