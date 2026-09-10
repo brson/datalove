@@ -1020,10 +1020,20 @@ fun or_option<T>(self: ?T, other: ?T): ?T
 end fun
 ```
 
-**Bounds.** A type parameter may be written `<T: float>`, which says it is one
-of a fixed set of types — `f32` or `f64` — and in exchange the body may do what
-all of them have in common. For `float` that is the arithmetic, the comparisons,
-and what `sys/std/float` offers.
+**Bounds.** A signature may end with a `with` clause, which bounds a type
+parameter:
+
+```
+fun scaled<T>(a: T, b: T): T with { T is float, }
+  ret a * b
+end fun
+```
+
+A bound says the parameter is one of a fixed set of types — for `float` that is
+`f32` or `f64` — and in exchange the body may do what all of them have in
+common: the arithmetic, the comparisons, and what `sys/std/float` offers. The
+bounds sit apart from the names so that the signature reads as a signature; the
+clause may be put on its own lines when there are several.
 
 Erasure still compiles one body, so the machine code cannot hold the
 instruction for both widths. The operands arrive with their descriptors and the

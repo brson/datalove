@@ -768,12 +768,6 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         let src_ptr = self.get_operand_ptr(builder, src)?;
         let src_tydesc_ptr = self.operand_tydesc(builder, src)?;
 
-        // The destination's says what shape the clone has to arrive in. Where
-        // the two differ the value is wrapped on the way, which the runtime
-        // decides rather than this.
-        let dest_ty = self.func.value_types[dest.0 as usize].clone();
-        let dest_tydesc_ptr = self.static_tydesc(builder, &dest_ty)?;
-
         // Get frame slot and destination address for Int result.
         let frame_slot = self.frame_slot.ok_or_else(|| {
             CraneliftError::Codegen("no frame slot for Widen result".into())

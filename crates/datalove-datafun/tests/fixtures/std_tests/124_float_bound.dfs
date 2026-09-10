@@ -20,8 +20,8 @@ import float.distance
 // A type parameter bounded to `float`.
 //
 // A bare type parameter admits nothing but moving, dropping, cloning, printing
-// and handing on, because nothing is known about it. `T: float` says it is one
-// of two types, and in exchange the body may do what both have in common: the
+// and handing on, because nothing is known about it. `T is float` says it is
+// one of two types, and in exchange the body may do what both have in common: the
 // arithmetic, the comparisons, and the operations the rider offers.
 //
 // Erasure still compiles one body, so the machine code cannot hold an `fadd`
@@ -32,21 +32,21 @@ import float.distance
 // So each of these is one function serving both widths, and the same call
 // written twice gives answers of two different types.
 
-fun scaled<T: float>(a: T, b: T): T
+fun scaled<T>(a: T, b: T): T with { T is float, }
   ret a * b
 end fun
 
-fun span<T: float>(low: T, high: T): T
+fun span<T>(low: T, high: T): T with { T is float, }
   ret high - low
 end fun
 
-fun ordered<T: float>(a: T, b: T): bool
+fun ordered<T>(a: T, b: T): bool with { T is float, }
   ret a .< b
 end fun
 
 // A bounded generic handing its parameter to another one: the bound travels
 // with it, because whatever the outer call picked is what the inner gets.
-fun blend<T: float>(a: T, b: T, t: T): T
+fun blend<T>(a: T, b: T, t: T): T with { T is float, }
   // Cloned because handing a value to a function moves it, and these are
   // wanted twice. Reading one as the operand of an operator does not move it,
   // which is why `lerp` below needs no clone.
@@ -56,7 +56,7 @@ end fun
 // A value of a bounded parameter is still linear, so using one twice asks for
 // a clone. Being a float does not make it copy here: what is copy is read off
 // the type, and a type parameter's type is not known where it is written.
-fun squared<T: float>(x: T): T
+fun squared<T>(x: T): T with { T is float, }
   ret x@ * x
 end fun
 

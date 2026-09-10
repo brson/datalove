@@ -342,6 +342,9 @@ impl<'db> Parser<'db> {
             None
         };
 
+        // Bounds, if the signature ends with `with { T is float, }`.
+        let type_bounds = self.parse_with_clause(&type_params, type_bounds);
+
         // Enter function context for expression identity tracking.
         self.enter_function(name);
 
@@ -390,40 +393,90 @@ impl<'db> Parser<'db> {
         ))
     }
 
-    /// Parse the names inside `<...>` on a function signature.
-    /// Parse `<T>` or `<T: bound>`, giving the names and their bounds.
+    /// Parse the type parameter names inside `<...>` on a function signature.
     ///
-    /// The two come back together because they are one parse: nothing can put
-    /// a bound against a name that is not there.
+    /// The bounds come separately, from the `with` clause at the end of the
+    /// signature, so this gives an empty bound for each name and the clause
+    /// fills them in.
     fn parse_type_params(
         &mut self,
         inner: BracerIter<'db>,
     ) -> (Vec<InternedText<'db>>, Vec<Option<ast::TypeBound>>) {
         let mut sub = Parser::from_branch_with_context(
             self.db, inner, self.source_text(), None, self.module_id());
-        let parsed = sub.parse_comma_separated(|p| p.parse_type_param());
+        let names = sub.parse_comma_separated(|p| p.eat_name());
         sub.error_if_not_exhausted();
         self.had_error |= sub.had_error;
-        let mut names = Vec::new();
-        let mut bounds = Vec::new();
-        for (name, bound) in parsed.into_iter().flatten() {
-            names.push(name);
-            bounds.push(bound);
-        }
+        let names: Vec<_> = names.into_iter().flatten().collect();
+        let bounds = vec![None; names.len()];
         (names, bounds)
     }
 
-    /// One type parameter: a name, and after a colon the bound it must satisfy.
-    fn parse_type_param(&mut self) -> Option<(InternedText<'db>, Option<ast::TypeBound>)> {
-        let name = self.eat_name()?;
-        if !self.peek_sigil(Sigil::Colon) {
-            return Some((name, None));
+    /// Parse `with { T is float, }` after a signature, if it is there.
+    ///
+    /// A bound says which types its parameter may be, and in exchange the body
+    /// may do what all of them have in common. Written apart from the name so
+    /// that a signature reads as a signature and the constraints sit together
+    /// underneath it.
+    fn parse_with_clause(
+        &mut self,
+        type_params: &[InternedText<'db>],
+        mut bounds: Vec<Option<ast::TypeBound>>,
+    ) -> Vec<Option<ast::TypeBound>> {
+        if self.peek_word() != Some("with") {
+            return bounds;
         }
-        self.eat_sigil(Sigil::Colon);
+        self.eat_word("with");
+        let Some(inner) = self.eat_branch(Sigil::BraceOpen) else {
+            self.had_error = true;
+            DiagnosticBuilder::error(self.db, "expected `{` after `with`")
+                .code("P061")
+                .primary_label(self.peek_text_span(), "the bounds go in braces")
+                .emit_parse();
+            return bounds;
+        };
+
+        let mut sub = Parser::from_branch_with_context(
+            self.db, inner, self.source_text(), None, self.module_id());
+        let clauses = sub.parse_comma_separated(|p| p.parse_one_bound());
+        sub.error_if_not_exhausted();
+        self.had_error |= sub.had_error;
+
+        for (name, bound, ts) in clauses.into_iter().flatten() {
+            match type_params.iter().position(|p| *p == name) {
+                Some(i) => bounds[i] = Some(bound),
+                None => {
+                    self.had_error = true;
+                    DiagnosticBuilder::error(self.db, &format!(
+                        "`{}` is not a type parameter of this function",
+                        name.text(self.db)))
+                        .code("P062")
+                        .primary_label(ts, "bounded here but never declared")
+                        .emit_parse();
+                }
+            }
+        }
+        bounds
+    }
+
+    /// One line of a `with` clause: `T is float`.
+    fn parse_one_bound(
+        &mut self,
+    ) -> Option<(InternedText<'db>, ast::TypeBound, TextSpan<'db>)> {
+        let name_span = self.peek_text_span();
+        let name = self.eat_name()?;
+        if !self.eat_word("is") {
+            self.had_error = true;
+            DiagnosticBuilder::error(self.db, "expected `is` after the type parameter")
+                .code("P063")
+                .primary_label(self.peek_text_span(), "a bound reads `T is float`")
+                .emit_parse();
+            return None;
+        }
         let ts = self.peek_text_span();
         let bound_name = self.eat_name()?;
         match ast::TypeBound::from_name(bound_name.text(self.db)) {
-            Some(bound) => Some((name, Some(bound))),
+            Some(bound) => Some((name, bound, name_span)),
             None => {
                 self.had_error = true;
                 DiagnosticBuilder::error(self.db, &format!(
@@ -431,7 +484,7 @@ impl<'db> Parser<'db> {
                     .code("P060")
                     .primary_label(ts, "not a bound this language has")
                     .emit_parse();
-                Some((name, None))
+                None
             }
         }
     }
@@ -1026,6 +1079,8 @@ impl<'db> Parser<'db> {
             None
         };
 
+        let type_bounds = self.parse_with_clause(&type_params, type_bounds);
+
         ast::Statement::NativeFun(ast::StmtNativeFun {
             name,
             type_params,
@@ -1196,6 +1251,13 @@ impl<'db> Parser<'db> {
         let mut collected = Vec::new();
 
         while let Some(token) = self.peek() {
+            // A `with` clause ends the signature, so it ends the return type
+            // too. Only after something has been collected, so that a type may
+            // still be named `with`.
+            if !collected.is_empty() && self.peek_word() == Some("with") {
+                break;
+            }
+
             let should_stop = match token {
                 TreeToken::Token(t) => {
                     matches!(

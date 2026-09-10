@@ -202,13 +202,13 @@ native fun string_parse_f64(ref self: string): ?f64
 // One-operand operations on a type parameter bounded to `float`. The
 // implementation reads the width off the descriptor, so there is one of each
 // for both floats rather than one per width.
-native fun float_abs<T: float>(self: T): T
-native fun float_sqrt<T: float>(self: T): T
-native fun float_floor<T: float>(self: T): T
-native fun float_ceil<T: float>(self: T): T
-native fun float_round<T: float>(self: T): T
-native fun float_trunc<T: float>(self: T): T
-native fun float_fract<T: float>(self: T): T
-native fun float_recip<T: float>(self: T): T
-native fun float_signum<T: float>(self: T): T
-native fun float_neg<T: float>(self: T): T
+native fun float_abs<T>(self: T): T with { T is float, }
+native fun float_sqrt<T>(self: T): T with { T is float, }
+native fun float_floor<T>(self: T): T with { T is float, }
+native fun float_ceil<T>(self: T): T with { T is float, }
+native fun float_round<T>(self: T): T with { T is float, }
+native fun float_trunc<T>(self: T): T with { T is float, }
+native fun float_fract<T>(self: T): T with { T is float, }
+native fun float_recip<T>(self: T): T with { T is float, }
+native fun float_signum<T>(self: T): T with { T is float, }
+native fun float_neg<T>(self: T): T with { T is float, }

@@ -394,7 +394,7 @@ pub enum TypeBound {
 }
 
 impl TypeBound {
-    /// The bound a name in `<T: name>` stands for.
+    /// The bound a name in `T is name` stands for, if it names one.
     pub fn from_name(name: &str) -> Option<TypeBound> {
         match name {
             "float" => Some(TypeBound::Float),

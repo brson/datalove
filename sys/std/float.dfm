@@ -22,58 +22,58 @@ import std.float_signum
 import std.float_neg
 
 // The magnitude, without its sign.
-fun abs<T: float>(self: T): T
+fun abs<T>(self: T): T with { T is float, }
   ret float_abs(self)
 end fun
 
 // The square root.
-fun sqrt<T: float>(self: T): T
+fun sqrt<T>(self: T): T with { T is float, }
   ret float_sqrt(self)
 end fun
 
 // The largest whole number no greater than self.
-fun floor<T: float>(self: T): T
+fun floor<T>(self: T): T with { T is float, }
   ret float_floor(self)
 end fun
 
 // The smallest whole number no less than self.
-fun ceil<T: float>(self: T): T
+fun ceil<T>(self: T): T with { T is float, }
   ret float_ceil(self)
 end fun
 
 // The nearest whole number, halves away from zero.
-fun round<T: float>(self: T): T
+fun round<T>(self: T): T with { T is float, }
   ret float_round(self)
 end fun
 
 // The whole part, dropping the fraction.
-fun trunc<T: float>(self: T): T
+fun trunc<T>(self: T): T with { T is float, }
   ret float_trunc(self)
 end fun
 
 // The fractional part, keeping the sign.
-fun fract<T: float>(self: T): T
+fun fract<T>(self: T): T with { T is float, }
   ret float_fract(self)
 end fun
 
 // One divided by self.
-fun recip<T: float>(self: T): T
+fun recip<T>(self: T): T with { T is float, }
   ret float_recip(self)
 end fun
 
 // 1, -1 or a nan, matching self's sign.
-fun signum<T: float>(self: T): T
+fun signum<T>(self: T): T with { T is float, }
   ret float_signum(self)
 end fun
 
 // Self with its sign flipped.
-fun neg<T: float>(self: T): T
+fun neg<T>(self: T): T with { T is float, }
   ret float_neg(self)
 end fun
 
 // The smaller of the two. A nan compares false against everything, so a nan
 // on the left gives the right.
-fun min<T: float>(self: T, other: T): T
+fun min<T>(self: T, other: T): T with { T is float, }
   if self .< other
     ret self
   else
@@ -82,7 +82,7 @@ fun min<T: float>(self: T, other: T): T
 end fun
 
 // The larger of the two.
-fun max<T: float>(self: T, other: T): T
+fun max<T>(self: T, other: T): T with { T is float, }
   if self .> other
     ret self
   else
@@ -91,21 +91,21 @@ fun max<T: float>(self: T, other: T): T
 end fun
 
 // Self held between two bounds.
-fun clamp<T: float>(self: T, low: T, high: T): T
+fun clamp<T>(self: T, low: T, high: T): T with { T is float, }
   ret min(max(self, low), high)
 end fun
 
 // The point a fraction of the way from a to b.
-fun lerp<T: float>(a: T, b: T, t: T): T
+fun lerp<T>(a: T, b: T, t: T): T with { T is float, }
   ret a + (b - a) * t
 end fun
 
 // True if self is a nan, which is the one value that is not equal to itself.
-fun is_nan<T: float>(self: T): bool
+fun is_nan<T>(self: T): bool with { T is float, }
   ret self != self
 end fun
 
 // The difference between the two, without its sign.
-fun distance<T: float>(self: T, other: T): T
+fun distance<T>(self: T, other: T): T with { T is float, }
   ret float_abs(self - other)
 end fun
