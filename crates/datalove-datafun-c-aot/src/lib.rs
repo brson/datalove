@@ -363,7 +363,9 @@ impl CAotCompiler {
         writeln!(out, "extern uint8_t dtlv_rti_reify_local(void* rt, const void* src_in, const dtlv_tydesc_t* src_tydesc, void* dst_out, const dtlv_tydesc_t* dst_tydesc);").unwrap();
         writeln!(out, "extern uint8_t dtlv_rti_data_parts(const void* data_in, const void** value_out, const dtlv_tydesc_t** tydesc_out);").unwrap();
         // An operator on a type parameter bounded to `float`.
-        writeln!(out, "extern uint8_t dtlv_rti_float_binop(void* rt, uint8_t op, const void* lhs, const dtlv_tydesc_t* lhs_td, const void* rhs, const dtlv_tydesc_t* rhs_td, void* out, const dtlv_tydesc_t* out_td);").unwrap();
+        writeln!(out, "extern uint8_t dtlv_rti_dyn_binop(void* rt, uint8_t op, const void* lhs, const dtlv_tydesc_t* lhs_td, const void* rhs, const dtlv_tydesc_t* rhs_td, void* out, const dtlv_tydesc_t* out_td);").unwrap();
+        writeln!(out, "extern uint8_t dtlv_rti_dyn_binop_checked(void* rt, uint8_t op, const void* lhs, const dtlv_tydesc_t* lhs_td, const void* rhs, const dtlv_tydesc_t* rhs_td, void* out, const dtlv_tydesc_t* out_td, bool_t* overflow_out);").unwrap();
+        writeln!(out, "extern uint8_t dtlv_rti_dyn_neg_checked(void* rt, const void* value, const dtlv_tydesc_t* value_td, void* out, const dtlv_tydesc_t* out_td, bool_t* overflow_out);").unwrap();
         writeln!(out, "extern uint8_t dtlv_rti_list_get_erased_local(void* rt, const void* list_ref, const dtlv_tydesc_t* list_tydesc, index_t index, void* option_out, const dtlv_tydesc_t* option_tydesc);").unwrap();
         writeln!(out, "extern uint8_t dtlv_rti_clone_erased_local(void* rt, const void* src_in, const dtlv_tydesc_t* src_tydesc, void* dst_out, const dtlv_tydesc_t* dst_tydesc);").unwrap();
         writeln!(out).unwrap();

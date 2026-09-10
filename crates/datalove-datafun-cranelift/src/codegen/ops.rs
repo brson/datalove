@@ -457,7 +457,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         let dest_ptr = builder.ins().stack_addr(PTR_TYPE, frame_slot, dest_offset as i32);
         let dest_td = self.static_tydesc(builder, &dest_ty)?;
 
-        let callee = self.module.declare_func_in_func(runtime.float_binop, builder.func);
+        let callee = self.module.declare_func_in_func(runtime.dyn_binop, builder.func);
         builder.ins().call(callee, &[
             rt_handle, op_val, lhs_ptr, lhs_td, rhs_ptr, rhs_td, dest_ptr, dest_td,
         ]);
@@ -489,6 +489,14 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         // Bigints divide through the runtime rather than an instruction.
         if matches!(dest_ty, IrType::Int) {
             return self.compile_int_binop_checked(builder, dest, overflow_dest, op, lhs, rhs);
+        }
+
+        // A type parameter bounded to `fixedint`, whose width and signedness
+        // only the descriptor says. This body was compiled once and cannot hold
+        // the instruction for all ten, so the runtime reads and picks.
+        if matches!(dest_ty, IrType::Data) {
+            return self.compile_binop_checked_dynamic(
+                builder, dest, overflow_dest, op, lhs, rhs);
         }
 
         // Only supported for fixed-width integers.
@@ -699,6 +707,130 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         Ok(())
     }
 
+    /// A checked binop whose operands are carried as `data`.
+    ///
+    /// Reached only through a bound: without one nothing may be done to a type
+    /// parameter, so nothing else gets here.
+    fn compile_binop_checked_dynamic(
+        &mut self,
+        builder: &mut FunctionBuilder,
+        dest: ValueId,
+        overflow_dest: ValueId,
+        op: BinOp,
+        lhs: &Operand,
+        rhs: &Operand,
+    ) -> Result<(), CraneliftError> {
+        let code = datalove_datafun_ir::dyn_op_code(op).ok_or_else(|| {
+            CraneliftError::Codegen(format!("no dynamic form of {:?}", op))
+        })?;
+        let (rt_handle, runtime) = self.dynamic_call_context("a checked dynamic binop")?;
+
+        let op_val = builder.ins().iconst(cl_types::I8, code as u8 as i64);
+        let lhs_ptr = self.get_operand_ptr(builder, lhs)?;
+        let lhs_td = self.operand_tydesc(builder, lhs)?;
+        let rhs_ptr = self.get_operand_ptr(builder, rhs)?;
+        let rhs_td = self.operand_tydesc(builder, rhs)?;
+
+        let dest_ty = self.func.value_types[dest.0 as usize].clone();
+        let dest_ptr = self.frame_addr(builder, dest, "a checked dynamic binop")?;
+        let dest_td = self.static_tydesc(builder, &dest_ty)?;
+        let overflow_ptr = self.frame_addr(builder, overflow_dest, "a checked dynamic binop")?;
+
+        let callee = self.module.declare_func_in_func(runtime.dyn_binop_checked, builder.func);
+        builder.ins().call(callee, &[
+            rt_handle, op_val, lhs_ptr, lhs_td, rhs_ptr, rhs_td,
+            dest_ptr, dest_td, overflow_ptr,
+        ]);
+
+        self.read_back_dynamic(builder, dest, &dest_ty, dest_ptr);
+        let overflow = builder.ins().load(
+            cl_types::I8, cl_ir::MemFlagsData::new(), overflow_ptr, 0);
+        self.values.insert(overflow_dest, overflow);
+        Ok(())
+    }
+
+    /// Checked negation of a value carried as `data`.
+    fn compile_neg_checked_dynamic(
+        &mut self,
+        builder: &mut FunctionBuilder,
+        dest: ValueId,
+        overflow_dest: ValueId,
+        operand: &Operand,
+    ) -> Result<(), CraneliftError> {
+        let (rt_handle, runtime) = self.dynamic_call_context("a checked dynamic negation")?;
+
+        let value_ptr = self.get_operand_ptr(builder, operand)?;
+        let value_td = self.operand_tydesc(builder, operand)?;
+
+        let dest_ty = self.func.value_types[dest.0 as usize].clone();
+        let dest_ptr = self.frame_addr(builder, dest, "a checked dynamic negation")?;
+        let dest_td = self.static_tydesc(builder, &dest_ty)?;
+        let overflow_ptr =
+            self.frame_addr(builder, overflow_dest, "a checked dynamic negation")?;
+
+        let callee = self.module.declare_func_in_func(runtime.dyn_neg_checked, builder.func);
+        builder.ins().call(callee, &[
+            rt_handle, value_ptr, value_td, dest_ptr, dest_td, overflow_ptr,
+        ]);
+
+        self.read_back_dynamic(builder, dest, &dest_ty, dest_ptr);
+        let overflow = builder.ins().load(
+            cl_types::I8, cl_ir::MemFlagsData::new(), overflow_ptr, 0);
+        self.values.insert(overflow_dest, overflow);
+        Ok(())
+    }
+
+    /// The runtime handle and imports a call into the runtime needs.
+    fn dynamic_call_context(
+        &self,
+        what: &str,
+    ) -> Result<(cl_ir::Value, crate::runtime::RuntimeImports), CraneliftError> {
+        let runtime = self.runtime.ok_or_else(|| {
+            CraneliftError::Codegen(format!("{} requires runtime imports", what))
+        })?;
+        let rt_handle = self.rt_handle_param.ok_or_else(|| {
+            CraneliftError::Codegen(format!("{} requires runtime handle", what))
+        })?;
+        Ok((rt_handle, runtime))
+    }
+
+    /// The address of a value's slot in the frame.
+    fn frame_addr(
+        &self,
+        builder: &mut FunctionBuilder,
+        value: ValueId,
+        what: &str,
+    ) -> Result<cl_ir::Value, CraneliftError> {
+        let frame_slot = self.frame_slot.ok_or_else(|| {
+            CraneliftError::Codegen(format!("no frame slot for {}", what))
+        })?;
+        let offset = self.layout.value_offset(value.0);
+        Ok(builder.ins().stack_addr(PTR_TYPE, frame_slot, offset as i32))
+    }
+
+    /// Take a destination the runtime wrote back into an SSA value.
+    ///
+    /// A scalar is read back out of the frame, the way a call with an sret
+    /// return is; anything larger stays where it was put and travels as its
+    /// address.
+    fn read_back_dynamic(
+        &mut self,
+        builder: &mut FunctionBuilder,
+        dest: ValueId,
+        dest_ty: &IrType,
+        dest_ptr: cl_ir::Value,
+    ) {
+        if let crate::types::CraneliftRepr::Scalar(scalar_ty) =
+            crate::types::ir_type_to_cranelift(dest_ty)
+        {
+            let loaded = builder.ins().load(
+                scalar_ty, cl_ir::MemFlagsData::new(), dest_ptr, 0);
+            self.values.insert(dest, loaded);
+        } else {
+            self.values.insert(dest, dest_ptr);
+        }
+    }
+
     /// Compile a checked unary operation (produces result + overflow flag).
     pub(super) fn compile_unaryop_checked(
         &mut self,
@@ -717,6 +849,12 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         }
 
         let dest_ty = &self.func.value_types[dest.0 as usize];
+
+        // A type parameter bounded to `fixedint`, which may turn out to be
+        // unsigned; the runtime reads the descriptor and decides.
+        if matches!(dest_ty, IrType::Data) {
+            return self.compile_neg_checked_dynamic(builder, dest, overflow_dest, operand);
+        }
 
         // Only supported for signed integers.
         let (min_val, cl_ty) = match dest_ty {

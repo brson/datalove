@@ -493,13 +493,36 @@ impl IrInterpreter {
             unreachable!("no dynamic form of {:?}", op);
         };
         let status = unsafe {
-            datalove_rt::c::dtlv_rti_float_binop(
+            datalove_rt::c::dtlv_rti_dyn_binop(
                 self.runtime.handle(), code as u8,
                 lhs.ptr, lhs.tydesc, rhs.ptr, rhs.tydesc, dest.ptr, dest.tydesc,
             )
         };
         assert_eq!(status, datalove_rt::c::RtStatus::Ok,
             "applying {:?} to a bounded type parameter", op);
+    }
+
+    /// A checked binop whose operands are carried as `data`.
+    fn execute_binop_checked_dynamic(
+        &mut self,
+        op: BinOp,
+        lhs: &Value,
+        rhs: &Value,
+        dest: Destination,
+        overflow_dest: Destination,
+    ) {
+        let Some(code) = datalove_datafun_ir::dyn_op_code(op) else {
+            unreachable!("no dynamic form of {:?}", op);
+        };
+        let status = unsafe {
+            datalove_rt::c::dtlv_rti_dyn_binop_checked(
+                self.runtime.handle(), code as u8,
+                lhs.ptr, lhs.tydesc, rhs.ptr, rhs.tydesc, dest.ptr, dest.tydesc,
+                overflow_dest.ptr as *mut bool,
+            )
+        };
+        assert_eq!(status, datalove_rt::c::RtStatus::Ok,
+            "applying checked {:?} to a bounded type parameter", op);
     }
 
     fn execute_binop_bool(
@@ -692,6 +715,11 @@ impl IrInterpreter {
                 rtdt::TyTag::U64 => Self::execute_binop_checked_int::<u64>(op, lhs, rhs, dest, overflow_dest),
                 rtdt::TyTag::Index => Self::execute_binop_checked_int::<rtdt::IndexRepr>(op, lhs, rhs, dest, overflow_dest),
                 rtdt::TyTag::Int => self.execute_binop_checked_bigint(op, lhs, rhs, dest, overflow_dest),
+                // A value whose type only its descriptor says: a type parameter
+                // bounded to `fixedint`, which the call site fixed at one of the
+                // ten widths. The runtime reads the descriptor and picks.
+                rtdt::TyTag::Data =>
+                    self.execute_binop_checked_dynamic(op, lhs, rhs, dest, overflow_dest),
                 // Checked ops only apply to the integer types; type checker ensures this.
                 _ => unreachable!("unsupported checked binop {:?} for type {:?}", op, tag),
             }
@@ -779,10 +807,29 @@ impl IrInterpreter {
                 rtdt::TyTag::I32 => Self::execute_checked_neg::<i32>(src, dest, overflow_dest),
                 rtdt::TyTag::I64 => Self::execute_checked_neg::<i64>(src, dest, overflow_dest),
                 rtdt::TyTag::Offset => Self::execute_checked_neg::<rtdt::OffsetRepr>(src, dest, overflow_dest),
+                rtdt::TyTag::Data => self.execute_checked_neg_dynamic(src, dest, overflow_dest),
                 // Checked negation only for signed ints; type checker ensures this.
                 _ => unreachable!("checked negation only supported for signed integers, got {:?}", tag),
             }
         }
+    }
+
+    /// Checked negation of a value carried as `data`.
+    fn execute_checked_neg_dynamic(
+        &self,
+        src: &Value,
+        dest: Destination,
+        overflow_dest: Destination,
+    ) {
+        let status = unsafe {
+            datalove_rt::c::dtlv_rti_dyn_neg_checked(
+                self.runtime.handle(),
+                src.ptr, src.tydesc, dest.ptr, dest.tydesc,
+                overflow_dest.ptr as *mut bool,
+            )
+        };
+        assert_eq!(status, datalove_rt::c::RtStatus::Ok,
+            "negating a bounded type parameter");
     }
 
     /// Checked negation for signed integers.

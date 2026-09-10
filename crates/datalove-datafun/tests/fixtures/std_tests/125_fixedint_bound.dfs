@@ -1,0 +1,121 @@
+require module sys/std/fixedint
+
+import fixedint.min
+import fixedint.max
+import fixedint.clamp
+import fixedint.abs_diff
+import fixedint.sorted_pair
+import fixedint.in_range
+import fixedint.least
+import fixedint.greatest
+import fixedint.sum
+import fixedint.product
+import fixedint.is_sorted
+
+// A type parameter bounded to `fixedint`.
+//
+// A bare type parameter admits nothing but moving, dropping, cloning, printing
+// and handing on, because nothing is known about it. `T is fixedint` says it is
+// one of ten types -- the eight widths plus `index` and `offset` -- and in
+// exchange the body may do what all ten have in common.
+//
+// That is less than `float` gets. A fixed-width integer has no bare `+`, so
+// neither does a parameter bounded to one: the arithmetic here is the checked
+// and optional forms, which say what happened rather than wrapping quietly.
+// The comparisons are the same for all ten once the descriptor has said
+// whether the bits are signed.
+//
+// Erasure still compiles one body, so the machine code cannot hold the
+// instruction for all ten widths. The operands arrive with their descriptors
+// and the runtime reads which integer it is, exactly as a collection of a type
+// parameter has its elements walked by size read off a descriptor.
+
+fun total<T>(a: T, b: T): ?T with { T is fixedint, }
+  ret some (a +? b)
+end fun
+
+fun difference<T>(a: T, b: T): !T with { T is fixedint, }
+  ret ok (a -! b)
+end fun
+
+fun scaled<T>(a: T, b: T): ?T with { T is fixedint, }
+  ret some (a *? b)
+end fun
+
+fun quotient<T>(a: T, b: T): ?T with { T is fixedint, }
+  ret some (a /? b)
+end fun
+
+// Negation is the result form, not the optional one: `-?` is refused for
+// unsigned operands, and a parameter may turn out to be one.
+fun negated<T>(a: T): !T with { T is fixedint, }
+  ret ok (-! a)
+end fun
+
+fun ordered<T>(a: T, b: T): bool with { T is fixedint, }
+  ret a .< b
+end fun
+
+// A bounded generic handing its parameter to another one: the bound travels
+// with it, because whatever the outer call picked is what the inner gets.
+fun bounded<T>(x: T, low: T, high: T): T with { T is fixedint, }
+  ret clamp(x, low, high)
+end fun
+
+// A value of a bounded parameter is still linear, so using one twice asks for
+// a clone. Being an integer does not make it copy here: what is copy is read
+// off the type, and a type parameter's type is not known where it is written.
+fun doubled<T>(x: T): ?T with { T is fixedint, }
+  ret some (x@ +? x)
+end fun
+
+// The same call written at each of the ten types the bound admits.
+let narrow_unsigned = (total(: u8 / 3, : u8 / 200), total(: u8 / 100, : u8 / 200),
+                       total(: u16 / 1, : u16 / 65534), total(: u16 / 2, : u16 / 65534))
+let wide_unsigned = (total(: u32 / 7, : u32 / 8), total(: u64 / 7, : u64 / 8),
+                     total(: index / 7, : index / 8))
+let narrow_signed = (difference(: i8 / -128, : i8 / 1), difference(: i8 / 5, : i8 / 9),
+                     difference(: i16 / 0, : i16 / 300))
+let wide_signed = (difference(: i32 / 5, : i32 / 9), difference(: i64 / 5, : i64 / 9),
+                   difference(: offset / 5, : offset / 9))
+
+let products = (scaled(: u8 / 16, : u8 / 15), scaled(: u8 / 16, : u8 / 16),
+                scaled(: i32 / -3, : i32 / 7))
+let quotients = (quotient(: i32 / 7, : i32 / 2), quotient(: i32 / 7, : i32 / 0),
+                 quotient(: i32 / -2147483648, : i32 / -1), quotient(: u64 / 100, : u64 / 7))
+
+// Negation over the whole range: the most negative signed value has no
+// counterpart, zero is the only unsigned value that survives it.
+let negations = (negated(: i32 / 5), negated(: i32 / -2147483648),
+                 negated(: u32 / 0), negated(: u32 / 3), negated(: offset / -1))
+
+let comparisons = (ordered(: u8 / 3, : u8 / 200), ordered(: i8 / 3, : i8 / -100),
+                   ordered(: index / 1, : index / 2), ordered(: offset / -1, : offset / 1))
+
+let forwarded = (bounded(: index / 12, : index / 0, : index / 10),
+                 bounded(: i16 / -50, : i16 / -10, : i16 / 10))
+let repeated = (doubled(: u8 / 100), doubled(: u8 / 200), doubled(: i64 / -3))
+
+// The module's own functions, over three of the ten.
+let picking = (min(: u8 / 3, : u8 / 200), max(: i32 / -5, : i32 / -9),
+               clamp(: index / 12, : index / 0, : index / 10),
+               in_range(: i16 / 5, : i16 / 0, : i16 / 9),
+               in_range(: i16 / 50, : i16 / 0, : i16 / 9))
+let pairs = (sorted_pair(: offset / 4, : offset / -4), sorted_pair(: u32 / 1, : u32 / 2))
+let distances = (abs_diff(: u8 / 3, : u8 / 200), abs_diff(: i8 / 127, : i8 / -128))
+
+let ns: [u32] = [: u32 / 5, : u32 / 2, : u32 / 9, : u32 / 4]
+let over: [u8] = [: u8 / 200, : u8 / 200]
+let sorted: [i64] = [: i64 / -3, : i64 / 0, : i64 / 7]
+let empty: [u16] = []
+let folded = (least(ref ns), greatest(ref ns), sum(ref ns), product(ref ns),
+              is_sorted(ref ns))
+let overflowed = (sum(ref over), product(ref over))
+let ascending = (is_sorted(ref sorted), sum(ref sorted), least(ref sorted),
+                 greatest(ref sorted))
+let nothing = (least(ref empty), greatest(ref empty), sum(ref empty),
+               product(ref empty), is_sorted(ref empty))
+
+let output = (narrow_unsigned, wide_unsigned, narrow_signed, wide_signed,
+              products, quotients, negations, comparisons, forwarded, repeated,
+              picking, pairs, distances, folded, overflowed, ascending, nothing)

@@ -1029,22 +1029,37 @@ fun scaled<T>(a: T, b: T): T with { T is float, }
 end fun
 ```
 
-A bound says the parameter is one of a fixed set of types — for `float` that is
-`f32` or `f64` — and in exchange the body may do what all of them have in
-common: the arithmetic, the comparisons, and what `sys/std/float` offers. The
-bounds sit apart from the names so that the signature reads as a signature; the
-clause may be put on its own lines when there are several.
+A bound says the parameter is one of a fixed set of types, and in exchange the
+body may do what all of them have in common. The bounds sit apart from the
+names so that the signature reads as a signature. The clause may be spread over
+several lines, but the `with` has to be on the signature's own line, because
+that is where the signature ends.
+
+There are two bounds:
+
+- **`float`** is `f32` or `f64`. Both have the bare arithmetic and the
+  comparisons, so a parameter bounded to it has them too, along with what
+  `sys/std/float` offers.
+- **`fixedint`** is any of the ten fixed-width integers: `u8`, `i8`, `u16`,
+  `i16`, `u32`, `i32`, `u64`, `i64`, `index` and `offset`. What all ten have is
+  the comparisons and the checked and optional arithmetic — `+!`, `+?` and the
+  rest. Bare `+` is not among them, because a fixed-width integer does not have
+  one. Negation is the result form `-!` and not the optional `-?`, which is
+  refused for unsigned operands and so refused for a parameter that may turn
+  out to be one. `sys/std/fixedint` is what is written on top of that.
 
 Erasure still compiles one body, so the machine code cannot hold the
-instruction for both widths. The operands arrive with their descriptors and the
-runtime reads which float it is, the same way a collection of a type parameter
-has its elements walked by a size read off a descriptor. A call site that binds
-the parameter to anything else is refused.
+instruction for every type the bound admits. The operands arrive with their
+descriptors and the runtime reads which type it is, the same way a collection
+of a type parameter has its elements walked by a size read off a descriptor. A
+call site that binds the parameter to anything else is refused.
 
-`float` is the only bound so far. A value of a bounded parameter is still
-linear, so handing one to a function twice asks for a clone; reading one as the
-operand of an operator does not move it. A float literal cannot be written at
-type `T`, so a function wanting a constant has to be given one.
+A value of a bounded parameter is still linear, so handing one to a function
+twice asks for a clone; reading one as the operand of an operator does not move
+it. A literal cannot be written at type `T`, so a function wanting a constant
+has to be given one — which is why `sys/std/fixedint` has no `zero` and no
+`min_value`, and why its folds start from the first element rather than from a
+neutral one.
 
 **What a bare type parameter does not admit.** Anything that would need to know
 what the type is. A `T` can be moved, dropped, cloned, printed, stored, returned and

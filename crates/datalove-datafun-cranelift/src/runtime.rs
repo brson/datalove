@@ -108,8 +108,12 @@ pub struct RuntimeImports {
     pub data_parts: FuncId,
     /// `dtlv_rti_data_from_local(rt, inner, inner_tydesc, dest) -> RtStatus`
     pub data_from_local: FuncId,
-    /// `dtlv_rti_float_binop(rt, op, lhs, lhs_td, rhs, rhs_td, out, out_td)`
-    pub float_binop: FuncId,
+    /// `dtlv_rti_dyn_binop(rt, op, lhs, lhs_td, rhs, rhs_td, out, out_td)`
+    pub dyn_binop: FuncId,
+    /// `dtlv_rti_dyn_binop_checked(rt, op, lhs, lhs_td, rhs, rhs_td, out, out_td, overflow)`
+    pub dyn_binop_checked: FuncId,
+    /// `dtlv_rti_dyn_neg_checked(rt, value, value_td, out, out_td, overflow)`
+    pub dyn_neg_checked: FuncId,
     /// `dtlv_rti_list_get_erased_local(rt, list, list_td, index, opt_out, opt_td) -> RtStatus`
     pub list_get_erased: FuncId,
     /// `dtlv_rti_clone_erased_local(rt, src, src_td, dst, dst_td) -> RtStatus`
@@ -647,10 +651,9 @@ impl RuntimeImports {
                     format!("declare dtlv_rti_data_from_local: {}", e)))?
         };
 
-        // An operator on a type parameter bounded to `float`, whose width only
-        // the descriptor says.
-        let float_binop = {
-            let mut sig = module.make_signature();
+        // An operator on a bounded type parameter, whose type only the
+        // descriptor says.
+        fn dyn_binop_sig(mut sig: cl_ir::Signature, checked: bool) -> cl_ir::Signature {
             sig.params.push(AbiParam::new(PTR_TYPE));       // rt
             sig.params.push(AbiParam::new(cl_types::I8));   // op
             sig.params.push(AbiParam::new(PTR_TYPE));       // lhs
@@ -659,10 +662,36 @@ impl RuntimeImports {
             sig.params.push(AbiParam::new(PTR_TYPE));       // rhs tydesc
             sig.params.push(AbiParam::new(PTR_TYPE));       // out
             sig.params.push(AbiParam::new(PTR_TYPE));       // out tydesc
+            if checked {
+                sig.params.push(AbiParam::new(PTR_TYPE));   // overflow out
+            }
             sig.returns.push(AbiParam::new(cl_types::I8));
-            module.declare_function("dtlv_rti_float_binop", Linkage::Import, &sig)
+            sig
+        }
+        let dyn_binop = {
+            let sig = dyn_binop_sig(module.make_signature(), false);
+            module.declare_function("dtlv_rti_dyn_binop", Linkage::Import, &sig)
                 .map_err(|e| CraneliftError::Module(
-                    format!("declare dtlv_rti_float_binop: {}", e)))?
+                    format!("declare dtlv_rti_dyn_binop: {}", e)))?
+        };
+        let dyn_binop_checked = {
+            let sig = dyn_binop_sig(module.make_signature(), true);
+            module.declare_function("dtlv_rti_dyn_binop_checked", Linkage::Import, &sig)
+                .map_err(|e| CraneliftError::Module(
+                    format!("declare dtlv_rti_dyn_binop_checked: {}", e)))?
+        };
+        let dyn_neg_checked = {
+            let mut sig = module.make_signature();
+            sig.params.push(AbiParam::new(PTR_TYPE));       // rt
+            sig.params.push(AbiParam::new(PTR_TYPE));       // value
+            sig.params.push(AbiParam::new(PTR_TYPE));       // value tydesc
+            sig.params.push(AbiParam::new(PTR_TYPE));       // out
+            sig.params.push(AbiParam::new(PTR_TYPE));       // out tydesc
+            sig.params.push(AbiParam::new(PTR_TYPE));       // overflow out
+            sig.returns.push(AbiParam::new(cl_types::I8));
+            module.declare_function("dtlv_rti_dyn_neg_checked", Linkage::Import, &sig)
+                .map_err(|e| CraneliftError::Module(
+                    format!("declare dtlv_rti_dyn_neg_checked: {}", e)))?
         };
 
         // Indexing a list whose elements a generic cannot name. The runtime
@@ -734,7 +763,9 @@ impl RuntimeImports {
             erase,
             data_parts,
             data_from_local,
-            float_binop,
+            dyn_binop,
+            dyn_binop_checked,
+            dyn_neg_checked,
             list_get_erased,
             clone_erased,
             reify,

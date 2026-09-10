@@ -562,13 +562,13 @@ pub unsafe extern "C-unwind" fn dtlv_rti_clone_erased_local(
     }
 }
 
-/// Apply an operator to two floats whose type only their descriptors say.
+/// Apply an operator to two numbers whose type only their descriptors say.
 ///
 /// `op` is a `rtdt::DynOp`. See `dyn_ops`: this is how a generic bounded to
-/// `float` adds or compares its type parameter, since one compiled body cannot
-/// hold the instruction for both widths.
+/// `float` or `fixedint` operates on its type parameter, since one compiled
+/// body cannot hold the instruction for every type the bound admits.
 #[unsafe(no_mangle)]
-pub unsafe extern "C-unwind" fn dtlv_rti_float_binop(
+pub unsafe extern "C-unwind" fn dtlv_rti_dyn_binop(
     rt: LocalRtHandle,
     op: u8,
     lhs: *const u8,
@@ -585,15 +585,46 @@ pub unsafe extern "C-unwind" fn dtlv_rti_float_binop(
         return RtStatus::Error;
     };
     unsafe {
-        crate::impls::dyn_ops::float_binop(
+        crate::impls::dyn_ops::dyn_binop(
             rt, op, lhs, lhs_tydesc, rhs, rhs_tydesc, out, out_tydesc)
     }
 }
 
-/// Apply a one-operand operation to a float whose type only its descriptor
+/// Apply a checked operator to two integers whose type only their descriptors
+/// say, writing to `overflow_out` whether the answer fit.
+///
+/// A fixed-width integer has no bare arithmetic, so this rather than
+/// `dtlv_rti_dyn_binop` is where a `T is fixedint` adds.
+#[unsafe(no_mangle)]
+#[allow(clippy::too_many_arguments)]
+pub unsafe extern "C-unwind" fn dtlv_rti_dyn_binop_checked(
+    rt: LocalRtHandle,
+    op: u8,
+    lhs: *const u8,
+    lhs_tydesc: *const rtdt::TyDesc,
+    rhs: *const u8,
+    rhs_tydesc: *const rtdt::TyDesc,
+    out: *mut u8,
+    out_tydesc: *const rtdt::TyDesc,
+    overflow_out: *mut bool,
+) -> RtStatus {
+    debug_assert!(!lhs.is_null(), "lhs is null");
+    debug_assert!(!rhs.is_null(), "rhs is null");
+    debug_assert!(!out.is_null(), "out is null");
+    debug_assert!(!overflow_out.is_null(), "overflow_out is null");
+    let Some(op) = rtdt::DynOp::from_code(op) else {
+        return RtStatus::Error;
+    };
+    unsafe {
+        crate::impls::dyn_ops::dyn_binop_checked(
+            rt, op, lhs, lhs_tydesc, rhs, rhs_tydesc, out, out_tydesc, overflow_out)
+    }
+}
+
+/// Apply a one-operand operation to a number whose type only its descriptor
 /// says. `op` is a `rtdt::DynUnOp`.
 #[unsafe(no_mangle)]
-pub unsafe extern "C-unwind" fn dtlv_rti_float_unop(
+pub unsafe extern "C-unwind" fn dtlv_rti_dyn_unop(
     rt: LocalRtHandle,
     op: u8,
     value: *const u8,
@@ -606,7 +637,27 @@ pub unsafe extern "C-unwind" fn dtlv_rti_float_unop(
     let Some(op) = rtdt::DynUnOp::from_code(op) else {
         return RtStatus::Error;
     };
-    unsafe { crate::impls::dyn_ops::float_unop(rt, op, value, value_tydesc, out, out_tydesc) }
+    unsafe { crate::impls::dyn_ops::dyn_unop(rt, op, value, value_tydesc, out, out_tydesc) }
+}
+
+/// Negate an integer whose type only its descriptor says, writing to
+/// `overflow_out` whether the answer fit.
+#[unsafe(no_mangle)]
+pub unsafe extern "C-unwind" fn dtlv_rti_dyn_neg_checked(
+    rt: LocalRtHandle,
+    value: *const u8,
+    value_tydesc: *const rtdt::TyDesc,
+    out: *mut u8,
+    out_tydesc: *const rtdt::TyDesc,
+    overflow_out: *mut bool,
+) -> RtStatus {
+    debug_assert!(!value.is_null(), "value is null");
+    debug_assert!(!out.is_null(), "out is null");
+    debug_assert!(!overflow_out.is_null(), "overflow_out is null");
+    unsafe {
+        crate::impls::dyn_ops::dyn_neg_checked(
+            rt, value, value_tydesc, out, out_tydesc, overflow_out)
+    }
 }
 
 /// Borrow what a Data holds, as a value pointer and its descriptor.

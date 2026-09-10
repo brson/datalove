@@ -308,6 +308,21 @@ impl Data {
         }
     }
 
+    /// The bits of a value held in the words themselves rather than behind a
+    /// pointer.
+    ///
+    /// A narrow scalar rides in the primary word and a 64-bit one takes the
+    /// whole secondary, so which word to read depends on the tag. Reading a
+    /// value back generically needs both, and the choosing is done here rather
+    /// than at each caller.
+    pub fn inline_bits(&self) -> u64 {
+        match self.tag() {
+            Tag::SmallImmediate => self.immediate_u61(),
+            Tag::InlineWithTyDesc => self.secondary_value(),
+            other => panic!("{:?} does not hold its value inline", other),
+        }
+    }
+
     /// Get the secondary word as a u64 value (for inline values).
     #[inline]
     fn secondary_value(&self) -> u64 {

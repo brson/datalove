@@ -593,14 +593,17 @@ fn synthesize_binop<'db>(
     let operand_ty = lhs_ty.clone();
 
     // A bounded type parameter is whichever of its types the call site picks,
-    // and the operators they all have go through. `float` is `f32` or `f64`,
-    // both of which take the bare arithmetic and the comparisons, so a `T:
-    // float` takes them too. Which one it turns out to be is read off the
-    // descriptor at run time, the same way a collection's elements are.
-    let float_bounded = matches!(&operand_ty,
-        Type::Datalit(datalit::tycheck::Type::Var(name))
-            if ctx.type_param_bounds.get(name)
-                == Some(&datalove_datafun_ast::ast::TypeBound::Float));
+    // and the operators they all have go through. Which one it turns out to be
+    // is read off the descriptor at run time, the same way a collection's
+    // elements are.
+    //
+    // `float` is `f32` or `f64`, both of which take the bare arithmetic and the
+    // comparisons. `fixedint` is any of the ten fixed widths, none of which has
+    // bare arithmetic at all, so its parameter gets the comparisons and the
+    // checked and optional forms and no more.
+    let bound = operand_bound(ctx, &operand_ty);
+    let float_bounded = bound == Some(datalove_datafun_ast::ast::TypeBound::Float);
+    let fixedint_bounded = bound == Some(datalove_datafun_ast::ast::TypeBound::FixedInt);
 
     // Boolean logic operators require bool operands.
     if matches!(op, BinOp::And | BinOp::Or | BinOp::Xor) {
@@ -611,8 +614,8 @@ fn synthesize_binop<'db>(
                 &type_to_string(db, &operand_ty)
             ));
         }
-    } else if float_bounded {
-        // Nothing more to check: every type the bound admits is numeric.
+    } else if float_bounded || fixedint_bounded {
+        // Nothing more to check: every type either bound admits is numeric.
     } else {
         // All other operators require numeric types.
         if !is_numeric_type(&operand_ty) {
@@ -662,7 +665,7 @@ fn synthesize_binop<'db>(
         // Checked operators yield element type directly (not wrapped in Result).
         // On overflow, the function early-returns with an error.
         AddChecked | SubChecked | MulChecked => {
-            if !is_fixed_int_type(&operand_ty) {
+            if !fixedint_bounded && !is_fixed_int_type(&operand_ty) {
                 return Err(ctx.error_invalid_operand_type(
                     expr,
                     binop_to_str(op),
@@ -674,7 +677,10 @@ fn synthesize_binop<'db>(
         }
 
         DivChecked => {
-            if !is_fixed_int_type(&operand_ty) && !is_bigint_type(&operand_ty) {
+            if !fixedint_bounded
+                && !is_fixed_int_type(&operand_ty)
+                && !is_bigint_type(&operand_ty)
+            {
                 return Err(ctx.error_invalid_operand_type(
                     expr,
                     binop_to_str(op),
@@ -687,7 +693,7 @@ fn synthesize_binop<'db>(
 
         // Optional arithmetic: only fixed ints, early-returns None on overflow.
         AddOptional | SubOptional | MulOptional => {
-            if !is_fixed_int_type(&operand_ty) {
+            if !fixedint_bounded && !is_fixed_int_type(&operand_ty) {
                 return Err(ctx.error_invalid_operand_type(
                     expr,
                     binop_to_str(op),
@@ -699,7 +705,10 @@ fn synthesize_binop<'db>(
         }
 
         DivOptional => {
-            if !is_fixed_int_type(&operand_ty) && !is_bigint_type(&operand_ty) {
+            if !fixedint_bounded
+                && !is_fixed_int_type(&operand_ty)
+                && !is_bigint_type(&operand_ty)
+            {
                 return Err(ctx.error_invalid_operand_type(
                     expr,
                     binop_to_str(op),
@@ -744,6 +753,9 @@ fn synthesize_unaryop<'db>(
     ctx.ref_context = old_ref_context;
     let operand_type = operand_ty.clone();
 
+    let bound = operand_bound(ctx, &operand_type);
+    let fixedint_bounded = bound == Some(datalove_datafun_ast::ast::TypeBound::FixedInt);
+
     // Boolean not requires bool operand.
     if matches!(op, UnaryOp::Not) {
         if !is_bool_type(&operand_type) {
@@ -753,6 +765,8 @@ fn synthesize_unaryop<'db>(
                 &type_to_string(db, &operand_type)
             ));
         }
+    } else if fixedint_bounded {
+        // Every type the bound admits is numeric.
     } else {
         // All other unary operators require numeric types.
         if !is_numeric_type(&operand_type) {
@@ -795,7 +809,7 @@ fn synthesize_unaryop<'db>(
         // Result negation: only fixed ints.
         // Returns element type directly; on overflow, early-returns Err.
         UnaryOp::NegResult => {
-            if !is_fixed_int_type(&operand_type) {
+            if !fixedint_bounded && !is_fixed_int_type(&operand_type) {
                 return Err(ctx.error_invalid_operand_type(
                     expr,
                     unaryop_to_str(op),
@@ -1029,6 +1043,22 @@ pub(crate) fn synthesize_function_call_expecting<'db>(
     Ok(return_type)
 }
 
+/// The bound on a type, if it is a type parameter carrying one.
+///
+/// Anything that is not a parameter is its own type and has no bound; anything
+/// that is a parameter without one admits nothing but moving and dropping, so
+/// it is `None` too and every operator refuses it.
+fn operand_bound<'db>(
+    ctx: &TypeContext<'db>,
+    ty: &Type<'db>,
+) -> Option<datalove_datafun_ast::ast::TypeBound> {
+    match ty {
+        Type::Datalit(datalit::tycheck::Type::Var(name)) =>
+            ctx.type_param_bounds.get(name).copied(),
+        _ => None,
+    }
+}
+
 /// Whether a bound admits a type.
 ///
 /// `float` is `f32` or `f64` and nothing else. A bare integer literal is `int`
@@ -1048,10 +1078,11 @@ fn bound_admits<'db>(
     }
     match bound {
         TypeBound::Float => matches!(ty, datalit::tycheck::Type::F32 | datalit::tycheck::Type::F64),
+        TypeBound::FixedInt => datalit::tycheck::is_fixed_int_type(ty),
     }
 }
 
-/// Replace a bound type parameter with what the call site bound it to./// Replace a bound type parameter with what the call site bound it to.
+/// Replace a bound type parameter with what the call site bound it to.
 ///
 /// A parameter may sit at any depth, so this rebuilds the type around it. A
 /// function type has no type parameters inside it to replace.

@@ -713,7 +713,7 @@ impl<'a> FunctionCodegenContext<'a> {
             let rhs_td = self.operand_tydesc(rhs);
             let dest_ty = self.value_type(dest).clone();
             let dest_td = self.tydesc_name(&dest_ty);
-            writeln!(out, "    dtlv_rti_float_binop(rt, {code}, {lhs_addr}, {lhs_td}, \
+            writeln!(out, "    dtlv_rti_dyn_binop(rt, {code}, {lhs_addr}, {lhs_td}, \
                 {rhs_addr}, {rhs_td}, {dest_addr}, &{dest_td});").unwrap();
             return Ok(());
         }
@@ -848,6 +848,22 @@ impl<'a> FunctionCodegenContext<'a> {
             writeln!(out,
                 "    *(bool_t*){} = dtlv_rti_int_div_checked(rt, {}, &{}, {}, &{}, {}, &{}) != 1;",
                 overflow_addr, lhs_addr, tydesc, rhs_addr, tydesc, dest_addr, tydesc).unwrap();
+            return Ok(());
+        }
+
+        // A type parameter bounded to `fixedint`, whose width and signedness
+        // only the descriptor says. This body is emitted once and cannot hold
+        // the arithmetic for all ten, so the runtime reads and picks.
+        if matches!(lhs_ty, IrType::Data) {
+            let code = datalove_datafun_ir::dyn_op_code(op).ok_or_else(|| {
+                CAotError::Codegen(format!("no dynamic form of {:?}", op))
+            })? as u8;
+            let lhs_td = self.operand_tydesc(lhs);
+            let rhs_td = self.operand_tydesc(rhs);
+            let dest_ty = self.value_type(dest).clone();
+            let dest_td = self.tydesc_name(&dest_ty);
+            writeln!(out, "    dtlv_rti_dyn_binop_checked(rt, {code}, {lhs_addr}, {lhs_td}, \
+                {rhs_addr}, {rhs_td}, {dest_addr}, &{dest_td}, (bool_t*){overflow_addr});").unwrap();
             return Ok(());
         }
 
@@ -992,8 +1008,25 @@ impl<'a> FunctionCodegenContext<'a> {
         let dest_addr = self.value_addr(dest);
         let overflow_addr = self.value_addr(overflow);
         let src_addr = self.operand_addr(operand);
-        let src_ty = self.operand_type(operand);
-        let c_ty = types::ir_type_to_c(src_ty);
+        let src_ty = self.operand_type(operand).clone();
+
+        // A type parameter bounded to `fixedint`, which may turn out to be
+        // unsigned; the runtime reads the descriptor and decides.
+        if matches!(src_ty, IrType::Data) {
+            if op != UnaryOp::Neg {
+                return Err(CAotError::Unsupported(format!(
+                    "no dynamic form of checked {:?}", op)));
+            }
+            let src_td = self.operand_tydesc(operand);
+            let dest_ty = self.value_type(dest).clone();
+            let dest_td = self.tydesc_name(&dest_ty);
+            writeln!(out, "    dtlv_rti_dyn_neg_checked(rt, {src_addr}, {src_td}, \
+                {dest_addr}, &{dest_td}, (bool_t*){overflow_addr});").unwrap();
+            return Ok(());
+        }
+
+        let c_ty = types::ir_type_to_c(&src_ty);
+        let src_ty = &src_ty;
 
         match op {
             UnaryOp::Neg => {

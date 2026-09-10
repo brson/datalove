@@ -587,8 +587,26 @@ pub unsafe fn data_from_local(
     inner_tydesc: *const rtdt::TyDesc,
     dest_out: *mut u8,
 ) -> RtStatus {
-    // A scalar goes in the two words directly rather than onto the heap.
     let tytag = unsafe { (*inner_tydesc).type_tag };
+    unsafe { data_from_local_tagged(rt, inner_in, tytag, inner_tydesc, dest_out) }
+}
+
+/// Create a Data from a value whose tag is already in hand.
+///
+/// The narrow scalars pack into the words with no descriptor at all, so a
+/// value taken back out of one has none to give. Passing the tag separately
+/// lets those be re-wrapped from what is known, rather than making up a
+/// descriptor to hold a tag that is already here.
+///
+/// `inner_tydesc` may be null exactly when the tag is one of those.
+pub unsafe fn data_from_local_tagged(
+    rt: LocalRtHandle,
+    inner_in: *const u8,
+    tytag: TyTag,
+    inner_tydesc: *const rtdt::TyDesc,
+    dest_out: *mut u8,
+) -> RtStatus {
+    // A scalar goes in the two words directly rather than onto the heap.
     if tytag.can_inline() {
         unsafe {
             let data = inline_data(inner_in, inner_tydesc, tytag);

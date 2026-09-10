@@ -376,10 +376,6 @@ pub struct StmtTypeAlias<'db> {
     pub local_index: u32,
 }
 
-/// Native function declaration: `native fun name(params): ret_type`.
-///
-/// Declares a function signature without a body. Used in `.dli` rider
-/// interface files to describe functions implemented in Rust.
 /// What a type parameter was constrained to.
 ///
 /// A parameter written bare stands for any type at all, and nothing can be
@@ -391,6 +387,13 @@ pub struct StmtTypeAlias<'db> {
 pub enum TypeBound {
     /// `f32` or `f64`.
     Float,
+    /// Any of the ten fixed-width integers, signed or unsigned.
+    ///
+    /// What they share is the comparisons and the checked and optional
+    /// arithmetic. Bare `+` is not among them, because a fixed-width integer
+    /// does not have one; neither is negation, because half of these have no
+    /// negative values to give.
+    FixedInt,
 }
 
 impl TypeBound {
@@ -398,6 +401,7 @@ impl TypeBound {
     pub fn from_name(name: &str) -> Option<TypeBound> {
         match name {
             "float" => Some(TypeBound::Float),
+            "fixedint" => Some(TypeBound::FixedInt),
             _ => None,
         }
     }
@@ -405,10 +409,15 @@ impl TypeBound {
     pub fn as_str(&self) -> &'static str {
         match self {
             TypeBound::Float => "float",
+            TypeBound::FixedInt => "fixedint",
         }
     }
 }
 
+/// Native function declaration: `native fun name(params): ret_type`.
+///
+/// Declares a function signature without a body. Used in `.dli` rider
+/// interface files to describe functions implemented in Rust.
 #[derive(Clone, Hash, PartialEq, Eq)]
 #[derive(salsa::SalsaValue)]
 pub struct StmtNativeFun<'db> {

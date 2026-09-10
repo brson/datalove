@@ -676,7 +676,11 @@ fn trampoline_all_runtime_imports(
     tramp(jit_module, &mut runtime.data_parts, c::dtlv_rti_data_parts as *const u8)?;
     tramp(jit_module, &mut runtime.data_from_local,
         c::dtlv_rti_data_from_local as *const u8)?;
-    tramp(jit_module, &mut runtime.float_binop, c::dtlv_rti_float_binop as *const u8)?;
+    tramp(jit_module, &mut runtime.dyn_binop, c::dtlv_rti_dyn_binop as *const u8)?;
+    tramp(jit_module, &mut runtime.dyn_binop_checked,
+        c::dtlv_rti_dyn_binop_checked as *const u8)?;
+    tramp(jit_module, &mut runtime.dyn_neg_checked,
+        c::dtlv_rti_dyn_neg_checked as *const u8)?;
     tramp(jit_module, &mut runtime.list_get_erased,
         c::dtlv_rti_list_get_erased_local as *const u8)?;
     tramp(jit_module, &mut runtime.clone_erased,
@@ -741,7 +745,11 @@ fn register_runtime_symbols(jit_builder: &mut JITBuilder) {
     // Boxing functions.
     jit_builder.symbol("dtlv_rti_error_from_local", c::dtlv_rti_error_from_local as *const u8);
     jit_builder.symbol("dtlv_rti_data_from_local", c::dtlv_rti_data_from_local as *const u8);
-    jit_builder.symbol("dtlv_rti_float_binop", c::dtlv_rti_float_binop as *const u8);
+    jit_builder.symbol("dtlv_rti_dyn_binop", c::dtlv_rti_dyn_binop as *const u8);
+    jit_builder.symbol("dtlv_rti_dyn_binop_checked",
+        c::dtlv_rti_dyn_binop_checked as *const u8);
+    jit_builder.symbol("dtlv_rti_dyn_neg_checked", c::dtlv_rti_dyn_neg_checked as *const u8);
+    jit_builder.symbol("dtlv_rti_dyn_unop", c::dtlv_rti_dyn_unop as *const u8);
     jit_builder.symbol("dtlv_rti_erase_local", c::dtlv_rti_erase_local as *const u8);
     jit_builder.symbol("dtlv_rti_reify_local", c::dtlv_rti_reify_local as *const u8);
     jit_builder.symbol("dtlv_rti_data_parts", c::dtlv_rti_data_parts as *const u8);

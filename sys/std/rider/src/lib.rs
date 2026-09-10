@@ -2113,7 +2113,7 @@ pub extern "C-unwind" fn dlr_std__float_abs(
     out: *mut u8, out_td: *const u8,
 ) -> u8 {
     unsafe {
-        datalove_rt::c::dtlv_rti_float_unop(
+        datalove_rt::c::dtlv_rti_dyn_unop(
             rt, 0, x, x_td as *const rtdt::TyDesc,
             out, out_td as *const rtdt::TyDesc,
         ) as u8
@@ -2127,7 +2127,7 @@ pub extern "C-unwind" fn dlr_std__float_sqrt(
     out: *mut u8, out_td: *const u8,
 ) -> u8 {
     unsafe {
-        datalove_rt::c::dtlv_rti_float_unop(
+        datalove_rt::c::dtlv_rti_dyn_unop(
             rt, 1, x, x_td as *const rtdt::TyDesc,
             out, out_td as *const rtdt::TyDesc,
         ) as u8
@@ -2141,7 +2141,7 @@ pub extern "C-unwind" fn dlr_std__float_floor(
     out: *mut u8, out_td: *const u8,
 ) -> u8 {
     unsafe {
-        datalove_rt::c::dtlv_rti_float_unop(
+        datalove_rt::c::dtlv_rti_dyn_unop(
             rt, 2, x, x_td as *const rtdt::TyDesc,
             out, out_td as *const rtdt::TyDesc,
         ) as u8
@@ -2155,7 +2155,7 @@ pub extern "C-unwind" fn dlr_std__float_ceil(
     out: *mut u8, out_td: *const u8,
 ) -> u8 {
     unsafe {
-        datalove_rt::c::dtlv_rti_float_unop(
+        datalove_rt::c::dtlv_rti_dyn_unop(
             rt, 3, x, x_td as *const rtdt::TyDesc,
             out, out_td as *const rtdt::TyDesc,
         ) as u8
@@ -2169,7 +2169,7 @@ pub extern "C-unwind" fn dlr_std__float_round(
     out: *mut u8, out_td: *const u8,
 ) -> u8 {
     unsafe {
-        datalove_rt::c::dtlv_rti_float_unop(
+        datalove_rt::c::dtlv_rti_dyn_unop(
             rt, 4, x, x_td as *const rtdt::TyDesc,
             out, out_td as *const rtdt::TyDesc,
         ) as u8
@@ -2183,7 +2183,7 @@ pub extern "C-unwind" fn dlr_std__float_trunc(
     out: *mut u8, out_td: *const u8,
 ) -> u8 {
     unsafe {
-        datalove_rt::c::dtlv_rti_float_unop(
+        datalove_rt::c::dtlv_rti_dyn_unop(
             rt, 5, x, x_td as *const rtdt::TyDesc,
             out, out_td as *const rtdt::TyDesc,
         ) as u8
@@ -2197,7 +2197,7 @@ pub extern "C-unwind" fn dlr_std__float_fract(
     out: *mut u8, out_td: *const u8,
 ) -> u8 {
     unsafe {
-        datalove_rt::c::dtlv_rti_float_unop(
+        datalove_rt::c::dtlv_rti_dyn_unop(
             rt, 6, x, x_td as *const rtdt::TyDesc,
             out, out_td as *const rtdt::TyDesc,
         ) as u8
@@ -2211,7 +2211,7 @@ pub extern "C-unwind" fn dlr_std__float_recip(
     out: *mut u8, out_td: *const u8,
 ) -> u8 {
     unsafe {
-        datalove_rt::c::dtlv_rti_float_unop(
+        datalove_rt::c::dtlv_rti_dyn_unop(
             rt, 7, x, x_td as *const rtdt::TyDesc,
             out, out_td as *const rtdt::TyDesc,
         ) as u8
@@ -2225,7 +2225,7 @@ pub extern "C-unwind" fn dlr_std__float_signum(
     out: *mut u8, out_td: *const u8,
 ) -> u8 {
     unsafe {
-        datalove_rt::c::dtlv_rti_float_unop(
+        datalove_rt::c::dtlv_rti_dyn_unop(
             rt, 8, x, x_td as *const rtdt::TyDesc,
             out, out_td as *const rtdt::TyDesc,
         ) as u8
@@ -2239,7 +2239,7 @@ pub extern "C-unwind" fn dlr_std__float_neg(
     out: *mut u8, out_td: *const u8,
 ) -> u8 {
     unsafe {
-        datalove_rt::c::dtlv_rti_float_unop(
+        datalove_rt::c::dtlv_rti_dyn_unop(
             rt, 9, x, x_td as *const rtdt::TyDesc,
             out, out_td as *const rtdt::TyDesc,
         ) as u8
