@@ -1,0 +1,63 @@
+require module sys/std/list
+require module sys/std/set
+
+import list.push
+import list.len
+import set.insert
+
+// Handing a copy value to a generic does not use it up.
+//
+// A generic takes its argument erased, so passing an `index` to one puts an
+// `erase` between the two. The interpreter took that for a move and marked the
+// source gone, so the next read of it found nothing: `push(mut l, i)` followed
+// by anything that reads `i` again panicked, which any counting loop does. The
+// lowering never thought so -- it reads the counter back with `load.copy` --
+// and the compiled backends were right all along.
+//
+// It wanted a function to show: the same code at script level was fine, and so
+// was a generic one, because there the counter is a type parameter and gets
+// copied rather than erased.
+
+fun count_up(n: index): index
+  var built: [index] = []
+  var i: index = : index / 0
+  loop while i .< n
+    push(mut built, i)
+    set i = icall add_wrapping_index(i, : index / 1)
+  end loop
+  ret len(ref built)
+end fun
+
+// One erase and one read after it, with no loop at all, which is the whole bug.
+fun erase_then_read(): index
+  var built: [index] = []
+  var i: index = : index / 5
+  push(mut built, i)
+  ret i
+end fun
+
+// A set takes its element the same way.
+fun count_up_set(n: index): index
+  var built: #{index} = #{}
+  var i: index = : index / 0
+  loop while i .< n
+    let added = insert(mut built, i)
+    set i = icall add_wrapping_index(i, : index / 1)
+  end loop
+  ret i
+end fun
+
+// A copy that is not a scalar: a tuple of two of them.
+fun erase_a_tuple(): (u32, u32)
+  var built: [(u32, u32)] = []
+  let pair: (u32, u32) = (: u32 / 1, : u32 / 2)
+  push(mut built, pair)
+  ret pair
+end fun
+
+let counted = count_up(: index / 4)
+let read_back = erase_then_read()
+let counted_set = count_up_set(: index / 3)
+let tuple_back = erase_a_tuple()
+
+let output = (counted, read_back, counted_set, tuple_back)

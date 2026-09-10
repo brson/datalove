@@ -132,6 +132,41 @@ pub struct IrInterpreter {
     native_table: NativeFunctionTable,
 }
 
+/// The types a code unit gives its values and slots.
+///
+/// Carried alongside the blocks so that an instruction can ask whether what it
+/// is about to consume is a copy. Borrowed rather than cloned: a frame is made
+/// for every call, and the types do not change.
+pub(crate) struct UnitTypes<'a> {
+    value_types: &'a [IrType],
+    slot_types: &'a [IrType],
+    param_types: &'a [IrType],
+}
+
+impl<'a> UnitTypes<'a> {
+    fn of(unit: &'a IrCodeUnit) -> Self {
+        UnitTypes {
+            value_types: &unit.value_types,
+            slot_types: &unit.slot_types,
+            param_types: unit.function_context()
+                .map(|c| c.param_types.as_slice())
+                .unwrap_or(&[]),
+        }
+    }
+
+    /// Whether an operand names something a read leaves behind.
+    fn is_copy(&self, operand: &Operand) -> bool {
+        let ty = match operand {
+            Operand::Value(id) | Operand::ValueRef(id) => self.value_types.get(id.0 as usize),
+            Operand::Slot(id) => self.slot_types.get(id.0 as usize),
+            Operand::Param(id) => self.param_types.get(id.0 as usize),
+            // Something another unit owns is never this unit's to keep.
+            Operand::ExternalValue { .. } | Operand::ExternalSlot { .. } => None,
+        };
+        ty.is_some_and(|t| t.is_copy())
+    }
+}
+
 impl IrInterpreter {
     /// Create a new interpreter with default settings (debug output disabled).
     pub fn new() -> Self {
@@ -387,7 +422,7 @@ impl IrInterpreter {
 
         // Execute blocks, writing return value directly to ret_dest.
         // Functions use ret_dest for Return, not expr_dest.
-        let result = self.execute_blocks(&func.blocks, &mut frame, ret_dest, None, ctx, registry, frames, code_ref.as_ref());
+        let result = self.execute_blocks(&func.blocks, &UnitTypes::of(func), &mut frame, ret_dest, None, ctx, registry, frames, code_ref.as_ref());
 
         // Convert UnitCompletion to () - functions always complete normally.
         result.map(|_| ())
@@ -430,6 +465,7 @@ impl IrInterpreter {
         // Script units don't have a single function ID, so pass None.
         let result = self.execute_blocks(
             &unit.blocks,
+            &UnitTypes::of(unit),
             &mut frame,
             ret_dest,
             expr_dest,
@@ -460,9 +496,11 @@ impl IrInterpreter {
         result
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn execute_blocks(
         &mut self,
         blocks: &[IrBlock],
+        unit_types: &UnitTypes<'_>,
         frame: &mut Frame,
         ret_dest: Destination,
         expr_dest: Option<Destination>,
@@ -479,7 +517,7 @@ impl IrInterpreter {
 
             // Execute instructions.
             for instr in &block.instructions {
-                self.execute_instruction(instr, frame, ctx, registry, frames, current_func)?;
+                self.execute_instruction(instr, unit_types, frame, ctx, registry, frames, current_func)?;
             }
 
             // Handle terminator.
@@ -586,9 +624,11 @@ impl IrInterpreter {
         Ok(())
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn execute_instruction(
         &mut self,
         instr: &Instruction,
+        unit_types: &UnitTypes<'_>,
         frame: &mut Frame,
         ctx: &ExecutionContext,
         registry: &FunctionRegistry,
@@ -976,14 +1016,22 @@ impl IrInterpreter {
                 let dest_slot = frame.value_dest(*dest);
                 self.execute_erase(&src_val, dest_slot);
                 frame.mark_value_live(*dest);
-                Self::mark_source_dropped_local(src, frame);
+                // A copy source is still there afterwards. Lowering knows it --
+                // it reads the slot again with `load.copy` -- so saying the
+                // erase consumed it left the next read with nothing.
+                if !unit_types.is_copy(src) {
+                    Self::mark_source_dropped_local(src, frame);
+                }
             }
             Instruction::Reify { dest, src } => {
                 let src_val = self.read_operand(src, frame, frames);
                 let dest_slot = frame.value_dest(*dest);
                 self.execute_reify(&src_val, dest_slot);
                 frame.mark_value_live(*dest);
-                Self::mark_source_dropped_local(src, frame);
+                // See `Erase`.
+                if !unit_types.is_copy(src) {
+                    Self::mark_source_dropped_local(src, frame);
+                }
             }
             Instruction::Call { site_id, dest, func, args, shape_descriptors, .. } => {
                 let callee = ctx.get_unit(func, registry);
@@ -1932,6 +1980,7 @@ impl IrInterpreter {
     /// External operands are ignored since they belong to other frames and are
     /// handled separately (typically in terminators via `mark_source_dropped_all`).
     fn mark_source_dropped_local(operand: &Operand, frame: &mut Frame) {
+
         match operand {
             Operand::Value(id) | Operand::ValueRef(id) => frame.mark_value_dropped(*id),
             Operand::Slot(id) => frame.mark_slot_dropped(*id),
