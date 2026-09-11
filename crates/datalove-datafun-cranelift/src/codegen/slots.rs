@@ -92,11 +92,26 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 let val = builder.ins().load(cl_ty, MemFlagsData::new(), addr, 0);
                 self.values.insert(dest, val);
             }
-            CraneliftRepr::Aggregate(_) => {
-                // Aggregate: return pointer to slot location.
-                // The value stays in place, we just track the pointer.
-                let addr = builder.ins().stack_addr(PTR_TYPE, frame_slot, slot_offset as i32);
-                self.values.insert(dest, addr);
+            CraneliftRepr::Aggregate(layout) => {
+                // Aggregate: copied into the destination's own room rather
+                // than pointed at where it lies.
+                //
+                // Pointing at the slot would be cheaper and is wrong: a load
+                // takes the value out, and what is taken has to survive the
+                // slot being written again. A loop that reads a slot, stores
+                // a fresh value into it and only then drops what it took --
+                // which is what `set x = some elem` after reading `x` lowers
+                // to -- would otherwise drop the fresh value and leave the
+                // old one, freeing one thing twice. The other backends copy
+                // here for the same reason.
+                let src = builder.ins().stack_addr(PTR_TYPE, frame_slot, slot_offset as i32);
+                let dest_offset = self.layout.value_offset(dest.0);
+                let dst = builder.ins().stack_addr(PTR_TYPE, frame_slot, dest_offset as i32);
+                if layout.size > 0 {
+                    let size = builder.ins().iconst(PTR_TYPE, layout.size as i64);
+                    builder.call_memcpy(self.isa.frontend_config(), dst, src, size);
+                }
+                self.values.insert(dest, dst);
             }
         }
 

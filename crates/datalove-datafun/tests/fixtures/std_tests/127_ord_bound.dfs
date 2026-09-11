@@ -1,5 +1,6 @@
 require module sys/std/ord
 require module sys/std/set
+require module sys/std/list
 
 import ord.compare
 import ord.equal
@@ -23,6 +24,8 @@ import ord.binary_search
 import ord.deduped
 import set.insert
 import set.to_list
+import list.len
+import list.get
 
 // A type parameter bounded to `ord`.
 //
@@ -107,6 +110,44 @@ let gathered = (gather(: i32 / 5, : i32 / -2, : i32 / 9),
 let forwarded = (smallest_of(: i8 / 3, : i8 / -3), smallest_of("b", "a"),
                  smallest_of(: f32 / 1.5, : f32 / -1.5))
 
-let output = (three_way, on_strings, on_shapes, picking,
+// A value taken out of a slot has to outlive the slot being written again.
+//
+// Reading `previous`, storing this element into it, and only then letting go
+// of what was read is what the shape below lowers to. Pointing at the slot
+// rather than copying out of it made the read and the write the same memory,
+// so the drop freed the element just stored and left the one it was given --
+// freeing one thing twice, once here and once at the end.
+fun adjacent_equal<T>(ref self: [T]): index with { T is ord, }
+  var pairs: index = : index / 0
+  var previous: ?T = none
+  let n = len(ref self)
+  var i: index = : index / 0
+  loop while i .< n
+    if get(ref self, i) |elem|
+      if previous |before|
+        let same = equal(ref before, ref elem)
+        let unwanted_before = before
+        if same
+          set pairs = icall add_wrapping_index(pairs, : index / 1)
+        end if
+        set previous = some elem
+      else
+        set previous = some elem
+      end if
+    end if
+    set i = icall add_wrapping_index(i, : index / 1)
+  end loop
+  if previous |last|
+    let unwanted_last = last
+  end if
+  ret pairs
+end fun
+
+let runs: [string] = ["a", "a", "a", "b", "c", "c"]
+let numbers: [u32] = [: u32 / 1, : u32 / 1, : u32 / 2]
+let adjacent = (adjacent_equal(ref runs), adjacent_equal(ref numbers),
+                adjacent_equal(ref empty))
+
+let output = (adjacent, three_way, on_strings, on_shapes, picking,
               ordered_signed, ordered_floats, ordered_strings, ordered_empty,
               searching, looking, gathered, forwarded)
