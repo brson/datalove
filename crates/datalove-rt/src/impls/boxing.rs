@@ -390,6 +390,61 @@ pub unsafe fn data_parts(
     }
 }
 
+/// Borrow what a Data holds, writing a packed value into `scratch` first.
+///
+/// A `data` holding something on the heap can lend the address it already has.
+/// One holding a narrow scalar in its own words cannot: the value is not at a
+/// byte address of its own, and for the narrowest it has no descriptor beside
+/// it either. So the value is unpacked into eight bytes the caller lends, and
+/// the descriptor comes from `packed_tydesc`, which is a constant per type
+/// rather than anything made up here.
+///
+/// The borrow lasts as long as `scratch` does, so a caller keeps it alive
+/// across whatever it was borrowing for.
+///
+/// # Safety
+///
+/// `data_in` must be an initialized `Data`, and `scratch` must be writable for
+/// eight bytes aligned to eight.
+pub unsafe fn data_borrow(
+    data_in: *const u8,
+    scratch: *mut u8,
+    value_out: *mut *const u8,
+    tydesc_out: *mut *const rtdt::TyDesc,
+) -> RtStatus {
+    unsafe {
+        let data = &*(data_in as *const rtdt::Data);
+        if data.tag() == rtdt::anypack::Tag::TwoPointers {
+            return data_parts(data_in, value_out, tydesc_out);
+        }
+
+        let tytag = data.tytag();
+        let bits = data.inline_bits();
+        // Written through a pointer of the right width rather than copied from
+        // the low bytes, so that the byte order is the machine's own.
+        match tytag {
+            TyTag::Bool | TyTag::U8 | TyTag::I8 => *scratch = bits as u8,
+            TyTag::U16 | TyTag::I16 => *(scratch as *mut u16) = bits as u16,
+            TyTag::U32 | TyTag::I32 | TyTag::F32 => *(scratch as *mut u32) = bits as u32,
+            _ => *(scratch as *mut u64) = bits,
+        }
+
+        // The wider inline forms keep their descriptor; the narrow ones have
+        // only a tag, and the descriptor for a tag is a constant.
+        let tydesc = match rtdt::packed_tydesc(tytag) {
+            Some(td) => td,
+            None => data.tydesc(),
+        };
+        if tydesc.is_null() {
+            return RtStatus::Error;
+        }
+
+        std::ptr::write(value_out, scratch as *const u8);
+        std::ptr::write(tydesc_out, tydesc);
+        RtStatus::Ok
+    }
+}
+
 /// Move the value back out of a Data.
 ///
 /// The inverse of [`data_from_local`]. The caller knows what type it put in and

@@ -2305,3 +2305,41 @@ pub extern "C-unwind" fn dlr_std__fixedint_max_value(
         ) as u8
     }
 }
+
+/// The total order every value has, as a three-way comparison.
+///
+/// The operands are taken by value, so inside a generic each arrives as the
+/// `data` wrapping it rather than as the thing itself. The runtime's own
+/// comparison reads through a wrapper, so both readings work; what would not
+/// work is borrowing through one, since a value packed into a `data`'s own
+/// words has no address.
+///
+/// Ownership passes with them, and comparing does not consume: both are
+/// destroyed here, which is what taking them by value promised.
+#[no_mangle]
+pub extern "C-unwind" fn dlr_std__ord_compare(
+    rt: *mut u8,
+    a: *mut u8, a_td: *const u8,
+    b: *mut u8, b_td: *const u8,
+    out: *mut u8, _out_td: *const u8,
+) -> u8 {
+    unsafe {
+        let ordering = datalove_rt::c::dtlv_rti_cmp_total_local(
+            rt,
+            a, a_td as *const rtdt::TyDesc,
+            b, b_td as *const rtdt::TyDesc,
+        );
+        let answer: i8 = match ordering {
+            datalove_rt::c::RtOrdering::Less => -1,
+            datalove_rt::c::RtOrdering::Equal => 0,
+            datalove_rt::c::RtOrdering::Greater => 1,
+            // The two descriptors disagreed, which a call site binding one
+            // type parameter cannot arrange.
+            datalove_rt::c::RtOrdering::Error => return 2,
+        };
+        *(out as *mut i8) = answer;
+        datalove_rt::c::dtlv_rti_any_destroy_local(rt, a as *mut u8, a_td as *const rtdt::TyDesc);
+        datalove_rt::c::dtlv_rti_any_destroy_local(rt, b as *mut u8, b_td as *const rtdt::TyDesc);
+    }
+    OK
+}

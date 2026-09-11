@@ -1,0 +1,112 @@
+require module sys/std/ord
+require module sys/std/set
+
+import ord.compare
+import ord.equal
+import ord.not_equal
+import ord.less
+import ord.less_or_equal
+import ord.greater
+import ord.greater_or_equal
+import ord.min
+import ord.max
+import ord.clamp
+import ord.sorted_pair
+import ord.contains
+import ord.index_of
+import ord.count_of
+import ord.least
+import ord.greatest
+import ord.is_sorted
+import ord.sorted
+import ord.binary_search
+import ord.deduped
+import set.insert
+import set.to_list
+
+// A type parameter bounded to `ord`.
+//
+// It is the weakest bound there is: every type has a total order, so `ord`
+// admits every type. What it says is that the order may be used, which without
+// it nothing can -- `.<` and `==` are the numeric operators and are refused for
+// a string, a list, a tuple or an option, whether or not a generic is
+// involved. So these reach further than the operators do.
+//
+// The order is the one sets and maps keep their keys in, which walks a value
+// structurally. For floats it is IEEE 754-2008 `totalOrder`, so it differs
+// from `.<` over NaN and signed zero and over nothing else.
+
+// The comparisons, over types the operators cannot reach at all.
+let words = ("pear", "apple")
+let lists: ([u32], [u32]) = ([: u32 / 1, : u32 / 9], [: u32 / 2])
+let tuples = ((: u32 / 1, "b"), (: u32 / 1, "a"))
+let options: (?u32, ?u32) = (some : u32 / 1, none)
+let flags = (true, false)
+
+let three_way = (compare(ref words.0, ref words.1), compare(ref words.1, ref words.0),
+                 compare(ref words.0, ref words.0))
+let on_strings = (equal(ref words.0, ref words.1), not_equal(ref words.0, ref words.1),
+                  less(ref words.1, ref words.0), greater(ref words.1, ref words.0),
+                  less_or_equal(ref words.0, ref words.0),
+                  greater_or_equal(ref words.0, ref words.0))
+let on_shapes = (less(ref lists.1, ref lists.0), greater(ref tuples.0, ref tuples.1),
+                 greater(ref options.0, ref options.1), greater(ref flags.0, ref flags.1))
+
+// Picking, which takes its operands and gives one back.
+let picking = (min("b", "a"), max("b", "a"), clamp("z", "a", "m"),
+               clamp("a", "b", "y"), sorted_pair("b", "a"))
+
+// A signed element is where reading the wrapper's own words rather than what
+// it holds went wrong: two's complement read as a magnitude puts every
+// negative above every positive.
+let signed: [i32] = [: i32 / 5, : i32 / -2, : i32 / 9, : i32 / -2]
+let floats: [f64] = [: f64 / 2.5, : f64 / -1.5, : f64 / 0.0]
+let strings: [string] = ["pear", "apple", "fig", "apple"]
+let empty: [u16] = []
+
+let ordered_signed = (least(ref signed), greatest(ref signed), sorted(ref signed),
+                      is_sorted(ref signed))
+let ordered_floats = (least(ref floats), greatest(ref floats), sorted(ref floats))
+let ordered_strings = (least(ref strings), greatest(ref strings), sorted(ref strings))
+let ordered_empty = (least(ref empty), greatest(ref empty), is_sorted(ref empty),
+                     sorted(ref empty))
+
+let by_value = sorted(ref signed)
+let searched_for = : i32 / 9
+let absent = : i32 / 7
+let searching = (is_sorted(ref by_value), deduped(ref by_value),
+                 binary_search(ref by_value, ref searched_for),
+                 binary_search(ref by_value, ref absent))
+
+let needle = "apple"
+let missing = "zebra"
+let looking = (contains(ref strings, ref needle), contains(ref strings, ref missing),
+               index_of(ref strings, ref needle), index_of(ref strings, ref missing),
+               count_of(ref strings, ref needle))
+
+// A set built over a type parameter orders its elements by the same relation,
+// so a signed element is where it used to come back in the wrong order.
+fun gather<T>(a: T, b: T, c: T): [T] with { T is ord, }
+  var held: #{T} = #{}
+  let first = insert(mut held, a)
+  let second = insert(mut held, b)
+  let third = insert(mut held, c)
+  ret to_list(ref held)
+end fun
+
+// Borrowing a type parameter from one generic into another, which for a value
+// the wrapper packs into its own words means unpacking it first: there is no
+// address to lend and, for the narrowest, no descriptor either.
+fun smallest_of<T>(a: T, b: T): T with { T is ord, }
+  ret min(a, b)
+end fun
+
+let gathered = (gather(: i32 / 5, : i32 / -2, : i32 / 9),
+                gather(: u8 / 3, : u8 / 1, : u8 / 2),
+                gather("c", "a", "b"))
+let forwarded = (smallest_of(: i8 / 3, : i8 / -3), smallest_of("b", "a"),
+                 smallest_of(: f32 / 1.5, : f32 / -1.5))
+
+let output = (three_way, on_strings, on_shapes, picking,
+              ordered_signed, ordered_floats, ordered_strings, ordered_empty,
+              searching, looking, gathered, forwarded)

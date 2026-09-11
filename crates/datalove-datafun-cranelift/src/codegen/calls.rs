@@ -156,19 +156,23 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         builder: &mut FunctionBuilder,
         arg: &Operand,
     ) -> Result<(cl_ir::Value, cl_ir::Value), CraneliftError> {
-        let parts = self.runtime.as_ref()
+        let borrow = self.runtime.as_ref()
             .ok_or_else(|| CraneliftError::Codegen(
                 "borrowing through a wrapper requires runtime imports".into()))?
-            .data_parts;
+            .data_borrow;
 
+        // Two words for the answers and a third to unpack into, for a value
+        // the wrapper keeps in its own words and so has no address to lend.
+        // The frame outlives the call, which is as long as the borrow lasts.
         let slot = builder.create_sized_stack_slot(cl_ir::StackSlotData::new(
-            cl_ir::StackSlotKind::ExplicitSlot, 16, 3));
+            cl_ir::StackSlotKind::ExplicitSlot, 24, 3));
         let value_out = builder.ins().stack_addr(PTR_TYPE, slot, 0);
         let tydesc_out = builder.ins().stack_addr(PTR_TYPE, slot, 8);
+        let scratch = builder.ins().stack_addr(PTR_TYPE, slot, 16);
 
         let data_ptr = self.get_operand_ptr(builder, arg)?;
-        let parts_ref = self.module.declare_func_in_func(parts, builder.func);
-        builder.ins().call(parts_ref, &[data_ptr, value_out, tydesc_out]);
+        let borrow_ref = self.module.declare_func_in_func(borrow, builder.func);
+        builder.ins().call(borrow_ref, &[data_ptr, scratch, value_out, tydesc_out]);
 
         let value = builder.ins().load(PTR_TYPE, MemFlagsData::new(), value_out, 0);
         let tydesc = builder.ins().load(PTR_TYPE, MemFlagsData::new(), tydesc_out, 0);

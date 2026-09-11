@@ -1035,7 +1035,20 @@ names so that the signature reads as a signature. The clause may be spread over
 several lines, but the `with` has to be on the signature's own line, because
 that is where the signature ends.
 
-There are two bounds:
+There are three bounds:
+
+- **`ord`** is every type there is, and says that the total order every value
+  has may be used. It is the weakest bound: what it rules out is a type with no
+  ordering, of which the language has none today. It is worth asking for
+  because the order is otherwise out of reach — `.<` and `==` are the numeric
+  operators and are refused for a string, a list, a tuple or an option, whether
+  or not a generic is involved. `sys/std/ord` is what it offers: the
+  comparisons, `min`, `max`, `clamp`, and sorting and searching over a list.
+
+  The relation is the one sets and maps keep their keys in, which walks a value
+  structurally. For floats that is IEEE 754-2008 `totalOrder`, so it puts NaN
+  in order and tells the two zeros apart; `.<` on a concrete float does
+  neither. They differ over nothing else.
 
 - **`float`** is `f32` or `f64`. Both have the bare arithmetic and the
   comparisons, so a parameter bounded to it has them too, along with what
@@ -1046,7 +1059,9 @@ There are two bounds:
   rest. Bare `+` is not among them, because a fixed-width integer does not have
   one. Negation is the result form `-!` and not the optional `-?`, which is
   refused for unsigned operands and so refused for a parameter that may turn
-  out to be one. `sys/std/fixedint` is what is written on top of that.
+  out to be one. `sys/std/fixedint` is what is written on top of that: the
+  arithmetic, and the constants. Comparing and sorting are not there, because
+  they ask nothing of a fixed-width integer that another type cannot answer.
 
 Erasure still compiles one body, so the machine code cannot hold the
 instruction for every type the bound admits. The operands arrive with their

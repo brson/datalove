@@ -224,3 +224,17 @@ native fun fixedint_zero<T>(): T with { T is fixedint, }
 native fun fixedint_one<T>(): T with { T is fixedint, }
 native fun fixedint_min_value<T>(): T with { T is fixedint, }
 native fun fixedint_max_value<T>(): T with { T is fixedint, }
+
+// The total order every value has.
+//
+// A three-way comparison: negative when self sorts before other, zero when
+// they sort together, positive when it sorts after. This is the order sets and
+// maps keep their keys in, which for floats is IEEE 754-2008 `totalOrder` and
+// so differs from `.<` over NaN and signed zero. See `sys/std/ord`.
+//
+// Takes its operands by value rather than by reference. A borrowed bare `T`
+// arrives read through its wrapper, and a value packed into a `data`'s own
+// words has no address to lend and no descriptor to hand over -- see
+// `botdocs/native-abi.md`. Taken by value it arrives as the wrapper itself,
+// which the runtime's comparison unpacks for itself.
+native fun ord_compare<T>(self: T, other: T): i8 with { T is ord, }

@@ -1830,8 +1830,8 @@ impl<'a> FunctionCodegenContext<'a> {
             // Named for the call's destination as well as the argument, since
             // two calls in one block would otherwise declare the same locals.
             let name = format!("__bw{}_{}", dest.0, i);
-            writeln!(out, "    const void* {name}_v; const dtlv_tydesc_t* {name}_t;").unwrap();
-            writeln!(out, "    dtlv_rti_data_parts({}, &{name}_v, &{name}_t);",
+            writeln!(out, "    const void* {name}_v; const dtlv_tydesc_t* {name}_t; uint64_t {name}_s;").unwrap();
+            writeln!(out, "    dtlv_rti_data_borrow({}, &{name}_s, &{name}_v, &{name}_t);",
                 self.operand_addr(arg)).unwrap();
             borrowed[i] = Some(name);
         }
@@ -2119,8 +2119,8 @@ impl<'a> FunctionCodegenContext<'a> {
                     | Some(datalove_datafun_ir::ParamMode::Mut));
             if wrapped {
                 let name = format!("__nb{}_{}", dest.0, i);
-                writeln!(out, "    const void* {name}_v; const dtlv_tydesc_t* {name}_t;").unwrap();
-                writeln!(out, "    dtlv_rti_data_parts({}, &{name}_v, &{name}_t);",
+                writeln!(out, "    const void* {name}_v; const dtlv_tydesc_t* {name}_t; uint64_t {name}_s;").unwrap();
+                writeln!(out, "    dtlv_rti_data_borrow({}, &{name}_s, &{name}_v, &{name}_t);",
                     self.operand_addr(arg)).unwrap();
                 write!(&mut call_args, ", (void*){name}_v, {name}_t").unwrap();
                 continue;

@@ -365,6 +365,7 @@ impl CAotCompiler {
         writeln!(out, "extern uint8_t dtlv_rti_erase_local(void* rt, const void* src_in, const dtlv_tydesc_t* src_tydesc, void* dst_out, const dtlv_tydesc_t* dst_tydesc);").unwrap();
         writeln!(out, "extern uint8_t dtlv_rti_reify_local(void* rt, const void* src_in, const dtlv_tydesc_t* src_tydesc, void* dst_out, const dtlv_tydesc_t* dst_tydesc);").unwrap();
         writeln!(out, "extern uint8_t dtlv_rti_data_parts(const void* data_in, const void** value_out, const dtlv_tydesc_t** tydesc_out);").unwrap();
+        writeln!(out, "extern uint8_t dtlv_rti_data_borrow(const void* data_in, void* scratch, const void** value_out, const dtlv_tydesc_t** tydesc_out);").unwrap();
         // An operator on a type parameter bounded to `float`.
         writeln!(out, "extern uint8_t dtlv_rti_dyn_binop(void* rt, uint8_t op, const void* lhs, const dtlv_tydesc_t* lhs_td, const void* rhs, const dtlv_tydesc_t* rhs_td, void* out, const dtlv_tydesc_t* out_td);").unwrap();
         writeln!(out, "extern uint8_t dtlv_rti_dyn_binop_checked(void* rt, uint8_t op, const void* lhs, const dtlv_tydesc_t* lhs_td, const void* rhs, const dtlv_tydesc_t* rhs_td, void* out, const dtlv_tydesc_t* out_td, bool_t* overflow_out);").unwrap();

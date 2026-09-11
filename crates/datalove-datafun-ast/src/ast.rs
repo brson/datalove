@@ -387,6 +387,13 @@ pub struct StmtTypeAlias<'db> {
 pub enum TypeBound {
     /// `f32` or `f64`.
     Float,
+    /// Any type at all, which is to say every type has a total order.
+    ///
+    /// It is the weakest bound there is, and says only what the runtime can
+    /// already do for any value: order it against another of its type. What it
+    /// rules out is a type with no ordering, of which the language has none
+    /// today -- a function value would be the first.
+    Ord,
     /// Any of the ten fixed-width integers, signed or unsigned.
     ///
     /// What they share is the comparisons and the checked and optional
@@ -402,6 +409,7 @@ impl TypeBound {
         match name {
             "float" => Some(TypeBound::Float),
             "fixedint" => Some(TypeBound::FixedInt),
+            "ord" => Some(TypeBound::Ord),
             _ => None,
         }
     }
@@ -410,6 +418,7 @@ impl TypeBound {
         match self {
             TypeBound::Float => "float",
             TypeBound::FixedInt => "fixedint",
+            TypeBound::Ord => "ord",
         }
     }
 }

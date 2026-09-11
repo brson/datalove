@@ -65,6 +65,12 @@ pub use dispatch::{CallDispatcher, CallSiteInfo, DispatchCallContext, DispatchRe
 pub use dynamic::{DynamicInliner, DynamicInlinerConfig, InlinerStats};
 pub use ctfe::InterpCtfeEvaluator;
 pub use native::{NativeFunctionTable, NativeFnImpl};
+
+/// Room to unpack borrowed values that have no address of their own.
+///
+/// One box per borrow, kept by whoever prepared the call so that the borrows
+/// outlive it. See `borrow_through_wrapper`.
+type BorrowScratch = Vec<Box<u64>>;
 pub use datalove_rt::c::DebugOutputMode;
 
 use std::cell::RefCell;
@@ -1035,7 +1041,10 @@ impl IrInterpreter {
             }
             Instruction::Call { site_id, dest, func, args, shape_descriptors, .. } => {
                 let callee = ctx.get_unit(func, registry);
-                let arg_vals = self.prepare_call_args(callee, args, frame, frames);
+                // The scratch is held until the call returns, because a
+                // borrowed argument with no address of its own points into it.
+                let (arg_vals, _borrow_scratch) =
+                    self.prepare_call_args(callee, args, frame, frames);
                 let dest_slot = frame.value_dest(*dest);
                 Self::mark_consumed_call_args(callee, args, frame);
 
@@ -1086,7 +1095,10 @@ impl IrInterpreter {
             // the original function with original args.
             Instruction::ComptimeCall { dest, func, args, .. } => {
                 let callee = ctx.get_unit(func, registry);
-                let arg_vals = self.prepare_call_args(callee, args, frame, frames);
+                // The scratch is held until the call returns, because a
+                // borrowed argument with no address of its own points into it.
+                let (arg_vals, _borrow_scratch) =
+                    self.prepare_call_args(callee, args, frame, frames);
                 let dest_slot = frame.value_dest(*dest);
                 Self::mark_consumed_call_args(callee, args, frame);
 
@@ -2077,7 +2089,11 @@ impl IrInterpreter {
         args: &[Operand],
         frame: &mut Frame,
         frames: &FrameStore,
-    ) -> Vec<Value> {
+    ) -> (Vec<Value>, BorrowScratch) {
+        // Somewhere to unpack a borrowed value that has no address of its own.
+        // Boxed one apiece so that filling the vector cannot move what an
+        // argument already points at.
+        let mut scratch: BorrowScratch = Vec::new();
         let mut arg_vals = Vec::with_capacity(args.len());
         for (i, op) in args.iter().enumerate() {
             let mode = param_mode(callee, i);
@@ -2107,12 +2123,12 @@ impl IrInterpreter {
                 // owned, and a borrowed parameter wants the container itself
                 // with a descriptor beside it. Both are inside the wrapper.
                 if matches!(mode, ParamMode::Ref | ParamMode::Mut) {
-                    val = Self::borrow_through_wrapper(val);
+                    val = Self::borrow_through_wrapper(val, &mut scratch);
                 }
                 arg_vals.push(val);
             }
         }
-        arg_vals
+        (arg_vals, scratch)
     }
 
     /// The descriptor a `DescriptorRef` names.
@@ -2135,23 +2151,28 @@ impl IrInterpreter {
         }
     }
 
-    /// Read through a wrapper, where one is what arrived.    /// Read through a wrapper, where one is what arrived.
+    /// Read through a wrapper, where one is what arrived.
     ///
     /// Only a wrapped value has anything to read through, and only a borrowed
     /// parameter asks: an owned one takes the wrapper as it stands, since
     /// owning it means dropping it and the wrapper is what knows how.
-    fn borrow_through_wrapper(val: Value) -> Value {
+    ///
+    /// A wrapper holding something on the heap lends the address it has. One
+    /// holding a narrow scalar in its own words has no address to lend, so the
+    /// value is unpacked into `scratch`, which the caller keeps alive for as
+    /// long as the borrow.
+    fn borrow_through_wrapper(val: Value, scratch: &mut BorrowScratch) -> Value {
         if unsafe { (*val.tydesc).type_tag } != rtdt::TyTag::Data {
             return val;
         }
+        scratch.push(Box::new(0u64));
+        let slot = scratch.last_mut().expect("just pushed").as_mut() as *mut u64 as *mut u8;
         let mut inner_ptr: *const u8 = std::ptr::null();
         let mut inner_tydesc: *const rtdt::TyDesc = std::ptr::null();
         let status = unsafe {
-            datalove_rt::c::dtlv_rti_data_parts(val.ptr, &mut inner_ptr, &mut inner_tydesc)
+            datalove_rt::c::dtlv_rti_data_borrow(
+                val.ptr, slot, &mut inner_ptr, &mut inner_tydesc)
         };
-        // A wrapper a container made always holds its value on the heap, so
-        // there is always something to point at. Anything else reaching here
-        // is a shape the lowering should not have produced.
         assert_eq!(status, datalove_rt::c::RtStatus::Ok,
             "borrowing through a wrapper that holds nothing to borrow");
         Value { ptr: inner_ptr as *mut u8, tydesc: inner_tydesc }

@@ -680,6 +680,7 @@ fn trampoline_all_runtime_imports(
     tramp(jit_module, &mut runtime.erase, c::dtlv_rti_erase_local as *const u8)?;
     tramp(jit_module, &mut runtime.reify, c::dtlv_rti_reify_local as *const u8)?;
     tramp(jit_module, &mut runtime.data_parts, c::dtlv_rti_data_parts as *const u8)?;
+    tramp(jit_module, &mut runtime.data_borrow, c::dtlv_rti_data_borrow as *const u8)?;
     tramp(jit_module, &mut runtime.data_from_local,
         c::dtlv_rti_data_from_local as *const u8)?;
     tramp(jit_module, &mut runtime.dyn_binop, c::dtlv_rti_dyn_binop as *const u8)?;
@@ -765,6 +766,7 @@ fn register_runtime_symbols(jit_builder: &mut JITBuilder) {
     jit_builder.symbol("dtlv_rti_erase_local", c::dtlv_rti_erase_local as *const u8);
     jit_builder.symbol("dtlv_rti_reify_local", c::dtlv_rti_reify_local as *const u8);
     jit_builder.symbol("dtlv_rti_data_parts", c::dtlv_rti_data_parts as *const u8);
+    jit_builder.symbol("dtlv_rti_data_borrow", c::dtlv_rti_data_borrow as *const u8);
     jit_builder.symbol("dtlv_rti_list_get_erased_local",
         c::dtlv_rti_list_get_erased_local as *const u8);
     jit_builder.symbol("dtlv_rti_clone_erased_local",

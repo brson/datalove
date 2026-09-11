@@ -1095,6 +1095,11 @@ fn bound_admits<'db>(
     match bound {
         TypeBound::Float => matches!(ty, datalit::tycheck::Type::F32 | datalit::tycheck::Type::F64),
         TypeBound::FixedInt => datalit::tycheck::is_fixed_int_type(ty),
+        // Every type reaching here is one the runtime can order, because a
+        // type parameter is bound to a data type and every data type has a
+        // total order. A function type is not a data type and cannot be
+        // written where this would be asked.
+        TypeBound::Ord => true,
     }
 }
 

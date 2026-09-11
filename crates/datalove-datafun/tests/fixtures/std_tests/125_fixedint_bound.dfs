@@ -1,16 +1,8 @@
 require module sys/std/fixedint
 
-import fixedint.min
-import fixedint.max
-import fixedint.clamp
 import fixedint.abs_diff
-import fixedint.sorted_pair
-import fixedint.in_range
-import fixedint.least
-import fixedint.greatest
 import fixedint.sum
 import fixedint.product
-import fixedint.is_sorted
 import fixedint.zero
 import fixedint.one
 import fixedint.min_value
@@ -72,8 +64,8 @@ end fun
 
 // A bounded generic handing its parameter to another one: the bound travels
 // with it, because whatever the outer call picked is what the inner gets.
-fun bounded<T>(x: T, low: T, high: T): T with { T is fixedint, }
-  ret clamp(x, low, high)
+fun bounded<T>(x: T, y: T): ?T with { T is fixedint, }
+  ret add_checked(x, y)
 end fun
 
 // A value of a bounded parameter is still linear, so using one twice asks for
@@ -106,32 +98,24 @@ let negations = (negated(: i32 / 5), negated(: i32 / -2147483648),
 let comparisons = (ordered(: u8 / 3, : u8 / 200), ordered(: i8 / 3, : i8 / -100),
                    ordered(: index / 1, : index / 2), ordered(: offset / -1, : offset / 1))
 
-let forwarded = (bounded(: index / 12, : index / 0, : index / 10),
-                 bounded(: i16 / -50, : i16 / -10, : i16 / 10))
+let forwarded = (bounded(: index / 12, : index / 3), bounded(: i16 / -50, : i16 / 10))
 let repeated = (doubled(: u8 / 100), doubled(: u8 / 200), doubled(: i64 / -3))
 
-// The module's own functions, over three of the ten.
-let picking = (min(: u8 / 3, : u8 / 200), max(: i32 / -5, : i32 / -9),
-               clamp(: index / 12, : index / 0, : index / 10),
-               in_range(: i16 / 5, : i16 / 0, : i16 / 9),
-               in_range(: i16 / 50, : i16 / 0, : i16 / 9))
-let pairs = (sorted_pair(: offset / 4, : offset / -4), sorted_pair(: u32 / 1, : u32 / 2))
+// Comparing, picking and sorting are not here: they ask nothing of a
+// fixed-width integer that another type cannot answer, so they are in
+// `sys/std/ord` and work for every type. What is left is the arithmetic.
 let distances = (abs_diff(: u8 / 3, : u8 / 200), abs_diff(: i8 / 127, : i8 / -128))
 
 let ns: [u32] = [: u32 / 5, : u32 / 2, : u32 / 9, : u32 / 4]
 let over: [u8] = [: u8 / 200, : u8 / 200]
 let sorted: [i64] = [: i64 / -3, : i64 / 0, : i64 / 7]
 let empty: [u16] = []
-let folded = (least(ref ns), greatest(ref ns), sum(ref ns), product(ref ns),
-              is_sorted(ref ns))
+let folded = (sum(ref ns), product(ref ns))
 let overflowed = (sum(ref over), product(ref over))
-let ascending = (is_sorted(ref sorted), sum(ref sorted), least(ref sorted),
-                 greatest(ref sorted))
-// The folds start from the type's own zero and one now, so an empty list has
-// an answer rather than none. `least` and `greatest` still have none, having
-// no element to pick.
-let nothing = (least(ref empty), greatest(ref empty), sum(ref empty),
-               product(ref empty), is_sorted(ref empty))
+let ascending = (sum(ref sorted), product(ref sorted))
+// The folds start from the type's own zero and one, so an empty list has an
+// answer rather than none.
+let nothing = (sum(ref empty), product(ref empty))
 
 // The constants, which no literal can spell at a type nobody has named. These
 // come from the rider, which is handed a descriptor by the call site because
@@ -167,4 +151,4 @@ let saturating = (add_saturating(: u8 / 200, : u8 / 100),
 let output = (zeros, ones, lows, highs, signs, checked, saturating,
               narrow_unsigned, wide_unsigned, narrow_signed, wide_signed,
               products, quotients, negations, comparisons, forwarded, repeated,
-              picking, pairs, distances, folded, overflowed, ascending, nothing)
+              distances, folded, overflowed, ascending, nothing)

@@ -112,6 +112,8 @@ pub struct RuntimeImports {
     pub reify: FuncId,
     /// `dtlv_rti_data_parts(data_in, value_out, tydesc_out) -> RtStatus`
     pub data_parts: FuncId,
+    /// `dtlv_rti_data_borrow(data_in, scratch, value_out, tydesc_out) -> RtStatus`
+    pub data_borrow: FuncId,
     /// `dtlv_rti_data_from_local(rt, inner, inner_tydesc, dest) -> RtStatus`
     pub data_from_local: FuncId,
     /// `dtlv_rti_dyn_binop(rt, op, lhs, lhs_td, rhs, rhs_td, out, out_td)`
@@ -681,6 +683,18 @@ impl RuntimeImports {
 
         // Moving a freshly built collection into the wrapper that carries its
         // descriptor with it.
+        let data_borrow = {
+            let mut sig = module.make_signature();
+            sig.params.push(AbiParam::new(PTR_TYPE)); // data in
+            sig.params.push(AbiParam::new(PTR_TYPE)); // scratch
+            sig.params.push(AbiParam::new(PTR_TYPE)); // value out
+            sig.params.push(AbiParam::new(PTR_TYPE)); // tydesc out
+            sig.returns.push(AbiParam::new(cl_types::I8));
+            module.declare_function("dtlv_rti_data_borrow", Linkage::Import, &sig)
+                .map_err(|e| CraneliftError::Module(
+                    format!("declare dtlv_rti_data_borrow: {}", e)))?
+        };
+
         let data_from_local = {
             let mut sig = module.make_signature();
             sig.params.push(AbiParam::new(PTR_TYPE)); // rt
@@ -807,6 +821,7 @@ impl RuntimeImports {
             data_from,
             erase,
             data_parts,
+            data_borrow,
             data_from_local,
             dyn_binop,
             dyn_binop_checked,

@@ -20,6 +20,35 @@ enum FloatOrdPolicy {
     Total,
 }
 
+/// Read what a `data` holds, unpacking it into `scratch` when it has no
+/// address of its own.
+///
+/// A packed value is not at a byte address and the narrowest carry no
+/// descriptor, so both come from here. See `boxing::data_borrow`.
+///
+/// # Safety
+///
+/// `data` must be initialized and `scratch` writable for eight bytes.
+unsafe fn data_inner(
+    data: *const rtdt::Data,
+    scratch: &mut u64,
+) -> std::option::Option<(*const u8, *const rtdt::TyDesc)> {
+    let mut value: *const u8 = std::ptr::null();
+    let mut tydesc: *const rtdt::TyDesc = std::ptr::null();
+    let status = unsafe {
+        super::boxing::data_borrow(
+            data as *const u8,
+            scratch as *mut u64 as *mut u8,
+            &mut value,
+            &mut tydesc,
+        )
+    };
+    if status != crate::c::RtStatus::Ok {
+        return std::option::Option::None;
+    }
+    std::option::Option::Some((value, tydesc))
+}
+
 pub unsafe fn eq(
     value_a: *const u8,
     tydesc_a: *const rtdt::TyDesc,
@@ -111,7 +140,7 @@ pub unsafe fn cmp_total(
 /// handles that. One descriptor compared against itself is the common case
 /// though: the collections pass the same pointer for both sides on every key
 /// comparison, so the identity check below carries the B-tree hot path.
-fn eq_tydesc(
+pub(crate) fn eq_tydesc(
     td_a: rtdt::TyDescRef,
     td_b: rtdt::TyDescRef,
 ) -> bool {
@@ -728,22 +757,24 @@ unsafe fn eq_value(
                         eq_value(inner_value_a, inner_value_b, rtdt::TyDescRef::from_ptr(tydesc_a), float_policy)
                     }
                     rtdt::anypack::Tag::SmallImmediate | rtdt::anypack::Tag::InlineWithTyDesc => {
-                        // For same type, compare the Data structures field-wise.
-                        // This works because each type has a consistent encoding.
-                        // Data is repr(C) with two pointer fields: (primary, secondary).
+                        // Unpacked and compared as what it is, rather than as
+                        // the words it lies in: the two float zeros have
+                        // different bits and are equal, and a NaN has the same
+                        // bits as itself and is not.
                         if std::ptr::eq(data_a, data_b) {
-                            true
-                        } else {
-                            // Read Data as two usize values and compare.
-                            let data_a_bytes = std::ptr::read(data_a);
-                            let data_b_bytes = std::ptr::read(data_b);
-
-                            // Compare using transmute to [usize; 2] for consistent equality.
-                            let a_words: [usize; 2] = std::mem::transmute(data_a_bytes);
-                            let b_words: [usize; 2] = std::mem::transmute(data_b_bytes);
-
-                            a_words == b_words
+                            return true;
                         }
+                        let mut scratch_a = 0u64;
+                        let mut scratch_b = 0u64;
+                        let (std::option::Option::Some((inner_a, inner_td)),
+                             std::option::Option::Some((inner_b, _))) =
+                            (data_inner(data_a, &mut scratch_a),
+                             data_inner(data_b, &mut scratch_b))
+                        else {
+                            return false;
+                        };
+                        eq_value(inner_a, inner_b,
+                            rtdt::TyDescRef::from_ptr(inner_td), float_policy)
                     }
                     _ => {
                         panic!("invalid Data tag: {:?}", data_a.tag());
@@ -1381,26 +1412,25 @@ unsafe fn cmp_value(
                         cmp_value(inner_value_a, inner_value_b, rtdt::TyDescRef::from_ptr(tydesc_a), float_policy)
                     }
                     rtdt::anypack::Tag::SmallImmediate | rtdt::anypack::Tag::InlineWithTyDesc => {
-                        // For same type, compare the Data structures field-wise.
-                        // This works because each type has a consistent encoding.
-                        // Data is repr(C) with two pointer fields: (primary, secondary).
+                        // Unpacked and compared as what it is, rather than as
+                        // the words it lies in. Those words would put every
+                        // negative integer above every positive one, because
+                        // two's complement read as a magnitude says so, and
+                        // would order floats by their bit patterns.
                         if std::ptr::eq(data_a, data_b) {
-                            crate::c::RtOrdering::Equal
-                        } else {
-                            // Read Data as two usize values and compare.
-                            let data_a_bytes = std::ptr::read(data_a);
-                            let data_b_bytes = std::ptr::read(data_b);
-
-                            // Compare using transmute to [usize; 2] for consistent ordering.
-                            let a_words: [usize; 2] = std::mem::transmute(data_a_bytes);
-                            let b_words: [usize; 2] = std::mem::transmute(data_b_bytes);
-
-                            match a_words.cmp(&b_words) {
-                                std::cmp::Ordering::Less => crate::c::RtOrdering::Less,
-                                std::cmp::Ordering::Greater => crate::c::RtOrdering::Greater,
-                                std::cmp::Ordering::Equal => crate::c::RtOrdering::Equal,
-                            }
+                            return crate::c::RtOrdering::Equal;
                         }
+                        let mut scratch_a = 0u64;
+                        let mut scratch_b = 0u64;
+                        let (std::option::Option::Some((inner_a, inner_td)),
+                             std::option::Option::Some((inner_b, _))) =
+                            (data_inner(data_a, &mut scratch_a),
+                             data_inner(data_b, &mut scratch_b))
+                        else {
+                            return crate::c::RtOrdering::Error;
+                        };
+                        cmp_value(inner_a, inner_b,
+                            rtdt::TyDescRef::from_ptr(inner_td), float_policy)
                     }
                     _ => {
                         panic!("invalid Data tag: {:?}", data_a.tag());

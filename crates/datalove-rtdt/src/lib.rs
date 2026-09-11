@@ -683,6 +683,49 @@ pub struct TyDesc {
     pub type_info: TyInfo,
 }
 
+/// The descriptor for a type that packs into a `data`'s own words.
+///
+/// A narrow scalar rides in a `data` as a tag and a value, with no descriptor
+/// pointer beside it, so a value taken back out of one has none to give. These
+/// are the descriptors it would have had. They are constants, not something
+/// made up at run time: the size and alignment of `u8` are as fixed as its
+/// name.
+///
+/// `None` for anything else, including the types that pack with their
+/// descriptor already in hand.
+pub fn packed_tydesc(tag: TyTag) -> core::option::Option<*const TyDesc> {
+    // A `TyDesc` holds a union of pointers, so it is not `Sync` and cannot be
+    // a plain `static`. These are read-only and never point anywhere, so the
+    // wrapper carries the promise rather than each one.
+    struct Packed(TyDesc);
+    // SAFETY: the union is read as `nothing` for every one of these, which
+    // holds no pointer, and nothing writes to them.
+    unsafe impl Sync for Packed {}
+
+    macro_rules! desc {
+        ($name:ident, $tag:expr, $size:expr) => {{
+            static $name: Packed = Packed(TyDesc {
+                type_tag: $tag,
+                size: $size,
+                align: $size,
+                type_info: TyInfo { nothing: TyInfoNothing },
+            });
+            &$name.0 as *const TyDesc
+        }};
+    }
+    core::option::Option::Some(match tag {
+        TyTag::Bool => desc!(BOOL, TyTag::Bool, 1),
+        TyTag::U8 => desc!(U8, TyTag::U8, 1),
+        TyTag::I8 => desc!(I8, TyTag::I8, 1),
+        TyTag::U16 => desc!(U16, TyTag::U16, 2),
+        TyTag::I16 => desc!(I16, TyTag::I16, 2),
+        TyTag::U32 => desc!(U32, TyTag::U32, 4),
+        TyTag::I32 => desc!(I32, TyTag::I32, 4),
+        TyTag::F32 => desc!(F32, TyTag::F32, 4),
+        _ => return core::option::Option::None,
+    })
+}
+
 /// An operator applied to values whose type only a descriptor says.
 ///
 /// A generic bounded to `float` may add, subtract, multiply, divide and compare

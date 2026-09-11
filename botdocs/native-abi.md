@@ -165,6 +165,25 @@ Three places have to agree, and all three derive from the same `.dli` line.
    A rider is visible only to modules in its own package. A script reaches one
    through a module that re-exports it.
 
+## Borrowing a type parameter
+
+A `ref T` parameter is read through its wrapper before the call, so the native
+gets the thing itself with a real descriptor. That works for a value the
+wrapper keeps on the heap, which lends the address it already has.
+
+A narrow scalar is packed into the `data`'s own words instead. It has no
+address to lend, and the narrowest carry no descriptor beside them either --
+only a tag. So `dtlv_rti_data_borrow` unpacks one into eight bytes the caller
+lends and takes the descriptor from `rtdt::packed_tydesc`, which is a constant
+per type rather than anything made up at run time. The scratch lives in the
+caller's frame and so outlasts the call.
+
+One consequence: a descriptor reaching a native may be one of those runtime
+constants rather than the one the compiler emitted. Descriptors were never
+deduplicated, so nothing may compare them by address; `same_tydesc` in the
+runtime compares them structurally, and the assertions that guard the
+collection entries use it.
+
 ## Arity
 
 The interpreter reaches a native through `call_native_bridge`, which builds a
