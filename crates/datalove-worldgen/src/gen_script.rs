@@ -1,5 +1,7 @@
 //! Script fragment generation.
 
+use std::collections::HashSet;
+
 use rand::Rng;
 use crate::config::WorldGenConfig;
 use crate::context::{GenContext, ModuleInfo};
@@ -19,15 +21,29 @@ pub fn gen_script<'db, R: Rng>(
     let mut ctx = GenContext::new();
 
     // Import functions from modules.
+    //
+    // A name is imported once: every module names its functions `fn0`, `fn1`
+    // and so on, so two of them export the same name, and a second import
+    // under a name already bound is an error rather than a shadowing. The
+    // module generator has kept to this; the script did not.
+    let mut imported_names: HashSet<String> = HashSet::new();
     for module in modules {
         if !module.functions.is_empty() {
-            lines.push(format!("require module {}", module.path()));
-
+            let mut required = false;
             for func in &module.functions {
+                if !imported_names.insert(func.name.clone()) {
+                    continue;
+                }
+                if !required {
+                    lines.push(format!("require module {}", module.path()));
+                    required = true;
+                }
                 lines.push(format!("import {}.{}", module.alias(), func.name));
                 ctx.imported_functions.push(func.clone());
             }
-            lines.push(String::new());
+            if required {
+                lines.push(String::new());
+            }
         }
     }
 

@@ -135,6 +135,20 @@ pub fn gen_if<'db, R: Rng>(
     // Save variables and consumed state before entering then branch.
     let saved_variables = ctx.variables.clone();
     let saved_consumed = ctx.consumed_variables.clone();
+    let saved_protected = ctx.loop_protected_variables.clone();
+
+    // A branch may not move what was declared outside it. Moving in one branch
+    // and not the other is refused, and the generator has no way to promise
+    // the other branch will match, so it borrows rather than moves. The same
+    // rule a loop body keeps, for the same kind of reason.
+    let outer_linear: Vec<String> = ctx.variables
+        .iter()
+        .filter(|v| is_linear_type(&v.type_hint))
+        .map(|v| v.name.clone())
+        .collect();
+    for name in &outer_linear {
+        ctx.loop_protect_variable(name);
+    }
 
     let then_stmt_count = rng.gen_range(1..=2);
     for _ in 0..then_stmt_count {
@@ -167,6 +181,7 @@ pub fn gen_if<'db, R: Rng>(
         ctx.consumed_variables = saved_consumed;
     }
 
+    ctx.loop_protected_variables = saved_protected;
     ctx.control_flow_depth -= 1;
     result.push_str(&format!("{}end if", indent));
     result

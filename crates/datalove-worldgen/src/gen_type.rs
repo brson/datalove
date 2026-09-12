@@ -2,7 +2,7 @@
 
 use rand::Rng;
 use datalove_datalit::ast::TypeHint;
-use datalove_datalit::ast_gen::{self, TypeWeights};
+use datalove_datalit::ast_gen;
 use crate::config::WorldGenConfig;
 use crate::pretty::pretty_type_hint;
 
@@ -14,11 +14,12 @@ pub fn gen_type_hint<'db, R: Rng>(
     rng: &mut R,
     config: &WorldGenConfig,
 ) -> TypeHint<'db> {
-    // Use leaf-only types for function signatures to ensure reliable typechecking.
-    let mut type_config = config.type_config.clone();
-    type_config.type_weights = TypeWeights::leaf_only();
-
-    ast_gen::gen_type_hint(db, rng, &type_config, 0)
+    // Whatever the config asks for. This forced leaf-only types once, to work
+    // around a one-element tuple printed as `(x)` rather than `(x,)`, which
+    // reads as a bracketed expression and did not match its own type. That is
+    // fixed, and a signature holding a list or an option is the interesting
+    // case, so nothing is held back here now.
+    ast_gen::gen_type_hint(db, rng, &config.type_config, 0)
 }
 
 /// Generate a type alias definition.
@@ -30,10 +31,7 @@ pub fn gen_type_alias<'db, R: Rng>(
     name: &str,
     _config: &WorldGenConfig,
 ) -> (String, TypeHint<'db>) {
-    // Generate a primitive type for the alias to ensure reliable typechecking.
-    let mut type_config = ast_gen::AstGenConfig::default();
-    type_config.type_weights = TypeWeights::leaf_only();
-
+    let type_config = ast_gen::AstGenConfig::default();
     let type_hint = ast_gen::gen_type_hint(db, rng, &type_config, 0);
     (name.to_string(), type_hint)
 }
@@ -78,23 +76,23 @@ mod tests {
     }
 
     #[test]
-    fn test_gen_type_hint_produces_leaf_types() {
+    fn test_gen_type_hint_follows_the_weights() {
         let db = Database::default();
-        test_gen_type_hint_leaf_inner(&db);
+        test_gen_type_hint_weights_inner(&db);
     }
 
+    /// The weights are what decide, rather than anything forced here.
+    ///
+    /// This asked for leaf types once, because the generator pinned them
+    /// whatever the config said. A signature holding a list or an option is
+    /// the interesting case, so what is checked now is that both answers are
+    /// reachable: leaf-only weights give leaf types, and the default weights
+    /// give compound ones too.
     #[salsa::tracked(returns(copy))]
-    fn test_gen_type_hint_leaf_inner<'db>(db: &'db dyn salsa::Database) {
-        let config = WorldGenConfig::default();
-        let mut rng = rand::rngs::StdRng::seed_from_u64(42);
-
-        // Generate 100 types and verify they're all leaf types.
-        for _ in 0..100 {
-            let type_hint = gen_type_hint(db, &mut rng, &config);
-
-            // Verify it's a leaf type (no containers).
-            let is_leaf = matches!(
-                type_hint,
+    fn test_gen_type_hint_weights_inner<'db>(db: &'db dyn salsa::Database) {
+        fn is_leaf(ty: &TypeHint) -> bool {
+            matches!(
+                ty,
                 TypeHint::Bool
                     | TypeHint::U8
                     | TypeHint::I8
@@ -110,9 +108,24 @@ mod tests {
                     | TypeHint::F64
                     | TypeHint::Int
                     | TypeHint::String
-            );
-            assert!(is_leaf, "Expected leaf type");
+            )
         }
+
+        let mut leaf_config = WorldGenConfig::default();
+        leaf_config.type_config.type_weights =
+            datalove_datalit::ast_gen::TypeWeights::leaf_only();
+        let mut rng = rand::rngs::StdRng::seed_from_u64(42);
+        for _ in 0..100 {
+            let type_hint = gen_type_hint(db, &mut rng, &leaf_config);
+            assert!(is_leaf(&type_hint), "leaf-only weights gave a compound type");
+        }
+
+        let config = WorldGenConfig::default();
+        let mut rng = rand::rngs::StdRng::seed_from_u64(42);
+        let compound = (0..100)
+            .filter(|_| !is_leaf(&gen_type_hint(db, &mut rng, &config)))
+            .count();
+        assert!(compound > 0, "the default weights gave no compound type in 100");
     }
 
     #[test]

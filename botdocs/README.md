@@ -41,6 +41,8 @@ Specifications, research, design documents, implementation plans, and reports.
 
 ### Reports
 
+- [The State of Worldgen](reports/report-worldgen-state.md)
+
 - [Adapt Operator Error Cases](report-adapt-cases.md)
 - [Advanced PLT Directions](report-advanced-ideas.md)
 - [GADTs Without Dependent Types](report-gadts.md)

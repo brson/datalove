@@ -68,6 +68,11 @@ fn write_expr<'db>(
                 }
                 write_expr_full(db, *elem, out);
             }
+            // A one-element tuple takes a trailing comma, since `(x)` on its
+            // own is the expression `x` in brackets.
+            if t.elements.len() == 1 {
+                out.push(',');
+            }
             out.push(')');
         }
 
