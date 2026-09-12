@@ -177,11 +177,13 @@ pub fn lower_function_body<'db>(
     }
     ctx.body.current_stmt_idx = None;
 
-    // If no explicit return, add implicit return unit.
-    // Drop analysis schedules drops at function scope exit.
+    // If no explicit return, add implicit return unit, letting go of whatever
+    // the body still owns on the way out. A `ret` does that for itself against
+    // its own statement index; there is no statement here to hang it on.
     let needs_return = ctx.body.blocks.is_empty()
         || !matches!(ctx.body.blocks.last().unwrap().terminator, Terminator::Return { .. });
     if needs_return {
+        ctx.emit_function_exit_drops();
         ctx.finish_block(Terminator::Return { value: None });
     }
 

@@ -1337,6 +1337,17 @@ impl<'db> LowerCtx<'db> {
         }
     }
 
+    /// Emit drops for what is still owned where the body ends.
+    ///
+    /// The counterpart of `emit_before_return_drops` for a function that runs
+    /// off the end rather than returning. Empty when every path returned.
+    pub fn emit_function_exit_drops(&mut self) {
+        let binding_ids = self.body.drop_schedule.at_function_exit.clone();
+        for id in binding_ids {
+            self.emit_binding_drop(id);
+        }
+    }
+
     /// Emit drops scheduled before a TryReturn (checked/optional operators).
     ///
     /// Uses current_stmt_idx since TryReturn happens within expression lowering.

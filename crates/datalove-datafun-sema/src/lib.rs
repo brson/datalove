@@ -417,6 +417,14 @@ pub struct DropSchedule {
     /// Key is (match_stmt_idx, arm_idx).
     pub match_arm_exit: BTreeMap<(usize, usize), Vec<BindingId>>,
 
+    /// Drops to emit where control runs off the end of a function body.
+    ///
+    /// A `ret` schedules its own drops against its statement index, but a body
+    /// that simply ends has no statement to hang them on, so they go here. It
+    /// is empty when every path returns explicitly, since those paths took
+    /// their bindings with them.
+    pub at_function_exit: Vec<BindingId>,
+
     /// Statement keys in allocation order, for verifying lowering traversal.
     /// Only present in debug builds.
     #[cfg(debug_assertions)]

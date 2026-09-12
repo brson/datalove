@@ -976,9 +976,11 @@ pub fn analyze_function_with_mode<'db>(
     // Analyze function body.
     analyze_statements(&mut ctx, func.body(db));
 
-    // Exit function scope - remaining live bindings need dropping at implicit return.
-    let _final_drops = ctx.exit_scope();
-    // Note: Final drops are handled by lowering's implicit return path.
+    // Whatever is still owned where the body ends has to be let go there.
+    // A `ret` schedules its own against its statement index; a body that runs
+    // off the end has no statement to hang them on, so they go in their own
+    // place and lowering emits them before the return it adds.
+    ctx.schedule.at_function_exit = ctx.exit_scope();
 
     // Compute tracking categories.
     let tracking = ctx.compute_tracking();

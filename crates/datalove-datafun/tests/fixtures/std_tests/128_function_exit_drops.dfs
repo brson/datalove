@@ -1,0 +1,76 @@
+require module sys/std/list
+
+import list.len
+
+// What a function still owns where its body ends.
+//
+// A `ret` lets go of what is still live before it leaves, scheduled against
+// the statement it is. A body that simply runs off the end has no statement to
+// hang that on, and for a while nothing let go there at all: an owned
+// parameter a function never used was leaked, and so was one it bound to a
+// name and did nothing with.
+//
+// Nothing here checks a value, because there is nothing to check -- the leak
+// detector is the assertion. These run for their side effect of ending.
+
+// The plainest case: an owned parameter the body never mentions.
+fun ignores<T>(x: T)
+end fun
+
+// Bound and left, which is the same thing said out loud.
+fun binds_and_leaves<T>(x: T)
+  let unwanted = x
+end fun
+
+// Two of them, so that more than one drop has to be emitted.
+fun ignores_two<A, B>(a: A, b: B)
+end fun
+
+// A local made beside the parameter, so the drops are not only parameters.
+fun makes_a_local<T>(x: T)
+  let beside = "a local"
+end fun
+
+// A `var` is tracked rather than precise, because its state varies. The drop
+// at the end has to be the form that reads the tracking byte.
+fun keeps_a_var(pick: bool)
+  var held: ?string = none
+  if pick
+    set held = some "something"
+  end if
+end fun
+
+// Falling off the end of a loop that made a binding each round. The loop body
+// lets go of its own; the end of the body lets go of what is left.
+fun loops_then_ends(rounds: index)
+  var i: index = : index / 0
+  loop while i .< rounds
+    let each_round = "made"
+    set i = icall add_wrapping_index(i, : index / 1)
+  end loop
+  let after = "and one more"
+end fun
+
+// A heap type is the one that shows, because dropping a `u32` frees nothing.
+ignores("a string")
+ignores([: u32 / 1, : u32 / 2])
+ignores(12345678901234567890)
+ignores(: u32 / 5)
+
+binds_and_leaves("a string")
+binds_and_leaves([: u32 / 3])
+
+ignores_two("one", [: u32 / 1])
+ignores_two(: u8 / 1, "two")
+
+makes_a_local("a string")
+
+keeps_a_var(true)
+keeps_a_var(false)
+
+loops_then_ends(: index / 3)
+loops_then_ends(: index / 0)
+
+// Something to show, so the unit has a result.
+let evidence: [string] = ["still here"]
+let output = len(ref evidence)
