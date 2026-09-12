@@ -20,6 +20,17 @@ import std.float_fract
 import std.float_recip
 import std.float_signum
 import std.float_neg
+import std.float_zero
+import std.float_one
+import std.float_nan
+import std.float_infinity
+import std.float_neg_infinity
+import std.float_min_value
+import std.float_max_value
+import std.float_min_positive
+import std.float_epsilon
+import std.float_pi
+import std.float_e
 
 // The magnitude, without its sign.
 fun abs<T>(self: T): T with { T is float, }
@@ -108,4 +119,67 @@ end fun
 // The difference between the two, without its sign.
 fun distance<T>(self: T, other: T): T with { T is float, }
   ret float_abs(self - other)
+end fun
+
+// The constants, at whatever width the caller wants.
+//
+// A literal has to be written at some type, and inside a generic the type is
+// what nobody has picked yet. So these come from the rider, which is handed a
+// descriptor by the call site and makes the value from that. As with every
+// return-position generic, the call has to say what it wants: bind the answer
+// to a name carrying the type.
+
+// Zero.
+fun zero<T>(): T with { T is float, }
+  ret float_zero()
+end fun
+
+// One.
+fun one<T>(): T with { T is float, }
+  ret float_one()
+end fun
+
+// The value that is not equal to itself.
+fun nan<T>(): T with { T is float, }
+  ret float_nan()
+end fun
+
+// Positive infinity.
+fun infinity<T>(): T with { T is float, }
+  ret float_infinity()
+end fun
+
+// Negative infinity.
+fun neg_infinity<T>(): T with { T is float, }
+  ret float_neg_infinity()
+end fun
+
+// The most negative finite value.
+fun min_value<T>(): T with { T is float, }
+  ret float_min_value()
+end fun
+
+// The largest finite value.
+fun max_value<T>(): T with { T is float, }
+  ret float_max_value()
+end fun
+
+// The smallest positive normal value.
+fun min_positive<T>(): T with { T is float, }
+  ret float_min_positive()
+end fun
+
+// The difference between one and the next value above it.
+fun epsilon<T>(): T with { T is float, }
+  ret float_epsilon()
+end fun
+
+// The ratio of a circle to its diameter.
+fun pi<T>(): T with { T is float, }
+  ret float_pi()
+end fun
+
+// The base of the natural logarithm.
+fun e<T>(): T with { T is float, }
+  ret float_e()
 end fun

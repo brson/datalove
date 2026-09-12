@@ -24,8 +24,10 @@ let looked_up = (get(ref scores, ref k_b), get(ref scores, ref k_missing))
 let present = (contains_key(ref scores, ref k_a), contains_key(ref scores, ref k_zz))
 let counted = len(ref scores)
 
-remove(mut scores, ref k_a)
-let after_remove = (len(ref scores), contains_key(ref scores, ref k_a))
+// `remove` gives back what was under the key, so it is a value and not a
+// statement. Nothing is silently let go.
+let removed = remove(mut scores, ref k_a)
+let after_remove = (removed, len(ref scores), contains_key(ref scores, ref k_a))
 
 // A value that owns memory, so a missed drop shows up as a leak.
 let k1 = : u32 / 1

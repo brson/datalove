@@ -2343,3 +2343,161 @@ pub extern "C-unwind" fn dlr_std__ord_compare(
     }
     OK
 }
+
+// Constants of a type parameter bounded to `float`. Each takes its width from
+// the descriptor the call site hands over, the type parameter appearing only
+// in the return.
+
+#[no_mangle]
+pub extern "C-unwind" fn dlr_std__float_zero(
+    rt: *mut u8,
+    out: *mut u8, out_td: *const u8,
+    value_td: *const u8,
+) -> u8 {
+    unsafe {
+        datalove_rt::c::dtlv_rti_dyn_float_const(
+            rt, 0, out, out_td as *const rtdt::TyDesc,
+            value_td as *const rtdt::TyDesc,
+        ) as u8
+    }
+}
+
+#[no_mangle]
+pub extern "C-unwind" fn dlr_std__float_one(
+    rt: *mut u8,
+    out: *mut u8, out_td: *const u8,
+    value_td: *const u8,
+) -> u8 {
+    unsafe {
+        datalove_rt::c::dtlv_rti_dyn_float_const(
+            rt, 1, out, out_td as *const rtdt::TyDesc,
+            value_td as *const rtdt::TyDesc,
+        ) as u8
+    }
+}
+
+#[no_mangle]
+pub extern "C-unwind" fn dlr_std__float_nan(
+    rt: *mut u8,
+    out: *mut u8, out_td: *const u8,
+    value_td: *const u8,
+) -> u8 {
+    unsafe {
+        datalove_rt::c::dtlv_rti_dyn_float_const(
+            rt, 2, out, out_td as *const rtdt::TyDesc,
+            value_td as *const rtdt::TyDesc,
+        ) as u8
+    }
+}
+
+#[no_mangle]
+pub extern "C-unwind" fn dlr_std__float_infinity(
+    rt: *mut u8,
+    out: *mut u8, out_td: *const u8,
+    value_td: *const u8,
+) -> u8 {
+    unsafe {
+        datalove_rt::c::dtlv_rti_dyn_float_const(
+            rt, 3, out, out_td as *const rtdt::TyDesc,
+            value_td as *const rtdt::TyDesc,
+        ) as u8
+    }
+}
+
+#[no_mangle]
+pub extern "C-unwind" fn dlr_std__float_neg_infinity(
+    rt: *mut u8,
+    out: *mut u8, out_td: *const u8,
+    value_td: *const u8,
+) -> u8 {
+    unsafe {
+        datalove_rt::c::dtlv_rti_dyn_float_const(
+            rt, 4, out, out_td as *const rtdt::TyDesc,
+            value_td as *const rtdt::TyDesc,
+        ) as u8
+    }
+}
+
+#[no_mangle]
+pub extern "C-unwind" fn dlr_std__float_min_value(
+    rt: *mut u8,
+    out: *mut u8, out_td: *const u8,
+    value_td: *const u8,
+) -> u8 {
+    unsafe {
+        datalove_rt::c::dtlv_rti_dyn_float_const(
+            rt, 5, out, out_td as *const rtdt::TyDesc,
+            value_td as *const rtdt::TyDesc,
+        ) as u8
+    }
+}
+
+#[no_mangle]
+pub extern "C-unwind" fn dlr_std__float_max_value(
+    rt: *mut u8,
+    out: *mut u8, out_td: *const u8,
+    value_td: *const u8,
+) -> u8 {
+    unsafe {
+        datalove_rt::c::dtlv_rti_dyn_float_const(
+            rt, 6, out, out_td as *const rtdt::TyDesc,
+            value_td as *const rtdt::TyDesc,
+        ) as u8
+    }
+}
+
+#[no_mangle]
+pub extern "C-unwind" fn dlr_std__float_min_positive(
+    rt: *mut u8,
+    out: *mut u8, out_td: *const u8,
+    value_td: *const u8,
+) -> u8 {
+    unsafe {
+        datalove_rt::c::dtlv_rti_dyn_float_const(
+            rt, 7, out, out_td as *const rtdt::TyDesc,
+            value_td as *const rtdt::TyDesc,
+        ) as u8
+    }
+}
+
+#[no_mangle]
+pub extern "C-unwind" fn dlr_std__float_epsilon(
+    rt: *mut u8,
+    out: *mut u8, out_td: *const u8,
+    value_td: *const u8,
+) -> u8 {
+    unsafe {
+        datalove_rt::c::dtlv_rti_dyn_float_const(
+            rt, 8, out, out_td as *const rtdt::TyDesc,
+            value_td as *const rtdt::TyDesc,
+        ) as u8
+    }
+}
+
+#[no_mangle]
+pub extern "C-unwind" fn dlr_std__float_pi(
+    rt: *mut u8,
+    out: *mut u8, out_td: *const u8,
+    value_td: *const u8,
+) -> u8 {
+    unsafe {
+        datalove_rt::c::dtlv_rti_dyn_float_const(
+            rt, 9, out, out_td as *const rtdt::TyDesc,
+            value_td as *const rtdt::TyDesc,
+        ) as u8
+    }
+}
+
+#[no_mangle]
+pub extern "C-unwind" fn dlr_std__float_e(
+    rt: *mut u8,
+    out: *mut u8, out_td: *const u8,
+    value_td: *const u8,
+) -> u8 {
+    unsafe {
+        datalove_rt::c::dtlv_rti_dyn_float_const(
+            rt, 10, out, out_td as *const rtdt::TyDesc,
+            value_td as *const rtdt::TyDesc,
+        ) as u8
+    }
+}

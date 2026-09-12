@@ -10,6 +10,10 @@
 // `self`, and these rebuild the option with `some value` rather than returning
 // the `self` they destructured.
 
+require module sys/std/fixedint
+
+import fixedint.zero
+
 // True if the option holds a value.
 fun is_some<T>(self: ?T): bool
   if self |value|
@@ -107,11 +111,15 @@ fun zip_option<A, B>(self: ?A, other: ?B): ?(A, B)
   end if
 end fun
 
-// Returns the contained value or zero.
-fun unwrap_or_zero(self: ?u32): u32
+// The contained value, or the type's own zero.
+//
+// Bounded to `fixedint` rather than written at one width, because a zero can
+// be made at any of them: `sys/std/fixedint` asks the rider for one and the
+// call site's descriptor says which.
+fun unwrap_or_zero<T>(self: ?T): T with { T is fixedint, }
   if self |value|
     ret value
   else
-    ret 0
+    ret zero()
   end if
 end fun

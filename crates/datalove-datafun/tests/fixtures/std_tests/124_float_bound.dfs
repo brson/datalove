@@ -16,6 +16,17 @@ import float.clamp
 import float.lerp
 import float.is_nan
 import float.distance
+import float.zero
+import float.one
+import float.nan
+import float.infinity
+import float.neg_infinity
+import float.min_value
+import float.max_value
+import float.min_positive
+import float.epsilon
+import float.pi
+import float.e
 
 // A type parameter bounded to `float`.
 //
@@ -81,5 +92,23 @@ let forwarded = (blend(: f64 / 0.0, : f64 / 10.0, : f64 / 0.25),
                  blend(: f32 / 0.0, : f32 / 10.0, : f32 / 0.25))
 let repeated = (squared(: f64 / 3.0), squared(: f32 / 1.5))
 
+// The constants, at whichever width the binding names. A literal cannot be
+// written at a type nobody has picked yet, so these come from the rider, which
+// is handed a descriptor by the call site because the type parameter appears
+// only in the return.
+let wide_consts: (f64, f64, f64, f64) = (zero(), one(), pi(), e())
+let narrow_consts: (f32, f32, f32) = (zero(), one(), pi())
+let limits: (f64, f32) = (max_value(), max_value())
+let smallest: (f64, f32) = (min_positive(), epsilon())
+// Each is bound to a name carrying the type, because a call whose type
+// parameter appears only in the return has nothing else to take it from.
+let a_nan: f64 = nan()
+let an_inf: f64 = infinity()
+let a_neg_inf: f32 = neg_infinity()
+let a_floor: f64 = min_value()
+let infinities = (is_nan(a_nan), is_nan(an_inf), an_inf .> : f64 / 0.0,
+                  a_neg_inf .< : f32 / 0.0, a_floor .< : f64 / 0.0)
+
 let output = (wide, narrow, rounding, signs, picking, derived, nans,
-              forwarded, repeated)
+              forwarded, repeated, wide_consts, narrow_consts, limits,
+              smallest, infinities)

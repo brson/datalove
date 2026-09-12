@@ -9,17 +9,6 @@ enum FloatEqPolicy {
     Bitwise,
 }
 
-/// Float ordering policy for comparison operations.
-#[derive(Copy, Clone)]
-enum FloatOrdPolicy {
-    /// Datalove ordering: NaN total order with zero coalescing.
-    /// -NaN < -Infinity < -numbers < -0.0 == +0.0 < +numbers < +Infinity < +NaN
-    Datalove,
-    /// IEEE 754-2008 total order: distinguishes -0.0 from +0.0.
-    /// -NaN < -Infinity < -numbers < -0.0 < +0.0 < +numbers < +Infinity < +NaN
-    Total,
-}
-
 /// Read what a `data` holds, unpacking it into `scratch` when it has no
 /// address of its own.
 ///
@@ -95,25 +84,6 @@ pub unsafe fn eq_unique(
     }
 }
 
-pub unsafe fn cmp(
-    value_a: *const u8,
-    tydesc_a: *const rtdt::TyDesc,
-    value_b: *const u8,
-    tydesc_b: *const rtdt::TyDesc,
-) -> crate::c::RtOrdering {
-    assert!(!(value_a.is_null() || value_b.is_null()));
-    assert!(!(tydesc_a.is_null() || tydesc_b.is_null()));
-
-    unsafe {
-        let td_a = rtdt::TyDescRef::from_ptr(tydesc_a);
-        let td_b = rtdt::TyDescRef::from_ptr(tydesc_b);
-        if !eq_tydesc(td_a, td_b) {
-            return crate::c::RtOrdering::Error;
-        }
-        cmp_value(value_a, value_b, td_a, FloatOrdPolicy::Datalove)
-    }
-}
-
 pub unsafe fn cmp_total(
     value_a: *const u8,
     tydesc_a: *const rtdt::TyDesc,
@@ -129,7 +99,7 @@ pub unsafe fn cmp_total(
         if !eq_tydesc(td_a, td_b) {
             return crate::c::RtOrdering::Error;
         }
-        cmp_value(value_a, value_b, td_a, FloatOrdPolicy::Total)
+        cmp_value(value_a, value_b, td_a)
     }
 }
 
@@ -842,7 +812,6 @@ unsafe fn cmp_value(
     value_a: *const u8,
     value_b: *const u8,
     tydesc: rtdt::TyDescRef,
-    float_policy: FloatOrdPolicy,
 ) -> crate::c::RtOrdering {
     unsafe {
         let td = tydesc;
@@ -973,66 +942,27 @@ unsafe fn cmp_value(
             rtdt::TyTag::F32 => {
                 let a = *(value_a as *const f32);
                 let b = *(value_b as *const f32);
-                match float_policy {
-                    FloatOrdPolicy::Datalove => {
-                        // Datalove ordering: NaN total order; +0.0 == -0.0
-                        // -NaN < -Infinity < -numbers < -0.0 == +0.0 < +numbers < +Infinity < +NaN
-
-                        // Rust's partial_cmp gives us -0.0 ==+.0.0, rejects NaN
-                        match a.partial_cmp(&b) {
-                            Some(std::cmp::Ordering::Less) => crate::c::RtOrdering::Less,
-                            Some(std::cmp::Ordering::Greater) => crate::c::RtOrdering::Greater,
-                            Some(std::cmp::Ordering::Equal) => crate::c::RtOrdering::Equal,
-                            None => {
-                                debug_assert!(a.is_nan() || b.is_nan());
-                                // Rust's total_cmp gives us the correct NaN ordering.
-                                match a.total_cmp(&b) {
-                                    std::cmp::Ordering::Less => crate::c::RtOrdering::Less,
-                                    std::cmp::Ordering::Greater => crate::c::RtOrdering::Greater,
-                                    std::cmp::Ordering::Equal => crate::c::RtOrdering::Equal,
-                                }
-                            }
-                        }
-                    }
-                    FloatOrdPolicy::Total => {
-                        // IEEE 754-2008 total order: distinguishes -0.0 from +0.0.
-                        // -NaN < -Infinity < -numbers < -0.0 < +0.0 < +numbers < +Infinity < +NaN
-                        match a.total_cmp(&b) {
-                            std::cmp::Ordering::Less => crate::c::RtOrdering::Less,
-                            std::cmp::Ordering::Greater => crate::c::RtOrdering::Greater,
-                            std::cmp::Ordering::Equal => crate::c::RtOrdering::Equal,
-                        }
-                    }
+                // IEEE 754-2008 total order, which is the one the language
+                // has: NaN takes a place rather than comparing false, and the
+                // two zeros are told apart.
+                // -NaN < -Inf < -numbers < -0.0 < +0.0 < +numbers < +Inf < +NaN
+                match a.total_cmp(&b) {
+                    std::cmp::Ordering::Less => crate::c::RtOrdering::Less,
+                    std::cmp::Ordering::Greater => crate::c::RtOrdering::Greater,
+                    std::cmp::Ordering::Equal => crate::c::RtOrdering::Equal,
                 }
             }
             rtdt::TyTag::F64 => {
                 let a = *(value_a as *const f64);
                 let b = *(value_b as *const f64);
-                match float_policy {
-                    FloatOrdPolicy::Datalove => {
-                        // Datalove ordering: NaN total order; +0.0 == -0.0
-                        match a.partial_cmp(&b) {
-                            Some(std::cmp::Ordering::Less) => crate::c::RtOrdering::Less,
-                            Some(std::cmp::Ordering::Greater) => crate::c::RtOrdering::Greater,
-                            Some(std::cmp::Ordering::Equal) => crate::c::RtOrdering::Equal,
-                            None => {
-                                debug_assert!(a.is_nan() || b.is_nan());
-                                match a.total_cmp(&b) {
-                                    std::cmp::Ordering::Less => crate::c::RtOrdering::Less,
-                                    std::cmp::Ordering::Greater => crate::c::RtOrdering::Greater,
-                                    std::cmp::Ordering::Equal => crate::c::RtOrdering::Equal,
-                                }
-                            }
-                        }
-                    }
-                    FloatOrdPolicy::Total => {
-                        // IEEE 754-2008 total order: distinguishes -0.0 from +0.0.
-                        match a.total_cmp(&b) {
-                            std::cmp::Ordering::Less => crate::c::RtOrdering::Less,
-                            std::cmp::Ordering::Greater => crate::c::RtOrdering::Greater,
-                            std::cmp::Ordering::Equal => crate::c::RtOrdering::Equal,
-                        }
-                    }
+                // IEEE 754-2008 total order, which is the one the language
+                // has: NaN takes a place rather than comparing false, and the
+                // two zeros are told apart.
+                // -NaN < -Inf < -numbers < -0.0 < +0.0 < +numbers < +Inf < +NaN
+                match a.total_cmp(&b) {
+                    std::cmp::Ordering::Less => crate::c::RtOrdering::Less,
+                    std::cmp::Ordering::Greater => crate::c::RtOrdering::Greater,
+                    std::cmp::Ordering::Equal => crate::c::RtOrdering::Equal,
                 }
             }
             rtdt::TyTag::Int => {
@@ -1072,7 +1002,7 @@ unsafe fn cmp_value(
                 for field in td.iter_tuple_fields() {
                     let field_a = value_a.add(field.offset() as usize);
                     let field_b = value_b.add(field.offset() as usize);
-                    let field_cmp = cmp_value(field_a, field_b, field.tydesc(), float_policy);
+                    let field_cmp = cmp_value(field_a, field_b, field.tydesc());
                     match field_cmp {
                         crate::c::RtOrdering::Less => return crate::c::RtOrdering::Less,
                         crate::c::RtOrdering::Greater => return crate::c::RtOrdering::Greater,
@@ -1087,7 +1017,7 @@ unsafe fn cmp_value(
                 for field in td.iter_struct_fields() {
                     let field_a = value_a.add(field.offset() as usize);
                     let field_b = value_b.add(field.offset() as usize);
-                    let field_cmp = cmp_value(field_a, field_b, field.tydesc(), float_policy);
+                    let field_cmp = cmp_value(field_a, field_b, field.tydesc());
                     match field_cmp {
                         crate::c::RtOrdering::Less => return crate::c::RtOrdering::Less,
                         crate::c::RtOrdering::Greater => return crate::c::RtOrdering::Greater,
@@ -1100,7 +1030,7 @@ unsafe fn cmp_value(
             rtdt::TyTag::Atom => crate::c::RtOrdering::Equal,
             rtdt::TyTag::Term => {
                 let (_, payload_ty) = td.term_info();
-                cmp_value(value_a, value_b, payload_ty, float_policy)
+                cmp_value(value_a, value_b, payload_ty)
             }
             rtdt::TyTag::Enum => {
                 let enum_info = td.enum_info();
@@ -1123,7 +1053,7 @@ unsafe fn cmp_value(
                         if let core::option::Option::Some(payload_ty) = variant.payload() {
                             let payload_a = value_a.add(variant.offset() as usize);
                             let payload_b = value_b.add(variant.offset() as usize);
-                            return cmp_value(payload_a, payload_b, payload_ty, float_policy);
+                            return cmp_value(payload_a, payload_b, payload_ty);
                         }
                     }
                 }
@@ -1141,7 +1071,7 @@ unsafe fn cmp_value(
                 for i in 0..min_size {
                     let elem_a = list_a.data.add(i * element_size);
                     let elem_b = list_b.data.add(i * element_size);
-                    let elem_cmp = cmp_value(elem_a, elem_b, element_ty, float_policy);
+                    let elem_cmp = cmp_value(elem_a, elem_b, element_ty);
                     match elem_cmp {
                         crate::c::RtOrdering::Less => return crate::c::RtOrdering::Less,
                         crate::c::RtOrdering::Greater => return crate::c::RtOrdering::Greater,
@@ -1173,7 +1103,7 @@ unsafe fn cmp_value(
                         let layout = rtdt::layout::compute_option_layout(tydesc);
                         let payload_a = value_a.add(layout.payload_offset as usize);
                         let payload_b = value_b.add(layout.payload_offset as usize);
-                        cmp_value(payload_a, payload_b, inner_ty, float_policy)
+                        cmp_value(payload_a, payload_b, inner_ty)
                     }
                 }
             }
@@ -1193,7 +1123,7 @@ unsafe fn cmp_value(
 
                         match result_a.tag {
                             rtdt::ResultTag::Ok => {
-                                cmp_value(payload_a, payload_b, ok_ty, float_policy)
+                                cmp_value(payload_a, payload_b, ok_ty)
                             }
                             rtdt::ResultTag::Err => {
                                 // Compare Error values.
@@ -1212,7 +1142,7 @@ unsafe fn cmp_value(
                                 }
                                 let value_a = err_a.value_ptr();
                                 let value_b = err_b.value_ptr();
-                                cmp_value(value_a, value_b, rtdt::TyDescRef::from_ptr(tydesc_a), float_policy)
+                                cmp_value(value_a, value_b, rtdt::TyDescRef::from_ptr(tydesc_a))
                             }
                         }
                     }
@@ -1231,7 +1161,6 @@ unsafe fn cmp_value(
                     map_b.root as *mut rtdt::MapNode,
                     key_ty,
                     value_ty,
-                    float_policy,
                 )
             }
             rtdt::TyTag::Set => {
@@ -1245,7 +1174,6 @@ unsafe fn cmp_value(
                     set_a.root as *mut rtdt::SetNode,
                     set_b.root as *mut rtdt::SetNode,
                     element_ty,
-                    float_policy,
                 )
             }
             rtdt::TyTag::Tensor => {
@@ -1298,7 +1226,7 @@ unsafe fn cmp_value(
                         let elem_b = tensor_b.ptr_base.add((offset_b as usize) * element_size);
 
                         // Compare elements.
-                        let elem_cmp = cmp_value(elem_a, elem_b, element_ty, float_policy);
+                        let elem_cmp = cmp_value(elem_a, elem_b, element_ty);
                         match elem_cmp {
                             crate::c::RtOrdering::Less => return crate::c::RtOrdering::Less,
                             crate::c::RtOrdering::Greater => return crate::c::RtOrdering::Greater,
@@ -1333,7 +1261,7 @@ unsafe fn cmp_value(
                     let elem_a = tensor_a.ptr_base.add(tensor_a.offset_elems.as_usize() * element_size);
                     let elem_b = tensor_b.ptr_base.add(tensor_b.offset_elems.as_usize() * element_size);
 
-                    cmp_value(elem_a, elem_b, element_ty, float_policy)
+                    cmp_value(elem_a, elem_b, element_ty)
                 }
             }
             rtdt::TyTag::Table => {
@@ -1360,7 +1288,7 @@ unsafe fn cmp_value(
                             col,
                             table_b.capacity.0,
                         );
-                        let ord = cmp_value(elem_a, elem_b, col_info.tydesc(), float_policy);
+                        let ord = cmp_value(elem_a, elem_b, col_info.tydesc());
                         if ord != crate::c::RtOrdering::Equal {
                             return ord;
                         }
@@ -1409,7 +1337,7 @@ unsafe fn cmp_value(
                         }
                         let inner_value_a = data_a.value_ptr();
                         let inner_value_b = data_b.value_ptr();
-                        cmp_value(inner_value_a, inner_value_b, rtdt::TyDescRef::from_ptr(tydesc_a), float_policy)
+                        cmp_value(inner_value_a, inner_value_b, rtdt::TyDescRef::from_ptr(tydesc_a))
                     }
                     rtdt::anypack::Tag::SmallImmediate | rtdt::anypack::Tag::InlineWithTyDesc => {
                         // Unpacked and compared as what it is, rather than as
@@ -1430,7 +1358,7 @@ unsafe fn cmp_value(
                             return crate::c::RtOrdering::Error;
                         };
                         cmp_value(inner_a, inner_b,
-                            rtdt::TyDescRef::from_ptr(inner_td), float_policy)
+                            rtdt::TyDescRef::from_ptr(inner_td))
                     }
                     _ => {
                         panic!("invalid Data tag: {:?}", data_a.tag());
@@ -1474,7 +1402,7 @@ unsafe fn cmp_value(
                         }
                         let inner_value_a = err_a.value_ptr();
                         let inner_value_b = err_b.value_ptr();
-                        cmp_value(inner_value_a, inner_value_b, rtdt::TyDescRef::from_ptr(tydesc_a), float_policy)
+                        cmp_value(inner_value_a, inner_value_b, rtdt::TyDescRef::from_ptr(tydesc_a))
                     }
                     rtdt::anypack::Tag::SmallImmediate | rtdt::anypack::Tag::InlineWithTyDesc => {
                         // For same type, compare the Error structures field-wise.
@@ -1752,7 +1680,6 @@ unsafe fn cmp_map_trees(
     root_b: *mut rtdt::MapNode,
     key_tydesc: rtdt::TyDescRef,
     value_tydesc: rtdt::TyDescRef,
-    float_policy: FloatOrdPolicy,
 ) -> crate::c::RtOrdering {
     unsafe {
         // Handle null roots.
@@ -1833,14 +1760,14 @@ unsafe fn cmp_map_trees(
             let value_b = values_b.add((idx_b as usize) * value_size);
 
             // Compare keys first.
-            let key_cmp = cmp_value(key_a, key_b, key_tydesc, float_policy);
+            let key_cmp = cmp_value(key_a, key_b, key_tydesc);
             match key_cmp {
                 crate::c::RtOrdering::Less => return crate::c::RtOrdering::Less,
                 crate::c::RtOrdering::Greater => return crate::c::RtOrdering::Greater,
                 crate::c::RtOrdering::Error => return crate::c::RtOrdering::Error,
                 crate::c::RtOrdering::Equal => {
                     // Keys equal, compare values.
-                    let value_cmp = cmp_value(value_a, value_b, value_tydesc, float_policy);
+                    let value_cmp = cmp_value(value_a, value_b, value_tydesc);
                     match value_cmp {
                         crate::c::RtOrdering::Less => return crate::c::RtOrdering::Less,
                         crate::c::RtOrdering::Greater => return crate::c::RtOrdering::Greater,
@@ -1862,7 +1789,6 @@ unsafe fn cmp_set_trees(
     root_a: *mut rtdt::SetNode,
     root_b: *mut rtdt::SetNode,
     element_tydesc: rtdt::TyDescRef,
-    float_policy: FloatOrdPolicy,
 ) -> crate::c::RtOrdering {
     unsafe {
         // Handle null roots.
@@ -1938,7 +1864,7 @@ unsafe fn cmp_set_trees(
             let element_b = elements_b.add((idx_b as usize) * element_size);
 
             // Compare elements.
-            let elem_cmp = cmp_value(element_a, element_b, element_tydesc, float_policy);
+            let elem_cmp = cmp_value(element_a, element_b, element_tydesc);
             match elem_cmp {
                 crate::c::RtOrdering::Less => return crate::c::RtOrdering::Less,
                 crate::c::RtOrdering::Greater => return crate::c::RtOrdering::Greater,
@@ -2197,7 +2123,7 @@ mod tests {
         let c: u8 = 10;
 
         unsafe {
-            let result = cmp(
+            let result = cmp_total(
                 &a as *const u8,
                 &tydesc,
                 &b as *const u8,
@@ -2205,7 +2131,7 @@ mod tests {
             );
             assert_eq!(result, crate::c::RtOrdering::Less);
 
-            let result = cmp(
+            let result = cmp_total(
                 &b as *const u8,
                 &tydesc,
                 &a as *const u8,
@@ -2213,7 +2139,7 @@ mod tests {
             );
             assert_eq!(result, crate::c::RtOrdering::Greater);
 
-            let result = cmp(
+            let result = cmp_total(
                 &a as *const u8,
                 &tydesc,
                 &c as *const u8,
@@ -2231,7 +2157,7 @@ mod tests {
         let c: i8 = -50;
 
         unsafe {
-            let result = cmp(
+            let result = cmp_total(
                 &a as *const i8 as *const u8,
                 &tydesc,
                 &b as *const i8 as *const u8,
@@ -2239,7 +2165,7 @@ mod tests {
             );
             assert_eq!(result, crate::c::RtOrdering::Less);
 
-            let result = cmp(
+            let result = cmp_total(
                 &b as *const i8 as *const u8,
                 &tydesc,
                 &a as *const i8 as *const u8,
@@ -2247,7 +2173,7 @@ mod tests {
             );
             assert_eq!(result, crate::c::RtOrdering::Greater);
 
-            let result = cmp(
+            let result = cmp_total(
                 &a as *const i8 as *const u8,
                 &tydesc,
                 &c as *const i8 as *const u8,
@@ -2265,7 +2191,7 @@ mod tests {
         let c: i16 = -1000;
 
         unsafe {
-            let result = cmp(
+            let result = cmp_total(
                 &a as *const i16 as *const u8,
                 &tydesc,
                 &b as *const i16 as *const u8,
@@ -2273,7 +2199,7 @@ mod tests {
             );
             assert_eq!(result, crate::c::RtOrdering::Less);
 
-            let result = cmp(
+            let result = cmp_total(
                 &b as *const i16 as *const u8,
                 &tydesc,
                 &a as *const i16 as *const u8,
@@ -2281,7 +2207,7 @@ mod tests {
             );
             assert_eq!(result, crate::c::RtOrdering::Greater);
 
-            let result = cmp(
+            let result = cmp_total(
                 &a as *const i16 as *const u8,
                 &tydesc,
                 &c as *const i16 as *const u8,
@@ -2299,7 +2225,7 @@ mod tests {
         let c: i32 = -1000000;
 
         unsafe {
-            let result = cmp(
+            let result = cmp_total(
                 &a as *const i32 as *const u8,
                 &tydesc,
                 &b as *const i32 as *const u8,
@@ -2307,7 +2233,7 @@ mod tests {
             );
             assert_eq!(result, crate::c::RtOrdering::Less);
 
-            let result = cmp(
+            let result = cmp_total(
                 &b as *const i32 as *const u8,
                 &tydesc,
                 &a as *const i32 as *const u8,
@@ -2315,7 +2241,7 @@ mod tests {
             );
             assert_eq!(result, crate::c::RtOrdering::Greater);
 
-            let result = cmp(
+            let result = cmp_total(
                 &a as *const i32 as *const u8,
                 &tydesc,
                 &c as *const i32 as *const u8,
@@ -2333,7 +2259,7 @@ mod tests {
         let c: i64 = -123456789012345;
 
         unsafe {
-            let result = cmp(
+            let result = cmp_total(
                 &a as *const i64 as *const u8,
                 &tydesc,
                 &b as *const i64 as *const u8,
@@ -2341,7 +2267,7 @@ mod tests {
             );
             assert_eq!(result, crate::c::RtOrdering::Less);
 
-            let result = cmp(
+            let result = cmp_total(
                 &b as *const i64 as *const u8,
                 &tydesc,
                 &a as *const i64 as *const u8,
@@ -2349,7 +2275,7 @@ mod tests {
             );
             assert_eq!(result, crate::c::RtOrdering::Greater);
 
-            let result = cmp(
+            let result = cmp_total(
                 &a as *const i64 as *const u8,
                 &tydesc,
                 &c as *const i64 as *const u8,
@@ -2367,7 +2293,7 @@ mod tests {
         let c: u64 = 100;
 
         unsafe {
-            let result = cmp(
+            let result = cmp_total(
                 &a as *const u64 as *const u8,
                 &tydesc,
                 &b as *const u64 as *const u8,
@@ -2375,7 +2301,7 @@ mod tests {
             );
             assert_eq!(result, crate::c::RtOrdering::Less);
 
-            let result = cmp(
+            let result = cmp_total(
                 &b as *const u64 as *const u8,
                 &tydesc,
                 &a as *const u64 as *const u8,
@@ -2383,7 +2309,7 @@ mod tests {
             );
             assert_eq!(result, crate::c::RtOrdering::Greater);
 
-            let result = cmp(
+            let result = cmp_total(
                 &a as *const u64 as *const u8,
                 &tydesc,
                 &c as *const u64 as *const u8,
@@ -2401,7 +2327,7 @@ mod tests {
         let c: f64 = 1.5;
 
         unsafe {
-            let result = cmp(
+            let result = cmp_total(
                 &a as *const f64 as *const u8,
                 &tydesc,
                 &b as *const f64 as *const u8,
@@ -2409,7 +2335,7 @@ mod tests {
             );
             assert_eq!(result, crate::c::RtOrdering::Less);
 
-            let result = cmp(
+            let result = cmp_total(
                 &b as *const f64 as *const u8,
                 &tydesc,
                 &a as *const f64 as *const u8,
@@ -2417,7 +2343,7 @@ mod tests {
             );
             assert_eq!(result, crate::c::RtOrdering::Greater);
 
-            let result = cmp(
+            let result = cmp_total(
                 &a as *const f64 as *const u8,
                 &tydesc,
                 &c as *const f64 as *const u8,
@@ -2435,7 +2361,7 @@ mod tests {
         let zero: i8 = 0;
 
         unsafe {
-            let result = cmp(
+            let result = cmp_total(
                 &min as *const i8 as *const u8,
                 &tydesc,
                 &zero as *const i8 as *const u8,
@@ -2443,7 +2369,7 @@ mod tests {
             );
             assert_eq!(result, crate::c::RtOrdering::Less);
 
-            let result = cmp(
+            let result = cmp_total(
                 &max as *const i8 as *const u8,
                 &tydesc,
                 &zero as *const i8 as *const u8,
@@ -2451,7 +2377,7 @@ mod tests {
             );
             assert_eq!(result, crate::c::RtOrdering::Greater);
 
-            let result = cmp(
+            let result = cmp_total(
                 &min as *const i8 as *const u8,
                 &tydesc,
                 &max as *const i8 as *const u8,
@@ -2469,7 +2395,7 @@ mod tests {
         let zero: i32 = 0;
 
         unsafe {
-            let result = cmp(
+            let result = cmp_total(
                 &min as *const i32 as *const u8,
                 &tydesc,
                 &zero as *const i32 as *const u8,
@@ -2477,7 +2403,7 @@ mod tests {
             );
             assert_eq!(result, crate::c::RtOrdering::Less);
 
-            let result = cmp(
+            let result = cmp_total(
                 &max as *const i32 as *const u8,
                 &tydesc,
                 &zero as *const i32 as *const u8,
@@ -2485,7 +2411,7 @@ mod tests {
             );
             assert_eq!(result, crate::c::RtOrdering::Greater);
 
-            let result = cmp(
+            let result = cmp_total(
                 &min as *const i32 as *const u8,
                 &tydesc,
                 &max as *const i32 as *const u8,
@@ -2503,7 +2429,7 @@ mod tests {
         let zero: i64 = 0;
 
         unsafe {
-            let result = cmp(
+            let result = cmp_total(
                 &min as *const i64 as *const u8,
                 &tydesc,
                 &zero as *const i64 as *const u8,
@@ -2511,7 +2437,7 @@ mod tests {
             );
             assert_eq!(result, crate::c::RtOrdering::Less);
 
-            let result = cmp(
+            let result = cmp_total(
                 &max as *const i64 as *const u8,
                 &tydesc,
                 &zero as *const i64 as *const u8,
@@ -2519,7 +2445,7 @@ mod tests {
             );
             assert_eq!(result, crate::c::RtOrdering::Greater);
 
-            let result = cmp(
+            let result = cmp_total(
                 &min as *const i64 as *const u8,
                 &tydesc,
                 &max as *const i64 as *const u8,

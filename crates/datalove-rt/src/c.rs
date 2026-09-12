@@ -290,10 +290,12 @@ pub unsafe extern "C-unwind" fn dtlv_rti_eq_unique_local(
     }
 }
 
-/// Establish ordering using Datalove ordering.
+/// Establish ordering.
 ///
-/// This is probably not actually useful. Just experimenting.
-/// NaN's have total order; float zeros are equal.
+/// The same relation as `dtlv_rti_cmp_total_local`, which is the only one this
+/// language has. Kept as its own symbol because the backends declare it for
+/// the bigint comparisons, where no float is in reach and the two never
+/// differed anyway.
 #[unsafe(no_mangle)]
 pub unsafe extern "C-unwind" fn dtlv_rti_cmp_local(
     _rt: LocalRtHandle,
@@ -309,7 +311,7 @@ pub unsafe extern "C-unwind" fn dtlv_rti_cmp_local(
     debug_assert_aligned(value_a_ref, value_a_tydesc, "cmp_local:value_a");
     debug_assert_aligned(value_b_ref, value_b_tydesc, "cmp_local:value_b");
     unsafe {
-        crate::impls::cmp::cmp(value_a_ref, value_a_tydesc, value_b_ref, value_b_tydesc)
+        crate::impls::cmp::cmp_total(value_a_ref, value_a_tydesc, value_b_ref, value_b_tydesc)
     }
 }
 
@@ -679,6 +681,26 @@ pub unsafe extern "C-unwind" fn dtlv_rti_dyn_const(
         return RtStatus::Error;
     };
     unsafe { crate::impls::dyn_ops::dyn_const(rt, which, out, out_tydesc, value_tydesc) }
+}
+
+/// Make a float constant at the width `value_tydesc` names.
+///
+/// `which` is a `rtdt::DynFloatConst`. As `dtlv_rti_dyn_const` is for the
+/// integers, and for the same reason.
+#[unsafe(no_mangle)]
+pub unsafe extern "C-unwind" fn dtlv_rti_dyn_float_const(
+    rt: LocalRtHandle,
+    which: u8,
+    out: *mut u8,
+    out_tydesc: *const rtdt::TyDesc,
+    value_tydesc: *const rtdt::TyDesc,
+) -> RtStatus {
+    debug_assert!(!out.is_null(), "out is null");
+    debug_assert!(!value_tydesc.is_null(), "value_tydesc is null");
+    let Some(which) = rtdt::DynFloatConst::from_code(which) else {
+        return RtStatus::Error;
+    };
+    unsafe { crate::impls::dyn_ops::dyn_float_const(rt, which, out, out_tydesc, value_tydesc) }
 }
 
 /// Negate an integer whose type only its descriptor says, writing to

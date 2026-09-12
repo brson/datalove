@@ -800,6 +800,49 @@ impl DynConst {
     }
 }
 
+/// A constant every float has.
+///
+/// The same bargain `DynConst` makes for the integers: a literal has to be
+/// written at some type, and inside a generic the type is not known where the
+/// literal is. These are asked for by number and made at whatever width the
+/// call site's descriptor names.
+///
+/// Numbered like `DynOp`, and for the same reason: the number is the ABI.
+#[repr(u8)]
+#[derive(Debug, PartialEq, Eq, Copy, Clone)]
+pub enum DynFloatConst {
+    Zero = 0,
+    One = 1,
+    Nan = 2,
+    Infinity = 3,
+    NegInfinity = 4,
+    MinValue = 5,
+    MaxValue = 6,
+    MinPositive = 7,
+    Epsilon = 8,
+    Pi = 9,
+    E = 10,
+}
+
+impl DynFloatConst {
+    pub fn from_code(code: u8) -> core::option::Option<DynFloatConst> {
+        core::option::Option::Some(match code {
+            0 => DynFloatConst::Zero,
+            1 => DynFloatConst::One,
+            2 => DynFloatConst::Nan,
+            3 => DynFloatConst::Infinity,
+            4 => DynFloatConst::NegInfinity,
+            5 => DynFloatConst::MinValue,
+            6 => DynFloatConst::MaxValue,
+            7 => DynFloatConst::MinPositive,
+            8 => DynFloatConst::Epsilon,
+            9 => DynFloatConst::Pi,
+            10 => DynFloatConst::E,
+            _ => return None,
+        })
+    }
+}
+
 /// A one-operand operation on a value whose type only a descriptor says.
 ///
 /// Numbered like `DynOp`, and for the same reason: the number is the ABI.

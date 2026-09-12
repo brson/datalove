@@ -465,6 +465,62 @@ pub unsafe fn dyn_const(
     }
 }
 
+/// Make a float constant at the width a descriptor names.
+///
+/// The counterpart of `dyn_const` for the floats. Written out per width rather
+/// than computed from one, because the two are different types and the
+/// constants of each are its own.
+pub unsafe fn dyn_float_const(
+    rt: LocalRtHandle,
+    which: rtdt::DynFloatConst,
+    out: *mut u8,
+    out_tydesc: *const rtdt::TyDesc,
+    value_tydesc: *const rtdt::TyDesc,
+) -> RtStatus {
+    use rtdt::DynFloatConst as K;
+
+    unsafe {
+        let tag = (*value_tydesc).type_tag;
+        let bits = match tag {
+            TyTag::F32 => {
+                let v: f32 = match which {
+                    K::Zero => 0.0,
+                    K::One => 1.0,
+                    K::Nan => f32::NAN,
+                    K::Infinity => f32::INFINITY,
+                    K::NegInfinity => f32::NEG_INFINITY,
+                    K::MinValue => f32::MIN,
+                    K::MaxValue => f32::MAX,
+                    K::MinPositive => f32::MIN_POSITIVE,
+                    K::Epsilon => f32::EPSILON,
+                    K::Pi => std::f32::consts::PI,
+                    K::E => std::f32::consts::E,
+                };
+                v.to_bits() as u64
+            }
+            TyTag::F64 => {
+                let v: f64 = match which {
+                    K::Zero => 0.0,
+                    K::One => 1.0,
+                    K::Nan => f64::NAN,
+                    K::Infinity => f64::INFINITY,
+                    K::NegInfinity => f64::NEG_INFINITY,
+                    K::MinValue => f64::MIN,
+                    K::MaxValue => f64::MAX,
+                    K::MinPositive => f64::MIN_POSITIVE,
+                    K::Epsilon => f64::EPSILON,
+                    K::Pi => std::f64::consts::PI,
+                    K::E => std::f64::consts::E,
+                };
+                v.to_bits()
+            }
+            _ => return RtStatus::Error,
+        };
+
+        place_bits(rt, bits, tag, value_tydesc, out, out_tydesc)
+    }
+}
+
 /// Whether a tag is a signed integer, or none when it is not an integer.
 fn signedness(tag: TyTag) -> core::option::Option<bool> {
     core::option::Option::Some(match tag {

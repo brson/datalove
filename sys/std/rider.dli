@@ -238,3 +238,22 @@ native fun fixedint_max_value<T>(): T with { T is fixedint, }
 // `botdocs/native-abi.md`. Taken by value it arrives as the wrapper itself,
 // which the runtime's comparison unpacks for itself.
 native fun ord_compare<T>(self: T, other: T): i8 with { T is ord, }
+
+// Constants of a type parameter bounded to `float`.
+//
+// The same as the `fixedint_*` constants above and for the same reason: a
+// literal has to be written at some type, and inside a generic the type is
+// what nobody has picked yet. The type parameter appears only in the return,
+// so the call site hands a descriptor over after the out parameter. See
+// `botdocs/native-abi.md`.
+native fun float_zero<T>(): T with { T is float, }
+native fun float_one<T>(): T with { T is float, }
+native fun float_nan<T>(): T with { T is float, }
+native fun float_infinity<T>(): T with { T is float, }
+native fun float_neg_infinity<T>(): T with { T is float, }
+native fun float_min_value<T>(): T with { T is float, }
+native fun float_max_value<T>(): T with { T is float, }
+native fun float_min_positive<T>(): T with { T is float, }
+native fun float_epsilon<T>(): T with { T is float, }
+native fun float_pi<T>(): T with { T is float, }
+native fun float_e<T>(): T with { T is float, }

@@ -1082,9 +1082,10 @@ it.
 
 A literal cannot be written at type `T`, because a literal has to be written at
 some type and inside a generic the type is what nobody has picked yet. The
-constants every fixed-width integer has come from `sys/std/fixedint` instead —
-`zero`, `one`, `min_value`, `max_value` — which take theirs from a descriptor
-the call site hands over. That works because the type parameter appears only in
+constants come from the standard library instead — `zero`, `one`, `min_value`
+and `max_value` in `sys/std/fixedint`, and those plus `nan`, `infinity`,
+`epsilon`, `pi` and the rest in `sys/std/float` — which take theirs from a
+descriptor the call site hands over. That works because the type parameter appears only in
 the return, so the call site is the one place that knows; see
 [the native ABI](native-abi.md). The consequence is that such a call has to say
 what it wants:

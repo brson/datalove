@@ -6,6 +6,10 @@
 // A type parameter is never copy, because the caller may supply a linear type,
 // so a value taken out by `if self |value|` has moved out of `self`.
 
+require module sys/std/fixedint
+
+import fixedint.zero
+
 // True if result is Ok.
 fun is_ok<T>(self: !T): bool
   if self |value|
@@ -33,12 +37,17 @@ fun unwrap_or<T>(self: !T, default: T): T
   end if
 end fun
 
-// Returns the contained value or zero.
-fun unwrap_or_zero(self: !u32): u32
+// The contained value, or the type's own zero.
+//
+// Bounded to `fixedint` rather than written at one width, because a zero can
+// be made at any of them: `sys/std/fixedint` asks the rider for one and the
+// call site's descriptor says which.
+fun unwrap_or_zero<T>(self: !T): T with { T is fixedint, }
   if self |value|
     ret value
-  else |error|
-    ret 0
+  else |failure|
+    let unwanted = failure
+    ret zero()
   end if
 end fun
 

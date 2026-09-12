@@ -44,8 +44,15 @@ fun insert<K, V>(mut self: %{K = V}, key: K, value: V) with { K is ord, }
 end fun
 
 // Remove the entry under a key, if there is one.
-fun remove<K, V>(mut self: %{K = V}, ref key: K) with { K is ord, }
+// Take the entry out, giving back what was under the key.
+//
+// The value is read before the entry goes, which copies it. The tree destroys
+// what it held rather than handing it over, so the only way to keep a value
+// through a removal is to have made another first.
+fun remove<K, V>(mut self: %{K = V}, ref key: K): ?V with { K is ord, }
+  let taken = map_get(ref self, ref key)
   map_remove(mut self, ref key)
+  ret taken
 end fun
 
 // Drop every entry.
