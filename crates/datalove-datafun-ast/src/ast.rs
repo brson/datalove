@@ -414,6 +414,21 @@ impl TypeBound {
         }
     }
 
+    /// Whether every type this bound admits has a total order.
+    ///
+    /// A set keeps its elements in order and a map keeps its keys in order, so
+    /// a collection over a type parameter needs this of it. Every bound says
+    /// yes today, because every type there is has an order; the match is
+    /// written out so that a bound admitting something with none has to answer
+    /// here rather than slip through.
+    pub fn implies_ord(&self) -> bool {
+        match self {
+            TypeBound::Ord => true,
+            TypeBound::Float => true,
+            TypeBound::FixedInt => true,
+        }
+    }
+
     pub fn as_str(&self) -> &'static str {
         match self {
             TypeBound::Float => "float",

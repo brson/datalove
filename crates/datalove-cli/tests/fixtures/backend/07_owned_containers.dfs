@@ -63,7 +63,7 @@ let f: [string] = ["m"]
 debuglog grow(f, "n")
 
 // A map, to show this is about containers rather than about lists.
-fun take_map<K, V>(m: %{K = V}): bool
+fun take_map<K, V>(m: %{K = V}): bool with { K is ord, }
   ret true
 end fun
 

@@ -448,6 +448,8 @@ pub enum TypeError {
     /// where that signature is, so the call site's "cannot find function" is
     /// not the only thing the reader gets.
     TypeParamNotErasable { param: String, position: String, fun_local_index: u32 },
+    /// F061: A set or map was written over a type parameter with no order.
+    CollectionKeyNotOrdered { param: String, position: String, fun_local_index: u32 },
     /// Duplicate type alias definition.
     DuplicateTypeAlias(String),
     /// Two imports bound the same name.

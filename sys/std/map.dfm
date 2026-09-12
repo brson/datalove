@@ -19,42 +19,42 @@ import std.map_value_at
 import std.list_push
 
 // The number of entries.
-fun len<K, V>(ref self: %{K = V}): index
+fun len<K, V>(ref self: %{K = V}): index with { K is ord, }
   ret map_len(ref self)
 end fun
 
 // True if there are no entries.
-fun is_empty<K, V>(ref self: %{K = V}): bool
+fun is_empty<K, V>(ref self: %{K = V}): bool with { K is ord, }
   ret map_len(ref self) == (: index / 0)
 end fun
 
 // True if the key is present.
-fun contains_key<K, V>(ref self: %{K = V}, ref key: K): bool
+fun contains_key<K, V>(ref self: %{K = V}, ref key: K): bool with { K is ord, }
   ret map_contains_key(ref self, ref key)
 end fun
 
 // The value for a key, or none.
-fun get<K, V>(ref self: %{K = V}, ref key: K): ?V
+fun get<K, V>(ref self: %{K = V}, ref key: K): ?V with { K is ord, }
   ret map_get(ref self, ref key)
 end fun
 
 // Insert an entry, replacing any value already under the key.
-fun insert<K, V>(mut self: %{K = V}, key: K, value: V)
+fun insert<K, V>(mut self: %{K = V}, key: K, value: V) with { K is ord, }
   map_insert(mut self, key, value)
 end fun
 
 // Remove the entry under a key, if there is one.
-fun remove<K, V>(mut self: %{K = V}, ref key: K)
+fun remove<K, V>(mut self: %{K = V}, ref key: K) with { K is ord, }
   map_remove(mut self, ref key)
 end fun
 
 // Drop every entry.
-fun clear<K, V>(mut self: %{K = V})
+fun clear<K, V>(mut self: %{K = V}) with { K is ord, }
   map_clear(mut self)
 end fun
 
 // The value under a key, or a default if there is none.
-fun get_or<K, V>(ref self: %{K = V}, ref key: K, default: V): V
+fun get_or<K, V>(ref self: %{K = V}, ref key: K, default: V): V with { K is ord, }
   if get(ref self, ref key) |value|
     ret value
   else
@@ -66,7 +66,7 @@ end fun
 //
 // Unlike `insert`, this hands back whether anything happened, which is what
 // `set.insert` already does for a set.
-fun insert_if_absent<K, V>(mut self: %{K = V}, key: K, value: V): bool
+fun insert_if_absent<K, V>(mut self: %{K = V}, key: K, value: V): bool with { K is ord, }
   if contains_key(ref self, ref key)
     ret false
   else
@@ -84,17 +84,17 @@ end fun
 //
 // The key and the value are reached separately rather than as a pair, because
 // a pair of two type parameters is a shape a collection of cannot yet hold.
-fun key_at<K, V>(ref self: %{K = V}, i: index): ?K
+fun key_at<K, V>(ref self: %{K = V}, i: index): ?K with { K is ord, }
   ret map_key_at(ref self, i)
 end fun
 
 // The value of the entry at a position in sort order.
-fun value_at<K, V>(ref self: %{K = V}, i: index): ?V
+fun value_at<K, V>(ref self: %{K = V}, i: index): ?V with { K is ord, }
   ret map_value_at(ref self, i)
 end fun
 
 // Every key, in sort order.
-fun keys<K, V>(ref self: %{K = V}): [K]
+fun keys<K, V>(ref self: %{K = V}): [K] with { K is ord, }
   var built: [K] = []
   let n = len(ref self)
   var i: index = : index / 0
@@ -108,7 +108,7 @@ fun keys<K, V>(ref self: %{K = V}): [K]
 end fun
 
 // Every value, in the order of its key.
-fun values<K, V>(ref self: %{K = V}): [V]
+fun values<K, V>(ref self: %{K = V}): [V] with { K is ord, }
   var built: [V] = []
   let n = len(ref self)
   var i: index = : index / 0

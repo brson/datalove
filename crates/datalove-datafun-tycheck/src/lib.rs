@@ -110,6 +110,13 @@ pub enum PendingDiagnostic<'db> {
         param: InternedText<'db>,
         position: InternedText<'db>,
     },
+    /// F061: A set or map was written over a type parameter with no order.
+    CollectionKeyNotOrdered {
+        local_index: u32,
+        module_id: Option<ModuleId<'db>>,
+        param: InternedText<'db>,
+        position: InternedText<'db>,
+    },
     /// F011: Cannot synthesize type.
     CannotSynthesize {
         expr_key: ExprKey<'db>,

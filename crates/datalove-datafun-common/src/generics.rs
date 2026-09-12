@@ -239,6 +239,74 @@ pub fn mentions_type_param<'db>(ty: &Type<'db>, name: InternedText<'db>) -> bool
     }
 }
 
+/// The first type parameter a set or map would have to order and cannot.
+///
+/// A set keeps its elements in order and a map keeps its keys in order, so a
+/// collection written over a type parameter asks that parameter for an
+/// ordering. `ordered` says which parameters have promised one; a parameter in
+/// such a position that has not is what comes back.
+///
+/// The whole of an element or key type is looked at, not just its head: a
+/// `#{?T}` orders its options by their payloads, so `T` is asked for one too.
+/// A map's values are not, since nothing puts them in order.
+pub fn first_unordered_collection_key<'db>(
+    ty: &Type<'db>,
+    ordered: &dyn Fn(InternedText<'db>) -> bool,
+) -> Option<InternedText<'db>> {
+    match ty {
+        Type::Set(t) => first_unordered_param(&t.element_type, ordered)
+            .or_else(|| first_unordered_collection_key(&t.element_type, ordered)),
+        Type::Map(t) => first_unordered_param(&t.key_type, ordered)
+            .or_else(|| first_unordered_collection_key(&t.key_type, ordered))
+            .or_else(|| first_unordered_collection_key(&t.value_type, ordered)),
+
+        Type::List(t) => first_unordered_collection_key(&t.element_type, ordered),
+        Type::Tensor(t) => first_unordered_collection_key(&t.element_type, ordered),
+        Type::Option(t) => first_unordered_collection_key(&t.inner_type, ordered),
+        Type::Result(t) => first_unordered_collection_key(&t.inner_type, ordered),
+        Type::Term(t) => first_unordered_collection_key(&t.payload, ordered),
+        Type::AnonTuple(t) => t.fields.iter()
+            .find_map(|f| first_unordered_collection_key(f, ordered)),
+        Type::AnonStruct(t) => t.fields.iter()
+            .find_map(|f| first_unordered_collection_key(&f.ty, ordered)),
+        Type::Table(t) => t.columns.iter()
+            .find_map(|c| first_unordered_collection_key(&c.ty, ordered)),
+        Type::Enum(t) => t.variants.iter().find_map(|v| {
+            v.payload.as_ref().and_then(|p| first_unordered_collection_key(p, ordered))
+        }),
+
+        _ => None,
+    }
+}
+
+/// The first type parameter anywhere in a type that has not promised an order.
+fn first_unordered_param<'db>(
+    ty: &Type<'db>,
+    ordered: &dyn Fn(InternedText<'db>) -> bool,
+) -> Option<InternedText<'db>> {
+    match ty {
+        Type::Var(name) => (!ordered(*name)).then_some(*name),
+
+        Type::List(t) => first_unordered_param(&t.element_type, ordered),
+        Type::Set(t) => first_unordered_param(&t.element_type, ordered),
+        Type::Tensor(t) => first_unordered_param(&t.element_type, ordered),
+        Type::Option(t) => first_unordered_param(&t.inner_type, ordered),
+        Type::Result(t) => first_unordered_param(&t.inner_type, ordered),
+        Type::Term(t) => first_unordered_param(&t.payload, ordered),
+        Type::Map(t) => first_unordered_param(&t.key_type, ordered)
+            .or_else(|| first_unordered_param(&t.value_type, ordered)),
+        Type::AnonTuple(t) => t.fields.iter().find_map(|f| first_unordered_param(f, ordered)),
+        Type::AnonStruct(t) => t.fields.iter()
+            .find_map(|f| first_unordered_param(&f.ty, ordered)),
+        Type::Table(t) => t.columns.iter().find_map(|c| first_unordered_param(&c.ty, ordered)),
+        Type::Enum(t) => t.variants.iter().find_map(|v| {
+            v.payload.as_ref().and_then(|p| first_unordered_param(p, ordered))
+        }),
+
+        _ => None,
+    }
+}
+
 /// The first type parameter sitting somewhere erasure cannot convert.
 ///
 /// Erasing a value into the shape a generic callee was compiled for converts

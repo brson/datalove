@@ -191,6 +191,13 @@ fn error_to_json(error: &datalove_datafun_tycheck::TypeError) -> rmx::serde_json
                 "position": position
             })
         }
+        TypeError::CollectionKeyNotOrdered { param, position, fun_local_index: _ } => {
+            json!({
+                "kind": "CollectionKeyNotOrdered",
+                "name": param,
+                "position": position
+            })
+        }
         TypeError::UnresolvedTypeAlias(name) => {
             json!({
                 "kind": "UnresolvedTypeAlias",

@@ -270,6 +270,21 @@ is converted.")
                     .emit_type();
             }
         }
+        PendingDiagnostic::CollectionKeyNotOrdered { local_index, module_id: _, param, position } => {
+            if let Some(ts) = spans.lookup_fun(db, *local_index) {
+                let msg = format!(
+                    "`{}` has not said it can be ordered, and {} puts it in a set or a map",
+                    param.as_str(db), position.as_str(db),
+                );
+                bct::diagnostic::DiagnosticBuilder::error(db, &msg)
+                    .code("F061")
+                    .primary_label(ts, "this signature does not resolve, so calls to it are not found either")
+                    .note("a set keeps its elements in order and a map keeps its keys in order, so a \
+collection written over a type parameter asks that parameter for an ordering. Say so with `with { \
+<param> is ord, }`, which every type there is satisfies.")
+                    .emit_type();
+            }
+        }
         PendingDiagnostic::CannotSynthesize { expr_key, module_id: _, message } => {
             if let Some(ts) = spans.lookup_expr(db, *expr_key) {
                 bct::diagnostic::DiagnosticBuilder::error(db, message.as_str(db))
@@ -549,6 +564,14 @@ fn format_single_diagnostic<'db>(
             let loc = format_location(db, &ts);
             Some(format!(
                 "{}: error[F060]: `{}` cannot stand inside a type at {}",
+                loc, param.as_str(db), position.as_str(db),
+            ))
+        }
+        PendingDiagnostic::CollectionKeyNotOrdered { local_index, module_id: _, param, position } => {
+            let ts = spans.lookup_fun(db, *local_index)?;
+            let loc = format_location(db, &ts);
+            Some(format!(
+                "{}: error[F061]: `{}` has not said it can be ordered, and {} puts it in a set or a map",
                 loc, param.as_str(db), position.as_str(db),
             ))
         }

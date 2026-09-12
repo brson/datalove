@@ -12,19 +12,19 @@ import set.len
 // rather than as the `data` they are carried in: two equal strings collapse to
 // one entry.
 
-fun singleton<T>(x: T): #{T}
+fun singleton<T>(x: T): #{T} with { T is ord, }
   var out: #{T} = #{}
   let added = insert(mut out, x)
   ret out
 end fun
 
-fun pair<T>(a: T, b: T): #{T}
+fun pair<T>(a: T, b: T): #{T} with { T is ord, }
   var out: #{T} = singleton(a)
   let added = insert(mut out, b)
   ret out
 end fun
 
-fun empty_set<T>(): #{T}
+fun empty_set<T>(): #{T} with { T is ord, }
   var out: #{T} = #{}
   ret out
 end fun

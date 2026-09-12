@@ -1050,6 +1050,13 @@ There are three bounds:
   in order and tells the two zeros apart; `.<` on a concrete float does
   neither. They differ over nothing else.
 
+  A set or a map written over a type parameter has to ask for it. A set keeps
+  its elements in order and a map keeps its keys in order, so `#{T}` and
+  `%{T = V}` need `T is ord` whether the collection is a parameter, a return
+  type or a binding inside the body. A map's values do not, since nothing puts
+  them in order, and neither does `[T]`. Every bound implies `ord`, so `float`
+  and `fixedint` serve as well.
+
 - **`float`** is `f32` or `f64`. Both have the bare arithmetic and the
   comparisons, so a parameter bounded to it has them too, along with what
   `sys/std/float` offers.

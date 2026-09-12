@@ -17,6 +17,9 @@ import map.get
 //
 // The same three literals with concrete elements take neither step, and are
 // here so that the two paths stay told apart.
+//
+// A set or a map over a type parameter asks that parameter for an ordering, so
+// the two that build one say `is ord`. A list does not.
 
 fun one_of<T>(x: T): [T]
   ret [x]
@@ -26,11 +29,11 @@ fun two_of<T>(x: T, y: T): [T]
   ret [x, y]
 end fun
 
-fun set_of<T>(x: T, y: T): #{T}
+fun set_of<T>(x: T, y: T): #{T} with { T is ord, }
   ret #{x, y}
 end fun
 
-fun map_of<K, V>(k: K, v: V): %{K = V}
+fun map_of<K, V>(k: K, v: V): %{K = V} with { K is ord, }
   ret %{k = v}
 end fun
 

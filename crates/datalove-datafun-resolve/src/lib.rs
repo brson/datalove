@@ -94,14 +94,25 @@ pub fn resolve_names_impl<'db>(
         // the positions erasure cannot reach do not apply to one.
         let is_native = matches!(statement, Statement::NativeFun(_));
 
-        let (name, type_params, params, return_type, func_ast) = match statement {
+        let (name, type_params, type_bounds, params, return_type, func_ast) = match statement {
             Statement::Fun(stmt) => {
-                (stmt.name(db), stmt.type_params(db).clone(), stmt.params(db).clone(), stmt.return_type(db), Some(*stmt))
+                (stmt.name(db), stmt.type_params(db).clone(), stmt.type_bounds(db).clone(),
+                 stmt.params(db).clone(), stmt.return_type(db), Some(*stmt))
             }
             Statement::NativeFun(stmt) => {
-                (stmt.name, stmt.type_params.clone(), stmt.params.clone(), stmt.return_type.clone(), None)
+                (stmt.name, stmt.type_params.clone(), stmt.type_bounds.clone(),
+                 stmt.params.clone(), stmt.return_type.clone(), None)
             }
             _ => continue,
+        };
+
+        // Which of this signature's type parameters have promised an order.
+        // A set or map written over one that has not is refused below; see
+        // `first_unordered_collection_key`.
+        let ordered = |name: bct::text::InternedText<'db>| -> bool {
+            type_params.iter().position(|p| *p == name)
+                .and_then(|i| type_bounds.get(i).copied().flatten())
+                .is_some_and(|bound| bound.implies_ord())
         };
         // Where the signature is, for a diagnostic to point at. A native's
         // interface has no span table, and a native is exempt from the check
@@ -138,6 +149,16 @@ pub fn resolve_names_impl<'db>(
                     // A native's parameters are the same case by construction.
                     let borrowed = matches!(param.mode, ParamMode::Ref | ParamMode::Mut);
                     let position = format!("parameter `{}`", param.name.as_str(db));
+                    // A native is exempt from erasability, because nothing is
+                    // converted at its boundary, but not from this: whatever
+                    // it is handed, the runtime still has to order.
+                    if let Some(e) =
+                        unordered_collection_key_error(db, &ty, &position, fun_local_index, &ordered)
+                    {
+                        errors.push(e);
+                        has_error = true;
+                        break;
+                    }
                     if let Some(e) = (!is_native && !borrowed)
                         .then(|| unerasable_type_param_error(db, &ty, &position, fun_local_index))
                         .flatten()
@@ -166,9 +187,12 @@ pub fn resolve_names_impl<'db>(
         let ret_ty = match return_type {
             Some(type_hint) => {
                 match convert_type_hint_with_aliases(db, type_hint, &type_aliases_map) {
-                    Ok(ty) => match (!is_native)
-                        .then(|| unerasable_type_param_error(db, &ty, "the return type", fun_local_index))
-                        .flatten()
+                    Ok(ty) => match unordered_collection_key_error(
+                        db, &ty, "the return type", fun_local_index, &ordered)
+                        .or_else(|| (!is_native)
+                            .then(|| unerasable_type_param_error(
+                                db, &ty, "the return type", fun_local_index))
+                            .flatten())
                     {
                         Some(e) => {
                             errors.push(e);
@@ -401,6 +425,26 @@ pub fn build_all_function_ast_maps<'db>(
     }
 
     AllModuleFunctionAsts::new(db, module_function_asts)
+}
+
+/// Reject a signature that puts a type parameter where an order is needed and
+/// does not ask for one.
+///
+/// See `first_unordered_collection_key` for which positions those are.
+fn unordered_collection_key_error<'db>(
+    db: &'db dyn Db,
+    ty: &Type<'db>,
+    position: &str,
+    fun_local_index: u32,
+    ordered: &dyn Fn(bct::text::InternedText<'db>) -> bool,
+) -> Option<TypeError> {
+    let Type::Datalit(dt) = ty else { return None };
+    let name = datalove_datafun_common::generics::first_unordered_collection_key(dt, ordered)?;
+    Some(TypeError::CollectionKeyNotOrdered {
+        param: name.as_str(db).to_string(),
+        position: position.to_string(),
+        fun_local_index,
+    })
 }
 
 /// Reject a signature whose type parameter sits where erasure cannot reach it.

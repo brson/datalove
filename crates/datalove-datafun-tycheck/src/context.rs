@@ -738,6 +738,14 @@ impl<'db> TypeContext<'db> {
                     position: InternedText::new(self.db, position.S()),
                 });
             }
+            if let TypeError::CollectionKeyNotOrdered { param, position, fun_local_index } = error {
+                self.pending_diagnostics.push(PendingDiagnostic::CollectionKeyNotOrdered {
+                    local_index: *fun_local_index,
+                    module_id,
+                    param: InternedText::new(self.db, param.S()),
+                    position: InternedText::new(self.db, position.S()),
+                });
+            }
             self.add_error(error.clone());
         }
     }

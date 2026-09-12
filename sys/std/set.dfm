@@ -15,32 +15,32 @@ import std.set_get
 import std.list_push
 
 // The number of elements.
-fun len<T>(ref self: #{T}): index
+fun len<T>(ref self: #{T}): index with { T is ord, }
   ret set_len(ref self)
 end fun
 
 // True if there are no elements.
-fun is_empty<T>(ref self: #{T}): bool
+fun is_empty<T>(ref self: #{T}): bool with { T is ord, }
   ret set_len(ref self) == (: index / 0)
 end fun
 
 // True if the element is present.
-fun contains<T>(ref self: #{T}, ref elem: T): bool
+fun contains<T>(ref self: #{T}, ref elem: T): bool with { T is ord, }
   ret set_contains(ref self, ref elem)
 end fun
 
 // Add an element. False if it was already present.
-fun insert<T>(mut self: #{T}, elem: T): bool
+fun insert<T>(mut self: #{T}, elem: T): bool with { T is ord, }
   ret set_insert(mut self, elem)
 end fun
 
 // Remove an element. False if it was not present.
-fun remove<T>(mut self: #{T}, ref elem: T): bool
+fun remove<T>(mut self: #{T}, ref elem: T): bool with { T is ord, }
   ret set_remove(mut self, ref elem)
 end fun
 
 // Drop every element.
-fun clear<T>(mut self: #{T})
+fun clear<T>(mut self: #{T}) with { T is ord, }
   set_clear(mut self)
 end fun
 
@@ -50,12 +50,12 @@ end fun
 // reaching every element in turn costs more than it does for a list. It is here
 // so that anything written as a loop over `len` and an index -- which is how
 // everything over a collection is written -- can be written over a set too.
-fun get<T>(ref self: #{T}, i: index): ?T
+fun get<T>(ref self: #{T}, i: index): ?T with { T is ord, }
   ret set_get(ref self, i)
 end fun
 
 // Every element, in sort order.
-fun to_list<T>(ref self: #{T}): [T]
+fun to_list<T>(ref self: #{T}): [T] with { T is ord, }
   var built: [T] = []
   let n = len(ref self)
   var i: index = : index / 0
@@ -69,7 +69,7 @@ fun to_list<T>(ref self: #{T}): [T]
 end fun
 
 // Every element of either.
-fun union_with<T>(ref self: #{T}, ref other: #{T}): #{T}
+fun union_with<T>(ref self: #{T}, ref other: #{T}): #{T} with { T is ord, }
   var built: #{T} = #{}
   let n = len(ref self)
   var i: index = : index / 0
@@ -96,7 +96,7 @@ end fun
 // has to be moved on every one: drop points here are static, so the checker
 // will not take a value whose fate depends on the branch. The element that is
 // not wanted goes into a binding that ends with the branch.
-fun intersection_with<T>(ref self: #{T}, ref other: #{T}): #{T}
+fun intersection_with<T>(ref self: #{T}, ref other: #{T}): #{T} with { T is ord, }
   var built: #{T} = #{}
   let n = len(ref self)
   var i: index = : index / 0
@@ -114,7 +114,7 @@ fun intersection_with<T>(ref self: #{T}, ref other: #{T}): #{T}
 end fun
 
 // Every element of self that other does not have.
-fun difference_with<T>(ref self: #{T}, ref other: #{T}): #{T}
+fun difference_with<T>(ref self: #{T}, ref other: #{T}): #{T} with { T is ord, }
   var built: #{T} = #{}
   let n = len(ref self)
   var i: index = : index / 0
@@ -136,7 +136,7 @@ end fun
 // The answer is accumulated rather than returned as soon as it is known,
 // because returning out of `if get(...) |elem|` disposes of `elem` on that path
 // and not the other, and a value's fate has to be the same on every one.
-fun is_subset_of<T>(ref self: #{T}, ref other: #{T}): bool
+fun is_subset_of<T>(ref self: #{T}, ref other: #{T}): bool with { T is ord, }
   var all_present: bool = true
   let n = len(ref self)
   var i: index = : index / 0

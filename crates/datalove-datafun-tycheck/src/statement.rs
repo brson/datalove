@@ -32,6 +32,10 @@ fn check_variable_decl<'db>(
         Some(hint) => {
             match convert_type_hint_with_aliases(db, hint, &ctx.type_aliases) {
                 Ok(expected_type) => {
+                    if let Some(err) = unordered_binding_error(ctx, &expected_type, value) {
+                        ctx.add_error(err);
+                        return;
+                    }
                     match check_expr(ctx, value, &expected_type) {
                         Ok(()) => Some(expected_type),
                         Err(e) => {
@@ -60,6 +64,30 @@ fn check_variable_decl<'db>(
     if let Some(ty) = var_type {
         ctx.add_variable(name, ty, is_mutable);
     }
+}
+
+/// Reject a binding whose type puts a type parameter where an order is needed.
+///
+/// The signature is checked where it is resolved; this is the same rule for a
+/// type written inside the body, where `var seen: #{T} = #{}` asks `T` for an
+/// ordering just as a parameter of that type would.
+fn unordered_binding_error<'db>(
+    ctx: &mut TypeContext<'db>,
+    ty: &Type<'db>,
+    at: ExprFun<'db>,
+) -> Option<TypeError> {
+    let Type::Datalit(dt) = ty else { return None };
+    let bounds = ctx.type_param_bounds.clone();
+    let ordered = |name: bct::text::InternedText<'db>| -> bool {
+        bounds.get(&name).is_some_and(|bound| bound.implies_ord())
+    };
+    let param = datalove_datafun_common::generics::first_unordered_collection_key(dt, &ordered)?;
+    Some(ctx.error_cannot_synthesize(at, &format!(
+        "`{}` has not said it can be ordered, and this binding puts it in a set or a map. \
+A set keeps its elements in order and a map keeps its keys in order, so say so with \
+`with {{ {} is ord, }}`, which every type there is satisfies",
+        param.as_str(ctx.db), param.as_str(ctx.db),
+    )))
 }
 
 /// Check a statement.

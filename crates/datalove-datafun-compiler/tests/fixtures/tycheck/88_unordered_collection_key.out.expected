@@ -1,0 +1,41 @@
+{
+  "diagnostics": [
+    {
+      "code": "F061",
+      "labels": [
+        {
+          "message": "this signature does not resolve, so calls to it are not found either",
+          "span": [
+            363,
+            366
+          ],
+          "text": "fun"
+        }
+      ],
+      "message": "`K` has not said it can be ordered, and parameter `m` puts it in a set or a map",
+      "notes": [
+        "a set keeps its elements in order and a map keeps its keys in order, so a collection written over a type parameter asks that parameter for an ordering. Say so with `with { <param> is ord, }`, which every type there is satisfies."
+      ]
+    }
+  ],
+  "errors": [
+    {
+      "kind": "CollectionKeyNotOrdered",
+      "name": "K",
+      "position": "parameter `m`"
+    }
+  ],
+  "judgements": [
+    {
+      "kind": "function",
+      "name": "by_key",
+      "params": [
+        {
+          "name": "m",
+          "type": "{K: V}"
+        }
+      ],
+      "return_type": "bool"
+    }
+  ]
+}

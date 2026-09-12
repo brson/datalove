@@ -13,12 +13,12 @@ import set.len
 // `deep` unchanged, so nothing grows however deep the type is written. This was
 // refused while the check was a limit on nesting depth, with a message claiming
 // the shape grew without end. There is no cycle here at all.
-fun deep<T>(x: T): index
+fun deep<T>(x: T): index with { T is ord, }
   var built: [[[[[[[[[[[[T]]]]]]]]]]]] = []
   ret : index / 0
 end fun
 
-fun carry<T>(x: T): index
+fun carry<T>(x: T): index with { T is ord, }
   ret deep(x)
 end fun
 
@@ -28,7 +28,7 @@ end fun
 // `string` the descriptor handed over describes a `#{string}` that appears in
 // no value type, no parameter and no return. The compiled backends emit
 // descriptors for the types they can see, and saw none for this one.
-fun count_one<T>(x: T): index
+fun count_one<T>(x: T): index with { T is ord, }
   var seen: #{T} = #{}
   let added = insert(mut seen, x)
   ret len(ref seen)

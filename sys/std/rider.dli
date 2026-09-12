@@ -117,26 +117,26 @@ native fun list_reserve<T>(mut self: [T], n: index)
 // Maps and sets. Generic over their key, value or element type, which the
 // implementation reads off the container's descriptor. A key or element being
 // looked up is borrowed, so it arrives as itself.
-native fun map_len<K, V>(ref self: %{K = V}): index
-native fun map_clear<K, V>(mut self: %{K = V})
-native fun map_contains_key<K, V>(ref self: %{K = V}, ref key: K): bool
-native fun map_get<K, V>(ref self: %{K = V}, ref key: K): ?V
-native fun map_insert<K, V>(mut self: %{K = V}, key: K, value: V)
-native fun map_remove<K, V>(mut self: %{K = V}, ref key: K)
+native fun map_len<K, V>(ref self: %{K = V}): index with { K is ord, }
+native fun map_clear<K, V>(mut self: %{K = V}) with { K is ord, }
+native fun map_contains_key<K, V>(ref self: %{K = V}, ref key: K): bool with { K is ord, }
+native fun map_get<K, V>(ref self: %{K = V}, ref key: K): ?V with { K is ord, }
+native fun map_insert<K, V>(mut self: %{K = V}, key: K, value: V) with { K is ord, }
+native fun map_remove<K, V>(mut self: %{K = V}, ref key: K) with { K is ord, }
 // Reaching an entry by position, which is what gives a map the same reach a
 // list has: everything written over a collection here is a loop over `len` and
 // an index. The order is the keys' own. Walking a whole map this way is
 // quadratic in its length, because a tree has no position to jump to.
-native fun map_key_at<K, V>(ref self: %{K = V}, i: index): ?K
-native fun map_value_at<K, V>(ref self: %{K = V}, i: index): ?V
+native fun map_key_at<K, V>(ref self: %{K = V}, i: index): ?K with { K is ord, }
+native fun map_value_at<K, V>(ref self: %{K = V}, i: index): ?V with { K is ord, }
 
-native fun set_len<T>(ref self: #{T}): index
-native fun set_clear<T>(mut self: #{T})
-native fun set_contains<T>(ref self: #{T}, ref elem: T): bool
-native fun set_insert<T>(mut self: #{T}, elem: T): bool
-native fun set_remove<T>(mut self: #{T}, ref elem: T): bool
+native fun set_len<T>(ref self: #{T}): index with { T is ord, }
+native fun set_clear<T>(mut self: #{T}) with { T is ord, }
+native fun set_contains<T>(ref self: #{T}, ref elem: T): bool with { T is ord, }
+native fun set_insert<T>(mut self: #{T}, elem: T): bool with { T is ord, }
+native fun set_remove<T>(mut self: #{T}, ref elem: T): bool with { T is ord, }
 // Reaching an element by position; see `map_key_at`.
-native fun set_get<T>(ref self: #{T}, i: index): ?T
+native fun set_get<T>(ref self: #{T}, i: index): ?T with { T is ord, }
 
 // Floating point math, from the platform's libm. These are the operations
 // that have no machine instruction behind them, which is why they are here

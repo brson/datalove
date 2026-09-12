@@ -1,0 +1,9 @@
+// A set or a map written over a type parameter asks that parameter for an
+// ordering, because a set keeps its elements in order and a map keeps its keys
+// in order. Saying `T is ord` is what promises one; every type there is
+// satisfies it, so nothing is shut out, but the signature has to say so.
+//
+// The map's values are free: nothing puts them in order.
+fun by_key<K, V>(ref m: %{K = V}): bool
+    ret true
+end fun
