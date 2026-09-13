@@ -1,25 +1,11 @@
 {
-  "diagnostics": [
+  "diagnostics": [],
+  "errors": [],
+  "judgements": [
     {
-      "code": "F001",
-      "labels": [
-        {
-          "message": "not found in this scope",
-          "span": [
-            8,
-            11
-          ],
-          "text": "map"
-        }
-      ],
-      "message": "cannot find value `map` in this scope"
+      "kind": "variable",
+      "name": "x",
+      "type": "%{int = int}"
     }
-  ],
-  "errors": [
-    {
-      "kind": "UnresolvedName",
-      "name": "map"
-    }
-  ],
-  "judgements": []
+  ]
 }

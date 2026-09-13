@@ -7,28 +7,35 @@
         "type_hint": null,
         "value": {
           "expr": {
-            "kind": "Place",
-            "root": "set",
-            "steps": []
+            "elements": [
+              {
+                "expr": {
+                  "kind": "Int",
+                  "type_hint": null,
+                  "value": "1"
+                }
+              },
+              {
+                "expr": {
+                  "kind": "Int",
+                  "type_hint": null,
+                  "value": "2"
+                }
+              },
+              {
+                "expr": {
+                  "kind": "Int",
+                  "type_hint": null,
+                  "value": "3"
+                }
+              }
+            ],
+            "kind": "Set",
+            "type_hint": null
           }
         }
       }
     ]
   },
-  "diagnostics": [
-    {
-      "code": "P021",
-      "labels": [
-        {
-          "message": "unexpected token",
-          "span": [
-            12,
-            23
-          ],
-          "text": "{ 1, 2, 3 }"
-        }
-      ],
-      "message": "unexpected token after expression"
-    }
-  ]
+  "diagnostics": []
 }

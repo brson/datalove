@@ -7,28 +7,76 @@
         "type_hint": null,
         "value": {
           "expr": {
-            "kind": "Place",
-            "root": "map",
-            "steps": []
+            "entries": [
+              {
+                "key": {
+                  "expr": {
+                    "kind": "Int",
+                    "type_hint": null,
+                    "value": "1"
+                  }
+                },
+                "value": {
+                  "expr": {
+                    "elements": [
+                      {
+                        "expr": {
+                          "kind": "Int",
+                          "type_hint": null,
+                          "value": "10"
+                        }
+                      },
+                      {
+                        "expr": {
+                          "kind": "Int",
+                          "type_hint": null,
+                          "value": "20"
+                        }
+                      }
+                    ],
+                    "kind": "List",
+                    "type_hint": null
+                  }
+                }
+              },
+              {
+                "key": {
+                  "expr": {
+                    "kind": "Int",
+                    "type_hint": null,
+                    "value": "2"
+                  }
+                },
+                "value": {
+                  "expr": {
+                    "elements": [
+                      {
+                        "expr": {
+                          "kind": "Int",
+                          "type_hint": null,
+                          "value": "30"
+                        }
+                      },
+                      {
+                        "expr": {
+                          "kind": "Int",
+                          "type_hint": null,
+                          "value": "40"
+                        }
+                      }
+                    ],
+                    "kind": "List",
+                    "type_hint": null
+                  }
+                }
+              }
+            ],
+            "kind": "Map",
+            "type_hint": null
           }
         }
       }
     ]
   },
-  "diagnostics": [
-    {
-      "code": "P021",
-      "labels": [
-        {
-          "message": "unexpected token",
-          "span": [
-            12,
-            42
-          ],
-          "text": "{ 1 = [10, 20], 2 = [30, 40] }"
-        }
-      ],
-      "message": "unexpected token after expression"
-    }
-  ]
+  "diagnostics": []
 }
