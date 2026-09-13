@@ -1,0 +1,78 @@
+// Leaving from inside a branch, with something live outside it.
+//
+// An early return has to let go of everything the function still owns on the
+// way out, and which bindings those are is worked out per statement and looked
+// up by the statement's id. Ownership analysis numbers every statement it
+// walks, nested ones included; lowering numbered only the ones at the top of
+// the body. The two agree exactly as long as nothing nests, and an `if` with a
+// statement in it puts them out of step for the rest of the function.
+//
+// So a `?`, a `!`, or a checked overflow inside a branch looked up the
+// enclosing statement's drops, found none, and left without letting go of
+// anything. The same shape at the top of a body was right all along, which is
+// what made it look like the early return worked.
+//
+// Each of these leaves from inside something, with a string live outside it.
+// There is nothing to check but the leak detector and the answer.
+
+// A checked multiply that overflows, inside a branch.
+fun overflow_in_a_branch(): !u8
+  let held: string = "alive"
+  if true
+    let product: u8 = (: u8 / 208) *! (: u8 / 4)
+  end if
+  ret ok : u8 / 1
+end fun
+
+// The same inside a loop.
+fun overflow_in_a_loop(): !u8
+  let held: string = "alive"
+  loop
+    let product: u8 = (: u8 / 208) *! (: u8 / 4)
+    break
+  end loop
+  ret ok : u8 / 1
+end fun
+
+// The optional form, which leaves through a `none` instead.
+fun optional_overflow_in_a_branch(): ?u8
+  let held: string = "alive"
+  if true
+    let product: u8 = (: u8 / 208) *? (: u8 / 4)
+  end if
+  ret some : u8 / 1
+end fun
+
+// An index past the end, which leaves the same way.
+fun index_past_the_end(ref numbers: [u32]): ?u32
+  let held: string = "alive"
+  if true
+    let element: u32 = numbers[: index / 99]?
+  end if
+  ret some : u32 / 1
+end fun
+
+// Two deep, so the drops come from more than one scope out.
+fun two_deep(): ?u8
+  let outer: string = "outer"
+  if true
+    let inner: string = "inner"
+    if true
+      let product: u8 = (: u8 / 208) *? (: u8 / 4)
+    end if
+  end if
+  ret some : u8 / 1
+end fun
+
+// And the case that always worked, so the two stay told apart.
+fun overflow_at_the_top(): !u8
+  let held: string = "alive"
+  let product: u8 = (: u8 / 208) *! (: u8 / 4)
+  ret ok : u8 / 1
+end fun
+
+let numbers: [u32] = [: u32 / 1]
+
+let output = (overflow_in_a_branch(), overflow_in_a_loop(),
+              optional_overflow_in_a_branch(), index_past_the_end(ref numbers),
+              two_deep(), overflow_at_the_top())

@@ -52,6 +52,8 @@ Analysis(
                         v13 = const "arithmetic overflow"
                         v14 = error_from v13
                         v15 = err v14
+                        drop.tracked s0
+                        drop.tracked s1
                         return v15
                     block7:
                         store.copy s2, v11

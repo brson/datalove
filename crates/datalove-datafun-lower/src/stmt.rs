@@ -52,6 +52,30 @@ fn lower_statement_impl<'db>(
 ) -> Result<(), LowerError> {
     // Allocate a globally-unique statement ID that matches ownership analysis.
     let stmt_idx = ctx.alloc_stmt_id(stmt);
+
+    // And say that this is the statement being lowered, for as long as it is.
+    //
+    // The drop schedule is keyed by this id, and everything that reads it --
+    // an early return out of the middle of a statement, chiefly -- asks for
+    // the current one. The body loops set it to the statement's position among
+    // the top-level ones, which is the same number only while nothing nests:
+    // an `if` with two statements in it puts the two numberings out of step,
+    // and a `?` or a checked overflow inside that branch then looked up the
+    // enclosing statement's drops and found none, and leaked what was live.
+    //
+    // Put back rather than cleared, because what encloses this statement is
+    // the statement to go back to.
+    let enclosing_stmt_idx = ctx.body.current_stmt_idx.replace(stmt_idx);
+    let result = lower_statement_with_id(ctx, stmt, stmt_idx);
+    ctx.body.current_stmt_idx = enclosing_stmt_idx;
+    result
+}
+
+fn lower_statement_with_id<'db>(
+    ctx: &mut LowerCtx<'db>,
+    stmt: &Statement<'db>,
+    stmt_idx: usize,
+) -> Result<(), LowerError> {
     match stmt {
         Statement::Let(let_stmt) => {
             let name = let_stmt.name.text(ctx.db).to_string();
