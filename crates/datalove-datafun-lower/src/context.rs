@@ -789,6 +789,15 @@ impl<'db> LowerCtx<'db> {
         }
     }
 
+    /// The expression temporaries added since `mark`, without taking them.
+    ///
+    /// For an operation that leaves by more than one path and has to let go of
+    /// the same temporaries on each: the list is read once here, dropped in
+    /// every block that leaves, and taken off the list once at the end.
+    pub fn expr_temps_since(&self, mark: usize) -> Vec<(ValueId, IrType)> {
+        self.body.expr_temps[mark..].to_vec()
+    }
+
     /// Emit Drop instructions for expression temporaries added since `mark`.
     ///
     /// Temps before `mark` are left in place for the enclosing expression.

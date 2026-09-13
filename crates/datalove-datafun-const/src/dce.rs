@@ -19,10 +19,17 @@ use datalove_datafun_ir::{
 /// Every value an instruction defines.
 ///
 /// [`instruction_dest`] answers with one, which is all its callers want and is
-/// not enough to decide whether an instruction is dead. Five instructions define
-/// a second or third value, and each of the extra ones is the flag a branch
-/// tests: dropping `UnwrapOption` because nobody reads the payload leaves the
-/// branch on `is_some` reading a value nothing defines.
+/// not enough to decide whether an instruction is dead. Eight instructions
+/// define a second or third value, and each of the extra ones is the flag a
+/// branch tests: dropping `UnwrapOption` because nobody reads the payload
+/// leaves the branch on `is_some` reading a value nothing defines.
+///
+/// The three collection gets are the same shape -- `l[i]?` lowers to a get and
+/// a branch on whether the index was in bounds -- and were missing from here.
+/// A `let x = l[i]?` whose `x` nothing reads had its get dropped and its
+/// branch kept, so it took the out-of-bounds arm on whatever the undefined
+/// flag happened to be, and the function early-returned `none` from an index
+/// that was in bounds.
 pub fn instruction_dests(instr: &Instruction) -> Vec<ValueId> {
     match instr {
         Instruction::UnwrapOption { dest, is_some, .. } => vec![*dest, *is_some],
@@ -31,6 +38,9 @@ pub fn instruction_dests(instr: &Instruction) -> Vec<ValueId> {
         }
         Instruction::BinOpChecked { dest, overflow, .. } => vec![*dest, *overflow],
         Instruction::UnaryOpChecked { dest, overflow, .. } => vec![*dest, *overflow],
+        Instruction::ListGet { dest, is_valid, .. } => vec![*dest, *is_valid],
+        Instruction::MapGet { dest, is_valid, .. } => vec![*dest, *is_valid],
+        Instruction::TensorGet { dest, is_valid, .. } => vec![*dest, *is_valid],
         Instruction::Unpack { dests, .. } => dests.clone(),
         _ => instruction_dest(instr).into_iter().collect(),
     }

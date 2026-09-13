@@ -1589,6 +1589,10 @@ fn lower_collection_index_value<'db>(
     index_expr: &ast::ExprIndex<'db>,
     error_mode: ast::IndexErrorMode,
 ) -> Result<ValueId, LowerError> {
+    // A get borrows what it is given, so anything made to hand it is this
+    // expression's to let go of, on whichever way out it takes. A map keyed by
+    // a string leaked the key it was looked up with.
+    let temps_mark = ctx.expr_temps_mark();
     let base_op = lower_operand(ctx, index_expr.base)?;
     let key_op = lower_operand(ctx, index_expr.index)?;
     let base_type = ctx.expr_type(index_expr.base);
@@ -1630,7 +1634,13 @@ fn lower_collection_index_value<'db>(
         else_args: Vec::new(),
     });
 
+    // Read rather than taken, because both ways out let go of the same ones.
+    let temps = ctx.expr_temps_since(temps_mark);
+
     ctx.start_block(early_return_block);
+    for (value, ty) in &temps {
+        ctx.emit_drop_for_operand(&Operand::Value(*value), ty);
+    }
     match error_mode {
         ast::IndexErrorMode::Option => ctx.emit_early_return_none(false),
         ast::IndexErrorMode::Result => {
@@ -1640,6 +1650,7 @@ fn lower_collection_index_value<'db>(
     }
 
     ctx.start_block(continue_block);
+    ctx.emit_expr_temp_drops_since(temps_mark);
     Ok(dest)
 }
 
@@ -1702,6 +1713,9 @@ fn lower_place_expression<'db>(
                 let error_mode = idx.error_mode
                     .expect("Place expression index steps always have error mode");
                 let base_type = operand_type(ctx, &current_op);
+                // As in `lower_collection_index_value`: a get borrows its key,
+                // so anything made to hand it over is dropped on both ways out.
+                let temps_mark = ctx.expr_temps_mark();
                 let key_op = lower_operand(ctx, idx.index)?;
                 let is_map = matches!(&base_type, IrType::Map(_, _));
                 let is_tensor = matches!(&base_type, IrType::Tensor(_, _));
@@ -1745,7 +1759,12 @@ fn lower_place_expression<'db>(
                         else_args: Vec::new(),
                     });
 
+                    let temps = ctx.expr_temps_since(temps_mark);
+
                     ctx.start_block(early_return_block);
+                    for (value, ty) in &temps {
+                        ctx.emit_drop_for_operand(&Operand::Value(*value), ty);
+                    }
                     match error_mode {
                         ast::IndexErrorMode::Option => ctx.emit_early_return_none(false),
                         ast::IndexErrorMode::Result => {
@@ -1755,6 +1774,7 @@ fn lower_place_expression<'db>(
                     }
 
                     ctx.start_block(continue_block);
+                    ctx.emit_expr_temp_drops_since(temps_mark);
                     return Ok(dest);
                 } else {
                     // Intermediate index — get ref to element.

@@ -1,0 +1,60 @@
+// Indexing whose answer nobody reads.
+//
+// `l[i]?` lowers to a get and a branch on whether the index was in bounds, and
+// the get defines two values: the element and that flag. Dead-code removal
+// asked each instruction what it defined and was told about the element only,
+// so a get whose element nothing read was dropped and the branch on the flag
+// was kept -- reading a value nothing defines. The branch then took whichever
+// arm the undefined flag pointed at, and the function early-returned from an
+// index that was in bounds.
+//
+// It showed two ways. An index whose binding is never used afterwards, which
+// is the plain case. And two indexes in one function, where the first one's
+// element is read and the second's is not, or the other way about, depending
+// on which way the rest of the body happened to fall.
+//
+// `UnwrapOption`, `UnwrapResult` and the two checked arithmetic instructions
+// were already listed as defining a flag as well. The three collection gets
+// are the same shape and were not.
+
+fun unused_index(ref l: [u32]): ?u32
+  let ignored: u32 = l[: index / 0]?
+  ret some : u32 / 42
+end fun
+
+fun two_indexes(ref l: [u32]): ?u32
+  let first: u32 = l[: index / 0]?
+  let second: u32 = l[: index / 1]?
+  ret some second
+end fun
+
+fun two_indexes_result(ref l: [u32]): !u32
+  let first: u32 = l[: index / 0]!
+  let second: u32 = l[: index / 1]!
+  ret ok second
+end fun
+
+// A map and a tensor take the same path, through `MapGet` and `TensorGet`.
+fun unused_map_index(ref m: %{string = u32}): ?u32
+  let ignored: u32 = m["a"]?
+  ret some : u32 / 7
+end fun
+
+fun unused_tensor_index(ref t: [|u32, 1|]): ?u32
+  let ignored: u32 = t[: index / 0]?
+  ret some : u32 / 8
+end fun
+
+// And the out-of-bounds answer still has to be the out-of-bounds answer.
+fun out_of_bounds(ref l: [u32]): ?u32
+  let ignored: u32 = l[: index / 99]?
+  ret some : u32 / 42
+end fun
+
+let numbers: [u32] = [: u32 / 5, : u32 / 6]
+let named: %{string = u32} = %{"a" = : u32 / 1}
+let grid: [|u32, 1|] = [| : u32 / 3 : u32 / 4 |]
+
+let output = (unused_index(ref numbers), two_indexes(ref numbers),
+              two_indexes_result(ref numbers), unused_map_index(ref named),
+              unused_tensor_index(ref grid), out_of_bounds(ref numbers))
