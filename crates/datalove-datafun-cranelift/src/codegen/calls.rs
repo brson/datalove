@@ -295,6 +295,17 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                     // Will load after call below.
                 }
             }
+        } else {
+            // A unit return travels in no register and needs no room written
+            // to, but it is still a value here, and something may go on to
+            // read it -- `debuglog f()` does. So it gets the address of its
+            // own slot, which has no size and nothing in it.
+            let frame_slot = self.frame_slot.ok_or_else(|| {
+                CraneliftError::Codegen("no frame slot for a unit return".into())
+            })?;
+            let dest_offset = self.layout.value_offset(dest.0);
+            let ptr = builder.ins().stack_addr(PTR_TYPE, frame_slot, dest_offset as i32);
+            self.values.insert(dest, ptr);
         }
 
         self.destroy_out_destinations(builder, code_ref, args)?;

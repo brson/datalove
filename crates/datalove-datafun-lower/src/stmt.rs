@@ -106,7 +106,16 @@ fn lower_statement_impl<'db>(
         Statement::Ret(ret_stmt) => {
             let value = if let Some(expr) = ret_stmt.value {
                 let value_id = lower_expression(ctx, expr)?;
-                Some(Operand::Value(value_id))
+                // A function whose return type is unit returns nothing, even
+                // where the source wrote something for it to return. `()` is
+                // that type, so `ret ()` names a value of no size and a
+                // signature with nowhere to put it -- the expression is
+                // lowered for whatever it does, and then left behind.
+                if matches!(ctx.return_type, Some(IrType::Unit) | None) {
+                    None
+                } else {
+                    Some(Operand::Value(value_id))
+                }
             } else {
                 None
             };
