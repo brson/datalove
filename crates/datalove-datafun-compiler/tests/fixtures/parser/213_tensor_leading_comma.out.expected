@@ -1,0 +1,53 @@
+{
+  "ast": {
+    "statements": [
+      {
+        "kind": "Let",
+        "name": "v",
+        "type_hint": null,
+        "value": {
+          "expr": {
+            "elements": [
+              {
+                "expr": {
+                  "kind": "Int",
+                  "type_hint": null,
+                  "value": "1"
+                }
+              },
+              {
+                "expr": {
+                  "kind": "Int",
+                  "type_hint": null,
+                  "value": "2"
+                }
+              }
+            ],
+            "kind": "Tensor",
+            "shape": [
+              1,
+              2
+            ],
+            "type_hint": null
+          }
+        }
+      }
+    ]
+  },
+  "diagnostics": [
+    {
+      "code": "D033",
+      "labels": [
+        {
+          "message": "a `,` goes between two parts",
+          "span": [
+            10,
+            11
+          ],
+          "text": ","
+        }
+      ],
+      "message": "nothing before this `,`"
+    }
+  ]
+}

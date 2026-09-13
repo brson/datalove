@@ -1,0 +1,5 @@
+fun f(e: E): u32
+  match e
+  case atom A
+    ret 1
+end fun

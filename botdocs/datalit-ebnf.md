@@ -89,7 +89,7 @@ multi_comma    = ",", ",", { "," } ;  (* ,, for 3D, ,,, for 4D, etc. *)
 (* Table: header row + data rows *)
 table_expr     = "{|", ws, table_header, table_rows, ws, "|}" ;
 table_header   = ident, { ws, ",", ws, ident }, row_sep ;
-table_rows     = { table_row } ;
+table_rows     = { ws, table_row } ;
 table_row      = full_expr, { ws, ",", ws, full_expr }, [ row_sep ] ;
 row_sep        = ";" | newline ;
 
@@ -122,3 +122,12 @@ newline        = "\n" | "\r\n" ;
 6. **Tables**: pipe-brace delimiters `{| ... |}`, header then data rows
 7. **Trailing commas** allowed everywhere
 8. **Block comments** can nest
+9. **A delimiter someone wrote needs something before it.** A `;` or a `,`
+   separates two particular things, so one with nothing before it separates
+   nothing and is an error: `{| x, y;; 1, 2 |}`, `{| x,, y |}`, `[|,1 2|]`.
+   A newline is not written to separate anything in particular - it falls
+   between whatever it happens to fall between - so blank lines are free
+   wherever `ws` is. A trailing `;` or `,` is not a delimiter with nothing
+   before it: it closes the row or group it follows, which is what `[ row_sep ]`
+   and the trailing commas above say. Both parsers report this as `D033` and
+   neither drops the delimiter silently.

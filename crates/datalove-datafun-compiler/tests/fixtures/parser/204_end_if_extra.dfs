@@ -1,0 +1,6 @@
+fun f(): u32
+  if true
+    ret 1
+  end if oops
+  ret 2
+end fun

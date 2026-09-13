@@ -69,11 +69,42 @@ impl<'db> Parser<'db> {
         line: Vec<TreeToken<'db>>,
         remaining_lines: &mut Peekable<impl Iterator<Item = (usize, Vec<TreeToken<'db>>)>>,
     ) -> ast::Statement<'db> {
-        let line_tokens: Vec<_> = line.into_iter().filter_map(|t| t.without_space()).collect();
-        let mut sub = self.new_sub(line_tokens);
+        let mut sub = self.new_sub(line);
         let stmt = sub.parse_statement(remaining_lines);
         self.merge_identity_from(&mut sub);
         stmt
+    }
+
+    /// Consume an `end <keyword>` line, complaining about anything after it.
+    ///
+    /// A block's terminator is a whole line, so a word left over on it was
+    /// meant to do something and does not. Dropping it is how `end fun please`
+    /// came to mean `end fun`.
+    fn eat_end_line(
+        &mut self,
+        remaining_lines: &mut Peekable<impl Iterator<Item = (usize, Vec<TreeToken<'db>>)>>,
+        keyword: &str,
+    ) {
+        let (_, line) = remaining_lines.next().X();
+        let Some(extra) = line.get(2) else {
+            return;
+        };
+        self.had_error = true;
+        DiagnosticBuilder::error(self.db, &fmt!("unexpected token after `end {keyword}`"))
+            .code("P033")
+            .primary_label(self.extract_text_span(extra), "`end` takes the keyword and nothing else")
+            .emit_parse();
+    }
+
+    /// Report a block that ran out of input before its `end` line.
+    fn unterminated_block(&mut self, keyword: &str) -> ast::Statement<'db> {
+        let end = self.last_byte_end();
+        self.emit_stmt_error(
+            TextSpan::new(self.source_text(), end..end),
+            &fmt!("unterminated {keyword} body"),
+            "P034",
+            &fmt!("expected `end {keyword}` before the end of the input"),
+        )
     }
 
     fn parse_let(&mut self) -> ast::Statement<'db> {
@@ -353,28 +384,20 @@ impl<'db> Parser<'db> {
         let mut found_end_fun = false;
         while let Some((_, line)) = remaining_lines.peek() {
             if self.line_is_end_keyword(line, "fun") {
-                remaining_lines.next(); // consume "end fun" line
+                self.eat_end_line(remaining_lines, "fun");
                 found_end_fun = true;
                 break;
             }
 
             let (_, line) = remaining_lines.next().X();
-            if !line.is_empty() {
-                // Parse statement recursively to handle if/ret/etc in function body.
-                let stmt = self.parse_line_statement(line, remaining_lines);
-                body.push(stmt);
-            }
+            // Parse statement recursively to handle if/ret/etc in function body.
+            let stmt = self.parse_line_statement(line, remaining_lines);
+            body.push(stmt);
         }
 
         if !found_end_fun {
             self.exit_function();
-            let ts = TextSpan::new(self.source_text(), 0..0);
-            return self.emit_stmt_error(
-                ts,
-                "unterminated function body",
-                "P010",
-                "expected 'end fun' before end of input"
-            );
+            return self.unterminated_block("fun");
         }
 
         // Exit function context.
@@ -810,35 +833,32 @@ impl<'db> Parser<'db> {
         // Parse then body until we hit "else" or "end if".
         let mut then_body = vec![];
         let mut found_else = false;
+        let mut found_end_if = false;
 
         while let Some((_, line)) = remaining_lines.peek() {
             if self.line_is_end_keyword(line, "if") {
-                remaining_lines.next(); // consume "end if" line
+                self.eat_end_line(remaining_lines, "if");
+                found_end_if = true;
                 break;
             }
 
-            if line.len() >= 1 {
-                if let Some(TreeToken::Token(t1)) = line.get(0) {
-                    if let Some("else") = t1.word_str(self.db) {
-                        found_else = true;
-                        break;
-                    }
+            if let Some(TreeToken::Token(t1)) = line.get(0) {
+                if let Some("else") = t1.word_str(self.db) {
+                    found_else = true;
+                    break;
                 }
             }
 
             let (_, line) = remaining_lines.next().X();
-            if !line.is_empty() {
-                let stmt = self.parse_line_statement(line, remaining_lines);
-                then_body.push(stmt);
-            }
+            let stmt = self.parse_line_statement(line, remaining_lines);
+            then_body.push(stmt);
         }
 
         // Parse else binding and body if we found "else".
         let (else_binding, else_body) = if found_else {
             // Consume the "else" line and parse any binding.
             let (_, else_line) = remaining_lines.next().X();
-            let else_tokens: Vec<_> = else_line.into_iter().filter_map(|t| t.without_space()).collect();
-            let mut else_sub = self.new_sub(else_tokens);
+            let mut else_sub = self.new_sub(else_line);
             else_sub.eat_word("else");
 
             // Parse optional else binding: |identifier|
@@ -877,21 +897,24 @@ impl<'db> Parser<'db> {
 
             while let Some((_, line)) = remaining_lines.peek() {
                 if self.line_is_end_keyword(line, "if") {
-                    remaining_lines.next(); // consume "end if" line
+                    self.eat_end_line(remaining_lines, "if");
+                    found_end_if = true;
                     break;
                 }
 
                 let (_, line) = remaining_lines.next().X();
-                if !line.is_empty() {
-                    let stmt = self.parse_line_statement(line, remaining_lines);
-                    body.push(stmt);
-                }
+                let stmt = self.parse_line_statement(line, remaining_lines);
+                body.push(stmt);
             }
 
             (else_binding, Some(body))
         } else {
             (None, None)
         };
+
+        if !found_end_if {
+            return self.unterminated_block("if");
+        }
 
         ast::Statement::If(ast::StmtIf {
             condition,
@@ -918,17 +941,21 @@ impl<'db> Parser<'db> {
 
         // Parse body until we hit "end loop".
         let mut body = vec![];
+        let mut found_end_loop = false;
         while let Some((_, line)) = remaining_lines.peek() {
             if self.line_is_end_keyword(line, "loop") {
-                remaining_lines.next();
+                self.eat_end_line(remaining_lines, "loop");
+                found_end_loop = true;
                 break;
             }
 
             let (_, line) = remaining_lines.next().X();
-            if !line.is_empty() {
-                let stmt = self.parse_line_statement(line, remaining_lines);
-                body.push(stmt);
-            }
+            let stmt = self.parse_line_statement(line, remaining_lines);
+            body.push(stmt);
+        }
+
+        if !found_end_loop {
+            return self.unterminated_block("loop");
         }
 
         ast::Statement::Loop(ast::StmtLoop { condition, body })
@@ -1102,10 +1129,12 @@ impl<'db> Parser<'db> {
         // Parse case arms until "end match".
         let mut cases = vec![];
         let mut default_body = None;
+        let mut found_end_match = false;
 
         while let Some((_, line)) = remaining_lines.peek() {
             if self.line_is_end_keyword(line, "match") {
-                remaining_lines.next(); // consume "end match"
+                self.eat_end_line(remaining_lines, "match");
+                found_end_match = true;
                 break;
             }
 
@@ -1113,8 +1142,7 @@ impl<'db> Parser<'db> {
             if let Some(TreeToken::Token(t1)) = line.get(0) {
                 if let Some("case") = t1.word_str(self.db) {
                     let (_, case_line) = remaining_lines.next().X();
-                    let case_tokens: Vec<_> = case_line.into_iter().filter_map(|t| t.without_space()).collect();
-                    let mut case_sub = self.new_sub(case_tokens);
+                    let mut case_sub = self.new_sub(case_line);
                     case_sub.eat_word("case");
 
                     match case_sub.peek_word() {
@@ -1203,8 +1231,18 @@ impl<'db> Parser<'db> {
                 }
             }
 
-            // Unexpected line inside match - skip it.
-            let (_, _line) = remaining_lines.next().X();
+            // A line inside a match that is not a `case` belongs to no arm.
+            let (_, line) = remaining_lines.next().X();
+            self.had_error = true;
+            let ts = self.extract_text_span(&line[0]);
+            DiagnosticBuilder::error(self.db, "this line is in no case of the match")
+                .code("P048")
+                .primary_label(ts, "every statement here belongs to a `case`")
+                .emit_parse();
+        }
+
+        if !found_end_match {
+            return self.unterminated_block("match");
         }
 
         ast::Statement::Match(ast::StmtMatch {
@@ -1232,10 +1270,8 @@ impl<'db> Parser<'db> {
             }
 
             let (_, line) = remaining_lines.next().X();
-            if !line.is_empty() {
-                let stmt = self.parse_line_statement(line, remaining_lines);
-                body.push(stmt);
-            }
+            let stmt = self.parse_line_statement(line, remaining_lines);
+            body.push(stmt);
         }
         body
     }

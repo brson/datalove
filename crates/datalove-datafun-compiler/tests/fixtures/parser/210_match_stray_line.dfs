@@ -1,0 +1,8 @@
+fun f(e: E): u32
+  match e
+  garbage line
+  case atom A
+    ret 1
+  end match
+  ret 2
+end fun

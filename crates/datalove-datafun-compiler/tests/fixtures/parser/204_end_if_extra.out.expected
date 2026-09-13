@@ -1,0 +1,62 @@
+{
+  "ast": {
+    "statements": [
+      {
+        "body": [
+          {
+            "condition": {
+              "expr": {
+                "kind": "True",
+                "type_hint": null
+              }
+            },
+            "else_body": null,
+            "kind": "If",
+            "then_body": [
+              {
+                "kind": "Ret",
+                "value": {
+                  "expr": {
+                    "kind": "Int",
+                    "type_hint": null,
+                    "value": "1"
+                  }
+                }
+              }
+            ]
+          },
+          {
+            "kind": "Ret",
+            "value": {
+              "expr": {
+                "kind": "Int",
+                "type_hint": null,
+                "value": "2"
+              }
+            }
+          }
+        ],
+        "kind": "Fun",
+        "name": "f",
+        "params": [],
+        "return_type": "U32"
+      }
+    ]
+  },
+  "diagnostics": [
+    {
+      "code": "P033",
+      "labels": [
+        {
+          "message": "`end` takes the keyword and nothing else",
+          "span": [
+            42,
+            46
+          ],
+          "text": "oops"
+        }
+      ],
+      "message": "unexpected token after `end if`"
+    }
+  ]
+}

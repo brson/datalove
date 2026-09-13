@@ -194,7 +194,11 @@ Table literals use a line-oriented syntax:
 |}
 ```
 
-Semicolons permit single-line format: `{| x, y; 1, 2; 3, 4 |}`.
+Semicolons permit single-line format: `{| x, y; 1, 2; 3, 4 |}`. A `;` or a `,`
+goes between two things, so one with nothing before it is an error
+(`{| x, y;; 1, 2 |}`); a trailing one closes what it follows and is fine. This
+holds wherever the two languages read a delimiter -- table rows and columns,
+tensor axes, and the `;` between two statements.
 
 Column projections (e.g., `table.x`) yield a list view that cannot be moved or
 mutated, but can be passed to `ref` parameters.

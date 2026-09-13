@@ -1,0 +1,80 @@
+{
+  "ast": {
+    "statements": [
+      {
+        "body": [
+          {
+            "cases": [
+              {
+                "body": [
+                  {
+                    "kind": "Ret",
+                    "value": {
+                      "expr": {
+                        "kind": "Int",
+                        "type_hint": null,
+                        "value": "1"
+                      }
+                    }
+                  }
+                ],
+                "kind": {
+                  "name": "A",
+                  "variant": "Atom"
+                }
+              }
+            ],
+            "default_body": null,
+            "input": {
+              "expr": {
+                "kind": "Place",
+                "root": "e",
+                "steps": []
+              }
+            },
+            "kind": "Match"
+          },
+          {
+            "kind": "Ret",
+            "value": {
+              "expr": {
+                "kind": "Int",
+                "type_hint": null,
+                "value": "2"
+              }
+            }
+          }
+        ],
+        "kind": "Fun",
+        "name": "f",
+        "params": [
+          {
+            "is_comptime": false,
+            "mode": "In",
+            "name": "e",
+            "type_hint": {
+              "Alias": "E"
+            }
+          }
+        ],
+        "return_type": "U32"
+      }
+    ]
+  },
+  "diagnostics": [
+    {
+      "code": "P048",
+      "labels": [
+        {
+          "message": "every statement here belongs to a `case`",
+          "span": [
+            29,
+            36
+          ],
+          "text": "garbage"
+        }
+      ],
+      "message": "this line is in no case of the match"
+    }
+  ]
+}

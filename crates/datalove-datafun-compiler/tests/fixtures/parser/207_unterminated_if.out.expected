@@ -1,0 +1,26 @@
+{
+  "ast": {
+    "statements": [
+      {
+        "kind": "ParseError",
+        "message": "unterminated if body"
+      }
+    ]
+  },
+  "diagnostics": [
+    {
+      "code": "P034",
+      "labels": [
+        {
+          "message": "expected `end if` before the end of the input",
+          "span": [
+            7,
+            7
+          ],
+          "text": ""
+        }
+      ],
+      "message": "unterminated if body"
+    }
+  ]
+}

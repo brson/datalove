@@ -1,0 +1,57 @@
+{
+  "ast": {
+    "statements": [
+      {
+        "kind": "Let",
+        "name": "t",
+        "type_hint": null,
+        "value": {
+          "expr": {
+            "header": [
+              "x",
+              "y"
+            ],
+            "kind": "Table",
+            "rows": [
+              {
+                "elements": [
+                  {
+                    "expr": {
+                      "kind": "Int",
+                      "type_hint": null,
+                      "value": "1"
+                    }
+                  },
+                  {
+                    "expr": {
+                      "kind": "Int",
+                      "type_hint": null,
+                      "value": "2"
+                    }
+                  }
+                ]
+              }
+            ],
+            "type_hint": null
+          }
+        }
+      }
+    ]
+  },
+  "diagnostics": [
+    {
+      "code": "D033",
+      "labels": [
+        {
+          "message": "a `;` goes between two rows",
+          "span": [
+            17,
+            18
+          ],
+          "text": ";"
+        }
+      ],
+      "message": "nothing before this `;`"
+    }
+  ]
+}

@@ -1,0 +1,51 @@
+{
+  "ast": {
+    "expr": {
+      "Table": {
+        "header": [
+          "x",
+          "y"
+        ],
+        "rows": [
+          {
+            "elements": [
+              {
+                "expr": {
+                  "Int": {
+                    "value": "1"
+                  }
+                },
+                "type_hint": null
+              },
+              {
+                "expr": {
+                  "Int": {
+                    "value": "2"
+                  }
+                },
+                "type_hint": null
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "type_hint": null
+  },
+  "diagnostics": [
+    {
+      "code": "D033",
+      "labels": [
+        {
+          "message": "a `;` goes between two rows",
+          "span": [
+            9,
+            10
+          ],
+          "text": ";"
+        }
+      ],
+      "message": "nothing before this `;`"
+    }
+  ]
+}

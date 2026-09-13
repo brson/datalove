@@ -10,7 +10,7 @@ pub mod source_map;
 pub mod chunks;
 pub mod lexer;
 pub mod bracer;
-pub mod lines;
+pub mod split;
 
 pub mod package2;
 pub mod package_resolve2;

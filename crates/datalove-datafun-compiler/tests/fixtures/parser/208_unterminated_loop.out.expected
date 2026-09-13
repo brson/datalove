@@ -1,0 +1,26 @@
+{
+  "ast": {
+    "statements": [
+      {
+        "kind": "ParseError",
+        "message": "unterminated loop body"
+      }
+    ]
+  },
+  "diagnostics": [
+    {
+      "code": "P034",
+      "labels": [
+        {
+          "message": "expected `end loop` before the end of the input",
+          "span": [
+            16,
+            16
+          ],
+          "text": ""
+        }
+      ],
+      "message": "unterminated loop body"
+    }
+  ]
+}

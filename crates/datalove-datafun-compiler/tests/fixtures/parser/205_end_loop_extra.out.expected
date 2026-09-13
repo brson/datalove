@@ -1,0 +1,48 @@
+{
+  "ast": {
+    "statements": [
+      {
+        "body": [
+          {
+            "body": [
+              {
+                "kind": "Break"
+              }
+            ],
+            "kind": "Loop"
+          },
+          {
+            "kind": "Ret",
+            "value": {
+              "expr": {
+                "kind": "Int",
+                "type_hint": null,
+                "value": "2"
+              }
+            }
+          }
+        ],
+        "kind": "Fun",
+        "name": "f",
+        "params": [],
+        "return_type": "U32"
+      }
+    ]
+  },
+  "diagnostics": [
+    {
+      "code": "P033",
+      "labels": [
+        {
+          "message": "`end` takes the keyword and nothing else",
+          "span": [
+            41,
+            49
+          ],
+          "text": "nonsense"
+        }
+      ],
+      "message": "unexpected token after `end loop`"
+    }
+  ]
+}

@@ -260,6 +260,15 @@ they cannot synthesize a type.
 Column names in the literal must match the type hint in order.
 Each data row must have exactly as many values as there are columns.
 
+A semicolon is written to go between two rows,
+so one with nothing before it is an error,
+as is a comma with no column before it:
+`{| x, y;; 1, 2 |}` and `{| x,, y |}` do not parse.
+A newline is not written to separate anything in particular,
+so blank lines are free.
+A semicolon or comma at the very end
+closes the row or value before it and is fine.
+
 
 ### Tensor
 
@@ -304,6 +313,12 @@ Trailing commas preserve rank in this case:
 not a rank-1 tensor with shape [3].
 The number of trailing commas equals rank minus one.
 
+Trailing is the only place a separator may have nothing beside it.
+A comma with nothing before it separates nothing,
+so `[| ,1 2 |]` does not parse.
+Blank lines are whitespace here and mean nothing to the shape,
+which is what lets the layout above breathe.
+
 The type specifies element type and rank: `[|T, N|]`.
 Shape is not part of the type &mdash;
 two tensors of the same element type and rank
@@ -331,7 +346,7 @@ entry_list     = entry, { ws, ",", ws, entry }, [ ws, "," ] ;
 entry          = full_expr, ws, "=", ws, full_expr ;
 
 table_header   = ident, { ws, ",", ws, ident }, row_sep ;
-table_rows     = { table_row } ;
+table_rows     = { ws, table_row } ;
 table_row      = full_expr, { ws, ",", ws, full_expr }, [ row_sep ] ;
 row_sep        = ";" | newline ;
 

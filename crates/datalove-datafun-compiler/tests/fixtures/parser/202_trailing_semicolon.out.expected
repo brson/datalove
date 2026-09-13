@@ -1,0 +1,19 @@
+{
+  "ast": {
+    "statements": [
+      {
+        "kind": "Let",
+        "name": "a",
+        "type_hint": null,
+        "value": {
+          "expr": {
+            "kind": "Int",
+            "type_hint": null,
+            "value": "1"
+          }
+        }
+      }
+    ]
+  },
+  "diagnostics": []
+}

@@ -7,6 +7,7 @@ use rmx::prelude::*;
 use bct::{
     lexer::{TokenKind, Sigil},
     bracer::{BracerIter, TreeToken},
+    split,
     text::InternedText,
 };
 
@@ -386,11 +387,9 @@ impl<'db> Parser<'db> {
         type_hint: Option<datalit::ast::TypeHint<'db>>,
         iter: BracerIter<'db>,
     ) -> ast::ExprFunKind<'db> {
-        let all_tokens: Vec<_> = iter.collect();
-
         // Filter to non-whitespace tokens for comma-level scanning.
-        let tokens_no_ws: Vec<_> = all_tokens.iter()
-            .filter_map(|t| t.C().without_space())
+        let tokens_no_ws: Vec<_> = iter
+            .filter_map(|t| t.without_space())
             .collect();
 
         if tokens_no_ws.is_empty() {
@@ -399,9 +398,8 @@ impl<'db> Parser<'db> {
             });
         }
 
-        // Scan for max consecutive comma count to determine rank.
-        let max_comma_level = self.scan_max_comma_level(&tokens_no_ws);
-        let rank = max_comma_level + 1;
+        // The widest separator written decides the rank.
+        let rank = split::max_comma_run(&tokens_no_ws) + 1;
 
         // Recursively split by comma levels and parse.
         let (shape, elements) = self.parse_tensor_multicomma_inner(&tokens_no_ws, rank as u32);
@@ -409,25 +407,21 @@ impl<'db> Parser<'db> {
         ast::ExprFunKind::Tensor(ast::ExprTensor { type_hint, shape, elements })
     }
 
-    /// Scan tokens to find the maximum consecutive comma count.
-    fn scan_max_comma_level(&self, tokens: &[TreeToken<'db>]) -> usize {
-        let mut max_level = 0usize;
-        let mut current_commas = 0usize;
+    /// Split a table row into its cells, reporting any stray `,`.
+    fn split_table_cells(&mut self, tokens: &[TreeToken<'db>]) -> Vec<Vec<TreeToken<'db>>> {
+        let groups = split::split_commas(tokens.iter().cloned(), 1);
+        self.report_stray_delimiters(&groups, "columns");
+        split::nonempty_groups(groups)
+    }
 
-        for token in tokens {
-            if let TreeToken::Token(tok) = token {
-                if tok.kind == TokenKind::Sigil(Sigil::Comma) {
-                    current_commas += 1;
-                    max_level = max_level.max(current_commas);
-                } else {
-                    current_commas = 0;
-                }
-            } else {
-                current_commas = 0;
-            }
+    /// Report every delimiter that was written with nothing before it.
+    fn report_stray_delimiters(&mut self, groups: &[split::TokenGroup<'db>], what: &str) {
+        for written in split::stray_delimiters(groups) {
+            self.had_error = true;
+            split::stray_delimiter_error(self.db, self.source_text(), &written, what)
+                .code("D033")
+                .emit_parse();
         }
-
-        max_level
     }
 
     /// Parse tensor data from tokens with multi-comma structure.
@@ -450,7 +444,9 @@ impl<'db> Parser<'db> {
 
         // Split by (rank-1) consecutive commas.
         let split_level = rank - 1;
-        let groups = self.split_by_comma_level(tokens, split_level as usize);
+        let groups = split::split_commas(tokens.iter().cloned(), split_level as usize);
+        self.report_stray_delimiters(&groups, "parts");
+        let groups = split::nonempty_groups(groups);
 
         if groups.is_empty() {
             return (vec![0; rank as usize], vec![]);
@@ -486,62 +482,16 @@ impl<'db> Parser<'db> {
         (shape, all_elements)
     }
 
-    /// Split tokens by N consecutive commas.
-    fn split_by_comma_level(&self, tokens: &[TreeToken<'db>], level: usize) -> Vec<Vec<TreeToken<'db>>> {
-        let mut groups: Vec<Vec<TreeToken<'db>>> = Vec::new();
-        let mut current_group: Vec<TreeToken<'db>> = Vec::new();
-        let mut i = 0;
-
-        while i < tokens.len() {
-            let mut comma_count = 0;
-            let mut j = i;
-            while j < tokens.len() {
-                if let TreeToken::Token(tok) = &tokens[j] {
-                    if tok.kind == TokenKind::Sigil(Sigil::Comma) {
-                        comma_count += 1;
-                        j += 1;
-                    } else {
-                        break;
-                    }
-                } else {
-                    break;
-                }
-            }
-
-            if comma_count >= level {
-                if !current_group.is_empty() {
-                    groups.push(std::mem::take(&mut current_group));
-                }
-                i = j;
-            } else if comma_count > 0 {
-                for k in i..j {
-                    current_group.push(tokens[k].clone());
-                }
-                i = j;
-            } else {
-                current_group.push(tokens[i].clone());
-                i += 1;
-            }
-        }
-
-        if !current_group.is_empty() {
-            groups.push(current_group);
-        }
-
-        groups
-    }
-
     /// Parse table: {| header; row1; row2 |}
     fn parse_lit_table(
         &mut self,
         type_hint: Option<datalit::ast::TypeHint<'db>>,
         iter: BracerIter<'db>,
     ) -> ast::ExprFunKind<'db> {
-        // Collect all tokens including whitespace.
-        let all_tokens: Vec<_> = iter.collect();
-
         // Split by row delimiters (newline in whitespace, or semicolon).
-        let rows = self.split_tokens_by_row(&all_tokens);
+        let groups = split::split_lines(self.db, iter);
+        self.report_stray_delimiters(&groups, "rows");
+        let rows = split::nonempty_groups(groups);
 
         if rows.is_empty() {
             // Empty table: {||}.
@@ -575,52 +525,9 @@ impl<'db> Parser<'db> {
         ast::ExprFunKind::Table(ast::ExprTable { type_hint, header, rows: data_rows })
     }
 
-    /// Split tokens by row delimiters (newline or semicolon).
-    fn split_tokens_by_row(&self, tokens: &[TreeToken<'db>]) -> Vec<Vec<TreeToken<'db>>> {
-        let mut rows = Vec::new();
-        let mut current_row = Vec::new();
-
-        for token in tokens {
-            match token {
-                // Semicolon is explicit row delimiter.
-                TreeToken::Token(tok) if tok.kind == TokenKind::Sigil(Sigil::Semicolon) => {
-                    if !current_row.is_empty() {
-                        rows.push(std::mem::take(&mut current_row));
-                    }
-                }
-                // Whitespace containing newline is implicit row delimiter.
-                TreeToken::Token(tok) if tok.kind == TokenKind::Whitespace => {
-                    let text = tok.text.as_str(self.db);
-                    if text.contains('\n') {
-                        if !current_row.is_empty() {
-                            rows.push(std::mem::take(&mut current_row));
-                        }
-                    } else {
-                        current_row.push(token.C());
-                    }
-                }
-                _ => {
-                    current_row.push(token.C());
-                }
-            }
-        }
-
-        if !current_row.is_empty() {
-            rows.push(current_row);
-        }
-
-        rows
-    }
-
     /// Parse table header row (column names).
     fn parse_table_header(&mut self, row_tokens: &[TreeToken<'db>]) -> Vec<InternedText<'db>> {
-        // Filter out whitespace and split by comma.
-        let tokens_no_ws: Vec<_> = row_tokens.iter()
-            .filter_map(|t| t.C().without_space())
-            .collect();
-
-        // Split by comma and extract names.
-        let parts = self.split_tokens_by_comma_for_table(&tokens_no_ws);
+        let parts = self.split_table_cells(row_tokens);
         let mut names = Vec::new();
 
         for part in parts {
@@ -645,13 +552,7 @@ impl<'db> Parser<'db> {
 
     /// Parse table data row (comma-separated expressions).
     fn parse_table_data_row(&mut self, row_tokens: &[TreeToken<'db>]) -> Vec<ast::ExprFun<'db>> {
-        // Filter out whitespace.
-        let tokens_no_ws: Vec<_> = row_tokens.iter()
-            .filter_map(|t| t.C().without_space())
-            .collect();
-
-        // Split by comma and parse each element.
-        let parts = self.split_tokens_by_comma_for_table(&tokens_no_ws);
+        let parts = self.split_table_cells(row_tokens);
         let mut elements = Vec::new();
 
         for part in parts {
@@ -663,31 +564,6 @@ impl<'db> Parser<'db> {
         }
 
         elements
-    }
-
-    /// Split tokens by comma (for table parsing).
-    fn split_tokens_by_comma_for_table(&self, tokens: &[TreeToken<'db>]) -> Vec<Vec<TreeToken<'db>>> {
-        let mut groups = Vec::new();
-        let mut current = Vec::new();
-
-        for token in tokens {
-            match token {
-                TreeToken::Token(tok) if tok.kind == TokenKind::Sigil(Sigil::Comma) => {
-                    if !current.is_empty() {
-                        groups.push(std::mem::take(&mut current));
-                    }
-                }
-                _ => {
-                    current.push(token.C());
-                }
-            }
-        }
-
-        if !current.is_empty() {
-            groups.push(current);
-        }
-
-        groups
     }
 
     /// Helper to parse comma-separated expressions from a branch.

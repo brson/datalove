@@ -1,0 +1,6 @@
+fun f(): u32
+  loop
+    break
+  end loop nonsense
+  ret 2
+end fun

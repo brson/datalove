@@ -12,8 +12,8 @@ use rmx::prelude::*;
 use bct::{
     input::Source,
     module_graph::ModuleId,
-    lexer::{Token, TokenKind, Sigil},
     bracer::{Bracer, TreeToken},
+    split,
     text::{Text, TextSpan},
     source_map,
     lexer,
@@ -145,35 +145,19 @@ fn parse_bracer<'db>(
     source_text: Text<'db>,
     module_id: Option<ModuleId<'db>>,
 ) -> ast::ParseResult<'db> {
-    // Get line iterator - newlines inside balanced braces don't count as line breaks.
-    // First split on newlines, then filter spaces from each line.
-    let lines = bracer.iter(db)
-        .batching(|iter| {
-            let mut line = vec![];
-            let mut found_newline = false;
+    // Split into lines. A newline inside balanced braces is not a line break,
+    // since the bracer has already put it inside a branch.
+    let groups = split::split_lines(db, bracer.iter(db));
 
-            while let Some(token) = iter.next() {
-                match token {
-                    TreeToken::Token(ref t) if is_line_separator(db, t) => {
-                        found_newline = true;
-                        break;
-                    }
-                    _ => {
-                        // Filter spaces here, after newline check.
-                        if let Some(t) = token.without_space() {
-                            line.push(t);
-                        }
-                    }
-                }
-            }
+    // A `;` separates two statements, so one with nothing before it separates
+    // nothing. A blank line is not the same thing and is left alone.
+    for written in split::stray_delimiters(&groups) {
+        split::stray_delimiter_error(db, source_text, &written, "statements")
+            .code("P032")
+            .emit_parse();
+    }
 
-            if !line.is_empty() || found_newline {
-                Some(line)
-            } else {
-                None
-            }
-        });
-
+    let lines = split::nonempty_groups(groups).into_iter();
     let (statements, spans) = parse_statements(db, lines, source_text, module_id);
     let parsed = ast::ParsedStatements { statements };
     ast::ParseResult {
@@ -186,17 +170,6 @@ fn parse_bracer<'db>(
         fun_spans: spans.fun_spans,
         type_alias_spans: spans.type_alias_spans,
         import_spans: spans.import_spans,
-    }
-}
-
-/// Check if a token acts as a line separator.
-///
-/// Line separators are newlines or semicolons.
-fn is_line_separator<'db>(db: &'db dyn Db, token: &Token<'db>) -> bool {
-    match token.kind {
-        TokenKind::Whitespace => token.text.as_str(db).contains("\n"),
-        TokenKind::Sigil(Sigil::Semicolon) => true,
-        _ => false,
     }
 }
 
@@ -234,10 +207,6 @@ fn parse_statements<'db>(
     let mut counters = ScriptCounters::default();
 
     while let Some((_line_num, line)) = line_iter.next() {
-        if line.is_empty() {
-            continue;
-        }
-
         let mut parser = Parser::new(db, line, source_text, module_id, counters);
         let statement = parser.parse_statement(&mut line_iter);
         counters = parser.script_counters();

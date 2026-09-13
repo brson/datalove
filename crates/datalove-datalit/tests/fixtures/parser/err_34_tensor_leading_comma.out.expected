@@ -1,0 +1,47 @@
+{
+  "ast": {
+    "expr": {
+      "Tensor": {
+        "elements": [
+          {
+            "expr": {
+              "Int": {
+                "value": "1"
+              }
+            },
+            "type_hint": null
+          },
+          {
+            "expr": {
+              "Int": {
+                "value": "2"
+              }
+            },
+            "type_hint": null
+          }
+        ],
+        "shape": [
+          1,
+          2
+        ]
+      }
+    },
+    "type_hint": null
+  },
+  "diagnostics": [
+    {
+      "code": "D033",
+      "labels": [
+        {
+          "message": "a `,` goes between two parts",
+          "span": [
+            2,
+            3
+          ],
+          "text": ","
+        }
+      ],
+      "message": "nothing before this `,`"
+    }
+  ]
+}

@@ -1,0 +1,40 @@
+{
+  "ast": {
+    "statements": [
+      {
+        "body": [
+          {
+            "kind": "Ret",
+            "value": {
+              "expr": {
+                "kind": "Int",
+                "type_hint": null,
+                "value": "1"
+              }
+            }
+          }
+        ],
+        "kind": "Fun",
+        "name": "f",
+        "params": [],
+        "return_type": "U32"
+      }
+    ]
+  },
+  "diagnostics": [
+    {
+      "code": "P033",
+      "labels": [
+        {
+          "message": "`end` takes the keyword and nothing else",
+          "span": [
+            29,
+            36
+          ],
+          "text": "garbage"
+        }
+      ],
+      "message": "unexpected token after `end fun`"
+    }
+  ]
+}

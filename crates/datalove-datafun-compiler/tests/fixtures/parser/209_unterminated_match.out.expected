@@ -1,0 +1,54 @@
+{
+  "ast": {
+    "statements": [
+      {
+        "kind": "ParseError",
+        "message": "unterminated fun body"
+      }
+    ]
+  },
+  "diagnostics": [
+    {
+      "code": "P001",
+      "labels": [
+        {
+          "message": "expected 'let', 'var', 'const', 'set', 'fun', 'ret', 'require', 'import', 'if', 'loop', 'break', 'continue', 'debuglog', 'type', or 'native'",
+          "span": [
+            51,
+            54
+          ],
+          "text": "end"
+        }
+      ],
+      "message": "unexpected statement"
+    },
+    {
+      "code": "P034",
+      "labels": [
+        {
+          "message": "expected `end match` before the end of the input",
+          "span": [
+            26,
+            26
+          ],
+          "text": ""
+        }
+      ],
+      "message": "unterminated match body"
+    },
+    {
+      "code": "P034",
+      "labels": [
+        {
+          "message": "expected `end fun` before the end of the input",
+          "span": [
+            16,
+            16
+          ],
+          "text": ""
+        }
+      ],
+      "message": "unterminated fun body"
+    }
+  ]
+}
