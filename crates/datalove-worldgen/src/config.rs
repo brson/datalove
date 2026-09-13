@@ -35,6 +35,10 @@ pub struct WorldGenConfig {
     /// Probability of generating a loop statement (0-100 percent).
     pub loop_probability: u32,
 
+    /// Probability that an `if` destructures an option or a result rather than
+    /// testing a condition, where there is one in scope to destructure.
+    pub if_binding_probability: u32,
+
     /// Probability of using a type alias instead of a structural type (0-100 percent).
     pub type_alias_usage_probability: u32,
 
@@ -79,6 +83,7 @@ impl Default for WorldGenConfig {
             max_control_flow_depth: 2,
             if_probability: 30,
             loop_probability: 20,
+            if_binding_probability: 40,
             type_alias_usage_probability: 30,
             function_call_probability: 30,
             arithmetic_probability: 30,

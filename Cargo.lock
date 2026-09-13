@@ -1864,6 +1864,7 @@ dependencies = [
  "bcts",
  "datalove-datafun",
  "datalove-datafun-ast",
+ "datalove-datafun-parser",
  "datalove-datafun-pkg",
  "datalove-datafun-resolve",
  "datalove-datafun-tycheck",

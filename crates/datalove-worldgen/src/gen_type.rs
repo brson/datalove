@@ -23,6 +23,31 @@ pub fn gen_type_hint<'db, R: Rng>(
     ast_gen::gen_type_hint(db, rng, &config.type_config, 0)
 }
 
+/// Pick a type, and how to write it.
+///
+/// A type alias is another name for a type, and the generator declared plenty
+/// of them and never once wrote one down -- `type_alias_usage_probability` was
+/// in the config and read by nothing. So a declaration meant nothing and the
+/// resolver's work on them was never reached.
+///
+/// The type that comes back is the structural one, because that is what the
+/// value has to be built from and what later statements match against. Only
+/// the way it is written changes.
+pub fn gen_type_hint_and_spelling<'db, R: Rng>(
+    db: &'db dyn salsa::Database,
+    rng: &mut R,
+    config: &WorldGenConfig,
+    aliases: &[crate::context::TypeAlias<'db>],
+) -> (TypeHint<'db>, String) {
+    if !aliases.is_empty() && config.check_probability(rng, config.type_alias_usage_probability) {
+        let alias = &aliases[rng.gen_range(0..aliases.len())];
+        return (alias.type_hint.clone(), alias.name.clone());
+    }
+    let type_hint = gen_type_hint(db, rng, config);
+    let spelling = pretty_type_hint(db, type_hint.clone());
+    (type_hint, spelling)
+}
+
 /// Generate a type alias definition.
 ///
 /// Returns the TypeAlias name and its underlying type.

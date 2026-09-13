@@ -15,6 +15,7 @@ datalove-datafun-ast.path = "../datalove-datafun-ast"
 
 [dev-dependencies]
 datalove-datafun.path = "../datalove-datafun"
+datalove-datafun-parser.path = "../datalove-datafun-parser"
 datalove-datafun-pkg.path = "../datalove-datafun-pkg"
 datalove-datafun-tycheck.path = "../datalove-datafun-tycheck"
 datalove-datafun-resolve.path = "../datalove-datafun-resolve"

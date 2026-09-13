@@ -1,9 +1,10 @@
 //! Statement generation.
 
 use rand::Rng;
+use datalove_datalit::ast::TypeHint;
 use crate::config::WorldGenConfig;
 use crate::context::{GenContext, Variable, is_linear_type};
-use crate::gen_type::gen_type_hint;
+use crate::gen_type::gen_type_hint_and_spelling;
 use crate::gen_expr::{gen_expr, gen_bool_expr};
 use crate::pretty::pretty_type_hint;
 
@@ -64,9 +65,9 @@ pub fn gen_let<'db, R: Rng>(
     let name = format!("v{}", *var_counter);
     *var_counter += 1;
 
-    let type_hint = gen_type_hint(db, rng, config);
+    let (type_hint, type_str) =
+        gen_type_hint_and_spelling(db, rng, config, &ctx.type_aliases);
     let value = gen_expr(db, rng, type_hint.clone(), config, ctx);
-    let type_str = pretty_type_hint(db, type_hint.clone());
 
     ctx.variables.push(Variable {
         name: name.clone(),
@@ -89,9 +90,9 @@ pub fn gen_var<'db, R: Rng>(
     let name = format!("v{}", *var_counter);
     *var_counter += 1;
 
-    let type_hint = gen_type_hint(db, rng, config);
+    let (type_hint, type_str) =
+        gen_type_hint_and_spelling(db, rng, config, &ctx.type_aliases);
     let value = gen_expr(db, rng, type_hint.clone(), config, ctx);
-    let type_str = pretty_type_hint(db, type_hint.clone());
 
     ctx.variables.push(Variable {
         name: name.clone(),
@@ -170,8 +171,22 @@ pub fn gen_if<'db, R: Rng>(
     var_counter: &mut usize,
     indent: &str,
 ) -> String {
-    let condition = gen_bool_expr(db, rng, config, ctx);
-    let mut result = format!("{}if {}\n", indent, condition);
+    // An `if` over an option may bind what is inside it, which is the only way
+    // the language has of getting at that payload. The binding
+    // moves out of what it destructured -- `if x |value|` leaves `x` moved
+    // from on both paths -- so the scrutinee has to be one this body is
+    // allowed to move, and it is consumed before the branches are written.
+    let binding = gen_if_binding(db, rng, config, ctx, var_counter);
+
+    let mut result = match &binding {
+        Some((scrutinee, name, _)) => {
+            format!("{}if {} |{}|\n", indent, scrutinee, name)
+        }
+        Option::None => {
+            let condition = gen_bool_expr(db, rng, config, ctx);
+            format!("{}if {}\n", indent, condition)
+        }
+    };
 
     // Generate then-body.
     let inner_indent = format!("{}  ", indent);
@@ -193,6 +208,16 @@ pub fn gen_if<'db, R: Rng>(
         .collect();
     for name in &outer_linear {
         ctx.loop_protect_variable(name);
+    }
+
+    // What the binding named is in scope for the then branch alone, and the
+    // restore below is what takes it back out again.
+    if let Some((_, name, payload_type)) = &binding {
+        ctx.variables.push(Variable {
+            name: name.clone(),
+            type_hint: payload_type.clone(),
+            is_mutable: false,
+        });
     }
 
     let then_stmt_count = rng.gen_range(1..=2);
@@ -230,6 +255,52 @@ pub fn gen_if<'db, R: Rng>(
     ctx.control_flow_depth -= 1;
     result.push_str(&format!("{}end if", indent));
     result
+}
+
+/// Pick an option for an `if` to destructure, if there is one to pick.
+///
+/// Returns what to name in the condition, what to call what comes out, and the
+/// type that has. The scrutinee is marked consumed here, because the binding
+/// moves out of it whichever way the branch goes.
+///
+/// A variable the body is only borrowing -- one declared outside a loop, say
+/// -- cannot be destructured, since that would be a move. Those are the ones
+/// already marked loop-protected, and `variables_of_type` leaves them out.
+fn gen_if_binding<'db, R: Rng>(
+    db: &'db dyn salsa::Database,
+    rng: &mut R,
+    config: &WorldGenConfig,
+    ctx: &mut GenContext<'db>,
+    var_counter: &mut usize,
+) -> Option<(String, String, TypeHint<'db>)> {
+    if !config.check_probability(rng, config.if_binding_probability) {
+        return Option::None;
+    }
+
+    let candidates: Vec<(String, TypeHint<'db>)> = ctx
+        .variables
+        .iter()
+        .filter(|v| !ctx.is_consumed(&v.name) && !ctx.is_loop_protected(&v.name))
+        // An option only. Destructuring a result binds what went wrong as well,
+        // in an `else |err|`, and without that the typechecker refuses it
+        // outright -- `ResultRequiresErrorBinding`. That form is worth writing
+        // too; it is not written here.
+        .filter_map(|v| match &v.type_hint {
+            TypeHint::Option(o) => Some((v.name.clone(), (*o.inner_type).clone())),
+            _ => Option::None,
+        })
+        .collect();
+
+    if candidates.is_empty() {
+        return Option::None;
+    }
+
+    let (scrutinee, payload_type) = candidates[rng.gen_range(0..candidates.len())].clone();
+    ctx.consume_variable(&scrutinee);
+
+    let name = format!("v{}", *var_counter);
+    *var_counter += 1;
+    Some((scrutinee, name, payload_type))
 }
 
 /// Generate a loop statement.

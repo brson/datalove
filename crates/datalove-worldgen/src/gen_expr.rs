@@ -16,6 +16,39 @@ fn supports_bare_arithmetic(type_hint: TypeHint<'_>) -> bool {
     matches!(type_hint, TypeHint::F32 | TypeHint::F64 | TypeHint::Int)
 }
 
+/// Whether a type is one of the ten fixed-width integers.
+fn is_fixed_int(type_hint: &TypeHint<'_>) -> bool {
+    matches!(
+        type_hint,
+        TypeHint::U8 | TypeHint::I8 | TypeHint::U16 | TypeHint::I16
+            | TypeHint::U32 | TypeHint::I32 | TypeHint::U64 | TypeHint::I64
+            | TypeHint::Index | TypeHint::Offset
+    )
+}
+
+/// Whether a fixed-width integer is signed, which unary `-!` and `-?` need.
+fn is_signed_fixed_int(type_hint: &TypeHint<'_>) -> bool {
+    matches!(
+        type_hint,
+        TypeHint::I8 | TypeHint::I16 | TypeHint::I32 | TypeHint::I64 | TypeHint::Offset
+    )
+}
+
+/// Which of the two overflow-handling forms a body may write, if either.
+///
+/// A fixed integer has no bare arithmetic. What it has is checked -- `+!`,
+/// which early-returns an error where it overflows -- and optional -- `+?`,
+/// which early-returns `none`. Each is an early return of its own shape, so
+/// which one is available is decided by what the function it sits in returns,
+/// and in a script fragment, which returns nothing, neither is.
+fn overflow_form(return_type: &Option<TypeHint<'_>>) -> Option<&'static str> {
+    match return_type {
+        Some(TypeHint::Result(_)) => Some("!"),
+        Some(TypeHint::Option(_)) => Some("?"),
+        _ => Option::None,
+    }
+}
+
 /// Check if a type supports unary negation.
 ///
 /// Only floats and bigints support bare unary `-`.
@@ -36,11 +69,10 @@ pub fn gen_expr<'db, R: Rng>(
     config: &WorldGenConfig,
     ctx: &mut GenContext<'db>,
 ) -> String {
-    // Check if we can use a variable.
+    // What could stand here, each rolled for on its own.
     let has_matching_vars = !ctx.variables_of_type(db, type_hint.clone()).is_empty();
     let can_use_var = has_matching_vars && rng.gen_bool(0.4);
 
-    // Check if we can call a function.
     // Clone the matching functions to avoid borrow issues.
     let type_hint_for_filter = type_hint.clone();
     let matching_fns: Vec<FunctionSig<'db>> = ctx.callable_functions()
@@ -56,53 +88,57 @@ pub fn gen_expr<'db, R: Rng>(
     let can_call_fn = !matching_fns.is_empty()
         && config.check_probability(rng, config.function_call_probability);
 
-    // Check if we can generate an arithmetic expression.
     let can_arith = supports_bare_arithmetic(type_hint.clone())
         && config.check_probability(rng, config.arithmetic_probability);
 
-    if can_use_var && !can_call_fn && !can_arith {
-        // Use a variable.
-        let matching_vars = ctx.variables_of_type(db, type_hint.clone());
-        if matching_vars.is_empty() {
-            return gen_literal(db, rng, type_hint, config);
-        }
-        let var_name = matching_vars[rng.gen_range(0..matching_vars.len())].name.clone();
-        ctx.consume_variable(&var_name);
-        var_name
-    } else if can_call_fn && !can_use_var && !can_arith {
-        // Call a function.
-        let func = &matching_fns[rng.gen_range(0..matching_fns.len())];
-        gen_function_call(db, rng, func, config, ctx)
-    } else if can_arith && !can_use_var && !can_call_fn {
-        // Generate arithmetic expression.
-        gen_arithmetic_expr(db, rng, type_hint, config, ctx)
-    } else if can_use_var || can_call_fn || can_arith {
-        // Multiple options available, choose randomly.
-        let mut options = Vec::new();
-        if can_use_var { options.push(0); }
-        if can_call_fn { options.push(1); }
-        if can_arith { options.push(2); }
-
-        match options[rng.gen_range(0..options.len())] {
-            0 => {
-                let matching_vars = ctx.variables_of_type(db, type_hint.clone());
-                if matching_vars.is_empty() {
-                    return gen_literal(db, rng, type_hint, config);
-                }
-                let var_name = matching_vars[rng.gen_range(0..matching_vars.len())].name.clone();
-                ctx.consume_variable(&var_name);
-                var_name
-            }
-            1 => {
-                let func = &matching_fns[rng.gen_range(0..matching_fns.len())];
-                gen_function_call(db, rng, func, config, ctx)
-            }
-            2 => gen_arithmetic_expr(db, rng, type_hint, config, ctx),
-            _ => unreachable!(),
-        }
+    // A fixed integer has no bare arithmetic. What it has is the checked kind
+    // and the optional kind, each of which early-returns through the enclosing
+    // function, so which one is available -- if either -- is decided by what
+    // that function returns.
+    let overflow_mark = if is_fixed_int(&type_hint)
+        && config.check_probability(rng, config.arithmetic_probability)
+    {
+        overflow_form(&ctx.return_type)
     } else {
-        // Generate a literal using datalit.
-        gen_literal(db, rng, type_hint, config)
+        Option::None
+    };
+
+    enum Choice {
+        Variable,
+        Call,
+        Arithmetic,
+        OverflowArithmetic,
+    }
+
+    let mut choices = Vec::new();
+    if can_use_var { choices.push(Choice::Variable); }
+    if can_call_fn { choices.push(Choice::Call); }
+    if can_arith { choices.push(Choice::Arithmetic); }
+    if overflow_mark.is_some() { choices.push(Choice::OverflowArithmetic); }
+
+    if choices.is_empty() {
+        return gen_literal(db, rng, type_hint, config);
+    }
+
+    match choices.remove(rng.gen_range(0..choices.len())) {
+        Choice::Variable => {
+            let matching_vars = ctx.variables_of_type(db, type_hint.clone());
+            if matching_vars.is_empty() {
+                return gen_literal(db, rng, type_hint, config);
+            }
+            let var_name = matching_vars[rng.gen_range(0..matching_vars.len())].name.clone();
+            ctx.consume_variable(&var_name);
+            var_name
+        }
+        Choice::Call => {
+            let func = &matching_fns[rng.gen_range(0..matching_fns.len())];
+            gen_function_call(db, rng, func, config, ctx)
+        }
+        Choice::Arithmetic => gen_arithmetic_expr(db, rng, type_hint, config, ctx),
+        Choice::OverflowArithmetic => {
+            let mark = overflow_mark.expect("a choice only offered when there is a mark");
+            gen_overflow_arith_expr(db, rng, type_hint, mark, config, ctx)
+        }
     }
 }
 
@@ -163,6 +199,51 @@ fn gen_arithmetic_expr<'db, R: Rng>(
         };
         format!("{} {} {}", lhs_str, op, rhs_str)
     }
+}
+
+/// Write a checked or optional arithmetic expression on a fixed integer.
+///
+/// `mark` is `!` or `?`. Both forms have the type of their operands -- the
+/// overflow leaves through the function's return rather than through the
+/// expression -- so this answers for the type it was asked for.
+fn gen_overflow_arith_expr<'db, R: Rng>(
+    db: &'db dyn salsa::Database,
+    rng: &mut R,
+    type_hint: TypeHint<'db>,
+    mark: &str,
+    config: &WorldGenConfig,
+    ctx: &GenContext<'db>,
+) -> String {
+    // Unary negation is for the signed ones only.
+    if is_signed_fixed_int(&type_hint) && rng.gen_bool(0.35) {
+        let operand = gen_overflow_operand(db, rng, type_hint, config, ctx);
+        return format!("-{}{}", mark, operand);
+    }
+
+    let op = ["+", "-", "*", "/"][rng.gen_range(0..4)];
+    let lhs = gen_overflow_operand(db, rng, type_hint.clone(), config, ctx);
+    let rhs = gen_overflow_operand(db, rng, type_hint, config, ctx);
+    format!("{} {}{} {}", lhs, op, mark, rhs)
+}
+
+/// An operand for the above, parenthesized so it can sit beside an operator.
+///
+/// A variable where there is one of the right type, since a fixed integer is
+/// copied rather than moved and using one costs nothing.
+fn gen_overflow_operand<'db, R: Rng>(
+    db: &'db dyn salsa::Database,
+    rng: &mut R,
+    type_hint: TypeHint<'db>,
+    config: &WorldGenConfig,
+    ctx: &GenContext<'db>,
+) -> String {
+    let borrowable = ctx.variables_of_type_for_borrow(db, type_hint.clone());
+    if !borrowable.is_empty() && rng.gen_bool(0.4) {
+        return borrowable[rng.gen_range(0..borrowable.len())].name.clone();
+    }
+    let type_str = pretty_type_hint(db, type_hint.clone());
+    let value = ast_gen::gen_expr_matching_type(db, rng, type_hint, &config.type_config, 0);
+    format!("(: {} / {})", type_str, pretty_expr(db, value))
 }
 
 /// Arithmetic operand - either a literal or a variable name.
