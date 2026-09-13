@@ -4,7 +4,7 @@ use rand::Rng;
 use datalove_datalit::ast::TypeHint;
 use datalove_datalit::ast_gen;
 use crate::config::WorldGenConfig;
-use crate::context::{GenContext, FunctionSig, types_match};
+use crate::context::{GenContext, FunctionSig, Param, ParamMode, is_linear_type, types_match};
 use crate::gen_type::{gen_bool_type, gen_u32_type};
 use crate::pretty::{pretty_expr, pretty_type_hint};
 
@@ -83,6 +83,9 @@ pub fn gen_expr<'db, R: Rng>(
                 false
             }
         })
+        // And whose parameters this body can supply. A `ref`, a `mut` or an
+        // `out` wants a binding the caller already has.
+        .filter(|f| can_call(db, f, ctx))
         .cloned()
         .collect();
     let can_call_fn = !matching_fns.is_empty()
@@ -103,11 +106,43 @@ pub fn gen_expr<'db, R: Rng>(
         Option::None
     };
 
+    // A field of a struct or a tuple already in scope. Only a copy field can
+    // be projected -- taking a heap one out would move it, and the typechecker
+    // says so -- which is the whole of the rule.
+    let projections = if is_linear_type(&type_hint) {
+        Vec::new()
+    } else {
+        projection_candidates(db, &type_hint, ctx)
+    };
+
+    // An element of a collection already in scope, by the same copy rule, and
+    // the same early return as the overflow arithmetic: `l[i]?` leaves through
+    // the function's return where the index is out of bounds.
+    //
+    // What decides the mark here is only what the function returns -- unlike
+    // the arithmetic above, which also wants a fixed integer.
+    let early_return_mark = overflow_form(&ctx.return_type);
+    let index_candidates = match (is_linear_type(&type_hint), early_return_mark) {
+        (false, Some(_)) => index_candidates(db, &type_hint, ctx),
+        _ => Vec::new(),
+    };
+
+    // Something in scope that has to be unwrapped to get at what is inside it,
+    // which early-returns through the function the same way. `v?` moves out of
+    // `v`, so whatever is picked is consumed.
+    let unwrappable = match early_return_mark {
+        Some(mark) => unwrap_candidates(db, &type_hint, mark, ctx),
+        Option::None => Vec::new(),
+    };
+
     enum Choice {
         Variable,
         Call,
         Arithmetic,
         OverflowArithmetic,
+        Projection,
+        Index,
+        Unwrap,
     }
 
     let mut choices = Vec::new();
@@ -115,6 +150,15 @@ pub fn gen_expr<'db, R: Rng>(
     if can_call_fn { choices.push(Choice::Call); }
     if can_arith { choices.push(Choice::Arithmetic); }
     if overflow_mark.is_some() { choices.push(Choice::OverflowArithmetic); }
+    if !projections.is_empty() && config.check_probability(rng, config.projection_probability) {
+        choices.push(Choice::Projection);
+    }
+    if !index_candidates.is_empty() && config.check_probability(rng, config.projection_probability) {
+        choices.push(Choice::Index);
+    }
+    if !unwrappable.is_empty() && config.check_probability(rng, config.projection_probability) {
+        choices.push(Choice::Unwrap);
+    }
 
     if choices.is_empty() {
         return gen_literal(db, rng, type_hint, config);
@@ -139,7 +183,116 @@ pub fn gen_expr<'db, R: Rng>(
             let mark = overflow_mark.expect("a choice only offered when there is a mark");
             gen_overflow_arith_expr(db, rng, type_hint, mark, config, ctx)
         }
+        Choice::Projection => {
+            projections[rng.gen_range(0..projections.len())].clone()
+        }
+        Choice::Index => {
+            let mark = early_return_mark.expect("a choice only offered when there is a mark");
+            let (container, key) =
+                index_candidates[rng.gen_range(0..index_candidates.len())].clone();
+            format!("{}[{}]{}", container, key, mark)
+        }
+        Choice::Unwrap => {
+            let mark = early_return_mark.expect("a choice only offered when there is a mark");
+            let name = unwrappable[rng.gen_range(0..unwrappable.len())].clone();
+            ctx.consume_variable(&name);
+            format!("{}{}", name, mark)
+        }
     }
+}
+
+/// Every binding in scope that `?` or `!` would take the wanted type out of.
+///
+/// Which of the two is decided by what the enclosing function returns, and it
+/// has to be the matching one: `?` unwraps an option and leaves through a
+/// `none`, `!` unwraps a result and leaves through an error.
+fn unwrap_candidates<'db>(
+    db: &'db dyn salsa::Database,
+    wanted: &TypeHint<'db>,
+    mark: &str,
+    ctx: &GenContext<'db>,
+) -> Vec<String> {
+    ctx.variables
+        .iter()
+        .filter(|v| !ctx.is_consumed(&v.name) && !ctx.is_loop_protected(&v.name))
+        .filter_map(|v| match (&v.type_hint, mark) {
+            (TypeHint::Option(o), "?") => Some((v.name.clone(), (*o.inner_type).clone())),
+            (TypeHint::Result(r), "!") => Some((v.name.clone(), (*r.inner_type).clone())),
+            _ => Option::None,
+        })
+        .filter(|(_, inner)| types_match(db, inner.clone(), wanted.clone()))
+        .map(|(name, _)| name)
+        .collect()
+}
+
+/// Every `v.field` in scope that has the wanted type.
+///
+/// Written out rather than picked from, because whether a field has the type
+/// wanted is only known by looking at every field of every struct and tuple in
+/// reach, and there are few enough of each that listing them is the clearest
+/// way to say it.
+fn projection_candidates<'db>(
+    db: &'db dyn salsa::Database,
+    wanted: &TypeHint<'db>,
+    ctx: &GenContext<'db>,
+) -> Vec<String> {
+    let mut found = Vec::new();
+    for var in ctx.variables.iter().filter(|v| !ctx.is_consumed(&v.name)) {
+        match &var.type_hint {
+            TypeHint::AnonTuple(t) => {
+                for (i, field) in t.fields.iter().enumerate() {
+                    if types_match(db, field.clone(), wanted.clone()) {
+                        found.push(format!("{}.{}", var.name, i));
+                    }
+                }
+            }
+            TypeHint::AnonStruct(t) => {
+                for field in t.fields.iter() {
+                    if types_match(db, (*field.type_hint).clone(), wanted.clone()) {
+                        found.push(format!("{}.{}", var.name, field.name.text(db)));
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+    found
+}
+
+/// Every collection in scope holding the wanted type, with something to look
+/// it up by.
+///
+/// A list and a tensor are indexed by an `index`, which may be past the end --
+/// that is the point of the early return. A map is indexed by a key, and this
+/// only offers one where the key type is a copy type, so that writing the key
+/// costs nothing and moves nothing.
+fn index_candidates<'db>(
+    db: &'db dyn salsa::Database,
+    wanted: &TypeHint<'db>,
+    ctx: &GenContext<'db>,
+) -> Vec<(String, String)> {
+    let mut found = Vec::new();
+    for var in ctx.variables.iter().filter(|v| !ctx.is_consumed(&v.name)) {
+        let (element, key) = match &var.type_hint {
+            TypeHint::List(t) => ((*t.element_type).clone(), Option::None),
+            TypeHint::Tensor(t) => ((*t.element_type).clone(), Option::None),
+            TypeHint::Map(t) => ((*t.value_type).clone(), Some((*t.key_type).clone())),
+            _ => continue,
+        };
+        if !types_match(db, element, wanted.clone()) {
+            continue;
+        }
+        match key {
+            // An index past the end is as interesting as one inside it.
+            Option::None => found.push((var.name.clone(), ": index / 0".to_string())),
+            Some(key_ty) if !is_linear_type(&key_ty) => {
+                let written = pretty_type_hint(db, key_ty.clone());
+                found.push((var.name.clone(), format!(": {} / 0", written)));
+            }
+            Some(_) => {}
+        }
+    }
+    found
 }
 
 /// Generate an arithmetic expression (binary or unary).
@@ -341,6 +494,49 @@ fn gen_literal<'db, R: Rng>(
 }
 
 /// Generate a function call expression.
+/// Whether this call can be written from here.
+///
+/// An `in` parameter takes whatever the expression generator makes, so a
+/// function of those is always callable. The other three want something the
+/// caller already has: a `ref` wants a binding to borrow, and a `mut` or an
+/// `out` wants a `var` to write through. Two of them wanting the same one is
+/// refused as well, so each takes a different name.
+pub fn can_call<'db>(
+    db: &'db dyn salsa::Database,
+    func: &FunctionSig<'db>,
+    ctx: &GenContext<'db>,
+) -> bool {
+    let mut spoken_for: Vec<String> = Vec::new();
+    for param in &func.params {
+        if param.mode == ParamMode::In {
+            continue;
+        }
+        let candidate = argument_candidates(db, param, ctx)
+            .into_iter()
+            .find(|name| !spoken_for.contains(name));
+        match candidate {
+            Some(name) => spoken_for.push(name),
+            None => return false,
+        }
+    }
+    true
+}
+
+/// The bindings a parameter of this mode would take, by name.
+fn argument_candidates<'db>(
+    db: &'db dyn salsa::Database,
+    param: &Param<'db>,
+    ctx: &GenContext<'db>,
+) -> Vec<String> {
+    ctx.variables
+        .iter()
+        .filter(|v| !ctx.is_consumed(&v.name))
+        .filter(|v| !param.mode.wants_a_mutable_binding() || v.is_mutable)
+        .filter(|v| types_match(db, v.type_hint.clone(), param.type_hint.clone()))
+        .map(|v| v.name.clone())
+        .collect()
+}
+
 fn gen_function_call<'db, R: Rng>(
     db: &'db dyn salsa::Database,
     rng: &mut R,
@@ -348,10 +544,31 @@ fn gen_function_call<'db, R: Rng>(
     config: &WorldGenConfig,
     ctx: &mut GenContext<'db>,
 ) -> String {
+    // The borrowed and written ones are picked first, because which binding
+    // each takes has to be settled before an `in` argument is allowed to
+    // consume one of them.
+    let mut spoken_for: Vec<(usize, String)> = Vec::new();
+    for (i, param) in func.params.iter().enumerate() {
+        if param.mode == ParamMode::In {
+            continue;
+        }
+        let taken: Vec<String> = spoken_for.iter().map(|(_, n)| n.clone()).collect();
+        let candidates: Vec<String> = argument_candidates(db, param, ctx)
+            .into_iter()
+            .filter(|name| !taken.contains(name))
+            .collect();
+        let name = candidates[rng.gen_range(0..candidates.len())].clone();
+        spoken_for.push((i, name));
+    }
+
     let args: Vec<String> = func
         .params
         .iter()
-        .map(|(_, param_type)| gen_expr(db, rng, param_type.clone(), config, ctx))
+        .enumerate()
+        .map(|(i, param)| match spoken_for.iter().find(|(j, _)| *j == i) {
+            Some((_, name)) => format!("{}{}", param.mode.marker(), name),
+            Option::None => gen_expr(db, rng, param.type_hint.clone(), config, ctx),
+        })
         .collect();
 
     format!("{}({})", func.name, args.join(", "))
@@ -581,7 +798,7 @@ mod tests {
         let mut ctx = GenContext::new();
         ctx.functions.push(FunctionSig {
             name: "get_value".to_string(),
-            params: vec![("flag".to_string(), param_ty)],
+            params: vec![Param { name: "flag".to_string(), type_hint: param_ty, mode: ParamMode::In }],
             return_type: Some(ret_ty.clone()),
         });
 

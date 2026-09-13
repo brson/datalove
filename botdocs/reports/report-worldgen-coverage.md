@@ -88,20 +88,43 @@ consumed before either branch is written. The result form wants an `else |err|`
 as well, which is not generated, and the typechecker refuses the binding
 without it.
 
-Thin: `if` (39), `loop` (37), `set` statements (71), `and`/`or`/`xor`, `.>`,
-`.>=`, `.=`, `.!=`, and each of the overflow operators.
+**All four parameter modes.** `ref`, `mut` and `out` each ask something of the
+call site -- a `ref` wants a binding to borrow, a `mut` or an `out` wants a
+`var` to write through -- so a function taking one is only callable from
+somewhere that has it, and `can_call` is what decides that. An `out` parameter
+holds nothing until the body writes it, so the body opens by doing that.
 
-Still never generated, 19 of roughly 110 things counted:
+**Field projection and indexing**, both of which the typechecker allows only
+for a copy type: taking a heap field or element out would move it. `v.a` and
+`v[i]?` parse as a place with a step rather than as `FieldProj` or `Index`,
+which are for a base that is not a place, so the roll counts them under two
+shapes instead.
+
+**`v?` and `v!`**, which move out of what they unwrap.
+
+**More functions returning an option or a result.** What a function returns is
+what decides whether its body may write anything that early-returns, and with
+plain return types only, seventeen expressions in four hundred and sixty were
+written anywhere that could. At about a third, the checked and optional
+arithmetic went from one-to-six occurrences each to fifteen-to-twenty-seven,
+and `?` began to appear at all.
+
+Thin: `if` (39), `loop` (56), `set` statements (71), `and`/`or`/`xor`, `.>`,
+`.>=`, `.=`, `.!=`, places with an index step (3), `if` with a binding (5).
+
+Still never generated, 13 of roughly 110 things counted:
 
 | category | what |
 |---|---|
 | statements | `const`, `continue`, `native fun`, `match` |
-| expressions | postfix `?`, postfix `!`, field projection, indexing, hex literals, `table`, atoms, `term`, enum literals, `icall` |
-| parameters | `out`, `mut` |
+| expressions | postfix `!`, a projection or an index off something that is not a place, hex literals, `table`, atoms, `term`, enum literals, `icall` |
 | types | `atom`, `term`, `enum`, `table` |
 | shapes | `if r \|value\| else \|err\|` |
 
 ## What it found
+
+Four compiler bugs, each from a construct the generator had only just started
+writing.
 
 **A set's leaves were strung together by a pointer nobody initialized.**
 Fixed. `alloc_leaf_node` wrote the node's tag and its length and left `next`
@@ -116,10 +139,38 @@ The way in was a tensor handed to a generic, which boxes it on the heap and
 frees the box once it is unpacked -- a forty-byte block holding, among other
 things, the tensor's element count of one. The next set's leaf was cut from
 that block, read its `next` as the address `0x1`, and took the printer down.
+Seed 55448; `133_set_leaf_chain`.
 
-Found at seed 55448, by a corpus that had only just started writing tensors
-through generics. `133_set_leaf_chain` covers it, with a list and a map in
-place of the tensor as well.
+**An index whose answer nobody read took the out-of-bounds arm.** Fixed.
+`l[i]?` lowers to a get and a branch on whether the index was in bounds, and
+the get defines two values: the element and that flag. Dead-code removal asked
+each instruction what it defined and was told about the element only, so a get
+whose element nothing read was dropped and the branch on the flag was kept,
+reading a value nothing defines. `UnwrapOption`, `UnwrapResult` and the two
+checked arithmetic instructions were already listed as defining a flag as
+well; the three collection gets are the same shape and were not.
+`134_index_flag_liveness`.
+
+**A map indexed by a temporary leaked it.** Fixed. A get borrows its key, so
+anything made to hand one over is the expression's to let go of -- on both
+ways out, since the index may be out of bounds. `m["a"]` leaked the `"a"`.
+Both places that lower an index had it.
+
+**An early return from inside a branch let go of nothing.** Fixed, and the
+worst of the four. An early return has to drop everything the function still
+owns, and which bindings those are is worked out per statement and looked up
+by the statement's id. Ownership analysis numbers every statement it walks,
+nested ones included; lowering set the current id from the statement's
+position among the *top-level* ones. The two agree exactly as long as nothing
+nests, and an `if` with a statement in it puts them out of step for the rest of
+the function.
+
+So a `?`, a `!`, or a checked overflow inside a branch looked up the enclosing
+statement's drops, found none, and left without dropping anything. The same
+shape at the top of a body was right all along, which is what made the early
+return look like it worked. `806_int_slot_reassign_loop` had been recording the
+wrong answer -- its IR dump gained the two drops the overflow path owed --
+and `135_nested_early_return_drops` covers the shapes.
 
 ## What this still does not tell us
 
@@ -142,18 +193,12 @@ text.
 
 ## Next
 
-In rough order of what the compiler is most likely to have got wrong:
-
-1. `mut` and `out` parameters, and `match`. New lowering paths, and the
-   ownership analysis has the most to say about them.
-2. Postfix `?` and `!`, `if r |value| else |err|`, field projection, indexing.
-   Fallible and place-forming paths.
+1. `match`, which is the largest thing left and has its own lowering.
+2. `if r |value| else |err|`, postfix `!`, and a projection or an index off
+   something that is not a place.
 3. `const`, enums, terms, tables, atoms.
-4. Raise the `if` and `loop` weights. They are where D007 and D008 and the
-   exit drops live, and they appear in an eighth of seeds.
-5. Make the overflow operators less rare, which wants more functions returning
-   a result or an option, or a body that reaches for a fixed integer when it
-   is in one.
-6. Log the silent fallbacks. `gen_set` and friends fall back to `gen_let` when
+4. Raise the `if` and `loop` weights. They are where D007 and D008 and the exit
+   drops live, and the four bugs above say what nesting is worth.
+5. Log the silent fallbacks. `gen_set` and friends fall back to `gen_let` when
    they cannot proceed, so a construct can be rare because it keeps failing to
    build rather than because it was weighted that way, and nothing says which.

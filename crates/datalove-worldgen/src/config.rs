@@ -39,6 +39,19 @@ pub struct WorldGenConfig {
     /// testing a condition, where there is one in scope to destructure.
     pub if_binding_probability: u32,
 
+    /// Probability that a parameter is passed by something other than `in`
+    /// (0-100 percent). Which of the other three is then chosen evenly.
+    pub param_mode_probability: u32,
+
+    /// Probability of reaching for a field of something in scope, or an
+    /// element of a collection in scope, where one has the wanted type.
+    pub projection_probability: u32,
+
+    /// Probability that a function's return type is an option or a result
+    /// over what it would otherwise have been. What a function returns is what
+    /// says whether its body may write anything that early-returns.
+    pub fallible_return_probability: u32,
+
     /// Probability of using a type alias instead of a structural type (0-100 percent).
     pub type_alias_usage_probability: u32,
 
@@ -84,6 +97,9 @@ impl Default for WorldGenConfig {
             if_probability: 30,
             loop_probability: 20,
             if_binding_probability: 40,
+            param_mode_probability: 35,
+            projection_probability: 40,
+            fallible_return_probability: 35,
             type_alias_usage_probability: 30,
             function_call_probability: 30,
             arithmetic_probability: 30,

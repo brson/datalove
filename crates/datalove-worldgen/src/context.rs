@@ -12,11 +12,53 @@ pub struct Variable<'db> {
     pub is_mutable: bool,
 }
 
+/// How a parameter is passed, which decides what may be done with it.
+///
+/// Every argument repeats its parameter's mode at the call, so a call can only
+/// be written where the caller has something the mode will take: a `mut` or an
+/// `out` wants a `var`, and neither will take an expression.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum ParamMode {
+    /// `x: T`. The caller hands the value over and the callee consumes it.
+    In,
+    /// `ref x: T`. The callee reads it and the caller keeps it.
+    Ref,
+    /// `mut x: T`. The callee may write it and the caller keeps it.
+    Mut,
+    /// `out x: T`. The callee must write it before it returns.
+    Out,
+}
+
+impl ParamMode {
+    /// How the mode is written, in a signature or before an argument.
+    pub fn marker(&self) -> &'static str {
+        match self {
+            ParamMode::In => "",
+            ParamMode::Ref => "ref ",
+            ParamMode::Mut => "mut ",
+            ParamMode::Out => "out ",
+        }
+    }
+
+    /// Whether the caller has to hand over a `var` rather than a value.
+    pub fn wants_a_mutable_binding(&self) -> bool {
+        matches!(self, ParamMode::Mut | ParamMode::Out)
+    }
+}
+
+/// One parameter of a generated function.
+#[derive(Clone)]
+pub struct Param<'db> {
+    pub name: String,
+    pub type_hint: TypeHint<'db>,
+    pub mode: ParamMode,
+}
+
 /// A function signature.
 #[derive(Clone)]
 pub struct FunctionSig<'db> {
     pub name: String,
-    pub params: Vec<(String, TypeHint<'db>)>,
+    pub params: Vec<Param<'db>>,
     pub return_type: Option<TypeHint<'db>>,
 }
 
@@ -522,7 +564,7 @@ mod tests {
         // Imported function also named "compute" (should be shadowed).
         ctx.imported_functions.push(FunctionSig {
             name: "compute".to_string(),
-            params: vec![("x".to_string(), TypeHint::U32)],
+            params: vec![Param { name: "x".to_string(), type_hint: TypeHint::U32, mode: ParamMode::In }],
             return_type: Some(TypeHint::U32),
         });
 

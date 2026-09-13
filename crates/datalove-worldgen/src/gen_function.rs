@@ -1,11 +1,30 @@
 //! Function generation.
 
 use rand::Rng;
+use datalove_datalit::ast::{TypeHint, TypeHintOption, TypeHintResult};
 use crate::config::WorldGenConfig;
-use crate::context::{GenContext, FunctionSig, Variable};
+use crate::context::{GenContext, FunctionSig, Param, ParamMode, Variable};
 use crate::gen_type::gen_type_hint;
+use crate::gen_expr::gen_expr;
 use crate::gen_stmt::{gen_body_statement, gen_ret};
 use crate::pretty::pretty_type_hint;
+
+/// Pick how a parameter is passed.
+///
+/// Mostly `in`, which is the one with no marker and the one a call can always
+/// satisfy. The other three ask something of the call site -- a `ref` wants a
+/// binding rather than an expression, and a `mut` or an `out` wants a `var` --
+/// so a function that takes one can only be called from somewhere that has it.
+fn gen_param_mode<R: Rng>(rng: &mut R, config: &WorldGenConfig) -> ParamMode {
+    if !config.check_probability(rng, config.param_mode_probability) {
+        return ParamMode::In;
+    }
+    match rng.gen_range(0..3) {
+        0 => ParamMode::Ref,
+        1 => ParamMode::Mut,
+        _ => ParamMode::Out,
+    }
+}
 
 /// Generate a function signature.
 pub fn gen_function_signature<'db, R: Rng>(
@@ -17,16 +36,31 @@ pub fn gen_function_signature<'db, R: Rng>(
     // Generate 0-3 parameters.
     let param_count = rng.gen_range(0..=3);
     let params: Vec<_> = (0..param_count)
-        .map(|i| {
-            let param_name = format!("p{}", i);
-            let param_type = gen_type_hint(db, rng, config);
-            (param_name, param_type)
+        .map(|i| Param {
+            name: format!("p{}", i),
+            type_hint: gen_type_hint(db, rng, config),
+            mode: gen_param_mode(rng, config),
         })
         .collect();
 
     // Maybe generate a return type (80% of functions have returns).
+    //
+    // Sometimes an option or a result over one. What a function returns is
+    // what decides whether its body may write anything that early-returns --
+    // `?`, `!`, checked arithmetic, a fallible index -- and with plain types
+    // only, seventeen expressions in four hundred and sixty were written
+    // anywhere that could.
     let return_type = if rng.gen_bool(0.8) {
-        Some(gen_type_hint(db, rng, config))
+        let inner = gen_type_hint(db, rng, config);
+        Some(if config.check_probability(rng, config.fallible_return_probability) {
+            if rng.gen_bool(0.5) {
+                TypeHint::Option(TypeHintOption { inner_type: Box::new(inner) })
+            } else {
+                TypeHint::Result(TypeHintResult { inner_type: Box::new(inner) })
+            }
+        } else {
+            inner
+        })
     } else {
         None
     };
@@ -52,7 +86,7 @@ pub fn gen_function<'db, R: Rng>(
     let params_str = sig
         .params
         .iter()
-        .map(|(name, ty)| format!("{}: {}", name, pretty_type_hint(db, ty.clone())))
+        .map(|p| format!("{}{}: {}", p.mode.marker(), p.name, pretty_type_hint(db, p.type_hint.clone())))
         .collect::<Vec<_>>()
         .join(", ");
 
@@ -76,17 +110,32 @@ pub fn gen_function<'db, R: Rng>(
     // where it has to hold, and this context is a fresh one.
     ctx.max_callable_function_index = module_ctx.max_callable_function_index;
 
-    // Add parameters as variables.
-    for (name, ty) in &sig.params {
+    // Add parameters as variables, as far as each mode allows.
+    //
+    // Only an `in` parameter is the body's to move. The other three belong to
+    // the caller, so they are marked the way a loop marks what it may borrow
+    // and not move. A `mut` is also a place the body may write, and an `out`
+    // is a place it *must* write before it returns, which is what the first
+    // statement below does -- until then it holds nothing and cannot be read.
+    let mut lead_statements = Vec::new();
+    let mut var_counter = 0;
+    for param in &sig.params {
+        if param.mode == ParamMode::Out {
+            let value = gen_expr(db, rng, param.type_hint.clone(), config, &mut ctx);
+            lead_statements.push(format!("  set {} = {}", param.name, value));
+        }
         ctx.variables.push(Variable {
-            name: name.clone(),
-            type_hint: ty.clone(),
-            is_mutable: false,
+            name: param.name.clone(),
+            type_hint: param.type_hint.clone(),
+            is_mutable: matches!(param.mode, ParamMode::Mut | ParamMode::Out),
         });
+        if param.mode != ParamMode::In {
+            ctx.loop_protect_variable(&param.name);
+        }
     }
+    lines.extend(lead_statements);
 
     // Generate body statements.
-    let mut var_counter = 0;
     let stmt_count = rng.gen_range(config.statements_per_function.0..=config.statements_per_function.1);
 
     for _ in 0..stmt_count {

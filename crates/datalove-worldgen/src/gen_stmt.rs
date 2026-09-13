@@ -176,7 +176,7 @@ pub fn gen_if<'db, R: Rng>(
     // moves out of what it destructured -- `if x |value|` leaves `x` moved
     // from on both paths -- so the scrutinee has to be one this body is
     // allowed to move, and it is consumed before the branches are written.
-    let binding = gen_if_binding(db, rng, config, ctx, var_counter);
+    let binding = gen_if_binding(rng, config, ctx, var_counter);
 
     let mut result = match &binding {
         Some((scrutinee, name, _)) => {
@@ -267,7 +267,6 @@ pub fn gen_if<'db, R: Rng>(
 /// -- cannot be destructured, since that would be a move. Those are the ones
 /// already marked loop-protected, and `variables_of_type` leaves them out.
 fn gen_if_binding<'db, R: Rng>(
-    db: &'db dyn salsa::Database,
     rng: &mut R,
     config: &WorldGenConfig,
     ctx: &mut GenContext<'db>,

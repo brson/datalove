@@ -96,6 +96,8 @@ const ALL_SHAPES: &[&str] = &[
     "if with an error binding",
     "loop while",
     "bare loop",
+    "place with a field step",
+    "place with an index step",
 ];
 
 /// What the generator does not write yet, and why.
@@ -112,21 +114,21 @@ const NOT_YET_GENERATED: &[(&str, &str, &str)] = &[
     ("statement", "Match", "match is not generated"),
     ("statement", "ParseError", "a parse error means the generator wrote something wrong"),
 
-    ("expr", "TryOption", "postfix `?` is not generated"),
-    ("expr", "TryResult", "postfix `!` is not generated"),
-    ("expr", "FieldProj", "field projection is not generated"),
+    ("expr", "TryResult", "postfix `!` wants a result-typed binding in a function returning a result, which has not coincided"),
+    // `v.a` and `v[i]?` are written, and parse as a place with a step rather
+    // than as these -- which are for a base that is not a place, like `f().0`.
+    // See the two place-step shapes.
+    ("expr", "FieldProj", "a projection off something that is not a place, like `f().0`, is not generated"),
     ("expr", "Hex", "hex literals are not generated"),
     ("expr", "Table", "table literals are not generated"),
     ("expr", "Atom", "atoms are not generated"),
     ("expr", "Term", "terms are not generated"),
     ("expr", "EnumLiteral", "enum literals are not generated"),
-    ("expr", "Index", "indexing is not generated"),
+    ("expr", "Index", "an index off something that is not a place, like `f()[i]?`, is not generated"),
     ("expr", "IntrinsicCall", "`icall` names intrinsics the generator does not know"),
     ("expr", "ParseError", "a parse error means the generator wrote something wrong"),
 
 
-    ("param_mode", "Out", "out parameters are not generated"),
-    ("param_mode", "Mut", "mut parameters are not generated"),
 
 
     ("shape", "if with an error binding", "`if r |value| else |err|`, which a result wants, is not generated"),
@@ -313,7 +315,25 @@ fn walk_expr<'db>(
         }
         ExprFunKind::Term(e) => sub(e.payload, cov),
         ExprFunKind::EnumLiteral(e) => sub(e.variant, cov),
-        ExprFunKind::Atom(_) | ExprFunKind::Place(_) | ExprFunKind::ParseError(_) => {}
+        // A place is a name and the steps taken from it, and the steps are
+        // where a field projection and an indexing actually land: `v.a` and
+        // `v[i]?` parse as a place with a step rather than as `FieldProj` or
+        // `Index`, which are for a base that is not a place. Without this the
+        // roll reports both as never written while the generator writes them.
+        ExprFunKind::Place(place) => {
+            for step in place.steps.iter() {
+                match step {
+                    datalove_datafun_ast::ast::PlaceStep::Field(_) => {
+                        cov.hit("shape", "place with a field step")
+                    }
+                    datalove_datafun_ast::ast::PlaceStep::Index(idx) => {
+                        cov.hit("shape", "place with an index step");
+                        sub(idx.index, cov);
+                    }
+                }
+            }
+        }
+        ExprFunKind::Atom(_) | ExprFunKind::ParseError(_) => {}
     }
 }
 
