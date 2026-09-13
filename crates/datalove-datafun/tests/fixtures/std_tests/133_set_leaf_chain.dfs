@@ -1,0 +1,67 @@
+require module sys/std/set
+
+import set.len
+
+// A set built into memory that held something else first.
+//
+// A set's leaves are strung together by a `next` pointer, and everything that
+// reads one in order walks that chain. A freshly allocated leaf said its tag
+// and its length and left the `next` alone, and what the allocator hands back
+// is not zeroed -- so the chain ended wherever the block it was cut from
+// happened to hold a zero, and walked into whatever it held otherwise.
+//
+// That took a freed block with the right byte non-zero to show, which is why
+// it stood for so long: a set built early in a run gets fresh pages, and fresh
+// pages are zero. The way in was a tensor handed to a generic, which boxes it
+// on the heap and frees the box once it is unpacked again -- a forty-byte
+// block holding, among other things, the tensor's element count of one. The
+// next set's leaf was cut from it, read its `next` as the address `0x1`, and
+// took the printer down with it.
+//
+// So each of these builds a set after something else has been freed. What they
+// hold does not matter; that they are read in order does.
+
+fun through_a_generic<T>(x: T): T
+  ret x
+end fun
+
+// The way it was found. The tensor is boxed to be handed over and the box is
+// freed on the way back, which is the block the set below is cut from.
+fun after_a_tensor(): #{u32}
+  let a: [|u32, 1|] = [| : u32 / 1 |]
+  let b: [|u32, 1|] = through_a_generic(a)
+  ret #{: u32 / 119, : u32 / 54}
+end fun
+
+// The same shape with a list and a map, which box and free the same way.
+fun after_a_list(): #{u32}
+  let a: [u32] = [: u32 / 7, : u32 / 8]
+  let b: [u32] = through_a_generic(a)
+  ret #{: u32 / 3, : u32 / 2, : u32 / 1}
+end fun
+
+fun after_a_map(): #{string}
+  let a: %{u32 = string} = %{: u32 / 1 = : string / "one"}
+  let b: %{u32 = string} = through_a_generic(a)
+  ret #{"c", "a", "b"}
+end fun
+
+// Enough elements to want more than one leaf, so the chain is walked rather
+// than just begun.
+fun a_longer_one(): #{u32}
+  let a: [|u32, 1|] = [| : u32 / 1 |]
+  let b: [|u32, 1|] = through_a_generic(a)
+  ret #{: u32 / 9, : u32 / 1, : u32 / 8, : u32 / 2, : u32 / 7, : u32 / 3,
+        : u32 / 6, : u32 / 4, : u32 / 5, : u32 / 0}
+end fun
+
+let plain = after_a_tensor()
+let from_list = after_a_list()
+let from_map = after_a_map()
+let longer = a_longer_one()
+
+// Counted as well as printed, since a walk that stops early counts short.
+let counts = (len(ref plain), len(ref from_list), len(ref from_map),
+              len(ref longer))
+
+let output = (plain, from_list, from_map, longer, counts)

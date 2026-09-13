@@ -101,6 +101,14 @@ unsafe fn alloc_leaf_node(
         write_node_tag(node, SetNodeTag::Leaf);
         write_node_len(node, 0);
 
+        // The chain through the leaves ends here until something links it on.
+        // What the allocator hands back is not zeroed, so a leaf that does not
+        // say this walks off into whatever the block held when it was last
+        // freed -- and everything that reads a set in order walks that chain.
+        // The map's leaves have always said it.
+        let next_leaf_ptr = ptr.add(layout.next_leaf_offset as usize) as *mut *mut SetNode;
+        *next_leaf_ptr = std::ptr::null_mut();
+
         node
     }
 }
