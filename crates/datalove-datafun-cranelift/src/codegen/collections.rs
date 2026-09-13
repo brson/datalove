@@ -6,7 +6,7 @@ use cranelift_module::Module;
 
 use datalove_datafun_ir::{IrType, Operand, ValueId};
 
-use crate::types::PTR_TYPE;
+use crate::types::{align_shift, ir_type_align, PTR_TYPE};
 use crate::CraneliftError;
 
 use super::FunctionCompiler;
@@ -41,7 +41,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         let temp = builder.create_sized_stack_slot(cl_ir::StackSlotData::new(
             cl_ir::StackSlotKind::ExplicitSlot,
             std::mem::size_of::<datalove_rtdt::List>() as u32,
-            3,
+            align_shift(std::mem::align_of::<datalove_rtdt::List>() as u32),
         ));
         let list_ptr = builder.ins().stack_addr(PTR_TYPE, temp, 0);
 
@@ -162,14 +162,14 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         let temp = builder.create_sized_stack_slot(cl_ir::StackSlotData::new(
             cl_ir::StackSlotKind::ExplicitSlot,
             std::mem::size_of::<datalove_rtdt::Set>() as u32,
-            3,
+            align_shift(std::mem::align_of::<datalove_rtdt::Set>() as u32),
         ));
         let set_ptr = builder.ins().stack_addr(PTR_TYPE, temp, 0);
         let create_ref = self.module.declare_func_in_func(runtime.set_create, builder.func);
         builder.ins().call(create_ref, &[rt_handle, set_ptr, set_tydesc_ptr]);
 
         let bool_slot = builder.create_sized_stack_slot(cl_ir::StackSlotData::new(
-            cl_ir::StackSlotKind::ExplicitSlot, 1, 0));
+            cl_ir::StackSlotKind::ExplicitSlot, 1, align_shift(1)));
         let bool_ptr = builder.ins().stack_addr(PTR_TYPE, bool_slot, 0);
         let insert_ref = self.module.declare_func_in_func(runtime.set_insert_erased, builder.func);
         for elem in elements {
@@ -204,7 +204,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         let temp = builder.create_sized_stack_slot(cl_ir::StackSlotData::new(
             cl_ir::StackSlotKind::ExplicitSlot,
             std::mem::size_of::<datalove_rtdt::Map>() as u32,
-            3,
+            align_shift(std::mem::align_of::<datalove_rtdt::Map>() as u32),
         ));
         let map_ptr = builder.ins().stack_addr(PTR_TYPE, temp, 0);
         let create_ref = self.module.declare_func_in_func(runtime.map_create, builder.func);
@@ -302,7 +302,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         let bool_slot = builder.create_sized_stack_slot(cl_ir::StackSlotData::new(
             cl_ir::StackSlotKind::ExplicitSlot,
             1,
-            0,
+            align_shift(1),
         ));
         let bool_ptr = builder.ins().stack_addr(PTR_TYPE, bool_slot, 0);
 
@@ -452,7 +452,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         let data_slot = builder.create_sized_stack_slot(cl_ir::StackSlotData::new(
             cl_ir::StackSlotKind::ExplicitSlot,
             data_buffer_size as u32,
-            elem_size as u8, // alignment
+            align_shift(ir_type_align(&elem_ty)),
         ));
         let data_ptr = builder.ins().stack_addr(PTR_TYPE, data_slot, 0);
 
@@ -478,7 +478,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         let shape_slot = builder.create_sized_stack_slot(cl_ir::StackSlotData::new(
             cl_ir::StackSlotKind::ExplicitSlot,
             shape_buffer_size as u32,
-            std::mem::align_of::<u32>() as u8,
+            align_shift(std::mem::align_of::<u32>() as u32),
         ));
         let shape_ptr = builder.ins().stack_addr(PTR_TYPE, shape_slot, 0);
 

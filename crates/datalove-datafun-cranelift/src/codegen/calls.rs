@@ -165,7 +165,8 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         // the wrapper keeps in its own words and so has no address to lend.
         // The frame outlives the call, which is as long as the borrow lasts.
         let slot = builder.create_sized_stack_slot(cl_ir::StackSlotData::new(
-            cl_ir::StackSlotKind::ExplicitSlot, 24, 3));
+            cl_ir::StackSlotKind::ExplicitSlot, 3 * types::PTR_SIZE,
+            types::align_shift(types::PTR_ALIGN)));
         let value_out = builder.ins().stack_addr(PTR_TYPE, slot, 0);
         let tydesc_out = builder.ins().stack_addr(PTR_TYPE, slot, 8);
         let scratch = builder.ins().stack_addr(PTR_TYPE, slot, 16);

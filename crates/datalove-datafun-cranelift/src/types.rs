@@ -115,6 +115,26 @@ pub fn ir_type_size(ty: &IrType) -> u32 {
     ir_type_to_cranelift(ty).layout().size
 }
 
+/// Get the alignment of an IR type in bytes.
+pub fn ir_type_align(ty: &IrType) -> u32 {
+    ir_type_to_cranelift(ty).layout().align
+}
+
+/// An alignment in bytes, as the shift a stack slot is declared with.
+///
+/// `StackSlotData::new` takes the log2 of the alignment, not the alignment,
+/// and the two read alike at a call site -- a slot declared `8` is aligned to
+/// 256 bytes, and one declared `align_of::<u32>()` to 16. Neither is wrong
+/// enough to notice, since asking for more than is needed still gives enough,
+/// which is why it went unnoticed until an element 32 bytes wide asked for an
+/// alignment of four gigabytes and cranelift refused.
+///
+/// So the conversion is written once, here, and every slot goes through it.
+pub fn align_shift(align: u32) -> u8 {
+    debug_assert!(align.is_power_of_two(), "alignment {} is not a power of two", align);
+    align.trailing_zeros() as u8
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

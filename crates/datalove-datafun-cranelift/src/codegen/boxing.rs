@@ -4,9 +4,9 @@ use cranelift_codegen::ir::{self as cl_ir, InstBuilder, MemFlagsData};
 use cranelift_frontend::FunctionBuilder;
 use cranelift_module::Module;
 
-use datalove_datafun_ir::{Operand, ValueId};
+use datalove_datafun_ir::{IrType, Operand, ValueId};
 
-use crate::types::PTR_TYPE;
+use crate::types::{align_shift, PTR_TYPE};
 use crate::CraneliftError;
 
 use super::FunctionCompiler;
@@ -45,11 +45,12 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         let inner_tydesc_gv = self.module.declare_data_in_func(inner_tydesc_id, builder.func);
         let inner_tydesc_addr = builder.ins().symbol_value(PTR_TYPE, inner_tydesc_gv);
 
-        // Allocate temp slot for the Error result (16 bytes, 8-byte aligned).
+        // Allocate temp slot for the Error result.
+        let error_layout = datalove_datafun_ir::layout::layout_of(&IrType::Error);
         let slot_data = cl_ir::StackSlotData::new(
             cl_ir::StackSlotKind::ExplicitSlot,
-            16,
-            0,
+            error_layout.size,
+            align_shift(error_layout.align),
         );
         let temp_slot = builder.create_sized_stack_slot(slot_data);
         let dest_ptr = builder.ins().stack_addr(PTR_TYPE, temp_slot, 0);
@@ -97,11 +98,12 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         let inner_tydesc_gv = self.module.declare_data_in_func(inner_tydesc_id, builder.func);
         let inner_tydesc_addr = builder.ins().symbol_value(PTR_TYPE, inner_tydesc_gv);
 
-        // Allocate temp slot for the Data result (16 bytes, 8-byte aligned).
+        // Allocate temp slot for the Data result.
+        let data_layout = datalove_datafun_ir::layout::layout_of(&IrType::Data);
         let slot_data = cl_ir::StackSlotData::new(
             cl_ir::StackSlotKind::ExplicitSlot,
-            16,
-            0,
+            data_layout.size,
+            align_shift(data_layout.align),
         );
         let temp_slot = builder.create_sized_stack_slot(slot_data);
         let dest_ptr = builder.ins().stack_addr(PTR_TYPE, temp_slot, 0);

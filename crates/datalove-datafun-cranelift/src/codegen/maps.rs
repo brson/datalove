@@ -106,7 +106,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         let result_slot = builder.create_sized_stack_slot(cl_ir::StackSlotData::new(
             cl_ir::StackSlotKind::ExplicitSlot,
             1,
-            0,
+            types::align_shift(1),
         ));
         let result_addr = builder.ins().stack_addr(PTR_TYPE, result_slot, 0);
 
@@ -150,7 +150,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         let vref_slot = builder.create_sized_stack_slot(cl_ir::StackSlotData::new(
             cl_ir::StackSlotKind::ExplicitSlot,
             std::mem::size_of::<*mut u8>() as u32,
-            0,
+            types::align_shift(types::PTR_ALIGN),
         ));
         let vref_addr = builder.ins().stack_addr(PTR_TYPE, vref_slot, 0);
 
@@ -288,7 +288,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         let vref_slot = builder.create_sized_stack_slot(cl_ir::StackSlotData::new(
             cl_ir::StackSlotKind::ExplicitSlot,
             std::mem::size_of::<*mut u8>() as u32,
-            0,
+            types::align_shift(types::PTR_ALIGN),
         ));
         let vref_addr = builder.ins().stack_addr(PTR_TYPE, vref_slot, 0);
 

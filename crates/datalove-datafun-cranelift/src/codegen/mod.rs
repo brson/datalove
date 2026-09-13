@@ -449,7 +449,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             let slot_data = cl_ir::StackSlotData::new(
                 cl_ir::StackSlotKind::ExplicitSlot,
                 self.layout.frame_size,
-                self.layout.frame_align.try_into().unwrap_or(0),
+                types::align_shift(self.layout.frame_align),
             );
             self.frame_slot = Some(builder.create_sized_stack_slot(slot_data));
         }
@@ -981,7 +981,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 let slot_data = cl_ir::StackSlotData::new(
                     cl_ir::StackSlotKind::ExplicitSlot,
                     size,
-                    0,
+                    types::align_shift(size.max(1)),
                 );
                 let temp_slot = builder.create_sized_stack_slot(slot_data);
                 let addr = builder.ins().stack_addr(PTR_TYPE, temp_slot, 0);

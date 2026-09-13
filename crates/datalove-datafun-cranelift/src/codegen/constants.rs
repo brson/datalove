@@ -8,7 +8,7 @@ use cranelift_module::{Linkage, Module};
 
 use datalove_datafun_ir::{ConstValue, IrType, ValueId};
 
-use crate::types::PTR_TYPE;
+use crate::types::{align_shift, PTR_TYPE};
 use crate::CraneliftError;
 
 use super::FunctionCompiler;
@@ -596,13 +596,13 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
 
         // Get inner size and alignment.
         let inner_size = self.size_of_const_value(inner).max(1);
-        let inner_align = self.align_of_const_value(inner).max(1) as u8;
+        let inner_align = self.align_of_const_value(inner).max(1);
 
         // Allocate temp slot for the inner value.
         let slot_data = cranelift_codegen::ir::StackSlotData::new(
             cranelift_codegen::ir::StackSlotKind::ExplicitSlot,
             inner_size,
-            inner_align,
+            align_shift(inner_align),
         );
         let temp_slot = builder.create_sized_stack_slot(slot_data);
         let inner_ptr = builder.ins().stack_addr(PTR_TYPE, temp_slot, 0);
@@ -653,13 +653,13 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
 
         // Get inner size and alignment.
         let inner_size = self.size_of_const_value(inner).max(1);
-        let inner_align = self.align_of_const_value(inner).max(1) as u8;
+        let inner_align = self.align_of_const_value(inner).max(1);
 
         // Allocate temp slot for the inner value.
         let slot_data = cranelift_codegen::ir::StackSlotData::new(
             cranelift_codegen::ir::StackSlotKind::ExplicitSlot,
             inner_size,
-            inner_align,
+            align_shift(inner_align),
         );
         let temp_slot = builder.create_sized_stack_slot(slot_data);
         let inner_ptr = builder.ins().stack_addr(PTR_TYPE, temp_slot, 0);
@@ -729,7 +729,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         let elements_slot = builder.create_sized_stack_slot(cranelift_codegen::ir::StackSlotData::new(
             cranelift_codegen::ir::StackSlotKind::ExplicitSlot,
             buffer_size,
-            elem_align as u8,
+            align_shift(elem_align),
         ));
         let elements_addr = builder.ins().stack_addr(PTR_TYPE, elements_slot, 0);
 
@@ -804,7 +804,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         let elements_slot = builder.create_sized_stack_slot(cranelift_codegen::ir::StackSlotData::new(
             cranelift_codegen::ir::StackSlotKind::ExplicitSlot,
             buffer_size,
-            elem_align as u8,
+            align_shift(elem_align),
         ));
         let elements_addr = builder.ins().stack_addr(PTR_TYPE, elements_slot, 0);
 
@@ -894,12 +894,12 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         let keys_slot = builder.create_sized_stack_slot(cranelift_codegen::ir::StackSlotData::new(
             cranelift_codegen::ir::StackSlotKind::ExplicitSlot,
             keys_buffer_size,
-            key_align as u8,
+            align_shift(key_align),
         ));
         let vals_slot = builder.create_sized_stack_slot(cranelift_codegen::ir::StackSlotData::new(
             cranelift_codegen::ir::StackSlotKind::ExplicitSlot,
             vals_buffer_size,
-            val_align as u8,
+            align_shift(val_align),
         ));
         let keys_addr = builder.ins().stack_addr(PTR_TYPE, keys_slot, 0);
         let vals_addr = builder.ins().stack_addr(PTR_TYPE, vals_slot, 0);
@@ -994,7 +994,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         let tuple_fields_slot = builder.create_sized_stack_slot(cranelift_codegen::ir::StackSlotData::new(
             cranelift_codegen::ir::StackSlotKind::ExplicitSlot,
             tuple_fields_size.max(8),
-            8,
+            align_shift(8),
         ));
         let tuple_fields_addr = builder.ins().stack_addr(PTR_TYPE, tuple_fields_slot, 0);
 
@@ -1017,7 +1017,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         let row_tydesc_slot = builder.create_sized_stack_slot(cranelift_codegen::ir::StackSlotData::new(
             cranelift_codegen::ir::StackSlotKind::ExplicitSlot,
             32,
-            8,
+            align_shift(8),
         ));
         let row_tydesc_addr = builder.ins().stack_addr(PTR_TYPE, row_tydesc_slot, 0);
 
@@ -1042,7 +1042,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         let rows_slot = builder.create_sized_stack_slot(cranelift_codegen::ir::StackSlotData::new(
             cranelift_codegen::ir::StackSlotKind::ExplicitSlot,
             buffer_size,
-            row_max_align as u8,
+            align_shift(row_max_align),
         ));
         let rows_addr = builder.ins().stack_addr(PTR_TYPE, rows_slot, 0);
 
@@ -1404,13 +1404,13 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
 
                 // Get inner size and alignment.
                 let inner_size = self.size_of_const_value(inner).max(1);
-                let inner_align = self.align_of_const_value(inner).max(1) as u8;
+                let inner_align = self.align_of_const_value(inner).max(1);
 
                 // Allocate temp slot for the inner value.
                 let slot_data = cranelift_codegen::ir::StackSlotData::new(
                     cranelift_codegen::ir::StackSlotKind::ExplicitSlot,
                     inner_size,
-                    inner_align,
+                    align_shift(inner_align),
                 );
                 let temp_slot = builder.create_sized_stack_slot(slot_data);
                 let inner_ptr = builder.ins().stack_addr(PTR_TYPE, temp_slot, 0);
@@ -1441,13 +1441,13 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
 
                 // Get inner size and alignment.
                 let inner_size = self.size_of_const_value(inner).max(1);
-                let inner_align = self.align_of_const_value(inner).max(1) as u8;
+                let inner_align = self.align_of_const_value(inner).max(1);
 
                 // Allocate temp slot for the inner value.
                 let slot_data = cranelift_codegen::ir::StackSlotData::new(
                     cranelift_codegen::ir::StackSlotKind::ExplicitSlot,
                     inner_size,
-                    inner_align,
+                    align_shift(inner_align),
                 );
                 let temp_slot = builder.create_sized_stack_slot(slot_data);
                 let inner_ptr = builder.ins().stack_addr(PTR_TYPE, temp_slot, 0);

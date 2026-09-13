@@ -16,7 +16,7 @@ use datalove_datafun_interp::{ExecutionContext, FunctionRegistry};
 use datalove_datafun_cranelift::codegen::{self, build_signature_for_func, uses_sret};
 use datalove_datafun_cranelift::runtime::RuntimeImports;
 use datalove_datafun_cranelift::tydesc_emit::{self, TyDescEmitter};
-use datalove_datafun_cranelift::types::PTR_TYPE;
+use datalove_datafun_cranelift::types::{align_shift, PTR_ALIGN, PTR_TYPE};
 
 use crate::trampoline::{self, EncodedFuncKey};
 use crate::JitError;
@@ -436,7 +436,7 @@ impl JitCompiler {
             let slot = builder.create_sized_stack_slot(cl_ir::StackSlotData::new(
                 cl_ir::StackSlotKind::ExplicitSlot,
                 (arg_count * 8) as u32,
-                8,
+                align_shift(PTR_ALIGN),
             ));
             // Store each arg pointer in the array.
             for (i, &arg) in user_args.iter().enumerate() {
@@ -463,7 +463,7 @@ impl JitCompiler {
             let slot = builder.create_sized_stack_slot(cl_ir::StackSlotData::new(
                 cl_ir::StackSlotKind::ExplicitSlot,
                 (descriptors.len() * 8) as u32,
-                8,
+                align_shift(PTR_ALIGN),
             ));
             for (i, &tydesc) in descriptors.iter().enumerate() {
                 builder.ins().stack_store(PTR_TYPE, tydesc, slot, (i * 8) as i32);

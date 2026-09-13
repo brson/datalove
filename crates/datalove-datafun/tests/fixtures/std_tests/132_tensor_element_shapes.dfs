@@ -1,0 +1,44 @@
+// Tensors whose elements are wider than a word.
+//
+// A tensor literal copies its elements into a stack buffer on the way to the
+// runtime, and the buffer is declared with the alignment its elements want.
+// `StackSlotData::new` takes the log2 of an alignment rather than the
+// alignment, and this passed the element's *size*: an element eight bytes wide
+// asked for a buffer aligned to 256 bytes, which is merely wasteful, and one
+// twenty-four bytes wide asked for sixteen megabytes, which is not. The
+// binary built and then died where it ran.
+//
+// A tensor of tensors was worse: its elements are the tensor struct, wide
+// enough that the shift came out past thirty-two, and cranelift refused the
+// function outright. So the widest elements are what this holds.
+//
+// Nothing here is clever; the point is that each of these compiles and comes
+// back with what went in.
+
+// A tuple element holding something on the heap, in either position, which is
+// the shape that died at runtime.
+let tuple_then_heap: [|(u32, string), 1|] = [| : (u32, string) / (: u32 / 6, : string / "hi") |]
+let heap_then_tuple: [|(string, u32), 1|] = [| : (string, u32) / (: string / "hi", : u32 / 6) |]
+let tuple_of_list: [|(u32, [u32]), 1|] = [| : (u32, [u32]) / (: u32 / 6, : [u32] / [: u32 / 1, : u32 / 2]) |]
+
+// Two of them, so the buffer holds more than one and the stride is used.
+let two_tuples: [|(u64, string), 1|] = [|
+  : (u64, string) / (: u64 / 66, : string / "first")
+  : (u64, string) / (: u64 / 102, : string / "second") |]
+
+// A tensor of tensors, which cranelift would not compile at all. The `,,`
+// separates along the third axis, so the whole is rank three.
+let nested: [|[|f32, 1|], 3|] = [| : [|f32, 1|] / [| : f32 / 1.0 |],,
+                                   : [|f32, 1|] / [| : f32 / 2.0 |] |]
+
+// A struct element, which was always fine, here so the two stay told apart.
+let struct_element: [|{a: string}, 1|] = [| : {a: string} / {a = : string / "held"} |]
+
+// The plain cases, whose alignment was merely over-asked for rather than
+// impossible.
+let scalars: [|u32, 1|] = [| : u32 / 1 : u32 / 2 : u32 / 3 |]
+let strings: [|string, 1|] = [| : string / "a" : string / "b" |]
+let rank_two: [|u32, 2|] = [| : u32 / 1 : u32 / 2, : u32 / 3 : u32 / 4 |]
+
+let output = (tuple_then_heap, heap_then_tuple, tuple_of_list, two_tuples,
+              nested, struct_element, scalars, strings, rank_two)

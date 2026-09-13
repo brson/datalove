@@ -337,7 +337,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             let ss = builder.create_sized_stack_slot(cl_ir::StackSlotData::new(
                 cl_ir::StackSlotKind::ExplicitSlot,
                 tensor_struct_size,
-                3, // align = 8 bytes (2^3)
+                types::align_shift(std::mem::align_of::<datalove_rtdt::Tensor>() as u32),
             ));
             let view_ptr = builder.ins().stack_addr(PTR_TYPE, ss, 0);
 

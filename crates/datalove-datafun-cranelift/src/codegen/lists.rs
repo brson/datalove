@@ -93,7 +93,8 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         let option_ty = IrType::Option(Box::new(IrType::Data));
         let option_layout = datalove_datafun_ir::layout::layout_of(&option_ty);
         let slot = builder.create_sized_stack_slot(cl_ir::StackSlotData::new(
-            cl_ir::StackSlotKind::ExplicitSlot, option_layout.size, 3));
+            cl_ir::StackSlotKind::ExplicitSlot, option_layout.size,
+            types::align_shift(option_layout.align)));
         let option_out = builder.ins().stack_addr(PTR_TYPE, slot, 0);
 
         let option_tydesc = self.static_tydesc(builder, &option_ty)?;
