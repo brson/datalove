@@ -1,0 +1,1 @@
+(%{data 55 = "a string"}, %{data 55 = [1, 2]}, %{data 55 = 9}, %{"a key" = data 7}, %{3 = data "held"}, %{data 1 = data 2}, %{"k" = "v"}, (1, 1, 1))

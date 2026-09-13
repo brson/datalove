@@ -1353,18 +1353,16 @@ pub unsafe extern "C-unwind" fn dtlv_rti_btreemap_insert_erased_local(
         let map_ty = rtdt::TyDescRef::from_ptr(map_tydesc);
         let key_wrapped = unwraps_the_element(key_tydesc, map_ty.map_key_ty());
         let value_wrapped = unwraps_the_element(value_tydesc, map_ty.map_value_ty());
-        if key_wrapped != value_wrapped {
-            // The insert entries take both sides the same way, so a map erased
-            // on one side only has no path through here yet. Lowering refuses
-            // to build one, so nothing arrives in this state.
-            return RtStatus::Error;
+        if !key_wrapped && !value_wrapped {
+            return dtlv_rti_btreemap_insert_local(
+                rt, map_value_mut, map_tydesc, key_in, key_tydesc, value_in, value_tydesc);
         }
-        if key_wrapped {
-            return dtlv_rti_btreemap_insert_data_local(
-                rt, map_value_mut, map_tydesc, key_in as *const u8, value_in as *const u8);
-        }
-        dtlv_rti_btreemap_insert_local(
-            rt, map_value_mut, map_tydesc, key_in, key_tydesc, value_in, value_tydesc)
+        // One side may be wrapped and the other not: a map generic in both its
+        // key and its value, called with `data` for the key, holds a key that
+        // is already what it wants and a value that is still packed.
+        let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
+        crate::impls::btreemap::btreemap_insert_sides_impl(
+            rt_ref, map_value_mut, map_ty, key_in, key_wrapped, value_in, value_wrapped)
     }
 }
 

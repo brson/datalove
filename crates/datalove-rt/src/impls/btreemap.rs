@@ -1059,43 +1059,92 @@ pub unsafe fn btreemap_insert_data_impl(
     value_data_in: *const u8,
 ) -> RtStatus {
     unsafe {
+        btreemap_insert_sides_impl(
+            rt, btreemap_value_mut, btreemap_tydesc,
+            key_data_in as *mut u8, true, value_data_in as *mut u8, true,
+        )
+    }
+}
+
+/// Insert an entry where either side may have arrived packed into a `data`.
+///
+/// A side that arrived packed is moved out into a value of the map's own key
+/// or value type on the way in, consuming the `data`; a side that did not is
+/// moved in as it stands. The two are decided apart, because a map built
+/// inside a generic can be erased on one side and not the other: `%{k = v}`
+/// written in a generic over `K` and `V`, called at `K := data`, hands over a
+/// key that is already what the map holds and a value that is not.
+pub unsafe fn btreemap_insert_sides_impl(
+    rt: &mut RtLocal,
+    btreemap_value_mut: *mut u8,
+    btreemap_tydesc: rtdt::TyDescRef,
+    // Value is moved.
+    key_in: *mut u8,
+    key_is_data: bool,
+    // Value is moved.
+    value_in: *mut u8,
+    value_is_data: bool,
+) -> RtStatus {
+    unsafe {
         let key_ty = btreemap_tydesc.map_key_ty();
         let value_ty = btreemap_tydesc.map_value_ty();
         let rt_handle = rt as *mut RtLocal as crate::c::LocalRtHandle;
 
-        let key_slot = crate::c::dtlv_rti_mem_alloc_local(rt_handle, key_ty.as_ptr(), 1);
-        if key_slot.is_null() {
-            return RtStatus::Error;
-        }
-        let value_slot = crate::c::dtlv_rti_mem_alloc_local(rt_handle, value_ty.as_ptr(), 1);
-        if value_slot.is_null() {
-            rt.alloc.free(key_ty.size(), key_ty.align(), 1, key_slot);
-            return RtStatus::Error;
-        }
-
-        let status = crate::impls::boxing::data_into_local(
-            rt_handle, key_data_in, key_slot, key_ty.as_ptr(),
-        );
-        if status == RtStatus::Ok {
-            let status = crate::impls::boxing::data_into_local(
-                rt_handle, value_data_in, value_slot, value_ty.as_ptr(),
-            );
-            if status == RtStatus::Ok {
-                let status = btreemap_insert_impl(
-                    rt, btreemap_value_mut, btreemap_tydesc,
-                    key_slot, key_ty, value_slot, value_ty,
-                );
-                // The slots held the values only on the way in; the map has
-                // them now, so the storage goes back and what it held does not.
-                rt.alloc.free(key_ty.size(), key_ty.align(), 1, key_slot);
-                rt.alloc.free(value_ty.size(), value_ty.align(), 1, value_slot);
-                return status;
+        // A side that arrived packed needs somewhere of the real type to be
+        // unpacked into. One that did not is already there.
+        let key_slot = if key_is_data {
+            let slot = crate::c::dtlv_rti_mem_alloc_local(rt_handle, key_ty.as_ptr(), 1);
+            if slot.is_null() {
+                return RtStatus::Error;
             }
-        }
+            let status = crate::impls::boxing::data_into_local(
+                rt_handle, key_in, slot, key_ty.as_ptr(),
+            );
+            if status != RtStatus::Ok {
+                rt.alloc.free(key_ty.size(), key_ty.align(), 1, slot);
+                return RtStatus::Error;
+            }
+            slot
+        } else {
+            key_in
+        };
 
-        rt.alloc.free(key_ty.size(), key_ty.align(), 1, key_slot);
-        rt.alloc.free(value_ty.size(), value_ty.align(), 1, value_slot);
-        RtStatus::Error
+        let value_slot = if value_is_data {
+            let slot = crate::c::dtlv_rti_mem_alloc_local(rt_handle, value_ty.as_ptr(), 1);
+            if slot.is_null() {
+                if key_is_data {
+                    rt.alloc.free(key_ty.size(), key_ty.align(), 1, key_slot);
+                }
+                return RtStatus::Error;
+            }
+            let status = crate::impls::boxing::data_into_local(
+                rt_handle, value_in, slot, value_ty.as_ptr(),
+            );
+            if status != RtStatus::Ok {
+                rt.alloc.free(value_ty.size(), value_ty.align(), 1, slot);
+                if key_is_data {
+                    rt.alloc.free(key_ty.size(), key_ty.align(), 1, key_slot);
+                }
+                return RtStatus::Error;
+            }
+            slot
+        } else {
+            value_in
+        };
+
+        let status = btreemap_insert_impl(
+            rt, btreemap_value_mut, btreemap_tydesc,
+            key_slot, key_ty, value_slot, value_ty,
+        );
+        // A slot held its value only on the way in; the map has it now, so the
+        // storage goes back and what it held does not.
+        if key_is_data {
+            rt.alloc.free(key_ty.size(), key_ty.align(), 1, key_slot);
+        }
+        if value_is_data {
+            rt.alloc.free(value_ty.size(), value_ty.align(), 1, value_slot);
+        }
+        status
     }
 }
 

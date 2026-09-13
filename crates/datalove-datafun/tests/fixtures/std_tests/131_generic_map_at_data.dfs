@@ -1,0 +1,46 @@
+require module sys/std/map
+
+import map.len
+
+// A map literal built in a generic, over a type parameter standing at `data`.
+//
+// A collection built inside a generic is made against the descriptor the call
+// site handed over, so its elements go in as what they really are, and an
+// element in hand is in the erased shape -- a `data` -- and has to be unpacked
+// on the way. The one case where the two readings coincide is a collection
+// whose elements really are `data`: then the value in hand is already what the
+// map wants and unpacking it would take it apart.
+//
+// A map has two sides, and they are read separately, because they can differ:
+// `%{k = v}` in a generic over both, called at `K := data`, has a key that
+// wants leaving alone and a value that wants unpacking. The insert took both
+// sides the same way, so that entry went nowhere and everything in it was
+// leaked -- silently, because a map nobody counts looks much the same empty.
+
+fun pair<K, V>(k: K, v: V): %{K = V} with { K is ord, }
+  ret %{k = v}
+end fun
+
+fun size<K, V>(ref m: %{K = V}): index with { K is ord, }
+  ret len(ref m)
+end fun
+
+// The key is a `data` and the value is not, which is the side that differed.
+let data_key = pair(data : i64 / 55, "a string")
+let data_key_heap = pair(data : i64 / 55, [: u32 / 1, : u32 / 2])
+let data_key_packed = pair(data : i64 / 55, : u32 / 9)
+
+// And the other way round.
+let data_value = pair("a key", data : i64 / 7)
+let data_value_narrow = pair(: u8 / 3, data : string / "held")
+
+// Both sides, which is the case that always worked.
+let both = pair(data : i64 / 1, data : i64 / 2)
+let neither = pair("k", "v")
+
+// Counted as well as printed, because an entry that never went in still
+// prints as a map.
+let counts = (size(ref data_key), size(ref data_value), size(ref both))
+
+let output = (data_key, data_key_heap, data_key_packed, data_value,
+              data_value_narrow, both, neither, counts)
