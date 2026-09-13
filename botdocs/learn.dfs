@@ -1,231 +1,419 @@
 // Learn Datalove in Y Minutes
 //
-// Datalove is a typed scripting language with a three-layer tower:
-// - Datalit (.dlt) - Pure data literal language
-// - Datafun (.dfs script, .dfm module) - Pure functional layer
-// - Full Datalove (.dls, .dlm) - Procedures and objects [not yet implemented]
+// Datalove is a tower of three languages, each a superset of the one below:
 //
-// This script covers the Datafun layer.
+//   Datalit  (.dlt)             - Data literals. No names, no computation.
+//   Datafun  (.dfs, .dfm)       - Pure functions over those literals.
+//   Datalove (.dls, .dlm)       - Procedures and objects. Not yet implemented.
+//
+// This file is the Datafun layer, and it is a script, so it runs:
+//
+//   cargo run -p datalove-cli -- script botdocs/learn.dfs
+//
+// Every construct below is checked by running it. When the language moves,
+// this file stops running, which is the point of writing it as a script
+// rather than as prose.
 
 
 // =========================================================================
-// 1. PRIMITIVE TYPES AND LITERALS
+// 1. COMMENTS
 // =========================================================================
 
-// Boolean.
-let b1: bool = true
-let b2: bool = false
+// A line comment runs to the end of the line.
 
-// Unsigned integers: u8, u16, u32, u64.
-let small: u8 = 255
-let medium: u32 = 42
+/* A block comment /* nests */ so commenting out a region that already
+   holds a comment does what you meant. */
 
-// Signed integers: i8, i16, i32, i64.
+
+// =========================================================================
+// 2. MODULES
+// =========================================================================
+
+// A module is named by three parts: the import space, the package, and the
+// module. `sys` is the system library that ships with the compiler; `local`
+// is where a worldfile puts its own modules.
+require module sys/std/u32
+require module sys/std/list
+require module sys/std/map
+require module sys/std/set
+require module sys/std/string
+require module sys/std/ord
+require module sys/std/option
+
+// `require module` makes the module visible. `import` brings one function in
+// by name. There is no glob import.
+import u32.max_value
+import u32.add_saturating
+import u32.add_checked
+import list.len
+import list.get
+import map.insert
+import map.get_or
+import set.contains
+import string.concat
+import string.char_count
+import string.from_u32
+import ord.min
+import option.unwrap_or
+
+
+// =========================================================================
+// 3. PRIMITIVE TYPES AND LITERALS
+// =========================================================================
+
+// Booleans.
+let yes: bool = true
+let no: bool = false
+
+// Fixed-width integers, signed and unsigned, in four widths each.
+let byte: u8 = 255
+let word: u32 = 42
 let signed: i32 = -100
+let wide: u64 = 18446744073709551615
 
-// Arbitrary precision integer (bigint).
+// Two more fixed-width integers, sized to a pointer, for lengths and for the
+// distance between them. Indexing wants an `index`, not a `u32`.
+let position: index = 7
+let delta: offset = -7
+
+// An arbitrary-precision integer. This one is a heap value, unlike the above.
 let big: int = 999999999999999999999
 
-// 32-bit float.
+// Binary floats in two widths.
 let pi: f32 = 3.14159
+let e: f64 = 2.718281828459045
 
-// Strings.
+// Strings are UTF-8 and live on the heap.
 let greeting: string = "hello, datalove"
 
-// Heap annotations: @ = local heap, # = global heap. Usually omitted.
-let explicit_local: @u32 = 42
-let explicit_global: #u32 = #42
-let inferred: u32 = 42        // heap inferred
-
-// Type hints use `: type / expr` syntax.
-let hinted = : u32 / 99
-
-// Hex literals work for integers and f32 (bit pattern).
-let hex_int: u32 = 0xFF             // 255
-let hex_float = : f32 / 0x40490FDB  // pi as bit pattern (needs type hint)
+// Hex literals, an exponent on a float, and underscores anywhere in a number
+// that a reader would want one.
+let mask: u32 = 0xFF
+let huge: f64 = 1e300
+let grouped: u32 = 1_000_000
 
 
 // =========================================================================
-// 2. VARIABLES: LET, VAR, SET
+// 4. TYPE HINTS
 // =========================================================================
 
-// `let` creates an immutable binding.
+// A literal does not carry a type of its own: `42` is the digits, not a
+// `u32`. Usually the type comes from somewhere else -- the annotation on a
+// `let`, the parameter it is passed to, the return type of the function it is
+// returned from.
+let from_annotation: u8 = 200
+
+// Where nothing else says, the literal says it itself, with `: type / value`.
+// The type goes first because it is what the reader needs first.
+let from_hint = : u8 / 200
+
+// Inside a tuple, each element is its own literal, so each needs its own
+// source of a type. The annotation on the outside will do.
+let annotated: (u8, u32) = (200, 70000)
+
+// Or each hint can carry its own.
+let hinted = (: u8 / 200, : u32 / 70000)
+
+// A literal with nothing at all to infer from falls back to the widest of its
+// family, on the grounds that a width nobody asked for should lose the least.
+// So these are an `int` and an `f64`.
+let widest_integer = 42
+let widest_float = 3.14
+
+// The `: type / value` form is also how a datalit file is written from top to
+// bottom, which is what makes .dlt a language rather than a format.
+
+
+// =========================================================================
+// 5. BINDINGS: LET, VAR, SET, CONST
+// =========================================================================
+
+// `let` binds a name to a value once.
 let immutable: u32 = 10
 
-// `var` creates a mutable slot.
+// `var` makes a slot that can be written again.
 var counter: u32 = 0
 
-// `set` mutates a var.
+// `set` writes one. It is a statement, not an expression.
 set counter = 1
 
+// A `var` may be declared without a value, in which case it must be given a
+// type. Reading it before it is written is a compile error, not a zero.
+var pending: u32
+set pending = 5
+
+// `const` is evaluated at compile time. Naming a const does not consume it,
+// even when its type is linear, so a const string can be read as many times
+// as you like.
+const LIMIT: u32 = 100
+const NAME: string = "datalove"
+
 
 // =========================================================================
-// 3. COLLECTION TYPES
+// 6. COLLECTIONS
 // =========================================================================
 
-// Lists use [@T] type and [a, b, c] syntax.
+// A list is `[T]`, and its literal is the same brackets.
 let numbers: [u32] = [1, 2, 3, 4, 5]
-let empty_list: [u32] = []
+let no_numbers: [u32] = []
 
-// Maps use @map<K, V> type and @map { k1 = v1, k2 = v2 } syntax.
-let scores: @map<string, u32> = @map { "alice" = 100, "bob" = 85 }
-let empty_map: @map<u32, u32> = @map {}
+// A map is `%{K = V}`. The `=` separates key from value in both the type and
+// the literal, because they are the same shape.
+let scores: %{string = u32} = %{"alice" = 100, "bob" = 85}
+let no_scores: %{string = u32} = %{}
 
-// Sets use @set<T> type and @set { v1, v2, v3 } syntax.
-let unique: @set<u32> = @set { 1, 2, 3 }
-let empty_set: @set<u32> = @set {}
+// A set is `#{T}`.
+let unique: #{u32} = #{1, 2, 3}
+let no_unique: #{u32} = #{}
+
+// A tensor is `[|T, rank|]`: a rectangular array of known rank. Its elements
+// are separated by spaces and its rows by commas, so a rank-2 tensor of two
+// rows of three reads as it looks.
+let grid: [|u32, 2|] = [| 1 2 3, 4 5 6 |]
+let row: [|u32, 1|] = [| 1 2 3 |]
+
+// A table is `{| name: T, ... |}`: columns, not rows, and stored that way.
+// The literal names its columns first and then gives a row per `;`.
+let readings: {| hour: u32, value: u32 |} = {| hour, value; 1, 10; 2, 20 |}
+let no_readings: {| hour: u32, value: u32 |} = {| hour, value |}
+
+// Tables are the least finished of these. A column of a heap type -- a
+// string, a list -- reads back wrong from a datafun script and leaks, so
+// everything here holds fixed-width columns.
 
 
 // =========================================================================
-// 4. AGGREGATE TYPES
+// 7. TUPLES AND STRUCTS
 // =========================================================================
 
-// Tuples.
+// A tuple is positional, and its fields are read by number.
 let pair: (u32, bool) = (42, true)
-let triple: (u32, u32, u32) = (1, 2, 3)
 let unit: () = ()
+let first_of_pair = pair.0
 
-// Anonymous structs.
+// An anonymous struct is named, and needs no declaration. Note that the type
+// writes `:` between a field and its type and the value writes `=`.
 let point: { x: u32, y: u32 } = { x = 10, y = 20 }
+let point_x = point.x
 
 
 // =========================================================================
-// 5. OPTION AND RESULT TYPES
+// 8. OPTION AND RESULT
 // =========================================================================
 
-// Option type: ?T holds a value or none.
+// `?T` holds a `T` or nothing. `some` wraps, `none` is the empty one.
 let found: ?u32 = some 42
 let missing: ?u32 = none
 
-// Result type: !T holds a value or error.
-// ok wraps value, er wraps error. error constructs the error value.
-let success: !u32 = ok 42
-let failure: !u32 = er error "something went wrong"
+// `!T` holds a `T` or an error. `ok` wraps the value and `er` wraps the
+// error. `error` is a type of its own, and building one wraps any value at
+// all -- a string is only the usual choice.
+let succeeded: !u32 = ok 42
+let failed: !u32 = er error "something went wrong"
+let bare_error: error = error "out of cheese"
+
+// They nest, and the sigils stack in the order you read them.
+let both: ?!u32 = some ok 5
 
 
 // =========================================================================
-// 6. THE DATA TYPE
+// 9. DATA
 // =========================================================================
 
-// @data can hold any value (type-erased).
-let anything: @data = @data 42
-let also_data: @data = @data "hello"
+// `data` is the type-erased one: it holds any value at all, and carries
+// enough with it to be cloned, dropped and printed. It is how a value crosses
+// into a generic that does not know its type.
+let anything: data = data : u32 / 42
+let also_anything: data = data "hello"
 
 
 // =========================================================================
-// 7. FUNCTIONS
+// 10. ENUMS
 // =========================================================================
 
-// Basic function definition.
-// Note: bare + widens to int, so we return int here.
-fun add(a: u32, b: u32): int
-  ret a + b
+// A variant with no payload is an `atom`; one with a payload is a `term`.
+// An enum type lists them.
+type Shape: enum { atom Circle, atom Square, term Sided u8 }
+
+let circle: Shape = atom Circle
+let pentagon: Shape = term Sided : u8 / 5
+
+// `match` takes a value apart. A `case term` arm names a binding for the
+// payload. An exhaustive match needs nothing after it; anything short of
+// exhaustive needs `case default`.
+fun name_of(s: Shape): string
+  match s
+  case atom Circle
+    ret "circle"
+  case atom Square
+    ret "square"
+  case term Sided count
+    ret "polygon"
+  end match
 end fun
 
-// Use checked ops (+!) to stay in the fixed integer type.
-fun add_u32(a: u32, b: u32): !u32
-  ret ok (a +! b)
+fun is_round(s: Shape): bool
+  match s
+  case atom Circle
+    ret true
+  case default
+    ret false
+  end match
 end fun
 
-// Void function (no return type, no ret required).
+
+// =========================================================================
+// 11. FUNCTIONS
+// =========================================================================
+
+// A function is a `fun` line, a body, and an `end fun`. Blocks close by name,
+// so an `end` always says what it ends.
+fun double(n: int): int
+  ret n * 2
+end fun
+
+// A function with no return type returns nothing, and needs no `ret`.
 fun do_nothing()
 end fun
 
-// Early return in void function.
+// `ret` on its own leaves such a function early.
 fun maybe_early(n: u32)
   if n .< 10
     ret
   end if
 end fun
 
-// Functions returning options.
-fun safe_divide(a: u32, b: u32): ?u32
-  if b == 0
-    ret none
-  else
-    ret some (a /? b)
-  end if
+// A call is an expression, and a call to one of these -- which gives nothing
+// back to bind -- is a statement.
+do_nothing()
+maybe_early(5)
+
+
+// =========================================================================
+// 12. PARAMETER MODES
+// =========================================================================
+
+// Every parameter is passed by reference. What differs is what the callee may
+// do with it and who owns it afterwards. The mode is written at both ends:
+// the declaration says what it wants and the call site says what it is doing,
+// and the two must agree.
+
+// `in` is the default, and is not written. The callee takes ownership.
+fun consume(text: string): index
+  ret len_of_string(ref text)
 end fun
 
-// Functions returning results.
+// `ref` borrows to read. The caller keeps the value.
+fun inspect(ref text: string): index
+  ret len_of_string(ref text)
+end fun
+
+// `mut` borrows to read and write. The caller keeps the value, changed.
+fun bump(mut n: u32): !()
+  set n = n +! 1
+  ret ok ()
+end fun
+
+// `out` is write-only: the callee must write it before returning. The caller
+// is meant to be able to pass a slot that holds nothing yet, but the
+// ownership pass does not currently count the call as the write, so the
+// slot below is given a value it does not need.
+fun fill(out n: u32)
+  set n = 42
+end fun
+
+fun len_of_string(ref text: string): index
+  ret char_count(ref text)
+end fun
+
+// A call that returns nothing is a statement on its own.
+var to_fill: u32 = 0
+fill(out to_fill)
+
+var to_bump: u32 = 10
+let bumped = bump(mut to_bump)
+
+
+// =========================================================================
+// 13. OPERATORS
+// =========================================================================
+
+// Bare `+ - * /` are the operators of `int` and of the floats. A fixed-width
+// integer does not have them, because there is no answer they could give when
+// the result does not fit.
+let int_sum: int = 2 + 3
+let float_quotient: f64 = : f64 / 7.0 / : f64 / 2.0
+
+// A fixed-width integer gets two families instead, and each says what happens
+// when it overflows.
+//
+//   +! -! *! /!  checked  - the expression early-returns an error
+//   +? -? *? /?  optional - the expression early-returns none
+//
+// Which means the function's return type has to be able to carry it.
 fun checked_add(a: u32, b: u32): !u32
   ret ok (a +! b)
 end fun
 
-
-// =========================================================================
-// 8. PARAMETER MODES
-// =========================================================================
-
-// All parameters passed by reference. The mode controls allowed operations:
-
-// `in` (default): Read and consume; ownership transfers to callee.
-fun consume_value(value: u32): u32
-  ret value
+fun optional_add(a: u32, b: u32): ?u32
+  ret some (a +? b)
 end fun
 
-// `ref`: Read only; caller retains ownership.
-fun read_only(ref value: u32): !u32
-  ret ok (value +! 1)
+// Division needs one of the two even for `int`, because the divisor may be
+// zero.
+fun int_divide(a: int, b: int): !int
+  ret ok (a /! b)
 end fun
 
-// `mut`: Read and write via set; caller retains ownership.
-fun increment(mut value: u32): !u32
-  set value = value +! 1
-  ret ok value
-end fun
+// Comparison. Less-than and greater-than are spelled `.<` and `.>`: angle
+// brackets are a paired delimiter in this language, holding a function's type
+// parameters, so they are not free to be operators.
+let is_less = 1 .< 2
+let is_greater = 5 .> 3
+let is_le = 1 <= 1
+let is_ge = 5 >= 4
+let is_eq = 2 == 2
+let is_ne = 1 != 2
 
-// `out`: Write only; callee must initialize before return.
-fun init_value(out value: u32)
-  set value = 42
-end fun
+// Logic is words, and `not` is prefix.
+let conjunction = true and false
+let disjunction = true or false
+let exclusive = true xor true
+let negation = not true
 
-
-// =========================================================================
-// 9. OPERATORS
-// =========================================================================
-
-// Arithmetic: + - * (bare ops widen fixed ints to int).
-let sum: int = 1 + 2     // Result is int
-let product: int = 3 * 4 // Result is int
-
-// Checked arithmetic (!): stays in fixed-width type, errors on overflow.
-fun checked_example(a: u32, b: u32): !u32
-  let result = a +! b  // Early-returns error on overflow
-  ret ok result
-end fun
-
-// Optional arithmetic (?): stays in fixed-width type, none on overflow.
-fun optional_example(a: u32, b: u32): ?u32
-  let result = a +? b  // Early-returns none on overflow
-  ret some result
-end fun
-
-// Division requires checked variants (div by zero possible).
-// int:  /! returns !int, /? returns ?int
-// fixed: /! returns !T, /? returns ?T
-
-// Comparison: .< .> <= >= == !=
-// Note: < and > written as .< and .> (dot prefix).
-let less = 1 .< 2
-let greater = 5 .> 3
-let less_eq = 1 <= 1
-let greater_eq = 5 >= 4
-let equal = 2 == 2
-let not_equal = 1 != 2
-
-// Logical: and or xor not
-let both = true and false     // false
-let either = true or false    // true
-let exclusive = true xor true // false
-let negated = not true         // false
+// Comparison and arithmetic are for numbers. Comparing a string, a list or a
+// tuple goes through `sys/std/ord`, which reaches types the operators do not.
 
 
 // =========================================================================
-// 10. CONTROL FLOW
+// 14. CLONE AND WIDEN: THE @ OPERATOR
 // =========================================================================
 
-// If/else.
+// Postfix `@` does the two things a value may need on its way somewhere else:
+// it copies a linear value so the original survives, and it widens a narrow
+// integer to a wider one.
+
+// Widening. `a` is a `u32` and `+` is not a `u32` operator, so both sides
+// become `int` first.
+fun widen_then_add(a: u32, b: u32): int
+  ret a@ + b@
+end fun
+
+// Cloning. Passing a string to an `in` parameter gives it away; `@` hands
+// over a copy instead.
+let original = "hello"
+let length_of_copy = consume(original@)
+let length_of_original = consume(original)
+
+// Without the `@` on the first of those, the second is a use-after-move, and
+// the compiler says so and tells you where to put the `@`.
+
+
+// =========================================================================
+// 15. CONTROL FLOW
+// =========================================================================
+
+// `if` and `else`, closed by `end if`. There is no `else if`; nest instead.
 fun classify(n: u32): string
   if n == 0
     ret "zero"
@@ -238,8 +426,9 @@ fun classify(n: u32): string
   end if
 end fun
 
-// If with binding: destructure option/result.
-fun unwrap_or_default(opt: ?u32): u32
+// An `if` over an option or a result takes it apart, binding the payload
+// between bars.
+fun or_zero(opt: ?u32): u32
   if opt |value|
     ret value
   else
@@ -247,7 +436,16 @@ fun unwrap_or_default(opt: ?u32): u32
   end if
 end fun
 
-// Basic loop with break.
+// The `else` of a result can bind the error the same way.
+fun describe_result(r: !u32): string
+  if r |value|
+    ret "ok"
+  else |problem|
+    ret "failed"
+  end if
+end fun
+
+// `loop` runs until something breaks it.
 fun count_to(limit: u32): !u32
   var n: u32 = 0
   loop
@@ -259,7 +457,7 @@ fun count_to(limit: u32): !u32
   ret ok n
 end fun
 
-// Loop while.
+// `loop while` tests first.
 fun sum_to(limit: u32): !u32
   var total: u32 = 0
   var i: u32 = 1
@@ -270,13 +468,13 @@ fun sum_to(limit: u32): !u32
   ret ok total
 end fun
 
-// Continue skips to next iteration.
+// `continue` skips the rest of the iteration.
 fun count_odds(limit: u32): !u32
   var count: u32 = 0
   var i: u32 = 0
   loop while i .< limit
     set i = i +! 1
-    if icall rem_u32(i, 2) == 0
+    if icall rem_u32(i, : u32 / 2) == : u32 / 0
       continue
     end if
     set count = count +! 1
@@ -284,113 +482,211 @@ fun count_odds(limit: u32): !u32
   ret ok count
 end fun
 
+// There is no `for`. Walking a list is a `loop while` over an index.
+fun sum_list(ref xs: [u32]): !u32
+  var total: u32 = 0
+  var i: index = 0
+  let n = len(ref xs)
+  loop while i .< n
+    if get(ref xs, i) |element|
+      set total = total +! element
+    end if
+    set i = i +! : index / 1
+  end loop
+  ret ok total
+end fun
+
 
 // =========================================================================
-// 11. TRY OPERATORS
+// 16. TRY OPERATORS
 // =========================================================================
 
-// Postfix ? early-returns none on none.
-fun chain_options(a: ?u32, b: ?u32): ?u32
-  let x = a?  // If a is none, function returns none
+// Postfix `?` unwraps an option, and returns `none` from the whole function
+// if there is nothing there.
+fun add_options(a: ?u32, b: ?u32): ?u32
+  let x = a?
   let y = b?
   ret some (x +? y)
 end fun
 
-// Postfix ! early-returns error on error.
-fun chain_results(a: !u32, b: !u32): !u32
-  let x = a!  // If a is error, function returns that error
+// Postfix `!` unwraps a result, and returns the error from the whole function
+// if that is what it holds.
+fun add_results(a: !u32, b: !u32): !u32
+  let x = a!
   let y = b!
   ret ok (x +! y)
 end fun
 
+// The checked and optional arithmetic behaves the same way, which is why it
+// puts the same requirement on the return type: `a +! b` is an addition that
+// may fail, unwrapped on the spot.
+
 
 // =========================================================================
-// 12. MODULE SYSTEM
+// 17. INDEXING
 // =========================================================================
 
-// Import modules from sys/std library.
-require module sys/std/u32
+// Indexing gives an option, because the index may be out of range or the key
+// absent, so it is followed by `?` or `!` or taken apart with `if`.
+fun lookup(): ?u32
+  let xs: [u32] = [10, 20, 30]
+  let m: %{string = u32} = %{"a" = 1}
+  let head = xs[: index / 0]?
+  let mapped = m["a"]?
+  ret some (head +? mapped)
+end fun
 
-// Import specific functions.
-import u32.max_value
-import u32.add_saturating
+// A place can be written through in the same way.
+fun overwrite(): ?[u32]
+  var xs: [u32] = [1, 2, 3]
+  set xs[: index / 0]? = 99
+  ret some xs
+end fun
 
-// Use imported functions.
-fun use_stdlib(): u32
-  let max = max_value()
-  let result = add_saturating(max, 1)  // Saturates at max
-  ret result
+// A set is not indexed. Ask it whether it holds something.
+fun has_two(ref s: #{u32}): bool
+  ret contains(ref s, ref : u32 / 2)
 end fun
 
 
 // =========================================================================
-// 13. INTRINSIC CALLS
+// 18. GENERICS AND BOUNDS
 // =========================================================================
 
-// Low-level operations via icall.
-fun bitwise_example(a: u32, b: u32): u32
-  let anded = icall bitand_u32(a, b)
-  let ored = icall bitor_u32(a, b)
-  let shifted = icall shl_u32(a, 2)
-  ret shifted
+// A function may take type parameters in angle brackets.
+fun pair_up<T>(a: T, b: T): [T]
+  ret [a, b]
 end fun
 
+// A bound says which types a parameter may be, and in exchange the body may
+// do what all of them have in common. Bounds go in a `with` clause after the
+// signature, so a signature reads as a signature.
+//
+//   ord       - every type; says the total order may be used
+//   fixedint  - the ten fixed-width integers
+//   float     - f32 and f64
+fun smaller<T>(a: T, b: T): T with { T is ord, }
+  ret min(a, b)
+end fun
+
+// A set or a map over a type parameter needs that parameter ordered, because
+// that is how it keeps its keys. A list does not.
+fun set_of<T>(a: T, b: T): #{T} with { T is ord, }
+  ret #{a, b}
+end fun
+
+// A generic is compiled against a descriptor the call site hands over, so one
+// of these serves every element type and passing a collection to one costs
+// nothing.
+
 
 // =========================================================================
-// 14. TYPE ALIASES
+// 19. CONST PARAMETERS
 // =========================================================================
 
-// Type aliases provide names for structural types.
+// A `const` parameter must be given a compile-time constant, and the body may
+// use it where a constant is required.
+fun scaled(const factor: u32, n: u32): !u32
+  ret ok (n *! factor)
+end fun
+
+const FACTOR: u32 = 3
+let scaled_up = scaled(FACTOR, 7)
+
+
+// =========================================================================
+// 20. TYPE ALIASES
+// =========================================================================
+
+// An alias names a structural type. It is syntax only: there is no new type
+// and no runtime difference.
 type Age: u32
 type Point: { x: f32, y: f32 }
 type MaybeInt: ?int
 type IntResult: !int
+type PointList: [Point]
 
-// Use aliases in function signatures.
 fun make_point(x: f32, y: f32): Point
   ret { x = x, y = y }
 end fun
 
-fun get_age(): Age
-  ret 25
+// An alias must be defined before it is used, which rules out both forward
+// references and an alias that names itself, and it cannot shadow a primitive
+// type name.
+
+
+// =========================================================================
+// 21. INTRINSICS AND NATIVE FUNCTIONS
+// =========================================================================
+
+// `icall` calls a compiler intrinsic. An intrinsic infers nothing, so its
+// arguments carry their own type hints.
+fun bit_ops(a: u32, b: u32): u32
+  let anded = icall bitand_u32(a, b)
+  let shifted = icall shl_u32(anded, : u32 / 2)
+  ret shifted
 end fun
 
-// Aliases can reference other aliases (if defined earlier).
-type PointList: [Point]
-
-// Restrictions:
-// - Must be defined before use (no forward references).
-// - Cannot shadow primitive types (bool, u32, int, string, etc.).
-// - Purely syntactic: no runtime difference from the structural type.
+// Below the intrinsics are the native functions, which are Rust. A package
+// declares a rider -- a Rust crate compiled alongside it -- and a module
+// inside that package names what the rider provides:
+//
+//   require rider std
+//   import std.string_len
+//
+//   native fun string_len(ref self: string): index
+//
+// That is how `sys/std/string` is built, and it is a module-level facility:
+// a script cannot declare its own natives.
 
 
 // =========================================================================
-// 15. TYPE SYSTEM NOTES
+// 22. DEBUG OUTPUT
 // =========================================================================
 
-// Numeric widening: smaller types widen to larger.
-// u8 -> u16 -> u32 -> u64 -> int
-// i8 -> i16 -> i32 -> i64 -> int
+// `debuglog` prints a value. It is the one thing here that is not pure, and
+// it exists for looking at the middle of a computation.
+debuglog "learn.dfs is running"
 
-// Copy types (can be freely duplicated):
-//   bool, u8-u64, i8-i64, f32
 
-// Linear types (move semantics):
-//   int, string, list, map, set, table, data, error
+// =========================================================================
+// 23. LINEAR TYPES
+// =========================================================================
 
-// Binary operators borrow operands (don't consume).
-fun can_reuse(x: int): int
-  let a = x + x    // x cloned for operation
-  let b = x + x    // x still valid
-  ret x            // x can be returned
+// Types divide in two.
+//
+//   Copy    bool, u8-u64, i8-i64, index, offset, f32, f64
+//   Linear  int, string, list, map, set, tensor, table, data, error
+//
+// A copy type duplicates as often as it is named. A linear one is used
+// exactly once: passing it somewhere gives it away, and naming it again is an
+// error until you clone it with `@`.
+fun reuse_a_copy_type(x: u32): u32
+  let a = x
+  let b = x
+  ret a
 end fun
 
+// A binary operator borrows rather than consumes, so a linear operand is
+// still there afterwards.
+fun reuse_across_operators(x: int): int
+  let a = x + x
+  let b = x + x
+  ret x
+end fun
+
+// A loop is where linearity bites hardest. Naming a linear value from outside
+// the loop inside its body would move it on every iteration, which can happen
+// at most once, so the compiler stops it -- and again points at the `@` that
+// would clone it per iteration instead.
+
 
 // =========================================================================
-// 16. PUTTING IT ALL TOGETHER
+// 24. PUTTING IT TOGETHER
 // =========================================================================
 
-// Example: Fibonacci with checked arithmetic.
+// Fibonacci, in checked arithmetic, so overflow is an error rather than a
+// wrong answer.
 fun fib(n: u32): !u32
   if n .< 2
     ret ok n
@@ -407,10 +703,73 @@ fun fib(n: u32): !u32
   ret ok b
 end fun
 
+// A histogram, which touches a map, a var, a loop and a borrow.
+fun tally(ref words: [string]): !%{string = u32}
+  var counts: %{string = u32} = %{}
+  var i: index = 0
+  let n = len(ref words)
+  loop while i .< n
+    if get(ref words, i) |word|
+      let seen = get_or(ref counts, ref word, : u32 / 0)
+      insert(mut counts, word, seen +! : u32 / 1)
+    end if
+    set i = icall add_wrapping_index(i, : index / 1)
+  end loop
+  ret ok counts
+end fun
+
 
 // =========================================================================
-// SCRIPT OUTPUT
+// 25. SCRIPT OUTPUT
 // =========================================================================
 
-// Script final expression is the output.
-let output = fib(10)
+// The script runner prints the binding named `output`, if there is one. That
+// is a convention of the runner and not part of the language.
+//
+// Everything borrowed is borrowed before the tuple is built, because putting
+// a linear value into the tuple gives it away and the borrow would then be a
+// use after move.
+let sample_words: [string] = ["a", "b", "a"]
+let word_counts = tally(ref sample_words)
+let numbers_total = sum_list(ref numbers)
+let greeting_length = inspect(ref greeting)
+let unique_has_two = has_two(ref unique)
+let joined = concat(ref "data", ref "love")
+
+let output = (
+  // Literals and bindings.
+  byte, position, delta, big, pi, e, greeting, greeting_length, mask, huge,
+  grouped, from_hint, hinted, widest_integer, widest_float,
+  counter, pending, LIMIT, NAME,
+  // Collections.
+  numbers, scores, unique, grid, readings,
+  // Aggregates, options and results.
+  pair, point, found, missing, succeeded, failed, bare_error, both, anything,
+  // Enums.
+  circle, name_of(circle), name_of(pentagon), is_round(circle),
+  // Functions and parameter modes.
+  double(21), to_fill, to_bump, bumped,
+  // Operators.
+  int_sum, float_quotient, checked_add(1, 2), optional_add(1, 2),
+  int_divide(7, 2), is_less, is_eq, conjunction, negation,
+  // Clone and widen.
+  widen_then_add(2, 3), length_of_copy, length_of_original,
+  // Control flow.
+  classify(0), classify(50), or_zero(some 7), or_zero(none),
+  describe_result(ok 1), describe_result(er error "x"),
+  count_to(5), sum_to(5), count_odds(10), numbers_total,
+  // Try operators and indexing.
+  add_options(some 1, none), add_results(ok 1, ok 2),
+  lookup(), overwrite(), unique_has_two,
+  // Generics, const parameters, aliases, intrinsics.
+  pair_up(: u32 / 1, : u32 / 2), smaller("b", "a"),
+  set_of(: u32 / 5, : u32 / 2), scaled_up,
+  make_point(: f32 / 1.0, : f32 / 2.0), bit_ops(: u32 / 12, : u32 / 10),
+  // Linearity.
+  reuse_a_copy_type(3), reuse_across_operators(4),
+  // The worked examples, and a little of the standard library.
+  fib(10), word_counts,
+  max_value(), add_saturating(max_value(), 1), add_checked(1, 2),
+  unwrap_or(some : u32 / 3, : u32 / 0),
+  joined, from_u32(: u32 / 7)
+)
