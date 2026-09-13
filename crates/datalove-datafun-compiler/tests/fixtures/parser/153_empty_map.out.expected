@@ -5,48 +5,20 @@
         "kind": "Let",
         "name": "x",
         "type_hint": {
-          "ParseError": {
-            "message": "unexpected tokens in type hint"
+          "Map": {
+            "key_type": "U32",
+            "value_type": "String"
           }
         },
         "value": {
           "expr": {
-            "kind": "Place",
-            "root": "map",
-            "steps": []
+            "entries": [],
+            "kind": "Map",
+            "type_hint": null
           }
         }
       }
     ]
   },
-  "diagnostics": [
-    {
-      "code": "D021",
-      "labels": [
-        {
-          "message": "unexpected tokens",
-          "span": [
-            0,
-            1
-          ],
-          "text": "l"
-        }
-      ],
-      "message": "unexpected tokens in type hint"
-    },
-    {
-      "code": "P021",
-      "labels": [
-        {
-          "message": "unexpected token",
-          "span": [
-            30,
-            32
-          ],
-          "text": "{}"
-        }
-      ],
-      "message": "unexpected token after expression"
-    }
-  ]
+  "diagnostics": []
 }

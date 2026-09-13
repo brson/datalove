@@ -1,0 +1,38 @@
+{
+  "ast": {
+    "statements": [
+      {
+        "kind": "Let",
+        "name": "y",
+        "type_hint": "U32",
+        "value": {
+          "expr": {
+            "kind": "Int",
+            "type_hint": null,
+            "value": "5"
+          }
+        }
+      },
+      {
+        "kind": "ParseError",
+        "message": "expected '=' after let binding"
+      }
+    ]
+  },
+  "diagnostics": [
+    {
+      "code": "D023",
+      "labels": [
+        {
+          "message": "expected '='",
+          "span": [
+            26,
+            30
+          ],
+          "text": "junk"
+        }
+      ],
+      "message": "expected '=' after let binding"
+    }
+  ]
+}

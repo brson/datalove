@@ -11,7 +11,7 @@ mod tests;
 
 use bct::{
     input::Source,
-    bracer::{Bracer, TreeToken},
+    bracer::Bracer,
     source_map,
     lexer,
     bracer,
@@ -19,6 +19,8 @@ use bct::{
 
 use crate::ast;
 use state::Parser;
+
+pub use type_hint::{parse_type_hint, TypeHintStream};
 
 /// Parse a Source into a datalit expression with span information.
 #[salsa::tracked(returns(copy))]
@@ -41,20 +43,6 @@ fn parse_bracer<'db>(
     let mut parser = Parser::from_branch(db, bracer.iter(db), source_text);
     let expr = parser.parse_expr_full();
     ast::ParseResult::new(db, expr, parser.take_expr_spans())
-}
-
-/// Parse a type hint from a vector of tokens.
-///
-/// Returns the parsed type hint and the number of tokens consumed.
-pub fn parse_type_hint_from_tokens<'db>(
-    db: &'db dyn crate::Db,
-    tokens: Vec<TreeToken<'db>>,
-    source_text: bct::text::Text<'db>,
-) -> (ast::TypeHint<'db>, usize) {
-    let mut parser = Parser::new(db, tokens, source_text);
-    let type_hint = parser.parse_type_hint();
-    let consumed = parser.pos();
-    (type_hint, consumed)
 }
 
 /// Test-only tracked wrapper around parse() to provide Salsa context.

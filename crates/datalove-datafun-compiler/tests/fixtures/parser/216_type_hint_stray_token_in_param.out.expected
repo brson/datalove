@@ -1,0 +1,55 @@
+{
+  "ast": {
+    "statements": [
+      {
+        "body": [
+          {
+            "kind": "Ret",
+            "value": {
+              "expr": {
+                "kind": "Int",
+                "type_hint": null,
+                "value": "1"
+              }
+            }
+          }
+        ],
+        "kind": "Fun",
+        "name": "f",
+        "params": [
+          {
+            "is_comptime": false,
+            "mode": "In",
+            "name": "a",
+            "type_hint": "U32"
+          }
+        ],
+        "return_type": "U32"
+      }
+    ]
+  },
+  "diagnostics": [
+    {
+      "code": "P021",
+      "labels": [
+        {
+          "message": "unexpected token",
+          "span": [
+            13,
+            17
+          ],
+          "text": "junk"
+        },
+        {
+          "message": "in this parameter list",
+          "span": [
+            5,
+            6
+          ],
+          "text": "("
+        }
+      ],
+      "message": "unexpected token after expression"
+    }
+  ]
+}

@@ -1,0 +1,36 @@
+{
+  "ast": {
+    "statements": [
+      {
+        "body": [
+          {
+            "kind": "Ret",
+            "value": {
+              "expr": {
+                "kind": "Place",
+                "root": "a",
+                "steps": []
+              }
+            }
+          }
+        ],
+        "kind": "Fun",
+        "name": "f",
+        "params": [
+          {
+            "is_comptime": false,
+            "mode": "In",
+            "name": "a",
+            "type_hint": {
+              "Alias": "T"
+            }
+          }
+        ],
+        "return_type": {
+          "Alias": "T"
+        }
+      }
+    ]
+  },
+  "diagnostics": []
+}

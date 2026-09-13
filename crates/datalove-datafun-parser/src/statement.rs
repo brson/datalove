@@ -1276,81 +1276,13 @@ impl<'db> Parser<'db> {
         body
     }
 
-    /// Delegate to datalit parser for type hints.
+    /// Read a type hint, which datalit knows the shape of and this does not.
+    ///
+    /// It reads straight out of this parser, so it consumes the type and
+    /// nothing else: the `=` of a `let`, the `,` between two parameters and
+    /// the `with` opening a bounds clause are all still here afterwards, for
+    /// whichever caller wanted one to say so itself.
     pub(super) fn parse_type_hint(&mut self) -> datalit::ast::TypeHint<'db> {
-        use bct::lexer::TokenKind;
-
-        // Collect tokens for the type hint, stopping at delimiters that mark the end of a type.
-        // We stop at `=` (assignment), `,` (parameter separator), or `/` (type/value separator).
-        // These delimiters are NOT consumed, so they remain in the iterator.
-        // fixme this is so brittle
-        let mut collected = Vec::new();
-
-        while let Some(token) = self.peek() {
-            // A `with` clause ends the signature, so it ends the return type
-            // too. Only after something has been collected, so that a type may
-            // still be named `with`.
-            if !collected.is_empty() && self.peek_word() == Some("with") {
-                break;
-            }
-
-            let should_stop = match token {
-                TreeToken::Token(t) => {
-                    matches!(
-                        t.kind,
-                        TokenKind::Sigil(Sigil::Equals)
-                            | TokenKind::Sigil(Sigil::Comma)
-                            | TokenKind::Sigil(Sigil::SlashForward)
-                    )
-                }
-                _ => false,
-            };
-
-            if should_stop {
-                break;
-            }
-
-            // Consume and collect the token.
-            collected.push(token.C());
-            self.next();
-        }
-
-        let collected_len = collected.len();
-
-        // Delegate to datalit parser.
-        let (type_hint, consumed) = datalit::parser::parse_type_hint_from_tokens(
-            self.db,
-            collected,
-            self.source_text(),
-        );
-
-        // Check for unconsumed tokens - this indicates a parse error in the type hint.
-        // But only emit a new error if the type hint isn't already a ParseError
-        // (to avoid duplicate errors).
-        if consumed < collected_len {
-            if !matches!(type_hint, datalit::ast::TypeHint::ParseError(_)) {
-                use bct::text::{InternedText, TextSpan};
-                use bct::diagnostic::DiagnosticBuilder;
-                use datalove_diagnostic::DiagnosticBuilderExt;
-
-                // Get text/span info for the error.
-                let text = self.source_text();
-                let message = InternedText::new(self.db, "unexpected tokens in type hint".S());
-
-                DiagnosticBuilder::error(self.db, "unexpected tokens in type hint")
-                    .code("D021")
-                    .primary_label(TextSpan::new(text, 0..1), "unexpected tokens")
-                    .emit_parse();
-
-                let error = datalit::ast::TypeHintParseError {
-                    text,
-                    span: (0..1).into(),
-                    message,
-                };
-                return datalit::ast::TypeHint::ParseError(error);
-            }
-        }
-
-        type_hint
+        datalit::parser::parse_type_hint(self)
     }
 }

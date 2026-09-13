@@ -10,6 +10,7 @@ use bct::{
 };
 
 use datalove_datafun_ast::ast;
+use datalove_datalit as datalit;
 use datalove_datalit::parser_util::{TextSpan, TokenStream, TokenStreamExt};
 use bct::diagnostic::{DiagnosticBuilder, SpanEntry};
 use datalove_diagnostic::DiagnosticBuilderExt;
@@ -619,6 +620,36 @@ impl<'db> Parser<'db> {
             }
             builder.emit_parse();
         }
+    }
+}
+
+impl<'db> datalit::parser::TypeHintStream<'db> for Parser<'db> {
+    /// Report a type hint error against this parser rather than datalit's.
+    ///
+    /// A type hint inside a datafun statement is read straight out of this
+    /// parser, so what goes wrong in one is this parser's error to record and
+    /// to point at, down to the branch it was found in.
+    fn type_hint_error(
+        &mut self,
+        ts: TextSpan<'db>,
+        message: &str,
+        code: &str,
+        label: &str,
+    ) -> datalit::ast::TypeHint<'db> {
+        self.had_error = true;
+        let message_text = InternedText::new(self.db, message.S());
+        let mut builder = DiagnosticBuilder::error(self.db, message)
+            .code(code)
+            .primary_label(ts.C(), label);
+        if let Some((ctx_span, ctx_msg)) = &self.branch_context {
+            builder = builder.secondary_label(ctx_span.C(), ctx_msg);
+        }
+        builder.emit_parse();
+        datalit::ast::TypeHint::ParseError(datalit::ast::TypeHintParseError {
+            text: ts.text,
+            span: ts.span,
+            message: message_text,
+        })
     }
 }
 

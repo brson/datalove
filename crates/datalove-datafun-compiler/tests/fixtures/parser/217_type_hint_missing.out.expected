@@ -1,0 +1,38 @@
+{
+  "ast": {
+    "statements": [
+      {
+        "kind": "Let",
+        "name": "x",
+        "type_hint": {
+          "ParseError": {
+            "message": "unexpected token in type hint"
+          }
+        },
+        "value": {
+          "expr": {
+            "kind": "Int",
+            "type_hint": null,
+            "value": "5"
+          }
+        }
+      }
+    ]
+  },
+  "diagnostics": [
+    {
+      "code": "D008",
+      "labels": [
+        {
+          "message": "unexpected token in type hint",
+          "span": [
+            7,
+            8
+          ],
+          "text": "="
+        }
+      ],
+      "message": "unexpected token in type hint"
+    }
+  ]
+}

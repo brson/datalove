@@ -140,16 +140,6 @@ impl<'db> Parser<'db> {
         self.expr_counter = sub.expr_counter;
     }
 
-    /// Get current position.
-    ///
-    /// Only valid for Vec-backed parsers.
-    pub(super) fn pos(&self) -> usize {
-        match &self.source {
-            TokenSource::Vec { pos, .. } => *pos,
-            TokenSource::Iter { .. } => panic!("pos() called on iterator-backed parser"),
-        }
-    }
-
     /// Peek at the next token (one ahead of current) for lookahead.
     pub(super) fn peek_next(&self) -> Option<&TreeToken<'db>> {
         match &self.source {
