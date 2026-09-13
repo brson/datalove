@@ -128,9 +128,10 @@ face in both positions.")
     ;; earmuffed brackets the lexer knows.
     ("%{\\|#{\\|{|\\||}\\|\\[|\\||\\]\\|(|\\||)\\|<|\\||>" . font-lock-builtin-face)
 
-    ;; Checked (`!'), optional (`?'), saturating (`|') and wrapping (`%')
-    ;; arithmetic, and the comparisons.
-    ("[-+*/][!?|%]" . font-lock-builtin-face)
+    ;; Checked (`!') and optional (`?') arithmetic, and the comparisons. The
+    ;; lexer also knows a saturating `|' and a wrapping `%' form, but no
+    ;; parser reads either, so neither is an operator to highlight.
+    ("[-+*/][!?]" . font-lock-builtin-face)
     ("\\.<\\|\\.>\\|<=\\|>=\\|==\\|!=" . font-lock-builtin-face))
   "Font lock keywords for `datalove-mode'.")
 
@@ -201,6 +202,11 @@ Return nil if point is not inside a block."
     (beginning-of-line)
     (let ((state (syntax-ppss (point))))
       (cond
+       ;; Inside a string or a block comment that opened on an earlier line,
+       ;; where the whitespace at the front of the line is content.
+       ((nth 8 state)
+        (current-indentation))
+
        ;; A continuation line inside brackets. Both hanging and aligned
        ;; continuations are written in Datalove, and nothing in the line tells
        ;; which one it means to be, so an already-indented line is left where
