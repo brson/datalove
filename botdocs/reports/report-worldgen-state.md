@@ -87,18 +87,59 @@ let v2: {} = {}
 debuglog v2
 ```
 
-The interpreter prints `{}` and exits; the cranelift AOT dies on a signal.
-Reproduce with:
+The interpreter printed `{}` and exited; the cranelift AOT died on a signal.
+
+It was the empty anon struct. `TyDescRef::struct_info` built a slice over the
+field array with `slice::from_raw_parts`, and every emitter leaves that pointer
+null when there are no fields to point at -- "No fields array needed for empty
+tuple", as the cranelift one puts it. `from_raw_parts` wants a non-null aligned
+pointer even for a length of zero, so this was undefined behaviour, and the
+check that noticed it aborted the process. `debuglog` was the reader, through
+`pretty_struct`.
+
+The interpreter escaped because its descriptors come from a Rust-side builder,
+whose empty run is a dangling-but-valid pointer rather than a null one.
+
+And the same program run by `datalove aot-compile --run` escaped too, which is
+why it looked at first as though the module mattered. It did not: that path
+links the native component, built under `profile.native-component`, which
+inherits `release` and so has the check compiled out. The dual test links a
+runtime built in its own debug profile. The undefined behaviour was in both;
+only the checking differed. Nothing was ever read through the empty slice, so
+nothing was corrupted -- it aborted where the check was on and was silent
+where it was off.
+
+Answered in the accessor rather than the emitters: a run of no elements is
+empty whatever the pointer says, and asking ten emitters across four backends
+to invent a dangling address instead is the worse trade. The nine sibling
+accessors that read a name or a variant list were the same shape and went the
+same way.
+
+## And a second one, twenty-odd seeds later
+
+Seed 407, with a map literal naming a key twice:
 
 ```
-WORLDGEN_DUAL_TEST=1 WORLDGEN_DUAL_SEED=2 \
-  cargo test -p datalove-tests --test worldgen_dual_tests
+let m: %{bool = u32} = %{false = : u32 / 118, false = : u32 / 75, true = : u32 / 41}
 ```
 
-It needs the module: the script fragment alone agrees between the two, and so
-does each piece of it on its own -- an empty anon struct, an empty tuple, an
-empty list, a struct with a field. The module's function is imported and never
-called. Not diagnosed further here.
+The interpreter gave `%{false = 118, false = 75, true = 41}` -- a map holding
+one key twice. The AOT gave `%{false = 75, true = 41}`, which is right.
+
+The interpreter built a set or map literal by sorting what the literal named
+and handing the run to a bulk builder, which takes the run as given. Nothing
+removed the duplicates. A set literal was worse in kind than a map's, since
+`#{1, 1, 2}` came back holding `1` twice, and a set is a collection of unique
+elements by definition.
+
+Both now insert one at a time, which is what the erased paths beside them
+already did and what the C backend was changed to do for the same reason. The
+insert is what knows an element is already there, and what lets go of the one
+it did not take -- which matters for a string, where the duplicate is a
+separate allocation.
+
+Neither of these has anything to do with generics. They are what was sitting
+in the part of the language the generator had stopped writing.
 
 ## Where that leaves it
 

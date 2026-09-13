@@ -451,7 +451,36 @@ fn test_worldfile(base_seed: u64, index: u64) -> Result<(), String> {
     Ok(())
 }
 
+/// Run one worldfile from a file through both paths, for bisecting by hand.
+fn bisect_from_file(path: &str) {
+    let source = std::fs::read_to_string(path).expect("readable worldfile");
+    let parsed = package_load_worldfile::parse_worldfile_sections(source.as_bytes())
+        .expect("parseable worldfile");
+    let handle = std::thread::Builder::new()
+        .stack_size(32 * 1024 * 1024)
+        .spawn(move || {
+            let db = datafun::Database::default();
+            let interp = run_with_chaos_interp(&db, &parsed, 0);
+            let aot = run_with_aot(&db, &parsed);
+            (interp, aot)
+        })
+        .expect("spawn");
+    match handle.join() {
+        Ok((interp, aot)) => {
+            println!("INTERP ok={} out={:?} err={:?}", interp.success, interp.debuglog, interp.error);
+            println!("AOT    ok={} out={:?} err={:?}", aot.success, aot.debuglog, aot.error);
+            println!("{}", if interp.success == aot.success && interp.debuglog == aot.debuglog {
+                "AGREE" } else { "DIVERGE" });
+        }
+        Err(_) => println!("DIVERGE (panicked)"),
+    }
+}
+
 fn main() {
+    if let Ok(path) = std::env::var("BISECT_WORLD") {
+        bisect_from_file(&path);
+        return;
+    }
     // Skip unless explicitly enabled (can crash due to stack overflow on some seeds).
     if std::env::var("WORLDGEN_DUAL_TEST").is_err() {
         println!("Skipping worldgen dual tests (set WORLDGEN_DUAL_TEST=1 to run)");

@@ -150,79 +150,25 @@ impl IrInterpreter {
         frames: &FrameStore,
     ) {
         let rt_handle = self.runtime.handle();
-        let set_ptr = dest.ptr;
-        let set_tydesc = dest.tydesc;
 
-        // Get element tydesc from set tydesc.
-        let set_tydesc_ref = unsafe { TyDescRef::from_ptr(set_tydesc) };
-        let element_tydesc = set_tydesc_ref.set_element_ty().as_ptr();
-        let element_size = unsafe { (*element_tydesc).size as usize };
-        let element_align = unsafe { (*element_tydesc).align };
-
-        if elements.is_empty() {
-            // Create empty set.
-            unsafe {
-                datalove_rt::c::dtlv_rti_btreeset_create_local(rt_handle, set_ptr, set_tydesc);
-            }
-            return;
-        }
-
-        // Read all element values.
-        let mut elem_values: Vec<crate::value::Value> = elements
-            .iter()
-            .map(|op| self.read_operand(op, frame, frames))
-            .collect();
-
-        // Sort elements using runtime comparison.
-        elem_values.sort_by(|a, b| unsafe {
-            let result = datalove_rt::c::dtlv_rti_cmp_total_local(
-                rt_handle,
-                a.ptr,
-                element_tydesc,
-                b.ptr,
-                element_tydesc,
-            );
-            match result {
-                datalove_rt::c::RtOrdering::Less => std::cmp::Ordering::Less,
-                datalove_rt::c::RtOrdering::Greater => std::cmp::Ordering::Greater,
-                _ => std::cmp::Ordering::Equal,
-            }
-        });
-
-        // Allocate temporary buffer for sorted elements.
-        let buffer_size = (elem_values.len() * element_size) as u32;
-        let buffer = unsafe {
-            datalove_rt::c::dtlv_rti_mem_alloc_raw_local(rt_handle, buffer_size, element_align, 1)
-        };
-
-        // Copy elements into buffer.
-        for (i, value) in elem_values.iter().enumerate() {
-            unsafe {
-                let elem_dest = buffer.add(i * element_size);
-                std::ptr::copy_nonoverlapping(value.ptr, elem_dest, element_size);
-            }
-        }
-
-        // Build B-tree from sorted buffer.
+        // Inserted one at a time rather than sorted and built in bulk.
+        //
+        // A set holds each element once, and building from a sorted run takes
+        // the run as given: two equal elements written in a literal both went
+        // in and the set came out holding a duplicate, which is not a set. The
+        // insert is what knows an element is already there, and what destroys
+        // the one it did not take.
         unsafe {
-            datalove_rt::c::dtlv_rti_btreeset_build_from_sorted_slice_local(
-                rt_handle,
-                set_ptr,
-                element_tydesc,
-                buffer,
-                elem_values.len() as rtdt::IndexRepr,
-            );
+            datalove_rt::c::dtlv_rti_btreeset_create_local(rt_handle, dest.ptr, dest.tydesc);
         }
-
-        // Free temporary buffer.
-        unsafe {
-            datalove_rt::c::dtlv_rti_mem_free_raw_local(
-                rt_handle,
-                buffer_size,
-                element_align,
-                1,
-                buffer,
-            );
+        for elem_op in elements {
+            let elem = self.read_operand(elem_op, frame, frames);
+            let mut added = false;
+            unsafe {
+                datalove_rt::c::dtlv_rti_btreeset_insert_local(
+                    rt_handle, dest.ptr, dest.tydesc, elem.ptr, elem.tydesc,
+                    &mut added as *mut bool as *mut u8);
+            }
         }
     }
 
@@ -268,108 +214,23 @@ impl IrInterpreter {
         frames: &FrameStore,
     ) {
         let rt_handle = self.runtime.handle();
-        let map_ptr = dest.ptr;
-        let map_tydesc = dest.tydesc;
 
-        // Get key and value tydescs from map tydesc.
-        let map_tydesc_ref = unsafe { TyDescRef::from_ptr(map_tydesc) };
-        let key_tydesc = map_tydesc_ref.map_key_ty().as_ptr();
-        let value_tydesc = map_tydesc_ref.map_value_ty().as_ptr();
-        let key_size = unsafe { (*key_tydesc).size as usize };
-        let value_size = unsafe { (*value_tydesc).size as usize };
-        let key_align = unsafe { (*key_tydesc).align };
-        let value_align = unsafe { (*value_tydesc).align };
-
-        if entries.is_empty() {
-            // Create empty map.
-            unsafe {
-                datalove_rt::c::dtlv_rti_btreemap_create_local(rt_handle, map_ptr, map_tydesc);
-            }
-            return;
-        }
-
-        // Read all key-value pairs.
-        let mut kv_pairs: Vec<(crate::value::Value, crate::value::Value)> = entries
-            .iter()
-            .map(|(k_op, v_op)| {
-                let k = self.read_operand(k_op, frame, frames);
-                let v = self.read_operand(v_op, frame, frames);
-                (k, v)
-            })
-            .collect();
-
-        // Sort by key using runtime comparison.
-        kv_pairs.sort_by(|a, b| unsafe {
-            let result = datalove_rt::c::dtlv_rti_cmp_total_local(
-                rt_handle,
-                a.0.ptr,
-                key_tydesc,
-                b.0.ptr,
-                key_tydesc,
-            );
-            match result {
-                datalove_rt::c::RtOrdering::Less => std::cmp::Ordering::Less,
-                datalove_rt::c::RtOrdering::Greater => std::cmp::Ordering::Greater,
-                _ => std::cmp::Ordering::Equal,
-            }
-        });
-
-        // Allocate temporary buffers for keys and values.
-        let keys_buffer_size = (kv_pairs.len() * key_size) as u32;
-        let values_buffer_size = (kv_pairs.len() * value_size) as u32;
-
-        let keys_buffer = unsafe {
-            datalove_rt::c::dtlv_rti_mem_alloc_raw_local(rt_handle, keys_buffer_size, key_align, 1)
-        };
-
-        let values_buffer = unsafe {
-            datalove_rt::c::dtlv_rti_mem_alloc_raw_local(
-                rt_handle,
-                values_buffer_size,
-                value_align,
-                1,
-            )
-        };
-
-        // Copy keys and values into buffers.
-        for (i, (key, value)) in kv_pairs.iter().enumerate() {
-            unsafe {
-                let key_dest = keys_buffer.add(i * key_size);
-                let value_dest = values_buffer.add(i * value_size);
-                std::ptr::copy_nonoverlapping(key.ptr, key_dest, key_size);
-                std::ptr::copy_nonoverlapping(value.ptr, value_dest, value_size);
-            }
-        }
-
-        // Build B-tree from sorted slices.
+        // Inserted one at a time rather than sorted and built in bulk; see
+        // `execute_set_new`. A map holds each key once, and a literal naming
+        // one twice built a map with the key in it twice. The insert is what
+        // knows the key is there already, and what lets go of the value it
+        // replaced.
         unsafe {
-            datalove_rt::c::dtlv_rti_btreemap_build_from_sorted_slices_local(
-                rt_handle,
-                map_ptr,
-                key_tydesc,
-                value_tydesc,
-                keys_buffer,
-                values_buffer,
-                kv_pairs.len() as rtdt::IndexRepr,
-            );
+            datalove_rt::c::dtlv_rti_btreemap_create_local(rt_handle, dest.ptr, dest.tydesc);
         }
-
-        // Free temporary buffers.
-        unsafe {
-            datalove_rt::c::dtlv_rti_mem_free_raw_local(
-                rt_handle,
-                keys_buffer_size,
-                key_align,
-                1,
-                keys_buffer,
-            );
-            datalove_rt::c::dtlv_rti_mem_free_raw_local(
-                rt_handle,
-                values_buffer_size,
-                value_align,
-                1,
-                values_buffer,
-            );
+        for (key_op, val_op) in entries {
+            let key = self.read_operand(key_op, frame, frames);
+            let val = self.read_operand(val_op, frame, frames);
+            unsafe {
+                datalove_rt::c::dtlv_rti_btreemap_insert_local(
+                    rt_handle, dest.ptr, dest.tydesc,
+                    key.ptr, key.tydesc, val.ptr, val.tydesc);
+            }
         }
     }
 

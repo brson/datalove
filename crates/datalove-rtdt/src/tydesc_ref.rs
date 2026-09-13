@@ -72,7 +72,7 @@ impl<'a> TyDescRef<'a> {
         assert_eq!(self.inner.type_tag, TyTag::Tuple);
         unsafe {
             let info = self.inner.type_info.tuple;
-            let fields = std::slice::from_raw_parts(info.fields, info.num_fields as usize);
+            let fields = slice_or_empty(info.fields, info.num_fields as usize);
             TupleInfo { fields }
         }
     }
@@ -99,7 +99,7 @@ impl<'a> TyDescRef<'a> {
         assert_eq!(self.inner.type_tag, TyTag::Struct);
         unsafe {
             let info = self.inner.type_info.struct_;
-            let fields = std::slice::from_raw_parts(info.fields, info.num_fields as usize);
+            let fields = slice_or_empty(info.fields, info.num_fields as usize);
             StructInfo { fields }
         }
     }
@@ -126,7 +126,7 @@ impl<'a> TyDescRef<'a> {
         assert_eq!(self.inner.type_tag, TyTag::Enum);
         unsafe {
             let info = self.inner.type_info.enum_;
-            let variants = std::slice::from_raw_parts(info.variants, info.num_variants as usize);
+            let variants = slice_or_empty(info.variants, info.num_variants as usize);
             EnumInfo { variants }
         }
     }
@@ -153,7 +153,7 @@ impl<'a> TyDescRef<'a> {
         assert_eq!(self.inner.type_tag, TyTag::Atom);
         unsafe {
             let info = self.inner.type_info.atom;
-            let name_bytes = std::slice::from_raw_parts(info.name, info.name_len as usize);
+            let name_bytes = slice_or_empty(info.name, info.name_len as usize);
             let name = std::str::from_utf8_unchecked(name_bytes);
             (name, info.name_len)
         }
@@ -167,7 +167,7 @@ impl<'a> TyDescRef<'a> {
         assert_eq!(self.inner.type_tag, TyTag::Term);
         unsafe {
             let info = self.inner.type_info.term;
-            let name_bytes = std::slice::from_raw_parts(info.name, info.name_len as usize);
+            let name_bytes = slice_or_empty(info.name, info.name_len as usize);
             let name = std::str::from_utf8_unchecked(name_bytes);
             let payload = TyDescRef::from_ptr(info.payload);
             (name, payload)
@@ -401,7 +401,7 @@ impl<'a> StructInfo<'a> {
     pub fn field(&self, index: usize) -> core::option::Option<StructFieldRef<'a>> {
         self.fields.get(index).map(|f| {
             unsafe {
-                let name_bytes = std::slice::from_raw_parts(f.name, f.name_len as usize);
+                let name_bytes = slice_or_empty(f.name, f.name_len as usize);
                 let name = std::str::from_utf8_unchecked(name_bytes);
                 StructFieldRef {
                     name,
@@ -452,7 +452,7 @@ impl<'a> Iterator for StructFieldIter<'a> {
             let field = &self.fields[self.index];
             self.index += 1;
             unsafe {
-                let name_bytes = std::slice::from_raw_parts(field.name, field.name_len as usize);
+                let name_bytes = slice_or_empty(field.name, field.name_len as usize);
                 let name = std::str::from_utf8_unchecked(name_bytes);
                 core::option::Option::Some(StructFieldRef {
                     name,
@@ -488,7 +488,7 @@ impl<'a> EnumInfo<'a> {
     pub fn variant(&self, index: usize) -> core::option::Option<EnumVariantRef<'a>> {
         self.variants.get(index).map(|v| {
             unsafe {
-                let name_bytes = std::slice::from_raw_parts(v.name, v.name_len as usize);
+                let name_bytes = slice_or_empty(v.name, v.name_len as usize);
                 let name = std::str::from_utf8_unchecked(name_bytes);
                 let payload = if v.payload.is_null() {
                     core::option::Option::None
@@ -544,7 +544,7 @@ impl<'a> Iterator for EnumVariantIter<'a> {
             let variant = &self.variants[self.index];
             self.index += 1;
             unsafe {
-                let name_bytes = std::slice::from_raw_parts(variant.name, variant.name_len as usize);
+                let name_bytes = slice_or_empty(variant.name, variant.name_len as usize);
                 let name = std::str::from_utf8_unchecked(name_bytes);
                 let payload = if variant.payload.is_null() {
                     core::option::Option::None
@@ -600,7 +600,7 @@ impl<'a> Iterator for TableColumnIter<'a> {
             let col = &*self.ptr;
             self.ptr = self.ptr.add(1);
             self.remaining -= 1;
-            let name_bytes = std::slice::from_raw_parts(col.name, col.name_len as usize);
+            let name_bytes = slice_or_empty(col.name, col.name_len as usize);
             let name = std::str::from_utf8_unchecked(name_bytes);
             core::option::Option::Some(TableColumnRef {
                 name,
@@ -616,3 +616,21 @@ impl<'a> Iterator for TableColumnIter<'a> {
 }
 
 impl<'a> ExactSizeIterator for TableColumnIter<'a> {}
+
+/// A slice over a run a descriptor points at, empty when there is none.
+///
+/// A descriptor with nothing to point at leaves the pointer null rather than
+/// inventing an address for a run of no elements, which is what every backend
+/// that emits one does. Building a zero-length slice from a null pointer is
+/// not allowed even though nothing would be read through it, so the empty case
+/// is answered without looking at the pointer at all.
+///
+/// # Safety
+///
+/// When `len` is not zero, `ptr` must be valid for `len` elements.
+unsafe fn slice_or_empty<'a, T>(ptr: *const T, len: usize) -> &'a [T] {
+    if len == 0 {
+        return &[];
+    }
+    unsafe { std::slice::from_raw_parts(ptr, len) }
+}
