@@ -14,12 +14,55 @@ pub fn gen_type_hint<'db, R: Rng>(
     rng: &mut R,
     config: &WorldGenConfig,
 ) -> TypeHint<'db> {
-    // Whatever the config asks for. This forced leaf-only types once, to work
-    // around a one-element tuple printed as `(x)` rather than `(x,)`, which
-    // reads as a bracketed expression and did not match its own type. That is
-    // fixed, and a signature holding a list or an option is the interesting
-    // case, so nothing is held back here now.
-    ast_gen::gen_type_hint(db, rng, &config.type_config, 0)
+    // Whatever the config asks for, less what is declined. This forced
+    // leaf-only types once, to work around a one-element tuple printed as
+    // `(x)` rather than `(x,)`, which reads as a bracketed expression and did
+    // not match its own type. That is fixed, and a signature holding a list or
+    // an option is the interesting case, so nothing else is held back.
+    for _ in 0..8 {
+        let candidate = ast_gen::gen_type_hint(db, rng, &config.type_config, 0);
+        if !is_declined(&candidate) {
+            return candidate;
+        }
+    }
+    // Gave up asking; a leaf is always acceptable.
+    TypeHint::U32
+}
+
+/// Whether a type is one the generator declines to write, for now.
+///
+/// Both are tensors of something, and each is a compiler that cannot take what
+/// it would be handed. They are written down in
+/// `botdocs/reports/report-worldgen-state.md` with the program that shows the
+/// failure, so that this list comes back off again when they are dealt with. A
+/// generator that writes nothing but working programs finds nothing; one that
+/// writes nothing but failing ones is no use either, and these two are already
+/// known.
+///
+/// - A tensor whose elements are tensors, which the cranelift backend fails to
+///   compile, inside cranelift's own ABI code.
+/// - A tensor whose elements are tuples, whose AOT binary dies where it builds
+///   one. Only a tuple holding something on the heap actually does -- a tuple
+///   of numbers is fine -- but the decline is left coarser than the bug rather
+///   than turn on a "holds a pointer" reading of a type.
+///
+/// A flat tensor of anything else is fine and is still written, including a
+/// tensor of structs, which is the same shape as the tuple that is not.
+fn is_declined(ty: &TypeHint<'_>) -> bool {
+    match ty {
+        TypeHint::Tensor(t) => {
+            matches!(*t.element_type, TypeHint::Tensor(_) | TypeHint::AnonTuple(_))
+                || is_declined(&t.element_type)
+        }
+        TypeHint::List(t) => is_declined(&t.element_type),
+        TypeHint::Set(t) => is_declined(&t.element_type),
+        TypeHint::Option(t) => is_declined(&t.inner_type),
+        TypeHint::Result(t) => is_declined(&t.inner_type),
+        TypeHint::Map(t) => is_declined(&t.key_type) || is_declined(&t.value_type),
+        TypeHint::AnonTuple(t) => t.fields.iter().any(is_declined),
+        TypeHint::AnonStruct(t) => t.fields.iter().any(|f| is_declined(&f.type_hint)),
+        _ => false,
+    }
 }
 
 /// Generate a type alias definition.

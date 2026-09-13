@@ -35,6 +35,9 @@ pub struct ModuleInfo<'db> {
     pub module: String,
     pub functions: Vec<FunctionSig<'db>>,
     pub type_aliases: Vec<TypeAlias<'db>>,
+    /// The generic functions it defines, which are called by picking types
+    /// rather than by matching a return type. See `gen_generic`.
+    pub generics: Vec<crate::gen_generic::GenericSig>,
 }
 
 impl<'db> ModuleInfo<'db> {
@@ -81,6 +84,12 @@ pub struct GenContext<'db> {
     /// Functions are named fn0, fn1, fn2, etc.
     pub max_callable_function_index: Option<usize>,
 
+    /// The generic functions in reach, which a call has to pick concrete
+    /// types for. Kept apart from `functions` because they are not called the
+    /// same way: a generic's answer depends on what the call binds its type
+    /// parameters to, so the caller chooses first and names the result.
+    pub generic_functions: Vec<crate::gen_generic::GenericSig>,
+
     /// Variables that have been consumed (moved) and can't be used again.
     /// This is used for ownership tracking - global heap types get moved on first use.
     pub consumed_variables: HashSet<String>,
@@ -102,6 +111,7 @@ impl<'db> GenContext<'db> {
             control_flow_depth: 0,
             current_function_name: None,
             max_callable_function_index: None,
+            generic_functions: Vec::new(),
             consumed_variables: HashSet::new(),
             loop_protected_variables: HashSet::new(),
         }
@@ -157,9 +167,12 @@ impl<'db> GenContext<'db> {
             })
             .collect();
 
-        // Collect callable local function names for shadowing check.
+        // Collect local function names for the shadowing check. Every local
+        // name, not just the callable ones: a local function further down the
+        // module is not callable from here, but it still stands in front of an
+        // import of the same name, and writing that name would reach it.
         let local_names: std::collections::HashSet<_> =
-            callable_local.iter().map(|f| f.name.as_str()).collect();
+            self.functions.iter().map(|f| f.name.as_str()).collect();
 
         // For imported functions, later imports shadow earlier ones.
         // Keep track of which names we've seen (iterating in reverse).
@@ -541,6 +554,7 @@ mod tests {
             module: "utils".to_string(),
             functions: vec![],
             type_aliases: vec![],
+            generics: vec![],
         };
 
         assert_eq!(info.path(), "local/gen/utils");

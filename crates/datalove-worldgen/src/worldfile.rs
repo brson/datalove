@@ -3,7 +3,7 @@
 use rand::{Rng, SeedableRng};
 use datalove_datalit::Database;
 use crate::config::WorldGenConfig;
-use crate::gen_module::{plan_module_graph, gen_module_type_aliases, gen_module_function_sigs, gen_module};
+use crate::gen_module::{plan_module_graph, gen_module_type_aliases, gen_module_function_sigs, gen_module_generic_sigs, gen_module};
 use crate::gen_script::gen_script;
 
 /// Generate a complete worldfile from a seed.
@@ -39,8 +39,9 @@ fn gen_worldfile_inner<'db, R: Rng>(
     let mut modules = plan_module_graph(rng, config);
 
     // First pass: generate type aliases and function signatures for all modules.
-    for module in &mut modules {
+    for (index, module) in modules.iter_mut().enumerate() {
         module.type_aliases = gen_module_type_aliases(db, rng, config);
+        module.generics = gen_module_generic_sigs(rng, config, index);
         module.functions = gen_module_function_sigs(db, rng, config);
     }
 

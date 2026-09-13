@@ -141,22 +141,159 @@ separate allocation.
 Neither of these has anything to do with generics. They are what was sitting
 in the part of the language the generator had stopped writing.
 
+## Generics
+
+Added after the above. A generic body can do very little with a value of its
+type parameter -- move it, drop it, clone it, print it, hand it on, put it in a
+collection -- and anything more wants a bound. So rather than teach the
+expression generator what a `T` is and hope it keeps to those rules, the bodies
+come from a fixed set of shapes known to compile, and the variety goes where it
+is worth having: in the types the call sites pick.
+
+Twelve shapes, in `gen_generic.rs`: handing the value back, letting it go,
+cloning it, wrapping it in an option, building a list of it from one element or
+two, building a set, building a map from two parameters, borrowing a list of
+it, and three bounded ones -- checked arithmetic under `fixedint`, bare
+arithmetic under `float`, a comparison under `fixedint`. The set and map carry
+`is ord`, which they must.
+
+A call picks a concrete type for each parameter, respecting the bound, binds
+every argument to a name carrying its type, and binds the answer. The argument
+binding matters: a generic's parameter is fixed by what the arguments turn out
+to be, and an unadorned `1.5` is an `f64`, so a call meant for `f32` would
+quietly become one for `f64` and then disagree with the binding that named it.
+Binding first also gives a `ref` parameter a place to borrow.
+
+Generated code now looks like:
+
+```
+let a0: i32 = : i32 / 30
+let a1: i32 = fn0(fn1(-(: f64 / 94.2)))
+let v2: [i32] = gen1_1(a0, a1)
+
+debuglog v2
+```
+
+2000 seeds typecheck, and 280 of 280 seeds pass the dual test with no
+disagreement between backends.
+
+## What that turned up
+
+**A function returning `()` could not be compiled at all.** Fixed here. `()`
+maps to `IrType::Unit`, so the signature gets no sret pointer, but the body
+still lowered `ret ()` into a value and the return went looking for somewhere
+to put it. Two halves: `ret` now returns nothing where the return type is
+unit, and a call to such a function gives its destination the address of its
+own empty slot, since something may still read it -- `debuglog f()` does.
+
+**Two shapes the generator declines**, each because a compiler cannot take it.
+Both are tensors of something; a flat tensor of anything else is fine.
+`is_declined` in `gen_type.rs` says so and points here. A generator that writes
+only working programs finds nothing; one that writes only failing programs is
+no use either.
+
+- A tensor whose elements are tensors, which fails inside cranelift's own ABI
+  code, at compile time.
+
+  ```
+  let v: [|[|f32, 1|], 3|] = [| : [|f32, 1|] / [| : f32 / 1.0 |],, : [|f32, 1|] / [| : f32 / 2.0 |] |]
+  ```
+
+- A tensor whose elements are tuples holding something on the heap. This one
+  compiles and then dies where it runs, and only under AOT -- the interpreter,
+  with the chaos JIT on, builds it and carries on.
+
+  ```
+  let v: [|(u32, string), 1|] = [| : (u32, string) / (: u32 / 6, : string / "hi") |]
+  ```
+
+  Any heap member does it, in any position, and so does a list in place of the
+  string. A tuple of numbers is fine. A *struct* holding a string is fine,
+  which is the same shape laid out the same way, so it is the tuple path
+  through the tensor rather than the heap member itself. Found by the dual
+  test, at seed 47524.
+
+**A `some` or an `ok` written with a type hint left its payload unchecked**,
+and the lowerer came down on the missing type with "Expression must have type
+from typechecker". Fixed here.
+
+```
+let v: data = data : ?u32 / some : u32 / 1
+let w: error = error : ?u32 / ok : u32 / 28
+```
+
+`synthesize` took the hint's word for what the whole expression was and
+returned, and nothing else ever visited what it wrapped. `er` did not have
+this, because it checks its payload against `error`. It showed up under `data`
+and `error` only because that is where a wrapper gets synthesized rather than
+checked -- everywhere else the payload is checked against the surrounding
+type. Checking the payload against the hint also means a hint that disagrees
+with what it wraps is now an error rather than believed: `data : ?string /
+some : u32 / 1` used to compile.
+
+**A map built in a generic, at `data` on one side, dropped its entry and
+leaked what was in it.** Fixed here. A collection built inside a generic is
+made against the descriptor the call site handed over, so an element goes in as
+what it really is, and an element in hand is in the erased shape -- a `data` --
+and has to be unpacked on the way. The one case where the two readings coincide
+is a collection whose elements really are `data`: the value in hand is already
+what is wanted and unpacking it would take it apart.
+
+A map has two sides and they can differ. `%{k = v}` in a generic over both,
+called at `K := data`, has a key to leave alone and a value to unpack. The
+insert entry read each side, saw they disagreed, and returned an error:
+
+```
+// The insert entries take both sides the same way, so a map erased
+// on one side only has no path through here yet. Lowering refuses
+// to build one, so nothing arrives in this state.
+```
+
+Lowering does not refuse, and things do arrive in that state. Nobody read the
+error, so the entry silently went nowhere and everything in it leaked. It took
+the leak checker to notice, because a map with nothing in it prints as a map.
+`btreemap_insert_sides_impl` now takes each side its own way. Found by the dual
+test, at seed 87113; `131_generic_map_at_data` covers it.
+
+**The generator wrote mutually recursive functions with no base case.** Fixed
+here. `gen_module` works out how far down the module a body may call, which is
+what stops `fn1` calling `fn2` calling `fn1`, and `gen_function` then built a
+fresh context for the body and did not carry it over -- so the limit was set
+and never read. It overflows the stack, and under the chaos JIT it overflows it
+inside JITted code, where what comes out is a garbage type descriptor reaching
+the runtime ("not aligned to 1410787040 bytes") rather than anything that names
+the cause.
+
+Carrying the limit over exposed a second half: an import shadowed by a local
+function of the same name was offered as callable as soon as that local was out
+of reach, but writing the name still reached the local, and the call failed to
+typecheck. The shadowing set now holds every local name rather than the
+callable ones.
+
+**One thing the generator writes that is still wrong**, left because it is
+harmless: a tensor literal with more elements than its declared shape, with
+spaces between them. Seed 47524 has `[|(u64, string), 1|]` holding two, which
+the typechecker lets through -- though the same literal at `(u64, u32)` is
+caught as an arity mismatch, so the check is there and something about the
+first shape gets past it.
+
 ## Where that leaves it
 
 The generator covers modules, functions, control flow, cross-module imports,
-type aliases and now every shape of type. What it does not cover:
+type aliases, every shape of type but the one declined, and generics. What it
+does not cover:
 
-- **Generics.** No type parameters, no bounds, no generic calls. This is the
-  extension worth making, and it is where the compiler's bugs have been: four
-  found by hand in erased-generic paths in one sitting, three of them silent
-  wrong answers or memory corruption.
 - **Riders and natives**, `match`, tables, `out` parameters, const parameters.
+- **Generic bodies that do anything interesting.** The shapes are fixed. A
+  generic that loops, branches, or calls another generic with its own
+  parameter would reach the shape closure and the descriptor forwarding, which
+  the fixed shapes only touch at one remove.
 
 Two things about the harness itself:
 
 - `worldgen_dual_tests` is behind `WORLDGEN_DUAL_TEST=1`, so it never runs in
-  `just test`. At 5/20 it could not have. At 20/20 it could, once the seed-2
-  divergence is dealt with.
+  `just test`. At 5/20 it could not have. It now passes 280 seeds out of 280,
+  so it could, at whatever number of seeds is worth the minute it takes.
 - `test_1000_seeds_typecheck` is `#[ignore]`d for time. It takes about seven
   seconds.
 - The typecheck-only tests do not run ownership analysis, so they cannot see a

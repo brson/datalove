@@ -14,6 +14,12 @@ pub struct WorldGenConfig {
     /// Number of statements per function (min, max).
     pub statements_per_function: (usize, usize),
 
+    /// Number of generic functions per module (min, max).
+    pub generics_per_module: (usize, usize),
+
+    /// Probability of a statement calling a generic function (0-100 percent).
+    pub generic_call_probability: u32,
+
     /// Number of type aliases per module (min, max).
     pub type_aliases_per_module: (usize, usize),
 
@@ -66,6 +72,8 @@ impl Default for WorldGenConfig {
             module_count: (1, 3),
             functions_per_module: (1, 3),
             statements_per_function: (1, 5),
+            generics_per_module: (1, 3),
+            generic_call_probability: 35,
             type_aliases_per_module: (0, 2),
             script_statements: (1, 5),
             max_control_flow_depth: 2,

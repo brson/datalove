@@ -7,6 +7,51 @@ use crate::gen_type::gen_type_hint;
 use crate::gen_expr::{gen_expr, gen_bool_expr};
 use crate::pretty::pretty_type_hint;
 
+/// Call a generic function, binding what comes back.
+///
+/// The types are picked before the call is written, so the binding can name
+/// the answer: a generic's answer is whatever the call bound its parameters
+/// to. See `gen_generic`.
+///
+/// `None` when there is no generic in reach.
+pub fn gen_generic_call_stmt<'db, R: Rng>(
+    db: &'db dyn salsa::Database,
+    rng: &mut R,
+    config: &WorldGenConfig,
+    ctx: &mut GenContext<'db>,
+    var_counter: &mut usize,
+    indent: &str,
+) -> Option<String> {
+    if ctx.generic_functions.is_empty() {
+        return None;
+    }
+    let sig = ctx.generic_functions[rng.gen_range(0..ctx.generic_functions.len())].clone();
+    let (prelude, call, result) =
+        crate::gen_generic::gen_generic_call(db, rng, &sig, config, ctx, var_counter);
+
+    let mut lines: Vec<String> = prelude
+        .into_iter()
+        .map(|line| format!("{}{}", indent, line))
+        .collect();
+
+    match result {
+        // Nothing comes back, so the call is a statement on its own.
+        None => lines.push(format!("{}{}", indent, call)),
+        Some(result_type) => {
+            let name = format!("v{}", *var_counter);
+            *var_counter += 1;
+            let type_str = pretty_type_hint(db, result_type.clone());
+            ctx.variables.push(Variable {
+                name: name.clone(),
+                type_hint: result_type,
+                is_mutable: false,
+            });
+            lines.push(format!("{}let {}: {} = {}", indent, name, type_str, call));
+        }
+    }
+    Some(lines.join("\n"))
+}
+
 /// Generate a let statement.
 pub fn gen_let<'db, R: Rng>(
     db: &'db dyn salsa::Database,
@@ -312,6 +357,15 @@ pub fn gen_body_statement<'db, R: Rng>(
     let can_if = !ctx.at_max_depth(config) && config.check_probability(rng, config.if_probability);
     let can_loop = !ctx.at_max_depth(config) && config.check_probability(rng, config.loop_probability);
     let can_debuglog = config.check_probability(rng, config.debuglog_probability);
+
+    let can_generic = !ctx.generic_functions.is_empty()
+        && config.check_probability(rng, config.generic_call_probability);
+
+    if can_generic {
+        if let Some(stmt) = gen_generic_call_stmt(db, rng, config, ctx, var_counter, indent) {
+            return stmt;
+        }
+    }
 
     let choice = rng.gen_range(0..12);
     match choice {

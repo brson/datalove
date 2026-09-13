@@ -9,6 +9,7 @@ mod gen_type;
 mod gen_expr;
 mod gen_stmt;
 mod gen_function;
+mod gen_generic;
 mod gen_module;
 mod gen_script;
 mod pretty;

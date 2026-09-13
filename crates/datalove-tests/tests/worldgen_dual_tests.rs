@@ -11,9 +11,12 @@
 //!
 //! Run manually with: WORLDGEN_DUAL_TEST=1 cargo test -p datalove-tests --test worldgen_dual_tests
 //! To reproduce a failure: WORLDGEN_DUAL_TEST=1 WORLDGEN_DUAL_SEED=<seed> cargo test -p datalove-tests --test worldgen_dual_tests
+//!
+//! A failing world is easier to read once it is small. BISECT_WORLD=<path>
+//! takes a worldfile rather than a seed and cuts statements out of it for as
+//! long as it keeps failing the same way, leaving the least that still does.
 
 use std::process::Command;
-use std::path::Path;
 
 use rand::Rng;
 

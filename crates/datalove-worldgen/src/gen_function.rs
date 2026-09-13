@@ -68,8 +68,13 @@ pub fn gen_function<'db, R: Rng>(
     ctx.type_aliases = module_ctx.type_aliases.clone();
     ctx.functions = module_ctx.functions.clone();
     ctx.imported_functions = module_ctx.imported_functions.clone();
+    ctx.generic_functions = module_ctx.generic_functions.clone();
     // Set current function name to prevent self-recursive calls.
     ctx.current_function_name = Some(sig.name.clone());
+    // And how far down the module the body may call, which is what stops two
+    // functions calling each other. The module works this out; the body is
+    // where it has to hold, and this context is a fresh one.
+    ctx.max_callable_function_index = module_ctx.max_callable_function_index;
 
     // Add parameters as variables.
     for (name, ty) in &sig.params {
