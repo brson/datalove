@@ -1,10 +1,10 @@
 [package]
 name = "bcts"
-version = "0.4.0"
+version = "0.5.0"
 license = "Apache-2.0 OR MIT"
 authors = ["Brian Anderson <andersrb@gmail.com>"]
 description = "Incremental compiler infrastructure using Salsa"
-repository = "https://github.com/brson/bcts"
+repository = "https://github.com/brson/datalove"
 documentation = "https://docs.rs/bcts"
 edition = "2024"
 
