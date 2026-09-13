@@ -175,7 +175,7 @@ debuglog v2
 ```
 
 2000 seeds typecheck, and 280 of 280 seeds pass the dual test with no
-disagreement between backends.
+disagreement between backends, with every shape of type in play.
 
 ## What that turned up
 
@@ -186,32 +186,39 @@ to put it. Two halves: `ret` now returns nothing where the return type is
 unit, and a call to such a function gives its destination the address of its
 own empty slot, since something may still read it -- `debuglog f()` does.
 
-**Two shapes the generator declines**, each because a compiler cannot take it.
-Both are tensors of something; a flat tensor of anything else is fine.
-`is_declined` in `gen_type.rs` says so and points here. A generator that writes
-only working programs finds nothing; one that writes only failing programs is
-no use either.
+**Two shapes of tensor could not be compiled or could not be run.** Both
+fixed; they were declined by the generator in between, and are not now. Both
+are one mistake, made where a tensor literal copies its elements into a stack
+buffer on the way to the runtime.
 
-- A tensor whose elements are tensors, which fails inside cranelift's own ABI
-  code, at compile time.
+`StackSlotData::new` takes the log2 of an alignment rather than the alignment.
+The tensor literal passed the element's *size*, and a size and a shift read
+alike at a call site. An element eight bytes wide asked for a buffer aligned to
+256 bytes, which is merely wasteful. One twenty-four bytes wide -- a tuple of a
+`u32` and a `string` -- asked for sixteen megabytes, and the binary built and
+then died where it ran, under AOT only. And a tensor whose elements are
+tensors, the element being the tensor struct, came out past thirty-two, which
+cranelift asserts against, so the function would not compile at all.
 
-  ```
-  let v: [|[|f32, 1|], 3|] = [| : [|f32, 1|] / [| : f32 / 1.0 |],, : [|f32, 1|] / [| : f32 / 2.0 |] |]
-  ```
+```
+let v: [|(u32, string), 1|] = [| : (u32, string) / (: u32 / 6, : string / "hi") |]
+let w: [|[|f32, 1|], 3|] = [| : [|f32, 1|] / [| : f32 / 1.0 |],, : [|f32, 1|] / [| : f32 / 2.0 |] |]
+```
 
-- A tensor whose elements are tuples holding something on the heap. This one
-  compiles and then dies where it runs, and only under AOT -- the interpreter,
-  with the chaos JIT on, builds it and carries on.
+That explained what had looked like two unrelated bugs, and why a tensor of
+*structs* holding a string was fine while the tuple was not: nothing about
+tuples, only that the struct in hand happened to be narrower.
 
-  ```
-  let v: [|(u32, string), 1|] = [| : (u32, string) / (: u32 / 6, : string / "hi") |]
-  ```
+The same confusion was at every one of the thirty-odd stack slots the cranelift
+backend declares, in both directions. Some asked for far more alignment than
+they wanted and got away with it; a few asked for less -- a pointer slot
+declared `0`, which is one byte, and two sixteen-byte slots whose comments said
+"8-byte aligned" while asking for one. Nothing was corrupted, because what
+cranelift gives a slot in practice was enough, but nothing guaranteed it. The
+conversion is now written once, as `types::align_shift`, and every slot goes
+through it.
 
-  Any heap member does it, in any position, and so does a list in place of the
-  string. A tuple of numbers is fine. A *struct* holding a string is fine,
-  which is the same shape laid out the same way, so it is the tuple path
-  through the tensor rather than the heap member itself. Found by the dual
-  test, at seed 47524.
+`132_tensor_element_shapes` holds the shapes that could not be built.
 
 **A `some` or an `ok` written with a type hint left its payload unchecked**,
 and the lowerer came down on the missing type with "Expression must have type
@@ -270,17 +277,19 @@ of reach, but writing the name still reached the local, and the call failed to
 typecheck. The shadowing set now holds every local name rather than the
 callable ones.
 
-**One thing the generator writes that is still wrong**, left because it is
-harmless: a tensor literal with more elements than its declared shape, with
-spaces between them. Seed 47524 has `[|(u64, string), 1|]` holding two, which
-the typechecker lets through -- though the same literal at `(u64, u32)` is
-caught as an arity mismatch, so the check is there and something about the
-first shape gets past it.
+**One thing that was written down here as a bug and is not.** A tensor type
+hint names its element type and its *rank*, not a dimension: `[|u32, 2|]` is a
+rank-2 tensor of `u32`, whatever its shape turns out to be. So seed 47524's
+`[|(u64, string), 1|]` holding two space-separated elements is a rank-1 tensor
+of two, which is right, and `[|u32, 2|]` refusing `[| 1 2 |]` is a rank
+mismatch, which is also right -- reported as `ArityMismatch { expected: 2,
+actual: 1 }`, where both numbers are ranks. Read as a shape, each of those
+looks like a hole. The error would be easier to read if it said so.
 
 ## Where that leaves it
 
 The generator covers modules, functions, control flow, cross-module imports,
-type aliases, every shape of type but the one declined, and generics. What it
+type aliases, every shape of type, and generics. What it
 does not cover:
 
 - **Riders and natives**, `match`, tables, `out` parameters, const parameters.
