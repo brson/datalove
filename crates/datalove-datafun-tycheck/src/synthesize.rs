@@ -343,7 +343,15 @@ pub fn synthesize_expr<'db>(
         // Wrapper types.
         ExprFunKind::Some(some_expr) => {
             if let Some(type_hint) = some_expr.type_hint.clone() {
-                return convert_type_hint(db, type_hint);
+                // Check the payload rather than take the hint's word for it.
+                // The hint says what the whole is, and nothing else here will
+                // visit what it wraps: returning the hint alone left the
+                // payload with no type recorded, which lowering then went
+                // looking for. Reachable wherever a `some` is synthesized
+                // rather than checked, which is under a `data` or an `error`.
+                let expected = convert_type_hint(db, type_hint)?;
+                check_expr(ctx, expr, &expected)?;
+                return Ok(expected);
             }
             // Synthesize inner type and wrap in Option.
             // Synthesized expression types are always Datalit (Function types only appear in signatures).
@@ -360,7 +368,11 @@ pub fn synthesize_expr<'db>(
         }
         ExprFunKind::Ok(ok_expr) => {
             if let Some(type_hint) = ok_expr.type_hint.clone() {
-                return convert_type_hint(db, type_hint);
+                // As for `some` above: the payload needs checking, because
+                // nothing else here visits it.
+                let expected = convert_type_hint(db, type_hint)?;
+                check_expr(ctx, expr, &expected)?;
+                return Ok(expected);
             }
             // Synthesize inner type and wrap in Result.
             // Synthesized expression types are always Datalit (Function types only appear in signatures).

@@ -1,0 +1,31 @@
+// A `some` or an `ok` that says its own type.
+//
+// A wrapper written with a type hint says what the whole of it is, and for a
+// while that was taken at its word: the hint became the answer and nothing
+// ever looked at what was wrapped. The payload came out the other side with no
+// type recorded, and lowering, which asks for one, fell over.
+//
+// It only shows where a wrapper is synthesized rather than checked, because
+// everywhere else the payload is checked against the surrounding type. Under a
+// `data` or an `error` there is no surrounding type to check against, so that
+// is where these are written.
+
+let some_u32: data = data : ?u32 / some : u32 / 1
+let some_narrow: data = data : ?u8 / some : u8 / 200
+let some_string: data = data : ?string / some : string / "wrapped"
+let some_list: data = data : ?[u32] / some : [u32] / [: u32 / 7, : u32 / 8]
+let none_at_all: data = data : ?u32 / none
+
+let ok_u32: data = data : !u32 / ok : u32 / 2
+let ok_string: data = data : !string / ok : string / "fine"
+let er_u32: data = data : !u32 / er error : u32 / 3
+
+// The same under an `error` rather than a `data`.
+let in_error: error = error : ?u32 / some : u32 / 28
+let ok_in_error: error = error : !u8 / ok : u8 / 9
+
+// Nested, so the inner wrapper is reached through the outer one.
+let nested: data = data : ??u32 / some : ?u32 / some : u32 / 4
+
+let output = (some_u32, some_narrow, some_string, some_list, none_at_all,
+              ok_u32, ok_string, er_u32, in_error, ok_in_error, nested)
