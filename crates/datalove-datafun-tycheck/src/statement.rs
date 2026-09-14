@@ -212,6 +212,17 @@ pub fn check_statement<'db>(
                 check_statement(ctx, stmt);
             }
 
+            // A function that owes a value has to have returned one by every
+            // way out, and the end of the body is a way out. Lowering adds the
+            // return there whatever the body did, so a body that simply ended
+            // handed the caller a zeroed value of the return type: `0` for an
+            // integer, and for a string a null buffer that prints as empty.
+            if stmt.return_type(db).is_some()
+                && datalove_datafun_ast::reachable::body_completes(body)
+            {
+                ctx.report_missing_return(stmt.local_index(db), name);
+            }
+
             // Restore context.
             ctx.variables = saved_variables;
             ctx.type_aliases = saved_type_aliases;

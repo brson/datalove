@@ -1,0 +1,79 @@
+// The ways of returning a value that do not need a `ret` at the end.
+//
+// A function that owes a value has to give one by every way out, and the end
+// of the body is a way out. Saying so is only useful if the shapes that
+// already return on every path are left alone, and each of these ends in
+// something other than a `ret`.
+
+// Both branches return, so the end is unreachable.
+fun both_branches(c: bool): u32
+  if c
+    ret 1
+  else
+    ret 2
+  end if
+end fun
+
+// Nested the same way.
+fun nested_branches(a: bool, b: bool): u32
+  if a
+    if b
+      ret 1
+    else
+      ret 2
+    end if
+  else
+    ret 3
+  end if
+end fun
+
+// A loop with no way out but the return.
+fun loops_forever_until_return(n: u32): !u32
+  var i: u32 = 0
+  loop
+    if i >= n
+      ret ok i
+    end if
+    set i = i +! 1
+  end loop
+end fun
+
+// A default arm counts as an arm, and returning from every arm is fine as
+// long as one of them is the default. The same match written over every
+// variant with no default is refused by cranelift's verifier -- the block
+// after it has no terminator -- which is its own bug and predates this check,
+// so there is no such match here.
+type Side: enum { atom Left, atom Right, term Other u8 }
+fun with_default(s: Side): u32
+  match s
+  case atom Left
+    ret 1
+  case default
+    ret 2
+  end match
+end fun
+
+// A `break` is what lets control past a bare `loop`, so this one does reach
+// its `ret` at the end rather than returning from inside.
+fun breaks_then_returns(): !u32
+  var i: u32 = 0
+  loop
+    set i = i +! 1
+    if i >= 3
+      break
+    end if
+  end loop
+  ret ok i
+end fun
+
+// A function that owes nothing needs none of this.
+fun owes_nothing(ref n: u32)
+end fun
+
+owes_nothing(ref : u32 / 1)
+
+let output = (both_branches(true), both_branches(false),
+              nested_branches(true, false), nested_branches(false, false),
+              loops_forever_until_return(3), with_default(atom Left),
+              with_default(atom Right), with_default(term Other : u8 / 9),
+              breaks_then_returns())

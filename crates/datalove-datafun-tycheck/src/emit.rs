@@ -285,6 +285,21 @@ collection written over a type parameter asks that parameter for an ordering. Sa
                     .emit_type();
             }
         }
+        PendingDiagnostic::MissingReturn { local_index, module_id: _, name } => {
+            if let Some(ts) = spans.lookup_fun(db, *local_index) {
+                let msg = format!(
+                    "`{}` can reach the end of its body without returning a value",
+                    name.as_str(db),
+                );
+                bct::diagnostic::DiagnosticBuilder::error(db, &msg)
+                    .code("F063")
+                    .primary_label(ts, "this signature promises a value")
+                    .note("the end of a body is a return like any other, and one that owes a \
+value has to be reached only where a `ret` has already left. Return from every path out, or \
+drop the return type.")
+                    .emit_type();
+            }
+        }
         PendingDiagnostic::NativeFunOutsideRider { local_index, module_id: _, name } => {
             if let Some(ts) = spans.lookup_fun(db, *local_index) {
                 let msg = format!(
@@ -588,6 +603,14 @@ fn format_single_diagnostic<'db>(
             Some(format!(
                 "{}: error[F061]: `{}` has not said it can be ordered, and {} puts it in a set or a map",
                 loc, param.as_str(db), position.as_str(db),
+            ))
+        }
+        PendingDiagnostic::MissingReturn { local_index, module_id: _, name } => {
+            let ts = spans.lookup_fun(db, *local_index)?;
+            let loc = format_location(db, &ts);
+            Some(format!(
+                "{}: error[F063]: `{}` can reach the end of its body without returning a value",
+                loc, name.as_str(db),
             ))
         }
         PendingDiagnostic::NativeFunOutsideRider { local_index, module_id: _, name } => {

@@ -1,0 +1,13 @@
+// F063 a function that owes a value and can end without giving one.
+//
+// The end of a body is a return, and nothing checked it. Lowering adds the
+// return whatever the body did, so this handed the caller a zeroed `u32` and
+// said nothing: the answer was 0, and 0 is a number a caller would believe.
+// A `string` was worse, coming back as a null buffer that prints empty.
+fun forgot(n: u32): u32
+  if n .> 10
+    ret 1
+  end if
+end fun
+
+let output = forgot(0)

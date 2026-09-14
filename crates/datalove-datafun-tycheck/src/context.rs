@@ -174,6 +174,23 @@ impl<'db> TypeContext<'db> {
         self.errors.push(error);
     }
 
+    /// Report a function that can reach the end of its body owing a value.
+    pub fn report_missing_return(
+        &mut self,
+        local_index: u32,
+        name: InternedText<'db>,
+    ) {
+        self.pending_diagnostics.push(PendingDiagnostic::MissingReturn {
+            local_index,
+            module_id: self.current_module_id,
+            name,
+        });
+        self.add_error(TypeError::MissingReturn {
+            name: name.as_str(self.db).to_string(),
+            fun_local_index: local_index,
+        });
+    }
+
     /// Report a `native fun` declared where nothing can implement it.
     pub fn report_native_fun_outside_rider(
         &mut self,

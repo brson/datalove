@@ -450,6 +450,13 @@ pub enum TypeError {
     TypeParamNotErasable { param: String, position: String, fun_local_index: u32 },
     /// F061: A set or map was written over a type parameter with no order.
     CollectionKeyNotOrdered { param: String, position: String, fun_local_index: u32 },
+    /// F063: A function with a return type can reach the end of its body.
+    ///
+    /// The end of a body is a return, and for a function that owes a value it
+    /// is one with nothing to give. Lowering adds the return regardless, which
+    /// handed back a zeroed value of the return type: an integer 0, or a string
+    /// with a null buffer that prints empty.
+    MissingReturn { name: String, fun_local_index: u32 },
     /// F062: A `native fun` was written somewhere that has no rider.
     ///
     /// The declaration names a Rust function, and the only thing that supplies

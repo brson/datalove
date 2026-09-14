@@ -1002,7 +1002,7 @@ pub fn analyze_function_with_mode<'db>(
     // a body that simply ended -- which for a function returning nothing is
     // the usual way to write one -- promised an out parameter and delivered
     // nothing, and the caller read whatever was in the slot.
-    if body_completes(func.body(db)) {
+    if datalove_datafun_ast::reachable::body_completes(func.body(db)) {
         check_out_params_initialized(&mut ctx, None);
     }
 
@@ -1495,55 +1495,6 @@ fn check_out_params_initialized<'db>(
             }
         }
     }
-}
-
-/// Whether control can reach the end of this list of statements.
-///
-/// Only as much of it as the out parameter check needs: the point is not to
-/// report against a return the function cannot arrive at. Anything not named
-/// here is taken to complete, which at worst repeats a report a `ret` already
-/// made rather than inventing one.
-fn body_completes<'db>(statements: &[Statement<'db>]) -> bool {
-    statements.iter().all(statement_completes)
-}
-
-fn statement_completes<'db>(statement: &Statement<'db>) -> bool {
-    match statement {
-        Statement::Ret(_) | Statement::Break(_) | Statement::Continue(_) => false,
-        Statement::If(stmt) => match &stmt.else_body {
-            // Either way through is a way through.
-            Some(else_body) => body_completes(&stmt.then_body) || body_completes(else_body),
-            // No else is a way through that does nothing.
-            None => true,
-        },
-        Statement::Loop(stmt) => match stmt.condition {
-            // A condition may be false the first time it is read.
-            Some(_) => true,
-            // Otherwise the only way out is a `break` written for this loop.
-            None => contains_break(&stmt.body),
-        },
-        _ => true,
-    }
-}
-
-/// Whether a `break` in these statements leaves the loop they belong to.
-///
-/// A `break` inside a nested loop belongs to that one, so nested loops are not
-/// descended into; everything else that holds statements is.
-fn contains_break<'db>(statements: &[Statement<'db>]) -> bool {
-    statements.iter().any(|statement| match statement {
-        Statement::Break(_) => true,
-        Statement::Loop(_) => false,
-        Statement::If(stmt) => {
-            contains_break(&stmt.then_body)
-                || stmt.else_body.as_ref().is_some_and(|body| contains_break(body))
-        }
-        Statement::Match(stmt) => {
-            stmt.cases.iter().any(|case| contains_break(&case.body))
-                || stmt.default_body.as_ref().is_some_and(|body| contains_break(body))
-        }
-        _ => false,
-    })
 }
 
 fn analyze_return<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmt: &StmtRet<'db>, stmt_idx: usize) {

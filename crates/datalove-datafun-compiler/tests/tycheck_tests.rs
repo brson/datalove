@@ -254,6 +254,12 @@ fn error_to_json(error: &datalove_datafun_tycheck::TypeError) -> rmx::serde_json
                 "position": position
             })
         }
+        TypeError::MissingReturn { name, fun_local_index: _ } => {
+            json!({
+                "kind": "MissingReturn",
+                "name": name
+            })
+        }
         TypeError::NativeFunOutsideRider { name, fun_local_index: _ } => {
             json!({
                 "kind": "NativeFunOutsideRider",

@@ -117,6 +117,12 @@ pub enum PendingDiagnostic<'db> {
         param: InternedText<'db>,
         position: InternedText<'db>,
     },
+    /// F063: A function with a return type can reach the end of its body.
+    MissingReturn {
+        local_index: u32,
+        module_id: Option<ModuleId<'db>>,
+        name: InternedText<'db>,
+    },
     /// F062: A `native fun` was written somewhere that has no rider.
     NativeFunOutsideRider {
         local_index: u32,

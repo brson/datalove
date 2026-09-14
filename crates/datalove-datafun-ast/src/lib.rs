@@ -1,5 +1,6 @@
 pub mod ast;
 pub mod ast_serde;
+pub mod reachable;
 pub mod script;
 pub mod spans;
 

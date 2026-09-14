@@ -1,6 +1,29 @@
 {
-  "diagnostics": [],
-  "errors": [],
+  "diagnostics": [
+    {
+      "code": "F063",
+      "labels": [
+        {
+          "message": "this signature promises a value",
+          "span": [
+            0,
+            3
+          ],
+          "text": "fun"
+        }
+      ],
+      "message": "`maybe_divide` can reach the end of its body without returning a value",
+      "notes": [
+        "the end of a body is a return like any other, and one that owes a value has to be reached only where a `ret` has already left. Return from every path out, or drop the return type."
+      ]
+    }
+  ],
+  "errors": [
+    {
+      "kind": "MissingReturn",
+      "name": "maybe_divide"
+    }
+  ],
   "judgements": [
     {
       "kind": "function",

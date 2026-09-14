@@ -16,10 +16,31 @@
       "notes": [
         "use `if result |value| ... else |err| ... end if` to handle both cases"
       ]
+    },
+    {
+      "code": "F063",
+      "labels": [
+        {
+          "message": "this signature promises a value",
+          "span": [
+            0,
+            3
+          ],
+          "text": "fun"
+        }
+      ],
+      "message": "`test_result_missing_else` can reach the end of its body without returning a value",
+      "notes": [
+        "the end of a body is a return like any other, and one that owes a value has to be reached only where a `ret` has already left. Return from every path out, or drop the return type."
+      ]
     }
   ],
   "errors": [
-    "ResultRequiresErrorBinding"
+    "ResultRequiresErrorBinding",
+    {
+      "kind": "MissingReturn",
+      "name": "test_result_missing_else"
+    }
   ],
   "judgements": [
     {
