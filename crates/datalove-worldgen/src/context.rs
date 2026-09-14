@@ -80,6 +80,17 @@ pub struct EnumDef<'db> {
     pub variants: Vec<EnumVariant<'db>>,
 }
 
+/// A const a module or a body defines.
+///
+/// Kept apart from the variables because reading one does not consume it: a
+/// const names a value rather than a place, so a linear one can be named as
+/// often as it is wanted. Nothing else the generator writes can be.
+#[derive(Clone)]
+pub struct ConstDef<'db> {
+    pub name: String,
+    pub type_hint: TypeHint<'db>,
+}
+
 /// A type alias.
 #[derive(Clone)]
 pub struct TypeAlias<'db> {
@@ -97,6 +108,8 @@ pub struct ModuleInfo<'db> {
     pub type_aliases: Vec<TypeAlias<'db>>,
     /// The enums it defines, each declared as a named type alias.
     pub enums: Vec<EnumDef<'db>>,
+    /// The consts it defines, in scope for every function in it.
+    pub consts: Vec<ConstDef<'db>>,
     /// The generic functions it defines, which are called by picking types
     /// rather than by matching a return type. See `gen_generic`.
     pub generics: Vec<crate::gen_generic::GenericSig>,
@@ -128,6 +141,9 @@ pub struct GenContext<'db> {
 
     /// Enums in reach, which are what a `match` can be written over.
     pub enums: Vec<EnumDef<'db>>,
+
+    /// Consts in reach, which may be named as often as wanted.
+    pub consts: Vec<ConstDef<'db>>,
 
     /// Imported functions from other modules.
     pub imported_functions: Vec<FunctionSig<'db>>,
@@ -171,6 +187,7 @@ impl<'db> GenContext<'db> {
             functions: Vec::new(),
             type_aliases: Vec::new(),
             enums: Vec::new(),
+            consts: Vec::new(),
             imported_functions: Vec::new(),
             return_type: None,
             loop_depth: 0,
@@ -621,6 +638,7 @@ mod tests {
             functions: vec![],
             type_aliases: vec![],
             enums: vec![],
+            consts: vec![],
             generics: vec![],
         };
 

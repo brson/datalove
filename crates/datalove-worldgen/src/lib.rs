@@ -9,6 +9,7 @@ mod gen_type;
 mod gen_expr;
 mod gen_stmt;
 mod gen_function;
+mod gen_const;
 mod gen_enum;
 mod gen_generic;
 mod gen_module;

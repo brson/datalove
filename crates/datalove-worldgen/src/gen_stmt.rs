@@ -67,7 +67,6 @@ pub fn gen_generic_call_stmt<'db, R: Rng>(
 fn gen_unwrap_let<'db, R: Rng>(
     db: &'db dyn salsa::Database,
     rng: &mut R,
-    config: &WorldGenConfig,
     ctx: &mut GenContext<'db>,
     var_counter: &mut usize,
     indent: &str,
@@ -386,6 +385,31 @@ pub fn gen_if<'db, R: Rng>(
     ctx.control_flow_depth -= 1;
     result.push_str(&format!("{}end if", indent));
     result
+}
+
+/// Bind a const in a body.
+///
+/// Named in capitals, apart from the `vN` the rest of the generator uses, so
+/// that a const and a binding are told apart on sight. Bound to a literal:
+/// the expression may name only other consts, and naming a parameter or a
+/// `let` is an error even where a const of that name is in scope.
+fn gen_const_let<'db, R: Rng>(
+    db: &'db dyn salsa::Database,
+    rng: &mut R,
+    config: &WorldGenConfig,
+    ctx: &mut GenContext<'db>,
+    var_counter: &mut usize,
+    indent: &str,
+) -> String {
+    let name = format!("C{}", *var_counter);
+    *var_counter += 1;
+
+    let type_hint = crate::gen_const::gen_const_type(db, rng, config);
+    let written = pretty_type_hint(db, type_hint.clone());
+    let value = crate::gen_const::gen_const_value(db, rng, type_hint.clone(), config);
+
+    ctx.consts.push(crate::context::ConstDef { name: name.clone(), type_hint });
+    format!("{}const {}: {} = {}", indent, name, written, value)
 }
 
 /// Read a field or an element out of a value a call just made.
@@ -750,7 +774,7 @@ pub fn gen_body_statement<'db, R: Rng>(
     }
 
     if config.check_probability(rng, config.projection_probability) {
-        if let Some(stmt) = gen_unwrap_let(db, rng, config, ctx, var_counter, indent) {
+        if let Some(stmt) = gen_unwrap_let(db, rng, ctx, var_counter, indent) {
             return stmt;
         }
     }
@@ -759,6 +783,10 @@ pub fn gen_body_statement<'db, R: Rng>(
         if let Some(stmt) = gen_call_projection_let(db, rng, config, ctx, var_counter, indent) {
             return stmt;
         }
+    }
+
+    if config.check_probability(rng, config.const_probability) {
+        return gen_const_let(db, rng, config, ctx, var_counter, indent);
     }
 
     // Taking an option or a result apart with an `if` is worth reaching for on

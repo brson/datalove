@@ -27,6 +27,13 @@ pub struct WorldGenConfig {
     /// apart, and it has to be named for the match to name its variants.
     pub enums_per_module: (usize, usize),
 
+    /// Number of consts per module (min, max).
+    pub consts_per_module: (usize, usize),
+
+    /// Probability of binding a const in a body, or of naming one where one
+    /// has the wanted type.
+    pub const_probability: u32,
+
     /// Probability of writing a `match` where there is something to match on.
     pub match_probability: u32,
 
@@ -103,6 +110,8 @@ impl Default for WorldGenConfig {
             generic_call_probability: 35,
             type_aliases_per_module: (0, 2),
             enums_per_module: (1, 2),
+            consts_per_module: (0, 2),
+            const_probability: 30,
             match_probability: 40,
             script_statements: (1, 5),
             max_control_flow_depth: 2,

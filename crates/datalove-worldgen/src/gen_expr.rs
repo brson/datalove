@@ -181,11 +181,23 @@ pub fn gen_expr<'db, R: Rng>(
         Option::None => Vec::new(),
     };
 
+    // A const of the wanted type, which may be named without being consumed:
+    // each mention makes a value of its own. Every other name the generator
+    // writes is moved on first use, so this is the one place a linear value is
+    // read twice without a `@`.
+    let consts: Vec<String> = ctx
+        .consts
+        .iter()
+        .filter(|c| types_match(db, c.type_hint.clone(), type_hint.clone()))
+        .map(|c| c.name.clone())
+        .collect();
+
     enum Choice {
         Variable,
         Call,
         Arithmetic,
         OverflowArithmetic,
+        Const,
         Projection,
         CallProjection,
         Index,
@@ -197,6 +209,9 @@ pub fn gen_expr<'db, R: Rng>(
     if can_call_fn { choices.push(Choice::Call); }
     if can_arith { choices.push(Choice::Arithmetic); }
     if overflow_mark.is_some() { choices.push(Choice::OverflowArithmetic); }
+    if !consts.is_empty() && config.check_probability(rng, config.const_probability) {
+        choices.push(Choice::Const);
+    }
     if !projections.is_empty() && config.check_probability(rng, config.projection_probability) {
         choices.push(Choice::Projection);
     }
@@ -233,6 +248,7 @@ pub fn gen_expr<'db, R: Rng>(
             let mark = overflow_mark.expect("a choice only offered when there is a mark");
             gen_overflow_arith_expr(db, rng, type_hint, mark, config, ctx)
         }
+        Choice::Const => consts[rng.gen_range(0..consts.len())].clone(),
         Choice::Projection => {
             projections[rng.gen_range(0..projections.len())].clone()
         }

@@ -115,8 +115,35 @@ pub enum Shape {
     /// which only a float has.
     Multiply,
     /// `fun f<T>(a: T, b: T): bool with { T is fixedint, }` -- a comparison,
-    /// whose answer is not the parameter's type.
-    Compare,
+    /// whose answer is not the parameter's type. One shape per operator: a
+    /// generic body is where most comparisons in the corpus are written, and
+    /// with `.<` alone the other five were left to the handful of places that
+    /// write a condition, thin enough to reach zero between runs.
+    Compare(Comparison),
+}
+
+/// The six ways two values of an ordered type are compared.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Comparison {
+    Lt,
+    Gt,
+    Le,
+    Ge,
+    Eq,
+    Ne,
+}
+
+impl Comparison {
+    fn written(&self) -> &'static str {
+        match self {
+            Comparison::Lt => ".<",
+            Comparison::Gt => ".>",
+            Comparison::Le => "<=",
+            Comparison::Ge => ">=",
+            Comparison::Eq => "==",
+            Comparison::Ne => "!=",
+        }
+    }
 }
 
 impl Shape {
@@ -125,7 +152,13 @@ impl Shape {
         &[
             Shape::Identity, Shape::Consume, Shape::Duplicate, Shape::Wrap,
             Shape::Listify, Shape::ListifyTwo, Shape::Setify, Shape::Mapify,
-            Shape::Borrow, Shape::AddChecked, Shape::Multiply, Shape::Compare,
+            Shape::Borrow, Shape::AddChecked, Shape::Multiply,
+            Shape::Compare(Comparison::Lt),
+            Shape::Compare(Comparison::Gt),
+            Shape::Compare(Comparison::Le),
+            Shape::Compare(Comparison::Ge),
+            Shape::Compare(Comparison::Eq),
+            Shape::Compare(Comparison::Ne),
         ]
     }
 
@@ -134,7 +167,7 @@ impl Shape {
         match self {
             Shape::Setify => &[("T", Bound::Ord)],
             Shape::Mapify => &[("K", Bound::Ord), ("V", Bound::None)],
-            Shape::AddChecked | Shape::Compare => &[("T", Bound::FixedInt)],
+            Shape::AddChecked | Shape::Compare(_) => &[("T", Bound::FixedInt)],
             Shape::Multiply => &[("T", Bound::Float)],
             _ => &[("T", Bound::None)],
         }
@@ -185,8 +218,9 @@ pub fn gen_generic_function(name: &str, shape: Shape) -> String {
             "fun {name}<{names}>(a: T, b: T): ?T{clause}\n  ret some (a +? b)\nend fun"),
         Shape::Multiply => format!(
             "fun {name}<{names}>(a: T, b: T): T{clause}\n  ret a * b\nend fun"),
-        Shape::Compare => format!(
-            "fun {name}<{names}>(a: T, b: T): bool{clause}\n  ret a .< b\nend fun"),
+        Shape::Compare(how) => format!(
+            "fun {name}<{names}>(a: T, b: T): bool{clause}\n  ret a {} b\nend fun",
+            how.written()),
     }
 }
 
@@ -294,7 +328,7 @@ pub fn gen_generic_call<'db, R: Rng>(
             let b = bind(rng, ctx, &mut prelude, t.clone());
             (format!("{}({}, {})", sig.name, a, b), Some(t))
         }
-        Shape::Compare => {
+        Shape::Compare(_) => {
             let a = bind(rng, ctx, &mut prelude, t.clone());
             let b = bind(rng, ctx, &mut prelude, t);
             (format!("{}({}, {})", sig.name, a, b), Some(TypeHint::Bool))

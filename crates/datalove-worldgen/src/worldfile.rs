@@ -42,6 +42,7 @@ fn gen_worldfile_inner<'db, R: Rng>(
     for (index, module) in modules.iter_mut().enumerate() {
         module.type_aliases = gen_module_type_aliases(db, rng, config);
         module.enums = crate::gen_enum::gen_module_enums(db, rng, config, index);
+        module.consts = crate::gen_const::gen_module_consts(db, rng, config, index);
         module.generics = gen_module_generic_sigs(rng, config, index);
         module.functions = gen_module_function_sigs(db, rng, config);
     }

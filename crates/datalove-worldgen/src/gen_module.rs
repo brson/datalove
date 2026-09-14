@@ -32,6 +32,7 @@ pub fn plan_module_graph<'db, R: Rng>(
             functions: Vec::new(),
             type_aliases: Vec::new(),
             enums: Vec::new(),
+            consts: Vec::new(),
             generics: Vec::new(),
         });
     }
@@ -158,6 +159,16 @@ pub fn gen_module<'db, R: Rng>(
         lines.push(format_type_alias(db, &alias.name, alias.type_hint.clone()));
     }
     if !info.type_aliases.is_empty() {
+        lines.push(String::new());
+    }
+
+    // Const declarations, which every function below may name whether or not
+    // it is written above them. Bound to literals, since a const may name only
+    // other consts and a call could close a cycle with a function that names
+    // one.
+    ctx.consts = info.consts.clone();
+    for def in &info.consts {
+        lines.push(crate::gen_const::format_const(db, rng, def, config));
         lines.push(String::new());
     }
 

@@ -167,6 +167,29 @@ if the choice is taken. Writing it while collecting candidates meant every
 expression generated a call whose arguments are expressions, which is not a
 recursion that stops: the 1000-seed test overflowed its stack.
 
+**Consts**, at module top level and in a body, and read without being
+consumed. A const names a value rather than a place, so each mention produces
+one of its own -- it is the one name in the language a linear type can be read
+from twice with no `@`, and everything else the generator writes is moved on
+first use. Bound to literals: a const expression may name only other consts,
+and a module-level one that calls a function which itself names a const is a
+cycle.
+
+Three shapes of const are kept out of the corpus, each because the compiler
+falls short of what the spec says a const may hold, which is "anything a
+function can compute":
+
+- `data`, `error` and a tensor cannot be read back out of the evaluated value,
+  wherever they appear: "unsupported type for extraction".
+- A collection nested inside anything -- `(u32, [u32])`, `?[u32]`, a list of
+  lists -- compiles under the interpreter and not under the cranelift AOT,
+  which writes a nested const value to an address and has no way to write a
+  collection there. A collection on its own is fine, having its own path.
+- A result, for a reason about the value rather than the type: `er error
+  <payload>` is one of the ways to write one, what the error carries is chosen
+  by datalit's generator, and an error carrying a tuple cannot be read back --
+  "cannot reconstruct IrType from TyTag::Tuple".
+
 **`continue`**, which had been left out under a note saying it would make a
 loop's final break unreachable. It would, written bare: everything after it in
 the same block is unreachable, the `break` included, and that break is what
@@ -183,11 +206,11 @@ go of on the way, which is a path nothing else in the corpus takes.
 Thin: `if` (39), `loop` (56), `set` statements (71), `and`/`or`/`xor`, `.>`,
 `.>=`, `.=`, `.!=`, places with an index step, `if` with a binding.
 
-Still never generated, 5 of roughly 110 things counted:
+Still never generated, 4 of roughly 110 things counted:
 
 | category | what |
 |---|---|
-| statements | `const`, `native fun` |
+| statements | `native fun` |
 | expressions | hex literals, `table`, `icall` |
 | types | `table` |
 
@@ -239,6 +262,26 @@ for a term. Nothing was marked moved, so the term and what it was built from
 were both dropped. An enum literal had the same gap.
 `137_term_payload_ownership`.
 
+**A function naming a module const could not call a generic that builds
+anything.** Fixed. Which calls have to hand a descriptor over is worked out by
+closing the shapes over the call graph, and that was done once, over everything
+lowered at the time. A function naming a module-level const is not lowered at
+that time: a const is evaluated against what is already lowered, so those
+functions are held back and lowered afterwards, in a second round the closing
+never saw. One of them calling a generic that builds a list, a set or a map
+was compiled without the descriptor the call had to pass, and the interpreter
+came down on "a shape built with is one this function declared". A generic
+building nothing was fine, which made it look like a problem with consts.
+`062_const_then_generic`.
+
+**Leaving a function from inside a condition let go of nothing.** Fixed. A
+`?`, a `!` or a checked overflow early-returns from wherever it is written, and
+a condition is one of those places. An `if` had its condition's moves analysed
+but nothing recorded for a way out of it, and a `loop` did not look at its
+condition at all -- not for moves and not for leaving. A loop's is the more
+surprising, being read again every round.
+`139_condition_early_return`.
+
 **A field read off a value nobody keeps leaked the rest of it.** Fixed. A
 projection whose base is not a place reads one field out of a value made for
 it, and left the value alone afterwards. Only a copy field can be projected at
@@ -274,7 +317,7 @@ text.
 
 ## Next
 
-1. `const`, and tables.
+1. Tables.
 2. Log the silent fallbacks. `gen_set` and friends fall back to `gen_let` when
    they cannot proceed, so a construct can be rare because it keeps failing to
    build rather than because it was weighted that way, and nothing says which.

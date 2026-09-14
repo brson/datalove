@@ -101,6 +101,7 @@ pub fn gen_function<'db, R: Rng>(
     ctx.return_type = sig.return_type.clone();
     ctx.type_aliases = module_ctx.type_aliases.clone();
     ctx.enums = module_ctx.enums.clone();
+    ctx.consts = module_ctx.consts.clone();
     ctx.functions = module_ctx.functions.clone();
     ctx.imported_functions = module_ctx.imported_functions.clone();
     ctx.generic_functions = module_ctx.generic_functions.clone();

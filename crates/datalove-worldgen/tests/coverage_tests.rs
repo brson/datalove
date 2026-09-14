@@ -100,6 +100,22 @@ const ALL_SHAPES: &[&str] = &[
     "place with an index step",
 ];
 
+/// What the generator can write but does not reliably, and why.
+///
+/// A third answer beside "writes it" and "does not": a kind that wants a
+/// coincidence the generator cannot arrange, and turns up in some runs and not
+/// others. Neither required nor forbidden here, because either of those makes
+/// the test fail on the roll of the dice rather than on anything that changed.
+///
+/// Keep this list short. A kind belongs here when the coincidence is in the
+/// language rather than in the generator -- if it can be reached for on
+/// purpose, it should be, and every other rare thing on this list eventually
+/// was.
+const SOMETIMES_GENERATED: &[(&str, &str, &str)] = &[
+    // (category, kind, what it waits for)
+    ("expr", "Index", "wants a callable function answering with a collection of a copy type, inside a function that returns an option or a result; three in three hundred worldfiles"),
+];
+
 /// What the generator does not write yet, and why.
 ///
 /// Every one of these is a gap rather than a decision, unless it says
@@ -108,7 +124,6 @@ const ALL_SHAPES: &[&str] = &[
 /// the other direction either.
 const NOT_YET_GENERATED: &[(&str, &str, &str)] = &[
     // (category, kind, why not)
-    ("statement", "Const", "const declarations are not generated"),
     ("statement", "NativeFun", "natives need a rider to resolve against"),
     ("statement", "ParseError", "a parse error means the generator wrote something wrong"),
 
@@ -477,6 +492,11 @@ fn test_language_coverage() {
         .map(|(category, kind, _)| (*category, *kind))
         .collect();
 
+    let sometimes: BTreeSet<(&str, &str)> = SOMETIMES_GENERATED
+        .iter()
+        .map(|(category, kind, _)| (*category, *kind))
+        .collect();
+
     let mut uncovered = Vec::new();
     let mut unexpectedly_covered = Vec::new();
 
@@ -486,14 +506,23 @@ fn test_language_coverage() {
         for kind in kinds {
             let count = cov.count(category, kind);
             let listed = expected_missing.contains(&(category, *kind));
+            let sometimes_listed = sometimes.contains(&(category, *kind));
             match (count, listed) {
-                (0, false) => uncovered.push(format!("{} {}", category, kind)),
+                (0, false) if !sometimes_listed => {
+                    uncovered.push(format!("{} {}", category, kind))
+                }
                 (_, true) if count > 0 => {
                     unexpectedly_covered.push(format!("{} {}", category, kind))
                 }
                 _ => {}
             }
-            let note = if count == 0 { "   (never)" } else { "" };
+            let note = if sometimes_listed {
+                "   (sometimes)"
+            } else if count == 0 {
+                "   (never)"
+            } else {
+                ""
+            };
             println!("    {:<16}{:>8}{}", kind, count, note);
         }
     }
@@ -578,6 +607,7 @@ fn test_core_constructs_are_common() {
         ("statement", "Match", 20),
         ("statement", "Continue", 3),
         ("expr", "FieldProj", 3),
+        ("statement", "Const", 50),
         ("expr", "EnumLiteral", 20),
     ];
 
