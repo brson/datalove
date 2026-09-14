@@ -293,9 +293,13 @@ pub fn lex_chunk<'db>(
         }
 
         fn eat_error_from(&mut self, start_ch: char) -> Token<'db> {
-            // The first error character has already been consumed by the caller.
+            // The first error character has already been consumed by the
+            // caller, so the token starts however wide that character was --
+            // not one byte back. Backing up by one put the span inside a
+            // multibyte character, and interning it sliced the chunk on a
+            // boundary that is not one.
             let token_start = Self::token_start(start_ch);
-            let start = self.range.start.checked_sub(1).X();
+            let start = self.range.start.checked_sub(start_ch.len_utf8()).X();
             while let Some(ch) = self.peek() {
                 let next_token_start = Self::token_start(ch);
                 let recover = match (token_start, next_token_start) {
@@ -801,4 +805,98 @@ fn test_lex_chunk() {
         dbglex("(||)"),
         "(| |)",
     );
+}
+
+/// A character that is neither a word, a sigil nor whitespace is an error
+/// token, and it may be more than one byte wide.
+///
+/// Smart quotes and an em-dash pasted for a minus are the ones a person
+/// actually produces, and the error path is what a live-reloading editor
+/// relies on to report rather than die. Letters are not among them:
+/// `is_word_start` is `is_alphanumeric`, so `café` is a word.
+#[test]
+fn test_lex_multibyte_error() {
+    fn dbglex(s: &str) -> String {
+        let ref db = crate::Database::default();
+        let source = Source::new(db, S(s));
+        let chunk = basic_source_map(db, source);
+        lex_chunk(db, chunk).debug_str(db)
+    }
+
+    // At the start, at the end, and between two words.
+    assert_eq!(dbglex("\u{a7}"), "err");
+    assert_eq!(dbglex("a\u{a7}"), "a err");
+    assert_eq!(dbglex("\u{a7}a"), "err a");
+    assert_eq!(dbglex("a \u{a7} b"), "a ws err ws b");
+
+    // Three bytes and four, since the width is what was got wrong.
+    assert_eq!(dbglex("a \u{2014} b"), "a ws err ws b");
+    assert_eq!(dbglex("a \u{1f600} b"), "a ws err ws b");
+
+    // Adjacent error characters are one token, which is the arm that keeps
+    // eating after the first.
+    assert_eq!(dbglex("\u{201c}\u{201d}"), "err");
+    assert_eq!(dbglex("a\u{201c}\u{201d}b"), "a err b");
+
+    // And against a sigil on either side, since a sigil ends the run.
+    assert_eq!(dbglex("{\u{a7}}"), "{ err }");
+    assert_eq!(dbglex("=\u{2014}="), "= err =");
+
+    // A multibyte letter is a word, not an error, and the run stops at the
+    // one character that is neither.
+    assert_eq!(dbglex("caf\u{e9}"), "caf\u{e9}");
+    assert_eq!(dbglex("caf\u{e9}\u{2014}"), "caf\u{e9} err");
+}
+
+/// The span of an error token is the characters it covers, whole.
+///
+/// `debug_str` renders every error as `err`, so a span that began inside a
+/// multibyte character would pass the test above and still be wrong. It was
+/// wrong: the start was recovered by stepping back one *byte* from a character
+/// that had been consumed by its width in bytes.
+#[test]
+fn test_lex_error_spans() {
+    fn spans(s: &str) -> Vec<(Range<usize>, String)> {
+        let ref db = crate::Database::default();
+        let source = Source::new(db, S(s));
+        let chunk = basic_source_map(db, source);
+        lex_chunk(db, chunk)
+            .tokens(db)
+            .iter()
+            .map(|t| (t.span(), t.debug_str(db).to_string()))
+            .collect()
+    }
+
+    // `§` is bytes 1..3, so the error token is 1..3 and `b` starts at 3.
+    assert_eq!(
+        spans("a\u{a7}b"),
+        vec![(0..1, "a".into()), (1..3, "err".into()), (3..4, "b".into())],
+    );
+
+    // An em-dash is three bytes.
+    assert_eq!(
+        spans("\u{2014}a"),
+        vec![(0..3, "err".into()), (3..4, "a".into())],
+    );
+
+    // Two of them, run together into one token.
+    assert_eq!(
+        spans("\u{201c}\u{201d}"),
+        vec![(0..6, "err".into())],
+    );
+
+    // An ASCII error character is still one byte, which is the case the old
+    // arithmetic was written for.
+    assert_eq!(
+        spans("a\\b"),
+        vec![(0..1, "a".into()), (1..2, "err".into()), (2..3, "b".into())],
+    );
+
+    // Every span indexes the source, which is the property the panic broke.
+    for src in ["a\u{a7}b", "\u{2014}a", "\u{201c}\u{201d}", "a\\b", "\u{1f600}"] {
+        for (span, _) in spans(src) {
+            assert!(src.is_char_boundary(span.start), "{src:?} {span:?}");
+            assert!(src.is_char_boundary(span.end), "{src:?} {span:?}");
+        }
+    }
 }
