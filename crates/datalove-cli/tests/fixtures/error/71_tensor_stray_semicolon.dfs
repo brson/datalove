@@ -1,0 +1,7 @@
+// P010 a token a tensor's innermost axis cannot read.
+//
+// The axis is separated by spaces, so its elements are parsed by reading
+// expressions until the tokens run out. An unexpected sigil was reported
+// without being consumed, which left the tokens exactly as they were and the
+// loop going round forever: this file used to hang the compiler.
+let grid: [|u32, 1|] = [|1 ; 2|]

@@ -26,6 +26,16 @@ impl<'db> Parser<'db> {
 
         let mut lhs = self.parse_expr_primary();
 
+        // Nothing is built on top of an operand that did not parse. Reading an
+        // operator after one asks for a right-hand side that the same broken
+        // text has to supply, and what it says about the second failure is
+        // worth less than the first: `$-` at the end of a line reported the
+        // `$`, then reported an expression missing after the `-` at the top of
+        // the file, there being no token left to point at.
+        if matches!(lhs.expr(self.db), ast::ExprFunKind::ParseError(_)) {
+            return lhs;
+        }
+
         // Check for postfix try operators (? and !).
         // These have highest precedence and are parsed before binary operators.
         lhs = self.parse_postfix_try_operators(lhs);
@@ -590,6 +600,12 @@ impl<'db> Parser<'db> {
                     }
                     _ => {
                         let ts = self.peek_text_span();
+                        // Consumed, because a caller that reads expressions
+                        // until the tokens run out has nothing else to move it
+                        // along: a tensor's innermost axis is separated by
+                        // spaces, so the loop over its elements ends only when
+                        // the parser has eaten them all.
+                        self.next();
                         self.emit_expr_error(ts,
                             "unexpected token in expression",
                             "P010",
