@@ -1891,6 +1891,48 @@ fn lower_clone_coerce<'db>(
 
     let dest = ctx.fresh_value(dest_type.clone());
 
+    // An atom or a term widening into an enum is built rather than copied.
+    //
+    // An enum keeps a discriminant saying which variant it holds, and neither
+    // an atom nor a term has one to copy across: an atom is zero-sized, and a
+    // term is laid out as its payload alone. So the copy below wrote nothing
+    // where the discriminant goes and left whatever the slot held, which in a
+    // fresh frame is zero -- every widened atom came out as the variant that
+    // sorts first, whichever one was written.
+    //
+    // Used directly in enum context, `atom Red` is already lowered this way;
+    // it is only through `@`, where the operand has its own narrow type, that
+    // it was not.
+    if let IrType::Enum(variants) = &dest_type {
+        let variant_name = match &src_type {
+            IrType::Atom(name) => Some(name.clone()),
+            IrType::Term(name, _) => Some(name.clone()),
+            _ => None,
+        };
+        if let Some(name) = variant_name {
+            let variant_index = variants
+                .iter()
+                .position(|(n, _)| *n == name)
+                .unwrap_or_else(|| panic!("variant '{}' not found in enum", name))
+                as u32;
+            // A term's payload is the term itself, which is laid out as that
+            // payload. It is cloned rather than handed over, because `@`
+            // borrows what it is given and the enum takes ownership of what it
+            // is built from -- moving it would free the same thing twice.
+            let payload = match &src_type {
+                IrType::Term(_, _) => {
+                    let cloned = ctx.fresh_value(src_type.clone());
+                    ctx.emit(Instruction::Clone { dest: cloned, src });
+                    Some(Operand::Value(cloned))
+                }
+                _ => None,
+            };
+            ctx.emit(Instruction::EnumVariant { dest, variant_index, payload });
+            ctx.emit_expr_temp_drops_since(expr_temp_mark);
+            return Ok(dest);
+        }
+    }
+
     // Determine the right instruction based on types:
     // 1. Same type copy types: Copy (no-op for same type)
     // 2. Fixed-width int to larger fixed-width int: WidenFixed

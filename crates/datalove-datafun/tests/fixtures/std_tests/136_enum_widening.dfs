@@ -1,0 +1,64 @@
+// An atom or a term widened into an enum with `@`.
+//
+// An enum keeps a discriminant saying which variant it holds. An atom has
+// nothing to copy across, being zero-sized, and a term is laid out as its
+// payload alone, so neither widens by copying. The coercion copied anyway: it
+// wrote nothing where the discriminant goes and left whatever the slot held,
+// which in a fresh frame is zero. Every widened atom came out as the variant
+// that sorts first -- `(atom Red)@` into `enum { atom Red, atom Blue }` was
+// Blue, and a `match` on it took the Blue arm.
+//
+// Used directly in enum context, `atom Red` was always built properly. It was
+// only through `@`, where the operand has its own narrow type, that it was
+// not, and `@` is how the spec writes the widening.
+//
+// A term also has to be cloned rather than handed over, because `@` borrows
+// what it is given while the enum owns what it is built from. Moving it freed
+// the same payload twice.
+
+type Colour: enum { atom Red, atom Blue, atom Green }
+type Tagged: enum { atom Empty, term Note string, term Count u32 }
+
+fun name_of(c: Colour): string
+  match c
+  case atom Red
+    ret "red"
+  case atom Blue
+    ret "blue"
+  case atom Green
+    ret "green"
+  end match
+  ret "unreachable"
+end fun
+
+fun describe(t: Tagged): string
+  match t
+  case atom Empty
+    ret "empty"
+  case term Note text
+    ret text
+  case default
+    ret "something else"
+  end match
+  ret "unreachable"
+end fun
+
+// Every variant, because the one that sorts first was the only one that worked.
+let reds = (name_of((atom Red)@), name_of((atom Blue)@), name_of((atom Green)@))
+
+// And what each widens to, printed.
+let as_red: Colour = (atom Red)@
+let as_blue: Colour = (atom Blue)@
+let as_green: Colour = (atom Green)@
+let widened = (as_red, as_blue, as_green)
+
+// A term carrying something on the heap, and one carrying a number.
+let noted = describe((term Note : string / "written down")@)
+let counted = describe((term Count : u32 / 3)@)
+let empty = describe((atom Empty)@)
+
+// Widened from a binding, which `@` leaves alone.
+let original: term Note string = term Note : string / "keep"
+let copy_of_it: Tagged = original@
+
+let output = (reds, widened, noted, counted, empty, original, copy_of_it)
