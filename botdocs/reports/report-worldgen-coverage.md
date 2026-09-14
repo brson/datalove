@@ -202,8 +202,10 @@ list or a set or a map, and written into a constant.
 What a table *cannot* do is anything else. The spec gives it one operation --
 a column projection, `t.x`, yielding a list view -- and that is not
 implemented; nor is indexing a row, nor a length, nor iteration. There is no
-`table.dfm` in `sys/std`. So the corpus builds tables, moves them about and
-takes them apart again, and that is the whole of what there is to write.
+`table.dfm` in `sys/std`. So the corpus builds tables, moves them about, and
+drops them -- which is worth doing, since a table with a list column and a map
+column has to let go of both -- and that is the whole of what there is to
+write. Nothing reads a value back out of one, because there is no way to.
 
 Thin: `if` (39), `loop` (56), `set` statements (71), `and`/`or`/`xor`, `.>`,
 `.>=`, `.=`, `.!=`, places with an index step, `if` with a binding.
