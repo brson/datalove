@@ -137,8 +137,11 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 return self.compile_map_const(builder, dest, entries);
             }
             ConstValue::Table { rows, .. } => {
-                // Table: create table and push rows.
-                return self.compile_table_const(builder, dest, rows);
+                let base = self.const_dest_addr(builder, dest, "Table")?;
+                let ty = self.value_type_of(dest)?;
+                self.build_table_const_at(builder, base, &ty, rows)?;
+                self.values.insert(dest, base);
+                return Ok(());
             }
             ConstValue::ResultErr(inner) => {
                 // Result Err: write tag=2 and Error payload.
@@ -964,22 +967,18 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         Ok(())
     }
 
-    /// Compile a Table constant.
+    /// Build a table constant at an address, from its rows.
     ///
-    /// Builds table from rows using bulk-build runtime function.
-    fn compile_table_const(
+    /// The rows go into one run of memory, laid out as tuples of the column
+    /// types, and the runtime takes the table from there. The same call a
+    /// table literal makes.
+    fn build_table_const_at(
         &mut self,
         builder: &mut FunctionBuilder,
-        dest: ValueId,
+        base: cranelift_codegen::ir::Value,
+        ty: &IrType,
         rows: &[Vec<ConstValue>],
     ) -> Result<(), CraneliftError> {
-        // Get frame slot and destination address.
-        let frame_slot = self.frame_slot.ok_or_else(|| {
-            CraneliftError::Codegen("no frame slot for Table constant".into())
-        })?;
-        let dest_offset = self.layout.value_offset(dest.0);
-        let base = builder.ins().stack_addr(PTR_TYPE, frame_slot, dest_offset as i32);
-
         // Need runtime handle and imports.
         let rt_handle = self.rt_handle_param.ok_or_else(|| {
             CraneliftError::Codegen("Table constant requires runtime handle".into())
@@ -988,93 +987,38 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             CraneliftError::Codegen("Table constant requires runtime imports".into())
         })?;
 
-        // Get Table type from function.
-        let ir_type = self.func.value_types.get(dest.0 as usize).ok_or_else(|| {
-            CraneliftError::Codegen("no type for Table constant".into())
-        })?;
-        let columns = match ir_type {
-            IrType::Table(cols) => cols.clone(),
-            _ => return Err(CraneliftError::Codegen("expected Table type".into())),
+        let IrType::Table(columns) = ty else {
+            return Err(CraneliftError::Codegen(format!(
+                "a table constant wants a table type, not {:?}", ty)));
         };
+        let columns = columns.clone();
 
         // Get Table TyDesc.
-        let table_tydesc_id = self.tydesc_emitter.get(ir_type).ok_or_else(|| {
+        let table_tydesc_id = self.tydesc_emitter.get(ty).ok_or_else(|| {
             CraneliftError::Codegen("TyDesc not found for Table".into())
         })?;
         let table_tydesc_gv = self.module.declare_data_in_func(table_tydesc_id, builder.func);
         let table_tydesc_ptr = builder.ins().symbol_value(PTR_TYPE, table_tydesc_gv);
 
-        // Compute row tuple layout.
+        // A row is a tuple of the column types, and the descriptor for it is
+        // emitted alongside the table's own. It used to be built here, on the
+        // stack, field by field: a type tag, a size, an align and an array of
+        // offsets, written at offsets spelled out in a comment. The tag it
+        // wrote was 7, which was what `Tuple` was numbered once and has not
+        // been for a long time, so the runtime asserted on the tag and every
+        // table constant died where it was built.
+        let row_ty = IrType::Tuple(columns.iter().map(|(_, ty)| (**ty).clone()).collect());
+        let row_tydesc_id = self.tydesc_emitter.get(&row_ty).ok_or_else(|| {
+            CraneliftError::Codegen(format!("TyDesc not found for row type {:?}", row_ty))
+        })?;
+        let row_tydesc_gv = self.module.declare_data_in_func(row_tydesc_id, builder.func);
+        let row_tydesc_ptr = builder.ins().symbol_value(PTR_TYPE, row_tydesc_gv);
+
         let col_types: Vec<_> = columns.iter().map(|(_, ty)| (**ty).clone()).collect();
-        let mut row_offset = 0u32;
-        let mut row_max_align = 1u32;
-        let mut field_offsets = Vec::with_capacity(col_types.len());
-        let mut col_tydescs = Vec::with_capacity(col_types.len());
-
-        for col_type in col_types.iter() {
-            let col_layout = crate::types::ir_type_to_cranelift(col_type).layout();
-            let field_align = col_layout.align;
-            let field_size = col_layout.size;
-            row_max_align = row_max_align.max(field_align);
-            row_offset = datalove_rtdt::layout::align_up(row_offset, field_align);
-            field_offsets.push(row_offset);
-            row_offset += field_size;
-
-            let col_tydesc_id = self.tydesc_emitter.get(col_type).ok_or_else(|| {
-                CraneliftError::Codegen("TyDesc not found for Table column".into())
-            })?;
-            col_tydescs.push(col_tydesc_id);
-        }
-        let row_size = datalove_rtdt::layout::align_up(row_offset, row_max_align);
-        let row_stride = if row_size == 0 { 1 } else { row_size };
-
-        // Build row tuple TyDesc on stack.
-        // TyInfoTupleField is { offset: u32, _pad: u32, tydesc: *const TyDesc }
-        let tuple_fields_size = columns.len() as u32 * 16; // Each field is 16 bytes
-        let tuple_fields_slot = builder.create_sized_stack_slot(cranelift_codegen::ir::StackSlotData::new(
-            cranelift_codegen::ir::StackSlotKind::ExplicitSlot,
-            tuple_fields_size.max(8),
-            align_shift(8),
-        ));
-        let tuple_fields_addr = builder.ins().stack_addr(PTR_TYPE, tuple_fields_slot, 0);
-
-        // Fill in the tuple fields.
-        let mem_flags = cranelift_codegen::ir::MemFlagsData::trusted();
-        for (i, &col_tydesc_id) in col_tydescs.iter().enumerate() {
-            let field_base = builder.ins().iadd_imm_s(tuple_fields_addr, (i * 16) as i64);
-            let offset_val = builder.ins().iconst(cl_types::I32, field_offsets[i] as i64);
-            builder.ins().store(mem_flags, offset_val, field_base, 0);
-
-            let col_tydesc_gv = self.module.declare_data_in_func(col_tydesc_id, builder.func);
-            let col_tydesc_ptr = builder.ins().symbol_value(PTR_TYPE, col_tydesc_gv);
-            builder.ins().store(mem_flags, col_tydesc_ptr, field_base, 8);
-        }
-
-        // Build the tuple TyDesc on stack.
-        // TyDesc = { type_tag: u8, _pad: [u8; 3], size: u32, align: u32, _pad2: u32, type_info: TyInfo }
-        // TyInfo for Tuple = { num_fields: u32, _pad: u32, fields: *const TyInfoTupleField }
-        // Total size: 1 + 3 + 4 + 4 + 4 + 4 + 4 + 8 = 32 bytes
-        let row_tydesc_slot = builder.create_sized_stack_slot(cranelift_codegen::ir::StackSlotData::new(
-            cranelift_codegen::ir::StackSlotKind::ExplicitSlot,
-            32,
-            align_shift(8),
-        ));
-        let row_tydesc_addr = builder.ins().stack_addr(PTR_TYPE, row_tydesc_slot, 0);
-
-        // type_tag = Tuple (7)
-        let tag_val = builder.ins().iconst(cl_types::I8, 7);
-        builder.ins().store(mem_flags, tag_val, row_tydesc_addr, 0);
-        // size
-        let size_val = builder.ins().iconst(cl_types::I32, row_size as i64);
-        builder.ins().store(mem_flags, size_val, row_tydesc_addr, 4);
-        // align
-        let align_val = builder.ins().iconst(cl_types::I32, row_max_align as i64);
-        builder.ins().store(mem_flags, align_val, row_tydesc_addr, 8);
-        // num_fields
-        let num_fields_val = builder.ins().iconst(cl_types::I32, columns.len() as i64);
-        builder.ins().store(mem_flags, num_fields_val, row_tydesc_addr, 16);
-        // fields pointer
-        builder.ins().store(mem_flags, tuple_fields_addr, row_tydesc_addr, 24);
+        let field_offsets = ir_layout::aggregate_field_offsets(&col_types);
+        let row_layout = crate::types::ir_type_to_cranelift(&row_ty).layout();
+        let row_max_align = row_layout.align;
+        let row_stride = if row_layout.size == 0 { 1 } else { row_layout.size };
 
         // Allocate stack buffer for ALL rows.
         let num_rows = rows.len() as u32;
@@ -1099,10 +1043,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         // Build table from rows.
         let num_rows_val = builder.ins().iconst(crate::index_types::INDEX_TYPE, num_rows as i64);
         let table_build_ref = self.module.declare_func_in_func(runtime.table_build_from_rows, builder.func);
-        builder.ins().call(table_build_ref, &[rt_handle, base, table_tydesc_ptr, rows_addr, row_tydesc_addr, num_rows_val]);
-
-        // Store base pointer for this value.
-        self.values.insert(dest, base);
+        builder.ins().call(table_build_ref, &[rt_handle, base, table_tydesc_ptr, rows_addr, row_tydesc_ptr, num_rows_val]);
         Ok(())
     }
     /// Write a ConstValue to a memory address.
@@ -1478,11 +1419,8 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 self.build_map_const_at(builder, addr, &key_type, &value_type, entries)?;
             }
 
-            // A table is the one shape left, and nothing writes one yet.
-            ConstValue::Table { .. } => {
-                return Err(CraneliftError::Codegen(format!(
-                    "a table constant cannot be written at an address yet: {:?}", value
-                )));
+            ConstValue::Table { rows, .. } => {
+                self.build_table_const_at(builder, addr, ty, rows)?;
             }
         }
         Ok(())

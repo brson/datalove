@@ -1941,6 +1941,7 @@ proptest! {
                 // data_type and error_type disabled: clone not implemented (shallow copy causes double-free).
                 data_type: 0,
                 error_type: 0,
+                table_type: 0,
                 // Named types disabled by gen_expr_full_seeded (need external type definitions).
                 named_tuple_type: 0,
                 named_struct_type: 0,

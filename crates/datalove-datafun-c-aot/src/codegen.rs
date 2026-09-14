@@ -832,10 +832,42 @@ impl<'a> FunctionCodegenContext<'a> {
                     scratch, elements.len(), elem_tydesc, scratch, rank, dest_addr, tensor_tydesc).unwrap();
             }
 
-            // A table is the one shape left, and nothing writes one yet.
-            _ => {
-                return Err(CAotError::Unsupported(format!(
-                    "constant of this shape: {:?}", value)));
+            ConstValue::Table { rows, .. } => {
+                let IrType::Table(columns) = ty else {
+                    return Err(CAotError::Codegen(format!(
+                        "a table constant wants a table type, not {:?}", ty)));
+                };
+                let table_tydesc = self.tydesc_name(ty);
+
+                // A row is a tuple of the column types, laid out as one, and
+                // the runtime is handed a descriptor for it along with the run
+                // of rows. Cells go in the order the columns were written,
+                // which is the order every layer keeps them in.
+                let col_types: Vec<IrType> =
+                    columns.iter().map(|(_, ty)| (**ty).clone()).collect();
+                let row_ty = IrType::Tuple(col_types.clone());
+                let row_tydesc = self.tydesc_name(&row_ty);
+                let offsets = ir_layout::aggregate_field_offsets(&col_types);
+                let row_size = types::ir_type_to_crepr(&row_ty).layout().size;
+
+                if rows.is_empty() {
+                    writeln!(out, "    dtlv_rti_table_create_local(rt, {}, &{});",
+                        dest_addr, table_tydesc).unwrap();
+                } else {
+                    let scratch = self.next_const_scratch();
+                    writeln!(out, "    {{ _Alignas(8) uint8_t {}[{}] = {{0}};",
+                        scratch, (row_size * rows.len() as u32).max(1)).unwrap();
+                    for (row_index, row) in rows.iter().enumerate() {
+                        let row_base = row_index as u32 * row_size;
+                        for (column, cell) in row.iter().enumerate() {
+                            let cell_addr =
+                                format!("({} + {})", scratch, row_base + offsets[column]);
+                            self.emit_const_at(out, &cell_addr, &col_types[column], cell)?;
+                        }
+                    }
+                    writeln!(out, "    dtlv_rti_table_build_from_rows_local(rt, {}, &{}, {}, &{}, {}); }}",
+                        dest_addr, table_tydesc, scratch, row_tydesc, rows.len()).unwrap();
+                }
             }
         }
         Ok(())
@@ -1985,7 +2017,10 @@ impl<'a> FunctionCodegenContext<'a> {
             writeln!(out, "    dtlv_rti_table_create_local(rt, {}, &{});", dest_addr, dest_tydesc).unwrap();
         } else {
             let total_size = row_layout.size * rows.len() as u32;
-            writeln!(out, "    {{ uint8_t __rows[{}];", total_size.max(1)).unwrap();
+            // Aligned, because the runtime reads each row through the tuple
+            // descriptor's offsets and those are computed from the columns'
+            // own alignments.
+            writeln!(out, "    {{ _Alignas(8) uint8_t __rows[{}];", total_size.max(1)).unwrap();
 
             for (i, row_op) in rows.iter().enumerate() {
                 let row_addr = self.operand_addr(row_op);

@@ -622,6 +622,16 @@ fn ir_type_from_tydesc(tydesc: datalove_rtdt::TyDescRef) -> Result<IrType, CtfeE
             }
             Ok(IrType::Struct(fields))
         }
+        TyTag::Table => {
+            let mut columns = Vec::new();
+            for column in tydesc.table_column_tydescs() {
+                columns.push((
+                    column.name().to_string(),
+                    Box::new(ir_type_from_tydesc(column.tydesc())?),
+                ));
+            }
+            Ok(IrType::Table(columns))
+        }
         TyTag::Atom => Ok(IrType::Atom(tydesc.atom_info().0.to_string())),
         TyTag::Term => {
             let (name, payload) = tydesc.term_info();
@@ -641,10 +651,6 @@ fn ir_type_from_tydesc(tydesc: datalove_rtdt::TyDescRef) -> Result<IrType, CtfeE
             }
             Ok(IrType::Enum(variants))
         }
-
-        other => Err(CtfeError::UnsupportedType(format!(
-            "cannot reconstruct IrType from TyTag::{:?}", other
-        ))),
     }
 }
 

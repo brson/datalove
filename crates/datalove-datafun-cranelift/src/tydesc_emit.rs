@@ -1186,6 +1186,14 @@ impl TyDescEmitter {
             column_tydesc_ids.push(tydesc_id);
         }
 
+        // And the descriptor for a row, which is a tuple of the columns: the
+        // runtime is handed one every time a row is pushed or a table is built
+        // from rows. A table whose rows are written out has one already, from
+        // the row values themselves, but an empty table mentions the tuple
+        // nowhere else and could not be built at all without this.
+        let row_ty = IrType::Tuple(columns.iter().map(|(_, ty)| (**ty).clone()).collect());
+        self.emit(module, &row_ty)?;
+
         // Create the columns array as a separate data object.
         let columns_data_id = if columns.is_empty() {
             None
@@ -1473,9 +1481,88 @@ pub fn collect_types_from_code_unit(unit: &IrCodeUnit, types: &mut BTreeSet<IrTy
         }
     }
 
+    // A constant can name a type its own does not. The value of a `data` is
+    // `Data` and says nothing about what it holds, and what it holds is
+    // packed against a descriptor for that: a const of a `data` over a list of
+    // `i64` was the only mention of `[i64]` in its unit, and the emitter made
+    // no descriptor for it.
+    for block in &unit.blocks {
+        for instr in &block.instructions {
+            if let datalove_datafun_ir::Instruction::Const { value, .. } = instr {
+                collect_types_from_const_value(value, types);
+            }
+        }
+    }
+
     // Recursively collect from nested units.
     for nested in &unit.nested_units {
         collect_types_from_code_unit(nested, types);
+    }
+}
+
+/// Collect the types a constant names, which its own type may not.
+fn collect_types_from_const_value(
+    value: &datalove_datafun_ir::ConstValue,
+    types: &mut BTreeSet<IrType>,
+) {
+    use datalove_datafun_ir::ConstValue;
+    match value {
+        ConstValue::Data { payload_type, value }
+        | ConstValue::Error { payload_type, value } => {
+            types.insert((**payload_type).clone());
+            collect_types_from_const_value(value, types);
+        }
+        ConstValue::List(elements)
+        | ConstValue::Set(elements)
+        | ConstValue::Tuple(elements)
+        | ConstValue::Tensor { elements, .. } => {
+            for element in elements {
+                collect_types_from_const_value(element, types);
+            }
+        }
+        ConstValue::Map(entries) => {
+            for (key, value) in entries {
+                collect_types_from_const_value(key, types);
+                collect_types_from_const_value(value, types);
+            }
+        }
+        ConstValue::Table { rows, .. } => {
+            for row in rows {
+                for cell in row {
+                    collect_types_from_const_value(cell, types);
+                }
+            }
+        }
+        ConstValue::Struct(fields) => {
+            for (_, field) in fields {
+                collect_types_from_const_value(field, types);
+            }
+        }
+        ConstValue::OptionSome(inner)
+        | ConstValue::ResultOk(inner)
+        | ConstValue::ResultErr(inner) => collect_types_from_const_value(inner, types),
+        ConstValue::Enum { payload, .. } => {
+            if let Some(payload) = payload {
+                collect_types_from_const_value(payload, types);
+            }
+        }
+        ConstValue::Unit
+        | ConstValue::Bool(_)
+        | ConstValue::U8(_)
+        | ConstValue::I8(_)
+        | ConstValue::U16(_)
+        | ConstValue::I16(_)
+        | ConstValue::U32(_)
+        | ConstValue::I32(_)
+        | ConstValue::U64(_)
+        | ConstValue::I64(_)
+        | ConstValue::Index(_)
+        | ConstValue::Offset(_)
+        | ConstValue::F32(_)
+        | ConstValue::F64(_)
+        | ConstValue::Int { .. }
+        | ConstValue::String(_)
+        | ConstValue::OptionNone => {}
     }
 }
 

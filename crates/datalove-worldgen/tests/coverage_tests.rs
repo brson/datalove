@@ -131,7 +131,6 @@ const NOT_YET_GENERATED: &[(&str, &str, &str)] = &[
     // and `Index`, which are for a base that is not a place. Both pairs are
     // written; the place forms are counted under the two place-step shapes.
     ("expr", "Hex", "hex literals are not generated"),
-    ("expr", "Table", "table literals are not generated"),
     ("expr", "IntrinsicCall", "`icall` names intrinsics the generator does not know"),
     ("expr", "ParseError", "a parse error means the generator wrote something wrong"),
 
@@ -140,7 +139,6 @@ const NOT_YET_GENERATED: &[(&str, &str, &str)] = &[
 
     // A type parameter parses as an alias too, and those are everywhere.
     // `TypeParams` tells the two apart, so an alias count is alias references.
-    ("type", "Table", "table types are not generated"),
     ("type", "ParseError", "a parse error means the generator wrote something wrong"),
 ];
 

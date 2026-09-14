@@ -150,7 +150,7 @@ pub enum IrType {
     /// Used for field refs passed to ref/mut/out params.
     /// Layout is pointer-sized (8 bytes), stores a pointer to the inner type.
     Ref(Box<IrType>),
-    /// Table with named columns (sorted by name).
+    /// Table with named columns, in the order they were written.
     Table(Vec<(String, Box<IrType>)>),
 }
 

@@ -75,6 +75,7 @@ pub struct TypeWeights {
     pub named_enum_type: u32,
     pub data_type: u32,
     pub error_type: u32,
+    pub table_type: u32,
 }
 
 impl Default for TypeWeights {
@@ -109,6 +110,7 @@ impl Default for TypeWeights {
             named_enum_type: 1,
             data_type: 2,
             error_type: 2,
+            table_type: 2,
         }
     }
 }
@@ -146,6 +148,7 @@ impl TypeWeights {
             named_enum_type: 0,
             data_type: 0,
             error_type: 0,
+            table_type: 0,
         }
     }
 }
@@ -275,6 +278,7 @@ pub fn gen_type_hint<'db, R: Rng>(
     add_choice(weights.error_type, 23);
     add_choice(weights.usize_type, 24);
     add_choice(weights.isize_type, 25);
+    add_choice(weights.table_type, 26);
 
     if choices.is_empty() {
         return TypeHint::Bool;
@@ -354,150 +358,26 @@ pub fn gen_type_hint<'db, R: Rng>(
         23 => TypeHint::Error,
         24 => TypeHint::Index,
         25 => TypeHint::Offset,
-        _ => TypeHint::Bool,
-    }
-}
-
-/// Generate a TypeHint with nested types (internal helper).
-fn gen_type_hint_inner<'db, R: Rng>(
-    db: &'db dyn salsa::Database,
-    rng: &mut R,
-    config: &AstGenConfig,
-    depth: usize,
-) -> TypeHint<'db> {
-    let weights = if depth >= config.max_depth {
-        let mut leaf = TypeWeights::leaf_only();
-        if config.type_weights.bool_type == 0 { leaf.bool_type = 0; }
-        if config.type_weights.u8_type == 0 { leaf.u8_type = 0; }
-        if config.type_weights.i8_type == 0 { leaf.i8_type = 0; }
-        if config.type_weights.u16_type == 0 { leaf.u16_type = 0; }
-        if config.type_weights.i16_type == 0 { leaf.i16_type = 0; }
-        if config.type_weights.u32_type == 0 { leaf.u32_type = 0; }
-        if config.type_weights.i32_type == 0 { leaf.i32_type = 0; }
-        if config.type_weights.u64_type == 0 { leaf.u64_type = 0; }
-        if config.type_weights.i64_type == 0 { leaf.i64_type = 0; }
-        if config.type_weights.usize_type == 0 { leaf.usize_type = 0; }
-        if config.type_weights.isize_type == 0 { leaf.isize_type = 0; }
-        if config.type_weights.f32_type == 0 { leaf.f32_type = 0; }
-        if config.type_weights.f64_type == 0 { leaf.f64_type = 0; }
-        if config.type_weights.int_type == 0 { leaf.int_type = 0; }
-        if config.type_weights.string_type == 0 { leaf.string_type = 0; }
-        leaf
-    } else {
-        config.type_weights.clone()
-    };
-
-    let mut choices = Vec::new();
-    let mut add_choice = |weight: u32, idx: usize| {
-        for _ in 0..weight {
-            choices.push(idx);
-        }
-    };
-
-    add_choice(weights.bool_type, 0);
-    add_choice(weights.u8_type, 1);
-    add_choice(weights.i8_type, 2);
-    add_choice(weights.u16_type, 3);
-    add_choice(weights.i16_type, 4);
-    add_choice(weights.u32_type, 5);
-    add_choice(weights.i32_type, 6);
-    add_choice(weights.u64_type, 7);
-    add_choice(weights.i64_type, 8);
-    add_choice(weights.f32_type, 9);
-    add_choice(weights.f64_type, 10);
-    add_choice(weights.int_type, 11);
-    add_choice(weights.string_type, 12);
-    add_choice(weights.list_type, 13);
-    add_choice(weights.map_type, 14);
-    add_choice(weights.set_type, 15);
-    add_choice(weights.option_type, 16);
-    add_choice(weights.result_type, 17);
-    add_choice(weights.tensor_type, 18);
-    add_choice(weights.anon_tuple_type, 19);
-    add_choice(weights.anon_struct_type, 20);
-    add_choice(weights.anon_enum_type, 21);
-    add_choice(weights.data_type, 22);
-    add_choice(weights.error_type, 23);
-    add_choice(weights.usize_type, 24);
-    add_choice(weights.isize_type, 25);
-
-    if choices.is_empty() {
-        return TypeHint::Bool;
-    }
-
-    let choice = choices[rng.gen_range(0..choices.len())];
-
-    match choice {
-        0 => TypeHint::Bool,
-        1 => TypeHint::U8,
-        2 => TypeHint::I8,
-        3 => TypeHint::U16,
-        4 => TypeHint::I16,
-        5 => TypeHint::U32,
-        6 => TypeHint::I32,
-        7 => TypeHint::U64,
-        8 => TypeHint::I64,
-        9 => TypeHint::F32,
-        10 => TypeHint::F64,
-        11 => TypeHint::Int,
-        12 => TypeHint::String,
-        13 => {
-            let element_type = gen_type_hint_inner(db, rng, config, depth + 1);
-            TypeHint::List(TypeHintList { element_type: Box::new(element_type) })
-        }
-        14 => {
-            let key_type = gen_type_hint_inner(db, rng, config, depth + 1);
-            let value_type = gen_type_hint_inner(db, rng, config, depth + 1);
-            TypeHint::Map(TypeHintMap { key_type: Box::new(key_type), value_type: Box::new(value_type) })
-        }
-        15 => {
-            let element_type = gen_type_hint_inner(db, rng, config, depth + 1);
-            TypeHint::Set(TypeHintSet { element_type: Box::new(element_type) })
-        }
-        16 => {
-            let inner_type = gen_type_hint_inner(db, rng, config, depth + 1);
-            TypeHint::Option(TypeHintOption { inner_type: Box::new(inner_type) })
-        }
-        17 => {
-            let inner_type = gen_type_hint_inner(db, rng, config, depth + 1);
-            TypeHint::Result(TypeHintResult { inner_type: Box::new(inner_type) })
-        }
-        18 => {
-            let element_type = gen_type_hint_inner(db, rng, config, depth + 1);
-            let rank = rng.gen_range(1..=config.tensor_config.max_rank);
-            TypeHint::Tensor(TypeHintTensor { element_type: Box::new(element_type), rank })
-        }
-        19 => {
-            let count = rng.gen_range(config.min_collection_size..=config.max_collection_size);
-            let fields: Vec<_> = (0..count)
-                .map(|_| gen_type_hint_inner(db, rng, config, depth + 1))
-                .collect();
-            TypeHint::AnonTuple(TypeHintAnonTuple { fields })
-        }
-        20 => {
-            // Cap count to available unique field names to prevent infinite loops.
-            let max_count = config.max_collection_size.min(MAX_UNIQUE_FIELD_NAMES);
-            let count = rng.gen_range(config.min_collection_size..=max_count);
+        26 => {
+            // At least one column, since a table of none has no rows either
+            // and is the same table whatever is written into it.
+            let max_count = config.max_collection_size.max(1).min(MAX_UNIQUE_FIELD_NAMES);
+            let count = rng.gen_range(1..=max_count);
             let mut used_names = std::collections::HashSet::new();
-            let fields: Vec<_> = (0..count)
+            let columns: Vec<_> = (0..count)
                 .map(|_| {
-                    // Generate unique field name.
                     let name = loop {
                         let candidate = gen_field_name(rng);
                         if used_names.insert(candidate.clone()) {
                             break InternedText::new(db, &candidate);
                         }
                     };
-                    let type_hint = gen_type_hint_inner(db, rng, config, depth + 1);
+                    let type_hint = gen_type_hint(db, rng, config, depth + 1);
                     TypeHintNamedField { name, type_hint: Box::new(type_hint) }
                 })
                 .collect();
-            TypeHint::AnonStruct(TypeHintAnonStruct { fields })
+            TypeHint::Table(TypeHintTable { columns })
         }
-        21 => TypeHint::Data,
-        23 => TypeHint::Error,
-        24 => TypeHint::Index,
-        25 => TypeHint::Offset,
         _ => TypeHint::Bool,
     }
 }
@@ -601,7 +481,7 @@ pub fn gen_expr_matching_type<'db, R: Rng>(
                 Expr::Ok(ExprOk { payload })
             } else {
                 // Error case: generate Expr::Er with Expr::Error payload.
-                let error_inner_type = gen_type_hint_inner(db, rng, config, depth + 1);
+                let error_inner_type = gen_type_hint(db, rng, config, depth + 1);
                 let error_inner_value = gen_expr_full_inner(db, rng, error_inner_type, config, depth + 1);
                 let error_expr = Expr::Error(ExprError { value: error_inner_value });
                 let er_payload = ExprFull::new(db, None, None, error_expr);
@@ -637,17 +517,41 @@ pub fn gen_expr_matching_type<'db, R: Rng>(
             Expr::Tensor(ExprTensor { shape, elements })
         }
         TypeHint::Data => {
-            let inner_type = gen_type_hint_inner(db, rng, config, depth + 1);
+            let inner_type = gen_type_hint(db, rng, config, depth + 1);
             let value = gen_expr_full_inner(db, rng, inner_type, config, depth + 1);
             Expr::Data(ExprData { value })
         }
         TypeHint::Error => {
-            let inner_type = gen_type_hint_inner(db, rng, config, depth + 1);
+            let inner_type = gen_type_hint(db, rng, config, depth + 1);
             let value = gen_expr_full_inner(db, rng, inner_type, config, depth + 1);
             Expr::Error(ExprError { value })
         }
         TypeHint::ParseError(_) => Expr::None,
-        TypeHint::Table(_) => todo!("table expression generation not yet implemented"),
+        TypeHint::Table(th) => {
+            // The header is the type's columns in the type's order, which is
+            // the only order a table literal may be written in.
+            let header: Vec<_> = th.columns.iter().map(|c| c.name).collect();
+            let count = rng.gen_range(config.min_collection_size..=config.max_collection_size);
+            let rows: Vec<_> = (0..count)
+                .map(|_| {
+                    let elements = th
+                        .columns
+                        .iter()
+                        .map(|c| {
+                            gen_expr_full_inner(
+                                db,
+                                rng,
+                                (*c.type_hint).clone(),
+                                config,
+                                depth + 1,
+                            )
+                        })
+                        .collect();
+                    ExprTableRow { elements }
+                })
+                .collect();
+            Expr::Table(ExprTable { header, rows })
+        }
         TypeHint::Alias(_) => Expr::None,
         TypeHint::Atom(_) | TypeHint::Term(_) | TypeHint::Enum(_) => {
             todo!("atom/term/enum expression generation not yet implemented")
@@ -1003,7 +907,7 @@ fn gen_expr_full_random_type<'db, R: Rng>(
     rng: &mut R,
     config: &AstGenConfig,
 ) -> ExprFull<'db> {
-    let type_hint = gen_type_hint_inner(db, rng, config, 0);
+    let type_hint = gen_type_hint(db, rng, config, 0);
     gen_expr_full_inner(db, rng, type_hint, config, 0)
 }
 

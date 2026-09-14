@@ -38,6 +38,89 @@ unsafe fn data_inner(
     std::option::Option::Some((value, tydesc))
 }
 
+/// Whether two packed values are equal.
+///
+/// A `data` and an `error` are the same three encodings under two type tags,
+/// and an `error` is how the error side of a result is held, so all three read
+/// through here. Each of them used to compare for itself: the `error` arms
+/// read the two words raw, which puts every negative integer above every
+/// positive one, and the result's arm reached straight for the value pointer,
+/// which only a heap-packed value has. A set of results whose errors held a
+/// `bool` could not be built at all -- inserting the second one compared it
+/// against the first and the runtime stopped on "value not stored as pointer".
+///
+/// # Safety
+///
+/// Both pointers must be initialized packed values.
+unsafe fn eq_packed(
+    a: *const rtdt::Data,
+    b: *const rtdt::Data,
+    float_policy: FloatEqPolicy,
+) -> bool {
+    unsafe {
+        if (*a).tytag() != (*b).tytag() {
+            return false;
+        }
+        if std::ptr::eq(a, b) {
+            return true;
+        }
+        // Unpacked and compared as what it is, rather than as the words it
+        // lies in: the two float zeros have different bits and are equal, and
+        // a NaN has the same bits as itself and is not.
+        let mut scratch_a = 0u64;
+        let mut scratch_b = 0u64;
+        let (std::option::Option::Some((inner_a, inner_td)),
+             std::option::Option::Some((inner_b, _))) =
+            (data_inner(a, &mut scratch_a), data_inner(b, &mut scratch_b))
+        else {
+            return false;
+        };
+        eq_value(inner_a, inner_b, rtdt::TyDescRef::from_ptr(inner_td), float_policy)
+    }
+}
+
+/// How two packed values order. See `eq_packed`.
+///
+/// Two of different types order by their type tags, which is arbitrary but
+/// total, and is what a collection sorted on them needs.
+///
+/// # Safety
+///
+/// Both pointers must be initialized packed values.
+unsafe fn cmp_packed(
+    a: *const rtdt::Data,
+    b: *const rtdt::Data,
+) -> crate::c::RtOrdering {
+    unsafe {
+        let tytag_a = (*a).tytag();
+        let tytag_b = (*b).tytag();
+        if tytag_a != tytag_b {
+            return ordering_of((tytag_a as u8).cmp(&(tytag_b as u8)));
+        }
+        if std::ptr::eq(a, b) {
+            return crate::c::RtOrdering::Equal;
+        }
+        let mut scratch_a = 0u64;
+        let mut scratch_b = 0u64;
+        let (std::option::Option::Some((inner_a, inner_td)),
+             std::option::Option::Some((inner_b, _))) =
+            (data_inner(a, &mut scratch_a), data_inner(b, &mut scratch_b))
+        else {
+            return crate::c::RtOrdering::Error;
+        };
+        cmp_value(inner_a, inner_b, rtdt::TyDescRef::from_ptr(inner_td))
+    }
+}
+
+/// Carry an ordering across to the one the runtime speaks.
+fn ordering_of(ordering: std::cmp::Ordering) -> crate::c::RtOrdering {
+    match ordering {
+        std::cmp::Ordering::Less => crate::c::RtOrdering::Less,
+        std::cmp::Ordering::Greater => crate::c::RtOrdering::Greater,
+        std::cmp::Ordering::Equal => crate::c::RtOrdering::Equal,
+    }
+}
+
 pub unsafe fn eq(
     value_a: *const u8,
     tydesc_a: *const rtdt::TyDesc,
@@ -517,18 +600,8 @@ unsafe fn eq_value(
                         eq_value(payload_a, payload_b, ok_ty, float_policy)
                     }
                     rtdt::ResultTag::Err => {
-                        // Compare Error values.
-                        // Error has same structure as Data: (tydesc, value_ptr).
-                        let err_a = &*(payload_a as *const rtdt::Error);
-                        let err_b = &*(payload_b as *const rtdt::Error);
-                        let tydesc_a = err_a.tydesc();
-                        let tydesc_b = err_b.tydesc();
-                        if tydesc_a != tydesc_b {
-                            return false;
-                        }
-                        let value_a = err_a.value_ptr();
-                        let value_b = err_b.value_ptr();
-                        eq_value(value_a, value_b, rtdt::TyDescRef::from_ptr(tydesc_a), float_policy)
+                        eq_packed(payload_a as *const rtdt::Data,
+                            payload_b as *const rtdt::Data, float_policy)
                     }
                 }
             }
@@ -699,107 +772,9 @@ unsafe fn eq_value(
                 }
                 true
             }
-            rtdt::TyTag::Data => {
-                // Compare Data values.
-                // Data uses a tagged encoding that can store values in three ways.
-                let data_a = &*(value_a as *const rtdt::Data);
-                let data_b = &*(value_b as *const rtdt::Data);
-
-                // First check if types match.
-                let tytag_a = data_a.tytag();
-                let tytag_b = data_b.tytag();
-                if tytag_a != tytag_b {
-                    return false;
-                }
-
-                // Same type - compare based on encoding.
-                match data_a.tag() {
-                    rtdt::anypack::Tag::TwoPointers => {
-                        // Heap-allocated values (Int, String, List, etc.).
-                        // Recursively compare the inner values.
-                        let tydesc_a = data_a.tydesc();
-                        let tydesc_b = data_b.tydesc();
-                        if tydesc_a != tydesc_b {
-                            return false;
-                        }
-                        let inner_value_a = data_a.value_ptr();
-                        let inner_value_b = data_b.value_ptr();
-                        eq_value(inner_value_a, inner_value_b, rtdt::TyDescRef::from_ptr(tydesc_a), float_policy)
-                    }
-                    rtdt::anypack::Tag::SmallImmediate | rtdt::anypack::Tag::InlineWithTyDesc => {
-                        // Unpacked and compared as what it is, rather than as
-                        // the words it lies in: the two float zeros have
-                        // different bits and are equal, and a NaN has the same
-                        // bits as itself and is not.
-                        if std::ptr::eq(data_a, data_b) {
-                            return true;
-                        }
-                        let mut scratch_a = 0u64;
-                        let mut scratch_b = 0u64;
-                        let (std::option::Option::Some((inner_a, inner_td)),
-                             std::option::Option::Some((inner_b, _))) =
-                            (data_inner(data_a, &mut scratch_a),
-                             data_inner(data_b, &mut scratch_b))
-                        else {
-                            return false;
-                        };
-                        eq_value(inner_a, inner_b,
-                            rtdt::TyDescRef::from_ptr(inner_td), float_policy)
-                    }
-                    _ => {
-                        panic!("invalid Data tag: {:?}", data_a.tag());
-                    }
-                }
-            }
-            rtdt::TyTag::Error => {
-                // Compare Error values.
-                // Error uses same encoding as Data.
-                let err_a = &*(value_a as *const rtdt::Error);
-                let err_b = &*(value_b as *const rtdt::Error);
-                let as_data_a = &*(value_a as *const rtdt::Data);
-                let as_data_b = &*(value_b as *const rtdt::Data);
-
-                // First check if types match.
-                let tytag_a = as_data_a.tytag();
-                let tytag_b = as_data_b.tytag();
-                if tytag_a != tytag_b {
-                    return false;
-                }
-
-                // Same type - compare based on encoding.
-                match as_data_a.tag() {
-                    rtdt::anypack::Tag::TwoPointers => {
-                        // Heap-allocated error values.
-                        // Recursively compare the inner values.
-                        let tydesc_a = err_a.tydesc();
-                        let tydesc_b = err_b.tydesc();
-                        if tydesc_a != tydesc_b {
-                            return false;
-                        }
-                        let inner_value_a = err_a.value_ptr();
-                        let inner_value_b = err_b.value_ptr();
-                        eq_value(inner_value_a, inner_value_b, rtdt::TyDescRef::from_ptr(tydesc_a), float_policy)
-                    }
-                    rtdt::anypack::Tag::SmallImmediate | rtdt::anypack::Tag::InlineWithTyDesc => {
-                        // For same type, compare the Error structures field-wise.
-                        if std::ptr::eq(err_a, err_b) {
-                            true
-                        } else {
-                            // Read Error as two usize values and compare.
-                            let err_a_bytes = std::ptr::read(as_data_a);
-                            let err_b_bytes = std::ptr::read(as_data_b);
-
-                            // Compare using transmute to [usize; 2] for consistent equality.
-                            let a_words: [usize; 2] = std::mem::transmute(err_a_bytes);
-                            let b_words: [usize; 2] = std::mem::transmute(err_b_bytes);
-
-                            a_words == b_words
-                        }
-                    }
-                    _ => {
-                        panic!("invalid Error tag: {:?}", as_data_a.tag());
-                    }
-                }
+            rtdt::TyTag::Data | rtdt::TyTag::Error => {
+                eq_packed(value_a as *const rtdt::Data,
+                    value_b as *const rtdt::Data, float_policy)
             }
         }
     }
@@ -1126,23 +1101,8 @@ unsafe fn cmp_value(
                                 cmp_value(payload_a, payload_b, ok_ty)
                             }
                             rtdt::ResultTag::Err => {
-                                // Compare Error values.
-                                // Error has same structure as Data: (tydesc, value_ptr).
-                                let err_a = &*(payload_a as *const rtdt::Error);
-                                let err_b = &*(payload_b as *const rtdt::Error);
-                                let tydesc_a = err_a.tydesc();
-                                let tydesc_b = err_b.tydesc();
-                                if tydesc_a != tydesc_b {
-                                    // Different error types - compare tydesc pointers.
-                                    return match (tydesc_a as usize).cmp(&(tydesc_b as usize)) {
-                                        std::cmp::Ordering::Less => crate::c::RtOrdering::Less,
-                                        std::cmp::Ordering::Greater => crate::c::RtOrdering::Greater,
-                                        std::cmp::Ordering::Equal => crate::c::RtOrdering::Equal,
-                                    };
-                                }
-                                let value_a = err_a.value_ptr();
-                                let value_b = err_b.value_ptr();
-                                cmp_value(value_a, value_b, rtdt::TyDescRef::from_ptr(tydesc_a))
+                                cmp_packed(payload_a as *const rtdt::Data,
+                                    payload_b as *const rtdt::Data)
                             }
                         }
                     }
@@ -1302,134 +1262,8 @@ unsafe fn cmp_value(
                     std::cmp::Ordering::Equal => crate::c::RtOrdering::Equal,
                 }
             }
-            rtdt::TyTag::Data => {
-                // Compare Data values.
-                // Data uses a tagged encoding that can store values in three ways.
-                let data_a = &*(value_a as *const rtdt::Data);
-                let data_b = &*(value_b as *const rtdt::Data);
-
-                // First check if types match.
-                let tytag_a = data_a.tytag();
-                let tytag_b = data_b.tytag();
-                if tytag_a != tytag_b {
-                    // Different types - order by tytag.
-                    return match (tytag_a as u8).cmp(&(tytag_b as u8)) {
-                        std::cmp::Ordering::Less => crate::c::RtOrdering::Less,
-                        std::cmp::Ordering::Greater => crate::c::RtOrdering::Greater,
-                        std::cmp::Ordering::Equal => crate::c::RtOrdering::Equal,
-                    };
-                }
-
-                // Same type - compare based on encoding.
-                match data_a.tag() {
-                    rtdt::anypack::Tag::TwoPointers => {
-                        // Heap-allocated values (Int, String, List, etc.).
-                        // Recursively compare the inner values.
-                        let tydesc_a = data_a.tydesc();
-                        let tydesc_b = data_b.tydesc();
-                        if tydesc_a != tydesc_b {
-                            // Different tydescs - order by pointer.
-                            return match (tydesc_a as usize).cmp(&(tydesc_b as usize)) {
-                                std::cmp::Ordering::Less => crate::c::RtOrdering::Less,
-                                std::cmp::Ordering::Greater => crate::c::RtOrdering::Greater,
-                                std::cmp::Ordering::Equal => crate::c::RtOrdering::Equal,
-                            };
-                        }
-                        let inner_value_a = data_a.value_ptr();
-                        let inner_value_b = data_b.value_ptr();
-                        cmp_value(inner_value_a, inner_value_b, rtdt::TyDescRef::from_ptr(tydesc_a))
-                    }
-                    rtdt::anypack::Tag::SmallImmediate | rtdt::anypack::Tag::InlineWithTyDesc => {
-                        // Unpacked and compared as what it is, rather than as
-                        // the words it lies in. Those words would put every
-                        // negative integer above every positive one, because
-                        // two's complement read as a magnitude says so, and
-                        // would order floats by their bit patterns.
-                        if std::ptr::eq(data_a, data_b) {
-                            return crate::c::RtOrdering::Equal;
-                        }
-                        let mut scratch_a = 0u64;
-                        let mut scratch_b = 0u64;
-                        let (std::option::Option::Some((inner_a, inner_td)),
-                             std::option::Option::Some((inner_b, _))) =
-                            (data_inner(data_a, &mut scratch_a),
-                             data_inner(data_b, &mut scratch_b))
-                        else {
-                            return crate::c::RtOrdering::Error;
-                        };
-                        cmp_value(inner_a, inner_b,
-                            rtdt::TyDescRef::from_ptr(inner_td))
-                    }
-                    _ => {
-                        panic!("invalid Data tag: {:?}", data_a.tag());
-                    }
-                }
-            }
-            rtdt::TyTag::Error => {
-                // Compare Error values.
-                // Error uses same encoding as Data.
-                let err_a = &*(value_a as *const rtdt::Error);
-                let err_b = &*(value_b as *const rtdt::Error);
-                let as_data_a = &*(value_a as *const rtdt::Data);
-                let as_data_b = &*(value_b as *const rtdt::Data);
-
-                // First check if types match.
-                let tytag_a = as_data_a.tytag();
-                let tytag_b = as_data_b.tytag();
-                if tytag_a != tytag_b {
-                    // Different types - order by tytag.
-                    return match (tytag_a as u8).cmp(&(tytag_b as u8)) {
-                        std::cmp::Ordering::Less => crate::c::RtOrdering::Less,
-                        std::cmp::Ordering::Greater => crate::c::RtOrdering::Greater,
-                        std::cmp::Ordering::Equal => crate::c::RtOrdering::Equal,
-                    };
-                }
-
-                // Same type - compare based on encoding.
-                match as_data_a.tag() {
-                    rtdt::anypack::Tag::TwoPointers => {
-                        // Heap-allocated error values.
-                        // Recursively compare the inner values.
-                        let tydesc_a = err_a.tydesc();
-                        let tydesc_b = err_b.tydesc();
-                        if tydesc_a != tydesc_b {
-                            // Different tydescs - order by pointer.
-                            return match (tydesc_a as usize).cmp(&(tydesc_b as usize)) {
-                                std::cmp::Ordering::Less => crate::c::RtOrdering::Less,
-                                std::cmp::Ordering::Greater => crate::c::RtOrdering::Greater,
-                                std::cmp::Ordering::Equal => crate::c::RtOrdering::Equal,
-                            };
-                        }
-                        let inner_value_a = err_a.value_ptr();
-                        let inner_value_b = err_b.value_ptr();
-                        cmp_value(inner_value_a, inner_value_b, rtdt::TyDescRef::from_ptr(tydesc_a))
-                    }
-                    rtdt::anypack::Tag::SmallImmediate | rtdt::anypack::Tag::InlineWithTyDesc => {
-                        // For same type, compare the Error structures field-wise.
-                        // This works because each type has a consistent encoding.
-                        // Error has same repr as Data: two pointer fields.
-                        if std::ptr::eq(err_a, err_b) {
-                            crate::c::RtOrdering::Equal
-                        } else {
-                            // Read Error as two usize values and compare.
-                            let err_a_bytes = std::ptr::read(err_a);
-                            let err_b_bytes = std::ptr::read(err_b);
-
-                            // Compare using transmute to [usize; 2] for consistent ordering.
-                            let a_words: [usize; 2] = std::mem::transmute(err_a_bytes);
-                            let b_words: [usize; 2] = std::mem::transmute(err_b_bytes);
-
-                            match a_words.cmp(&b_words) {
-                                std::cmp::Ordering::Less => crate::c::RtOrdering::Less,
-                                std::cmp::Ordering::Greater => crate::c::RtOrdering::Greater,
-                                std::cmp::Ordering::Equal => crate::c::RtOrdering::Equal,
-                            }
-                        }
-                    }
-                    _ => {
-                        panic!("invalid Error tag: {:?}", as_data_a.tag());
-                    }
-                }
+            rtdt::TyTag::Data | rtdt::TyTag::Error => {
+                cmp_packed(value_a as *const rtdt::Data, value_b as *const rtdt::Data)
             }
         }
     }

@@ -1,0 +1,76 @@
+// A table, every way one is written.
+//
+// Nothing generated a table until now, so what the four backends did with one
+// had never been compared. Three things were wrong and each was in a different
+// place.
+//
+// A table built from no rows asks the runtime for a descriptor of the row it
+// is not writing, and the cranelift backend emitted descriptors only for types
+// something mentioned. A row is a tuple of the columns and an empty table
+// mentions it nowhere, so it could not be built at all. The descriptor for a
+// row is emitted with the table's own now.
+//
+// A table constant hand-built that row descriptor instead, on the stack, field
+// by field, with the type tag written as the literal 7. `Tuple` was numbered 7
+// once; it is 0x40 and has been for a long time. The runtime asserted on the
+// tag and the program died where the constant was built. It reads the emitted
+// descriptor now, like everything else, and the hand-building is gone.
+//
+// The C backend refused a table constant outright, and wrote the rows of a
+// table literal into a buffer it had not aligned.
+
+fun make(): {| x: u32, y: string |}
+  ret {| x, y; : u32 / 1, : string / "a"; : u32 / 2, : string / "b" |}
+end fun
+
+fun take(t: {| x: u32, y: string |}): {| x: u32, y: string |}
+  ret t
+end fun
+
+// Taken and never used, so the callee drops it.
+fun drop_it(t: {| x: u32, y: string |}): u32
+  ret : u32 / 7
+end fun
+
+fun borrow(ref t: {| x: u32 |}): u32
+  ret : u32 / 8
+end fun
+
+// The shapes a table is built in.
+let plain: {| x: u32, y: string |} = {| x, y; : u32 / 1, : string / "a" |}
+let three_rows: {| x: u32 |} = {| x; : u32 / 1; : u32 / 2; : u32 / 3 |}
+let empty: {| x: u32 |} = {| x |}
+let wide: {| a: u8, b: f64, c: index, d: string |} = {| a, b, c, d; : u8 / 1, : f64 / 2.5, : index / 3, : string / "d" |}
+
+// A column that owns something, and a column that is a table.
+let owning: {| x: [u32], y: %{u32 = string} |} = {| x, y; : [u32] / [: u32 / 1, : u32 / 2], : %{u32 = string} / %{: u32 / 1 = : string / "v"} |}
+let nested: {| x: {| y: u32 |} |} = {| x; : {| y: u32 |} / {| y; : u32 / 5 |} |}
+
+// Passed, returned, cloned, dropped.
+let made = make()
+let passed = take({| x, y; : u32 / 3, : string / "c" |})
+let cloned: {| x: u32, y: string |} = plain@
+let dropped = drop_it({| x, y; : u32 / 4, : string / "d" |})
+let borrowed = borrow(ref three_rows)
+
+// Held inside other things.
+let in_option: ?{| x: u32 |} = some {| x; : u32 / 5 |}
+let in_list: [{| x: u32 |}] = [{| x; : u32 / 6 |}, {| x |}]
+let in_set: #{{| x: u32 |}} = #{{| x; : u32 / 1 |}, {| x; : u32 / 2 |}}
+let in_map: %{{| x: u32 |} = u32} = %{{| x; : u32 / 1 |} = : u32 / 9}
+
+// And written as a constant, which is built rather than copied.
+const TABLE: {| x: u32, y: string |} = {| x, y; : u32 / 8, : string / "e" |}
+const EMPTY: {| x: u32 |} = {| x |}
+const NESTED: {| x: [u32] |} = {| x; : [u32] / [: u32 / 1, : u32 / 2] |}
+let from_const = (TABLE, EMPTY, NESTED)
+
+// A constant inside a constant, which is written at an address rather than
+// into a value of its own.
+const PAIR: ({| x: u32 |}, u32) = ({| x; : u32 / 4 |}, : u32 / 5)
+const HELD: ?{| x: u32 |} = some {| x; : u32 / 6 |}
+let nested_consts = (PAIR, HELD)
+
+let output = (plain, three_rows, empty, wide, owning, nested, made, passed,
+              cloned, dropped, borrowed, in_option, in_list, in_set, in_map,
+              from_const, nested_consts)

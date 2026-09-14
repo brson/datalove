@@ -193,16 +193,27 @@ break, which is a loop that does not end -- the first thing this wrote was
 second falls through. What that round has bound by then is the loop's to let
 go of on the way, which is a path nothing else in the corpus takes.
 
+**Tables**, the last of the language's types nothing built. A table is written
+as a type and as a literal -- `{| x: u32, y: string |}` and `{| x, y; 1, "a"
+|}` -- and it is now one of the types a value can be asked for, so it turns up
+wherever any other does: bound, passed, returned, cloned, dropped, held in a
+list or a set or a map, and written into a constant.
+
+What a table *cannot* do is anything else. The spec gives it one operation --
+a column projection, `t.x`, yielding a list view -- and that is not
+implemented; nor is indexing a row, nor a length, nor iteration. There is no
+`table.dfm` in `sys/std`. So the corpus builds tables, moves them about and
+takes them apart again, and that is the whole of what there is to write.
+
 Thin: `if` (39), `loop` (56), `set` statements (71), `and`/`or`/`xor`, `.>`,
 `.>=`, `.=`, `.!=`, places with an index step, `if` with a binding.
 
-Still never generated, 4 of roughly 110 things counted:
+Still never generated, 3 of roughly 110 things counted:
 
 | category | what |
 |---|---|
 | statements | `native fun` |
-| expressions | hex literals, `table`, `icall` |
-| types | `table` |
+| expressions | hex literals, `icall` |
 
 ## What it found
 
@@ -286,6 +297,51 @@ generator was writing `: bool / 0` for a map keyed by `bool`, which is how it
 was found and is also a generator bug, fixed by only offering an
 integer-keyed map to index.
 
+And four from the tables, which nothing had ever built. Three were in the
+backends and one was not about tables at all.
+
+**A table with no rows could not be built.** The runtime is handed a
+descriptor for a row every time one is pushed, and a row is a tuple of the
+columns. The cranelift backend emitted descriptors only for types something
+mentioned, and a table with rows mentions that tuple in the rows themselves.
+An empty one mentions it nowhere. A row's descriptor is emitted with the
+table's own now.
+
+**A table constant wrote a type tag of 7.** Rather than ask for the row
+descriptor, the constant path built one on the stack, field by field, at
+offsets spelled out in a comment, with the tag written as a literal. `Tuple`
+was numbered 7 once; it has been 0x40 for a long time. The runtime asserted on
+the tag and the program died where the constant was built. It reads the
+emitted descriptor now, and sixty lines of hand-building are gone.
+
+**The C backend refused a table constant** and wrote a table literal's rows
+into a buffer it had not aligned. Both fixed; `144_table_shapes`.
+
+**A constant of a `data` named a type nothing else in its unit did.** Not a
+table bug -- the generator's roll moved when tables were added to it, and
+this was underneath. A `data` is packed against a descriptor for what it
+holds, and since the value of one is just `Data`, the type it holds appears
+nowhere in the unit's values. A const of a `data` over a list of `i64` was the
+only mention of `[i64]` anywhere, so no descriptor was emitted and codegen had
+nothing to point at. The collector walks constants now.
+
+**Two packed values could not be compared unless both were on the heap.** Also
+not a table bug, and the worst of the four. A `data` holds what it was built
+from in one of three ways -- behind a pointer, inline beside a descriptor, or
+packed into the words themselves -- an `error` is the same three under another
+tag, and an `error` is how the error side of a result is held. The comparison
+was written three times. The `data` one read all three encodings. The `error`
+one read the two words raw, which orders by bit pattern: every negative
+integer above every positive one. The result one reached straight for the
+value pointer, which only the heap encoding has, and stopped the program on
+"value not stored as pointer".
+
+So a set of results whose errors held a `bool` could not be built: inserting
+the second compared it against the first and died. The interpreter was fine,
+which is what made it a mismatch rather than a crash on both sides. All three
+read through one comparison now, and the two hand-rolled ones are gone.
+`145_packed_error_ordering`.
+
 ## Consts, in more detail
 
 The spec says a const holds anything a function can compute. Seven things
@@ -358,12 +414,11 @@ text.
 
 ## Next
 
-1. Tables.
-2. Log the silent fallbacks. `gen_set` and friends fall back to `gen_let` when
+1. Log the silent fallbacks. `gen_set` and friends fall back to `gen_let` when
    they cannot proceed, so a construct can be rare because it keeps failing to
    build rather than because it was weighted that way, and nothing says which.
-3. `native fun` and `icall` each want something the generator does not have: a
+2. `native fun` and `icall` each want something the generator does not have: a
    rider to resolve against, and the names of the intrinsics.
-4. The interactions, which is where every bug so far has been. A roll of node
+3. The interactions, which is where every bug so far has been. A roll of node
    kinds says nothing about a generic over a map at `data` on one side, or a
    checked overflow inside a branch of a function returning a result.

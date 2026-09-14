@@ -1,0 +1,40 @@
+// Comparing two values that carry their own type.
+//
+// A `data` holds what it was built from in one of three ways: behind a
+// pointer, inline beside a descriptor, or -- for something narrow enough --
+// packed into the words themselves with no descriptor at all. An `error` is
+// the same three under another tag, and an `error` is how the error side of a
+// result is held.
+//
+// Comparing them was written three times. The `data` version read all three
+// encodings. The `error` version read the two words raw, which orders by bit
+// pattern: every negative integer above every positive one, and floats by
+// their exponents. The result version reached straight for the value pointer,
+// which only the first encoding has, so it did not compare inline values at
+// all -- it stopped the program on "value not stored as pointer".
+//
+// A set sorts what goes into it, so a set of results whose errors held a
+// `bool` could not be built. The second insert compared against the first and
+// died. Under the interpreter nothing went wrong, which is what a set like
+// this is here to keep true.
+//
+// All three read through one comparison now.
+
+// A set, which compares every element it takes against the ones it holds.
+let inline_errors: #{!u32} = #{: !u32 / er error : bool / false, : !u32 / er error : u32 / 92}
+let mixed: #{!u32} = #{: !u32 / ok : u32 / 1, : !u32 / er error : u32 / 2, : !u32 / er error : string / "heap"}
+
+// Negative numbers, which the raw comparison put above the positive ones.
+let signed: #{!i32} = #{: !i32 / er error : i32 / -5, : !i32 / er error : i32 / 3, : !i32 / er error : i32 / -100}
+
+// Floats, whose zeros have different bits and are the same number.
+let floats: #{!f64} = #{: !f64 / er error : f64 / 0.0, : !f64 / er error : f64 / 1.5}
+
+// A map keyed on one, which sorts the same way.
+let keyed: %{!u32 = string} = %{: !u32 / er error : bool / true = : string / "t"}
+
+// And a bare `data` and `error` beside them, which always read all three.
+let datas: #{data} = #{data : u32 / 1, data : string / "s", data : bool / true}
+let errors: #{error} = #{error : u32 / 1, error : bool / false}
+
+let output = (inline_errors, mixed, signed, floats, keyed, datas, errors)

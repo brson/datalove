@@ -327,6 +327,7 @@ pub enum TypeSerde {
     Atom { name: String },
     Term { name: String, payload: Box<TypeSerde> },
     Enum { variants: Vec<(String, Option<TypeSerde>)> },
+    Table { columns: Vec<(String, TypeSerde)> },
 }
 
 /// Serializable type error (common subset).
@@ -427,7 +428,12 @@ fn datalit_type_to_serde<'db>(
         },
         Type::Data => TypeSerde::Data,
         Type::Error => TypeSerde::Error,
-        Type::Table(_) => todo!("table types not yet supported in funlit equiv"),
+        Type::Table(t) => TypeSerde::Table {
+            columns: t.columns.iter().map(|c| (
+                c.name.as_str(db).to_string(),
+                datalit_type_to_serde(db, (*c.ty).clone()),
+            )).collect(),
+        },
         Type::Atom(a) => TypeSerde::Atom {
             name: a.name.as_str(db).to_string(),
         },

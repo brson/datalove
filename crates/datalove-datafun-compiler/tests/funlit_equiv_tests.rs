@@ -324,6 +324,7 @@ fn make_compatible_config() -> AstGenConfig {
             // Data and error types work with type hints.
             data_type: 10,
             error_type: 10,
+            table_type: 10,
         },
         ..Default::default()
     }

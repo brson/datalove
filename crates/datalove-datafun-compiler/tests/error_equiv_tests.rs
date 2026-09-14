@@ -326,6 +326,7 @@ fn make_mutation_config() -> AstGenConfig {
             named_enum_type: 5,
             data_type: 3,
             error_type: 3,
+            table_type: 3,
         },
         ..Default::default()
     }

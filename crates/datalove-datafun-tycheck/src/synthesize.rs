@@ -431,8 +431,7 @@ pub fn synthesize_expr<'db>(
                 }
                 return Ok(expected_ty);
             }
-            // Table requires type hint - cannot infer schema.
-            Err(ctx.error_cannot_synthesize(expr, "table requires type hint"))
+            synthesize_inline_table(ctx, expr, table_expr)
         }
 
         // Atom expression: synthesize standalone Atom type.
@@ -1803,6 +1802,78 @@ fn synthesize_inline_tensor<'db>(
         datalit::tycheck::TypeTensor { element_type: Box::new(first_datalit), rank }
     ));
     Ok(ty)
+}
+
+/// Synthesize the type of a table written without one.
+///
+/// A column's type is what the first row puts in it, and every row after that
+/// is checked against the first, which is how a list and a map are read. Until
+/// this was written a table was the one collection that could not say its own
+/// type at all, so it could be written nowhere a type was not already known --
+/// not inside a `data`, not as a term's payload.
+///
+/// A table with no rows says only its column names, and they get `()`, the way
+/// an empty list's elements do.
+fn synthesize_inline_table<'db>(
+    ctx: &mut TypeContext<'db>,
+    _expr: ExprFun<'db>,
+    table_expr: &ExprTable<'db>,
+) -> Result<Type<'db>, TypeError> {
+    let db = ctx.db;
+    let header = &table_expr.header;
+    let rows = &table_expr.rows;
+
+    let mut column_types = Vec::with_capacity(header.len());
+    match rows.first() {
+        Some(first) => {
+            if first.elements.len() != header.len() {
+                return Err(TypeError::ArityMismatch {
+                    expected: header.len(),
+                    actual: first.elements.len(),
+                });
+            }
+            for element in &first.elements {
+                let ty = ctx.synthesize_expr(*element)?;
+                column_types.push(ty);
+            }
+        }
+        None => {
+            for _ in header {
+                column_types.push(Type::Datalit(datalit::tycheck::unit_type()));
+            }
+        }
+    }
+
+    for row in rows.iter().skip(1) {
+        if row.elements.len() != header.len() {
+            return Err(TypeError::ArityMismatch {
+                expected: header.len(),
+                actual: row.elements.len(),
+            });
+        }
+        for (element, column_ty) in row.elements.iter().zip(column_types.iter()) {
+            let element_ty = ctx.synthesize_expr(*element)?;
+            check_element_compatible(db, column_ty, &element_ty)?;
+        }
+    }
+
+    let columns = header
+        .iter()
+        .zip(column_types.into_iter())
+        .map(|(name, ty)| {
+            let datalit_ty = match ty {
+                Type::Datalit(dt) => dt,
+                Type::Function(_) => {
+                    unreachable!("synthesized expression type is always Datalit")
+                }
+            };
+            datalit::tycheck::TypeNamedField { name: *name, ty: Box::new(datalit_ty) }
+        })
+        .collect();
+
+    Ok(Type::Datalit(datalit::tycheck::Type::Table(
+        datalit::tycheck::TypeTable { columns },
+    )))
 }
 
 /// Synthesize type for inline anonymous tuple.
