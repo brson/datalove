@@ -109,7 +109,6 @@ const ALL_SHAPES: &[&str] = &[
 const NOT_YET_GENERATED: &[(&str, &str, &str)] = &[
     // (category, kind, why not)
     ("statement", "Const", "const declarations are not generated"),
-    ("statement", "Continue", "would make a loop's final break unreachable"),
     ("statement", "NativeFun", "natives need a rider to resolve against"),
     ("statement", "ParseError", "a parse error means the generator wrote something wrong"),
 
@@ -579,6 +578,7 @@ fn test_core_constructs_are_common() {
         ("expr", "TryOption", 3),
         ("expr", "TryResult", 2),
         ("statement", "Match", 20),
+        ("statement", "Continue", 3),
         ("expr", "EnumLiteral", 20),
     ];
 

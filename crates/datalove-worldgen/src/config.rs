@@ -42,6 +42,9 @@ pub struct WorldGenConfig {
     /// Probability of generating a loop statement (0-100 percent).
     pub loop_probability: u32,
 
+    /// Probability that a loop body goes back round early, under a guard.
+    pub continue_probability: u32,
+
     /// Probability that an `if` destructures an option or a result rather than
     /// testing a condition, where there is one in scope to destructure.
     pub if_binding_probability: u32,
@@ -105,6 +108,7 @@ impl Default for WorldGenConfig {
             max_control_flow_depth: 2,
             if_probability: 30,
             loop_probability: 20,
+            continue_probability: 40,
             if_binding_probability: 40,
             param_mode_probability: 35,
             projection_probability: 40,

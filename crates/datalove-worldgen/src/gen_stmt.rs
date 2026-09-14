@@ -475,12 +475,32 @@ pub fn gen_loop<'db, R: Rng>(
     // 30% chance to generate bare loop, 70% loop while.
     let is_bare_loop = rng.gen_bool(0.3);
 
-    let mut result = if is_bare_loop {
+    // The flag a `continue` is guarded by, declared before the loop so the
+    // body can put it out. See where it is used, below.
+    let continue_flag = if config.check_probability(rng, config.continue_probability) {
+        let name = format!("v{}", *var_counter);
+        *var_counter += 1;
+        ctx.variables.push(Variable {
+            name: name.clone(),
+            type_hint: TypeHint::Bool,
+            is_mutable: true,
+        });
+        Some(name)
+    } else {
+        Option::None
+    };
+
+    let mut result = String::new();
+    if let Some(flag) = &continue_flag {
+        result.push_str(&format!("{}var {}: bool = true\n", indent, flag));
+    }
+
+    result.push_str(&if is_bare_loop {
         format!("{}loop\n", indent)
     } else {
         let condition = gen_bool_expr(db, rng, config, ctx);
         format!("{}loop while {}\n", indent, condition)
-    };
+    });
 
     let inner_indent = format!("{}  ", indent);
     ctx.control_flow_depth += 1;
@@ -500,6 +520,27 @@ pub fn gen_loop<'db, R: Rng>(
         .collect();
     for name in linear_vars {
         ctx.loop_protect_variable(&name);
+    }
+
+    // A round that goes back to the top before reaching the end of the body.
+    //
+    // Guarded, and written before anything else, because the statements after
+    // a bare `continue` are unreachable -- including the `break` that keeps
+    // the loop from running forever. Inside a branch, what follows is reached
+    // on the rounds that do not take it.
+    //
+    // The guard is a flag the branch puts out, rather than a generated
+    // condition: a condition that happens to be `true` continues every round
+    // and the break is never reached, which is a loop that does not end. This
+    // way the first round goes back and the second falls through.
+    //
+    // What the round has bound by the time it goes back is the loop's to let
+    // go of, which is a path nothing else in the generated corpus takes.
+    if let Some(flag) = &continue_flag {
+        result.push_str(&format!("{}if {}\n", inner_indent, flag));
+        result.push_str(&format!("{}  set {} = false\n", inner_indent, flag));
+        result.push_str(&format!("{}  continue\n", inner_indent));
+        result.push_str(&format!("{}end if\n", inner_indent));
     }
 
     let body_stmt_count = rng.gen_range(1..=3);

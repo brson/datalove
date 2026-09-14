@@ -151,14 +151,27 @@ The six forms that kept reaching zero between runs now have floors in
 `test_core_constructs_are_common`, so losing one is a failure rather than a
 shrug.
 
+**`continue`**, which had been left out under a note saying it would make a
+loop's final break unreachable. It would, written bare: everything after it in
+the same block is unreachable, the `break` included, and that break is what
+keeps a generated loop from running forever. Inside a branch, what follows is
+reached on the rounds that do not take it.
+
+The guard is a flag put out by the branch rather than a generated condition. A
+condition that happens to be `true` continues every round and never reaches the
+break, which is a loop that does not end -- the first thing this wrote was
+`loop / if true / continue`. With a flag the first round goes back and the
+second falls through. What that round has bound by then is the loop's to let
+go of on the way, which is a path nothing else in the corpus takes.
+
 Thin: `if` (39), `loop` (56), `set` statements (71), `and`/`or`/`xor`, `.>`,
 `.>=`, `.=`, `.!=`, places with an index step, `if` with a binding.
 
-Still never generated, 6 of roughly 110 things counted:
+Still never generated, 5 of roughly 110 things counted:
 
 | category | what |
 |---|---|
-| statements | `const`, `continue`, `native fun` |
+| statements | `const`, `native fun` |
 | expressions | a projection or an index off something that is not a place, hex literals, `table`, `icall` |
 | types | `table` |
 
@@ -244,9 +257,8 @@ text.
 3. Log the silent fallbacks. `gen_set` and friends fall back to `gen_let` when
    they cannot proceed, so a construct can be rare because it keeps failing to
    build rather than because it was weighted that way, and nothing says which.
-4. `continue`, `native fun` and `icall` each want something the generator does
-   not have: a loop that does not end in a break, a rider to resolve against,
-   and the names of the intrinsics.
+4. `native fun` and `icall` each want something the generator does not have: a
+   rider to resolve against, and the names of the intrinsics.
 5. The interactions, which is where every bug so far has been. A roll of node
    kinds says nothing about a generic over a map at `data` on one side, or a
    checked overflow inside a branch of a function returning a result.
