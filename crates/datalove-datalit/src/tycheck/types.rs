@@ -735,7 +735,13 @@ pub fn check_int_fits_type(value_str: &str, ty: &Type<'_>) -> Result<(), TypeErr
         Type::Index => value_str.parse::<datalove_rtdt::IndexRepr>().map(|_| ()).map_err(|_| TypeError::IntOutOfRange),
         Type::Offset => value_str.parse::<datalove_rtdt::OffsetRepr>().map(|_| ()).map_err(|_| TypeError::IntOutOfRange),
         Type::Int => Ok(()),
-        _ => panic!("check_int_fits_type called with non-integer type"),
+        // An integer written with a hint that is not an integer type. `: bool
+        // / 0` is a thing a person can write, and saying so is the answer; it
+        // used to bring the compiler down here instead.
+        _ => Err(TypeError::TypeMismatch {
+            expected: "an integer type".to_string(),
+            actual: "a hint that is not one".to_string(),
+        }),
     }
 }
 
