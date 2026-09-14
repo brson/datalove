@@ -525,7 +525,7 @@ impl<'db> Parser<'db> {
                                         ts
                                     )
                                 }
-                                num if Self::is_numeric_literal(num) || Self::is_float_word(num) => {
+                                num if Self::is_number_word(num) => {
                                     // Capture span before parsing for diagnostic reporting.
                                     let ts = self.peek_text_span();
                                     let expr_kind = self.parse_lit_expr(None);

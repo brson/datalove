@@ -1,0 +1,26 @@
+{
+  "ast": {
+    "expr": {
+      "ParseError": {
+        "message": "numeric suffixes are not supported"
+      }
+    },
+    "type_hint": null
+  },
+  "diagnostics": [
+    {
+      "code": "D019",
+      "labels": [
+        {
+          "message": "`u8` is not part of the number; write a type hint, as in `: u8 / 1`",
+          "span": [
+            0,
+            3
+          ],
+          "text": "1u8"
+        }
+      ],
+      "message": "numeric suffixes are not supported"
+    }
+  ]
+}

@@ -14,10 +14,10 @@
         {
           "message": "unexpected '-' not followed by number",
           "span": [
-            1,
-            4
+            0,
+            1
           ],
-          "text": "foo"
+          "text": "-"
         }
       ],
       "message": "unexpected minus sign"

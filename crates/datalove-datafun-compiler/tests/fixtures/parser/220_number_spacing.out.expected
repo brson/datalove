@@ -1,0 +1,108 @@
+{
+  "ast": {
+    "statements": [
+      {
+        "kind": "Let",
+        "name": "a",
+        "type_hint": null,
+        "value": {
+          "expr": {
+            "kind": "ParseError",
+            "message": "a float is written without spaces in it"
+          }
+        }
+      },
+      {
+        "kind": "Let",
+        "name": "b",
+        "type_hint": null,
+        "value": {
+          "expr": {
+            "kind": "ParseError",
+            "message": "an exponent is written without spaces in it"
+          }
+        }
+      },
+      {
+        "kind": "Let",
+        "name": "c",
+        "type_hint": null,
+        "value": {
+          "expr": {
+            "kind": "ParseError",
+            "message": "numeric suffixes are not supported"
+          }
+        }
+      },
+      {
+        "kind": "Let",
+        "name": "d",
+        "type_hint": null,
+        "value": {
+          "expr": {
+            "kind": "ParseError",
+            "message": "a separator goes between two digits"
+          }
+        }
+      }
+    ]
+  },
+  "diagnostics": [
+    {
+      "code": "P052",
+      "labels": [
+        {
+          "message": "write it as `1.5`",
+          "span": [
+            151,
+            156
+          ],
+          "text": "1 . 5"
+        }
+      ],
+      "message": "a float is written without spaces in it"
+    },
+    {
+      "code": "P052",
+      "labels": [
+        {
+          "message": "write it as `2.5e-10`",
+          "span": [
+            165,
+            174
+          ],
+          "text": "2.5e - 10"
+        }
+      ],
+      "message": "an exponent is written without spaces in it"
+    },
+    {
+      "code": "P053",
+      "labels": [
+        {
+          "message": "`u8` is not part of the number; write a type hint, as in `: u8 / 1`",
+          "span": [
+            183,
+            186
+          ],
+          "text": "1u8"
+        }
+      ],
+      "message": "numeric suffixes are not supported"
+    },
+    {
+      "code": "P052",
+      "labels": [
+        {
+          "message": "not a run of digits",
+          "span": [
+            195,
+            197
+          ],
+          "text": "1_"
+        }
+      ],
+      "message": "a separator goes between two digits"
+    }
+  ]
+}

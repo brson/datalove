@@ -122,7 +122,15 @@ newline        = "\n" | "\r\n" ;
 6. **Tables**: pipe-brace delimiters `{| ... |}`, header then data rows
 7. **Trailing commas** allowed everywhere
 8. **Block comments** can nest
-9. **A delimiter someone wrote needs something before it.** A `;` or a `,`
+9. **A number is written without spaces in it.** The grammar above puts no
+   `ws` inside `int_lit`, `float_lit` or `hex_lit`, and the parser holds to
+   that: a literal runs as far as it was written against itself, so `1 . 5`,
+   `2.5e - 10` and `- 5` are reported rather than assembled out of whatever
+   is nearby. Letters on the end of the digits are reported too, datalove
+   having no numeric suffixes: `1u8` asks for `: u8 / 1`. See
+   [design-token-gluing.md](design-token-gluing.md), which also covers how
+   spacing decides an operator's fixity in datafun.
+10. **A delimiter someone wrote needs something before it.** A `;` or a `,`
    separates two particular things, so one with nothing before it separates
    nothing and is an error: `{| x, y;; 1, 2 |}`, `{| x,, y |}`, `[|,1 2|]`.
    A newline is not written to separate anything in particular - it falls

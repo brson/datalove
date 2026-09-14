@@ -594,16 +594,20 @@ pub fn bracer<'db>(
 }
 
 impl<'db> TreeToken<'db> {
+    /// The byte range this token or branch covers.
+    ///
+    /// A branch runs from its open sigil to wherever it ended, which is its
+    /// close where it has one and where the recovery put it where it does not.
+    pub fn span(&self) -> Range<usize> {
+        match self {
+            TreeToken::Token(tok) => tok.span(),
+            TreeToken::Branch { open, end_byte, .. } => open.span().start..*end_byte,
+        }
+    }
+
     /// Get source Text and byte span for this token or branch.
     pub fn text_span(&self, source_text: crate::text::Text<'db>) -> Option<crate::text::TextSpan<'db>> {
-        match self {
-            TreeToken::Token(tok) => {
-                Some(crate::text::TextSpan::new(source_text, tok.span()))
-            }
-            TreeToken::Branch { open, end_byte, .. } => {
-                Some(crate::text::TextSpan::new(source_text, open.span().start..*end_byte))
-            }
-        }
+        Some(crate::text::TextSpan::new(source_text, self.span()))
     }
 
     pub fn without_space(self) -> Option<Self> {

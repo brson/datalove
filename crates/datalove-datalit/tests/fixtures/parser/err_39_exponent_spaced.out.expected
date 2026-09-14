@@ -1,0 +1,26 @@
+{
+  "ast": {
+    "expr": {
+      "ParseError": {
+        "message": "an exponent is written without spaces in it"
+      }
+    },
+    "type_hint": null
+  },
+  "diagnostics": [
+    {
+      "code": "D019",
+      "labels": [
+        {
+          "message": "write it as `2.5e-10`",
+          "span": [
+            0,
+            9
+          ],
+          "text": "2.5e - 10"
+        }
+      ],
+      "message": "an exponent is written without spaces in it"
+    }
+  ]
+}

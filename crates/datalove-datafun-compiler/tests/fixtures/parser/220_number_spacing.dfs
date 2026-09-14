@@ -1,0 +1,6 @@
+// A number is written without spaces in it, so each of these is reported
+// rather than assembled out of the pieces that happen to be nearby.
+let a = 1 . 5
+let b = 2.5e - 10
+let c = 1u8
+let d = 1_

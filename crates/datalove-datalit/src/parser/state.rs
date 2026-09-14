@@ -247,6 +247,24 @@ impl<'db> TokenStream<'db> for Parser<'db> {
         }
     }
 
+    fn peek_next(&self) -> Option<&TreeToken<'db>> {
+        match &self.source {
+            TokenSource::Vec { tokens, pos } => tokens.get(pos.checked_add(1).X()),
+            TokenSource::Iter { buffer, .. } => buffer[1].as_ref(),
+        }
+    }
+
+    fn prev_end(&self) -> Option<usize> {
+        match &self.source {
+            TokenSource::Vec { tokens, pos } => {
+                tokens.get(pos.checked_sub(1)?).map(|token| token.span().end)
+            }
+            TokenSource::Iter { last_token, .. } => {
+                last_token.as_ref().map(|token| token.span().end)
+            }
+        }
+    }
+
     fn next(&mut self) -> Option<TreeToken<'db>> {
         match &mut self.source {
             TokenSource::Vec { tokens, pos } => {

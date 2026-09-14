@@ -10,20 +10,10 @@ use bct::{
 };
 
 use crate::ast;
-use crate::parser_util::{self, TokenStream, TokenStreamExt};
+use crate::parser_util::{self, TextSpan, TokenStream, TokenStreamExt};
 use bct::diagnostic::DiagnosticBuilder;
 use datalove_diagnostic::DiagnosticBuilderExt;
 use super::state::Parser;
-
-/// What follows a literal's leading digits.
-enum FloatTail {
-    /// No float here: nothing was consumed, so the digits are an integer.
-    None,
-    /// The text of a whole float literal.
-    Text(String),
-    /// A float that ran out, having consumed the tokens that started it.
-    Malformed,
-}
 
 impl<'db> Parser<'db> {
     pub(super) fn parse_expr_full(&mut self) -> ast::ExprFull<'db> {
@@ -66,107 +56,39 @@ impl<'db> Parser<'db> {
         expr_full
     }
 
-    /// Read the fraction and exponent after a literal's leading digits.
+    /// Build the expression for a number, or report how it was written.
     ///
-    /// The digits have already been consumed. Their word is passed back in
-    /// because an exponent without a fraction is part of it: `2e10` is one
-    /// word, where `2.5e10` is three.
-    fn parse_float_tail(&mut self, word: &str) -> FloatTail {
-        // An exponent on the leading digits means there is no fraction.
-        match parser_util::float_exponent(word) {
-            Some(parser_util::FloatExponent::Complete { .. }) => {
-                return FloatTail::Text(word.S());
-            }
-            Some(parser_util::FloatExponent::Pending { .. }) => {
-                return match parser_util::eat_exponent_tail(self) {
-                    Some(tail) => FloatTail::Text(fmt!("{word}{tail}")),
-                    None => FloatTail::Malformed,
-                };
-            }
-            None => {}
+    /// A sign is part of the literal here, datalit having no operator that
+    /// could claim it instead.
+    fn number_expr(&mut self, number: parser_util::Number) -> ast::Expr<'db> {
+        let ts = TextSpan::new(self.source_text(), number.span.C());
+
+        if let Some((message, label)) = number.complaint() {
+            return self.emit_expr_error(ts, &message, "D019", &label);
+        }
+        if let Some(suffix) = &number.suffix {
+            let (message, label) = parser_util::suffix_complaint(suffix);
+            return self.emit_expr_error(ts, &message, "D019", &label);
         }
 
-        if !self.peek_sigil(Sigil::Dot) {
-            return FloatTail::None;
-        }
-
-        // Past this point the dot is consumed, so there is no reading the
-        // digits as an integer any more.
-        self.eat_sigil(Sigil::Dot);
-
-        let Some(fraction) = self.peek_word() else {
-            return FloatTail::Malformed;
-        };
-        let fraction = fraction.S();
-
-        if parser_util::is_decimal_run(&fraction) {
-            self.next();
-            return FloatTail::Text(fmt!("{word}.{fraction}"));
-        }
-
-        match parser_util::float_exponent(&fraction) {
-            Some(parser_util::FloatExponent::Complete { .. }) => {
-                self.next();
-                FloatTail::Text(fmt!("{word}.{fraction}"))
-            }
-            Some(parser_util::FloatExponent::Pending { .. }) => {
-                self.next();
-                match parser_util::eat_exponent_tail(self) {
-                    Some(tail) => FloatTail::Text(fmt!("{word}.{fraction}{tail}")),
-                    None => FloatTail::Malformed,
-                }
-            }
-            None => FloatTail::Malformed,
+        let value = InternedText::new(self.db, number.text());
+        match (number.radix, number.float) {
+            (parser_util::Radix::Hex, _) => ast::Expr::Hex(ast::ExprHex { value }),
+            (parser_util::Radix::Dec, true) => ast::Expr::Float(ast::ExprFloat { value }),
+            (parser_util::Radix::Dec, false) => ast::Expr::Int(ast::ExprInt { value }),
         }
     }
 
     fn parse_expr(&mut self) -> ast::Expr<'db> {
-        // Parse keywords, literals, and structures.
-        // Check for negative number literals first (- followed by digits).
-        if self.peek_sigil(Sigil::Minus) {
-            // Peek ahead to see if this is a negative number.
-            self.eat_sigil(Sigil::Minus);
-            if let Some(TreeToken::Token(token)) = self.peek() {
-                if let Some(word) = token.word_str(self.db) {
-                    if parser_util::is_numeric_literal(word)
-                        || parser_util::float_exponent(word).is_some()
-                    {
-                        // It's a negative number! Consume the literal.
-                        self.next();
-                        // Only check for float pattern on decimal literals (not hex).
-                        let is_hex = word.starts_with("0x") || word.starts_with("0X");
-                        let float = if is_hex {
-                            FloatTail::None
-                        } else {
-                            self.parse_float_tail(word)
-                        };
+        // A number, taking the sign written against it where there is one.
+        if let Some(number) = parser_util::eat_number(self) {
+            return self.number_expr(number);
+        }
 
-                        if let FloatTail::Text(text) = float {
-                            let value = InternedText::new(self.db, fmt!("-{text}"));
-                            return ast::Expr::Float(ast::ExprFloat { value });
-                        } else if let FloatTail::Malformed = float {
-                            let ts = self.peek_text_span();
-                            return self.emit_expr_error(ts,
-                                "expected the digits of a float",
-                                "D019",
-                                "expected the digits of a float",
-                            );
-                        } else if is_hex {
-                            // Negative hex literal.
-                            let hex_str = format!("-{}", word);
-                            let value = InternedText::new(self.db, hex_str.S());
-                            return ast::Expr::Hex(ast::ExprHex { value });
-                        } else {
-                            // Negative decimal int.
-                            let int_str = format!("-{}", word);
-                            let value = InternedText::new(self.db, int_str.S());
-                            return ast::Expr::Int(ast::ExprInt { value });
-                        }
-                    }
-                }
-            }
-            // Not a negative number - this is an error (unexpected minus).
+        // A `-` no number follows is nothing else in datalit.
+        if self.peek_sigil(Sigil::Minus) {
             let ts = self.peek_text_span();
+            self.next();
             return self.emit_expr_error(ts,
                 "unexpected minus sign",
                 "D013",
@@ -221,47 +143,17 @@ impl<'db> Parser<'db> {
             Some(TreeToken::Token(token)) => {
                 match token.kind {
                     TokenKind::Word => {
+                        // A word beginning with a digit was read as a number
+                        // above, so whatever is left is a name, and datalit
+                        // has nothing for one to mean.
                         let word = token.word_str(self.db).X();
-                        if parser_util::is_numeric_literal(word)
-                            || parser_util::float_exponent(word).is_some()
-                        {
-                            self.next();
-                            // Only check for float pattern on decimal literals (not hex).
-                            let is_hex = word.starts_with("0x") || word.starts_with("0X");
-                            if !is_hex {
-                                match self.parse_float_tail(word) {
-                                    FloatTail::Text(text) => {
-                                        let value = InternedText::new(self.db, text);
-                                        return ast::Expr::Float(ast::ExprFloat { value });
-                                    }
-                                    FloatTail::Malformed => {
-                                        let ts = self.peek_text_span();
-                                        return self.emit_expr_error(ts,
-                                            "expected the digits of a float",
-                                            "D019",
-                                            "expected the digits of a float",
-                                        );
-                                    }
-                                    FloatTail::None => {}
-                                }
-                            }
-                            // Not a float - check if hex or decimal.
-                            let value = InternedText::new(self.db, word.S());
-                            if is_hex {
-                                ast::Expr::Hex(ast::ExprHex { value })
-                            } else {
-                                ast::Expr::Int(ast::ExprInt { value })
-                            }
-                        } else {
-                            // Not a number, parse error for bare identifiers.
-                            let ts = self.peek_text_span();
-                            self.next();
-                            self.emit_expr_error(ts,
-                                &format!("unexpected identifier '{}'", word),
-                                "D019",
-                                "unexpected identifier"
-                            )
-                        }
+                        let ts = self.peek_text_span();
+                        self.next();
+                        self.emit_expr_error(ts,
+                            &format!("unexpected identifier '{}'", word),
+                            "D019",
+                            "unexpected identifier"
+                        )
                     }
                     TokenKind::String => {
                         self.next();
