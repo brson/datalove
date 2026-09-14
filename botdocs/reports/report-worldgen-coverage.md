@@ -109,68 +109,85 @@ written anywhere that could. At about a third, the checked and optional
 arithmetic went from one-to-six occurrences each to fifteen-to-twenty-seven,
 and `?` began to appear at all.
 
-Thin: `if` (39), `loop` (56), `set` statements (71), `and`/`or`/`xor`, `.>`,
-`.>=`, `.=`, `.!=`, places with an index step (3), `if` with a binding (5).
+**Enums, atoms, terms, and `match`.** An enum is what a `match` takes apart,
+and a match has to name the variants of the type it is matching, so the enums
+are declared per module as named type aliases -- `type Enum0_0: enum { atom
+Enum0_0V0, term Enum0_0V1 u64 }` -- and a `match` is written over a binding of
+one. The arms cover every variant, or some of them and a `case default`;
+without a default the match must be exhaustive, and a default over an already
+exhaustive match is refused as unreachable. A term arm binds its payload.
 
-Still never generated, 13 of roughly 110 things counted:
+The input is moved by the match, and the arms are branches, so the same rule an
+`if` keeps applies: the scrutinee has to be something the body may move, and no
+arm may move what was declared outside it. Atoms and terms are also written on
+their own, as their own types.
+
+Thin: `if` (39), `loop` (56), `set` statements (71), `and`/`or`/`xor`, `.>`,
+`.>=`, `.=`, `.!=`, places with an index step, `if` with a binding.
+
+Still never generated, 8 of roughly 110 things counted:
 
 | category | what |
 |---|---|
-| statements | `const`, `continue`, `native fun`, `match` |
-| expressions | postfix `!`, a projection or an index off something that is not a place, hex literals, `table`, atoms, `term`, enum literals, `icall` |
-| types | `atom`, `term`, `enum`, `table` |
+| statements | `const`, `continue`, `native fun` |
+| expressions | `enum { ... }` as an expression, a projection or an index off something that is not a place, hex literals, `table`, `icall` |
+| types | `table` |
 | shapes | `if r \|value\| else \|err\|` |
 
 ## What it found
 
-Four compiler bugs, each from a construct the generator had only just started
-writing.
+Seven compiler bugs, each from a construct the generator had only just started
+writing. Four from the first round of gap-filling:
 
 **A set's leaves were strung together by a pointer nobody initialized.**
-Fixed. `alloc_leaf_node` wrote the node's tag and its length and left `next`
-alone, and what the allocator hands back is not zeroed. So the chain through
-the leaves -- which everything that reads a set in order walks -- ended
-wherever the recycled block happened to hold a zero, and walked into whatever
-it held otherwise. The map's leaves had always initialized theirs.
+`alloc_leaf_node` wrote the node's tag and its length and left `next` alone,
+and what the allocator hands back is not zeroed, so the chain through the
+leaves ended wherever the recycled block happened to hold a zero and walked
+into whatever it held otherwise. The map's leaves had always initialized
+theirs. Seed 55448; `133_set_leaf_chain`.
 
-It took a freed block with that byte non-zero to show, which is why it stood:
-a set built early in a run is cut from fresh pages, and fresh pages are zero.
-The way in was a tensor handed to a generic, which boxes it on the heap and
-frees the box once it is unpacked -- a forty-byte block holding, among other
-things, the tensor's element count of one. The next set's leaf was cut from
-that block, read its `next` as the address `0x1`, and took the printer down.
-Seed 55448; `133_set_leaf_chain`.
+**An index whose answer nobody read took the out-of-bounds arm.** `l[i]?`
+lowers to a get and a branch on an in-bounds flag, and the get defines two
+values. Dead-code removal was told about the element only, so a get whose
+element nothing read was dropped and the branch on the flag was kept, reading
+a value nothing defines. `134_index_flag_liveness`.
 
-**An index whose answer nobody read took the out-of-bounds arm.** Fixed.
-`l[i]?` lowers to a get and a branch on whether the index was in bounds, and
-the get defines two values: the element and that flag. Dead-code removal asked
-each instruction what it defined and was told about the element only, so a get
-whose element nothing read was dropped and the branch on the flag was kept,
-reading a value nothing defines. `UnwrapOption`, `UnwrapResult` and the two
-checked arithmetic instructions were already listed as defining a flag as
-well; the three collection gets are the same shape and were not.
-`134_index_flag_liveness`.
+**A map indexed by a temporary leaked it.** A get borrows its key, and nothing
+let go of one made to hand over. Both ways out want it, since the index may be
+out of bounds.
 
-**A map indexed by a temporary leaked it.** Fixed. A get borrows its key, so
-anything made to hand one over is the expression's to let go of -- on both
-ways out, since the index may be out of bounds. `m["a"]` leaked the `"a"`.
-Both places that lower an index had it.
+**An early return from inside a branch let go of nothing.** Ownership analysis
+numbers every statement it walks, nested ones included; lowering set the
+current id from the statement's position among the *top-level* ones. Those
+agree only while nothing nests. So a `?`, a `!`, or a checked overflow inside a
+branch looked up the enclosing statement's drops, found none, and left holding
+everything. `806_int_slot_reassign_loop` had been recording the wrong answer.
+`135_nested_early_return_drops`.
 
-**An early return from inside a branch let go of nothing.** Fixed, and the
-worst of the four. An early return has to drop everything the function still
-owns, and which bindings those are is worked out per statement and looked up
-by the statement's id. Ownership analysis numbers every statement it walks,
-nested ones included; lowering set the current id from the statement's
-position among the *top-level* ones. The two agree exactly as long as nothing
-nests, and an `if` with a statement in it puts them out of step for the rest of
-the function.
+Three more from the enums:
 
-So a `?`, a `!`, or a checked overflow inside a branch looked up the enclosing
-statement's drops, found none, and left without dropping anything. The same
-shape at the top of a body was right all along, which is what made the early
-return look like it worked. `806_int_slot_reassign_loop` had been recording the
-wrong answer -- its IR dump gained the two drops the overflow path owed --
-and `135_nested_early_return_drops` covers the shapes.
+**Every atom widened into an enum came out as the wrong variant.** An enum
+keeps a discriminant saying which variant it holds, and an atom has nothing to
+copy across, being zero-sized. The coercion copied anyway, wrote nothing where
+the discriminant goes, and left whatever the slot held -- zero in a fresh
+frame. `(atom Red)@` into `enum { atom Red, atom Blue }` was Blue, and a
+`match` on it took the Blue arm. A term had to be cloned rather than handed
+over as well, since `@` borrows and the enum owns what it is built from.
+`136_enum_widening`.
+
+**A term built from a binding freed it twice.** A term is its payload under a
+name and takes it, and the ownership analysis walked into a `some`, an `ok`,
+an `er`, a `data` and an `error` to say so, and fell through to doing nothing
+for a term. Nothing was marked moved, so the term and what it was built from
+were both dropped. An enum literal had the same gap.
+`137_term_payload_ownership`.
+
+**An integer under a hint that is not an integer type brought the compiler
+down.** `check_int_fits_type` panicked rather than reporting. `let v: bool = :
+bool / 0` is a thing a person can write, and saying so is the answer. The
+generator was writing `: bool / 0` for a map keyed by `bool`, which is how it
+was found and is also a generator bug, fixed by only offering an
+integer-keyed map to index.
 
 ## What this still does not tell us
 
@@ -193,12 +210,14 @@ text.
 
 ## Next
 
-1. `match`, which is the largest thing left and has its own lowering.
-2. `if r |value| else |err|`, postfix `!`, and a projection or an index off
-   something that is not a place.
-3. `const`, enums, terms, tables, atoms.
-4. Raise the `if` and `loop` weights. They are where D007 and D008 and the exit
-   drops live, and the four bugs above say what nesting is worth.
-5. Log the silent fallbacks. `gen_set` and friends fall back to `gen_let` when
+1. `if r |value| else |err|`, and a projection or an index off something that
+   is not a place.
+2. `const`, and tables.
+3. Raise the `if` and `loop` weights. They are where D007 and D008 and the exit
+   drops live, and the seven bugs above say what nesting is worth.
+4. Log the silent fallbacks. `gen_set` and friends fall back to `gen_let` when
    they cannot proceed, so a construct can be rare because it keeps failing to
    build rather than because it was weighted that way, and nothing says which.
+5. `continue`, `native fun` and `icall` each want something the generator does
+   not have: a loop that does not end in a break, a rider to resolve against,
+   and the names of the intrinsics.

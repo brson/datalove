@@ -16,6 +16,11 @@ fn supports_bare_arithmetic(type_hint: TypeHint<'_>) -> bool {
     matches!(type_hint, TypeHint::F32 | TypeHint::F64 | TypeHint::Int)
 }
 
+/// Whether an integer literal can be written under a hint of this type.
+fn is_integer_type(type_hint: &TypeHint<'_>) -> bool {
+    is_fixed_int(type_hint) || matches!(type_hint, TypeHint::Int)
+}
+
 /// Whether a type is one of the ten fixed-width integers.
 fn is_fixed_int(type_hint: &TypeHint<'_>) -> bool {
     matches!(
@@ -264,8 +269,11 @@ fn projection_candidates<'db>(
 ///
 /// A list and a tensor are indexed by an `index`, which may be past the end --
 /// that is the point of the early return. A map is indexed by a key, and this
-/// only offers one where the key type is a copy type, so that writing the key
-/// costs nothing and moves nothing.
+/// only offers one where the key is an integer, because the key has to be
+/// written here and a literal is the only thing that can be written without a
+/// generator to hand. Writing `: bool / 0` for a map keyed by `bool` is what
+/// the first version of this did, and an integer under a hint that is not an
+/// integer type used to bring the typechecker down.
 fn index_candidates<'db>(
     db: &'db dyn salsa::Database,
     wanted: &TypeHint<'db>,
@@ -275,7 +283,10 @@ fn index_candidates<'db>(
     for var in ctx.variables.iter().filter(|v| !ctx.is_consumed(&v.name)) {
         let (element, key) = match &var.type_hint {
             TypeHint::List(t) => ((*t.element_type).clone(), Option::None),
-            TypeHint::Tensor(t) => ((*t.element_type).clone(), Option::None),
+            // Only a rank-1 tensor, whose index gives an element. Indexing a
+            // tensor of higher rank gives a sub-tensor view of one rank less,
+            // which is not the element type and is not a copy type either.
+            TypeHint::Tensor(t) if t.rank == 1 => ((*t.element_type).clone(), Option::None),
             TypeHint::Map(t) => ((*t.value_type).clone(), Some((*t.key_type).clone())),
             _ => continue,
         };
@@ -285,7 +296,7 @@ fn index_candidates<'db>(
         match key {
             // An index past the end is as interesting as one inside it.
             Option::None => found.push((var.name.clone(), ": index / 0".to_string())),
-            Some(key_ty) if !is_linear_type(&key_ty) => {
+            Some(key_ty) if is_integer_type(&key_ty) => {
                 let written = pretty_type_hint(db, key_ty.clone());
                 found.push((var.name.clone(), format!(": {} / 0", written)));
             }

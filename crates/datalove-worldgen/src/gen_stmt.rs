@@ -5,6 +5,7 @@ use datalove_datalit::ast::TypeHint;
 use crate::config::WorldGenConfig;
 use crate::context::{GenContext, Variable, is_linear_type};
 use crate::gen_type::gen_type_hint_and_spelling;
+use crate::gen_enum::gen_match;
 use crate::gen_expr::{gen_expr, gen_bool_expr};
 use crate::pretty::pretty_type_hint;
 
@@ -50,6 +51,56 @@ pub fn gen_generic_call_stmt<'db, R: Rng>(
             lines.push(format!("{}let {}: {} = {}", indent, name, type_str, call));
         }
     }
+    Some(lines.join("\n"))
+}
+
+/// Bind a value of one of the enums in reach.
+///
+/// Its type is written as the alias the enum was declared under, because that
+/// is the only name it has, and a `match` needs the name to say which variants
+/// it is covering.
+///
+/// `None` when the body has no enum in reach, which is every body outside a
+/// module: an enum is declared in the module that defines it.
+fn gen_enum_let<'db, R: Rng>(
+    db: &'db dyn salsa::Database,
+    rng: &mut R,
+    config: &WorldGenConfig,
+    ctx: &mut GenContext<'db>,
+    var_counter: &mut usize,
+    indent: &str,
+) -> Option<String> {
+    if ctx.enums.is_empty() {
+        return Option::None;
+    }
+    let def = ctx.enums[rng.gen_range(0..ctx.enums.len())].clone();
+
+    // Sometimes the variant on its own rather than widened. What is bound is
+    // then of the atom's or the term's own type, which nothing matches over
+    // and nothing else reaches for -- it is written to be written.
+    if rng.gen_bool(0.3) {
+        let (prelude, written_type, value) = crate::gen_enum::gen_bare_variant_let(
+            db, rng, &def, config, ctx, var_counter, indent);
+        let name = format!("v{}", *var_counter);
+        *var_counter += 1;
+        let mut lines = prelude;
+        lines.push(format!("{}let {}: {} = {}", indent, name, written_type, value));
+        return Some(lines.join("\n"));
+    }
+
+    let (prelude, value) =
+        crate::gen_enum::gen_enum_value(db, rng, &def, config, ctx, var_counter, indent);
+
+    let name = format!("v{}", *var_counter);
+    *var_counter += 1;
+    ctx.variables.push(Variable {
+        name: name.clone(),
+        type_hint: TypeHint::Alias(bct::text::InternedText::new(db, def.name.clone())),
+        is_mutable: false,
+    });
+
+    let mut lines = prelude;
+    lines.push(format!("{}let {}: {} = {}", indent, name, def.name, value));
     Some(lines.join("\n"))
 }
 
@@ -371,7 +422,7 @@ pub fn gen_loop<'db, R: Rng>(
 }
 
 /// Generate a simple statement (let, var, set).
-fn gen_simple_statement<'db, R: Rng>(
+pub(crate) fn gen_simple_statement<'db, R: Rng>(
     db: &'db dyn salsa::Database,
     rng: &mut R,
     config: &WorldGenConfig,
@@ -433,6 +484,17 @@ pub fn gen_body_statement<'db, R: Rng>(
 
     if can_generic {
         if let Some(stmt) = gen_generic_call_stmt(db, rng, config, ctx, var_counter, indent) {
+            return stmt;
+        }
+    }
+
+    // A `match` is the only way to take an enum apart, and something has to
+    // have made one first, so the two are reached for together.
+    if !ctx.enums.is_empty() && config.check_probability(rng, config.match_probability) {
+        if let Some(stmt) = gen_match(db, rng, config, ctx, var_counter, indent) {
+            return stmt;
+        }
+        if let Some(stmt) = gen_enum_let(db, rng, config, ctx, var_counter, indent) {
             return stmt;
         }
     }

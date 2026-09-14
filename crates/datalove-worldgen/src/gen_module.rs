@@ -31,6 +31,7 @@ pub fn plan_module_graph<'db, R: Rng>(
             module: module_name,
             functions: Vec::new(),
             type_aliases: Vec::new(),
+            enums: Vec::new(),
             generics: Vec::new(),
         });
     }
@@ -157,6 +158,13 @@ pub fn gen_module<'db, R: Rng>(
         lines.push(format_type_alias(db, &alias.name, alias.type_hint.clone()));
     }
     if !info.type_aliases.is_empty() {
+        lines.push(String::new());
+    }
+
+    // Enum declarations, which the functions below match over.
+    ctx.enums = info.enums.clone();
+    for def in &info.enums {
+        lines.push(crate::gen_enum::format_enum(db, def));
         lines.push(String::new());
     }
 

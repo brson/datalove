@@ -62,6 +62,24 @@ pub struct FunctionSig<'db> {
     pub return_type: Option<TypeHint<'db>>,
 }
 
+/// One variant of a generated enum: an atom, or a term over a payload.
+#[derive(Clone)]
+pub struct EnumVariant<'db> {
+    pub name: String,
+    pub payload: Option<TypeHint<'db>>,
+}
+
+/// An enum a module defines, declared as a type alias so it has a name.
+///
+/// A `match` names the variants of the type it takes apart, so the type has to
+/// be one the generator can name, which a structural enum written inline is
+/// not.
+#[derive(Clone)]
+pub struct EnumDef<'db> {
+    pub name: String,
+    pub variants: Vec<EnumVariant<'db>>,
+}
+
 /// A type alias.
 #[derive(Clone)]
 pub struct TypeAlias<'db> {
@@ -77,6 +95,8 @@ pub struct ModuleInfo<'db> {
     pub module: String,
     pub functions: Vec<FunctionSig<'db>>,
     pub type_aliases: Vec<TypeAlias<'db>>,
+    /// The enums it defines, each declared as a named type alias.
+    pub enums: Vec<EnumDef<'db>>,
     /// The generic functions it defines, which are called by picking types
     /// rather than by matching a return type. See `gen_generic`.
     pub generics: Vec<crate::gen_generic::GenericSig>,
@@ -105,6 +125,9 @@ pub struct GenContext<'db> {
 
     /// Type aliases defined in this module.
     pub type_aliases: Vec<TypeAlias<'db>>,
+
+    /// Enums in reach, which are what a `match` can be written over.
+    pub enums: Vec<EnumDef<'db>>,
 
     /// Imported functions from other modules.
     pub imported_functions: Vec<FunctionSig<'db>>,
@@ -147,6 +170,7 @@ impl<'db> GenContext<'db> {
             variables: Vec::new(),
             functions: Vec::new(),
             type_aliases: Vec::new(),
+            enums: Vec::new(),
             imported_functions: Vec::new(),
             return_type: None,
             loop_depth: 0,
@@ -596,6 +620,7 @@ mod tests {
             module: "utils".to_string(),
             functions: vec![],
             type_aliases: vec![],
+            enums: vec![],
             generics: vec![],
         };
 

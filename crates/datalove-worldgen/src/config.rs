@@ -23,6 +23,13 @@ pub struct WorldGenConfig {
     /// Number of type aliases per module (min, max).
     pub type_aliases_per_module: (usize, usize),
 
+    /// Number of enums per module (min, max). An enum is what a `match` takes
+    /// apart, and it has to be named for the match to name its variants.
+    pub enums_per_module: (usize, usize),
+
+    /// Probability of writing a `match` where there is something to match on.
+    pub match_probability: u32,
+
     /// Number of statements in script (min, max).
     pub script_statements: (usize, usize),
 
@@ -92,6 +99,8 @@ impl Default for WorldGenConfig {
             generics_per_module: (1, 3),
             generic_call_probability: 35,
             type_aliases_per_module: (0, 2),
+            enums_per_module: (1, 2),
+            match_probability: 40,
             script_statements: (1, 5),
             max_control_flow_depth: 2,
             if_probability: 30,

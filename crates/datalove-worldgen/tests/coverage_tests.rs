@@ -111,19 +111,15 @@ const NOT_YET_GENERATED: &[(&str, &str, &str)] = &[
     ("statement", "Const", "const declarations are not generated"),
     ("statement", "Continue", "would make a loop's final break unreachable"),
     ("statement", "NativeFun", "natives need a rider to resolve against"),
-    ("statement", "Match", "match is not generated"),
     ("statement", "ParseError", "a parse error means the generator wrote something wrong"),
 
-    ("expr", "TryResult", "postfix `!` wants a result-typed binding in a function returning a result, which has not coincided"),
     // `v.a` and `v[i]?` are written, and parse as a place with a step rather
     // than as these -- which are for a base that is not a place, like `f().0`.
     // See the two place-step shapes.
     ("expr", "FieldProj", "a projection off something that is not a place, like `f().0`, is not generated"),
     ("expr", "Hex", "hex literals are not generated"),
     ("expr", "Table", "table literals are not generated"),
-    ("expr", "Atom", "atoms are not generated"),
-    ("expr", "Term", "terms are not generated"),
-    ("expr", "EnumLiteral", "enum literals are not generated"),
+    ("expr", "EnumLiteral", "`enum { atom Foo }` as an expression, which is the checking-only form, is not generated"),
     ("expr", "Index", "an index off something that is not a place, like `f()[i]?`, is not generated"),
     ("expr", "IntrinsicCall", "`icall` names intrinsics the generator does not know"),
     ("expr", "ParseError", "a parse error means the generator wrote something wrong"),
@@ -134,9 +130,6 @@ const NOT_YET_GENERATED: &[(&str, &str, &str)] = &[
     ("shape", "if with an error binding", "`if r |value| else |err|`, which a result wants, is not generated"),
     // A type parameter parses as an alias too, and those are everywhere.
     // `TypeParams` tells the two apart, so an alias count is alias references.
-    ("type", "Atom", "atom types are not generated"),
-    ("type", "Term", "term types are not generated"),
-    ("type", "Enum", "enum types are not generated"),
     ("type", "Table", "table types are not generated"),
     ("type", "ParseError", "a parse error means the generator wrote something wrong"),
 ];
