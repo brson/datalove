@@ -452,6 +452,32 @@ fn extract_const_value(ptr: *const u8, ir_type: &IrType) -> Result<ConstValue, C
                     Ok(ConstValue::Table { columns: column_names, rows })
                 }
             }
+            IrType::Tensor(element_type, rank) => {
+                // A tensor keeps its elements in one run, with a shape beside
+                // them saying how they are grouped. Both are read, because the
+                // elements alone do not say the shape and the rank alone does
+                // not say the extents.
+                let tensor = &*(ptr as *const datalove_rtdt::Tensor);
+                let rank = *rank as usize;
+                let shape: Vec<u32> = if rank > 0 && !tensor.shape.is_null() {
+                    (0..rank).map(|i| (*tensor.shape.add(i)).as_usize() as u32).collect()
+                } else {
+                    Vec::new()
+                };
+
+                let count: usize = shape.iter().map(|extent| *extent as usize).product();
+                let mut elements = Vec::with_capacity(count);
+                if count > 0 && !tensor.ptr_base.is_null() {
+                    let element_size = size_of_ir_type(element_type) as usize;
+                    let start = tensor.offset_elems.0 as usize;
+                    for i in 0..count {
+                        let element_ptr = tensor.ptr_base.add((start + i) * element_size);
+                        elements.push(extract_const_value(element_ptr, element_type)?);
+                    }
+                }
+                Ok(ConstValue::Tensor { shape, elements })
+            }
+
             // A `data` or an `error` is a value under a descriptor it carries
             // itself, so what is read back is decided by that rather than by
             // the type written down. Borrowed rather than unpacked, because

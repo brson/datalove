@@ -892,6 +892,12 @@ pub enum ConstValue {
     Set(Vec<ConstValue>),
     /// Map with key-value pairs (sorted by key for determinism).
     Map(Vec<(ConstValue, ConstValue)>),
+    /// A tensor: its shape, and its elements in row-major order.
+    ///
+    /// The shape is kept because the elements do not say it -- nine numbers
+    /// are a 3 by 3 or a 9 by 1 depending only on this -- and because the rank
+    /// belongs to the type while the lengths belong to the value.
+    Tensor { shape: Vec<u32>, elements: Vec<ConstValue> },
     /// Table with column names and row data.
     Table { columns: Vec<String>, rows: Vec<Vec<ConstValue>> },
 }
@@ -974,6 +980,14 @@ pub fn ir_type_of_const_value(value: &ConstValue) -> IrType {
                 .unwrap_or((IrType::Unit, IrType::Unit));
             IrType::Map(Box::new(key_type), Box::new(value_type))
         }
+        ConstValue::Tensor { shape, elements } => IrType::Tensor(
+            Box::new(
+                elements.first()
+                    .map(ir_type_of_const_value)
+                    .unwrap_or(IrType::Unit),
+            ),
+            shape.len() as u32,
+        ),
         ConstValue::Table { columns, rows } => {
             // Infer column types from first row if available.
             let col_types: Vec<(String, Box<IrType>)> = if let Some(first_row) = rows.first() {
@@ -1028,6 +1042,10 @@ impl std::hash::Hash for ConstValue {
             ConstValue::List(elems) => elems.hash(state),
             ConstValue::Set(elems) => elems.hash(state),
             ConstValue::Map(entries) => entries.hash(state),
+            ConstValue::Tensor { shape, elements } => {
+                shape.hash(state);
+                elements.hash(state);
+            }
             ConstValue::Table { columns, rows } => {
                 columns.hash(state);
                 rows.hash(state);

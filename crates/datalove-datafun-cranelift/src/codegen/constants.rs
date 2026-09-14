@@ -121,6 +121,13 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 // List: create list and push elements.
                 return self.compile_list_const(builder, dest, elements);
             }
+            ConstValue::Tensor { shape, elements } => {
+                let base = self.const_dest_addr(builder, dest, "Tensor")?;
+                let ty = self.value_type_of(dest)?;
+                self.build_tensor_const_at(builder, base, &ty, shape, elements)?;
+                self.values.insert(dest, base);
+                return Ok(());
+            }
             ConstValue::Set(elements) => {
                 // Set: create set and insert elements.
                 return self.compile_set_const(builder, dest, elements);
@@ -698,6 +705,95 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         };
         self.build_set_const_at(builder, base, &element_type, elements)?;
         self.values.insert(dest, base);
+        Ok(())
+    }
+
+    /// Build a tensor at an address, from its declared type and its shape.
+    ///
+    /// The elements go into one run and the runtime takes them from there,
+    /// along with the shape saying how they group -- the same call a tensor
+    /// literal makes. The shape is the value's; the rank is the type's, and
+    /// the two have to agree.
+    fn build_tensor_const_at(
+        &mut self,
+        builder: &mut FunctionBuilder,
+        base: cranelift_codegen::ir::Value,
+        ty: &IrType,
+        shape: &[u32],
+        elements: &[ConstValue],
+    ) -> Result<(), CraneliftError> {
+        let IrType::Tensor(element_type, rank) = ty else {
+            return Err(CraneliftError::Codegen(format!(
+                "a tensor constant wants a tensor type, not {:?}", ty)));
+        };
+        let element_type = (**element_type).clone();
+        let rank = *rank;
+        if shape.len() as u32 != rank {
+            return Err(CraneliftError::Codegen(format!(
+                "a tensor constant of rank {} was given a shape of {}",
+                rank, shape.len())));
+        }
+        let tensor_type = ty.clone();
+
+        let rt_handle = self.rt_handle_param.ok_or_else(|| {
+            CraneliftError::Codegen("Tensor constant requires runtime handle".into())
+        })?;
+        let runtime = self.runtime.ok_or_else(|| {
+            CraneliftError::Codegen("Tensor constant requires runtime imports".into())
+        })?;
+
+        let tensor_tydesc_id = self.tydesc_emitter.get(&tensor_type).ok_or_else(|| {
+            CraneliftError::Codegen("TyDesc not found for Tensor constant".into())
+        })?;
+        let tensor_tydesc_gv = self.module.declare_data_in_func(tensor_tydesc_id, builder.func);
+        let tensor_tydesc_ptr = builder.ins().symbol_value(PTR_TYPE, tensor_tydesc_gv);
+
+        let elem_tydesc_id = self.tydesc_emitter.get(&element_type).ok_or_else(|| {
+            CraneliftError::Codegen("TyDesc not found for Tensor element".into())
+        })?;
+        let elem_tydesc_gv = self.module.declare_data_in_func(elem_tydesc_id, builder.func);
+        let elem_tydesc_ptr = builder.ins().symbol_value(PTR_TYPE, elem_tydesc_gv);
+
+        let elem_layout = crate::types::ir_type_to_cranelift(&element_type).layout();
+        let elem_stride =
+            datalove_rtdt::layout::align_up(elem_layout.size, elem_layout.align).max(1);
+
+        // The elements, one after another.
+        let buffer_size = (elem_stride * elements.len() as u32).max(8);
+        let elements_slot = builder.create_sized_stack_slot(cranelift_codegen::ir::StackSlotData::new(
+            cranelift_codegen::ir::StackSlotKind::ExplicitSlot,
+            buffer_size,
+            align_shift(elem_layout.align.max(1)),
+        ));
+        let elements_addr = builder.ins().stack_addr(PTR_TYPE, elements_slot, 0);
+        for (i, element) in elements.iter().enumerate() {
+            let offset = (i as u32) * elem_stride;
+            let elem_addr = builder.ins().iadd_imm_s(elements_addr, offset as i64);
+            self.write_const_value_to_addr(builder, elem_addr, &element_type, element)?;
+        }
+
+        // And the shape beside them.
+        let shape_size = (shape.len() as u32 * 4).max(4);
+        let shape_slot = builder.create_sized_stack_slot(cranelift_codegen::ir::StackSlotData::new(
+            cranelift_codegen::ir::StackSlotKind::ExplicitSlot,
+            shape_size,
+            align_shift(std::mem::align_of::<u32>() as u32),
+        ));
+        let shape_addr = builder.ins().stack_addr(PTR_TYPE, shape_slot, 0);
+        let mem_flags = cranelift_codegen::ir::MemFlagsData::new();
+        for (i, extent) in shape.iter().enumerate() {
+            let value = builder.ins().iconst(cl_types::I32, *extent as i64);
+            builder.ins().store(mem_flags, value, shape_addr, (i * 4) as i32);
+        }
+
+        let count = builder.ins()
+            .iconst(crate::index_types::INDEX_TYPE, elements.len() as i64);
+        let rank_value = builder.ins().iconst(cl_types::I32, rank as i64);
+        let init_ref = self.module.declare_func_in_func(runtime.tensor_init, builder.func);
+        builder.ins().call(init_ref, &[
+            rt_handle, elements_addr, count, elem_tydesc_ptr,
+            shape_addr, rank_value, base, tensor_tydesc_ptr,
+        ]);
         Ok(())
     }
 
@@ -1347,6 +1443,9 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             // ones with an id of their own use. What they want and this had no
             // way to give them is the element type, which now comes with the
             // address.
+            ConstValue::Tensor { shape, elements } => {
+                self.build_tensor_const_at(builder, addr, ty, shape, elements)?;
+            }
             ConstValue::List(elements) => {
                 let IrType::List(element_type) = ty else {
                     return Err(CraneliftError::Codegen(format!(

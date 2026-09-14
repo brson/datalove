@@ -288,8 +288,9 @@ integer-keyed map to index.
 
 ## Consts, in more detail
 
-The spec says a const holds anything a function can compute. Six things stood
-in the way. Five are fixed; the last is sized here rather than done.
+The spec says a const holds anything a function can compute. Seven things
+stood in the way. Six are fixed; the last is sized here rather than done, and
+is not one of the ones it started as.
 
 **Fixed: a type could not be reconstructed from the descriptor it came with.**
 A const is evaluated by running it, and what comes out is read back into
@@ -309,62 +310,30 @@ looking at still belongs to the frame it was computed in.
 
 `063_const_reads_back` covers both, twelve shapes of them.
 
-**Left: a tensor cannot be read back.** There is no `ConstValue` that holds
-one. Adding it means a variant carrying a shape and elements, an arm in the
-extractor, and a writer in each of the four backends -- the interpreter, both
-AOTs, and the JIT through cranelift. That is the largest of the four and the
-only one that adds IR surface.
+**Fixed: a tensor could not be read back.** There was no `ConstValue` that
+held one, so a const of a tensor could not be evaluated at all. It has a
+variant now, carrying the shape as well as the elements -- a list's elements
+are the whole of it, while nine numbers are a three by three or a nine by one
+depending only on the shape, and the rank belongs to the type while the extents
+belong to the value. Read back by walking the run of elements, and written by
+handing that run and the shape to the same call a tensor literal makes.
 
-This is also what keeps `data`, `error` and a result out of the *generator*,
-which is a weaker reason than it was: each carries a payload chosen by datalit
-rather than by worldgen, and that payload is sometimes a tensor. `error :
-[|int, 1|] / ...` is a const the generator would otherwise write.
+`142_tensor_consts` runs eight shapes through all four backends, including an
+element wider than a word, one carrying a string, and a tensor nested in a
+tuple and in an option.
 
-**Fixed: the C AOT wrote five shapes of constant and refused the rest.** It
-wrote the scalars, `int`, `string`, a list and an atom, and refused a tuple, a
-struct, an option, a result, a `data`, an `error`, a set and a map -- so a
-program holding any of those as a const compiled under the interpreter and
-both other backends and not under that one. Its writer already took the type
-it was writing, which is what the missing shapes needed, so each is the same
-walk the other backends do. `140_const_shapes` runs sixteen shapes through all
-four.
+**Left: a `data`, an `error` and a result.** Not for any of the reasons above
+-- reading one back works, and so does a tensor. `ConstValue::Data` holds the
+value and not its type, and a `data` carries its own descriptor at run time, so
+a backend writing one has to work the type out from the value. A value cannot
+always say it: an empty map gives `Map(Unit, Unit)`, which is not a type the
+program has and which the cranelift AOT has no descriptor for -- "TyDesc not
+found for inner type Map(Unit, Unit)". A result goes with them, its error side
+being an `error`.
 
-That also settled where `ir_type_of_const_value` lives. Three backends had a
-copy each, character for character; it is in the IR crate now, beside the
-`ConstValue` it reads.
-
-**Fixed: a collection nested inside a const.** `(u32, [u32])`, `?[u32]`, a
-list of lists. Only a constant that *is* a collection could be built; one that
-holds one somewhere inside is written part by part into an address, and the
-cranelift writer had no type there to name the elements with -- it worked its
-offsets out from the value, which cannot say the whole of a type. An empty list
-says nothing about its elements and a `none` nothing about what it would have
-held, so those offsets were guesses that happened to be right.
-
-It takes the type now, as the C backend's already did, and the three collection
-builders have a form that takes an address. The entry points that had their own
-copy of the writing -- an option, a tuple, a struct, a result, an enum -- are
-that same walk with the address worked out first, which took a value-based
-sizing chain out with it.
-
-That turned up one in the C backend as well. Each part of a constant is built
-in a scratch buffer, and C scopes by block, so a buffer named the same as the
-one outside it hides it: a list of lists pushed each inner list into its own
-scratch rather than into the list being built, and came out empty. The names
-are numbered now.
-
-`141_nested_collection_consts` runs eleven shapes through all four backends,
-including two deep and an empty one inside.
-
-**Left: a tensor cannot be read back.** There is no `ConstValue` that holds
-one. Adding it means a variant carrying a shape and elements, an arm in the
-extractor, and a writer in each of the four backends. It is the only one of the
-five that adds IR surface.
-
-This is also what keeps `data`, `error` and a result out of the *generator*,
-which is a weaker reason than it looks: each carries a payload chosen by
-datalit rather than by worldgen, and that payload is sometimes a tensor.
-`error : [|int, 1|] / ...` is a const the generator would otherwise write.
+The fix is to keep the payload's type in the `ConstValue` beside the value, the
+way the tensor keeps its shape. That is IR surface again, and four writers,
+but it is the last of them.
 
 ## What this still does not tell us
 

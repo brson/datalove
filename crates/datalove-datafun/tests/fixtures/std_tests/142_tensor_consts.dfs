@@ -1,0 +1,30 @@
+// A tensor as a constant.
+//
+// A constant is evaluated by running it and then read back into something the
+// compiler can write down again, and there was no `ConstValue` that held a
+// tensor -- so a const of one could not be evaluated at all: "unsupported type
+// for extraction". Nor could anything holding one, which is why a `data`, an
+// `error` and a result were kept out of the generated corpus: each carries a
+// payload chosen elsewhere, and that payload is sometimes a tensor.
+//
+// What a tensor keeps that a list does not is its shape. Nine numbers are a
+// three by three or a nine by one depending only on that, so the shape is read
+// back with the elements and written down beside them. The rank belongs to the
+// type and the extents to the value, and the two have to agree.
+
+const FLAT: [|u32, 1|] = [| : u32 / 1 : u32 / 2 : u32 / 3 |]
+const GRID: [|u32, 2|] = [| : u32 / 1 : u32 / 2, : u32 / 3 : u32 / 4 |]
+const FLOATS: [|f32, 1|] = [| : f32 / 1.5 : f32 / 2.5 |]
+const ONE: [|i64, 1|] = [| : i64 / -7 |]
+
+// An element wider than a word, which is where the stride matters.
+const PAIRS: [|(u32, u64), 1|] = [| : (u32, u64) / (: u32 / 1, : u64 / 2) : (u32, u64) / (: u32 / 3, : u64 / 4) |]
+
+// One carrying something on the heap.
+const WORDS: [|string, 1|] = [| : string / "first" : string / "second" |]
+
+// And a tensor inside something else, which the nested writer takes.
+const IN_A_TUPLE: (u32, [|u32, 1|]) = (: u32 / 9, : [|u32, 1|] / [| : u32 / 8 : u32 / 7 |])
+const IN_AN_OPTION: ?[|u32, 1|] = some : [|u32, 1|] / [| : u32 / 6 |]
+
+let output = (FLAT, GRID, FLOATS, ONE, PAIRS, WORDS, IN_A_TUPLE, IN_AN_OPTION)

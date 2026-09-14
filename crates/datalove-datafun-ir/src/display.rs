@@ -227,6 +227,22 @@ impl fmt::Display for ConstValue {
                 }
                 write!(f, "}}")
             }
+            ConstValue::Tensor { shape, elements } => {
+                // The shape is said rather than shown, because the elements
+                // are written in one run and the grouping is what the shape
+                // is for.
+                write!(f, "[| ")?;
+                for (i, element) in elements.iter().enumerate() {
+                    if i > 0 { write!(f, " ")?; }
+                    write!(f, "{}", element)?;
+                }
+                write!(f, " |] of ")?;
+                for (i, extent) in shape.iter().enumerate() {
+                    if i > 0 { write!(f, "x")?; }
+                    write!(f, "{}", extent)?;
+                }
+                Ok(())
+            }
             ConstValue::Table { columns, rows } => {
                 write!(f, "{{| ")?;
                 for (i, col) in columns.iter().enumerate() {

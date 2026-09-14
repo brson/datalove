@@ -24,25 +24,28 @@ use crate::pretty::{pretty_expr, pretty_type_hint};
 
 /// Whether a const may hold this type.
 ///
-/// The spec says a const holds anything a function can compute. One thing
-/// still falls short: a tensor cannot be read back out of the evaluated value,
-/// there being no `ConstValue` that holds one. It is written down in
-/// `botdocs/reports/report-worldgen-coverage.md` with what it would take.
+/// Everything a const can be evaluated to and written back down as, which is
+/// now everything but three, and for a different reason than before.
 ///
-/// That is also what keeps a `data`, an `error` and a result out, which is a
-/// weaker reason than it looks: each carries a payload chosen by datalit's
-/// expression generator rather than here, and that payload is sometimes a
-/// tensor. `error : [|int, 1|] / ...` is a const this would otherwise write.
+/// A `data` and an `error` carry their own descriptor at run time, and a
+/// `ConstValue` does not keep it: `Data(Box<ConstValue>)` holds the value and
+/// not its type. So a backend writing one has to work the type out from the
+/// value, and a value cannot always say it -- an empty map gives
+/// `Map(Unit, Unit)`, which is not a type the program has, and the cranelift
+/// AOT has no descriptor for it: "TyDesc not found for inner type
+/// Map(Unit, Unit)". A result goes with them, its error side being an `error`.
 ///
-/// A collection nested inside another type used to be here too, and is not
-/// now.
+/// The fix is to keep the payload's type in the `ConstValue`, which is written
+/// down in `botdocs/reports/report-worldgen-coverage.md`. Reading one back is
+/// no longer the problem, and neither is a tensor.
 pub fn a_const_can_hold(ty: &TypeHint<'_>) -> bool {
     match ty {
-        TypeHint::Tensor(_) | TypeHint::Data | TypeHint::Error | TypeHint::Result(_) => false,
+        TypeHint::Data | TypeHint::Error | TypeHint::Result(_) => false,
         TypeHint::List(t) => a_const_can_hold(&t.element_type),
         TypeHint::Set(t) => a_const_can_hold(&t.element_type),
         TypeHint::Map(t) => a_const_can_hold(&t.key_type) && a_const_can_hold(&t.value_type),
         TypeHint::Option(t) => a_const_can_hold(&t.inner_type),
+        TypeHint::Tensor(t) => a_const_can_hold(&t.element_type),
         TypeHint::AnonTuple(t) => t.fields.iter().all(a_const_can_hold),
         TypeHint::AnonStruct(t) => t.fields.iter().all(|f| a_const_can_hold(&f.type_hint)),
         _ => true,

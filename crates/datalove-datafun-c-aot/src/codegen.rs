@@ -794,6 +794,39 @@ impl<'a> FunctionCodegenContext<'a> {
                 }
             }
 
+            ConstValue::Tensor { shape, elements } => {
+                let IrType::Tensor(elem_ty, rank) = ty else {
+                    return Err(CAotError::Codegen(format!(
+                        "a tensor constant wants a tensor type, not {:?}", ty)));
+                };
+                let elem_ty = (**elem_ty).clone();
+                let rank = *rank;
+                if shape.len() as u32 != rank {
+                    return Err(CAotError::Codegen(format!(
+                        "a tensor constant of rank {} was given a shape of {}",
+                        rank, shape.len())));
+                }
+                let tensor_tydesc = self.tydesc_name(ty);
+                let elem_tydesc = self.tydesc_name(&elem_ty);
+                let elem_size = types::ir_type_to_crepr(&elem_ty).layout().size.max(1);
+
+                // The elements go into one run and the runtime takes them from
+                // there, along with the shape saying how they group. The same
+                // call a tensor literal makes.
+                let scratch = self.next_const_scratch();
+                writeln!(out, "    {{ _Alignas(8) uint8_t {}[{}] = {{0}};",
+                    scratch, (elem_size * elements.len() as u32).max(1)).unwrap();
+                for (i, element) in elements.iter().enumerate() {
+                    let elem_addr = format!("({} + {})", scratch, i as u32 * elem_size);
+                    self.emit_const_at(out, &elem_addr, &elem_ty, element)?;
+                }
+                let extents: Vec<String> = shape.iter().map(|e| e.to_string()).collect();
+                writeln!(out, "    static const index_t {}_shape[] = {{ {} }};",
+                    scratch, if extents.is_empty() { "0".to_string() } else { extents.join(", ") }).unwrap();
+                writeln!(out, "    dtlv_rti_tensor_init_local(rt, {}, {}, &{}, {}_shape, {}, {}, &{}); }}",
+                    scratch, elements.len(), elem_tydesc, scratch, rank, dest_addr, tensor_tydesc).unwrap();
+            }
+
             // A table is the one shape left, and nothing writes one yet.
             _ => {
                 return Err(CAotError::Unsupported(format!(

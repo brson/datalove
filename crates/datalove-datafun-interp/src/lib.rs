@@ -2564,6 +2564,39 @@ impl IrInterpreter {
                         num_elements as rtdt::IndexRepr,
                     );
                 }
+                ConstValue::Tensor { shape, elements } => {
+                    // The elements go into one run and the runtime takes them
+                    // from there, along with the shape saying how they group.
+                    // The same way a tensor literal is built.
+                    let tydesc_ref = rtdt::TyDescRef::from_ptr(dest.tydesc);
+                    let element_tydesc = tydesc_ref.tensor_element_ty().as_ptr();
+                    let element_size = (*element_tydesc).size as usize;
+                    let element_align = (*element_tydesc).align;
+
+                    let stride = rtdt::layout::align_up(element_size as u32, element_align) as usize;
+                    let stride = if stride == 0 { 1 } else { stride };
+
+                    let mut elements_buffer = vec![0u8; (stride * elements.len()).max(8)];
+                    for (i, element_value) in elements.iter().enumerate() {
+                        let element_dest = Destination {
+                            ptr: elements_buffer.as_mut_ptr().add(i * stride),
+                            tydesc: element_tydesc,
+                        };
+                        self.write_const(element_value, element_dest);
+                    }
+
+                    let shape_values: Vec<u32> = shape.clone();
+                    datalove_rt::c::dtlv_rti_tensor_init_local(
+                        self.runtime.handle(),
+                        elements_buffer.as_mut_ptr(),
+                        elements.len() as rtdt::IndexRepr,
+                        element_tydesc,
+                        shape_values.as_ptr(),
+                        shape_values.len() as u32,
+                        dest.ptr,
+                        dest.tydesc,
+                    );
+                }
                 ConstValue::Set(elements) => {
                     // Build set from sorted slice of elements.
                     let tydesc_ref = rtdt::TyDescRef::from_ptr(dest.tydesc);

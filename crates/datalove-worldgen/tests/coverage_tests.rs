@@ -564,8 +564,11 @@ fn test_language_coverage() {
 ///
 /// More than the roll needs, because a floor is a number rather than a yes: a
 /// count that averages a dozen over fifty worldfiles came back three often
-/// enough to fail on nothing having changed.
-const FLOOR_SEEDS: u64 = 100;
+/// enough to fail on nothing having changed. Raised again for the same reason
+/// -- the rarer forms swing by more than half their average at a hundred --
+/// and the floors below are set near a third of what they measure rather than
+/// just under it.
+const FLOOR_SEEDS: u64 = 200;
 
 /// The constructs the generator is meant to lean on, with enough of each that
 /// a seed is likely to exercise them.
@@ -600,15 +603,18 @@ fn test_core_constructs_are_common() {
         ("type", "Map", 10),
         // These reached zero between runs before they were reached for
         // deliberately rather than waiting on two rolls to coincide.
-        ("shape", "if with a binding", 10),
-        ("shape", "if with an error binding", 3),
-        ("expr", "TryOption", 3),
-        ("expr", "TryResult", 2),
-        ("statement", "Match", 20),
-        ("statement", "Continue", 3),
-        ("expr", "FieldProj", 3),
-        ("statement", "Const", 50),
-        ("expr", "EnumLiteral", 20),
+        ("shape", "if with a binding", 15),
+        ("shape", "if with an error binding", 4),
+        ("expr", "TryOption", 4),
+        ("expr", "TryResult", 3),
+        ("statement", "Match", 30),
+        ("statement", "Continue", 4),
+        // Rarer over these seeds than over the roll's: a field off a call
+        // wants a callable answering with a tuple or a struct, and how often
+        // that happens is not even across seeds.
+        ("expr", "FieldProj", 2),
+        ("statement", "Const", 100),
+        ("expr", "EnumLiteral", 30),
     ];
 
     let mut thin = Vec::new();
