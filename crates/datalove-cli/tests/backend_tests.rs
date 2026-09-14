@@ -7,8 +7,13 @@
 //! for itself. A native reaching the interpreter and not the jit is invisible
 //! to it, and was: `script --jit` aborted on any script that called one.
 //!
-//! The recorded output is what all three agree on, so a disagreement is a
+//! The recorded output is what all four agree on, so a disagreement is a
 //! failure rather than a blessed difference.
+//!
+//! Four, because there are two ways to compile ahead of time and they share
+//! no code: one emits an object through cranelift and one emits C. Only the
+//! first was run here, and the C backend carried its own copies of two out
+//! parameter bugs the whole time the cranelift one was being fixed.
 
 use rmx::prelude::*;
 use std::path::Path;
@@ -44,6 +49,30 @@ fn run(binary: &Path, args: &[&std::ffi::OsStr]) -> Result<String, String> {
     Ok(format!("{}{}", stdout, stderr))
 }
 
+/// Compile the script ahead of time and run what comes out.
+///
+/// `extra` is what picks the backend: nothing for the cranelift object, `--c`
+/// for the one that emits C. Each gets its own directory, since two of these
+/// running at once would otherwise link over each other's output.
+fn run_aot(binary: &Path, script: &std::ffi::OsStr, extra: &[&str]) -> Result<String, String> {
+    let dir = rmx::tempfile::tempdir()
+        .map_err(|e| format!("temp dir: {}", e))?;
+    let exe = dir.path().join("compiled");
+
+    let mut args: Vec<&std::ffi::OsStr> = vec!["aot-compile".as_ref(), "--run".as_ref()];
+    args.extend(extra.iter().map(|a| std::ffi::OsStr::new(a)));
+    args.extend(["-o".as_ref(), exe.as_ref(), script]);
+    let output = run(binary, &args)?;
+
+    // The AOT driver says where it put the executable before running it,
+    // which is a path that differs every time and says nothing about the
+    // program.
+    Ok(output.lines()
+        .filter(|line| !line.starts_with("Linked executable:"))
+        .map(|line| format!("{line}\n"))
+        .collect())
+}
+
 fn run_every_backend(path: &Path) -> Result<String, String> {
     let binary = binary()?;
     let script: &std::ffi::OsStr = path.as_ref();
@@ -52,30 +81,19 @@ fn run_every_backend(path: &Path) -> Result<String, String> {
         .map_err(|e| format!("interpreter: {}", e))?;
     let jit = run(&binary, &["script".as_ref(), "--jit".as_ref(), script])
         .map_err(|e| format!("jit: {}", e))?;
-
-    // The compiled program is written beside nothing anyone else is using,
-    // since two of these running at once would otherwise link over each
-    // other's output.
-    let dir = rmx::tempfile::tempdir()
-        .map_err(|e| format!("temp dir: {}", e))?;
-    let exe = dir.path().join("compiled");
-    let aot = run(&binary, &[
-        "aot-compile".as_ref(), "--run".as_ref(), "-o".as_ref(), exe.as_ref(), script,
-    ]).map_err(|e| format!("aot: {}", e))?;
-
-    // The AOT driver says where it put the executable before running it,
-    // which is a path that differs every time and says nothing about the
-    // program.
-    let aot: String = aot.lines()
-        .filter(|line| !line.starts_with("Linked executable:"))
-        .map(|line| format!("{line}\n"))
-        .collect();
+    let aot = run_aot(&binary, script, &[])
+        .map_err(|e| format!("aot: {}", e))?;
+    let c_aot = run_aot(&binary, script, &["--c"])
+        .map_err(|e| format!("c aot: {}", e))?;
 
     if interp != jit {
         return Err(format!("interpreter and jit disagree:\n{interp}---\n{jit}"));
     }
     if interp != aot {
         return Err(format!("interpreter and aot disagree:\n{interp}---\n{aot}"));
+    }
+    if interp != c_aot {
+        return Err(format!("interpreter and c aot disagree:\n{interp}---\n{c_aot}"));
     }
     Ok(interp)
 }
