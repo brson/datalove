@@ -8,7 +8,7 @@ Analysis(
             ),
             ownership: OwnershipResult(
                 status: "Error",
-                message: "Ownership error in bad_function: OutParamNotInitialized { ret_stmt_idx: None, name: \"x\" }, OutParamNotInitialized { ret_stmt_idx: Some(2), name: \"x\" }",
+                message: "Ownership error in bad_function: OutParamNotInitialized { ret_stmt_idx: Some(2), name: \"x\" }",
             ),
             lowering: LoweringResult(
                 status: "Skipped",

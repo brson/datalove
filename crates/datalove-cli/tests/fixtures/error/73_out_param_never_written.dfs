@@ -1,0 +1,12 @@
+// D006 an out parameter the function never writes.
+//
+// The end of a body is a return like any other, and for a function that gives
+// nothing back it is the usual way to write one. Only a written `ret` checked,
+// so this promised to write `n` and did not, and the caller read whatever its
+// slot happened to hold. Adding a bare `ret` was enough to be told.
+fun never_writes(out n: u32)
+end fun
+
+var slot: u32 = 0
+never_writes(out slot)
+let output = slot

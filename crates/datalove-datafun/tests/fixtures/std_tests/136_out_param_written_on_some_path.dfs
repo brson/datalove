@@ -1,0 +1,70 @@
+// Where an out parameter has to be written, and where it need not be.
+//
+// The rule is that every return writes it, and the end of the body is a
+// return. What used to be checked was neither of those: a written `ret`
+// checked, an `if` that wrote in one branch and not the other reported on the
+// spot, and a body that simply ended checked nothing at all.
+//
+// Reporting at the `if` was wrong in both directions. It refused `writes_after`
+// below, where the write that counts comes after the branch, and it said
+// nothing about a body that ran off the end without writing at all.
+
+fun write_then_end(out n: u32)
+  set n = 1
+end fun
+
+// One branch writes and the other does not, and the write after the `if` is
+// the one that settles it.
+fun writes_after(out n: u32, c: bool)
+  if c
+    set n = 1
+  end if
+  set n = 2
+end fun
+
+// Both branches write and both return, so the end is never reached and there
+// is nothing left to check there.
+fun writes_in_both(out n: u32, c: bool)
+  if c
+    set n = 1
+    ret
+  else
+    set n = 2
+    ret
+  end if
+end fun
+
+// Written inside a loop that is left by `break`.
+fun writes_in_loop(out n: u32)
+  loop
+    set n = 3
+    break
+  end loop
+end fun
+
+// Every arm of a match writes it.
+type Side: enum { atom Left, atom Right }
+fun writes_in_match(out n: u32, s: Side)
+  match s
+  case atom Left
+    set n = 4
+  case atom Right
+    set n = 5
+  end match
+end fun
+
+var a: u32 = 0
+var b: u32 = 0
+var c: u32 = 0
+var d: u32 = 0
+var e: u32 = 0
+var f: u32 = 0
+
+write_then_end(out a)
+writes_after(out b, true)
+writes_after(out c, false)
+writes_in_both(out d, true)
+writes_in_loop(out e)
+writes_in_match(out f, atom Right)
+
+let output = (a, b, c, d, e, f)

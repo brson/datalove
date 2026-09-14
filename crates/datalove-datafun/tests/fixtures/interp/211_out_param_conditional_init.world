@@ -2,7 +2,12 @@
 module local/test/main
 ----------
 
-// Error test: Out param initialized in only one branch.
+// Error test: a return that some path reaches without writing the out param.
+//
+// Writing it in one branch and not the other is not itself the error, and
+// reporting there refused a function that writes after the branch instead.
+// What is wrong here is the `ret`, which the `cond == false` path arrives at
+// with `x` unwritten, and that is the one report.
 fun bad_function(out x: u32, cond: bool): bool
     if cond
         set x = 42

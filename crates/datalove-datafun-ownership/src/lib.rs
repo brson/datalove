@@ -997,6 +997,15 @@ pub fn analyze_function_with_mode<'db>(
     // Analyze function body.
     analyze_statements(&mut ctx, func.body(db));
 
+    // The end of the body is a return too, and an out parameter has to have
+    // been written by every return there is. Only a written `ret` checked, so
+    // a body that simply ended -- which for a function returning nothing is
+    // the usual way to write one -- promised an out parameter and delivered
+    // nothing, and the caller read whatever was in the slot.
+    if body_completes(func.body(db)) {
+        check_out_params_initialized(&mut ctx, None);
+    }
+
     // Whatever is still owned where the body ends has to be let go there.
     // A `ret` schedules its own against its statement index; a body that runs
     // off the end has no statement to hang them on, so they go in their own
@@ -1466,20 +1475,80 @@ fn analyze_set<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmt: &StmtSet<'db>, stmt_id
     }
 }
 
-fn analyze_return<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmt: &StmtRet<'db>, stmt_idx: usize) {
-    // Check that all Out params are initialized before return.
+/// Report every out parameter that has not been written by this exit.
+///
+/// `ret_stmt_idx` is the `ret` the check is for, or `None` for the end of the
+/// body, which is a return the function did not write down.
+fn check_out_params_initialized<'db>(
+    ctx: &mut AnalysisCtx<'_, 'db>,
+    ret_stmt_idx: Option<usize>,
+) {
     for (idx, info) in ctx.bindings.iter().enumerate() {
         if info.param_mode == Some(ParamMode::Out) {
             let id = BindingId(idx as u32);
             if ctx.get_out_param_init(id) != Some(OutParamInitState::Initialized) {
                 let name = info.name.C();
                 ctx.errors.push(AnalysisError::OutParamNotInitialized {
-                    ret_stmt_idx: Some(stmt_idx),
+                    ret_stmt_idx,
                     name,
                 });
             }
         }
     }
+}
+
+/// Whether control can reach the end of this list of statements.
+///
+/// Only as much of it as the out parameter check needs: the point is not to
+/// report against a return the function cannot arrive at. Anything not named
+/// here is taken to complete, which at worst repeats a report a `ret` already
+/// made rather than inventing one.
+fn body_completes<'db>(statements: &[Statement<'db>]) -> bool {
+    statements.iter().all(statement_completes)
+}
+
+fn statement_completes<'db>(statement: &Statement<'db>) -> bool {
+    match statement {
+        Statement::Ret(_) | Statement::Break(_) | Statement::Continue(_) => false,
+        Statement::If(stmt) => match &stmt.else_body {
+            // Either way through is a way through.
+            Some(else_body) => body_completes(&stmt.then_body) || body_completes(else_body),
+            // No else is a way through that does nothing.
+            None => true,
+        },
+        Statement::Loop(stmt) => match stmt.condition {
+            // A condition may be false the first time it is read.
+            Some(_) => true,
+            // Otherwise the only way out is a `break` written for this loop.
+            None => contains_break(&stmt.body),
+        },
+        _ => true,
+    }
+}
+
+/// Whether a `break` in these statements leaves the loop they belong to.
+///
+/// A `break` inside a nested loop belongs to that one, so nested loops are not
+/// descended into; everything else that holds statements is.
+fn contains_break<'db>(statements: &[Statement<'db>]) -> bool {
+    statements.iter().any(|statement| match statement {
+        Statement::Break(_) => true,
+        Statement::Loop(_) => false,
+        Statement::If(stmt) => {
+            contains_break(&stmt.then_body)
+                || stmt.else_body.as_ref().is_some_and(|body| contains_break(body))
+        }
+        Statement::Match(stmt) => {
+            stmt.cases.iter().any(|case| contains_break(&case.body))
+                || stmt.default_body.as_ref().is_some_and(|body| contains_break(body))
+        }
+        _ => false,
+    })
+}
+
+fn analyze_return<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmt: &StmtRet<'db>, stmt_idx: usize) {
+    // Check that all Out params are initialized before return.
+    check_out_params_initialized(ctx, Some(stmt_idx));
 
     let may_early_return = stmt.value
         .map(|expr| ctx.expr_may_early_return(expr))
@@ -1616,20 +1685,21 @@ fn analyze_if<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmt: &StmtIf<'db>, stmt_idx:
             frame.current_state.insert(id, then_state);
         }
 
-        // Out param convergence: must be initialized in both branches or neither.
-        // If initialized in only one branch, report error.
+        // Writing an out parameter in one branch and not the other is not an
+        // error in itself: what the parameter has to be is written by the time
+        // the function returns, and an `if` is not a return. This used to
+        // report here, which refused
+        //
+        //     if c
+        //       set n = 1
+        //     end if
+        //     set n = 2
+        //
+        // where the write after the branch is the one that counts. Every exit
+        // checks for itself, so all this has to do is say what is known after.
         for (&id, &then_init) in &out_param_init_after_then {
             let else_init = out_param_init_after_else.get(&id).copied()
                 .unwrap_or(OutParamInitState::Uninitialized);
-            if then_init != else_init {
-                // Initialized in one branch but not the other.
-                let name = ctx.bindings[id.0 as usize].name.C();
-                // No specific return statement - this is a branch convergence issue.
-                ctx.errors.push(AnalysisError::OutParamNotInitialized {
-                    ret_stmt_idx: None,
-                    name,
-                });
-            }
             // After convergence, use the "most restrictive" state: if either is
             // Uninitialized, the converged state is Uninitialized.
             let converged = if then_init == OutParamInitState::Initialized
