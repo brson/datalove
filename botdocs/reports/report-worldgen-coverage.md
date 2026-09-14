@@ -132,19 +132,35 @@ those was wrong for two years' worth of variants until this turned it up.
 somewhere. Waiting for a binding of the right shape to be wanted at exactly
 the right type left `!` unwritten across three hundred worldfiles at a
 stretch, and left the roll flipping between runs. A statement that unwraps
-something in reach and binds what comes out is reliable: 35 and 23 in 300.
+something in reach and binds what comes out is reliable: 22 and 15 in 300.
+
+**Both `if` bindings.** `if opt |value|` and `if r |value| else |err|` are the
+two ways the language unwraps without early-returning, and the result form's
+else branch has to be there and has to bind: the typechecker refuses one
+without it. Both move out of what they destructure, so the scrutinee has to be
+something the body may move.
+
+Reached for on its own rather than waiting on the `if` roll and the binding
+roll to coincide -- which had written the option form three times in three
+hundred worldfiles and the result form once, and had the roll flickering
+between runs. It is 140 and 40 now, and `if` altogether went from 44 to 179,
+which is the other half of a to-do on this list: `if` is where D007 and D008
+and the exit drops live.
+
+The six forms that kept reaching zero between runs now have floors in
+`test_core_constructs_are_common`, so losing one is a failure rather than a
+shrug.
 
 Thin: `if` (39), `loop` (56), `set` statements (71), `and`/`or`/`xor`, `.>`,
 `.>=`, `.=`, `.!=`, places with an index step, `if` with a binding.
 
-Still never generated, 7 of roughly 110 things counted:
+Still never generated, 6 of roughly 110 things counted:
 
 | category | what |
 |---|---|
 | statements | `const`, `continue`, `native fun` |
 | expressions | a projection or an index off something that is not a place, hex literals, `table`, `icall` |
 | types | `table` |
-| shapes | `if r \|value\| else \|err\|` |
 
 ## What it found
 
@@ -222,14 +238,15 @@ text.
 
 ## Next
 
-1. `if r |value| else |err|`, and a projection or an index off something that
-   is not a place.
+1. A projection or an index off something that is not a place -- `f().0`,
+   `f()[i]?` -- which is what the `FieldProj` and `Index` nodes are for.
 2. `const`, and tables.
-3. Raise the `if` and `loop` weights. They are where D007 and D008 and the exit
-   drops live, and the seven bugs above say what nesting is worth.
-4. Log the silent fallbacks. `gen_set` and friends fall back to `gen_let` when
+3. Log the silent fallbacks. `gen_set` and friends fall back to `gen_let` when
    they cannot proceed, so a construct can be rare because it keeps failing to
    build rather than because it was weighted that way, and nothing says which.
-5. `continue`, `native fun` and `icall` each want something the generator does
+4. `continue`, `native fun` and `icall` each want something the generator does
    not have: a loop that does not end in a break, a rider to resolve against,
    and the names of the intrinsics.
+5. The interactions, which is where every bug so far has been. A roll of node
+   kinds says nothing about a generic over a map at `data` on one side, or a
+   checked overflow inside a branch of a function returning a result.

@@ -282,18 +282,24 @@ pub fn gen_if<'db, R: Rng>(
     ctx: &mut GenContext<'db>,
     var_counter: &mut usize,
     indent: &str,
+    insist_on_a_binding: bool,
 ) -> String {
     // An `if` over an option may bind what is inside it, which is the only way
     // the language has of getting at that payload. The binding
     // moves out of what it destructured -- `if x |value|` leaves `x` moved
     // from on both paths -- so the scrutinee has to be one this body is
     // allowed to move, and it is consumed before the branches are written.
-    let binding = gen_if_binding(rng, config, ctx, var_counter);
+    // Whether this `if` takes something apart or tests a condition. A caller
+    // that reached for the destructuring form on purpose says so; otherwise it
+    // is rolled for here.
+    let binding = if insist_on_a_binding || config.check_probability(rng, config.if_binding_probability) {
+        gen_if_binding(rng, ctx, var_counter)
+    } else {
+        Option::None
+    };
 
     let mut result = match &binding {
-        Some((scrutinee, name, _)) => {
-            format!("{}if {} |{}|\n", indent, scrutinee, name)
-        }
+        Some(b) => format!("{}if {} |{}|\n", indent, b.scrutinee, b.name),
         Option::None => {
             let condition = gen_bool_expr(db, rng, config, ctx);
             format!("{}if {}\n", indent, condition)
@@ -324,10 +330,10 @@ pub fn gen_if<'db, R: Rng>(
 
     // What the binding named is in scope for the then branch alone, and the
     // restore below is what takes it back out again.
-    if let Some((_, name, payload_type)) = &binding {
+    if let Some(b) = &binding {
         ctx.variables.push(Variable {
-            name: name.clone(),
-            type_hint: payload_type.clone(),
+            name: b.name.clone(),
+            type_hint: b.payload_type.clone(),
             is_mutable: false,
         });
     }
@@ -343,13 +349,26 @@ pub fn gen_if<'db, R: Rng>(
     ctx.variables = saved_variables;
     ctx.consumed_variables = saved_consumed;
 
-    // Maybe generate else-body.
-    if rng.gen_bool(0.5) {
-        result.push_str(&format!("{}else\n", indent));
+    // Maybe generate else-body. A result destructured above has to have one,
+    // and it has to bind what went wrong.
+    let error_binding = binding.as_ref().and_then(|b| b.error_binding.clone());
+    if error_binding.is_some() || rng.gen_bool(0.5) {
+        match &error_binding {
+            Some(err) => result.push_str(&format!("{}else |{}|\n", indent, err)),
+            Option::None => result.push_str(&format!("{}else\n", indent)),
+        }
 
         // Save variables and consumed state before entering else branch.
         let saved_variables = ctx.variables.clone();
         let saved_consumed = ctx.consumed_variables.clone();
+
+        if let Some(err) = &error_binding {
+            ctx.variables.push(Variable {
+                name: err.clone(),
+                type_hint: TypeHint::Error,
+                is_mutable: false,
+            });
+        }
 
         let else_stmt_count = rng.gen_range(1..=2);
         for _ in 0..else_stmt_count {
@@ -369,35 +388,52 @@ pub fn gen_if<'db, R: Rng>(
     result
 }
 
-/// Pick an option for an `if` to destructure, if there is one to pick.
+/// Whether anything in scope can be taken apart by an `if`.
+fn has_something_to_destructure(ctx: &GenContext<'_>) -> bool {
+    ctx.variables.iter().any(|v| {
+        !ctx.is_consumed(&v.name)
+            && !ctx.is_loop_protected(&v.name)
+            && matches!(v.type_hint, TypeHint::Option(_) | TypeHint::Result(_))
+    })
+}
+
+/// An `if` that takes something apart rather than testing a condition.
+pub struct IfBinding<'db> {
+    /// What is being destructured, which the `if` moves out of.
+    pub scrutinee: String,
+    /// What the payload is called in the then branch, and its type.
+    pub name: String,
+    pub payload_type: TypeHint<'db>,
+    /// What the error is called in the else branch, for a result.
+    ///
+    /// An option's else branch binds nothing and may be left off altogether. A
+    /// result's must be there and must bind: the typechecker refuses one
+    /// without it, `ResultRequiresErrorBinding`.
+    pub error_binding: Option<String>,
+}
+
+/// Pick something for an `if` to destructure, if there is anything to pick.
 ///
-/// Returns what to name in the condition, what to call what comes out, and the
-/// type that has. The scrutinee is marked consumed here, because the binding
-/// moves out of it whichever way the branch goes.
+/// An option or a result, which are the two the language unwraps this way.
+/// The scrutinee is marked consumed here, because the binding moves out of it
+/// whichever way the branch goes.
 ///
 /// A variable the body is only borrowing -- one declared outside a loop, say
 /// -- cannot be destructured, since that would be a move. Those are the ones
-/// already marked loop-protected, and `variables_of_type` leaves them out.
+/// already marked loop-protected, and they are left out.
 fn gen_if_binding<'db, R: Rng>(
     rng: &mut R,
-    config: &WorldGenConfig,
     ctx: &mut GenContext<'db>,
     var_counter: &mut usize,
-) -> Option<(String, String, TypeHint<'db>)> {
-    if !config.check_probability(rng, config.if_binding_probability) {
-        return Option::None;
-    }
-
-    let candidates: Vec<(String, TypeHint<'db>)> = ctx
+) -> Option<IfBinding<'db>> {
+    // (name, payload type, whether the else branch has to bind the error).
+    let candidates: Vec<(String, TypeHint<'db>, bool)> = ctx
         .variables
         .iter()
         .filter(|v| !ctx.is_consumed(&v.name) && !ctx.is_loop_protected(&v.name))
-        // An option only. Destructuring a result binds what went wrong as well,
-        // in an `else |err|`, and without that the typechecker refuses it
-        // outright -- `ResultRequiresErrorBinding`. That form is worth writing
-        // too; it is not written here.
         .filter_map(|v| match &v.type_hint {
-            TypeHint::Option(o) => Some((v.name.clone(), (*o.inner_type).clone())),
+            TypeHint::Option(o) => Some((v.name.clone(), (*o.inner_type).clone(), false)),
+            TypeHint::Result(r) => Some((v.name.clone(), (*r.inner_type).clone(), true)),
             _ => Option::None,
         })
         .collect();
@@ -406,12 +442,21 @@ fn gen_if_binding<'db, R: Rng>(
         return Option::None;
     }
 
-    let (scrutinee, payload_type) = candidates[rng.gen_range(0..candidates.len())].clone();
+    let (scrutinee, payload_type, wants_error) =
+        candidates[rng.gen_range(0..candidates.len())].clone();
     ctx.consume_variable(&scrutinee);
 
     let name = format!("v{}", *var_counter);
     *var_counter += 1;
-    Some((scrutinee, name, payload_type))
+    let error_binding = if wants_error {
+        let err = format!("v{}", *var_counter);
+        *var_counter += 1;
+        Some(err)
+    } else {
+        Option::None
+    };
+
+    Some(IfBinding { scrutinee, name, payload_type, error_binding })
 }
 
 /// Generate a loop statement.
@@ -521,7 +566,7 @@ fn gen_loop_body_statement<'db, R: Rng>(
             .unwrap_or_else(|| gen_let(db, rng, config, ctx, var_counter, indent)),
         12 => format!("{}break", indent),
         // Removed: continue - would make final break unreachable.
-        13 if !ctx.at_max_depth(config) => gen_if(db, rng, config, ctx, var_counter, indent),
+        13 if !ctx.at_max_depth(config) => gen_if(db, rng, config, ctx, var_counter, indent, false),
         _ => gen_let(db, rng, config, ctx, var_counter, indent),
     }
 }
@@ -555,6 +600,17 @@ pub fn gen_body_statement<'db, R: Rng>(
         }
     }
 
+    // Taking an option or a result apart with an `if` is worth reaching for on
+    // its own, rather than waiting for the `if` roll and the binding roll to
+    // come up together. Left to those, it was written three times in three
+    // hundred worldfiles and the result form once.
+    if !ctx.at_max_depth(config)
+        && config.check_probability(rng, config.if_binding_probability)
+        && has_something_to_destructure(ctx)
+    {
+        return gen_if(db, rng, config, ctx, var_counter, indent, true);
+    }
+
     // A `match` is the only way to take an enum apart, and something has to
     // have made one first, so the two are reached for together.
     if !ctx.enums.is_empty() && config.check_probability(rng, config.match_probability) {
@@ -572,7 +628,7 @@ pub fn gen_body_statement<'db, R: Rng>(
         4..=5 => gen_var(db, rng, config, ctx, var_counter, indent),
         6..=7 => gen_set(db, rng, config, ctx, indent)
             .unwrap_or_else(|| gen_let(db, rng, config, ctx, var_counter, indent)),
-        8 if can_if => gen_if(db, rng, config, ctx, var_counter, indent),
+        8 if can_if => gen_if(db, rng, config, ctx, var_counter, indent, false),
         9 if can_loop => gen_loop(db, rng, config, ctx, var_counter, indent),
         10..=11 if can_debuglog => gen_debuglog(db, rng, ctx, indent)
             .unwrap_or_else(|| gen_let(db, rng, config, ctx, var_counter, indent)),

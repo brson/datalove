@@ -126,7 +126,6 @@ const NOT_YET_GENERATED: &[(&str, &str, &str)] = &[
 
 
 
-    ("shape", "if with an error binding", "`if r |value| else |err|`, which a result wants, is not generated"),
     // A type parameter parses as an alias too, and those are everywhere.
     // `TypeParams` tells the two apart, so an alias count is alias references.
     ("type", "Table", "table types are not generated"),
@@ -573,6 +572,14 @@ fn test_core_constructs_are_common() {
         ("type", "List", 20),
         ("type", "Option", 20),
         ("type", "Map", 10),
+        // These reached zero between runs before they were reached for
+        // deliberately rather than waiting on two rolls to coincide.
+        ("shape", "if with a binding", 10),
+        ("shape", "if with an error binding", 3),
+        ("expr", "TryOption", 3),
+        ("expr", "TryResult", 2),
+        ("statement", "Match", 20),
+        ("expr", "EnumLiteral", 20),
     ];
 
     let mut thin = Vec::new();
