@@ -662,6 +662,8 @@ impl<'a, 'db> AnalysisCtx<'a, 'db> {
             ExprFunKind::Er(e) => self.expr_may_early_return(e.payload),
             ExprFunKind::Data(d) => self.expr_may_early_return(d.value),
             ExprFunKind::Error(e) => self.expr_may_early_return(e.value),
+            ExprFunKind::Term(t) => self.expr_may_early_return(t.payload),
+            ExprFunKind::EnumLiteral(lit) => self.expr_may_early_return(lit.variant),
             ExprFunKind::FieldProj(proj) => self.expr_may_early_return(proj.base),
             ExprFunKind::Index(ref idx) => {
                 self.expr_may_early_return(idx.base)
@@ -834,6 +836,20 @@ impl<'a, 'db> AnalysisCtx<'a, 'db> {
             ExprFunKind::Error(e) => {
                 // Value is consumed.
                 self.analyze_expr_moves(e.value, true);
+                None
+            }
+            ExprFunKind::Term(t) => {
+                // A term is its payload under a name, and takes it: `term Foo
+                // a` moves `a` in. Reaching the fallthrough below instead left
+                // the payload unanalyzed, so nothing was marked moved and both
+                // the term and what it was built from were dropped.
+                self.analyze_expr_moves(t.payload, true);
+                None
+            }
+            ExprFunKind::EnumLiteral(lit) => {
+                // An enum literal is the variant it wraps, checked against the
+                // enum type, and consumes what that consumes.
+                self.analyze_expr_moves(lit.variant, is_consumed);
                 None
             }
 

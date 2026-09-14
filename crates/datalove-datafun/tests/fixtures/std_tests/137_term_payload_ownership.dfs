@@ -1,0 +1,57 @@
+// What a term does with the value it is built from.
+//
+// A term is its payload under a name, laid out exactly as that payload, and
+// `term Foo a` takes `a`. The ownership analysis walked into a `some`, an
+// `ok`, an `er`, a `data` and an `error` to say their payloads were consumed,
+// and fell through to doing nothing for a term. So nothing was marked moved,
+// and both the term and what it was built from were dropped -- the same
+// allocation freed twice, which the allocator caught only because it was
+// tracking.
+//
+// A payload that is a literal was fine, having no binding to move out of,
+// which is most of the ways a term gets written by hand.
+//
+// An enum literal had the same gap, and is here for the same reason.
+
+type Tagged: enum { atom Empty, term Note string, term Count u32 }
+
+// The plain case: a binding moved into a term.
+fun from_a_binding(): term Note string
+  let text: string = "moved in"
+  ret term Note text
+end fun
+
+// The same, widened into the enum it belongs to.
+fun widened(): Tagged
+  let text: string = "moved in and widened"
+  ret (term Note text)@
+end fun
+
+// A clone, which leaves the original to be used after. The brackets matter:
+// `term Note text@` is the term cloned, not the payload, since `@` is postfix
+// and the payload parse stops at the name.
+fun from_a_clone(): (string, term Note string)
+  let text: string = "kept"
+  let held: term Note string = term Note (text@)
+  ret (text, held)
+end fun
+
+// A payload that owns something bigger than a word.
+fun from_a_list(): term Note [u32]
+  let numbers: [u32] = [: u32 / 1, : u32 / 2, : u32 / 3]
+  ret term Note numbers
+end fun
+
+// A copy payload, which is moved in the same way and costs nothing.
+fun from_a_number(): term Count u32
+  let n: u32 = : u32 / 7
+  ret term Count n
+end fun
+
+// And a literal payload, which was always right.
+fun from_a_literal(): term Note string
+  ret term Note : string / "written in place"
+end fun
+
+let output = (from_a_binding(), widened(), from_a_clone(), from_a_list(),
+              from_a_number(), from_a_literal())
