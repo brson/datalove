@@ -6,6 +6,12 @@
 //
 // Forwarding one is here too. The interpreter used to panic on it, generic or
 // not, because a parameter was not a shape it accepted as a destination.
+//
+// A destination that has never been written is the other half. There is
+// nothing there to clear, and clearing it anyway freed cranelift's 0xFF poison
+// and whatever the C stack had left; and the call has to record that it wrote
+// the place, or the drop at the end of the scope skips what it put there. Both
+// need a move type and a `var` with no initializer to say anything.
 
 fun take_out<T>(out x: T, src: T)
   set x = src
@@ -32,3 +38,29 @@ debuglog pair
 var counter: u32 = 0
 forward_out(out counter, 42)
 debuglog counter
+
+// A destination that holds nothing yet. These go through a concrete function:
+// a generic erases its arguments on the way in, and erasing a destination
+// reads it, which for one that has never been written panics in the
+// interpreter before any backend sees it.
+fun take_out_string(out x: string, src: string)
+  set x = src
+end fun
+
+var fresh: string
+take_out_string(out fresh, "written")
+debuglog fresh
+
+// One never read, so the drop at the end of the unit is the only thing that
+// frees what the call wrote, and it asks the tracking byte the call has to set.
+var unread: string
+take_out_string(out unread, "dropped")
+
+// Forwarded through a second out parameter, still starting from nothing.
+fun forward_out_string(out x: string, src: string)
+  take_out_string(out x, src)
+end fun
+
+var fresh_forwarded: string
+forward_out_string(out fresh_forwarded, "relayed")
+debuglog fresh_forwarded

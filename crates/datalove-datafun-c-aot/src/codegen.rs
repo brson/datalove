@@ -1892,7 +1892,26 @@ impl<'a> FunctionCodegenContext<'a> {
             let c_ty = types::ir_type_to_c(&dest_ty);
             writeln!(out, "    *({c_ty}*){dest_addr} = {}({});", func_name, call_args).unwrap();
         }
+        self.mark_out_destinations_live(out, func, args);
         Ok(())
+    }
+
+    /// Record that the call wrote every `out` argument's destination.
+    ///
+    /// The callee promises to write one before it returns, so whatever drops
+    /// the destination afterwards has to know it holds something. Without this
+    /// an uninitialized `var` passed as `out` came back still reading
+    /// uninitialized and the drop at the end of its scope skipped what the call
+    /// had put there. A destination that was live before the call dropped
+    /// correctly either way, which is why this went unseen.
+    fn mark_out_destinations_live(&mut self, out: &mut String, func: &CodeRef, args: &[Operand]) {
+        use datalove_datafun_ir::ParamMode;
+        let modes = self.callee_param_modes(func);
+        for (i, arg) in args.iter().enumerate() {
+            if modes.get(i) == Some(&ParamMode::Out) {
+                self.mark_tracking_live(out, arg);
+            }
+        }
     }
 
     /// Build a set described by a handed-over descriptor, then wrap it.
@@ -2031,13 +2050,17 @@ impl<'a> FunctionCodegenContext<'a> {
             let addr = self.operand_addr(arg);
             let tydesc = self.operand_tydesc(arg);
 
-            // This function's own out parameter, passed straight on, names a
-            // destination its caller already cleared and nothing has written
-            // to since. Its tracking byte says so, and freeing what was freed
-            // is worse than leaking it.
+            // A destination that is tracked says for itself whether it holds
+            // anything. This function's own out parameter, passed straight on,
+            // was cleared by whoever called this one; an uninitialized `var`
+            // has never held anything at all, and `__frame` is whatever the C
+            // stack left there, so clearing it would free that. Freeing what
+            // was never allocated is worse than leaking.
             let guard = match arg {
                 Operand::Param(param) => self.layout.param_tracking_byte(param.0),
-                _ => None,
+                Operand::Slot(id) => self.layout.slot_tracking_byte(id.0),
+                Operand::Value(id) | Operand::ValueRef(id) => self.layout.value_tracking_byte(id.0),
+                Operand::ExternalSlot { .. } | Operand::ExternalValue { .. } => None,
             };
             match guard {
                 Some(offset) => writeln!(out,

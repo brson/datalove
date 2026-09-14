@@ -12,6 +12,10 @@ fun fill(out n: u32)
   set n = 42
 end fun
 
+fun fill_string(out s: string)
+  set s = "written"
+end fun
+
 // Forwarding one `out` into another, which is the case that always worked.
 fun forward(out n: u32)
   fill(out n)
@@ -29,13 +33,28 @@ fun forwarded(): u32
   ret slot
 end fun
 
-// Only fixed-width slots here. An uninitialized slot of a linear type passed
-// as `out` aborts under the JIT, because the callee's `set` drops what the
-// slot held and there is nothing there to drop; that is its own bug, and it
-// predates this one.
+// A slot of a linear type, where the destination holds nothing to drop until
+// the call writes it. Clearing the destination before the call is what the
+// compiled backends do for whatever was there before, and for a slot that was
+// never written there is nothing: cranelift freed its own 0xFF poison and the
+// C backend freed whatever the stack had left.
+fun heap_slot(): string
+  var text: string
+  fill_string(out text)
+  ret text
+end fun
+
+// The same, with nothing read afterwards, so the only thing that frees what
+// the call wrote is the drop at the end of the scope. That drop asks the
+// tracking byte, and the call has to have set it.
+fun heap_slot_unread(): u32
+  var text: string
+  fill_string(out text)
+  ret 1
+end fun
 
 // At script level as well as inside a function.
 var top_level: u32
 fill(out top_level)
 
-let output = (in_a_function(), forwarded(), top_level)
+let output = (in_a_function(), forwarded(), heap_slot(), heap_slot_unread(), top_level)

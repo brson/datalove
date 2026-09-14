@@ -314,9 +314,9 @@ fun bump(mut n: u32): !()
 end fun
 
 // `out` is write-only: the callee must write it before returning, and the
-// caller may pass a slot that holds nothing yet. A slot of a linear type is
-// the exception -- an uninitialized one aborts under the JIT, because the
-// callee's `set` drops what the slot held and there is nothing there.
+// caller may pass a slot that holds nothing yet. A generic is the exception:
+// it erases its arguments on the way in, and erasing a destination reads it,
+// so an `out` argument to one has to hold something already.
 fun fill(out n: u32)
   set n = 42
 end fun

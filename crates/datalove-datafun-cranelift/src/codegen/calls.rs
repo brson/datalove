@@ -75,6 +75,33 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         }
     }
 
+    /// Record that the call wrote every `out` argument's destination.
+    ///
+    /// The callee promises to write one before it returns, so the destination
+    /// holds a value afterwards and whatever drops it has to know. Without this
+    /// an uninitialized `var` passed as `out` came back still reading
+    /// uninitialized, and the drop at the end of its scope skipped what the
+    /// call had put there. A destination that was already initialized dropped
+    /// correctly, its tracking byte having been live since before the call,
+    /// which is why this went unseen.
+    fn mark_out_destinations_live(
+        &mut self,
+        builder: &mut FunctionBuilder,
+        code_ref: &CodeRef,
+        args: &[Operand],
+    ) {
+        let modes = self.callee_param_modes(code_ref);
+        for (i, arg) in args.iter().enumerate() {
+            if modes.get(i) != Some(&ParamMode::Out) {
+                continue;
+            }
+            match arg {
+                Operand::Param(param) => self.mark_param_live(builder, *param),
+                other => self.mark_tracking_live(builder, other),
+            }
+        }
+    }
+
     /// Destroy whatever an `out` argument's destination holds now.
     ///
     /// The callee writes a fresh value there and its tracking byte starts
@@ -108,13 +135,15 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             let tydesc = self.operand_tydesc(builder, arg)?;
             let destroy_ref = self.module.declare_func_in_func(destroy, builder.func);
 
-            // This function's own out parameter, passed straight on, names a
-            // destination its caller already cleared and nothing has written
-            // to since. Its tracking byte says so, and freeing what was freed
-            // is worse than leaking it.
+            // A destination that is tracked says for itself whether it holds
+            // anything. This function's own out parameter, passed straight on,
+            // was cleared by whoever called this one; an uninitialized `var`
+            // has never held anything at all, and its slot is 0xFF poison, so
+            // clearing it would call `free` on the poison. Freeing what was
+            // never allocated is worse than leaking.
             let guard = match arg {
                 Operand::Param(param) => self.param_tracking_byte_offset(*param),
-                _ => None,
+                other => self.tracking_byte_offset(other),
             };
             let Some(track_offset) = guard else {
                 builder.ins().call(destroy_ref, &[rt_handle, ptr, tydesc]);
@@ -369,6 +398,8 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         // Declare callee in this function and emit call.
         let callee_ref = self.module.declare_func_in_func(callee_func_id, builder.func);
         builder.ins().call(callee_ref, &call_args);
+
+        self.mark_out_destinations_live(builder, code_ref, args);
 
         // For scalar sret returns, load the value from the sret location.
         if callee_uses_sret {
