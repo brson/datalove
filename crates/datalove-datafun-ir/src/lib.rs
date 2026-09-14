@@ -896,6 +896,100 @@ pub enum ConstValue {
     Table { columns: Vec<String>, rows: Vec<Vec<ConstValue>> },
 }
 
+/// The type a constant value is of.
+///
+/// A `ConstValue` says its own shape, so the type can be read off it. Where a
+/// value cannot say the whole of a type this answers with the part it can: an
+/// enum gives the one variant it holds, and a `none` gives `?()`. That is
+/// enough for the two things this is for -- making a descriptor for a `data`,
+/// and sizing a buffer to build one in -- and is not enough to check anything
+/// against.
+///
+/// Here rather than in a backend because three of them wanted it and had a
+/// copy each, character for character.
+pub fn ir_type_of_const_value(value: &ConstValue) -> IrType {
+    match value {
+        ConstValue::Unit => IrType::Unit,
+        ConstValue::Bool(_) => IrType::Bool,
+        ConstValue::U8(_) => IrType::U8,
+        ConstValue::U16(_) => IrType::U16,
+        ConstValue::U32(_) => IrType::U32,
+        ConstValue::U64(_) => IrType::U64,
+        ConstValue::I8(_) => IrType::I8,
+        ConstValue::I16(_) => IrType::I16,
+        ConstValue::I32(_) => IrType::I32,
+        ConstValue::I64(_) => IrType::I64,
+        ConstValue::Index(_) => IrType::Index,
+        ConstValue::Offset(_) => IrType::Offset,
+        ConstValue::Int { .. } => IrType::Int,
+        ConstValue::F32(_) => IrType::F32,
+        ConstValue::F64(_) => IrType::F64,
+        ConstValue::String(_) => IrType::String,
+        ConstValue::Tuple(fields) => {
+            IrType::Tuple(fields.iter().map(ir_type_of_const_value).collect())
+        }
+        ConstValue::Struct(fields) => {
+            IrType::Struct(
+                fields.iter()
+                    .map(|(name, v)| (name.clone(), ir_type_of_const_value(v)))
+                    .collect()
+            )
+        }
+        ConstValue::Enum { variant, payload } => {
+            // For enum, we can only infer a single-variant enum type.
+            let payload_type = payload.as_ref().map(|p| ir_type_of_const_value(p));
+            IrType::Enum(vec![(variant.clone(), payload_type)])
+        }
+        ConstValue::OptionNone => {
+            // Cannot fully infer the inner type for None; default to Unit.
+            IrType::Option(Box::new(IrType::Unit))
+        }
+        ConstValue::OptionSome(inner) => {
+            IrType::Option(Box::new(ir_type_of_const_value(inner)))
+        }
+        ConstValue::ResultOk(inner) => {
+            IrType::Result(Box::new(ir_type_of_const_value(inner)))
+        }
+        ConstValue::ResultErr(_) => {
+            // Result::Err - cannot infer Ok type from Err; default to Unit.
+            IrType::Result(Box::new(IrType::Unit))
+        }
+        ConstValue::Data(_) => IrType::Data,
+        ConstValue::Error(_) => IrType::Error,
+        ConstValue::List(elements) => {
+            let elem_type = elements.first()
+                .map(ir_type_of_const_value)
+                .unwrap_or(IrType::Unit);
+            IrType::List(Box::new(elem_type))
+        }
+        ConstValue::Set(elements) => {
+            let elem_type = elements.first()
+                .map(ir_type_of_const_value)
+                .unwrap_or(IrType::Unit);
+            IrType::Set(Box::new(elem_type))
+        }
+        ConstValue::Map(entries) => {
+            let (key_type, value_type) = entries.first()
+                .map(|(k, v)| (ir_type_of_const_value(k), ir_type_of_const_value(v)))
+                .unwrap_or((IrType::Unit, IrType::Unit));
+            IrType::Map(Box::new(key_type), Box::new(value_type))
+        }
+        ConstValue::Table { columns, rows } => {
+            // Infer column types from first row if available.
+            let col_types: Vec<(String, Box<IrType>)> = if let Some(first_row) = rows.first() {
+                columns.iter()
+                    .zip(first_row.iter())
+                    .map(|(name, value)| (name.clone(), Box::new(ir_type_of_const_value(value))))
+                    .collect()
+            } else {
+                columns.iter().map(|name| (name.clone(), Box::new(IrType::Unit))).collect()
+            };
+            IrType::Table(col_types)
+        }
+    }
+}
+
+
 impl std::hash::Hash for ConstValue {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         std::mem::discriminant(self).hash(state);

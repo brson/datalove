@@ -587,7 +587,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         })?;
 
         // Infer inner type and get TyDesc.
-        let inner_ir_type = ir_type_of_const_value(inner);
+        let inner_ir_type = datalove_datafun_ir::ir_type_of_const_value(inner);
         let inner_tydesc_id = self.tydesc_emitter.get(&inner_ir_type).ok_or_else(|| {
             CraneliftError::Codegen(format!("TyDesc not found for inner type {:?}", inner_ir_type))
         })?;
@@ -644,7 +644,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         })?;
 
         // Infer inner type and get TyDesc.
-        let inner_ir_type = ir_type_of_const_value(inner);
+        let inner_ir_type = datalove_datafun_ir::ir_type_of_const_value(inner);
         let inner_tydesc_id = self.tydesc_emitter.get(&inner_ir_type).ok_or_else(|| {
             CraneliftError::Codegen(format!("TyDesc not found for inner type {:?}", inner_ir_type))
         })?;
@@ -1395,7 +1395,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 })?;
 
                 // Infer inner type and get TyDesc.
-                let inner_ir_type = ir_type_of_const_value(inner);
+                let inner_ir_type = datalove_datafun_ir::ir_type_of_const_value(inner);
                 let inner_tydesc_id = self.tydesc_emitter.get(&inner_ir_type).ok_or_else(|| {
                     CraneliftError::Codegen(format!("TyDesc not found for inner type {:?}", inner_ir_type))
                 })?;
@@ -1432,7 +1432,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 })?;
 
                 // Infer inner type and get TyDesc.
-                let inner_ir_type = ir_type_of_const_value(inner);
+                let inner_ir_type = datalove_datafun_ir::ir_type_of_const_value(inner);
                 let inner_tydesc_id = self.tydesc_emitter.get(&inner_ir_type).ok_or_else(|| {
                     CraneliftError::Codegen(format!("TyDesc not found for inner type {:?}", inner_ir_type))
                 })?;
@@ -1478,84 +1478,3 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
     }
 }
 
-/// Infer an IrType from a ConstValue.
-///
-/// This is used to create tydescs for Data constants where the inner
-/// type is not explicitly available.
-fn ir_type_of_const_value(value: &ConstValue) -> IrType {
-    match value {
-        ConstValue::Unit => IrType::Unit,
-        ConstValue::Bool(_) => IrType::Bool,
-        ConstValue::U8(_) => IrType::U8,
-        ConstValue::U16(_) => IrType::U16,
-        ConstValue::U32(_) => IrType::U32,
-        ConstValue::U64(_) => IrType::U64,
-        ConstValue::I8(_) => IrType::I8,
-        ConstValue::I16(_) => IrType::I16,
-        ConstValue::I32(_) => IrType::I32,
-        ConstValue::I64(_) => IrType::I64,
-        ConstValue::Index(_) => IrType::Index,
-        ConstValue::Offset(_) => IrType::Offset,
-        ConstValue::Int { .. } => IrType::Int,
-        ConstValue::F32(_) => IrType::F32,
-        ConstValue::F64(_) => IrType::F64,
-        ConstValue::String(_) => IrType::String,
-        ConstValue::Tuple(fields) => {
-            IrType::Tuple(fields.iter().map(ir_type_of_const_value).collect())
-        }
-        ConstValue::Struct(fields) => {
-            IrType::Struct(
-                fields.iter()
-                    .map(|(name, v)| (name.clone(), ir_type_of_const_value(v)))
-                    .collect()
-            )
-        }
-        ConstValue::Enum { variant, payload } => {
-            let payload_type = payload.as_ref().map(|p| ir_type_of_const_value(p));
-            IrType::Enum(vec![(variant.clone(), payload_type)])
-        }
-        ConstValue::OptionNone => {
-            IrType::Option(Box::new(IrType::Unit))
-        }
-        ConstValue::OptionSome(inner) => {
-            IrType::Option(Box::new(ir_type_of_const_value(inner)))
-        }
-        ConstValue::ResultOk(inner) => {
-            IrType::Result(Box::new(ir_type_of_const_value(inner)))
-        }
-        ConstValue::ResultErr(_) => {
-            IrType::Result(Box::new(IrType::Unit))
-        }
-        ConstValue::Data(_) => IrType::Data,
-        ConstValue::Error(_) => IrType::Error,
-        ConstValue::List(elements) => {
-            let elem_type = elements.first()
-                .map(ir_type_of_const_value)
-                .unwrap_or(IrType::Unit);
-            IrType::List(Box::new(elem_type))
-        }
-        ConstValue::Set(elements) => {
-            let elem_type = elements.first()
-                .map(ir_type_of_const_value)
-                .unwrap_or(IrType::Unit);
-            IrType::Set(Box::new(elem_type))
-        }
-        ConstValue::Map(entries) => {
-            let (key_type, value_type) = entries.first()
-                .map(|(k, v)| (ir_type_of_const_value(k), ir_type_of_const_value(v)))
-                .unwrap_or((IrType::Unit, IrType::Unit));
-            IrType::Map(Box::new(key_type), Box::new(value_type))
-        }
-        ConstValue::Table { columns, rows } => {
-            let col_types: Vec<(String, Box<IrType>)> = if let Some(first_row) = rows.first() {
-                columns.iter()
-                    .zip(first_row.iter())
-                    .map(|(name, value)| (name.clone(), Box::new(ir_type_of_const_value(value))))
-                    .collect()
-            } else {
-                columns.iter().map(|name| (name.clone(), Box::new(IrType::Unit))).collect()
-            };
-            IrType::Table(col_types)
-        }
-    }
-}

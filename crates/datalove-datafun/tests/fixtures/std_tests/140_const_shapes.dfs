@@ -1,0 +1,35 @@
+// A const of every shape the compiler can work out and write back down.
+//
+// The four backends had drifted apart on this. The interpreter and the
+// cranelift AOT wrote most shapes; the C one wrote the scalars, `int`,
+// `string`, a list and an atom, and refused a tuple, a struct, an option, a
+// result, a `data`, an `error`, a set and a map -- "constant of this shape".
+//
+// This runs on all four, so it says they agree.
+
+const A_BOOL: bool = true
+const A_NUMBER: u32 = : u32 / 7
+const A_BIGINT: int = : int / 99999999999999999999
+const A_STRING: string = "held"
+
+const A_TUPLE: (u32, string) = (: u32 / 1, : string / "in a tuple")
+const A_STRUCT: {a: u32, b: string} = {a = : u32 / 5, b = : string / "in a struct"}
+
+const SOME: ?u32 = some : u32 / 8
+const NONE: ?u32 = none
+const OK: !u32 = ok : u32 / 9
+const ERR: !u32 = er error : u32 / 10
+
+const A_LIST: [u32] = [: u32 / 1, : u32 / 2, : u32 / 3]
+const A_SET: #{u32} = #{: u32 / 3, : u32 / 1, : u32 / 2}
+const A_MAP: %{u32 = string} = %{: u32 / 1 = : string / "one"}
+
+const A_DATA: data = data : u32 / 11
+const AN_ERROR: error = error : string / "went wrong"
+
+// A set written with a duplicate, which holds it once.
+const DEDUPED: #{u32} = #{: u32 / 4, : u32 / 4, : u32 / 5}
+
+let output = (A_BOOL, A_NUMBER, A_BIGINT, A_STRING, A_TUPLE, A_STRUCT,
+              SOME, NONE, OK, ERR, A_LIST, A_SET, A_MAP, A_DATA, AN_ERROR,
+              DEDUPED)

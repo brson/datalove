@@ -644,8 +644,135 @@ impl<'a> FunctionCodegenContext<'a> {
                     self.emit_const_at(out, &payload_addr, &payload_ty, payload)?;
                 }
             }
-            // Anything else would be written as a comment and read as whatever
-            // the frame happened to hold, which for a list is an empty one.
+            ConstValue::Tuple(elements) => {
+                let IrType::Tuple(field_types) = ty else {
+                    return Err(CAotError::Codegen(format!(
+                        "a tuple constant wants a tuple type, not {:?}", ty)));
+                };
+                let offsets = ir_layout::aggregate_field_offsets(field_types);
+                for (i, element) in elements.iter().enumerate() {
+                    let field_ty = field_types[i].clone();
+                    let field_addr = format!("({} + {})", dest_addr, offsets[i]);
+                    self.emit_const_at(out, &field_addr, &field_ty, element)?;
+                }
+            }
+            ConstValue::Struct(fields) => {
+                let IrType::Struct(field_types) = ty else {
+                    return Err(CAotError::Codegen(format!(
+                        "a struct constant wants a struct type, not {:?}", ty)));
+                };
+                // The type's fields are in the order the layout uses, which is
+                // what the offsets are computed from; the value's are matched
+                // to them by name.
+                let ordered: Vec<IrType> =
+                    field_types.iter().map(|(_, ty)| ty.clone()).collect();
+                let offsets = ir_layout::aggregate_field_offsets(&ordered);
+                for (name, field_value) in fields {
+                    let index = field_types.iter().position(|(n, _)| n == name)
+                        .ok_or_else(|| CAotError::Codegen(format!(
+                            "struct constant names field '{}', which {:?} does not have",
+                            name, ty)))?;
+                    let field_addr = format!("({} + {})", dest_addr, offsets[index]);
+                    self.emit_const_at(out, &field_addr, &ordered[index], field_value)?;
+                }
+            }
+            ConstValue::OptionNone => {
+                writeln!(out, "    *(uint8_t*){} = 1;", dest_addr).unwrap();
+            }
+            ConstValue::OptionSome(inner) => {
+                let IrType::Option(inner_ty) = ty else {
+                    return Err(CAotError::Codegen(format!(
+                        "an option constant wants an option type, not {:?}", ty)));
+                };
+                writeln!(out, "    *(uint8_t*){} = 2;", dest_addr).unwrap();
+                let offset = ir_layout::option_payload_offset(inner_ty);
+                let payload_addr = format!("({} + {})", dest_addr, offset);
+                self.emit_const_at(out, &payload_addr, inner_ty, inner)?;
+            }
+            ConstValue::ResultOk(inner) => {
+                let IrType::Result(ok_ty) = ty else {
+                    return Err(CAotError::Codegen(format!(
+                        "a result constant wants a result type, not {:?}", ty)));
+                };
+                writeln!(out, "    *(uint8_t*){} = 1;", dest_addr).unwrap();
+                let offset = ir_layout::result_payload_offset(ok_ty);
+                let payload_addr = format!("({} + {})", dest_addr, offset);
+                self.emit_const_at(out, &payload_addr, ok_ty, inner)?;
+            }
+            ConstValue::ResultErr(inner) => {
+                let IrType::Result(ok_ty) = ty else {
+                    return Err(CAotError::Codegen(format!(
+                        "a result constant wants a result type, not {:?}", ty)));
+                };
+                writeln!(out, "    *(uint8_t*){} = 2;", dest_addr).unwrap();
+                let offset = ir_layout::result_payload_offset(ok_ty);
+                let payload_addr = format!("({} + {})", dest_addr, offset);
+                // The error side is an `error` whatever the ok side is.
+                self.emit_const_at(out, &payload_addr, &IrType::Error, inner)?;
+            }
+            // A `data` and an `error` are built from what they hold, which
+            // says its own type: the value goes into a scratch buffer and the
+            // runtime packs it, taking it from there.
+            ConstValue::Data(inner) | ConstValue::Error(inner) => {
+                let inner_ty = datalove_datafun_ir::ir_type_of_const_value(inner);
+                let inner_tydesc = self.tydesc_name(&inner_ty);
+                let inner_size = types::ir_type_to_crepr(&inner_ty).layout().size.max(1);
+                let pack = match value {
+                    ConstValue::Data(_) => "dtlv_rti_data_from_local",
+                    _ => "dtlv_rti_error_from_local",
+                };
+                writeln!(out, "    {{ _Alignas(8) uint8_t __cb[{}] = {{0}};", inner_size).unwrap();
+                self.emit_const_at(out, "__cb", &inner_ty, inner)?;
+                writeln!(out, "    {}(rt, __cb, &{}, {}); }}", pack, inner_tydesc, dest_addr).unwrap();
+            }
+            ConstValue::Set(elements) => {
+                let IrType::Set(elem_ty) = ty else {
+                    return Err(CAotError::Codegen(format!(
+                        "a set constant wants a set type, not {:?}", ty)));
+                };
+                let elem_ty = (**elem_ty).clone();
+                let set_tydesc = self.tydesc_name(ty);
+                let elem_tydesc = self.tydesc_name(&elem_ty);
+                let elem_size = types::ir_type_to_crepr(&elem_ty).layout().size.max(1);
+
+                writeln!(out, "    dtlv_rti_btreeset_create_local(rt, {}, &{});",
+                    dest_addr, set_tydesc).unwrap();
+                for element in elements {
+                    // Inserted one at a time, as a literal is, so that the set
+                    // holds each element once and lets go of a duplicate.
+                    writeln!(out, "    {{ _Alignas(8) uint8_t __ce[{}] = {{0}}; uint8_t __added = 0;",
+                        elem_size).unwrap();
+                    self.emit_const_at(out, "__ce", &elem_ty, element)?;
+                    writeln!(out, "    dtlv_rti_btreeset_insert_local(rt, {}, &{}, __ce, &{}, &__added); }}",
+                        dest_addr, set_tydesc, elem_tydesc).unwrap();
+                }
+            }
+            ConstValue::Map(entries) => {
+                let IrType::Map(key_ty, value_ty) = ty else {
+                    return Err(CAotError::Codegen(format!(
+                        "a map constant wants a map type, not {:?}", ty)));
+                };
+                let key_ty = (**key_ty).clone();
+                let value_ty = (**value_ty).clone();
+                let map_tydesc = self.tydesc_name(ty);
+                let key_tydesc = self.tydesc_name(&key_ty);
+                let value_tydesc = self.tydesc_name(&value_ty);
+                let key_size = types::ir_type_to_crepr(&key_ty).layout().size.max(1);
+                let value_size = types::ir_type_to_crepr(&value_ty).layout().size.max(1);
+
+                writeln!(out, "    dtlv_rti_btreemap_create_local(rt, {}, &{});",
+                    dest_addr, map_tydesc).unwrap();
+                for (key, entry_value) in entries {
+                    writeln!(out, "    {{ _Alignas(8) uint8_t __ck[{}] = {{0}};", key_size).unwrap();
+                    self.emit_const_at(out, "__ck", &key_ty, key)?;
+                    writeln!(out, "    _Alignas(8) uint8_t __cv[{}] = {{0}};", value_size).unwrap();
+                    self.emit_const_at(out, "__cv", &value_ty, entry_value)?;
+                    writeln!(out, "    dtlv_rti_btreemap_insert_local(rt, {}, &{}, __ck, &{}, __cv, &{}); }}",
+                        dest_addr, map_tydesc, key_tydesc, value_tydesc).unwrap();
+                }
+            }
+
+            // A table is the one shape left, and nothing writes one yet.
             _ => {
                 return Err(CAotError::Unsupported(format!(
                     "constant of this shape: {:?}", value)));

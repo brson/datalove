@@ -1,0 +1,1 @@
+(true, 7, 99999999999999999999, "held", (1, "in a tuple"), {a = 5, b = "in a struct"}, some 8, none, ok 9, error 10, [1, 2, 3], #{1, 2, 3}, %{1 = "one"}, data 11, error "went wrong", #{4, 5})

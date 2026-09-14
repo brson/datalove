@@ -288,8 +288,8 @@ integer-keyed map to index.
 
 ## Consts, in more detail
 
-The spec says a const holds anything a function can compute. Four things stood
-in the way. Two are fixed; two are sized here rather than done.
+The spec says a const holds anything a function can compute. Five things stood
+in the way. Three are fixed; two are sized here rather than done.
 
 **Fixed: a type could not be reconstructed from the descriptor it came with.**
 A const is evaluated by running it, and what comes out is read back into
@@ -320,20 +320,32 @@ which is a weaker reason than it was: each carries a payload chosen by datalit
 rather than by worldgen, and that payload is sometimes a tensor. `error :
 [|int, 1|] / ...` is a const the generator would otherwise write.
 
-**Left: a collection nested inside a const.** `(u32, [u32])`, `?[u32]`, a list
-of lists. The interpreter takes them; the cranelift AOT does not.
-`write_const_value_to_addr` writes a nested const value to an address and has
-no type to hand a collection builder, which needs the element descriptor --
-the three builders take theirs from the destination `ValueId`, and a nested
-value has no id. The fix is to thread the `IrType` through that writer, which
-its eight call sites each know, and give the three builders an address-taking
-form. Contained, one backend, no IR surface. The enum case has the same shape
-and the same answer.
+**Fixed: the C AOT wrote five shapes of constant and refused the rest.** It
+wrote the scalars, `int`, `string`, a list and an atom, and refused a tuple, a
+struct, an option, a result, a `data`, an `error`, a set and a map -- so a
+program holding any of those as a const compiled under the interpreter and
+both other backends and not under that one. Its writer already took the type
+it was writing, which is what the missing shapes needed, so each is the same
+walk the other backends do. `140_const_shapes` runs sixteen shapes through all
+four.
 
-The C AOT is further behind than either: it writes scalars, `int`, `string`,
-lists and atoms, and refuses a `data`, an `error`, a result, an option, a
-tuple, a struct, a set and a map. That is why `063_const_reads_back` sits with
-the interpreter tests rather than in `std_tests`, which runs all four.
+That also settled where `ir_type_of_const_value` lives. Three backends had a
+copy each, character for character; it is in the IR crate now, beside the
+`ConstValue` it reads.
+
+**Left: a collection nested inside a const, under the cranelift AOT.**
+`(u32, [u32])`, `?[u32]`, a list of lists. The interpreter takes them, and so
+does the C AOT now. `write_const_value_to_addr` writes a nested const value to
+an address and has no type to hand a collection builder, which needs the
+element descriptor -- the three builders take theirs from the destination
+`ValueId`, and a nested value has no id.
+
+The fix is the one the C backend already has: give that writer the `IrType` it
+is writing and let the builders take an address. What makes it the larger of
+the two is that it has about twenty call sites, each of which has to derive the
+type from its own context. Inferring it from the value instead is not sound --
+an empty list says nothing about its elements, and a `none` says `?()`. One
+backend, no IR surface. The enum case has the same shape and the same answer.
 
 ## What this still does not tell us
 
