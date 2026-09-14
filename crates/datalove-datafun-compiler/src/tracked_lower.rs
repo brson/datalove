@@ -1112,6 +1112,23 @@ pub fn lower_module_graph_with_evaluator<'db>(
                 }
             }
         }
+
+        // And close the shapes again, over everything now that the second
+        // stratum is in.
+        //
+        // The first pass saw only what was lowered before the consts were
+        // evaluated. A function that names a module const is lowered here
+        // instead, and one of those calling a generic that builds a collection
+        // was left without the descriptor the call has to pass -- the callee
+        // then looked for a shape its frame had never been given and brought
+        // the interpreter down on "a shape built with is one this function
+        // declared".
+        //
+        // Closing again rather than only over the new ones, because a shape
+        // reaches whatever calls into it: a second-stratum function is a caller
+        // the first pass did not know about.
+        close_shapes_over_calls(
+            db_salsa, parsed_graph, func_id_map, &mut lowered_functions, &mut shape_errors);
     }
 
     // Phase 5b: Evaluate consts (skip if skip_const_inlining is enabled).
