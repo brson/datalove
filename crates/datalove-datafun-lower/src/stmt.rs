@@ -1042,12 +1042,18 @@ pub fn lower_match<'db>(
         switch_cases.push((variant_index, arm_blocks[i]));
     }
 
-    // Emit a single switch terminator.
+    // Emit a single switch terminator, remembering where it lands so that its
+    // default can be aimed somewhere else once the arms are known.
+    let switch_block_index = ctx.body.blocks.len();
     ctx.finish_block(Terminator::Switch {
         discriminant: Operand::Value(disc_id),
         cases: switch_cases,
         default: fallthrough,
     });
+
+    // Whether every way out of the match left rather than reaching the end of
+    // it, which decides if there is anything after the match to build.
+    let mut all_arms_terminated = true;
 
     // Emit arm body blocks.
     for (i, case) in match_stmt.cases.iter().enumerate() {
@@ -1091,6 +1097,7 @@ pub fn lower_match<'db>(
 
         // Emit match arm drops and goto merge.
         let arm_terminated = ctx.is_unreachable();
+        all_arms_terminated &= arm_terminated;
         if !arm_terminated {
             ctx.emit_match_arm_drops(stmt_idx, i);
             ctx.finish_block(Terminator::Goto { target: merge_block, args: Vec::new() });
@@ -1111,14 +1118,36 @@ pub fn lower_match<'db>(
         }
 
         let default_terminated = ctx.is_unreachable();
+        all_arms_terminated &= default_terminated;
         if !default_terminated {
             ctx.emit_match_arm_drops(stmt_idx, num_cases);
             ctx.finish_block(Terminator::Goto { target: merge_block, args: Vec::new() });
         }
     }
 
-    // Start merge block.
-    ctx.start_block(merge_block);
+    // Start the merge block. If every arm left, nothing reaches it, the same
+    // way an `if` whose branches both return reaches nothing after it -- and
+    // then it is never built, so nothing may be left pointing at it.
+    //
+    // Without a `case default` the switch's own default points there, for a
+    // discriminant none of its cases name. The match covers every variant,
+    // which the typechecker sees to, so that edge is dead; it is aimed at an
+    // arm instead. Left alone it named a block that did not exist, which
+    // renumbering turned into the entry block, and cranelift refused to verify
+    // a function that branched to its own entry.
+    if all_arms_terminated {
+        if !has_default {
+            if let Some(&first_arm) = arm_blocks.first() {
+                let switch = &mut ctx.body.blocks[switch_block_index].terminator;
+                if let Terminator::Switch { default, .. } = switch {
+                    *default = first_arm;
+                }
+            }
+        }
+        ctx.start_unreachable_block(merge_block);
+    } else {
+        ctx.start_block(merge_block);
+    }
     Ok(())
 }
 

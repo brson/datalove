@@ -1,0 +1,89 @@
+// A match with no `case default` whose every arm returns.
+//
+// The switch sends a discriminant none of its cases name somewhere, and with
+// no default arm that was the block after the match. A match every arm of
+// which returns has nothing after it, so that block was never built, and the
+// switch named one that did not exist -- which renumbering turned into the
+// entry block, giving a function that branched to its own entry. The
+// interpreter followed the cases and never looked; cranelift's verifier
+// refused the function outright, so this is a backend test rather than a
+// script one.
+//
+// The edge is dead either way, the typechecker having seen that the match
+// covers every variant, so it goes to an arm instead.
+
+type Side: enum { atom Left, atom Right, term Other u8 }
+
+fun every_arm(s: Side): u32
+  match s
+  case atom Left
+    ret 1
+  case atom Right
+    ret 2
+  case term Other n
+    ret 3
+  end match
+end fun
+
+// A payload on the heap, so the arm that takes it has something to let go of
+// and a wrong arm would be visible as a leak rather than a wrong number.
+type Held: enum { atom Nothing, term Text string }
+
+fun length_of(h: Held): index
+  match h
+  case atom Nothing
+    ret : index / 0
+  case term Text text
+    ret : index / 1
+  end match
+end fun
+
+// One inside another, where the inner match is the whole of an arm.
+fun nested(a: Side, b: Side): u32
+  match a
+  case atom Left
+    match b
+    case atom Left
+      ret 10
+    case atom Right
+      ret 20
+    case term Other n
+      ret 30
+    end match
+  case atom Right
+    ret 40
+  case term Other n
+    ret 50
+  end match
+end fun
+
+// The shapes that already worked, so that fixing the one above does not quietly
+// change them: a default arm, and an arm that falls out of the match instead of
+// returning.
+fun with_default(s: Side): u32
+  match s
+  case atom Left
+    ret 1
+  case default
+    ret 2
+  end match
+end fun
+
+fun falls_through(s: Side): u32
+  var r: u32 = 0
+  match s
+  case atom Left
+    ret 1
+  case atom Right
+    set r = 2
+  case term Other n
+    set r = 3
+  end match
+  ret r
+end fun
+
+debuglog (every_arm(atom Left), every_arm(atom Right), every_arm(term Other : u8 / 9))
+debuglog (length_of(atom Nothing), length_of(term Text "held"))
+debuglog (nested(atom Left, atom Right), nested(atom Right, atom Left))
+debuglog (with_default(atom Left), with_default(term Other : u8 / 1))
+debuglog (falls_through(atom Left), falls_through(atom Right))
