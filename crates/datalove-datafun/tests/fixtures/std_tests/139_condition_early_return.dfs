@@ -1,0 +1,57 @@
+// Leaving the function from inside a condition.
+//
+// A `?`, a `!`, or a checked overflow early-returns from wherever it is
+// written, and a condition is one of the places it can be written. The
+// function has to let go of what it still owns on the way out.
+//
+// The drops for that are worked out per statement. An `if` had its condition's
+// moves analysed but nothing recorded for a way out of it, and a `loop` did not
+// look at its condition at all -- not for moves and not for leaving. So a
+// condition that went under took everything live with it.
+//
+// A loop's condition is the more surprising of the two, being read again every
+// round: what is live at it is what was live before the loop.
+
+// `99 -? 156` goes under, so the condition leaves through a `none`.
+fun from_a_loop_condition(): ?u8
+  let held: string = "alive"
+  var flag: bool = true
+  loop while flag xor : u32 / 1 != (: u32 / 99) -? (: u32 / 156)
+    break
+  end loop
+  ret some : u8 / 1
+end fun
+
+fun from_an_if_condition(): ?u8
+  let held: string = "alive"
+  if : u32 / 1 != (: u32 / 99) -? (: u32 / 156)
+    ret some : u8 / 2
+  else
+    ret none
+  end if
+end fun
+
+// More than one live, and one of them a collection.
+fun two_live(): ?u8
+  let first: string = "one"
+  let second: [u32] = [: u32 / 1, : u32 / 2]
+  var flag: bool = true
+  loop while flag and : u32 / 1 != (: u32 / 3) -? (: u32 / 9)
+    break
+  end loop
+  ret some : u8 / 3
+end fun
+
+// A condition that does not go under, so the loop runs and the function
+// answers from the end of it.
+fun does_not_leave(): ?u8
+  let held: string = "alive"
+  var rounds: u8 = : u8 / 0
+  loop while rounds .< (: u8 / 2) +? (: u8 / 0)
+    set rounds = rounds +? : u8 / 1
+  end loop
+  ret some rounds
+end fun
+
+let output = (from_a_loop_condition(), from_an_if_condition(), two_live(),
+              does_not_leave())

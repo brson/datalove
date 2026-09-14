@@ -1535,7 +1535,18 @@ fn analyze_if<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmt: &StmtIf<'db>, stmt_idx:
     // Analyze condition. For regular bool conditions, it's just read.
     // For Option/Result conditions with bindings, it's consumed by the destructure.
     let has_binding = stmt.then_binding.is_some();
+    let condition_may_leave = ctx.expr_may_early_return(stmt.condition);
     ctx.analyze_expr_moves(stmt.condition, has_binding);
+
+    // A condition can leave the function before either branch is reached -- a
+    // `?` in it, or a checked overflow -- and what the function still owns has
+    // to go with it.
+    if condition_may_leave {
+        let drops = ctx.live_bindings_for_return();
+        if !drops.is_empty() {
+            ctx.schedule.before_try_return.insert(stmt_idx, drops);
+        }
+    }
 
     // Save state before branches.
     let state_before = ctx.scope_stack.last()
@@ -1776,6 +1787,23 @@ fn analyze_match<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmt: &StmtMatch<'db>, stm
 }
 
 fn analyze_loop<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmt: &StmtLoop<'db>, stmt_idx: usize) {
+    // The condition, which was not looked at here at all.
+    //
+    // It is read rather than consumed, like an `if`'s. And it can leave the
+    // function before the body is reached -- `loop while a -? b .< c` leaves
+    // where the subtraction goes under -- so what the function still owns has
+    // to go with it. Nothing was dropped on that way out.
+    if let Some(condition) = stmt.condition {
+        let condition_may_leave = ctx.expr_may_early_return(condition);
+        ctx.analyze_expr_moves(condition, false);
+        if condition_may_leave {
+            let drops = ctx.live_bindings_for_return();
+            if !drops.is_empty() {
+                ctx.schedule.before_try_return.insert(stmt_idx, drops);
+            }
+        }
+    }
+
     // Capture outer-scope non-copy bindings that are Live before entering the loop.
     // If any of these become Moved during loop body analysis, that's an error
     // because the loop could iterate multiple times.
