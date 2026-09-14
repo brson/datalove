@@ -1970,8 +1970,19 @@ fn lower_field_proj<'db>(
     proj: ast::ExprFieldProj<'db>,
 ) -> Result<ValueId, LowerError> {
     // Lower the base expression.
+    let temps_mark = ctx.expr_temps_mark();
     let base_id = lower_expression(ctx, proj.base)?;
     let base_type = ctx.expr_type(proj.base);
+
+    // A base that is not a place is a value made here, and reading one field
+    // out of it leaves the rest to be let go of: `f().0` takes the number out
+    // of a tuple the call made and drops the string beside it. A place base
+    // does not reach this -- `v.a` parses as a place with a field step, which
+    // the place walker lowers -- but the guard says so rather than relying on
+    // it, because dropping something a binding owns would be worse.
+    if !matches!(proj.base.expr(ctx.db), ExprFunKind::Place(_)) {
+        ctx.record_expr_temp(base_id, base_type.clone());
+    }
 
     // Get the field index.
     let field_index = resolve_field_index(&proj.field, &base_type, ctx.db)?;
@@ -1981,6 +1992,7 @@ fn lower_field_proj<'db>(
     let dest = ctx.fresh_value(result_type);
 
     ctx.emit_get_field(dest, Operand::Value(base_id), field_index);
+    ctx.emit_expr_temp_drops_since(temps_mark);
     Ok(dest)
 }
 

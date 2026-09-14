@@ -1,0 +1,56 @@
+// Reading one field or element out of something nobody keeps.
+//
+// `v.a` and `v[i]?` are a place and a step from it, and the place walker
+// lowers those. `f().0` and `f()[i]?` are not: the base is a value the call
+// made, which this expression is the only owner of, and reading one field out
+// of it leaves the rest.
+//
+// The projection did not let go of that base. A tuple of a `u32` and a
+// `string`, projected at the number, leaked the string -- and only the string,
+// so the answer was right and nothing said otherwise. Only a copy field can be
+// projected at all, so the field itself is never what leaks; it is always the
+// siblings.
+//
+// Indexing off a value was already right, because it borrows its base through
+// the path that records a temporary.
+
+fun a_pair(): (u32, string)
+  ret (: u32 / 1, : string / "beside it")
+end fun
+
+fun a_struct(): {a: u32, b: [u32]}
+  ret {a = : u32 / 5, b = : [u32] / [: u32 / 1, : u32 / 2]}
+end fun
+
+fun a_list(): [u32]
+  ret [: u32 / 7, : u32 / 8]
+end fun
+
+fun a_map(): %{u32 = u32}
+  ret %{: u32 / 1 = : u32 / 9}
+end fun
+
+// A field off a value, by index and by name.
+let by_index = a_pair().0
+let by_name = a_struct().a
+
+// An element off a value, which early-returns where there is none.
+fun element_of_a_list(): ?u32
+  ret some a_list()[: index / 1]?
+end fun
+
+fun element_of_a_map(): ?u32
+  ret some a_map()[: u32 / 1]?
+end fun
+
+fun past_the_end(): ?u32
+  ret some a_list()[: index / 99]?
+end fun
+
+// The place forms, which were always right and are here so the two stay told
+// apart.
+let held: (u32, string) = (: u32 / 3, : string / "kept")
+let from_a_place = held.0
+
+let output = (by_index, by_name, element_of_a_list(), element_of_a_map(),
+              past_the_end(), from_a_place, held)
