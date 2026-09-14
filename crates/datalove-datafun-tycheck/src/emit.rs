@@ -285,6 +285,21 @@ collection written over a type parameter asks that parameter for an ordering. Sa
                     .emit_type();
             }
         }
+        PendingDiagnostic::NativeFunOutsideRider { local_index, module_id: _, name } => {
+            if let Some(ts) = spans.lookup_fun(db, *local_index) {
+                let msg = format!(
+                    "`{}` is a native function declared where there is no rider to implement it",
+                    name.as_str(db),
+                );
+                bct::diagnostic::DiagnosticBuilder::error(db, &msg)
+                    .code("F062")
+                    .primary_label(ts, "nothing supplies a body for this")
+                    .note("a `native fun` names a Rust function, and the only place one is supplied \
+is a package's rider interface. Declare it in the package's `rider.dli` and reach it from a module \
+with `require rider <name>` and `import <name>.<function>`; a script has no rider of its own.")
+                    .emit_type();
+            }
+        }
         PendingDiagnostic::CannotSynthesize { expr_key, module_id: _, message } => {
             if let Some(ts) = spans.lookup_expr(db, *expr_key) {
                 bct::diagnostic::DiagnosticBuilder::error(db, message.as_str(db))
@@ -573,6 +588,14 @@ fn format_single_diagnostic<'db>(
             Some(format!(
                 "{}: error[F061]: `{}` has not said it can be ordered, and {} puts it in a set or a map",
                 loc, param.as_str(db), position.as_str(db),
+            ))
+        }
+        PendingDiagnostic::NativeFunOutsideRider { local_index, module_id: _, name } => {
+            let ts = spans.lookup_fun(db, *local_index)?;
+            let loc = format_location(db, &ts);
+            Some(format!(
+                "{}: error[F062]: `{}` is a native function declared where there is no rider to implement it",
+                loc, name.as_str(db),
             ))
         }
         PendingDiagnostic::CannotSynthesize { expr_key, module_id: _, message } => {

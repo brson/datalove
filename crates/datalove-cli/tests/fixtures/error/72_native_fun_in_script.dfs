@@ -1,0 +1,9 @@
+// F062 a native function declared where no rider can implement it.
+//
+// A `native fun` names a Rust function, and the only thing that supplies one
+// is a package's rider interface. A script has no rider, so the declaration
+// resolved to nothing and the call went unresolved -- which used to reach
+// lowering and panic there rather than being reported here.
+native fun string_len(ref self: string): index
+
+let output = string_len(ref "hello")

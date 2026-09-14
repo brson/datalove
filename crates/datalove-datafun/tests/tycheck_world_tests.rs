@@ -198,6 +198,12 @@ fn error_to_json(error: &datalove_datafun_tycheck::TypeError) -> rmx::serde_json
                 "position": position
             })
         }
+        TypeError::NativeFunOutsideRider { name, fun_local_index: _ } => {
+            json!({
+                "kind": "NativeFunOutsideRider",
+                "name": name
+            })
+        }
         TypeError::UnresolvedTypeAlias(name) => {
             json!({
                 "kind": "UnresolvedTypeAlias",

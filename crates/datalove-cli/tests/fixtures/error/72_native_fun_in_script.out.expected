@@ -1,0 +1,10 @@
+[31m[F062] Error:[0m `string_len` is a native function declared where there is no rider to implement it
+   [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0mtests/fixtures/error/72_native_fun_in_script.dfs:7:1[38;5;246m][0m
+   [38;5;246m│[0m
+ [38;5;246m7 │[0m [38;5;201mn[0m[38;5;201ma[0m[38;5;201mt[0m[38;5;201mi[0m[38;5;201mv[0m[38;5;201me[0m[38;5;249m [0m[38;5;249mf[0m[38;5;249mu[0m[38;5;249mn[0m[38;5;249m [0m[38;5;249ms[0m[38;5;249mt[0m[38;5;249mr[0m[38;5;249mi[0m[38;5;249mn[0m[38;5;249mg[0m[38;5;249m_[0m[38;5;249ml[0m[38;5;249me[0m[38;5;249mn[0m[38;5;249m([0m[38;5;249mr[0m[38;5;249me[0m[38;5;249mf[0m[38;5;249m [0m[38;5;249ms[0m[38;5;249me[0m[38;5;249ml[0m[38;5;249mf[0m[38;5;249m:[0m[38;5;249m [0m[38;5;249ms[0m[38;5;249mt[0m[38;5;249mr[0m[38;5;249mi[0m[38;5;249mn[0m[38;5;249mg[0m[38;5;249m)[0m[38;5;249m:[0m[38;5;249m [0m[38;5;249mi[0m[38;5;249mn[0m[38;5;249md[0m[38;5;249me[0m[38;5;249mx[0m
+ [38;5;240m  │[0m [38;5;201m─[0m[38;5;201m─[0m[38;5;201m─[0m[38;5;201m┬[0m[38;5;201m─[0m[38;5;201m─[0m  
+ [38;5;240m  │[0m    [38;5;201m╰[0m[38;5;201m─[0m[38;5;201m─[0m[38;5;201m─[0m[38;5;201m─[0m nothing supplies a body for this
+ [38;5;240m  │[0m 
+ [38;5;240m  │[0m [38;5;115mNote[0m: a `native fun` names a Rust function, and the only place one is supplied is a package's rider interface. Declare it in the package's `rider.dli` and reach it from a module with `require rider <name>` and `import <name>.<function>`; a script has no rider of its own.
+[38;5;246m───╯[0m
+Error: Type error

@@ -428,9 +428,14 @@ pub fn check_statement<'db>(
             // Nothing to do here.
         }
 
-        Statement::NativeFun(_) => {
-            // Native function signatures are collected in name resolution.
-            // Nothing to typecheck — no body.
+        Statement::NativeFun(stmt) => {
+            // A native's signature is collected in name resolution, and it has
+            // no body to check. What it does need is something to implement it,
+            // and the only thing that does is a package's rider interface. This
+            // walk runs over scripts and modules and not over rider interfaces,
+            // so a native reaching here has no implementation waiting for it
+            // and every call to it would go unresolved.
+            ctx.report_native_fun_outside_rider(stmt.local_index, stmt.name);
         }
 
         Statement::Const(stmt) => {

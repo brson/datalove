@@ -174,6 +174,23 @@ impl<'db> TypeContext<'db> {
         self.errors.push(error);
     }
 
+    /// Report a `native fun` declared where nothing can implement it.
+    pub fn report_native_fun_outside_rider(
+        &mut self,
+        local_index: u32,
+        name: InternedText<'db>,
+    ) {
+        self.pending_diagnostics.push(PendingDiagnostic::NativeFunOutsideRider {
+            local_index,
+            module_id: self.current_module_id,
+            name,
+        });
+        self.add_error(TypeError::NativeFunOutsideRider {
+            name: name.as_str(self.db).to_string(),
+            fun_local_index: local_index,
+        });
+    }
+
     /// Run `attempt`, discarding anything it reported if it does not succeed.
     ///
     /// For speculative checks that fall back to another way of typing the same

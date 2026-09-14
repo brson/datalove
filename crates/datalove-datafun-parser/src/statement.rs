@@ -1047,6 +1047,10 @@ impl<'db> Parser<'db> {
     }
 
     fn parse_native_fun(&mut self) -> ast::Statement<'db> {
+        // Recorded in the same table a `fun` uses, so a diagnostic about the
+        // declaration has somewhere to point.
+        let native_span = self.peek_text_span();
+        let local_index = self.record_fun_span(native_span);
         self.eat_word("native");
 
         if self.peek_word() != Some("fun") {
@@ -1114,6 +1118,7 @@ impl<'db> Parser<'db> {
             type_bounds,
             params,
             return_type,
+            local_index,
         })
     }
 

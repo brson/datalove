@@ -450,6 +450,13 @@ pub enum TypeError {
     TypeParamNotErasable { param: String, position: String, fun_local_index: u32 },
     /// F061: A set or map was written over a type parameter with no order.
     CollectionKeyNotOrdered { param: String, position: String, fun_local_index: u32 },
+    /// F062: A `native fun` was written somewhere that has no rider.
+    ///
+    /// The declaration names a Rust function, and the only thing that supplies
+    /// one is a package's rider interface. A script or a module has no rider of
+    /// its own, so a native declared there resolves to nothing and every call
+    /// to it goes unresolved.
+    NativeFunOutsideRider { name: String, fun_local_index: u32 },
     /// Duplicate type alias definition.
     DuplicateTypeAlias(String),
     /// Two imports bound the same name.

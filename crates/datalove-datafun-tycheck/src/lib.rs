@@ -117,6 +117,12 @@ pub enum PendingDiagnostic<'db> {
         param: InternedText<'db>,
         position: InternedText<'db>,
     },
+    /// F062: A `native fun` was written somewhere that has no rider.
+    NativeFunOutsideRider {
+        local_index: u32,
+        module_id: Option<ModuleId<'db>>,
+        name: InternedText<'db>,
+    },
     /// F011: Cannot synthesize type.
     CannotSynthesize {
         expr_key: ExprKey<'db>,

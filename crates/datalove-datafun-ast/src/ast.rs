@@ -451,6 +451,9 @@ pub struct StmtNativeFun<'db> {
     pub type_bounds: Vec<Option<TypeBound>>,
     pub params: Vec<FunParam<'db>>,
     pub return_type: Option<datalit::ast::TypeHint<'db>>,
+    /// Index into the same span table a `fun` uses, so a diagnostic about
+    /// this declaration can point at it.
+    pub local_index: u32,
 }
 
 /// Expression statement for void function calls.
