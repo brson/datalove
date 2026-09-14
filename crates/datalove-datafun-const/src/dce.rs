@@ -91,6 +91,7 @@ pub fn instruction_dest(instr: &Instruction) -> Option<ValueId> {
         Instruction::ErrorFrom { dest, .. } => Some(*dest),
         Instruction::DataFrom { dest, .. } => Some(*dest),
         Instruction::Erase { dest, .. } => Some(*dest),
+        Instruction::EraseTracked { dest, .. } => Some(*dest),
         Instruction::Reify { dest, .. } => Some(*dest),
 
         // Collection construction
@@ -469,6 +470,7 @@ fn collect_instruction_operands(instr: &Instruction, used: &mut HashSet<ValueId>
         Instruction::ErrorFrom { inner, .. }
         | Instruction::DataFrom { inner, .. } => add_operand_value(inner, used),
         Instruction::Erase { src, .. }
+        | Instruction::EraseTracked { src, .. }
         | Instruction::Reify { src, .. } => add_operand_value(src, used),
 
         // Slot load operations (no operand, just slot reference).

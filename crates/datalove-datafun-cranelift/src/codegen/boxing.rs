@@ -132,6 +132,34 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         src: &Operand,
         erasing: bool,
     ) -> Result<(), CraneliftError> {
+        self.compile_erasure_inner(builder, dest, src, erasing, false)
+    }
+
+    /// Compile an EraseTracked instruction.
+    ///
+    /// The source is the destination of an erased `out` parameter and may never
+    /// have been written, in which case there is nothing to move across and
+    /// reading it would read the frame's own poison. Its tracking byte says
+    /// which, so the erase happens under a branch and the other way zeroes the
+    /// destination: an empty `data`, which the call destroys as a no-op and the
+    /// callee overwrites.
+    pub(super) fn compile_erasure_tracked(
+        &mut self,
+        builder: &mut FunctionBuilder,
+        dest: ValueId,
+        src: &Operand,
+    ) -> Result<(), CraneliftError> {
+        self.compile_erasure_inner(builder, dest, src, true, true)
+    }
+
+    fn compile_erasure_inner(
+        &mut self,
+        builder: &mut FunctionBuilder,
+        dest: ValueId,
+        src: &Operand,
+        erasing: bool,
+        tracked: bool,
+    ) -> Result<(), CraneliftError> {
         let runtime = self.runtime.as_ref()
             .ok_or_else(|| CraneliftError::Codegen("erasure requires runtime imports".into()))?;
         let func_id = if erasing { runtime.erase } else { runtime.reify };
@@ -161,11 +189,63 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         let dest_offset = self.layout.value_offset(dest.0);
         let dest_ptr = builder.ins().stack_addr(PTR_TYPE, frame_slot, dest_offset as i32);
 
+        // Whether the source is a place this frame tracks, which is what says
+        // it may be holding nothing.
+        let guard = if tracked {
+            match src {
+                Operand::Param(param) => self.param_tracking_byte_offset(*param),
+                other => self.tracking_byte_offset(other),
+            }
+        } else {
+            None
+        };
+
         let func_ref = self.module.declare_func_in_func(func_id, builder.func);
-        builder.ins().call(
-            func_ref,
-            &[rt_handle, src_ptr, src_tydesc_addr, dest_ptr, dest_tydesc_addr],
-        );
+        match guard {
+            None => {
+                builder.ins().call(
+                    func_ref,
+                    &[rt_handle, src_ptr, src_tydesc_addr, dest_ptr, dest_tydesc_addr],
+                );
+            }
+            Some(track_offset) => {
+                use crate::layout::tracking;
+                use cranelift_codegen::ir::types as cl_types;
+
+                let frame = self.frame_slot.ok_or_else(|| {
+                    CraneliftError::Codegen("tracked erasure requires frame slot".into())
+                })?;
+                let track_addr = builder.ins().stack_addr(PTR_TYPE, frame, track_offset as i32);
+                let track_val = builder.ins().load(cl_types::I8, MemFlagsData::new(), track_addr, 0);
+                let live_const = builder.ins().iconst(cl_types::I8, tracking::LIVE as i64);
+                let is_live = builder.ins().icmp(
+                    cranelift_codegen::ir::condcodes::IntCC::Equal, track_val, live_const);
+
+                let erase_block = builder.create_block();
+                let empty_block = builder.create_block();
+                let merge_block = builder.create_block();
+                builder.ins().brif(is_live, erase_block, &[], empty_block, &[]);
+
+                builder.switch_to_block(erase_block);
+                builder.seal_block(erase_block);
+                builder.ins().call(
+                    func_ref,
+                    &[rt_handle, src_ptr, src_tydesc_addr, dest_ptr, dest_tydesc_addr],
+                );
+                builder.ins().jump(merge_block, &[]);
+
+                builder.switch_to_block(empty_block);
+                builder.seal_block(empty_block);
+                let dest_size = crate::types::ir_type_to_cranelift(&dest_ty).layout().size;
+                let zero = builder.ins().iconst(cl_types::I8, 0);
+                let size = builder.ins().iconst(PTR_TYPE, dest_size as i64);
+                builder.call_memset(self.isa.frontend_config(), dest_ptr, zero, size);
+                builder.ins().jump(merge_block, &[]);
+
+                builder.switch_to_block(merge_block);
+                builder.seal_block(merge_block);
+            }
+        }
 
         match crate::types::ir_type_to_cranelift(&dest_ty) {
             crate::types::CraneliftRepr::Scalar(cl_ty) => {

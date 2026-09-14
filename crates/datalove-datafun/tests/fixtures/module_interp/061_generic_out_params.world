@@ -9,7 +9,10 @@ module local/test/main
 //
 // What was already at the out parameter is erased into the value the callee is
 // given, so the call destroys it exactly once, the way it does for any out
-// parameter.
+// parameter. `erase.tracked` is that erase: a destination that has never been
+// written has nothing to hand over, and reading it would read the frame's own
+// poison, so it asks the tracking byte first. A destination reached through a
+// reference -- the tuple fields below -- has no byte here and is always read.
 
 fun copy_out<T>(src: T, out dst: T): bool
   set dst = src

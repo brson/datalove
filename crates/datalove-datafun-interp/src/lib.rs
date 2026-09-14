@@ -1029,6 +1029,33 @@ impl IrInterpreter {
                     Self::mark_source_dropped_local(src, frame);
                 }
             }
+            Instruction::EraseTracked { dest, src } => {
+                // The destination of an erased out parameter, which may never
+                // have been written. There is nothing to carry across then, so
+                // the callee is handed an empty `data`: two zero words, which
+                // destroys as a no-op and which the call overwrites.
+                let live = match src {
+                    Operand::Slot(id) => frame.is_slot_initialized(*id),
+                    Operand::Param(id) => frame.is_param_initialized(*id),
+                    Operand::ExternalSlot { unit, slot } => {
+                        frames.is_external_slot_initialized(*unit, *slot)
+                    }
+                    Operand::Value(_) | Operand::ValueRef(_)
+                    | Operand::ExternalValue { .. } => true,
+                };
+                let dest_slot = frame.value_dest(*dest);
+                if live {
+                    let src_val = self.read_operand(src, frame, frames);
+                    self.execute_erase(&src_val, dest_slot);
+                } else {
+                    let size = unsafe { rtdt::TyDescRef::from_ptr(dest_slot.tydesc) }.size();
+                    unsafe { std::ptr::write_bytes(dest_slot.ptr, 0, size as usize) };
+                }
+                frame.mark_value_live(*dest);
+                if live && !unit_types.is_copy(src) {
+                    Self::mark_source_dropped_local(src, frame);
+                }
+            }
             Instruction::Reify { dest, src } => {
                 let src_val = self.read_operand(src, frame, frames);
                 let dest_slot = frame.value_dest(*dest);

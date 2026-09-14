@@ -607,8 +607,16 @@ pub fn lower_expression<'db>(
                     let erased = ctx.fresh_value(erased_shape);
                     if mode == ParamMode::Out {
                         erased_out_params.push((operand.clone(), erased));
+                        // The destination may be holding nothing: a `var`
+                        // declared without a value is what an out parameter is
+                        // usually given, and there is nothing there to move
+                        // across. Reading it anyway read the frame's own
+                        // poison, which the interpreter refused outright and
+                        // cranelift boxed and then freed.
+                        ctx.emit(Instruction::EraseTracked { dest: erased, src: operand.clone() });
+                    } else {
+                        ctx.emit(Instruction::Erase { dest: erased, src: operand.clone() });
                     }
-                    ctx.emit(Instruction::Erase { dest: erased, src: operand.clone() });
                     operand = Operand::Value(erased);
                 }
                 // Track in-mode args as pending intermediate.

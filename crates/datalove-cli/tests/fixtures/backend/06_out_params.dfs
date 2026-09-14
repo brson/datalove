@@ -39,10 +39,7 @@ var counter: u32 = 0
 forward_out(out counter, 42)
 debuglog counter
 
-// A destination that holds nothing yet. These go through a concrete function:
-// a generic erases its arguments on the way in, and erasing a destination
-// reads it, which for one that has never been written panics in the
-// interpreter before any backend sees it.
+// A destination that holds nothing yet, through a concrete function.
 fun take_out_string(out x: string, src: string)
   set x = src
 end fun
@@ -64,3 +61,24 @@ end fun
 var fresh_forwarded: string
 forward_out_string(out fresh_forwarded, "relayed")
 debuglog fresh_forwarded
+
+// And through a generic, which is the harder half: a generic erases its
+// arguments on the way in, and the destination is erased along with them so
+// that the call destroys what was there. A destination holding nothing has
+// nothing to erase, and reading it anyway read the frame's own poison.
+var generic_fresh: string
+take_out(out generic_fresh, "erased")
+debuglog generic_fresh
+
+var generic_unread: string
+take_out(out generic_unread, "erased and dropped")
+
+var generic_forwarded: string
+forward_out(out generic_forwarded, "erased and relayed")
+debuglog generic_forwarded
+
+// A copy type through the same path, where the erased shape is packed into
+// the wrapper's own words rather than pointed at.
+var generic_narrow: u32
+take_out(out generic_narrow, 7)
+debuglog generic_narrow

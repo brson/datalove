@@ -1325,6 +1325,18 @@ pub enum Instruction {
     /// **Ownership:** Consumes `src`, produces `dest`.
     Erase { dest: ValueId, src: Operand },
 
+    /// Erase a source that may be holding nothing yet.
+    ///
+    /// An erased `out` parameter is given the destination's current value, so
+    /// that the call destroys it once as it does for any out parameter. A
+    /// destination that has never been written has nothing to give, and
+    /// reading it is reading whatever the frame was left with, so `dest` is
+    /// zeroed instead -- an empty `data`, which destroys as a no-op and which
+    /// the callee overwrites.
+    ///
+    /// **Ownership:** Consumes `src` if `src` holds anything, produces `dest`.
+    EraseTracked { dest: ValueId, src: Operand },
+
     /// Move the value back out of a Data, as the type of `dest`.
     ///
     /// The inverse of `DataFrom`. Emitted where the compiler knows what went

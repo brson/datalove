@@ -459,6 +459,9 @@ impl fmt::Display for Instruction {
             Instruction::Erase { dest, src } => {
                 write!(f, "{} = erase {}", dest, src)
             }
+            Instruction::EraseTracked { dest, src } => {
+                write!(f, "{} = erase.tracked {}", dest, src)
+            }
             Instruction::Reify { dest, src } => {
                 write!(f, "{} = reify {}", dest, src)
             }

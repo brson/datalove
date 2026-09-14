@@ -313,10 +313,9 @@ fun bump(mut n: u32): !()
   ret ok ()
 end fun
 
-// `out` is write-only: the callee must write it before returning, and the
-// caller may pass a slot that holds nothing yet. A generic is the exception:
-// it erases its arguments on the way in, and erasing a destination reads it,
-// so an `out` argument to one has to hold something already.
+// `out` is write-only: the callee must write it before returning, on every
+// path out including the end of the body, and the caller may pass a slot that
+// holds nothing yet.
 fun fill(out n: u32)
   set n = 42
 end fun

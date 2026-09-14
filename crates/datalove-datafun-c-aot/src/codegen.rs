@@ -273,6 +273,9 @@ impl<'a> FunctionCodegenContext<'a> {
             Instruction::Erase { dest, src } => {
                 self.emit_erasure(out, *dest, src, true)?;
             }
+            Instruction::EraseTracked { dest, src } => {
+                self.emit_erasure_tracked(out, *dest, src)?;
+            }
             Instruction::Reify { dest, src } => {
                 self.emit_erasure(out, *dest, src, false)?;
             }
@@ -1589,6 +1592,36 @@ impl<'a> FunctionCodegenContext<'a> {
         // copy type: a `u32` erased into two calls is read twice from the same
         // place, and the second read would find the zero the first wrote.
         writeln!(out, "    {}(rt, {}, &{}, {}, &{});", func, src_addr, src_tydesc, dest_addr, dest_tydesc).unwrap();
+        Ok(())
+    }
+
+    /// Emit an erasure of a source that may be holding nothing.
+    ///
+    /// The source is the destination of an erased `out` parameter, and one that
+    /// has never been written holds whatever the C stack left in `__frame`.
+    /// Its tracking byte says which, and with nothing there the destination
+    /// gets two zero words instead: an empty `data`, which the call destroys as
+    /// a no-op and the callee overwrites.
+    fn emit_erasure_tracked(&mut self, out: &mut String, dest: ValueId, src: &Operand) -> Result<(), CAotError> {
+        let guard = match src {
+            Operand::Slot(id) => self.layout.slot_tracking_byte(id.0),
+            Operand::Value(id) | Operand::ValueRef(id) => self.layout.value_tracking_byte(id.0),
+            Operand::Param(id) => self.layout.param_tracking_byte(id.0),
+            Operand::ExternalSlot { .. } | Operand::ExternalValue { .. } => None,
+        };
+        let Some(offset) = guard else {
+            return self.emit_erasure(out, dest, src, true);
+        };
+
+        let dest_addr = self.value_addr(dest);
+        let dest_ty = self.value_type(dest).clone();
+        let dest_size = types::ir_type_to_crepr(&dest_ty).layout().size;
+
+        writeln!(out, "    if (__frame[{}] == TRACK_LIVE) {{", offset).unwrap();
+        self.emit_erasure(out, dest, src, true)?;
+        writeln!(out, "    }} else {{").unwrap();
+        writeln!(out, "    memset({}, 0, {});", dest_addr, dest_size).unwrap();
+        writeln!(out, "    }}").unwrap();
         Ok(())
     }
 

@@ -35,7 +35,7 @@ ModulesAnalysis(
                 store.copy s0, v0
                 v1 = const 42u32
                 v2 = erase v1
-                v3 = erase s0
+                v3 = erase.tracked s0
                 v4 = call @0 m0.u0(v2, v3)
                 v5 = reify v3
                 store.copy s0, v5
@@ -43,7 +43,7 @@ ModulesAnalysis(
                 store.move.tracked s1, v6
                 v7 = const "after"
                 v8 = erase v7
-                v9 = erase s1
+                v9 = erase.tracked s1
                 v10 = call @1 m0.u0(v8, v9)
                 v11 = reify v9
                 store.move.tracked s1, v11
@@ -51,7 +51,7 @@ ModulesAnalysis(
                 store.move.tracked s2, v12
                 v13 = const 99999999999999999999int
                 v14 = erase v13
-                v15 = erase s2
+                v15 = erase.tracked s2
                 v16 = call @2 m0.u0(v14, v15)
                 v17 = reify v15
                 store.move.tracked s2, v17
@@ -59,7 +59,7 @@ ModulesAnalysis(
                 store.move.tracked s3, v18
                 v19 = const "wrapped"
                 v20 = erase v19
-                v21 = erase s3
+                v21 = erase.tracked s3
                 v22 = call @3 m0.u1(v20, v21)
                 v23 = reify v21
                 store.move.tracked s3, v23
@@ -71,8 +71,8 @@ ModulesAnalysis(
                 v27 = erase v26
                 v28 = const "second"
                 v29 = erase v28
-                v30 = erase s4
-                v31 = erase s5
+                v30 = erase.tracked s4
+                v31 = erase.tracked s5
                 v32 = call @4 m0.u2(v27, v29, v30, v31)
                 v33 = reify v30
                 store.copy s4, v33
@@ -85,14 +85,14 @@ ModulesAnalysis(
                 v38 = const 5u32
                 v39 = erase v38
                 v40 = getfieldref s6.0
-                v41 = erase *v40
+                v41 = erase.tracked *v40
                 v42 = call @5 m0.u0(v39, v41)
                 v43 = reify v41
                 refstore.tracked *v40, v43
                 v44 = const "written"
                 v45 = erase v44
                 v46 = getfieldref s6.1
-                v47 = erase *v46
+                v47 = erase.tracked *v46
                 v48 = call @6 m0.u0(v45, v47)
                 v49 = reify v47
                 refstore.tracked *v46, v49

@@ -786,6 +786,10 @@ impl RemapContext {
                 dest: self.remap_value(*dest),
                 src: self.remap_operand(src),
             },
+            Instruction::EraseTracked { dest, src } => Instruction::EraseTracked {
+                dest: self.remap_value(*dest),
+                src: self.remap_operand(src),
+            },
             Instruction::Reify { dest, src } => Instruction::Reify {
                 dest: self.remap_value(*dest),
                 src: self.remap_operand(src),
@@ -1382,6 +1386,10 @@ fn replace_params_in_instruction(
             inner: replace_operand(inner),
         },
         Instruction::Erase { dest, src } => Instruction::Erase {
+            dest: *dest,
+            src: replace_operand(src),
+        },
+        Instruction::EraseTracked { dest, src } => Instruction::EraseTracked {
             dest: *dest,
             src: replace_operand(src),
         },

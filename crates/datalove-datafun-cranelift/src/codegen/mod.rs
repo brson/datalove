@@ -861,6 +861,9 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             Instruction::Erase { dest, src } => {
                 self.compile_erasure(builder, *dest, src, true)?;
             }
+            Instruction::EraseTracked { dest, src } => {
+                self.compile_erasure_tracked(builder, *dest, src)?;
+            }
             Instruction::Reify { dest, src } => {
                 self.compile_erasure(builder, *dest, src, false)?;
             }
