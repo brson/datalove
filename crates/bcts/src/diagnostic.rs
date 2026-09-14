@@ -327,3 +327,59 @@ impl<'db> DiagnosticBuilder<'db> {
         self.diagnostic.to_stored(self.db)
     }
 }
+
+/// Declare the accumulators a language files its diagnostics in.
+///
+/// Which phases a compiler has is its own business - datalove keeps five and
+/// a smaller language may want one - so the set is named by the caller and
+/// the plumbing is written once here. Each entry declares an accumulator and
+/// the method that files a diagnostic into it:
+///
+/// ```ignore
+/// bcts::diagnostics! {
+///     ParseDiagnostic => emit_parse,
+///     TypeDiagnostic => emit_type,
+/// }
+/// ```
+///
+/// The invoking crate needs `salsa` as a dependency, the accumulators being
+/// salsa's.
+#[macro_export]
+macro_rules! diagnostics {
+    ($($accumulator:ident => $emit:ident),* $(,)?) => {
+        $(
+            #[salsa::accumulator]
+            pub struct $accumulator($crate::diagnostic::StoredDiagnostic);
+
+            impl $accumulator {
+                /// The diagnostic this holds, read back against the database.
+                pub fn to_diagnostic<'db>(
+                    &self,
+                    db: &'db dyn salsa::Database,
+                ) -> $crate::diagnostic::Diagnostic<'db> {
+                    self.0.to_diagnostic(db)
+                }
+            }
+        )*
+
+        /// Filing a built diagnostic in one of this language's accumulators.
+        pub trait DiagnosticBuilderExt<'db> {
+            $(
+                #[doc = concat!("File this diagnostic in `", stringify!($accumulator), "`.")]
+                fn $emit(self);
+            )*
+        }
+
+        impl<'db> DiagnosticBuilderExt<'db> for $crate::diagnostic::DiagnosticBuilder<'db> {
+            $(
+                fn $emit(self) {
+                    let db = self.db();
+                    <$accumulator as salsa::Accumulator>::accumulate(
+                        $accumulator(self.build_stored()),
+                        db,
+                    );
+                }
+            )*
+        }
+    };
+}

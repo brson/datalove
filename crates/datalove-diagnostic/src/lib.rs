@@ -1,101 +1,13 @@
 //! Diagnostic system for Datalove compiler.
 //!
-//! Provides Datalove-specific Salsa accumulators for different compilation phases.
+//! Names the accumulators datalove's phases file their complaints in. The
+//! plumbing behind them is [`bct::diagnostics`], since which phases a
+//! compiler has is the only part of this that belongs to a language.
 
-use salsa::Accumulator;
-use bct::diagnostic::{Diagnostic, DiagnosticBuilder, StoredDiagnostic};
-
-/// Salsa accumulator for parse diagnostics.
-#[salsa::accumulator]
-pub struct ParseDiagnostic(StoredDiagnostic);
-
-impl ParseDiagnostic {
-    pub fn to_diagnostic<'db>(&self, db: &'db dyn salsa::Database) -> Diagnostic<'db> {
-        self.0.to_diagnostic(db)
-    }
-}
-
-/// Salsa accumulator for type checking diagnostics.
-#[salsa::accumulator]
-pub struct TypeDiagnostic(StoredDiagnostic);
-
-impl TypeDiagnostic {
-    pub fn to_diagnostic<'db>(&self, db: &'db dyn salsa::Database) -> Diagnostic<'db> {
-        self.0.to_diagnostic(db)
-    }
-}
-
-/// Salsa accumulator for name resolution diagnostics.
-#[salsa::accumulator]
-pub struct ResolutionDiagnostic(StoredDiagnostic);
-
-impl ResolutionDiagnostic {
-    pub fn to_diagnostic<'db>(&self, db: &'db dyn salsa::Database) -> Diagnostic<'db> {
-        self.0.to_diagnostic(db)
-    }
-}
-
-/// Salsa accumulator for lint diagnostics.
-#[salsa::accumulator]
-pub struct LintDiagnostic(StoredDiagnostic);
-
-impl LintDiagnostic {
-    pub fn to_diagnostic<'db>(&self, db: &'db dyn salsa::Database) -> Diagnostic<'db> {
-        self.0.to_diagnostic(db)
-    }
-}
-
-/// Salsa accumulator for ownership analysis diagnostics.
-#[salsa::accumulator]
-pub struct OwnershipDiagnostic(StoredDiagnostic);
-
-impl OwnershipDiagnostic {
-    pub fn to_diagnostic<'db>(&self, db: &'db dyn salsa::Database) -> Diagnostic<'db> {
-        self.0.to_diagnostic(db)
-    }
-}
-
-// Extension trait to add emit methods to DiagnosticBuilder for datalove accumulators.
-pub trait DiagnosticBuilderExt<'db> {
-    /// Emit this diagnostic as a parse diagnostic.
-    fn emit_parse(self);
-
-    /// Emit this diagnostic as a type checking diagnostic.
-    fn emit_type(self);
-
-    /// Emit this diagnostic as a resolution diagnostic.
-    fn emit_resolution(self);
-
-    /// Emit this diagnostic as a lint diagnostic.
-    fn emit_lint(self);
-
-    /// Emit this diagnostic as an ownership diagnostic.
-    fn emit_ownership(self);
-}
-
-impl<'db> DiagnosticBuilderExt<'db> for DiagnosticBuilder<'db> {
-    fn emit_parse(self) {
-        let db = self.db();
-        ParseDiagnostic(self.build_stored()).accumulate(db);
-    }
-
-    fn emit_type(self) {
-        let db = self.db();
-        TypeDiagnostic(self.build_stored()).accumulate(db);
-    }
-
-    fn emit_resolution(self) {
-        let db = self.db();
-        ResolutionDiagnostic(self.build_stored()).accumulate(db);
-    }
-
-    fn emit_lint(self) {
-        let db = self.db();
-        LintDiagnostic(self.build_stored()).accumulate(db);
-    }
-
-    fn emit_ownership(self) {
-        let db = self.db();
-        OwnershipDiagnostic(self.build_stored()).accumulate(db);
-    }
+bct::diagnostics! {
+    ParseDiagnostic => emit_parse,
+    TypeDiagnostic => emit_type,
+    ResolutionDiagnostic => emit_resolution,
+    LintDiagnostic => emit_lint,
+    OwnershipDiagnostic => emit_ownership,
 }
