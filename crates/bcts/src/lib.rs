@@ -18,6 +18,7 @@ pub mod package_resolve2;
 pub mod module_graph;
 
 pub mod diagnostic;
+pub mod render;
 pub mod parser_util;
 
 use salsa::Database as Db;

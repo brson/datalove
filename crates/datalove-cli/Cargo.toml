@@ -28,7 +28,6 @@ datalove-datafun-pkg.path = "../datalove-datafun-pkg"
 datalove-worldgen.path = "../datalove-worldgen"
 pulldown-cmark = "0.12"
 rand = "0.8"
-ariadne = "0.4"
 salsa.workspace = true
 
 [[bin]]

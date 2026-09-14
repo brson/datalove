@@ -140,14 +140,6 @@ impl<'db> Parser<'db> {
         self.expr_counter = sub.expr_counter;
     }
 
-    /// Peek at the next token (one ahead of current) for lookahead.
-    pub(super) fn peek_next(&self) -> Option<&TreeToken<'db>> {
-        match &self.source {
-            TokenSource::Vec { tokens, pos } => tokens.get(pos + 1),
-            TokenSource::Iter { buffer, .. } => buffer[1].as_ref(),
-        }
-    }
-
     /// Take the accumulated expression spans.
     pub(super) fn take_expr_spans(&mut self) -> Vec<ast::ParseSpanEntry> {
         std::mem::take(&mut self.expr_spans)

@@ -136,6 +136,8 @@ pub struct Diagnostic<'db> {
     pub message: InternedText<'db>,
     pub labels: Vec<DiagnosticLabel<'db>>,
     pub notes: Vec<InternedText<'db>>,
+    /// What to do about it, as against what a note says about it.
+    pub helps: Vec<InternedText<'db>>,
     pub suggestions: Vec<Suggestion<'db>>,
 }
 
@@ -154,6 +156,7 @@ pub struct StoredDiagnostic {
     pub message: String,
     pub labels: Vec<StoredLabel>,
     pub notes: Vec<String>,
+    pub helps: Vec<String>,
 }
 
 #[derive(Clone, Debug, Hash, PartialEq, Eq)]
@@ -178,6 +181,7 @@ impl<'db> Diagnostic<'db> {
                 style: l.style,
             }).collect(),
             notes: self.notes.iter().map(|n| n.as_str(db).to_string()).collect(),
+            helps: self.helps.iter().map(|h| h.as_str(db).to_string()).collect(),
         }
     }
 }
@@ -196,6 +200,7 @@ impl StoredDiagnostic {
                 style: l.style,
             }).collect(),
             notes: self.notes.iter().map(|n| InternedText::new(db, n.C())).collect(),
+            helps: self.helps.iter().map(|h| InternedText::new(db, h.C())).collect(),
             suggestions: vec![],  // TODO: Handle suggestions in stored form
         }
     }
@@ -225,6 +230,7 @@ impl<'db> DiagnosticBuilder<'db> {
                 message: InternedText::new(db, message.S()),
                 labels: vec![],
                 notes: vec![],
+                helps: vec![],
                 suggestions: vec![],
             },
         }
@@ -240,6 +246,7 @@ impl<'db> DiagnosticBuilder<'db> {
                 message: InternedText::new(db, message.S()),
                 labels: vec![],
                 notes: vec![],
+                helps: vec![],
                 suggestions: vec![],
             },
         }
@@ -298,6 +305,15 @@ impl<'db> DiagnosticBuilder<'db> {
     /// Add a note.
     pub fn note(mut self, note: &str) -> Self {
         self.diagnostic.notes.push(InternedText::new(self.db, note.S()));
+        self
+    }
+
+    /// Add a line saying what to do about it.
+    ///
+    /// A note says something about the diagnostic; a help says what would fix
+    /// it, and is rendered apart from the notes.
+    pub fn help(mut self, help: &str) -> Self {
+        self.diagnostic.helps.push(InternedText::new(self.db, help.S()));
         self
     }
 

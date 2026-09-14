@@ -16,3 +16,4 @@ rmx.workspace = true
 salsa.workspace = true
 serde.workspace = true
 enum-iterator.workspace = true
+ariadne.workspace = true

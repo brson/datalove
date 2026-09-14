@@ -33,6 +33,7 @@ bct.path = "crates/bcts"
 serde.version = "1"
 enum-iterator.version = "2"
 salsa.version = "0.28.2"
+ariadne.version = "0.4"
 
 # Full DWARF for this workspace and its dependencies is the bulk of a target
 # directory. `line-tables-only` keeps the file and line that a backtrace
