@@ -174,12 +174,11 @@ let row: [|u32, 1|] = [| 1 2 3 |]
 
 // A table is `{| name: T, ... |}`: columns, not rows, and stored that way.
 // The literal names its columns first and then gives a row per `;`.
-let readings: {| hour: u32, value: u32 |} = {| hour, value; 1, 10; 2, 20 |}
-let no_readings: {| hour: u32, value: u32 |} = {| hour, value |}
+let readings: {| name: string, hour: u32 |} = {| name, hour; "dawn", 6; "dusk", 18 |}
+let no_readings: {| name: string, hour: u32 |} = {| name, hour |}
 
-// Tables are the least finished of these. A column of a heap type -- a
-// string, a list -- reads back wrong from a datafun script and leaks, so
-// everything here holds fixed-width columns.
+// A table's columns stay in the order they were written, and a column may
+// hold anything a list can.
 
 
 // =========================================================================
@@ -314,10 +313,10 @@ fun bump(mut n: u32): !()
   ret ok ()
 end fun
 
-// `out` is write-only: the callee must write it before returning. The caller
-// is meant to be able to pass a slot that holds nothing yet, but the
-// ownership pass does not currently count the call as the write, so the
-// slot below is given a value it does not need.
+// `out` is write-only: the callee must write it before returning, and the
+// caller may pass a slot that holds nothing yet. A slot of a linear type is
+// the exception -- an uninitialized one aborts under the JIT, because the
+// callee's `set` drops what the slot held and there is nothing there.
 fun fill(out n: u32)
   set n = 42
 end fun
@@ -327,7 +326,7 @@ fun len_of_string(ref text: string): index
 end fun
 
 // A call that returns nothing is a statement on its own.
-var to_fill: u32 = 0
+var to_fill: u32
 fill(out to_fill)
 
 var to_bump: u32 = 10
