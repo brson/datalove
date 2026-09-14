@@ -738,8 +738,13 @@ impl<'a, 'db> AnalysisCtx<'a, 'db> {
                                 };
                                 self.errors.push(AnalysisError::UseAfterMove { expr_key, moved_at, name, recovery_hint });
                             }
-                            // Mark the binding as initialized after the call writes to it.
-                            if self.bindings[binding_id.0 as usize].param_mode == Some(ParamMode::Out) {
+                            // The call is the write, so whatever was waiting
+                            // for one has had it. Asking whether the argument
+                            // is itself an `out` parameter only counted the
+                            // case of forwarding one into another; the usual
+                            // argument is an uninitialized `var`, which is
+                            // tracked the same way and was left unwritten.
+                            if self.get_out_param_init(binding_id).is_some() {
                                 self.set_out_param_init(binding_id, OutParamInitState::Initialized);
                             }
                         }

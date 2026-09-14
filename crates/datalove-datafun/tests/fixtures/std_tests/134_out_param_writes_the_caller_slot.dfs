@@ -1,0 +1,41 @@
+// An `out` parameter initializes the slot the caller passed.
+//
+// That is the whole of what `out` is for: the caller has storage with nothing
+// in it yet, and the callee promises to write it before returning. The
+// ownership pass tracked the write only when the argument was itself another
+// `out` parameter being forwarded, which is the rare case. The usual argument
+// is an uninitialized `var`, and for one of those the call was not counted as
+// the write, so reading the slot afterwards was D005 -- leaving `out` working
+// only where a value was already there and it was not needed.
+
+fun fill(out n: u32)
+  set n = 42
+end fun
+
+// Forwarding one `out` into another, which is the case that always worked.
+fun forward(out n: u32)
+  fill(out n)
+end fun
+
+fun in_a_function(): u32
+  var slot: u32
+  fill(out slot)
+  ret slot
+end fun
+
+fun forwarded(): u32
+  var slot: u32
+  forward(out slot)
+  ret slot
+end fun
+
+// Only fixed-width slots here. An uninitialized slot of a linear type passed
+// as `out` aborts under the JIT, because the callee's `set` drops what the
+// slot held and there is nothing there to drop; that is its own bug, and it
+// predates this one.
+
+// At script level as well as inside a function.
+var top_level: u32
+fill(out top_level)
+
+let output = (in_a_function(), forwarded(), top_level)
