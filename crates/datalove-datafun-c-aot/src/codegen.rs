@@ -731,12 +731,17 @@ impl<'a> FunctionCodegenContext<'a> {
             // A `data` and an `error` are built from what they hold, which
             // says its own type: the value goes into a scratch buffer and the
             // runtime packs it, taking it from there.
-            ConstValue::Data(inner) | ConstValue::Error(inner) => {
-                let inner_ty = datalove_datafun_ir::ir_type_of_const_value(inner);
+            ConstValue::Data { payload_type, value: inner }
+            | ConstValue::Error { payload_type, value: inner } => {
+                // The type the value was read back as, rather than one worked
+                // out from the value: an empty collection cannot say what it
+                // holds, and the descriptor a `data` carries has to be one
+                // this unit emitted.
+                let inner_ty = (**payload_type).clone();
                 let inner_tydesc = self.tydesc_name(&inner_ty);
                 let inner_size = types::ir_type_to_crepr(&inner_ty).layout().size.max(1);
                 let pack = match value {
-                    ConstValue::Data(_) => "dtlv_rti_data_from_local",
+                    ConstValue::Data { .. } => "dtlv_rti_data_from_local",
                     _ => "dtlv_rti_error_from_local",
                 };
                 let scratch = self.next_const_scratch();

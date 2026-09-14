@@ -334,7 +334,10 @@ fn extract_const_value(ptr: *const u8, ir_type: &IrType) -> Result<ConstValue, C
                         let inner_tydesc_ptr = error_val.tydesc();
                         if inner_tydesc_ptr.is_null() {
                             // Null error - return Unit as placeholder.
-                            Ok(ConstValue::ResultErr(Box::new(ConstValue::Error(Box::new(ConstValue::Unit)))))
+                            Ok(ConstValue::ResultErr(Box::new(ConstValue::Error {
+                                payload_type: Box::new(IrType::Unit),
+                                value: Box::new(ConstValue::Unit),
+                            })))
                         } else {
                             let inner_tydesc = datalove_rtdt::TyDescRef::from_ptr(inner_tydesc_ptr);
                             let inner_value_ptr = error_val.value_ptr();
@@ -342,7 +345,10 @@ fn extract_const_value(ptr: *const u8, ir_type: &IrType) -> Result<ConstValue, C
                             // Extract the inner error value based on its actual type.
                             let inner_ir_type = ir_type_from_tydesc(inner_tydesc)?;
                             let inner_value = extract_const_value(inner_value_ptr, &inner_ir_type)?;
-                            Ok(ConstValue::ResultErr(Box::new(ConstValue::Error(Box::new(inner_value)))))
+                            Ok(ConstValue::ResultErr(Box::new(ConstValue::Error {
+                                payload_type: Box::new(inner_ir_type),
+                                value: Box::new(inner_value),
+                            })))
                         }
                     }
                     _ => Err(CtfeError::InterpError(format!(
@@ -487,18 +493,27 @@ fn extract_const_value(ptr: *const u8, ir_type: &IrType) -> Result<ConstValue, C
                 let (value_ptr, tydesc) = borrow_packed(ptr)?;
                 let inner_ir_type = ir_type_from_tydesc(tydesc)?;
                 let inner = extract_const_value(value_ptr, &inner_ir_type)?;
-                Ok(ConstValue::Data(Box::new(inner)))
+                Ok(ConstValue::Data {
+                    payload_type: Box::new(inner_ir_type),
+                    value: Box::new(inner),
+                })
             }
             IrType::Error => {
                 let error_val = &*(ptr as *const datalove_rtdt::Error);
                 let tydesc_ptr = error_val.tydesc();
                 if tydesc_ptr.is_null() {
-                    return Ok(ConstValue::Error(Box::new(ConstValue::Unit)));
+                    return Ok(ConstValue::Error {
+                        payload_type: Box::new(IrType::Unit),
+                        value: Box::new(ConstValue::Unit),
+                    });
                 }
                 let tydesc = datalove_rtdt::TyDescRef::from_ptr(tydesc_ptr);
                 let inner_ir_type = ir_type_from_tydesc(tydesc)?;
                 let inner = extract_const_value(error_val.value_ptr(), &inner_ir_type)?;
-                Ok(ConstValue::Error(Box::new(inner)))
+                Ok(ConstValue::Error {
+                    payload_type: Box::new(inner_ir_type),
+                    value: Box::new(inner),
+                })
             }
 
             _ => Err(CtfeError::UnsupportedType(format!("{:?}", ir_type))),

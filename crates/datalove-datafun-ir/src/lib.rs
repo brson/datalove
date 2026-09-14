@@ -880,10 +880,16 @@ pub enum ConstValue {
     ResultOk(Box<ConstValue>),
     /// Result::Err variant (contains error value).
     ResultErr(Box<ConstValue>),
-    /// Dynamic data wrapper.
-    Data(Box<ConstValue>),
-    /// Error value (boxes any value).
-    Error(Box<ConstValue>),
+    /// Dynamic data wrapper, with the type of what it holds.
+    ///
+    /// The type is kept because a `data` carries its own descriptor at run
+    /// time and the value alone cannot always say what that should be: an
+    /// empty map says `%{() = ()}`, which is not a type the program has and
+    /// which a backend has no descriptor for. The same reason a tensor keeps
+    /// its shape.
+    Data { payload_type: Box<IrType>, value: Box<ConstValue> },
+    /// Error value, with the type of what it boxes. See `Data`.
+    Error { payload_type: Box<IrType>, value: Box<ConstValue> },
 
     // Collections.
     /// List with elements.
@@ -960,8 +966,8 @@ pub fn ir_type_of_const_value(value: &ConstValue) -> IrType {
             // Result::Err - cannot infer Ok type from Err; default to Unit.
             IrType::Result(Box::new(IrType::Unit))
         }
-        ConstValue::Data(_) => IrType::Data,
-        ConstValue::Error(_) => IrType::Error,
+        ConstValue::Data { .. } => IrType::Data,
+        ConstValue::Error { .. } => IrType::Error,
         ConstValue::List(elements) => {
             let elem_type = elements.first()
                 .map(ir_type_of_const_value)
@@ -1037,8 +1043,14 @@ impl std::hash::Hash for ConstValue {
             ConstValue::OptionNone => {}
             ConstValue::ResultOk(v) => v.hash(state),
             ConstValue::ResultErr(v) => v.hash(state),
-            ConstValue::Data(v) => v.hash(state),
-            ConstValue::Error(v) => v.hash(state),
+            ConstValue::Data { payload_type, value } => {
+                payload_type.hash(state);
+                value.hash(state);
+            }
+            ConstValue::Error { payload_type, value } => {
+                payload_type.hash(state);
+                value.hash(state);
+            }
             ConstValue::List(elems) => elems.hash(state),
             ConstValue::Set(elems) => elems.hash(state),
             ConstValue::Map(entries) => entries.hash(state),

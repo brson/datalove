@@ -2769,9 +2769,12 @@ impl IrInterpreter {
                     };
                     self.write_const(inner, payload_dest);
                 }
-                ConstValue::Error(inner) => {
+                ConstValue::Error { payload_type, value: inner } => {
                     // Error is a boxed wrapper around any value.
-                    let inner_ir_type = datalove_datafun_ir::ir_type_of_const_value(inner);
+                    // The type the value was read back as, rather than one
+                    // worked out from the value: an empty collection cannot say
+                    // what it holds.
+                    let inner_ir_type = (**payload_type).clone();
                     let inner_tydesc = self.tydesc_table.get_or_create(&inner_ir_type);
                     let inner_size = (*inner_tydesc).size as usize;
                     let inner_align = (*inner_tydesc).align as usize;
@@ -2799,9 +2802,12 @@ impl IrInterpreter {
                     // Deallocate temp buffer.
                     std::alloc::dealloc(inner_buffer, layout);
                 }
-                ConstValue::Data(inner) => {
+                ConstValue::Data { payload_type, value: inner } => {
                     // Data is a boxed wrapper around any value.
-                    let inner_ir_type = datalove_datafun_ir::ir_type_of_const_value(inner);
+                    // The type the value was read back as, rather than one
+                    // worked out from the value: an empty collection cannot say
+                    // what it holds.
+                    let inner_ir_type = (**payload_type).clone();
                     let inner_tydesc = self.tydesc_table.get_or_create(&inner_ir_type);
                     let inner_size = (*inner_tydesc).size as usize;
                     let inner_align = (*inner_tydesc).align as usize;

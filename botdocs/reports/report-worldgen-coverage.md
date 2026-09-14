@@ -289,8 +289,8 @@ integer-keyed map to index.
 ## Consts, in more detail
 
 The spec says a const holds anything a function can compute. Seven things
-stood in the way. Six are fixed; the last is sized here rather than done, and
-is not one of the ones it started as.
+stood in the way, and the last of them was not one of the ones it started as.
+All seven are fixed.
 
 **Fixed: a type could not be reconstructed from the descriptor it came with.**
 A const is evaluated by running it, and what comes out is read back into
@@ -322,18 +322,20 @@ handing that run and the shape to the same call a tensor literal makes.
 element wider than a word, one carrying a string, and a tensor nested in a
 tuple and in an option.
 
-**Left: a `data`, an `error` and a result.** Not for any of the reasons above
--- reading one back works, and so does a tensor. `ConstValue::Data` holds the
-value and not its type, and a `data` carries its own descriptor at run time, so
-a backend writing one has to work the type out from the value. A value cannot
-always say it: an empty map gives `Map(Unit, Unit)`, which is not a type the
-program has and which the cranelift AOT has no descriptor for -- "TyDesc not
-found for inner type Map(Unit, Unit)". A result goes with them, its error side
-being an `error`.
+**Fixed: a `data`, an `error` and a result.** Not for any of the reasons
+above -- reading one back had been working since the second fix. A `data`
+carries its own descriptor at run time and `ConstValue::Data` kept the value
+without it, so a backend writing one worked the type out from the value, and a
+value cannot always say it: an empty map gives `Map(Unit, Unit)`, which is not
+a type the program has and which the cranelift AOT had no descriptor for.
 
-The fix is to keep the payload's type in the `ConstValue` beside the value, the
-way the tensor keeps its shape. That is IR surface again, and four writers,
-but it is the last of them.
+The constant keeps the payload's type beside the value now, the way the tensor
+keeps its shape -- the type it was read back as, which is the type the
+descriptor named. Four writers again, and a result came with them, its error
+side being an `error`. `143_data_const_payload_type`.
+
+So a const holds anything a function can compute, which is what the spec says,
+and worldgen writes every type into one.
 
 ## What this still does not tell us
 

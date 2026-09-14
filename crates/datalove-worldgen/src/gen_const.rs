@@ -24,32 +24,15 @@ use crate::pretty::{pretty_expr, pretty_type_hint};
 
 /// Whether a const may hold this type.
 ///
-/// Everything a const can be evaluated to and written back down as, which is
-/// now everything but three, and for a different reason than before.
+/// Everything. The spec says a const holds anything a function can compute,
+/// and it does now. What used to be refused, and why, is in
+/// `botdocs/reports/report-worldgen-coverage.md`: seven things in the way, the
+/// last of them a `data` that did not keep the type of what it held.
 ///
-/// A `data` and an `error` carry their own descriptor at run time, and a
-/// `ConstValue` does not keep it: `Data(Box<ConstValue>)` holds the value and
-/// not its type. So a backend writing one has to work the type out from the
-/// value, and a value cannot always say it -- an empty map gives
-/// `Map(Unit, Unit)`, which is not a type the program has, and the cranelift
-/// AOT has no descriptor for it: "TyDesc not found for inner type
-/// Map(Unit, Unit)". A result goes with them, its error side being an `error`.
-///
-/// The fix is to keep the payload's type in the `ConstValue`, which is written
-/// down in `botdocs/reports/report-worldgen-coverage.md`. Reading one back is
-/// no longer the problem, and neither is a tensor.
-pub fn a_const_can_hold(ty: &TypeHint<'_>) -> bool {
-    match ty {
-        TypeHint::Data | TypeHint::Error | TypeHint::Result(_) => false,
-        TypeHint::List(t) => a_const_can_hold(&t.element_type),
-        TypeHint::Set(t) => a_const_can_hold(&t.element_type),
-        TypeHint::Map(t) => a_const_can_hold(&t.key_type) && a_const_can_hold(&t.value_type),
-        TypeHint::Option(t) => a_const_can_hold(&t.inner_type),
-        TypeHint::Tensor(t) => a_const_can_hold(&t.element_type),
-        TypeHint::AnonTuple(t) => t.fields.iter().all(a_const_can_hold),
-        TypeHint::AnonStruct(t) => t.fields.iter().all(|f| a_const_can_hold(&f.type_hint)),
-        _ => true,
-    }
+/// Kept as a function rather than deleted because the next thing added to the
+/// language will want asking.
+pub fn a_const_can_hold(_ty: &TypeHint<'_>) -> bool {
+    true
 }
 
 /// A type a const can hold, asked for until one comes back.

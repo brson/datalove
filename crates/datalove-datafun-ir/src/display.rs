@@ -201,8 +201,8 @@ impl fmt::Display for ConstValue {
             ConstValue::OptionNone => write!(f, "none"),
             ConstValue::ResultOk(v) => write!(f, "ok {}", v),
             ConstValue::ResultErr(v) => write!(f, "err {}", v),
-            ConstValue::Data(v) => write!(f, "data {}", v),
-            ConstValue::Error(v) => write!(f, "error {}", v),
+            ConstValue::Data { value, .. } => write!(f, "data {}", value),
+            ConstValue::Error { value, .. } => write!(f, "error {}", value),
             ConstValue::List(elems) => {
                 write!(f, "[")?;
                 for (i, e) in elems.iter().enumerate() {

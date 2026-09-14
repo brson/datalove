@@ -144,13 +144,13 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 // Result Err: write tag=2 and Error payload.
                 return self.compile_result_err_const(builder, dest, inner);
             }
-            ConstValue::Data(inner) => {
+            ConstValue::Data { payload_type, value } => {
                 // Data: box inner value.
-                return self.compile_data_const(builder, dest, inner);
+                return self.compile_data_const(builder, dest, payload_type, value);
             }
-            ConstValue::Error(inner) => {
+            ConstValue::Error { payload_type, value } => {
                 // Error: box inner value.
-                return self.compile_error_const(builder, dest, inner);
+                return self.compile_error_const(builder, dest, payload_type, value);
             }
         };
 
@@ -475,6 +475,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         &mut self,
         builder: &mut FunctionBuilder,
         dest: ValueId,
+        payload_type: &IrType,
         inner: &ConstValue,
     ) -> Result<(), CraneliftError> {
         // Get frame slot and destination address.
@@ -492,8 +493,10 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             CraneliftError::Codegen("Error constant requires runtime imports".into())
         })?;
 
-        // Infer inner type and get TyDesc.
-        let inner_ir_type = datalove_datafun_ir::ir_type_of_const_value(inner);
+        // The type the value was read back as, rather than one worked out
+        // from the value: an empty collection cannot say what it holds, and
+        // the descriptor a `data` carries has to be one this unit emitted.
+        let inner_ir_type = payload_type.clone();
         let inner_tydesc_id = self.tydesc_emitter.get(&inner_ir_type).ok_or_else(|| {
             CraneliftError::Codegen(format!("TyDesc not found for inner type {:?}", inner_ir_type))
         })?;
@@ -535,6 +538,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         &mut self,
         builder: &mut FunctionBuilder,
         dest: ValueId,
+        payload_type: &IrType,
         inner: &ConstValue,
     ) -> Result<(), CraneliftError> {
         // Get frame slot and destination address.
@@ -552,8 +556,10 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             CraneliftError::Codegen("Data constant requires runtime imports".into())
         })?;
 
-        // Infer inner type and get TyDesc.
-        let inner_ir_type = datalove_datafun_ir::ir_type_of_const_value(inner);
+        // The type the value was read back as, rather than one worked out
+        // from the value: an empty collection cannot say what it holds, and
+        // the descriptor a `data` carries has to be one this unit emitted.
+        let inner_ir_type = payload_type.clone();
         let inner_tydesc_id = self.tydesc_emitter.get(&inner_ir_type).ok_or_else(|| {
             CraneliftError::Codegen(format!("TyDesc not found for inner type {:?}", inner_ir_type))
         })?;
@@ -1335,7 +1341,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 self.write_const_value_to_addr(
                     builder, payload_addr, &IrType::Error, inner)?;
             }
-            ConstValue::Error(inner) => {
+            ConstValue::Error { payload_type, value: inner } => {
                 // Error requires runtime call - write inner value then box it.
                 let rt_handle = self.rt_handle_param.ok_or_else(|| {
                     CraneliftError::Codegen("Error constant requires runtime handle".into())
@@ -1345,7 +1351,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 })?;
 
                 // Infer inner type and get TyDesc.
-                let inner_ir_type = datalove_datafun_ir::ir_type_of_const_value(inner);
+                let inner_ir_type = (**payload_type).clone();
                 let inner_tydesc_id = self.tydesc_emitter.get(&inner_ir_type).ok_or_else(|| {
                     CraneliftError::Codegen(format!("TyDesc not found for inner type {:?}", inner_ir_type))
                 })?;
@@ -1373,7 +1379,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 let error_from_ref = self.module.declare_func_in_func(runtime.error_from, builder.func);
                 builder.ins().call(error_from_ref, &[rt_handle, inner_ptr, inner_tydesc_ptr, addr]);
             }
-            ConstValue::Data(inner) => {
+            ConstValue::Data { payload_type, value: inner } => {
                 // Data requires runtime call - write inner value then box it.
                 let rt_handle = self.rt_handle_param.ok_or_else(|| {
                     CraneliftError::Codegen("Data constant requires runtime handle".into())
@@ -1383,7 +1389,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 })?;
 
                 // Infer inner type and get TyDesc.
-                let inner_ir_type = datalove_datafun_ir::ir_type_of_const_value(inner);
+                let inner_ir_type = (**payload_type).clone();
                 let inner_tydesc_id = self.tydesc_emitter.get(&inner_ir_type).ok_or_else(|| {
                     CraneliftError::Codegen(format!("TyDesc not found for inner type {:?}", inner_ir_type))
                 })?;

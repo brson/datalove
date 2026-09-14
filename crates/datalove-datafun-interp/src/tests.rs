@@ -2248,7 +2248,7 @@ fn test_ctfe_struct_with_string_and_debuglog() {
 #[test]
 fn test_const_error() {
     // Test ConstValue::Error - boxes an inner value.
-    let error_const = ConstValue::Error(Box::new(ConstValue::String("test error message".to_string())));
+    let error_const = ConstValue::Error { payload_type: Box::new(IrType::String), value: Box::new(ConstValue::String("test error message".to_string())) };
 
     let unit = make_script_unit(
         vec![
@@ -2291,7 +2291,7 @@ fn test_const_error() {
 #[test]
 fn test_const_data() {
     // Test ConstValue::Data - boxes an inner value.
-    let data_const = ConstValue::Data(Box::new(ConstValue::I32(42)));
+    let data_const = ConstValue::Data { payload_type: Box::new(IrType::I32), value: Box::new(ConstValue::I32(42)) };
 
     let unit = make_script_unit(
         vec![
@@ -2335,7 +2335,7 @@ fn test_const_data() {
 fn test_const_result_err() {
     // Test ConstValue::ResultErr - creates a Result::Err from an Error.
     let result_err_const = ConstValue::ResultErr(Box::new(
-        ConstValue::Error(Box::new(ConstValue::String("error in result".to_string())))
+        ConstValue::Error { payload_type: Box::new(IrType::String), value: Box::new(ConstValue::String("error in result".to_string())) }
     ));
 
     let result_type = IrType::Result(Box::new(IrType::I32));
@@ -2381,7 +2381,7 @@ fn test_const_result_err() {
 #[test]
 fn test_const_data_with_string() {
     // Test ConstValue::Data with a String inside.
-    let data_const = ConstValue::Data(Box::new(ConstValue::String("boxed string".to_string())));
+    let data_const = ConstValue::Data { payload_type: Box::new(IrType::String), value: Box::new(ConstValue::String("boxed string".to_string())) };
 
     let unit = make_script_unit(
         vec![
@@ -2423,7 +2423,7 @@ fn test_const_data_with_string() {
 #[test]
 fn test_const_error_with_i32() {
     // Test ConstValue::Error boxing an i32.
-    let error_const = ConstValue::Error(Box::new(ConstValue::I32(42)));
+    let error_const = ConstValue::Error { payload_type: Box::new(IrType::I32), value: Box::new(ConstValue::I32(42)) };
 
     let unit = make_script_unit(
         vec![
@@ -2465,10 +2465,13 @@ fn test_const_error_with_i32() {
 #[test]
 fn test_const_error_with_tuple() {
     // Test ConstValue::Error boxing a tuple.
-    let error_const = ConstValue::Error(Box::new(ConstValue::Tuple(vec![
+    let error_const = ConstValue::Error { payload_type: Box::new(datalove_datafun_ir::ir_type_of_const_value(&(ConstValue::Tuple(vec![
         ConstValue::I32(1),
         ConstValue::Bool(true),
-    ])));
+    ])))), value: Box::new(ConstValue::Tuple(vec![
+        ConstValue::I32(1),
+        ConstValue::Bool(true),
+    ])) };
 
     let unit = make_script_unit(
         vec![
@@ -2510,10 +2513,13 @@ fn test_const_error_with_tuple() {
 #[test]
 fn test_const_data_with_tuple() {
     // Test ConstValue::Data boxing a tuple.
-    let data_const = ConstValue::Data(Box::new(ConstValue::Tuple(vec![
+    let data_const = ConstValue::Data { payload_type: Box::new(datalove_datafun_ir::ir_type_of_const_value(&(ConstValue::Tuple(vec![
         ConstValue::U32(100),
         ConstValue::U32(200),
-    ])));
+    ])))), value: Box::new(ConstValue::Tuple(vec![
+        ConstValue::U32(100),
+        ConstValue::U32(200),
+    ])) };
 
     let unit = make_script_unit(
         vec![
@@ -2556,7 +2562,7 @@ fn test_const_data_with_tuple() {
 fn test_const_result_err_with_i32() {
     // Test ConstValue::ResultErr with an Error containing i32.
     let result_err_const = ConstValue::ResultErr(Box::new(
-        ConstValue::Error(Box::new(ConstValue::I32(999)))
+        ConstValue::Error { payload_type: Box::new(IrType::I32), value: Box::new(ConstValue::I32(999)) }
     ));
 
     let result_type = IrType::Result(Box::new(IrType::String));
@@ -2601,7 +2607,7 @@ fn test_const_result_err_with_i32() {
 #[test]
 fn test_const_data_with_bool() {
     // Test ConstValue::Data boxing a bool.
-    let data_const = ConstValue::Data(Box::new(ConstValue::Bool(true)));
+    let data_const = ConstValue::Data { payload_type: Box::new(IrType::Bool), value: Box::new(ConstValue::Bool(true)) };
 
     let unit = make_script_unit(
         vec![
@@ -2643,7 +2649,7 @@ fn test_const_data_with_bool() {
 #[test]
 fn test_const_error_with_unit() {
     // Test ConstValue::Error boxing Unit.
-    let error_const = ConstValue::Error(Box::new(ConstValue::Unit));
+    let error_const = ConstValue::Error { payload_type: Box::new(IrType::Unit), value: Box::new(ConstValue::Unit) };
 
     let unit = make_script_unit(
         vec![
