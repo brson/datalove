@@ -102,6 +102,7 @@ pub enum Sigil {
     MinusEquals,
     StarEquals,
     SlashEquals,
+    DotDot,
     DotLess,
     DotGreater,
     LessEquals,
@@ -126,6 +127,7 @@ pub enum Sigil {
     Colon,
     Hash,
     At,
+    Percent,
     ParenOpen,
     ParenClose,
     BraceOpen,
@@ -459,6 +461,7 @@ impl Sigil {
             Sigil::MinusEquals => "-=",
             Sigil::StarEquals => "*=",
             Sigil::SlashEquals => "/=",
+            Sigil::DotDot => "..",
             Sigil::DotLess => ".<",
             Sigil::DotGreater => ".>",
             Sigil::LessEquals => "<=",
@@ -483,6 +486,7 @@ impl Sigil {
             Sigil::Colon => ":",
             Sigil::Hash => "#",
             Sigil::At => "@",
+            Sigil::Percent => "%",
             Sigil::ParenOpen => "(",
             Sigil::ParenClose => ")",
             Sigil::BraceOpen => "{",
@@ -606,6 +610,38 @@ fn test_lex_chunk() {
     assert_eq!(
         dbglex("a#b"),
         "a # b",
+    );
+
+    // A bare `%` is a sigil, and the brace open is still the longer match.
+    assert_eq!(
+        dbglex("50%"),
+        "50 %",
+    );
+    assert_eq!(
+        dbglex("a % b"),
+        "a ws % ws b",
+    );
+    assert_eq!(
+        dbglex("%%"),
+        "% %",
+    );
+
+    // A range is one sigil, and a float's point is still its own.
+    assert_eq!(
+        dbglex("0..8"),
+        "0 .. 8",
+    );
+    assert_eq!(
+        dbglex("0 .. 8"),
+        "0 ws .. ws 8",
+    );
+    assert_eq!(
+        dbglex("1.5"),
+        "1 . 5",
+    );
+    assert_eq!(
+        dbglex("..."),
+        ".. .",
     );
 
     // Sigil-brace opens.

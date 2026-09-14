@@ -34,6 +34,11 @@ Sigils are defined in the `bcts` crate (`lexer.rs`).
 - `#` - Hash
   - Part of `#{` set open sigil
 
+### Percent
+- `%` - Percent
+  - Reserved, not yet used in parser. The `%{` map open is the longer match,
+    so a `%` written against a `{` is still that.
+
 ### Type Constructors / Modifiers
 - `?` - Question
   - Prefix: Option type constructor: `let x: ?u32`
@@ -156,6 +161,10 @@ Reserved, not yet used in parser.
 - `-=` - MinusEquals
 - `*=` - StarEquals
 - `/=` - SlashEquals
+
+### Range
+- `..` - DotDot: Reserved, not yet used in parser. A float's point is a
+  single `.`, so `1.5` is unaffected.
 
 ### Comparison Operators
 - `.<` - DotLess: Less than
