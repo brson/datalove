@@ -825,8 +825,10 @@ impl<'a> FunctionCodegenContext<'a> {
                     let elem_addr = format!("({} + {})", scratch, i as u32 * elem_size);
                     self.emit_const_at(out, &elem_addr, &elem_ty, element)?;
                 }
+                // An extent is a `u32` in the IR and the runtime reads it as
+                // one, whatever width an index happens to be.
                 let extents: Vec<String> = shape.iter().map(|e| e.to_string()).collect();
-                writeln!(out, "    static const index_t {}_shape[] = {{ {} }};",
+                writeln!(out, "    static const uint32_t {}_shape[] = {{ {} }};",
                     scratch, if extents.is_empty() { "0".to_string() } else { extents.join(", ") }).unwrap();
                 writeln!(out, "    dtlv_rti_tensor_init_local(rt, {}, {}, &{}, {}_shape, {}, {}, &{}); }}",
                     scratch, elements.len(), elem_tydesc, scratch, rank, dest_addr, tensor_tydesc).unwrap();
@@ -1986,9 +1988,10 @@ impl<'a> FunctionCodegenContext<'a> {
             }
         }
 
-        // Emit shape array.
+        // Emit shape array. An extent is a `u32` in the IR and the runtime
+        // reads it as one, whatever width an index happens to be.
         let shape_str: Vec<String> = shape.iter().map(|s| s.to_string()).collect();
-        writeln!(out, "    static const index_t __shape[] = {{ {} }};", shape_str.join(", ")).unwrap();
+        writeln!(out, "    static const uint32_t __shape[] = {{ {} }};", shape_str.join(", ")).unwrap();
 
         writeln!(out, "    dtlv_rti_tensor_init_local(rt, __elems, {}, &{}, __shape, {}, {}, &{}); }}",
             elements.len(), elem_tydesc, rank, dest_addr, dest_tydesc).unwrap();
