@@ -1,0 +1,40 @@
+// A collection somewhere inside a constant.
+//
+// A constant that is itself a list, a set or a map is built by a runtime call
+// against the element descriptor, and each backend had a path for that. A
+// constant that *holds* one somewhere inside -- a tuple with a list in it, an
+// option over a set, a list of lists -- is written part by part into an
+// address, and the cranelift AOT had no way to build a collection there:
+// "write_const_value_to_addr not supported for collections".
+//
+// What it was missing was the type. The writer took an address and a value and
+// worked the offsets out from the value, which cannot say the whole of a type
+// -- an empty list says nothing about its elements, a `none` nothing about
+// what it would have held -- and had nothing to name the elements of a nested
+// collection with. It takes the type now, as the C backend's already did, and
+// the three collection builders have a form that takes an address.
+//
+// This runs on all four backends, so it says they agree.
+
+const TUPLE_WITH_LIST: (u32, [u32]) = (: u32 / 1, : [u32] / [: u32 / 2, : u32 / 3])
+const TUPLE_WITH_SET: (bool, #{u32}) = (: bool / true, : #{u32} / #{: u32 / 5, : u32 / 4})
+const STRUCT_WITH_MAP: {a: u32, b: %{u32 = string}} = {a = : u32 / 6, b = : %{u32 = string} / %{: u32 / 1 = : string / "one"}}
+
+const OPTION_OF_LIST: ?[u32] = some : [u32] / [: u32 / 7]
+const RESULT_OF_SET: !#{u32} = ok : #{u32} / #{: u32 / 9, : u32 / 8}
+
+const LIST_OF_LISTS: [[u32]] = [: [u32] / [: u32 / 1], : [u32] / [: u32 / 2, : u32 / 3]]
+const LIST_OF_TUPLES: [(u32, string)] = [: (u32, string) / (: u32 / 1, : string / "in a list")]
+const MAP_TO_LIST: %{u32 = [u32]} = %{: u32 / 1 = : [u32] / [: u32 / 4, : u32 / 5]}
+
+// Two deep, so the writing recurses rather than only nesting once.
+const DEEP: (u32, ?[[u32]]) = (: u32 / 1, : ?[[u32]] / some : [[u32]] / [: [u32] / [: u32 / 2]])
+
+// An empty one inside, which is where reading the type off the value would
+// have had nothing to go on.
+const EMPTY_INSIDE: (u32, [u32]) = (: u32 / 1, : [u32] / [])
+const NONE_INSIDE: (u32, ?[u32]) = (: u32 / 1, : ?[u32] / none)
+
+let output = (TUPLE_WITH_LIST, TUPLE_WITH_SET, STRUCT_WITH_MAP, OPTION_OF_LIST,
+              RESULT_OF_SET, LIST_OF_LISTS, LIST_OF_TUPLES, MAP_TO_LIST, DEEP,
+              EMPTY_INSIDE, NONE_INSIDE)

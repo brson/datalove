@@ -288,8 +288,8 @@ integer-keyed map to index.
 
 ## Consts, in more detail
 
-The spec says a const holds anything a function can compute. Five things stood
-in the way. Three are fixed; two are sized here rather than done.
+The spec says a const holds anything a function can compute. Six things stood
+in the way. Five are fixed; the last is sized here rather than done.
 
 **Fixed: a type could not be reconstructed from the descriptor it came with.**
 A const is evaluated by running it, and what comes out is read back into
@@ -333,19 +333,38 @@ That also settled where `ir_type_of_const_value` lives. Three backends had a
 copy each, character for character; it is in the IR crate now, beside the
 `ConstValue` it reads.
 
-**Left: a collection nested inside a const, under the cranelift AOT.**
-`(u32, [u32])`, `?[u32]`, a list of lists. The interpreter takes them, and so
-does the C AOT now. `write_const_value_to_addr` writes a nested const value to
-an address and has no type to hand a collection builder, which needs the
-element descriptor -- the three builders take theirs from the destination
-`ValueId`, and a nested value has no id.
+**Fixed: a collection nested inside a const.** `(u32, [u32])`, `?[u32]`, a
+list of lists. Only a constant that *is* a collection could be built; one that
+holds one somewhere inside is written part by part into an address, and the
+cranelift writer had no type there to name the elements with -- it worked its
+offsets out from the value, which cannot say the whole of a type. An empty list
+says nothing about its elements and a `none` nothing about what it would have
+held, so those offsets were guesses that happened to be right.
 
-The fix is the one the C backend already has: give that writer the `IrType` it
-is writing and let the builders take an address. What makes it the larger of
-the two is that it has about twenty call sites, each of which has to derive the
-type from its own context. Inferring it from the value instead is not sound --
-an empty list says nothing about its elements, and a `none` says `?()`. One
-backend, no IR surface. The enum case has the same shape and the same answer.
+It takes the type now, as the C backend's already did, and the three collection
+builders have a form that takes an address. The entry points that had their own
+copy of the writing -- an option, a tuple, a struct, a result, an enum -- are
+that same walk with the address worked out first, which took a value-based
+sizing chain out with it.
+
+That turned up one in the C backend as well. Each part of a constant is built
+in a scratch buffer, and C scopes by block, so a buffer named the same as the
+one outside it hides it: a list of lists pushed each inner list into its own
+scratch rather than into the list being built, and came out empty. The names
+are numbered now.
+
+`141_nested_collection_consts` runs eleven shapes through all four backends,
+including two deep and an empty one inside.
+
+**Left: a tensor cannot be read back.** There is no `ConstValue` that holds
+one. Adding it means a variant carrying a shape and elements, an arm in the
+extractor, and a writer in each of the four backends. It is the only one of the
+five that adds IR surface.
+
+This is also what keeps `data`, `error` and a result out of the *generator*,
+which is a weaker reason than it looks: each carries a payload chosen by
+datalit rather than by worldgen, and that payload is sometimes a tensor.
+`error : [|int, 1|] / ...` is a const the generator would otherwise write.
 
 ## What this still does not tell us
 

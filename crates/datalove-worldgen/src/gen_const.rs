@@ -24,54 +24,27 @@ use crate::pretty::{pretty_expr, pretty_type_hint};
 
 /// Whether a const may hold this type.
 ///
-/// The spec says a const holds anything a function can compute. Two things
-/// still fall short of that, both written down in
-/// `botdocs/reports/report-worldgen-coverage.md` with what they would take.
+/// The spec says a const holds anything a function can compute. One thing
+/// still falls short: a tensor cannot be read back out of the evaluated value,
+/// there being no `ConstValue` that holds one. It is written down in
+/// `botdocs/reports/report-worldgen-coverage.md` with what it would take.
 ///
-/// - A tensor cannot be read back out of the evaluated value, there being no
-///   `ConstValue` that holds one.
-/// - A collection nested inside anything -- `(u32, [u32])`, `?[u32]`, a list
-///   of lists -- compiles under the interpreter and not under the cranelift
-///   AOT, which writes a nested const value to an address and has no way to
-///   write a collection there. A collection on its own is fine, having its own
-///   path.
+/// That is also what keeps a `data`, an `error` and a result out, which is a
+/// weaker reason than it looks: each carries a payload chosen by datalit's
+/// expression generator rather than here, and that payload is sometimes a
+/// tensor. `error : [|int, 1|] / ...` is a const this would otherwise write.
 ///
-/// The first of those is why a `data`, an `error` and a result are kept out,
-/// which is a weaker reason than it was. Reading those back used to be
-/// impossible outright; it works now, and what stops them is only that each
-/// carries a payload chosen by datalit's expression generator rather than
-/// here, and that payload is sometimes a tensor. `error : [|int, 1|] / ...` is
-/// a const the generator would otherwise write.
+/// A collection nested inside another type used to be here too, and is not
+/// now.
 pub fn a_const_can_hold(ty: &TypeHint<'_>) -> bool {
     match ty {
         TypeHint::Tensor(_) | TypeHint::Data | TypeHint::Error | TypeHint::Result(_) => false,
-        // A collection at the top of a const is fine; what it holds may not be
-        // another one.
-        TypeHint::List(t) => holds_no_collection(&t.element_type),
-        TypeHint::Set(t) => holds_no_collection(&t.element_type),
-        TypeHint::Map(t) => {
-            holds_no_collection(&t.key_type) && holds_no_collection(&t.value_type)
-        }
-        TypeHint::Option(t) => holds_no_collection(&t.inner_type),
-        TypeHint::AnonTuple(t) => t.fields.iter().all(holds_no_collection),
-        TypeHint::AnonStruct(t) => t.fields.iter().all(|f| holds_no_collection(&f.type_hint)),
-        _ => true,
-    }
-}
-
-/// Whether a type can sit inside a const without a collection anywhere in it.
-fn holds_no_collection(ty: &TypeHint<'_>) -> bool {
-    match ty {
-        TypeHint::Tensor(_)
-        | TypeHint::List(_)
-        | TypeHint::Set(_)
-        | TypeHint::Map(_)
-        | TypeHint::Data
-        | TypeHint::Error
-        | TypeHint::Result(_) => false,
-        TypeHint::Option(t) => holds_no_collection(&t.inner_type),
-        TypeHint::AnonTuple(t) => t.fields.iter().all(holds_no_collection),
-        TypeHint::AnonStruct(t) => t.fields.iter().all(|f| holds_no_collection(&f.type_hint)),
+        TypeHint::List(t) => a_const_can_hold(&t.element_type),
+        TypeHint::Set(t) => a_const_can_hold(&t.element_type),
+        TypeHint::Map(t) => a_const_can_hold(&t.key_type) && a_const_can_hold(&t.value_type),
+        TypeHint::Option(t) => a_const_can_hold(&t.inner_type),
+        TypeHint::AnonTuple(t) => t.fields.iter().all(a_const_can_hold),
+        TypeHint::AnonStruct(t) => t.fields.iter().all(|f| a_const_can_hold(&f.type_hint)),
         _ => true,
     }
 }

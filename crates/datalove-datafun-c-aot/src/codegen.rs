@@ -81,6 +81,7 @@ pub fn emit_function(
         compiler,
         registry,
         uses_sret,
+        const_scratch: 0,
     };
 
     // Emit blocks.
@@ -136,6 +137,7 @@ pub fn emit_script_body(
         compiler,
         registry,
         uses_sret: false,
+        const_scratch: 0,
     };
 
     // Emit blocks.
@@ -158,6 +160,15 @@ struct FunctionCodegenContext<'a> {
     compiler: &'a mut CAotCompiler,
     registry: &'a FunctionRegistry,
     uses_sret: bool,
+    /// How many scratch buffers a constant has asked for.
+    ///
+    /// A constant holding a collection builds each part in a buffer of its
+    /// own, and a collection holding a collection nests those. C scopes by
+    /// block, so a buffer named the same as the one outside it hides it: a
+    /// list of lists pushed each inner list into its own scratch rather than
+    /// into the list being built, and came out empty. The count makes each
+    /// name its own.
+    const_scratch: u32,
 }
 
 impl<'a> FunctionCodegenContext<'a> {
@@ -506,6 +517,12 @@ impl<'a> FunctionCodegenContext<'a> {
         self.emit_const_at(out, &dest_addr, &ty, value)
     }
 
+    /// A scratch buffer name nothing else is using.
+    fn next_const_scratch(&mut self) -> String {
+        self.const_scratch += 1;
+        format!("__cs{}", self.const_scratch)
+    }
+
     /// Emit a constant into an address.
     ///
     /// Written against an address rather than a value so that a constant made
@@ -614,10 +631,11 @@ impl<'a> FunctionCodegenContext<'a> {
                     // Each element is built in a scratch buffer and pushed,
                     // which moves it into the list. The buffer goes out of
                     // scope with nothing left in it to release.
-                    writeln!(out, "    {{ _Alignas(8) uint8_t __ce[{}] = {{0}};", elem_size).unwrap();
-                    self.emit_const_at(out, "__ce", &elem_ty, element)?;
-                    writeln!(out, "    dtlv_rti_list_push_local(rt, {}, &{}, __ce, &{}); }}",
-                        dest_addr, list_tydesc, elem_tydesc).unwrap();
+                    let scratch = self.next_const_scratch();
+                    writeln!(out, "    {{ _Alignas(8) uint8_t {}[{}] = {{0}};", scratch, elem_size).unwrap();
+                    self.emit_const_at(out, &scratch, &elem_ty, element)?;
+                    writeln!(out, "    dtlv_rti_list_push_local(rt, {}, &{}, {}, &{}); }}",
+                        dest_addr, list_tydesc, scratch, elem_tydesc).unwrap();
                 }
             }
             // An atom is one value of a type that has only that value, so it
@@ -721,9 +739,10 @@ impl<'a> FunctionCodegenContext<'a> {
                     ConstValue::Data(_) => "dtlv_rti_data_from_local",
                     _ => "dtlv_rti_error_from_local",
                 };
-                writeln!(out, "    {{ _Alignas(8) uint8_t __cb[{}] = {{0}};", inner_size).unwrap();
-                self.emit_const_at(out, "__cb", &inner_ty, inner)?;
-                writeln!(out, "    {}(rt, __cb, &{}, {}); }}", pack, inner_tydesc, dest_addr).unwrap();
+                let scratch = self.next_const_scratch();
+                writeln!(out, "    {{ _Alignas(8) uint8_t {}[{}] = {{0}};", scratch, inner_size).unwrap();
+                self.emit_const_at(out, &scratch, &inner_ty, inner)?;
+                writeln!(out, "    {}(rt, {}, &{}, {}); }}", pack, scratch, inner_tydesc, dest_addr).unwrap();
             }
             ConstValue::Set(elements) => {
                 let IrType::Set(elem_ty) = ty else {
@@ -740,11 +759,12 @@ impl<'a> FunctionCodegenContext<'a> {
                 for element in elements {
                     // Inserted one at a time, as a literal is, so that the set
                     // holds each element once and lets go of a duplicate.
-                    writeln!(out, "    {{ _Alignas(8) uint8_t __ce[{}] = {{0}}; uint8_t __added = 0;",
-                        elem_size).unwrap();
-                    self.emit_const_at(out, "__ce", &elem_ty, element)?;
-                    writeln!(out, "    dtlv_rti_btreeset_insert_local(rt, {}, &{}, __ce, &{}, &__added); }}",
-                        dest_addr, set_tydesc, elem_tydesc).unwrap();
+                    let scratch = self.next_const_scratch();
+                    writeln!(out, "    {{ _Alignas(8) uint8_t {}[{}] = {{0}}; uint8_t {}_added = 0;",
+                        scratch, elem_size, scratch).unwrap();
+                    self.emit_const_at(out, &scratch, &elem_ty, element)?;
+                    writeln!(out, "    dtlv_rti_btreeset_insert_local(rt, {}, &{}, {}, &{}, &{}_added); }}",
+                        dest_addr, set_tydesc, scratch, elem_tydesc, scratch).unwrap();
                 }
             }
             ConstValue::Map(entries) => {
@@ -763,12 +783,14 @@ impl<'a> FunctionCodegenContext<'a> {
                 writeln!(out, "    dtlv_rti_btreemap_create_local(rt, {}, &{});",
                     dest_addr, map_tydesc).unwrap();
                 for (key, entry_value) in entries {
-                    writeln!(out, "    {{ _Alignas(8) uint8_t __ck[{}] = {{0}};", key_size).unwrap();
-                    self.emit_const_at(out, "__ck", &key_ty, key)?;
-                    writeln!(out, "    _Alignas(8) uint8_t __cv[{}] = {{0}};", value_size).unwrap();
-                    self.emit_const_at(out, "__cv", &value_ty, entry_value)?;
-                    writeln!(out, "    dtlv_rti_btreemap_insert_local(rt, {}, &{}, __ck, &{}, __cv, &{}); }}",
-                        dest_addr, map_tydesc, key_tydesc, value_tydesc).unwrap();
+                    let key_scratch = self.next_const_scratch();
+                    let value_scratch = self.next_const_scratch();
+                    writeln!(out, "    {{ _Alignas(8) uint8_t {}[{}] = {{0}};", key_scratch, key_size).unwrap();
+                    self.emit_const_at(out, &key_scratch, &key_ty, key)?;
+                    writeln!(out, "    _Alignas(8) uint8_t {}[{}] = {{0}};", value_scratch, value_size).unwrap();
+                    self.emit_const_at(out, &value_scratch, &value_ty, entry_value)?;
+                    writeln!(out, "    dtlv_rti_btreemap_insert_local(rt, {}, &{}, {}, &{}, {}, &{}); }}",
+                        dest_addr, map_tydesc, key_scratch, key_tydesc, value_scratch, value_tydesc).unwrap();
                 }
             }
 
