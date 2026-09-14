@@ -18,15 +18,15 @@ Thorough compiler architecture, bare language.
 - [x] logic ops
 - [x] type aliases
 - [x] ctfe
-- [ ] generic functions for built-in generic types
-- [ ] basic repl,
+- [x] generic functions for built-in generic types
+- [x] basic repl,
 - [x] script runner
 - [x] interpreter
 - [x] jit
 - [x] aot
-- [ ] compute-only std library
+- [x] compute-only std library
 - [x] std->runtime calls
-- [ ] intrinsics and core functions
+- [x] intrinsics and core functions
 - [x] field projections
 - [x] match for enums
 
@@ -36,20 +36,14 @@ Thorough compiler architecture, bare language.
 ## In progress
 
 - std
-- generics
-- repl
-
+- tensors
 
 
 ## On deck
 
-- better generative testing
-- parser token-swallowing fixes
 - const param specialization
 - human docs
-- datalit synthesis for enums, etc.
 - match syntax / switch ir instruction
-  - use switch during specialization
 - fully reactive scripts, undo/redo
 
 
