@@ -117,7 +117,11 @@ pub unsafe fn table_destroy_impl(
 
 /// Push a row to a table.
 ///
-/// The row is passed as a tuple with one field per column.
+/// The row is passed as a tuple with one field per column, and the tuple is
+/// consumed: `TableNew` marks its operands moved and emits no drop for them,
+/// so each field is copied into its column rather than cloned there. Cloning
+/// left the tuple owning a second copy that nothing would ever free, which for
+/// a column holding anything on the heap was one leak per row.
 pub unsafe fn table_push_row_impl(
     rt: LocalRtHandle,
     table_mut: *mut u8,
@@ -144,7 +148,7 @@ pub unsafe fn table_push_row_impl(
             }
         }
 
-        // Copy each tuple field to the corresponding column position.
+        // Move each tuple field into the corresponding column position.
         for (col, field) in row_tydesc.iter_tuple_fields().enumerate() {
             let field_ptr = row_ref.add(field.offset() as usize);
             let dst = element_ptr_mut(
@@ -154,29 +158,8 @@ pub unsafe fn table_push_row_impl(
                 col,
                 table.capacity.0,
             );
-
-            // Clone the field value into the table.
-            let status = crate::impls::clone::clone_value(
-                rt,
-                field_ptr,
-                field.tydesc().as_ptr(),
-                dst,
-            );
-            if status != RtStatus::Ok {
-                // Clean up already-copied fields on failure.
-                for cleanup_col in 0..col {
-                    let cleanup_dst = element_ptr_mut(
-                        table.data as *mut u8,
-                        &column_tydescs,
-                        table.len.0,
-                        cleanup_col,
-                        table.capacity.0,
-                    );
-                    let cleanup_tydesc = column_tydescs[cleanup_col];
-                    let _ = crate::impls::destroy::any_destroy_local(rt, cleanup_dst, cleanup_tydesc);
-                }
-                return status;
-            }
+            let size = field.tydesc().size() as usize;
+            std::ptr::copy_nonoverlapping(field_ptr, dst, size);
         }
 
         table.len += rtdt::Index::ONE;

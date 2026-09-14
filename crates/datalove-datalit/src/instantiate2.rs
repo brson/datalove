@@ -906,14 +906,9 @@ fn instantiate_table<'db>(
             }
         }
 
-        // Destroy the row tuple cells after push (table_push_row clones them).
-        unsafe {
-            for (col_idx, col_tydesc) in column_tydescs.iter().enumerate() {
-                let cleanup_offset = row_layout.field_offsets[col_idx];
-                let cleanup_dest = row_buffer.add(cleanup_offset as usize);
-                datalove_rt::c::dtlv_rti_any_destroy_local(rt, cleanup_dest, *col_tydesc);
-            }
-        }
+        // Nothing to destroy here: the push takes the cells, and the buffer is
+        // written over by the next row. It used to clone them instead, which
+        // left this loop freeing what the table now held.
     }
 
     // Free row buffer.

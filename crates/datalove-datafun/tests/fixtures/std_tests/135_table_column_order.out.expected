@@ -1,0 +1,1 @@
+({| name, age; "Alice", 30; "Bob", 25 |}, {| age, name; 30, "Alice"; 25, "Bob" |}, {| name; "Alice"; "Bob" |}, {| y, x; 1, 2; 3, 4 |}, {| tag, n, items, flag; "first", 1, [10, 20], true; "second", 2, [30], false |}, {| name, age |})

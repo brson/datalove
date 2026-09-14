@@ -519,7 +519,15 @@ impl IrType {
                 IrType::Tensor(Box::new(elem), t.rank)
             }
             TypeHint::Table(table) => {
-                let mut columns: Vec<_> = table.columns
+                // In the order the columns were written, which is the order
+                // every other layer keeps them in: datalit compares two table
+                // types column by column, the typechecker makes a literal's
+                // header match its type, and the literal's cells are lowered
+                // left to right. Sorting here for a canonical layout agreed
+                // with none of them, and a table whose columns were not
+                // already alphabetical was built with each cell at another
+                // column's offset.
+                let columns: Vec<_> = table.columns
                     .iter()
                     .map(|c| {
                         let name = c.name.text(db).to_string();
@@ -527,8 +535,6 @@ impl IrType {
                         (name, Box::new(ty))
                     })
                     .collect();
-                // Sort columns by name for consistent layout.
-                columns.sort_by(|a, b| a.0.cmp(&b.0));
                 IrType::Table(columns)
             }
             TypeHint::Atom(a) => {
@@ -645,7 +651,8 @@ impl IrType {
                 IrType::Tensor(Box::new(elem), t.rank)
             }
             DlType::Table(table) => {
-                let mut columns: Vec<_> = table.columns
+                // Written order, as above.
+                let columns: Vec<_> = table.columns
                     .iter()
                     .map(|c| {
                         let name = c.name.text(db).to_string();
@@ -653,8 +660,6 @@ impl IrType {
                         (name, Box::new(ty))
                     })
                     .collect();
-                // Sort columns by name for consistent layout.
-                columns.sort_by(|a, b| a.0.cmp(&b.0));
                 IrType::Table(columns)
             }
             DlType::Atom(a) => {
