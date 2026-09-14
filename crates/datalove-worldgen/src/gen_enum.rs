@@ -68,8 +68,11 @@ pub fn format_enum<'db>(db: &'db dyn salsa::Database, def: &EnumDef<'db>) -> Str
 
 /// Write a value of an enum type, and whatever has to be written before it.
 ///
-/// An atom or a term widens into the enum with `@`, which is how the spec
-/// writes it and the only way a value of the enum type is made.
+/// There are two ways to say it and both are written. `(atom Red)@` widens the
+/// variant into the enum, which is how the spec puts it. `enum { atom Red }`
+/// says the same thing by naming the enum and letting the variant be checked
+/// against it, and takes a different path through the compiler: the coercion
+/// builds the variant, while the literal is the variant, checked.
 ///
 /// A term's payload is bound to a name carrying its type first, for the same
 /// reason a generic's arguments are: the payload has to be exactly the type
@@ -86,6 +89,8 @@ pub fn gen_enum_value<'db, R: Rng>(
     indent: &str,
 ) -> (Vec<String>, String) {
     let variant = &def.variants[rng.gen_range(0..def.variants.len())];
+    let as_literal = rng.gen_bool(0.5);
+
     match &variant.payload {
         Some(ty) => {
             let name = format!("a{}", *var_counter);
@@ -98,9 +103,24 @@ pub fn gen_enum_value<'db, R: Rng>(
                 pretty_type_hint(db, ty.clone()),
                 value
             );
-            (vec![bind], format!("(term {} {})@", variant.name, name))
+            let written = if as_literal {
+                format!("enum {{ term {} {} }}", variant.name, name)
+            } else {
+                // Bracketed, since `term Name a -? b` reads the term as the
+                // left side of the operator. Inside the braces of a literal
+                // the payload is delimited already.
+                format!("(term {} {})@", variant.name, name)
+            };
+            (vec![bind], written)
         }
-        Option::None => (Vec::new(), format!("(atom {})@", variant.name)),
+        Option::None => {
+            let written = if as_literal {
+                format!("enum {{ atom {} }}", variant.name)
+            } else {
+                format!("(atom {})@", variant.name)
+            };
+            (Vec::new(), written)
+        }
     }
 }
 

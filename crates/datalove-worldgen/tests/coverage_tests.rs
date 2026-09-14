@@ -119,7 +119,6 @@ const NOT_YET_GENERATED: &[(&str, &str, &str)] = &[
     ("expr", "FieldProj", "a projection off something that is not a place, like `f().0`, is not generated"),
     ("expr", "Hex", "hex literals are not generated"),
     ("expr", "Table", "table literals are not generated"),
-    ("expr", "EnumLiteral", "`enum { atom Foo }` as an expression, which is the checking-only form, is not generated"),
     ("expr", "Index", "an index off something that is not a place, like `f()[i]?`, is not generated"),
     ("expr", "IntrinsicCall", "`icall` names intrinsics the generator does not know"),
     ("expr", "ParseError", "a parse error means the generator wrote something wrong"),

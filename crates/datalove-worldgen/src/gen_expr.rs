@@ -1,7 +1,7 @@
 //! Expression generation using datalit's type-directed generation.
 
 use rand::Rng;
-use datalove_datalit::ast::TypeHint;
+use datalove_datalit::ast::{TypeHint, TypeHintOption, TypeHintResult};
 use datalove_datalit::ast_gen;
 use crate::config::WorldGenConfig;
 use crate::context::{GenContext, FunctionSig, Param, ParamMode, is_linear_type, types_match};
@@ -14,6 +14,23 @@ use crate::pretty::{pretty_expr, pretty_type_hint};
 /// Float literals need type hints to avoid f32/f64 inference issues.
 fn supports_bare_arithmetic(type_hint: TypeHint<'_>) -> bool {
     matches!(type_hint, TypeHint::F32 | TypeHint::F64 | TypeHint::Int)
+}
+
+/// The option or result a body may unwrap, given what its function returns.
+///
+/// A `?` only leaves through a function returning an option and a `!` only
+/// through one returning a result, so a binding is only worth having in the
+/// matching shape. `gen_let` uses this to declare one now and then, which is
+/// what makes the unwrapping reachable at all: left to chance, a binding of
+/// the right shape and a function of the right kind rarely met.
+pub fn wrapper_worth_binding<'db>(
+    return_type: &Option<TypeHint<'db>>,
+    inner: TypeHint<'db>,
+) -> Option<TypeHint<'db>> {
+    match overflow_form(return_type)? {
+        "?" => Some(TypeHint::Option(TypeHintOption { inner_type: Box::new(inner) })),
+        _ => Some(TypeHint::Result(TypeHintResult { inner_type: Box::new(inner) })),
+    }
 }
 
 /// Whether an integer literal can be written under a hint of this type.
@@ -46,6 +63,10 @@ fn is_signed_fixed_int(type_hint: &TypeHint<'_>) -> bool {
 /// which early-returns `none`. Each is an early return of its own shape, so
 /// which one is available is decided by what the function it sits in returns,
 /// and in a script fragment, which returns nothing, neither is.
+pub fn early_return_mark(return_type: &Option<TypeHint<'_>>) -> Option<&'static str> {
+    overflow_form(return_type)
+}
+
 fn overflow_form(return_type: &Option<TypeHint<'_>>) -> Option<&'static str> {
     match return_type {
         Some(TypeHint::Result(_)) => Some("!"),

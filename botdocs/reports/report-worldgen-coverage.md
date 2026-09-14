@@ -122,15 +122,27 @@ The input is moved by the match, and the arms are branches, so the same rule an
 arm may move what was declared outside it. Atoms and terms are also written on
 their own, as their own types.
 
+**Both ways of saying an enum value.** `(atom Red)@` widens the variant into
+the enum; `enum { atom Red }` names the enum and lets the variant be checked
+against it. They take different paths through the compiler -- the coercion
+builds the variant, the literal *is* the variant, checked -- and the first of
+those was wrong for two years' worth of variants until this turned it up.
+
+**`?` and `!` driven by what is in scope**, rather than by a type wanted
+somewhere. Waiting for a binding of the right shape to be wanted at exactly
+the right type left `!` unwritten across three hundred worldfiles at a
+stretch, and left the roll flipping between runs. A statement that unwraps
+something in reach and binds what comes out is reliable: 35 and 23 in 300.
+
 Thin: `if` (39), `loop` (56), `set` statements (71), `and`/`or`/`xor`, `.>`,
 `.>=`, `.=`, `.!=`, places with an index step, `if` with a binding.
 
-Still never generated, 8 of roughly 110 things counted:
+Still never generated, 7 of roughly 110 things counted:
 
 | category | what |
 |---|---|
 | statements | `const`, `continue`, `native fun` |
-| expressions | `enum { ... }` as an expression, a projection or an index off something that is not a place, hex literals, `table`, `icall` |
+| expressions | a projection or an index off something that is not a place, hex literals, `table`, `icall` |
 | types | `table` |
 | shapes | `if r \|value\| else \|err\|` |
 

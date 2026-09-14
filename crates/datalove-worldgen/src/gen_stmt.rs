@@ -54,6 +54,53 @@ pub fn gen_generic_call_stmt<'db, R: Rng>(
     Some(lines.join("\n"))
 }
 
+/// Unwrap something in scope, binding what comes out.
+///
+/// Driven by what is in scope rather than by a type wanted somewhere: `?` and
+/// `!` are worth writing for their own sake, and waiting for a binding of the
+/// right shape to be wanted at exactly the right type left `!` unwritten
+/// across three hundred worldfiles at a stretch.
+///
+/// `None` unless the enclosing function returns the matching kind -- a `?`
+/// leaves through a `none` and a `!` through an error -- and there is
+/// something of that shape to take apart. The binding is moved out of.
+fn gen_unwrap_let<'db, R: Rng>(
+    db: &'db dyn salsa::Database,
+    rng: &mut R,
+    config: &WorldGenConfig,
+    ctx: &mut GenContext<'db>,
+    var_counter: &mut usize,
+    indent: &str,
+) -> Option<String> {
+    let mark = crate::gen_expr::early_return_mark(&ctx.return_type)?;
+    let candidates: Vec<(String, TypeHint<'db>)> = ctx
+        .variables
+        .iter()
+        .filter(|v| !ctx.is_consumed(&v.name) && !ctx.is_loop_protected(&v.name))
+        .filter_map(|v| match (&v.type_hint, mark) {
+            (TypeHint::Option(o), "?") => Some((v.name.clone(), (*o.inner_type).clone())),
+            (TypeHint::Result(r), "!") => Some((v.name.clone(), (*r.inner_type).clone())),
+            _ => Option::None,
+        })
+        .collect();
+    if candidates.is_empty() {
+        return Option::None;
+    }
+
+    let (scrutinee, inner) = candidates[rng.gen_range(0..candidates.len())].clone();
+    ctx.consume_variable(&scrutinee);
+
+    let name = format!("v{}", *var_counter);
+    *var_counter += 1;
+    let written = pretty_type_hint(db, inner.clone());
+    ctx.variables.push(Variable {
+        name: name.clone(),
+        type_hint: inner,
+        is_mutable: false,
+    });
+    Some(format!("{}let {}: {} = {}{}", indent, name, written, scrutinee, mark))
+}
+
 /// Bind a value of one of the enums in reach.
 ///
 /// Its type is written as the alias the enum was declared under, because that
@@ -118,6 +165,20 @@ pub fn gen_let<'db, R: Rng>(
 
     let (type_hint, type_str) =
         gen_type_hint_and_spelling(db, rng, config, &ctx.type_aliases);
+
+    // Inside a function that returns an option or a result, sometimes bind the
+    // matching wrapper over what was picked, so there is something for a `?`
+    // or a `!` to unwrap. Left to chance, a binding of the right shape and a
+    // function of the right kind hardly ever met.
+    let (type_hint, type_str) =
+        match crate::gen_expr::wrapper_worth_binding(&ctx.return_type, type_hint.clone()) {
+            Some(wrapped) if config.check_probability(rng, config.projection_probability) => {
+                let written = pretty_type_hint(db, wrapped.clone());
+                (wrapped, written)
+            }
+            _ => (type_hint, type_str),
+        };
+
     let value = gen_expr(db, rng, type_hint.clone(), config, ctx);
 
     ctx.variables.push(Variable {
@@ -484,6 +545,12 @@ pub fn gen_body_statement<'db, R: Rng>(
 
     if can_generic {
         if let Some(stmt) = gen_generic_call_stmt(db, rng, config, ctx, var_counter, indent) {
+            return stmt;
+        }
+    }
+
+    if config.check_probability(rng, config.projection_probability) {
+        if let Some(stmt) = gen_unwrap_let(db, rng, config, ctx, var_counter, indent) {
             return stmt;
         }
     }
