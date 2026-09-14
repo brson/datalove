@@ -3,7 +3,7 @@
 use rand::Rng;
 use datalove_datalit::ast::TypeHint;
 use crate::config::WorldGenConfig;
-use crate::context::{GenContext, Variable, is_linear_type};
+use crate::context::{FunctionSig, GenContext, Variable, is_linear_type};
 use crate::gen_type::gen_type_hint_and_spelling;
 use crate::gen_enum::gen_match;
 use crate::gen_expr::{gen_expr, gen_bool_expr};
@@ -388,6 +388,120 @@ pub fn gen_if<'db, R: Rng>(
     result
 }
 
+/// Read a field or an element out of a value a call just made.
+///
+/// `f().0` and `f()[i]?` rather than `v.a` and `v[i]?`: the base is a value
+/// nobody keeps, which is a different path through the compiler and the only
+/// one that is a `FieldProj` or an `Index`. A place and a step from it is
+/// neither.
+///
+/// Driven by what can be called rather than by a type wanted somewhere, for
+/// the reason the unwrapping is: waiting for the coincidence wrote one of
+/// these in three hundred worldfiles.
+fn gen_call_projection_let<'db, R: Rng>(
+    db: &'db dyn salsa::Database,
+    rng: &mut R,
+    config: &WorldGenConfig,
+    ctx: &mut GenContext<'db>,
+    var_counter: &mut usize,
+    indent: &str,
+) -> Option<String> {
+    // (function, how to read from what it returns, the type that has).
+    let mut candidates: Vec<(FunctionSig<'db>, String, TypeHint<'db>)> = Vec::new();
+
+    let mark = crate::gen_expr::early_return_mark(&ctx.return_type);
+    for func in ctx.callable_functions().filter(|f| crate::gen_expr::can_call(db, f, ctx)) {
+        let Some(returns) = func.return_type.clone() else { continue };
+
+        // A field, which the typechecker allows only where it is a copy type.
+        match &returns {
+            TypeHint::AnonTuple(t) => {
+                for (i, field) in t.fields.iter().enumerate() {
+                    if !is_linear_type(field) {
+                        candidates.push((func.clone(), format!(".{}", i), field.clone()));
+                    }
+                }
+            }
+            TypeHint::AnonStruct(t) => {
+                for field in t.fields.iter() {
+                    if !is_linear_type(&field.type_hint) {
+                        candidates.push((
+                            func.clone(),
+                            format!(".{}", field.name.text(db)),
+                            (*field.type_hint).clone(),
+                        ));
+                    }
+                }
+            }
+            _ => {}
+        }
+
+        // An element, which wants the same and an enclosing function to
+        // early-return through.
+        let Some(mark) = mark else { continue };
+
+        // Through the wrapper where there is one, since most of what a
+        // function answers with is wrapped now: `f()?[i]?` unwraps the option
+        // and indexes what was inside it. Both marks have to be the one the
+        // enclosing function takes -- mixing them is a type error.
+        let (returns, unwrap) = match &returns {
+            TypeHint::Option(o) if mark == "?" => ((*o.inner_type).clone(), mark),
+            TypeHint::Result(r) if mark == "!" => ((*r.inner_type).clone(), mark),
+            TypeHint::Option(_) | TypeHint::Result(_) => continue,
+            other => (other.clone(), ""),
+        };
+
+        let (element, key) = match &returns {
+            TypeHint::List(t) => ((*t.element_type).clone(), ": index / 0".to_string()),
+            TypeHint::Tensor(t) if t.rank == 1 => {
+                ((*t.element_type).clone(), ": index / 0".to_string())
+            }
+            TypeHint::Map(t) if crate::gen_expr::is_integer_type(&t.key_type) => {
+                let written = pretty_type_hint(db, (*t.key_type).clone());
+                ((*t.value_type).clone(), format!(": {} / 0", written))
+            }
+            _ => continue,
+        };
+        if !is_linear_type(&element) {
+            candidates.push((func.clone(), format!("{}[{}]{}", unwrap, key, mark), element));
+        }
+    }
+
+    if candidates.is_empty() {
+        return Option::None;
+    }
+
+    // An element is taken ahead of a field wherever one is on offer. A
+    // function answering with a collection of a copy type is much rarer than
+    // one answering with a tuple, and taking uniformly from the list left the
+    // index form at one occurrence in three hundred worldfiles. A field is
+    // written often enough by the other path.
+    let indexes: Vec<usize> = candidates
+        .iter()
+        .enumerate()
+        .filter(|(_, (_, step, _))| step.contains('['))
+        .map(|(i, _)| i)
+        .collect();
+    let chosen = if !indexes.is_empty() {
+        indexes[rng.gen_range(0..indexes.len())]
+    } else {
+        rng.gen_range(0..candidates.len())
+    };
+
+    let (func, step, result_type) = candidates[chosen].clone();
+    let call = crate::gen_expr::gen_function_call(db, rng, &func, config, ctx);
+
+    let name = format!("v{}", *var_counter);
+    *var_counter += 1;
+    let written = pretty_type_hint(db, result_type.clone());
+    ctx.variables.push(Variable {
+        name: name.clone(),
+        type_hint: result_type,
+        is_mutable: false,
+    });
+    Some(format!("{}let {}: {} = {}{}", indent, name, written, call, step))
+}
+
 /// Whether anything in scope can be taken apart by an `if`.
 fn has_something_to_destructure(ctx: &GenContext<'_>) -> bool {
     ctx.variables.iter().any(|v| {
@@ -637,6 +751,12 @@ pub fn gen_body_statement<'db, R: Rng>(
 
     if config.check_probability(rng, config.projection_probability) {
         if let Some(stmt) = gen_unwrap_let(db, rng, config, ctx, var_counter, indent) {
+            return stmt;
+        }
+    }
+
+    if config.check_probability(rng, config.projection_probability) {
+        if let Some(stmt) = gen_call_projection_let(db, rng, config, ctx, var_counter, indent) {
             return stmt;
         }
     }

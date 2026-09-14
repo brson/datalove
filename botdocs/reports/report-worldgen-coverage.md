@@ -151,6 +151,22 @@ The six forms that kept reaching zero between runs now have floors in
 `test_core_constructs_are_common`, so losing one is a failure rather than a
 shrug.
 
+**A field or an element off a value nobody keeps.** `f().0` and `f()?[i]?`,
+as against `v.a` and `v[i]?`. The second pair is a place and a step from it,
+which the place walker lowers; the first is a value the call made, which the
+expression is the only owner of, and only that pair is a `FieldProj` or an
+`Index`.
+
+Mostly the index has to look through a wrapper -- a callable function answers
+with `![u32]` far more often than with `[u32]`, now that most returns are
+fallible -- so it unwraps and then indexes, `f()?[i]?`, with both marks the one
+the enclosing function takes. Mixing them is a type error.
+
+The candidate is settled without writing the call, and the call is only written
+if the choice is taken. Writing it while collecting candidates meant every
+expression generated a call whose arguments are expressions, which is not a
+recursion that stops: the 1000-seed test overflowed its stack.
+
 **`continue`**, which had been left out under a note saying it would make a
 loop's final break unreachable. It would, written bare: everything after it in
 the same block is unreachable, the `break` included, and that break is what
@@ -172,7 +188,7 @@ Still never generated, 5 of roughly 110 things counted:
 | category | what |
 |---|---|
 | statements | `const`, `native fun` |
-| expressions | a projection or an index off something that is not a place, hex literals, `table`, `icall` |
+| expressions | hex literals, `table`, `icall` |
 | types | `table` |
 
 ## What it found
@@ -223,6 +239,13 @@ for a term. Nothing was marked moved, so the term and what it was built from
 were both dropped. An enum literal had the same gap.
 `137_term_payload_ownership`.
 
+**A field read off a value nobody keeps leaked the rest of it.** Fixed. A
+projection whose base is not a place reads one field out of a value made for
+it, and left the value alone afterwards. Only a copy field can be projected at
+all, so the field is never what leaks -- it is always the siblings, and a
+tuple of a `u32` and a `string` projected at the number leaked the string, with
+the right answer and nothing said. `138_projection_off_a_value`.
+
 **An integer under a hint that is not an integer type brought the compiler
 down.** `check_int_fits_type` panicked rather than reporting. `let v: bool = :
 bool / 0` is a thing a person can write, and saying so is the answer. The
@@ -251,14 +274,12 @@ text.
 
 ## Next
 
-1. A projection or an index off something that is not a place -- `f().0`,
-   `f()[i]?` -- which is what the `FieldProj` and `Index` nodes are for.
-2. `const`, and tables.
-3. Log the silent fallbacks. `gen_set` and friends fall back to `gen_let` when
+1. `const`, and tables.
+2. Log the silent fallbacks. `gen_set` and friends fall back to `gen_let` when
    they cannot proceed, so a construct can be rare because it keeps failing to
    build rather than because it was weighted that way, and nothing says which.
-4. `native fun` and `icall` each want something the generator does not have: a
+3. `native fun` and `icall` each want something the generator does not have: a
    rider to resolve against, and the names of the intrinsics.
-5. The interactions, which is where every bug so far has been. A roll of node
+4. The interactions, which is where every bug so far has been. A roll of node
    kinds says nothing about a generic over a map at `data` on one side, or a
    checked overflow inside a branch of a function returning a result.

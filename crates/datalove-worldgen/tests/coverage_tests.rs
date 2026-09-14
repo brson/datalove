@@ -112,13 +112,11 @@ const NOT_YET_GENERATED: &[(&str, &str, &str)] = &[
     ("statement", "NativeFun", "natives need a rider to resolve against"),
     ("statement", "ParseError", "a parse error means the generator wrote something wrong"),
 
-    // `v.a` and `v[i]?` are written, and parse as a place with a step rather
-    // than as these -- which are for a base that is not a place, like `f().0`.
-    // See the two place-step shapes.
-    ("expr", "FieldProj", "a projection off something that is not a place, like `f().0`, is not generated"),
+    // `v.a` and `v[i]?` parse as a place with a step rather than as `FieldProj`
+    // and `Index`, which are for a base that is not a place. Both pairs are
+    // written; the place forms are counted under the two place-step shapes.
     ("expr", "Hex", "hex literals are not generated"),
     ("expr", "Table", "table literals are not generated"),
-    ("expr", "Index", "an index off something that is not a place, like `f()[i]?`, is not generated"),
     ("expr", "IntrinsicCall", "`icall` names intrinsics the generator does not know"),
     ("expr", "ParseError", "a parse error means the generator wrote something wrong"),
 
@@ -579,6 +577,7 @@ fn test_core_constructs_are_common() {
         ("expr", "TryResult", 2),
         ("statement", "Match", 20),
         ("statement", "Continue", 3),
+        ("expr", "FieldProj", 3),
         ("expr", "EnumLiteral", 20),
     ];
 

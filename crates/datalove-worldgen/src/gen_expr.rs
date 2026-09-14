@@ -34,7 +34,7 @@ pub fn wrapper_worth_binding<'db>(
 }
 
 /// Whether an integer literal can be written under a hint of this type.
-fn is_integer_type(type_hint: &TypeHint<'_>) -> bool {
+pub fn is_integer_type(type_hint: &TypeHint<'_>) -> bool {
     is_fixed_int(type_hint) || matches!(type_hint, TypeHint::Int)
 }
 
@@ -141,6 +141,26 @@ pub fn gen_expr<'db, R: Rng>(
         projection_candidates(db, &type_hint, ctx)
     };
 
+    // And the same off a call, which is a different thing: `v.a` is a place
+    // and a step from it, while `f().0` reads one field out of a value the
+    // call made and nobody keeps. Only the second is a `FieldProj`.
+    //
+    // Which function and which field are settled here; the call itself is not
+    // written unless this choice is taken. Writing it here would mean every
+    // expression generated a call whose arguments are expressions, which is
+    // not a recursion that stops.
+    let call_projections: Vec<(FunctionSig<'db>, String)> = if is_linear_type(&type_hint) {
+        Vec::new()
+    } else {
+        ctx.callable_functions()
+            .filter(|f| can_call(db, f, ctx))
+            .filter_map(|f| {
+                let fields = fields_of(db, f.return_type.as_ref()?, &type_hint);
+                fields.first().map(|field| (f.clone(), field.clone()))
+            })
+            .collect()
+    };
+
     // An element of a collection already in scope, by the same copy rule, and
     // the same early return as the overflow arithmetic: `l[i]?` leaves through
     // the function's return where the index is out of bounds.
@@ -167,6 +187,7 @@ pub fn gen_expr<'db, R: Rng>(
         Arithmetic,
         OverflowArithmetic,
         Projection,
+        CallProjection,
         Index,
         Unwrap,
     }
@@ -178,6 +199,9 @@ pub fn gen_expr<'db, R: Rng>(
     if overflow_mark.is_some() { choices.push(Choice::OverflowArithmetic); }
     if !projections.is_empty() && config.check_probability(rng, config.projection_probability) {
         choices.push(Choice::Projection);
+    }
+    if !call_projections.is_empty() && config.check_probability(rng, config.projection_probability) {
+        choices.push(Choice::CallProjection);
     }
     if !index_candidates.is_empty() && config.check_probability(rng, config.projection_probability) {
         choices.push(Choice::Index);
@@ -211,6 +235,12 @@ pub fn gen_expr<'db, R: Rng>(
         }
         Choice::Projection => {
             projections[rng.gen_range(0..projections.len())].clone()
+        }
+        Choice::CallProjection => {
+            let (func, field) =
+                call_projections[rng.gen_range(0..call_projections.len())].clone();
+            let call = gen_function_call(db, rng, &func, config, ctx);
+            format!("{}.{}", call, field)
         }
         Choice::Index => {
             let mark = early_return_mark.expect("a choice only offered when there is a mark");
@@ -263,6 +293,7 @@ fn projection_candidates<'db>(
     ctx: &GenContext<'db>,
 ) -> Vec<String> {
     let mut found = Vec::new();
+
     for var in ctx.variables.iter().filter(|v| !ctx.is_consumed(&v.name)) {
         match &var.type_hint {
             TypeHint::AnonTuple(t) => {
@@ -283,6 +314,30 @@ fn projection_candidates<'db>(
         }
     }
     found
+}
+
+/// The fields of a tuple or a struct that have the wanted type, by selector.
+pub fn fields_of<'db>(
+    db: &'db dyn salsa::Database,
+    holder: &TypeHint<'db>,
+    wanted: &TypeHint<'db>,
+) -> Vec<String> {
+    match holder {
+        TypeHint::AnonTuple(t) => t
+            .fields
+            .iter()
+            .enumerate()
+            .filter(|(_, field)| types_match(db, (*field).clone(), wanted.clone()))
+            .map(|(i, _)| i.to_string())
+            .collect(),
+        TypeHint::AnonStruct(t) => t
+            .fields
+            .iter()
+            .filter(|field| types_match(db, (*field.type_hint).clone(), wanted.clone()))
+            .map(|field| field.name.text(db).to_string())
+            .collect(),
+        _ => Vec::new(),
+    }
 }
 
 /// Every collection in scope holding the wanted type, with something to look
@@ -569,7 +624,7 @@ fn argument_candidates<'db>(
         .collect()
 }
 
-fn gen_function_call<'db, R: Rng>(
+pub fn gen_function_call<'db, R: Rng>(
     db: &'db dyn salsa::Database,
     rng: &mut R,
     func: &FunctionSig<'db>,
