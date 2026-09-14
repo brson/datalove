@@ -1,0 +1,27 @@
+ModulesAnalysis(
+    typecheck: TypecheckResult(
+        status: "Success",
+    ),
+    lowering: LoweringResult(
+        status: "Success",
+        ir: """
+            fn main():
+            block0:
+                v0 = const data 7u32
+                v1 = const data 3u8
+                v2 = const data "held"
+                v3 = const data [1u32, 2u32]
+                v4 = const error 3u32
+                v5 = const error "went wrong"
+                v6 = const err error (34u32, 92u8, 110i32)
+                v7 = const err error [1u32, 2u32]
+                v8 = const err error {a = 5u32, b = "in it"}
+                v9 = const err error some 8u32
+                v10 = const ok 5u32
+                v11 = const some data 9u32
+                v12 = pack Tuple12 {v0, v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11}
+                return v12
+        """,
+    ),
+    output: "(data 7, data 3, data \"held\", data [1, 2], error 3, error \"went wrong\", error (34, 92, 110), error [1, 2], error {a = 5, b = \"in it\"}, error some 8, ok 5, some data 9)",
+)

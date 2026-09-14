@@ -452,8 +452,71 @@ fn extract_const_value(ptr: *const u8, ir_type: &IrType) -> Result<ConstValue, C
                     Ok(ConstValue::Table { columns: column_names, rows })
                 }
             }
+            // A `data` or an `error` is a value under a descriptor it carries
+            // itself, so what is read back is decided by that rather than by
+            // the type written down. Borrowed rather than unpacked, because
+            // what the const evaluator is looking at still belongs to the
+            // frame it was computed in and is destroyed with it.
+            IrType::Data => {
+                let (value_ptr, tydesc) = borrow_packed(ptr)?;
+                let inner_ir_type = ir_type_from_tydesc(tydesc)?;
+                let inner = extract_const_value(value_ptr, &inner_ir_type)?;
+                Ok(ConstValue::Data(Box::new(inner)))
+            }
+            IrType::Error => {
+                let error_val = &*(ptr as *const datalove_rtdt::Error);
+                let tydesc_ptr = error_val.tydesc();
+                if tydesc_ptr.is_null() {
+                    return Ok(ConstValue::Error(Box::new(ConstValue::Unit)));
+                }
+                let tydesc = datalove_rtdt::TyDescRef::from_ptr(tydesc_ptr);
+                let inner_ir_type = ir_type_from_tydesc(tydesc)?;
+                let inner = extract_const_value(error_val.value_ptr(), &inner_ir_type)?;
+                Ok(ConstValue::Error(Box::new(inner)))
+            }
+
             _ => Err(CtfeError::UnsupportedType(format!("{:?}", ir_type))),
         }
+    }
+}
+
+/// Read what a `data` holds, without taking it.
+///
+/// The three ways one is packed -- on the heap, inline with a descriptor, and
+/// inline with only a tag -- are all read the same way here, which is what
+/// `data_borrow` is for. The scratch is where a value packed into the words is
+/// written so that there is something to point at; it outlives the read
+/// because the caller extracts before returning.
+unsafe fn borrow_packed(
+    ptr: *const u8,
+) -> Result<(*const u8, datalove_rtdt::TyDescRef<'static>), CtfeError> {
+    unsafe {
+        let mut scratch = [0u8; 16];
+        let mut value_ptr: *const u8 = std::ptr::null();
+        let mut tydesc_ptr: *const datalove_rtdt::TyDesc = std::ptr::null();
+        let status = datalove_rt::c::dtlv_rti_data_borrow(
+            ptr,
+            scratch.as_mut_ptr(),
+            &mut value_ptr as *mut *const u8,
+            &mut tydesc_ptr as *mut *const datalove_rtdt::TyDesc,
+        );
+        if status != datalove_rt::c::RtStatus::Ok || tydesc_ptr.is_null() {
+            return Err(CtfeError::UnsupportedType(
+                "a `data` with nothing in it".to_string()));
+        }
+        // The value may point into `scratch`, which is this frame's. Reading it
+        // out here keeps it alive for exactly as long as the caller needs.
+        let tydesc = datalove_rtdt::TyDescRef::from_ptr(tydesc_ptr);
+        let size = tydesc.size() as usize;
+        if value_ptr == scratch.as_ptr() {
+            // Packed into the words: copy to a leaked buffer, since the value
+            // has to outlive this scratch. A const is evaluated once.
+            let mut owned = vec![0u8; size.max(1)];
+            std::ptr::copy_nonoverlapping(value_ptr, owned.as_mut_ptr(), size);
+            let leaked = Box::leak(owned.into_boxed_slice());
+            return Ok((leaked.as_ptr(), tydesc));
+        }
+        Ok((value_ptr, tydesc))
     }
 }
 
@@ -479,7 +542,65 @@ fn ir_type_from_tydesc(tydesc: datalove_rtdt::TyDescRef) -> Result<IrType, CtfeE
         TyTag::F64 => Ok(IrType::F64),
         TyTag::Int => Ok(IrType::Int),
         TyTag::String => Ok(IrType::String),
-        // For complex types, return an error - we'd need to recursively reconstruct.
+        TyTag::Data => Ok(IrType::Data),
+        TyTag::Error => Ok(IrType::Error),
+
+        // A descriptor carries the whole of a type, so a structured one is
+        // read back by walking it. This used to stop at the scalars, under a
+        // note that a complex type would want recursion; it is wanted, because
+        // this is how the payload of an `error` is read and an error carries
+        // whatever it was built from. A const of a result whose error held a
+        // tuple could not be evaluated at all.
+        TyTag::Option => Ok(IrType::Option(Box::new(
+            ir_type_from_tydesc(tydesc.option_inner_ty())?))),
+        TyTag::Result => Ok(IrType::Result(Box::new(
+            ir_type_from_tydesc(tydesc.result_ok_ty())?))),
+        TyTag::List => Ok(IrType::List(Box::new(
+            ir_type_from_tydesc(tydesc.list_element_ty())?))),
+        TyTag::Set => Ok(IrType::Set(Box::new(
+            ir_type_from_tydesc(tydesc.set_element_ty())?))),
+        TyTag::Map => Ok(IrType::Map(
+            Box::new(ir_type_from_tydesc(tydesc.map_key_ty())?),
+            Box::new(ir_type_from_tydesc(tydesc.map_value_ty())?),
+        )),
+        TyTag::Tensor => Ok(IrType::Tensor(
+            Box::new(ir_type_from_tydesc(tydesc.tensor_element_ty())?),
+            tydesc.tensor_rank(),
+        )),
+        TyTag::Tuple => {
+            let mut fields = Vec::new();
+            for field in tydesc.iter_tuple_fields() {
+                fields.push(ir_type_from_tydesc(field.tydesc())?);
+            }
+            Ok(IrType::Tuple(fields))
+        }
+        TyTag::Struct => {
+            let mut fields = Vec::new();
+            for field in tydesc.iter_struct_fields() {
+                fields.push((field.name().to_string(), ir_type_from_tydesc(field.tydesc())?));
+            }
+            Ok(IrType::Struct(fields))
+        }
+        TyTag::Atom => Ok(IrType::Atom(tydesc.atom_info().0.to_string())),
+        TyTag::Term => {
+            let (name, payload) = tydesc.term_info();
+            Ok(IrType::Term(name.to_string(), Box::new(ir_type_from_tydesc(payload)?)))
+        }
+        TyTag::Enum => {
+            let info = tydesc.enum_info();
+            let mut variants = Vec::new();
+            for i in 0..info.num_variants() as usize {
+                let variant = info.variant(i).ok_or_else(|| CtfeError::UnsupportedType(
+                    "enum variant out of bounds".to_string()))?;
+                let payload = match variant.payload() {
+                    core::option::Option::Some(ty) => Some(ir_type_from_tydesc(ty)?),
+                    core::option::Option::None => None,
+                };
+                variants.push((variant.name().to_string(), payload));
+            }
+            Ok(IrType::Enum(variants))
+        }
+
         other => Err(CtfeError::UnsupportedType(format!(
             "cannot reconstruct IrType from TyTag::{:?}", other
         ))),

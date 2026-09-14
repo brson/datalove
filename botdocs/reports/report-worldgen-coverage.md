@@ -175,20 +175,10 @@ first use. Bound to literals: a const expression may name only other consts,
 and a module-level one that calls a function which itself names a const is a
 cycle.
 
-Three shapes of const are kept out of the corpus, each because the compiler
-falls short of what the spec says a const may hold, which is "anything a
-function can compute":
-
-- `data`, `error` and a tensor cannot be read back out of the evaluated value,
-  wherever they appear: "unsupported type for extraction".
-- A collection nested inside anything -- `(u32, [u32])`, `?[u32]`, a list of
-  lists -- compiles under the interpreter and not under the cranelift AOT,
-  which writes a nested const value to an address and has no way to write a
-  collection there. A collection on its own is fine, having its own path.
-- A result, for a reason about the value rather than the type: `er error
-  <payload>` is one of the ways to write one, what the error carries is chosen
-  by datalit's generator, and an error carrying a tuple cannot be read back --
-  "cannot reconstruct IrType from TyTag::Tuple".
+Some shapes of const are kept out of the corpus, because the compiler falls
+short of what the spec says a const may hold, which is "anything a function can
+compute". Two of the reasons were looked into and fixed; what is left is
+written down below under "Consts, in more detail".
 
 **`continue`**, which had been left out under a note saying it would make a
 loop's final break unreachable. It would, written bare: everything after it in
@@ -295,6 +285,55 @@ bool / 0` is a thing a person can write, and saying so is the answer. The
 generator was writing `: bool / 0` for a map keyed by `bool`, which is how it
 was found and is also a generator bug, fixed by only offering an
 integer-keyed map to index.
+
+## Consts, in more detail
+
+The spec says a const holds anything a function can compute. Four things stood
+in the way. Two are fixed; two are sized here rather than done.
+
+**Fixed: a type could not be reconstructed from the descriptor it came with.**
+A const is evaluated by running it, and what comes out is read back into
+something the compiler can write down again. An `error` carries whatever it was
+built from, so reading one means reconstructing a type from the descriptor
+beside it -- and that reconstruction handled the scalars and a string and gave
+up on the rest, under a note that a complex type would want recursion. A
+descriptor carries the whole of a type, so it does. `const C: !index = er error
+(a, tuple)` could not be evaluated at all.
+
+**Fixed: a `data` and an `error` could not be read back.** Neither had an arm
+in the extractor, so neither could be a const whatever it held. Both are read
+through `data_borrow`, which takes the three ways a `data` is packed -- on the
+heap, inline with a descriptor, inline with only a tag -- and answers the same
+way for each. Borrowed rather than unpacked, because what the evaluator is
+looking at still belongs to the frame it was computed in.
+
+`063_const_reads_back` covers both, twelve shapes of them.
+
+**Left: a tensor cannot be read back.** There is no `ConstValue` that holds
+one. Adding it means a variant carrying a shape and elements, an arm in the
+extractor, and a writer in each of the four backends -- the interpreter, both
+AOTs, and the JIT through cranelift. That is the largest of the four and the
+only one that adds IR surface.
+
+This is also what keeps `data`, `error` and a result out of the *generator*,
+which is a weaker reason than it was: each carries a payload chosen by datalit
+rather than by worldgen, and that payload is sometimes a tensor. `error :
+[|int, 1|] / ...` is a const the generator would otherwise write.
+
+**Left: a collection nested inside a const.** `(u32, [u32])`, `?[u32]`, a list
+of lists. The interpreter takes them; the cranelift AOT does not.
+`write_const_value_to_addr` writes a nested const value to an address and has
+no type to hand a collection builder, which needs the element descriptor --
+the three builders take theirs from the destination `ValueId`, and a nested
+value has no id. The fix is to thread the `IrType` through that writer, which
+its eight call sites each know, and give the three builders an address-taking
+form. Contained, one backend, no IR surface. The enum case has the same shape
+and the same answer.
+
+The C AOT is further behind than either: it writes scalars, `int`, `string`,
+lists and atoms, and refuses a `data`, an `error`, a result, an option, a
+tuple, a struct, a set and a map. That is why `063_const_reads_back` sits with
+the interpreter tests rather than in `std_tests`, which runs all four.
 
 ## What this still does not tell us
 
