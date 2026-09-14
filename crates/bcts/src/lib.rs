@@ -21,7 +21,12 @@ pub mod diagnostic;
 pub mod render;
 pub mod parser_util;
 
-use salsa::Database as Db;
+/// The database handle every query here takes.
+///
+/// Named rather than written out because it appears in the signature of most
+/// of this crate, and re-exported because a caller writing one of those
+/// signatures needs the same name for it.
+pub use salsa::Database as Db;
 
 #[salsa::db]
 #[derive(Default, Clone)]

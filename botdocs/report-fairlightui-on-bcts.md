@@ -70,15 +70,14 @@ decides the shape of a `.fui` document.
 
 ```rust
 pub fn split_lines<'db>(
-    db: &'db dyn salsa::Database,
+    db: &'db dyn bcts::Db,
     tokens: impl IntoIterator<Item = TreeToken<'db>>,
 ) -> Vec<TokenGroup<'db>>
 ```
 
-(bcts names that `crate::Db` internally and does not re-export the alias, so
-from outside it is `salsa::Database`. This repo renames the dependency to
-`bct`, which is why the paths below read `bct::` where a fresh consumer would
-write `bcts::`.)
+(`bcts::Db` is `salsa::Database`, re-exported under the name the signatures
+here use. This repo renames the dependency to `bct`, which is why the paths
+below read `bct::` where a fresh consumer would write `bcts::`.)
 
 It cuts a run of tokens at a newline inside a whitespace token, or at a `;`,
 and hands back every group including the empty ones. Each group records what
@@ -128,7 +127,7 @@ datalove parsers already do this for tensor rows and columns.
 ```rust
 /// Parse the members of one brace, each line a property, a flag or a child.
 fn parse_members<'db>(
-    db: &'db dyn salsa::Database,
+    db: &'db dyn bcts::Db,
     text: Text<'db>,
     tokens: impl IntoIterator<Item = TreeToken<'db>>,
 ) -> Vec<Member<'db>> {
@@ -148,7 +147,7 @@ fn parse_members<'db>(
 }
 
 fn parse_member<'db>(
-    db: &'db dyn salsa::Database,
+    db: &'db dyn bcts::Db,
     text: Text<'db>,
     line: Vec<TreeToken<'db>>,
 ) -> Member<'db> {
