@@ -30,6 +30,7 @@
 
 ---
 
+- [`.fui` on bcts](report-fairlightui-on-bcts.md)
 - [Adapt Operator Error Cases](report-adapt-cases.md)
 - [Advanced PLT Directions](report-advanced-ideas.md)
 - [GADTs Without Dependent Types](report-gadts.md)
