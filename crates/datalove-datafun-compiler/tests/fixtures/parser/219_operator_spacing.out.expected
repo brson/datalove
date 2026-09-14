@@ -1,0 +1,194 @@
+{
+  "ast": {
+    "statements": [
+      {
+        "kind": "Let",
+        "name": "a",
+        "type_hint": "Int",
+        "value": {
+          "expr": {
+            "kind": "BinOp",
+            "lhs": {
+              "expr": {
+                "kind": "Int",
+                "type_hint": null,
+                "value": "1"
+              }
+            },
+            "op": "Sub",
+            "rhs": {
+              "expr": {
+                "kind": "Int",
+                "type_hint": null,
+                "value": "2"
+              }
+            }
+          }
+        }
+      },
+      {
+        "kind": "Let",
+        "name": "b",
+        "type_hint": "Int",
+        "value": {
+          "expr": {
+            "kind": "BinOp",
+            "lhs": {
+              "expr": {
+                "kind": "Int",
+                "type_hint": null,
+                "value": "1"
+              }
+            },
+            "op": "Sub",
+            "rhs": {
+              "expr": {
+                "kind": "Int",
+                "type_hint": null,
+                "value": "2"
+              }
+            }
+          }
+        }
+      },
+      {
+        "kind": "Let",
+        "name": "c",
+        "type_hint": "Int",
+        "value": {
+          "expr": {
+            "kind": "UnaryOp",
+            "op": "Neg",
+            "operand": {
+              "expr": {
+                "kind": "Int",
+                "type_hint": null,
+                "value": "2"
+              }
+            }
+          }
+        }
+      },
+      {
+        "kind": "Let",
+        "name": "d",
+        "type_hint": {
+          "Tensor": {
+            "element_type": "Int",
+            "rank": 2
+          }
+        },
+        "value": {
+          "expr": {
+            "elements": [
+              {
+                "expr": {
+                  "kind": "Int",
+                  "type_hint": null,
+                  "value": "1"
+                }
+              },
+              {
+                "expr": {
+                  "kind": "UnaryOp",
+                  "op": "Neg",
+                  "operand": {
+                    "expr": {
+                      "kind": "Int",
+                      "type_hint": null,
+                      "value": "2"
+                    }
+                  }
+                }
+              },
+              {
+                "expr": {
+                  "kind": "Int",
+                  "type_hint": null,
+                  "value": "3"
+                }
+              },
+              {
+                "expr": {
+                  "kind": "Int",
+                  "type_hint": null,
+                  "value": "4"
+                }
+              }
+            ],
+            "kind": "Tensor",
+            "shape": [
+              2,
+              2
+            ],
+            "type_hint": null
+          }
+        }
+      },
+      {
+        "kind": "Let",
+        "name": "e",
+        "type_hint": {
+          "Tensor": {
+            "element_type": "Int",
+            "rank": 2
+          }
+        },
+        "value": {
+          "expr": {
+            "elements": [
+              {
+                "expr": {
+                  "kind": "BinOp",
+                  "lhs": {
+                    "expr": {
+                      "kind": "Int",
+                      "type_hint": null,
+                      "value": "1"
+                    }
+                  },
+                  "op": "Sub",
+                  "rhs": {
+                    "expr": {
+                      "kind": "Int",
+                      "type_hint": null,
+                      "value": "2"
+                    }
+                  }
+                }
+              },
+              {
+                "expr": {
+                  "kind": "Int",
+                  "type_hint": null,
+                  "value": "3"
+                }
+              },
+              {
+                "expr": {
+                  "kind": "Int",
+                  "type_hint": null,
+                  "value": "4"
+                }
+              },
+              {
+                "expr": {
+                  "kind": "Int",
+                  "type_hint": null,
+                  "value": "5"
+                }
+              }
+            ],
+            "kind": "Tensor",
+            "shape": [
+              2,
+              2
+            ],
+            "type_hint": null
+          }
+        }
+      }
+    ]
+  },
+  "diagnostics": []
+}

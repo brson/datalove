@@ -85,6 +85,11 @@ impl<'db> Parser<'db> {
     /// `ExprFunKind::Place` instead of `TryOption(Index(...))`.
     fn parse_postfix_try_operators(&mut self, mut expr: ast::ExprFun<'db>) -> ast::ExprFun<'db> {
         loop {
+            // A postfix operator is written against what it operates on, so
+            // one with a space before it is not attached to this expression.
+            if !self.glued_left() {
+                break;
+            }
             match self.peek() {
                 Some(TreeToken::Token(token)) => {
                     let TextSpan { text, span: op_span } = self.extract_text_span(&TreeToken::Token(token.clone()));
@@ -155,8 +160,10 @@ impl<'db> Parser<'db> {
                     sub.error_if_not_exhausted();
                     self.merge_from_sub(&mut sub);
 
-                    // Check for ? or ! following the index.
-                    let error_mode = if self.peek_sigil(Sigil::Question) {
+                    // Check for ? or ! following the index, written against it.
+                    let error_mode = if !self.glued_left() {
+                        None
+                    } else if self.peek_sigil(Sigil::Question) {
                         self.next(); // consume ?
                         Some(ast::IndexErrorMode::Option)
                     } else if self.peek_sigil(Sigil::Exclamation) {
@@ -268,7 +275,70 @@ impl<'db> Parser<'db> {
     }
 
     /// Peek at the next token(s) and return the binary operator if present.
+    ///
+    /// An operator written against one of its neighbours and not the other is
+    /// a prefix or a postfix operator rather than this one, so the expression
+    /// ends before it: `a -1` is `a` and then `-1`. A word operator is
+    /// delimited by being a word, which is why only the sigils are asked
+    /// about their spacing.
     fn peek_binop(&self) -> Option<ast::BinOp> {
+        let op = self.peek_binop_ignoring_spacing()?;
+        if self.peek_is_sigil() && !self.is_infix_spacing() {
+            return None;
+        }
+        Some(op)
+    }
+
+    /// Whether the token at the cursor is a sigil.
+    fn peek_is_sigil(&self) -> bool {
+        matches!(
+            self.peek(),
+            Some(TreeToken::Token(token)) if matches!(token.kind, TokenKind::Sigil(_))
+        )
+    }
+
+    /// What to say about an operator written against one side only.
+    ///
+    /// An expression that ended at one of these ended because of how it was
+    /// spaced, which is worth saying rather than reporting the operator as a
+    /// token nobody expected.
+    pub(super) fn lopsided_operator(&self) -> Option<(String, String)> {
+        let Some(TreeToken::Token(token)) = self.peek() else {
+            return None;
+        };
+        let TokenKind::Sigil(sigil) = token.kind else {
+            return None;
+        };
+        let text = sigil.as_str();
+
+        if self.peek_binop_ignoring_spacing().is_some() && !self.is_infix_spacing() {
+            let fixity = if self.glued_right() { "prefix" } else { "postfix" };
+            return Some((
+                fmt!("this `{text}` is spaced as a {fixity} operator"),
+                S("an operator between two things is written against both of them, or against neither"),
+            ));
+        }
+
+        if Self::is_postfix_sigil(sigil) && !self.glued_left() {
+            return Some((
+                fmt!("this `{text}` is written apart from what it applies to"),
+                S("a postfix operator is written against the expression before it"),
+            ));
+        }
+
+        None
+    }
+
+    /// Whether a sigil is one of the operators written after its operand.
+    fn is_postfix_sigil(sigil: Sigil) -> bool {
+        matches!(
+            sigil,
+            Sigil::Question | Sigil::Exclamation | Sigil::At | Sigil::Dot,
+        )
+    }
+
+    /// The binary operator at the cursor, whatever its spacing says.
+    fn peek_binop_ignoring_spacing(&self) -> Option<ast::BinOp> {
         match self.peek() {
             Some(TreeToken::Token(token)) => {
                 match token.kind {

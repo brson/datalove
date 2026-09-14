@@ -1,6 +1,6 @@
 # Design: Token Gluing and Operator Fixity
 
-Status: Design complete
+Status: Implemented
 Date: 2026-09-14
 
 ## Overview
@@ -61,6 +61,12 @@ trailing run of letters. Any gap ends the literal.
 The suffix is reported rather than interpreted. datalove has no numeric
 suffixes, so it rejects any suffix and says what to write instead; a caller
 that has units reads them off the same field.
+
+A `.` written against the digits commits to a float whatever follows it, so
+`1.foo` asks for the digits of a float. One with a space before it commits
+only where digits follow: `1 . 5` is a float written apart from itself, and
+`1 .foo` is a field read written apart from its base, which the postfix rule
+below complains about instead.
 
 ## Fixity
 
@@ -139,19 +145,50 @@ pub trait TokenStreamExt<'db> {
 
 pub enum Radix { Dec, Hex }
 
-pub struct Number<'db> {
+pub enum NumberError {
+    Digits, FloatSpaced, FractionMissing, ExponentSpaced, ExponentMissing,
+}
+
+pub struct Number {
     pub negative: bool,
     pub radix: Radix,
-    pub digits: InternedText<'db>,
-    pub fraction: Option<InternedText<'db>>,
-    pub exponent: Option<String>,
-    pub suffix: Option<InternedText<'db>>,
+    /// Whether a fraction or an exponent makes this a float.
+    pub float: bool,
+    /// The leading word, its radix prefix included and any suffix taken off.
+    pub digits: String,
+    /// The word after the `.`, which carries an in-word exponent with it.
+    pub fraction: Option<String>,
+    /// An exponent's sign and digits, where they were tokens of their own.
+    pub exponent_tail: Option<String>,
+    /// Letters written onto the digits, meaning whatever the caller says.
+    pub suffix: Option<String>,
     pub span: Range<usize>,
+    pub error: Option<NumberError>,
+}
+
+impl Number {
+    /// The message and label for a number that was not written as one.
+    pub fn complaint(&self) -> Option<(String, String)>;
+    /// The literal as it was written, without its suffix.
+    pub fn text(&self) -> String;
 }
 
 /// Read one numeric literal, as far as it is glued.
-pub fn eat_number<'db, S>(stream: &mut S) -> Option<Number<'db>>;
+pub fn eat_number<'db, S: TokenStreamExt<'db>>(stream: &mut S) -> Option<Number>;
+
+/// Whether a word begins a number, which a name cannot.
+pub fn is_number_word(word: &str) -> bool;
 ```
+
+A number is read whole and reported whole: the pieces are consumed even where
+the spacing was wrong, so a parser makes one complaint about the number rather
+than meeting its pieces again as something else. `complaint` lives in bcts so
+that the two languages say the same thing, and quotes the number the reader
+meant: `1 . 5` is answered with ``write it as `1.5```.
+
+A suffix is a field rather than an error, since bcts does not know whether the
+caller has units. datalove's own message for one is in
+`datalove-datalit::parser_util::suffix_complaint`, shared by both its parsers.
 
 There is no sign policy. `eat_number` always takes a glued leading `-`, and
 whether it is ever asked is the grammar's business: datafun's prefix operator

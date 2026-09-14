@@ -1,0 +1,8 @@
+// An operator written against both its neighbours or against neither goes
+// between them, and one written against a single side does not: `1 -2` is
+// two things where `1 - 2` and `1-2` are one.
+let a: int = 1 - 2
+let b: int = 1-2
+let c: int = -2
+let d: [|int, 2|] = [| 1 -2, 3 4 |]
+let e: [|int, 2|] = [| 1 - 2 3, 4 5 |]

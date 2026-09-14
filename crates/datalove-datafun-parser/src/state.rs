@@ -612,9 +612,13 @@ impl<'db> Parser<'db> {
         if self.peek().is_some() && !self.had_error {
             self.had_error = true;
             let ts = self.peek_text_span();
-            let mut builder = DiagnosticBuilder::error(self.db, "unexpected token after expression")
+            let (message, label) = match self.lopsided_operator() {
+                Some(complaint) => complaint,
+                None => (S("unexpected token after expression"), S("unexpected token")),
+            };
+            let mut builder = DiagnosticBuilder::error(self.db, &message)
                 .code("P021")
-                .primary_label(ts, "unexpected token");
+                .primary_label(ts, &label);
             if let Some((ctx_span, ctx_msg)) = &self.branch_context {
                 builder = builder.secondary_label(ctx_span.C(), ctx_msg);
             }

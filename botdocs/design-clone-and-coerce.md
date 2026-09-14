@@ -21,6 +21,9 @@ Creates a deep copy of a linear value. Original remains valid after cloning.
 expr$
 ```
 
+A postfix operator is written against what it applies to, so `x$` is a clone
+and `x $` is not. See [design-token-gluing.md](design-token-gluing.md).
+
 ### Type Rules
 
 | Operand type | Result |

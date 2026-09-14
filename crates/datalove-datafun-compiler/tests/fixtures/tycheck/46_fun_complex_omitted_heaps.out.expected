@@ -20,9 +20,6 @@
   ],
   "errors": [
     {
-      "kind": "CannotSynthesize"
-    },
-    {
       "kind": "MissingReturn",
       "name": "factorial"
     }

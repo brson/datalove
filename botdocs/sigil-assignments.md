@@ -22,6 +22,14 @@ Sigils are defined in the `bcts` crate (`lexer.rs`).
 - `@` - At
   - Postfix adapt operator: clone, widen, or coerce
 
+- `$` - Dollar
+  - Lexed, not yet read by the parser: postfix clone, see
+    [design-clone-and-coerce.md](design-clone-and-coerce.md)
+
+- `~` - Tilde
+  - Lexed, not yet read by the parser: postfix widen, see
+    [design-clone-and-coerce.md](design-clone-and-coerce.md)
+
 ### Hash
 - `#` - Hash
   - Part of `#{` set open sigil
@@ -183,10 +191,18 @@ Reserved, not yet used in parser.
 Characters not currently assigned as sigil start characters:
 
 ```datalove
-$ & \ ^ ` ~
+& \ ^ `
 ```
 
 Note: `_` is considered a word character (identifier start).
+
+## Spacing
+
+What a sigil operator attaches to is decided by how it was written: one
+against both its neighbours or against neither goes between them, one against
+only what follows it is a prefix operator, and one against only what precedes
+it is a postfix operator. See
+[design-token-gluing.md](design-token-gluing.md).
 
 
 # Open design questions
