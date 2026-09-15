@@ -1,0 +1,54 @@
+----------
+scriptunit-fragment
+----------
+
+// Unit 1 defines two functions. `inner` is unit-local id 0 and `outer` is 1.
+// Calling `outer` past the inline threshold makes the dispatcher hold an
+// optimized body for it, remembered under the reference the call names.
+
+fun inner(x: int): int
+    ret x + 1
+end fun
+
+fun outer(x: int): int
+    ret inner(x)
+end fun
+
+var i: int = 0
+var warm: int = 0
+loop while i .< 80
+    set warm = warm + outer(i@)
+    set i = i + 1
+end loop
+
+debuglog warm
+
+----------
+scriptunit-fragment
+----------
+
+// Unit 2 defines its own two functions, which take unit-local ids 0 and 1
+// again. Calling `second` here is a local reference, the same one unit 1 used
+// for `outer`, and it has to reach this unit's function: a local reference
+// means nothing without knowing whose local scope it names.
+//
+// The result is bound rather than only logged, because a fragment reports
+// only that it ran. The expression unit below is what compares the value
+// across the interpreter and the dispatchers.
+
+fun first(x: int): int
+    ret x + 1000
+end fun
+
+fun second(x: int): int
+    ret x + 2000
+end fun
+
+let local_call = second(7)
+debuglog local_call
+
+----------
+scriptunit-expr
+----------
+
+local_call

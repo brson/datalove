@@ -586,6 +586,21 @@ pub enum CodeRef {
 
 `Module` uses numeric `IrModuleId` (not salsa `ModuleId`) for serializability.
 
+**`Local` is relative, and is not a name to remember a function by.** It is a
+position in whichever unit's list is in scope, and every script unit numbers its
+own functions from zero, so `Local(1)` means a different function in each of
+them. Resolution is fine -- `ExecutionContext` holds one unit's list at a time,
+and only `CodeRef::External` swaps it -- but anything that *remembers* a
+function between calls has to say which unit as well. The dynamic inliner's
+optimized bodies and the JIT's compiled ones both did not, so a hot function in
+one REPL line was executed in place of a different function at the same id in
+the next. `FuncIdentity` (interp `dispatch.rs`) is what those key on now: it
+resolves `Local` against the scope unit, which also makes it agree with the
+`External` a later unit uses for the same function. `ExecutionContext` carries
+the unit for this, and `FunctionKey::of` does the same for the JIT's table.
+Fixture: `interp/947_crossunit_local_id_reuse`, which the tuned and chaos
+dispatcher suites run against the plain interpreter.
+
 ### IrCodeUnit
 
 One type represents functions, script units and native functions. The `context`

@@ -99,10 +99,17 @@ impl FunctionKey {
     }
 }
 
-impl From<&CodeRef> for FunctionKey {
-    fn from(code_ref: &CodeRef) -> Self {
+impl FunctionKey {
+    /// Key the function a reference reaches.
+    ///
+    /// `scope_unit` is the script unit whose local functions are in scope. A
+    /// `CodeRef::Local` is a position in that unit's list and means a different
+    /// function in every other unit, so it is resolved against the unit here
+    /// rather than kept as-is; that also makes it agree with the
+    /// `CodeRef::External` a later unit would use for the same function.
+    pub fn of(code_ref: &CodeRef, scope_unit: u32) -> Self {
         match code_ref {
-            CodeRef::Local(id) => FunctionKey::local(*id),
+            CodeRef::Local(id) => FunctionKey::external(scope_unit, *id),
             CodeRef::Module { module, id } => FunctionKey::module(*module, *id),
             CodeRef::External { unit, id } => FunctionKey::external(*unit, *id),
         }
@@ -526,7 +533,7 @@ mod tests {
 
         // Set up execution context with both functions.
         let functions: Vec<IrCodeUnit> = vec![identity_fn, main_fn.clone()];
-        let ctx = ExecutionContext::new(&functions);
+        let ctx = ExecutionContext::new(0, &functions);
         let registry = FunctionRegistry::new();
         let mut frames = FrameStore::new();
 
@@ -610,7 +617,7 @@ mod tests {
 
         // Set up context with both functions.
         let functions: Vec<IrCodeUnit> = vec![identity_fn, main_fn.clone()];
-        let ctx = ExecutionContext::new(&functions);
+        let ctx = ExecutionContext::new(0, &functions);
         let registry = FunctionRegistry::new();
 
         // Create JIT engine.
@@ -688,7 +695,7 @@ impl CallDispatcher for JitEngine {
     ) -> DispatchResult {
         use datalove_datafun_interp::ExecutionContext;
 
-        let key = FunctionKey::from(code_ref);
+        let key = FunctionKey::of(code_ref, call_ctx.exec_ctx.unit());
 
         // For external functions, we need to use the callee's unit's context to find
         // its local functions. For local/module functions, use the caller's context.
@@ -699,7 +706,7 @@ impl CallDispatcher for JitEngine {
                 // External function - get context from callee's unit.
                 match call_ctx.registry.unit_functions(*unit) {
                     Some(unit_funcs) => {
-                        _callee_ctx_owned = Some(ExecutionContext::new(unit_funcs));
+                        _callee_ctx_owned = Some(ExecutionContext::new(*unit, unit_funcs));
                         _callee_ctx_owned.as_ref().unwrap()
                     }
                     None => {

@@ -61,7 +61,7 @@ pub use layout::IrLayout;
 pub use tydesc::IrTyDescTable;
 pub use frame::{Frame, FrameStore};
 pub use env::{FunctionRegistry, ModuleFunctionRegistry, UnitFunctionRegistry, ScriptEnvironment, ExecutionContext};
-pub use dispatch::{CallDispatcher, CallSiteInfo, DispatchCallContext, DispatchResult};
+pub use dispatch::{CallDispatcher, CallSiteInfo, DispatchCallContext, DispatchResult, FuncIdentity};
 pub use dynamic::{DynamicInliner, DynamicInlinerConfig, InlinerStats};
 pub use ctfe::InterpCtfeEvaluator;
 pub use native::{NativeFunctionTable, NativeFnImpl};
@@ -338,7 +338,7 @@ impl IrInterpreter {
         env: &ScriptEnvironment,
     ) -> Result<(), InterpError> {
         // Create an empty context (module functions are resolved via registry, not local context).
-        let ctx = ExecutionContext::new(&[]);
+        let ctx = ExecutionContext::new(env.registry.unit_count(), &[]);
         // Use the environment's registry but create fresh frames (function execution
         // doesn't persist frames like script units do).
         let mut frames = FrameStore::new();
@@ -464,8 +464,10 @@ impl IrInterpreter {
         // Create frame with live value tracking for script cleanup.
         let mut frame = Frame::new(unit, layout);
 
-        // Create execution context with local functions.
-        let ctx = ExecutionContext::new(&unit.nested_units);
+        // Create execution context with local functions. A unit is registered
+        // once it finishes, so the count is the index this one will take, and
+        // the index its `Local` references are relative to.
+        let ctx = ExecutionContext::new(env.registry.unit_count(), &unit.nested_units);
 
         // Execute blocks with registry for function lookups and frames for slot access.
         // Script units don't have a single function ID, so pass None.
@@ -1093,6 +1095,7 @@ impl IrInterpreter {
                     let call_site_info = current_func.map(|caller| {
                         dispatch::CallSiteInfo {
                             caller: caller.clone(),
+                            caller_unit: ctx.unit(),
                             call_site_id: *site_id,
                         }
                     });
@@ -2273,9 +2276,9 @@ impl IrInterpreter {
     /// Get an optimized version of a code unit from the dispatcher if available.
     ///
     /// Returns a cloned code unit to avoid lifetime issues with the dispatcher borrow.
-    fn get_optimized_function(&self, code_ref: &CodeRef) -> Option<IrCodeUnit> {
+    fn get_optimized_function(&self, func: dispatch::FuncIdentity) -> Option<IrCodeUnit> {
         let dispatcher = self.call_dispatcher.borrow();
-        dispatcher.as_ref().and_then(|d| d.get_optimized_function(code_ref).cloned())
+        dispatcher.as_ref().and_then(|d| d.get_optimized_function(func).cloned())
     }
 
     /// Mark Out param destinations as initialized after a call returns.
@@ -2308,12 +2311,13 @@ impl IrInterpreter {
         registry: &FunctionRegistry,
         frames: &mut FrameStore,
     ) -> Result<(), InterpError> {
-        let optimized = self.get_optimized_function(code_ref);
+        let optimized = self.get_optimized_function(
+            dispatch::FuncIdentity::of(code_ref, ctx.unit()));
         let func_to_use = optimized.as_ref().unwrap_or(callee);
         if let CodeRef::External { unit, .. } = code_ref {
             let unit_funcs = registry.unit_functions(*unit)
                 .unwrap_or_else(|| panic!("external unit {} not found", unit));
-            let callee_ctx = ExecutionContext::new(unit_funcs);
+            let callee_ctx = ExecutionContext::new(*unit, unit_funcs);
             self.call_in_context_with_shapes(
                 func_to_use, Some(code_ref.clone()), arg_vals, shape_descriptors,
                 dest, &callee_ctx, registry, frames)
@@ -2335,13 +2339,14 @@ impl IrInterpreter {
         frames: &mut FrameStore,
     ) -> Result<(), InterpError> {
         // Check if there's an optimized (inlined) version of this function.
-        let optimized = self.get_optimized_function(code_ref);
+        let optimized = self.get_optimized_function(
+            dispatch::FuncIdentity::of(code_ref, ctx.unit()));
         let func_to_use = optimized.as_ref().unwrap_or(callee);
 
         if let CodeRef::External { unit, .. } = code_ref {
             let unit_funcs = registry.unit_functions(*unit)
                 .unwrap_or_else(|| panic!("external unit {} not found", unit));
-            let callee_ctx = ExecutionContext::new(unit_funcs);
+            let callee_ctx = ExecutionContext::new(*unit, unit_funcs);
             self.call_in_context(func_to_use, Some(code_ref.clone()), arg_vals, dest, &callee_ctx, registry, frames)
         } else {
             self.call_in_context(func_to_use, Some(code_ref.clone()), arg_vals, dest, ctx, registry, frames)

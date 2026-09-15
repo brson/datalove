@@ -4,7 +4,7 @@
 
 use std::any::Any;
 
-use datalove_datafun_ir::{CallSiteId, CodeRef, IrCodeUnit};
+use datalove_datafun_ir::{CallSiteId, CodeRef, CodeUnitId, IrCodeUnit, IrModuleId};
 use datalove_rt::c::LocalRtHandle;
 
 use crate::error::InterpError;
@@ -20,8 +20,46 @@ use crate::IrInterpreter;
 pub struct CallSiteInfo {
     /// The function containing this call site.
     pub caller: CodeRef,
+    /// The script unit whose local scope `caller` names, where it is `Local`.
+    pub caller_unit: u32,
     /// The unique ID of this call site within the caller.
     pub call_site_id: CallSiteId,
+}
+
+impl CallSiteInfo {
+    /// Which function this call site is in, unambiguously.
+    pub fn caller_identity(&self) -> FuncIdentity {
+        FuncIdentity::of(&self.caller, self.caller_unit)
+    }
+}
+
+/// A function, named so that two units cannot mean the same thing by it.
+///
+/// `CodeRef::Local` is relative to whichever unit's list is in scope, so it is
+/// not something to remember a function by: every script unit numbers its own
+/// functions from zero. Resolving it against that unit gives a name that holds
+/// still, and one a later unit's `CodeRef::External` agrees with, since both
+/// denote the same function.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub enum FuncIdentity {
+    /// A script unit's function: the unit that owns it, and its id there.
+    Unit { unit: u32, id: CodeUnitId },
+    /// A module function, which is already unambiguous.
+    Module { module: IrModuleId, id: CodeUnitId },
+}
+
+impl FuncIdentity {
+    /// Name the function a reference reaches.
+    ///
+    /// `scope_unit` is the unit whose local functions are in scope, which is
+    /// what a `Local` reference is relative to.
+    pub fn of(code_ref: &CodeRef, scope_unit: u32) -> Self {
+        match code_ref {
+            CodeRef::Local(id) => FuncIdentity::Unit { unit: scope_unit, id: *id },
+            CodeRef::External { unit, id } => FuncIdentity::Unit { unit: *unit, id: *id },
+            CodeRef::Module { module, id } => FuncIdentity::Module { module: *module, id: *id },
+        }
+    }
 }
 
 /// Result of dispatching a call.
@@ -89,7 +127,7 @@ pub trait CallDispatcher {
     ///
     /// Called before executing a function to check if there's an inlined/optimized
     /// version that should be used instead. Returns None to use the original code unit.
-    fn get_optimized_function(&self, _code_ref: &CodeRef) -> Option<&IrCodeUnit> {
+    fn get_optimized_function(&self, _func: FuncIdentity) -> Option<&IrCodeUnit> {
         None
     }
 }

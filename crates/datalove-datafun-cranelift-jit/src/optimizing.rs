@@ -16,7 +16,7 @@ use std::time::Instant;
 use datalove_datafun_ir::{CodeRef, IrCodeUnit};
 use datalove_datafun_interp::{
     CallDispatcher, DispatchCallContext, DispatchResult, Destination,
-    DynamicInliner, DynamicInlinerConfig, InterpError, Value,
+    DynamicInliner, DynamicInlinerConfig, FuncIdentity, InterpError, Value,
 };
 use datalove_rt::c::LocalRtHandle;
 
@@ -305,8 +305,8 @@ impl OptimizingDispatcher {
     }
 
     /// Check if we have an inlined version of a function.
-    fn has_inlined_version(&self, code_ref: &CodeRef) -> bool {
-        self.inliner.get_inlined_function(code_ref).is_some()
+    fn has_inlined_version(&self, func: FuncIdentity) -> bool {
+        self.inliner.get_inlined_function(func).is_some()
     }
 
     /// Try to execute via JIT if compiled.
@@ -325,7 +325,8 @@ impl OptimizingDispatcher {
     ) -> Option<DispatchResult> {
         use datalove_datafun_interp::ExecutionContext;
 
-        let key = FunctionKey::from(code_ref);
+        let key = FunctionKey::of(code_ref, call_ctx.exec_ctx.unit());
+        let func_id = FuncIdentity::of(code_ref, call_ctx.exec_ctx.unit());
 
         // For external functions, get context from callee's unit.
         let _callee_ctx_owned: Option<ExecutionContext>;
@@ -333,7 +334,7 @@ impl OptimizingDispatcher {
             CodeRef::External { unit, .. } => {
                 match call_ctx.registry.unit_functions(*unit) {
                     Some(unit_funcs) => {
-                        _callee_ctx_owned = Some(ExecutionContext::new(unit_funcs));
+                        _callee_ctx_owned = Some(ExecutionContext::new(*unit, unit_funcs));
                         _callee_ctx_owned.as_ref().unwrap()
                     }
                     None => {
@@ -353,7 +354,7 @@ impl OptimizingDispatcher {
                 // Record JIT compilation in metrics if this was a new compilation.
                 if let Some(metrics) = &mut self.metrics {
                     if let Some(FunctionState::Compiled { code_size, .. }) = self.jit.states.get(&key) {
-                        metrics.record_jit_compile(code_ref, *code_size);
+                        metrics.record_jit_compile(func_id, *code_size);
                     }
                 }
 
@@ -386,7 +387,7 @@ impl OptimizingDispatcher {
                     } else {
                         ExecutionMode::Jit
                     };
-                    metrics.record_call(code_ref, mode, start_time);
+                    metrics.record_call(func_id, mode, start_time);
                 }
 
                 match result {
@@ -472,9 +473,9 @@ impl CallDispatcher for OptimizingDispatcher {
                     );
 
                     // Check if inlining was performed.
-                    if self.inliner.get_inlined_function(&call_site_info.caller).is_some() {
+                    if self.inliner.get_inlined_function(call_site_info.caller_identity()).is_some() {
                         if let Some(metrics) = &mut self.metrics {
-                            metrics.record_inlining(&call_site_info.caller);
+                            metrics.record_inlining(call_site_info.caller_identity());
                         }
                     }
 
@@ -486,7 +487,8 @@ impl CallDispatcher for OptimizingDispatcher {
         }
 
         // Step 2: Check if we have an inlined version.
-        let is_inlined = self.has_inlined_version(code_ref);
+        let is_inlined = self.has_inlined_version(
+            FuncIdentity::of(code_ref, call_ctx.exec_ctx.unit()));
 
         // Determine whether to attempt JIT based on mode.
         let should_try_jit = self.config.jit_enabled && self.chaos_should_compile();
@@ -517,7 +519,11 @@ impl CallDispatcher for OptimizingDispatcher {
         // Step 5: Fall back to interpreter.
         // Record interpreted execution in metrics.
         if let Some(metrics) = &mut self.metrics {
-            metrics.record_call(code_ref, ExecutionMode::Interpreted, start_time);
+            metrics.record_call(
+                FuncIdentity::of(code_ref, call_ctx.exec_ctx.unit()),
+                ExecutionMode::Interpreted,
+                start_time,
+            );
         }
 
         DispatchResult::NotHandled
@@ -531,8 +537,8 @@ impl CallDispatcher for OptimizingDispatcher {
         self
     }
 
-    fn get_optimized_function(&self, code_ref: &CodeRef) -> Option<&IrCodeUnit> {
-        self.inliner.get_inlined_function(code_ref)
+    fn get_optimized_function(&self, func: FuncIdentity) -> Option<&IrCodeUnit> {
+        self.inliner.get_inlined_function(func)
     }
 }
 

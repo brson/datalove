@@ -96,7 +96,7 @@ impl ChaosDispatcher {
         frames: &mut FrameStore,
     ) -> Result<(), InterpError> {
         let code_ref = CodeRef::Local(datalove_datafun_ir::CodeUnitId(func.id.0));
-        let key = FunctionKey::from(&code_ref);
+        let key = FunctionKey::of(&code_ref, ctx.unit());
         let rt_handle = interp.runtime_handle();
 
         // Randomly decide whether to try JIT.
@@ -171,7 +171,7 @@ impl CallDispatcher for ChaosDispatcher {
     ) -> DispatchResult {
         use datalove_datafun_interp::ExecutionContext;
 
-        let key = FunctionKey::from(code_ref);
+        let key = FunctionKey::of(code_ref, call_ctx.exec_ctx.unit());
 
         // Randomly decide whether to try JIT.
         if !self.should_compile() {
@@ -185,7 +185,7 @@ impl CallDispatcher for ChaosDispatcher {
             CodeRef::External { unit, .. } => {
                 match call_ctx.registry.unit_functions(*unit) {
                     Some(unit_funcs) => {
-                        _callee_ctx_owned = Some(ExecutionContext::new(unit_funcs));
+                        _callee_ctx_owned = Some(ExecutionContext::new(*unit, unit_funcs));
                         _callee_ctx_owned.as_ref().unwrap()
                     }
                     None => {

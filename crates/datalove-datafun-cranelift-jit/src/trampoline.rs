@@ -186,7 +186,7 @@ pub unsafe extern "C" fn __jit_dispatch_call(
 
     // Decode target function.
     let code_ref = EncodedFuncKey::from_u64(encoded_key).to_code_ref();
-    let func_key = FunctionKey::from(&code_ref);
+    let func_key = FunctionKey::of(&code_ref, ctx.exec_ctx.unit());
 
     // Look up the function IR using ExecutionContext (handles Local, Module, External).
     let ir_unit = ctx.exec_ctx.get_unit(&code_ref, ctx.registry);

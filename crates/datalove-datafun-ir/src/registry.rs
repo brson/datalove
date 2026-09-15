@@ -84,6 +84,14 @@ impl UnitFunctionRegistry {
         self.unit_functions.get(unit as usize).map(|v| v.as_slice())
     }
 
+    /// How many units have been completed.
+    ///
+    /// A unit is added once it has finished, so this is also the index the
+    /// unit now running will take.
+    pub fn unit_count(&self) -> u32 {
+        self.unit_functions.len() as u32
+    }
+
     /// Iterate over all unit code units.
     pub fn iter_unit_code_units(&self) -> impl Iterator<Item = &IrCodeUnit> {
         self.unit_functions.iter().flat_map(|v| v.iter())
@@ -162,6 +170,11 @@ impl FunctionRegistry {
     /// Get all code units from a unit.
     pub fn unit_functions(&self, unit: u32) -> Option<&[IrCodeUnit]> {
         self.unit_registry.unit_functions(unit)
+    }
+
+    /// How many units have been completed; also the index of the one running.
+    pub fn unit_count(&self) -> u32 {
+        self.unit_registry.unit_count()
     }
 
     /// Iterate over all module code units.

@@ -238,7 +238,7 @@ fn test_simple_function_call() {
 
     // Create context with both functions.
     let functions: Vec<IrCodeUnit> = vec![identity_fn, main_code_unit.clone()];
-    let ctx = ExecutionContext::new(&functions);
+    let ctx = ExecutionContext::new(0, &functions);
 
     // Execute main, writing result to our storage.
     let mut interp = IrInterpreter::new();
@@ -323,7 +323,7 @@ fn test_nested_function_calls() {
 
     // Create context with both functions.
     let functions: Vec<IrCodeUnit> = vec![passthrough_fn, nested_code_unit.clone()];
-    let ctx = ExecutionContext::new(&functions);
+    let ctx = ExecutionContext::new(0, &functions);
 
     // Create argument value: 42.
     let mut interp = IrInterpreter::new();
@@ -353,7 +353,7 @@ fn test_nested_function_calls() {
 /// Helper to run a function and get an i64 result.
 fn run_i64_function(code_unit: &IrCodeUnit) -> i64 {
     let functions = [code_unit.clone()];
-    let ctx = ExecutionContext::new(&functions);
+    let ctx = ExecutionContext::new(0, &functions);
     let mut interp = IrInterpreter::new();
     let mut result: i64 = 0;
     let ret_tydesc = interp.tydesc_table.get_or_create(&IrType::I64);
@@ -370,7 +370,7 @@ fn run_i64_function(code_unit: &IrCodeUnit) -> i64 {
 /// Helper to run a function and get a u32 result.
 fn run_u32_function(code_unit: &IrCodeUnit) -> u32 {
     let functions = [code_unit.clone()];
-    let ctx = ExecutionContext::new(&functions);
+    let ctx = ExecutionContext::new(0, &functions);
     let mut interp = IrInterpreter::new();
     let mut result: u32 = 0;
     let ret_tydesc = interp.tydesc_table.get_or_create(&IrType::U32);
@@ -387,7 +387,7 @@ fn run_u32_function(code_unit: &IrCodeUnit) -> u32 {
 /// Helper to run a function and get a bool result.
 fn run_bool_function(code_unit: &IrCodeUnit) -> bool {
     let functions = [code_unit.clone()];
-    let ctx = ExecutionContext::new(&functions);
+    let ctx = ExecutionContext::new(0, &functions);
     let mut interp = IrInterpreter::new();
     let mut result: bool = false;
     let ret_tydesc = interp.tydesc_table.get_or_create(&IrType::Bool);
@@ -427,7 +427,7 @@ fn test_const_u8() {
 
     let code_unit = IrCodeUnit::from(func);
     let functions = [code_unit.clone()];
-    let ctx = ExecutionContext::new(&functions);
+    let ctx = ExecutionContext::new(0, &functions);
     let mut interp = IrInterpreter::new();
     let mut result: u8 = 0;
     let ret_tydesc = interp.tydesc_table.get_or_create(&IrType::U8);
@@ -463,7 +463,7 @@ fn test_const_i32() {
 
     let code_unit = IrCodeUnit::from(func);
     let functions = [code_unit.clone()];
-    let ctx = ExecutionContext::new(&functions);
+    let ctx = ExecutionContext::new(0, &functions);
     let mut interp = IrInterpreter::new();
     let mut result: i32 = 0;
     let ret_tydesc = interp.tydesc_table.get_or_create(&IrType::I32);

@@ -68,14 +68,27 @@ impl Default for ScriptEnvironment {
 
 /// Execution context holding available functions.
 pub struct ExecutionContext<'a> {
+    /// The script unit these functions belong to.
+    ///
+    /// A `CodeRef::Local` names a position in `functions` and says nothing
+    /// about whose list that is, so every unit's ids start again at zero.
+    /// Anything that remembers a function between calls -- the inliner's
+    /// optimized bodies, the JIT's compiled ones -- has to key on this as well,
+    /// or unit 1's function answers to unit 2's name.
+    unit: u32,
     /// Local functions available for calling (from current unit).
     functions: &'a [IrCodeUnit],
 }
 
 impl<'a> ExecutionContext<'a> {
-    /// Create a new execution context with the given functions.
-    pub fn new(functions: &'a [IrCodeUnit]) -> Self {
-        Self { functions }
+    /// Create a new execution context for one script unit's functions.
+    pub fn new(unit: u32, functions: &'a [IrCodeUnit]) -> Self {
+        Self { unit, functions }
+    }
+
+    /// The script unit whose local scope this is.
+    pub fn unit(&self) -> u32 {
+        self.unit
     }
 
     /// Find a local function by ID.
