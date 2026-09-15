@@ -26,14 +26,13 @@ and again when the replacement was built. The union-branch record is kept in an 
 
 **Front end.** `FunParam::is_comptime` carries the `const` modifier from the parser.
 `TypeFunction::param_comptime` carries it through the type system. `synthesize.rs:1202`
-enforces what a comptime argument may be: the name of a `const` binding, or a scalar
-literal. Not a `let`, not a parameter, and not an expression -- not even one whose parts
-are all known, such as `2 + 3`. The test is on the shape of the expression rather than on
-whether it could in principle be evaluated, because specialization reads the value back
-out of the lowered IR and needs an operand a single `Const` defines. An expression lowers
-to the instructions that compute it, and a comptime call that cannot be placed keeps
-running the original function, so accepting one would mean the `const` quietly did
-nothing. Covered by `tycheck_world/05_comptime_arg_errors.world`.
+enforces what a comptime argument may be: the name of a `const` binding, and nothing
+else. Not a `let`, not a parameter, not a literal, not an expression. The value a const
+parameter takes has to be one the compiler already holds, and a binding is the one form
+that says so on its face; every other shape would mean the compiler deciding case by case
+which ones it can see through, which is how a rule stops being one. A const parameter
+counts, being a const binding within the body, which is what lets one comptime function
+pass its parameter to another. Covered by `tycheck_world/05_comptime_arg_errors.world`.
 
 **Call sites.** `lower/expr.rs:653` emits `Instruction::ComptimeCall` instead of `Call`
 when the callee has comptime parameters, carrying the original arguments and the comptime
@@ -191,10 +190,8 @@ copy or is one of those two.
 and a comptime function calling another with it, over both a module caller and a script
 one. It used to be the fixture that would not lower.
 
-`026_literal_comptime_args` covers literal arguments on both sides, including a
-fixed-width one, where a literal that needed widening would lower to something other than
-a `Const` and quietly not specialize. It also covers two call sites naming the same
-instantiation, which reach one copy.
+`026_shared_instantiation` covers two call sites naming one instantiation, which reach
+one copy, along with a fixed-width and a string const parameter.
 
 `024_module_side_positions` covers the parameter renumbering: a comptime parameter last,
 two of them, and two interleaved among three ordinary ones, all called from module
@@ -222,32 +219,20 @@ at the wrong type. `TypeError::ComptimeParamOnGeneric` reports it at the definit
 catches the function whether or not anything calls it. Lifting the refusal means computing
 type arguments on the comptime branch too, and carrying them through the copy.
 
-**A negated literal is an expression.** `scale(-1.0, x)` is refused where
-`scale(1.0, x)` is accepted, because a negation lowers to the literal's `Const` followed
-by `neg` rather than to one constant. Write the value as a const binding, which CTFE folds
-into a single `Const`. Routing const arguments through CTFE would lift this along with the
-rest of the expression case.
-
 **A linear const parameter can only be passed on once.** Using it twice needs a clone, and
-`n@` is an expression, so it is refused as a const argument. Binding it first --
+`n@` is an expression rather than a name, so it is refused. Binding it first --
 `const N: int = n` -- works, because re-reading a const binding clones implicitly rather
-than through an operator. Accepting `name@` would close it.
+than through an operator. This is the one place the rule costs something, and closing it
+means either admitting `name@` or deciding that reading a const parameter does not consume
+it, which it arguably should not: in the copy it is a constant, not a value anyone owns.
 
 ## What remains
 
-- **Const expressions as arguments.** Literals and const bindings are accepted; `2 + 3` is
-  not. Unlike the const-binding case this is not a phasing problem -- the expression
-  depends on nothing instantiation-specific and could be evaluated in phase 5b like any
-  other const. It is simply that CTFE is driven from `Statement::Const` and a call
-  argument is not one. Routing the argument through the same lower-then-evaluate path
-  would lift it. The workaround is to name the value with a `const` binding, which is the
-  rule the surface has today: a const argument is a name or a literal, both of which have
-  an obvious lowering to a single constant.
 - **Dead copies.** A function all of whose call sites were specialized keeps an original
   nobody calls. Leaving it is deliberate -- a later script line may call it -- but for an
   AOT build, where there is no later script line, it is dead weight.
 - **Decide whether the tag ever earns its place.** Monomorphization is right when the
-  value is known at the call site, which the const-binding-only restriction guarantees. If
+  value is known at the call site, which the rule about const arguments guarantees. If
   that restriction is ever lifted far enough that a call site can pass a value chosen at
   runtime from a known set, the dispatch that union-branch built becomes the right shape
   for that case. It is not the right shape for this one.

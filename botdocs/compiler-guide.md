@@ -229,9 +229,11 @@ called into does not have to change. A call whose const argument did not survive
 constant, which is every one of them under `skip_const_inlining`, keeps its `ComptimeCall`
 and runs the original.
 
-**What a const argument may be.** The name of a `const` binding, or a scalar literal.
-Not an expression, even one whose parts are all known: it lowers to the instructions that
-compute it rather than to a `Const`, and there would be nothing for the plan to read.
+**What a const argument may be.** The name of a `const` binding, and nothing else --
+not a literal, not an expression. The value has to be one the compiler already holds, and
+a binding is the one form that says so on its face; anything else would mean deciding
+case by case which shapes to see through. A const parameter counts, being a const binding
+within the body.
 A function with both const parameters and type parameters is refused outright
 (`ComptimeParamOnGeneric`), because lowering takes the comptime branch before a call's
 type arguments are computed and the copy would lose its descriptors.

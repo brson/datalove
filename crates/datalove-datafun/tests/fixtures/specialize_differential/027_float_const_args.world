@@ -8,17 +8,17 @@ module local/test/floatconst
 // which is the one a constant is asked about. They have to be two copies here,
 // and the sign survives the multiply, so collapsing them would show.
 //
-// The negative zero comes from a const binding rather than being written as
-// `-0.0` at the call site: a negation is an expression, and lowers to `const
-// 0f64` followed by `neg` rather than to a constant, so it is refused like any
-// other expression.
+// Every const argument is a named const, which is the rule: the value has to
+// be one the compiler already holds.
 
 fun scale(const factor: f64, x: f64): f64
     ret factor * x
 end fun
 
+const POS_ZERO: f64 = 0.0
+
 fun by_pos_zero(x: f64): f64
-    ret scale(0.0, x)
+    ret scale(POS_ZERO, x)
 end fun
 
 const NEG_ZERO: f64 = -0.0
@@ -27,8 +27,10 @@ fun by_neg_zero(x: f64): f64
     ret scale(NEG_ZERO, x)
 end fun
 
+const HALF: f64 = 0.5
+
 fun by_half(x: f64): f64
-    ret scale(0.5, x)
+    ret scale(HALF, x)
 end fun
 
 ----------

@@ -13,18 +13,22 @@ fun bad_let_binding(x: int): int
     ret scale(three, x)
 end fun
 
-// A literal is accepted: specialization reads the value back out of the IR,
-// where a literal is a `Const` operand exactly like a const binding is.
-fun good_literal(x: int): int
+// A literal is refused along with everything else that is not a name. The
+// value a const parameter takes has to be one the compiler already holds, and
+// a `const` binding is the one form that says so on its face.
+fun bad_literal(x: int): int
     ret scale(5, x)
 end fun
 
-// An expression is not, even though every part of it is known. It lowers to
-// the instructions that compute it, so there is no constant to read, and a
-// comptime call that cannot be placed keeps running the original -- accepting
-// this would mean the `const` quietly did nothing.
+// An expression, likewise, whether or not its parts are known.
 fun bad_expression(x: int): int
     ret scale(2 + 3, x)
+end fun
+
+// Naming a const is how it is written.
+fun good_const(x: int): int
+    const FIVE: int = 5
+    ret scale(FIVE, x)
 end fun
 
 // This function tries to pass a function param to a const param - should error

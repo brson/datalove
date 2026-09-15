@@ -1,0 +1,70 @@
+----------
+module local/test/shared
+----------
+
+// Two call sites naming the same instantiation reach one copy, and a const
+// parameter of a fixed-width type carries a value that is not a bigint.
+
+fun scale(const factor: int, x: int): int
+    ret factor * x
+end fun
+
+fun keep_str(const n: int, s: string): string
+    ret s
+end fun
+
+fun multiply_i32(const factor: i32, x: i32): !i32
+    ret ok (factor *! x)
+end fun
+
+const THREE: int = 3
+const FIVE: int = 5
+const TWO: int = 2
+const I32_THREE: i32 = 3
+
+fun triple(x: int): int
+    ret scale(THREE, x)
+end fun
+
+fun quintuple(x: int): int
+    ret scale(FIVE, x)
+end fun
+
+// The same instantiation as `triple`, so both reach one copy.
+fun thrice_again(x: int): int
+    ret scale(THREE, x)
+end fun
+
+fun triple_i32(x: i32): !i32
+    ret multiply_i32(I32_THREE, x)
+end fun
+
+----------
+scriptunit-fragment
+----------
+
+require module local/test/shared
+import shared.keep_str
+import shared.triple
+import shared.quintuple
+import shared.thrice_again
+import shared.triple_i32
+
+const SCRIPT_TWO: int = 2
+
+let a = triple(10)
+let b = quintuple(10)
+let c = thrice_again(10)
+let d = keep_str(SCRIPT_TWO, "hi")
+let e = triple_i32(: i32 / 5)
+debuglog a
+debuglog b
+debuglog c
+debuglog d
+debuglog e
+
+----------
+scriptunit-expr
+----------
+
+(a, b, c)

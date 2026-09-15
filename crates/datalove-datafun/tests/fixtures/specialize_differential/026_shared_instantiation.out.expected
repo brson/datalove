@@ -4,7 +4,7 @@ Analysis(
     sections: [
         SectionResult(
             section_type: "module",
-            name: Some("local/test/literals"),
+            name: Some("local/test/shared"),
             typecheck: TypecheckResult(
                 status: "Success",
             ),
@@ -21,11 +21,24 @@ Analysis(
                         drop p1
                         return v0
                     
-                    fn repeat_str(p0, p1):
+                    fn keep_str(p0, p1):
                     block0:
                         v0 = move p1
                         drop p0
                         return v0
+                    
+                    fn multiply_i32(p0, p1):
+                    block0:
+                        v0, v1 = mul.checked p0, p1
+                        branch v1, block1, block2
+                    block1:
+                        v2 = const "arithmetic overflow"
+                        v3 = error_from v2
+                        v4 = err v3
+                        return v4
+                    block2:
+                        v5 = ok v0
+                        return v5
                     
                     fn triple(p0):
                     block0:
@@ -47,19 +60,6 @@ Analysis(
                         drop v0
                         v1 = call @0 m0.u7(p0)
                         return v1
-                    
-                    fn multiply_i32(p0, p1):
-                    block0:
-                        v0, v1 = mul.checked p0, p1
-                        branch v1, block1, block2
-                    block1:
-                        v2 = const "arithmetic overflow"
-                        v3 = error_from v2
-                        v4 = err v3
-                        return v4
-                    block2:
-                        v5 = ok v0
-                        return v5
                     
                     fn triple_i32(p0):
                     block0:
@@ -115,74 +115,42 @@ Analysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = const 10int
-                        v1 = call @0 m0.u2(v0)
-                        v2 = const 10int
-                        v3 = call @1 m0.u3(v2)
-                        v4 = const 10int
-                        v5 = call @2 m0.u4(v4)
-                        v6 = const 7int
-                        v7 = const 10int
-                        drop v6
-                        v8 = call @4 u0(v7)
-                        v9 = const 2int
-                        v10 = const "hi"
-                        drop v9
-                        v11 = call @5 u1(v10)
-                        v12 = const 5i32
-                        v13 = call @3 m0.u6(v12)
-                        v14 = const 4i32
-                        v15 = const 5i32
-                        drop v14
-                        v16 = call @6 u2(v15)
-                        debuglog v1
-                        debuglog v3
-                        debuglog v5
-                        debuglog v8
+                        v0 = const 2int
+                        v1 = const 10int
+                        v2 = call @0 m0.u3(v1)
+                        v3 = const 10int
+                        v4 = call @1 m0.u4(v3)
+                        v5 = const 10int
+                        v6 = call @2 m0.u5(v5)
+                        v7 = const 2int
+                        v8 = const "hi"
+                        drop v7
+                        v9 = call @4 u0(v8)
+                        v10 = const 5i32
+                        v11 = call @3 m0.u6(v10)
+                        debuglog v2
+                        debuglog v4
+                        debuglog v6
+                        debuglog v9
                         debuglog v11
-                        debuglog v13
-                        debuglog v16
-                        unit_end_drop v1
-                        unit_end_drop v3
-                        unit_end_drop v5
-                        unit_end_drop v8
+                        unit_end_drop v0
+                        unit_end_drop v2
+                        unit_end_drop v4
+                        unit_end_drop v6
+                        unit_end_drop v9
                         unit_end_drop v11
-                        unit_end_drop v13
-                        unit_end_drop v16
                         unit_end
                     
-                    fn scale__ct0(p0):
-                    block0:
-                        v1 = const 7int
-                        v0 = mul v1, p0
-                        drop v1
-                        drop p0
-                        return v0
-                    
-                    fn repeat_str__ct1(p0):
+                    fn keep_str__ct0(p0):
                     block0:
                         v1 = const 2int
                         v0 = move p0
                         drop v1
                         return v0
-                    
-                    fn multiply_i32__ct2(p0):
-                    block0:
-                        v6 = const 4i32
-                        v0, v1 = mul.checked v6, p0
-                        branch v1, block1, block2
-                    block1:
-                        v2 = const "arithmetic overflow"
-                        v3 = error_from v2
-                        v4 = err v3
-                        return v4
-                    block2:
-                        v5 = ok v0
-                        return v5
                 """,
             ),
             output: "(fragment executed)",
-            debug_output: Some("30\n50\n30\n70\n\"hi\"\nok 15\nok 20\n"),
+            debug_output: Some("30\n50\n30\n\"hi\"\nok 15\n"),
         ),
         SectionResult(
             section_type: "scriptunit-expr",
@@ -198,15 +166,14 @@ Analysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = clone unit0.v1
-                        v1 = clone unit0.v3
-                        v2 = clone unit0.v5
-                        v3 = clone unit0.v8
-                        v4 = pack Tuple4 {v0, v1, v2, v3}
-                        unit_end v4
+                        v0 = clone unit0.v2
+                        v1 = clone unit0.v4
+                        v2 = clone unit0.v6
+                        v3 = pack Tuple3 {v0, v1, v2}
+                        unit_end v3
                 """,
             ),
-            output: "(30, 50, 30, 70)",
+            output: "(30, 50, 30)",
         ),
     ],
 )

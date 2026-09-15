@@ -11,7 +11,12 @@
         {
           "kind": "ComptimeArgNotConstBinding",
           "param_idx": 0,
-          "reason": "comptime argument must be a const binding name or a literal"
+          "reason": "comptime argument must be a const binding name"
+        },
+        {
+          "kind": "ComptimeArgNotConstBinding",
+          "param_idx": 0,
+          "reason": "comptime argument must be a const binding name"
         },
         {
           "kind": "ComptimeArgNotConstBinding",
@@ -41,7 +46,7 @@
           "return_type": "int"
         },
         {
-          "name": "good_literal",
+          "name": "bad_literal",
           "params": [
             "int"
           ],
@@ -49,6 +54,13 @@
         },
         {
           "name": "bad_expression",
+          "params": [
+            "int"
+          ],
+          "return_type": "int"
+        },
+        {
+          "name": "good_const",
           "params": [
             "int"
           ],

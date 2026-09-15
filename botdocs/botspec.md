@@ -945,12 +945,11 @@ fun repeat(const n: i32, s: string): string
 end fun
 
 const COUNT = 3
-let x = repeat(COUNT, "ab")  // a const binding
-let y = repeat(3, "ab")      // or a literal
+let x = repeat(COUNT, "ab")  // COUNT is a const binding
 ```
 
 **Semantics:**
-- The argument must be a const binding name or a scalar literal
+- The argument must be the name of a `const` binding
 - The compiler specializes the function for each unique const argument value
 - Within the function body, the const parameter is available as a compile-time
   constant, enabling optimizations like loop unrolling and dead code elimination
@@ -961,12 +960,11 @@ let y = repeat(3, "ab")      // or a literal
   specialization removes it and writes the value into the body, so `ref` has no
   borrow to describe and `out` and `mut` have nothing to write back to
 - Cannot combine const parameters with type parameters
-- The argument may not be an expression, even one whose parts are all known:
-  `repeat(2 + 1, s)` is refused where `repeat(3, s)` is accepted. Specialization
-  reads the value out of the lowered IR, where a binding and a literal are each
-  a single constant and an expression is the instructions that compute it. A
-  negation counts as an expression, so `scale(-1.0, x)` is refused; name the
-  value with a `const` binding
+- Nothing else is accepted, not a literal and not an expression: `repeat(3, s)`
+  is refused as surely as `repeat(2 + 1, s)`. The value a const parameter takes
+  has to be one the compiler already holds, and a `const` binding is the one
+  form that says so on its face. A const parameter counts, being a const
+  binding within the body
 
 **Implementation:** The compiler monomorphizes, keeping the original function
 and adding a copy per instantiation beside it. See
