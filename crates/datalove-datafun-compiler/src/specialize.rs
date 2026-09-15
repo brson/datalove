@@ -59,6 +59,16 @@ use datalove_datafun_ir::{
 /// Each one is a whole copy of the body in the object file.
 pub const MAX_INSTANTIATIONS: usize = 64;
 
+/// How many times to look for instantiations the last round's copies revealed.
+///
+/// A comptime function calling another one only tells you what it passes once
+/// its own const parameters have been substituted, so a round of copying can
+/// uncover instantiations the round before could not see. This terminates on
+/// its own -- the callees are the program's functions and each is capped at
+/// [`MAX_INSTANTIATIONS`] -- and the cap is a backstop against a cycle nobody
+/// has thought of rather than a limit anything real should reach.
+pub const MAX_ROUNDS: usize = 16;
+
 /// Where a comptime call reaches.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum CalleeKey {
@@ -348,66 +358,81 @@ pub fn specialize_script_unit(
     unit: &IrCodeUnit,
     module_unit: &dyn Fn(IrModuleId, CodeUnitId) -> Option<IrCodeUnit>,
 ) -> (IrCodeUnit, Vec<String>) {
-    let mut plan = MonomorphizationPlan::default();
-    collect_instantiations_into(&mut plan, unit, &script_callee_key);
-    for nested in &unit.nested_units {
-        collect_instantiations_into(&mut plan, nested, &script_callee_key);
-    }
-    if plan.is_empty() {
-        return (unit.clone(), Vec::new());
-    }
-
     let mut unit = unit.clone();
-    let mut next_id = unit.nested_units.iter()
-        .map(|f| f.id.0 + 1)
-        .max()
-        .unwrap_or(0);
+    let mut plan = MonomorphizationPlan::default();
     let mut errors = Vec::new();
-    let mut copies = Vec::new();
 
-    for (callee, mono) in plan.funcs.iter_mut() {
-        let original = match callee {
-            CalleeKey::Local(id) => unit.nested_units.iter().find(|f| f.id == *id).cloned(),
-            CalleeKey::Module(module, id) => module_unit(*module, *id),
-        };
-        let Some(original) = original else {
-            continue;
-        };
-
-        if mono.instantiations.len() > MAX_INSTANTIATIONS {
-            errors.push(format!(
-                "`{}` has {} const parameter instantiations, over the limit of {}; \
-                 each one is a copy of the function",
-                original.name, mono.instantiations.len(), MAX_INSTANTIATIONS,
-            ));
-            continue;
+    for _ in 0..MAX_ROUNDS {
+        collect_instantiations_into(&mut plan, &unit, &script_callee_key);
+        for nested in &unit.nested_units {
+            collect_instantiations_into(&mut plan, nested, &script_callee_key);
         }
 
-        for values in mono.instantiations.iter() {
-            let new_id = CodeUnitId(next_id);
-            next_id += 1;
-            // Numbered by unit id rather than by instantiation, so that two
-            // callees that share a name cannot produce two copies that do. A
-            // nested unit's name is what the C backend emits as its symbol,
-            // and unlike a module's it carries nothing to tell them apart.
-            copies.push(monomorphize_function(
-                &original,
-                &mono.comptime_param_indices,
-                values,
-                new_id,
-                format!("{}__ct{}", original.name, new_id.0),
-            ));
-            mono.copies.push(CodeRef::Local(new_id));
+        let mut next_id = unit.nested_units.iter()
+            .map(|f| f.id.0 + 1)
+            .max()
+            .unwrap_or(0);
+        let mut copies = Vec::new();
+
+        for (callee, mono) in plan.funcs.iter_mut() {
+            let original = match callee {
+                CalleeKey::Local(id) => unit.nested_units.iter().find(|f| f.id == *id).cloned(),
+                CalleeKey::Module(module, id) => module_unit(*module, *id),
+            };
+            let Some(original) = original else {
+                continue;
+            };
+
+            if let Some(error) = over_limit(&original.name, mono) {
+                errors.push(error);
+                continue;
+            }
+
+            for values in mono.instantiations.iter().skip(mono.copies.len()) {
+                let new_id = CodeUnitId(next_id);
+                next_id += 1;
+                // Numbered by unit id rather than by instantiation, so that two
+                // callees that share a name cannot produce two copies that do. A
+                // nested unit's name is what the C backend emits as its symbol,
+                // and unlike a module's it carries nothing to tell them apart.
+                copies.push(monomorphize_function(
+                    &original,
+                    &mono.comptime_param_indices,
+                    values,
+                    new_id,
+                    format!("{}__ct{}", original.name, new_id.0),
+                ));
+                mono.copies.push(CodeRef::Local(new_id));
+            }
         }
+
+        if copies.is_empty() {
+            break;
+        }
+        unit.nested_units.extend(copies);
     }
 
-    unit.nested_units.extend(copies);
     unit.nested_units = unit.nested_units.iter()
         .map(|nested| rewrite_comptime_calls(nested, &plan, &script_callee_key))
         .collect();
     let unit = rewrite_comptime_calls(&unit, &plan, &script_callee_key);
 
     (unit, errors)
+}
+
+/// Report a function that wants more copies than it may have.
+///
+/// Leaving `copies` short of `instantiations` is what stops the call sites it
+/// could not be copied for being pointed at copies that were never built.
+pub fn over_limit(name: &str, mono: &FuncMonomorphization) -> Option<String> {
+    if mono.instantiations.len() <= MAX_INSTANTIATIONS {
+        return None;
+    }
+    Some(format!(
+        "`{}` has {} const parameter instantiations, over the limit of {}; \
+         each one is a copy of the function",
+        name, mono.instantiations.len(), MAX_INSTANTIATIONS,
+    ))
 }
 
 /// The const argument values at a call site, or `None` if any is not a constant.
@@ -434,11 +459,15 @@ fn const_value_map(unit: &IrCodeUnit) -> HashMap<ValueId, ConstValue> {
                 Instruction::Const { dest, value } => {
                     map.insert(*dest, value.clone());
                 }
-                // A clone of a constant is that constant. Reading a const of a
-                // linear type clones it, so that each read has a value of its
-                // own, and a const argument read that way is still the constant
-                // the call site wrote.
-                Instruction::Clone { dest, src: Operand::Value(src) } => {
+                // A constant carried somewhere is still that constant. Reading
+                // a const of a linear type clones it, so that each read has a
+                // value of its own; binding one to a name moves or copies it,
+                // which is what a const naming a const parameter lowers to,
+                // since it has a value per instantiation rather than one and
+                // only becomes a constant inside the copy.
+                Instruction::Clone { dest, src: Operand::Value(src) }
+                | Instruction::Move { dest, src: Operand::Value(src) }
+                | Instruction::Copy { dest, src: Operand::Value(src) } => {
                     if let Some(value) = map.get(src).cloned() {
                         map.insert(*dest, value);
                     }

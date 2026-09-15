@@ -24,8 +24,8 @@ use datalove_datafun_const::{inline_module_functions, PreparedConst, evaluate_pr
 use crate::IrTypeExt;
 use crate::lower;
 use crate::specialize::{
-    CalleeKey, MAX_INSTANTIATIONS, MonomorphizationPlan, collect_instantiations_into,
-    module_callee_key, monomorphize_function, rewrite_comptime_calls,
+    CalleeKey, MAX_ROUNDS, MonomorphizationPlan, collect_instantiations_into,
+    module_callee_key, monomorphize_function, over_limit, rewrite_comptime_calls,
 };
 use crate::tracked_ownership_analysis::{SingleModuleAnalysis, ModuleGraphAnalysis};
 
@@ -822,13 +822,23 @@ pub fn evaluate_all_module_consts<'db>(
                 // Track local consts for this function so later consts can reference earlier ones.
                 let mut func_local_consts: HashMap<String, (IrType, ConstValue)> = module_level.clone();
 
+                // The parameters whose value this function does not have one
+                // of, because it has one per instantiation.
+                let comptime_params: std::collections::BTreeSet<String> = func_stmt.params(db)
+                    .iter()
+                    .filter(|p| p.is_comptime)
+                    .map(|p| p.name.text(db).S())
+                    .collect();
+
                 for func_body_stmt in func_stmt.body(db).iter() {
                     if let Statement::Const(const_stmt) = func_body_stmt {
                         match evaluate_single_const(
                             db, const_stmt, expr_types, call_targets, &func_local_consts, &evaluator,
                             funcs, &func_map, func_return_type.clone(), func_id_map,
+                            &comptime_params,
                         ) {
-                            Ok((name, ir_type, value)) => {
+                            Ok(None) => {}
+                            Ok(Some((name, ir_type, value))) => {
                                 // Store locally for other consts in this function.
                                 func_local_consts.insert(name.clone(), (ir_type.clone(), value.clone()));
 
@@ -928,12 +938,15 @@ fn evaluate_module_level_consts<'db>(
         for statement in &parsed.statements {
             if let Statement::Const(const_stmt) = statement {
                 // A module const is outside any function, so there is no return
-                // type for an early-return operator to check against.
+                // type for an early-return operator to check against, and no
+                // const parameters for it to name.
                 match evaluate_single_const(
                     db, const_stmt, expr_types, call_targets, &consts, evaluator,
                     funcs, &func_map, None, func_id_map,
+                    &std::collections::BTreeSet::new(),
                 ) {
-                    Ok((name, ir_type, value)) => {
+                    Ok(None) => {}
+                    Ok(Some((name, ir_type, value))) => {
                         consts.insert(name, (ir_type, value));
                     }
                     Err(e) => errors_out.entry(*module_id).or_default().push(e),
@@ -960,7 +973,8 @@ fn evaluate_single_const<'db>(
     func_name_to_id: &HashMap<String, FuncId>,
     func_return_type: Option<IrType>,
     func_id_map: FuncIdMap<'db>,
-) -> Result<(String, IrType, ConstValue), String> {
+    comptime_params: &std::collections::BTreeSet<String>,
+) -> Result<Option<(String, IrType, ConstValue)>, String> {
     let name = const_stmt.name.text(db).S();
     let init_expr = const_stmt.value;
 
@@ -973,7 +987,7 @@ fn evaluate_single_const<'db>(
     // Lower the const binding using the "lower then evaluate" pattern.
     // Convert the tracked FuncIdMap to a HashMap for lowering.
     let func_id_map_hashmap = func_id_map.to_hashmap(db);
-    let (unit_opt, value_opt) = lower::lower_const_binding(
+    let lowered = lower::lower_const_binding(
         db,
         init_expr,
         &ir_type,
@@ -984,7 +998,20 @@ fn evaluate_single_const<'db>(
         lowered_functions,
         func_name_to_id,
         Some(&func_id_map_hashmap),
-    ).map_err(|e| format!("const '{}': lowering error: {}", name, e))?;
+    );
+    let (unit_opt, value_opt) = match lowered {
+        Ok(pair) => pair,
+        // A const naming a const parameter has a value per instantiation
+        // rather than one, so there is nothing to evaluate until the copies
+        // are made. It lowers as an ordinary binding and specialization
+        // substitutes the parameter, leaving the constant in the copy.
+        Err(lower::LowerError::BindingNotAvailable(ref missing))
+            if comptime_params.contains(missing) =>
+        {
+            return Ok(None);
+        }
+        Err(e) => return Err(format!("const '{}': lowering error: {}", name, e)),
+    };
 
     // Evaluate to get the const value.
     let value = match (unit_opt, value_opt) {
@@ -1008,7 +1035,7 @@ fn evaluate_single_const<'db>(
         _ => unreachable!("lower_const_binding returns exactly one of unit or value"),
     };
 
-    Ok((name, ir_type, value))
+    Ok(Some((name, ir_type, value)))
 }
 
 /// Lower module graph with CTFE evaluator for complex const expressions.
@@ -1209,78 +1236,87 @@ fn specialize_comptime_functions<'db>(
         .map(|(idx, module)| (module.id(db), IrModuleId(idx as u32)))
         .collect();
 
-    let mut plan = MonomorphizationPlan::default();
-    for (module_id, _) in &modules {
-        let Some(module_funcs) = lowered_functions.get(module_id) else {
-            continue;
-        };
-        for func in &module_funcs.functions {
-            collect_instantiations_into(&mut plan, func, &module_callee_key);
-        }
-    }
-    if plan.is_empty() {
-        return (lowered_functions, Vec::new());
-    }
-
     // Build the copies. Ids follow the source-derived ones, which
     // `compute_func_id_map` assigns from statement order and cannot assign here
     // because these functions are in nobody's source.
+    //
+    // A round at a time, because a comptime function only says what it passes
+    // to another one once its own const parameters have been substituted, so
+    // copying can uncover instantiations the scan before it could not see.
+    let mut plan = MonomorphizationPlan::default();
     let mut errors: Vec<(ModuleId<'db>, Vec<String>)> = Vec::new();
-    for (module_id, ir_module_id) in &modules {
-        let Some(module_funcs) = lowered_functions.get_mut(module_id) else {
-            continue;
-        };
 
-        let mut next_id = module_funcs.functions.iter()
-            .map(|f| f.id.0 + 1)
-            .max()
-            .unwrap_or(0);
-        let mut module_errors = Vec::new();
-        let mut copies = Vec::new();
-
-        for (callee, mono) in plan.funcs.iter_mut() {
-            let CalleeKey::Module(plan_module, callee_id) = callee else {
+    for _ in 0..MAX_ROUNDS {
+        for (module_id, _) in &modules {
+            let Some(module_funcs) = lowered_functions.get(module_id) else {
                 continue;
             };
-            if plan_module != ir_module_id {
-                continue;
+            for func in &module_funcs.functions {
+                collect_instantiations_into(&mut plan, func, &module_callee_key);
             }
-            let Some(original) = module_funcs.functions.iter().find(|f| f.id == *callee_id) else {
+        }
+        if plan.is_empty() {
+            return (lowered_functions, Vec::new());
+        }
+
+        let mut made_any = false;
+        for (module_id, ir_module_id) in &modules {
+            let Some(module_funcs) = lowered_functions.get_mut(module_id) else {
                 continue;
             };
 
-            if mono.instantiations.len() > MAX_INSTANTIATIONS {
-                module_errors.push(format!(
-                    "`{}` has {} const parameter instantiations, over the limit of {}; \
-                     each one is a copy of the function",
-                    original.name, mono.instantiations.len(), MAX_INSTANTIATIONS,
-                ));
-                continue;
+            let mut next_id = module_funcs.functions.iter()
+                .map(|f| f.id.0 + 1)
+                .max()
+                .unwrap_or(0);
+            let mut module_errors = Vec::new();
+            let mut copies = Vec::new();
+
+            for (callee, mono) in plan.funcs.iter_mut() {
+                let CalleeKey::Module(plan_module, callee_id) = callee else {
+                    continue;
+                };
+                if plan_module != ir_module_id {
+                    continue;
+                }
+                let Some(original) = module_funcs.functions.iter().find(|f| f.id == *callee_id) else {
+                    continue;
+                };
+
+                if let Some(error) = over_limit(&original.name, mono) {
+                    module_errors.push(error);
+                    continue;
+                }
+
+                for values in mono.instantiations.iter().skip(mono.copies.len()) {
+                    let new_id = CodeUnitId(next_id);
+                    next_id += 1;
+                    copies.push(monomorphize_function(
+                        original,
+                        &mono.comptime_param_indices,
+                        values,
+                        new_id,
+                        format!("{}__ct{}", original.name, new_id.0),
+                    ));
+                    mono.copies.push(CodeRef::Module { module: *ir_module_id, id: new_id });
+                }
             }
 
-            for (index, values) in mono.instantiations.iter().enumerate() {
-                let new_id = CodeUnitId(next_id);
-                next_id += 1;
-                copies.push(monomorphize_function(
-                    original,
-                    &mono.comptime_param_indices,
-                    values,
-                    new_id,
-                    format!("{}__ct{}", original.name, index),
-                ));
-                mono.copies.push(CodeRef::Module { module: *ir_module_id, id: new_id });
+            made_any |= !copies.is_empty();
+            for copy in copies {
+                module_funcs.func_name_to_id.push((copy.name.clone(), FuncId(copy.id.0)));
+                module_funcs.functions.push(copy);
+            }
+            module_funcs.functions.sort_by_key(|f| f.id.0);
+            module_funcs.func_name_to_id.sort_by(|a, b| a.0.cmp(&b.0));
+
+            if !module_errors.is_empty() {
+                errors.push((*module_id, module_errors));
             }
         }
 
-        for copy in copies {
-            module_funcs.func_name_to_id.push((copy.name.clone(), FuncId(copy.id.0)));
-            module_funcs.functions.push(copy);
-        }
-        module_funcs.functions.sort_by_key(|f| f.id.0);
-        module_funcs.func_name_to_id.sort_by(|a, b| a.0.cmp(&b.0));
-
-        if !module_errors.is_empty() {
-            errors.push((*module_id, module_errors));
+        if !made_any {
+            break;
         }
     }
 

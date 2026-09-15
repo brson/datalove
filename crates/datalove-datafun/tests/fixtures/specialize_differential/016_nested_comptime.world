@@ -7,11 +7,22 @@ fun add_n(const n: int, x: int): int
     ret n + x
 end fun
 
-// Comptime function B that calls comptime function A
+// Comptime function B that calls comptime function A. `N` names a const
+// parameter, so it has a value per instantiation rather than one: there is
+// nothing to evaluate until the copies are made, and the call to `add_n` only
+// says what it passes once `n` has been substituted. Specialization looks
+// again after each round of copying for that reason.
 fun double_add(const n: int, x: int): int
     const N: int = n
     let first = add_n(N, x)
     ret add_n(N, first)
+end fun
+
+// A module-side caller, so the rounds run over module functions as well as
+// over a script unit's.
+fun double_add_seven(x: int): int
+    const SEVEN: int = 7
+    ret double_add(SEVEN, x)
 end fun
 
 ----------
@@ -20,13 +31,16 @@ scriptunit-fragment
 
 require module local/test/nested
 import nested.double_add
+import nested.double_add_seven
 
 const FIVE: int = 5
 let result = double_add(FIVE, 10)
+let from_module = double_add_seven(10)
 debuglog result
+debuglog from_module
 
 ----------
 scriptunit-expr
 ----------
 
-result
+(result, from_module)

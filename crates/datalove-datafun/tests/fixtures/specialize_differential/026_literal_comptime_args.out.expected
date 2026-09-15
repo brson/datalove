@@ -68,7 +68,7 @@ Analysis(
                         v1 = call @0 m0.u9(p0)
                         return v1
                     
-                    fn scale__ct0(p0):
+                    fn scale__ct7(p0):
                     block0:
                         v1 = const 3int
                         v0 = mul v1, p0
@@ -76,7 +76,7 @@ Analysis(
                         drop p0
                         return v0
                     
-                    fn scale__ct1(p0):
+                    fn scale__ct8(p0):
                     block0:
                         v1 = const 5int
                         v0 = mul v1, p0
@@ -84,7 +84,7 @@ Analysis(
                         drop p0
                         return v0
                     
-                    fn multiply_i32__ct0(p0):
+                    fn multiply_i32__ct9(p0):
                     block0:
                         v6 = const 3i32
                         v0, v1 = mul.checked v6, p0

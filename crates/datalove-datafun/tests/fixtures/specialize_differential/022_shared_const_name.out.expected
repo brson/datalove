@@ -39,7 +39,7 @@ Analysis(
                         drop v0
                         return v2
                     
-                    fn scale__ct0(p0):
+                    fn scale__ct3(p0):
                     block0:
                         v1 = const 2int
                         v0 = mul v1, p0
@@ -47,7 +47,7 @@ Analysis(
                         drop p0
                         return v0
                     
-                    fn scale__ct1(p0):
+                    fn scale__ct4(p0):
                     block0:
                         v1 = const 5int
                         v0 = mul v1, p0

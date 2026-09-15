@@ -57,6 +57,14 @@ C backend, the inliner, DCE, and the IR printer. Where nothing rewrites it, it i
    copy, drops the const arguments the copy does not take, and leaves everything else
    alone.
 
+Steps 1 and 2 run a round at a time, up to `MAX_ROUNDS`. A comptime function only says
+what it passes to another one once its own const parameters have been substituted, so a
+round of copying can uncover instantiations the scan before it could not see. It
+terminates on its own -- the callees are the program's functions and each is capped -- and
+the round cap is a backstop rather than a limit anything reaches. Running out of rounds
+leaves call sites unspecialized rather than wrong, which is the same state a call site the
+pass cannot see is in.
+
 **Script units** are specialized separately, by `specialize_script_unit`, called from
 `ScriptCompiler::phase_specialize`. A script unit compiles after the module graph and one
 at a time, so it cannot add to a module; instead its copies go in its own `nested_units`,
@@ -160,15 +168,17 @@ argument on the way. Keeping the original removes the condition entirely. Fixtur
 specialization on and off, and compares both `debug_output` and `output` for every
 section. That harness is sound. What it was pointed at was not, and still is only partly.
 
-Of the 21 fixtures in `fixtures/specialize_differential/`, 18 specialize, and their
-expected IR is where the `__ct` copies appear. Of the three that do not, two -- 
+Of the 23 fixtures in `fixtures/specialize_differential/`, 21 specialize, and their
+expected IR is where the `__ct` copies appear. The two that do not --
 `000_no_comptime` and `007_str_no_comptime` -- have no const parameters to specialize,
-which is what they are for. The third, `016_nested_comptime`, fails to lower: a const in a
-comptime function's body cannot name that function's comptime parameter. It is recorded as
-passing because both sides fail identically.
+which is what they are for.
 
 No `comptime_call` survives in any fixture's expected IR. Every call site either reaches a
-copy or is one of those three.
+copy or is one of those two.
+
+`016_nested_comptime` is the one that needed the rounds: a const naming a const parameter,
+and a comptime function calling another with it, over both a module caller and a script
+one. It used to be the fixture that would not lower.
 
 `026_literal_comptime_args` covers literal arguments on both sides, including a
 fixed-width one, where a literal that needed widening would lower to something other than
@@ -207,17 +217,12 @@ by `neg` rather than to one constant. Write the value as a const binding, which 
 into a single `Const`. Folding such an argument before phase 5c would lift this along with
 the rest of the expression case.
 
-**Nested comptime does not lower.** A const binding in a comptime function's body cannot
-name that function's comptime parameter (`016_nested_comptime`). Monomorphization makes
-this tractable -- inside a copy the parameter *is* a const -- but it is a separate change.
-
 ## What remains
 
 - **Const expressions as arguments.** Literals and const bindings are accepted; `2 + 3` is
   not, per the constraint above. Accepting it means folding the argument to a `Const`
   before phase 5c, so that there is something for the plan to read. Worth doing only if
   the refusal proves annoying in practice.
-- **Nested comptime**, per the constraint above, with `016_nested_comptime` as its fixture.
 - **Dead copies.** A function all of whose call sites were specialized keeps an original
   nobody calls. Leaving it is deliberate -- a later script line may call it -- but for an
   AOT build, where there is no later script line, it is dead weight.

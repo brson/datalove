@@ -40,19 +40,19 @@ Analysis(
                         v1 = call @0 m0.u6(p0)
                         return v1
                     
-                    fn scale__ct0(p0):
+                    fn scale__ct4(p0):
                     block0:
                         v1 = const 0f64
                         v0 = mul v1, p0
                         return v0
                     
-                    fn scale__ct1(p0):
+                    fn scale__ct5(p0):
                     block0:
                         v1 = const -0f64
                         v0 = mul v1, p0
                         return v0
                     
-                    fn scale__ct2(p0):
+                    fn scale__ct6(p0):
                     block0:
                         v1 = const 0.5f64
                         v0 = mul v1, p0

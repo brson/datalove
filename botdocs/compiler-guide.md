@@ -205,9 +205,11 @@ Functions with `const` parameters are monomorphized during phase 5c:
 ```
 Phase 5c: Specialize comptime functions
     |   specialize_comptime_functions
+    |   Round, until no copy is made:
     |   - Scan the lowered IR for ComptimeCall, resolving each const
     |     argument against the Const instruction that defines it
-    |   - Build one copy of the callee per distinct instantiation
+    |   - Build one copy of the callee per instantiation not yet copied
+    |   Then:
     |   - Point those call sites at the copy
     v   Output: the original functions, plus a copy per instantiation
 ```
@@ -248,8 +250,16 @@ order and cannot assign one here, since the copies are in nobody's source. They 
 after the highest source-derived one in their module. The name has to be a valid
 identifier, because both AOT backends use it as a linker symbol.
 
+**Rounds.** A comptime function that calls another only says what it passes once its own
+const parameters have been substituted, so copying can uncover instantiations the scan
+before it could not see. The scan and the copying therefore repeat until a round makes no
+copy. A const naming a const parameter is part of the same story: it has a value per
+instantiation rather than one, so const evaluation leaves it alone, it lowers as an
+ordinary binding, and substitution makes it a constant inside each copy.
+
 **Limit.** `MAX_INSTANTIATIONS` caps a function at 64. Each instantiation is a whole copy
-in the object file, so going over is reported rather than paid.
+in the object file, so going over is reported rather than paid. `MAX_ROUNDS` caps the
+rounds, as a backstop; running out leaves call sites unspecialized rather than wrong.
 
 **Call site handling:** The lowering phase emits `ComptimeCall` instructions for calls to
 functions with const parameters. Specialization turns the ones it can place into a

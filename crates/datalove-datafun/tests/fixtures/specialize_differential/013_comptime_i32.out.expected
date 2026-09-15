@@ -34,7 +34,7 @@ Analysis(
                         v1 = call @0 m0.u2(p0)
                         return v1
                     
-                    fn multiply_i32__ct0(p0):
+                    fn multiply_i32__ct2(p0):
                     block0:
                         v6 = const 3i32
                         v0, v1 = mul.checked v6, p0
