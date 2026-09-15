@@ -3,10 +3,10 @@ module local/test/tablefunc
 ----------
 
 // CTFE table in module function.
-fn compute() -> {| id: u32, val: u32 |} {
+fun compute(): {| id: u32, val: u32 |}
     const T: {| id: u32, val: u32 |} = {| id, val; 100, 200; 300, 400 |}
-    : T
-}
+    ret T
+end fun
 
 ----------
 scriptunit-fragment
@@ -15,4 +15,4 @@ scriptunit-fragment
 require module local/test/tablefunc
 import tablefunc.compute
 
-debuglog(compute())
+debuglog compute()

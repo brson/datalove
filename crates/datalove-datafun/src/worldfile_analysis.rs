@@ -179,16 +179,23 @@ fn collect_module_results(
         if let Some(path) = section.module_path() {
             let module_path = path.to_path_string();
 
-            // Look up typecheck errors for this module.
-            let typecheck = match compiled.path_to_errors.get(&module_path) {
+            // A module that did not parse has nothing to typecheck, and saying
+            // so is the only way the refusal reaches anyone: a parse
+            // diagnostic is not a typecheck error and used to go unread here.
+            let typecheck = match compiled.parse_errors.get(&module_path) {
                 Some(errors) if !errors.is_empty() => {
-                    TypecheckResult::Error { errors: errors.clone() }
+                    TypecheckResult::ParseError { errors: errors.clone() }
                 }
-                _ => TypecheckResult::Success,
+                _ => match compiled.path_to_errors.get(&module_path) {
+                    Some(errors) if !errors.is_empty() => {
+                        TypecheckResult::Error { errors: errors.clone() }
+                    }
+                    _ => TypecheckResult::Success,
+                },
             };
 
             // Look up analysis results for this module.
-            let has_typecheck_errors = matches!(&typecheck, TypecheckResult::Error { .. });
+            let has_typecheck_errors = !matches!(&typecheck, TypecheckResult::Success);
             let ir_dumps = compiled.module_ir_dumps.get(&module_path).map(|v| v.as_slice()).unwrap_or(&[]);
             let ownership_errs = compiled.ownership_errors.get(&module_path).map(|v| v.as_slice()).unwrap_or(&[]);
             let lowering_errs = compiled.lowering_errors.get(&module_path).map(|v| v.as_slice()).unwrap_or(&[]);

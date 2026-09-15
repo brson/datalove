@@ -951,8 +951,14 @@ let x = repeat(COUNT, "ab")  // COUNT is a const binding
 **Semantics:**
 - The argument must be the name of a `const` binding
 - The compiler specializes the function for each unique const argument value
-- Within the function body, the const parameter is available as a compile-time
-  constant, enabling optimizations like loop unrolling and dead code elimination
+- Within the function body, the const parameter is a compile-time constant. A
+  `const` binding that names it is evaluated for each instantiation, through
+  arithmetic and through calls alike, so `const M: int = n + 1` and
+  `const P: int = helper(n)` are constants in the specialized copy and may
+  themselves be passed as const arguments
+- A branch on such a binding becomes a jump and the unreachable side is
+  dropped. An expression over the parameter written in place, such as
+  `if n .< 3`, is not folded and keeps its branch; nothing unrolls a loop
 
 **Restrictions:**
 - Const parameters must have primitive types or simple aggregates

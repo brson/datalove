@@ -1,0 +1,18 @@
+----------
+module local/test/badmode
+----------
+
+// A module that does not parse. Worth a fixture of its own because a parse
+// diagnostic is not a typecheck error, and this harness used to read only the
+// latter -- so a module refusal reached nobody, which is why the refusal of
+// `out` and `mut` shipped without a test.
+
+fun by_ref(const ref factor: int, x: int): int
+    ret factor * x
+end fun
+
+----------
+scriptunit-fragment
+----------
+
+debuglog 1

@@ -10,7 +10,15 @@ Analysis(
                 status: "Success",
             ),
             lowering: LoweringResult(
-                status: "Skipped",
+                status: "Success",
+                ir: """
+                    fn compute():
+                    block0:
+                        v6 = const {| id, val; 100u32, 200u32; 300u32, 400u32 |}
+                        v7 = const {| id, val; 100u32, 200u32; 300u32, 400u32 |}
+                        drop v6
+                        return v7
+                """,
             ),
             output: "",
         ),
@@ -18,15 +26,24 @@ Analysis(
             section_type: "scriptunit-fragment",
             name: None,
             typecheck: TypecheckResult(
-                status: "Skipped",
+                status: "Success",
             ),
             ownership: OwnershipResult(
-                status: "Skipped",
+                status: "Success",
             ),
             lowering: LoweringResult(
-                status: "Skipped",
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = call @0 m0.u0()
+                        debuglog v0
+                        drop v0
+                        unit_end
+                """,
             ),
-            output: "",
+            output: "(fragment executed)",
+            debug_output: Some("{| id, val; 100, 200; 300, 400 |}\n"),
         ),
     ],
 )

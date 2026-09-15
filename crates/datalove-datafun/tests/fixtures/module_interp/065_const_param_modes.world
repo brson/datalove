@@ -1,0 +1,19 @@
+----------
+module local/test/main
+----------
+
+// A const parameter has no passing mode. Specialization removes it and writes
+// the value into the body, so `ref` has no borrow to describe, and `out` and
+// `mut` have nothing to write back to.
+
+fun by_ref(const ref factor: int, x: int): int
+    ret factor * x
+end fun
+
+fun by_out(const out factor: int, x: int): int
+    ret x
+end fun
+
+fun by_mut(const mut factor: int, x: int): int
+    ret factor * x
+end fun

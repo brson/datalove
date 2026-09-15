@@ -85,6 +85,17 @@ pub fn analyze_modules_worldfile(
         });
     }
 
+    // A module that did not parse has nothing to typecheck, and this is where
+    // that has to be said: a parse diagnostic is not a typecheck error.
+    let parse_errors = compiled.all_parse_errors();
+    if !parse_errors.is_empty() {
+        return Ok(ModulesAnalysis {
+            typecheck: TypecheckResult::ParseError { errors: parse_errors },
+            lowering: LoweringResult::Skipped,
+            output: String::new(),
+        });
+    }
+
     // Check for typecheck errors using consolidated helper.
     let all_typecheck_errors = compiled.all_typecheck_errors();
     if !all_typecheck_errors.is_empty() {
