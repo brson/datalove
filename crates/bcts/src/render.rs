@@ -14,6 +14,7 @@ use rmx::std::path::Path;
 use ariadne::{Cache, CharSet, Color, ColorGenerator, Config, Label, Report, ReportKind, Source};
 
 use crate::diagnostic::{Diagnostic, LabelStyle, Severity};
+use crate::text::InternedText;
 
 /// A run of diagnostics printed together.
 ///
@@ -124,6 +125,14 @@ pub fn render_multi_source_diagnostics<'db>(
     }
 }
 
+/// Several lines as one, or nothing where there are none.
+fn joined<'db>(db: &'db dyn crate::Db, lines: &[InternedText<'db>]) -> Option<String> {
+    match lines.is_empty() {
+        true => None,
+        false => Some(lines.iter().map(|l| l.as_str(db)).collect::<Vec<_>>().join("\n")),
+    }
+}
+
 /// The path as a reader knows it, which is where they are standing.
 fn display_path(file_path: &Path, cwd: &Path) -> String {
     file_path.strip_prefix(cwd).unwrap_or(file_path).display().S()
@@ -205,19 +214,31 @@ fn render_one<'db>(
     }
 
     for label in &diag.labels {
-        let mut ariadne_label = Label::new((&file_name, label.span.C()))
-            .with_color(label_color(label.style, colors));
-        if let Some(message) = &label.message {
-            ariadne_label = ariadne_label.with_message(message.as_str(db));
-        }
-        builder = builder.with_label(ariadne_label);
+        // Always a message, even where there is none to give. ariadne draws a
+        // label without one *not at all* -- no underline, nothing -- so a
+        // caller that asked for a span to be marked and had nothing to add
+        // about it got silence. An empty message leaves the connector running
+        // out to nothing, which is ugly and is much the lesser fault.
+        //
+        // It is also a nudge in the right direction: a label reads better with
+        // a few words on it than without, which is why rustc's carry them.
+        let message = label.message.map(|m| m.as_str(db)).unwrap_or("");
+        builder = builder.with_label(
+            Label::new((&file_name, label.span.C()))
+                .with_color(label_color(label.style, colors))
+                .with_message(message),
+        );
     }
 
-    for note in &diag.notes {
-        builder = builder.with_note(note.as_str(db));
+    // One call each, not one per line. ariadne's report holds a single note
+    // and a single help, so `with_note` in a loop keeps the last and drops
+    // every one before it -- a diagnostic that carefully explained itself in
+    // three notes printed one. Joined, they all arrive.
+    if let Some(notes) = joined(db, &diag.notes) {
+        builder = builder.with_note(notes);
     }
-    for help in &diag.helps {
-        builder = builder.with_help(help.as_str(db));
+    if let Some(helps) = joined(db, &diag.helps) {
+        builder = builder.with_help(helps);
     }
 
     // Every label is in the one source here, so the first of them says which.
@@ -278,11 +299,15 @@ fn render_one_multi_source<'db>(
         builder = builder.with_label(ariadne_label);
     }
 
-    for note in &diag.notes {
-        builder = builder.with_note(note.as_str(db));
+    // One call each, not one per line. ariadne's report holds a single note
+    // and a single help, so `with_note` in a loop keeps the last and drops
+    // every one before it -- a diagnostic that carefully explained itself in
+    // three notes printed one. Joined, they all arrive.
+    if let Some(notes) = joined(db, &diag.notes) {
+        builder = builder.with_note(notes);
     }
-    for help in &diag.helps {
-        builder = builder.with_help(help.as_str(db));
+    if let Some(helps) = joined(db, &diag.helps) {
+        builder = builder.with_help(helps);
     }
 
     let _ = builder.finish().eprint(MultiSourceCache { sources });
@@ -414,6 +439,77 @@ mod tests {
         let out = render_diagnostics_to_string(db, diags, Path::new("t.fui"), Path::new(""));
         for i in 0..3 {
             assert!(out.contains(&format!("problem {i}")), "{out}");
+        }
+    }
+
+    /// A span with nothing to say about it is still underlined.
+    ///
+    /// ariadne draws a label with no message not at all. `primary_span` and
+    /// `secondary_span` were therefore silent no-ops, which nothing noticed
+    /// because nothing in this repository calls them.
+    #[test]
+    fn a_label_without_a_message_is_still_underlined() {
+        let ref db = crate::Database::default();
+        let src = "radius = 15\n";
+        let source = Input::new(db, src.S());
+        let text = crate::source_map::basic_source_map(db, source).text(db);
+        let diag = DiagnosticBuilder::error(db, "not a length")
+            .primary_span(TextSpan::new(text, 9..11))
+            .build();
+
+        let out = Renderer::new().to_string(db, &diag, Path::new("t.fui"), Path::new(""));
+        assert!(out.contains('^'), "no underline was drawn:\n{out}");
+        assert!(out.contains("radius = 15"), "{out}");
+    }
+
+    /// And one with a message says it, which is the shape to prefer.
+    #[test]
+    fn a_label_with_a_message_says_it() {
+        let ref db = crate::Database::default();
+        let src = "w = 10px + 5deg\n";
+        let source = Input::new(db, src.S());
+        let text = crate::source_map::basic_source_map(db, source).text(db);
+        let diag = DiagnosticBuilder::warning(db, "a length and an angle")
+            .primary_label(TextSpan::new(text, 11..15), "an angle")
+            .secondary_label(TextSpan::new(text, 4..8), "a length")
+            .build();
+
+        let out = Renderer::new().to_string(db, &diag, Path::new("t.fui"), Path::new(""));
+        assert!(out.contains("an angle"), "{out}");
+        assert!(out.contains("a length"), "{out}");
+        assert!(!out.contains('\u{1b}'), "a string should carry no colour:\n{out}");
+    }
+
+    /// Every note is printed, not just the last one.
+    ///
+    /// ariadne's report holds one note and one help, so `with_note` called
+    /// twice keeps the second. A diagnostic that explained itself in three
+    /// notes -- what the colour is, what will be drawn instead, and which
+    /// field it should have gone in -- printed the third.
+    #[test]
+    fn all_of_the_notes_and_helps_are_printed() {
+        let ref db = crate::Database::default();
+        let src = "albedo = #ff8a65\n";
+        let source = Input::new(db, src.S());
+        let text = crate::source_map::basic_source_map(db, source).text(db);
+        let diag = DiagnosticBuilder::warning(db, "brighter than any real surface")
+            .primary_label(TextSpan::new(text, 9..16), "too bright")
+            .note("the lightest hex that passes is #f38360")
+            .note("drawing it as #f38360 so the rest of the scene still shows")
+            .note("`albedo` is reflectance; a light this bright goes in `emission`")
+            .help("write #f38360 or darker")
+            .help("or move it to `emission`, where there is no ceiling")
+            .build();
+
+        let out = Renderer::new().to_string(db, &diag, Path::new("t.fui"), Path::new(""));
+        for line in [
+            "the lightest hex that passes is #f38360",
+            "drawing it as #f38360",
+            "`albedo` is reflectance",
+            "write #f38360 or darker",
+            "or move it to `emission`",
+        ] {
+            assert!(out.contains(line), "`{line}` was dropped:\n{out}");
         }
     }
 }
