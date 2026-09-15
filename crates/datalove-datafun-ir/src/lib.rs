@@ -837,10 +837,62 @@ pub enum SlotDest {
     External { unit: u32, slot: SlotId },
 }
 
+/// A 32-bit float as a constant.
+///
+/// See [`ConstF64`] for why it is wrapped.
+#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct ConstF32(pub f32);
+
+/// A 64-bit float as a constant.
+///
+/// Compared and hashed by its bits, which is the relation sets and maps keep
+/// their keys in -- IEEE 754-2008 `totalOrder`, which gives NaN a place and
+/// tells the two zeros apart -- and not the one the `==` operator has. The
+/// runtime draws the same distinction, between `FloatEqPolicy::Bitwise` and
+/// `FloatEqPolicy::Ieee`, and uses the bitwise one where a value has to have a
+/// single representation.
+///
+/// Asking a constant whether it is the same constant is that question, not the
+/// operator's: a `ConstValue` is what decides whether two call sites name one
+/// instantiation, and what salsa compares to decide whether lowering can be
+/// reused. Under the operator's relation a NaN constant is not equal to itself,
+/// which makes `Eq` a lie and stops any of that working.
+#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct ConstF64(pub f64);
+
+macro_rules! const_float_by_bits {
+    ($ty:ident, $bits:ty) => {
+        impl PartialEq for $ty {
+            fn eq(&self, other: &Self) -> bool {
+                self.0.to_bits() == other.0.to_bits()
+            }
+        }
+
+        impl Eq for $ty {}
+
+        impl std::hash::Hash for $ty {
+            fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+                self.0.to_bits().hash(state);
+            }
+        }
+
+        impl std::fmt::Display for $ty {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                write!(f, "{}", self.0)
+            }
+        }
+    };
+}
+
+const_float_by_bits!(ConstF32, u32);
+const_float_by_bits!(ConstF64, u64);
+
 /// Constant value that can be loaded or computed at compile time.
 ///
 /// Supports all Datafun types for compile-time function evaluation (CTFE).
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum ConstValue {
     // Primitives.
     Unit,
@@ -859,9 +911,9 @@ pub enum ConstValue {
     /// Empty limbs = 0.
     Int { limbs: Vec<u32>, negative: bool },
     /// 32-bit float.
-    F32(f32),
+    F32(ConstF32),
     /// 64-bit float.
-    F64(f64),
+    F64(ConstF64),
     /// String literal.
     String(String),
 
@@ -1012,64 +1064,6 @@ pub fn ir_type_of_const_value(value: &ConstValue) -> IrType {
 }
 
 
-impl std::hash::Hash for ConstValue {
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        std::mem::discriminant(self).hash(state);
-        match self {
-            ConstValue::Unit => {}
-            ConstValue::Bool(v) => v.hash(state),
-            ConstValue::U8(v) => v.hash(state),
-            ConstValue::U16(v) => v.hash(state),
-            ConstValue::U32(v) => v.hash(state),
-            ConstValue::U64(v) => v.hash(state),
-            ConstValue::I8(v) => v.hash(state),
-            ConstValue::I16(v) => v.hash(state),
-            ConstValue::I32(v) => v.hash(state),
-            ConstValue::I64(v) => v.hash(state),
-            ConstValue::Index(v) => v.hash(state),
-            ConstValue::Offset(v) => v.hash(state),
-            ConstValue::Int { limbs, negative } => {
-                limbs.hash(state);
-                negative.hash(state);
-            }
-            ConstValue::F32(v) => v.to_bits().hash(state),
-            ConstValue::F64(v) => v.to_bits().hash(state),
-            ConstValue::String(v) => v.hash(state),
-            ConstValue::Tuple(elems) => elems.hash(state),
-            ConstValue::Struct(fields) => fields.hash(state),
-            ConstValue::Enum { variant, payload } => {
-                variant.hash(state);
-                payload.hash(state);
-            }
-            ConstValue::OptionSome(v) => v.hash(state),
-            ConstValue::OptionNone => {}
-            ConstValue::ResultOk(v) => v.hash(state),
-            ConstValue::ResultErr(v) => v.hash(state),
-            ConstValue::Data { payload_type, value } => {
-                payload_type.hash(state);
-                value.hash(state);
-            }
-            ConstValue::Error { payload_type, value } => {
-                payload_type.hash(state);
-                value.hash(state);
-            }
-            ConstValue::List(elems) => elems.hash(state),
-            ConstValue::Set(elems) => elems.hash(state),
-            ConstValue::Map(entries) => entries.hash(state),
-            ConstValue::Tensor { shape, elements } => {
-                shape.hash(state);
-                elements.hash(state);
-            }
-            ConstValue::Table { columns, rows } => {
-                columns.hash(state);
-                rows.hash(state);
-            }
-        }
-    }
-}
-
-impl Eq for ConstValue {}
-// Note: PartialEq is derived and uses float comparison semantics.
 
 /// Binary operator.
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
@@ -2963,3 +2957,74 @@ impl std::fmt::Display for ConstEvalError {
 }
 
 impl std::error::Error for ConstEvalError {}
+
+#[cfg(test)]
+mod const_value_tests {
+    use super::*;
+    use std::collections::hash_map::DefaultHasher;
+    use std::hash::{Hash, Hasher};
+
+    fn hash_of(value: &ConstValue) -> u64 {
+        let mut hasher = DefaultHasher::new();
+        value.hash(&mut hasher);
+        hasher.finish()
+    }
+
+    fn f64c(v: f64) -> ConstValue {
+        ConstValue::F64(ConstF64(v))
+    }
+
+    #[test]
+    fn a_nan_constant_is_the_constant_it_is() {
+        // `Eq` promises this, and the `==` operator's relation does not give
+        // it: under that one a NaN is not equal to itself, so a code unit
+        // holding one would not equal itself either, and salsa could never
+        // reuse what it had lowered.
+        let nan = f64c(f64::NAN);
+        assert_eq!(nan, nan);
+        assert_eq!(hash_of(&nan), hash_of(&f64c(f64::NAN)));
+    }
+
+    #[test]
+    fn the_two_zeros_are_told_apart() {
+        // The relation sets and maps keep their keys in distinguishes them,
+        // and so does this. The `==` operator does not.
+        assert_ne!(f64c(0.0), f64c(-0.0));
+        assert_ne!(hash_of(&f64c(0.0)), hash_of(&f64c(-0.0)));
+    }
+
+    #[test]
+    fn equal_constants_hash_alike() {
+        // What a hash map needs of the two impls, over the values where the
+        // operator's relation and this one disagree.
+        for (a, b) in [
+            (f64c(f64::NAN), f64c(f64::NAN)),
+            (f64c(0.0), f64c(0.0)),
+            (f64c(-0.0), f64c(-0.0)),
+            (f64c(f64::INFINITY), f64c(f64::INFINITY)),
+        ] {
+            assert_eq!(a, b);
+            assert_eq!(hash_of(&a), hash_of(&b));
+        }
+    }
+
+    #[test]
+    fn the_rule_reaches_inside_an_aggregate() {
+        // The wrapper is why: every variant holding a `ConstValue` inherits it
+        // from the derive rather than from an arm someone has to remember.
+        let nested = ConstValue::Tuple(vec![f64c(f64::NAN), ConstValue::I32(1)]);
+        assert_eq!(nested, nested.clone());
+
+        let plus = ConstValue::OptionSome(Box::new(f64c(0.0)));
+        let minus = ConstValue::OptionSome(Box::new(f64c(-0.0)));
+        assert_ne!(plus, minus);
+    }
+
+    #[test]
+    fn a_float_constant_serializes_as_the_float() {
+        // `serde(transparent)` on the wrapper, so that what is written down
+        // did not change when the relation did.
+        let json = rmx::serde_json::to_string(&f64c(1.5)).unwrap();
+        assert_eq!(json, r#"{"F64":1.5}"#);
+    }
+}

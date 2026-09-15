@@ -201,12 +201,11 @@ at the wrong type. `TypeError::ComptimeParamOnGeneric` reports it at the definit
 catches the function whether or not anything calls it. Lifting the refusal means computing
 type arguments on the comptime branch too, and carrying them through the copy.
 
-**Float const parameters are unsound as an instantiation key.** `ConstValue` hashes `F32`
-and `F64` by `to_bits` but derives `PartialEq`, which uses float comparison. `0.0` and
-`-0.0` compare equal and hash differently; `NaN` hashes equal to itself and compares
-unequal. Any map keyed on `Vec<ConstValue>` inherits that, including
-`FuncMonomorphization::value_to_index`. Canonicalize the key or refuse float const
-parameters.
+**A negated literal is an expression.** `scale(-1.0, x)` is refused where
+`scale(1.0, x)` is accepted, because a negation lowers to the literal's `Const` followed
+by `neg` rather than to one constant. Write the value as a const binding, which CTFE folds
+into a single `Const`. Folding such an argument before phase 5c would lift this along with
+the rest of the expression case.
 
 **Nested comptime does not lower.** A const binding in a comptime function's body cannot
 name that function's comptime parameter (`016_nested_comptime`). Monomorphization makes

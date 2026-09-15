@@ -583,11 +583,11 @@ impl<'a> FunctionCodegenContext<'a> {
             // set where the literal did not.
             ConstValue::F32(v) => {
                 writeln!(out, "    {{ uint32_t __bits = {:#010x}u; memcpy({}, &__bits, 4); }}",
-                    v.to_bits(), dest_addr).unwrap();
+                    v.0.to_bits(), dest_addr).unwrap();
             }
             ConstValue::F64(v) => {
                 writeln!(out, "    {{ uint64_t __bits = {:#018x}ull; memcpy({}, &__bits, 8); }}",
-                    v.to_bits(), dest_addr).unwrap();
+                    v.0.to_bits(), dest_addr).unwrap();
             }
             ConstValue::Int { limbs, negative } => {
                 let ty = ty.clone();

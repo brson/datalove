@@ -80,10 +80,10 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 builder.ins().iconst(cl_types::I64, *v)
             }
             ConstValue::F32(v) => {
-                builder.ins().f32const(*v)
+                builder.ins().f32const(v.0)
             }
             ConstValue::F64(v) => {
-                builder.ins().f64const(*v)
+                builder.ins().f64const(v.0)
             }
             ConstValue::Int { limbs, negative } => {
                 // Int is an aggregate type - write directly to frame.
@@ -1127,11 +1127,11 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 builder.ins().store(mem_flags, val, addr, 0);
             }
             ConstValue::F32(v) => {
-                let val = builder.ins().f32const(*v);
+                let val = builder.ins().f32const(v.0);
                 builder.ins().store(mem_flags, val, addr, 0);
             }
             ConstValue::F64(v) => {
-                let val = builder.ins().f64const(*v);
+                let val = builder.ins().f64const(v.0);
                 builder.ins().store(mem_flags, val, addr, 0);
             }
             ConstValue::Int { limbs, negative } => {

@@ -2401,10 +2401,10 @@ impl IrInterpreter {
                     );
                 }
                 ConstValue::F32(n) => {
-                    *(dest.ptr as *mut f32) = *n;
+                    *(dest.ptr as *mut f32) = n.0;
                 }
                 ConstValue::F64(n) => {
-                    *(dest.ptr as *mut f64) = *n;
+                    *(dest.ptr as *mut f64) = n.0;
                 }
                 ConstValue::String(s) => {
                     let bytes_ptr = if s.is_empty() { std::ptr::null() } else { s.as_ptr() };

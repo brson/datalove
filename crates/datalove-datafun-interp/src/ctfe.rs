@@ -4,7 +4,7 @@
 //! const expressions to be evaluated at compile time.
 
 use std::sync::Arc;
-use datalove_datafun_ir::{ConstValue, CtfeError, CtfeEvaluator, IrCodeUnit, IrType};
+use datalove_datafun_ir::{ConstF32, ConstF64, ConstValue, CtfeError, CtfeEvaluator, IrCodeUnit, IrType};
 use crate::{IrInterpreter, ScriptEnvironment, UnitCompletion, Destination, ModuleFunctionRegistry};
 
 /// CTFE evaluator backed by the IR interpreter.
@@ -184,11 +184,11 @@ fn extract_const_value(ptr: *const u8, ir_type: &IrType) -> Result<ConstValue, C
             }
             IrType::F32 => {
                 let val = *(ptr as *const f32);
-                Ok(ConstValue::F32(val))
+                Ok(ConstValue::F32(ConstF32(val)))
             }
             IrType::F64 => {
                 let val = *(ptr as *const f64);
-                Ok(ConstValue::F64(val))
+                Ok(ConstValue::F64(ConstF64(val)))
             }
             IrType::Int => {
                 // Bigint is stored as: data pointer, size_and_sign, capacity.

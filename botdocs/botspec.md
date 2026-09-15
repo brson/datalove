@@ -962,7 +962,9 @@ let y = repeat(3, "ab")      // or a literal
 - The argument may not be an expression, even one whose parts are all known:
   `repeat(2 + 1, s)` is refused where `repeat(3, s)` is accepted. Specialization
   reads the value out of the lowered IR, where a binding and a literal are each
-  a single constant and an expression is the instructions that compute it
+  a single constant and an expression is the instructions that compute it. A
+  negation counts as an expression, so `scale(-1.0, x)` is refused; name the
+  value with a `const` binding
 
 **Implementation:** The compiler monomorphizes, keeping the original function
 and adding a copy per instantiation beside it. See

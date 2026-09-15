@@ -2,7 +2,7 @@
 //!
 //! Converts source text literals to IR constant values.
 
-use datalove_datafun_ir::{IrType, ConstValue};
+use datalove_datafun_ir::{ConstF32, ConstF64, IrType, ConstValue};
 
 /// A literal's text with its digit separators removed.
 ///
@@ -128,8 +128,8 @@ pub fn parse_float_const(text: &str, ty: &IrType) -> Result<ConstValue, ()> {
     let text = digits(text);
     let text = text.as_ref();
     match ty {
-        IrType::F32 => text.parse::<f32>().map(ConstValue::F32).map_err(|_| ()),
-        IrType::F64 => text.parse::<f64>().map(ConstValue::F64).map_err(|_| ()),
+        IrType::F32 => text.parse::<f32>().map(|v| ConstValue::F32(ConstF32(v))).map_err(|_| ()),
+        IrType::F64 => text.parse::<f64>().map(|v| ConstValue::F64(ConstF64(v))).map_err(|_| ()),
         _ => Err(()),
     }
 }
@@ -194,12 +194,12 @@ pub fn parse_hex_const(hex_str: &str, ty: &IrType) -> Result<ConstValue, ()> {
         IrType::F32 => {
             // Hex value represents the bit pattern of the float.
             let bits = u32::from_str_radix(hex_str, 16).map_err(|_| ())?;
-            Ok(ConstValue::F32(f32::from_bits(bits)))
+            Ok(ConstValue::F32(ConstF32(f32::from_bits(bits))))
         }
         IrType::F64 => {
             // Hex value represents the bit pattern of the float.
             let bits = u64::from_str_radix(hex_str, 16).map_err(|_| ())?;
-            Ok(ConstValue::F64(f64::from_bits(bits)))
+            Ok(ConstValue::F64(ConstF64(f64::from_bits(bits))))
         }
         _ => Err(()),
     }

@@ -1,0 +1,58 @@
+----------
+module local/test/floatconst
+----------
+
+// Float const arguments, where the relation that decides whether two call
+// sites name one instantiation matters. `0.0` and `-0.0` are one value to the
+// `==` operator and two to the relation sets and maps keep their keys in,
+// which is the one a constant is asked about. They have to be two copies here,
+// and the sign survives the multiply, so collapsing them would show.
+//
+// The negative zero comes from a const binding rather than being written as
+// `-0.0` at the call site: a negation is an expression, and lowers to `const
+// 0f64` followed by `neg` rather than to a constant, so it is refused like any
+// other expression.
+
+fun scale(const factor: f64, x: f64): f64
+    ret factor * x
+end fun
+
+fun by_pos_zero(x: f64): f64
+    ret scale(0.0, x)
+end fun
+
+const NEG_ZERO: f64 = -0.0
+
+fun by_neg_zero(x: f64): f64
+    ret scale(NEG_ZERO, x)
+end fun
+
+fun by_half(x: f64): f64
+    ret scale(0.5, x)
+end fun
+
+----------
+scriptunit-fragment
+----------
+
+require module local/test/floatconst
+import floatconst.scale
+import floatconst.by_pos_zero
+import floatconst.by_neg_zero
+import floatconst.by_half
+
+let a = by_pos_zero(2.0)
+let b = by_neg_zero(2.0)
+let c = by_half(3.0)
+const SCRIPT_NEG_ZERO: f64 = -0.0
+let d = scale(SCRIPT_NEG_ZERO, 2.0)
+debuglog a
+debuglog b
+debuglog c
+debuglog d
+
+----------
+scriptunit-expr
+----------
+
+(a, b, c, d)
