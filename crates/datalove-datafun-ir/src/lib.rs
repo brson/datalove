@@ -10,9 +10,11 @@ use std::collections::HashMap;
 
 pub mod display;
 pub mod layout;
+pub mod params;
 pub mod registry;
 
 pub use display::expand_ir_strings;
+pub use params::{replace_params_in_instruction, replace_params_in_terminator};
 pub use registry::{FunctionRegistry, ModuleFunctionRegistry, UnitFunctionRegistry};
 
 /// SSA value - defined exactly once, immutable.

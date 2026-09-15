@@ -4,7 +4,7 @@ Analysis(
     sections: [
         SectionResult(
             section_type: "module",
-            name: Some("local/test/i32const"),
+            name: Some("local/test/bothsides"),
             typecheck: TypecheckResult(
                 status: "Success",
             ),
@@ -14,39 +14,29 @@ Analysis(
             lowering: LoweringResult(
                 status: "Success",
                 ir: """
-                    fn multiply_i32(p0, p1):
+                    fn scale(p0, p1):
                     block0:
-                        v0, v1 = mul.checked p0, p1
-                        branch v1, block1, block2
-                    block1:
-                        v2 = const "arithmetic overflow"
-                        v3 = error_from v2
-                        v4 = err v3
-                        return v4
-                    block2:
-                        v5 = ok v0
-                        return v5
+                        v0 = mul p0, p1
+                        drop p0
+                        drop p1
+                        return v0
                     
-                    fn triple_i32(p0):
+                    fn triple(p0):
                     block0:
-                        v0 = const 3i32
+                        v0 = const 3int
+                        v1 = const 3int
+                        drop v1
+                        v2 = call @0 m0.u2(p0)
                         drop v0
-                        v1 = call @0 m0.u2(p0)
-                        return v1
+                        return v2
                     
-                    fn multiply_i32__ct0(p0):
+                    fn scale__ct0(p0):
                     block0:
-                        v6 = const 3i32
-                        v0, v1 = mul.checked v6, p0
-                        branch v1, block1, block2
-                    block1:
-                        v2 = const "arithmetic overflow"
-                        v3 = error_from v2
-                        v4 = err v3
-                        return v4
-                    block2:
-                        v5 = ok v0
-                        return v5
+                        v1 = const 3int
+                        v0 = mul v1, p0
+                        drop v1
+                        drop p0
+                        return v0
                 """,
             ),
             output: "",
@@ -65,20 +55,22 @@ Analysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = const 10i32
-                        v1 = const 5i32
-                        v2 = comptime_call m0.u0(v0, v1) [disc=0, comptime_params=[0]]
-                        v3 = const 5i32
-                        v4 = call @0 m0.u1(v3)
+                        v0 = const 7int
+                        v1 = const 10int
+                        v2 = call @0 m0.u1(v1)
+                        v3 = const 7int
+                        v4 = const 10int
+                        v5 = comptime_call m0.u0(v3, v4) [disc=0, comptime_params=[0]]
                         debuglog v2
-                        debuglog v4
+                        debuglog v5
+                        unit_end_drop v0
                         unit_end_drop v2
-                        unit_end_drop v4
+                        unit_end_drop v5
                         unit_end
                 """,
             ),
             output: "(fragment executed)",
-            debug_output: Some("ok 50\nok 15\n"),
+            debug_output: Some("30\n70\n"),
         ),
         SectionResult(
             section_type: "scriptunit-expr",
@@ -95,12 +87,12 @@ Analysis(
                     scriptunit:
                     block0:
                         v0 = clone unit0.v2
-                        v1 = clone unit0.v4
+                        v1 = clone unit0.v5
                         v2 = pack Tuple2 {v0, v1}
                         unit_end v2
                 """,
             ),
-            output: "(ok 50, ok 15)",
+            output: "(30, 70)",
         ),
     ],
 )

@@ -2,9 +2,19 @@
 module local/test/i32const
 ----------
 
-// Comptime function with i32 type
-fun multiply_i32(const factor: i32, x: i32): i32
-    ret factor *! x
+// A const parameter of a fixed-width type, so that the substituted value is a
+// ConstValue::I32 rather than a bigint. Bare arithmetic on a fixed integer is
+// not permitted, hence the checked operator and the result return type.
+
+fun multiply_i32(const factor: i32, x: i32): !i32
+    ret ok (factor *! x)
+end fun
+
+// A module-side call site, so that the i32 value is actually substituted into
+// a copy rather than passed to the original.
+fun triple_i32(x: i32): !i32
+    const THREE: i32 = 3
+    ret multiply_i32(THREE, x)
 end fun
 
 ----------
@@ -13,13 +23,16 @@ scriptunit-fragment
 
 require module local/test/i32const
 import i32const.multiply_i32
+import i32const.triple_i32
 
 const TEN: i32 = 10
-let result = multiply_i32(TEN, : i32 / 5)
-debuglog result
+let scaled = multiply_i32(TEN, : i32 / 5)
+let tripled = triple_i32(: i32 / 5)
+debuglog scaled
+debuglog tripled
 
 ----------
 scriptunit-expr
 ----------
 
-result
+(scaled, tripled)

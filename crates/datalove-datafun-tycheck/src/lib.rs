@@ -29,7 +29,6 @@ pub use datalove_datafun_common::{
     CollectedNames,
     AllModuleExports,
     AllModuleFunctionAsts,
-    ComptimeCallSiteRegistry,
 };
 
 // Re-export ResolvedCallTarget from sema.
@@ -577,12 +576,6 @@ pub struct SingleModuleTypecheckResult<'db> {
     /// Resolved call targets for this module.
     #[returns(ref)]
     pub call_targets: CallTargets<'db>,
-
-    /// Comptime call site registry for this module.
-    ///
-    /// Records call sites with comptime args and functions with comptime params.
-    #[returns(ref)]
-    pub comptime_registry: ComptimeCallSiteRegistry<'db>,
 }
 
 /// Exported function signatures from a module.
@@ -652,13 +645,6 @@ pub struct ModuleGraphTypecheckResult<'db> {
     /// information while preserving memoization.
     #[returns(ref)]
     pub module_results: BTreeMap<ModuleId<'db>, SingleModuleTypecheckResult<'db>>,
-
-    /// Comptime call site registry.
-    ///
-    /// Aggregates all comptime call sites and comptime-param functions
-    /// from all modules. Used by specialization phase in lowering.
-    #[returns(ref)]
-    pub comptime_registry: ComptimeCallSiteRegistry<'db>,
 }
 
 impl<'db> ModuleGraphTypecheckResult<'db> {

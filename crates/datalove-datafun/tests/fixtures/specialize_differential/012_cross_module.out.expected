@@ -16,13 +16,17 @@ Analysis(
                 ir: """
                     fn scale(p0, p1):
                     block0:
-                        switch p0, [0 => block1], default => block1
-                    block1:
+                        v0 = mul p0, p1
                         drop p0
-                        v1 = const 3int
-                        v0 = mul v1, p1
-                        drop v1
                         drop p1
+                        return v0
+                    
+                    fn scale__ct0(p0):
+                    block0:
+                        v1 = const 3int
+                        v0 = mul v1, p0
+                        drop v1
+                        drop p0
                         return v0
                 """,
             ),
@@ -44,9 +48,8 @@ Analysis(
                     block0:
                         v0 = const 3int
                         v1 = const 3int
-                        v3 = const 0i32
                         drop v1
-                        v2 = call @0 m0.u0(v3, p0)
+                        v2 = call @0 m0.u1(p0)
                         drop v0
                         return v2
                 """,

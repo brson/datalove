@@ -19,7 +19,6 @@ use crate::check::{check_expr, check_list_elements, check_set_elements, check_ma
 use crate::types::*;
 
 pub use crate::{Type, TypeError, is_copy_type};
-use crate::types::ComptimeCallSite;
 use datalove_datafun_common::generics::{
     bind_type_params, contains_type_param, substitute_type_params, TypeParamBindings,
 };
@@ -961,31 +960,11 @@ pub(crate) fn synthesize_function_call_expecting<'db>(
         .filter_map(|(i, &is_ct)| if is_ct { Some(i) } else { None })
         .collect();
 
-    // If function has comptime params, validate and record.
-    let mut comptime_arg_names = Vec::new();
-    if !comptime_indices.is_empty() {
-        // Register that this function has comptime params.
-        ctx.comptime_registry_mut().register_comptime_func(name, comptime_indices.clone());
-
-        // Validate each comptime argument is a const binding name.
-        for &i in &comptime_indices {
-            let arg = args[i];
-            match validate_comptime_arg(ctx, arg, i)? {
-                Some(arg_name) => comptime_arg_names.push(arg_name),
-                None => {
-                    // Error already recorded by validate_comptime_arg
-                }
-            }
-        }
-
-        // Record this call site if we successfully validated all comptime args.
-        if comptime_arg_names.len() == comptime_indices.len() {
-            ctx.comptime_registry_mut().record_call_site(ComptimeCallSite {
-                func_name: name,
-                comptime_param_indices: comptime_indices.clone(),
-                comptime_arg_names,
-            });
-        }
+    // Each const argument must be the name of a const binding. Nothing is
+    // recorded here: specialization reads the values it needs out of the
+    // lowered IR, where the argument is an operand a `Const` defines.
+    for &i in &comptime_indices {
+        validate_comptime_arg(ctx, args[i], i)?;
     }
 
     // Every argument must carry the parameter's mode, so that mutation and
@@ -1198,12 +1177,13 @@ fn mode_name(mode: ParamMode) -> &'static str {
 
 /// Validate that a comptime argument is a const binding name.
 ///
-/// Returns the const binding name if valid, or None if an error was recorded.
+/// An error is recorded rather than returned, so that the remaining arguments
+/// are still checked.
 fn validate_comptime_arg<'db>(
     ctx: &mut TypeContext<'db>,
     arg: ExprFun<'db>,
     param_idx: usize,
-) -> Result<Option<bct::text::InternedText<'db>>, TypeError> {
+) -> Result<(), TypeError> {
     let db = ctx.db;
 
     // The argument must be a simple Name expression.
@@ -1211,21 +1191,18 @@ fn validate_comptime_arg<'db>(
         ExprFunKind::Place(ref place) if place.steps.is_empty() => {
             let name = place.root;
             // Must be a const binding, not a let/var/parameter.
-            if ctx.is_const_binding(name) {
-                Ok(Some(name))
-            } else {
+            if !ctx.is_const_binding(name) {
                 let reason = format!("'{}' is not a const binding", name.as_str(db));
-                ctx.add_error(TypeError::ComptimeArgNotConstBinding { param_idx, reason: reason.clone() });
-                // Still return Ok(None) so we can continue checking other args
-                Ok(None)
+                ctx.add_error(TypeError::ComptimeArgNotConstBinding { param_idx, reason });
             }
         }
         _ => {
             let reason = "comptime argument must be a const binding name".to_string();
             ctx.add_error(TypeError::ComptimeArgNotConstBinding { param_idx, reason });
-            Ok(None)
         }
     }
+
+    Ok(())
 }
 
 // ============================================================================

@@ -1,0 +1,58 @@
+----------
+module local/test/positions
+----------
+
+// Const parameters away from index 0, called from module functions so that
+// they actually specialize. 006, 008 and 020 cover the same signatures from
+// script call sites, which leaves the parameter renumbering untested.
+
+fun last(x: int, const n: int): int
+    ret x * n
+end fun
+
+fun two_const(const a: int, const b: int, x: int): int
+    ret (a + b) * x
+end fun
+
+fun interleaved(x: int, const m: int, y: int, const n: int, z: int): int
+    ret (x * m) + (y * n) + z
+end fun
+
+fun use_last(x: int): int
+    const THREE: int = 3
+    ret last(x, THREE)
+end fun
+
+fun use_two_const(x: int): int
+    const A: int = 2
+    const B: int = 5
+    ret two_const(A, B, x)
+end fun
+
+fun use_interleaved(x: int): int
+    const M: int = 3
+    const N: int = 5
+    ret interleaved(x, M, 4, N, 1)
+end fun
+
+----------
+scriptunit-fragment
+----------
+
+require module local/test/positions
+import positions.use_last
+import positions.use_two_const
+import positions.use_interleaved
+
+let a = use_last(10)
+let b = use_two_const(10)
+let c = use_interleaved(2)
+debuglog a
+debuglog b
+debuglog c
+
+----------
+scriptunit-expr
+----------
+
+(a, b, c)

@@ -1,0 +1,40 @@
+----------
+module local/test/bothsides
+----------
+
+// The module call site specializes `scale`; the script call site below cannot
+// be specialized, because script units compile after the module graph. Under
+// the union-branch transform the module call rewrote `scale`'s signature and
+// the script call passed its const argument into what had become the tag,
+// running the wrong branch and leaking the argument. Monomorphization leaves
+// the original in place for the script call to keep using.
+
+fun scale(const factor: int, x: int): int
+    ret factor * x
+end fun
+
+fun triple(x: int): int
+    const THREE: int = 3
+    ret scale(THREE, x)
+end fun
+
+----------
+scriptunit-fragment
+----------
+
+require module local/test/bothsides
+import bothsides.scale
+import bothsides.triple
+
+const SEVEN: int = 7
+
+let a = triple(10)
+let b = scale(SEVEN, 10)
+debuglog a
+debuglog b
+
+----------
+scriptunit-expr
+----------
+
+(a, b)

@@ -23,7 +23,9 @@ use datalove_datafun_tycheck::{
 use datalove_datafun_const::{inline_module_functions, PreparedConst, evaluate_prepared_const};
 use crate::IrTypeExt;
 use crate::lower;
-use crate::specialize::{build_specialization_plan, transform_function, rewrite_comptime_calls};
+use crate::specialize::{
+    MAX_INSTANTIATIONS, collect_instantiations, monomorphize_function, rewrite_comptime_calls,
+};
 use crate::tracked_ownership_analysis::{SingleModuleAnalysis, ModuleGraphAnalysis};
 
 /// Function ID map for cross-module call resolution.
@@ -1147,7 +1149,23 @@ pub fn lower_module_graph_with_evaluator<'db>(
     // whose const could not be evaluated compiles as though the functions that
     // name it were never written.
     let mut resolved_consts = resolved_consts;
-    for (module_id, errors) in module_const_errors.into_iter().chain(shape_errors) {
+
+    // Phase 5c: Specialize const parameter functions by monomorphization. Each
+    // function with const parameters gains a copy per instantiation, and the
+    // call sites that named one are pointed at it.
+    let (lowered_functions, specialize_errors) = if skip_specialization {
+        (lowered_functions, Vec::new())
+    } else {
+        specialize_comptime_functions(db_salsa, typecheck_result, lowered_functions)
+    };
+
+    // Module const failures have to reach the lowering result, or a module
+    // whose const could not be evaluated compiles as though the functions that
+    // name it were never written. Specialization failures travel the same way.
+    for (module_id, errors) in module_const_errors.into_iter()
+        .chain(shape_errors)
+        .chain(specialize_errors)
+    {
         resolved_consts
             .entry(module_id)
             .or_insert_with(|| ModulePreResolvedConsts::new(module_id, Vec::new()))
@@ -1155,19 +1173,6 @@ pub fn lower_module_graph_with_evaluator<'db>(
             .extend(errors);
     }
     let resolved_consts = resolved_consts;
-
-    // Phase 5c: Specialize const parameter functions (union-branch transformation).
-    // This transforms functions with const parameters and rewrites call sites.
-    let lowered_functions = if skip_specialization {
-        lowered_functions
-    } else {
-        specialize_comptime_functions(
-            db_salsa,
-            typecheck_result,
-            &resolved_consts,
-            lowered_functions,
-        )
-    };
 
     // Phase 5d: Assemble modules with lowered functions, then inline consts.
     // CTFE errors from resolved_consts are included in lower_module via pre_resolved_consts.errors.
@@ -1181,115 +1186,108 @@ pub fn lower_module_graph_with_evaluator<'db>(
     }
 }
 
-/// Specialize functions with const parameters using union-branch transformation.
+/// Specialize functions with const parameters by monomorphization.
 ///
-/// This performs two transformations:
-/// 1. Callee transformation: Functions with const params get transformed to
-///    dispatch on a discriminant (union-branch form).
-/// 2. Call site transformation: ComptimeCall instructions get transformed to
-///    Const(discriminant) + Call with modified args.
+/// Every instantiation named by a call site in the module graph gets a copy of
+/// the callee with the const parameters substituted away, and the call site is
+/// pointed at it. The original is kept, so a call site this pass cannot see --
+/// a script unit's, which compiles later -- still calls something that takes
+/// the const argument.
+///
+/// Returns the errors specialization could not resolve, per module.
 fn specialize_comptime_functions<'db>(
     db: &'db dyn salsa::Database,
     typecheck_result: ModuleGraphTypecheckResult<'db>,
-    resolved_consts: &HashMap<ModuleId<'db>, ModulePreResolvedConsts<'db>>,
     mut lowered_functions: HashMap<ModuleId<'db>, ModuleLoweredFunctions>,
-) -> HashMap<ModuleId<'db>, ModuleLoweredFunctions> {
-    // Get the combined comptime registry.
-    let registry = typecheck_result.comptime_registry(db);
-    if registry.is_empty() {
-        return lowered_functions;
-    }
-
-    // Build a flattened map of const names to values for lookup.
-    // Include both qualified names (func_name::const_name) and unqualified names.
-    //
-    // Gathered in qualified-name order. The unqualified alias below keeps
-    // whichever const reaches it first, so when two of them share a short name
-    // the order decides which one wins; taken straight from a hash map that
-    // would be decided by the seed the process happened to start with.
-    let mut all_consts: Vec<_> = resolved_consts.values()
-        .flat_map(|pre_resolved| pre_resolved.consts.iter())
-        .collect();
-    all_consts.sort_by(|a, b| a.0.cmp(&b.0));
-
-    let mut const_values_map: HashMap<String, (IrType, ConstValue)> = HashMap::new();
-    for (qualified_name, ir_type, value) in all_consts {
-        const_values_map.insert(qualified_name.clone(), (ir_type.clone(), value.clone()));
-
-        // Also add unqualified name for direct lookup.
-        if let Some(unqualified) = qualified_name.rsplit("::").next() {
-            if unqualified != qualified_name {
-                // Only add if it's actually qualified.
-                const_values_map.entry(unqualified.to_string())
-                    .or_insert_with(|| (ir_type.clone(), value.clone()));
-            }
-        }
-    }
-
-    // Build the specialization plan.
-    let spec_result = build_specialization_plan(db, &registry, &const_values_map);
-    if spec_result.is_empty() {
-        return lowered_functions;
-    }
-
-    // Phase 1: Transform callee functions (functions with comptime params).
-    for (_module_id, module_funcs) in lowered_functions.iter_mut() {
-        let mut new_functions = Vec::new();
-
-        for func in &module_funcs.functions {
-            let func_name = &func.name;
-            if let Some(spec) = spec_result.specialized_funcs.get(func_name) {
-                // Transform this function to union-branch form.
-                let transformed = transform_function(func, spec);
-                new_functions.push(transformed);
-            } else {
-                new_functions.push(func.clone());
-            }
-        }
-
-        module_funcs.functions = new_functions;
-    }
-
-    // Build ModuleId -> IrModuleId mapping from the graph.
+) -> (HashMap<ModuleId<'db>, ModuleLoweredFunctions>, Vec<(ModuleId<'db>, Vec<String>)>) {
+    // Modules in the order that decides their `IrModuleId`, which is also the
+    // order the copies are numbered in.
     let graph = typecheck_result.graph(db);
-    let module_id_to_ir: HashMap<ModuleId<'db>, IrModuleId> = graph.iter_modules(db)
+    let modules: Vec<(ModuleId<'db>, IrModuleId)> = graph.iter_modules(db)
         .enumerate()
         .map(|(idx, module)| (module.id(db), IrModuleId(idx as u32)))
         .collect();
 
-    // Build a global (IrModuleId, FuncId) -> name map for resolving CodeRef during call rewriting.
-    // This is module-aware because FuncId is only unique within a module.
-    let mut func_id_to_name: HashMap<(IrModuleId, FuncId), String> = HashMap::new();
-    for (module_id, module_funcs) in lowered_functions.iter() {
-        if let Some(&ir_module_id) = module_id_to_ir.get(module_id) {
-            for (name, func_id) in &module_funcs.func_name_to_id {
-                func_id_to_name.insert((ir_module_id, *func_id), name.clone());
-            }
-        }
+    let mut plan = collect_instantiations(
+        modules.iter().filter_map(|(module_id, ir_module_id)| {
+            lowered_functions.get(module_id)
+                .map(|funcs| (*ir_module_id, funcs.functions.as_slice()))
+        }),
+    );
+    if plan.is_empty() {
+        return (lowered_functions, Vec::new());
     }
 
-    // Phase 2: Rewrite call sites (ComptimeCall -> Const + Call).
-    for (module_id, module_funcs) in lowered_functions.iter_mut() {
-        // Get the IrModuleId for this module.
-        let Some(&ir_module_id) = module_id_to_ir.get(module_id) else {
+    // Build the copies. Ids follow the source-derived ones, which
+    // `compute_func_id_map` assigns from statement order and cannot assign here
+    // because these functions are in nobody's source.
+    let mut errors: Vec<(ModuleId<'db>, Vec<String>)> = Vec::new();
+    for (module_id, ir_module_id) in &modules {
+        let Some(module_funcs) = lowered_functions.get_mut(module_id) else {
             continue;
         };
 
-        let mut new_functions = Vec::new();
+        let mut next_id = module_funcs.functions.iter()
+            .map(|f| f.id.0 + 1)
+            .max()
+            .unwrap_or(0);
+        let mut module_errors = Vec::new();
+        let mut copies = Vec::new();
 
-        for func in &module_funcs.functions {
-            // Track value allocation for new Const instructions.
-            let mut value_types = func.value_types.clone();
-            let mut next_value = func.value_count;
+        for ((plan_module, callee_id), mono) in plan.funcs.iter_mut() {
+            if plan_module != ir_module_id {
+                continue;
+            }
+            let Some(original) = module_funcs.functions.iter().find(|f| f.id == *callee_id) else {
+                continue;
+            };
 
-            let transformed = rewrite_comptime_calls(func, &spec_result, &func_id_to_name, ir_module_id, &mut value_types, &mut next_value);
-            new_functions.push(transformed);
+            if mono.instantiations.len() > MAX_INSTANTIATIONS {
+                module_errors.push(format!(
+                    "`{}` has {} const parameter instantiations, over the limit of {}; \
+                     each one is a copy of the function",
+                    original.name, mono.instantiations.len(), MAX_INSTANTIATIONS,
+                ));
+                continue;
+            }
+
+            for (index, values) in mono.instantiations.iter().enumerate() {
+                let new_id = CodeUnitId(next_id);
+                next_id += 1;
+                copies.push(monomorphize_function(
+                    original,
+                    &mono.comptime_param_indices,
+                    values,
+                    new_id,
+                    format!("{}__ct{}", original.name, index),
+                ));
+                mono.copies.push(new_id);
+            }
         }
 
-        module_funcs.functions = new_functions;
+        for copy in copies {
+            module_funcs.func_name_to_id.push((copy.name.clone(), FuncId(copy.id.0)));
+            module_funcs.functions.push(copy);
+        }
+        module_funcs.functions.sort_by_key(|f| f.id.0);
+        module_funcs.func_name_to_id.sort_by(|a, b| a.0.cmp(&b.0));
+
+        if !module_errors.is_empty() {
+            errors.push((*module_id, module_errors));
+        }
     }
 
-    lowered_functions
+    // Point the call sites at the copies.
+    for (module_id, ir_module_id) in &modules {
+        let Some(module_funcs) = lowered_functions.get_mut(module_id) else {
+            continue;
+        };
+        module_funcs.functions = module_funcs.functions.iter()
+            .map(|func| rewrite_comptime_calls(func, &plan, *ir_module_id))
+            .collect();
+    }
+
+    (lowered_functions, errors)
 }
 
 /// Assemble module graph sequentially.

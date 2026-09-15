@@ -1,0 +1,41 @@
+----------
+module local/test/sharedname
+----------
+
+// Two function-level consts in one module share a name and hold different
+// values. Resolving a call site's const argument by name gave both call sites
+// the same value, so the second instantiation was never planned for and the
+// rewrite found no copy to call.
+
+fun scale(const factor: int, x: int): int
+    ret factor * x
+end fun
+
+fun twice(x: int): int
+    const N: int = 2
+    ret scale(N, x)
+end fun
+
+fun fivex(x: int): int
+    const N: int = 5
+    ret scale(N, x)
+end fun
+
+----------
+scriptunit-fragment
+----------
+
+require module local/test/sharedname
+import sharedname.twice
+import sharedname.fivex
+
+let a = twice(10)
+let b = fivex(10)
+debuglog a
+debuglog b
+
+----------
+scriptunit-expr
+----------
+
+(a, b)

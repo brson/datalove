@@ -1,0 +1,145 @@
+----------
+module local/test/main
+----------
+
+// 65 instantiations of one function, over the limit of 64. Each one would be
+// a whole copy of the body, so the limit is reported rather than paid.
+
+fun scale(const factor: int): int
+    ret factor * 2
+end fun
+
+fun many(): int
+    const C1: int = 1
+    const C2: int = 2
+    const C3: int = 3
+    const C4: int = 4
+    const C5: int = 5
+    const C6: int = 6
+    const C7: int = 7
+    const C8: int = 8
+    const C9: int = 9
+    const C10: int = 10
+    const C11: int = 11
+    const C12: int = 12
+    const C13: int = 13
+    const C14: int = 14
+    const C15: int = 15
+    const C16: int = 16
+    const C17: int = 17
+    const C18: int = 18
+    const C19: int = 19
+    const C20: int = 20
+    const C21: int = 21
+    const C22: int = 22
+    const C23: int = 23
+    const C24: int = 24
+    const C25: int = 25
+    const C26: int = 26
+    const C27: int = 27
+    const C28: int = 28
+    const C29: int = 29
+    const C30: int = 30
+    const C31: int = 31
+    const C32: int = 32
+    const C33: int = 33
+    const C34: int = 34
+    const C35: int = 35
+    const C36: int = 36
+    const C37: int = 37
+    const C38: int = 38
+    const C39: int = 39
+    const C40: int = 40
+    const C41: int = 41
+    const C42: int = 42
+    const C43: int = 43
+    const C44: int = 44
+    const C45: int = 45
+    const C46: int = 46
+    const C47: int = 47
+    const C48: int = 48
+    const C49: int = 49
+    const C50: int = 50
+    const C51: int = 51
+    const C52: int = 52
+    const C53: int = 53
+    const C54: int = 54
+    const C55: int = 55
+    const C56: int = 56
+    const C57: int = 57
+    const C58: int = 58
+    const C59: int = 59
+    const C60: int = 60
+    const C61: int = 61
+    const C62: int = 62
+    const C63: int = 63
+    const C64: int = 64
+    const C65: int = 65
+    var t: int = 0
+    set t = t + scale(C1)
+    set t = t + scale(C2)
+    set t = t + scale(C3)
+    set t = t + scale(C4)
+    set t = t + scale(C5)
+    set t = t + scale(C6)
+    set t = t + scale(C7)
+    set t = t + scale(C8)
+    set t = t + scale(C9)
+    set t = t + scale(C10)
+    set t = t + scale(C11)
+    set t = t + scale(C12)
+    set t = t + scale(C13)
+    set t = t + scale(C14)
+    set t = t + scale(C15)
+    set t = t + scale(C16)
+    set t = t + scale(C17)
+    set t = t + scale(C18)
+    set t = t + scale(C19)
+    set t = t + scale(C20)
+    set t = t + scale(C21)
+    set t = t + scale(C22)
+    set t = t + scale(C23)
+    set t = t + scale(C24)
+    set t = t + scale(C25)
+    set t = t + scale(C26)
+    set t = t + scale(C27)
+    set t = t + scale(C28)
+    set t = t + scale(C29)
+    set t = t + scale(C30)
+    set t = t + scale(C31)
+    set t = t + scale(C32)
+    set t = t + scale(C33)
+    set t = t + scale(C34)
+    set t = t + scale(C35)
+    set t = t + scale(C36)
+    set t = t + scale(C37)
+    set t = t + scale(C38)
+    set t = t + scale(C39)
+    set t = t + scale(C40)
+    set t = t + scale(C41)
+    set t = t + scale(C42)
+    set t = t + scale(C43)
+    set t = t + scale(C44)
+    set t = t + scale(C45)
+    set t = t + scale(C46)
+    set t = t + scale(C47)
+    set t = t + scale(C48)
+    set t = t + scale(C49)
+    set t = t + scale(C50)
+    set t = t + scale(C51)
+    set t = t + scale(C52)
+    set t = t + scale(C53)
+    set t = t + scale(C54)
+    set t = t + scale(C55)
+    set t = t + scale(C56)
+    set t = t + scale(C57)
+    set t = t + scale(C58)
+    set t = t + scale(C59)
+    set t = t + scale(C60)
+    set t = t + scale(C61)
+    set t = t + scale(C62)
+    set t = t + scale(C63)
+    set t = t + scale(C64)
+    set t = t + scale(C65)
+    ret t
+end fun

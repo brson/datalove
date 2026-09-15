@@ -200,46 +200,56 @@ let bindings. Used for testing CTFE accuracy. Callers of the high-level pipeline
 
 ### Const Parameter Specialization
 
-Functions with `const` parameters undergo specialization during phase 5c. The compiler
-collects all call sites with const arguments during typechecking, then transforms the IR:
+Functions with `const` parameters are monomorphized during phase 5c:
 
 ```
 Phase 5c: Specialize comptime functions
     |   specialize_comptime_functions
-    |   - Resolve const arg values from ResolvedConsts
-    |   - Transform functions to union-branch form
-    |   - Rewrite ComptimeCall instructions to Call
-    v   Output: Specialized code units
+    |   - Scan the lowered IR for ComptimeCall, resolving each const
+    |     argument against the Const instruction that defines it
+    |   - Build one copy of the callee per distinct instantiation
+    |   - Point those call sites at the copy
+    v   Output: the original functions, plus a copy per instantiation
 ```
 
-**Union-branch strategy:** Instead of generating N separate functions (full
-monomorphization), the compiler generates one function with N branches dispatching on a
-tag.
+**Specialization is additive.** The original function is kept, with the signature it was
+lowered with, and the copies are added beside it as `name__ct0`, `name__ct1` and so on.
+That matters because the module graph is not the whole program: script units compile
+afterwards, one at a time, against modules already specialized, so a script line may name
+an instantiation no module call site asked for. Those calls keep their `ComptimeCall`,
+which every backend executes as a plain `Call` to the original.
 
-This was adopted for code size and compile time and delivers neither.
-`build_dispatch_blocks` clones every body block once per instantiation, so the output is
-the same size as monomorphization and takes the same time to produce, plus a `Switch`.
-That `Switch` is on a value every call site passes as a literal, since specialization
-emits `Const(discriminant)` followed by `Call` and the const-binding-only restriction
-guarantees the value is known. It also merges instantiations into one function, which
-the tiering in `optimizing.rs` counts and inlines as a unit, so a hot instantiation
-cannot tier separately from a cold one.
+A transform that rewrote the callee's signature in place could not do this. It would
+oblige the compiler to find and rewrite every call site, which it cannot, and a call site
+it missed would pass a const argument into a parameter that had become something else.
 
-Monomorphization is smaller, faster to compile, and gives the tiering what it wants. It is
-also additive where union-branch is destructive, which is what makes the union-branch
-signature rewrite unsafe for call sites the module graph cannot see, such as a script
-unit's. The plan to replace it is in
-[Const Parameter Implementation](const-param-impl-plan.md); why this machinery is not a
-foundation for generics is in [Generics and Specialization](plan-generics.md).
+**Where instantiations come from.** They are read out of the IR. The const argument at a
+call site is already an operand defined by a `Const` instruction, so the values the
+rewrite looks for are the values the plan was built from, and the two cannot disagree.
+Specialization used to resolve them instead by the *name* of the const binding, which the
+typechecker recorded in a `ComptimeCallSiteRegistry`; that could disagree, because two
+function-level consts sharing a name in one module resolved to the same value. The
+registry is gone -- the typechecker still enforces that a const argument names a const
+binding, but records nothing.
+
+**Identity of the copies.** `compute_func_id_map` assigns `FuncId`s from source statement
+order and cannot assign one here, since the copies are in nobody's source. They take ids
+after the highest source-derived one in their module. The name has to be a valid
+identifier, because both AOT backends use it as a linker symbol.
+
+**Limit.** `MAX_INSTANTIATIONS` caps a function at 64. Each instantiation is a whole copy
+in the object file, so going over is reported rather than paid.
 
 **Call site handling:** The lowering phase emits `ComptimeCall` instructions for calls to
-functions with const parameters. During specialization, these are transformed to emit the
-enum discriminant as a `Const` instruction followed by a regular `Call` with modified arguments.
+functions with const parameters. Specialization turns the ones it can place into a
+regular `Call` to the copy, dropping the const arguments the copy does not take.
 
 **Testing:** The `skip_specialization` flag (like `skip_const_inlining`) allows differential
 testing - comparing specialized vs unspecialized output to verify correctness.
 
-See `const-param-specialization.md` and `const-param-impl-plan.md` for detailed design.
+See [Const Parameter Implementation](const-param-impl-plan.md) for what remains, and
+[Generics and Specialization](plan-generics.md) for why this machinery is not a
+foundation for type parameters.
 
 ### Const Evaluation
 

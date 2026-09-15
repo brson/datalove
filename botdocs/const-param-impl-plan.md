@@ -1,339 +1,207 @@
 # Const Parameter Implementation
 
-How const parameter specialization works today, where it is wrong, and the plan to
-replace union-branch with monomorphization.
+How const parameter specialization works, and what is left to do.
 
 The survey of the literature that led to the original design is in
 [Const Parameter Specialization](const-param-specialization.md). The reasoning that
 rejected this machinery as a foundation for generics is in
-[Generics and Specialization](plan-generics.md). This document is the implementation
-plan, and it has been rewritten: the union-branch plan it used to hold described a
-strategy the compiler should stop using.
+[Generics and Specialization](plan-generics.md).
+
+This document has been rewritten twice: once when union-branch was replaced as a plan,
+and again when the replacement was built. The union-branch record is kept in an appendix.
 
 ## Table of Contents
 
 1. [What is built](#user-content-what-is-built)
-2. [What the tests actually cover](#user-content-what-the-tests-actually-cover)
-3. [Two faults](#user-content-two-faults)
-4. [Why monomorphization](#user-content-why-monomorphization)
-5. [The plan](#user-content-the-plan)
-6. [Constraints to respect](#user-content-constraints-to-respect)
-7. [Testing](#user-content-testing)
-8. [Order of work](#user-content-order-of-work)
-9. [Appendix: the union-branch record](#user-content-appendix-the-union-branch-record)
+2. [Why monomorphization](#user-content-why-monomorphization)
+3. [Two faults, and where they went](#user-content-two-faults-and-where-they-went)
+4. [What the tests cover](#user-content-what-the-tests-cover)
+5. [Constraints](#user-content-constraints)
+6. [What remains](#user-content-what-remains)
+7. [Appendix: the union-branch record](#user-content-appendix-the-union-branch-record)
 
 ---
 
 ## What is built
 
-The feature is wired end to end and `skip_specialization` defaults to `false`, so it
-runs in the real compiler.
-
 **Front end.** `FunParam::is_comptime` carries the `const` modifier from the parser.
 `TypeFunction::param_comptime` carries it through the type system. `synthesize.rs:1202`
 enforces the const-binding-only restriction: a comptime argument must be the name of a
-`const` binding, not a literal, a `let`, or a parameter. The three refusals are covered
-by `tycheck_world/05_comptime_arg_errors.world`.
+`const` binding, not a literal, a `let`, or a parameter. The three refusals are covered by
+`tycheck_world/05_comptime_arg_errors.world`.
 
 **Call sites.** `lower/expr.rs:653` emits `Instruction::ComptimeCall` instead of `Call`
-when the callee has comptime parameters. It carries the original arguments, the comptime
-parameter indices, and a placeholder discriminant. Every consumer handles it: the
-interpreter, the Cranelift backend, the C backend, the inliner, DCE, and the IR printer.
-Where nothing rewrites it, it behaves as a plain `Call` to the original function.
+when the callee has comptime parameters, carrying the original arguments and the comptime
+parameter indices. Every consumer handles it: the interpreter, the Cranelift backend, the
+C backend, the inliner, DCE, and the IR printer. Where nothing rewrites it, it is a plain
+`Call` to the original function.
 
-**Specialization.** `specialize_comptime_functions` in `tracked_lower.rs:1191` runs as
-phase 5c, after const evaluation and before assembly. It does three things:
+**Specialization.** `specialize_comptime_functions` in `tracked_lower.rs` runs as phase
+5c, after const evaluation and before assembly, over three functions in `specialize.rs`:
 
-1. `build_specialization_plan` walks the `ComptimeCallSiteRegistry` the typechecker
-   filled in, resolves each recorded const binding *name* against the module graph's
-   evaluated consts, and groups the resulting values into instantiations per function.
-2. `transform_function` rewrites each comptime function into union-branch form: the
-   comptime parameters are replaced by a single `i32` tag, and the body is cloned once
-   per instantiation behind a `Switch` on that tag.
-3. `rewrite_comptime_calls` turns each `ComptimeCall` into `Const(discriminant)` followed
-   by a `Call`, dropping the comptime arguments the callee no longer takes.
+1. `collect_instantiations` scans the lowered units for `ComptimeCall` and resolves each
+   comptime argument operand against the `Const` instruction that defines it, grouping the
+   distinct value tuples per callee. The callee is keyed by `(IrModuleId, CodeUnitId)`,
+   and modules are visited in `IrModuleId` order, so the numbering is deterministic.
+2. `monomorphize_function` builds one copy per instantiation: the comptime parameters are
+   dropped from the signature, the rest are renumbered, and a `Const` per comptime
+   parameter is prepended to the entry block and substituted through the body. The body's
+   own drop of what used to be the parameter becomes a drop of the const, so the ownership
+   accounting carries over unchanged.
+3. `rewrite_comptime_calls` points each call site whose instantiation was built at the
+   copy, drops the const arguments the copy does not take, and leaves everything else
+   alone.
 
-The parts of this worth keeping are the substitution helpers
-(`rewrite_comptime_params_in_instruction` and its terminator twin), `build_const_value_map`,
-and the call-site rewriting shell. The tag, the `Switch`, and `build_dispatch_blocks` are
-what goes.
+**Substitution** is `replace_params_in_instruction` and `replace_params_in_terminator` in
+`datalove-datafun-ir/src/params.rs`, shared with the inliner, which needs the same thing
+for a different reason. Both matches are exhaustive: a variant that fell through would
+leave a reference to a parameter the copy no longer has, and nothing downstream reports
+that. Moving it there found two variants, `UnitEndDrop` and `UnitEndDropTracked`, that the
+inliner's copy had grouped in with the operand-free ones and so never substituted.
 
-## What the tests actually cover
+**Identity.** `compute_func_id_map` is `#[salsa::tracked]` and assigns `FuncId`s from
+source statement order, which cannot cover functions that are in nobody's source. Copies
+take ids after the highest source-derived one in their module, and are named
+`{original}__ct{n}`. The name has to be an identifier because both AOT backends use it as
+a linker symbol -- Cranelift as `__mod_{module_id}_{name}`, the C backend directly. Copies
+are registered in `ModuleLoweredFunctions`, which `lower_module` reuses wholesale, so they
+reach assembly, the runtime registry and the IR dumps without further plumbing.
 
-Less than the fixture count suggests, and the gap runs in one direction: the cases the
-suite claims to cover are the cases it does not.
-
-Specialization only fires when a call site is *in a module function* and its const
-resolves out of the module graph's `resolved_consts`, which holds module-level and
-function-level consts. Script-unit consts are not in that map, so those call sites are
-silently skipped and the whole plan comes back empty.
-
-Of the 18 fixtures in `fixtures/specialize_differential/`:
-
-- **Two specialize.** `011_module_internal` and `012_cross_module` are the only fixtures
-  whose expected IR contains a `switch`. Both are `(const factor: int, x: int)`: a single
-  comptime parameter in first position.
-- **Fourteen are inert.** Their call sites are in script units, the plan comes back empty,
-  and the harness compares two identical unspecialized runs.
-- **Two do not run at all.** `013_comptime_i32` fails to typecheck (`*!` used in a
-  function that does not return a `Result`). `016_nested_comptime` fails to lower with
-  `double_add::const 'N': lowering error: binding not available yet: n` — a comptime
-  function calling another comptime function does not work. Both are recorded as passing,
-  because both sides of the differential fail identically.
-
-So `param_remap` has no live coverage for a comptime parameter anywhere but index 0.
-`006_comptime_last_position`, `008_two_comptime_params` and `020_interleaved_comptime`
-exercise the unspecialized path only. The AOT fixture `aot/083_comptime_simple.world` is
-a script call site, and its expected IR still shows `comptime_call` — specialization and
-AOT have never been run together.
-
-The harness itself is sound. `specialize_differential_analysis.rs` runs the worldfile
-twice on fresh databases and compares both `debug_output` and `output` for every section.
-The problem is the fixtures, and most of it dissolves on its own once the plan is sourced
-from the IR.
-
-## Two faults
-
-Both are live in an on-by-default path.
-
-**Same-named consts panic the compiler.** The registry records const *names* with no
-scope, and `build_specialization_plan` looks them up by bare name against a map that adds
-an unqualified alias on a first-wins basis. Two function-level consts sharing a name in
-one module:
-
-```datalove
-fun twice(x: int): int
-    const N: int = 2
-    ret scale(N, x)
-end fun
-
-fun fivex(x: int): int
-    const N: int = 5
-    ret scale(N, x)
-end fun
-```
-
-Both resolve to `2`, so `5` is never registered as an instantiation. `rewrite_comptime_calls`
-then resolves the real value `5` out of the IR, finds no discriminant for it, and reaches
-its own `panic!` at `specialize.rs:642`. The plan and the rewrite derive the same fact two
-different ways and are free to disagree.
-
-**A function called from both a module and a script miscompiles.** These two paths agree
-today only because neither normally fires. Give one comptime function a module-internal
-call site, which specializes it, and a script call site, which is never rewritten: the
-script passes the raw const value into what is now the tag parameter. The `Switch` finds
-no matching case, falls through to `default` — wired to the *last* variant — and runs the
-wrong branch with the wrong constant. With `int` the discarded argument also trips the
-runtime leak detector. Wrong answer and a leak, from ordinary code.
-
-Neither fault is a bug in the union-branch transform as such. The first is the two-sources
-problem; the second is what makes union-branch structurally unsafe here, and is the
-subject of the next section.
+**Limit.** `MAX_INSTANTIATIONS` is 64. Over that, the function is left unspecialized and
+the module gets a lowering error naming it, which travels the channel module const
+failures already use.
 
 ## Why monomorphization
 
-The size and compile-time case is already settled and recorded in
-[Generics and Specialization](plan-generics.md) and `compiler-guide.md:215`:
-`build_dispatch_blocks` clones every body block once per instantiation, so union-branch
-is monomorphization plus a `Switch` on a value every call site passes as a literal, and
-fusing instantiations into one symbol defeats the per-function counting in `optimizing.rs`.
+The size and compile-time case against union-branch is recorded in
+[Generics and Specialization](plan-generics.md) and `compiler-guide.md`:
+`build_dispatch_blocks` cloned every body block once per instantiation, so union-branch
+was monomorphization plus a `Switch` on a value every call site passed as a literal, and
+fusing instantiations into one symbol defeated the per-function counting in
+`optimizing.rs`.
 
-The argument that matters most for this compiler is a different one, and it is what the
-second fault is really about:
+The argument that decided it is a different one:
 
-**Monomorphization is additive. Union-branch is destructive.**
+**Monomorphization is additive. Union-branch was destructive.**
 
-Union-branch rewrites the callee's signature in place. Every call site in the program must
-then be found and rewritten to match, or it calls a function that no longer takes what it
-is passing. That is a whole-program obligation, and this compiler cannot discharge it:
-script units are compiled *after* the module graph, one at a time, against modules that
-were already specialized. A REPL line introducing a new instantiation arrives too late to
-participate.
+Union-branch rewrote the callee's signature in place. Every call site in the program then
+had to be found and rewritten to match, or it would call a function that no longer took
+what it was passing. That is a whole-program obligation, and this compiler cannot
+discharge it: script units compile *after* the module graph, one at a time, against
+modules already specialized. A REPL line introducing a new instantiation arrives too late.
 
-Monomorphization keeps the original function and adds copies beside it. A call site nobody
-specialized still calls a function that still exists with the signature it had. That single
-property:
+Keeping the original beside the copies means a call site nobody specialized still calls a
+function that exists with the signature it had. Those calls are not specialized -- which
+is the same amount of specialization the script path got before, but correct by
+construction rather than by accident.
 
-- removes the second fault structurally, rather than by patching the dispatch default;
-- makes the script and REPL path correct instead of accidentally correct, with no new
-  machinery, at the cost of those call sites staying unspecialized;
-- leaves specializing script call sites as a later optimization rather than a
-  prerequisite, since a script unit can hold its own copies in `nested_units`.
+## Two faults, and where they went
 
-The original may end up dead once every call site is specialized. Leaving it is the right
-default for a language with a REPL, where a later script line may call it.
+Both were live in an on-by-default path, and both are gone with the mechanism that caused
+them.
 
-## The plan
+**Same-named consts panicked the compiler.** The old plan resolved a call site's comptime
+argument by the *name* of the const binding the typechecker had recorded, against a map
+with a first-wins unqualified alias. Two function-level consts sharing a name in one
+module resolved to the same value, so the second instantiation was never planned for, and
+`rewrite_comptime_calls` -- which resolved the real value from the IR -- found no
+discriminant and hit its own `panic!`. The plan and the rewrite derived the same fact two
+ways and were free to disagree. Now there is one derivation. Fixture:
+`specialize_differential/022_shared_const_name`.
 
-### 1. Stop the bleeding
+The names were carried by `ComptimeCallSiteRegistry`, which nothing else read, so it went
+with them, along with `ComptimeCallSite` and the fields holding both on
+`SingleModuleTypecheckResult` and `ModuleGraphTypecheckResult`. Those are salsa-tracked,
+where an unread field is not free: it takes part in the equality that decides whether
+typechecking can be reused. The typechecker still enforces the const-binding-only
+restriction; it just records nothing. See `salsa-patterns.md`.
 
-Flip `skip_specialization` to default `true` at `module_pipeline.rs:77` and
-`workspace.rs:123`. That routes everything down the unspecialized path all 18 fixtures
-confirm is correct. The differential harness sets both values itself and is unaffected.
+**A function called from both a module and a script miscompiled.** The module call site
+specialized the callee; the script call site was never rewritten, so it passed its const
+value into what had become the tag. The `Switch` matched no case, fell to `default` --
+wired to the last variant -- and ran the wrong branch with the wrong constant, leaking the
+argument on the way. Keeping the original removes the condition entirely. Fixture:
+`specialize_differential/023_module_and_script_call`.
 
-This is independent of everything below and should not wait on it.
+## What the tests cover
 
-### 2. Source the plan from the IR
+`specialize_differential_analysis.rs` runs a worldfile twice on fresh databases, with
+specialization on and off, and compares both `debug_output` and `output` for every
+section. That harness is sound. What it was pointed at was not, and still is only partly.
 
-Delete the name-based lookup. Build the plan by scanning lowered units for `ComptimeCall`
-and resolving each comptime argument operand with `build_const_value_map`, which is
-exactly what `rewrite_comptime_calls` already does. Plan and rewrite then agree by
-construction.
+Specialization fires when the call site is in a module function. Of the 21 fixtures in
+`fixtures/specialize_differential/`:
 
-This removes, in order: the `resolved_consts` flattening in `tracked_lower.rs:1210-1227`,
-the unqualified-name alias and its ordering hazard, `comptime_arg_names` on
-`ComptimeCallSite`, and with it the first fault. The registry shrinks to what the IR does
-not already carry; note that `ComptimeCall` carries `comptime_param_indices` itself, so
-the call-site half of the registry has little left to say.
+- **Six specialize.** `011_module_internal`, `012_cross_module`, `013_comptime_i32`,
+  `022_shared_const_name`, `023_module_and_script_call` (its module half), and
+  `024_module_side_positions`. Their expected IR is where the `__ct` copies appear.
+- **Fourteen do not.** Their call sites are in script units, which this pass does not
+  reach, so both sides of the differential run the same unspecialized code. They are still
+  worth having -- they check that the unspecialized path stays correct -- but they are not
+  evidence about specialization.
+- **One does not run.** `016_nested_comptime` fails to lower: a const in a comptime
+  function's body cannot name that function's comptime parameter. It is recorded as
+  passing because both sides fail identically.
 
-This is also what closes the script-unit gap, whenever step 6 is taken: a script unit's
-`v1 = const 2int` feeding a `comptime_call` resolves exactly as well as a module's. The
-reason script call sites are skipped today is entirely an artifact of the name lookup.
+`024_module_side_positions` covers the parameter renumbering: a comptime parameter last,
+two of them, and two interleaved among three ordinary ones, all called from module
+functions. Before it, every live fixture had a single comptime parameter at index 0, so
+`param_remap` was never exercised away from the identity.
 
-> A related lesson is already recorded: `ComptimeCallSite` used to carry a
-> `call_expr_id: salsa::Id` that nothing read, because call sites are found in the IR.
-> A raw salsa id inside a memoized value is not free even when unread — it takes part in
-> the equality deciding whether typechecking can be reused. See `salsa-patterns.md`.
-> Sourcing the plan from the IR is the same observation carried to its conclusion.
+`013_comptime_i32` is the only live fixture whose body has more than one block. Its
+checked multiply early-returns on overflow, so the copy has to keep the branch and its
+targets, and it covers a fixed-width const value rather than a bigint. It had never
+typechecked before -- bare arithmetic on a fixed integer is not permitted, and it used a
+checked operator in a function that did not return a result.
 
-### 3. Replace the transform
+`aot/084_comptime_specialized` is the first fixture to run specialization and AOT
+together. `module_interp/064_const_param_limit` covers the instantiation limit; it lives
+there rather than in the differential suite because the limit is a refusal that only
+exists when specialization runs, so the two sides are *meant* to differ.
 
-Delete `build_dispatch_blocks` and `remap_terminator_blocks`. Replace `transform_function`
-with a copy-per-instantiation:
-
-- Clone the unit. Drop the comptime parameters from `params`, `param_types` and
-  `param_modes`; renumber what remains. There is no tag parameter, so the new indices
-  start at 0 rather than 1.
-- Prepend a `Const` instruction per comptime parameter to the entry block, and substitute
-  through the body with the existing `rewrite_comptime_params_in_instruction` and
-  `rewrite_comptime_params_in_terminator`. The body's own `drop` of what used to be the
-  parameter becomes a drop of the const, which is correct.
-- No block renumbering. The copy keeps the original block structure.
-
-**Make the substitution helpers exhaustive.** They currently end in `_ => instr.clone()`
-and handle about fourteen variants. Under union-branch an unhandled instruction kept a
-`Param` reference that still existed, so the catch-all was survivable. Under
-monomorphization the parameter is gone and an unrewritten reference dangles. This must be
-an exhaustive match, which the house rule against fallback code wants anyway.
-
-**Carry the context across.** `transform_function` currently blanks `tracked_params`,
-`descriptor_shapes`, `symbols`, `const_values` and `nested_units`. The copy must keep all
-of them, with `tracked_params` and `descriptor_params` remapped through `param_remap`.
-`tracked_params` is what the Cranelift and C backends use for parameter tracking, and
-losing it is waiting for the AOT path to be exercised.
-
-### 4. Give the copies an identity
-
-This is the genuinely new work. Union-branch sidestepped it by keeping one function per
-source function.
-
-**Ids.** `compute_func_id_map` is `#[salsa::tracked]` and assigns `FuncId`s from source
-statement order. Specialized copies do not exist in the source and cannot come from it.
-Allocate per module, starting past the highest source-derived `FuncId` for that module.
-`FuncId` and `CodeUnitId` are numerically interchangeable here and the code converts
-freely between them.
-
-**Names.** Both AOT backends use `unit.name` directly as a linker symbol — Cranelift as
-`__mod_{module_id}_{name}` at `cranelift-aot/src/lib.rs:215`, and the C backend as a C
-identifier. So the suffix must be identifier-safe: `scale__ct0`, not `scale$$0`.
-
-**Registration.** Add copies to `ModuleLoweredFunctions.functions` and
-`func_name_to_id`, keeping `functions` sorted by `id.0` — the stratified two-pass lowering
-at `tracked_lower.rs:1108` already relies on that ordering. `lower_module` reuses
-`lowered_functions` wholesale when it is provided (`tracked_lower.rs:358`), so copies
-added in phase 5c reach assembly without further plumbing. They must be registered before
-`first_uncallable_target` (`tracked_lower.rs:863`) runs, since it validates every
-`CodeRef::Module` target against the lowered list.
-
-### 5. Rewrite the call sites
-
-Keep the shape of `rewrite_comptime_calls`, minus the discriminant. A `ComptimeCall` whose
-instantiation is in the plan becomes a `Call` to the copy's `CodeRef`, with the comptime
-arguments removed from the argument list and dropped beforehand — the existing
-`comptime_args_to_drop` logic is still needed, since the caller's const value is linear
-and the callee no longer consumes it.
-
-A `ComptimeCall` whose instantiation is *not* in the plan is left alone. It is a correct
-call to the original function. Delete the `panic!`: under an additive design there is
-nothing to panic about, and the condition it was guarding against is no longer a fault.
-
-### 6. Optional: specialize script call sites
-
-Not required for correctness, and worth doing only if measurement asks for it. A script
-unit can hold copies in its own `nested_units` addressed by `CodeRef::Local`, which keeps
-the module untouched and works incrementally. Defer until steps 1 through 5 are in and
-the AOT path has coverage.
-
-## Constraints to respect
+## Constraints
 
 **Const parameters and generics do not combine.** `lower/expr.rs:653` takes the
 `ComptimeCall` branch before the `type_args` computation and so never computes them, and
-`rewrite_comptime_calls` emits empty `type_args` and `shape_descriptors` with the comment
-that a comptime call is not generic. A function that is both will silently lose its
-descriptors. Either reject the combination in the typechecker or compute `type_args` on
-both branches; the current state is an unstated assumption in two places.
+`rewrite_comptime_calls` emits empty `type_args` and `shape_descriptors`. A function that
+is both will silently lose its descriptors. Either reject the combination in the
+typechecker or compute `type_args` on both branches; the current state is an unstated
+assumption in two places.
 
 **Float const parameters are unsound as an instantiation key.** `ConstValue` hashes `F32`
-and `F64` by `to_bits` (`ir/src/lib.rs:1033`) but derives `PartialEq`, which uses float
-comparison. `0.0` and `-0.0` compare equal and hash differently; `NaN` hashes equal to
-itself and compares unequal. Any map keyed on `Vec<ConstValue>` inherits that. Canonicalize
-the key or refuse float const parameters.
+and `F64` by `to_bits` but derives `PartialEq`, which uses float comparison. `0.0` and
+`-0.0` compare equal and hash differently; `NaN` hashes equal to itself and compares
+unequal. Any map keyed on `Vec<ConstValue>` inherits that, including
+`FuncMonomorphization::value_to_index`. Canonicalize the key or refuse float const
+parameters.
 
 **Nested comptime does not lower.** A const binding in a comptime function's body cannot
 name that function's comptime parameter (`016_nested_comptime`). Monomorphization makes
-this tractable — inside a copy the parameter *is* a const — but it is a separate change
-and should get its own fixture and its own commit.
+this tractable -- inside a copy the parameter *is* a const -- but it is a separate change.
 
-**There is still no instantiation limit.** The original plan called for one and it was
-never built. Under monomorphization it matters more, since each instantiation is a real
-function in the object file. A limit with a clear error beats silent code growth.
+## What remains
 
-## Testing
-
-Keep the harness. It is strategy-independent and it is the valuable part of the existing
-work.
-
-Fixtures to add, none of which exist today:
-
-- The two faults, as regressions: same-named function-level consts in one module, and a
-  comptime function called from both a module function and a script unit.
-- A comptime parameter in middle and last position, and two comptime parameters, with the
-  call sites in module functions so they actually specialize. `006`, `008` and `020` test
-  these shapes against the unspecialized path only; they need module-side twins.
-- An AOT fixture that actually specializes. `aot/083` does not.
-- Fix `013_comptime_i32`, which has never typechecked.
-
-Sixteen fixtures go live on their own once step 2 lands, with no edits. That corpus is
-latent coverage, not dead weight, and it is the main reason to build on this rather than
-start over.
-
-Blessing note: the expected IR for the two live fixtures will change shape, from one
-function with a `switch` to an original plus copies.
-
-## Order of work
-
-- [ ] 1. Default `skip_specialization` to `true`. Independent, cheap, stops live
-      miscompiles.
-- [ ] 2. Source the plan from the IR. Removes the first fault and most of
-      `build_specialization_plan`.
-- [ ] 3. Monomorphizing transform, with exhaustive substitution and full context carried
-      across.
-- [ ] 4. Ids, names and registration for the copies.
-- [ ] 5. Call-site rewriting without the discriminant; delete the panic. Re-enable
-      specialization by default.
-- [ ] 6. Fixtures: the two regressions, module-side twins for the parameter positions,
-      an AOT case.
-- [ ] 7. Instantiation limit with a clear error.
-- [ ] 8. Reconsider the const-binding-only restriction. `pow(2, 10)` failing because `10`
-      is a literal is a bad first impression, and once the plan comes from the IR rather
-      than from pre-resolved consts, the restriction is easier to lift.
-
-Steps 3 through 5 land together or not at all; the intermediate states do not compile to
-anything coherent.
+- **Specialize script call sites.** The largest remaining gap, and the reason fourteen
+  fixtures are inert. A script unit can hold copies in its own `nested_units` addressed by
+  `CodeRef::Local`, which keeps the module untouched and works incrementally. Not needed
+  for correctness, since those calls run the original.
+- **Reconsider the const-binding-only restriction.** `pow(2, 10)` failing because `10` is
+  a literal is a bad first impression. Now that instantiations are read from the IR, a
+  literal argument arrives as a `Const` operand exactly like a const binding does, so the
+  specialization side needs nothing; the change is in `validate_comptime_arg`.
+- **Nested comptime**, per the constraint above, with `016_nested_comptime` as its fixture.
+- **Dead copies.** A function all of whose call sites were specialized keeps an original
+  nobody calls. Leaving it is deliberate -- a later script line may call it -- but for an
+  AOT build, where there is no later script line, it is dead weight.
+- **Decide whether the tag ever earns its place.** Monomorphization is right when the
+  value is known at the call site, which the const-binding-only restriction guarantees. If
+  that restriction is ever lifted far enough that a call site can pass a value chosen at
+  runtime from a known set, the dispatch that union-branch built becomes the right shape
+  for that case. It is not the right shape for this one.
 
 ## Appendix: the union-branch record
 
-Kept because the reasoning should stay recoverable, not because it should be followed.
+Kept because the reasoning should stay recoverable.
 
 Union-branch generated one function with N branches dispatching on a tag, instead of N
 copies. It was adopted on this comparison:
@@ -345,9 +213,8 @@ copies. It was adopted on this comparison:
 | Icache | Poor (N copies) | Good (1 function) |
 | Branch cost | None | ~2-5 cycles |
 
-Every row of which is wrong, because a branch is not cheaper than a copy of the body — it
-*is* a copy of the body. `build_dispatch_blocks` clones every original block once per
-instantiation. Corrected:
+Every row of which is wrong, because a branch is not cheaper than a copy of the body -- it
+*is* a copy of the body. Corrected:
 
 | Aspect | Full mono | Union-branch |
 |--------|-----------|--------------|
@@ -359,14 +226,14 @@ instantiation. Corrected:
 | JIT tiering | Per instantiation | All instantiations share one call count |
 
 The last row is specific to this compiler: `optimizing.rs` inlines at 50 calls and
-JIT-compiles at 100, counted per function, so fusing instantiations means a hot one cannot
-tier without dragging the cold ones with it.
+JIT-compiles at 100, counted per function, so fusing instantiations meant a hot one could
+not tier without dragging the cold ones with it.
 
-The extension to type parameters, once sketched here as phases B through D, does not
-exist. Union-branch holds one signature by removing the const parameter; a type parameter
-*is* the type of other parameters and of the return, so there is nothing for the branches
-to agree on. Generics went to erasure and type descriptors instead. The full argument is
-in [Generics and Specialization](plan-generics.md).
+The extension to type parameters, once planned here as phases B through D, does not exist.
+Union-branch held one signature by removing the const parameter; a type parameter *is* the
+type of other parameters and of the return, so there was nothing for the branches to agree
+on. Generics went to erasure and type descriptors instead. The full argument is in
+[Generics and Specialization](plan-generics.md).
 
 Problems found and fixed while the union-branch implementation was built, which were real
 and are not affected by any of the above: CTFE leaking heap values returned through a call
@@ -376,3 +243,8 @@ lowering paths, which orphaned the instructions computing an inlined const; modu
 consts, implemented by stratifying lowering into two passes; and a widening fault where a
 fixed-width integer passed to an `int` parameter produced zero. Fixtures: interp 944, 945,
 946, dual 423, module_interp 055 and 056.
+
+One piece of the union-branch implementation survives in spirit. `ComptimeCall` was added
+so that a later pass could find the call sites in the IR, and degrades to `Call` in every
+backend. That is what makes the additive design possible, and what lets the plan be built
+from the IR rather than from names.

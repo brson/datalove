@@ -333,68 +333,6 @@ pub struct TypeFunction<'db> {
 // Const Parameter Specialization Registry
 // ============================================================================
 
-/// A call site with const parameter arguments, recorded during typecheck.
-///
-/// Note: We record const binding *names*, not values. The values are looked up
-/// later from ResolvedConsts during specialization (after const evaluation).
-#[derive(Clone, Debug, Hash, PartialEq, Eq)]
-#[derive(salsa::SalsaValue)]
-pub struct ComptimeCallSite<'db> {
-    /// Name of the called function.
-    pub func_name: InternedText<'db>,
-    /// Indices of const parameters in the callee.
-    pub comptime_param_indices: Vec<usize>,
-    /// Names of const bindings used as const parameter args (NOT values yet).
-    pub comptime_arg_names: Vec<InternedText<'db>>,
-}
-
-/// Registry of const parameter call sites and functions, collected during typecheck.
-///
-/// Uses BTreeMap instead of HashMap to satisfy Hash/Eq requirements for Salsa tracking.
-#[derive(Clone, Debug, Default, Hash, PartialEq, Eq)]
-#[derive(salsa::SalsaValue)]
-pub struct ComptimeCallSiteRegistry<'db> {
-    /// All call sites with const parameter args.
-    pub call_sites: Vec<ComptimeCallSite<'db>>,
-    /// Functions that have const parameters (name -> param indices).
-    pub comptime_funcs: BTreeMap<InternedText<'db>, Vec<usize>>,
-}
-
-impl<'db> ComptimeCallSiteRegistry<'db> {
-    /// Create a new empty registry.
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    /// Check if there are any const parameter functions or call sites.
-    pub fn is_empty(&self) -> bool {
-        self.call_sites.is_empty() && self.comptime_funcs.is_empty()
-    }
-
-    /// Register a function with const parameters.
-    pub fn register_comptime_func(&mut self, name: InternedText<'db>, comptime_indices: Vec<usize>) {
-        self.comptime_funcs.entry(name).or_insert(comptime_indices);
-    }
-
-    /// Record a call site with const parameter arguments.
-    pub fn record_call_site(&mut self, call_site: ComptimeCallSite<'db>) {
-        self.call_sites.push(call_site);
-    }
-
-    /// Get const parameter indices for a function.
-    pub fn get_comptime_indices(&self, func_name: InternedText<'db>) -> Option<&Vec<usize>> {
-        self.comptime_funcs.get(&func_name)
-    }
-
-    /// Merge another registry into this one.
-    pub fn merge(&mut self, other: &ComptimeCallSiteRegistry<'db>) {
-        self.call_sites.extend(other.call_sites.iter().cloned());
-        for (name, indices) in &other.comptime_funcs {
-            self.comptime_funcs.entry(*name).or_insert_with(|| indices.clone());
-        }
-    }
-}
-
 /// Type error representation.
 ///
 /// A field type that is `'static` needs no `SalsaValue`; these live in maps
