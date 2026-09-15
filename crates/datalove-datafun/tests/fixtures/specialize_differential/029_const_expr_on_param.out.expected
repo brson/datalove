@@ -1,0 +1,195 @@
+// PASS: Specialized and unspecialized outputs match
+
+Analysis(
+    sections: [
+        SectionResult(
+            section_type: "module",
+            name: Some("local/test/constexpr"),
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    fn helper(p0):
+                    block0:
+                        v0 = const 10int
+                        v1 = mul p0, v0
+                        drop v0
+                        drop p0
+                        return v1
+                    
+                    fn scale(p0, p1):
+                    block0:
+                        v0 = mul p0, p1
+                        drop p0
+                        drop p1
+                        return v0
+                    
+                    fn uses_consts(p0, p1):
+                    block0:
+                        v0 = const 1int
+                        v1 = add p0, v0
+                        drop v0
+                        v2 = call @0 m0.u0(p0)
+                        v3 = clone v1
+                        v4 = const 2int
+                        v5 = mul v3, v4
+                        drop v3
+                        drop v4
+                        v6 = clone v1
+                        v7 = comptime_call m0.u1(v6, p1) [disc=0, comptime_params=[0]]
+                        v8 = clone v2
+                        v9 = add v7, v8
+                        drop v7
+                        drop v8
+                        v10 = clone v5
+                        v11 = add v9, v10
+                        drop v9
+                        drop v10
+                        drop v1
+                        drop v2
+                        drop v5
+                        return v11
+                    
+                    fn from_module(p0):
+                    block0:
+                        v0 = const 3int
+                        v1 = const 3int
+                        drop v1
+                        v2 = call @0 m0.u4(p0)
+                        drop v0
+                        return v2
+                    
+                    fn uses_consts__ct4(p0):
+                    block0:
+                        v0 = const 1int
+                        v1 = const 4int
+                        drop v0
+                        v2 = const 30int
+                        v3 = const 4int
+                        v4 = const 2int
+                        v5 = const 8int
+                        drop v3
+                        drop v4
+                        v6 = const 4int
+                        drop v6
+                        v7 = call @1 m0.u5(p0)
+                        v8 = const 30int
+                        v9 = add v7, v8
+                        drop v7
+                        drop v8
+                        v10 = const 8int
+                        v11 = add v9, v10
+                        drop v9
+                        drop v10
+                        drop v1
+                        drop v2
+                        drop v5
+                        return v11
+                    
+                    fn scale__ct5(p0):
+                    block0:
+                        v1 = const 4int
+                        v0 = mul v1, p0
+                        drop v1
+                        drop p0
+                        return v0
+                """,
+            ),
+            output: "",
+        ),
+        SectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 5int
+                        v1 = const 2int
+                        v2 = call @0 m0.u3(v1)
+                        v3 = const 5int
+                        v4 = const 2int
+                        drop v3
+                        v5 = call @1 u0(v4)
+                        debuglog v2
+                        debuglog v5
+                        unit_end_drop v0
+                        unit_end_drop v2
+                        unit_end_drop v5
+                        unit_end
+                    
+                    fn uses_consts__ct0(p0):
+                    block0:
+                        v0 = const 1int
+                        v1 = const 6int
+                        drop v0
+                        v2 = const 50int
+                        v3 = const 6int
+                        v4 = const 2int
+                        v5 = const 12int
+                        drop v3
+                        drop v4
+                        v6 = const 6int
+                        drop v6
+                        v7 = call @1 u1(p0)
+                        v8 = const 50int
+                        v9 = add v7, v8
+                        drop v7
+                        drop v8
+                        v10 = const 12int
+                        v11 = add v9, v10
+                        drop v9
+                        drop v10
+                        drop v1
+                        drop v2
+                        drop v5
+                        return v11
+                    
+                    fn scale__ct1(p0):
+                    block0:
+                        v1 = const 6int
+                        v0 = mul v1, p0
+                        drop v1
+                        drop p0
+                        return v0
+                """,
+            ),
+            output: "(fragment executed)",
+            debug_output: Some("46\n74\n"),
+        ),
+        SectionResult(
+            section_type: "scriptunit-expr",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = clone unit0.v2
+                        v1 = clone unit0.v5
+                        v2 = pack Tuple2 {v0, v1}
+                        unit_end v2
+                """,
+            ),
+            output: "(46, 74)",
+        ),
+    ],
+)

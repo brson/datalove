@@ -48,6 +48,7 @@
 
 use std::collections::{BTreeMap, HashMap};
 
+use datalove_datafun_const::inline_function_consts;
 use datalove_datafun_ir::{
     CallSiteId, CodeRef, CodeUnitContext, CodeUnitId, ConstValue, FunctionContext, Instruction,
     IrBlock, IrCodeUnit, IrModuleId, Operand, ParamId, ValueId,
@@ -357,6 +358,7 @@ pub fn rewrite_comptime_calls(
 pub fn specialize_script_unit(
     unit: &IrCodeUnit,
     module_unit: &dyn Fn(IrModuleId, CodeUnitId) -> Option<IrCodeUnit>,
+    instantiation_consts: &dyn Fn(CalleeKey, &[usize], &[ConstValue]) -> (HashMap<String, ConstValue>, Vec<String>),
 ) -> (IrCodeUnit, Vec<String>) {
     let mut unit = unit.clone();
     let mut plan = MonomorphizationPlan::default();
@@ -395,13 +397,22 @@ pub fn specialize_script_unit(
                 // callees that share a name cannot produce two copies that do. A
                 // nested unit's name is what the C backend emits as its symbol,
                 // and unlike a module's it carries nothing to tell them apart.
-                copies.push(monomorphize_function(
+                let mut copy = monomorphize_function(
                     &original,
                     &mono.comptime_param_indices,
                     values,
                     new_id,
                     format!("{}__ct{}", original.name, new_id.0),
-                ));
+                );
+
+                // Now that the parameters have values, the body's consts have
+                // one each, so they are evaluated and written in.
+                let (evaluated, const_errors) =
+                    instantiation_consts(*callee, &mono.comptime_param_indices, values);
+                errors.extend(const_errors);
+                inline_function_consts(&mut copy, &evaluated);
+
+                copies.push(copy);
                 mono.copies.push(CodeRef::Local(new_id));
             }
         }

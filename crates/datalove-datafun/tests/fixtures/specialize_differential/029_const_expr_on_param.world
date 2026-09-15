@@ -1,0 +1,50 @@
+----------
+module local/test/constexpr
+----------
+
+// A const naming a const parameter, through an expression and through a
+// function call. Both are evaluated once the instantiation is known, by the
+// same CTFE that evaluates every other const, so what reaches the copy is a
+// constant rather than the instructions that would compute one.
+
+fun helper(x: int): int
+    ret x * 10
+end fun
+
+fun scale(const n: int, x: int): int
+    ret n * x
+end fun
+
+fun uses_consts(const n: int, x: int): int
+    const PLUS: int = n + 1
+    const VIA_FUN: int = helper(n)
+    const CHAINED: int = PLUS * 2
+    // `PLUS` has to be a constant for this to specialize at all, so the call
+    // below is what proves it is one rather than a runtime value.
+    ret scale(PLUS, x) + VIA_FUN + CHAINED
+end fun
+
+fun from_module(x: int): int
+    const THREE: int = 3
+    ret uses_consts(THREE, x)
+end fun
+
+----------
+scriptunit-fragment
+----------
+
+require module local/test/constexpr
+import constexpr.uses_consts
+import constexpr.from_module
+
+const FIVE: int = 5
+let a = from_module(2)
+let b = uses_consts(FIVE, 2)
+debuglog a
+debuglog b
+
+----------
+scriptunit-expr
+----------
+
+(a, b)

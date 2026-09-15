@@ -57,6 +57,17 @@ C backend, the inliner, DCE, and the IR printer. Where nothing rewrites it, it i
    copy, drops the const arguments the copy does not take, and leaves everything else
    alone.
 
+Making a copy also evaluates that function's const bindings for the instantiation.
+A const naming a const parameter has a value per instantiation rather than one, so phase
+5b leaves it alone -- there is nothing to evaluate while the parameter is still a
+parameter -- and `evaluate_instantiation_consts` seeds the parameters with what the
+instantiation passes and runs the same CTFE every other const goes through.
+`inline_function_consts` writes the results into the copy, which also simplifies a branch
+whose condition has become constant. So `const` means the same thing inside a comptime
+function as outside one: `const PLUS: int = n + 1` and `const VIA_FUN: int = helper(n)`
+are constants in the copy, not the instructions that would compute them, and either can
+be passed on as a const argument.
+
 Steps 1 and 2 run a round at a time, up to `MAX_ROUNDS`. A comptime function only says
 what it passes to another one once its own const parameters have been substituted, so a
 round of copying can uncover instantiations the scan before it could not see. It
@@ -214,15 +225,24 @@ type arguments on the comptime branch too, and carrying them through the copy.
 **A negated literal is an expression.** `scale(-1.0, x)` is refused where
 `scale(1.0, x)` is accepted, because a negation lowers to the literal's `Const` followed
 by `neg` rather than to one constant. Write the value as a const binding, which CTFE folds
-into a single `Const`. Folding such an argument before phase 5c would lift this along with
-the rest of the expression case.
+into a single `Const`. Routing const arguments through CTFE would lift this along with the
+rest of the expression case.
+
+**A linear const parameter can only be passed on once.** Using it twice needs a clone, and
+`n@` is an expression, so it is refused as a const argument. Binding it first --
+`const N: int = n` -- works, because re-reading a const binding clones implicitly rather
+than through an operator. Accepting `name@` would close it.
 
 ## What remains
 
 - **Const expressions as arguments.** Literals and const bindings are accepted; `2 + 3` is
-  not, per the constraint above. Accepting it means folding the argument to a `Const`
-  before phase 5c, so that there is something for the plan to read. Worth doing only if
-  the refusal proves annoying in practice.
+  not. Unlike the const-binding case this is not a phasing problem -- the expression
+  depends on nothing instantiation-specific and could be evaluated in phase 5b like any
+  other const. It is simply that CTFE is driven from `Statement::Const` and a call
+  argument is not one. Routing the argument through the same lower-then-evaluate path
+  would lift it. The workaround is to name the value with a `const` binding, which is the
+  rule the surface has today: a const argument is a name or a literal, both of which have
+  an obvious lowering to a single constant.
 - **Dead copies.** A function all of whose call sites were specialized keeps an original
   nobody calls. Leaving it is deliberate -- a later script line may call it -- but for an
   AOT build, where there is no later script line, it is dead weight.

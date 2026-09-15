@@ -42,12 +42,11 @@ Analysis(
                     
                     fn double_add__ct3(p0):
                     block0:
-                        v5 = const 7int
-                        v0 = move v5
-                        v1 = clone v0
+                        v0 = const 7int
+                        v1 = const 7int
                         drop v1
                         v2 = call @0 m0.u4(p0)
-                        v3 = clone v0
+                        v3 = const 7int
                         drop v3
                         v4 = call @1 m0.u4(v2)
                         drop v0
@@ -94,12 +93,11 @@ Analysis(
                     
                     fn double_add__ct0(p0):
                     block0:
-                        v5 = const 5int
-                        v0 = move v5
-                        v1 = clone v0
+                        v0 = const 5int
+                        v1 = const 5int
                         drop v1
                         v2 = call @0 u1(p0)
-                        v3 = clone v0
+                        v3 = const 5int
                         drop v3
                         v4 = call @1 u1(v2)
                         drop v0

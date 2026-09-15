@@ -250,12 +250,18 @@ order and cannot assign one here, since the copies are in nobody's source. They 
 after the highest source-derived one in their module. The name has to be a valid
 identifier, because both AOT backends use it as a linker symbol.
 
+**Const bindings inside a comptime function.** One naming a const parameter has a value
+per instantiation rather than one, so phase 5b leaves it alone. Making a copy evaluates it:
+the parameters are seeded with what the instantiation passes, the same CTFE that evaluates
+every other const runs, and `inline_function_consts` writes the results into the copy --
+which also turns a branch whose condition has become constant into a jump. So `const`
+means the same thing inside a comptime function as outside one, including through
+arithmetic and through calls.
+
 **Rounds.** A comptime function that calls another only says what it passes once its own
 const parameters have been substituted, so copying can uncover instantiations the scan
 before it could not see. The scan and the copying therefore repeat until a round makes no
-copy. A const naming a const parameter is part of the same story: it has a value per
-instantiation rather than one, so const evaluation leaves it alone, it lowers as an
-ordinary binding, and substitution makes it a constant inside each copy.
+copy.
 
 **Limit.** `MAX_INSTANTIATIONS` caps a function at 64. Each instantiation is a whole copy
 in the object file, so going over is reported rather than paid. `MAX_ROUNDS` caps the

@@ -409,7 +409,7 @@ impl<'db> ScriptCompiler<'db> {
         let ir_unit = self.phase_resolve_shape_descriptors(ir_unit);
 
         // Phase 5: Const parameter specialization.
-        let ir_unit = match self.phase_specialize(ir_unit) {
+        let ir_unit = match self.phase_specialize(ir_unit, &unit, &typecheck, &lowered_funcs) {
             Ok(ir) => ir,
             Err(result) => {
                 self.accumulated_unit_specs.pop();
@@ -822,6 +822,15 @@ impl<'db> ScriptCompiler<'db> {
                 // Track local consts for this function.
                 let mut func_local_consts: HashMap<String, (IrType, ConstValue)> = HashMap::new();
 
+                // Names whose value this function does not have one of: its
+                // const parameters, and the consts already deferred for naming
+                // one, since those have no value here either.
+                let mut deferred: std::collections::BTreeSet<String> = func_stmt.params(self.db)
+                    .iter()
+                    .filter(|p| p.is_comptime)
+                    .map(|p| p.name.text(self.db).to_string())
+                    .collect();
+
                 for func_body_stmt in func_stmt.body(self.db).iter() {
                     if let Statement::Const(const_stmt) = func_body_stmt {
                         let name = const_stmt.name.text(self.db).to_string();
@@ -871,6 +880,17 @@ impl<'db> ScriptCompiler<'db> {
                                 }
                             }
                             Ok(_) => unreachable!("lower_const_binding returns exactly one of unit or value"),
+                            // A const naming a const parameter has a value per
+                            // instantiation rather than one, so there is nothing
+                            // to evaluate until the copies are made. It lowers
+                            // as an ordinary binding, and specialization
+                            // evaluates it once the parameter has a value.
+                            Err(datalove_datafun_compiler::lower::LowerError::BindingNotAvailable(ref missing))
+                                if deferred.contains(missing) =>
+                            {
+                                deferred.insert(name.clone());
+                                continue;
+                            }
                             Err(e) => {
                                 errors.push(format!("{}::{}: {}", func_name, name, e));
                                 continue;
@@ -1140,7 +1160,98 @@ impl<'db> ScriptCompiler<'db> {
     /// This runs after the descriptors are resolved, so that a copy arrives
     /// with the ones its own module worked out and nothing here recomputes
     /// them against a script that has no type parameters of its own.
-    fn phase_specialize(&self, ir_unit: IrCodeUnit) -> Result<IrCodeUnit, ScriptCompilationResult> {
+    /// Evaluate one function's const bindings for one instantiation.
+    ///
+    /// The mirror of what the module pipeline does for its own copies: seed the
+    /// const parameters with what this instantiation passes, and every const in
+    /// the body becomes evaluable by the same CTFE that evaluates every other
+    /// const. Returns the values under their local names, which is how the
+    /// copy's `const_values` records them.
+    #[allow(clippy::too_many_arguments)]
+    fn instantiation_consts_from(
+        &self,
+        statements: &[Statement<'db>],
+        func_name: &str,
+        expr_types: &'db datalove_datafun_tycheck::ExprTypes<'db>,
+        call_targets: &'db datalove_datafun_tycheck::CallTargets<'db>,
+        comptime_param_indices: &[usize],
+        values: &[ConstValue],
+        lowered: &[IrCodeUnit],
+        func_name_to_id: &HashMap<String, datalove_datafun_ir::FuncId>,
+    ) -> (HashMap<String, ConstValue>, Vec<String>) {
+        let Some(func_stmt) = statements.iter().find_map(|stmt| match stmt {
+            Statement::Fun(f) if f.name(self.db).text(self.db) == func_name => Some(f),
+            _ => None,
+        }) else {
+            return (HashMap::new(), Vec::new());
+        };
+
+        let params = func_stmt.params(self.db);
+        let mut seeded: HashMap<String, (IrType, ConstValue)> = HashMap::new();
+        for (&param_idx, value) in comptime_param_indices.iter().zip(values.iter()) {
+            let Some(param) = params.get(param_idx) else { continue };
+            seeded.insert(
+                param.name.text(self.db).to_string(),
+                (datalove_datafun_ir::ir_type_of_const_value(value), value.clone()),
+            );
+        }
+
+        let func_return_type = func_stmt.return_type(self.db)
+            .map(|ty| IrType::from_type_hint(self.db, &ty));
+
+        let mut evaluated = HashMap::new();
+        let mut errors = Vec::new();
+        for body_stmt in func_stmt.body(self.db).iter() {
+            let Statement::Const(const_stmt) = body_stmt else { continue };
+            let name = const_stmt.name.text(self.db).to_string();
+            let key = datalove_datafun_ast::ast::ExprKey::of(self.db, const_stmt.value);
+            let Some(ty) = expr_types.get(&key) else {
+                errors.push(format!("{}::{}: missing type information", func_name, name));
+                continue;
+            };
+            let ir_type = IrType::from_tycheck(self.db, ty);
+
+            let lowered_const = lower_const_binding(
+                self.db, const_stmt.value, &ir_type, expr_types, call_targets, &seeded,
+                func_return_type.clone(), lowered, func_name_to_id,
+                Some(&self.shared_context.func_id_map),
+            );
+            let value = match lowered_const {
+                Ok((None, Some(v))) => v,
+                Ok((Some(unit), None)) => {
+                    match evaluate_prepared_const(
+                        &PreparedConst::Unit(unit), &ir_type, &self.ctfe_evaluator)
+                    {
+                        Ok(v) => v,
+                        Err(e) => {
+                            errors.push(format!("{}::{}: {}", func_name, name, e));
+                            continue;
+                        }
+                    }
+                }
+                Ok(_) => unreachable!("lower_const_binding returns exactly one of unit or value"),
+                Err(e) => {
+                    errors.push(format!("{}::{}: {}", func_name, name, e));
+                    continue;
+                }
+            };
+
+            seeded.insert(name.clone(), (ir_type, value.clone()));
+            evaluated.insert(name, value);
+        }
+
+        (evaluated, errors)
+    }
+
+    fn phase_specialize(
+        &self,
+        ir_unit: IrCodeUnit,
+        unit: &ParsedUnit<'db>,
+        typecheck: &TypecheckOutput<'db>,
+        lowered_funcs: &LoweredFunctions,
+    ) -> Result<IrCodeUnit, ScriptCompilationResult> {
+        use datalove_datafun_compiler::specialize::CalleeKey;
+
         if self.skip_specialization {
             return Ok(ir_unit);
         }
@@ -1148,8 +1259,63 @@ impl<'db> ScriptCompiler<'db> {
         let registry = self.shared_context.module_registry.clone();
         let module_unit = |module, id| registry.get_module_function_as_unit(module, id).cloned();
 
-        let (ir_unit, errors) =
-            datalove_datafun_compiler::specialize::specialize_script_unit(&ir_unit, &module_unit);
+        // A copy's const bindings are evaluated here, where the parameters
+        // finally have values. The source is the script's own statements for a
+        // function defined beside it, and the module's for one it called into.
+        let script_stmts: &[Statement<'db>] = match unit {
+            ParsedUnit::Fragment { stmts, .. } => stmts.as_slice(),
+            ParsedUnit::Expr(_) => &[],
+        };
+        let instantiation_consts = |callee: CalleeKey, indices: &[usize], values: &[ConstValue]| {
+            match callee {
+                CalleeKey::Local(id) => {
+                    let Some(name) = lowered_funcs.func_name_to_id.iter()
+                        .find(|(_, func_id)| func_id.0 == id.0)
+                        .map(|(name, _)| name.clone())
+                    else {
+                        return (HashMap::new(), Vec::new());
+                    };
+                    self.instantiation_consts_from(
+                        script_stmts, &name, typecheck.expr_types, typecheck.call_targets,
+                        indices, values,
+                        &lowered_funcs.functions, &lowered_funcs.func_name_to_id,
+                    )
+                }
+                CalleeKey::Module(module, id) => {
+                    let Some(original) = registry.get_module_function_as_unit(module, id) else {
+                        return (HashMap::new(), Vec::new());
+                    };
+                    let name = original.name.clone();
+                    // The module's own expressions were typechecked with the
+                    // module graph, not with this script.
+                    let Some((module_id, parsed)) = self.shared_context.parsed_graph
+                        .statements_only(self.db)
+                        .get(module.0 as usize)
+                    else {
+                        return (HashMap::new(), Vec::new());
+                    };
+                    let module_results = self.shared_context.graph_typecheck.module_results(self.db);
+                    let Some(single) = module_results.get(module_id) else {
+                        return (HashMap::new(), Vec::new());
+                    };
+                    let funcs: Vec<IrCodeUnit> = registry.iter_module_code_units_with_ids()
+                        .filter(|((m, _), _)| *m == module)
+                        .map(|(_, u)| u.clone())
+                        .collect();
+                    let names: HashMap<String, datalove_datafun_ir::FuncId> = funcs.iter()
+                        .map(|u| (u.name.clone(), datalove_datafun_ir::FuncId(u.id.0)))
+                        .collect();
+                    self.instantiation_consts_from(
+                        &parsed.statements, &name,
+                        single.expr_types(self.db), single.call_targets(self.db),
+                        indices, values, &funcs, &names,
+                    )
+                }
+            }
+        };
+
+        let (ir_unit, errors) = datalove_datafun_compiler::specialize::specialize_script_unit(
+            &ir_unit, &module_unit, &instantiation_consts);
 
         if !errors.is_empty() {
             return Err(ScriptCompilationResult {

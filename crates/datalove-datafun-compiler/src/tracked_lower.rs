@@ -20,7 +20,7 @@ use datalove_datafun_tycheck::{
     ParsedModuleGraph,
 };
 
-use datalove_datafun_const::{inline_module_functions, PreparedConst, evaluate_prepared_const};
+use datalove_datafun_const::{inline_function_consts, inline_module_functions, PreparedConst, evaluate_prepared_const};
 use crate::IrTypeExt;
 use crate::lower;
 use crate::specialize::{
@@ -824,7 +824,9 @@ pub fn evaluate_all_module_consts<'db>(
 
                 // The parameters whose value this function does not have one
                 // of, because it has one per instantiation.
-                let comptime_params: std::collections::BTreeSet<String> = func_stmt.params(db)
+                // Grows as consts are deferred, since one naming a deferred
+                // const has no value here either.
+                let mut deferred: std::collections::BTreeSet<String> = func_stmt.params(db)
                     .iter()
                     .filter(|p| p.is_comptime)
                     .map(|p| p.name.text(db).S())
@@ -835,9 +837,11 @@ pub fn evaluate_all_module_consts<'db>(
                         match evaluate_single_const(
                             db, const_stmt, expr_types, call_targets, &func_local_consts, &evaluator,
                             funcs, &func_map, func_return_type.clone(), func_id_map,
-                            &comptime_params,
+                            &deferred,
                         ) {
-                            Ok(None) => {}
+                            Ok(None) => {
+                                deferred.insert(const_stmt.name.text(db).S());
+                            }
                             Ok(Some((name, ir_type, value))) => {
                                 // Store locally for other consts in this function.
                                 func_local_consts.insert(name.clone(), (ir_type.clone(), value.clone()));
@@ -973,7 +977,9 @@ fn evaluate_single_const<'db>(
     func_name_to_id: &HashMap<String, FuncId>,
     func_return_type: Option<IrType>,
     func_id_map: FuncIdMap<'db>,
-    comptime_params: &std::collections::BTreeSet<String>,
+    // Names whose value this function does not have one of: its const
+    // parameters, and the consts already deferred for naming one.
+    deferred: &std::collections::BTreeSet<String>,
 ) -> Result<Option<(String, IrType, ConstValue)>, String> {
     let name = const_stmt.name.text(db).S();
     let init_expr = const_stmt.value;
@@ -1006,7 +1012,7 @@ fn evaluate_single_const<'db>(
         // are made. It lowers as an ordinary binding and specialization
         // substitutes the parameter, leaving the constant in the copy.
         Err(lower::LowerError::BindingNotAvailable(ref missing))
-            if comptime_params.contains(missing) =>
+            if deferred.contains(missing) =>
         {
             return Ok(None);
         }
@@ -1170,7 +1176,7 @@ pub fn lower_module_graph_with_evaluator<'db>(
         let module_registry = build_module_registry_from_lowered(&lowered_functions, &func_id_hashmap);
         evaluator.borrow_mut().set_module_registry(module_registry);
 
-        evaluate_all_module_consts(db_salsa, parsed_graph, typecheck_result, evaluator, &lowered_functions, func_id_map, &module_consts)
+        evaluate_all_module_consts(db_salsa, parsed_graph, typecheck_result, evaluator.clone(), &lowered_functions, func_id_map, &module_consts)
     };
 
     // Module const failures have to reach the lowering result, or a module
@@ -1184,7 +1190,10 @@ pub fn lower_module_graph_with_evaluator<'db>(
     let (lowered_functions, specialize_errors) = if skip_specialization {
         (lowered_functions, Vec::new())
     } else {
-        specialize_comptime_functions(db_salsa, typecheck_result, lowered_functions)
+        specialize_comptime_functions(
+            db_salsa, parsed_graph, typecheck_result, &evaluator, func_id_map,
+            &module_consts, lowered_functions,
+        )
     };
 
     // Module const failures have to reach the lowering result, or a module
@@ -1214,6 +1223,68 @@ pub fn lower_module_graph_with_evaluator<'db>(
     }
 }
 
+
+/// Evaluate a comptime function's const bindings for one instantiation.
+///
+/// A const naming a const parameter has a value per instantiation rather than
+/// one, so phase 5b leaves it alone: there is nothing to evaluate while the
+/// parameter is still a parameter. Here there is. Seeding the parameters with
+/// what this instantiation passes makes every const in the body evaluable by
+/// the same CTFE that evaluates every other const, which is what keeps `const`
+/// meaning the same thing inside a comptime function as outside one.
+///
+/// Returns the values under their local names, which is how the copy's
+/// `const_values` records them.
+#[allow(clippy::too_many_arguments)]
+fn evaluate_instantiation_consts<'db>(
+    db: &'db dyn salsa::Database,
+    func_stmt: &datalove_datafun_ast::ast::StmtFun<'db>,
+    expr_types: &'db datalove_datafun_sema::ExprTypes<'db>,
+    call_targets: &'db datalove_datafun_sema::CallTargets<'db>,
+    evaluator: &Rc<RefCell<dyn CtfeEvaluator>>,
+    lowered: &[IrCodeUnit],
+    func_name_to_id: &HashMap<String, FuncId>,
+    func_id_map: FuncIdMap<'db>,
+    module_level: &HashMap<String, (IrType, ConstValue)>,
+    comptime_param_indices: &[usize],
+    values: &[ConstValue],
+) -> (HashMap<String, ConstValue>, Vec<String>) {
+    let params = func_stmt.params(db);
+    let mut seeded = module_level.clone();
+    for (&param_idx, value) in comptime_param_indices.iter().zip(values.iter()) {
+        let Some(param) = params.get(param_idx) else { continue };
+        seeded.insert(
+            param.name.text(db).S(),
+            (datalove_datafun_ir::ir_type_of_const_value(value), value.clone()),
+        );
+    }
+
+    let func_return_type = func_stmt.return_type(db)
+        .map(|ty| IrType::from_type_hint(db, &ty));
+
+    let mut evaluated = HashMap::new();
+    let mut errors = Vec::new();
+    for body_stmt in func_stmt.body(db).iter() {
+        let Statement::Const(const_stmt) = body_stmt else { continue };
+        // Nothing may be deferred now: every const parameter has a value, so a
+        // const that still cannot be evaluated is an error rather than a wait.
+        match evaluate_single_const(
+            db, const_stmt, expr_types, call_targets, &seeded, evaluator,
+            lowered, func_name_to_id, func_return_type.clone(), func_id_map,
+            &std::collections::BTreeSet::new(),
+        ) {
+            Ok(Some((name, ir_type, value))) => {
+                seeded.insert(name.clone(), (ir_type, value.clone()));
+                evaluated.insert(name, value);
+            }
+            Ok(None) => unreachable!("nothing defers once the parameters have values"),
+            Err(e) => errors.push(format!("{}::{}", func_stmt.name(db).text(db), e)),
+        }
+    }
+
+    (evaluated, errors)
+}
+
 /// Specialize functions with const parameters by monomorphization.
 ///
 /// Every instantiation named by a call site in the module graph gets a copy of
@@ -1223,9 +1294,14 @@ pub fn lower_module_graph_with_evaluator<'db>(
 /// the const argument.
 ///
 /// Returns the errors specialization could not resolve, per module.
+#[allow(clippy::too_many_arguments)]
 fn specialize_comptime_functions<'db>(
     db: &'db dyn salsa::Database,
+    parsed_graph: ParsedModuleGraph<'db>,
     typecheck_result: ModuleGraphTypecheckResult<'db>,
+    evaluator: &Rc<RefCell<dyn CtfeEvaluator>>,
+    func_id_map: FuncIdMap<'db>,
+    module_consts: &HashMap<ModuleId<'db>, HashMap<String, (IrType, ConstValue)>>,
     mut lowered_functions: HashMap<ModuleId<'db>, ModuleLoweredFunctions>,
 ) -> (HashMap<ModuleId<'db>, ModuleLoweredFunctions>, Vec<(ModuleId<'db>, Vec<String>)>) {
     // Modules in the order that decides their `IrModuleId`, which is also the
@@ -1235,6 +1311,19 @@ fn specialize_comptime_functions<'db>(
         .enumerate()
         .map(|(idx, module)| (module.id(db), IrModuleId(idx as u32)))
         .collect();
+
+    // The source of each comptime function, for evaluating its consts once the
+    // instantiation is known.
+    let mut func_asts: HashMap<(ModuleId<'db>, String), datalove_datafun_ast::ast::StmtFun<'db>> =
+        HashMap::new();
+    for (module_id, parsed) in parsed_graph.statements_only(db) {
+        for statement in &parsed.statements {
+            if let Statement::Fun(func_stmt) = statement {
+                func_asts.insert((*module_id, func_stmt.name(db).text(db).S()), *func_stmt);
+            }
+        }
+    }
+    let typecheck_module_results = typecheck_result.module_results(db);
 
     // Build the copies. Ids follow the source-derived ones, which
     // `compute_func_id_map` assigns from statement order and cannot assign here
@@ -1291,13 +1380,38 @@ fn specialize_comptime_functions<'db>(
                 for values in mono.instantiations.iter().skip(mono.copies.len()) {
                     let new_id = CodeUnitId(next_id);
                     next_id += 1;
-                    copies.push(monomorphize_function(
+                    let mut copy = monomorphize_function(
                         original,
                         &mono.comptime_param_indices,
                         values,
                         new_id,
                         format!("{}__ct{}", original.name, new_id.0),
-                    ));
+                    );
+
+                    // Now that the parameters have values, the body's consts
+                    // have one each, so they are evaluated and written in.
+                    if let (Some(func_stmt), Some(single_typecheck)) = (
+                        func_asts.get(&(*module_id, original.name.clone())),
+                        typecheck_module_results.get(module_id),
+                    ) {
+                        let (evaluated, const_errors) = evaluate_instantiation_consts(
+                            db,
+                            func_stmt,
+                            single_typecheck.expr_types(db),
+                            single_typecheck.call_targets(db),
+                            evaluator,
+                            &module_funcs.functions,
+                            &module_funcs.func_name_to_id.iter().cloned().collect(),
+                            func_id_map,
+                            &module_consts.get(module_id).cloned().unwrap_or_default(),
+                            &mono.comptime_param_indices,
+                            values,
+                        );
+                        module_errors.extend(const_errors);
+                        inline_function_consts(&mut copy, &evaluated);
+                    }
+
+                    copies.push(copy);
                     mono.copies.push(CodeRef::Module { module: *ir_module_id, id: new_id });
                 }
             }
