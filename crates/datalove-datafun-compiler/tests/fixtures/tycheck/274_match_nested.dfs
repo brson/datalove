@@ -1,0 +1,16 @@
+// A match whose arm is another match, each over its own input.
+type Side: enum { atom Left, atom Right }
+
+fun pick(a: Side, b: Side): u32
+  match a
+  case atom Left
+    match b
+    case atom Left
+      ret 1
+    case atom Right
+      ret 2
+    end match
+  case atom Right
+    ret 3
+  end match
+end fun

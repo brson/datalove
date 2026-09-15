@@ -1,0 +1,13 @@
+// A term arm binds the payload, and the binding has the payload's type.
+type Tagged: enum { atom Empty, term Note string, term Count u32 }
+
+fun describe(t: Tagged): string
+  match t
+  case atom Empty
+    ret "empty"
+  case term Note text
+    ret text
+  case term Count n
+    ret "counted"
+  end match
+end fun

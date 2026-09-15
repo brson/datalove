@@ -83,7 +83,7 @@ impl<'db> Parser<'db> {
     /// When an index `[expr]` is followed by `?` or `!` and the base expression
     /// can be decomposed into a root name + field steps, produces
     /// `ExprFunKind::Place` instead of `TryOption(Index(...))`.
-    fn parse_postfix_try_operators(&mut self, mut expr: ast::ExprFun<'db>) -> ast::ExprFun<'db> {
+    pub(super) fn parse_postfix_try_operators(&mut self, mut expr: ast::ExprFun<'db>) -> ast::ExprFun<'db> {
         loop {
             // A postfix operator is written against what it operates on, so
             // one with a space before it is not attached to this expression.
@@ -493,7 +493,7 @@ impl<'db> Parser<'db> {
                                         }
                                     };
                                     self.create_expr(
-                                        ast::ExprFunKind::Atom(ast::ExprAtom { name }),
+                                        ast::ExprFunKind::Atom(ast::ExprAtom { type_hint: None, name }),
                                         ts
                                     )
                                 }
@@ -517,7 +517,7 @@ impl<'db> Parser<'db> {
                                     };
                                     let payload = self.parse_expr_primary();
                                     self.create_expr(
-                                        ast::ExprFunKind::Term(ast::ExprTerm { name, payload }),
+                                        ast::ExprFunKind::Term(ast::ExprTerm { type_hint: None, name, payload }),
                                         ts
                                     )
                                 }
@@ -535,7 +535,7 @@ impl<'db> Parser<'db> {
                                     sub.error_if_not_exhausted();
                                     self.merge_from_sub(&mut sub);
                                     self.create_expr(
-                                        ast::ExprFunKind::EnumLiteral(ast::ExprEnumLiteral { variant }),
+                                        ast::ExprFunKind::EnumLiteral(ast::ExprEnumLiteral { type_hint: None, variant }),
                                         ts
                                     )
                                 }

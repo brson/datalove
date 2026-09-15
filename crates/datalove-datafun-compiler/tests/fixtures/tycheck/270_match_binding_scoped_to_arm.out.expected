@@ -1,0 +1,37 @@
+{
+  "diagnostics": [
+    {
+      "code": "F001",
+      "labels": [
+        {
+          "message": "not found in this scope",
+          "span": [
+            314,
+            318
+          ],
+          "text": "text"
+        }
+      ],
+      "message": "cannot find value `text` in this scope"
+    }
+  ],
+  "errors": [
+    {
+      "kind": "UnresolvedName",
+      "name": "text"
+    }
+  ],
+  "judgements": [
+    {
+      "kind": "function",
+      "name": "describe",
+      "params": [
+        {
+          "name": "t",
+          "type": "Tagged"
+        }
+      ],
+      "return_type": "string"
+    }
+  ]
+}

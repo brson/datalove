@@ -1,0 +1,38 @@
+{
+  "diagnostics": [
+    {
+      "code": "F016",
+      "labels": [
+        {
+          "message": "duplicate match case",
+          "span": [
+            115,
+            116
+          ],
+          "text": "c"
+        }
+      ],
+      "message": "mismatched types: expected `unique case`, found `duplicate case 'Red'`"
+    }
+  ],
+  "errors": [
+    {
+      "actual": "duplicate case 'Red'",
+      "expected": "unique case",
+      "kind": "TypeMismatch"
+    }
+  ],
+  "judgements": [
+    {
+      "kind": "function",
+      "name": "name_of",
+      "params": [
+        {
+          "name": "c",
+          "type": "Colour"
+        }
+      ],
+      "return_type": "string"
+    }
+  ]
+}

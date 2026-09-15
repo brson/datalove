@@ -1,0 +1,9 @@
+// A hint over something that is not a literal at all, which the spec's
+// `: type / expression` admits and which used to be a parse error.
+fun twice(n: u32): u32
+  ret n
+end fun
+
+let n: u32 = 1
+let a = : u32 / n
+let b = : u32 / twice(n)

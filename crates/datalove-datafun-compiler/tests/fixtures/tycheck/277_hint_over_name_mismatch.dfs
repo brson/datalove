@@ -1,0 +1,3 @@
+// The hint is checked, not taken on trust.
+let s: string = "x"
+let a = : u32 / s

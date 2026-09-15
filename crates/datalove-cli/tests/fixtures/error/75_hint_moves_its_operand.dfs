@@ -1,0 +1,5 @@
+// A hint takes nothing of its own, so the expression under it moves what it
+// would have moved written without one.
+let s: string = "x"
+let a = : string / s
+debuglog s

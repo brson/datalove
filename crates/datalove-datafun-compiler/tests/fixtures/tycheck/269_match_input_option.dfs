@@ -1,0 +1,9 @@
+// An option is destructured with `if o |x|`, not with `match`.
+fun unwrap_or_zero(o: ?u32): u32
+  match o
+  case atom none
+    ret 0
+  case term some n
+    ret n
+  end match
+end fun

@@ -1,0 +1,21 @@
+{
+  "diagnostics": [],
+  "errors": [],
+  "judgements": [
+    {
+      "kind": "function",
+      "name": "pick",
+      "params": [
+        {
+          "name": "a",
+          "type": "Side"
+        },
+        {
+          "name": "b",
+          "type": "Side"
+        }
+      ],
+      "return_type": "u32"
+    }
+  ]
+}

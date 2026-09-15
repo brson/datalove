@@ -1,0 +1,14 @@
+// The same variant named twice.
+type Colour: enum { atom Red, atom Blue }
+
+fun name_of(c: Colour): string
+  match c
+  case atom Red
+    ret "red"
+  case atom Red
+    ret "also red"
+  case atom Blue
+    ret "blue"
+  end match
+  ret "unreachable"
+end fun

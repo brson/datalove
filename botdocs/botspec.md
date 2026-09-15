@@ -364,7 +364,23 @@ Examples:
 : u32 / 42
 : [i32] / [1, 2, 3]
 : f32 / 0xABABABAB     // hex as bit pattern
+: atom Red / atom Red
+: enum { atom Red, atom Blue } / atom Red
 ```
+
+The expression may be any expression, not only a literal, and the hint is what
+it is checked against:
+
+```datalove
+let n: u32 = 1
+let a = : u32 / n           // a name
+let b = : u32 / twice(n)    // a call
+```
+
+Postfix lands on the expression under the hint, as it does on the payload of
+`some` and its fellows: `: u32 / o?` hints what the `?` produces, not the
+option it unwraps. A hint takes nothing of its own, so the expression under it
+moves what it would have moved written without one.
 
 A bare name in type position is a type alias (Section 3.7), or, within a generic
 function's signature or body, one of its type parameters (Section 8.5). Data
@@ -1200,9 +1216,12 @@ end match
 
 A `case default` arm matches any unmatched variant. Without a default, the
 match must be exhaustive (all enum variants must be covered). Duplicate cases
-are an error.
+are an error, and so is a second `case default`.
 
 The input expression is consumed (moved) by the match.
+
+A `case term` arm's binding belongs to that arm. It may take a name already in
+scope, and the outer one means what it meant again after `end match`.
 
 ### 8.7 Return
 

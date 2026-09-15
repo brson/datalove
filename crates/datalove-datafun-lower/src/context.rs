@@ -52,6 +52,19 @@ pub struct FrameState<'db> {
     pub next_call_site: u32,
     /// Mapping from variable names to their operands.
     pub variables: HashMap<String, Operand>,
+    /// Stack of open name scopes, innermost last.
+    ///
+    /// A block body -- an `if` branch, a loop body, a match arm -- opens one,
+    /// and every binding made while it is open records here what the name
+    /// stood for before. Closing the scope puts those back, so a name bound
+    /// inside a block stops meaning that once the block ends.
+    ///
+    /// Without this a binding that shadowed an outer one replaced it for the
+    /// rest of the function. The typechecker and the ownership analysis both
+    /// scope properly, so such a program compiled, and a use of the outer name
+    /// after the block read the inner binding's value -- which on a path where
+    /// the block did not run is a value that was never written.
+    pub variable_scopes: Vec<Vec<ShadowedBinding>>,
     /// Mapping from BindingId to Operand (built during lowering).
     ///
     /// Ordered, because `compute_tracked_slots` walks it to decide the order
@@ -102,6 +115,15 @@ pub struct FrameState<'db> {
     pub const_values: Vec<(String, ValueId)>,
 }
 
+/// What a name meant before a binding inside a scope took it over.
+pub struct ShadowedBinding {
+    name: String,
+    /// The operand the name stood for, or `None` if it was not bound at all.
+    operand: Option<Operand>,
+    /// Whether the name was a const written in this body.
+    was_const_let: bool,
+}
+
 impl<'db> FrameState<'db> {
     pub fn new() -> Self {
         Self {
@@ -117,6 +139,7 @@ impl<'db> FrameState<'db> {
             next_param: 0,
             next_call_site: 0,
             variables: HashMap::new(),
+            variable_scopes: Vec::new(),
             binding_to_operand: BTreeMap::new(),
             operand_to_binding: HashMap::new(),
             next_binding_id: 0,
@@ -661,7 +684,45 @@ impl<'db> LowerCtx<'db> {
 
     /// Bind a variable name to an operand.
     pub fn bind_var(&mut self, name: &str, operand: Operand) {
+        if let Some(scope) = self.body.variable_scopes.last_mut() {
+            scope.push(ShadowedBinding {
+                name: name.to_string(),
+                operand: self.body.variables.get(name).copied(),
+                was_const_let: self.const_let_names.contains(name),
+            });
+        }
         self.body.variables.insert(name.to_string(), operand);
+    }
+
+    /// Open a name scope for a block body.
+    ///
+    /// Bindings made while it is open last only until [`Self::exit_var_scope`].
+    pub fn enter_var_scope(&mut self) {
+        self.body.variable_scopes.push(Vec::new());
+    }
+
+    /// Close the innermost name scope, putting back what its bindings shadowed.
+    ///
+    /// Restores in reverse, so that a name bound more than once in the scope
+    /// ends up at what it meant before the first of them.
+    pub fn exit_var_scope(&mut self) {
+        let scope = self.body.variable_scopes.pop()
+            .expect("exit_var_scope without a matching enter_var_scope");
+        for shadowed in scope.into_iter().rev() {
+            match shadowed.operand {
+                Some(operand) => {
+                    self.body.variables.insert(shadowed.name.clone(), operand);
+                }
+                None => {
+                    self.body.variables.remove(&shadowed.name);
+                }
+            }
+            if shadowed.was_const_let {
+                self.const_let_names.insert(shadowed.name);
+            } else {
+                self.const_let_names.remove(&shadowed.name);
+            }
+        }
     }
 
     /// The type an operand currently holds.

@@ -60,7 +60,7 @@ kind_names!(expr_name, ExprFunKind, ExprFunKind<'_>, ALL_EXPRS, [
     BinOp, FunctionCall, Tuple, UnaryOp, TryOption, TryResult, CloneCoerce,
     FieldProj, True, False, None, Int, Float, Hex, String, List, Set, Map,
     Tensor, AnonTuple, AnonStruct, Some, Ok, Er, Data, Error, Table, Atom,
-    Term, EnumLiteral, Index, Place, ParseError, IntrinsicCall,
+    Term, EnumLiteral, Hinted, Index, Place, ParseError, IntrinsicCall,
 ]);
 
 kind_names!(binop_name, BinOp, BinOp, ALL_BINOPS, [
@@ -131,6 +131,7 @@ const NOT_YET_GENERATED: &[(&str, &str, &str)] = &[
     // and `Index`, which are for a base that is not a place. Both pairs are
     // written; the place forms are counted under the two place-step shapes.
     ("expr", "Hex", "hex literals are not generated"),
+    ("expr", "Hinted", "the generator only hints literals, which keep the hint themselves"),
     ("expr", "IntrinsicCall", "`icall` names intrinsics the generator does not know"),
     ("expr", "ParseError", "a parse error means the generator wrote something wrong"),
 
@@ -316,6 +317,7 @@ fn walk_expr<'db>(
         }
         ExprFunKind::Term(e) => sub(e.payload, cov),
         ExprFunKind::EnumLiteral(e) => sub(e.variant, cov),
+        ExprFunKind::Hinted(e) => sub(e.inner, cov),
         // A place is a name and the steps taken from it, and the steps are
         // where a field projection and an indexing actually land: `v.a` and
         // `v[i]?` parse as a place with a step rather than as `FieldProj` or

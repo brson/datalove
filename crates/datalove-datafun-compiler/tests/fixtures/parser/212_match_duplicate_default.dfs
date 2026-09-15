@@ -1,0 +1,8 @@
+type C: enum { atom Red, atom Blue }
+let a: C = (atom Red)@
+match a
+case default
+  debuglog "first"
+case default
+  debuglog "second"
+end match

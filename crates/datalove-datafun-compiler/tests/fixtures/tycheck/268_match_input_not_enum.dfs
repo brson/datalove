@@ -1,0 +1,10 @@
+// Match takes an enum and nothing else; this one is handed a u32.
+fun classify(n: u32): string
+  match n
+  case atom Red
+    ret "red"
+  case default
+    ret "other"
+  end match
+  ret "unreachable"
+end fun

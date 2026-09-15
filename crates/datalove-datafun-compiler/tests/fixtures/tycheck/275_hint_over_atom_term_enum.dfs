@@ -1,0 +1,7 @@
+// A type hint over the literal forms that carry no hint field of their own
+// until now: an atom, a term, and an enum literal.
+type Colour: enum { atom Red, atom Blue }
+
+let a = : atom Red / atom Red
+let t = : term Count u32 / term Count : u32 / 3
+let e = : enum { atom Red, atom Blue } / atom Red

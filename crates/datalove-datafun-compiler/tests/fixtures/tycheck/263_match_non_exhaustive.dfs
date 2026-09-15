@@ -1,0 +1,13 @@
+// Two of three variants named and no default, so the match does not cover its
+// input.
+type Colour: enum { atom Red, atom Blue, atom Green }
+
+fun name_of(c: Colour): string
+  match c
+  case atom Red
+    ret "red"
+  case atom Blue
+    ret "blue"
+  end match
+  ret "unreachable"
+end fun

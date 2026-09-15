@@ -1,0 +1,26 @@
+{
+  "diagnostics": [
+    {
+      "code": "F016",
+      "labels": [
+        {
+          "message": "atom not a variant of this enum",
+          "span": [
+            61,
+            62
+          ],
+          "text": ":"
+        }
+      ],
+      "message": "mismatched types: expected `enum{atom Blue, atom Red}`, found `atom Green`"
+    }
+  ],
+  "errors": [
+    {
+      "actual": "atom Green",
+      "expected": "enum{atom Blue, atom Red}",
+      "kind": "TypeMismatch"
+    }
+  ],
+  "judgements": []
+}

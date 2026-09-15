@@ -1169,6 +1169,11 @@ pub fn lower_expression<'db>(
             // Just lower the inner variant expression.
             lower_expression(ctx, enum_lit.variant)
         }
+        ExprFunKind::Hinted(hinted) => {
+            // The hint said what to check against and has done its work by
+            // now; what runs is the expression under it.
+            lower_expression(ctx, hinted.inner)
+        }
     }
 }
 

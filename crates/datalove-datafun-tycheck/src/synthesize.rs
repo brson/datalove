@@ -436,6 +436,14 @@ pub fn synthesize_expr<'db>(
 
         // Atom expression: synthesize standalone Atom type.
         ExprFunKind::Atom(ref atom_expr) => {
+            if let Some(type_hint) = atom_expr.type_hint.clone() {
+                // As for `some` above: checked against the hint rather than
+                // taking its word, so that the hint is the type and a
+                // disagreement is caught here.
+                let expected = convert_type_hint(db, type_hint)?;
+                check_expr(ctx, expr, &expected)?;
+                return Ok(expected);
+            }
             let ty = Type::Datalit(datalit::tycheck::Type::Atom(
                 datalit::tycheck::TypeAtom { name: atom_expr.name }
             ));
@@ -445,6 +453,12 @@ pub fn synthesize_expr<'db>(
 
         // Term expression: synthesize standalone Term type.
         ExprFunKind::Term(ref term_expr) => {
+            if let Some(type_hint) = term_expr.type_hint.clone() {
+                // The payload needs checking, and nothing else here visits it.
+                let expected = convert_type_hint(db, type_hint)?;
+                check_expr(ctx, expr, &expected)?;
+                return Ok(expected);
+            }
             let payload_ty = ctx.synthesize_expr(term_expr.payload)?;
             let payload_datalit = match payload_ty {
                 Type::Datalit(dt) => dt.clone(),
@@ -460,9 +474,23 @@ pub fn synthesize_expr<'db>(
             Ok(ty)
         }
 
-        // Enum literal: cannot synthesize (requires type context).
-        ExprFunKind::EnumLiteral(_) => {
-            Err(ctx.error_cannot_synthesize(expr, "enum literal requires type context"))
+        // A hint over an expression that has nowhere of its own to keep one.
+        // Checked against the hint, which is then the type, the same as every
+        // literal form does with the hint it carries.
+        ExprFunKind::Hinted(ref hinted) => {
+            let expected = convert_type_hint(db, hinted.type_hint.clone())?;
+            check_expr(ctx, expr, &expected)?;
+            Ok(expected)
+        }
+
+        // Enum literal: the hint is the only context it can have here.
+        ExprFunKind::EnumLiteral(ref enum_lit) => {
+            let Some(type_hint) = enum_lit.type_hint.clone() else {
+                return Err(ctx.error_cannot_synthesize(expr, "enum literal requires type context"));
+            };
+            let expected = convert_type_hint(db, type_hint)?;
+            check_expr(ctx, expr, &expected)?;
+            Ok(expected)
         }
 
         // Intrinsic call expression.

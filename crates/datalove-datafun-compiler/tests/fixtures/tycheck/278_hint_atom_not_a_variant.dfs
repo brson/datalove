@@ -1,0 +1,2 @@
+// An atom hinted at an enum it is not a variant of.
+let a = : enum { atom Red, atom Blue } / atom Green

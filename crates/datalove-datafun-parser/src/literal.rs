@@ -39,13 +39,53 @@ impl<'db> Parser<'db> {
                     "expected '/'"
                 );
             }
-            let expr_kind = self.parse_lit_expr(Some(type_hint));
-            // The type_hint is already captured in the expr_kind.
+            // A literal form has a field for the hint and takes it directly.
+            // Anything else -- a name, a call -- has none, so the hint goes on
+            // a wrapper around it. The spec's `: type / expression` admits
+            // both; only the literal grammar is narrower.
+            let expr_kind = if self.peek_starts_lit_expr() {
+                self.parse_lit_expr(Some(type_hint))
+            } else {
+                let inner = self.parse_expr_primary();
+                // Postfix onto the expression under the hint, the way `some`
+                // and its fellows take it onto their payload: `: u32 / o?`
+                // hints what the `?` produces, not the option it unwraps.
+                let inner = self.parse_postfix_try_operators(inner);
+                ast::ExprFunKind::Hinted(ast::ExprHinted { type_hint, inner })
+            };
             return self.create_expr(expr_kind, ts);
         }
 
         let expr_kind = self.parse_lit_expr(None);
         self.create_expr(expr_kind, ts)
+    }
+
+    /// Whether what comes next is a form [`Self::parse_lit_expr`] can read.
+    ///
+    /// Everything but a bare name is: numbers, strings, the literal keywords,
+    /// and the bracketed collection forms. A name reaching `parse_lit_expr`
+    /// became an "unexpected identifier" parse error, which is what made
+    /// `: u32 / n` fail for any `n`.
+    fn peek_starts_lit_expr(&self) -> bool {
+        let Some(TreeToken::Token(token)) = self.peek() else {
+            // A branch -- `(`, `[`, `{`, `%{`, `#{`, `[|`, `{|` -- is a
+            // collection or aggregate literal.
+            return true;
+        };
+        if token.kind != TokenKind::Word {
+            return true;
+        }
+        let Some(word) = token.word_str(self.db) else {
+            return true;
+        };
+        if Self::is_number_word(word) {
+            return true;
+        }
+        matches!(
+            word,
+            "true" | "false" | "none" | "some" | "ok" | "er"
+                | "data" | "error" | "atom" | "term" | "enum"
+        )
     }
 
     /// Parse a literal expression (keywords and literals).
@@ -110,6 +150,45 @@ impl<'db> Parser<'db> {
                 // Parse any datafun expression (superset of datalit).
                 let value = self.parse_expr_primary();
                 return ast::ExprFunKind::Error(ast::ExprError { type_hint, value });
+            }
+            Some("atom") => {
+                let ts = self.peek_text_span();
+                self.eat_word("atom");
+                let name = match self.eat_name() {
+                    Some(n) => n,
+                    None => return self.lit_error(ts,
+                        "expected name after 'atom'",
+                        "P042",
+                        "expected atom name",
+                    ),
+                };
+                return ast::ExprFunKind::Atom(ast::ExprAtom { type_hint, name });
+            }
+            Some("term") => {
+                let ts = self.peek_text_span();
+                self.eat_word("term");
+                let name = match self.eat_name() {
+                    Some(n) => n,
+                    None => return self.lit_error(ts,
+                        "expected name after 'term'",
+                        "P043",
+                        "expected term name",
+                    ),
+                };
+                let payload = self.parse_expr_primary();
+                return ast::ExprFunKind::Term(ast::ExprTerm { type_hint, name, payload });
+            }
+            Some("enum") if self.peek_second_sigil(Sigil::BraceOpen) => {
+                self.eat_word("enum");
+                let inner = match self.next() {
+                    Some(TreeToken::Branch { sigil: Sigil::BraceOpen, inner, .. }) => inner,
+                    _ => unreachable!("peek_second_sigil said a brace follows"),
+                };
+                let mut sub = self.sub_parser(inner, None);
+                let variant = sub.parse_expr_full();
+                sub.error_if_not_exhausted();
+                self.merge_from_sub(&mut sub);
+                return ast::ExprFunKind::EnumLiteral(ast::ExprEnumLiteral { type_hint, variant });
             }
             _ => {}
         }

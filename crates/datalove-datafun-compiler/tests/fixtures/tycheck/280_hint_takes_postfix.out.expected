@@ -1,0 +1,18 @@
+{
+  "diagnostics": [],
+  "errors": [],
+  "judgements": [
+    {
+      "kind": "function",
+      "name": "f",
+      "params": [],
+      "return_type": "?u32"
+    },
+    {
+      "kind": "function",
+      "name": "g",
+      "params": [],
+      "return_type": "!u32"
+    }
+  ]
+}

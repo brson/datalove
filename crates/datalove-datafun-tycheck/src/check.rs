@@ -622,6 +622,16 @@ pub fn check_expr<'db>(
         }
 
         // Handle enum literal expressions - check inner variant against expected enum.
+        // A hinted expression checks its inner against the outer expectation.
+        // The hint is what `synthesize` returns for it, and reaching here
+        // means something outside already said what the type must be, so
+        // agreement between the two is checked where the two meet.
+        ExprFunKind::Hinted(ref hinted) => {
+            check_expr(ctx, hinted.inner, expected)?;
+            ctx.store_expr_type(expr, expected);
+            Ok(())
+        }
+
         ExprFunKind::EnumLiteral(ref enum_lit) => {
             match expected {
                 Type::Datalit(datalit::tycheck::Type::Enum(_)) => {

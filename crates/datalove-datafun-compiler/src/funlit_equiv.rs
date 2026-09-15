@@ -278,6 +278,11 @@ pub fn datafun_expr_to_datalit_serde<'db>(
         ast::ExprFunKind::Atom(_) | ast::ExprFunKind::Term(_) | ast::ExprFunKind::EnumLiteral(_) => {
             return Err(ConversionError::NotPureDatalit("Atom/Term/Enum".to_string()));
         }
+        ast::ExprFunKind::Hinted(_) => {
+            // Datalit hints all sit on a literal form, which carries its own.
+            // A wrapper means the expression under it was not a literal.
+            return Err(ConversionError::NotPureDatalit("Hinted".to_string()));
+        }
         ast::ExprFunKind::Index(_) => {
             return Err(ConversionError::NotPureDatalit("Index".to_string()));
         }

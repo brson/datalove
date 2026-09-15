@@ -1,0 +1,17 @@
+{
+  "diagnostics": [],
+  "errors": [],
+  "judgements": [
+    {
+      "kind": "function",
+      "name": "describe",
+      "params": [
+        {
+          "name": "t",
+          "type": "Tagged"
+        }
+      ],
+      "return_type": "string"
+    }
+  ]
+}

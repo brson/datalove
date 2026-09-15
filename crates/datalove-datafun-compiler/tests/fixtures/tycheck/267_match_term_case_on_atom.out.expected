@@ -1,0 +1,38 @@
+{
+  "diagnostics": [
+    {
+      "code": "F016",
+      "labels": [
+        {
+          "message": "use 'case atom' for payloadless variants",
+          "span": [
+            142,
+            143
+          ],
+          "text": "t"
+        }
+      ],
+      "message": "mismatched types: expected `term case`, found `variant 'Empty' has no payload`"
+    }
+  ],
+  "errors": [
+    {
+      "actual": "variant 'Empty' has no payload",
+      "expected": "term case",
+      "kind": "TypeMismatch"
+    }
+  ],
+  "judgements": [
+    {
+      "kind": "function",
+      "name": "describe",
+      "params": [
+        {
+          "name": "t",
+          "type": "Tagged"
+        }
+      ],
+      "return_type": "string"
+    }
+  ]
+}

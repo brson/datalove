@@ -28,7 +28,8 @@
         "value": {
           "expr": {
             "kind": "Atom",
-            "name": "Red"
+            "name": "Red",
+            "type_hint": null
           }
         }
       },

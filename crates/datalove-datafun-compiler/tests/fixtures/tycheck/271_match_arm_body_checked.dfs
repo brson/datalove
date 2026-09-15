@@ -1,0 +1,14 @@
+// Arm bodies are checked like any other statements, in every kind of arm.
+type Tagged: enum { atom Empty, term Note string, term Count u32 }
+
+fun describe(t: Tagged): string
+  match t
+  case atom Empty
+    ret 1
+  case term Note text
+    ret 2
+  case default
+    ret 3
+  end match
+  ret "unreachable"
+end fun

@@ -1,0 +1,38 @@
+{
+  "diagnostics": [
+    {
+      "code": "F016",
+      "labels": [
+        {
+          "message": "variant not found in enum type",
+          "span": [
+            133,
+            134
+          ],
+          "text": "c"
+        }
+      ],
+      "message": "mismatched types: expected `valid variant`, found `unknown variant 'Green'`"
+    }
+  ],
+  "errors": [
+    {
+      "actual": "unknown variant 'Green'",
+      "expected": "valid variant",
+      "kind": "TypeMismatch"
+    }
+  ],
+  "judgements": [
+    {
+      "kind": "function",
+      "name": "name_of",
+      "params": [
+        {
+          "name": "c",
+          "type": "Colour"
+        }
+      ],
+      "return_type": "string"
+    }
+  ]
+}

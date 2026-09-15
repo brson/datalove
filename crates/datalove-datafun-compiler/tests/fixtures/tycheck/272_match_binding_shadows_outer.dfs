@@ -1,0 +1,14 @@
+// A binding may take a name already in scope, and the outer one comes back
+// after the match.
+type Tagged: enum { atom Empty, term Note string }
+
+fun describe(t: Tagged): string
+  let text: string = "outer"
+  match t
+  case atom Empty
+    ret "empty"
+  case term Note text
+    ret text
+  end match
+  ret text
+end fun

@@ -1,0 +1,13 @@
+// Every variant covered by name, which needs no default arm.
+type Colour: enum { atom Red, atom Blue, atom Green }
+
+fun name_of(c: Colour): string
+  match c
+  case atom Red
+    ret "red"
+  case atom Blue
+    ret "blue"
+  case atom Green
+    ret "green"
+  end match
+end fun

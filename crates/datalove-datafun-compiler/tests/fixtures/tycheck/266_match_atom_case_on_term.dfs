@@ -1,0 +1,12 @@
+// `case atom` on a variant that carries a payload, which has to be bound.
+type Tagged: enum { atom Empty, term Note string }
+
+fun describe(t: Tagged): string
+  match t
+  case atom Empty
+    ret "empty"
+  case atom Note
+    ret "note"
+  end match
+  ret "unreachable"
+end fun

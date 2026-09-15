@@ -1,0 +1,82 @@
+{
+  "ast": {
+    "statements": [
+      {
+        "kind": "TypeAlias",
+        "name": "C",
+        "type_hint": {
+          "Enum": {
+            "variants": [
+              {
+                "name": "Red",
+                "payload": null
+              },
+              {
+                "name": "Blue",
+                "payload": null
+              }
+            ]
+          }
+        }
+      },
+      {
+        "kind": "Let",
+        "name": "a",
+        "type_hint": {
+          "Alias": "C"
+        },
+        "value": {
+          "expr": {
+            "kind": "CloneCoerce",
+            "operand": {
+              "expr": {
+                "kind": "Atom",
+                "name": "Red",
+                "type_hint": null
+              }
+            }
+          }
+        }
+      },
+      {
+        "cases": [],
+        "default_body": [
+          {
+            "kind": "DebugLog",
+            "value": {
+              "expr": {
+                "kind": "String",
+                "type_hint": null,
+                "value": "\"first\""
+              }
+            }
+          }
+        ],
+        "input": {
+          "expr": {
+            "kind": "Place",
+            "root": "a",
+            "steps": []
+          }
+        },
+        "kind": "Match"
+      }
+    ]
+  },
+  "diagnostics": [
+    {
+      "code": "P049",
+      "labels": [
+        {
+          "message": "a match takes only one default arm",
+          "span": [
+            105,
+            112
+          ],
+          "text": "default"
+        }
+      ],
+      "message": "duplicate `case default` in match"
+    }
+  ]
+}

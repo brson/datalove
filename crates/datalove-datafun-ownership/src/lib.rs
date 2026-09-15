@@ -123,6 +123,15 @@ struct AnalysisCtx<'a, 'db> {
 struct ScopeFrame<'db> {
     /// Bindings created in this scope.
     bindings: Vec<BindingId>,
+    /// What each name in `bindings` meant before this scope took it over.
+    ///
+    /// A binding here may shadow one from an enclosing scope -- a match arm's
+    /// payload taking a name the function body already used, say. Leaving the
+    /// scope has to put the outer one back, not merely forget the name: an
+    /// unbound name is looked up as nothing, so a later `ret text` recorded no
+    /// move of the outer `text`, which then looked live at the return and had
+    /// a drop scheduled before the value it returned.
+    shadowed: Vec<(String, Option<BindingId>)>,
     /// Kind of scope (for handling break/continue).
     kind: ScopeKind,
     /// Current state of bindings.
@@ -264,8 +273,12 @@ impl<'a, 'db> AnalysisCtx<'a, 'db> {
             }
         }
 
-        // Add to name mapping.
-        self.name_to_binding.insert(name, id);
+        // Add to name mapping, remembering what the name meant before so
+        // that leaving the scope can put it back.
+        let previous = self.name_to_binding.insert(name.C(), id);
+        if let Some(frame) = self.scope_stack.last_mut() {
+            frame.shadowed.push((name, previous));
+        }
 
         id
     }
@@ -285,6 +298,7 @@ impl<'a, 'db> AnalysisCtx<'a, 'db> {
 
         self.scope_stack.push(ScopeFrame {
             bindings: Vec::new(),
+            shadowed: Vec::new(),
             kind,
             current_state,
             out_param_init,
@@ -314,10 +328,13 @@ impl<'a, 'db> AnalysisCtx<'a, 'db> {
             }
         }
 
-        // Remove bindings from name mapping.
-        for &id in &frame.bindings {
-            let name = &self.bindings[id.0 as usize].name;
-            self.name_to_binding.remove(name);
+        // Put each name back to what it meant before this scope, in reverse
+        // so that a name bound more than once here ends at the outer one.
+        for (name, previous) in frame.shadowed.iter().rev() {
+            match previous {
+                Some(id) => { self.name_to_binding.insert(name.C(), *id); }
+                None => { self.name_to_binding.remove(name); }
+            }
         }
 
         // Propagate state changes to parent scope.
@@ -674,6 +691,7 @@ impl<'a, 'db> AnalysisCtx<'a, 'db> {
                 place.steps.iter().any(|s| matches!(s, datalove_datafun_ast::ast::PlaceStep::Index(_)))
             }
             ExprFunKind::CloneCoerce(cc) => self.expr_may_early_return(cc.operand),
+            ExprFunKind::Hinted(h) => self.expr_may_early_return(h.inner),
             _ => false,
         }
     }
@@ -856,6 +874,12 @@ impl<'a, 'db> AnalysisCtx<'a, 'db> {
                 // enum type, and consumes what that consumes.
                 self.analyze_expr_moves(lit.variant, is_consumed);
                 None
+            }
+            ExprFunKind::Hinted(h) => {
+                // A hint says what the expression under it must be and takes
+                // nothing of its own, so the expression moves what it would
+                // have moved written without one.
+                self.analyze_expr_moves(h.inner, is_consumed)
             }
 
             ExprFunKind::FieldProj(proj) => {

@@ -1,0 +1,38 @@
+{
+  "diagnostics": [
+    {
+      "code": "F016",
+      "labels": [
+        {
+          "message": "match input must be an enum type",
+          "span": [
+            105,
+            106
+          ],
+          "text": "o"
+        }
+      ],
+      "message": "mismatched types: expected `enum`, found `?u32`"
+    }
+  ],
+  "errors": [
+    {
+      "actual": "?u32",
+      "expected": "enum",
+      "kind": "TypeMismatch"
+    }
+  ],
+  "judgements": [
+    {
+      "kind": "function",
+      "name": "unwrap_or_zero",
+      "params": [
+        {
+          "name": "o",
+          "type": "?u32"
+        }
+      ],
+      "return_type": "u32"
+    }
+  ]
+}

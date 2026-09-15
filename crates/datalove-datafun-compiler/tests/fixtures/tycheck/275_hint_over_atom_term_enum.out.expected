@@ -1,0 +1,21 @@
+{
+  "diagnostics": [],
+  "errors": [],
+  "judgements": [
+    {
+      "kind": "variable",
+      "name": "a",
+      "type": "atom Red"
+    },
+    {
+      "kind": "variable",
+      "name": "t",
+      "type": "term Count u32"
+    },
+    {
+      "kind": "variable",
+      "name": "e",
+      "type": "enum{atom Blue, atom Red}"
+    }
+  ]
+}

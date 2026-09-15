@@ -1,0 +1,38 @@
+{
+  "diagnostics": [
+    {
+      "code": "F016",
+      "labels": [
+        {
+          "message": "non-exhaustive match",
+          "span": [
+            183,
+            184
+          ],
+          "text": "c"
+        }
+      ],
+      "message": "mismatched types: expected `exhaustive match`, found `missing variants: Green`"
+    }
+  ],
+  "errors": [
+    {
+      "actual": "missing variants: Green",
+      "expected": "exhaustive match",
+      "kind": "TypeMismatch"
+    }
+  ],
+  "judgements": [
+    {
+      "kind": "function",
+      "name": "name_of",
+      "params": [
+        {
+          "name": "c",
+          "type": "Colour"
+        }
+      ],
+      "return_type": "string"
+    }
+  ]
+}

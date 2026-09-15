@@ -310,9 +310,11 @@ fn lower_if_bool<'db>(
 
     // Lower then branch.
     ctx.start_block(then_block);
+    ctx.enter_var_scope();
     for stmt in if_stmt.then_body.iter() {
         lower_statement(ctx, stmt)?;
     }
+    ctx.exit_var_scope();
     // Only emit Goto if branch didn't terminate early.
     let then_terminated = ctx.is_unreachable();
     if !then_terminated {
@@ -322,11 +324,13 @@ fn lower_if_bool<'db>(
 
     // Lower else branch.
     ctx.start_block(else_block);
+    ctx.enter_var_scope();
     if let Some(else_body) = &if_stmt.else_body {
         for stmt in else_body.iter() {
             lower_statement(ctx, stmt)?;
         }
     }
+    ctx.exit_var_scope();
     // Only emit Goto if branch didn't terminate early.
     let else_terminated = ctx.is_unreachable();
     if !else_terminated {
@@ -386,7 +390,7 @@ fn lower_if_option<'db>(
 
     // Bind the inner value to the binding name.
     let binding_str = binding_name.text(ctx.db);
-    let old_binding = ctx.lookup_var(binding_str);
+    ctx.enter_var_scope();
     ctx.bind_var(binding_str, Operand::Value(inner_dest));
 
     // Register binding with drop schedule system.
@@ -396,12 +400,7 @@ fn lower_if_option<'db>(
         lower_statement(ctx, stmt)?;
     }
 
-    // Restore old binding if we shadowed something.
-    if let Some(old) = old_binding {
-        ctx.bind_var(binding_str, old);
-    } else {
-        ctx.body.variables.remove(binding_str);
-    }
+    ctx.exit_var_scope();
 
     // Only emit Goto if branch didn't terminate early.
     let then_terminated = ctx.is_unreachable();
@@ -415,11 +414,13 @@ fn lower_if_option<'db>(
     // No binding in else branch for Option.
     // inner_dest is NOT valid here - do NOT access or drop it.
 
+    ctx.enter_var_scope();
     if let Some(else_body) = &if_stmt.else_body {
         for stmt in else_body {
             lower_statement(ctx, stmt)?;
         }
     }
+    ctx.exit_var_scope();
 
     // Only emit Goto if branch didn't terminate early.
     let else_terminated = ctx.is_unreachable();
@@ -484,7 +485,7 @@ fn lower_if_result<'db>(
 
     // Bind ok_dest to the ok_binding name.
     let ok_binding_str = ok_binding.text(ctx.db);
-    let old_ok_binding = ctx.lookup_var(ok_binding_str);
+    ctx.enter_var_scope();
     ctx.bind_var(ok_binding_str, Operand::Value(ok_dest));
 
     // Register binding with drop schedule system.
@@ -494,12 +495,7 @@ fn lower_if_result<'db>(
         lower_statement(ctx, stmt)?;
     }
 
-    // Restore old binding.
-    if let Some(old) = old_ok_binding {
-        ctx.bind_var(ok_binding_str, old);
-    } else {
-        ctx.body.variables.remove(ok_binding_str);
-    }
+    ctx.exit_var_scope();
 
     // Only emit Goto if branch didn't terminate early.
     let then_terminated = ctx.is_unreachable();
@@ -513,7 +509,7 @@ fn lower_if_result<'db>(
 
     // Bind err_dest to the err_binding name.
     let err_binding_str = err_binding.text(ctx.db);
-    let old_err_binding = ctx.lookup_var(err_binding_str);
+    ctx.enter_var_scope();
     ctx.bind_var(err_binding_str, Operand::Value(err_dest));
 
     // Register binding with drop schedule system.
@@ -525,12 +521,7 @@ fn lower_if_result<'db>(
         }
     }
 
-    // Restore old binding.
-    if let Some(old) = old_err_binding {
-        ctx.bind_var(err_binding_str, old);
-    } else {
-        ctx.body.variables.remove(err_binding_str);
-    }
+    ctx.exit_var_scope();
 
     // Only emit Goto if branch didn't terminate early.
     let else_terminated = ctx.is_unreachable();
@@ -598,9 +589,11 @@ pub fn lower_loop<'db>(
     });
 
     // Lower loop body.
+    ctx.enter_var_scope();
     for stmt in loop_stmt.body.iter() {
         lower_statement(ctx, stmt)?;
     }
+    ctx.exit_var_scope();
 
     // Only emit loop-back if the body didn't terminate early (via break/return).
     // If the body terminated, the current block is unreachable and we shouldn't
@@ -1068,6 +1061,7 @@ pub fn lower_match<'db>(
             as u32;
 
         ctx.start_block(arm_blocks[i]);
+        ctx.enter_var_scope();
 
         // For term cases, extract payload and bind variable.
         if let ast::MatchCaseKind::Term { name: _, binding } = &case.kind {
@@ -1095,6 +1089,8 @@ pub fn lower_match<'db>(
             lower_statement(ctx, stmt)?;
         }
 
+        ctx.exit_var_scope();
+
         // Emit match arm drops and goto merge.
         let arm_terminated = ctx.is_unreachable();
         all_arms_terminated &= arm_terminated;
@@ -1113,9 +1109,11 @@ pub fn lower_match<'db>(
             operand: Operand::Value(input_id),
         });
 
+        ctx.enter_var_scope();
         for stmt in default_body {
             lower_statement(ctx, stmt)?;
         }
+        ctx.exit_var_scope();
 
         let default_terminated = ctx.is_unreachable();
         all_arms_terminated &= default_terminated;

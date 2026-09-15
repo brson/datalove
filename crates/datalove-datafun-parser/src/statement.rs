@@ -1212,12 +1212,23 @@ impl<'db> Parser<'db> {
                             });
                         }
                         Some("default") => {
+                            let default_span = case_sub.peek_text_span();
                             case_sub.next(); // consume "default"
                             case_sub.error_if_not_exhausted();
                             self.had_error |= case_sub.had_error;
 
+                            // Parsed either way, so that a second default's body
+                            // is checked like any other rather than skipped.
                             let body = self.parse_match_arm_body(remaining_lines);
-                            default_body = Some(body);
+                            if default_body.is_some() {
+                                self.had_error = true;
+                                DiagnosticBuilder::error(self.db, "duplicate `case default` in match")
+                                    .code("P049")
+                                    .primary_label(default_span, "a match takes only one default arm")
+                                    .emit_parse();
+                            } else {
+                                default_body = Some(body);
+                            }
                         }
                         _ => {
                             self.had_error = true;

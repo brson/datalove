@@ -1,0 +1,17 @@
+{
+  "diagnostics": [],
+  "errors": [],
+  "judgements": [
+    {
+      "kind": "function",
+      "name": "name_of",
+      "params": [
+        {
+          "name": "c",
+          "type": "Colour"
+        }
+      ],
+      "return_type": "string"
+    }
+  ]
+}

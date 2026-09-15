@@ -1,0 +1,32 @@
+{
+  "diagnostics": [],
+  "errors": [],
+  "judgements": [
+    {
+      "kind": "function",
+      "name": "twice",
+      "params": [
+        {
+          "name": "n",
+          "type": "u32"
+        }
+      ],
+      "return_type": "u32"
+    },
+    {
+      "kind": "variable",
+      "name": "n",
+      "type": "u32"
+    },
+    {
+      "kind": "variable",
+      "name": "a",
+      "type": "u32"
+    },
+    {
+      "kind": "variable",
+      "name": "b",
+      "type": "u32"
+    }
+  ]
+}

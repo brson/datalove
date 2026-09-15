@@ -1,0 +1,12 @@
+// `case term` on a variant with nothing to bind.
+type Tagged: enum { atom Empty, term Note string }
+
+fun describe(t: Tagged): string
+  match t
+  case term Empty nothing
+    ret "empty"
+  case term Note text
+    ret text
+  end match
+  ret "unreachable"
+end fun

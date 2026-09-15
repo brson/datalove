@@ -1,0 +1,38 @@
+{
+  "diagnostics": [
+    {
+      "code": "F016",
+      "labels": [
+        {
+          "message": "use 'case term' to destructure payload",
+          "span": [
+            167,
+            168
+          ],
+          "text": "t"
+        }
+      ],
+      "message": "mismatched types: expected `atom case`, found `variant 'Note' has a payload`"
+    }
+  ],
+  "errors": [
+    {
+      "actual": "variant 'Note' has a payload",
+      "expected": "atom case",
+      "kind": "TypeMismatch"
+    }
+  ],
+  "judgements": [
+    {
+      "kind": "function",
+      "name": "describe",
+      "params": [
+        {
+          "name": "t",
+          "type": "Tagged"
+        }
+      ],
+      "return_type": "string"
+    }
+  ]
+}

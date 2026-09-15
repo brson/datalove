@@ -268,6 +268,8 @@ pub enum ExprFunKind {
     // Table expression.
     Table(ExprTable),
 
+    Hinted(ExprHinted),
+
     // Atom/Term/Enum expressions.
     Atom(ExprAtom),
     Term(ExprTerm),
@@ -376,18 +378,27 @@ pub struct ExprIndex {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct ExprHinted {
+    pub type_hint: Option<datalove_datalit::ast_serde::TypeHint>,
+    pub inner: Box<ExprFun>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct ExprAtom {
+    pub type_hint: Option<datalove_datalit::ast_serde::TypeHint>,
     pub name: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct ExprTerm {
+    pub type_hint: Option<datalove_datalit::ast_serde::TypeHint>,
     pub name: String,
     pub payload: Box<ExprFun>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct ExprEnumLiteral {
+    pub type_hint: Option<datalove_datalit::ast_serde::TypeHint>,
     pub variant: Box<ExprFun>,
 }
 
@@ -851,14 +862,21 @@ impl ExprFunKind {
             crate::ast::ExprFunKind::Table(e) => ExprFunKind::Table(ExprTable::from_ast(db, e)),
 
             // Atom/Term/Enum expressions.
+            crate::ast::ExprFunKind::Hinted(e) => ExprFunKind::Hinted(ExprHinted {
+                type_hint: type_hint_from_ast(db, Some(e.type_hint.clone())),
+                inner: Box::new(ExprFun::from_ast(db, e.inner)),
+            }),
             crate::ast::ExprFunKind::Atom(e) => ExprFunKind::Atom(ExprAtom {
+                type_hint: type_hint_from_ast(db, e.type_hint.clone()),
                 name: e.name.as_str(db).to_string(),
             }),
             crate::ast::ExprFunKind::Term(e) => ExprFunKind::Term(ExprTerm {
+                type_hint: type_hint_from_ast(db, e.type_hint.clone()),
                 name: e.name.as_str(db).to_string(),
                 payload: Box::new(ExprFun::from_ast(db, e.payload)),
             }),
             crate::ast::ExprFunKind::EnumLiteral(e) => ExprFunKind::EnumLiteral(ExprEnumLiteral {
+                type_hint: type_hint_from_ast(db, e.type_hint.clone()),
                 variant: Box::new(ExprFun::from_ast(db, e.variant)),
             }),
 

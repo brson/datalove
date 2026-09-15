@@ -1,0 +1,14 @@
+// A case naming something the enum does not have.
+type Colour: enum { atom Red, atom Blue }
+
+fun name_of(c: Colour): string
+  match c
+  case atom Red
+    ret "red"
+  case atom Blue
+    ret "blue"
+  case atom Green
+    ret "green"
+  end match
+  ret "unreachable"
+end fun

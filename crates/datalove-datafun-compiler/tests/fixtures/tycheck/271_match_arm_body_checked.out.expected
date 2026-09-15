@@ -1,0 +1,76 @@
+{
+  "diagnostics": [
+    {
+      "code": "F016",
+      "labels": [
+        {
+          "message": "type mismatch",
+          "span": [
+            211,
+            212
+          ],
+          "text": "1"
+        }
+      ],
+      "message": "mismatched types: expected `string`, found `int`"
+    },
+    {
+      "code": "F016",
+      "labels": [
+        {
+          "message": "type mismatch",
+          "span": [
+            243,
+            244
+          ],
+          "text": "2"
+        }
+      ],
+      "message": "mismatched types: expected `string`, found `int`"
+    },
+    {
+      "code": "F016",
+      "labels": [
+        {
+          "message": "type mismatch",
+          "span": [
+            268,
+            269
+          ],
+          "text": "3"
+        }
+      ],
+      "message": "mismatched types: expected `string`, found `int`"
+    }
+  ],
+  "errors": [
+    {
+      "actual": "int",
+      "expected": "string",
+      "kind": "TypeMismatch"
+    },
+    {
+      "actual": "int",
+      "expected": "string",
+      "kind": "TypeMismatch"
+    },
+    {
+      "actual": "int",
+      "expected": "string",
+      "kind": "TypeMismatch"
+    }
+  ],
+  "judgements": [
+    {
+      "kind": "function",
+      "name": "describe",
+      "params": [
+        {
+          "name": "t",
+          "type": "Tagged"
+        }
+      ],
+      "return_type": "string"
+    }
+  ]
+}

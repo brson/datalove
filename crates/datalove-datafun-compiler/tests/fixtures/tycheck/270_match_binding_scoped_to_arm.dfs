@@ -1,0 +1,13 @@
+// A term arm's binding belongs to that arm, so naming it after the match is
+// an unresolved name rather than a use of the payload.
+type Tagged: enum { atom Empty, term Note string }
+
+fun describe(t: Tagged): string
+  match t
+  case atom Empty
+    ret "empty"
+  case term Note text
+    ret text
+  end match
+  ret text
+end fun

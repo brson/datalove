@@ -1,0 +1,38 @@
+{
+  "diagnostics": [
+    {
+      "code": "F016",
+      "labels": [
+        {
+          "message": "match input must be an enum type",
+          "span": [
+            104,
+            105
+          ],
+          "text": "n"
+        }
+      ],
+      "message": "mismatched types: expected `enum`, found `u32`"
+    }
+  ],
+  "errors": [
+    {
+      "actual": "u32",
+      "expected": "enum",
+      "kind": "TypeMismatch"
+    }
+  ],
+  "judgements": [
+    {
+      "kind": "function",
+      "name": "classify",
+      "params": [
+        {
+          "name": "n",
+          "type": "u32"
+        }
+      ],
+      "return_type": "string"
+    }
+  ]
+}

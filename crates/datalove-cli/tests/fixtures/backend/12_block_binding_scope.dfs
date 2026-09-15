@@ -1,0 +1,101 @@
+// A binding inside a block that takes a name already in scope.
+//
+// The typechecker scopes a block's bindings and so does the ownership
+// analysis, so a use of the name after the block reads the outer one and the
+// program compiles. Lowering kept its names in one flat map with no scopes,
+// so the inner binding replaced the outer for the rest of the function and
+// that use read the inner value instead -- on a path where the block never
+// ran, a value that was never written.
+//
+// Every backend showed it differently, which is why this is a backend test:
+// the interpreter read a fresh slot and gave zero, the C backend read an
+// uninitialized local and gave whatever was there, and cranelift's verifier
+// refused the function outright, both jit and aot, for using a value not
+// defined on every path to it.
+
+type Note: enum { atom Nothing, term Text u32 }
+
+// A match arm binding over a name from the enclosing body.
+fun arm_binding(n: Note): u32
+  let held: u32 = 7
+  match n
+  case atom Nothing
+    debuglog "nothing"
+  case term Text held
+    debuglog held
+  end match
+  ret held
+end fun
+
+// The same through a `let` inside an arm rather than a payload binding.
+fun arm_let(n: Note): u32
+  let held: u32 = 7
+  match n
+  case atom Nothing
+    let held: u32 = 1
+    debuglog held
+  case term Text other
+    let held: u32 = 2
+    debuglog held
+  end match
+  ret held
+end fun
+
+// And through an `if`, which has the same flat map under it.
+fun branch_let(take: bool): u32
+  let held: u32 = 7
+  if take
+    let held: u32 = 1
+    debuglog held
+  else
+    let held: u32 = 2
+    debuglog held
+  end if
+  ret held
+end fun
+
+// A loop body, whose bindings are made afresh each time round.
+fun loop_let(): !u32
+  let held: u32 = 7
+  var i: u32 = 0
+  loop while i .< 2
+    let held: u32 = 1
+    debuglog held
+    set i = i +! 1
+  end loop
+  ret ok held
+end fun
+
+// An `if` binding over an option, which already restored what it shadowed and
+// so must keep doing that.
+fun option_binding(o: ?u32): u32
+  let held: u32 = 7
+  if o |held|
+    debuglog held
+  else
+    debuglog "none"
+  end if
+  ret held
+end fun
+
+// A linear payload, so that a wrong arm would show up as a leak or a double
+// free rather than only as a wrong number.
+type Held: enum { atom Nothing, term Text string }
+
+fun linear_binding(h: Held): string
+  let text: string = "outer"
+  match h
+  case atom Nothing
+    debuglog "nothing"
+  case term Text text
+    debuglog text
+  end match
+  ret text
+end fun
+
+debuglog (arm_binding(term Text : u32 / 42), arm_binding(atom Nothing))
+debuglog (arm_let(atom Nothing), arm_let(term Text : u32 / 42))
+debuglog (branch_let(true), branch_let(false))
+debuglog loop_let()!
+debuglog (option_binding(some 5), option_binding(none))
+debuglog (linear_binding(term Text "inner"), linear_binding(atom Nothing))

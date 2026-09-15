@@ -570,6 +570,14 @@ pub enum ExprFunKind<'db> {
     // Enum literal expression: `enum { atom Foo }` (checking-only).
     EnumLiteral(ExprEnumLiteral<'db>),
 
+    /// An expression written under a type hint: `: type / expression`.
+    ///
+    /// Only for expressions with nowhere of their own to keep a hint. Every
+    /// literal form carries its own `type_hint` field, and the parser fills
+    /// that in rather than wrapping; this covers the rest -- a name, a call,
+    /// anything the datalit literal grammar has no form for.
+    Hinted(ExprHinted<'db>),
+
     // Index expression: base[index].
     Index(ExprIndex<'db>),
 
@@ -883,6 +891,7 @@ pub struct ExprFunParseError<'db> {
 #[derive(Clone, Hash, PartialEq, Eq)]
 #[derive(salsa::SalsaValue)]
 pub struct ExprAtom<'db> {
+    pub type_hint: Option<datalit::ast::TypeHint<'db>>,
     pub name: InternedText<'db>,
 }
 
@@ -890,6 +899,7 @@ pub struct ExprAtom<'db> {
 #[derive(Clone, Hash, PartialEq, Eq)]
 #[derive(salsa::SalsaValue)]
 pub struct ExprTerm<'db> {
+    pub type_hint: Option<datalit::ast::TypeHint<'db>>,
     pub name: InternedText<'db>,
     pub payload: ExprFun<'db>,
 }
@@ -898,7 +908,16 @@ pub struct ExprTerm<'db> {
 #[derive(Clone, Hash, PartialEq, Eq)]
 #[derive(salsa::SalsaValue)]
 pub struct ExprEnumLiteral<'db> {
+    pub type_hint: Option<datalit::ast::TypeHint<'db>>,
     pub variant: ExprFun<'db>,
+}
+
+/// An expression written under a type hint: `: type / expression`.
+#[derive(Clone, Hash, PartialEq, Eq)]
+#[derive(salsa::SalsaValue)]
+pub struct ExprHinted<'db> {
+    pub type_hint: datalit::ast::TypeHint<'db>,
+    pub inner: ExprFun<'db>,
 }
 
 /// Intrinsic call expression (icall name(args)).
