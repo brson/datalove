@@ -1174,11 +1174,25 @@ fn instantiate_map<'db>(
             datalove_rt::c::dtlv_rti_mem_free_raw_local(rt, values_buffer_size, value_align, 1, values_buffer);
             return Err(anyhow!("Failed to allocate sorted buffers for map entries"));
         }
+        // A map holds each key once, and where the literal wrote one twice the
+        // later entry is the one it has. The sort is stable, so equal keys are
+        // neighbours in the order they were written and the last of a run is
+        // the one to keep; the entry it displaces is let go of, key and value
+        // both, rather than merely skipped.
+        let mut kept = 0usize;
         for (i, &from) in sorted.iter().enumerate() {
-            std::ptr::copy_nonoverlapping(
-                keys_buffer.add(from * key_size), sorted_keys.add(i * key_size), key_size);
-            std::ptr::copy_nonoverlapping(
-                values_buffer.add(from * value_size), sorted_values.add(i * value_size), value_size);
+            let key_src = keys_buffer.add(from * key_size);
+            let value_src = values_buffer.add(from * value_size);
+            if i > 0 && same_value(rt, sorted_keys.add((kept - 1) * key_size), key_src, key_tydesc) {
+                datalove_rt::c::dtlv_rti_any_destroy_local(
+                    rt, sorted_keys.add((kept - 1) * key_size), key_tydesc);
+                datalove_rt::c::dtlv_rti_any_destroy_local(
+                    rt, sorted_values.add((kept - 1) * value_size), value_tydesc);
+                kept -= 1;
+            }
+            std::ptr::copy_nonoverlapping(key_src, sorted_keys.add(kept * key_size), key_size);
+            std::ptr::copy_nonoverlapping(value_src, sorted_values.add(kept * value_size), value_size);
+            kept += 1;
         }
         datalove_rt::c::dtlv_rti_mem_free_raw_local(rt, keys_buffer_size, key_align, 1, keys_buffer);
         datalove_rt::c::dtlv_rti_mem_free_raw_local(rt, values_buffer_size, value_align, 1, values_buffer);
@@ -1191,7 +1205,7 @@ fn instantiate_map<'db>(
             value_tydesc,
             sorted_keys,
             sorted_values,
-            (entries.len() as u32).into(),
+            (kept as u32).into(),
         );
 
         // Free the buffer memory (data has been moved to the tree).
@@ -1286,11 +1300,20 @@ fn instantiate_set<'db>(
             datalove_rt::c::dtlv_rti_mem_free_raw_local(rt, buffer_size, element_align, 1, buffer);
             return Err(anyhow!("Failed to allocate sorted buffer for set elements"));
         }
-        // Moves, not copies: the bytes are handed over and the old run is left
-        // to be freed without being destroyed.
+        // A set holds each element once, however the literal wrote them. The
+        // builder takes the run as given, so the repeats are let go of here --
+        // equal elements are neighbours now that the run is sorted.
+        let mut kept = 0usize;
         for (i, &from) in sorted.iter().enumerate() {
-            std::ptr::copy_nonoverlapping(
-                buffer.add(from * element_size), sorted_buffer.add(i * element_size), element_size);
+            let src = buffer.add(from * element_size);
+            if i > 0 && same_value(rt, sorted_buffer.add((kept - 1) * element_size), src, element_tydesc) {
+                datalove_rt::c::dtlv_rti_any_destroy_local(rt, src, element_tydesc);
+                continue;
+            }
+            // Moves, not copies: the bytes are handed over and the old run is
+            // left to be freed without being destroyed.
+            std::ptr::copy_nonoverlapping(src, sorted_buffer.add(kept * element_size), element_size);
+            kept += 1;
         }
         datalove_rt::c::dtlv_rti_mem_free_raw_local(rt, buffer_size, element_align, 1, buffer);
 
@@ -1300,7 +1323,7 @@ fn instantiate_set<'db>(
             set_ptr as *mut u8,
             element_tydesc,
             sorted_buffer,
-            (elements.len() as u32).into(),
+            (kept as u32).into(),
         );
 
         // Free the buffer memory (elements have been moved to the tree).
@@ -1312,6 +1335,23 @@ fn instantiate_set<'db>(
     }
 
     Ok(set_ptr as *const u8)
+}
+
+/// Whether two instantiated values are the one value, as the tree would judge.
+///
+/// A set holds each element once and a map each key once, and which elements
+/// are the same one is the tree's question rather than the literal's: two
+/// strings written differently can still be one key.
+unsafe fn same_value(
+    rt: datalove_rt::c::LocalRtHandle,
+    a: *const u8,
+    b: *const u8,
+    tydesc: *const rtdt::TyDesc,
+) -> bool {
+    unsafe {
+        datalove_rt::c::dtlv_rti_cmp_total_local(rt, a, tydesc, b, tydesc)
+            == datalove_rt::c::RtOrdering::Equal
+    }
 }
 
 /// Order instantiated values by the runtime's comparison, returning where each
