@@ -707,6 +707,11 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 builder.ins().urem(a, b)
             }
 
+            // How wide an index is.
+            IndexBits => {
+                builder.ins().iconst(cl_types::I32, crate::index_types::INDEX_BITS as i64)
+            }
+
             // Usize/Isize type conversion (no-op at IR level).
             IndexToOffset => {
                 self.get_operand_value(builder, &args[0])?

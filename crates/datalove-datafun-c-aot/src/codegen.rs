@@ -3528,6 +3528,9 @@ impl<'a> FunctionCodegenContext<'a> {
             IntrinsicId::IndexToOffset => {
                 writeln!(out, "    *(offset_t*){} = (offset_t)*(index_t*){};", dest_addr, arg0()).unwrap();
             }
+            IntrinsicId::IndexBits => {
+                writeln!(out, "    *(uint32_t*){} = DTLV_INDEX_BITS;", dest_addr).unwrap();
+            }
 
             // Offset operations.
             IntrinsicId::OffsetToIndex => {

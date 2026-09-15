@@ -178,6 +178,7 @@ pub enum IntrinsicId {
     MulWrappingIndex = 233,
     RemIndex = 234,
     IndexToOffset = 235,
+    IndexBits = 236,
 
     // Offset operations (250-269).
     OffsetToIndex = 250,
@@ -1045,6 +1046,16 @@ pub static INTRINSICS: &[IntrinsicDef] = &[
         name: "rem_index",
         params: &[IntrinsicType::Index, IntrinsicType::Index],
         ret: IntrinsicType::Index,
+    },
+
+    // How wide an index is, which the build decides rather than the source.
+    // `offset` is the signed counterpart of `index` and is the same width, so
+    // this answers for both.
+    IntrinsicDef {
+        id: IntrinsicId::IndexBits,
+        name: "index_bits",
+        params: &[],
+        ret: IntrinsicType::U32,
     },
 
     // Usize/Isize type conversion.

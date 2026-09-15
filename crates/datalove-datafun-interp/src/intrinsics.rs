@@ -655,6 +655,11 @@ impl IrInterpreter {
                 self.write_usize(a % b, dest);
             }
 
+            // How wide an index is.
+            IndexBits => {
+                self.write_u32(datalove_rtdt::IndexRepr::BITS, dest);
+            }
+
             // Usize/Isize type conversion.
             IndexToOffset => {
                 let a = self.read_usize(&args[0], frame, frames);
