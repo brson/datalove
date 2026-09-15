@@ -1,0 +1,23 @@
+// An atom is its name, and a term is its name and its payload.
+//
+// A `data` carries its own descriptor, and two of them are compared by asking
+// whether those descriptors describe the one type. That question read an
+// atom's descriptor the way it reads a `u32`'s -- nothing to look at past the
+// tag -- so every atom was the same type as every other, and an atom carrying
+// nothing, two of them then compared equal as values as well. A set of
+// distinct atoms held one of them and let the rest go: `Blue` went missing
+// from the set below.
+//
+// A term was always compared by name, and by the type of what it carries. It
+// is here so that it stays that way.
+
+let atoms: #{data} = #{data : atom Red / atom Red,
+                       data : atom Red / atom Red,
+                       data : atom Blue / atom Blue}
+
+// Two names, and one name over two payload types: three terms, not one.
+let terms: #{data} = #{data : term Note u32 / term Note : u32 / 1,
+                       data : term Count u32 / term Count : u32 / 1,
+                       data : term Note string / term Note : string / "one"}
+
+let output = (atoms, terms)

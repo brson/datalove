@@ -243,8 +243,13 @@ pub(crate) fn cmp_tydesc(
         rtdt::TyTag::U16 | rtdt::TyTag::I16 | rtdt::TyTag::U32 | rtdt::TyTag::I32 |
         rtdt::TyTag::U64 | rtdt::TyTag::I64 | rtdt::TyTag::Index | rtdt::TyTag::Offset |
         rtdt::TyTag::F32 | rtdt::TyTag::F64 |
-        rtdt::TyTag::Int | rtdt::TyTag::String | rtdt::TyTag::Data | rtdt::TyTag::Error |
-        rtdt::TyTag::Atom => Ordering::Equal,
+        rtdt::TyTag::Int | rtdt::TyTag::String | rtdt::TyTag::Data |
+        rtdt::TyTag::Error => Ordering::Equal,
+
+        // An atom's name is the whole of its identity. `atom Red` and
+        // `atom Blue` are two types and nothing else in their descriptors
+        // tells them apart, both being zero-sized and carrying nothing.
+        rtdt::TyTag::Atom => td_a.atom_info().0.cmp(td_b.atom_info().0),
 
         rtdt::TyTag::Tuple => {
             let info_a = td_a.tuple_info();
@@ -408,9 +413,13 @@ pub(crate) fn eq_tydesc(
             rtdt::TyTag::U16 | rtdt::TyTag::I16 | rtdt::TyTag::U32 | rtdt::TyTag::I32 |
             rtdt::TyTag::U64 | rtdt::TyTag::I64 | rtdt::TyTag::Index | rtdt::TyTag::Offset |
             rtdt::TyTag::F32 | rtdt::TyTag::F64 |
-            rtdt::TyTag::Int | rtdt::TyTag::String | rtdt::TyTag::Data | rtdt::TyTag::Error |
-            rtdt::TyTag::Atom => {
+            rtdt::TyTag::Int | rtdt::TyTag::String | rtdt::TyTag::Data |
+            rtdt::TyTag::Error => {
                 true
+            }
+            // See `cmp_tydesc`: the name is the identity.
+            rtdt::TyTag::Atom => {
+                td_a.atom_info().0 == td_b.atom_info().0
             }
             rtdt::TyTag::Tuple => {
                 let info_a = td_a.tuple_info();
