@@ -3,9 +3,6 @@ use rmx::prelude::*;
 pub mod resolution;
 pub mod funlit_equiv;
 
-// Compile-time function evaluation (CTFE).
-pub mod const_eval;
-
 // Re-export const inlining from const crate.
 pub use datalove_datafun_const as datafun_const;
 
