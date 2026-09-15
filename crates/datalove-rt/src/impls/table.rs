@@ -98,13 +98,12 @@ pub unsafe fn table_destroy_impl(
         // Free the data buffer.
         // Re-obtain rt_ref after recursive calls to satisfy Stacked Borrows.
         let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
-        if table.capacity > rtdt::Index::ZERO {
-            let alloc_size = rtdt::layout::table_data_allocation_size(&column_tydescs, table.capacity.0);
-            let alloc_align = rtdt::layout::table_data_alignment(&column_tydescs);
-            if alloc_size > 0 {
-                rt_ref.alloc.free(alloc_size, alloc_align, 1, table.data as *mut u8);
-            }
-        }
+        // Freed on the strength of the pointer, not of the capacity: a table
+        // of zero-sized rows, or of no rows at all, holds a buffer of no bytes,
+        // and the allocator hands those out and takes them back like any other.
+        let alloc_size = rtdt::layout::table_data_allocation_size(&column_tydescs, table.capacity.0);
+        let alloc_align = rtdt::layout::table_data_alignment(&column_tydescs);
+        rt_ref.alloc.free(alloc_size, alloc_align, 1, table.data as *mut u8);
 
         // Clear the table fields.
         (*table_ptr).data = std::ptr::null();
@@ -186,34 +185,30 @@ unsafe fn table_grow(
         let new_alloc_size = rtdt::layout::table_data_allocation_size(column_tydescs, new_capacity);
         let alloc_align = rtdt::layout::table_data_alignment(column_tydescs);
 
-        if new_alloc_size == 0 {
-            table.capacity = rtdt::Index(new_capacity);
-            return RtStatus::Ok;
-        }
-
         let new_data = rt_ref.alloc.alloc(new_alloc_size, alloc_align, 1);
         if new_data.is_null() {
             return RtStatus::Error;
         }
 
         // Copy existing data column by column if there was old data.
-        if !table.data.is_null() && table.len > rtdt::Index::ZERO {
-            for col in 0..column_tydescs.len() {
-                let col_tydesc = column_tydescs[col];
-                let elem_size = col_tydesc.size as usize;
+        if !table.data.is_null() {
+            if table.len > rtdt::Index::ZERO {
+                for col in 0..column_tydescs.len() {
+                    let col_tydesc = column_tydescs[col];
+                    let elem_size = col_tydesc.size as usize;
 
-                for row in 0..table.len.0 {
-                    let src = element_ptr(table.data, column_tydescs, row, col, table.capacity.0);
-                    let dst = element_ptr_mut(new_data, column_tydescs, row, col, new_capacity);
-                    std::ptr::copy_nonoverlapping(src, dst, elem_size);
+                    for row in 0..table.len.0 {
+                        let src = element_ptr(table.data, column_tydescs, row, col, table.capacity.0);
+                        let dst = element_ptr_mut(new_data, column_tydescs, row, col, new_capacity);
+                        std::ptr::copy_nonoverlapping(src, dst, elem_size);
+                    }
                 }
             }
 
-            // Free old buffer.
+            // Freed whether or not there were rows to carry over: an empty
+            // table still holds a buffer, of no bytes.
             let old_alloc_size = rtdt::layout::table_data_allocation_size(column_tydescs, table.capacity.0);
-            if old_alloc_size > 0 {
-                rt_ref.alloc.free(old_alloc_size, alloc_align, 1, table.data as *mut u8);
-            }
+            rt_ref.alloc.free(old_alloc_size, alloc_align, 1, table.data as *mut u8);
         }
 
         table.data = new_data;
@@ -375,14 +370,19 @@ pub unsafe fn table_build_from_rows_impl(
         let alloc_size = rtdt::layout::table_data_allocation_size(&column_tydescs, num_rows);
         let alloc_align = rtdt::layout::table_data_alignment(&column_tydescs);
 
-        let data = if alloc_size > 0 {
+        // Allocated even where the rows come to nothing, which they do when
+        // every column is zero-sized. The allocator answers a request for no
+        // bytes with a block like any other, and a table that skipped it was
+        // left holding a null buffer with rows in it -- a shape everything
+        // that reads a table takes for the empty one, so the rows went
+        // missing on the way through a clone or a print. A list of the same
+        // zero-sized element has always allocated.
+        let data = {
             let ptr = rt_ref.alloc.alloc(alloc_size, alloc_align, 1);
             if ptr.is_null() {
                 return RtStatus::Error;
             }
             ptr
-        } else {
-            std::ptr::null_mut()
         };
 
         table.data = data;

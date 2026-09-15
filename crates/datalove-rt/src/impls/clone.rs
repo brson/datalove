@@ -418,13 +418,8 @@ unsafe fn clone_impl(
             let alloc_align = rtdt::layout::table_data_alignment(&column_tydescs);
 
             let rt_ref = unsafe { &mut *(rt as *mut rt_local::RtLocal) };
-            let new_data = if alloc_size > 0 {
-                unsafe { rt_ref.alloc.alloc(alloc_size, alloc_align, 1) }
-            } else {
-                std::ptr::null_mut()
-            };
-
-            if alloc_size > 0 && new_data.is_null() {
+            let new_data = unsafe { rt_ref.alloc.alloc(alloc_size, alloc_align, 1) };
+            if new_data.is_null() {
                 return RtStatus::Error;
             }
 
@@ -475,9 +470,7 @@ unsafe fn clone_impl(
                             }
                         }
                         let rt_ref = unsafe { &mut *(rt as *mut rt_local::RtLocal) };
-                        if alloc_size > 0 {
-                            unsafe { rt_ref.alloc.free(alloc_size, alloc_align, 1, new_data) };
-                        }
+                        unsafe { rt_ref.alloc.free(alloc_size, alloc_align, 1, new_data) };
                         return status;
                     }
                 }
