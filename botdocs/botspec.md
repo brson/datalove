@@ -957,7 +957,9 @@ let y = repeat(3, "ab")      // or a literal
 
 **Restrictions:**
 - Const parameters must have primitive types or simple aggregates
-- Cannot combine `const` with `out` or `mut` modes
+- Cannot combine `const` with a passing mode. A const parameter is not passed:
+  specialization removes it and writes the value into the body, so `ref` has no
+  borrow to describe and `out` and `mut` have nothing to write back to
 - Cannot combine const parameters with type parameters
 - The argument may not be an expression, even one whose parts are all known:
   `repeat(2 + 1, s)` is refused where `repeat(3, s)` is accepted. Specialization

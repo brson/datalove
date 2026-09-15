@@ -1,0 +1,25 @@
+----------
+scriptunit-fragment
+----------
+
+// A const parameter has no passing mode. Specialization removes the parameter
+// and writes the value into the body, so `ref` has no borrow to describe, and
+// `out` and `mut` have nothing to write back to.
+//
+// `ref` used to be allowed. The body of a `ref` parameter does not drop what
+// it was lent, so the copy made a constant that nothing released, and the call
+// site dropped an argument it had only borrowed.
+
+fun by_ref(const ref factor: int, x: int): int
+    ret factor * x
+end fun
+
+fun by_out(const out factor: int, x: int): int
+    ret x
+end fun
+
+fun by_mut(const mut factor: int, x: int): int
+    ret factor * x
+end fun
+
+debuglog 1

@@ -555,11 +555,14 @@ impl<'db> Parser<'db> {
             _ => ast::ParamMode::In,
         };
 
-        // Validate: const cannot combine with out or mut
-        if is_comptime && matches!(mode, ast::ParamMode::Out | ast::ParamMode::Mut) {
+        // A const parameter has no passing mode, because nothing is passed:
+        // specialization removes the parameter and writes the value into the
+        // body, so `ref` has no borrow to describe and `out` and `mut` have
+        // nothing to write back to.
+        if is_comptime && !matches!(mode, ast::ParamMode::In) {
             self.had_error = true;
             let ts = self.peek_text_span();
-            DiagnosticBuilder::error(self.db, "const parameter cannot be 'out' or 'mut'")
+            DiagnosticBuilder::error(self.db, "const parameter cannot be 'ref', 'out' or 'mut'")
                 .code("P013")
                 .primary_label(ts, "invalid combination")
                 .emit_parse();

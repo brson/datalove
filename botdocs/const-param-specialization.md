@@ -119,6 +119,15 @@ pub struct FunParam<'db> {
 - Allows combinations: `const ref x: T` (compile-time known reference)
 - Path to type parameters: `const T: type` uses same flag
 
+> **The second point is wrong, and the flag is not orthogonal to the mode.** A
+> const parameter is not passed at all: specialization removes it and writes the
+> value into the body. So there is no borrow for `ref` to describe, and nothing
+> for `out` or `mut` to write back to. `const ref` was accepted for a while and
+> leaked -- the body of a `ref` parameter does not drop what it was lent, so the
+> copy made a constant nothing released. All three modes are refused now (P013).
+> The third point is [superseded](plan-generics.md) along with the rest of the
+> type-parameter story.
+
 **Cons**: Two dimensions to track instead of one.
 
 ### Recommendation

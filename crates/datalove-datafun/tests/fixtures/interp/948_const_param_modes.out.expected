@@ -1,0 +1,23 @@
+Analysis(
+    sections: [
+        SectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "ParseError",
+                errors: [
+                    "const parameter cannot be \'ref\', \'out\' or \'mut\'",
+                    "const parameter cannot be \'ref\', \'out\' or \'mut\'",
+                    "const parameter cannot be \'ref\', \'out\' or \'mut\'",
+                ],
+            ),
+            ownership: OwnershipResult(
+                status: "Skipped",
+            ),
+            lowering: LoweringResult(
+                status: "Skipped",
+            ),
+            output: "",
+        ),
+    ],
+)
