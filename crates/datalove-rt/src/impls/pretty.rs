@@ -751,7 +751,7 @@ unsafe fn pretty_tensor(
             vec![]
         };
 
-        let total_elems: usize = shape.iter().product();
+        let total_elems = rtdt::tensor_element_count(&shape);
 
         if total_elems > 0 && !tensor.ptr_base.is_null() {
             push_str(rt, string_mut, string_tydesc, b"[| ")?;
@@ -776,6 +776,12 @@ unsafe fn pretty_tensor(
 }
 
 /// Recursively print tensor elements with multi-comma separators.
+///
+/// `shape` has at least one extent and `dim` indexes one of them. A tensor
+/// with no shape has no elements to print and is answered with `[| |]` before
+/// reaching here -- which is what `tensor_element_count` is for, an empty
+/// product having once said such a tensor held one element and sent this
+/// walking off the end of `shape`.
 unsafe fn pretty_tensor_group(
     rt: LocalRtHandle,
     ptr_base: *const u8,

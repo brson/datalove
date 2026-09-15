@@ -465,13 +465,14 @@ fn extract_const_value(ptr: *const u8, ir_type: &IrType) -> Result<ConstValue, C
                 // not say the extents.
                 let tensor = &*(ptr as *const datalove_rtdt::Tensor);
                 let rank = *rank as usize;
-                let shape: Vec<u32> = if rank > 0 && !tensor.shape.is_null() {
-                    (0..rank).map(|i| (*tensor.shape.add(i)).as_usize() as u32).collect()
+                let extents: Vec<usize> = if rank > 0 && !tensor.shape.is_null() {
+                    (0..rank).map(|i| (*tensor.shape.add(i)).as_usize()).collect()
                 } else {
                     Vec::new()
                 };
+                let shape: Vec<u32> = extents.iter().map(|extent| *extent as u32).collect();
 
-                let count: usize = shape.iter().map(|extent| *extent as usize).product();
+                let count = datalove_rtdt::tensor_element_count(&extents);
                 let mut elements = Vec::with_capacity(count);
                 if count > 0 && !tensor.ptr_base.is_null() {
                     let element_size = size_of_ir_type(element_type) as usize;
