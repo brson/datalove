@@ -1,17 +1,35 @@
 // Constants.
-// Note: These values are for the default 32-bit index configuration.
-// With the index-64 feature, offset is 64-bit but these constants remain 32-bit values.
+//
+// An `offset` is the signed counterpart of an `index` and is as wide as one,
+// so the build decides its width too: thirty-two bits by default and
+// sixty-four under the index-64 feature. The width is asked for rather than
+// written down, and the two edges are derived from it by writing the bit
+// pattern and reinterpreting it as signed -- there is no literal for the most
+// negative value, since its magnitude is one past the top of the range. All of
+// it is evaluated at compile time and reaches a backend as a literal.
+
+const BITS: u32 = icall index_bits()
+
+// One less than the width, which is what a shift amount is taken modulo and
+// what the sign bit is indexed by.
+const SHIFT_MASK: u32 = icall sub_wrapping_u32(BITS, : u32 / 1)
+
+// The sign bit alone, which read as signed is the most negative value.
+const MIN: offset = icall index_to_offset(icall shl_index(: index / 1, SHIFT_MASK))
+
+// Every bit but the sign bit, which read as signed is the largest value.
+const MAX: offset = icall index_to_offset(icall shr_index(icall bitnot_index(: index / 0), : u32 / 1))
 
 fun min_value(): offset
-  ret (: offset / -2147483648)
+  ret MIN
 end fun
 
 fun max_value(): offset
-  ret (: offset / 2147483647)
+  ret MAX
 end fun
 
 fun bits(): u32
-  ret : u32 / 32
+  ret BITS
 end fun
 
 // Sign functions.
@@ -105,7 +123,7 @@ end fun
 fun count_zeros(self: offset): u32
   let u = icall offset_to_index(self)
   let ones = icall popcount_index(u)
-  ret icall sub_wrapping_u32(: u32 / 32, ones)
+  ret icall sub_wrapping_u32(BITS, ones)
 end fun
 
 fun leading_zeros(self: offset): u32
@@ -259,9 +277,9 @@ end fun
 
 // Shifts.
 
-// Checked left shift. Returns none if n >= 32.
+// Checked left shift. Returns none if n >= bits().
 fun shift_left(self: offset, n: u32): ?offset
-  if n >= (: u32 / 32)
+  if n >= BITS
     ret none
   else
     let u = icall offset_to_index(self)
@@ -270,9 +288,9 @@ fun shift_left(self: offset, n: u32): ?offset
   end if
 end fun
 
-// Checked arithmetic right shift. Returns none if n >= 32.
+// Checked arithmetic right shift. Returns none if n >= bits().
 fun shift_right(self: offset, n: u32): ?offset
-  if n >= (: u32 / 32)
+  if n >= BITS
     ret none
   else
     ret some icall sshr_offset(self, n)
@@ -280,7 +298,7 @@ fun shift_right(self: offset, n: u32): ?offset
 end fun
 
 fun shift_left_wrapping(self: offset, n: u32): offset
-  let n_mod = icall bitand_u32(n, : u32 / 31)
+  let n_mod = icall bitand_u32(n, SHIFT_MASK)
   if shift_left(self, n_mod) |value|
     ret value
   else
@@ -289,7 +307,7 @@ fun shift_left_wrapping(self: offset, n: u32): offset
 end fun
 
 fun shift_right_wrapping(self: offset, n: u32): offset
-  let n_mod = icall bitand_u32(n, : u32 / 31)
+  let n_mod = icall bitand_u32(n, SHIFT_MASK)
   if shift_right(self, n_mod) |value|
     ret value
   else
@@ -298,7 +316,7 @@ fun shift_right_wrapping(self: offset, n: u32): offset
 end fun
 
 fun shift_left_saturating(self: offset, n: u32): offset
-  if n >= (: u32 / 32)
+  if n >= BITS
     if is_negative(self)
       ret min_value()
     else
@@ -320,7 +338,7 @@ end fun
 fun shift_right_saturating(self: offset, n: u32): offset
   let zero = (: offset / 0)
   let neg_one = (: offset / -1)
-  if n >= (: u32 / 32)
+  if n >= BITS
     // Arithmetic shift fills with sign bit.
     if is_negative(self)
       ret neg_one
@@ -343,20 +361,20 @@ end fun
 // Rotations (delegate to index).
 
 fun rotate_left(self: offset, n: u32): offset
-  let n_mod = icall bitand_u32(n, : u32 / 31)
+  let n_mod = icall bitand_u32(n, SHIFT_MASK)
   let u = icall offset_to_index(self)
   let left_part = icall shl_index(u, n_mod)
-  let right_amount = icall sub_wrapping_u32(: u32 / 32, n_mod)
+  let right_amount = icall sub_wrapping_u32(BITS, n_mod)
   let right_part = icall shr_index(u, right_amount)
   let result = icall bitor_index(left_part, right_part)
   ret icall index_to_offset(result)
 end fun
 
 fun rotate_right(self: offset, n: u32): offset
-  let n_mod = icall bitand_u32(n, : u32 / 31)
+  let n_mod = icall bitand_u32(n, SHIFT_MASK)
   let u = icall offset_to_index(self)
   let right_part = icall shr_index(u, n_mod)
-  let left_amount = icall sub_wrapping_u32(: u32 / 32, n_mod)
+  let left_amount = icall sub_wrapping_u32(BITS, n_mod)
   let left_part = icall shl_index(u, left_amount)
   let result = icall bitor_index(left_part, right_part)
   ret icall index_to_offset(result)

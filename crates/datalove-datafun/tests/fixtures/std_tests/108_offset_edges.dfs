@@ -1,7 +1,9 @@
 require module sys/std/offset
+require module sys/std/option
 
 import offset.min_value
 import offset.max_value
+import offset.bits
 import offset.neg_checked
 import offset.div_checked
 import offset.rem_checked
@@ -12,27 +14,42 @@ import offset.midpoint
 import offset.add_checked
 import offset.add_saturating
 import offset.add_wrapping
+import option.is_none
+import option.unwrap_or
 
-// The edges of `offset`, which had no test on any backend before this. It is a
-// thirty-two bit signed integer, so each of these agrees with the `i32` of the
-// same name.
+// The edges of `offset`, which had no test on any backend before this.
+//
+// An `offset` is as wide as an `index`, and the build decides that: thirty-two
+// bits by default, sixty-four under index-64. So each line asks about the edge
+// rather than about a number, and every answer below is the same at either
+// width.
 
-// Overflow at the top, under all three policies.
-let over = (add_checked(max_value(), : offset / 1),
-            add_saturating(max_value(), : offset / 1),
-            add_wrapping(max_value(), : offset / 1))
+let bottom = min_value()
+let top = max_value()
+let last_bit = icall sub_wrapping_u32(bits(), : u32 / 1)
+
+// Overflow at the top, under all three policies. Wrapping past the largest
+// value lands on the most negative one.
+let over = (is_none(add_checked(top, : offset / 1)),
+            add_saturating(top, : offset / 1) == top,
+            add_wrapping(top, : offset / 1) == bottom)
 
 // The two signed overflows: negating the most negative value, and dividing it
-// by -1. Both land on a value the type cannot hold.
-let signed_edges = (neg_checked(min_value()),
-                    div_checked(min_value(), : offset / -1),
-                    rem_checked(min_value(), : offset / -1))
+// by -1. Both land on a value the type cannot hold. The remainder there is
+// zero rather than an overflow.
+let signed_edges = (is_none(neg_checked(bottom)),
+                    is_none(div_checked(bottom, : offset / -1)),
+                    unwrap_or(rem_checked(bottom, : offset / -1), : offset / -1))
 
-// An arithmetic shift keeps the sign, so a negative stays negative.
-let signed_shift = (shift_right(: offset / -8, : u32 / 2), shift_right(: offset / -1, : u32 / 31))
+// An arithmetic shift keeps the sign, so a negative stays negative and all
+// ones stays all ones however far it goes.
+let signed_shift = (unwrap_or(shift_right(: offset / -8, : u32 / 2), : offset / 0),
+                    unwrap_or(shift_right(: offset / -1, last_bit), : offset / 0))
 
-let signed_spreads = (abs_diff(: offset / -3, : offset / 9), midpoint(: offset / -7, : offset / -3))
+let signed_spreads = (abs_diff(: offset / -3, : offset / 9),
+                      midpoint(: offset / -7, : offset / -3))
 
-let recast = cast_unsigned(: offset / -1)
+// -1 is every bit set, which read as unsigned is every bit set.
+let recast = cast_unsigned(: offset / -1) == icall bitnot_index(: index / 0)
 
 let output = (over, signed_edges, signed_shift, signed_spreads, recast)

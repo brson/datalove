@@ -1,18 +1,23 @@
 // The index arithmetic that `u32` had and `index` did not: the powers, and the
 // six that take a signed displacement.
 //
-// `index` is a 32-bit unsigned integer, so every one of these agrees with the
-// `u32` of the same name value for value, and the fixture is written to be
-// diffable against one built by substituting the types. What differs is the
-// signed counterpart -- `offset` where `u32` takes `i32` -- and the exponent,
+// `index` is the unsigned integer of whatever width the build chose -- thirty
+// two bits by default, sixty-four under index-64 -- and behaves exactly like
+// the `u32` of the same name at that width. What differs from `u32` is the
+// signed counterpart, `offset` where `u32` takes `i32`, and the exponent,
 // which is a `u32` because `index` takes a `u32` for every count-like
 // parameter it has, shift amounts and rotate amounts and bit counts alike.
 //
-// The interesting cases are the edges: a power that overflows exactly at 2^32,
-// a displacement that would take the value below zero, and one that would take
-// it past max_value, each under all three of checked, saturating and wrapping.
+// The interesting cases are the edges: a power that overflows exactly at
+// 2^bits, a displacement that would take the value below zero, and one that
+// would take it past max_value, each under all three of checked, saturating
+// and wrapping. None of those can be written as a literal without fixing a
+// width, so each is asked for relative to `bits()` and `max_value()` and every
+// answer here is the same at either width.
 
 require module sys/std/index
+require module sys/std/option
+
 import index.next_power_of_two
 import index.pow_checked
 import index.pow_saturating
@@ -23,30 +28,45 @@ import index.add_saturating_signed
 import index.sub_saturating_signed
 import index.add_wrapping_signed
 import index.sub_wrapping_signed
+import index.cast_signed
 import index.max_value
+import index.bits
+import option.is_none
 
+let top = max_value()
+let width = bits()
+
+// Rounding up to a power of two, and the one case that has none: the largest
+// value rounds up to 2^bits, which does not fit.
 let npot = (next_power_of_two(: index / 0), next_power_of_two(: index / 1),
             next_power_of_two(: index / 5), next_power_of_two(: index / 1024),
-            next_power_of_two(: index / 2147483649))
+            is_none(next_power_of_two(top)))
+
+// 2^31 fits at either width; 2^bits does not, and the three policies part
+// ways over it.
 let pc = (pow_checked(: index / 2, : u32 / 10), pow_checked(: index / 2, : u32 / 31),
-          pow_checked(: index / 2, : u32 / 32), pow_checked(: index / 3, : u32 / 0))
-let ps = (pow_saturating(: index / 2, : u32 / 10), pow_saturating(: index / 2, : u32 / 40))
-let pw = (pow_wrapping(: index / 2, : u32 / 10), pow_wrapping(: index / 2, : u32 / 32))
+          is_none(pow_checked(: index / 2, width)), pow_checked(: index / 3, : u32 / 0))
+let ps = (pow_saturating(: index / 2, : u32 / 10), pow_saturating(: index / 2, width) == top)
+let pw = (pow_wrapping(: index / 2, : u32 / 10), pow_wrapping(: index / 2, width))
 
 let acs = (add_checked_signed(: index / 10, : offset / 5),
            add_checked_signed(: index / 10, : offset / -5),
            add_checked_signed(: index / 3, : offset / -5),
-           add_checked_signed(max_value(), : offset / 1))
+           is_none(add_checked_signed(top, : offset / 1)))
 let scs = (sub_checked_signed(: index / 10, : offset / 5),
            sub_checked_signed(: index / 10, : offset / -5),
            sub_checked_signed(: index / 3, : offset / 5))
 let ass = (add_saturating_signed(: index / 10, : offset / -50),
-           add_saturating_signed(max_value(), : offset / 1))
+           add_saturating_signed(top, : offset / 1) == top)
 let sss = (sub_saturating_signed(: index / 10, : offset / 50),
-           sub_saturating_signed(max_value(), : offset / -1))
-let aws = (add_wrapping_signed(: index / 10, : offset / -50),
-           add_wrapping_signed(max_value(), : offset / 1))
-let sws = (sub_wrapping_signed(: index / 10, : offset / 50),
-           sub_wrapping_signed(max_value(), : offset / -1))
+           sub_saturating_signed(top, : offset / -1) == top)
+
+// Wrapping below zero lands near the top, which is a different number at each
+// width but the same bit pattern: read back as signed it is the displacement
+// that was asked for.
+let aws = (cast_signed(add_wrapping_signed(: index / 10, : offset / -50)),
+           add_wrapping_signed(top, : offset / 1))
+let sws = (cast_signed(sub_wrapping_signed(: index / 10, : offset / 50)),
+           sub_wrapping_signed(top, : offset / -1))
 
 let output = (npot, pc, ps, pw, acs, scs, ass, sss, aws, sws)

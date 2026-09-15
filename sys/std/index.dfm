@@ -1,17 +1,30 @@
 // Constants.
-// Note: These values are for the default 32-bit index configuration.
-// With the index-64 feature, index is 64-bit but these constants remain 32-bit values.
+//
+// How wide an `index` is, is decided by the build rather than by this source:
+// thirty-two bits by default and sixty-four under the index-64 feature. So the
+// width is asked for rather than written down. `index_bits` answers it, the
+// rest follows from it, and the whole lot is evaluated once at compile time
+// and reaches a backend as a literal -- these cost nothing at run time.
+
+const BITS: u32 = icall index_bits()
+
+// One less than the width, which is what a shift amount is taken modulo and
+// what the highest bit is indexed by.
+const SHIFT_MASK: u32 = icall sub_wrapping_u32(BITS, : u32 / 1)
+
+// Every bit set, which for an unsigned type is the largest value it holds.
+const MAX: index = icall bitnot_index(: index / 0)
 
 fun min_value(): index
   ret (: index / 0)
 end fun
 
 fun max_value(): index
-  ret (: index / 4294967295)
+  ret MAX
 end fun
 
 fun bits(): u32
-  ret : u32 / 32
+  ret BITS
 end fun
 
 // Bitwise primitives.
@@ -426,7 +439,7 @@ fun shift_right_saturating(self: index, n: u32): index
 end fun
 
 fun shift_left_wrapping(self: index, n: u32): index
-  let n_mod = icall bitand_u32(n, : u32 / 31)
+  let n_mod = icall bitand_u32(n, SHIFT_MASK)
   if shift_left(self, n_mod) |value|
     ret value
   else
@@ -435,7 +448,7 @@ fun shift_left_wrapping(self: index, n: u32): index
 end fun
 
 fun shift_right_wrapping(self: index, n: u32): index
-  let n_mod = icall bitand_u32(n, : u32 / 31)
+  let n_mod = icall bitand_u32(n, SHIFT_MASK)
   if shift_right(self, n_mod) |value|
     ret value
   else
@@ -446,9 +459,9 @@ end fun
 // Rotates.
 
 fun rotate_left(self: index, n: u32): index
-  let n_mod = icall bitand_u32(n, : u32 / 31)
+  let n_mod = icall bitand_u32(n, SHIFT_MASK)
   if shift_left(self, n_mod) |left_part|
-    let right_amount = icall sub_wrapping_u32(: u32 / 32, n_mod)
+    let right_amount = icall sub_wrapping_u32(BITS, n_mod)
     if shift_right(self, right_amount) |right_part|
       ret bitor(left_part, right_part)
     else
@@ -460,9 +473,9 @@ fun rotate_left(self: index, n: u32): index
 end fun
 
 fun rotate_right(self: index, n: u32): index
-  let n_mod = icall bitand_u32(n, : u32 / 31)
+  let n_mod = icall bitand_u32(n, SHIFT_MASK)
   if shift_right(self, n_mod) |right_part|
-    let left_amount = icall sub_wrapping_u32(: u32 / 32, n_mod)
+    let left_amount = icall sub_wrapping_u32(BITS, n_mod)
     if shift_left(self, left_amount) |left_part|
       ret bitor(left_part, right_part)
     else

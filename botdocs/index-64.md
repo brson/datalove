@@ -150,6 +150,41 @@ If `.out.expected.64` exists and index-64 is enabled, it takes precedence.
 3. **Collection capacities** - Internal representation sizes differ
 4. **Arithmetic wrapping** - Overflow points differ
 
+A fixture that exercises those edges does not have to have two expected files.
+Asking for the edge rather than naming it -- `bits()` instead of `32`,
+`max_value()` instead of `4294967295`, and comparing against an extreme rather
+than printing it -- gives an answer that is the same at either width.
+`106_index_math_parity`, `107_index_edges` and `108_offset_edges` are written
+that way and share one expected file. Reach for `.out.expected.64` only when
+the difference is the point of the test.
+
+## Standard Library
+
+`sys/std/index.dfm` and `sys/std/offset.dfm` do not write their width down.
+They ask for it:
+
+```datalove
+const BITS: u32 = icall index_bits()
+const SHIFT_MASK: u32 = icall sub_wrapping_u32(BITS, : u32 / 1)
+const MAX: index = icall bitnot_index(: index / 0)
+```
+
+`index_bits` is a nullary intrinsic that reports the configured width, and the
+rest follows from it: every bit set is the largest unsigned value, the sign bit
+alone is the most negative signed one. The `offset` edges are derived the same
+way and reinterpreted with `index_to_offset`, because the most negative value
+has no literal -- its magnitude is one past the top of the range.
+
+These are `const` bindings, so compile-time evaluation folds them to literals
+before any backend sees them; the intrinsic runs once during compilation and
+nothing is left at run time. `max_value()`, `bits()` and the rest are ordinary
+functions returning those consts, so the module's interface is unchanged.
+
+Before this, both modules hardcoded 32-bit constants and carried a note saying
+so. Under `index-64` that made `max_value()` and `bits()` disagree with the
+arithmetic around them, which was wrong in a way the tests caught only because
+`ilog2` returned nonsense.
+
 Example diagnostic constants in `datalove-datalit/src/tycheck/types.rs`:
 
 ```rust

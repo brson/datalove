@@ -549,6 +549,14 @@ Available intrinsics include bitwise operations (`bitnot_u32`, `bitand_u32`,
 `sub_wrapping_u32`, `mul_wrapping_u32`), and type reinterpretation
 (`u32_to_i32`, `i32_to_u32`).
 
+Two intrinsics answer a question about the build rather than compute anything:
+`is_big_endian(): bool` and `index_bits(): u32`, the latter being the width of
+`index` and of `offset`. Both take no arguments, and neither can be written as
+a literal because the answer is not fixed by the source. Every intrinsic,
+these included, runs under compile-time evaluation, so a `const` bound to one
+is folded to a literal before any backend sees it -- which is how `sys/std`'s
+`index` and `offset` modules state their own edges without naming a width.
+
 ### 6.8 Adapt Operator
 
 The postfix `@` operator performs explicit clone and/or widening conversions.

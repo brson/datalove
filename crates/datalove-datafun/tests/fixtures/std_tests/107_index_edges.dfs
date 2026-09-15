@@ -1,6 +1,8 @@
 require module sys/std/index
+require module sys/std/option
 
 import index.max_value
+import index.bits
 import index.add_checked
 import index.sub_checked
 import index.add_saturating
@@ -16,40 +18,58 @@ import index.ilog2
 import index.cast_signed
 import index.midpoint
 import index.abs_diff
+import option.is_none
+import option.unwrap_or
 
-// The edges of `index`, which had no test on any backend before this. It is a
-// thirty-two bit unsigned integer, so each of these agrees with the `u32` of
-// the same name.
+// The edges of `index`, which had no test on any backend before this.
+//
+// How wide an `index` is, is the build's to decide: thirty-two bits by
+// default and sixty-four under the index-64 feature. So each line below asks
+// about the edge rather than about a particular number -- where the answer
+// would be an extreme it is compared against the extreme instead of printed,
+// and where a shift amount would be a literal it is taken from `bits()`. Every
+// answer here is the same at either width, which is why there is one expected
+// file rather than one per configuration.
 //
 // These are the cases where a backend has gone its own way before: a narrow
 // type reaching a division it did not implement, and a shift at exactly the
 // bit width.
 
+let top = max_value()
+let width = bits()
+let last_bit = icall sub_wrapping_u32(width, : u32 / 1)
+
 // Overflow at the top and underflow at the bottom, under all three policies.
-let over = (add_checked(max_value(), : index / 1),
-            add_saturating(max_value(), : index / 1),
-            add_wrapping(max_value(), : index / 1))
-let under = (sub_checked(: index / 0, : index / 1),
+// Saturation lands on the edge it ran into, and wrapping crosses it.
+let over = (is_none(add_checked(top, : index / 1)),
+            add_saturating(top, : index / 1) == top,
+            add_wrapping(top, : index / 1))
+let under = (is_none(sub_checked(: index / 0, : index / 1)),
              sub_saturating(: index / 0, : index / 1),
-             sub_wrapping(: index / 0, : index / 1))
+             sub_wrapping(: index / 0, : index / 1) == top)
 
 // Division and remainder by zero have no answer rather than a fault.
-let by_zero = (div_checked(: index / 7, : index / 0),
-               rem_checked(: index / 7, : index / 0))
+let by_zero = (is_none(div_checked(: index / 7, : index / 0)),
+               is_none(rem_checked(: index / 7, : index / 0)))
 
-// A shift is refused at the bit width, where wrapping takes it modulo instead.
-let shifts = (shift_left(: index / 1, : u32 / 31),
-              shift_left(: index / 1, : u32 / 32),
-              shift_left_wrapping(: index / 1, : u32 / 32),
-              rotate_left(: index / 1, : u32 / 32))
+// A shift is refused at the bit width, where wrapping takes it modulo instead
+// and so shifts by nothing. One shifted to the top bit logs as that bit.
+let top_bit = unwrap_or(shift_left(: index / 1, last_bit), : index / 0)
+let shifts = (unwrap_or(ilog2(top_bit), : u32 / 0) == last_bit,
+              is_none(shift_left(: index / 1, width)),
+              shift_left_wrapping(: index / 1, width),
+              rotate_left(: index / 1, width))
 
-// Only zero has no logarithm.
-let logs = (ilog2(: index / 0), ilog2(: index / 1), ilog2(max_value()))
+// Only zero has no logarithm, and the largest value logs as the highest bit.
+let logs = (is_none(ilog2(: index / 0)),
+            unwrap_or(ilog2(: index / 1), : u32 / 0),
+            unwrap_or(ilog2(top), : u32 / 0) == last_bit)
 
-// Reinterpreting the bits, not converting the value.
-let recast = (cast_signed(max_value()), cast_signed(: index / 0))
+// Reinterpreting the bits, not converting the value. Every bit set reads as
+// -1 at any width, since that is what all-ones means in two's complement.
+let recast = (cast_signed(top), cast_signed(: index / 0))
 
 // Midpoint does not overflow on the way, and abs_diff has no sign to lose.
-let spreads = (midpoint(max_value(), max_value()), abs_diff(: index / 3, : index / 9))
+let spreads = (midpoint(top, top) == top, abs_diff(: index / 3, : index / 9))
 
 let output = (over, under, by_zero, shifts, logs, recast, spreads)
