@@ -317,6 +317,18 @@ impl<'db> DiagnosticBuilder<'db> {
         self
     }
 
+    /// Name the option nearest a word that missed a closed set.
+    ///
+    /// A help rather than a note, being what would fix it, and silent when
+    /// nothing is near enough -- see [`crate::suggest::closest`] for what near
+    /// enough means.
+    pub fn did_you_mean<'a>(self, got: &str, options: impl IntoIterator<Item = &'a str>) -> Self {
+        match crate::suggest::closest(got, options) {
+            Some(near) => self.help(&format!("did you mean `{near}`?")),
+            None => self,
+        }
+    }
+
     /// Add a suggestion with optional replacement text.
     pub fn suggestion(
         mut self,

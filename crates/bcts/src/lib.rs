@@ -19,6 +19,7 @@ pub mod module_graph;
 
 pub mod diagnostic;
 pub mod render;
+pub mod suggest;
 pub mod parser_util;
 
 /// The database handle every query here takes.

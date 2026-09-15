@@ -11,7 +11,7 @@ use rmx::std::collections::HashMap;
 use rmx::std::ops::Range;
 use rmx::std::path::Path;
 
-use ariadne::{Cache, Color, ColorGenerator, Label, Report, ReportKind, Source};
+use ariadne::{Cache, CharSet, Color, ColorGenerator, Config, Label, Report, ReportKind, Source};
 
 use crate::diagnostic::{Diagnostic, LabelStyle, Severity};
 
@@ -44,7 +44,25 @@ impl Renderer {
         file_path: &Path,
         cwd: &Path,
     ) {
-        render_one(db, diag, file_path, cwd, &mut self.colors);
+        render_one(db, diag, file_path, cwd, &mut self.colors, Sink::Stderr);
+    }
+
+    /// The same diagnostic as text, for a caller that is not a terminal.
+    ///
+    /// Plain and ASCII: no escape sequences and no box-drawing, because what
+    /// asks for a string is a test asserting on it, a log, or a window drawing
+    /// the text itself with a font that need not have `\u{256d}` in it. What
+    /// wants colour has a terminal, and has [`Renderer::diagnostic`].
+    pub fn to_string<'db>(
+        &mut self,
+        db: &'db dyn crate::Db,
+        diag: &Diagnostic<'db>,
+        file_path: &Path,
+        cwd: &Path,
+    ) -> String {
+        let mut out = String::new();
+        render_one(db, diag, file_path, cwd, &mut self.colors, Sink::Text(&mut out));
+        out
     }
 
     /// Print one diagnostic whose labels may point into several sources.
@@ -74,6 +92,23 @@ pub fn render_diagnostics<'db>(
     for diagnostic in diagnostics {
         renderer.diagnostic(db, &diagnostic, file_path, cwd);
     }
+}
+
+/// The same run as one string, for a caller that is not a terminal.
+///
+/// See [`Renderer::to_string`] for why it is plain.
+pub fn render_diagnostics_to_string<'db>(
+    db: &'db dyn crate::Db,
+    diagnostics: impl IntoIterator<Item = Diagnostic<'db>>,
+    file_path: &Path,
+    cwd: &Path,
+) -> String {
+    let mut renderer = Renderer::new();
+    let mut out = String::new();
+    for diagnostic in diagnostics {
+        out.push_str(&renderer.to_string(db, &diagnostic, file_path, cwd));
+    }
+    out
 }
 
 /// Print diagnostics whose labels may point into more than one source.
@@ -115,12 +150,45 @@ fn label_color(style: LabelStyle, colors: &mut ColorGenerator) -> Color {
     }
 }
 
+/// Where a rendered diagnostic goes.
+///
+/// A terminal gets colour and the box-drawing frame; a string gets neither,
+/// since the things that want a string are tests, logs and a window that draws
+/// the text itself.
+enum Sink<'a> {
+    Stderr,
+    Text(&'a mut String),
+}
+
+impl Sink<'_> {
+    fn config(&self) -> Config {
+        match self {
+            Sink::Stderr => Config::default(),
+            Sink::Text(_) => Config::default().with_color(false).with_char_set(CharSet::Ascii),
+        }
+    }
+
+    fn emit<S: ariadne::Span, C: Cache<S::SourceId>>(self, report: Report<'_, S>, cache: C) {
+        match self {
+            Sink::Stderr => {
+                let _ = report.eprint(cache);
+            }
+            Sink::Text(out) => {
+                let mut bytes = Vec::new();
+                let _ = report.write(cache, &mut bytes);
+                out.push_str(&String::from_utf8_lossy(&bytes));
+            }
+        }
+    }
+}
+
 fn render_one<'db>(
     db: &'db dyn crate::Db,
     diag: &Diagnostic<'db>,
     file_path: &Path,
     cwd: &Path,
     colors: &mut ColorGenerator,
+    sink: Sink<'_>,
 ) {
     let file_name = display_path(file_path, cwd);
 
@@ -129,6 +197,7 @@ fn render_one<'db>(
     let offset = diag.labels.first().map(|l| l.span.start).unwrap_or(0);
 
     let mut builder = Report::build(report_kind(diag.severity), &file_name, offset)
+        .with_config(sink.config())
         .with_message(diag.message.as_str(db));
 
     if let Some(code) = &diag.code {
@@ -154,7 +223,7 @@ fn render_one<'db>(
     // Every label is in the one source here, so the first of them says which.
     let source_text = diag.labels.first().map(|l| l.text.as_str(db)).unwrap_or("");
 
-    let _ = builder.finish().eprint((&file_name, Source::from(source_text)));
+    sink.emit(builder.finish(), (&file_name, Source::from(source_text)));
 }
 
 fn render_one_multi_source<'db>(
@@ -271,4 +340,80 @@ pub fn insertion_suggestion(
     let marker_line = fmt!("{marker_prefix}{:col$}{plus_markers}", "", col = col);
 
     Some(fmt!("{code_line}\n{marker_line}"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::diagnostic::DiagnosticBuilder;
+    use crate::input::Source as Input;
+    use crate::text::TextSpan;
+
+    /// Render a diagnostic over `src`, with a primary label and a secondary.
+    fn rendered(src: &str, primary: Range<usize>, secondary: Option<Range<usize>>) -> String {
+        let ref db = crate::Database::default();
+        let source = Input::new(db, src.S());
+        let text = crate::source_map::basic_source_map(db, source).text(db);
+
+        let mut b = DiagnosticBuilder::warning(db, "`w` is a length, and this adds an angle to one")
+            .primary_label(TextSpan::new(text, primary), "an angle")
+            .note("a length and an angle are not the same quantity")
+            .did_you_mean("widt", ["width", "height"]);
+        if let Some(s) = secondary {
+            b = b.secondary_label(TextSpan::new(text, s), "a length");
+        }
+        let mut r = Renderer::new();
+        r.to_string(db, &b.build(), Path::new("panel.fui"), Path::new(""))
+    }
+
+    #[test]
+    fn a_rendered_string_is_plain_ascii() {
+        let src = "stack { w = 10px + 5deg }\n";
+        assert_eq!(&src[19..23], "5deg");
+        assert_eq!(&src[12..16], "10px");
+        let out = rendered(src, 19..23, Some(12..16));
+
+        // No escape sequences: what asks for a string is a test, a log, or a
+        // window drawing the glyphs itself.
+        assert!(!out.contains('\u{1b}'), "{out:?}");
+        // And no box-drawing, for the same reason.
+        assert!(out.is_ascii(), "{out:?}");
+
+        // The parts a caller depends on.
+        assert!(out.contains("panel.fui"), "{out}");
+        assert!(out.contains("is a length, and this adds an angle to one"), "{out}");
+        assert!(out.contains("an angle"), "{out}");
+        assert!(out.contains("a length"), "{out}");
+        assert!(out.contains("a length and an angle are not the same quantity"), "{out}");
+        assert!(out.contains("did you mean `width`?"), "{out}");
+    }
+
+    #[test]
+    fn the_frame_names_the_line_and_column_of_the_primary_label() {
+        let src = "stack {\n    w = 10px + 5deg\n}\n";
+        // `5deg` begins at byte 23, which is line 2, column 16.
+        assert_eq!(&src[23..27], "5deg");
+        let out = rendered(src, 23..27, None);
+        assert!(out.contains("panel.fui:2:16"), "{out}");
+    }
+
+    #[test]
+    fn a_run_renders_every_diagnostic_it_was_given() {
+        let ref db = crate::Database::default();
+        let src = "a\nb\nc\n";
+        let source = Input::new(db, src.S());
+        let text = crate::source_map::basic_source_map(db, source).text(db);
+        let diags: Vec<_> = (0..3)
+            .map(|i| {
+                DiagnosticBuilder::error(db, &format!("problem {i}"))
+                    .primary_label(TextSpan::new(text, i * 2..i * 2 + 1), "here")
+                    .build()
+            })
+            .collect();
+
+        let out = render_diagnostics_to_string(db, diags, Path::new("t.fui"), Path::new(""));
+        for i in 0..3 {
+            assert!(out.contains(&format!("problem {i}")), "{out}");
+        }
+    }
 }
