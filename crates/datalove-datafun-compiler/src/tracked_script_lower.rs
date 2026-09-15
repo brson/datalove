@@ -271,6 +271,9 @@ fn find_const_refs_inner<'db>(
         ExprFunKind::CloneCoerce(c) => {
             find_const_refs_inner(db, c.operand, const_names, name_to_stmt, refs);
         }
+        ExprFunKind::Hinted(h) => {
+            find_const_refs_inner(db, h.inner, const_names, name_to_stmt, refs);
+        }
         ExprFunKind::TryOption(t) => {
             find_const_refs_inner(db, t.operand, const_names, name_to_stmt, refs);
         }
