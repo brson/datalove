@@ -249,6 +249,13 @@ fn error_to_json(error: &datalove_datafun_tycheck::TypeError) -> rmx::serde_json
                 "reason": reason
             })
         }
+        TypeError::ComptimeParamOnGeneric { func_name, param_name } => {
+            json!({
+                "kind": "ComptimeParamOnGeneric",
+                "func_name": func_name,
+                "param_name": param_name
+            })
+        }
         TypeError::ArgumentModeMismatch { param_idx, expected, found } => {
             json!({
                 "kind": "ArgumentModeMismatch",

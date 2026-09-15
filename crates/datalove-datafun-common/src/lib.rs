@@ -427,10 +427,15 @@ pub enum TypeError {
         expected: String,
         found: String,
     },
-    /// Comptime argument must be a const binding name.
+    /// Comptime argument must be a const binding name or a literal.
     ComptimeArgNotConstBinding {
         param_idx: usize,
         reason: String,
+    },
+    /// A function has both const parameters and type parameters.
+    ComptimeParamOnGeneric {
+        func_name: String,
+        param_name: String,
     },
 }
 

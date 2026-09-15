@@ -227,6 +227,13 @@ called into does not have to change. A call whose const argument did not survive
 constant, which is every one of them under `skip_const_inlining`, keeps its `ComptimeCall`
 and runs the original.
 
+**What a const argument may be.** The name of a `const` binding, or a scalar literal.
+Not an expression, even one whose parts are all known: it lowers to the instructions that
+compute it rather than to a `Const`, and there would be nothing for the plan to read.
+A function with both const parameters and type parameters is refused outright
+(`ComptimeParamOnGeneric`), because lowering takes the comptime branch before a call's
+type arguments are computed and the copy would lose its descriptors.
+
 **Where instantiations come from.** They are read out of the IR. The const argument at a
 call site is already an operand defined by a `Const` instruction, so the values the
 rewrite looks for are the values the plan was built from, and the two cannot disagree.

@@ -166,6 +166,21 @@ pub fn check_statement<'db>(
             let param_types = func_type.param_types(db);
             let ret_ty = func_type.return_type(db);
 
+            // Const parameters and type parameters do not combine. Lowering
+            // takes the comptime branch before a call's type arguments are
+            // computed, and specialization emits none, so a function that had
+            // both would lose the descriptors its type parameters need and
+            // read its values at the wrong type. Refused here rather than left
+            // to go wrong quietly.
+            if !stmt.type_params(db).is_empty() {
+                for param in params.iter().filter(|p| p.is_comptime) {
+                    ctx.add_error(TypeError::ComptimeParamOnGeneric {
+                        func_name: name.as_str(db).to_string(),
+                        param_name: param.name.as_str(db).to_string(),
+                    });
+                }
+            }
+
             // Create new context for function body with parameters in scope.
             let saved_variables = ctx.variables.C();
             // A type parameter is in scope in the body as well as the

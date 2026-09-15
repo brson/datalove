@@ -945,11 +945,12 @@ fun repeat(const n: i32, s: string): string
 end fun
 
 const COUNT = 3
-let x = repeat(COUNT, "ab")  // COUNT is a const binding
+let x = repeat(COUNT, "ab")  // a const binding
+let y = repeat(3, "ab")      // or a literal
 ```
 
 **Semantics:**
-- The argument must be a const binding name (not a literal or expression)
+- The argument must be a const binding name or a scalar literal
 - The compiler specializes the function for each unique const argument value
 - Within the function body, the const parameter is available as a compile-time
   constant, enabling optimizations like loop unrolling and dead code elimination
@@ -957,11 +958,15 @@ let x = repeat(COUNT, "ab")  // COUNT is a const binding
 **Restrictions:**
 - Const parameters must have primitive types or simple aggregates
 - Cannot combine `const` with `out` or `mut` modes
-- Arguments must be const binding names (e.g., `repeat(N, s)` not `repeat(3, s)`)
+- Cannot combine const parameters with type parameters
+- The argument may not be an expression, even one whose parts are all known:
+  `repeat(2 + 1, s)` is refused where `repeat(3, s)` is accepted. Specialization
+  reads the value out of the lowered IR, where a binding and a literal are each
+  a single constant and an expression is the instructions that compute it
 
-**Implementation:** The compiler uses union-branch specialization - a single
-function with dispatch over a tag of known instantiations. See
-`const-param-specialization.md` for design details.
+**Implementation:** The compiler monomorphizes, keeping the original function
+and adding a copy per instantiation beside it. See
+[Const Parameter Implementation](const-param-impl-plan.md).
 
 ### 8.5 Generic Functions
 

@@ -11,12 +11,17 @@
         {
           "kind": "ComptimeArgNotConstBinding",
           "param_idx": 0,
-          "reason": "comptime argument must be a const binding name"
+          "reason": "comptime argument must be a const binding name or a literal"
         },
         {
           "kind": "ComptimeArgNotConstBinding",
           "param_idx": 0,
           "reason": "'factor' is not a const binding"
+        },
+        {
+          "func_name": "bad_generic",
+          "kind": "ComptimeParamOnGeneric",
+          "param_name": "n"
         }
       ],
       "functions": [
@@ -36,7 +41,14 @@
           "return_type": "int"
         },
         {
-          "name": "bad_literal",
+          "name": "good_literal",
+          "params": [
+            "int"
+          ],
+          "return_type": "int"
+        },
+        {
+          "name": "bad_expression",
           "params": [
             "int"
           ],
@@ -49,6 +61,14 @@
             "int"
           ],
           "return_type": "int"
+        },
+        {
+          "name": "bad_generic",
+          "params": [
+            "int",
+            "T"
+          ],
+          "return_type": "T"
         }
       ]
     }

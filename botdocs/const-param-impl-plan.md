@@ -26,9 +26,14 @@ and again when the replacement was built. The union-branch record is kept in an 
 
 **Front end.** `FunParam::is_comptime` carries the `const` modifier from the parser.
 `TypeFunction::param_comptime` carries it through the type system. `synthesize.rs:1202`
-enforces the const-binding-only restriction: a comptime argument must be the name of a
-`const` binding, not a literal, a `let`, or a parameter. The three refusals are covered by
-`tycheck_world/05_comptime_arg_errors.world`.
+enforces what a comptime argument may be: the name of a `const` binding, or a scalar
+literal. Not a `let`, not a parameter, and not an expression -- not even one whose parts
+are all known, such as `2 + 3`. The test is on the shape of the expression rather than on
+whether it could in principle be evaluated, because specialization reads the value back
+out of the lowered IR and needs an operand a single `Const` defines. An expression lowers
+to the instructions that compute it, and a comptime call that cannot be placed keeps
+running the original function, so accepting one would mean the `const` quietly did
+nothing. Covered by `tycheck_world/05_comptime_arg_errors.world`.
 
 **Call sites.** `lower/expr.rs:653` emits `Instruction::ComptimeCall` instead of `Call`
 when the callee has comptime parameters, carrying the original arguments and the comptime
@@ -139,8 +144,8 @@ The names were carried by `ComptimeCallSiteRegistry`, which nothing else read, s
 with them, along with `ComptimeCallSite` and the fields holding both on
 `SingleModuleTypecheckResult` and `ModuleGraphTypecheckResult`. Those are salsa-tracked,
 where an unread field is not free: it takes part in the equality that decides whether
-typechecking can be reused. The typechecker still enforces the const-binding-only
-restriction; it just records nothing. See `salsa-patterns.md`.
+typechecking can be reused. The typechecker still enforces what a comptime argument may
+be; it just records nothing. See `salsa-patterns.md`.
 
 **A function called from both a module and a script miscompiled.** The module call site
 specialized the callee; the script call site was never rewritten, so it passed its const
@@ -165,6 +170,11 @@ passing because both sides fail identically.
 No `comptime_call` survives in any fixture's expected IR. Every call site either reaches a
 copy or is one of those three.
 
+`026_literal_comptime_args` covers literal arguments on both sides, including a
+fixed-width one, where a literal that needed widening would lower to something other than
+a `Const` and quietly not specialize. It also covers two call sites naming the same
+instantiation, which reach one copy.
+
 `024_module_side_positions` covers the parameter renumbering: a comptime parameter last,
 two of them, and two interleaved among three ordinary ones, all called from module
 functions. Before it, every live fixture had a single comptime parameter at index 0, so
@@ -183,12 +193,13 @@ exists when specialization runs, so the two sides are *meant* to differ.
 
 ## Constraints
 
-**Const parameters and generics do not combine.** `lower/expr.rs:653` takes the
-`ComptimeCall` branch before the `type_args` computation and so never computes them, and
-`rewrite_comptime_calls` emits empty `type_args` and `shape_descriptors`. A function that
-is both will silently lose its descriptors. Either reject the combination in the
-typechecker or compute `type_args` on both branches; the current state is an unstated
-assumption in two places.
+**Const parameters and generics do not combine, and are refused.** `lower/expr.rs:653`
+takes the `ComptimeCall` branch before the `type_args` computation and so never computes
+them, and `rewrite_comptime_calls` emits empty `type_args` and `shape_descriptors`, so a
+function with both would lose the descriptors its type parameters need and read its values
+at the wrong type. `TypeError::ComptimeParamOnGeneric` reports it at the definition, which
+catches the function whether or not anything calls it. Lifting the refusal means computing
+type arguments on the comptime branch too, and carrying them through the copy.
 
 **Float const parameters are unsound as an instantiation key.** `ConstValue` hashes `F32`
 and `F64` by `to_bits` but derives `PartialEq`, which uses float comparison. `0.0` and
@@ -203,10 +214,10 @@ this tractable -- inside a copy the parameter *is* a const -- but it is a separa
 
 ## What remains
 
-- **Reconsider the const-binding-only restriction.** `pow(2, 10)` failing because `10` is
-  a literal is a bad first impression. Now that instantiations are read from the IR, a
-  literal argument arrives as a `Const` operand exactly like a const binding does, so the
-  specialization side needs nothing; the change is in `validate_comptime_arg`.
+- **Const expressions as arguments.** Literals and const bindings are accepted; `2 + 3` is
+  not, per the constraint above. Accepting it means folding the argument to a `Const`
+  before phase 5c, so that there is something for the plan to read. Worth doing only if
+  the refusal proves annoying in practice.
 - **Nested comptime**, per the constraint above, with `016_nested_comptime` as its fixture.
 - **Dead copies.** A function all of whose call sites were specialized keeps an original
   nobody calls. Leaving it is deliberate -- a later script line may call it -- but for an

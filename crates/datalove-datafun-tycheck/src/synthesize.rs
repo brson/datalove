@@ -1175,7 +1175,16 @@ fn mode_name(mode: ParamMode) -> &'static str {
     }
 }
 
-/// Validate that a comptime argument is a const binding name.
+/// Validate that a comptime argument is a const binding name or a literal.
+///
+/// The test is on the shape of the expression rather than on whether it could
+/// in principle be evaluated, because specialization reads the value back out
+/// of the lowered IR: it needs the argument to be an operand a single `Const`
+/// defines. A const binding is one, and so is a scalar literal. An arithmetic
+/// expression is not, even where every part of it is known, because it lowers
+/// to the instructions that compute it -- and since a comptime call that
+/// cannot be placed keeps running the original function, accepting one would
+/// mean the `const` quietly did nothing.
 ///
 /// An error is recorded rather than returned, so that the remaining arguments
 /// are still checked.
@@ -1186,7 +1195,6 @@ fn validate_comptime_arg<'db>(
 ) -> Result<(), TypeError> {
     let db = ctx.db;
 
-    // The argument must be a simple Name expression.
     match arg.expr(db) {
         ExprFunKind::Place(ref place) if place.steps.is_empty() => {
             let name = place.root;
@@ -1196,8 +1204,16 @@ fn validate_comptime_arg<'db>(
                 ctx.add_error(TypeError::ComptimeArgNotConstBinding { param_idx, reason });
             }
         }
+        // A scalar literal lowers to one `Const` and needs nothing evaluated.
+        ExprFunKind::True(_)
+        | ExprFunKind::False(_)
+        | ExprFunKind::Int(_)
+        | ExprFunKind::Float(_)
+        | ExprFunKind::Hex(_)
+        | ExprFunKind::String(_) => {}
         _ => {
-            let reason = "comptime argument must be a const binding name".to_string();
+            let reason =
+                "comptime argument must be a const binding name or a literal".to_string();
             ctx.add_error(TypeError::ComptimeArgNotConstBinding { param_idx, reason });
         }
     }
