@@ -30,7 +30,7 @@ fn check_variable_decl<'db>(
 
     let var_type = match type_hint {
         Some(hint) => {
-            match convert_type_hint_with_aliases(db, hint, &ctx.type_aliases) {
+            match ctx.convert_hint(hint) {
                 Ok(expected_type) => {
                     if let Some(err) = unordered_binding_error(ctx, &expected_type, value) {
                         ctx.add_error(err);
@@ -110,7 +110,7 @@ pub fn check_statement<'db>(
                 None => {
                     // Uninitialized var - type hint is required (parser enforces this).
                     if let Some(hint) = stmt.type_hint.clone() {
-                        match convert_type_hint_with_aliases(db, hint, &ctx.type_aliases) {
+                        match ctx.convert_hint(hint) {
                             Ok(ty) => {
                                 ctx.add_variable(stmt.name, ty, true);
                             }

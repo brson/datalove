@@ -210,7 +210,7 @@ fn error_to_json(error: &datalove_datafun_tycheck::TypeError) -> rmx::serde_json
                 "name": name
             })
         }
-        TypeError::UnresolvedTypeAlias(name) => {
+        TypeError::UnresolvedTypeAlias { name, local_index: _ } => {
             json!({
                 "kind": "UnresolvedTypeAlias",
                 "name": name

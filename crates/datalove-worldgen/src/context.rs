@@ -478,7 +478,7 @@ pub fn types_match<'db>(
             ta.rank == tb.rank && types_match(db, (*ta.element_type).clone(), (*tb.element_type).clone())
         }
         (TypeHint::Alias(na), TypeHint::Alias(nb)) => {
-            na.as_str(db) == nb.as_str(db)
+            na.name.as_str(db) == nb.name.as_str(db)
         }
         _ => false,
     }

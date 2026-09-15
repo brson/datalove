@@ -35,6 +35,11 @@ pub struct DatafunSpans<'db> {
     pub type_alias_spans: Vec<SpanEntry>,
     /// Import statement spans, indexed by local_index.
     pub import_spans: Vec<SpanEntry>,
+    /// Spans of bare names in type position, indexed by local_index.
+    ///
+    /// A type alias is the one thing in a type hint that the hint cannot
+    /// resolve on its own, so it is the one a diagnostic has to point at.
+    pub alias_spans: Vec<SpanEntry>,
 }
 
 impl<'db> DatafunSpans<'db> {
@@ -49,6 +54,7 @@ impl<'db> DatafunSpans<'db> {
             fun_spans: vec![],
             type_alias_spans: vec![],
             import_spans: vec![],
+            alias_spans: vec![],
         }
     }
 
@@ -62,11 +68,17 @@ impl<'db> DatafunSpans<'db> {
         fun_spans: Vec<SpanEntry>,
         type_alias_spans: Vec<SpanEntry>,
         import_spans: Vec<SpanEntry>,
+        alias_spans: Vec<SpanEntry>,
     ) -> Self {
         Self {
             entries, break_spans, continue_spans, ret_spans, set_spans, fun_spans,
-            type_alias_spans, import_spans,
+            type_alias_spans, import_spans, alias_spans,
         }
+    }
+
+    /// Look up the span of a bare name in type position by local_index.
+    pub fn lookup_alias(&self, index: u32) -> Option<&SpanEntry> {
+        self.alias_spans.get(index as usize)
     }
 
     /// Look up span for an expression.

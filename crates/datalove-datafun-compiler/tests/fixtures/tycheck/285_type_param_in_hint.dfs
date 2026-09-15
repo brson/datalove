@@ -1,0 +1,6 @@
+// The other thing a bare name in type position can be resolves the same way,
+// so a hint may name one.
+fun pick<T>(x: T): T
+  let y = : T / x
+  ret y
+end fun

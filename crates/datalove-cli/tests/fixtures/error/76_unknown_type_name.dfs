@@ -1,0 +1,7 @@
+// A bare name in type position that names no alias and no type parameter.
+//
+// The error carried no span, so it rendered nothing, and the CLI prints the
+// error list only when no diagnostic rendered. A failed binding always leaves
+// its name undefined, so there was always a diagnostic to hide behind and the
+// cause was never shown.
+let a: Nosuch = 1

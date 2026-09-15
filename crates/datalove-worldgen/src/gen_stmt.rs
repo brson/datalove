@@ -141,7 +141,10 @@ fn gen_enum_let<'db, R: Rng>(
     *var_counter += 1;
     ctx.variables.push(Variable {
         name: name.clone(),
-        type_hint: TypeHint::Alias(bct::text::InternedText::new(db, def.name.clone())),
+        type_hint: TypeHint::Alias(datalove_datalit::ast::TypeHintAlias {
+            name: bct::text::InternedText::new(db, def.name.clone()),
+            local_index: None,
+        }),
         is_mutable: false,
     });
 

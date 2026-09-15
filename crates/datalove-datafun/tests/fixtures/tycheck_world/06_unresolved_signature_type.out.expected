@@ -1,5 +1,34 @@
 {
-  "diagnostics": [],
+  "diagnostics": [
+    {
+      "code": "F064",
+      "labels": [
+        {
+          "message": "no type of this name is in scope",
+          "span": [
+            168,
+            173
+          ],
+          "text": "Bogus"
+        }
+      ],
+      "message": "unknown type `Bogus`"
+    },
+    {
+      "code": "F064",
+      "labels": [
+        {
+          "message": "no type of this name is in scope",
+          "span": [
+            280,
+            288
+          ],
+          "text": "Nonesuch"
+        }
+      ],
+      "message": "unknown type `Nonesuch`"
+    }
+  ],
   "modules": {
     "main": {
       "errors": [

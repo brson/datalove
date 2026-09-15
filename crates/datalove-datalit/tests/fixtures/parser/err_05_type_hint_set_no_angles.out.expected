@@ -1,13 +1,44 @@
 {
   "ast": {
     "expr": {
-      "Set": {
-        "elements": []
+      "ParseError": {
+        "message": "expected '/' after type hint"
       }
     },
     "type_hint": {
-      "Alias": "set"
+      "ParseError": {
+        "message": "unknown type 'set', did you mean '#{T}'?"
+      }
     }
   },
-  "diagnostics": []
+  "diagnostics": [
+    {
+      "code": "D008",
+      "labels": [
+        {
+          "message": "a collection type is written with its sigil",
+          "span": [
+            2,
+            5
+          ],
+          "text": "set"
+        }
+      ],
+      "message": "unknown type 'set', did you mean '#{T}'?"
+    },
+    {
+      "code": "D012",
+      "labels": [
+        {
+          "message": "expected '/' separator between type hint and expression",
+          "span": [
+            2,
+            5
+          ],
+          "text": "set"
+        }
+      ],
+      "message": "expected '/' after type hint"
+    }
+  ]
 }

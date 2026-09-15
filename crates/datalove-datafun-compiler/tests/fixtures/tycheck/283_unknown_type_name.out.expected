@@ -1,0 +1,154 @@
+{
+  "diagnostics": [
+    {
+      "code": "F064",
+      "labels": [
+        {
+          "message": "no type of this name is in scope",
+          "span": [
+            504,
+            507
+          ],
+          "text": "NoG"
+        }
+      ],
+      "message": "unknown type `NoG`",
+      "notes": [
+        "a bare name in type position is a type alias, written `type Name: <type>`, or one of the type parameters of the generic function it appears in."
+      ]
+    },
+    {
+      "code": "F064",
+      "labels": [
+        {
+          "message": "no type of this name is in scope",
+          "span": [
+            350,
+            353
+          ],
+          "text": "NoA"
+        }
+      ],
+      "message": "unknown type `NoA`",
+      "notes": [
+        "a bare name in type position is a type alias, written `type Name: <type>`, or one of the type parameters of the generic function it appears in."
+      ]
+    },
+    {
+      "code": "F064",
+      "labels": [
+        {
+          "message": "no type of this name is in scope",
+          "span": [
+            371,
+            374
+          ],
+          "text": "NoB"
+        }
+      ],
+      "message": "unknown type `NoB`",
+      "notes": [
+        "a bare name in type position is a type alias, written `type Name: <type>`, or one of the type parameters of the generic function it appears in."
+      ]
+    },
+    {
+      "code": "F064",
+      "labels": [
+        {
+          "message": "no type of this name is in scope",
+          "span": [
+            395,
+            398
+          ],
+          "text": "NoC"
+        }
+      ],
+      "message": "unknown type `NoC`",
+      "notes": [
+        "a bare name in type position is a type alias, written `type Name: <type>`, or one of the type parameters of the generic function it appears in."
+      ]
+    },
+    {
+      "code": "F064",
+      "labels": [
+        {
+          "message": "no type of this name is in scope",
+          "span": [
+            418,
+            421
+          ],
+          "text": "NoD"
+        }
+      ],
+      "message": "unknown type `NoD`",
+      "notes": [
+        "a bare name in type position is a type alias, written `type Name: <type>`, or one of the type parameters of the generic function it appears in."
+      ]
+    },
+    {
+      "code": "F064",
+      "labels": [
+        {
+          "message": "no type of this name is in scope",
+          "span": [
+            439,
+            442
+          ],
+          "text": "NoE"
+        }
+      ],
+      "message": "unknown type `NoE`",
+      "notes": [
+        "a bare name in type position is a type alias, written `type Name: <type>`, or one of the type parameters of the generic function it appears in."
+      ]
+    },
+    {
+      "code": "F064",
+      "labels": [
+        {
+          "message": "no type of this name is in scope",
+          "span": [
+            467,
+            470
+          ],
+          "text": "NoF"
+        }
+      ],
+      "message": "unknown type `NoF`",
+      "notes": [
+        "a bare name in type position is a type alias, written `type Name: <type>`, or one of the type parameters of the generic function it appears in."
+      ]
+    }
+  ],
+  "errors": [
+    {
+      "kind": "UnresolvedTypeAlias",
+      "name": "NoG"
+    },
+    {
+      "kind": "UnresolvedTypeAlias",
+      "name": "NoA"
+    },
+    {
+      "kind": "UnresolvedTypeAlias",
+      "name": "NoB"
+    },
+    {
+      "kind": "UnresolvedTypeAlias",
+      "name": "NoC"
+    },
+    {
+      "kind": "UnresolvedTypeAlias",
+      "name": "NoD"
+    },
+    {
+      "kind": "UnresolvedTypeAlias",
+      "name": "NoE"
+    },
+    {
+      "kind": "UnresolvedTypeAlias",
+      "name": "NoF"
+    }
+  ],
+  "judgements": []
+}

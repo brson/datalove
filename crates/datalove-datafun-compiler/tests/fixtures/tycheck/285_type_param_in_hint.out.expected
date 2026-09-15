@@ -1,0 +1,17 @@
+{
+  "diagnostics": [],
+  "errors": [],
+  "judgements": [
+    {
+      "kind": "function",
+      "name": "pick",
+      "params": [
+        {
+          "name": "x",
+          "type": "T"
+        }
+      ],
+      "return_type": "T"
+    }
+  ]
+}

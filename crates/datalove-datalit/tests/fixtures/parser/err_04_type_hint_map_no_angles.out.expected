@@ -1,13 +1,44 @@
 {
   "ast": {
     "expr": {
-      "Map": {
-        "entries": []
+      "ParseError": {
+        "message": "expected '/' after type hint"
       }
     },
     "type_hint": {
-      "Alias": "map"
+      "ParseError": {
+        "message": "unknown type 'map', did you mean '%{K = V}'?"
+      }
     }
   },
-  "diagnostics": []
+  "diagnostics": [
+    {
+      "code": "D008",
+      "labels": [
+        {
+          "message": "a collection type is written with its sigil",
+          "span": [
+            2,
+            5
+          ],
+          "text": "map"
+        }
+      ],
+      "message": "unknown type 'map', did you mean '%{K = V}'?"
+    },
+    {
+      "code": "D012",
+      "labels": [
+        {
+          "message": "expected '/' separator between type hint and expression",
+          "span": [
+            2,
+            5
+          ],
+          "text": "map"
+        }
+      ],
+      "message": "expected '/' after type hint"
+    }
+  ]
 }

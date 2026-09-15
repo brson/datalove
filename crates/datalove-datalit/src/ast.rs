@@ -75,7 +75,7 @@ pub enum TypeHint<'db> {
     Table(TypeHintTable<'db>),
     Data,
     Error,
-    Alias(InternedText<'db>),
+    Alias(TypeHintAlias<'db>),
     Atom(TypeHintAtom<'db>),
     Term(TypeHintTerm<'db>),
     Enum(TypeHintEnum<'db>),
@@ -145,6 +145,21 @@ pub struct TypeHintTensor<'db> {
 #[derive(salsa::SalsaValue)]
 pub struct TypeHintTable<'db> {
     pub columns: Vec<TypeHintNamedField<'db>>,
+}
+
+/// A bare name in type position: a type alias, or a generic's type parameter.
+#[derive(Clone, Hash, PartialEq, Eq)]
+#[derive(salsa::SalsaValue)]
+pub struct TypeHintAlias<'db> {
+    pub name: InternedText<'db>,
+    /// Position of this alias in the parse that produced it, which is what a
+    /// span table is keyed by.
+    ///
+    /// The span itself is kept out of the AST so that an edit which moves
+    /// text without changing it leaves memoized work alone; see
+    /// `DatafunSpans`. `None` for an alias that came from no source, which is
+    /// what the worldfile generator builds to print.
+    pub local_index: Option<u32>,
 }
 
 #[derive(Clone, Hash, PartialEq, Eq)]

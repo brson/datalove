@@ -784,8 +784,8 @@ fn pretty_type_hint<'db>(
             out.push_str(" |}");
         }
 
-        TypeHint::Alias(name) => {
-            out.push_str(name.as_str(db));
+        TypeHint::Alias(alias) => {
+            out.push_str(alias.name.as_str(db));
         }
 
         TypeHint::Atom(a) => {

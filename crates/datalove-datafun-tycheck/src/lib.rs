@@ -123,6 +123,12 @@ pub enum PendingDiagnostic<'db> {
         module_id: Option<ModuleId<'db>>,
         name: InternedText<'db>,
     },
+    /// F064: A bare name in type position that names no alias or type parameter.
+    UnresolvedTypeAlias {
+        local_index: u32,
+        module_id: Option<ModuleId<'db>>,
+        name: InternedText<'db>,
+    },
     /// F062: A `native fun` was written somewhere that has no rider.
     NativeFunOutsideRider {
         local_index: u32,

@@ -181,7 +181,7 @@ fn walk_type(
     cov: &mut Coverage,
 ) {
     let is_type_param = match ty {
-        TypeHint::Alias(name) => params.names.contains(name.text(db)),
+        TypeHint::Alias(alias) => params.names.contains(alias.name.text(db)),
         _ => false,
     };
     if is_type_param {

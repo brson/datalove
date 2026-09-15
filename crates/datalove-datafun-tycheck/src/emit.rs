@@ -36,6 +36,9 @@ pub trait SpanLookup<'db> {
     /// Look up span for an import statement by local_index.
     fn lookup_import(&self, db: &'db dyn crate::Db, local_index: u32) -> Option<TextSpan<'db>>;
 
+    /// Look up the span of a bare name in type position by local_index.
+    fn lookup_alias(&self, db: &'db dyn crate::Db, local_index: u32) -> Option<TextSpan<'db>>;
+
     /// Look up span for a function definition in a specific module.
     ///
     /// For local spans, module_id is ignored. For module graph spans,
@@ -105,6 +108,13 @@ impl<'db> SpanLookup<'db> for LocalSpanLookup<'_, 'db> {
 
     fn lookup_fun(&self, db: &'db dyn crate::Db, local_index: u32) -> Option<TextSpan<'db>> {
         self.spans.lookup_fun(local_index).map(|entry| {
+            let (text, span) = entry.to_text_and_span(db);
+            TextSpan::new(text, span)
+        })
+    }
+
+    fn lookup_alias(&self, db: &'db dyn crate::Db, local_index: u32) -> Option<TextSpan<'db>> {
+        self.spans.lookup_alias(local_index).map(|entry| {
             let (text, span) = entry.to_text_and_span(db);
             TextSpan::new(text, span)
         })
@@ -185,6 +195,14 @@ impl<'db> SpanLookup<'db> for ModuleGraphSpanLookup<'_, 'db> {
     fn lookup_fun(&self, db: &'db dyn crate::Db, local_index: u32) -> Option<TextSpan<'db>> {
         let spans = self.parsed_graph.get_spans(db, self.module_id)?;
         spans.lookup_fun(local_index).map(|entry| {
+            let (text, span) = entry.to_text_and_span(db);
+            TextSpan::new(text, span)
+        })
+    }
+
+    fn lookup_alias(&self, db: &'db dyn crate::Db, local_index: u32) -> Option<TextSpan<'db>> {
+        let spans = self.parsed_graph.get_spans(db, self.module_id)?;
+        spans.lookup_alias(local_index).map(|entry| {
             let (text, span) = entry.to_text_and_span(db);
             TextSpan::new(text, span)
         })
@@ -297,6 +315,17 @@ collection written over a type parameter asks that parameter for an ordering. Sa
                     .note("the end of a body is a return like any other, and one that owes a \
 value has to be reached only where a `ret` has already left. Return from every path out, or \
 drop the return type.")
+                    .emit_type();
+            }
+        }
+        PendingDiagnostic::UnresolvedTypeAlias { local_index, module_id: _, name } => {
+            if let Some(ts) = spans.lookup_alias(db, *local_index) {
+                let msg = format!("unknown type `{}`", name.as_str(db));
+                bct::diagnostic::DiagnosticBuilder::error(db, &msg)
+                    .code("F064")
+                    .primary_label(ts, "no type of this name is in scope")
+                    .note("a bare name in type position is a type alias, written `type Name: \
+<type>`, or one of the type parameters of the generic function it appears in.")
                     .emit_type();
             }
         }
@@ -612,6 +641,11 @@ fn format_single_diagnostic<'db>(
                 "{}: error[F063]: `{}` can reach the end of its body without returning a value",
                 loc, name.as_str(db),
             ))
+        }
+        PendingDiagnostic::UnresolvedTypeAlias { local_index, module_id: _, name } => {
+            let ts = spans.lookup_alias(db, *local_index)?;
+            let loc = format_location(db, &ts);
+            Some(format!("{}: error[F064]: unknown type `{}`", loc, name.as_str(db)))
         }
         PendingDiagnostic::NativeFunOutsideRider { local_index, module_id: _, name } => {
             let ts = spans.lookup_fun(db, *local_index)?;

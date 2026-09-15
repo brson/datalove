@@ -518,9 +518,13 @@ impl<'db> Parser<'db> {
         context: Option<(TextSpan<'db>, &'static str)>,
     ) -> Vec<ast::FunParam<'db>> {
         let mut sub = Parser::from_branch_with_context(self.db, iter, self.source_text(), context, self.module_id());
+        // A parameter list holds types and nothing else, so the alias
+        // numbering is the only thing it has to carry on with and hand back.
+        sub.lend_alias_numbering(self);
         let params = sub.parse_comma_separated(|p| p.parse_fun_param());
         sub.error_if_not_exhausted();
         self.had_error |= sub.had_error;
+        self.take_alias_numbering(&mut sub);
         params
     }
 

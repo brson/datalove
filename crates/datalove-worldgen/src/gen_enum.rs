@@ -182,7 +182,7 @@ pub fn gen_match<'db, R: Rng>(
             TypeHint::Alias(name) => ctx
                 .enums
                 .iter()
-                .find(|e| e.name.as_str() == name.text(db))
+                .find(|e| e.name.as_str() == name.name.text(db))
                 .map(|e| (v.name.clone(), e.clone())),
             _ => Option::None,
         })

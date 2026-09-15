@@ -1,0 +1,4 @@
+// Inside a branch, where the type is read by a parser of its own. Without its
+// aliases handed back, the span was filed in a table nobody looks in and the
+// numbering of every alias after it was one out.
+let a: [Nosuch] = [1]

@@ -38,6 +38,10 @@ pub(super) struct Parser<'db> {
     /// Next position to hand out, shared with sub-parsers so that one parse
     /// numbers its expressions in a single sequence.
     pub(super) expr_counter: u32,
+    /// The same for the bare names in type position, whose spans a branch's
+    /// own parser collects on behalf of whatever stream asked for the type.
+    pub(super) alias_counter: u32,
+    pub(super) alias_spans: Vec<bct::diagnostic::SpanEntry>,
     pub(super) had_error: bool,
     /// Source text for error reporting when no current token.
     source_text: bct::text::Text<'db>,
@@ -51,6 +55,8 @@ impl<'db> Parser<'db> {
             source: TokenSource::Vec { tokens, pos: 0 },
             expr_spans: Vec::new(),
             expr_counter: 0,
+            alias_counter: 0,
+            alias_spans: Vec::new(),
             had_error: false,
             source_text,
         }
@@ -58,6 +64,20 @@ impl<'db> Parser<'db> {
 
     /// Create a new parser from a BracerIter (iterator-backed, zero allocation).
     pub(super) fn from_branch(db: &'db dyn crate::Db, iter: BracerIter<'db>, source_text: bct::text::Text<'db>) -> Self {
+        Self::from_branch_numbering_aliases(db, iter, source_text, 0)
+    }
+
+    /// The same, continuing the alias numbering of the stream that asked.
+    ///
+    /// What is inside a branch is read by a parser of its own whatever the
+    /// outer stream is, so without this each nested type would number its
+    /// aliases from zero again and file their spans where no one looks.
+    pub(super) fn from_branch_numbering_aliases(
+        db: &'db dyn crate::Db,
+        iter: BracerIter<'db>,
+        source_text: bct::text::Text<'db>,
+        alias_base: u32,
+    ) -> Self {
         let mut parser = Parser {
             db,
             source: TokenSource::Iter {
@@ -67,11 +87,17 @@ impl<'db> Parser<'db> {
             },
             expr_spans: Vec::new(),
             expr_counter: 0,
+            alias_counter: alias_base,
+            alias_spans: Vec::new(),
             had_error: false,
             source_text,
         };
         parser.fill_iter_buffer();
         parser
+    }
+
+    pub(super) fn take_alias_spans(&mut self) -> Vec<bct::diagnostic::SpanEntry> {
+        rmx::std::mem::take(&mut self.alias_spans)
     }
 
     /// Fill the iterator buffer with next non-whitespace tokens.

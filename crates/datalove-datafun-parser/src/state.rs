@@ -64,6 +64,9 @@ pub(super) struct StatementCounters {
     pub fun: u32,
     pub type_alias: u32,
     pub import: u32,
+    /// Bare names in type position, which are not statements but are numbered
+    /// and filed the same way.
+    pub alias: u32,
 }
 
 /// Parser state for datafun parsing.
@@ -90,6 +93,8 @@ pub(super) struct Parser<'db> {
     /// Accumulated type alias spans, indexed by local_index.
     type_alias_spans: Vec<SpanEntry>,
     import_spans: Vec<SpanEntry>,
+    /// Accumulated spans of bare names in type position, indexed by local_index.
+    alias_spans: Vec<SpanEntry>,
     /// Optional context for error messages showing the enclosing branch's opening token.
     branch_context: Option<(TextSpan<'db>, &'static str)>,
     /// Current function name for expression identity (None for script-level).
@@ -132,6 +137,7 @@ impl<'db> Parser<'db> {
             fun_spans: Vec::new(),
             type_alias_spans: Vec::new(),
             import_spans: Vec::new(),
+            alias_spans: Vec::new(),
             branch_context: None,
             current_fn_name: None,
             expr_counter: counters.expr,
@@ -206,6 +212,7 @@ impl<'db> Parser<'db> {
             fun_spans: Vec::new(),
             type_alias_spans: Vec::new(),
             import_spans: Vec::new(),
+            alias_spans: Vec::new(),
             branch_context: context,
             current_fn_name: None,
             expr_counter: 0,
@@ -245,6 +252,7 @@ impl<'db> Parser<'db> {
             fun_spans: Vec::new(),
             type_alias_spans: Vec::new(),
             import_spans: Vec::new(),
+            alias_spans: Vec::new(),
             branch_context: context,
             current_fn_name: self.current_fn_name,
             expr_counter: self.expr_counter,
@@ -527,6 +535,21 @@ impl<'db> Parser<'db> {
         rmx::std::mem::take(&mut self.type_alias_spans)
     }
 
+    pub(super) fn take_alias_spans(&mut self) -> Vec<SpanEntry> {
+        rmx::std::mem::take(&mut self.alias_spans)
+    }
+
+    /// Start this parser's alias numbering where `outer`'s has reached.
+    pub(super) fn lend_alias_numbering(&mut self, outer: &Self) {
+        self.stmt_counters.alias = outer.stmt_counters.alias;
+    }
+
+    /// Take back the aliases a sub-parser filed, and its numbering.
+    pub(super) fn take_alias_numbering(&mut self, sub: &mut Self) {
+        self.stmt_counters.alias = sub.stmt_counters.alias;
+        self.alias_spans.append(&mut sub.alias_spans);
+    }
+
     /// Merge spans from a sub-parser into this parser.
     pub(super) fn merge_spans_from(&mut self, sub: &mut Self) {
         self.expr_spans.append(&mut sub.expr_spans);
@@ -537,6 +560,7 @@ impl<'db> Parser<'db> {
         self.fun_spans.append(&mut sub.fun_spans);
         self.type_alias_spans.append(&mut sub.type_alias_spans);
         self.import_spans.append(&mut sub.import_spans);
+        self.alias_spans.append(&mut sub.alias_spans);
     }
 
     /// Record a break statement span and return its local_index.
@@ -628,6 +652,23 @@ impl<'db> Parser<'db> {
 }
 
 impl<'db> datalit::parser::TypeHintStream<'db> for Parser<'db> {
+    /// File where a bare name in type position was written.
+    ///
+    /// Only this layer resolves one, so only this layer has anything to say
+    /// when it cannot, and saying it needs the name's own span.
+    fn alias_index(&mut self, ts: TextSpan<'db>) -> u32 {
+        self.record_stmt_span(ts, |c| &mut c.alias, |p| &mut p.alias_spans)
+    }
+
+    fn alias_base(&self) -> u32 {
+        self.stmt_counters.alias
+    }
+
+    fn absorb_aliases(&mut self, spans: Vec<SpanEntry>, next: u32) {
+        self.alias_spans.extend(spans);
+        self.stmt_counters.alias = next;
+    }
+
     /// Report a type hint error against this parser rather than datalit's.
     ///
     /// A type hint inside a datafun statement is read straight out of this

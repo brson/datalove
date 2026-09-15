@@ -385,6 +385,12 @@ moves what it would have moved written without one.
 A bare name in type position is a type alias (Section 3.7), or, within a generic
 function's signature or body, one of its type parameters (Section 8.5). Data
 literals have neither, so a name in a data literal's type is always an error.
+A name that is neither is F064, wherever the type is written: a `let`, `var` or
+`const` annotation, a hint, a parameter, a return type, or inside any of those.
+
+A collection type is written with its sigil rather than its name, so `list`,
+`map`, `set`, `table` and `tensor` in type position are D008 rather than names
+of anything.
 
 ## 5. Copy and Linear Types
 

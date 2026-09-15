@@ -440,8 +440,11 @@ pub enum TypeError {
     UndefinedVariable,
     /// Cannot assign to immutable variable.
     VariableNotMutable,
-    /// Unresolved type alias (forward reference).
-    UnresolvedTypeAlias(String),
+    /// A bare name in type position that names no alias or type parameter.
+    ///
+    /// `local_index` is the alias's key into the span table, so that whoever
+    /// reports this can point at the name rather than at whatever encloses it.
+    UnresolvedTypeAlias { name: String, local_index: Option<u32> },
     /// A type parameter sat somewhere erasure could not reach.
     ///
     /// `position` says which part of the signature, and `fun_local_index` is
@@ -873,9 +876,12 @@ fn convert_type_hint_inner<'db>(
         }
 
         TypeHint::ParseError(_) => return Err(TypeError::CannotSynthesize),
-        TypeHint::Alias(name) => {
+        TypeHint::Alias(alias) => {
             // Type alias cannot be resolved without alias map.
-            return Err(TypeError::UnresolvedTypeAlias(name.as_str(db).to_string()));
+            return Err(TypeError::UnresolvedTypeAlias {
+                name: alias.name.as_str(db).to_string(),
+                local_index: alias.local_index,
+            });
         }
         TypeHint::Table(t) => {
             let columns: Result<Vec<_>, TypeError> = t.columns.iter()
@@ -1098,12 +1104,15 @@ fn convert_type_hint_with_aliases_inner<'db>(
 
         TypeHint::ParseError(_) => return Err(TypeError::CannotSynthesize),
 
-        TypeHint::Alias(name) => {
+        TypeHint::Alias(alias) => {
             // Look up the alias in the map.
-            if let Some(resolved_ty) = aliases.get(&name) {
+            if let Some(resolved_ty) = aliases.get(&alias.name) {
                 return Ok(resolved_ty.clone());
             }
-            return Err(TypeError::UnresolvedTypeAlias(name.as_str(db).to_string()));
+            return Err(TypeError::UnresolvedTypeAlias {
+                name: alias.name.as_str(db).to_string(),
+                local_index: alias.local_index,
+            });
         }
 
         TypeHint::Table(t) => {

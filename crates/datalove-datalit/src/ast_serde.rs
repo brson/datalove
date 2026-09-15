@@ -299,7 +299,7 @@ impl TypeHint {
             crate::ast::TypeHint::Table(t) => TypeHint::Table(TypeHintTable::from_ast(db, t)),
             crate::ast::TypeHint::Data => TypeHint::Data,
             crate::ast::TypeHint::Error => TypeHint::Error,
-            crate::ast::TypeHint::Alias(name) => TypeHint::Alias(name.as_str(db).to_string()),
+            crate::ast::TypeHint::Alias(alias) => TypeHint::Alias(alias.name.as_str(db).to_string()),
             crate::ast::TypeHint::Atom(a) => TypeHint::Atom(TypeHintAtom { name: a.name.as_str(db).to_string() }),
             crate::ast::TypeHint::Term(t) => TypeHint::Term(TypeHintTerm {
                 name: t.name.as_str(db).to_string(),

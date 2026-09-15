@@ -1,0 +1,13 @@
+// The same in a signature, which name resolution converts rather than the
+// body check.
+fun in_param(n: NoA): u32
+  ret 1
+end fun
+
+fun in_nested_param(l: [NoB]): u32
+  ret 1
+end fun
+
+fun in_return(n: u32): NoC
+  ret 1
+end fun

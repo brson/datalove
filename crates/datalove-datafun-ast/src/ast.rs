@@ -109,6 +109,8 @@ pub struct ParseResult<'db> {
     pub type_alias_spans: Vec<SpanEntry>,
     /// Import statement spans, indexed by position among the imports.
     pub import_spans: Vec<SpanEntry>,
+    /// Spans of bare names in type position, indexed by local_index.
+    pub alias_spans: Vec<SpanEntry>,
 }
 
 #[derive(Clone, Hash, PartialEq, Eq)]

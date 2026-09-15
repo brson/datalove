@@ -27,7 +27,7 @@ pub use crate::{
 };
 
 pub use crate::types::ComptimeCallSiteRegistry;
-use datalove_datafun_common::can_clone_coerce_to;
+use datalove_datafun_common::{can_clone_coerce_to, convert_type_hint_with_aliases};
 use std::collections::HashSet;
 
 /// Context for typechecking.
@@ -278,6 +278,27 @@ impl<'db> TypeContext<'db> {
     }
 
     /// F011: Cannot synthesize type.
+    /// Convert a type hint under the aliases in scope, reporting a name that
+    /// resolves to nothing.
+    ///
+    /// The one thing in a hint that cannot be worked out from the hint alone
+    /// is a bare name, and an unresolved one carried no span, so it rendered
+    /// nothing and was dropped whenever any other diagnostic was present.
+    pub fn convert_hint(
+        &mut self,
+        type_hint: datalove_datalit::ast::TypeHint<'db>,
+    ) -> Result<Type<'db>, TypeError> {
+        let result = convert_type_hint_with_aliases(self.db, type_hint, &self.type_aliases);
+        if let Err(TypeError::UnresolvedTypeAlias { name, local_index: Some(local_index) }) = &result {
+            self.pending_diagnostics.push(PendingDiagnostic::UnresolvedTypeAlias {
+                local_index: *local_index,
+                module_id: self.current_module_id,
+                name: InternedText::new(self.db, name.C()),
+            });
+        }
+        result
+    }
+
     pub fn error_cannot_synthesize(&mut self, expr: ExprFun<'db>, message: &str) -> TypeError {
         self.pending_diagnostics.push(PendingDiagnostic::CannotSynthesize {
             expr_key: ExprKey::of(self.db, expr),
@@ -778,6 +799,16 @@ impl<'db> TypeContext<'db> {
                     module_id,
                     param: InternedText::new(self.db, param.S()),
                     position: InternedText::new(self.db, position.S()),
+                });
+            }
+            // Name resolution converts the type hints in signatures and in
+            // alias definitions, so a name that resolves to nothing in one of
+            // those is found here rather than while checking a body.
+            if let TypeError::UnresolvedTypeAlias { name, local_index: Some(local_index) } = error {
+                self.pending_diagnostics.push(PendingDiagnostic::UnresolvedTypeAlias {
+                    local_index: *local_index,
+                    module_id,
+                    name: InternedText::new(self.db, name.C()),
                 });
             }
             self.add_error(error.clone());

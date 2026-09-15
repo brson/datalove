@@ -1,0 +1,104 @@
+{
+  "diagnostics": [
+    {
+      "code": "F064",
+      "labels": [
+        {
+          "message": "no type of this name is in scope",
+          "span": [
+            106,
+            109
+          ],
+          "text": "NoA"
+        }
+      ],
+      "message": "unknown type `NoA`",
+      "notes": [
+        "a bare name in type position is a type alias, written `type Name: <type>`, or one of the type parameters of the generic function it appears in."
+      ]
+    },
+    {
+      "code": "F064",
+      "labels": [
+        {
+          "message": "no type of this name is in scope",
+          "span": [
+            157,
+            160
+          ],
+          "text": "NoB"
+        }
+      ],
+      "message": "unknown type `NoB`",
+      "notes": [
+        "a bare name in type position is a type alias, written `type Name: <type>`, or one of the type parameters of the generic function it appears in."
+      ]
+    },
+    {
+      "code": "F064",
+      "labels": [
+        {
+          "message": "no type of this name is in scope",
+          "span": [
+            208,
+            211
+          ],
+          "text": "NoC"
+        }
+      ],
+      "message": "unknown type `NoC`",
+      "notes": [
+        "a bare name in type position is a type alias, written `type Name: <type>`, or one of the type parameters of the generic function it appears in."
+      ]
+    }
+  ],
+  "errors": [
+    {
+      "kind": "UnresolvedTypeAlias",
+      "name": "NoA"
+    },
+    {
+      "kind": "UnresolvedTypeAlias",
+      "name": "NoB"
+    },
+    {
+      "kind": "UnresolvedTypeAlias",
+      "name": "NoC"
+    }
+  ],
+  "judgements": [
+    {
+      "kind": "function",
+      "name": "in_param",
+      "params": [
+        {
+          "name": "n",
+          "type": "NoA"
+        }
+      ],
+      "return_type": "u32"
+    },
+    {
+      "kind": "function",
+      "name": "in_nested_param",
+      "params": [
+        {
+          "name": "l",
+          "type": "[NoB]"
+        }
+      ],
+      "return_type": "u32"
+    },
+    {
+      "kind": "function",
+      "name": "in_return",
+      "params": [
+        {
+          "name": "n",
+          "type": "u32"
+        }
+      ],
+      "return_type": "NoC"
+    }
+  ]
+}

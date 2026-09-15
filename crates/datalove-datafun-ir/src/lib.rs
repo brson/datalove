@@ -405,7 +405,7 @@ pub fn type_hint_mentions_param<'db>(
     let mentions = |t: &TypeHint<'db>| type_hint_mentions_param(t, type_params);
 
     match ty {
-        TypeHint::Alias(name) => type_params.contains(name),
+        TypeHint::Alias(alias) => type_params.contains(&alias.name),
 
         TypeHint::List(t) => mentions(&t.element_type),
         TypeHint::Set(t) => mentions(&t.element_type),
@@ -560,8 +560,8 @@ impl IrType {
             TypeHint::ParseError(_) => {
                 IrType::Error
             }
-            TypeHint::Alias(name) => {
-                if type_params.contains(name) {
+            TypeHint::Alias(alias) => {
+                if type_params.contains(&alias.name) {
                     // A type parameter is erased: the function is compiled once
                     // over `data`, and the call site converts on the way in and
                     // back out.

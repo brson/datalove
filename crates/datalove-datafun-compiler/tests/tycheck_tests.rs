@@ -64,7 +64,7 @@ fn type_hint_to_string(db: &dyn salsa::Database, type_hint: &datalove_datalit::a
         TypeHint::Error => "error".to_string(),
         TypeHint::ParseError(_) => "?".to_string(),
         TypeHint::Table(_) => "table".to_string(),
-        TypeHint::Alias(name) => name.as_str(db).to_string(),
+        TypeHint::Alias(alias) => alias.name.as_str(db).to_string(),
         TypeHint::Atom(a) => format!("atom {}", a.name.as_str(db)),
         TypeHint::Term(t) => format!("term {} {}", t.name.as_str(db), type_hint_to_string(db, &t.payload)),
         TypeHint::Enum(e) => {
@@ -266,7 +266,7 @@ fn error_to_json(error: &datalove_datafun_tycheck::TypeError) -> rmx::serde_json
                 "name": name
             })
         }
-        TypeError::UnresolvedTypeAlias(name) => {
+        TypeError::UnresolvedTypeAlias { name, local_index: _ } => {
             json!({
                 "kind": "UnresolvedTypeAlias",
                 "name": name

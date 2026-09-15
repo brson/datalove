@@ -2,8 +2,8 @@ ModulesAnalysis(
     typecheck: TypecheckResult(
         status: "Error",
         errors: [
-            "local/test/main: UnresolvedTypeAlias(\"Bogus\")",
-            "local/test/main: UnresolvedTypeAlias(\"Nonesuch\")",
+            "line 4, col 22: error[F064]: unknown type `Bogus`",
+            "line 8, col 29: error[F064]: unknown type `Nonesuch`",
         ],
     ),
     lowering: LoweringResult(

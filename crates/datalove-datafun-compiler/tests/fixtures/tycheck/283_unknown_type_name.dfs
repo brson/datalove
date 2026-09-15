@@ -1,0 +1,14 @@
+// A bare name in type position that names no alias and no type parameter,
+// in each place a type hint can be written.
+//
+// The error carried no span, so it rendered nothing and was dropped whenever
+// any other diagnostic was present -- which a failed binding always produces,
+// since it leaves the name it was binding undefined.
+
+let annotated: NoA = 1
+var mutable: NoB = 1
+const CONSTANT: NoC = 1
+let hinted = : NoD / 1
+let nested: [NoE] = [1]
+let deeper = : %{NoF = u32} / %{1 = 2}
+type Aliased: [NoG]
