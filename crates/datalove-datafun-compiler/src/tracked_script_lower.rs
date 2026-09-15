@@ -235,10 +235,41 @@ fn find_const_refs_inner<'db>(
                 find_const_refs_inner(db, *elem, const_names, name_to_stmt, refs);
             }
         }
+        ExprFunKind::Set(s) => {
+            for elem in &s.elements {
+                find_const_refs_inner(db, *elem, const_names, name_to_stmt, refs);
+            }
+        }
+        ExprFunKind::Map(m) => {
+            for entry in &m.entries {
+                find_const_refs_inner(db, entry.key, const_names, name_to_stmt, refs);
+                find_const_refs_inner(db, entry.value, const_names, name_to_stmt, refs);
+            }
+        }
+        ExprFunKind::Tensor(t) => {
+            for elem in &t.elements {
+                find_const_refs_inner(db, *elem, const_names, name_to_stmt, refs);
+            }
+        }
+        ExprFunKind::Table(t) => {
+            for row in &t.rows {
+                for elem in &row.elements {
+                    find_const_refs_inner(db, *elem, const_names, name_to_stmt, refs);
+                }
+            }
+        }
         ExprFunKind::FunctionCall(call) => {
             for arg in call.args(db) {
                 find_const_refs_inner(db, *arg, const_names, name_to_stmt, refs);
             }
+        }
+        ExprFunKind::IntrinsicCall(call) => {
+            for arg in &call.args {
+                find_const_refs_inner(db, *arg, const_names, name_to_stmt, refs);
+            }
+        }
+        ExprFunKind::CloneCoerce(c) => {
+            find_const_refs_inner(db, c.operand, const_names, name_to_stmt, refs);
         }
         ExprFunKind::TryOption(t) => {
             find_const_refs_inner(db, t.operand, const_names, name_to_stmt, refs);
@@ -260,6 +291,19 @@ fn find_const_refs_inner<'db>(
         }
         ExprFunKind::Data(d) => {
             find_const_refs_inner(db, d.value, const_names, name_to_stmt, refs);
+        }
+        ExprFunKind::Error(e) => {
+            find_const_refs_inner(db, e.value, const_names, name_to_stmt, refs);
+        }
+        ExprFunKind::Term(t) => {
+            find_const_refs_inner(db, t.payload, const_names, name_to_stmt, refs);
+        }
+        ExprFunKind::EnumLiteral(e) => {
+            find_const_refs_inner(db, e.variant, const_names, name_to_stmt, refs);
+        }
+        ExprFunKind::Index(i) => {
+            find_const_refs_inner(db, i.base, const_names, name_to_stmt, refs);
+            find_const_refs_inner(db, i.index, const_names, name_to_stmt, refs);
         }
         ExprFunKind::AnonTuple(t) => {
             for elem in &t.elements {
@@ -289,8 +333,21 @@ fn find_const_refs_inner<'db>(
             }
         }
 
-        // Literals and other simple expressions have no references.
-        _ => {}
+        // A literal holds no subexpression, so it names no const. Listed rather
+        // than swept up by a wildcard: this walk decides what a const is
+        // evaluated after, and a kind that goes unwalked does not fail, it
+        // silently loses the edge and the topological sort puts the const
+        // before the one it reads. Naming every kind makes the next one added
+        // a compile error here.
+        ExprFunKind::True(_)
+        | ExprFunKind::False(_)
+        | ExprFunKind::None(_)
+        | ExprFunKind::Int(_)
+        | ExprFunKind::Float(_)
+        | ExprFunKind::Hex(_)
+        | ExprFunKind::String(_)
+        | ExprFunKind::Atom(_)
+        | ExprFunKind::ParseError(_) => {}
     }
 }
 
