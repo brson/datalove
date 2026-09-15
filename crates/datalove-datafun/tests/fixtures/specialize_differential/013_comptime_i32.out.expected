@@ -67,7 +67,8 @@ Analysis(
                     block0:
                         v0 = const 10i32
                         v1 = const 5i32
-                        v2 = comptime_call m0.u0(v0, v1) [disc=0, comptime_params=[0]]
+                        drop v0
+                        v2 = call @1 u0(v1)
                         v3 = const 5i32
                         v4 = call @0 m0.u1(v3)
                         debuglog v2
@@ -75,6 +76,20 @@ Analysis(
                         unit_end_drop v2
                         unit_end_drop v4
                         unit_end
+                    
+                    fn multiply_i32__ct0(p0):
+                    block0:
+                        v6 = const 10i32
+                        v0, v1 = mul.checked v6, p0
+                        branch v1, block1, block2
+                    block1:
+                        v2 = const "arithmetic overflow"
+                        v3 = error_from v2
+                        v4 = err v3
+                        return v4
+                    block2:
+                        v5 = ok v0
+                        return v5
                 """,
             ),
             output: "(fragment executed)",

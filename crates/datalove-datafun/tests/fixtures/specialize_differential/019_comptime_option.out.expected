@@ -38,11 +38,25 @@ Analysis(
                     block0:
                         v1 = const some 42i32
                         v2 = const none
-                        v3 = comptime_call m0.u0(v1) [disc=0, comptime_params=[0]]
-                        v4 = comptime_call m0.u0(v2) [disc=0, comptime_params=[0]]
+                        drop v1
+                        v3 = call @0 u0()
+                        drop v2
+                        v4 = call @1 u1()
                         debuglog v3
                         debuglog v4
                         unit_end
+                    
+                    fn get_opt__ct0():
+                    block0:
+                        v1 = const some 42i32
+                        v0 = copy v1
+                        return v0
+                    
+                    fn get_opt__ct1():
+                    block0:
+                        v1 = const none
+                        v0 = copy v1
+                        return v0
                 """,
             ),
             output: "(fragment executed)",

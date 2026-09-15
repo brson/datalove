@@ -39,11 +39,19 @@ Analysis(
                     block0:
                         v0 = const 2int
                         v1 = const 2int
-                        v2 = comptime_call m0.u0(v1) [disc=0, comptime_params=[0]]
+                        drop v1
+                        v2 = call @0 u0()
                         debuglog v2
                         unit_end_drop v0
                         unit_end_drop v2
                         unit_end
+                    
+                    fn double__ct0():
+                    block0:
+                        v1 = const 2int
+                        v0 = add v1, v1
+                        drop v1
+                        return v0
                 """,
             ),
             output: "(fragment executed)",

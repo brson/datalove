@@ -60,13 +60,22 @@ Analysis(
                         v2 = call @0 m0.u1(v1)
                         v3 = const 7int
                         v4 = const 10int
-                        v5 = comptime_call m0.u0(v3, v4) [disc=0, comptime_params=[0]]
+                        drop v3
+                        v5 = call @1 u0(v4)
                         debuglog v2
                         debuglog v5
                         unit_end_drop v0
                         unit_end_drop v2
                         unit_end_drop v5
                         unit_end
+                    
+                    fn scale__ct0(p0):
+                    block0:
+                        v1 = const 7int
+                        v0 = mul v1, p0
+                        drop v1
+                        drop p0
+                        return v0
                 """,
             ),
             output: "(fragment executed)",

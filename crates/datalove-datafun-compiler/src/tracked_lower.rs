@@ -12,7 +12,7 @@ use datalove_datafun_ast::ast::{ParsedStatements, Statement};
 use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::Arc;
-use datalove_datafun_ir::{CodeUnitId, ConstValue, CtfeEvaluator, IrCodeUnit, IrType, FuncId, IrModuleId, ModuleFunctionRegistry};
+use datalove_datafun_ir::{CodeRef, CodeUnitId, ConstValue, CtfeEvaluator, IrCodeUnit, IrType, FuncId, IrModuleId, ModuleFunctionRegistry};
 use datalove_datafun_tycheck::{
     DbClone, ParallelMode,
     SingleModuleTypecheckResult,
@@ -24,7 +24,8 @@ use datalove_datafun_const::{inline_module_functions, PreparedConst, evaluate_pr
 use crate::IrTypeExt;
 use crate::lower;
 use crate::specialize::{
-    MAX_INSTANTIATIONS, collect_instantiations, monomorphize_function, rewrite_comptime_calls,
+    CalleeKey, MAX_INSTANTIATIONS, MonomorphizationPlan, collect_instantiations_into,
+    module_callee_key, monomorphize_function, rewrite_comptime_calls,
 };
 use crate::tracked_ownership_analysis::{SingleModuleAnalysis, ModuleGraphAnalysis};
 
@@ -1208,12 +1209,15 @@ fn specialize_comptime_functions<'db>(
         .map(|(idx, module)| (module.id(db), IrModuleId(idx as u32)))
         .collect();
 
-    let mut plan = collect_instantiations(
-        modules.iter().filter_map(|(module_id, ir_module_id)| {
-            lowered_functions.get(module_id)
-                .map(|funcs| (*ir_module_id, funcs.functions.as_slice()))
-        }),
-    );
+    let mut plan = MonomorphizationPlan::default();
+    for (module_id, _) in &modules {
+        let Some(module_funcs) = lowered_functions.get(module_id) else {
+            continue;
+        };
+        for func in &module_funcs.functions {
+            collect_instantiations_into(&mut plan, func, &module_callee_key);
+        }
+    }
     if plan.is_empty() {
         return (lowered_functions, Vec::new());
     }
@@ -1234,7 +1238,10 @@ fn specialize_comptime_functions<'db>(
         let mut module_errors = Vec::new();
         let mut copies = Vec::new();
 
-        for ((plan_module, callee_id), mono) in plan.funcs.iter_mut() {
+        for (callee, mono) in plan.funcs.iter_mut() {
+            let CalleeKey::Module(plan_module, callee_id) = callee else {
+                continue;
+            };
             if plan_module != ir_module_id {
                 continue;
             }
@@ -1261,7 +1268,7 @@ fn specialize_comptime_functions<'db>(
                     new_id,
                     format!("{}__ct{}", original.name, index),
                 ));
-                mono.copies.push(new_id);
+                mono.copies.push(CodeRef::Module { module: *ir_module_id, id: new_id });
             }
         }
 
@@ -1278,12 +1285,12 @@ fn specialize_comptime_functions<'db>(
     }
 
     // Point the call sites at the copies.
-    for (module_id, ir_module_id) in &modules {
+    for (module_id, _) in &modules {
         let Some(module_funcs) = lowered_functions.get_mut(module_id) else {
             continue;
         };
         module_funcs.functions = module_funcs.functions.iter()
-            .map(|func| rewrite_comptime_calls(func, &plan, *ir_module_id))
+            .map(|func| rewrite_comptime_calls(func, &plan, &module_callee_key))
             .collect();
     }
 

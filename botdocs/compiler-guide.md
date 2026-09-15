@@ -213,15 +213,19 @@ Phase 5c: Specialize comptime functions
 ```
 
 **Specialization is additive.** The original function is kept, with the signature it was
-lowered with, and the copies are added beside it as `name__ct0`, `name__ct1` and so on.
-That matters because the module graph is not the whole program: script units compile
-afterwards, one at a time, against modules already specialized, so a script line may name
-an instantiation no module call site asked for. Those calls keep their `ComptimeCall`,
-which every backend executes as a plain `Call` to the original.
+lowered with, and the copies are added beside it as `name__ct0`, `name__ct1` and so on. A
+transform that rewrote the callee's signature in place could not do that: it would oblige
+the compiler to find and rewrite every call site at once, and a call site it missed would
+pass a const argument into a parameter that had become something else.
 
-A transform that rewrote the callee's signature in place could not do this. It would
-oblige the compiler to find and rewrite every call site, which it cannot, and a call site
-it missed would pass a const argument into a parameter that had become something else.
+That matters because the module graph is not the whole program. Script units compile
+afterwards, one at a time, against modules already specialized, so a script line may name
+an instantiation no module call site asked for. `ScriptCompiler::phase_specialize` handles
+those separately, putting the copies in the script unit's own `nested_units` reached by
+`CodeRef::Local` -- the same vehicle a script-local function uses -- so the module it
+called into does not have to change. A call whose const argument did not survive as a
+constant, which is every one of them under `skip_const_inlining`, keeps its `ComptimeCall`
+and runs the original.
 
 **Where instantiations come from.** They are read out of the IR. The const argument at a
 call site is already an operand defined by a `Const` instruction, so the values the

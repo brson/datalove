@@ -144,6 +144,14 @@ pub fn analyze_worldfile_with_options(
         }
     }
 
+    // The same flag the module graph was compiled under has to reach the
+    // script compiler, or the differential run would specialize one half.
+    if options.skip_specialization {
+        if let Some(ref mut compiler) = compiler {
+            compiler.set_skip_specialization(true);
+        }
+    }
+
     // Process script sections.
     process_script_sections(&parsed.sections, &mut compiler, &mut executor, &mut results);
 

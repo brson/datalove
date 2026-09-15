@@ -59,6 +59,15 @@ use datalove_datafun_ir::{
 /// Each one is a whole copy of the body in the object file.
 pub const MAX_INSTANTIATIONS: usize = 64;
 
+/// Where a comptime call reaches.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub enum CalleeKey {
+    /// A unit beside the one making the call, in its `nested_units`.
+    Local(CodeUnitId),
+    /// A module function.
+    Module(IrModuleId, CodeUnitId),
+}
+
 /// The instantiations found for one function with const parameters.
 #[derive(Clone, Debug)]
 pub struct FuncMonomorphization {
@@ -68,19 +77,19 @@ pub struct FuncMonomorphization {
     pub instantiations: Vec<Vec<ConstValue>>,
     /// Which instantiation a given tuple is.
     value_to_index: HashMap<Vec<ConstValue>, usize>,
-    /// Unit id of the copy for each instantiation, in the same order.
+    /// How to reach the copy for each instantiation, in the same order.
     ///
     /// Empty until the copies are made, and left empty for a function that
     /// exceeded [`MAX_INSTANTIATIONS`], which is what stops its call sites
     /// being rewritten to copies that were never built.
-    pub copies: Vec<CodeUnitId>,
+    pub copies: Vec<CodeRef>,
 }
 
 impl FuncMonomorphization {
     /// The copy to call for a given set of const argument values.
-    pub fn copy_for(&self, values: &[ConstValue]) -> Option<CodeUnitId> {
+    pub fn copy_for(&self, values: &[ConstValue]) -> Option<CodeRef> {
         let index = *self.value_to_index.get(values)?;
-        self.copies.get(index).copied()
+        self.copies.get(index).cloned()
     }
 }
 
@@ -89,7 +98,7 @@ impl FuncMonomorphization {
 /// A `BTreeMap` because the order decides which unit ids the copies get.
 #[derive(Clone, Debug, Default)]
 pub struct MonomorphizationPlan {
-    pub funcs: BTreeMap<(IrModuleId, CodeUnitId), FuncMonomorphization>,
+    pub funcs: BTreeMap<CalleeKey, FuncMonomorphization>,
 }
 
 impl MonomorphizationPlan {
@@ -99,49 +108,71 @@ impl MonomorphizationPlan {
     }
 }
 
-/// Find every instantiation reachable from the given units.
+/// Add every instantiation this unit names to the plan.
 ///
-/// The caller decides the order, which decides the order instantiations are
-/// numbered in, and so the names and ids the copies get.
-pub fn collect_instantiations<'a>(
-    modules: impl IntoIterator<Item = (IrModuleId, &'a [IrCodeUnit])>,
-) -> MonomorphizationPlan {
-    let mut funcs: BTreeMap<(IrModuleId, CodeUnitId), FuncMonomorphization> = BTreeMap::new();
+/// `key_of` says where a reference reaches, which differs between a module
+/// function and a script unit: the first addresses every call by module, the
+/// second can also name a unit beside itself.
+///
+/// The caller decides the order units are visited in, which decides the order
+/// instantiations are numbered in, and so the names and ids the copies get.
+pub fn collect_instantiations_into(
+    plan: &mut MonomorphizationPlan,
+    unit: &IrCodeUnit,
+    key_of: &dyn Fn(&CodeRef) -> Option<CalleeKey>,
+) {
+    let consts = const_value_map(unit);
 
-    for (ir_module_id, units) in modules {
-        for unit in units {
-            let consts = const_value_map(unit);
+    for block in &unit.blocks {
+        for instr in &block.instructions {
+            let Instruction::ComptimeCall { func, args, comptime_param_indices, .. } = instr else {
+                continue;
+            };
+            let Some(callee) = key_of(func) else {
+                continue;
+            };
+            let Some(values) = comptime_values(args, comptime_param_indices, &consts) else {
+                continue;
+            };
 
-            for block in &unit.blocks {
-                for instr in &block.instructions {
-                    let Instruction::ComptimeCall { func, args, comptime_param_indices, .. } = instr
-                    else {
-                        continue;
-                    };
-                    let Some(callee) = callee_key(func, ir_module_id) else {
-                        continue;
-                    };
-                    let Some(values) = comptime_values(args, comptime_param_indices, &consts) else {
-                        continue;
-                    };
+            let entry = plan.funcs.entry(callee).or_insert_with(|| FuncMonomorphization {
+                comptime_param_indices: comptime_param_indices.clone(),
+                instantiations: Vec::new(),
+                value_to_index: HashMap::new(),
+                copies: Vec::new(),
+            });
 
-                    let entry = funcs.entry(callee).or_insert_with(|| FuncMonomorphization {
-                        comptime_param_indices: comptime_param_indices.clone(),
-                        instantiations: Vec::new(),
-                        value_to_index: HashMap::new(),
-                        copies: Vec::new(),
-                    });
-
-                    if !entry.value_to_index.contains_key(&values) {
-                        entry.value_to_index.insert(values.clone(), entry.instantiations.len());
-                        entry.instantiations.push(values);
-                    }
-                }
+            if !entry.value_to_index.contains_key(&values) {
+                entry.value_to_index.insert(values.clone(), entry.instantiations.len());
+                entry.instantiations.push(values);
             }
         }
     }
+}
 
-    MonomorphizationPlan { funcs }
+/// Where a call in a module function reaches.
+///
+/// Module functions address every call by module, including calls within their
+/// own module, so a local reference is not something this can be handed.
+pub fn module_callee_key(code_ref: &CodeRef) -> Option<CalleeKey> {
+    match code_ref {
+        CodeRef::Module { module, id } => Some(CalleeKey::Module(*module, *id)),
+        CodeRef::Local(id) => {
+            panic!("a module function addresses its calls by module, not local unit {}", id.0)
+        }
+        // A call into a previous script execution names a unit that was
+        // compiled and run before this one existed.
+        CodeRef::External { .. } => None,
+    }
+}
+
+/// Where a call in a script unit reaches.
+pub fn script_callee_key(code_ref: &CodeRef) -> Option<CalleeKey> {
+    match code_ref {
+        CodeRef::Local(id) => Some(CalleeKey::Local(*id)),
+        CodeRef::Module { module, id } => Some(CalleeKey::Module(*module, *id)),
+        CodeRef::External { .. } => None,
+    }
 }
 
 /// Build one copy of a function with its const parameters substituted away.
@@ -234,7 +265,7 @@ pub fn monomorphize_function(
 pub fn rewrite_comptime_calls(
     unit: &IrCodeUnit,
     plan: &MonomorphizationPlan,
-    current_module: IrModuleId,
+    key_of: &dyn Fn(&CodeRef) -> Option<CalleeKey>,
 ) -> IrCodeUnit {
     let consts = const_value_map(unit);
     let mut next_call_site = unit.call_site_count;
@@ -250,13 +281,13 @@ pub fn rewrite_comptime_calls(
                 continue;
             };
 
-            let copy = callee_key(func, current_module)
+            let copy = key_of(func)
                 .and_then(|key| plan.funcs.get(&key))
                 .and_then(|mono| {
                     let values = comptime_values(args, comptime_param_indices, &consts)?;
                     mono.copy_for(&values)
                 });
-            let Some(copy_id) = copy else {
+            let Some(copy_ref) = copy else {
                 instructions.push(instr.clone());
                 continue;
             };
@@ -279,7 +310,7 @@ pub fn rewrite_comptime_calls(
             instructions.push(Instruction::Call {
                 site_id,
                 dest: *dest,
-                func: with_unit_id(func, copy_id),
+                func: copy_ref,
                 args: kept_args,
                 // A function with const parameters is never generic: lowering
                 // takes the comptime branch before type arguments are computed.
@@ -303,27 +334,80 @@ pub fn rewrite_comptime_calls(
     }
 }
 
-/// Where a call reaches, as a key into the plan.
+/// Specialize the comptime calls a script unit makes.
 ///
-/// A call into a previous script execution is not specialized: the unit it
-/// names was compiled and run before this one existed.
-fn callee_key(code_ref: &CodeRef, current_module: IrModuleId) -> Option<(IrModuleId, CodeUnitId)> {
-    match code_ref {
-        CodeRef::Local(id) => Some((current_module, *id)),
-        CodeRef::Module { module, id } => Some((*module, *id)),
-        CodeRef::External { .. } => None,
+/// The copies go in the script unit's own `nested_units`, reached by
+/// `CodeRef::Local`, so that nothing in the module graph is disturbed. That is
+/// what makes this work one script unit at a time: a REPL line may name an
+/// instantiation no module call site asked for, and gets its own copy of the
+/// callee without the module it came from having to change.
+///
+/// `module_unit` reads a module function out of the registry, which is where a
+/// script's callee usually lives. Returns the unit and any errors.
+pub fn specialize_script_unit(
+    unit: &IrCodeUnit,
+    module_unit: &dyn Fn(IrModuleId, CodeUnitId) -> Option<IrCodeUnit>,
+) -> (IrCodeUnit, Vec<String>) {
+    let mut plan = MonomorphizationPlan::default();
+    collect_instantiations_into(&mut plan, unit, &script_callee_key);
+    for nested in &unit.nested_units {
+        collect_instantiations_into(&mut plan, nested, &script_callee_key);
     }
-}
+    if plan.is_empty() {
+        return (unit.clone(), Vec::new());
+    }
 
-/// The same kind of reference, pointing at a different unit in the same place.
-fn with_unit_id(code_ref: &CodeRef, id: CodeUnitId) -> CodeRef {
-    match code_ref {
-        CodeRef::Local(_) => CodeRef::Local(id),
-        CodeRef::Module { module, .. } => CodeRef::Module { module: *module, id },
-        CodeRef::External { .. } => {
-            panic!("an external call is never specialized, so it never reaches here")
+    let mut unit = unit.clone();
+    let mut next_id = unit.nested_units.iter()
+        .map(|f| f.id.0 + 1)
+        .max()
+        .unwrap_or(0);
+    let mut errors = Vec::new();
+    let mut copies = Vec::new();
+
+    for (callee, mono) in plan.funcs.iter_mut() {
+        let original = match callee {
+            CalleeKey::Local(id) => unit.nested_units.iter().find(|f| f.id == *id).cloned(),
+            CalleeKey::Module(module, id) => module_unit(*module, *id),
+        };
+        let Some(original) = original else {
+            continue;
+        };
+
+        if mono.instantiations.len() > MAX_INSTANTIATIONS {
+            errors.push(format!(
+                "`{}` has {} const parameter instantiations, over the limit of {}; \
+                 each one is a copy of the function",
+                original.name, mono.instantiations.len(), MAX_INSTANTIATIONS,
+            ));
+            continue;
+        }
+
+        for values in mono.instantiations.iter() {
+            let new_id = CodeUnitId(next_id);
+            next_id += 1;
+            // Numbered by unit id rather than by instantiation, so that two
+            // callees that share a name cannot produce two copies that do. A
+            // nested unit's name is what the C backend emits as its symbol,
+            // and unlike a module's it carries nothing to tell them apart.
+            copies.push(monomorphize_function(
+                &original,
+                &mono.comptime_param_indices,
+                values,
+                new_id,
+                format!("{}__ct{}", original.name, new_id.0),
+            ));
+            mono.copies.push(CodeRef::Local(new_id));
         }
     }
+
+    unit.nested_units.extend(copies);
+    unit.nested_units = unit.nested_units.iter()
+        .map(|nested| rewrite_comptime_calls(nested, &plan, &script_callee_key))
+        .collect();
+    let unit = rewrite_comptime_calls(&unit, &plan, &script_callee_key);
+
+    (unit, errors)
 }
 
 /// The const argument values at a call site, or `None` if any is not a constant.
@@ -378,7 +462,7 @@ fn remap_params(params: &[ParamId], param_remap: &HashMap<u32, u32>) -> Vec<Para
 mod tests {
     use super::*;
 
-    fn mono(instantiations: Vec<Vec<ConstValue>>, copies: Vec<CodeUnitId>) -> FuncMonomorphization {
+    fn mono(instantiations: Vec<Vec<ConstValue>>, copies: Vec<CodeRef>) -> FuncMonomorphization {
         let value_to_index = instantiations.iter().enumerate()
             .map(|(i, v)| (v.clone(), i))
             .collect();
@@ -394,11 +478,11 @@ mod tests {
     fn copy_for_finds_the_copy_built_for_a_tuple() {
         let m = mono(
             vec![vec![ConstValue::I32(3)], vec![ConstValue::I32(5)]],
-            vec![CodeUnitId(7), CodeUnitId(8)],
+            vec![CodeRef::Local(CodeUnitId(7)), CodeRef::Local(CodeUnitId(8))],
         );
 
-        assert_eq!(m.copy_for(&[ConstValue::I32(3)]), Some(CodeUnitId(7)));
-        assert_eq!(m.copy_for(&[ConstValue::I32(5)]), Some(CodeUnitId(8)));
+        assert_eq!(m.copy_for(&[ConstValue::I32(3)]), Some(CodeRef::Local(CodeUnitId(7))));
+        assert_eq!(m.copy_for(&[ConstValue::I32(5)]), Some(CodeRef::Local(CodeUnitId(8))));
         assert_eq!(m.copy_for(&[ConstValue::I32(9)]), None);
     }
 

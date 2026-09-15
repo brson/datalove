@@ -158,6 +158,7 @@ impl<'db> CompiledModules<'db> {
             last_batch_spec: None,
             ctfe_evaluator,
             skip_const_inlining: false,
+            skip_specialization: false,
             shared_context: self.shared.clone(),
             auto_adapt_mode: AutoAdaptMode::Disabled,
             last_ownership_errors: Vec::new(),
@@ -199,6 +200,8 @@ pub struct ScriptCompiler<'db> {
     ctfe_evaluator: Rc<RefCell<dyn CtfeEvaluator>>,
     /// When true, const bindings in functions are lowered as let bindings.
     skip_const_inlining: bool,
+    /// When true, comptime calls are left naming the original function.
+    skip_specialization: bool,
     /// Shared module context for cross-module CTFE function calls.
     shared_context: Arc<SharedModuleContext<'db>>,
     /// Auto-adapt mode for ownership analysis.
@@ -303,6 +306,14 @@ impl<'db> ScriptCompiler<'db> {
         self.db
     }
 
+    /// Skip const parameter specialization.
+    ///
+    /// When enabled, a comptime call keeps naming the original function, which
+    /// still takes the const argument. Used for differential testing.
+    pub fn set_skip_specialization(&mut self, enabled: bool) {
+        self.skip_specialization = enabled;
+    }
+
     /// Skip compile-time const evaluation and inlining.
     ///
     /// When enabled, const bindings are evaluated at runtime instead of being
@@ -396,6 +407,15 @@ impl<'db> ScriptCompiler<'db> {
         // Skipped in skip_const_inlining mode (consts evaluated at runtime).
         let ir_unit = self.phase_const_inline(ir_unit, &consts);
         let ir_unit = self.phase_resolve_shape_descriptors(ir_unit);
+
+        // Phase 5: Const parameter specialization.
+        let ir_unit = match self.phase_specialize(ir_unit) {
+            Ok(ir) => ir,
+            Err(result) => {
+                self.accumulated_unit_specs.pop();
+                return result;
+            }
+        };
 
         // Update accumulated state
         self.update_accumulated_state(&ir_unit, &ownership);
@@ -1103,6 +1123,44 @@ impl<'db> ScriptCompiler<'db> {
         let _ = datalove_datafun_ir::resolve_call_descriptors(
             &mut ir_unit, &[], &callee_shapes);
         ir_unit
+    }
+
+    // ========================================================================
+    // Phase 5: Const Parameter Specialization
+    // ========================================================================
+
+    /// Give each comptime call in this unit a copy of its callee to run.
+    ///
+    /// The copies go in this unit's own `nested_units`, so a script line can
+    /// name an instantiation no module call site asked for without the module
+    /// it came from having to change. A call whose const argument did not
+    /// survive as a constant -- under `skip_const_inlining` none of them do --
+    /// keeps naming the original, which still takes it.
+    ///
+    /// This runs after the descriptors are resolved, so that a copy arrives
+    /// with the ones its own module worked out and nothing here recomputes
+    /// them against a script that has no type parameters of its own.
+    fn phase_specialize(&self, ir_unit: IrCodeUnit) -> Result<IrCodeUnit, ScriptCompilationResult> {
+        if self.skip_specialization {
+            return Ok(ir_unit);
+        }
+
+        let registry = self.shared_context.module_registry.clone();
+        let module_unit = |module, id| registry.get_module_function_as_unit(module, id).cloned();
+
+        let (ir_unit, errors) =
+            datalove_datafun_compiler::specialize::specialize_script_unit(&ir_unit, &module_unit);
+
+        if !errors.is_empty() {
+            return Err(ScriptCompilationResult {
+                typecheck: TypecheckResult::Success,
+                ownership: OwnershipResult::Success,
+                lowering: LoweringResult::Error { message: errors.join("; ") },
+                ir_unit: None,
+            });
+        }
+
+        Ok(ir_unit)
     }
 
     fn phase_const_inline(

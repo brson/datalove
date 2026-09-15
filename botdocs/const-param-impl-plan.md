@@ -52,6 +52,21 @@ C backend, the inliner, DCE, and the IR printer. Where nothing rewrites it, it i
    copy, drops the const arguments the copy does not take, and leaves everything else
    alone.
 
+**Script units** are specialized separately, by `specialize_script_unit`, called from
+`ScriptCompiler::phase_specialize`. A script unit compiles after the module graph and one
+at a time, so it cannot add to a module; instead its copies go in its own `nested_units`,
+reached by `CodeRef::Local`, which is the same vehicle a script-local function already
+uses and which every backend already handles. A script line may therefore name an
+instantiation no module call site asked for and get its own copy, without the module it
+came from changing. The callee is read out of the module registry, or out of the script's
+own nested units when the comptime function was defined beside the script.
+
+This runs after the shape descriptors are resolved, so a copy arrives with the ones its
+own module worked out rather than having them recomputed against a script that has no type
+parameters of its own. It needs the const arguments to have survived as `Const`
+instructions, so under `skip_const_inlining` nothing specializes and the calls run the
+original -- which is correct, just not specialized.
+
 **Substitution** is `replace_params_in_instruction` and `replace_params_in_terminator` in
 `datalove-datafun-ir/src/params.rs`, shared with the inliner, which needs the same thing
 for a different reason. Both matches are exhaustive: a variant that fell through would
@@ -61,11 +76,22 @@ inliner's copy had grouped in with the operand-free ones and so never substitute
 
 **Identity.** `compute_func_id_map` is `#[salsa::tracked]` and assigns `FuncId`s from
 source statement order, which cannot cover functions that are in nobody's source. Copies
-take ids after the highest source-derived one in their module, and are named
+take ids after the highest source-derived one in the unit they go into, and are named
 `{original}__ct{n}`. The name has to be an identifier because both AOT backends use it as
-a linker symbol -- Cranelift as `__mod_{module_id}_{name}`, the C backend directly. Copies
-are registered in `ModuleLoweredFunctions`, which `lower_module` reuses wholesale, so they
-reach assembly, the runtime registry and the IR dumps without further plumbing.
+a linker symbol -- Cranelift as `__mod_{module_id}_{name}` for a module function and the
+bare name for a nested one, the C backend as `__mod_{module_id}_{name}` and
+`__local_{name}`.
+
+Module copies number `n` by instantiation, which is unambiguous because the symbol carries
+the module. Script copies number it by unit id instead: a nested unit's symbol carries
+nothing to tell it from another unit's, so two callees that happened to share a name would
+otherwise produce two copies that did. Nothing can currently name two such callees from
+one script -- imports cannot be aliased -- but the copies are made distinct rather than
+left resting on that.
+
+Module copies are registered in `ModuleLoweredFunctions`, which `lower_module` reuses
+wholesale, so they reach assembly, the runtime registry and the IR dumps without further
+plumbing.
 
 **Limit.** `MAX_INSTANTIATIONS` is 64. Over that, the function is left unspecialized and
 the module gets a lowering error naming it, which travels the channel module const
@@ -129,19 +155,15 @@ argument on the way. Keeping the original removes the condition entirely. Fixtur
 specialization on and off, and compares both `debug_output` and `output` for every
 section. That harness is sound. What it was pointed at was not, and still is only partly.
 
-Specialization fires when the call site is in a module function. Of the 21 fixtures in
-`fixtures/specialize_differential/`:
+Of the 21 fixtures in `fixtures/specialize_differential/`, 18 specialize, and their
+expected IR is where the `__ct` copies appear. Of the three that do not, two -- 
+`000_no_comptime` and `007_str_no_comptime` -- have no const parameters to specialize,
+which is what they are for. The third, `016_nested_comptime`, fails to lower: a const in a
+comptime function's body cannot name that function's comptime parameter. It is recorded as
+passing because both sides fail identically.
 
-- **Six specialize.** `011_module_internal`, `012_cross_module`, `013_comptime_i32`,
-  `022_shared_const_name`, `023_module_and_script_call` (its module half), and
-  `024_module_side_positions`. Their expected IR is where the `__ct` copies appear.
-- **Fourteen do not.** Their call sites are in script units, which this pass does not
-  reach, so both sides of the differential run the same unspecialized code. They are still
-  worth having -- they check that the unspecialized path stays correct -- but they are not
-  evidence about specialization.
-- **One does not run.** `016_nested_comptime` fails to lower: a const in a comptime
-  function's body cannot name that function's comptime parameter. It is recorded as
-  passing because both sides fail identically.
+No `comptime_call` survives in any fixture's expected IR. Every call site either reaches a
+copy or is one of those three.
 
 `024_module_side_positions` covers the parameter renumbering: a comptime parameter last,
 two of them, and two interleaved among three ordinary ones, all called from module
@@ -181,10 +203,6 @@ this tractable -- inside a copy the parameter *is* a const -- but it is a separa
 
 ## What remains
 
-- **Specialize script call sites.** The largest remaining gap, and the reason fourteen
-  fixtures are inert. A script unit can hold copies in its own `nested_units` addressed by
-  `CodeRef::Local`, which keeps the module untouched and works incrementally. Not needed
-  for correctness, since those calls run the original.
 - **Reconsider the const-binding-only restriction.** `pow(2, 10)` failing because `10` is
   a literal is a bad first impression. Now that instantiations are read from the IR, a
   literal argument arrives as a `Const` operand exactly like a const binding does, so the

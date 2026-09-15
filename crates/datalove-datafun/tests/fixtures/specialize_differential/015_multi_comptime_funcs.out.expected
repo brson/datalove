@@ -60,14 +60,18 @@ Analysis(
                         v2 = const 5int
                         v3 = const 2int
                         v4 = const 10int
-                        v5 = comptime_call m0.u0(v3, v4) [disc=0, comptime_params=[0]]
+                        drop v3
+                        v5 = call @0 u0(v4)
                         v6 = const 3int
                         v7 = const 10int
-                        v8 = comptime_call m0.u1(v6, v7) [disc=0, comptime_params=[0]]
+                        drop v6
+                        v8 = call @1 u1(v7)
                         v9 = const 2int
                         v10 = const 5int
                         v11 = const 10int
-                        v12 = comptime_call m0.u2(v9, v10, v11) [disc=0, comptime_params=[0, 1]]
+                        drop v9
+                        drop v10
+                        v12 = call @2 u2(v11)
                         debuglog v5
                         debuglog v8
                         debuglog v12
@@ -78,6 +82,34 @@ Analysis(
                         unit_end_drop v8
                         unit_end_drop v12
                         unit_end
+                    
+                    fn add_const__ct0(p0):
+                    block0:
+                        v1 = const 2int
+                        v0 = add v1, p0
+                        drop v1
+                        drop p0
+                        return v0
+                    
+                    fn mul_const__ct1(p0):
+                    block0:
+                        v1 = const 3int
+                        v0 = mul v1, p0
+                        drop v1
+                        drop p0
+                        return v0
+                    
+                    fn shift_by__ct2(p0):
+                    block0:
+                        v2 = const 2int
+                        v3 = const 5int
+                        v0 = add p0, v2
+                        v1 = mul v0, v3
+                        drop v0
+                        drop v2
+                        drop v3
+                        drop p0
+                        return v1
                 """,
             ),
             output: "(fragment executed)",

@@ -41,11 +41,20 @@ Analysis(
                         v0 = const 3int
                         v1 = const 7int
                         v2 = const 3int
-                        v3 = comptime_call m0.u0(v1, v2) [disc=0, comptime_params=[1]]
+                        drop v2
+                        v3 = call @0 u0(v1)
                         debuglog v3
                         unit_end_drop v0
                         unit_end_drop v3
                         unit_end
+                    
+                    fn multiply__ct0(p0):
+                    block0:
+                        v1 = const 3int
+                        v0 = mul p0, v1
+                        drop p0
+                        drop v1
+                        return v0
                 """,
             ),
             output: "(fragment executed)",

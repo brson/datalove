@@ -37,9 +37,16 @@ Analysis(
                     scriptunit:
                     block0:
                         v2 = const {enabled = true, value = 42i32}
-                        v3 = comptime_call m0.u0(v2) [disc=0, comptime_params=[0]]
+                        drop v2
+                        v3 = call @0 u0()
                         debuglog v3
                         unit_end
+                    
+                    fn get_config__ct0():
+                    block0:
+                        v1 = const {enabled = true, value = 42i32}
+                        v0 = copy v1
+                        return v0
                 """,
             ),
             output: "(fragment executed)",

@@ -48,28 +48,36 @@ Analysis(
                         v7 = const 8int
                         v8 = const 1int
                         v9 = const 10int
-                        v10 = comptime_call m0.u0(v8, v9) [disc=0, comptime_params=[0]]
+                        drop v8
+                        v10 = call @0 u0(v9)
                         v11 = const 2int
                         v12 = const 10int
-                        v13 = comptime_call m0.u0(v11, v12) [disc=0, comptime_params=[0]]
+                        drop v11
+                        v13 = call @1 u1(v12)
                         v14 = const 3int
                         v15 = const 10int
-                        v16 = comptime_call m0.u0(v14, v15) [disc=0, comptime_params=[0]]
+                        drop v14
+                        v16 = call @2 u2(v15)
                         v17 = const 4int
                         v18 = const 10int
-                        v19 = comptime_call m0.u0(v17, v18) [disc=0, comptime_params=[0]]
+                        drop v17
+                        v19 = call @3 u3(v18)
                         v20 = const 5int
                         v21 = const 10int
-                        v22 = comptime_call m0.u0(v20, v21) [disc=0, comptime_params=[0]]
+                        drop v20
+                        v22 = call @4 u4(v21)
                         v23 = const 6int
                         v24 = const 10int
-                        v25 = comptime_call m0.u0(v23, v24) [disc=0, comptime_params=[0]]
+                        drop v23
+                        v25 = call @5 u5(v24)
                         v26 = const 7int
                         v27 = const 10int
-                        v28 = comptime_call m0.u0(v26, v27) [disc=0, comptime_params=[0]]
+                        drop v26
+                        v28 = call @6 u6(v27)
                         v29 = const 8int
                         v30 = const 10int
-                        v31 = comptime_call m0.u0(v29, v30) [disc=0, comptime_params=[0]]
+                        drop v29
+                        v31 = call @7 u7(v30)
                         debuglog v10
                         debuglog v13
                         debuglog v16
@@ -95,6 +103,70 @@ Analysis(
                         unit_end_drop v28
                         unit_end_drop v31
                         unit_end
+                    
+                    fn scale__ct0(p0):
+                    block0:
+                        v1 = const 1int
+                        v0 = mul p0, v1
+                        drop v1
+                        drop p0
+                        return v0
+                    
+                    fn scale__ct1(p0):
+                    block0:
+                        v1 = const 2int
+                        v0 = mul p0, v1
+                        drop v1
+                        drop p0
+                        return v0
+                    
+                    fn scale__ct2(p0):
+                    block0:
+                        v1 = const 3int
+                        v0 = mul p0, v1
+                        drop v1
+                        drop p0
+                        return v0
+                    
+                    fn scale__ct3(p0):
+                    block0:
+                        v1 = const 4int
+                        v0 = mul p0, v1
+                        drop v1
+                        drop p0
+                        return v0
+                    
+                    fn scale__ct4(p0):
+                    block0:
+                        v1 = const 5int
+                        v0 = mul p0, v1
+                        drop v1
+                        drop p0
+                        return v0
+                    
+                    fn scale__ct5(p0):
+                    block0:
+                        v1 = const 6int
+                        v0 = mul p0, v1
+                        drop v1
+                        drop p0
+                        return v0
+                    
+                    fn scale__ct6(p0):
+                    block0:
+                        v1 = const 7int
+                        v0 = mul p0, v1
+                        drop v1
+                        drop p0
+                        return v0
+                    
+                    fn scale__ct7(p0):
+                    block0:
+                        v1 = const 8int
+                        v0 = mul p0, v1
+                        drop v1
+                        drop p0
+                        return v0
                 """,
             ),
             output: "(fragment executed)",
