@@ -1098,9 +1098,8 @@ fn instantiate_map<'db>(
         return Ok(map_ptr as *const u8);
     }
 
-    // Get sorted indices (cached by Salsa).
-    let sorted_indices = crate::canon::sorted_map_indices(db, &map_expr);
-
+    // Entries go in one at a time, in the order they were written; see
+    // `instantiate_set` for why they are not sorted here first.
     let key_tydesc = tydesc_table.get_or_create(&key_type);
     let value_tydesc = tydesc_table.get_or_create(&value_type);
     let key_tydesc_ref = unsafe { rtdt::TyDescRef::from_ptr(key_tydesc) };
@@ -1129,42 +1128,31 @@ fn instantiate_map<'db>(
         // Track how many entries we've successfully instantiated (for cleanup on error).
         let mut instantiated_count = 0usize;
 
-        // Instantiate entries into the buffers in sorted order (by key).
-        for (i, &orig_idx) in sorted_indices.iter().enumerate() {
-            let entry = &entries[orig_idx];
-            let key_expr = entry.key;
-            let value_expr = entry.value;
-
+        // Instantiate entries into the buffers in the order they were written.
+        for (i, entry) in entries.iter().enumerate() {
             let key_dest = keys_buffer.add(i * key_size);
             let value_dest = values_buffer.add(i * value_size);
 
             // Try to instantiate key.
-            if let Err(e) = instantiate_expr_into(db, rt, key_expr, &key_type, tydesc_table, key_dest, resolved) {
+            if let Err(e) = instantiate_expr_into(db, rt, entry.key, &key_type, tydesc_table, key_dest, resolved) {
                 // Cleanup: destroy already-instantiated entries.
                 for j in 0..instantiated_count {
-                    let key_to_destroy = keys_buffer.add(j * key_size);
-                    let value_to_destroy = values_buffer.add(j * value_size);
-                    datalove_rt::c::dtlv_rti_any_destroy_local(rt, key_to_destroy, key_tydesc);
-                    datalove_rt::c::dtlv_rti_any_destroy_local(rt, value_to_destroy, value_tydesc);
+                    datalove_rt::c::dtlv_rti_any_destroy_local(rt, keys_buffer.add(j * key_size), key_tydesc);
+                    datalove_rt::c::dtlv_rti_any_destroy_local(rt, values_buffer.add(j * value_size), value_tydesc);
                 }
-                // Free the buffers.
                 datalove_rt::c::dtlv_rti_mem_free_raw_local(rt, keys_buffer_size, key_align, 1, keys_buffer);
                 datalove_rt::c::dtlv_rti_mem_free_raw_local(rt, values_buffer_size, value_align, 1, values_buffer);
                 return Err(e);
             }
 
             // Try to instantiate value.
-            if let Err(e) = instantiate_expr_into(db, rt, value_expr, &value_type, tydesc_table, value_dest, resolved) {
+            if let Err(e) = instantiate_expr_into(db, rt, entry.value, &value_type, tydesc_table, value_dest, resolved) {
                 // Destroy the key we just instantiated.
                 datalove_rt::c::dtlv_rti_any_destroy_local(rt, key_dest, key_tydesc);
-                // Cleanup: destroy already-instantiated entries.
                 for j in 0..instantiated_count {
-                    let key_to_destroy = keys_buffer.add(j * key_size);
-                    let value_to_destroy = values_buffer.add(j * value_size);
-                    datalove_rt::c::dtlv_rti_any_destroy_local(rt, key_to_destroy, key_tydesc);
-                    datalove_rt::c::dtlv_rti_any_destroy_local(rt, value_to_destroy, value_tydesc);
+                    datalove_rt::c::dtlv_rti_any_destroy_local(rt, keys_buffer.add(j * key_size), key_tydesc);
+                    datalove_rt::c::dtlv_rti_any_destroy_local(rt, values_buffer.add(j * value_size), value_tydesc);
                 }
-                // Free the buffers.
                 datalove_rt::c::dtlv_rti_mem_free_raw_local(rt, keys_buffer_size, key_align, 1, keys_buffer);
                 datalove_rt::c::dtlv_rti_mem_free_raw_local(rt, values_buffer_size, value_align, 1, values_buffer);
                 return Err(e);
@@ -1173,20 +1161,42 @@ fn instantiate_map<'db>(
             instantiated_count += 1;
         }
 
+        // By key, in the runtime's order; see `instantiate_set`.
+        let sorted = sort_instantiated(rt, keys_buffer, entries.len(), key_size, key_tydesc);
+        let sorted_keys = datalove_rt::c::dtlv_rti_mem_alloc_raw_local(rt, keys_buffer_size, key_align, 1);
+        let sorted_values = datalove_rt::c::dtlv_rti_mem_alloc_raw_local(rt, values_buffer_size, value_align, 1);
+        if sorted_keys.is_null() || sorted_values.is_null() {
+            for j in 0..entries.len() {
+                datalove_rt::c::dtlv_rti_any_destroy_local(rt, keys_buffer.add(j * key_size), key_tydesc);
+                datalove_rt::c::dtlv_rti_any_destroy_local(rt, values_buffer.add(j * value_size), value_tydesc);
+            }
+            datalove_rt::c::dtlv_rti_mem_free_raw_local(rt, keys_buffer_size, key_align, 1, keys_buffer);
+            datalove_rt::c::dtlv_rti_mem_free_raw_local(rt, values_buffer_size, value_align, 1, values_buffer);
+            return Err(anyhow!("Failed to allocate sorted buffers for map entries"));
+        }
+        for (i, &from) in sorted.iter().enumerate() {
+            std::ptr::copy_nonoverlapping(
+                keys_buffer.add(from * key_size), sorted_keys.add(i * key_size), key_size);
+            std::ptr::copy_nonoverlapping(
+                values_buffer.add(from * value_size), sorted_values.add(i * value_size), value_size);
+        }
+        datalove_rt::c::dtlv_rti_mem_free_raw_local(rt, keys_buffer_size, key_align, 1, keys_buffer);
+        datalove_rt::c::dtlv_rti_mem_free_raw_local(rt, values_buffer_size, value_align, 1, values_buffer);
+
         // Build the B-tree using the runtime function (takes ownership of buffer contents).
         let status = datalove_rt::c::dtlv_rti_btreemap_build_from_sorted_slices_local(
             rt,
             map_ptr as *mut u8,
             key_tydesc,
             value_tydesc,
-            keys_buffer,
-            values_buffer,
+            sorted_keys,
+            sorted_values,
             (entries.len() as u32).into(),
         );
 
         // Free the buffer memory (data has been moved to the tree).
-        datalove_rt::c::dtlv_rti_mem_free_raw_local(rt, keys_buffer_size, key_align, 1, keys_buffer);
-        datalove_rt::c::dtlv_rti_mem_free_raw_local(rt, values_buffer_size, value_align, 1, values_buffer);
+        datalove_rt::c::dtlv_rti_mem_free_raw_local(rt, keys_buffer_size, key_align, 1, sorted_keys);
+        datalove_rt::c::dtlv_rti_mem_free_raw_local(rt, values_buffer_size, value_align, 1, sorted_values);
 
         if status != datalove_rt::c::RtStatus::Ok {
             return Err(anyhow!("Failed to build map B-tree"));
@@ -1222,9 +1232,6 @@ fn instantiate_set<'db>(
         return Ok(set_ptr as *const u8);
     }
 
-    // Get sorted indices (cached by Salsa).
-    let sorted_indices = crate::canon::sorted_set_indices(db, &set_expr);
-
     let element_tydesc = tydesc_table.get_or_create(&element_type);
     let element_tydesc_ref = unsafe { rtdt::TyDescRef::from_ptr(element_tydesc) };
     let element_size = element_tydesc_ref.size() as usize;
@@ -1241,11 +1248,10 @@ fn instantiate_set<'db>(
         // Track how many elements we've successfully instantiated (for cleanup on error).
         let mut instantiated_count = 0usize;
 
-        // Instantiate elements into the buffer in sorted order.
-        for (i, &orig_idx) in sorted_indices.iter().enumerate() {
-            let elem = elements[orig_idx];
+        // Instantiate elements into the buffer in the order they were written.
+        for (i, elem) in elements.iter().enumerate() {
             let elem_dest = buffer.add(i * element_size);
-            if let Err(e) = instantiate_expr_into(db, rt, elem, &element_type, tydesc_table, elem_dest, resolved) {
+            if let Err(e) = instantiate_expr_into(db, rt, *elem, &element_type, tydesc_table, elem_dest, resolved) {
                 // Cleanup: destroy already-instantiated elements.
                 for j in 0..instantiated_count {
                     let elem_to_destroy = buffer.add(j * element_size);
@@ -1258,17 +1264,47 @@ fn instantiate_set<'db>(
             instantiated_count += 1;
         }
 
+        // Sorted by the runtime's own comparator, which is what the tree this
+        // run is about to become uses to decide where anything sits.
+        //
+        // The order used to be worked out from the expressions instead, by a
+        // second comparison written over the AST in `canon`. Nothing held the
+        // two to one answer, and they differed: over how a `data` orders
+        // against another holding a different type, over sequences of unequal
+        // length, over a struct's fields, and over tables, which `canon` gave
+        // a type tag and no comparison at all, so that a set of two of them
+        // reached an `unreachable!`. Where they differed, the run handed to
+        // build-from-sorted-slice was not sorted by the comparator that
+        // believed it was, and the tree came out holding values it could no
+        // longer find.
+        let sorted = sort_instantiated(rt, buffer, elements.len(), element_size, element_tydesc);
+        let sorted_buffer = datalove_rt::c::dtlv_rti_mem_alloc_raw_local(rt, buffer_size, element_align, 1);
+        if sorted_buffer.is_null() {
+            for j in 0..elements.len() {
+                datalove_rt::c::dtlv_rti_any_destroy_local(rt, buffer.add(j * element_size), element_tydesc);
+            }
+            datalove_rt::c::dtlv_rti_mem_free_raw_local(rt, buffer_size, element_align, 1, buffer);
+            return Err(anyhow!("Failed to allocate sorted buffer for set elements"));
+        }
+        // Moves, not copies: the bytes are handed over and the old run is left
+        // to be freed without being destroyed.
+        for (i, &from) in sorted.iter().enumerate() {
+            std::ptr::copy_nonoverlapping(
+                buffer.add(from * element_size), sorted_buffer.add(i * element_size), element_size);
+        }
+        datalove_rt::c::dtlv_rti_mem_free_raw_local(rt, buffer_size, element_align, 1, buffer);
+
         // Build the B-tree using the runtime function (takes ownership of buffer contents).
         let status = datalove_rt::c::dtlv_rti_btreeset_build_from_sorted_slice_local(
             rt,
             set_ptr as *mut u8,
             element_tydesc,
-            buffer,
+            sorted_buffer,
             (elements.len() as u32).into(),
         );
 
         // Free the buffer memory (elements have been moved to the tree).
-        datalove_rt::c::dtlv_rti_mem_free_raw_local(rt, buffer_size, element_align, 1, buffer);
+        datalove_rt::c::dtlv_rti_mem_free_raw_local(rt, buffer_size, element_align, 1, sorted_buffer);
 
         if status != datalove_rt::c::RtStatus::Ok {
             return Err(anyhow!("Failed to build set B-tree"));
@@ -1276,6 +1312,39 @@ fn instantiate_set<'db>(
     }
 
     Ok(set_ptr as *const u8)
+}
+
+/// Order instantiated values by the runtime's comparison, returning where each
+/// belongs rather than moving anything.
+///
+/// A set or a map literal is built by handing a sorted run of values to the
+/// runtime, which takes the order on trust, so the order has to be the one its
+/// own comparator would give. Asking it is the only way to be sure of that.
+unsafe fn sort_instantiated(
+    rt: datalove_rt::c::LocalRtHandle,
+    buffer: *const u8,
+    count: usize,
+    stride: usize,
+    tydesc: *const rtdt::TyDesc,
+) -> Vec<usize> {
+    let mut order: Vec<usize> = (0..count).collect();
+    order.sort_by(|&a, &b| unsafe {
+        match datalove_rt::c::dtlv_rti_cmp_total_local(
+            rt,
+            buffer.add(a * stride),
+            tydesc,
+            buffer.add(b * stride),
+            tydesc,
+        ) {
+            datalove_rt::c::RtOrdering::Less => std::cmp::Ordering::Less,
+            datalove_rt::c::RtOrdering::Greater => std::cmp::Ordering::Greater,
+            datalove_rt::c::RtOrdering::Equal => std::cmp::Ordering::Equal,
+            // Two values of one type always compare, and everything in one of
+            // these runs has one type.
+            datalove_rt::c::RtOrdering::Error => unreachable!("cmp of two values of one type"),
+        }
+    });
+    order
 }
 
 fn instantiate_tensor<'db>(

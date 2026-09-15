@@ -2,7 +2,6 @@ use rmx::prelude::*;
 
 pub mod ast;
 pub mod ast_serde;
-pub mod canon;
 pub mod parser;
 pub mod parser_util;
 pub mod resolve;
