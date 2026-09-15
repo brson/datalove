@@ -1149,7 +1149,7 @@ impl<'a> FunctionCodegenContext<'a> {
                 IrType::I16 => Some("INT16_MIN"),
                 IrType::I32 => Some("INT32_MIN"),
                 IrType::I64 => Some("INT64_MIN"),
-                IrType::Offset => Some("INT32_MIN"),
+                IrType::Offset => Some("DTLV_OFFSET_MIN"),
                 _ => None,
             };
             writeln!(out, "    if (*({c_ty}*){rhs_addr} == 0) {{").unwrap();
@@ -1262,6 +1262,10 @@ impl<'a> FunctionCodegenContext<'a> {
                     }
                     IrType::I64 => {
                         writeln!(out, "    {{ int64_t __v = *(int64_t*){}; *(bool_t*){} = (__v == INT64_MIN); *(int64_t*){} = -__v; }}",
+                            src_addr, overflow_addr, dest_addr).unwrap();
+                    }
+                    IrType::Offset => {
+                        writeln!(out, "    {{ offset_t __v = *(offset_t*){}; *(bool_t*){} = (__v == DTLV_OFFSET_MIN); *(offset_t*){} = -__v; }}",
                             src_addr, overflow_addr, dest_addr).unwrap();
                     }
                     _ => {
@@ -3533,7 +3537,7 @@ impl<'a> FunctionCodegenContext<'a> {
                 writeln!(out, "    *(offset_t*){} = -*(offset_t*){};", dest_addr, arg0()).unwrap();
             }
             IntrinsicId::SshrOffset => {
-                writeln!(out, "    *(offset_t*){} = *(offset_t*){} >> *(index_t*){};", dest_addr, arg0(), arg1()).unwrap();
+                writeln!(out, "    *(offset_t*){} = *(offset_t*){} >> *(uint32_t*){};", dest_addr, arg0(), arg1()).unwrap();
             }
             IntrinsicId::SremOffset => {
                 writeln!(out, "    *(offset_t*){} = *(offset_t*){} % *(offset_t*){};", dest_addr, arg0(), arg1()).unwrap();

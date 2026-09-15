@@ -265,11 +265,13 @@ impl CAotCompiler {
         {
             writeln!(out, "typedef uint32_t index_t;").unwrap();
             writeln!(out, "typedef int32_t offset_t;").unwrap();
+            writeln!(out, "#define DTLV_OFFSET_MIN INT32_MIN").unwrap();
         }
         #[cfg(feature = "index-64")]
         {
             writeln!(out, "typedef uint64_t index_t;").unwrap();
             writeln!(out, "typedef int64_t offset_t;").unwrap();
+            writeln!(out, "#define DTLV_OFFSET_MIN INT64_MIN").unwrap();
         }
         writeln!(out).unwrap();
 
