@@ -225,8 +225,12 @@ guarantees the value is known. It also merges instantiations into one function, 
 the tiering in `optimizing.rs` counts and inlines as a unit, so a hot instantiation
 cannot tier separately from a cold one.
 
-Monomorphization is smaller, faster to compile, and gives the tiering what it wants.
-This is worth revisiting; see [Generics and Specialization](plan-generics.md).
+Monomorphization is smaller, faster to compile, and gives the tiering what it wants. It is
+also additive where union-branch is destructive, which is what makes the union-branch
+signature rewrite unsafe for call sites the module graph cannot see, such as a script
+unit's. The plan to replace it is in
+[Const Parameter Implementation](const-param-impl-plan.md); why this machinery is not a
+foundation for generics is in [Generics and Specialization](plan-generics.md).
 
 **Call site handling:** The lowering phase emits `ComptimeCall` instructions for calls to
 functions with const parameters. During specialization, these are transformed to emit the

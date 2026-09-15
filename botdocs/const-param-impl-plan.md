@@ -1,1352 +1,378 @@
-# Const Parameter Specialization Implementation Plan
+# Const Parameter Implementation
 
-## Union-Branch Approach for `const` Parameters
+How const parameter specialization works today, where it is wrong, and the plan to
+replace union-branch with monomorphization.
 
-This document provides a detailed implementation plan for adding Zig-style const parameter specialization
-to datalove using the **union-branch specialization** strategy.
-
-> **Where the plan and the code differ.** The `call_expr_id: salsa::Id` on
-> `ComptimeCallSite`, and the `call_rewrites` map it fed on
-> `SpecializationResult`, are not in the code. Call sites are found in the IR by
-> `rewrite_comptime_calls`, which matches `Instruction::ComptimeCall` and
-> resolves the comptime argument values it finds there, so the id was never
-> read. It was removed, along with the map. A raw salsa id inside a memoized
-> value is not free even when unread: it takes part in the equality that decides
-> whether typechecking can be reused. See `salsa-patterns.md`.
+The survey of the literature that led to the original design is in
+[Const Parameter Specialization](const-param-specialization.md). The reasoning that
+rejected this machinery as a foundation for generics is in
+[Generics and Specialization](plan-generics.md). This document is the implementation
+plan, and it has been rewritten: the union-branch plan it used to hold described a
+strategy the compiler should stop using.
 
 ## Table of Contents
 
-1. [Executive Summary](#executive-summary)
-2. [Architecture Overview](#architecture-overview)
-3. [Phase 1: AST & Parsing](#phase-1-ast--parsing)
-4. [Phase 2: Type System](#phase-2-type-system)
-5. [Phase 3: Comptime Call Site Recording](#phase-3-comptime-call-site-recording)
-6. [Phase 4: IR-Level Specialization](#phase-4-ir-level-specialization)
-7. [Phase 5: Const Folding Within Branches](#phase-5-const-folding-within-branches)
-8. [Phase 6: Codegen Optimization](#phase-6-codegen-optimization)
-9. [Testing Strategy](#testing-strategy)
-10. [Risk Mitigation](#risk-mitigation)
-11. [Future Extensions](#future-extensions)
-12. [Implementation Order](#implementation-order)
-13. [Appendix: Key Files to Modify](#appendix-key-files-to-modify)
+1. [What is built](#user-content-what-is-built)
+2. [What the tests actually cover](#user-content-what-the-tests-actually-cover)
+3. [Two faults](#user-content-two-faults)
+4. [Why monomorphization](#user-content-why-monomorphization)
+5. [The plan](#user-content-the-plan)
+6. [Constraints to respect](#user-content-constraints-to-respect)
+7. [Testing](#user-content-testing)
+8. [Order of work](#user-content-order-of-work)
+9. [Appendix: the union-branch record](#user-content-appendix-the-union-branch-record)
 
 ---
 
-## Executive Summary
+## What is built
 
-### Goal
+The feature is wired end to end and `skip_specialization` defaults to `false`, so it
+runs in the real compiler.
 
-Add `const` parameter modifier enabling compile-time known arguments:
+**Front end.** `FunParam::is_comptime` carries the `const` modifier from the parser.
+`TypeFunction::param_comptime` carries it through the type system. `synthesize.rs:1202`
+enforces the const-binding-only restriction: a comptime argument must be the name of a
+`const` binding, not a literal, a `let`, or a parameter. The three refusals are covered
+by `tycheck_world/05_comptime_arg_errors.world`.
+
+**Call sites.** `lower/expr.rs:653` emits `Instruction::ComptimeCall` instead of `Call`
+when the callee has comptime parameters. It carries the original arguments, the comptime
+parameter indices, and a placeholder discriminant. Every consumer handles it: the
+interpreter, the Cranelift backend, the C backend, the inliner, DCE, and the IR printer.
+Where nothing rewrites it, it behaves as a plain `Call` to the original function.
+
+**Specialization.** `specialize_comptime_functions` in `tracked_lower.rs:1191` runs as
+phase 5c, after const evaluation and before assembly. It does three things:
+
+1. `build_specialization_plan` walks the `ComptimeCallSiteRegistry` the typechecker
+   filled in, resolves each recorded const binding *name* against the module graph's
+   evaluated consts, and groups the resulting values into instantiations per function.
+2. `transform_function` rewrites each comptime function into union-branch form: the
+   comptime parameters are replaced by a single `i32` tag, and the body is cloned once
+   per instantiation behind a `Switch` on that tag.
+3. `rewrite_comptime_calls` turns each `ComptimeCall` into `Const(discriminant)` followed
+   by a `Call`, dropping the comptime arguments the callee no longer takes.
+
+The parts of this worth keeping are the substitution helpers
+(`rewrite_comptime_params_in_instruction` and its terminator twin), `build_const_value_map`,
+and the call-site rewriting shell. The tag, the `Switch`, and `build_dispatch_blocks` are
+what goes.
+
+## What the tests actually cover
+
+Less than the fixture count suggests, and the gap runs in one direction: the cases the
+suite claims to cover are the cases it does not.
+
+Specialization only fires when a call site is *in a module function* and its const
+resolves out of the module graph's `resolved_consts`, which holds module-level and
+function-level consts. Script-unit consts are not in that map, so those call sites are
+silently skipped and the whole plan comes back empty.
+
+Of the 18 fixtures in `fixtures/specialize_differential/`:
+
+- **Two specialize.** `011_module_internal` and `012_cross_module` are the only fixtures
+  whose expected IR contains a `switch`. Both are `(const factor: int, x: int)`: a single
+  comptime parameter in first position.
+- **Fourteen are inert.** Their call sites are in script units, the plan comes back empty,
+  and the harness compares two identical unspecialized runs.
+- **Two do not run at all.** `013_comptime_i32` fails to typecheck (`*!` used in a
+  function that does not return a `Result`). `016_nested_comptime` fails to lower with
+  `double_add::const 'N': lowering error: binding not available yet: n` — a comptime
+  function calling another comptime function does not work. Both are recorded as passing,
+  because both sides of the differential fail identically.
+
+So `param_remap` has no live coverage for a comptime parameter anywhere but index 0.
+`006_comptime_last_position`, `008_two_comptime_params` and `020_interleaved_comptime`
+exercise the unspecialized path only. The AOT fixture `aot/083_comptime_simple.world` is
+a script call site, and its expected IR still shows `comptime_call` — specialization and
+AOT have never been run together.
+
+The harness itself is sound. `specialize_differential_analysis.rs` runs the worldfile
+twice on fresh databases and compares both `debug_output` and `output` for every section.
+The problem is the fixtures, and most of it dissolves on its own once the plan is sourced
+from the IR.
+
+## Two faults
+
+Both are live in an on-by-default path.
+
+**Same-named consts panic the compiler.** The registry records const *names* with no
+scope, and `build_specialization_plan` looks them up by bare name against a map that adds
+an unqualified alias on a first-wins basis. Two function-level consts sharing a name in
+one module:
 
 ```datalove
-fun repeat(const n: i32, s: string) -> string
-    // n is known at compile time, enabling optimization
+fun twice(x: int): int
+    const N: int = 2
+    ret scale(N, x)
 end fun
 
-const N = 3
-let x = repeat(N, "ab")  // N is a const binding, value looked up
-```
-
-### Initial Restriction: Const-Binding-Only Arguments
-
-To avoid complexity with CTFE ordering, const parameter specialization must be **const binding names**:
-
-```datalove
-const N = 5
-const MODE = 2
-
-fun foo(const n: i32, x: string) -> string ...
-
-let a = foo(N, "hello")     // ✓ N is a const binding
-let b = foo(MODE, "world")  // ✓ MODE is a const binding
-let c = foo(3, "x")         // ✗ ERROR: literal not allowed (for now)
-let d = foo(1 + 2, "y")     // ✗ ERROR: expression not allowed
-```
-
-This restriction means **no additional CTFE is needed during specialization**—we just
-look up already-evaluated const values from `ResolvedConsts`.
-
-### Strategy: Union-Branch Specialization
-
-Instead of generating N separate functions (full monomorphization), generate **one function
-with N branches**, dispatching on an enum tag:
-
-```datalove
-// Generated internal representation
-enum Comptime_repeat_n { V0, V1, V2 }  // variants for N=3, N=5, N=10
-
-fun repeat_unified(n_tag: Comptime_repeat_n, s: string) -> string
-    if discriminant(n_tag) == 0
-        const n = 3
-        // body with n=3 const-folded
-    else if discriminant(n_tag) == 1
-        const n = 5
-        // body with n=5 const-folded
-    else
-        const n = 10
-        // body with n=10 const-folded
-    end if
+fun fivex(x: int): int
+    const N: int = 5
+    ret scale(N, x)
 end fun
 ```
 
-### Why Union-Branch
+Both resolve to `2`, so `5` is never registered as an instantiation. `rewrite_comptime_calls`
+then resolves the real value `5` out of the IR, finds no discriminant for it, and reaches
+its own `panic!` at `specialize.rs:642`. The plan and the rewrite derive the same fact two
+different ways and are free to disagree.
 
-**WRONG, as built.** The plan was written expecting a branch to be cheaper than a copy
-of the function. `build_dispatch_blocks` clones every body block once per instantiation,
-so `N × branch` is `N × func` and both size and compile time match monomorphization:
+**A function called from both a module and a script miscompiles.** These two paths agree
+today only because neither normally fires. Give one comptime function a module-internal
+call site, which specializes it, and a script call site, which is never rewritten: the
+script passes the raw const value into what is now the tag parameter. The `Switch` finds
+no matching case, falls through to `default` — wired to the *last* variant — and runs the
+wrong branch with the wrong constant. With `int` the discarded argument also trips the
+runtime leak detector. Wrong answer and a leak, from ordinary code.
 
-| Aspect | Full Mono | Union-Branch |
+Neither fault is a bug in the union-branch transform as such. The first is the two-sources
+problem; the second is what makes union-branch structurally unsafe here, and is the
+subject of the next section.
+
+## Why monomorphization
+
+The size and compile-time case is already settled and recorded in
+[Generics and Specialization](plan-generics.md) and `compiler-guide.md:215`:
+`build_dispatch_blocks` clones every body block once per instantiation, so union-branch
+is monomorphization plus a `Switch` on a value every call site passes as a literal, and
+fusing instantiations into one symbol defeats the per-function counting in `optimizing.rs`.
+
+The argument that matters most for this compiler is a different one, and it is what the
+second fault is really about:
+
+**Monomorphization is additive. Union-branch is destructive.**
+
+Union-branch rewrites the callee's signature in place. Every call site in the program must
+then be found and rewritten to match, or it calls a function that no longer takes what it
+is passing. That is a whole-program obligation, and this compiler cannot discharge it:
+script units are compiled *after* the module graph, one at a time, against modules that
+were already specialized. A REPL line introducing a new instantiation arrives too late to
+participate.
+
+Monomorphization keeps the original function and adds copies beside it. A call site nobody
+specialized still calls a function that still exists with the signature it had. That single
+property:
+
+- removes the second fault structurally, rather than by patching the dispatch default;
+- makes the script and REPL path correct instead of accidentally correct, with no new
+  machinery, at the cost of those call sites staying unspecialized;
+- leaves specializing script call sites as a later optimization rather than a
+  prerequisite, since a script unit can hold its own copies in `nested_units`.
+
+The original may end up dead once every call site is specialized. Leaving it is the right
+default for a language with a REPL, where a later script line may call it.
+
+## The plan
+
+### 1. Stop the bleeding
+
+Flip `skip_specialization` to default `true` at `module_pipeline.rs:77` and
+`workspace.rs:123`. That routes everything down the unspecialized path all 18 fixtures
+confirm is correct. The differential harness sets both values itself and is unaffected.
+
+This is independent of everything below and should not wait on it.
+
+### 2. Source the plan from the IR
+
+Delete the name-based lookup. Build the plan by scanning lowered units for `ComptimeCall`
+and resolving each comptime argument operand with `build_const_value_map`, which is
+exactly what `rewrite_comptime_calls` already does. Plan and rewrite then agree by
+construction.
+
+This removes, in order: the `resolved_consts` flattening in `tracked_lower.rs:1210-1227`,
+the unqualified-name alias and its ordering hazard, `comptime_arg_names` on
+`ComptimeCallSite`, and with it the first fault. The registry shrinks to what the IR does
+not already carry; note that `ComptimeCall` carries `comptime_param_indices` itself, so
+the call-site half of the registry has little left to say.
+
+This is also what closes the script-unit gap, whenever step 6 is taken: a script unit's
+`v1 = const 2int` feeding a `comptime_call` resolves exactly as well as a module's. The
+reason script call sites are skipped today is entirely an artifact of the name lookup.
+
+> A related lesson is already recorded: `ComptimeCallSite` used to carry a
+> `call_expr_id: salsa::Id` that nothing read, because call sites are found in the IR.
+> A raw salsa id inside a memoized value is not free even when unread — it takes part in
+> the equality deciding whether typechecking can be reused. See `salsa-patterns.md`.
+> Sourcing the plan from the IR is the same observation carried to its conclusion.
+
+### 3. Replace the transform
+
+Delete `build_dispatch_blocks` and `remap_terminator_blocks`. Replace `transform_function`
+with a copy-per-instantiation:
+
+- Clone the unit. Drop the comptime parameters from `params`, `param_types` and
+  `param_modes`; renumber what remains. There is no tag parameter, so the new indices
+  start at 0 rather than 1.
+- Prepend a `Const` instruction per comptime parameter to the entry block, and substitute
+  through the body with the existing `rewrite_comptime_params_in_instruction` and
+  `rewrite_comptime_params_in_terminator`. The body's own `drop` of what used to be the
+  parameter becomes a drop of the const, which is correct.
+- No block renumbering. The copy keeps the original block structure.
+
+**Make the substitution helpers exhaustive.** They currently end in `_ => instr.clone()`
+and handle about fourteen variants. Under union-branch an unhandled instruction kept a
+`Param` reference that still existed, so the catch-all was survivable. Under
+monomorphization the parameter is gone and an unrewritten reference dangles. This must be
+an exhaustive match, which the house rule against fallback code wants anyway.
+
+**Carry the context across.** `transform_function` currently blanks `tracked_params`,
+`descriptor_shapes`, `symbols`, `const_values` and `nested_units`. The copy must keep all
+of them, with `tracked_params` and `descriptor_params` remapped through `param_remap`.
+`tracked_params` is what the Cranelift and C backends use for parameter tracking, and
+losing it is waiting for the AOT path to be exercised.
+
+### 4. Give the copies an identity
+
+This is the genuinely new work. Union-branch sidestepped it by keeping one function per
+source function.
+
+**Ids.** `compute_func_id_map` is `#[salsa::tracked]` and assigns `FuncId`s from source
+statement order. Specialized copies do not exist in the source and cannot come from it.
+Allocate per module, starting past the highest source-derived `FuncId` for that module.
+`FuncId` and `CodeUnitId` are numerically interchangeable here and the code converts
+freely between them.
+
+**Names.** Both AOT backends use `unit.name` directly as a linker symbol — Cranelift as
+`__mod_{module_id}_{name}` at `cranelift-aot/src/lib.rs:215`, and the C backend as a C
+identifier. So the suffix must be identifier-safe: `scale__ct0`, not `scale$$0`.
+
+**Registration.** Add copies to `ModuleLoweredFunctions.functions` and
+`func_name_to_id`, keeping `functions` sorted by `id.0` — the stratified two-pass lowering
+at `tracked_lower.rs:1108` already relies on that ordering. `lower_module` reuses
+`lowered_functions` wholesale when it is provided (`tracked_lower.rs:358`), so copies
+added in phase 5c reach assembly without further plumbing. They must be registered before
+`first_uncallable_target` (`tracked_lower.rs:863`) runs, since it validates every
+`CodeRef::Module` target against the lowered list.
+
+### 5. Rewrite the call sites
+
+Keep the shape of `rewrite_comptime_calls`, minus the discriminant. A `ComptimeCall` whose
+instantiation is in the plan becomes a `Call` to the copy's `CodeRef`, with the comptime
+arguments removed from the argument list and dropped beforehand — the existing
+`comptime_args_to_drop` logic is still needed, since the caller's const value is linear
+and the callee no longer consumes it.
+
+A `ComptimeCall` whose instantiation is *not* in the plan is left alone. It is a correct
+call to the original function. Delete the `panic!`: under an additive design there is
+nothing to panic about, and the condition it was guarding against is no longer a fault.
+
+### 6. Optional: specialize script call sites
+
+Not required for correctness, and worth doing only if measurement asks for it. A script
+unit can hold copies in its own `nested_units` addressed by `CodeRef::Local`, which keeps
+the module untouched and works incrementally. Defer until steps 1 through 5 are in and
+the AOT path has coverage.
+
+## Constraints to respect
+
+**Const parameters and generics do not combine.** `lower/expr.rs:653` takes the
+`ComptimeCall` branch before the `type_args` computation and so never computes them, and
+`rewrite_comptime_calls` emits empty `type_args` and `shape_descriptors` with the comment
+that a comptime call is not generic. A function that is both will silently lose its
+descriptors. Either reject the combination in the typechecker or compute `type_args` on
+both branches; the current state is an unstated assumption in two places.
+
+**Float const parameters are unsound as an instantiation key.** `ConstValue` hashes `F32`
+and `F64` by `to_bits` (`ir/src/lib.rs:1033`) but derives `PartialEq`, which uses float
+comparison. `0.0` and `-0.0` compare equal and hash differently; `NaN` hashes equal to
+itself and compares unequal. Any map keyed on `Vec<ConstValue>` inherits that. Canonicalize
+the key or refuse float const parameters.
+
+**Nested comptime does not lower.** A const binding in a comptime function's body cannot
+name that function's comptime parameter (`016_nested_comptime`). Monomorphization makes
+this tractable — inside a copy the parameter *is* a const — but it is a separate change
+and should get its own fixture and its own commit.
+
+**There is still no instantiation limit.** The original plan called for one and it was
+never built. Under monomorphization it matters more, since each instantiation is a real
+function in the object file. A limit with a clear error beats silent code growth.
+
+## Testing
+
+Keep the harness. It is strategy-independent and it is the valuable part of the existing
+work.
+
+Fixtures to add, none of which exist today:
+
+- The two faults, as regressions: same-named function-level consts in one module, and a
+  comptime function called from both a module function and a script unit.
+- A comptime parameter in middle and last position, and two comptime parameters, with the
+  call sites in module functions so they actually specialize. `006`, `008` and `020` test
+  these shapes against the unspecialized path only; they need module-side twins.
+- An AOT fixture that actually specializes. `aot/083` does not.
+- Fix `013_comptime_i32`, which has never typechecked.
+
+Sixteen fixtures go live on their own once step 2 lands, with no edits. That corpus is
+latent coverage, not dead weight, and it is the main reason to build on this rather than
+start over.
+
+Blessing note: the expected IR for the two live fixtures will change shape, from one
+function with a `switch` to an original plus copies.
+
+## Order of work
+
+- [ ] 1. Default `skip_specialization` to `true`. Independent, cheap, stops live
+      miscompiles.
+- [ ] 2. Source the plan from the IR. Removes the first fault and most of
+      `build_specialization_plan`.
+- [ ] 3. Monomorphizing transform, with exhaustive substitution and full context carried
+      across.
+- [ ] 4. Ids, names and registration for the copies.
+- [ ] 5. Call-site rewriting without the discriminant; delete the panic. Re-enable
+      specialization by default.
+- [ ] 6. Fixtures: the two regressions, module-side twins for the parameter positions,
+      an AOT case.
+- [ ] 7. Instantiation limit with a clear error.
+- [ ] 8. Reconsider the const-binding-only restriction. `pow(2, 10)` failing because `10`
+      is a literal is a bad first impression, and once the plan comes from the IR rather
+      than from pre-resolved consts, the restriction is easier to lift.
+
+Steps 3 through 5 land together or not at all; the intermediate states do not compile to
+anything coherent.
+
+## Appendix: the union-branch record
+
+Kept because the reasoning should stay recoverable, not because it should be followed.
+
+Union-branch generated one function with N branches dispatching on a tag, instead of N
+copies. It was adopted on this comparison:
+
+| Aspect | Full mono | Union-branch |
 |--------|-----------|--------------|
-| Code size | O(N × func) | O(func + N × branch) |
-| Compile time | O(N × func) | O(func + N) |
+| Code size | O(N x func) | O(func + N x branch) |
+| Compile time | O(N x func) | O(func + N) |
 | Icache | Poor (N copies) | Good (1 function) |
 | Branch cost | None | ~2-5 cycles |
-| Const folding | Full | Full (per branch) |
 
-Corrected: size and compile time are O(N × func) either way; the branch cost is real and
-is paid on a discriminant every call site passes as a literal; and fusing the
-instantiations into one function defeats the per-function tiering in `optimizing.rs`.
-For a scripting language prioritizing compile time, monomorphization is the better
-tradeoff, and it is also the simpler code. See
-[Generics and Specialization](plan-generics.md).
-
----
-
-## Architecture Overview
-
-### Key Insight: Specialization Within Lowering Phase
-
-Specialization happens **inside the lowering phase**, after const evaluation:
-
-```
-┌─────────────────────────────────────────────────────────────────────────┐
-│  Parse → Resolve → Typecheck → Ownership → Lower (Phase 5)              │
-│                         │                      │                        │
-│              [record comptime           ┌──────┴──────┐                 │
-│               call sites]               │ 5a: Lower   │                 │
-│                                         │ 5b: Eval    │ ← consts evaluated
-│                                         │ 5c: SPECIAL │ ← NEW: transform IR
-│                                         │ 5d: Assemble│                 │
-│                                         └─────────────┘                 │
-└─────────────────────────────────────────────────────────────────────────┘
-```
-
-### Why This Ordering Works
-
-1. **Typecheck** records which call sites have const args (just names, no values yet)
-2. **Phase 5a** lowers all functions to IR (including const-param functions)
-3. **Phase 5b** evaluates all const bindings → `ResolvedConsts`
-4. **Phase 5c (NEW)** specializes:
-   - Look up const arg values from `ResolvedConsts` (no CTFE needed!)
-   - Transform IR functions to union-branch form
-   - Rewrite call instructions
-5. **Phase 5d** assembles and inlines consts
-
-**No duplicate lowering or CTFE** — const values are already computed in 5b.
-
-### New Module: `datalove-datafun-specialize`
-
-Can be a new crate or a module within `datalove-datafun-lower`:
-
-```
-datalove-datafun-specialize/
-├── Cargo.toml
-├── src/
-│   ├── lib.rs              # Public API
-│   ├── transform.rs        # IR transformation to union-branch
-│   ├── rewrite.rs          # Call instruction rewriting
-│   └── types.rs            # Data structures
-```
-
-### Key Data Structures
-
-```rust
-/// Recorded during typecheck: a call site with const args
-#[derive(Clone, Debug)]
-pub struct ComptimeCallSite<'db> {
-    /// The call expression (for locating in IR later)
-    pub call_expr_id: salsa::Id,
-    /// Name of the called function
-    pub func_name: InternedText<'db>,
-    /// Indices of const parametereters in the callee
-    pub comptime_param_indices: Vec<usize>,
-    /// Names of const bindings used as const args (NOT values yet)
-    pub comptime_arg_names: Vec<InternedText<'db>>,
-}
-
-/// Collected during typecheck for a module
-#[derive(Clone, Debug, Default)]
-pub struct ComptimeCallSiteRegistry<'db> {
-    /// All call sites with const args
-    pub call_sites: Vec<ComptimeCallSite<'db>>,
-    /// Functions that have const parametereters
-    pub comptime_funcs: HashMap<InternedText<'db>, Vec<usize>>,  // name → param indices
-}
-
-/// Built during specialization (phase 5c) after const eval
-#[derive(Clone, Debug)]
-pub struct ResolvedComptimeCall {
-    /// The call site
-    pub call_site_id: salsa::Id,
-    /// Resolved values (looked up from ResolvedConsts)
-    pub comptime_values: Vec<ConstValue>,
-}
-
-/// Specialization info for one const-param function
-#[derive(Clone, Debug)]
-pub struct FuncSpecialization {
-    /// Original function's FuncId
-    pub original_func_id: FuncId,
-    /// The enum type for dispatch
-    pub enum_type: IrType,
-    /// Map from const values to variant index
-    pub value_to_variant: HashMap<Vec<ConstValue>, u32>,
-    /// All unique instantiations
-    pub instantiations: Vec<Vec<ConstValue>>,
-}
-```
-
----
-
-## Phase 1: AST & Parsing
-
-### 1.1 Extend FunParam
-
-**File**: `datalove-datafun-ast/src/ast.rs`
-
-```rust
-#[derive(Clone, Hash, PartialEq, Eq)]
-#[derive(salsa::Update)]
-pub struct FunParam<'db> {
-    pub name: InternedText<'db>,
-    pub mode: ParamMode,
-    pub is_comptime: bool,  // NEW: true if `const` modifier present
-    pub type_hint: datalit::ast::TypeHint<'db>,
-}
-```
-
-### 1.2 Add `const` Keyword
-
-**File**: `datalove-datafun-parser/src/lexer.rs`
-
-The `const` keyword already exists for const bindings. Verify it's in the keyword list.
-
-### 1.3 Parse `const` Parameter Modifier
-
-**File**: `datalove-datafun-parser/src/statement.rs`
-
-Modify `parse_fun_param()`:
-
-```rust
-fn parse_fun_param(&mut self) -> Result<FunParam<'db>, ParseError> {
-    // NEW: Check for `const` modifier first
-    let is_comptime = if self.check(TokenKind::Keyword)
-        && self.current_text() == "const"
-    {
-        self.advance();
-        true
-    } else {
-        false
-    };
-
-    // Existing mode parsing (in, out, ref, mut)
-    let mode = self.parse_param_mode();
-
-    // Parameter name
-    let name = self.expect_ident()?;
-
-    // Colon and type
-    self.expect(TokenKind::Colon)?;
-    let type_hint = self.parse_type_hint()?;
-
-    Ok(FunParam {
-        name,
-        mode,
-        is_comptime,  // NEW
-        type_hint,
-    })
-}
-```
-
-**Syntax examples**:
-```datalove
-fun foo(const n: i32)              // const by-value
-fun bar(const ref data: [i32])     // const reference (less common)
-fun baz(n: i32, const mode: i32)   // mixed params
-```
-
-### 1.4 Validation Rules
-
-Add validation in parser or early typecheck:
-
-1. **Const params must have supported types**: primitives, strings, simple aggregates
-2. **Const params cannot be `out` or `mut`**: `const out x` is nonsensical
-3. **Const params should come first** (convention, not required)
-
-**File**: `datalove-datafun-tycheck/src/lib.rs` (add validation)
-
-```rust
-fn validate_comptime_param(param: &FunParam) -> Result<(), TypeError> {
-    if param.is_comptime {
-        // Cannot combine const with out or mut
-        if matches!(param.mode, ParamMode::Out | ParamMode::Mut) {
-            return Err(TypeError::InvalidComptimeMode {
-                param_name: param.name.clone(),
-            });
-        }
-        // Type must be evaluable at compile time
-        if !is_ctfe_supported_type(&param.type_hint) {
-            return Err(TypeError::UnsupportedComptimeType {
-                param_name: param.name.clone(),
-            });
-        }
-    }
-    Ok(())
-}
-```
-
----
-
-## Phase 2: Type System
-
-### 2.1 Extend TypeFunction
-
-**File**: `datalove-datafun-common/src/lib.rs`
-
-```rust
-#[salsa::tracked]
-pub struct TypeFunction<'db> {
-    #[returns(ref)]
-    pub param_types: Vec<Type<'db>>,
-    #[returns(ref)]
-    pub param_modes: Vec<ParamMode>,
-    #[returns(ref)]
-    pub param_comptime: Vec<bool>,  // NEW: which params are comptime
-    pub return_type: Type<'db>,
-}
-```
-
-### 2.2 Update Function Type Construction
-
-**File**: `datalove-datafun-tycheck/src/context.rs`
-
-When building `TypeFunction` from `StmtFun`:
-
-```rust
-fn build_function_type(&self, func: StmtFun<'db>) -> TypeFunction<'db> {
-    let params = func.params(self.db);
-    TypeFunction::new(
-        self.db,
-        params.iter().map(|p| self.resolve_type(&p.type_hint)).collect(),
-        params.iter().map(|p| p.mode).collect(),
-        params.iter().map(|p| p.is_comptime).collect(),  // NEW
-        self.resolve_return_type(func.return_type(self.db)),
-    )
-}
-```
-
-### 2.3 Comptime Argument Checking
-
-**File**: `datalove-datafun-tycheck/src/synthesize.rs`
-
-Extend `synthesize_function_call`:
-
-```rust
-fn synthesize_function_call<'db>(
-    ctx: &mut TypeContext<'db>,
-    expr: ExprFun<'db>,
-    call: ExprFunctionCall<'db>,
-) -> Result<Type<'db>, TypeError> {
-    let func_type = ctx.lookup_function(call.name(ctx.db))?;
-    let param_comptime = func_type.param_comptime(ctx.db);
-
-    // Existing argument checking...
-
-    // NEW: Validate const parameter specialization
-    for (i, (arg, &is_comptime)) in call.args(ctx.db).iter()
-        .zip(param_comptime.iter())
-        .enumerate()
-    {
-        if is_comptime {
-            // Argument must be evaluable at compile time
-            if !ctx.is_const_evaluable(*arg) {
-                return Err(TypeError::ComptimeArgNotConst {
-                    func_name: call.name(ctx.db).text(ctx.db).to_string(),
-                    param_index: i,
-                    arg_expr: *arg,
-                });
-            }
-
-            // Store evaluated value for specialization pass
-            let const_val = ctx.evaluate_comptime_arg(*arg)?;
-            ctx.record_comptime_call(call, i, const_val);
-        }
-    }
-
-    // ... rest of type checking
-}
-```
-
-### 2.4 Const Evaluability Check (Simplified)
-
-With the const-binding-only restriction, this check is simple:
-
-```rust
-impl<'db> TypeContext<'db> {
-    /// Check if expression is a const binding name (our initial restriction)
-    fn is_const_binding_arg(&self, expr: ExprFun<'db>) -> Option<InternedText<'db>> {
-        match expr.expr(self.db) {
-            ExprFunKind::Name(name) if self.is_const_binding(name) => Some(name),
-            _ => None,
-        }
-    }
-}
-```
-
-**Note**: This intentionally rejects literals like `foo(3, x)` even though `3` is
-obviously compile-time known. The restriction simplifies the implementation by
-ensuring all const values are already in `ResolvedConsts`. Future extensions
-can relax this to allow literals and expressions.
-
----
-
-## Phase 3: Comptime Call Site Recording
-
-Recording happens **during typecheck**, not as a separate pass. This is lightweight—
-we just record const binding names, not values.
-
-### 3.1 Extend Typecheck Context
-
-**File**: `datalove-datafun-tycheck/src/context.rs`
-
-```rust
-impl<'db> TypeContext<'db> {
-    /// Registry of comptime call sites discovered during typecheck
-    pub comptime_registry: ComptimeCallSiteRegistry<'db>,
-}
-```
-
-### 3.2 Record During Call Synthesis
-
-**File**: `datalove-datafun-tycheck/src/synthesize.rs`
-
-Extend `synthesize_function_call`:
-
-```rust
-fn synthesize_function_call<'db>(
-    ctx: &mut TypeContext<'db>,
-    expr: ExprFun<'db>,
-    call: ExprFunctionCall<'db>,
-) -> Result<Type<'db>, TypeError> {
-    let func_type = ctx.lookup_function(call.name(ctx.db))?;
-    let param_comptime = func_type.param_comptime(ctx.db);
-
-    // Check for const parametereters
-    let comptime_indices: Vec<usize> = param_comptime.iter()
-        .enumerate()
-        .filter_map(|(i, &is_ct)| if is_ct { Some(i) } else { None })
-        .collect();
-
-    if !comptime_indices.is_empty() {
-        // Record this function has const parameters
-        ctx.comptime_registry.comptime_funcs
-            .entry(call.name(ctx.db))
-            .or_insert_with(|| comptime_indices.clone());
-
-        // Validate and record const parameter specialization
-        let mut arg_names = Vec::new();
-        for &i in &comptime_indices {
-            let arg = call.args(ctx.db)[i];
-            let name = validate_comptime_arg(ctx, arg, i)?;
-            arg_names.push(name);
-        }
-
-        // Record call site (names only, not values)
-        ctx.comptime_registry.call_sites.push(ComptimeCallSite {
-            call_expr_id: call.as_id(),
-            func_name: call.name(ctx.db),
-            comptime_param_indices: comptime_indices,
-            comptime_arg_names: arg_names,
-        });
-    }
-
-    // ... rest of type checking (unchanged)
-}
-```
-
-### 3.3 Validate Const-Binding-Only
-
-```rust
-/// Validate that a const parameter is a const binding name
-fn validate_comptime_arg<'db>(
-    ctx: &TypeContext<'db>,
-    arg: ExprFun<'db>,
-    param_idx: usize,
-) -> Result<InternedText<'db>, TypeError> {
-    match arg.expr(ctx.db) {
-        ExprFunKind::Name(name) => {
-            // Must be a const binding, not a let/var
-            if ctx.is_const_binding(name) {
-                Ok(name)
-            } else {
-                Err(TypeError::ComptimeArgNotConst {
-                    param_idx,
-                    reason: format!("'{}' is not a const binding", name.text(ctx.db)),
-                })
-            }
-        }
-        _ => Err(TypeError::ComptimeArgNotConst {
-            param_idx,
-            reason: "const parameter must be a const binding name".to_string(),
-        }),
-    }
-}
-```
-
-### 3.4 Propagate Registry Through Pipeline
-
-The `ComptimeCallSiteRegistry` is attached to `SingleModuleTypecheckResult` and
-flows through to the lowering phase:
-
-```rust
-// In typecheck_module result
-pub struct SingleModuleTypecheckResult<'db> {
-    // ... existing fields ...
-    pub comptime_registry: ComptimeCallSiteRegistry<'db>,  // NEW
-}
-```
-
----
-
-## Phase 4: IR-Level Specialization
-
-This phase runs within lowering, specifically as **phase 5c** after const evaluation.
-All work happens on IR, not AST.
-
-### 4.1 Integration into Lowering Pipeline
-
-**File**: `datalove-datafun-compiler/src/tracked_lower.rs`
-
-```rust
-pub fn lower_module_graph_with_evaluator<'db>(
-    // ... existing params ...
-) -> ModuleGraphLoweringResult<'db> {
-    // Phase 5a: Lower all functions (existing)
-    let lowered_functions = lower_all_module_functions(db, ...);
-
-    // Phase 5b: Evaluate consts (existing)
-    let resolved_consts = evaluate_all_module_consts(db, &lowered_functions, evaluator);
-
-    // Phase 5c: Specialize comptime functions (NEW)
-    let (specialized_functions, call_rewrites) = specialize_comptime_functions(
-        db,
-        &lowered_functions,
-        &resolved_consts,
-        &typecheck_result.comptime_registry,
-    );
-
-    // Phase 5d: Assemble (existing, uses specialized functions)
-    assemble_modules(db, &specialized_functions, &resolved_consts, &call_rewrites)
-}
-```
-
-### 4.2 Resolve Comptime Values
-
-**File**: `datalove-datafun-specialize/src/lib.rs`
-
-```rust
-/// Resolve const arg names to values using already-evaluated consts
-fn resolve_comptime_calls(
-    registry: &ComptimeCallSiteRegistry,
-    resolved_consts: &ResolvedConsts,
-) -> Vec<ResolvedComptimeCall> {
-    registry.call_sites.iter().map(|site| {
-        let values: Vec<ConstValue> = site.comptime_arg_names.iter()
-            .map(|name| {
-                resolved_consts.get_by_name(name.text())
-                    .expect("const binding should exist")
-                    .clone()
-            })
-            .collect();
-
-        ResolvedComptimeCall {
-            call_site_id: site.call_expr_id,
-            comptime_values: values,
-        }
-    }).collect()
-}
-```
-
-**Key point**: No CTFE here—just HashMap lookups into `ResolvedConsts`.
-
-### 4.3 Build Specialization Plan
-
-```rust
-/// Group call sites by function and collect unique instantiations
-fn build_specialization_plan(
-    resolved_calls: &[ResolvedComptimeCall],
-    registry: &ComptimeCallSiteRegistry,
-) -> HashMap<String, FuncSpecialization> {
-    let mut plan: HashMap<String, FuncSpecialization> = HashMap::new();
-
-    for call in resolved_calls {
-        let func_name = registry.get_func_name(call.call_site_id);
-
-        let spec = plan.entry(func_name.clone()).or_insert_with(|| {
-            FuncSpecialization {
-                original_func_id: registry.get_func_id(&func_name),
-                enum_type: IrType::Unit,  // built later
-                value_to_variant: HashMap::new(),
-                instantiations: Vec::new(),
-            }
-        });
-
-        // Add unique instantiation
-        if !spec.instantiations.contains(&call.comptime_values) {
-            let variant_idx = spec.instantiations.len() as u32;
-            spec.value_to_variant.insert(call.comptime_values.clone(), variant_idx);
-            spec.instantiations.push(call.comptime_values.clone());
-        }
-    }
-
-    // Build enum types
-    for spec in plan.values_mut() {
-        spec.enum_type = build_comptime_enum(spec.instantiations.len());
-    }
-
-    plan
-}
-
-fn build_comptime_enum(num_variants: usize) -> IrType {
-    let variants: Vec<(String, Option<IrType>)> = (0..num_variants)
-        .map(|i| (format!("V{}", i), None))
-        .collect();
-    IrType::Enum(variants)
-}
-```
-
-### 4.4 Transform IR Function to Union-Branch
-
-```rust
-/// Transform an IrFunction to union-branch form
-fn transform_ir_function(
-    func: &IrFunction,
-    spec: &FuncSpecialization,
-    comptime_param_indices: &[usize],
-) -> IrFunction {
-    // Original: params = [comptime_p0, comptime_p1, regular_p0, ...]
-    // New:      params = [tag, regular_p0, ...]
-
-    let mut new_params = Vec::new();
-    let mut new_param_types = Vec::new();
-    let mut new_param_modes = Vec::new();
-
-    // Add tag parameter
-    new_params.push(ParamId(0));
-    new_param_types.push(spec.enum_type.clone());
-    new_param_modes.push(ParamMode::In);
-
-    // Add non-const parameters (renumbered)
-    for (i, (param, (ty, mode))) in func.params.iter()
-        .zip(func.param_types.iter().zip(func.param_modes.iter()))
-        .enumerate()
-    {
-        if !comptime_param_indices.contains(&i) {
-            new_params.push(ParamId(new_params.len() as u32));
-            new_param_types.push(ty.clone());
-            new_param_modes.push(*mode);
-        }
-    }
-
-    // Build dispatch blocks + specialized body copies
-    let new_blocks = build_dispatch_ir(
-        &func.blocks,
-        &spec.instantiations,
-        comptime_param_indices,
-        &func.param_types,
-    );
-
-    IrFunction {
-        id: func.id,
-        name: func.name.clone(),
-        params: new_params,
-        param_modes: new_param_modes,
-        param_types: new_param_types,
-        return_type: func.return_type.clone(),
-        blocks: new_blocks,
-        // ... update value_count, slot_count, etc.
-    }
-}
-```
-
-### 4.5 Build IR Dispatch Blocks
-
-```rust
-fn build_dispatch_ir(
-    original_blocks: &[IrBlock],
-    instantiations: &[Vec<ConstValue>],
-    comptime_param_indices: &[usize],
-    param_types: &[IrType],
-) -> Vec<IrBlock> {
-    let mut blocks = Vec::new();
-    let num_variants = instantiations.len();
-
-    // Entry block: get discriminant and start dispatch chain
-    let entry = IrBlock {
-        id: BlockId(0),
-        params: vec![],
-        instructions: vec![
-            // v0 = param0 (the tag)
-            // v1 = discriminant(v0) -- or just use v0 if enum is repr(int)
-        ],
-        terminator: Terminator::Branch {
-            cond: /* v1 == 0 */,
-            then_block: BlockId(num_variants as u32),  // first variant body
-            then_args: vec![],
-            else_block: BlockId(1),  // next check
-            else_args: vec![],
-        },
-    };
-    blocks.push(entry);
-
-    // Dispatch chain: check each variant
-    for i in 1..num_variants {
-        let check_block = IrBlock {
-            id: BlockId(i as u32),
-            params: vec![],
-            instructions: vec![],
-            terminator: Terminator::Branch {
-                cond: /* discriminant == i */,
-                then_block: BlockId((num_variants + i) as u32),
-                then_args: vec![],
-                else_block: BlockId((i + 1) as u32),
-                else_args: vec![],
-            },
-        };
-        blocks.push(check_block);
-    }
-
-    // Last check falls through to unreachable/panic
-    // (or last variant with no else)
-
-    // Variant bodies: clone original blocks with const substitution
-    for (variant_idx, values) in instantiations.iter().enumerate() {
-        let variant_blocks = clone_blocks_with_const_substitution(
-            original_blocks,
-            comptime_param_indices,
-            values,
-            param_types,
-            BlockId((num_variants + variant_idx) as u32),  // base block id
-        );
-        blocks.extend(variant_blocks);
-    }
-
-    blocks
-}
-```
-
-### 4.6 Const Substitution in Cloned Blocks
-
-```rust
-fn clone_blocks_with_const_substitution(
-    original_blocks: &[IrBlock],
-    comptime_param_indices: &[usize],
-    values: &[ConstValue],
-    param_types: &[IrType],
-    base_block_id: BlockId,
-) -> Vec<IrBlock> {
-    let mut cloned = Vec::new();
-
-    for (i, block) in original_blocks.iter().enumerate() {
-        let mut new_block = block.clone();
-        new_block.id = BlockId(base_block_id.0 + i as u32);
-
-        // Prepend const instructions for const parameters
-        if i == 0 {
-            let mut const_instrs: Vec<Instruction> = comptime_param_indices.iter()
-                .zip(values.iter())
-                .enumerate()
-                .map(|(i, (&param_idx, value))| {
-                    Instruction::Const {
-                        dest: ValueId(/* fresh id for this param */),
-                        value: value.clone(),
-                    }
-                })
-                .collect();
-            const_instrs.extend(new_block.instructions.drain(..));
-            new_block.instructions = const_instrs;
-        }
-
-        // Rewrite any references to const parameters → the const values
-        rewrite_param_references(&mut new_block, comptime_param_indices);
-
-        // Adjust block references in terminators
-        adjust_block_references(&mut new_block.terminator, base_block_id);
-
-        cloned.push(new_block);
-    }
-
-    cloned
-}
-```
-
-### 4.7 Rewrite Call Instructions
-
-```rust
-fn rewrite_call_instructions(
-    functions: &mut [IrFunction],
-    spec_plan: &HashMap<String, FuncSpecialization>,
-    resolved_calls: &[ResolvedComptimeCall],
-    registry: &ComptimeCallSiteRegistry,
-) {
-    // Build lookup: call_site_id → (func_name, variant_idx)
-    let call_lookup: HashMap<_, _> = resolved_calls.iter()
-        .map(|call| {
-            let func_name = registry.get_func_name(call.call_site_id);
-            let spec = &spec_plan[&func_name];
-            let variant_idx = spec.value_to_variant[&call.comptime_values];
-            (call.call_site_id, (func_name, variant_idx))
-        })
-        .collect();
-
-    for func in functions {
-        for block in &mut func.blocks {
-            for instr in &mut block.instructions {
-                if let Instruction::Call { dest, func: func_ref, args } = instr {
-                    // Check if this call needs rewriting
-                    // (need to map IR call back to original call site somehow)
-                    if let Some((func_name, variant_idx)) = lookup_call(instr, &call_lookup) {
-                        let spec = &spec_plan[&func_name];
-
-                        // Build new args: [enum_variant, non-const args...]
-                        let mut new_args = Vec::new();
-
-                        // Add enum variant construction
-                        // (emit EnumVariant instruction before call, use result)
-                        let variant_val = /* value from EnumVariant instr */;
-                        new_args.push(Operand::Value(variant_val));
-
-                        // Add non-const args
-                        let comptime_indices = &registry.comptime_funcs[&func_name];
-                        for (i, arg) in args.iter().enumerate() {
-                            if !comptime_indices.contains(&i) {
-                                new_args.push(arg.clone());
-                            }
-                        }
-
-                        *args = new_args;
-                    }
-                }
-            }
-        }
-    }
-}
-```
-
----
-
-## Phase 5: Const Folding Within Branches
-
-After union-branch transformation, each branch contains `const` bindings for the
-const parametereter values. The **existing CTFE infrastructure** handles this automatically.
-
-### 5.1 How Existing Const Folding Works
-
-From `compiler-guide.md`, the lowering phase already:
-
-1. Collects const bindings
-2. Evaluates them via CTFE
-3. Inlines the values at use sites
-
-The union-branch transformation produces code like:
-
-```datalove
-// Before CTFE (conceptual IR):
-if discriminant(n_tag) == 0
-    const n = 3          // <- normal const binding
-    let result = s * n   // <- uses const n
-    ...
-```
-
-The existing const eval pass sees `const n = 3` as a normal const binding and
-inlines `3` wherever `n` is used within that branch.
-
-### 5.2 No Additional Work Needed
-
-Because we:
-1. Transform at IR level (Phase 4)
-2. Insert normal `Instruction::Const` for const parameter values
-3. Let the existing phase 5b/5d handle evaluation and inlining
-
-The const folding is **free** — we just emit the right IR structure.
-
-### 5.3 Salsa Integration
-
-The specialization step is not a separate tracked function — it's part of the
-lowering pipeline:
-
-```rust
-// In tracked_lower.rs, within lower_module_graph_with_evaluator:
-
-pub fn lower_module_graph_with_evaluator<'db>(...) -> ModuleGraphLoweringResult<'db> {
-    // 5a: Lower all functions
-    let mut lowered = lower_all_functions(db, ...);
-
-    // 5b: Evaluate top-level consts
-    let resolved_consts = evaluate_consts(db, &lowered, evaluator);
-
-    // 5c: Specialize comptime functions (NEW)
-    if !typecheck_result.comptime_registry.is_empty() {
-        specialize_in_place(&mut lowered, &resolved_consts, &typecheck_result.comptime_registry);
-    }
-
-    // 5d: Assemble and inline
-    assemble(db, lowered, resolved_consts)
-}
-```
-
-This keeps specialization as a simple in-place transformation rather than a
-separate Salsa query, avoiding cache invalidation complexity.
-
----
-
-## Phase 6: Codegen Optimization
-
-### 6.1 Branch Optimization Opportunities
-
-The Cranelift backend can optimize the generated code:
-
-1. **Constant propagation**: Within each branch, const values are constants
-2. **Dead code elimination**: Branches not taken based on const conditions
-3. **Switch lowering**: Convert if-else chain to jump table if many variants
-
-### 6.2 Consider Adding Jump Table Hint
-
-For many variants (>4), hint to backend to use jump table:
-
-```rust
-// In codegen, when we see enum dispatch pattern:
-if is_comptime_dispatch(terminator) && num_variants > 4 {
-    emit_jump_table(variants);
-} else {
-    emit_if_else_chain(variants);
-}
-```
-
-### 6.3 Inlining Considerations
-
-After transformation:
-- The unified function is larger but single
-- Inlining at call sites benefits from const args in tag
-- Consider marking small comptime functions for inlining
-
----
-
-## Testing Strategy
-
-### Unit Tests
-
-**Location**: `datalove-datafun-specialize/src/tests.rs`
-
-```rust
-#[test]
-fn test_collect_comptime_calls() {
-    let source = r#"
-        fun repeat(const n: i32, s: string) -> string
-            // body
-        end fun
-
-        let a = repeat(3, "x")
-        let b = repeat(5, "y")
-    "#;
-
-    let collection = collect_from_source(source);
-    assert_eq!(collection.instantiations("repeat").len(), 2);
-    assert!(collection.has_values("repeat", &[ConstValue::I32(3)]));
-    assert!(collection.has_values("repeat", &[ConstValue::I32(5)]));
-}
-
-#[test]
-fn test_union_branch_transform() {
-    // Verify transformation produces valid AST
-}
-
-#[test]
-fn test_call_rewriting() {
-    // Verify call sites are correctly rewritten
-}
-```
-
-### Integration Tests
-
-**Location**: `datalove-datafun/tests/fixtures/specialize/`
-
-```
-001_simple_const_param.dfs
-001_simple_const_param.out.expected
-
-002_multiple_instantiations.dfs
-003_nested_comptime_calls.dfs
-004_comptime_in_module.world
-005_mixed_const_nonconst.dfs
-```
-
-### Dual-Mode Tests
-
-Extend existing dual tests to compare:
-- Interpreter output
-- AOT output
-- Verify identical results with const args
-
-### Differential Specialization Tests (Critical)
-
-**Location**: `datalove-datafun/tests/interp_specialize_tests.rs` (new file)
-
-Following the pattern of `interp_constlet_tests.rs`, create differential tests that verify
-**specialized IR produces identical output to unspecialized IR**:
-
-```rust
-/// Differential test: run worldfiles through interpreter twice:
-/// 1. With specialization enabled (union-branch dispatch)
-/// 2. With specialization disabled (const parameters evaluated normally)
-///
-/// Both must produce identical debuglog output.
-#[test]
-fn test_specialization_differential() {
-    // Similar to constlet tests:
-    // - analyze_worldfile_with_options(..., skip_specialization: false)
-    // - analyze_worldfile_with_options(..., skip_specialization: true)
-    // - Compare outputs
-}
-```
-
-**Test fixtures**: `datalove-datafun/tests/fixtures/specialize_differential/`
-
-```
-001_simple_const_param.world     # Basic const parametereter
-002_multiple_instantiations.world # Same func with different const args
-003_nested_comptime_calls.world   # Comptime func calling another
-004_mixed_params.world            # const + non-const params
-005_control_flow.world            # Comptime affecting branches
-```
-
-**Why this matters**: The union-branch transformation must be semantically equivalent
-to directly evaluating the const values. These tests ensure:
-1. Dispatch logic is correct (right branch taken for each instantiation)
-2. Const substitution in cloned bodies is correct
-3. Parameter remapping doesn't break non-const args
-4. Return values match regardless of specialization
-
-**Implementation**: Add `skip_specialization: bool` option to `AnalysisOptions`,
-similar to the existing `skip_const_inlining` option.
-
----
-
-## Risk Mitigation
-
-### Risk 1: Compile Time Regression
-
-**Mitigation**:
-- Lazy evaluation: only process files with comptime functions
-- Memoization via Salsa
-- Benchmark suite with comptime-heavy code
-
-### Risk 2: Code Size Explosion
-
-**Mitigation**:
-- Instance limit (configurable, default 64)
-- Warning when approaching limit
-- Option to fall back to error rather than degrade
-
-### Risk 3: Complex Interaction with Existing Passes
-
-**Mitigation**:
-- Specialization is IR-to-IR transformation within lowering (phase 5c)
-- No AST modification needed — all changes happen after lowering
-- Transformed IR uses existing instruction types (Const, Branch, etc.)
-
-### Risk 4: Enum Discriminant Access
-
-**Mitigation**:
-- Add `enum_discriminant` intrinsic if needed
-- Or use existing comparison operators on enums
-- Or generate if-binding pattern
-
-### Risk 5: Debugging Complexity
-
-**Mitigation**:
-- Preserve source locations in transformed code
-- Add `#[comptime_specialized]` attribute to generated functions
-- Debug mode that shows original function + instantiations
-
----
-
-## Future Extensions
-
-> **SUPERSEDED.** Phases B, C and D below plan Zig-style type parameters on top of the
-> union-branch machinery. That path does not exist: union-branch holds one signature by
-> replacing a const parameter with a tag, and a type parameter changes the signature, so
-> there is nothing for the branches to agree on. Generics are planned separately in
-> [Generics and Specialization](plan-generics.md), by erasure and type descriptors, which
-> the runtime already does throughout. `ConstValue::Type` may still be wanted later for
-> const generics; it is not the road to type parameters.
-
-### Phase B: Type as ConstValue
-
-Add `ConstValue::Type(IrType)` for Zig-style type parameters:
-
-```datalove
-fun identity(const T: type, x: T) -> T
-    x
-end fun
-```
-
-### Phase C: Type Computation
-
-Enable functions returning types:
-
-```datalove
-fun Pair(const A: type, const B: type) -> type
-    {first: A, second: B}
-end fun
-```
-
-### Phase D: Comptime Blocks
-
-Arbitrary compile-time execution:
-
-```datalove
-fun foo()
-    comptime
-        // Arbitrary code here, executed at compile time
-    end comptime
-end fun
-```
-
----
-
-## Implementation Order
-
-### Sprint 1: Foundation ✅
-- [x] Phase 1: AST & Parsing (`is_comptime` field, `const` modifier parsing)
-- [x] Phase 2: Type System (`param_comptime` in TypeFunction)
-- [x] Basic parser and typecheck tests
-
-### Sprint 2: Call Site Recording ✅
-- [x] Phase 3: Record comptime call sites during typecheck
-- [x] Validate const-binding-only restriction
-- [x] Propagate `ComptimeCallSiteRegistry` through pipeline
-- [ ] Unit tests for recording
-
-### Sprint 3: IR Transformation ✅
-- [x] Phase 4: Union-branch IR transformation (`transform_function`)
-- [x] Build dispatch blocks and cloned body blocks
-- [x] Const substitution in cloned blocks
-- [x] **Call instruction rewriting** - Implemented via `ComptimeCall` instruction variant
-- [ ] Integration tests
-
-### Sprint 4: Pipeline Integration ✅
-- [x] Insert specialization into lowering (phase 5c)
-- [x] Resolve const values from `ResolvedConsts`
-- [x] Add `skip_specialization` option to `lower_module_graph_with_evaluator`
-- [ ] End-to-end tests (interpreter + AOT)
-
-### Sprint 5: Differential Testing ✅
-- [x] Create `interp_specialize_tests.rs` following `interp_constlet_tests.rs` pattern
-- [x] Add test fixtures in `fixtures/specialize_differential/`
-- [x] Verify: specialized IR == unspecialized IR (same debuglog output)
-- [x] Test edge cases: multiple instantiations, nested calls, mixed params
-
-### Sprint 6: Polish
-- [ ] Phase 6: Codegen hints (jump table for many variants)
-- [ ] Error messages for invalid const args
-- [ ] Performance benchmarks
-
----
-
-## Current Status
-
-### Implemented: ComptimeCall Instruction
-
-Call site rewriting has been implemented via a new `ComptimeCall` IR instruction variant:
-
-1. **Lowering phase** emits `ComptimeCall` (instead of `Call`) when calling functions
-   with const parametereters. The `ComptimeCall` contains:
-   - Original args (including const args)
-   - Placeholder discriminant (0)
-   - Indices of const parametereters
-
-2. **Specialization phase (5c)** transforms `ComptimeCall` instructions:
-   - Resolves const arg values from const instructions
-   - Computes correct discriminant via specialization plan
-   - Emits `Const(discriminant)` + `Call` with modified args
-
-3. **Interpreter/AOT compatibility**: Without specialization, `ComptimeCall` is
-   handled exactly like `Call` (ignoring the specialization metadata).
-
-Key files modified:
-- `datafun-ir/src/lib.rs`: Added `ComptimeCall` instruction variant
-- `datafun-lower/src/expr.rs`: Emit `ComptimeCall` for comptime function calls
-- `datafun-compiler/src/specialize.rs`: Added `rewrite_comptime_calls()` function
-- `datafun-interp/src/lib.rs`: Handle `ComptimeCall` like `Call`
-- `datafun-cranelift/src/codegen/mod.rs`: Handle `ComptimeCall` like `Call`
-
-### Implemented: Differential Testing Infrastructure
-
-The differential testing infrastructure has been added to verify specialization correctness:
-
-1. **Module `specialize_differential_analysis.rs`**: Runs worldfiles twice (specialized
-   vs unspecialized) and compares outputs.
-
-2. **Test runner `interp_specialize_tests.rs`**: Test harness that runs all
-   `.world` files in `fixtures/specialize_differential/`.
-
-3. **Test fixtures**: Basic tests demonstrating the infrastructure works.
-
-Key files added:
-- `datalove-datafun/src/specialize_differential_analysis.rs`
-- `datalove-datafun/tests/interp_specialize_tests.rs`
-- `datalove-datafun/tests/fixtures/specialize_differential/*.world`
-
-### Known Issues Discovered
-
-#### Fixed: the three faults below, and one they were hiding
-
-All three had one cause. A const in a function body lowers as a let and the
-inlining pass swaps the value in later, orphaning the instructions that computed
-it. `inline_script_consts` had always run dead code elimination for exactly that;
-the two function paths ran only dead *block* elimination. Enabling it there
-exposed why it had never run on a function: `instruction_dest` reports one
-destination and five instructions define more, each extra one the flag a branch
-tests, so removing an unwrap for an unread payload left the branch reading a
-value nothing defined.
-
-Separately `lower_binop` ended with the take-all `emit_expr_temp_drops`, which
-took temporaries an enclosing expression still held. That panicked in `split_off`
-for calls on both sides of an operator, and where it did not panic it dropped
-early: `(x * m) + (y * n) + z` on bigints emitted `drop v0` before `add v0, v1`
-read it.
-
-Fixtures: interp 944, 945, 946 and dual 423. Each was checked by reverting its
-fix and confirming the failure.
-
-#### Fixed: module-level consts
-
-Implemented by stratifying lowering, which is the option that reuses the
-reference path that already gets drops right.
-
-Lowering runs in two passes. The first lowers the functions that name no
-module-level const; a function that names one fails with
-`LowerError::BindingNotAvailable` and is recorded rather than reported. The
-module's consts are then evaluated against what is lowered, so a const may call
-a function. The second pass lowers the recorded functions with the values
-seeded into `LowerCtx.const_bindings`, which is where an evaluated
-function-level const already lives, so a reference emits a fresh `Const` and is
-dropped as an expression temporary. Nothing new schedules drops, which is why
-this route was chosen: linear module consts, `string`, `int` and `[int]`, do not
-leak.
-
-The cycle case, a const calling a function that names a module const, is
-reported. It is caught before evaluation by scanning the lowered const unit for
-calls whose target is not among the lowered functions; without that the
-interpreter panicked looking for a function that was never lowered. Both ends
-are named, the const and the function.
-
-Two things this turned up. `F056`, which rejected module-level consts, is gone
-along with its diagnostic and error variants. And `require_option_return_type`
-and `require_result_return_type` asserted that an enclosing function always
-exists, which stopped being true the moment a const could sit outside one; they
-report instead.
-
-Fixtures: module_interp 055 and 056.
-
-
-#### Was open, now fixed: CTFE leaks heap values returned through a call
-
-A const whose value is produced by calling a function that returns a linear type trips
-the runtime leak detector at `alloc.rs`. A function that returns its argument is enough;
-the same function over a copy type is fine, so it is the linear return being materialized
-into a `ConstValue` without releasing the runtime value.
-
-```datalove
-fun id(n: int): int
-  ret n
-end fun
-
-const A: int = id(5)        // leak; `const A: int = 5` and `2 + 3` are fine
-const B: u32 = idu(5)       // fine, copy return type
-```
-
-#### Was open, now fixed: CTFE leaks collections with linear elements
-
-```datalove
-const E: [int] = [1, 2, 3]  // leak
-const F: [u32] = [1]        // fine
-```
-
-The element values are not released. Together with the previous issue this was the main
-thing to fix before CTFE could be asked to produce structured values, which anything
-type-level would require.
-
-#### Was open, now fixed: calls in binary operand position panic lowering
-
-```datalove
-ret fib(n - 1) + fib(n - 2)
-```
-
-panics in `emit_expr_temp_drops_since` with `at split index (is 1) should be <= len (is
-0)`. Not specific to const evaluation, but it blocks recursion at the shape anyone would
-write it, which makes CTFE much less useful than it looks.
-
-#### Fixed: Single-param comptime functions returning 0
-
-**Problem:** Functions like `fun double(const n: int): int` returned 0 instead of the
-correct computed value (e.g., `double(2)` returned 0 instead of 4).
-
-**Root cause:** When a fixed-width integer (u32) was passed to a function expecting
-int (BigInt), the typechecker allowed the widening but didn't store the expected type.
-The lowering then used the original u32 type, which the runtime interpreted incorrectly.
-
-**Fix (commit 1c194d8):**
-1. In `check.rs`, store the expected type when widening is detected
-2. Add `operand_type()` method in `context.rs` to get the type of an operand
-3. In `lower_call_arg`, check if widening is needed and emit Widen instruction
-
-**Verified:** Test 004 now correctly outputs `4` for `double(2)`.
-
-#### Fixed: Mixed comptime + regular parameters
-
-**Problem:** Functions with both comptime and regular parameters were previously not
-working - module lowering was skipped.
-
-**Status:** Fixed. This was likely resolved during the rebase onto origin/master which
-included widening fixes. Now works for all parameter configurations:
-- Comptime param first: `fun add_const(const n: int, x: int): int` ✓
-- Comptime param last: `fun multiply(x: int, const n: int): int` ✓
-- All const parameters: `fun add_consts(const a: int, const b: int): int` ✓
-
-**Verified:** Tests 005, 006, 008 in `fixtures/specialize_differential/` confirm correct
-behavior with differential testing.
-
----
-
-## Appendix: Key Files to Modify
-
-| File | Changes |
-|------|---------|
-| `datafun-ast/src/ast.rs` | Add `is_comptime` to FunParam |
-| `datafun-parser/src/statement.rs` | Parse `const` modifier |
-| `datafun-common/src/lib.rs` | Add `param_comptime` to TypeFunction |
-| `datafun-tycheck/src/synthesize.rs` | Validate const-binding-only args, record call sites |
-| `datafun-tycheck/src/context.rs` | Add `ComptimeCallSiteRegistry` |
-| `datafun-compiler/src/tracked_lower.rs` | Insert specialization step in phase 5c |
-| `datafun-ir/src/lib.rs` | (Maybe) enum discriminant helpers |
-
-| New File/Module | Purpose |
-|-----------------|---------|
-| `datafun-compiler/src/specialize.rs` | IR transformation module |
-| `datafun-compiler/src/specialize/transform.rs` | Union-branch IR generation |
-| `datafun-compiler/src/specialize/rewrite.rs` | Call instruction rewriting |
-| `datafun-compiler/src/specialize/types.rs` | Data structures (FuncSpecialization, etc.) |
-
-**Note**: Can also be a separate `datafun-specialize` crate if preferred for modularity.
+Every row of which is wrong, because a branch is not cheaper than a copy of the body — it
+*is* a copy of the body. `build_dispatch_blocks` clones every original block once per
+instantiation. Corrected:
+
+| Aspect | Full mono | Union-branch |
+|--------|-----------|--------------|
+| Code copies | N bodies | N bodies, plus a dispatch block |
+| Instruction cache | N copies | The same N copies in one symbol |
+| Branch prediction | No branch | A `Switch` on a per-call-site constant |
+| Inlining | Each copy inlinable | One oversized body, inlined whole or not at all |
+| Compile time | O(N x size) | O(N x size) plus dispatch |
+| JIT tiering | Per instantiation | All instantiations share one call count |
+
+The last row is specific to this compiler: `optimizing.rs` inlines at 50 calls and
+JIT-compiles at 100, counted per function, so fusing instantiations means a hot one cannot
+tier without dragging the cold ones with it.
+
+The extension to type parameters, once sketched here as phases B through D, does not
+exist. Union-branch holds one signature by removing the const parameter; a type parameter
+*is* the type of other parameters and of the return, so there is nothing for the branches
+to agree on. Generics went to erasure and type descriptors instead. The full argument is
+in [Generics and Specialization](plan-generics.md).
+
+Problems found and fixed while the union-branch implementation was built, which were real
+and are not affected by any of the above: CTFE leaking heap values returned through a call
+and leaking collections with linear elements; calls in binary operand position panicking
+`emit_expr_temp_drops_since`; dead code elimination not running on the two function
+lowering paths, which orphaned the instructions computing an inlined const; module-level
+consts, implemented by stratifying lowering into two passes; and a widening fault where a
+fixed-width integer passed to an `int` parameter produced zero. Fixtures: interp 944, 945,
+946, dual 423, module_interp 055 and 056.
