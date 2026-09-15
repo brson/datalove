@@ -43,7 +43,6 @@ Thorough compiler architecture, bare language.
 
 - const param specialization
 - human docs
-- match syntax / switch ir instruction
 - fully reactive scripts, undo/redo
 
 
