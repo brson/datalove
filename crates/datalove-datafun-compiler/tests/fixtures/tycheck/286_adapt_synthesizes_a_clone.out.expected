@@ -1,0 +1,51 @@
+{
+  "diagnostics": [],
+  "errors": [],
+  "judgements": [
+    {
+      "kind": "variable",
+      "name": "s",
+      "type": "string"
+    },
+    {
+      "kind": "variable",
+      "name": "copied",
+      "type": "string"
+    },
+    {
+      "kind": "variable",
+      "name": "l",
+      "type": "[u32]"
+    },
+    {
+      "kind": "variable",
+      "name": "copied_list",
+      "type": "[u32]"
+    },
+    {
+      "kind": "variable",
+      "name": "h",
+      "type": "enum{atom Nothing, term Text string}"
+    },
+    {
+      "kind": "variable",
+      "name": "copied_enum",
+      "type": "enum{atom Nothing, term Text string}"
+    },
+    {
+      "kind": "variable",
+      "name": "p",
+      "type": "{a: string, b: string}"
+    },
+    {
+      "kind": "variable",
+      "name": "copied_field",
+      "type": "string"
+    },
+    {
+      "kind": "variable",
+      "name": "narrow",
+      "type": "atom Nothing"
+    }
+  ]
+}

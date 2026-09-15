@@ -1,0 +1,70 @@
+{
+  "diagnostics": [],
+  "errors": [],
+  "judgements": [
+    {
+      "kind": "function",
+      "name": "widen_binding",
+      "params": [
+        {
+          "name": "n",
+          "type": "u8"
+        }
+      ],
+      "return_type": "int"
+    },
+    {
+      "kind": "function",
+      "name": "widen_argument",
+      "params": [
+        {
+          "name": "n",
+          "type": "u8"
+        }
+      ],
+      "return_type": "int"
+    },
+    {
+      "kind": "function",
+      "name": "to_int",
+      "params": [
+        {
+          "name": "n",
+          "type": "int"
+        }
+      ],
+      "return_type": "int"
+    },
+    {
+      "kind": "function",
+      "name": "widen_return",
+      "params": [
+        {
+          "name": "n",
+          "type": "u8"
+        }
+      ],
+      "return_type": "int"
+    },
+    {
+      "kind": "function",
+      "name": "widen_across_comparison",
+      "params": [
+        {
+          "name": "a",
+          "type": "u8"
+        },
+        {
+          "name": "b",
+          "type": "int"
+        }
+      ],
+      "return_type": "bool"
+    },
+    {
+      "kind": "variable",
+      "name": "widened",
+      "type": "enum{atom Blue, atom Red}"
+    }
+  ]
+}

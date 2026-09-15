@@ -1,0 +1,9 @@
+// With `@` on both sides of a comparison there is nothing to draw a type
+// from, so each clones and the two have to agree on their own.
+fun agree(a: int, b: int): bool
+  ret a@ .< b@
+end fun
+
+fun disagree(a: u32, b: u64): bool
+  ret a@ .< b@
+end fun

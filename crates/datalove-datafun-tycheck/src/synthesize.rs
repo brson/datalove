@@ -195,9 +195,26 @@ pub fn synthesize_expr<'db>(
             synthesize_try_result(ctx, expr, try_op)
         }
 
-        ExprFunKind::CloneCoerce(_) => {
-            // The @ operator requires type context - it cannot synthesize a type.
-            Err(ctx.error_cannot_synthesize(expr, "@ operator requires type context for coercion"))
+        ExprFunKind::CloneCoerce(ref cc_expr) => {
+            // With nothing to coerce to, `@` clones, and a clone is the type
+            // it was taken from. Coercion is the half that needs a target;
+            // cloning does not, and `can_clone_coerce_to` says as much by
+            // holding for a type and itself.
+            //
+            // Requiring a target either way left no way to write a clone
+            // except under an annotation, so `let c = s@` was an error, and so
+            // was `match h@` -- which is what the ownership analysis tells you
+            // to write when a match moves what it must not.
+            //
+            // `@` borrows its operand, so a non-copy projection is allowed
+            // under one.
+            let old_ref_context = ctx.ref_context;
+            ctx.ref_context = true;
+            let operand_ty = ctx.synthesize_expr(cc_expr.operand);
+            ctx.ref_context = old_ref_context;
+            let operand_ty = operand_ty?;
+            ctx.store_expr_type(expr, &operand_ty);
+            Ok(operand_ty)
         }
 
         ExprFunKind::FieldProj(ref proj) => {
@@ -531,13 +548,16 @@ fn is_bare_numeric_literal<'db>(ctx: &TypeContext<'db>, expr: ExprFun<'db>) -> b
     }
 }
 
-/// True if this operand has no type of its own at all.
+/// True if this operand would rather be told its type than pick one.
 ///
-/// `@` is the case: it needs a target to know whether it clones or which type
-/// it widens to, and an operator returning bool gives it nothing, so the other
-/// operand is the only source. This is stronger than being a bare numeric
-/// literal, which does have a type of its own, `int`, and merely prefers to
-/// take the other operand's instead.
+/// `@` is the case. Left to itself it clones, which gives back the type it
+/// was taken from and no widening -- but widening is most of what it is for,
+/// and an operator returning bool passes nothing down, so the other operand
+/// is the only thing that can ask for one: `a@ .< b` widens `a` to `b`'s
+/// type. This is stronger than being a bare numeric literal, which has a type
+/// of its own, `int`, and merely prefers the other operand's instead.
+///
+/// With one on each side there is nothing to draw on and each clones.
 fn operand_has_no_type<'db>(ctx: &TypeContext<'db>, expr: ExprFun<'db>) -> bool {
     match expr.expr(ctx.db) {
         ExprFunKind::CloneCoerce(_) => true,

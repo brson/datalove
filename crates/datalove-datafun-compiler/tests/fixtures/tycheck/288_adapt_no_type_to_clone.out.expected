@@ -1,0 +1,24 @@
+{
+  "diagnostics": [
+    {
+      "code": "F011",
+      "labels": [
+        {
+          "message": "cannot infer type",
+          "span": [
+            134,
+            138
+          ],
+          "text": "none"
+        }
+      ],
+      "message": "cannot infer type for None value"
+    }
+  ],
+  "errors": [
+    {
+      "kind": "CannotSynthesize"
+    }
+  ],
+  "judgements": []
+}

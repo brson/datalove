@@ -1,0 +1,5 @@
+// A widen that was wanted but never asked for: the atom keeps its own type,
+// and the error lands where it is used as something else.
+type Colour: enum { atom Red, atom Blue }
+let c = (atom Red)@
+let d: Colour = c

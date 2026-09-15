@@ -24,8 +24,15 @@ fun no_implicit_widen(x: u32): int
   ret r
 end fun
 
-// Nothing to draw a type from when neither operand has one.
+// Nothing to draw a type from when neither operand has one, so each clones
+// and the two are compared at the type they already had.
 fun both_untyped(a: int, b: int): bool
+  let r: bool = a@ .< b@
+  ret r
+end fun
+
+// Cloning does not make them agree, though.
+fun both_untyped_mismatched(a: u32, b: u64): bool
   let r: bool = a@ .< b@
   ret r
 end fun

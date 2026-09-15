@@ -566,7 +566,7 @@ is folded to a literal before any backend sees it -- which is how `sys/std`'s
 ### 6.8 Adapt Operator
 
 The postfix `@` operator performs explicit clone and/or widening conversions.
-It requires a type context (expected type) to determine the target type.
+A widening takes its target from the expected type; with none, `@` clones.
 
 **Clone**: For linear types, `@` creates a deep copy:
 
@@ -606,8 +606,19 @@ Valid widening chains:
 - Cross-sign: `u32` -> `i64`, `int`
 - Index/offset: `index` -> `int`, `offset` -> `int`
 
-The `@` operator cannot synthesize a type; it must appear in a context where
-the expected type is known. Those are:
+**Widening needs a target; cloning does not.** Where an expected type is
+known, `@` converts to it. Where none is, `@` clones, and the clone has the
+type it was taken from:
+
+```datalove
+let msg = "hello"
+let copy = msg@         // copy: string, and msg is still there
+```
+
+So `@` may be written anywhere, including where nothing asks for a type: the
+input of a `match`, an argument to `debuglog`, a `let` with no annotation.
+
+An expected type reaches `@` from:
 
 - A `let` or `var` binding with a type annotation.
 - Return position in a function with a declared return type.
@@ -621,7 +632,11 @@ the expected type is known. Those are:
   A comparison returns `bool`, which says nothing about its operands, so the
   type comes from across the operator instead: `a@ .< b` takes `b`'s type,
   and `a@ .< 0` takes the literal's. With `@` on both sides there is nothing
-  to take, and `a@ .< b@` is an error.
+  to take, so each clones and the two have to agree on their own.
+
+Widening is only what was asked for, so an atom under no expectation stays an
+atom: `let c = (atom Red)@` gives `c` the type `atom Red`, and using it where
+the enum is wanted is the error, not the `@`.
 
 The expected type has to be one the operator accepts, so `@` does not make an
 operator available on a type that does not have it. `let r: u32 = a@ + b@`

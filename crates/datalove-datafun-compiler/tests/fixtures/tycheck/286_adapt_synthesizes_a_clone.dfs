@@ -1,0 +1,22 @@
+// With nothing to coerce to, `@` clones and the clone has the type it was
+// taken from. Requiring a target either way left no way to write a clone
+// except under an annotation.
+type Held: enum { atom Nothing, term Text string }
+
+let s: string = "one"
+let copied = s@
+
+let l: [u32] = [1, 2]
+let copied_list = l@
+
+let h: Held = (atom Nothing)@
+let copied_enum = h@
+
+// Under a projection, which `@` borrows through.
+type Pair: { a: string, b: string }
+let p: Pair = { a = "x", b = "y" }
+let copied_field = p.a@
+
+// Widening is only what was asked for, so an atom under no expectation keeps
+// its own narrow type.
+let narrow = (atom Nothing)@

@@ -1,0 +1,57 @@
+{
+  "diagnostics": [
+    {
+      "code": "F016",
+      "labels": [
+        {
+          "message": "operands must have the same type",
+          "span": [
+            235,
+            243
+          ],
+          "text": "a@ .< b@"
+        }
+      ],
+      "message": "mismatched types: expected `u32`, found `u64`"
+    }
+  ],
+  "errors": [
+    {
+      "actual": "u64",
+      "expected": "u32",
+      "kind": "TypeMismatch"
+    }
+  ],
+  "judgements": [
+    {
+      "kind": "function",
+      "name": "agree",
+      "params": [
+        {
+          "name": "a",
+          "type": "int"
+        },
+        {
+          "name": "b",
+          "type": "int"
+        }
+      ],
+      "return_type": "bool"
+    },
+    {
+      "kind": "function",
+      "name": "disagree",
+      "params": [
+        {
+          "name": "a",
+          "type": "u32"
+        },
+        {
+          "name": "b",
+          "type": "u64"
+        }
+      ],
+      "return_type": "bool"
+    }
+  ]
+}

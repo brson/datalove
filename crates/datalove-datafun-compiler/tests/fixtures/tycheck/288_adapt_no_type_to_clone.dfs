@@ -1,0 +1,3 @@
+// Where the operand has no type of its own, the error is the operand's rather
+// than a blanket complaint about `@`.
+let from_none = none@

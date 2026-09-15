@@ -1,0 +1,91 @@
+// `@` where nothing asks for a type, which is a clone.
+//
+// It used to need a target either way, so there was no way to write a clone
+// except under an annotation. The input of a `match` asks for nothing, so
+// `match h@` was rejected -- which is what the ownership analysis tells you to
+// write when a match would move what it must not, so following the compiler's
+// own advice produced a type error.
+//
+// Run on every backend because a clone that nothing consumes has to be
+// dropped, and a clone of a linear payload is where a missed drop shows up as
+// a leak and a doubled one as a crash.
+
+type Held: enum { atom Nothing, term Text string }
+
+// The shape the ownership analysis asks for: a match inside a loop, whose
+// input would otherwise be moved on the first turn.
+fun count(h: Held): !u32
+  var i: u32 = 0
+  var seen: u32 = 0
+  loop while i .< 3
+    match h@
+    case atom Nothing
+      set seen = seen +! 1
+    case term Text t
+      set seen = seen +! 2
+    end match
+    set i = i +! 1
+  end loop
+  ret ok seen
+end fun
+
+// And a match on a clone of something still wanted afterwards.
+fun describe_twice(h: Held): string
+  var first: string = "?"
+  match h@
+  case atom Nothing
+    set first = "nothing"
+  case term Text t
+    set first = t
+  end match
+  match h
+  case atom Nothing
+    ret first
+  case term Text t
+    ret first
+  end match
+end fun
+
+// A clone bound with no annotation, of each of the kinds that own something.
+fun clones(): string
+  let s: string = "one"
+  let s_copy = s@
+  let l: [u32] = [1, 2, 3]
+  let l_copy = l@
+  let m: %{u32 = string} = %{1 = "a"}
+  let m_copy = m@
+  let big: int = 99999999999999999999
+  let big_copy = big@
+  debuglog (s, s_copy@, l, l_copy, m, m_copy, big, big_copy)
+  ret s_copy
+end fun
+
+// A clone of a copy type is a copy, and costs nothing.
+fun copies(n: u32): u32
+  let m = n@
+  ret m
+end fun
+
+// Straight into a call that consumes it, with the original still live after.
+fun length_of(s: string): index
+  ret : index / 1
+end fun
+
+fun keeps_original(): string
+  let s: string = "kept"
+  let n = length_of(s@)
+  debuglog n
+  ret s
+end fun
+
+debuglog count((term Text : string / "x")@)!
+debuglog count((atom Nothing)@)!
+debuglog describe_twice((term Text : string / "twice")@)
+debuglog clones()
+debuglog copies(5)
+debuglog keeps_original()
+
+// At script level too, where a unit's bindings are exported rather than dropped.
+let script_s: string = "script"
+let script_copy = script_s@
+debuglog (script_s, script_copy)
