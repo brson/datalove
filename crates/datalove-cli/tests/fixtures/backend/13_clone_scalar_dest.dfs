@@ -1,0 +1,94 @@
+// A clone whose destination is a scalar.
+//
+// Cranelift keeps an address for an aggregate and the value itself for a
+// scalar, and reads an operand as one or the other by its type. A runtime
+// call writes through a pointer whatever the type, and `Clone` left that
+// address behind as the value -- so the next read of a scalar clone took the
+// address for the number.
+//
+// A term is transparent over its payload, so a term over a scalar clones to a
+// scalar destination, and `@` widening a term into an enum is where that
+// happens: the payload written into the enum was a stack address. Both
+// cranelift backends had it, the jit and the aot; the interpreter and the C
+// backend were right, which is why the dual fixtures did not see it.
+
+type Note: enum { atom Nil, term V u32 }
+
+fun widen(n: u32): Note
+  let t: term V u32 = term V n
+  ret t@
+end fun
+
+fun payload_of(e: Note): u32
+  match e
+  case atom Nil
+    ret 0
+  case term V n
+    ret n
+  end match
+end fun
+
+// Every scalar shape a payload can be, since the load has to name a width.
+type EU8: enum { atom Nil, term V u8 }
+type EU64: enum { atom Nil, term V u64 }
+type EI16: enum { atom Nil, term V i16 }
+type EF32: enum { atom Nil, term V f32 }
+type EF64: enum { atom Nil, term V f64 }
+type EBool: enum { atom Nil, term V bool }
+type EIndex: enum { atom Nil, term V index }
+
+fun w8(n: u8): EU8
+  let t: term V u8 = term V n
+  ret t@
+end fun
+
+fun w64(n: u64): EU64
+  let t: term V u64 = term V n
+  ret t@
+end fun
+
+fun wi16(n: i16): EI16
+  let t: term V i16 = term V n
+  ret t@
+end fun
+
+fun wf32(n: f32): EF32
+  let t: term V f32 = term V n
+  ret t@
+end fun
+
+fun wf64(n: f64): EF64
+  let t: term V f64 = term V n
+  ret t@
+end fun
+
+fun wbool(n: bool): EBool
+  let t: term V bool = term V n
+  ret t@
+end fun
+
+fun windex(n: index): EIndex
+  let t: term V index = term V n
+  ret t@
+end fun
+
+// A linear payload, which was always right, so that fixing the scalar does not
+// quietly change it.
+type Held: enum { atom Nil, term V string }
+
+fun widen_string(s: string): Held
+  let t: term V string = term V s
+  ret t@
+end fun
+
+debuglog widen(42)
+debuglog payload_of(widen(42))
+debuglog (w8(: u8 / 200), w64(: u64 / 9000000000), wi16(: i16 / -300))
+debuglog (wf32(: f32 / 1.5), wf64(: f64 / 2.5), wbool(true))
+debuglog windex(: index / 7)
+debuglog widen_string("kept")
+
+// Widened straight from the literal, which is the form the spec writes.
+let from_literal: Note = (term V : u32 / 7)@
+debuglog from_literal
+debuglog payload_of(from_literal)

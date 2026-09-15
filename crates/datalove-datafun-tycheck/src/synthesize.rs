@@ -135,6 +135,20 @@ fn require_result_return_type<'db>(
 // Type Synthesis
 // ============================================================================
 
+/// Convert a type hint under the aliases in scope.
+///
+/// The bare `convert_type_hint` has no alias map and reports every name in a
+/// type position as unresolved, so `: Age / 5` under `type Age: u32` failed
+/// where `let a: Age = 5` did not -- a hint only worked for a type written
+/// out in full. Checking already went through the aliases; synthesis is what
+/// did not.
+fn hint_type<'db>(
+    ctx: &TypeContext<'db>,
+    type_hint: datalit::ast::TypeHint<'db>,
+) -> Result<Type<'db>, TypeError> {
+    convert_type_hint_with_aliases(ctx.db, type_hint, &ctx.type_aliases)
+}
+
 /// Synthesize a type for an expression.
 pub fn synthesize_expr<'db>(
     ctx: &mut TypeContext<'db>,
@@ -212,14 +226,14 @@ pub fn synthesize_expr<'db>(
         // All these check for type hints first.
         ExprFunKind::True(lit) => {
             if let Some(type_hint) = lit.type_hint.clone() {
-                return convert_type_hint(db, type_hint);
+                return hint_type(ctx, type_hint);
             }
             let ty = Type::Datalit(datalit::tycheck::Type::Bool);
             Ok(ty)
         }
         ExprFunKind::False(lit) => {
             if let Some(type_hint) = lit.type_hint.clone() {
-                return convert_type_hint(db, type_hint);
+                return hint_type(ctx, type_hint);
             }
             let ty = Type::Datalit(datalit::tycheck::Type::Bool);
             Ok(ty)
@@ -227,14 +241,14 @@ pub fn synthesize_expr<'db>(
         ExprFunKind::None(lit) => {
             // None requires type hint to determine the inner type.
             if let Some(type_hint) = lit.type_hint.clone() {
-                return convert_type_hint(db, type_hint);
+                return hint_type(ctx, type_hint);
             }
             Err(ctx.error_cannot_synthesize(expr, "cannot infer type for None value"))
         }
         ExprFunKind::Int(int_expr) => {
             // If type hint present, use it and validate the value fits.
             if let Some(type_hint) = int_expr.type_hint.clone() {
-                let result_ty = convert_type_hint(db, type_hint)?;
+                let result_ty = hint_type(ctx, type_hint)?;
                 // Validate integer value fits within the type.
                 let value_str = int_expr.value.as_str(db);
                 if let Type::Datalit(ref datalit_ty) = result_ty {
@@ -249,7 +263,7 @@ pub fn synthesize_expr<'db>(
         }
         ExprFunKind::Float(float_expr) => {
             if let Some(type_hint) = float_expr.type_hint.clone() {
-                return convert_type_hint(db, type_hint);
+                return hint_type(ctx, type_hint);
             }
             // A literal with nothing to infer from is an f64, the same way a
             // bare integer literal is an int: a default that has to be chosen
@@ -261,7 +275,7 @@ pub fn synthesize_expr<'db>(
         ExprFunKind::Hex(hex_expr) => {
             // If type hint present, use it and validate the value fits.
             if let Some(type_hint) = hex_expr.type_hint.clone() {
-                let result_ty = convert_type_hint(db, type_hint)?;
+                let result_ty = hint_type(ctx, type_hint)?;
                 // Validate hex value fits within the type.
                 let value_str = hex_expr.value.as_str(db);
                 if let Type::Datalit(ref datalit_ty) = result_ty {
@@ -276,7 +290,7 @@ pub fn synthesize_expr<'db>(
         }
         ExprFunKind::String(str_expr) => {
             if let Some(type_hint) = str_expr.type_hint.clone() {
-                return convert_type_hint(db, type_hint);
+                return hint_type(ctx, type_hint);
             }
             let ty = Type::Datalit(datalit::tycheck::Type::String);
             Ok(ty)
@@ -285,7 +299,7 @@ pub fn synthesize_expr<'db>(
         // Collection types.
         ExprFunKind::List(ref list_expr) => {
             if let Some(type_hint) = list_expr.type_hint.clone() {
-                let expected_ty = convert_type_hint(db, type_hint)?;
+                let expected_ty = hint_type(ctx, type_hint)?;
                 // Check elements against expected type.
                 check_list_elements(ctx, &list_expr.elements, &expected_ty)?;
                 return Ok(expected_ty);
@@ -294,7 +308,7 @@ pub fn synthesize_expr<'db>(
         }
         ExprFunKind::Set(ref set_expr) => {
             if let Some(type_hint) = set_expr.type_hint.clone() {
-                let expected_ty = convert_type_hint(db, type_hint)?;
+                let expected_ty = hint_type(ctx, type_hint)?;
                 // Check elements against expected type.
                 check_set_elements(ctx, &set_expr.elements, &expected_ty)?;
                 return Ok(expected_ty);
@@ -303,7 +317,7 @@ pub fn synthesize_expr<'db>(
         }
         ExprFunKind::Map(ref map_expr) => {
             if let Some(type_hint) = map_expr.type_hint.clone() {
-                let expected_ty = convert_type_hint(db, type_hint)?;
+                let expected_ty = hint_type(ctx, type_hint)?;
                 // Check entries against expected type.
                 check_map_entries(ctx, &map_expr.entries, &expected_ty)?;
                 return Ok(expected_ty);
@@ -312,7 +326,7 @@ pub fn synthesize_expr<'db>(
         }
         ExprFunKind::Tensor(ref tensor_expr) => {
             if let Some(type_hint) = tensor_expr.type_hint.clone() {
-                let expected_ty = convert_type_hint(db, type_hint)?;
+                let expected_ty = hint_type(ctx, type_hint)?;
                 // Check rank and elements against expected type.
                 check_tensor_shape_and_elements(ctx, tensor_expr.C(), &expected_ty)?;
                 return Ok(expected_ty);
@@ -323,7 +337,7 @@ pub fn synthesize_expr<'db>(
         // Aggregate types.
         ExprFunKind::AnonTuple(ref tuple_expr) => {
             if let Some(type_hint) = tuple_expr.type_hint.clone() {
-                let expected_ty = convert_type_hint(db, type_hint)?;
+                let expected_ty = hint_type(ctx, type_hint)?;
                 // Check elements against expected type (catches arity mismatches).
                 check_tuple_elements(ctx, &tuple_expr.elements, &expected_ty)?;
                 return Ok(expected_ty);
@@ -332,7 +346,7 @@ pub fn synthesize_expr<'db>(
         }
         ExprFunKind::AnonStruct(ref struct_expr) => {
             if let Some(type_hint) = struct_expr.type_hint.clone() {
-                let expected_ty = convert_type_hint(db, type_hint)?;
+                let expected_ty = hint_type(ctx, type_hint)?;
                 // Check fields against expected type (catches arity mismatches).
                 check_struct_fields(ctx, &struct_expr.fields, &expected_ty)?;
                 return Ok(expected_ty);
@@ -349,7 +363,7 @@ pub fn synthesize_expr<'db>(
                 // payload with no type recorded, which lowering then went
                 // looking for. Reachable wherever a `some` is synthesized
                 // rather than checked, which is under a `data` or an `error`.
-                let expected = convert_type_hint(db, type_hint)?;
+                let expected = hint_type(ctx, type_hint)?;
                 check_expr(ctx, expr, &expected)?;
                 return Ok(expected);
             }
@@ -370,7 +384,7 @@ pub fn synthesize_expr<'db>(
             if let Some(type_hint) = ok_expr.type_hint.clone() {
                 // As for `some` above: the payload needs checking, because
                 // nothing else here visits it.
-                let expected = convert_type_hint(db, type_hint)?;
+                let expected = hint_type(ctx, type_hint)?;
                 check_expr(ctx, expr, &expected)?;
                 return Ok(expected);
             }
@@ -394,7 +408,7 @@ pub fn synthesize_expr<'db>(
                 let error_ty = Type::Datalit(datalit::tycheck::Type::Error
                 );
                 check_expr(ctx, er_expr.payload, &error_ty)?;
-                let result = convert_type_hint(db, type_hint)?;
+                let result = hint_type(ctx, type_hint)?;
                 ctx.store_expr_type(expr, &result);
                 return Ok(result);
             }
@@ -404,7 +418,7 @@ pub fn synthesize_expr<'db>(
             if let Some(type_hint) = data_expr.type_hint.clone() {
                 // Synthesize inner value type (Data can wrap any type).
                 ctx.synthesize_expr(data_expr.value)?;
-                let result = convert_type_hint(db, type_hint)?;
+                let result = hint_type(ctx, type_hint)?;
                 ctx.store_expr_type(expr, &result);
                 return Ok(result);
             }
@@ -414,7 +428,7 @@ pub fn synthesize_expr<'db>(
             if let Some(type_hint) = err_expr.type_hint.clone() {
                 // Synthesize inner value type (Error can wrap any type).
                 ctx.synthesize_expr(err_expr.value)?;
-                let result = convert_type_hint(db, type_hint)?;
+                let result = hint_type(ctx, type_hint)?;
                 ctx.store_expr_type(expr, &result);
                 return Ok(result);
             }
@@ -424,7 +438,7 @@ pub fn synthesize_expr<'db>(
         // Table expression.
         ExprFunKind::Table(ref table_expr) => {
             if let Some(type_hint) = table_expr.type_hint.clone() {
-                let expected_ty = convert_type_hint(db, type_hint)?;
+                let expected_ty = hint_type(ctx, type_hint)?;
                 // Check rows against expected table type.
                 if let Type::Datalit(datalit::tycheck::Type::Table(ref table_ty)) = expected_ty {
                     check_table_rows(ctx, &table_expr.header, &table_expr.rows, table_ty)?;
@@ -440,7 +454,7 @@ pub fn synthesize_expr<'db>(
                 // As for `some` above: checked against the hint rather than
                 // taking its word, so that the hint is the type and a
                 // disagreement is caught here.
-                let expected = convert_type_hint(db, type_hint)?;
+                let expected = hint_type(ctx, type_hint)?;
                 check_expr(ctx, expr, &expected)?;
                 return Ok(expected);
             }
@@ -455,7 +469,7 @@ pub fn synthesize_expr<'db>(
         ExprFunKind::Term(ref term_expr) => {
             if let Some(type_hint) = term_expr.type_hint.clone() {
                 // The payload needs checking, and nothing else here visits it.
-                let expected = convert_type_hint(db, type_hint)?;
+                let expected = hint_type(ctx, type_hint)?;
                 check_expr(ctx, expr, &expected)?;
                 return Ok(expected);
             }
@@ -478,7 +492,7 @@ pub fn synthesize_expr<'db>(
         // Checked against the hint, which is then the type, the same as every
         // literal form does with the hint it carries.
         ExprFunKind::Hinted(ref hinted) => {
-            let expected = convert_type_hint(db, hinted.type_hint.clone())?;
+            let expected = hint_type(ctx, hinted.type_hint.clone())?;
             check_expr(ctx, expr, &expected)?;
             Ok(expected)
         }
@@ -488,7 +502,7 @@ pub fn synthesize_expr<'db>(
             let Some(type_hint) = enum_lit.type_hint.clone() else {
                 return Err(ctx.error_cannot_synthesize(expr, "enum literal requires type context"));
             };
-            let expected = convert_type_hint(db, type_hint)?;
+            let expected = hint_type(ctx, type_hint)?;
             check_expr(ctx, expr, &expected)?;
             Ok(expected)
         }

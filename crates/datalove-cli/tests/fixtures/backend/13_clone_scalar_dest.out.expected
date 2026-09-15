@@ -1,0 +1,8 @@
+enum V(42)
+42
+(enum V(200), enum V(9000000000), enum V(-300))
+(enum V(1.5), enum V(2.5), enum V(true))
+enum V(7)
+enum V("kept")
+enum V(7)
+7

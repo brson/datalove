@@ -913,6 +913,34 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         self.module_funcs = module_funcs;
     }
 
+    /// Record a result the runtime wrote into `result_ptr` as `dest`.
+    ///
+    /// `values` holds an address for an aggregate and the value itself for a
+    /// scalar, and every read of an operand takes what is there as one or the
+    /// other by the type. A runtime call writes through a pointer whatever
+    /// the type, so a scalar destination has to be loaded back out of it --
+    /// left as the address, the next read of it takes the address for the
+    /// value. That is how `(term Note : u32 / 42)@` came out as a stack
+    /// address widened into the enum: a term is transparent over its payload,
+    /// so cloning one has a scalar destination.
+    fn record_runtime_result(
+        &mut self,
+        builder: &mut FunctionBuilder,
+        dest: ValueId,
+        result_ptr: cl_ir::Value,
+    ) {
+        let dest_ty = &self.func.value_types[dest.0 as usize];
+        match types::ir_type_to_cranelift(dest_ty) {
+            CraneliftRepr::Scalar(cl_ty) => {
+                let val = builder.ins().load(cl_ty, MemFlagsData::new(), result_ptr, 0);
+                self.values.insert(dest, val);
+            }
+            CraneliftRepr::Aggregate(_) => {
+                self.values.insert(dest, result_ptr);
+            }
+        }
+    }
+
     /// Get a pointer to an operand's value.
     ///
     /// For aggregates already in memory, returns the pointer directly.

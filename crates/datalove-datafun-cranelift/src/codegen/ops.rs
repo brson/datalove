@@ -981,8 +981,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             dest_tydesc_ptr,
         ]);
 
-        // Store pointer to result.
-        self.values.insert(dest, result_ptr);
+        self.record_runtime_result(builder, dest, result_ptr);
         Ok(())
     }
 

@@ -1,0 +1,32 @@
+{
+  "diagnostics": [
+    {
+      "code": "F016",
+      "labels": [
+        {
+          "message": "type mismatch",
+          "span": [
+            116,
+            117
+          ],
+          "text": "s"
+        }
+      ],
+      "message": "mismatched types: expected `u32`, found `string`"
+    }
+  ],
+  "errors": [
+    {
+      "actual": "string",
+      "expected": "u32",
+      "kind": "TypeMismatch"
+    }
+  ],
+  "judgements": [
+    {
+      "kind": "variable",
+      "name": "s",
+      "type": "string"
+    }
+  ]
+}

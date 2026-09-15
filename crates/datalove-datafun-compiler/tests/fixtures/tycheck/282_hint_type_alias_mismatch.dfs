@@ -1,0 +1,4 @@
+// Resolved through the alias, the hint is still checked against.
+type Age: u32
+let s: string = "x"
+let a = : Age / s

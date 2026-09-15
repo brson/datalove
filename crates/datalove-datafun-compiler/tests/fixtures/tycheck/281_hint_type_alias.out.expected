@@ -1,0 +1,52 @@
+{
+  "diagnostics": [],
+  "errors": [],
+  "judgements": [
+    {
+      "kind": "variable",
+      "name": "a",
+      "type": "u32"
+    },
+    {
+      "kind": "variable",
+      "name": "b",
+      "type": "[u32]"
+    },
+    {
+      "kind": "variable",
+      "name": "c",
+      "type": "?u32"
+    },
+    {
+      "kind": "variable",
+      "name": "d",
+      "type": "enum{atom Blue, atom Red}"
+    },
+    {
+      "kind": "variable",
+      "name": "e",
+      "type": "{x: u32, y: u32}"
+    },
+    {
+      "kind": "variable",
+      "name": "n",
+      "type": "u32"
+    },
+    {
+      "kind": "variable",
+      "name": "f",
+      "type": "u32"
+    },
+    {
+      "kind": "function",
+      "name": "pick",
+      "params": [
+        {
+          "name": "x",
+          "type": "T"
+        }
+      ],
+      "return_type": "T"
+    }
+  ]
+}
