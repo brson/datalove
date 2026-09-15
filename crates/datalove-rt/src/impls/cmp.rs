@@ -1269,51 +1269,6 @@ unsafe fn cmp_value(
     }
 }
 
-/// Helper to find the leftmost leaf in a map tree.
-unsafe fn find_leftmost_map_leaf(mut node: *mut rtdt::MapNode, key_tydesc: rtdt::TyDescRef) -> *mut rtdt::MapNode {
-    unsafe {
-        loop {
-            let tag = read_map_node_tag(node);
-            match tag {
-                rtdt::MapNodeTag::Leaf => return node,
-                rtdt::MapNodeTag::Internal => {
-                    let layout = rtdt::layout::compute_map_internal_node_layout(key_tydesc);
-                    let children_ptr = (node as *mut u8).add(layout.child_ptrs_offset as usize) as *mut *mut rtdt::MapNode;
-                    node = *children_ptr;
-                }
-            }
-        }
-    }
-}
-
-/// Helper to find the leftmost leaf in a set tree.
-unsafe fn find_leftmost_set_leaf(mut node: *mut rtdt::SetNode, key_tydesc: rtdt::TyDescRef) -> *mut rtdt::SetNode {
-    unsafe {
-        loop {
-            let tag = read_set_node_tag(node);
-            match tag {
-                rtdt::SetNodeTag::Leaf => return node,
-                rtdt::SetNodeTag::Internal => {
-                    let layout = rtdt::layout::compute_set_internal_node_layout(key_tydesc);
-                    let children_ptr = (node as *mut u8).add(layout.child_ptrs_offset as usize) as *mut *mut rtdt::SetNode;
-                    node = *children_ptr;
-                }
-            }
-        }
-    }
-}
-
-/// Read map node tag.
-unsafe fn read_map_node_tag(node: *const rtdt::MapNode) -> rtdt::MapNodeTag {
-    unsafe {
-        let tag_byte = *(node as *const u8);
-        match tag_byte {
-            1 => rtdt::MapNodeTag::Internal,
-            2 => rtdt::MapNodeTag::Leaf,
-            _ => panic!("Invalid MapNodeTag: {}", tag_byte),
-        }
-    }
-}
 
 /// Read map node length.
 unsafe fn read_map_node_len(node: *const rtdt::MapNode) -> u32 {
@@ -1323,17 +1278,6 @@ unsafe fn read_map_node_len(node: *const rtdt::MapNode) -> u32 {
     }
 }
 
-/// Read set node tag.
-unsafe fn read_set_node_tag(node: *const rtdt::SetNode) -> rtdt::SetNodeTag {
-    unsafe {
-        let tag_byte = *(node as *const u8);
-        match tag_byte {
-            1 => rtdt::SetNodeTag::Internal,
-            2 => rtdt::SetNodeTag::Leaf,
-            _ => panic!("Invalid SetNodeTag: {}", tag_byte),
-        }
-    }
-}
 
 /// Read set node length.
 unsafe fn read_set_node_len(node: *const rtdt::SetNode) -> u32 {
@@ -1353,8 +1297,8 @@ unsafe fn eq_map_trees(
 ) -> bool {
     unsafe {
         // Find leftmost leaves.
-        let mut leaf_a = find_leftmost_map_leaf(root_a, key_tydesc);
-        let mut leaf_b = find_leftmost_map_leaf(root_b, key_tydesc);
+        let mut leaf_a = crate::impls::btreemap::leftmost_leaf(root_a, key_tydesc);
+        let mut leaf_b = crate::impls::btreemap::leftmost_leaf(root_b, key_tydesc);
 
         let key_size = key_tydesc.size() as usize;
         let value_size = value_tydesc.size() as usize;
@@ -1440,8 +1384,8 @@ unsafe fn eq_set_trees(
 ) -> bool {
     unsafe {
         // Find leftmost leaves.
-        let mut leaf_a = find_leftmost_set_leaf(root_a, element_tydesc);
-        let mut leaf_b = find_leftmost_set_leaf(root_b, element_tydesc);
+        let mut leaf_a = crate::impls::set::leftmost_leaf(root_a, element_tydesc);
+        let mut leaf_b = crate::impls::set::leftmost_leaf(root_b, element_tydesc);
 
         let element_size = element_tydesc.size() as usize;
 
@@ -1528,8 +1472,8 @@ unsafe fn cmp_map_trees(
         }
 
         // Find leftmost leaves.
-        let mut leaf_a = find_leftmost_map_leaf(root_a, key_tydesc);
-        let mut leaf_b = find_leftmost_map_leaf(root_b, key_tydesc);
+        let mut leaf_a = crate::impls::btreemap::leftmost_leaf(root_a, key_tydesc);
+        let mut leaf_b = crate::impls::btreemap::leftmost_leaf(root_b, key_tydesc);
 
         let key_size = key_tydesc.size() as usize;
         let value_size = value_tydesc.size() as usize;
@@ -1637,8 +1581,8 @@ unsafe fn cmp_set_trees(
         }
 
         // Find leftmost leaves.
-        let mut leaf_a = find_leftmost_set_leaf(root_a, element_tydesc);
-        let mut leaf_b = find_leftmost_set_leaf(root_b, element_tydesc);
+        let mut leaf_a = crate::impls::set::leftmost_leaf(root_a, element_tydesc);
+        let mut leaf_b = crate::impls::set::leftmost_leaf(root_b, element_tydesc);
 
         let element_size = element_tydesc.size() as usize;
 

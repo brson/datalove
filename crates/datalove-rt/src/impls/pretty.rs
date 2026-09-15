@@ -502,7 +502,8 @@ unsafe fn pretty_map(
             let key_size = key_ty.size() as usize;
             let value_size = value_ty.size() as usize;
 
-            let mut current_leaf = map.root as *mut rtdt::MapNode;
+            let mut current_leaf = crate::impls::btreemap::leftmost_leaf(
+                map.root as *mut rtdt::MapNode, key_ty);
             let mut entry_count = 0u32;
 
             while !current_leaf.is_null() {
@@ -553,7 +554,8 @@ unsafe fn pretty_set(
         if !set.root.is_null() && set.len > rtdt::Index::ZERO {
             let elem_size = elem_ty.size() as usize;
 
-            let mut current_leaf = set.root as *mut rtdt::SetNode;
+            let mut current_leaf = crate::impls::set::leftmost_leaf(
+                set.root as *mut rtdt::SetNode, elem_ty);
             let mut elem_count = 0u32;
 
             while !current_leaf.is_null() {

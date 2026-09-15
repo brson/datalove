@@ -160,6 +160,20 @@ unsafe fn internal_child_ptrs_ptr(
     }
 }
 
+/// The first leaf of a tree, reached down the left spine.
+///
+/// See `set::leftmost_leaf`: every walk of a map's entries in order starts
+/// here, and a root is only a leaf while the map fits in one node.
+pub(crate) unsafe fn leftmost_leaf(root: *mut MapNode, key_tydesc: rtdt::TyDescRef) -> *mut MapNode {
+    unsafe {
+        let mut node = root;
+        while matches!(read_node_tag(node), MapNodeTag::Internal) {
+            node = *internal_child_ptrs_ptr(node, key_tydesc);
+        }
+        node
+    }
+}
+
 // Leaf node accessors.
 
 /// Get pointer to next_leaf field in a leaf node.

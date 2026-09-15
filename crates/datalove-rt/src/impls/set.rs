@@ -55,6 +55,23 @@ unsafe fn internal_child_ptrs_ptr(node: *mut SetNode, key_tydesc: *const TyDesc)
     }
 }
 
+/// The first leaf of a tree, reached down the left spine.
+///
+/// Every walk of a set's elements in order starts here and then follows the
+/// leaf chain. A root is only a leaf while the set is small enough to be one
+/// node, so code that starts at the root and reads it as a leaf works until
+/// the set grows a level and then reads an internal node's child pointers as
+/// elements. The pretty printer did exactly that.
+pub(crate) unsafe fn leftmost_leaf(root: *mut SetNode, element_tydesc: rtdt::TyDescRef) -> *mut SetNode {
+    unsafe {
+        let mut node = root;
+        while matches!(read_node_tag(node), SetNodeTag::Internal) {
+            node = *internal_child_ptrs_ptr(node, element_tydesc.as_ptr());
+        }
+        node
+    }
+}
+
 /// Gets pointer to keys array in a leaf node.
 unsafe fn leaf_keys_ptr(node: *mut SetNode, key_tydesc: *const TyDesc) -> *mut u8 {
     unsafe {
