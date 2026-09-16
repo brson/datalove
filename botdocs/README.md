@@ -5,6 +5,12 @@ Specifications, research, design documents, implementation plans, and reports.
 
 ---
 
+### Issues
+
+- [Known issues](issues.md)
+
+---
+
 ### Specifications
 
 - [Language Specification](botspec.md)

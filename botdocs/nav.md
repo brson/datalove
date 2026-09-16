@@ -2,6 +2,10 @@
 
 ---
 
+- [Known issues](issues.md)
+
+---
+
 - [Language Specification](botspec.md)
 - [Compiler Guide](compiler-guide.md)
 - [REPL Architecture](repl-architecture.md)

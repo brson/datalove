@@ -105,19 +105,23 @@ pub fn lower_operand<'db>(
             }
             Ok(operand)
         }
-        // A projection of a linear field borrows part of an aggregate and
-        // reads through the borrow. Reading it as a value moves the field out
-        // of something that still holds it, and the temporary that records is
-        // then dropped, freeing it twice.
+        // A projection borrows part of what it reads from and reads through
+        // the borrow. Reading a linear field as a value moves it out of an
+        // aggregate that still holds it, and the temporary that records is
+        // dropped, freeing it twice. An index has no such fault -- `ListGet`
+        // and its neighbours clone the element -- but it clones it a second
+        // time when `@` follows, which borrowing avoids.
         //
-        // A copy field has no such problem and keeps the direct read. Index
-        // steps keep it too: borrowing a list element in an operand position
-        // is not what borrowing one for a `ref` argument is, and the
-        // `list_index_*` fixtures say so.
+        // Two things keep the direct read. A copy element has nothing to move
+        // out and nothing to free. And an erased one cannot be borrowed at
+        // all: the reference carries the element's static type, which inside a
+        // generic says `data`, so reading through it reads the bytes as the
+        // wrong thing. `ListGet` has a branch that asks the runtime instead,
+        // and that is the branch this leaves it on. See `botdocs/issues.md`.
         ExprFunKind::Place(ref place)
             if !place.steps.is_empty()
-                && place.steps.iter().all(|s| matches!(s, ast::PlaceStep::Field(_)))
-                && !ctx.expr_type(expr).is_copy() =>
+                && !ctx.expr_type(expr).is_copy()
+                && !matches!(ctx.expr_type(expr), IrType::Data) =>
         {
             let field_ref = lower_place_as_ref(ctx, place)?;
             Ok(operand_as_value_ref(field_ref))

@@ -330,14 +330,20 @@ The typechecker gates the two alike -- `NonCopyIndexProjection` unless
 Writing through an index works for a list and a map, by `mut`, by `out` and by
 assignment (`interp/950_index_write_forms`).
 
+In an operand position an index of a *known* element type is borrowed like a
+field, so `a[i]?@` clones once rather than twice. An *erased* one stays on
+`ListGet`: a reference carries the element's static type, which inside a
+generic says `data`, so reading through it reads the bytes as the wrong thing.
+That is a fault in its own right where a borrowed index reaches a generic --
+see [Known issues](issues.md).
+
 A tensor index is refused in all three, with `ViewTypeMutBinding`: it gives a
 view of a row rather than an element, and a view may not be bound mutably
 (`interp/951_tensor_index_not_mutable`). Reading and cloning one is fine.
 
-One cost falls out of this. `a[i]?@` clones twice: `ListGet` clones the element,
-then `@` clones that and drops the first. The `@` is redundant given what
-`ListGet` does, but the typechecker requires it, so every linear element read
-pays for two deep copies and a free.
+That double clone is what the borrow removes. Where it cannot -- an erased
+element -- `a[i]?@` still pays two deep copies and a free: `ListGet` clones the
+element, then `@` clones that and drops the first.
 
 ### Const Evaluation
 

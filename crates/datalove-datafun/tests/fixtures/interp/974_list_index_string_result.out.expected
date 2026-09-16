@@ -32,17 +32,17 @@ Analysis(
                     
                     fn get_str(p0, p1):
                     block0:
-                        v0, v1 = listget p0[p1]
-                        branch v1, block2, block1
+                        v0 = listboundscheck p0[p1]
+                        branch v0, block2, block1
                     block1:
-                        v2 = const "index out of bounds"
-                        v3 = error_from v2
-                        v4 = err v3
+                        v1 = const "index out of bounds"
+                        v2 = error_from v1
+                        v3 = err v2
                         drop p0
-                        return v4
+                        return v3
                     block2:
-                        v5 = clone v0
-                        drop v0
+                        v4 = listelementref p0[p1]
+                        v5 = clone *v4
                         v6 = ok v5
                         drop p0
                         return v6

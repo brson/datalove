@@ -99,15 +99,15 @@ Analysis(
                         v28 = const 50int
                         listset s0[v25] = v28
                         v29 = const 0index
-                        v30, v31 = listget s0[v29]
-                        branch v31, block14, block13
+                        v30 = listboundscheck s0[v29]
+                        branch v30, block14, block13
                     block13:
-                        v32 = none
+                        v31 = none
                         drop.tracked s0
-                        return v32
+                        return v31
                     block14:
-                        v33 = clone v30
-                        drop v30
+                        v32 = listelementref s0[v29]
+                        v33 = clone *v32
                         v34 = some v33
                         drop.tracked s0
                         return v34
@@ -147,15 +147,15 @@ Analysis(
                         v15 = const 50int
                         mapsetvalue s0[v12] = v15
                         v16 = const 1u32
-                        v17, v18 = mapget s0[v16]
-                        branch v18, block8, block7
+                        v17 = mapcontainskey s0[v16]
+                        branch v17, block8, block7
                     block7:
-                        v19 = none
+                        v18 = none
                         drop.tracked s0
-                        return v19
+                        return v18
                     block8:
-                        v20 = clone v17
-                        drop v17
+                        v19 = mapvalueref s0[v16]
+                        v20 = clone *v19
                         v21 = some v20
                         drop.tracked s0
                         return v21
