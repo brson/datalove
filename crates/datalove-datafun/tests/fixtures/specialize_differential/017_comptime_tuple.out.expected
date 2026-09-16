@@ -16,7 +16,8 @@ Analysis(
                 ir: """
                     fn get_pair(p0):
                     block0:
-                        v0 = move p0
+                        v0 = clone p0
+                        drop p0
                         return v0
                 """,
             ),
@@ -48,7 +49,8 @@ Analysis(
                     fn get_pair__ct0():
                     block0:
                         v1 = const (10int, 20int)
-                        v0 = move v1
+                        v0 = clone v1
+                        drop v1
                         return v0
                 """,
             ),

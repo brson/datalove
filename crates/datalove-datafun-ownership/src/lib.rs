@@ -1015,7 +1015,14 @@ pub fn analyze_function_with_mode<'db>(
             Some(types) => types[i].clone(),
             None => IrType::from_type_hint(db, &param.type_hint),
         };
-        ctx.alloc_binding(name, ty, false, Some(param.mode));
+        // A const parameter is a constant. Reading one does not consume it,
+        // for the reason reading any other const does not: it names a value the
+        // compiler computed rather than a place holding the only copy of one.
+        if param.is_comptime {
+            ctx.alloc_const_binding(name, ty);
+        } else {
+            ctx.alloc_binding(name, ty, false, Some(param.mode));
+        }
     }
 
     // Analyze function body.

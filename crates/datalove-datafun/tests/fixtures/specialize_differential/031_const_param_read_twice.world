@@ -1,0 +1,53 @@
+----------
+module local/test/twice
+----------
+
+// A const parameter read more than once. It is a constant, not a value the
+// body owns the only copy of, so reading it does not consume it -- the same
+// rule a const binding has always had. Writing `n@` was refused, since a
+// const argument must be a name, so this used to need a `const N: int = n`
+// standing in front of it.
+
+fun add_n(const n: int, x: int): int
+    ret n + x
+end fun
+
+fun twice(const n: int, x: int): int
+    let first = add_n(n, x)
+    ret add_n(n, first)
+end fun
+
+// Three reads, two of them as a const argument and one as a value.
+fun thrice(const n: int, x: int): int
+    let a = add_n(n, x)
+    let b = add_n(n, a)
+    ret b + n
+end fun
+
+fun from_module(x: int): int
+    const SEVEN: int = 7
+    ret twice(SEVEN, x)
+end fun
+
+----------
+scriptunit-fragment
+----------
+
+require module local/test/twice
+import twice.twice
+import twice.thrice
+import twice.from_module
+
+const FIVE: int = 5
+let a = from_module(10)
+let b = twice(FIVE, 10)
+let c = thrice(FIVE, 10)
+debuglog a
+debuglog b
+debuglog c
+
+----------
+scriptunit-expr
+----------
+
+(a, b, c)

@@ -304,6 +304,12 @@ pub struct LowerCtx<'db> {
     /// to name the value the initializer produced. Reading a const does not
     /// consume it, so each reference takes its own copy.
     pub(super) const_let_names: std::collections::HashSet<String>,
+    /// Const parameters, whose reads do not consume them.
+    ///
+    /// Separate from `const_let_names` because the value is not known here at
+    /// all -- specialization writes it in later -- and because only a read that
+    /// would consume needs a copy of its own. A borrow never consumed it.
+    pub(super) const_param_names: std::collections::HashSet<String>,
     /// CTFE evaluator for const expressions.
     pub(super) ctfe_evaluator: Option<Rc<RefCell<dyn CtfeEvaluator>>>,
 }
@@ -330,6 +336,7 @@ impl<'db> LowerCtx<'db> {
             is_script_unit: false,
             const_bindings: HashMap::new(),
             const_let_names: std::collections::HashSet::new(),
+            const_param_names: std::collections::HashSet::new(),
             ctfe_evaluator: None,
         }
     }
@@ -357,6 +364,7 @@ impl<'db> LowerCtx<'db> {
             is_script_unit: false,
             const_bindings: HashMap::new(),
             const_let_names: std::collections::HashSet::new(),
+            const_param_names: std::collections::HashSet::new(),
             ctfe_evaluator: None,
         }
     }
@@ -498,6 +506,7 @@ impl<'db> LowerCtx<'db> {
             is_script_unit: true,
             const_bindings: HashMap::new(),
             const_let_names: std::collections::HashSet::new(),
+            const_param_names: std::collections::HashSet::new(),
             ctfe_evaluator: None,
         }
     }

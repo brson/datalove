@@ -147,6 +147,14 @@ pub fn lower_function_body<'db>(
         let id = ctx.fresh_param(param_type.clone(), mode);
         let operand = Operand::Param(id);
         ctx.bind_var(&param_name, operand);
+        // A const parameter is a constant, not a value the body owns the only
+        // copy of, so reading it does not consume it -- the same as any other
+        // const, and by the same route: each read takes a copy of its own.
+        // Specialization then substitutes the constant, and what were clones
+        // of a parameter become clones of it.
+        if p.is_comptime {
+            ctx.const_param_names.insert(param_name.clone());
+        }
         // Record binding operand for drop schedule.
         ctx.record_binding_operand(operand);
         params.push(id);

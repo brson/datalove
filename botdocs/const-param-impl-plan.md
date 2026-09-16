@@ -211,6 +211,25 @@ exists when specialization runs, so the two sides are *meant* to differ.
 
 ## Constraints
 
+**Reading a const parameter does not consume it.** It is a constant, not a place holding
+the only copy of a value, which is the rule a `const` binding has always had -- stated in
+`lower/context.rs` and enforced by `BindingInfo::is_const` in ownership analysis. A const
+parameter simply was not registered as one, so passing a linear one to two calls was a
+use-after-move, and `n@` could not fix it because a const argument must be a name.
+
+A read that would consume takes a copy of its own; a borrow takes none, since it never
+consumed anything. That distinction matters: cloning in a borrow context too costs an
+allocation and a free per operand of every `n + n`, for nothing.
+
+This does not reach inside an aggregate. `PAIR.0` on a `const PAIR: (int, int)` is
+`NonCopyFieldProjection` whatever the root is, and `PAIR.0@` is refused as well, so a
+const of an aggregate type can be passed along whole and not read into --
+`017_comptime_tuple` says as much in its own comment. Destructuring is not refused:
+`if MAYBE |val|` on a `const MAYBE: ?int` unwraps a fresh copy and works. So the two
+disagree, and the projection rule is where it would have to be settled: it exists to stop
+a non-copy field moving out of a place someone still holds, which is not what reading a
+constant does.
+
 **Const parameters and generics do not combine, and are refused.** `lower/expr.rs:653`
 takes the `ComptimeCall` branch before the `type_args` computation and so never computes
 them, and `rewrite_comptime_calls` emits empty `type_args` and `shape_descriptors`, so a
@@ -218,13 +237,6 @@ function with both would lose the descriptors its type parameters need and read 
 at the wrong type. `TypeError::ComptimeParamOnGeneric` reports it at the definition, which
 catches the function whether or not anything calls it. Lifting the refusal means computing
 type arguments on the comptime branch too, and carrying them through the copy.
-
-**A linear const parameter can only be passed on once.** Using it twice needs a clone, and
-`n@` is an expression rather than a name, so it is refused. Binding it first --
-`const N: int = n` -- works, because re-reading a const binding clones implicitly rather
-than through an operator. This is the one place the rule costs something, and closing it
-means either admitting `name@` or deciding that reading a const parameter does not consume
-it, which it arguably should not: in the copy it is a constant, not a value anyone owns.
 
 ## What remains
 
