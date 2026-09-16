@@ -77,11 +77,18 @@ fn lower_var_operand(ctx: &mut LowerCtx, name: &str, consuming: bool) -> Result<
     Ok((op, false))
 }
 
-/// Lower an operand for borrowing contexts (binop, unaryop).
+/// Lower an operand for borrowing contexts (binop, unaryop, `@`).
 ///
-/// Returns an Operand directly:
-/// - For zero-step Places (variables): returns Operand::Slot/Value/Param
-/// - For compound expressions: evaluates and returns Operand::Value(result)
+/// A field projection borrows part of an aggregate; it does not produce a value
+/// anyone owns. Lowering one with `lower_expression` moves the field out and
+/// records it as a temporary to drop, which frees a field the aggregate still
+/// holds -- the shape `lower_expression_for_ref` was written to avoid, and
+/// which `@` on a linear field reached because nothing sent it there.
+///
+/// Everything else keeps the old route, including a place with steps: what
+/// `lower_place_as_ref` gives for `a[i]?.0` is a borrow of a list element,
+/// which is not the same thing here as it is for a `ref` argument, and the
+/// index fixtures say so.
 pub fn lower_operand<'db>(
     ctx: &mut LowerCtx<'db>,
     expr: ExprFun<'db>,
@@ -97,6 +104,27 @@ pub fn lower_operand<'db>(
                 }
             }
             Ok(operand)
+        }
+        // A projection of a linear field borrows part of an aggregate and
+        // reads through the borrow. Reading it as a value moves the field out
+        // of something that still holds it, and the temporary that records is
+        // then dropped, freeing it twice.
+        //
+        // A copy field has no such problem and keeps the direct read. Index
+        // steps keep it too: borrowing a list element in an operand position
+        // is not what borrowing one for a `ref` argument is, and the
+        // `list_index_*` fixtures say so.
+        ExprFunKind::Place(ref place)
+            if !place.steps.is_empty()
+                && place.steps.iter().all(|s| matches!(s, ast::PlaceStep::Field(_)))
+                && !ctx.expr_type(expr).is_copy() =>
+        {
+            let field_ref = lower_place_as_ref(ctx, place)?;
+            Ok(operand_as_value_ref(field_ref))
+        }
+        ExprFunKind::FieldProj(proj) if !ctx.expr_type(expr).is_copy() => {
+            let field_ref = lower_field_proj_as_ref(ctx, expr, proj)?;
+            Ok(operand_as_value_ref(field_ref))
         }
         _ => {
             // Compound expression: lower to a value.

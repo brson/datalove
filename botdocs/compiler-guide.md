@@ -280,6 +280,39 @@ See [Const Parameter Implementation](const-param-impl-plan.md) for what remains,
 [Generics and Specialization](plan-generics.md) for why this machinery is not a
 foundation for type parameters.
 
+### Field Projections
+
+A field projection borrows part of an aggregate. It does not produce a value
+anyone owns, so reading one has to go through a reference:
+
+- **A copy field** reads with `GetField` and needs nothing else.
+- **A non-copy field** is refused outright unless the typechecker is in
+  `ref_context` (`synthesize.rs`), which `debuglog`, `@`, and a `ref`/`mut`/`out`
+  argument position each set. Outside those, `p.a` on a linear `a` is
+  `NonCopyFieldProjection`, because it would move the field out of a place the
+  aggregate still holds.
+- **In a borrowing position** it lowers to `GetFieldRef` and is read through the
+  reference: `v = getfieldref p.0` then `clone *v`, or `debuglog *v`.
+- **As a `ref`/`mut`/`out` argument** the reference itself is what gets passed,
+  so `lower_expression_for_ref` hands back `Operand::Value` holding a `Ref`
+  rather than dereferencing it. An `out` argument drops the old value through
+  the reference first.
+
+That last distinction is why `lower_operand` and `lower_expression_for_ref` are
+not the same function: one wants what the reference points at, the other wants
+the reference. `lower_operand` used to send every projection through
+`lower_expression`, which moves the field out and records it as a temporary to
+drop -- freeing a field the aggregate still held. `@` on a linear field went
+that way and produced `free() called on untracked pointer`, and on the way to it
+a `copy_nonoverlapping` whose ranges overlapped. Fixture:
+`interp/949_field_proj_clone`.
+
+Only a linear field takes that route in an operand position. A copy field keeps
+the direct `GetField`, having nothing to move out and nothing to free. Index
+steps keep it too: borrowing a list element in an operand position is not the
+same as borrowing one for a `ref` argument, and the `list_index_*` fixtures say
+so.
+
 ### Const Evaluation
 
 Const evaluation in `evaluate_single_const` has three fast paths:

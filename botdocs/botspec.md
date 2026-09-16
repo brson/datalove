@@ -203,6 +203,12 @@ tensor axes, and the `;` between two statements.
 Column projections (e.g., `table.x`) yield a list view that cannot be moved or
 mutated, but can be passed to `ref` parameters.
 
+A projection of a field whose type is linear may not be read as a value: it
+would move the field out of an aggregate that still holds it. It may be
+borrowed -- `debuglog p.a`, or `f(ref p.a)` and the `mut` and `out` forms -- or
+cloned out with `@`, as in `let x = p.a@`. A field of a copy type reads
+directly.
+
 **Tensor.** A multi-dimensional array with fixed shape.
 
 ```datalove

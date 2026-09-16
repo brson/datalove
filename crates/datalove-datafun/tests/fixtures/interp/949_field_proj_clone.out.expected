@@ -1,0 +1,62 @@
+Analysis(
+    sections: [
+        SectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 10int
+                        v1 = const 2u32
+                        v2 = pack Struct0 {v0, v1}
+                        v3 = getfieldref v2.0
+                        v4 = clone *v3
+                        debuglog v4
+                        v5 = getfieldref v2.0
+                        v6 = clone *v5
+                        debuglog v6
+                        v7 = getfieldref v2.1
+                        debuglog *v7
+                        v8 = getfieldref v2.0
+                        debuglog *v8
+                        v9 = getfieldref v2.0
+                        v10 = call @0 u0(*v9)
+                        debuglog v10
+                        v11 = const 5int
+                        v12 = const 1u32
+                        v13 = pack Struct0 {v11, v12}
+                        v14 = const 3u32
+                        v15 = pack Struct0 {v13, v14}
+                        v16 = getfieldref v15.0
+                        v17 = getfieldref *v16.0
+                        v18 = clone *v17
+                        debuglog v18
+                        v19 = getfieldref v15.0
+                        v20 = getfieldref *v19.0
+                        debuglog *v20
+                        unit_end_drop v2
+                        unit_end_drop v4
+                        unit_end_drop v6
+                        unit_end_drop v15
+                        unit_end_drop v18
+                        unit_end
+                    
+                    fn peek(p0):
+                    block0:
+                        v0 = const 7u32
+                        return v0
+                """,
+            ),
+            output: "(fragment executed)",
+            debug_output: Some("10\n10\n2\n10\n7\n5\n5\n"),
+        ),
+    ],
+)
