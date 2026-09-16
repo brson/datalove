@@ -510,6 +510,14 @@ copied, and the two look alike from a call site. Deciding it in each backend
 would be four answers to one question, which is the shape of most of the bugs
 this area has had.
 
+> **"Everywhere" is the reading half only.** `ListGet`, `MapGet` and
+> `TensorGet` go through the runtime for an erased element and are right.
+> `ListElementRef`, `MapValueRef` and `TensorIndexRef` were not changed:
+> `emit_list_element_ref` and `compile_list_element_ref` still take the element
+> size from `operand_type(list)`, so a borrowed index inside a generic lands
+> between elements exactly as described above. It segfaults. See
+> [Known issues](issues.md).
+
 ## Where this stands
 
 Type parameters nest to any depth inside options, results, tuples, structs,

@@ -111,16 +111,32 @@ inner type from `v2`'s static tydesc. The value handed to the callee is already
 wrong before any descriptor is passed anywhere. A trailing descriptor gets the
 right type *to* a callee; it does not give a correctly typed local borrow.
 
-**What it would take.** The descriptor has to travel with the reference. That
-is the "descriptors as dataflow in the IR" option that
-[Generics and Specialization](plan-generics.md) weighed and turned down:
+**What it would take: the descriptor travels with the reference.** A `Ref`
+becomes a pointer and a descriptor rather than a pointer, and
+`ListElementRef` writes the element descriptor it already reads off the list.
 
-> the largest surface of the three: two things that have to stay in agreement,
-> spread over every instruction and four backends. Every generics bug found so
-> far has been that shape, and the failure mode is silent corruption rather
-> than a refusal.
+This is the *fat values* option in
+[Generics and Specialization](plan-generics.md), not the one that plan turned
+down. The rejected option was "descriptors as dataflow in the IR", and what was
+wrong with it was stated precisely: "**No representation change**, and the
+largest surface of the three: two things that have to stay in agreement". A fat
+reference is a representation change, and there is nothing to keep in
+agreement -- it describes itself. The plan's verdict on that family was
+kinder: "a new representation kind that `IrType`, the layout, all four backends
+and the runtime each have to learn... a migration rather than a redesign."
 
-This fault is that failure mode, arriving early.
+It would also *remove* a mechanism rather than add one. `descriptor_params`
+exists only for a borrowed parameter naming a type parameter, because "An owned
+container needs none: it arrives wrapped, and the wrapper carries the
+descriptor with it." A reference that carried its own would make a borrowed
+value self-describing the same way an owned one is, and that side channel --
+one of the two things that have to stay in agreement -- could go.
+
+The cost is honest: a reference goes from one word to two, and every producer
+and consumer of one in four backends and the runtime has to learn it. Making
+only *some* references fat would be worse than making all of them fat, since
+the representation would then depend on whether the pointee happened to be
+erased.
 
 **Cheaper than fixing it.** Refuse `ref xs[i]?` where the element type is
 erased, at typecheck, turning a segfault into a diagnostic in every backend at
@@ -129,6 +145,12 @@ once. That does not close the general question, only this way of reaching it.
 **Reach.** Not reachable from `sys/std`, whose `list.get<T>` delegates to a
 native rider rather than using indexing syntax. It needs user code to write a
 borrowed index inside a generic.
+
+**The plan believes this is already done.** `plan-generics.md` says under
+"Indexing, which was never blocked by this" that indexing reads the stride from
+the descriptor everywhere. That is the reading half. The borrowing half --
+`ListElementRef` and its neighbours -- was not changed, which is why this fault
+is in the part that was thought finished.
 
 **Also held back by this.** Lowering borrows a projection in an operand
 position, which reads a linear element once rather than cloning it twice, but
