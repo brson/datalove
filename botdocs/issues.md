@@ -43,11 +43,21 @@ call site (`FunctionContext::descriptor_params`). And a caller whose list type
 is concrete is fine, because the static type is truthful. Only the erased
 combination faults.
 
-**What is wrong.** `ListElementRef` stores a bare pointer. Its stride is right
--- `list_element_info` reads the element descriptor off the *list's* runtime
-descriptor -- but nothing carries that descriptor onward. `Frame::value_deref`
-takes the inner type from the *reference's static tydesc*, which inside a
-generic says `data`, so the bytes are read as the wrong thing.
+**What is wrong, and it differs by backend.** `ListElementRef` stores a bare
+pointer and nothing says what it points at.
+
+In the interpreter the pointer is right and the type is wrong.
+`list_element_info` reads the element descriptor off the *list's* runtime
+descriptor, so the stride is correct, but `Frame::value_deref` takes the inner
+type from the *reference's static tydesc*, which inside a generic says `data`.
+The bytes are read as the wrong thing.
+
+In the compiled backends the pointer is wrong too. Both take the element size
+from the static element type -- `emit_list_element_ref` in the C backend and
+`compile_list_element_ref` in Cranelift each compute `elem_size` from
+`operand_type(list)` and bake it into the output -- so inside a generic the
+stride is a `data`'s and the address lands between elements. That is the case
+`backend/10_generic_indexing.dfs` describes in its own header.
 
 `MapValueRef` and `TensorIndexRef` have the same shape and presumably the same
 fault; only the list case has been reproduced.
@@ -59,13 +69,21 @@ decides whether the element wants wrapping.
 `backend/10_generic_indexing.dfs` says why that decision is the runtime's:
 "Deciding it in each backend would be four answers to one question."
 
-**The descriptor is already in reach, which is the frustrating part.**
-`via<T>(ref xs: [T], ...)` has a borrowed parameter mentioning a type
-parameter, so it is a `descriptor_param` and the call site hands it a `[T]`
-descriptor. The element's descriptor is a field of that one --
-`type_info.list.element_tydesc`, which `list_element_info` already reads. So
-the information exists at the point of the fault; nothing carries it to where
-it is read.
+**The interpreter has the descriptor in hand, which is the frustrating part.**
+`Frame` keeps `param_tydescs`, a runtime descriptor per parameter, so the
+borrowing function holds the list's real descriptor and the element's is a
+field of it. What it does not have is anywhere to put one for an SSA value:
+`value_tydescs` lives in the layout and is computed from static types. A
+per-frame override, written by `ListElementRef` and read by `value_deref`,
+would close it there. `shape_descriptors` is the frame's note that this is the
+shape of the problem -- "A shape has no value to carry a descriptor with, so
+unlike everything else here it arrives on its own."
+
+Doing that in the interpreter alone would be worse than leaving it. The
+compiled backends have no such table and no such descriptor: a reference is a
+machine pointer in a stack slot and the stride was decided when the code was
+emitted. The interpreter would then run a program the AOT backends miscompile,
+which is the divergence `10_generic_indexing` exists to prevent.
 
 **The trailing-descriptor channel does not reach this.** `shape_descriptors`
 passes descriptors to a callee, and `DescriptorRef` has two forms: `Static`, a
@@ -79,7 +97,7 @@ Adding that part is small and does not break what the design rests on. Reading
 "nothing is put together at run time" still holds; a `DescriptorRef` variant
 meaning "the element of the one I was handed at index i" would do it.
 
-**But it would not fix this fault**, because the fault is not at a call
+**And it would not fix this fault either**, because the fault is not at a call
 boundary. In
 
 ```
@@ -105,8 +123,8 @@ is the "descriptors as dataflow in the IR" option that
 This fault is that failure mode, arriving early.
 
 **Cheaper than fixing it.** Refuse `ref xs[i]?` where the element type is
-erased, at typecheck, turning a segfault into a diagnostic. That does not close
-the general question, only this way of reaching it.
+erased, at typecheck, turning a segfault into a diagnostic in every backend at
+once. That does not close the general question, only this way of reaching it.
 
 **Reach.** Not reachable from `sys/std`, whose `list.get<T>` delegates to a
 native rider rather than using indexing syntax. It needs user code to write a
