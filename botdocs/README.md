@@ -15,6 +15,7 @@ Specifications, research, design documents, implementation plans, and reports.
 
 - [Language Specification](botspec.md)
 - [Compiler Guide](compiler-guide.md)
+- [The Datafun IR](ir.md)
 - [REPL Architecture](repl-architecture.md)
 - [Datalit Grammar (EBNF)](datalit-ebnf.md)
 - [Datalit Typing Rules](datalit-typing-rules.md)
@@ -31,6 +32,7 @@ Specifications, research, design documents, implementation plans, and reports.
 
 - [Place Expressions and Ephemeral References](places.md)
 - [Clone and Coerce Operators](design-clone-and-coerce.md)
+- [Token Gluing and Operator Fixity](design-token-gluing.md)
 - [Auto-Adapt Mode](design-auto-adapt.md)
 - [Const Parameter Specialization](const-param-specialization.md)
 
@@ -49,6 +51,7 @@ Specifications, research, design documents, implementation plans, and reports.
 
 - [The State of Worldgen](reports/report-worldgen-state.md)
 
+- [`.fui` on bcts](report-fairlightui-on-bcts.md)
 - [Adapt Operator Error Cases](report-adapt-cases.md)
 - [Advanced PLT Directions](report-advanced-ideas.md)
 - [GADTs Without Dependent Types](report-gadts.md)
@@ -80,3 +83,4 @@ Specifications, research, design documents, implementation plans, and reports.
 ### Tasks
 
 - [Tasks](tasks.md)
+- [Carry/Bring](carry-bring.md)

@@ -645,6 +645,11 @@ reads that binding where it lives instead of copying it to print it.
 
 ## IR Types
 
+What follows is the part of the IR a reader of this guide needs in order to
+follow the pipeline. The complete reference -- every instruction and
+terminator, the layout rules, erasure and descriptors, the passes and the
+invariants -- is [The Datafun IR](ir.md).
+
 ### IDs
 
 ```rust

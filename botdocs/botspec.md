@@ -4,6 +4,7 @@
 
 - [1. Introduction](#user-content-1-introduction)
 - [2. Lexical Conventions](#user-content-2-lexical-conventions)
+  - [2.4 Spacing](#user-content-24-spacing)
 - [3. Types](#user-content-3-types)
 - [4. Type Hints](#user-content-4-type-hints)
 - [5. Copy and Linear Types](#user-content-5-copy-and-linear-types)
@@ -119,6 +120,67 @@ integer: `42.0`, not `42`.
 Line comments begin with `//` and extend to end of line.
 Block comments are delimited by `/*` and `*/` and may be nested.
 
+### 2.4 Spacing
+
+Whitespace is significant inside an expression. Two tokens are **glued** when
+the first one's span ends where the second one's begins; a space, a newline or
+a comment between them leaves a gap. Two rules read that one fact: gluing
+decides how far a literal reaches, and fixity decides what an operator attaches
+to. Both are shared by Datalit and Datafun, so the two languages give the same
+answer for the same spelling.
+
+**Literal extent.** A numeric literal is a maximal glued run: an optional sign,
+digits, a `.` and a fraction, an exponent marker with its sign and digits. A
+gap anywhere inside ends it.
+
+```datalove
+-1.5e-7        // one literal
+1 . 5          // error: a float is written without spaces: `1.5`
+2.5e - 10      // error: an exponent is written without spaces: `2.5e-10`
+```
+
+Letters written onto the digits are read as a suffix and reported as one, since
+the language has none: `1u8` says to write `: u8 / 1` rather than complaining
+about an unexpected identifier.
+
+**Fixity.** An operator's spacing says what it attaches to:
+
+| Position | Reading |
+|----------|---------|
+| No left operand | Prefix, whatever the spacing |
+| Left operand, glued both sides or spaced both sides | Infix |
+| Left operand, spaced left and glued right | Prefix |
+| Left operand, glued left and spaced right | Postfix |
+
+The first row needs no spacing at all, which is what keeps `f(-1)`, `lcm(-4, 6)`
+and `ret -1` reading as they always did: nothing precedes the `-`, so nothing is
+consulted.
+
+```datalove
+a - b          // subtraction
+a-b            // subtraction
+a -b           // `a`, then `-b`: two expressions, not one
+p . 0          // error: a postfix operator is written against the expression before it
+x ?            // error: likewise
+a--b           // `a - (-b)`
+```
+
+Fixity is for the sigil operators. A word operator -- `and`, `or`, `xor`, `not`
+-- is delimited by being a word, and gluing it to an operand would make it part
+of the operand. The postfix operators `?`, `!`, `@`, `.field` and `[index]`
+require gluing on their left.
+
+The literal reader runs first and takes what is glued to it, and fixity judges
+only the operators it declined. That is why `2.5e-10` is one number while `x-1`
+subtracts.
+
+This is what settles how many elements a tensor literal's innermost axis has,
+that being the one place in the language where members are separated by nothing
+at all (Section 3.2).
+
+The design is written up in
+[Token Gluing and Operator Fixity](design-token-gluing.md).
+
 ## 3. Types
 
 ### 3.1 Primitive Types
@@ -229,6 +291,10 @@ along the innermost axis, `,` separates rows (2nd axis), `,,` separates
 slabs (3rd axis), `,,,` separates blocks (4th axis), etc. When the outermost
 dimension is 1, a trailing comma run preserves rank: `[| 1 2 3, |]` is a
 rank-2 tensor with shape [1, 3].
+
+Because the innermost axis is separated by nothing but whitespace, an
+operator's spacing decides how many elements a row has (Section 2.4):
+`[| 1 -2 |]` holds two elements and `[| 1 - 2 |]` holds one.
 
 Tensor literals can be created and stored, but element access and tensor
 operations (indexing, transpose, slice, reshape) are not yet exposed to the
@@ -445,6 +511,10 @@ Postfix binds looser than unary prefix, so a postfix operator applies to the
 prefix expression as a whole: `-x@` is `(-x)@`. The payload keywords `some`,
 `ok`, `er`, `data` and `error` are the exception, taking postfix onto their
 payload instead, so `some x@` is `some (x@)`.
+
+Which of the three a sigil operator is read as is decided by its spacing before
+precedence is consulted at all: `a - b` and `a-b` are the binary operator in
+this table, and `a -b` is not one (Section 2.4).
 
 ### 6.2 Arithmetic
 
@@ -1285,6 +1355,30 @@ Void functions may use bare `ret` for early exit:
 ret
 ```
 
+### 8.8 Debug Log
+
+`debuglog` prints a value:
+
+```datalove
+debuglog "red"
+debuglog p.a
+```
+
+It accepts an expression of any type, and borrows rather than consumes it, so
+a linear value may be logged and then used. That is why a projection of a
+linear field may be written under it without a `@` (Section 3.2).
+
+### 8.9 Expression Statements
+
+An expression may stand alone as a statement only when it is a function call:
+
+```datalove
+bump(mut v)
+```
+
+Anything else in statement position is P031, since a value computed and
+discarded is more likely a mistake than an intention.
+
 ## 9. Module System
 
 ### 9.1 Hierarchy
@@ -1611,12 +1705,23 @@ is expected is a mismatch rather than a conversion, and the same in reverse;
 | Command | Description |
 |---------|-------------|
 | `script` | Execute a .dfs script |
+| `script-ir` | Dump the IR a .dfs script lowers to |
+| `script-world` | Execute a worldfile's modules and script section |
+| `aot-compile` | Compile a .dfs script to native code |
 | `repl` | Interactive REPL |
 | `lit-tycheck` | Type check a datalit expression |
 | `lit-ast` | Print datalit AST |
 | `lit-pretty` | Pretty-print datalit |
 | `lit-op` | Perform datalit operations |
 | `typecheck-std` | Type check the standard library |
+| `worldgen` | Generate a random worldfile |
+| `docs` | Generate HTML documentation from `mandocs/` |
+
+`script` takes `--jit` to compile hot functions rather than interpreting them,
+and `aot-compile` takes `--link`, `--run` and `--c`, the last emitting C and
+compiling that rather than emitting an object file directly. `script`,
+`script-ir`, `script-world` and `aot-compile` each take `--no-sys` to leave the
+system library out.
 
 ## Appendix B. Unimplemented Features
 
@@ -1628,6 +1733,7 @@ The following features appear in design documents but are not yet implemented:
   Mutation of sub-tensor views via `mut` params is rejected;
   element-level mutation through a view requires direct `set` on the
   original tensor with chained indexing.
+- `require data <name>`, which parses and reaches no later phase
 - Arena blocks
 - Memoization
 - Type introspection (`@type`)

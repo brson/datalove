@@ -8,6 +8,7 @@
 
 - [Language Specification](botspec.md)
 - [Compiler Guide](compiler-guide.md)
+- [The Datafun IR](ir.md)
 - [REPL Architecture](repl-architecture.md)
 - [Datalit Grammar (EBNF)](datalit-ebnf.md)
 - [Datalit Typing Rules](datalit-typing-rules.md)
@@ -15,6 +16,7 @@
 - [Operator Precedence](op-precedence.md)
 - [Sigil Assignments](sigil-assignments.md)
 - [Salsa: idiomatic and effective use](salsa-patterns.md)
+- [The Native Rider ABI](native-abi.md)
 - [index-64 Feature](index-64.md)
 
 ---
@@ -34,6 +36,7 @@
 
 ---
 
+- [The State of Worldgen](reports/report-worldgen-state.md)
 - [`.fui` on bcts](report-fairlightui-on-bcts.md)
 - [Adapt Operator Error Cases](report-adapt-cases.md)
 - [Advanced PLT Directions](report-advanced-ideas.md)
