@@ -138,6 +138,12 @@ only *some* references fat would be worse than making all of them fat, since
 the representation would then depend on whether the pointee happened to be
 erased.
 
+A narrower form of this -- a fat reference that is deliberately not
+first-class, existing only between the projection that makes it and the read
+that consumes it -- is parked in
+[plan-generics.md](plan-generics.md#user-content-what-this-does-not-leave-a-borrow-taken-out-of-a-borrowed-container),
+with the questions it still needs answered.
+
 **Cheaper than fixing it.** Refuse `ref xs[i]?` where the element type is
 erased, at typecheck, turning a segfault into a diagnostic in every backend at
 once. That does not close the general question, only this way of reaching it.

@@ -19,6 +19,8 @@ monomorphization.
 - [What a first attempt found](#user-content-what-a-first-attempt-found)
 - [What the erased shape is for](#user-content-what-the-erased-shape-is-for)
 - [Carrying the descriptor with the value](#user-content-carrying-the-descriptor-with-the-value)
+  -- including [a borrow taken out of a borrowed container](#user-content-what-this-does-not-leave-a-borrow-taken-out-of-a-borrowed-container),
+  parked
 - [Where this stands](#user-content-where-this-stands) -- what works, and the
   current limitations
 - [Order of work](#user-content-order-of-work)
@@ -453,6 +455,49 @@ becomes `(u32, (data, #{u32}))`.
 
 A borrowed parameter is still structural, because nothing is converted at one
 and the descriptor the call site supplies covers the whole of it.
+
+### What this does not leave: a borrow taken out of a borrowed container
+
+*Parked, not decided. Written down mid-thought so it can be picked up.*
+
+The descriptor a call site supplies for a borrowed parameter "holds for exactly
+as long as the value stays in the parameter it arrived in", as above. Indexing
+takes it out. `xs[i]?` inside `fun via<T>(ref xs: [T], ...)` produces a
+reference, and a reference carries nothing: the interpreter reads its type off
+the static `Ref(data)`, and the compiled backends take the stride from the
+static element type and land between elements. It segfaults. Lowering keeps an
+erased element on the `ListGet` path to avoid forming one at all, which is a
+gate rather than an answer. See [Known issues](issues.md).
+
+**The idea is a fat reference, and a non-first-class one.** A reference into an
+erased container carries the element's descriptor beside the pointer. The
+descriptor is already in reach where the reference is made -- `ListElementRef`
+reads it off the list to get the stride -- so nothing has to be computed or
+looked up, only kept.
+
+Non-first-class is what keeps it small. A reference here is not a value anyone
+stores: `IrType::Ref` is only ever a `fresh_value` produced by a projection and
+consumed by the read, clone or argument that follows it. If that stays true by
+rule rather than by accident, the fat form has to exist only between those two
+points. It never goes in a slot, an aggregate or a return, so the layout, the
+serialized IR and the runtime's value model do not have to learn a new
+first-class representation -- which is most of what makes the fat-values
+migration above a migration.
+
+**Why this is not the option turned down.** "Descriptors as dataflow" keeps the
+representation and passes descriptors alongside, which is why it has "two
+things that have to stay in agreement". A fat reference describes itself.
+It may also retire `descriptor_params`, which exists only because a borrowed
+value is not self-describing the way an owned one is; whether that comes with
+it or trails it is open.
+
+**To resume on.** Whether a reference really is never stored, or only never
+stored today. Whether the fat form is every reference or only one into an
+erased container -- the second is cheaper and makes the representation depend
+on the pointee, which is the kind of conditional this area keeps being bitten
+by. What `mut` and `out` want, since they write through the reference rather
+than read through it. And whether the same reasoning covers `GetFieldRef` into
+an erased aggregate, which has not been tested and probably fails the same way.
 
 A term is its payload under a name, laid out exactly as the payload is, and an
 enum is a payload chosen by a discriminant. Both convert the way an option
