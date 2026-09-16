@@ -1,0 +1,168 @@
+Analysis(
+    sections: [
+        SectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = call @0 u2()
+                        debuglog v0
+                        drop v0
+                        v1 = call @1 u3()
+                        debuglog v1
+                        drop v1
+                        unit_end
+                    
+                    fn bump(p0):
+                    block0:
+                        v0 = const 1int
+                        v1 = add p0, v0
+                        drop v0
+                        store p0, v1
+                        return
+                    
+                    fn fill(p0):
+                    block0:
+                        v0 = const 99int
+                        store.tracked p0, v0
+                        return
+                    
+                    fn list_writes():
+                    block0:
+                        v0 = const 10int
+                        v1 = const 20int
+                        v2 = list [v0, v1]
+                        store.move.tracked s0, v2
+                        v3 = const 0index
+                        v4 = listboundscheck s0[v3]
+                        branch v4, block2, block1
+                    block1:
+                        v5 = none
+                        return v5
+                    block2:
+                        v6 = listelementref s0[v3]
+                        debuglog *v6
+                        v7 = const 0index
+                        v8 = listboundscheck s0[v7]
+                        branch v8, block4, block3
+                    block3:
+                        v9 = none
+                        return v9
+                    block4:
+                        v10 = listelementref s0[v7]
+                        v11 = call @0 u0(*v10)
+                        v12 = const 0index
+                        v13 = listboundscheck s0[v12]
+                        branch v13, block6, block5
+                    block5:
+                        v14 = none
+                        return v14
+                    block6:
+                        v15 = listelementref s0[v12]
+                        debuglog *v15
+                        v16 = const 0index
+                        v17 = listboundscheck s0[v16]
+                        branch v17, block8, block7
+                    block7:
+                        v18 = none
+                        return v18
+                    block8:
+                        v19 = listelementref s0[v16]
+                        drop.ref v19
+                        v20 = call @1 u1(*v19)
+                        v21 = const 0index
+                        v22 = listboundscheck s0[v21]
+                        branch v22, block10, block9
+                    block9:
+                        v23 = none
+                        return v23
+                    block10:
+                        v24 = listelementref s0[v21]
+                        debuglog *v24
+                        v25 = const 0index
+                        v26 = listboundscheck s0[v25]
+                        branch v26, block12, block11
+                    block11:
+                        v27 = none
+                        drop.tracked s0
+                        return v27
+                    block12:
+                        v28 = const 50int
+                        listset s0[v25] = v28
+                        v29 = const 0index
+                        v30, v31 = listget s0[v29]
+                        branch v31, block14, block13
+                    block13:
+                        v32 = none
+                        drop.tracked s0
+                        return v32
+                    block14:
+                        v33 = clone v30
+                        drop v30
+                        v34 = some v33
+                        drop.tracked s0
+                        return v34
+                    
+                    fn map_writes():
+                    block0:
+                        v0 = const 1u32
+                        v1 = const 10int
+                        v2 = %{v0: v1}
+                        store.move.tracked s0, v2
+                        v3 = const 1u32
+                        v4 = mapcontainskey s0[v3]
+                        branch v4, block2, block1
+                    block1:
+                        v5 = none
+                        return v5
+                    block2:
+                        v6 = mapvalueref s0[v3]
+                        v7 = call @0 u0(*v6)
+                        v8 = const 1u32
+                        v9 = mapcontainskey s0[v8]
+                        branch v9, block4, block3
+                    block3:
+                        v10 = none
+                        return v10
+                    block4:
+                        v11 = mapvalueref s0[v8]
+                        debuglog *v11
+                        v12 = const 1u32
+                        v13 = mapcontainskey s0[v12]
+                        branch v13, block6, block5
+                    block5:
+                        v14 = none
+                        drop.tracked s0
+                        return v14
+                    block6:
+                        v15 = const 50int
+                        mapsetvalue s0[v12] = v15
+                        v16 = const 1u32
+                        v17, v18 = mapget s0[v16]
+                        branch v18, block8, block7
+                    block7:
+                        v19 = none
+                        drop.tracked s0
+                        return v19
+                    block8:
+                        v20 = clone v17
+                        drop v17
+                        v21 = some v20
+                        drop.tracked s0
+                        return v21
+                """,
+            ),
+            output: "(fragment executed)",
+            debug_output: Some("10\n11\n99\nsome 50\n11\nsome 50\n"),
+        ),
+    ],
+)

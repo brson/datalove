@@ -1,0 +1,42 @@
+----------
+scriptunit-fragment
+----------
+
+// Writing through an index, which had no coverage: `mut`, `out` and
+// assignment, over a list and a map.
+//
+// Reading one is not the field-projection story. `GetField` copies the field's
+// bytes and says in its own comment that only copy types may go that way,
+// which is why a linear field has to be borrowed and cloned through the
+// borrow. `ListGet`, `MapGet` and `TensorGet` clone the element instead, so
+// what comes back is owned and dropping it is right.
+
+fun bump(mut x: int)
+    set x = x + :int/1
+end fun
+
+fun fill(out x: int)
+    set x = :int/99
+end fun
+
+fun list_writes(): ?int
+    var a: [int] = [:int/10, :int/20]
+    debuglog a[(: index / 0)]?
+    bump(mut a[(: index / 0)]?)
+    debuglog a[(: index / 0)]?
+    fill(out a[(: index / 0)]?)
+    debuglog a[(: index / 0)]?
+    set a[(: index / 0)]? = :int/50
+    ret some (a[(: index / 0)]?@)
+end fun
+
+fun map_writes(): ?int
+    var m: %{u32 = int} = %{ 1 = :int/10 }
+    bump(mut m[(: u32 / 1)]?)
+    debuglog m[(: u32 / 1)]?
+    set m[(: u32 / 1)]? = :int/50
+    ret some (m[(: u32 / 1)]?@)
+end fun
+
+debuglog list_writes()
+debuglog map_writes()

@@ -313,10 +313,31 @@ name, and goes through the same code for all of it -- read, borrow, clone,
 the two side by side and they agree exactly.
 
 Only a linear field takes that route in an operand position. A copy field keeps
-the direct `GetField`, having nothing to move out and nothing to free. Index
-steps keep it too: borrowing a list element in an operand position is not the
-same as borrowing one for a `ref` argument, and the `list_index_*` fixtures say
-so.
+the direct `GetField`, having nothing to move out and nothing to free.
+
+### Index Projections
+
+An index step is not the same operation and does not have the same problem.
+`GetField` copies the field's bytes -- shallow, and its own comment says only
+copy types may go that way. `ListGet`, `MapGet` and `TensorGet` call
+`dtlv_rti_clone_local`, so the element arrives owned and dropping it afterwards
+is right. That is why `a[i]?@` has always been safe where `p.a@` was not, and
+why routing index steps through the borrow path breaks the `list_index_*`
+fixtures: it turns a clone-on-read into a borrow.
+
+The typechecker gates the two alike -- `NonCopyIndexProjection` unless
+`ref_context` -- so a linear element still needs `@` or a borrow to be read.
+Writing through an index works for a list and a map, by `mut`, by `out` and by
+assignment (`interp/950_index_write_forms`).
+
+A tensor index is refused in all three, with `ViewTypeMutBinding`: it gives a
+view of a row rather than an element, and a view may not be bound mutably
+(`interp/951_tensor_index_not_mutable`). Reading and cloning one is fine.
+
+One cost falls out of this. `a[i]?@` clones twice: `ListGet` clones the element,
+then `@` clones that and drops the first. The `@` is redundant given what
+`ListGet` does, but the typechecker requires it, so every linear element read
+pays for two deep copies and a free.
 
 ### Const Evaluation
 

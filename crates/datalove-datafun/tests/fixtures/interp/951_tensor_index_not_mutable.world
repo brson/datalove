@@ -1,0 +1,15 @@
+----------
+scriptunit-fragment
+----------
+
+// A tensor index gives a view rather than an element, so it may not be bound
+// mutably. Reading one and cloning it with `@` is fine -- dual/082 does that
+// -- but `mut`, `out` and assignment are refused, with an error of their own.
+
+fun write_row(): ?[|u32, 1|]
+    var t: [|u32, 2|] = [| 10 20, 30 40 |]
+    set t[(: index / 0)]? = : [|u32, 1|] / [| 7 8 |]
+    ret some (t[(: index / 0)]?@)
+end fun
+
+debuglog write_row()
