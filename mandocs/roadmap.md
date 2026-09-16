@@ -35,13 +35,15 @@ Thorough compiler architecture, bare language.
 
 ## In progress
 
+- const param specialization - mostly done?
+- index projections in generics and fat references
 - std
 - tensors
+- tables
 
 
 ## On deck
 
-- const param specialization
 - human docs
 - fully reactive scripts, undo/redo
 
