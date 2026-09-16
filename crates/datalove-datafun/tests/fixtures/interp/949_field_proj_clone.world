@@ -35,3 +35,42 @@ let q: {inner: {a: int, b: u32}, c: u32} = {inner = {a = :int/5, b = :u32/1}, c 
 let deep = q.inner.a@
 debuglog deep
 debuglog q.inner.a
+
+// A tuple element is the same projection with a numeric selector, and behaves
+// the same way in every position.
+let t: (int, u32) = (: int / 10, : u32 / 2)
+let t_cloned: int = t.0@
+debuglog t_cloned
+debuglog t.0@
+debuglog t.1
+debuglog t.0
+debuglog peek(ref t.0)
+
+let nested: ((int, u32), u32) = ((: int / 5, : u32 / 1), : u32 / 3)
+debuglog nested.0.0@
+debuglog nested.0.0
+
+// Writing through a projection: `mut`, `out`, and assignment.
+fun bump(mut x: int)
+    set x = x + :int/1
+end fun
+
+fun fill(out x: int)
+    set x = :int/99
+end fun
+
+var w: (int, u32) = (: int / 10, : u32 / 2)
+bump(mut w.0)
+debuglog w.0
+fill(out w.0)
+debuglog w.0
+set w.0 = :int/50
+debuglog w.0
+
+var s: {a: int, b: u32} = {a = :int/10, b = :u32/2}
+bump(mut s.a)
+debuglog s.a
+fill(out s.a)
+debuglog s.a
+set s.a = :int/50
+debuglog s.a

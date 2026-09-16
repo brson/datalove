@@ -307,6 +307,11 @@ that way and produced `free() called on untracked pointer`, and on the way to it
 a `copy_nonoverlapping` whose ranges overlapped. Fixture:
 `interp/949_field_proj_clone`.
 
+A tuple element is the same projection with a numeric selector rather than a
+name, and goes through the same code for all of it -- read, borrow, clone,
+`ref`/`mut`/`out`, assignment and nesting. `interp/949_field_proj_clone` runs
+the two side by side and they agree exactly.
+
 Only a linear field takes that route in an operand position. A copy field keeps
 the direct `GetField`, having nothing to move out and nothing to free. Index
 steps keep it too: borrowing a list element in an operand position is not the
