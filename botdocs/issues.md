@@ -59,9 +59,43 @@ decides whether the element wants wrapping.
 `backend/10_generic_indexing.dfs` says why that decision is the runtime's:
 "Deciding it in each backend would be four answers to one question."
 
-**What it would take.** A reference into an erased container has to carry the
-element's descriptor. That is the "descriptors as dataflow in the IR" option
-that [Generics and Specialization](plan-generics.md) weighed and turned down:
+**The descriptor is already in reach, which is the frustrating part.**
+`via<T>(ref xs: [T], ...)` has a borrowed parameter mentioning a type
+parameter, so it is a `descriptor_param` and the call site hands it a `[T]`
+descriptor. The element's descriptor is a field of that one --
+`type_info.list.element_tydesc`, which `list_element_info` already reads. So
+the information exists at the point of the fault; nothing carries it to where
+it is read.
+
+**The trailing-descriptor channel does not reach this.** `shape_descriptors`
+passes descriptors to a callee, and `DescriptorRef` has two forms: `Static`, a
+descriptor the call site knows outright, and `Own(i)`, one this function was
+handed, forwarded whole. `shape_descriptors_for` matches a wanted shape against
+`own_shapes` exactly, so a function holding `[T0]` and asked for `T0` fails --
+it can forward a descriptor but not a part of one.
+
+Adding that part is small and does not break what the design rests on. Reading
+`element_tydesc` out of a list descriptor is a load, not construction, so
+"nothing is put together at run time" still holds; a `DescriptorRef` variant
+meaning "the element of the one I was handed at index i" would do it.
+
+**But it would not fix this fault**, because the fault is not at a call
+boundary. In
+
+```
+block2:
+    v2 = listelementref p0[p1]
+    v3 = call @0 u0(*v2)
+```
+
+the `*v2` is read in `via`'s own frame, and `Frame::value_deref` takes the
+inner type from `v2`'s static tydesc. The value handed to the callee is already
+wrong before any descriptor is passed anywhere. A trailing descriptor gets the
+right type *to* a callee; it does not give a correctly typed local borrow.
+
+**What it would take.** The descriptor has to travel with the reference. That
+is the "descriptors as dataflow in the IR" option that
+[Generics and Specialization](plan-generics.md) weighed and turned down:
 
 > the largest surface of the three: two things that have to stay in agreement,
 > spread over every instruction and four backends. Every generics bug found so
