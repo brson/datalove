@@ -584,7 +584,15 @@ Each of these was checked by compiling it, not by reading the rules.
 
 Every position a type parameter can occupy is one erasure reaches. The three
 cases it splits into are in the section below: a bare `T` becomes a `data`, a
-composite is converted field by field, and a collection is wrapped whole.
+composite is converted field by field, and a collection is wrapped whole --
+that last one when it is owned. A borrowed collection is not converted at all,
+because nothing is converted at a borrow; it keeps the shape it was written
+with and the call site hands over a descriptor for what is really behind it.
+`erased_param_type` is the fork: `borrowed` takes
+`from_type_hint_erasing`, which leaves `[T]` as `[data]`, and owned takes
+`erased_owned_type`, which returns `Data` for a container of a type parameter.
+`descriptor_params` is populated under the matching condition, `borrowed &&
+type_hint_mentions_param`.
 
 A call site names no types: each argument is matched against its parameter and
 the first to reach a parameter fixes it. `sys/std`'s `option`, `result`,
