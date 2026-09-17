@@ -15,7 +15,7 @@ home here.
 ## Contents
 
 - [A reference into an erased container carries the wrong type](#user-content-a-reference-into-an-erased-container-carries-the-wrong-type)
-- [A borrowed aggregate holding a type parameter reads the wrong field](#user-content-a-borrowed-aggregate-holding-a-type-parameter-reads-the-wrong-field)
+- [A borrowed aggregate holding a type parameter uses the wrong field offsets](#user-content-a-borrowed-aggregate-holding-a-type-parameter-uses-the-wrong-field-offsets)
 - [A unit that fails part way through leaves its index to the next one](#user-content-a-unit-that-fails-part-way-through-leaves-its-index-to-the-next-one)
 - [Inlining never triggers from a caller in an earlier unit](#user-content-inlining-never-triggers-from-a-caller-in-an-earlier-unit)
 - [A field of a const cannot be projected, but a const can be destructured](#user-content-a-field-of-a-const-cannot-be-projected-but-a-const-can-be-destructured)
@@ -165,9 +165,10 @@ it has to leave an erased element on the `ListGet` path for the reason above.
 So there are two lowerings for indexing, which is a smaller version of the same
 gap. See the comment in `lower_operand`.
 
-## A borrowed aggregate holding a type parameter reads the wrong field
+## A borrowed aggregate holding a type parameter uses the wrong field offsets
 
-**Reproduced.** Wrong answer, silently. No crash.
+**Reproduced.** Under `ref`, a wrong answer with no crash. Under `mut`, memory
+corruption.
 
 ```datalove
 fun second<T>(ref p: {a: T, b: u32}): u32
@@ -175,7 +176,19 @@ fun second<T>(ref p: {a: T, b: u32}): u32
 end fun
 
 let s: {a: u8, b: u32} = {a = 1, b = 7}
-debuglog second(ref s)      // interpreter 7, jit 0
+debuglog second(ref s)      // interpreter 7, jit 37, aot 1, c-aot 3962420992
+```
+
+```datalove
+fun bump<T>(mut p: {a: T, b: u32})
+  set p.b = 9
+end fun
+
+var s: {a: u8, b: u32} = {a = 1, b = 7}
+bump(mut s)
+debuglog s.b
+// interpreter 9; jit 7 then `free(): invalid next size (fast)`;
+// aot 7; c-aot `*** stack smashing detected ***`
 ```
 
 The same family as the entry above and the same cause, arriving through the
@@ -184,21 +197,38 @@ so the memory holds `{a: u8, b: u32}` while the erased signature says
 `{a: data, b: u32}`. A `data` is two words and a `u8` is one byte, so every
 field after the erased one is at an offset that is wrong by the difference.
 
-The interpreter reads the right value; the compiled backends do not. That is
+The `ref` reads are garbage rather than a stable wrong value -- four backends
+give four answers, and the same backend gives different answers on different
+runs -- because the offset lands past the end of the real value. The `mut`
+case writes there, which is why it takes the heap and the stack with it. So
+`mut` is the severe half and `ref` is the quiet half.
+
+The interpreter is right in every case; the compiled backends are not. That is
 the worse half of this: `backend_tests` catches it only because it runs the
 four and compares, and there is no fixture for the shape.
 
-**Scope, checked by compiling each.**
+**Scope, checked by compiling and running each.**
+
+Owned is sound. Ten shapes were tried and all four backends agree on all ten:
+a bare `T` before a fixed field, a `T` read out with `@`, `[T]` as a field,
+`?T`, `!T`, a nested aggregate, a tuple `(T, u32)`, two parameters `{a: A,
+b: B, c: u32}`, three levels of nesting, an owned generic aggregate in return
+position, and one forwarded through a second generic. The boundary converts an
+owned value field by field, so the layout the callee was compiled for is the
+layout it gets.
+
+Borrowed is where it breaks:
 
 | shape | result |
 |---|---|
-| `{a: T, b: u32}` owned | correct -- the boundary converts it field by field, so the layout the callee was compiled for is the layout it gets |
 | `ref {a: [T], b: u32}` | correct, by luck -- a list is a pointer and two indices whatever its elements are, so the erased and real layouts coincide |
-| `ref {a: T, b: u32}` | **wrong** |
+| `ref {b: u32, a: T}` | correct -- a field *before* the erased one is at the same offset either way |
+| `ref {a: T, b: u32}` | **wrong** -- reads garbage |
+| `mut {a: T, b: u32}` | **corrupts memory** -- writes past the value |
 
-So it is the bare type parameter under a borrow, not the container, and the
-container case is only spared because `[T]` and `[data]` happen to be the same
-size.
+So it is a bare type parameter under a borrow, with something after it. The
+container case is spared only because `[T]` and `[data]` happen to be the same
+size, and the reordered case only because nothing shifted.
 
 **What it says about the other entry.** The two are not a collection problem.
 They are one problem: a borrowed value is not converted, so its erased static
@@ -211,6 +241,12 @@ not sufficient: whatever reads through the reference has to take the layout
 from the descriptor rather than from the static type, which in the compiled
 backends means an offset that is no longer a compile-time constant. Converting
 at a borrow is the alternative, and is the thing a borrow exists not to do.
+
+Both entries are planned out together in
+[Fat references for borrowed generic values](plan-fat-refs.md). The descriptor
+already arrives -- `descriptor_params` carries it for exactly these parameters
+-- and a tydesc already holds precomputed field offsets, so the missing piece
+is that a projection drops it rather than narrowing it.
 
 ## A unit that fails part way through leaves its index to the next one
 

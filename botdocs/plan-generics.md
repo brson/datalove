@@ -562,7 +562,15 @@ this area has had.
 > `{a: data, b: u32}` while the caller holds `{a: u8, b: u32}`, so `p.b` is at
 > the wrong offset in the compiled backends and right in the interpreter. A
 > borrowed collection escapes only because `[T]` and `[data]` are the same
-> size. See [Known issues](issues.md).
+> size. Under `mut` the same offset is *written*, which corrupts the heap in
+> the jit and smashes the stack in the C backend.
+>
+> Owned is sound, and was checked the same way: ten shapes -- a bare `T`, a
+> `[T]` field, `?T`, `!T`, nested aggregates, tuples, two parameters, three
+> levels, return position, and forwarding through a second generic -- agree
+> across all four backends. The boundary converts an owned value field by
+> field, so what breaks is the borrow rather than the aggregate.
+> See [Known issues](issues.md).
 
 > **"Everywhere" is the reading half only.** `ListGet`, `MapGet` and
 > `TensorGet` go through the runtime for an erased element and are right.
