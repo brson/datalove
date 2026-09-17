@@ -336,11 +336,42 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 "ListElementRef on non-list type: {:?}", list_ty
             ))),
         };
-        let elem_repr = types::ir_type_to_cranelift(&elem_ty);
-        let elem_size = elem_repr.layout().size;
-
         let list_ptr = self.get_operand_ptr(builder, list)?;
         let idx = self.get_operand_value(builder, index)?;
+
+        // Inside a generic the static element type is a `data`, and a `data` is
+        // a different width from whatever the caller's list really holds, so a
+        // stride taken from it lands between elements. The list's own
+        // descriptor says, and the element's descriptor goes on to describe
+        // this reference.
+        if let Some(list_desc) = self.operand_ref_desc(list) {
+            let runtime = self.runtime.ok_or_else(|| CraneliftError::Codegen(
+                "a generic element borrow requires runtime imports".into()))?;
+            let elem_fn = self.module
+                .declare_func_in_func(runtime.element_tydesc, builder.func);
+            let call = builder.ins().call(elem_fn, &[list_desc]);
+            let elem_desc = builder.inst_results(call)[0];
+
+            let size_offset = std::mem::offset_of!(datalove_rtdt::TyDesc, size) as i32;
+            let elem_size = builder.ins().load(
+                cl_types::I32, MemFlagsData::new(), elem_desc, size_offset);
+            let elem_size = builder.ins().uextend(PTR_TYPE, elem_size);
+            let data_ptr = builder.ins().load(PTR_TYPE, MemFlagsData::new(), list_ptr, 0);
+            let idx_wide = if INDEX_TYPE != PTR_TYPE {
+                builder.ins().uextend(PTR_TYPE, idx)
+            } else {
+                idx
+            };
+            let offset = builder.ins().imul(idx_wide, elem_size);
+            let elem_addr = builder.ins().iadd(data_ptr, offset);
+
+            self.values.insert(dest, elem_addr);
+            self.ref_desc_values.insert(dest, elem_desc);
+            return Ok(());
+        }
+
+        let elem_repr = types::ir_type_to_cranelift(&elem_ty);
+        let elem_size = elem_repr.layout().size;
 
         let elem_addr = self.compute_element_addr(builder, list_ptr, idx, elem_size);
         self.values.insert(dest, elem_addr);

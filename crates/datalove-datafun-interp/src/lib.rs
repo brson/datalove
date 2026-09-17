@@ -801,7 +801,7 @@ impl IrInterpreter {
                         current_tydesc,
                     );
                 }
-                let size = unsafe { (*current_tydesc).size as usize };
+                let size = Self::field_write_size(current_tydesc, value_val.tydesc);
                 unsafe {
                     std::ptr::copy_nonoverlapping(value_val.ptr, current_ptr, size);
                 }
@@ -832,7 +832,7 @@ impl IrInterpreter {
                     dest_ptr.ptr, dest_ptr.tydesc, field_path
                 );
                 // Don't destroy old value (was uninitialized), just store new value.
-                let size = unsafe { (*current_tydesc).size as usize };
+                let size = Self::field_write_size(current_tydesc, value_val.tydesc);
                 unsafe {
                     std::ptr::copy_nonoverlapping(value_val.ptr, current_ptr, size);
                 }
@@ -1419,7 +1419,7 @@ impl IrInterpreter {
                 let idx_val = self.read_operand(index, frame, frames);
                 let idx = unsafe { *(idx_val.ptr as *const rtdt::IndexRepr) };
 
-                let (list_struct, _element_tydesc, element_size) =
+                let (list_struct, element_tydesc, element_size) =
                     unsafe { list_element_info(&list_val) };
 
                 // Compute element pointer.
@@ -1430,6 +1430,11 @@ impl IrInterpreter {
                 unsafe {
                     *(dest_slot.ptr as *mut *mut u8) = element_ptr;
                 }
+                // And what it points at. The stride was already read off the
+                // list's own descriptor; the element's descriptor was read with
+                // it and then thrown away, which is what left a reference into
+                // an erased container saying `data` about a string.
+                frame.set_value_tydesc(*dest, element_tydesc);
                 frame.mark_value_live(*dest);
             }
             Instruction::MapGet { dest, is_valid, map, key } => {
@@ -1891,7 +1896,7 @@ impl IrInterpreter {
                         current_tydesc,
                     );
                 }
-                let size = unsafe { (*current_tydesc).size as usize };
+                let size = Self::field_write_size(current_tydesc, value_val.tydesc);
                 unsafe {
                     std::ptr::copy_nonoverlapping(value_val.ptr, current_ptr, size);
                 }
@@ -1914,7 +1919,7 @@ impl IrInterpreter {
                         );
                     }
                 }
-                let size = unsafe { (*current_tydesc).size as usize };
+                let size = Self::field_write_size(current_tydesc, value_val.tydesc);
                 unsafe {
                     std::ptr::copy_nonoverlapping(value_val.ptr, current_ptr, size);
                 }
@@ -2845,6 +2850,28 @@ impl IrInterpreter {
     }
 
     /// Navigate a field path to get the pointer and tydesc for a nested field.
+    /// How many bytes a field write moves, having checked that the two sides
+    /// agree about the layout.
+    ///
+    /// Inside a generic they can disagree. The target's descriptor says what is
+    /// really there and the value's static type says the erased shape, and for
+    /// a field like `{a: T, b: u32}` those are different widths. Copying either
+    /// count would write the wrong bytes, so this refuses rather than guesses --
+    /// the compiled backends refuse the same case at compile time, and the
+    /// interpreter going ahead would be the divergence the four-backend
+    /// comparison exists to catch.
+    fn field_write_size(target: *const rtdt::TyDesc, value: *const rtdt::TyDesc) -> usize {
+        let target_size = unsafe { (*target).size as usize };
+        let value_size = unsafe { (*value).size as usize };
+        assert_eq!(
+            target_size, value_size,
+            "a field write was given a value of a different width: writing a part of \
+             a borrowed generic aggregate whose erased type is a composite holding \
+             `data` would have to convert the value piece by piece, which is not done",
+        );
+        target_size
+    }
+
     fn navigate_field_path(
         &self,
         base_ptr: *mut u8,

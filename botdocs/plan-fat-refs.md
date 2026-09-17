@@ -5,9 +5,10 @@ anything computing an address from a reference computed it from the referent's
 static type instead -- and inside a generic that type is a lie. This is the plan
 to carry the descriptor and take the layout from it.
 
-**Field projections are done**; see "What was built" below. Element references
-are not, and remain the one open [Known issue](issues.md) of this family. What
-follows describes the design as a whole; read it with that split in mind.
+**Field projections and list element references are done**; see "What was
+built" below. Map and tensor indexing is not, and remains an open
+[Known issue](issues.md). What follows describes the design as a whole; read it
+with that split in mind.
 
 ## What is already in place
 
@@ -266,15 +267,37 @@ What landed, and where it differs from the sketch above:
 
 Two cases are refused rather than written wrongly, both via
 `erasure_is_composite`: reading a field whose erased type is a composite holding
-`data` (it would have to be converted piece by piece), and writing one. Neither
-is reachable from `sys/std`.
+`data` (it would have to be converted piece by piece), and writing one. A third
+route to the same conversion -- handing the borrow to a callee and reifying what
+comes back -- is *not* refused and gives silent garbage; it predates this work.
+All three are in [Known issues](issues.md) and none is reachable from
+`sys/std`.
+
+Element references landed after the fields, and needed one thing the fields did
+not: `arg_needs_unwrapping` in Cranelift and its two counterparts in the C
+backend decided whether an argument typed `data` is a wrapper to unwrap or a
+pointer at the value, and they asked whether the operand was a borrowed
+parameter. Anything carrying its own descriptor is a pointer at the value, so
+that question became `operand_ref_desc(arg).is_some()`. Without it the callee
+took the first two words of a string for a wrapper's pointers.
 
 ## What is left
 
-Step 4, the element references -- `ListElementRef`, `MapValueRef`,
-`TensorIndexRef` -- which is the remaining [Known issue](issues.md). It needs a
-`RefDesc::Element` variant, the propagation rule, and the stride taken from the
-descriptor. The rest of the machinery is in place.
+**Maps and tensors.** `RefDesc::ParamElement` and `RefElement` already propagate
+through `MapValueRef` and `TensorIndexRef`, so the descriptor is at those sites;
+what is missing is using it. For maps that is more than the list needed, because
+a lookup has a *key* as well as a container, and inside a generic the key
+arrives as a `data` in a shape the comparison does not expect.
+`emit_map_contains_key` fails first, so an index into a generic map finds
+nothing rather than finding the wrong thing. See [Known issues](issues.md).
+
+**The composite conversion**, which is what both remaining entries in this
+family come back to: converting a value from the shape a descriptor says into
+the shape a static type says, piece by piece. `Erase` and `Reify` do it at a
+call boundary from two static types; nothing does it with a descriptor on one
+side. That is what would let a field whose erased type is `{a: data, b: u32}` be
+read, and what would let a borrow of one cross a call boundary without the two
+ends disagreeing about what is inside the `data`.
 
 ## Open questions
 

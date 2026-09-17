@@ -2430,10 +2430,9 @@ pub enum DescriptorRef {
 /// every field after it sits at an offset that is wrong by the difference.
 ///
 /// A value absent from what `resolve_ref_descriptors` returns is the ordinary
-/// case: its static type describes it. These two
-/// are the only ways a reference comes to need one, because the only thing that
-/// lies is a borrowed parameter (`FunctionContext::descriptor_params`) and the
-/// only way to get further in is to project a field.
+/// case: its static type describes it. The roots are the borrowed parameters in
+/// `FunctionContext::descriptor_params`, which is the only thing that lies, and
+/// the ways further in are projecting a field and indexing a container.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum RefDesc {
     /// Field `index` of the descriptor handed over for a borrowed parameter,
@@ -2441,6 +2440,18 @@ pub enum RefDesc {
     ParamField { param: u32, index: u32 },
     /// Field `index` of the descriptor already worked out for `base`.
     RefField { base: ValueId, index: u32 },
+    /// What a container described by a borrowed parameter's descriptor holds:
+    /// the element of a list, set or tensor, or the value of a map.
+    ParamElement { param: u32 },
+    /// What the container described for `base` holds.
+    RefElement { base: ValueId },
+}
+
+/// Where a reference's base got its descriptor, before it is narrowed.
+#[derive(Clone, Copy)]
+enum Root {
+    Param(u32),
+    Ref(ValueId),
 }
 
 /// Whether a type holds a `data` inside something else.
@@ -2504,23 +2515,33 @@ pub fn resolve_ref_descriptors(unit: &IrCodeUnit) -> BTreeMap<ValueId, RefDesc> 
         let mut added = false;
         for block in &unit.blocks {
             for instr in &block.instructions {
-                let Instruction::GetFieldRef { dest, src, field_index } = instr else {
-                    continue;
+                let (dest, base, field) = match instr {
+                    Instruction::GetFieldRef { dest, src, field_index } => {
+                        (dest, src, Some(*field_index))
+                    }
+                    Instruction::ListElementRef { dest, list, .. } => (dest, list, None),
+                    Instruction::MapValueRef { dest, map, .. } => (dest, map, None),
+                    Instruction::TensorIndexRef { dest, tensor, .. } => (dest, tensor, None),
+                    _ => continue,
                 };
                 if descs.contains_key(dest) {
                     continue;
                 }
-                let desc = match src {
-                    Operand::Param(p) => param_slot.get(p)
-                        .map(|slot| RefDesc::ParamField { param: *slot, index: *field_index }),
-                    Operand::Value(v) | Operand::ValueRef(v) => descs.contains_key(v)
-                        .then_some(RefDesc::RefField { base: *v, index: *field_index }),
+                let root = match base {
+                    Operand::Param(p) => param_slot.get(p).copied().map(Root::Param),
+                    Operand::Value(v) | Operand::ValueRef(v) => {
+                        descs.contains_key(v).then_some(Root::Ref(*v))
+                    }
                     _ => None,
                 };
-                if let Some(desc) = desc {
-                    descs.insert(*dest, desc);
-                    added = true;
-                }
+                let Some(root) = root else { continue };
+                descs.insert(*dest, match (root, field) {
+                    (Root::Param(param), Some(index)) => RefDesc::ParamField { param, index },
+                    (Root::Ref(base), Some(index)) => RefDesc::RefField { base, index },
+                    (Root::Param(param), None) => RefDesc::ParamElement { param },
+                    (Root::Ref(base), None) => RefDesc::RefElement { base },
+                });
+                added = true;
             }
         }
         if !added {

@@ -2130,14 +2130,14 @@ impl<'a> FunctionCodegenContext<'a> {
             if !wants_borrow || *self.operand_type(arg) != IrType::Data {
                 continue;
             }
-            // One of our own borrowed parameters is already a pointer at the
-            // value with a descriptor beside it, never a wrapper around it,
-            // even though its type reads `data`. Reading through it would take
-            // the first bytes of the value for a wrapper's two pointers.
-            if let Operand::Param(param_id) = arg {
-                if self.func_descriptor_index(*param_id).is_some() {
-                    continue;
-                }
+            // Anything that carries its own descriptor is already a pointer at
+            // the value, never a wrapper around it, even though its type reads
+            // `data`. That is one of our own borrowed parameters, and any
+            // reference projected or indexed out of one. Reading through it
+            // would take the first bytes of the value for a wrapper's two
+            // pointers.
+            if self.operand_ref_desc(arg).is_some() {
+                continue;
             }
             // Named for the call's destination as well as the argument, since
             // two calls in one block would otherwise declare the same locals.
@@ -2489,12 +2489,10 @@ impl<'a> FunctionCodegenContext<'a> {
             // `data` there just as the argument does. What tells them apart is
             // that the native borrows its collection and takes its element, and
             // only a borrow is passed through a wrapper.
-            // One of our own borrowed parameters is already a pointer at the
-            // value with a descriptor beside it, never a wrapper around it,
-            // even though its type reads `data`. Same as at a call to a module
-            // function.
-            let forwarded = matches!(arg, Operand::Param(p)
-                if self.func_descriptor_index(*p).is_some());
+            // Anything carrying its own descriptor is already a pointer at the
+            // value, never a wrapper around it, even though its type reads
+            // `data`. Same as at a call to a module function.
+            let forwarded = self.operand_ref_desc(arg).is_some();
             let wrapped = !forwarded
                 && *self.operand_type(arg) == IrType::Data
                 && matches!(native_param_modes.get(i),
@@ -3051,6 +3049,20 @@ impl<'a> FunctionCodegenContext<'a> {
                 "ListElementRef on non-list type: {:?}", list_ty
             ))),
         };
+
+        // Inside a generic the static element type is a `data`, and a `data` is
+        // a different width from whatever the caller's list really holds, so a
+        // stride taken from it lands between elements. The list's own
+        // descriptor says, and the element's descriptor goes on to describe
+        // this reference.
+        if let Some(list_desc) = self.operand_ref_desc(list) {
+            writeln!(out, "    __rd{} = dtlv_rti_element_tydesc({});",
+                dest.0, list_desc).unwrap();
+            writeln!(out, "    *(void**){} = *(void**){} + (size_t)*(index_t*){} * __rd{}->size;",
+                dest_addr, list_addr, index_addr, dest.0).unwrap();
+            return Ok(());
+        }
+
         let elem_repr = types::ir_type_to_crepr(&elem_ty);
         let elem_size = elem_repr.layout().size;
 

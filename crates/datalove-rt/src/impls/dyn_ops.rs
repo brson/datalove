@@ -671,3 +671,24 @@ pub unsafe fn field_read(
         }
     }
 }
+
+/// What a container holds, from the container's descriptor.
+///
+/// The element of a list, set or tensor, and the *value* of a map, which is
+/// what indexing one reaches. The counterpart of `field_tydesc` for the other
+/// way of getting further into a borrowed generic value: a reference into a
+/// container inside a generic has a static element type of `data`, whose width
+/// is not the width of what is really in there, so the stride and the type of
+/// what is found both have to come from here.
+pub unsafe fn element_tydesc(tydesc: *const rtdt::TyDesc) -> *const rtdt::TyDesc {
+    unsafe {
+        let ty = rtdt::TyDescRef::from_ptr(tydesc);
+        match (*tydesc).type_tag {
+            TyTag::List => ty.list_element_ty().as_ptr(),
+            TyTag::Set => ty.set_element_ty().as_ptr(),
+            TyTag::Map => ty.map_value_ty().as_ptr(),
+            TyTag::Tensor => ty.tensor_element_ty().as_ptr(),
+            other => panic!("element descriptor wanted from a {:?}", other),
+        }
+    }
+}

@@ -14,126 +14,56 @@ home here.
 
 ## Contents
 
-- [A reference into an erased container carries the wrong type](#user-content-a-reference-into-an-erased-container-carries-the-wrong-type)
+- [A generic map or tensor is indexed against a static descriptor](#user-content-a-generic-map-or-tensor-is-indexed-against-a-static-descriptor)
 - [Indexing a container a generic function owns is never unwrapped](#user-content-indexing-a-container-a-generic-function-owns-is-never-unwrapped)
+- [A part of a borrowed generic aggregate that is itself a composite is refused](#user-content-a-part-of-a-borrowed-generic-aggregate-that-is-itself-a-composite-is-refused)
 - [A unit that fails part way through leaves its index to the next one](#user-content-a-unit-that-fails-part-way-through-leaves-its-index-to-the-next-one)
 - [Inlining never triggers from a caller in an earlier unit](#user-content-inlining-never-triggers-from-a-caller-in-an-earlier-unit)
 - [A field of a const cannot be projected, but a const can be destructured](#user-content-a-field-of-a-const-cannot-be-projected-but-a-const-can-be-destructured)
 - [A specialized function keeps an original nobody calls](#user-content-a-specialized-function-keeps-an-original-nobody-calls)
 
-## A reference into an erased container carries the wrong type
+## A generic map or tensor is indexed against a static descriptor
 
-**Reproduced.** Segfaults.
+**Reproduced** for maps. Reasoned for tensors.
 
 ```datalove
 fun take<T>(ref x: T): ?T
   ret some (x@)
 end fun
 
-fun via<T>(ref xs: [T], i: index): ?T
-  ret take(ref xs[i]?)
+fun at<K, V>(ref m: %{K = V}, k: K): ?V with { K is ord, }
+  ret take(ref m[k]?)
 end fun
 
-let words: [string] = ["alpha", "beta"]
-debuglog via(ref words, 0)      // SIGSEGV
+let m: %{string = string} = %{"a" = "alpha", "b" = "beta"}
+debuglog at(ref m, "b")      // none, in all four backends
 ```
 
-Both neighbours work: `take(ref s)` on a concrete `string` is fine, because a
-borrowed parameter mentioning a type parameter takes its descriptor from the
-call site (`FunctionContext::descriptor_params`). And a caller whose list type
-is concrete is fine, because the static type is truthful. Only the erased
-combination faults.
+Not a crash and not a disagreement: all four say `none` for a key that is
+there, because the lookup never finds it. `emit_map_contains_key` passes
+`self.tydesc_name(&map_ty)`, a descriptor built from the static type, which
+inside a generic describes a `%{data = data}`. Comparing a `string` key against
+that ordering does not find the entry. `emit_map_value_ref` and `emit_map_get`
+take their map descriptor the same way.
 
-**What is wrong, and it differs by backend.** `ListElementRef` stores a bare
-pointer and nothing says what it points at.
+**The list case is fixed**, and is what this entry used to be about.
+`ListElementRef` now takes its stride from the list's own descriptor and the
+element's descriptor rides along with the pointer; see
+[Fat references for borrowed generic values](plan-fat-refs.md) and
+`backend/16_generic_element_borrow.dfs`. `RefDesc::ParamElement` and
+`RefElement` already propagate through `MapValueRef` and `TensorIndexRef` as
+well, so the descriptor is available at those sites -- what is missing is using
+it, and for maps that means the *key* descriptor too, which a list has no
+equivalent of.
 
-In the interpreter the pointer is right and the type is wrong.
-`list_element_info` reads the element descriptor off the *list's* runtime
-descriptor, so the stride is correct, but `Frame::value_deref` takes the inner
-type from the *reference's static tydesc*, which inside a generic says `data`.
-The bytes are read as the wrong thing.
+**The key is the part a list did not have.** Inside a generic the key arrives
+as a `data`, so a lookup has both a container described wrongly and a key in a
+shape the comparison does not expect. Only the first of those is the same
+problem the list had. That is why this was not done alongside the list.
 
-In the compiled backends the pointer is wrong too. Both take the element size
-from the static element type -- `emit_list_element_ref` in the C backend and
-`compile_list_element_ref` in Cranelift each compute `elem_size` from
-`operand_type(list)` and bake it into the output -- so inside a generic the
-stride is a `data`'s and the address lands between elements. That is the case
-`backend/10_generic_indexing.dfs` describes in its own header.
-
-`MapValueRef` and `TensorIndexRef` have the same shape and presumably the same
-fault; only the list case has been reproduced.
-
-**Why the rest of indexing is fine.** `ListGet`, `MapGet` and `TensorGet` never
-form such a reference. They clone the element, and when the destination is
-erased they go through `dtlv_rti_list_get_erased_local` so that the runtime
-decides whether the element wants wrapping.
-`backend/10_generic_indexing.dfs` says why that decision is the runtime's:
-"Deciding it in each backend would be four answers to one question."
-
-**Most of what this needs now exists.** Fat references were built for the
-aggregate case and that entry is gone; what is left here is applying the same
-machinery to the three element-reference instructions.
-
-In place already:
-
-- `RefDesc` and `resolve_ref_descriptors` (`datafun-ir`), which say what a
-  reference points at where its static type does not, derived per unit so that
-  specialization and inlining cannot leave it stale.
-- `Frame::value_tydescs` in the interpreter -- the per-frame override this entry
-  used to say was missing. `GetFieldRef` writes it and `value_deref` reads it.
-- `ref_desc_values` in Cranelift and `__rd{n}` in the C backend, the same thing
-  for the compiled ones.
-- `dtlv_rti_field_offset` and `dtlv_rti_field_tydesc`, one implementation of the
-  descriptor walk rather than four.
-
-What is left is a `RefDesc::Element` variant, the propagation rule for
-`ListElementRef`, `MapValueRef` and `TensorIndexRef`, and taking the stride from
-the descriptor in `emit_list_element_ref` and `compile_list_element_ref` instead
-of from `operand_type(list)`. The element's descriptor is a field of the list's,
-which is already reachable.
-
-**The trailing-descriptor channel does not reach this**, and never did.
-`shape_descriptors` passes descriptors to a callee, and `DescriptorRef` has two
-forms: `Static`, a descriptor the call site knows outright, and `Own(i)`, one
-this function was handed, forwarded whole. `shape_descriptors_for` matches a
-wanted shape against `own_shapes` exactly, so a function holding `[T0]` and
-asked for `T0` fails -- it can forward a descriptor but not a part of one.
-
-That is beside the point here anyway, because the fault is not at a call
-boundary. In
-
-```
-block2:
-    v2 = listelementref p0[p1]
-    v3 = call @0 u0(*v2)
-```
-
-the `*v2` is read in `via`'s own frame. The value handed to the callee is
-already wrong before any descriptor is passed anywhere. A trailing descriptor
-gets the right type *to* a callee; it does not give a correctly typed local
-borrow. Carrying the descriptor with the reference is what does, which is what
-[Fat references for borrowed generic values](plan-fat-refs.md) now does for
-fields and has still to do for elements.
-
-**Cheaper than fixing it.** Refuse `ref xs[i]?` where the element type is
-erased, at typecheck, turning a segfault into a diagnostic in every backend at
-once. That does not close the general question, only this way of reaching it.
-
-**Reach.** Not reachable from `sys/std`, whose `list.get<T>` delegates to a
-native rider rather than using indexing syntax. It needs user code to write a
-borrowed index inside a generic.
-
-**The plan believes this is already done.** `plan-generics.md` says under
-"Indexing, which was never blocked by this" that indexing reads the stride from
-the descriptor everywhere. That is the reading half. The borrowing half --
-`ListElementRef` and its neighbours -- was not changed, which is why this fault
-is in the part that was thought finished.
-
-**Also held back by this.** Lowering borrows a projection in an operand
-position, which reads a linear element once rather than cloning it twice, but
-it has to leave an erased element on the `ListGet` path for the reason above.
-So there are two lowerings for indexing, which is a smaller version of the same
-gap. See the comment in `lower_operand`.
+**Reach.** Not reachable from `sys/std`, whose map operations delegate to
+native riders rather than using indexing syntax. It needs user code to index a
+map inside a generic.
 
 ## Indexing a container a generic function owns is never unwrapped
 
@@ -187,6 +117,83 @@ they fail for unrelated reasons.
 **The plan believes the reading half is done.** `plan-generics.md` says
 indexing reads the stride from the descriptor everywhere. That is true of the
 borrowed read and false of the owned one, which never gets as far as a stride.
+
+## A part of a borrowed generic aggregate that is itself a composite is refused
+
+**Reproduced.** Refused, not miscompiled. A gap rather than a fault.
+
+```datalove
+fun get_q<T>(ref p: {q: {a: T, b: u32}, c: u32}): {a: T, b: u32}
+  ret p.q@
+end fun
+
+fun set_q<T>(mut p: {q: {a: T, b: u32}, c: u32}, v: {a: T, b: u32})
+  set p.q = v
+end fun
+```
+
+Reading or writing a *whole sub-aggregate* that holds the type parameter, as
+opposed to reading a field of it, is refused by `erasure_is_composite`.
+
+Reading a part of a borrowed generic value has three cases and only two are
+handled. A destination whose static type is the truth takes a copy at an offset
+from the descriptor. A destination that is exactly `data` takes a packed one,
+which `dtlv_rti_field_read_local` does. A destination like `{a: data, b: u32}`
+is neither: what is really there is `{a: u8, b: u32}`, so it would have to be
+converted field by field, the way the boundary converts an owned parameter.
+Nothing does that from a descriptor rather than from a pair of static types.
+
+The write side refuses a bare `data` target as well as a composite one, because
+that direction would have to *unpack* rather than pack.
+
+**What it would take.** A runtime conversion driven by two descriptors -- what
+is there and what is wanted -- rather than by two static types. `Erase` and
+`Reify` already do this at a call boundary, but from types both of which the
+backend knows. Extending that to take the source shape from a descriptor is the
+same piece of work the erased-element read needed, and would subsume it.
+
+**A refusal here costs a case that would have worked.** A `data` written by
+hand and a `data` left by erasure are one `IrType`, so a genuinely written
+`{x: data}` field is refused too. That is the price of the two being
+indistinguishable, and it is paid only inside a generic, on a borrowed
+aggregate, for a field that is a composite holding `data`.
+
+**Not uniform.** The two AOT backends refuse at compile time. The jit falls
+back to the interpreter rather than refusing, and the interpreter refuses at run
+time -- `Interpreter::field_write_size` asserts the two sides agree on a width,
+and the read path panics in the runtime. So the program is rejected everywhere,
+but by three different mechanisms and three different messages.
+
+**And one route to it is not refused at all.** Handing the borrow to a callee
+rather than reading it here reaches the same conversion through the return
+value, where nothing checks:
+
+```datalove
+fun take<T>(ref x: T): ?T
+  ret some (x@)
+end fun
+
+fun f<T>(ref p: {q: {a: T, b: u32}, c: u32}): ?{a: T, b: u32}
+  ret take(ref p.q)
+end fun
+```
+
+`take` is handed the descriptor of what is really there, clones it and packs a
+`data` holding a *concrete* `{a: u8, b: u32}`. The caller then reifies that into
+`?{a: data, b: u32}`, its own erased shape, and the two disagree about what is
+inside the `data`. The compiled backends print `some {a = 0, b = 1}` and
+`some {a = 0, b = 2}` -- different garbage each -- and the interpreter panics.
+Reaching it through a borrowed list element rather than a field does the same.
+
+This predates fat references: the same program gave the same garbage at
+`6a1f611b`, checked by building it. What is new is that the borrow now carries
+the truthful descriptor, so the disagreement is between a truthful callee and an
+erased caller rather than between two consistently wrong ones.
+
+**All owned is fine.** The same shape with no borrow anywhere -- `take(p)` on an
+owned parameter -- gives `some {a = 1, b = 7}` in every backend, because the
+boundary converts field by field in both directions. So the missing piece is
+precisely a conversion driven by descriptors rather than by two static types.
 
 ## A unit that fails part way through leaves its index to the next one
 

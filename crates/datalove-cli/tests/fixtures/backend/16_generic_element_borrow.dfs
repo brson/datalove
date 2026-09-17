@@ -1,0 +1,51 @@
+// A borrow taken out of a list borrowed inside a generic.
+//
+// `10_generic_indexing` covers the reading half, which goes through the runtime
+// and takes the stride from the list's descriptor. This is the borrowing half.
+// `ListElementRef` used to store a bare pointer computed at a stride taken from
+// the static element type, which inside a generic is a `data`'s: sixteen bytes
+// where the caller's list holds a one byte `u8` or a three word string. The
+// address landed between elements and it segfaulted in every backend.
+//
+// The stride now comes from the list's own descriptor, and the element's
+// descriptor rides along with the pointer, so passing the borrow to something
+// that takes it by reference tells that callee what it really has. Without the
+// second half the callee would read the value as the `data` its signature
+// claims and take the first two words of a string for a wrapper's pointers.
+
+fun take<T>(ref x: T): ?T
+  ret some (x@)
+end fun
+
+fun via<T>(ref xs: [T], i: index): ?T
+  ret take(ref xs[i]?)
+end fun
+
+// Reaching a list through a field of a borrowed aggregate first, so that the
+// element's descriptor is narrowed twice: once for the field and once for what
+// that field holds.
+fun first_of_field<T>(ref p: {xs: [T], n: u32}): ?T
+  ret take(ref p.xs[: index / 0]?)
+end fun
+
+// A concrete caller, which was always fine and stays fine: the static type is
+// truthful there, so the stride is still a compile-time constant.
+fun concrete_via(ref xs: [string], i: index): ?string
+  ret take(ref xs[i]?)
+end fun
+
+let words: [string] = ["alpha", "beta", "gamma"]
+debuglog via(ref words, 0)
+debuglog via(ref words, 2)
+
+// A one byte element, where a `data`'s stride would be sixteen times too far.
+let ns: [u8] = [1, 2, 3]
+debuglog via(ref ns, 1)
+
+let wide: [u64] = [10, 20]
+debuglog via(ref wide, 1)
+
+let held: {xs: [string], n: u32} = {xs = ["alpha", "beta"], n = 2}
+debuglog first_of_field(ref held)
+
+debuglog concrete_via(ref words, 1)

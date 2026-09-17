@@ -692,6 +692,10 @@ fn trampoline_all_runtime_imports(
         c::dtlv_rti_list_get_erased_local as *const u8)?;
     tramp(jit_module, &mut runtime.clone_erased,
         c::dtlv_rti_clone_erased_local as *const u8)?;
+    tramp(jit_module, &mut runtime.field_offset, c::dtlv_rti_field_offset as *const u8)?;
+    tramp(jit_module, &mut runtime.field_tydesc, c::dtlv_rti_field_tydesc as *const u8)?;
+    tramp(jit_module, &mut runtime.field_read, c::dtlv_rti_field_read_local as *const u8)?;
+    tramp(jit_module, &mut runtime.element_tydesc, c::dtlv_rti_element_tydesc as *const u8)?;
 
     Ok(())
 }
@@ -713,6 +717,7 @@ fn register_runtime_symbols(jit_builder: &mut JITBuilder) {
     jit_builder.symbol("dtlv_rti_field_offset", c::dtlv_rti_field_offset as *const u8);
     jit_builder.symbol("dtlv_rti_field_tydesc", c::dtlv_rti_field_tydesc as *const u8);
     jit_builder.symbol("dtlv_rti_field_read_local", c::dtlv_rti_field_read_local as *const u8);
+    jit_builder.symbol("dtlv_rti_element_tydesc", c::dtlv_rti_element_tydesc as *const u8);
 
     // String functions.
     jit_builder.symbol("dtlv_rti_string_create_local", c::dtlv_rti_string_create_local as *const u8);

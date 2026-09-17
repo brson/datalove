@@ -28,6 +28,8 @@ pub struct RuntimeImports {
     pub field_tydesc: FuncId,
     /// `dtlv_rti_field_read_local(rt, dest, dest_td, base, base_td, index) -> RtStatus`
     pub field_read: FuncId,
+    /// `dtlv_rti_element_tydesc(tydesc: *const TyDesc) -> *const TyDesc`
+    pub element_tydesc: FuncId,
     /// `dtlv_rti_mem_alloc_raw_local(rt: LocalRtHandle, size: u32, align: u32, count: u32) -> *mut u8`
     pub mem_alloc_raw: FuncId,
     /// `dtlv_rti_string_create_local(rt: LocalRtHandle, value_out: *mut u8, tydesc: *const TyDesc) -> RtStatus`
@@ -811,6 +813,18 @@ impl RuntimeImports {
         // Reading such a field out into a value. Whether what is found wants
         // packing on the way is the runtime's to decide, for the reason
         // `list_get_erased` gives.
+        // What a container holds, for a reference reaching into one inside a
+        // generic, where the static element type is a `data` of the wrong width.
+        let element_tydesc = {
+            let mut sig = module.make_signature();
+            sig.params.push(AbiParam::new(PTR_TYPE));      // tydesc
+            sig.returns.push(AbiParam::new(PTR_TYPE));
+            module
+                .declare_function("dtlv_rti_element_tydesc", Linkage::Import, &sig)
+                .map_err(|e| CraneliftError::Module(
+                    format!("declare dtlv_rti_element_tydesc: {}", e)))?
+        };
+
         let field_read = {
             let mut sig = module.make_signature();
             sig.params.push(AbiParam::new(PTR_TYPE));      // rt
@@ -835,6 +849,7 @@ impl RuntimeImports {
             field_offset,
             field_tydesc,
             field_read,
+            element_tydesc,
             mem_alloc_raw,
             string_create,
             string_push_bytes,

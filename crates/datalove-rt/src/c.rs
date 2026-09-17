@@ -3021,3 +3021,14 @@ pub unsafe extern "C-unwind" fn dtlv_rti_field_read_local(
         crate::impls::dyn_ops::field_read(rt, dest_out, dest_tydesc, base_in, base_tydesc, index)
     }
 }
+
+/// The descriptor of what a container holds.
+///
+/// See `crate::impls::dyn_ops::element_tydesc`.
+#[unsafe(no_mangle)]
+pub unsafe extern "C-unwind" fn dtlv_rti_element_tydesc(
+    tydesc: *const rtdt::TyDesc,
+) -> *const rtdt::TyDesc {
+    debug_assert!(!tydesc.is_null(), "tydesc is null");
+    unsafe { crate::impls::dyn_ops::element_tydesc(tydesc) }
+}

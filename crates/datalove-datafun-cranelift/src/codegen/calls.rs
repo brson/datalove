@@ -220,14 +220,13 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         if !matches!(modes.get(index), Some(ParamMode::Ref) | Some(ParamMode::Mut)) {
             return Ok(false);
         }
-        // One of our own borrowed parameters is already a pointer at the value
-        // with a descriptor beside it, never a wrapper around it, even though
-        // its type reads `data`. Reading through it would take the first bytes
-        // of the value for a wrapper's two pointers.
-        if let Operand::Param(param_id) = &args[index] {
-            if self.descriptor_values.contains_key(param_id) {
-                return Ok(false);
-            }
+        // Anything that carries its own descriptor is already a pointer at the
+        // value, never a wrapper around it, even though its type reads `data`.
+        // That is one of our own borrowed parameters, and any reference
+        // projected or indexed out of one. Reading through it would take the
+        // first bytes of the value for a wrapper's two pointers.
+        if self.operand_ref_desc(&args[index]).is_some() {
+            return Ok(false);
         }
         Ok(self.get_operand_type(&args[index])? == IrType::Data)
     }
