@@ -555,6 +555,15 @@ copied, and the two look alike from a call site. Deciding it in each backend
 would be four answers to one question, which is the shape of most of the bugs
 this area has had.
 
+> **A borrowed value's erased type is a lie about its layout.** The table above
+> says every position works, and it was checked by compiling each. What none of
+> those checks covered is reading a *part* of a borrowed value whose erased
+> layout differs from its real one: `ref p: {a: T, b: u32}` is compiled against
+> `{a: data, b: u32}` while the caller holds `{a: u8, b: u32}`, so `p.b` is at
+> the wrong offset in the compiled backends and right in the interpreter. A
+> borrowed collection escapes only because `[T]` and `[data]` are the same
+> size. See [Known issues](issues.md).
+
 > **"Everywhere" is the reading half only.** `ListGet`, `MapGet` and
 > `TensorGet` go through the runtime for an erased element and are right.
 > `ListElementRef`, `MapValueRef` and `TensorIndexRef` were not changed:

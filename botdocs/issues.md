@@ -15,6 +15,7 @@ home here.
 ## Contents
 
 - [A reference into an erased container carries the wrong type](#user-content-a-reference-into-an-erased-container-carries-the-wrong-type)
+- [A borrowed aggregate holding a type parameter reads the wrong field](#user-content-a-borrowed-aggregate-holding-a-type-parameter-reads-the-wrong-field)
 - [A unit that fails part way through leaves its index to the next one](#user-content-a-unit-that-fails-part-way-through-leaves-its-index-to-the-next-one)
 - [Inlining never triggers from a caller in an earlier unit](#user-content-inlining-never-triggers-from-a-caller-in-an-earlier-unit)
 - [A field of a const cannot be projected, but a const can be destructured](#user-content-a-field-of-a-const-cannot-be-projected-but-a-const-can-be-destructured)
@@ -163,6 +164,53 @@ position, which reads a linear element once rather than cloning it twice, but
 it has to leave an erased element on the `ListGet` path for the reason above.
 So there are two lowerings for indexing, which is a smaller version of the same
 gap. See the comment in `lower_operand`.
+
+## A borrowed aggregate holding a type parameter reads the wrong field
+
+**Reproduced.** Wrong answer, silently. No crash.
+
+```datalove
+fun second<T>(ref p: {a: T, b: u32}): u32
+  ret p.b
+end fun
+
+let s: {a: u8, b: u32} = {a = 1, b = 7}
+debuglog second(ref s)      // interpreter 7, jit 0
+```
+
+The same family as the entry above and the same cause, arriving through the
+field offsets rather than through a stride. Nothing is converted at a borrow,
+so the memory holds `{a: u8, b: u32}` while the erased signature says
+`{a: data, b: u32}`. A `data` is two words and a `u8` is one byte, so every
+field after the erased one is at an offset that is wrong by the difference.
+
+The interpreter reads the right value; the compiled backends do not. That is
+the worse half of this: `backend_tests` catches it only because it runs the
+four and compares, and there is no fixture for the shape.
+
+**Scope, checked by compiling each.**
+
+| shape | result |
+|---|---|
+| `{a: T, b: u32}` owned | correct -- the boundary converts it field by field, so the layout the callee was compiled for is the layout it gets |
+| `ref {a: [T], b: u32}` | correct, by luck -- a list is a pointer and two indices whatever its elements are, so the erased and real layouts coincide |
+| `ref {a: T, b: u32}` | **wrong** |
+
+So it is the bare type parameter under a borrow, not the container, and the
+container case is only spared because `[T]` and `[data]` happen to be the same
+size.
+
+**What it says about the other entry.** The two are not a collection problem.
+They are one problem: a borrowed value is not converted, so its erased static
+type is a lie about its layout, and anything computing an address from that
+type computes it wrongly. A stride is one way to compute an address and a field
+offset is another.
+
+That bears on the fix. Carrying a descriptor with a reference is necessary and
+not sufficient: whatever reads through the reference has to take the layout
+from the descriptor rather than from the static type, which in the compiled
+backends means an offset that is no longer a compile-time constant. Converting
+at a borrow is the alternative, and is the thing a borrow exists not to do.
 
 ## A unit that fails part way through leaves its index to the next one
 
