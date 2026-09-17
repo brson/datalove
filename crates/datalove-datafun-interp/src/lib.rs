@@ -801,10 +801,7 @@ impl IrInterpreter {
                         current_tydesc,
                     );
                 }
-                let size = Self::field_write_size(current_tydesc, value_val.tydesc);
-                unsafe {
-                    std::ptr::copy_nonoverlapping(value_val.ptr, current_ptr, size);
-                }
+                self.write_field(current_ptr, current_tydesc, &value_val);
                 Self::mark_source_dropped_local(value, frame);
             }
             Instruction::RefStoreTracked { dest, value } => {
@@ -832,10 +829,7 @@ impl IrInterpreter {
                     dest_ptr.ptr, dest_ptr.tydesc, field_path
                 );
                 // Don't destroy old value (was uninitialized), just store new value.
-                let size = Self::field_write_size(current_tydesc, value_val.tydesc);
-                unsafe {
-                    std::ptr::copy_nonoverlapping(value_val.ptr, current_ptr, size);
-                }
+                self.write_field(current_ptr, current_tydesc, &value_val);
                 // Mark the destination as initialized.
                 match dest {
                     Operand::Slot(slot) => frame.mark_slot_initialized(*slot),
@@ -1914,10 +1908,7 @@ impl IrInterpreter {
                         current_tydesc,
                     );
                 }
-                let size = Self::field_write_size(current_tydesc, value_val.tydesc);
-                unsafe {
-                    std::ptr::copy_nonoverlapping(value_val.ptr, current_ptr, size);
-                }
+                self.write_field(current_ptr, current_tydesc, &value_val);
                 Self::mark_source_dropped_local(value, frame);
             }
             Instruction::ParamSetFieldTracked { param, field_path, value } => {
@@ -1937,10 +1928,7 @@ impl IrInterpreter {
                         );
                     }
                 }
-                let size = Self::field_write_size(current_tydesc, value_val.tydesc);
-                unsafe {
-                    std::ptr::copy_nonoverlapping(value_val.ptr, current_ptr, size);
-                }
+                self.write_field(current_ptr, current_tydesc, &value_val);
                 frame.mark_param_initialized(*param);
                 Self::mark_source_dropped_local(value, frame);
             }
@@ -2868,26 +2856,25 @@ impl IrInterpreter {
     }
 
     /// Navigate a field path to get the pointer and tydesc for a nested field.
-    /// How many bytes a field write moves, having checked that the two sides
-    /// agree about the layout.
+    /// Move a value into a field, converting if the two sides are the same type
+    /// in different shapes.
     ///
-    /// Inside a generic they can disagree. The target's descriptor says what is
-    /// really there and the value's static type says the erased shape, and for
-    /// a field like `{a: T, b: u32}` those are different widths. Copying either
-    /// count would write the wrong bytes, so this refuses rather than guesses --
-    /// the compiled backends refuse the same case at compile time, and the
-    /// interpreter going ahead would be the divergence the four-backend
-    /// comparison exists to catch.
-    fn field_write_size(target: *const rtdt::TyDesc, value: *const rtdt::TyDesc) -> usize {
-        let target_size = unsafe { (*target).size as usize };
-        let value_size = unsafe { (*value).size as usize };
-        assert_eq!(
-            target_size, value_size,
-            "a field write was given a value of a different width: writing a part of \
-             a borrowed generic aggregate whose erased type is a composite holding \
-             `data` would have to convert the value piece by piece, which is not done",
-        );
-        target_size
+    /// Inside a generic they are. The target's descriptor says what is really
+    /// there and the value's says the erased shape. `reify_local` walks the two
+    /// and converts wherever one of them says `data`, which for two descriptors
+    /// that agree everywhere -- every write outside a generic -- is the move it
+    /// always was.
+    fn write_field(
+        &mut self,
+        target_ptr: *mut u8,
+        target_tydesc: *const rtdt::TyDesc,
+        value: &crate::value::Value,
+    ) {
+        unsafe {
+            let status = datalove_rt::c::dtlv_rti_reify_local(
+                self.runtime.handle(), value.ptr, value.tydesc, target_ptr, target_tydesc);
+            assert_eq!(status, datalove_rt::c::RtStatus::Ok, "field write failed");
+        }
     }
 
     fn navigate_field_path(

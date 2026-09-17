@@ -2454,34 +2454,6 @@ enum Root {
     Ref(ValueId),
 }
 
-/// Whether a type holds a `data` inside something else.
-///
-/// Reading a part of a borrowed generic value has three cases, and this
-/// separates the one nothing handles. A destination whose type is the truth
-/// takes a copy; a destination that is exactly `data` takes a packed one, which
-/// the runtime does. A destination like `{a: data, b: u32}` is neither: the
-/// value behind it is `{a: u8, b: u32}`, so it has to be converted field by
-/// field, and refusing is better than copying the wrong bytes.
-///
-/// A `data` written by hand rather than left by erasure reads the same here.
-/// That costs a refusal on a case that would have worked, which is the price of
-/// the two being one `IrType`.
-pub fn erasure_is_composite(ty: &IrType) -> bool {
-    fn holds_data(ty: &IrType) -> bool {
-        match ty {
-            IrType::Data => true,
-            IrType::Tuple(tys) => tys.iter().any(holds_data),
-            IrType::Struct(fields) => fields.iter().any(|(_, t)| holds_data(t)),
-            IrType::Option(t) | IrType::Result(t) => holds_data(t),
-            IrType::Term(_, t) => holds_data(t),
-            IrType::Enum(variants) => variants.iter()
-                .any(|(_, payload)| payload.as_ref().is_some_and(holds_data)),
-            _ => false,
-        }
-    }
-    !matches!(ty, IrType::Data) && holds_data(ty)
-}
-
 /// Say what each reference in `unit` points at, where its static type does not.
 ///
 /// One answer read by every backend, for the reason `resolve_call_descriptors`

@@ -1415,13 +1415,6 @@ impl<'a> FunctionCodegenContext<'a> {
         // packing on the way out; see `dtlv_rti_field_read_local`.
         if let Some(base_desc) = self.operand_ref_desc(src) {
             let dest_ty = self.value_type(dest).clone();
-            if datalove_datafun_ir::erasure_is_composite(&dest_ty) {
-                return Err(CAotError::Unsupported(format!(
-                    "reading field {} of a borrowed generic aggregate into a {:?}: a \
-                     field whose erased type is a composite holding `data` has to be \
-                     converted piece by piece, which is not done here",
-                    field_index, dest_ty)));
-            }
             let dest_tydesc = self.tydesc_name(&dest_ty);
             writeln!(out, "    dtlv_rti_field_read_local(rt, {}, &{}, {}, {}, {});",
                 dest_addr, dest_tydesc, src_addr, base_desc, field_index).unwrap();
@@ -2407,15 +2400,15 @@ impl<'a> FunctionCodegenContext<'a> {
     /// further in one field at a time and each step's offsets live in the
     /// previous step's descriptor.
     ///
-    /// The static type comes back so the caller can refuse a target the
-    /// descriptor cannot settle on its own; see `erasure_is_composite`.
+    /// The static type comes back too, so the caller can tell a copy type --
+    /// which is a shallow store -- from one that owns what it holds.
     fn walk_dynamic_field_path(
         &self,
         base_addr: String,
         base_desc: String,
         base_ty: &IrType,
         field_path: &[u32],
-    ) -> Result<(String, IrType), CAotError> {
+    ) -> Result<(String, String, IrType), CAotError> {
         let mut addr = base_addr;
         let mut desc = base_desc;
         let mut ty = base_ty.clone();
@@ -2430,7 +2423,7 @@ impl<'a> FunctionCodegenContext<'a> {
             desc = format!("dtlv_rti_field_tydesc({}, {})", desc, idx);
             ty = field_types[idx as usize].clone();
         }
-        Ok((addr, ty))
+        Ok((addr, desc, ty))
     }
 
     /// The descriptor for what an operand names, where its static type does not
@@ -2654,25 +2647,24 @@ impl<'a> FunctionCodegenContext<'a> {
         // severe half of this: it puts the value past the end of what the
         // caller owns.
         if let Some(base_desc) = self.operand_ref_desc(&Operand::Param(param)) {
-            let (addr, field_ty) = self.walk_dynamic_field_path(
+            let (addr, field_desc, field_ty) = self.walk_dynamic_field_path(
                 current_addr, base_desc, &current_ty, field_path)?;
-            if matches!(field_ty, IrType::Data) || datalove_datafun_ir::erasure_is_composite(&field_ty) {
-                return Err(CAotError::Unsupported(format!(
-                    "writing field {:?} of a borrowed generic aggregate, whose erased \
-                     type is {:?}: the value would have to be converted into the shape \
-                     the descriptor says, which is not done here",
-                    field_path, field_ty)));
-            }
             let src_addr = self.operand_addr(value);
-            match types::ir_type_to_crepr(&field_ty) {
-                CRepr::Scalar(c_ty) => {
-                    writeln!(out, "    *({c_ty}*){addr} = *({c_ty}*){src_addr};").unwrap();
-                }
-                CRepr::Aggregate(layout) if layout.size > 0 => {
-                    writeln!(out, "    memcpy({}, {}, {});", addr, src_addr, layout.size).unwrap();
-                }
-                CRepr::Aggregate(_) => {}
+            let src_tydesc = self.operand_tydesc(value);
+
+            // The field holds a live value, destroyed against the descriptor
+            // that says what is really there rather than the erased type.
+            if !field_ty.is_copy() {
+                writeln!(out, "    dtlv_rti_any_destroy_local(rt, {}, {});", addr, field_desc).unwrap();
             }
+
+            // What this function holds is in the erased shape and the field is
+            // in the real one, so the value is moved back out of its wrapping
+            // on the way in. `reify_local` walks the two descriptors and
+            // converts wherever one of them says `data`, which for a field that
+            // was never erased is a copy of the same width.
+            writeln!(out, "    dtlv_rti_reify_local(rt, {}, {}, {}, {});",
+                src_addr, src_tydesc, addr, field_desc).unwrap();
             if tracked {
                 if let Some(track_offset) = self.layout.param_tracking_byte(param.0) {
                     writeln!(out, "    __frame[{}] = TRACK_LIVE;", track_offset).unwrap();

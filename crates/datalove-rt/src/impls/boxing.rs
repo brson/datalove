@@ -324,6 +324,82 @@ unsafe fn convert(
     }
 }
 
+/// Whether `dst` is `src` with something replaced by `data`.
+///
+/// Comparing widths does not answer this. A `data` is two words and so is a
+/// `string`, so `{a: string, b: u32}` and `{a: data, b: u32}` are the same size
+/// and the same tag while being different layouts -- taking that for "nothing
+/// was erased" writes a string where a wrapper belongs, and what reads it back
+/// finds a descriptor pointer that is the string's first eight bytes.
+///
+/// So the two are walked the way `convert` walks them, looking only for a
+/// position where one says `data` and the other does not.
+pub unsafe fn needs_erasure(
+    src_tydesc: *const rtdt::TyDesc,
+    dst_tydesc: *const rtdt::TyDesc,
+) -> bool {
+    unsafe {
+        let src_tag = (*src_tydesc).type_tag;
+        let dst_tag = (*dst_tydesc).type_tag;
+        if dst_tag == TyTag::Data || src_tag == TyTag::Data {
+            return src_tag != dst_tag;
+        }
+        if src_tag != dst_tag {
+            return true;
+        }
+        let src_ty = rtdt::TyDescRef::from_ptr(src_tydesc);
+        let dst_ty = rtdt::TyDescRef::from_ptr(dst_tydesc);
+        match src_tag {
+            TyTag::Option => needs_erasure(
+                src_ty.option_inner_ty().as_ptr(), dst_ty.option_inner_ty().as_ptr()),
+            TyTag::Result => needs_erasure(
+                src_ty.result_ok_ty().as_ptr(), dst_ty.result_ok_ty().as_ptr()),
+            TyTag::Term => {
+                let (_, src_payload) = src_ty.term_info();
+                let (_, dst_payload) = dst_ty.term_info();
+                needs_erasure(src_payload.as_ptr(), dst_payload.as_ptr())
+            }
+            TyTag::Enum => {
+                let src_info = src_ty.enum_info();
+                let dst_info = dst_ty.enum_info();
+                if src_info.num_variants() != dst_info.num_variants() {
+                    return true;
+                }
+                (0..src_info.num_variants() as usize).any(|i| {
+                    match (src_info.variant(i), dst_info.variant(i)) {
+                        (Some(s), Some(d)) => match (s.payload(), d.payload()) {
+                            (Some(sp), Some(dp)) => needs_erasure(sp.as_ptr(), dp.as_ptr()),
+                            (None, None) => false,
+                            _ => true,
+                        },
+                        _ => true,
+                    }
+                })
+            }
+            TyTag::Tuple => {
+                let src_fields: Vec<_> = src_ty.iter_tuple_fields().collect();
+                let dst_fields: Vec<_> = dst_ty.iter_tuple_fields().collect();
+                src_fields.len() != dst_fields.len()
+                    || src_fields.iter().zip(dst_fields.iter()).any(|(s, d)| {
+                        needs_erasure(s.tydesc().as_ptr(), d.tydesc().as_ptr())
+                    })
+            }
+            TyTag::Struct => {
+                let src_fields: Vec<_> = src_ty.iter_struct_fields().collect();
+                let dst_fields: Vec<_> = dst_ty.iter_struct_fields().collect();
+                src_fields.len() != dst_fields.len()
+                    || src_fields.iter().zip(dst_fields.iter()).any(|(s, d)| {
+                        needs_erasure(s.tydesc().as_ptr(), d.tydesc().as_ptr())
+                    })
+            }
+            // A container holds its element type in its descriptor rather than
+            // its layout, so nothing here is erased in place; whether the
+            // elements are is the container's own business.
+            _ => false,
+        }
+    }
+}
+
 /// Clone a value into a destination that may be the erased shape.
 ///
 /// A `@` inside a generic clones something whose type only the descriptor
@@ -343,13 +419,61 @@ pub unsafe fn clone_erased_local(
     dst_tydesc: *const rtdt::TyDesc,
 ) -> RtStatus {
     unsafe {
-        let wraps = (*dst_tydesc).type_tag == TyTag::Data
-            && (*src_tydesc).type_tag != TyTag::Data;
-        if wraps {
-            data_clone_from_local(rt, src_in, src_tydesc, dst_out)
-        } else {
-            crate::impls::clone::clone_value(rt, src_in, src_tydesc, dst_out)
+        if (*dst_tydesc).type_tag == TyTag::Data {
+            return if (*src_tydesc).type_tag == TyTag::Data {
+                crate::impls::clone::clone_value(rt, src_in, src_tydesc, dst_out)
+            } else {
+                data_clone_from_local(rt, src_in, src_tydesc, dst_out)
+            };
         }
+
+        // The destination may be the source's shape with `data` at some
+        // position inside it rather than at the top: `{a: T, b: u32}` read out
+        // of something borrowed is a `{a: u8, b: u32}` going into a slot laid
+        // out as `{a: data, b: u32}`. Cloning in the source's shape would write
+        // the wrong widths from the erased field on.
+        //
+        if !needs_erasure(src_tydesc, dst_tydesc) {
+            return crate::impls::clone::clone_value(rt, src_in, src_tydesc, dst_out);
+        }
+        clone_into_erased_shape(rt, src_in, src_tydesc, dst_out, dst_tydesc)
+    }
+}
+
+/// Clone a value into a destination laid out as its erased shape.
+///
+/// `erase_local` already walks two descriptors and converts at each position
+/// one of them calls `data`, which is the whole of this job -- but it *moves*,
+/// and a value read out of something borrowed has to be left where it is. So
+/// the value is cloned in its own shape first and the clone is what gets moved.
+///
+/// The scratch is the real shape's width, which is only known here, so it is
+/// allocated rather than found on a stack frame. This is the rare path: a part
+/// of a borrowed generic value whose erased type holds a `data` somewhere
+/// inside it, as opposed to being honest or being a `data` outright, and both
+/// of those are handled above without allocating.
+unsafe fn clone_into_erased_shape(
+    rt: LocalRtHandle,
+    src_in: *const u8,
+    src_tydesc: *const rtdt::TyDesc,
+    dst_out: *mut u8,
+    dst_tydesc: *const rtdt::TyDesc,
+) -> RtStatus {
+    unsafe {
+        let size = (*src_tydesc).size;
+        let align = (*src_tydesc).align;
+        let rt_ref = &mut *(rt as *mut crate::impls::rt_local::RtLocal);
+        let scratch = rt_ref.alloc.alloc(size, align, 1);
+        if scratch.is_null() {
+            return RtStatus::Error;
+        }
+        let mut status = crate::impls::clone::clone_value(rt, src_in, src_tydesc, scratch);
+        if status == RtStatus::Ok {
+            status = erase_local(rt, scratch, src_tydesc, dst_out, dst_tydesc);
+        }
+        let rt_ref = &mut *(rt as *mut crate::impls::rt_local::RtLocal);
+        rt_ref.alloc.free(size, align, 1, scratch);
+        status
     }
 }
 
@@ -478,7 +602,21 @@ pub unsafe fn data_into_local(
                 }
                 // Move the payload out, then release the box it sat in. The
                 // payload is not destroyed: it now belongs to the destination.
-                std::ptr::copy_nonoverlapping(value_ptr, dest_out, size);
+                //
+                // What went in is not always what is wanted back. A generic
+                // returning `?{a: T, b: u32}` gets a `data` from one whose own
+                // parameter was a bare `T`, so the box holds the real
+                // `{a: u8, b: u32}` while the destination is laid out as
+                // `{a: data, b: u32}`. Copying the destination's width out of
+                // the payload's allocation reads past the end of it.
+                if !needs_erasure(inner_tydesc, dest_tydesc) {
+                    std::ptr::copy_nonoverlapping(value_ptr, dest_out, size);
+                } else {
+                    let status = erase_local(rt, value_ptr, inner_tydesc, dest_out, dest_tydesc);
+                    if status != RtStatus::Ok {
+                        return status;
+                    }
+                }
                 let inner_ty = rtdt::TyDescRef::from_ptr(inner_tydesc);
                 let rt_ref = &mut *(rt as *mut crate::impls::rt_local::RtLocal);
                 rt_ref.alloc.free(

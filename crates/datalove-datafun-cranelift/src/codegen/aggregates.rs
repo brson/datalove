@@ -301,14 +301,6 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             return Ok(());
         }
 
-        if datalove_datafun_ir::erasure_is_composite(&dest_ty) {
-            return Err(CraneliftError::Unsupported(format!(
-                "reading field {} of a borrowed generic aggregate into a {:?}: a field \
-                 whose erased type is a composite holding `data` has to be converted \
-                 piece by piece, which is not done here",
-                field_index, dest_ty)));
-        }
-
         let rt_handle = self.rt_handle_param.ok_or_else(|| {
             CraneliftError::Codegen("a generic field read requires a runtime handle".into())
         })?;
@@ -584,52 +576,54 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             current_ty = field_types[field_idx as usize].clone();
         }
 
-        // The value being written is one this function holds, so its own type
-        // describes it. A target whose erased type is a `data` or holds one is
-        // a different shape from that, and converting it is not done here.
-        if current_desc.is_some()
-            && (matches!(current_ty, IrType::Data)
-                || datalove_datafun_ir::erasure_is_composite(&current_ty))
-        {
-            return Err(CraneliftError::Unsupported(format!(
-                "writing field {:?} of a borrowed generic aggregate, whose erased type \
-                 is {:?}: the value would have to be converted into the shape the \
-                 descriptor says, which is not done here",
-                field_path, current_ty)));
-        }
 
-        // Destroy old field value before overwriting.
-        let tydesc_id = self.tydesc_emitter.get(&current_ty).ok_or_else(|| {
-            CraneliftError::Codegen(format!(
-                "TyDesc not found for type {:?}",
-                current_ty
-            ))
-        })?;
-        let tydesc_gv = self.module.declare_data_in_func(tydesc_id, builder.func);
-        let tydesc_ptr = builder.ins().symbol_value(PTR_TYPE, tydesc_gv);
-
-        let destroy_func_id = self.runtime.as_ref()
-            .ok_or_else(|| CraneliftError::Codegen("ParamSetField requires runtime imports".into()))?
-            .destroy_local;
+        let runtime = self.runtime.ok_or_else(|| CraneliftError::Codegen(
+            "ParamSetField requires runtime imports".into()))?;
         let rt_handle = self.rt_handle_param.ok_or_else(|| {
             CraneliftError::Codegen("ParamSetField requires runtime handle parameter".into())
         })?;
-        let destroy_ref = self.module.declare_func_in_func(destroy_func_id, builder.func);
+
+        // The descriptor that says what is really at the target. Inside a
+        // generic that is the one narrowed down the path above; elsewhere the
+        // static type is the truth.
+        let tydesc_ptr = match current_desc {
+            Some(desc) => desc,
+            None => {
+                let tydesc_id = self.tydesc_emitter.get(&current_ty).ok_or_else(|| {
+                    CraneliftError::Codegen(
+                        format!("TyDesc not found for type {:?}", current_ty))
+                })?;
+                let gv = self.module.declare_data_in_func(tydesc_id, builder.func);
+                builder.ins().symbol_value(PTR_TYPE, gv)
+            }
+        };
+
+        // Destroy old field value before overwriting.
+        let destroy_ref = self.module.declare_func_in_func(runtime.destroy_local, builder.func);
         builder.ins().call(destroy_ref, &[rt_handle, current_addr, tydesc_ptr]);
 
-        // Store new value at target address.
         let val = self.get_operand_value(builder, value)?;
-        let field_repr = types::ir_type_to_cranelift(&current_ty);
 
-        match field_repr {
+        // Inside a generic what this function holds is in the erased shape and
+        // the field is in the real one, so the value is moved back out of its
+        // wrapping on the way in. `reify_local` walks the two descriptors and
+        // converts wherever one says `data`.
+        if current_desc.is_some() {
+            let src_tydesc = self.operand_tydesc(builder, value)?;
+            let src_ptr = self.get_operand_ptr(builder, value)?;
+            let reify_ref = self.module.declare_func_in_func(runtime.reify, builder.func);
+            builder.ins().call(reify_ref, &[rt_handle, src_ptr, src_tydesc, current_addr, tydesc_ptr]);
+            return Ok(());
+        }
+
+        // Store new value at target address.
+        match types::ir_type_to_cranelift(&current_ty) {
             CraneliftRepr::Scalar(_) => {
                 builder.ins().store(MemFlagsData::new(), val, current_addr, 0);
             }
             CraneliftRepr::Aggregate(_) => {
-                let move_func_id = self.runtime.as_ref()
-                    .ok_or_else(|| CraneliftError::Codegen("ParamSetField aggregate requires runtime imports".into()))?
-                    .move_value;
-                let move_ref = self.module.declare_func_in_func(move_func_id, builder.func);
+                let move_ref = self.module
+                    .declare_func_in_func(runtime.move_value, builder.func);
                 builder.ins().call(move_ref, &[rt_handle, val, tydesc_ptr, current_addr]);
             }
         }

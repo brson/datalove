@@ -1,0 +1,86 @@
+// Reading and writing a part of a borrowed generic value whose erased type is
+// a composite holding `data`.
+//
+// Reading a part has three cases and only two used to work. A destination whose
+// static type is the truth takes a copy at an offset from the descriptor; one
+// that is exactly `data` takes a packed clone. A destination like
+// `{a: data, b: u32}` is neither: what is really there is `{a: u8, b: u32}`, so
+// it has to be converted position by position. Those were refused outright in
+// the compiled backends and gave silent garbage across a call boundary.
+//
+// Nothing new was needed to do it. `erase_local` and `reify_local` already walk
+// two descriptors and convert wherever one of them says `data` -- that is how
+// an owned parameter crosses a call -- and they take both descriptors as
+// pointers, so a descriptor found at run time does as well as a static one.
+// What was missing was calling them: the read cloned in the source's shape into
+// a destination laid out differently, the write copied one width over the
+// other, and `data_into_local` moved a payload out at the destination's width
+// rather than the payload's, reading past the end of the allocation.
+//
+// A value read out of something borrowed has to be left where it is, so the
+// read clones in the real shape first and moves the clone; see
+// `clone_into_erased_shape`.
+
+fun take<T>(ref x: T): ?T
+  ret some (x@)
+end fun
+
+// Read a whole sub-aggregate that itself holds the type parameter.
+fun get_q<T>(ref p: {q: {a: T, b: u32}, c: u32}): {a: T, b: u32}
+  ret p.q@
+end fun
+
+// Write one.
+fun set_q<T>(mut p: {q: {a: T, b: u32}, c: u32}, v: {a: T, b: u32})
+  set p.q = v
+end fun
+
+// The same conversion reached across a call boundary instead: `take` is handed
+// the descriptor of what is really there, so it packs a `data` holding a
+// concrete `{a: u8, b: u32}`, and the caller has to take it back out into its
+// own erased shape.
+fun via_call<T>(ref p: {q: {a: T, b: u32}, c: u32}): ?{a: T, b: u32}
+  ret take(ref p.q)
+end fun
+
+// And reached through a borrowed list element rather than a field.
+fun via_element<T>(ref xs: [{a: T, b: u32}], i: index): ?{a: T, b: u32}
+  ret take(ref xs[i]?)
+end fun
+
+// A tuple rather than a struct, and one with the erased position last.
+fun get_pair<T>(ref p: {q: (u32, T), c: u32}): (u32, T)
+  ret p.q@
+end fun
+
+// An option of a composite, so the walk goes through a discriminant.
+fun get_opt<T>(ref p: {q: ?{a: T, b: u32}, c: u32}): ?{a: T, b: u32}
+  ret p.q@
+end fun
+
+let s: {q: {a: u8, b: u32}, c: u32} = {q = {a = 1, b = 7}, c = 5}
+let got = get_q(ref s)
+debuglog got
+debuglog via_call(ref s)
+
+var m: {q: {a: u8, b: u32}, c: u32} = {q = {a = 1, b = 7}, c = 5}
+set_q(mut m, {a = 2, b = 9})
+debuglog m
+
+let xs: [{a: u8, b: u32}] = [{a = 1, b = 7}, {a = 2, b = 9}]
+debuglog via_element(ref xs, 1)
+
+// A string in the erased position, so the conversion has something to clone
+// rather than something that rides inline in the two words.
+let owned: {q: {a: string, b: u32}, c: u32} = {q = {a = "alpha", b = 7}, c = 5}
+debuglog get_q(ref owned)
+debuglog via_call(ref owned)
+
+let pair: {q: (u32, u8), c: u32} = {q = (7, 1), c = 5}
+debuglog get_pair(ref pair)
+
+let opt: {q: ?{a: u8, b: u32}, c: u32} = {q = some {a = 1, b = 7}, c = 5}
+debuglog get_opt(ref opt)
+
+let empty: {q: ?{a: u8, b: u32}, c: u32} = {q = none, c = 5}
+debuglog get_opt(ref empty)

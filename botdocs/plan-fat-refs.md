@@ -6,10 +6,8 @@ static type instead -- and inside a generic that type is a lie. This is the plan
 to carry the descriptor and take the layout from it.
 
 **Done**, for every way of reaching into a borrowed value: field projections,
-and list, map and tensor indexing. See "What was built" below. What follows
-describes the design; the one thing it does not cover is a *part* whose erased
-type is a composite holding `data`, which is still refused and is its own
-[Known issue](issues.md).
+list, map and tensor indexing, and parts whose erased type is a composite
+holding `data`. See "What was built" below.
 
 ## What is already in place
 
@@ -266,13 +264,10 @@ What landed, and where it differs from the sketch above:
   declaration. **JIT:** the three new symbols registered, without which every
   generic program aborted.
 
-Two cases are refused rather than written wrongly, both via
-`erasure_is_composite`: reading a field whose erased type is a composite holding
-`data` (it would have to be converted piece by piece), and writing one. A third
-route to the same conversion -- handing the borrow to a callee and reifying what
-comes back -- is *not* refused and gives silent garbage; it predates this work.
-All three are in [Known issues](issues.md) and none is reachable from
-`sys/std`.
+Three cases were refused or wrong at first and are now handled: reading a part
+whose erased type is a composite holding `data`, writing one, and handing such a
+borrow to a callee and taking back what it returns. See "The composite
+conversion" below.
 
 Element references landed after the fields, and needed one thing the fields did
 not: `arg_needs_unwrapping` in Cranelift and its two counterparts in the C
@@ -296,15 +291,47 @@ key is packed, by the reading `unwraps_the_element` already makes on the insert
 side. A tensor was the list's problem again: a stride from the static element
 type. `compute_tensor_element_addr` now takes a width rather than a constant.
 
+## The composite conversion
+
+Reading a part of a borrowed generic value has three cases. A destination whose
+static type is the truth takes a copy at an offset from the descriptor; one that
+is exactly `data` takes a packed clone. A destination like `{a: data, b: u32}`
+is neither: what is really there is `{a: u8, b: u32}`, so it has to be converted
+position by position.
+
+**Nothing new was needed.** `erase_local` and `reify_local` already walk two
+descriptors and convert wherever one of them says `data` -- that is how an owned
+parameter crosses a call -- and they take both descriptors as *pointers*, so one
+found at run time does as well as a static one. What was missing was calling
+them. Three places assumed instead:
+
+- The **read** cloned in the source's shape into a destination laid out
+  differently. A value read out of something borrowed has to be left where it
+  is, and `erase_local` moves, so `clone_into_erased_shape` clones in the real
+  shape first and moves the clone. That is the one allocation this adds, on the
+  one path that needs it.
+- The **write** copied one width over the other. It reifies now, which for two
+  descriptors that agree everywhere is the move it always was.
+- **`data_into_local`** moved a payload out at the *destination's* width rather
+  than the payload's, reading past the end of the allocation. That is the
+  silent-garbage route: a generic returning `?{a: T, b: u32}` gets a `data` back
+  from one whose own parameter was a bare `T`, so the box holds a concrete
+  `{a: u8, b: u32}` while the destination is laid out as `{a: data, b: u32}`.
+
+**Comparing widths does not decide whether anything was erased**, which cost a
+round of debugging. A `data` is two words and so is a `string`, so
+`{a: string, b: u32}` and `{a: data, b: u32}` are the same tag *and* the same
+size while being different layouts. Taking that for "nothing was erased" writes
+a string where a wrapper belongs, and what reads it back finds a descriptor
+pointer that is the string's first eight bytes -- `Result/32609`, in the run
+that caught it. `needs_erasure` walks the two descriptors the way `convert`
+does, looking only for a position where one says `data` and the other does not.
+
 ## What is left
 
-**The composite conversion**, which is what the remaining entry in this family
-comes back to: converting a value from the shape a descriptor says into the
-shape a static type says, piece by piece. `Erase` and `Reify` do it at a call
-boundary from two static types; nothing does it with a descriptor on one side.
-That is what would let a field whose erased type is `{a: data, b: u32}` be read,
-and what would let a borrow of one cross a call boundary without the two ends
-disagreeing about what is inside the `data`. See [Known issues](issues.md).
+Nothing in this family. The remaining [Known issue](issues.md) nearby is the
+owned container that is never unwrapped, which is a lowering gap rather than a
+descriptor one: no reference is involved and the value describes itself.
 
 ## Open questions
 

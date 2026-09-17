@@ -15,7 +15,6 @@ home here.
 ## Contents
 
 - [Indexing a container a generic function owns is never unwrapped](#user-content-indexing-a-container-a-generic-function-owns-is-never-unwrapped)
-- [A part of a borrowed generic aggregate that is itself a composite is refused](#user-content-a-part-of-a-borrowed-generic-aggregate-that-is-itself-a-composite-is-refused)
 - [A unit that fails part way through leaves its index to the next one](#user-content-a-unit-that-fails-part-way-through-leaves-its-index-to-the-next-one)
 - [Inlining never triggers from a caller in an earlier unit](#user-content-inlining-never-triggers-from-a-caller-in-an-earlier-unit)
 - [A field of a const cannot be projected, but a const can be destructured](#user-content-a-field-of-a-const-cannot-be-projected-but-a-const-can-be-destructured)
@@ -73,83 +72,6 @@ they fail for unrelated reasons.
 **The plan believes the reading half is done.** `plan-generics.md` says
 indexing reads the stride from the descriptor everywhere. That is true of the
 borrowed read and false of the owned one, which never gets as far as a stride.
-
-## A part of a borrowed generic aggregate that is itself a composite is refused
-
-**Reproduced.** Refused, not miscompiled. A gap rather than a fault.
-
-```datalove
-fun get_q<T>(ref p: {q: {a: T, b: u32}, c: u32}): {a: T, b: u32}
-  ret p.q@
-end fun
-
-fun set_q<T>(mut p: {q: {a: T, b: u32}, c: u32}, v: {a: T, b: u32})
-  set p.q = v
-end fun
-```
-
-Reading or writing a *whole sub-aggregate* that holds the type parameter, as
-opposed to reading a field of it, is refused by `erasure_is_composite`.
-
-Reading a part of a borrowed generic value has three cases and only two are
-handled. A destination whose static type is the truth takes a copy at an offset
-from the descriptor. A destination that is exactly `data` takes a packed one,
-which `dtlv_rti_field_read_local` does. A destination like `{a: data, b: u32}`
-is neither: what is really there is `{a: u8, b: u32}`, so it would have to be
-converted field by field, the way the boundary converts an owned parameter.
-Nothing does that from a descriptor rather than from a pair of static types.
-
-The write side refuses a bare `data` target as well as a composite one, because
-that direction would have to *unpack* rather than pack.
-
-**What it would take.** A runtime conversion driven by two descriptors -- what
-is there and what is wanted -- rather than by two static types. `Erase` and
-`Reify` already do this at a call boundary, but from types both of which the
-backend knows. Extending that to take the source shape from a descriptor is the
-same piece of work the erased-element read needed, and would subsume it.
-
-**A refusal here costs a case that would have worked.** A `data` written by
-hand and a `data` left by erasure are one `IrType`, so a genuinely written
-`{x: data}` field is refused too. That is the price of the two being
-indistinguishable, and it is paid only inside a generic, on a borrowed
-aggregate, for a field that is a composite holding `data`.
-
-**Not uniform.** The two AOT backends refuse at compile time. The jit falls
-back to the interpreter rather than refusing, and the interpreter refuses at run
-time -- `Interpreter::field_write_size` asserts the two sides agree on a width,
-and the read path panics in the runtime. So the program is rejected everywhere,
-but by three different mechanisms and three different messages.
-
-**And one route to it is not refused at all.** Handing the borrow to a callee
-rather than reading it here reaches the same conversion through the return
-value, where nothing checks:
-
-```datalove
-fun take<T>(ref x: T): ?T
-  ret some (x@)
-end fun
-
-fun f<T>(ref p: {q: {a: T, b: u32}, c: u32}): ?{a: T, b: u32}
-  ret take(ref p.q)
-end fun
-```
-
-`take` is handed the descriptor of what is really there, clones it and packs a
-`data` holding a *concrete* `{a: u8, b: u32}`. The caller then reifies that into
-`?{a: data, b: u32}`, its own erased shape, and the two disagree about what is
-inside the `data`. The compiled backends print `some {a = 0, b = 1}` and
-`some {a = 0, b = 2}` -- different garbage each -- and the interpreter panics.
-Reaching it through a borrowed list element rather than a field does the same.
-
-This predates fat references: the same program gave the same garbage at
-`6a1f611b`, checked by building it. What is new is that the borrow now carries
-the truthful descriptor, so the disagreement is between a truthful callee and an
-erased caller rather than between two consistently wrong ones.
-
-**All owned is fine.** The same shape with no borrow anywhere -- `take(p)` on an
-owned parameter -- gives `some {a = 1, b = 7}` in every backend, because the
-boundary converts field by field in both directions. So the missing piece is
-precisely a conversion driven by descriptors rather than by two static types.
 
 ## A unit that fails part way through leaves its index to the next one
 

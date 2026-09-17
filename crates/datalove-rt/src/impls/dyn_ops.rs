@@ -660,15 +660,18 @@ pub unsafe fn field_read(
         let field_ty = field_tydesc(base_tydesc, index);
         let src = base_in.add(offset as usize);
 
-        if (*dest_tydesc).type_tag != TyTag::Data {
+        // Nothing replaced by `data` means the destination's static type is the
+        // truth, and this is the shallow copy `GetField` means everywhere else.
+        // A destination that is a `data`, or that holds one where the field
+        // holds something real, is owned by the reader and wants a clone in
+        // that shape; `clone_erased_local` decides which.
+        if (*dest_tydesc).type_tag != TyTag::Data
+            && !crate::impls::boxing::needs_erasure(field_ty, dest_tydesc)
+        {
             core::ptr::copy_nonoverlapping(src, dest_out, (*field_ty).size as usize);
             return RtStatus::Ok;
         }
-        if (*field_ty).type_tag == TyTag::Data {
-            crate::impls::clone::clone_value(rt, src, field_ty, dest_out)
-        } else {
-            crate::impls::boxing::data_clone_from_local(rt, src, field_ty, dest_out)
-        }
+        crate::impls::boxing::clone_erased_local(rt, src, field_ty, dest_out, dest_tydesc)
     }
 }
 
