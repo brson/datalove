@@ -6,7 +6,7 @@
 //! - Direct lowering to LLVM/Cranelift (SSA values -> registers, slots -> stack)
 
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 
 pub mod display;
 pub mod layout;
@@ -18,7 +18,7 @@ pub use params::{replace_params_in_instruction, replace_params_in_terminator};
 pub use registry::{FunctionRegistry, ModuleFunctionRegistry, UnitFunctionRegistry};
 
 /// SSA value - defined exactly once, immutable.
-#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize)]
 pub struct ValueId(pub u32);
 
 /// Mutable slot - for var bindings, can be reassigned.
@@ -26,7 +26,7 @@ pub struct ValueId(pub u32);
 pub struct SlotId(pub u32);
 
 /// Function parameter - reference to caller's data.
-#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize)]
 pub struct ParamId(pub u32);
 
 /// Block identifier.
@@ -2416,6 +2416,118 @@ pub enum DescriptorRef {
     /// The descriptor this function was itself handed, by index into its own
     /// `descriptor_shapes`.
     Own(u32),
+}
+
+/// The descriptor for what a reference points at, where its own static type
+/// does not say.
+///
+/// A reference is a pointer and a descriptor. The descriptor is usually the one
+/// the referent's static type gives, and then it is a constant, nothing is
+/// carried, and a field offset folds at compile time -- which is every
+/// reference outside a generic. It is otherwise only where the static type says
+/// `data` because a type parameter stood there, and then it lies about the
+/// layout: a `data` is two words and the `u8` really behind it is one byte, so
+/// every field after it sits at an offset that is wrong by the difference.
+///
+/// A value absent from what `resolve_ref_descriptors` returns is the ordinary
+/// case: its static type describes it. These two
+/// are the only ways a reference comes to need one, because the only thing that
+/// lies is a borrowed parameter (`FunctionContext::descriptor_params`) and the
+/// only way to get further in is to project a field.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum RefDesc {
+    /// Field `index` of the descriptor handed over for a borrowed parameter,
+    /// named by its position in `descriptor_params`.
+    ParamField { param: u32, index: u32 },
+    /// Field `index` of the descriptor already worked out for `base`.
+    RefField { base: ValueId, index: u32 },
+}
+
+/// Whether a type holds a `data` inside something else.
+///
+/// Reading a part of a borrowed generic value has three cases, and this
+/// separates the one nothing handles. A destination whose type is the truth
+/// takes a copy; a destination that is exactly `data` takes a packed one, which
+/// the runtime does. A destination like `{a: data, b: u32}` is neither: the
+/// value behind it is `{a: u8, b: u32}`, so it has to be converted field by
+/// field, and refusing is better than copying the wrong bytes.
+///
+/// A `data` written by hand rather than left by erasure reads the same here.
+/// That costs a refusal on a case that would have worked, which is the price of
+/// the two being one `IrType`.
+pub fn erasure_is_composite(ty: &IrType) -> bool {
+    fn holds_data(ty: &IrType) -> bool {
+        match ty {
+            IrType::Data => true,
+            IrType::Tuple(tys) => tys.iter().any(holds_data),
+            IrType::Struct(fields) => fields.iter().any(|(_, t)| holds_data(t)),
+            IrType::Option(t) | IrType::Result(t) => holds_data(t),
+            IrType::Term(_, t) => holds_data(t),
+            IrType::Enum(variants) => variants.iter()
+                .any(|(_, payload)| payload.as_ref().is_some_and(holds_data)),
+            _ => false,
+        }
+    }
+    !matches!(ty, IrType::Data) && holds_data(ty)
+}
+
+/// Say what each reference in `unit` points at, where its static type does not.
+///
+/// One answer read by every backend, for the reason `resolve_call_descriptors`
+/// gives: four derivations of one question is the shape of most of the bugs
+/// this area has had. Derived rather than stored, so that specialization
+/// renumbering values and inlining offsetting them cannot leave it stale --
+/// each backend calls this once for the unit it is about to compile.
+///
+/// The roots are `descriptor_params`, which is already exactly the set of
+/// parameters whose static type does not describe what arrived. Nothing else
+/// roots one: a local holding an erased value holds a `data` for real, so its
+/// static type is honest, and an owned parameter was converted at the boundary.
+pub fn resolve_ref_descriptors(unit: &IrCodeUnit) -> BTreeMap<ValueId, RefDesc> {
+    let Some(ctx) = unit.function_context() else {
+        return BTreeMap::new();
+    };
+    if ctx.descriptor_params.is_empty() {
+        return BTreeMap::new();
+    }
+    let param_slot: BTreeMap<ParamId, u32> = ctx.descriptor_params.iter()
+        .enumerate()
+        .map(|(i, p)| (*p, i as u32))
+        .collect();
+
+    // A projection chain reaches further in one step at a time, and a step's
+    // source is always defined before it. Rather than assume an order over the
+    // blocks, grow the set until it stops growing; a chain is a handful of
+    // steps, so this settles at once.
+    let mut descs: BTreeMap<ValueId, RefDesc> = BTreeMap::new();
+    loop {
+        let mut added = false;
+        for block in &unit.blocks {
+            for instr in &block.instructions {
+                let Instruction::GetFieldRef { dest, src, field_index } = instr else {
+                    continue;
+                };
+                if descs.contains_key(dest) {
+                    continue;
+                }
+                let desc = match src {
+                    Operand::Param(p) => param_slot.get(p)
+                        .map(|slot| RefDesc::ParamField { param: *slot, index: *field_index }),
+                    Operand::Value(v) | Operand::ValueRef(v) => descs.contains_key(v)
+                        .then_some(RefDesc::RefField { base: *v, index: *field_index }),
+                    _ => None,
+                };
+                if let Some(desc) = desc {
+                    descs.insert(*dest, desc);
+                    added = true;
+                }
+            }
+        }
+        if !added {
+            break;
+        }
+    }
+    descs
 }
 
 /// Context for function execution./// Context for function execution.

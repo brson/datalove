@@ -584,3 +584,90 @@ fn unary_f64(op: DynUnOp, x: f64) -> f64 {
         DynUnOp::Neg => -x,
     }
 }
+
+/// The offset of field `index`, from the descriptor of the aggregate holding it.
+///
+/// See `dtlv_rti_field_offset` for why this is here rather than in each
+/// backend. A `Ref` descriptor is a one-field tuple wrapping what it points
+/// at, which the interpreter builds and the compiled backends do not, so it is
+/// unwrapped here when it appears.
+pub unsafe fn field_offset(tydesc: *const rtdt::TyDesc, index: u32) -> u32 {
+    unsafe {
+        match (*tydesc).type_tag {
+            TyTag::Tuple => {
+                let info = (*tydesc).type_info.tuple;
+                debug_assert!(index < info.num_fields, "tuple field index out of range");
+                (*info.fields.add(index as usize)).offset
+            }
+            TyTag::Struct => {
+                let info = (*tydesc).type_info.struct_;
+                debug_assert!(index < info.num_fields, "struct field index out of range");
+                (*info.fields.add(index as usize)).offset
+            }
+            other => panic!("field offset wanted from a {:?}", other),
+        }
+    }
+}
+
+/// The descriptor of field `index`, from the descriptor of the aggregate
+/// holding it.
+pub unsafe fn field_tydesc(tydesc: *const rtdt::TyDesc, index: u32) -> *const rtdt::TyDesc {
+    unsafe {
+        match (*tydesc).type_tag {
+            TyTag::Tuple => {
+                let info = (*tydesc).type_info.tuple;
+                debug_assert!(index < info.num_fields, "tuple field index out of range");
+                (*info.fields.add(index as usize)).tydesc
+            }
+            TyTag::Struct => {
+                let info = (*tydesc).type_info.struct_;
+                debug_assert!(index < info.num_fields, "struct field index out of range");
+                (*info.fields.add(index as usize)).tydesc
+            }
+            other => panic!("field descriptor wanted from a {:?}", other),
+        }
+    }
+}
+
+/// Read field `index` out of an aggregate whose layout only its descriptor
+/// says, into a destination laid out as `dest_tydesc`.
+///
+/// A borrowed parameter inside a generic is not converted at the boundary, so
+/// its static type says `data` where a type parameter stood and its real
+/// layout is something else. A field read from one therefore differs from an
+/// ordinary one twice over: the offset comes from the descriptor, and the value
+/// found there may need putting into a different shape on the way out.
+///
+/// The two readings of a `data`-shaped destination coincide the way they do in
+/// `list_get_erased_impl`: a generic asking for a field it cannot name wants
+/// one packed, and a field that really is a `data` wants one cloned. Comparing
+/// the field's own tag as well as the destination's is what tells them apart,
+/// and both are owned, which is what the `drop` lowering emits after such a
+/// read expects to find.
+///
+/// A destination that is not a `data` is one whose static type is the truth,
+/// and then this is the shallow copy `GetField` means everywhere else.
+pub unsafe fn field_read(
+    rt: LocalRtHandle,
+    dest_out: *mut u8,
+    dest_tydesc: *const rtdt::TyDesc,
+    base_in: *const u8,
+    base_tydesc: *const rtdt::TyDesc,
+    index: u32,
+) -> RtStatus {
+    unsafe {
+        let offset = field_offset(base_tydesc, index);
+        let field_ty = field_tydesc(base_tydesc, index);
+        let src = base_in.add(offset as usize);
+
+        if (*dest_tydesc).type_tag != TyTag::Data {
+            core::ptr::copy_nonoverlapping(src, dest_out, (*field_ty).size as usize);
+            return RtStatus::Ok;
+        }
+        if (*field_ty).type_tag == TyTag::Data {
+            crate::impls::clone::clone_value(rt, src, field_ty, dest_out)
+        } else {
+            crate::impls::boxing::data_clone_from_local(rt, src, field_ty, dest_out)
+        }
+    }
+}

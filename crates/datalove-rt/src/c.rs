@@ -2962,3 +2962,62 @@ pub unsafe extern "C-unwind" fn dtlv_rti_clear_debug_buffer(
     RtStatus::Ok
 }
 
+
+/// The offset of a field of an aggregate, taken from its descriptor.
+///
+/// A reference inside a generic points at a value whose static type says `data`
+/// where a type parameter stood, and a `data` is two words where the `u8`
+/// really behind it is one byte. So a field offset computed from that type is
+/// wrong by the difference, and has to be read from the descriptor of what
+/// arrived instead. The offset is already in there: building a descriptor is
+/// what settled the alignment.
+///
+/// Here rather than in each backend because a tuple and a struct do not agree
+/// on the order of their two fields -- `TyInfoTuple` is count then pointer and
+/// `TyInfoStruct` is pointer then count -- and four hand-written walks of that
+/// would get it wrong at least once.
+#[unsafe(no_mangle)]
+pub unsafe extern "C-unwind" fn dtlv_rti_field_offset(
+    tydesc: *const rtdt::TyDesc,
+    index: u32,
+) -> u32 {
+    debug_assert!(!tydesc.is_null(), "tydesc is null");
+    unsafe { crate::impls::dyn_ops::field_offset(tydesc, index) }
+}
+
+/// The descriptor of a field of an aggregate, taken from its descriptor.
+///
+/// The other half of `dtlv_rti_field_offset`: a projection narrows the pointer
+/// and the descriptor together, so that the next step of a chain, and whatever
+/// finally reads through the reference, each have the type of what is really
+/// there.
+#[unsafe(no_mangle)]
+pub unsafe extern "C-unwind" fn dtlv_rti_field_tydesc(
+    tydesc: *const rtdt::TyDesc,
+    index: u32,
+) -> *const rtdt::TyDesc {
+    debug_assert!(!tydesc.is_null(), "tydesc is null");
+    unsafe { crate::impls::dyn_ops::field_tydesc(tydesc, index) }
+}
+
+/// Read a field out of an aggregate whose layout only its descriptor says.
+///
+/// See `crate::impls::dyn_ops::field_read`.
+#[unsafe(no_mangle)]
+pub unsafe extern "C-unwind" fn dtlv_rti_field_read_local(
+    rt: LocalRtHandle,
+    dest_out: *mut u8,
+    dest_tydesc: *const rtdt::TyDesc,
+    base_in: *const u8,
+    base_tydesc: *const rtdt::TyDesc,
+    index: u32,
+) -> RtStatus {
+    debug_assert!(!rt.is_null(), "rt is null");
+    debug_assert!(!dest_out.is_null(), "dest_out is null");
+    debug_assert!(!dest_tydesc.is_null(), "dest_tydesc is null");
+    debug_assert!(!base_in.is_null(), "base_in is null");
+    debug_assert!(!base_tydesc.is_null(), "base_tydesc is null");
+    unsafe {
+        crate::impls::dyn_ops::field_read(rt, dest_out, dest_tydesc, base_in, base_tydesc, index)
+    }
+}

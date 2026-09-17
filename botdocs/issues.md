@@ -16,7 +16,6 @@ home here.
 
 - [A reference into an erased container carries the wrong type](#user-content-a-reference-into-an-erased-container-carries-the-wrong-type)
 - [Indexing a container a generic function owns is never unwrapped](#user-content-indexing-a-container-a-generic-function-owns-is-never-unwrapped)
-- [A borrowed aggregate holding a type parameter uses the wrong field offsets](#user-content-a-borrowed-aggregate-holding-a-type-parameter-uses-the-wrong-field-offsets)
 - [A unit that fails part way through leaves its index to the next one](#user-content-a-unit-that-fails-part-way-through-leaves-its-index-to-the-next-one)
 - [Inlining never triggers from a caller in an earlier unit](#user-content-inlining-never-triggers-from-a-caller-in-an-earlier-unit)
 - [A field of a const cannot be projected, but a const can be destructured](#user-content-a-field-of-a-const-cannot-be-projected-but-a-const-can-be-destructured)
@@ -71,35 +70,36 @@ decides whether the element wants wrapping.
 `backend/10_generic_indexing.dfs` says why that decision is the runtime's:
 "Deciding it in each backend would be four answers to one question."
 
-**The interpreter has the descriptor in hand, which is the frustrating part.**
-`Frame` keeps `param_tydescs`, a runtime descriptor per parameter, so the
-borrowing function holds the list's real descriptor and the element's is a
-field of it. What it does not have is anywhere to put one for an SSA value:
-`value_tydescs` lives in the layout and is computed from static types. A
-per-frame override, written by `ListElementRef` and read by `value_deref`,
-would close it there. `shape_descriptors` is the frame's note that this is the
-shape of the problem -- "A shape has no value to carry a descriptor with, so
-unlike everything else here it arrives on its own."
+**Most of what this needs now exists.** Fat references were built for the
+aggregate case and that entry is gone; what is left here is applying the same
+machinery to the three element-reference instructions.
 
-Doing that in the interpreter alone would be worse than leaving it. The
-compiled backends have no such table and no such descriptor: a reference is a
-machine pointer in a stack slot and the stride was decided when the code was
-emitted. The interpreter would then run a program the AOT backends miscompile,
-which is the divergence `10_generic_indexing` exists to prevent.
+In place already:
 
-**The trailing-descriptor channel does not reach this.** `shape_descriptors`
-passes descriptors to a callee, and `DescriptorRef` has two forms: `Static`, a
-descriptor the call site knows outright, and `Own(i)`, one this function was
-handed, forwarded whole. `shape_descriptors_for` matches a wanted shape against
-`own_shapes` exactly, so a function holding `[T0]` and asked for `T0` fails --
-it can forward a descriptor but not a part of one.
+- `RefDesc` and `resolve_ref_descriptors` (`datafun-ir`), which say what a
+  reference points at where its static type does not, derived per unit so that
+  specialization and inlining cannot leave it stale.
+- `Frame::value_tydescs` in the interpreter -- the per-frame override this entry
+  used to say was missing. `GetFieldRef` writes it and `value_deref` reads it.
+- `ref_desc_values` in Cranelift and `__rd{n}` in the C backend, the same thing
+  for the compiled ones.
+- `dtlv_rti_field_offset` and `dtlv_rti_field_tydesc`, one implementation of the
+  descriptor walk rather than four.
 
-Adding that part is small and does not break what the design rests on. Reading
-`element_tydesc` out of a list descriptor is a load, not construction, so
-"nothing is put together at run time" still holds; a `DescriptorRef` variant
-meaning "the element of the one I was handed at index i" would do it.
+What is left is a `RefDesc::Element` variant, the propagation rule for
+`ListElementRef`, `MapValueRef` and `TensorIndexRef`, and taking the stride from
+the descriptor in `emit_list_element_ref` and `compile_list_element_ref` instead
+of from `operand_type(list)`. The element's descriptor is a field of the list's,
+which is already reachable.
 
-**And it would not fix this fault either**, because the fault is not at a call
+**The trailing-descriptor channel does not reach this**, and never did.
+`shape_descriptors` passes descriptors to a callee, and `DescriptorRef` has two
+forms: `Static`, a descriptor the call site knows outright, and `Own(i)`, one
+this function was handed, forwarded whole. `shape_descriptors_for` matches a
+wanted shape against `own_shapes` exactly, so a function holding `[T0]` and
+asked for `T0` fails -- it can forward a descriptor but not a part of one.
+
+That is beside the point here anyway, because the fault is not at a call
 boundary. In
 
 ```
@@ -108,49 +108,12 @@ block2:
     v3 = call @0 u0(*v2)
 ```
 
-the `*v2` is read in `via`'s own frame, and `Frame::value_deref` takes the
-inner type from `v2`'s static tydesc. The value handed to the callee is already
-wrong before any descriptor is passed anywhere. A trailing descriptor gets the
-right type *to* a callee; it does not give a correctly typed local borrow.
-
-**What it would take: the descriptor travels with the reference.** A `Ref`
-becomes a pointer and a descriptor rather than a pointer, and
-`ListElementRef` writes the element descriptor it already reads off the list.
-
-This is the *fat values* option in
-[Generics and Specialization](plan-generics.md), not the one that plan turned
-down. The rejected option was "descriptors as dataflow in the IR", and what was
-wrong with it was stated precisely: "**No representation change**, and the
-largest surface of the three: two things that have to stay in agreement". A fat
-reference is a representation change, and there is nothing to keep in
-agreement -- it describes itself. The plan's verdict on that family was
-kinder: "a new representation kind that `IrType`, the layout, all four backends
-and the runtime each have to learn... a migration rather than a redesign."
-
-It would also *remove* a mechanism rather than add one. `descriptor_params`
-exists only for a borrowed parameter naming a type parameter, because "An owned
-container needs none: it arrives wrapped, and the wrapper carries the
-descriptor with it." A reference that carried its own would make a borrowed
-value self-describing the same way an owned one is, and that side channel --
-one of the two things that have to stay in agreement -- could go.
-
-The cost is honest: a reference goes from one word to two, and every producer
-and consumer of one in four backends and the runtime has to learn it. Making
-only *some* references fat would be worse than making all of them fat, since
-the representation would then depend on whether the pointee happened to be
-erased.
-
-That narrower form is now designed in
-[Fat references for borrowed generic values](plan-fat-refs.md), where it is
-step 4. Note that it needs the interpreter change described above as well as
-the compiled ones: all four backends fail this repro, the interpreter by
-segfault like the rest.
-
-The original sketch of it -- a fat reference that is deliberately not
-first-class, existing only between the projection that makes it and the read
-that consumes it -- is parked in
-[plan-generics.md](plan-generics.md#user-content-what-this-does-not-leave-a-borrow-taken-out-of-a-borrowed-container),
-with the questions it still needs answered.
+the `*v2` is read in `via`'s own frame. The value handed to the callee is
+already wrong before any descriptor is passed anywhere. A trailing descriptor
+gets the right type *to* a callee; it does not give a correctly typed local
+borrow. Carrying the descriptor with the reference is what does, which is what
+[Fat references for borrowed generic values](plan-fat-refs.md) now does for
+fields and has still to do for elements.
 
 **Cheaper than fixing it.** Refuse `ref xs[i]?` where the element type is
 erased, at typecheck, turning a segfault into a diagnostic in every backend at
@@ -224,89 +187,6 @@ they fail for unrelated reasons.
 **The plan believes the reading half is done.** `plan-generics.md` says
 indexing reads the stride from the descriptor everywhere. That is true of the
 borrowed read and false of the owned one, which never gets as far as a stride.
-
-## A borrowed aggregate holding a type parameter uses the wrong field offsets
-
-**Reproduced.** Under `ref`, a wrong answer with no crash. Under `mut`, memory
-corruption.
-
-```datalove
-fun second<T>(ref p: {a: T, b: u32}): u32
-  ret p.b
-end fun
-
-let s: {a: u8, b: u32} = {a = 1, b = 7}
-debuglog second(ref s)      // interpreter 7, jit 37, aot 1, c-aot 3962420992
-```
-
-```datalove
-fun bump<T>(mut p: {a: T, b: u32})
-  set p.b = 9
-end fun
-
-var s: {a: u8, b: u32} = {a = 1, b = 7}
-bump(mut s)
-debuglog s.b
-// interpreter 9; jit 7 then `free(): invalid next size (fast)`;
-// aot 7; c-aot `*** stack smashing detected ***`
-```
-
-The same family as the entry above and the same cause, arriving through the
-field offsets rather than through a stride. Nothing is converted at a borrow,
-so the memory holds `{a: u8, b: u32}` while the erased signature says
-`{a: data, b: u32}`. A `data` is two words and a `u8` is one byte, so every
-field after the erased one is at an offset that is wrong by the difference.
-
-The `ref` reads are garbage rather than a stable wrong value -- four backends
-give four answers, and the same backend gives different answers on different
-runs -- because the offset lands past the end of the real value. The `mut`
-case writes there, which is why it takes the heap and the stack with it. So
-`mut` is the severe half and `ref` is the quiet half.
-
-The interpreter is right in every case; the compiled backends are not. That is
-the worse half of this: `backend_tests` catches it only because it runs the
-four and compares, and there is no fixture for the shape.
-
-**Scope, checked by compiling and running each.**
-
-Owned is sound. Ten shapes were tried and all four backends agree on all ten:
-a bare `T` before a fixed field, a `T` read out with `@`, `[T]` as a field,
-`?T`, `!T`, a nested aggregate, a tuple `(T, u32)`, two parameters `{a: A,
-b: B, c: u32}`, three levels of nesting, an owned generic aggregate in return
-position, and one forwarded through a second generic. The boundary converts an
-owned value field by field, so the layout the callee was compiled for is the
-layout it gets.
-
-Borrowed is where it breaks:
-
-| shape | result |
-|---|---|
-| `ref {a: [T], b: u32}` | correct, by luck -- a list is a pointer and two indices whatever its elements are, so the erased and real layouts coincide |
-| `ref {b: u32, a: T}` | correct -- a field *before* the erased one is at the same offset either way |
-| `ref {a: T, b: u32}` | **wrong** -- reads garbage |
-| `mut {a: T, b: u32}` | **corrupts memory** -- writes past the value |
-
-So it is a bare type parameter under a borrow, with something after it. The
-container case is spared only because `[T]` and `[data]` happen to be the same
-size, and the reordered case only because nothing shifted.
-
-**What it says about the other entry.** The two are not a collection problem.
-They are one problem: a borrowed value is not converted, so its erased static
-type is a lie about its layout, and anything computing an address from that
-type computes it wrongly. A stride is one way to compute an address and a field
-offset is another.
-
-That bears on the fix. Carrying a descriptor with a reference is necessary and
-not sufficient: whatever reads through the reference has to take the layout
-from the descriptor rather than from the static type, which in the compiled
-backends means an offset that is no longer a compile-time constant. Converting
-at a borrow is the alternative, and is the thing a borrow exists not to do.
-
-Both entries are planned out together in
-[Fat references for borrowed generic values](plan-fat-refs.md). The descriptor
-already arrives -- `descriptor_params` carries it for exactly these parameters
--- and a tydesc already holds precomputed field offsets, so the missing piece
-is that a projection drops it rather than narrowing it.
 
 ## A unit that fails part way through leaves its index to the next one
 

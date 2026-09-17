@@ -36,6 +36,16 @@ pub struct Frame {
     /// The shapes this function declared, so a call site inside it can tell
     /// which of them a callee's need matches.
     own_shapes: Vec<datalove_datafun_ir::DescriptorShape>,
+    /// What a reference points at, where the layout's descriptor for it is a
+    /// lie.
+    ///
+    /// `value_tydescs` lives in the layout and is computed from static types,
+    /// which inside a generic say `data` where a type parameter stood. A
+    /// projection of a borrowed parameter knows better -- it read the field's
+    /// own descriptor off the one the caller supplied -- and this is where it
+    /// puts it. Null means the layout's answer was right, which is every value
+    /// outside a generic.
+    value_tydescs: Vec<*const TyDesc>,
 }
 
 impl Frame {
@@ -71,6 +81,7 @@ impl Frame {
             _ => Vec::new(),
         };
 
+        let value_count = layout.value_offsets.len();
         match &unit.context {
             CodeUnitContext::Function(ctx) => {
                 let param_count = ctx.params.len();
@@ -84,10 +95,10 @@ impl Frame {
                     param_initialized: vec![false; param_count],
                     shape_descriptors: Vec::new(),
                     own_shapes,
+                    value_tydescs: vec![std::ptr::null(); value_count],
                 }
             }
             CodeUnitContext::Script(_) => {
-                let value_count = layout.value_offsets.len();
                 Self {
                     data,
                     layout,
@@ -98,6 +109,7 @@ impl Frame {
                     param_initialized: Vec::new(),
                     shape_descriptors: Vec::new(),
                     own_shapes: own_shapes.clone(),
+                    value_tydescs: vec![std::ptr::null(); value_count],
                 }
             }
             CodeUnitContext::Native(ctx) => {
@@ -179,12 +191,22 @@ impl Frame {
 
         // Read the stored pointer.
         let stored_ptr = unsafe { *(ptr as *const *mut u8) };
-        // Get inner tydesc from the ref's tydesc (stored as 1-element tuple).
+        // What it points at is whatever the projection that made it found, when
+        // it found out; otherwise the ref's own tydesc, which wraps the inner
+        // type as a one-field tuple.
+        if !self.value_tydescs[idx].is_null() {
+            return Value { ptr: stored_ptr, tydesc: self.value_tydescs[idx] };
+        }
         let inner_tydesc = unsafe {
             let tuple_info = (*tydesc).type_info.tuple;
             (*tuple_info.fields).tydesc
         };
         Value { ptr: stored_ptr, tydesc: inner_tydesc }
+    }
+
+    /// Record what a reference points at, where the layout does not say.
+    pub fn set_value_tydesc(&mut self, id: ValueId, tydesc: *const TyDesc) {
+        self.value_tydescs[id.0 as usize] = tydesc;
     }
 
     /// Get destination for a slot.

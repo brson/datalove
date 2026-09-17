@@ -336,6 +336,9 @@ impl CAotCompiler {
         writeln!(out, "extern uint8_t dtlv_rti_set_debug_mode(void* rt, uint8_t mode);").unwrap();
         writeln!(out, "extern uint8_t dtlv_rti_debuglog_local(void* rt, const void* value_ref, const dtlv_tydesc_t* tydesc);").unwrap();
         writeln!(out, "extern uint8_t dtlv_rti_any_destroy_local(void* rt, void* value, const dtlv_tydesc_t* tydesc);").unwrap();
+        writeln!(out, "extern uint32_t dtlv_rti_field_offset(const dtlv_tydesc_t* tydesc, uint32_t index);").unwrap();
+        writeln!(out, "extern const dtlv_tydesc_t* dtlv_rti_field_tydesc(const dtlv_tydesc_t* tydesc, uint32_t index);").unwrap();
+        writeln!(out, "extern uint8_t dtlv_rti_field_read_local(void* rt, void* dest, const dtlv_tydesc_t* dest_tydesc, const void* base, const dtlv_tydesc_t* base_tydesc, uint32_t index);").unwrap();
         writeln!(out, "extern void* dtlv_rti_mem_alloc_raw_local(void* rt, uint32_t size, uint32_t align, index_t count);").unwrap();
         writeln!(out, "extern uint8_t dtlv_rti_string_from_bytes(void* rt, const uint8_t* bytes, uint32_t len, void* result_out, const dtlv_tydesc_t* tydesc);").unwrap();
         writeln!(out, "extern uint8_t dtlv_rti_list_create_local(void* rt, void* value_out, const dtlv_tydesc_t* tydesc);").unwrap();

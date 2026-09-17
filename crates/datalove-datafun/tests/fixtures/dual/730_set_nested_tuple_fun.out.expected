@@ -27,8 +27,8 @@ DualAnalysis(
                         store.copy s0, v4
                         v5 = const 99u32
                         setfield s0.0.1, v5
-                        v6 = getfield s0.0
-                        v7 = getfield v6.1
+                        v6 = getfieldref s0.0
+                        v7 = getfield *v6.1
                         return v7
                 """,
             ),
@@ -51,8 +51,8 @@ DualAnalysis(
                         store.copy s0, v4
                         v5 = const 99u32
                         setfield s0.0.1, v5
-                        v6 = getfield s0.0
-                        v7 = getfield v6.1
+                        v6 = getfieldref s0.0
+                        v7 = getfield *v6.1
                         return v7
                 """,
             ),

@@ -1,13 +1,13 @@
 # Fat references for borrowed generic values
 
-A reference is a pointer and a descriptor. Today only the pointer survives, so
-anything computing an address from a reference computes it from the referent's
-static type instead -- and inside a generic that type is a lie. This is the
-plan to carry the descriptor and take the layout from it.
+A reference is a pointer and a descriptor. Only the pointer used to survive, so
+anything computing an address from a reference computed it from the referent's
+static type instead -- and inside a generic that type is a lie. This is the plan
+to carry the descriptor and take the layout from it.
 
-It fixes two entries in [Known issues](issues.md): the borrowed aggregate using
-the wrong field offsets, and the reference into an erased container carrying
-the wrong type.
+**Field projections are done**; see "What was built" below. Element references
+are not, and remain the one open [Known issue](issues.md) of this family. What
+follows describes the design as a whole; read it with that split in mind.
 
 ## What is already in place
 
@@ -110,22 +110,19 @@ pub enum RefDesc {
 }
 ```
 
-Held as a side table on `IrCodeUnit`, absent meaning `Static`:
-
-```rust
-pub ref_descs: BTreeMap<ValueId, RefDesc>,
-```
+Absence means `Static`, so the enum as built has no such variant and no
+`Operand` in it -- see "What was built" for the shape it actually took.
 
 ### Where it is computed
 
 One pass, `resolve_ref_descriptors`, beside `resolve_call_descriptors` in
-`datafun-ir`, run after specialization and inlining have finished rewriting
-instructions. The reason is the one already written above
+`datafun-ir`, derived per unit by the backend about to compile it rather than
+stored anywhere. The reason is the one already written above
 `shape_descriptors_for`: *"One implementation, read by every backend, because a
 call site and a callee signature disagreeing about the trailing arguments is
 the failure this area keeps producing."* A side table keyed on `ValueId` that
 lowering filled in would have to be maintained through inlining's renumbering;
-a pass run afterwards cannot drift.
+deriving it on demand cannot drift at all.
 
 Roots are `descriptor_params`, unchanged -- it is already exactly the right
 set. Propagation is one rule per reference-producing instruction:
@@ -226,19 +223,58 @@ descriptor is missing -- the value is self-describing, it is simply never
 opened. Fat references do not reach it. It has its own entry in
 [Known issues](issues.md).
 
-## Staging
+## What was built
 
-1. Add `RefDesc`, the side table, and `resolve_ref_descriptors` producing
-   `Static` for everything. No behavior change; the test suite should be
-   untouched, which is the proof that the plumbing is inert.
-2. Seed roots from `descriptor_params`, propagate through `GetFieldRef`,
-   consume in the offset. This closes the borrowed-aggregate entry, `ref` and
-   `mut` both.
-3. Consume in read-through, `RefStore`, `RefStoreTracked` and `DropViaRef`.
-4. Propagate and consume through `ListElementRef`, `MapValueRef` and
-   `TensorIndexRef`. This closes the erased-container entry and is what would
-   let the index-projection gate be reconsidered -- separately, since that is a
-   language decision and not this one.
+Steps 1 to 3 are done: field projections of borrowed generic aggregates are
+right in all four backends, and `backend/15_borrowed_generic_aggregate.dfs`
+records what the four agree on across ten shapes.
+
+What landed, and where it differs from the sketch above:
+
+- **`RefDesc` and `resolve_ref_descriptors`** (`datafun-ir`). Derived per unit
+  rather than stored on `IrCodeUnit`, which is the one change of substance from
+  the plan: a stored table would have to survive specialization renumbering
+  values and inlining offsetting them, and each backend calling the pure
+  function once for the unit it is compiling cannot go stale. `ValueId` and
+  `ParamId` gained `Ord` for the `BTreeMap`.
+- **`dtlv_rti_field_offset` / `dtlv_rti_field_tydesc`**, one walk of the
+  descriptor rather than four, as planned.
+- **`dtlv_rti_field_read_local`**, which was *not* in the plan and turned out to
+  be necessary. A field of the erased type is not only at a different offset,
+  it is a different shape: `p.a` where `a: T` is really a `u16` and the
+  destination is the `data` the signature says. Packing it belongs in the
+  runtime for the same reason the erased list get does -- a destination that
+  really is a `data` wants a clone and one standing for a `T` wants a pack, and
+  the two look alike from a call site.
+- **Intermediate projections stopped copying.** `lower_place_value` used to walk
+  a chain like `p.q.b` by copying `p.q` out and reading `b` from the copy.
+  Inside a generic that copy garbles the value before the next step runs, since
+  the destination's layout is the erased one. Intermediates are now borrows.
+  This is cheaper outside a generic too -- one fewer aggregate copy per step --
+  and is what changed four `dual` fixtures' IR dumps, with their outputs
+  unchanged.
+- **`Frame::value_tydescs`** in the interpreter: the per-frame override
+  `issues.md` said was missing. The interpreter needed it after all. It was
+  right on the single-step cases only because a parameter's descriptor is
+  already per-frame; a chain, and a read of the erased field itself, were wrong
+  there too.
+- **Cranelift:** `ref_desc_values`, a scalar destination taking a dynamic offset
+  and a load rather than a runtime call, everything else through `field_read`.
+  **C:** `__rd{n}` declared in the prologue so a `goto` never jumps a
+  declaration. **JIT:** the three new symbols registered, without which every
+  generic program aborted.
+
+Two cases are refused rather than written wrongly, both via
+`erasure_is_composite`: reading a field whose erased type is a composite holding
+`data` (it would have to be converted piece by piece), and writing one. Neither
+is reachable from `sys/std`.
+
+## What is left
+
+Step 4, the element references -- `ListElementRef`, `MapValueRef`,
+`TensorIndexRef` -- which is the remaining [Known issue](issues.md). It needs a
+`RefDesc::Element` variant, the propagation rule, and the stride taken from the
+descriptor. The rest of the machinery is in place.
 
 ## Open questions
 

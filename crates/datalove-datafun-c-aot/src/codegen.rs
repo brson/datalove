@@ -73,6 +73,15 @@ pub fn emit_function(
         writeln!(out, "    memset(__frame + {}, TRACK_UNINIT, {});", layout.tracking_offset, layout.tracking_count).unwrap();
     }
 
+    // A reference whose static type does not describe what it points at carries
+    // a descriptor beside the pointer. Declared here rather than where it is
+    // assigned, so that a `goto` between blocks never jumps over a declaration.
+    // Empty outside a generic.
+    let ref_descs = datalove_datafun_ir::resolve_ref_descriptors(unit);
+    for vid in ref_descs.keys() {
+        writeln!(out, "    const dtlv_tydesc_t* __rd{};", vid.0).unwrap();
+    }
+
     // Create function context for codegen.
     let mut ctx = FunctionCodegenContext {
         unit,
@@ -82,6 +91,7 @@ pub fn emit_function(
         registry,
         uses_sret,
         const_scratch: 0,
+        ref_descs,
     };
 
     // Emit blocks.
@@ -130,6 +140,8 @@ pub fn emit_script_body(
 
     // Create script context for codegen.
     // Script body uses itself for local function lookup (it contains nested_units).
+    // A script unit has no type parameters, so no reference in one carries a
+    // descriptor.
     let mut ctx = FunctionCodegenContext {
         unit,
         parent_unit: None,
@@ -138,6 +150,7 @@ pub fn emit_script_body(
         registry,
         uses_sret: false,
         const_scratch: 0,
+        ref_descs: Default::default(),
     };
 
     // Emit blocks.
@@ -169,6 +182,11 @@ struct FunctionCodegenContext<'a> {
     /// into the list being built, and came out empty. The count makes each
     /// name its own.
     const_scratch: u32,
+    /// What each reference points at, where its static type does not say.
+    ///
+    /// Carried in a `__rd{n}` declared in the prologue. See
+    /// `datalove_datafun_ir::RefDesc`.
+    ref_descs: std::collections::BTreeMap<ValueId, datalove_datafun_ir::RefDesc>,
 }
 
 impl<'a> FunctionCodegenContext<'a> {
@@ -1391,6 +1409,25 @@ impl<'a> FunctionCodegenContext<'a> {
         let src_ty = self.operand_type(src);
         let dest_addr = self.value_addr(dest);
 
+        // A base whose static type does not describe it has the field's offset
+        // and the field's own type read from the descriptor of what arrived.
+        // The runtime does both, and decides there whether the value wants
+        // packing on the way out; see `dtlv_rti_field_read_local`.
+        if let Some(base_desc) = self.operand_ref_desc(src) {
+            let dest_ty = self.value_type(dest).clone();
+            if datalove_datafun_ir::erasure_is_composite(&dest_ty) {
+                return Err(CAotError::Unsupported(format!(
+                    "reading field {} of a borrowed generic aggregate into a {:?}: a \
+                     field whose erased type is a composite holding `data` has to be \
+                     converted piece by piece, which is not done here",
+                    field_index, dest_ty)));
+            }
+            let dest_tydesc = self.tydesc_name(&dest_ty);
+            writeln!(out, "    dtlv_rti_field_read_local(rt, {}, &{}, {}, {}, {});",
+                dest_addr, dest_tydesc, src_addr, base_desc, field_index).unwrap();
+            return Ok(());
+        }
+
         let field_types: Vec<IrType> = match src_ty {
             IrType::Tuple(tys) => tys.clone(),
             IrType::Struct(fs) => fs.iter().map(|(_, ty)| ty.clone()).collect(),
@@ -1421,6 +1458,19 @@ impl<'a> FunctionCodegenContext<'a> {
         let src_addr = self.operand_addr(src);
         let src_ty = self.operand_type(src);
         let dest_addr = self.value_addr(dest);
+
+        // A reference whose static type says `data` where a type parameter
+        // stood lies about the layout, so the offset comes from the descriptor
+        // of what really arrived, and the field's own descriptor goes on to
+        // describe this reference. Both are in there already: building a
+        // descriptor is what settled the offsets.
+        if let Some(base_desc) = self.operand_ref_desc(src) {
+            writeln!(out, "    __rd{} = dtlv_rti_field_tydesc({}, {});",
+                dest.0, base_desc, field_index).unwrap();
+            writeln!(out, "    *(void**){} = (uint8_t*){} + dtlv_rti_field_offset({}, {});",
+                dest_addr, src_addr, base_desc, field_index).unwrap();
+            return Ok(());
+        }
 
         let field_types: Vec<IrType> = match src_ty {
             IrType::Tuple(tys) => tys.clone(),
@@ -2342,13 +2392,61 @@ impl<'a> FunctionCodegenContext<'a> {
     /// so one built from that type would misdescribe the value. Everything
     /// else is described by its own type, which is a static descriptor.
     fn operand_tydesc(&mut self, operand: &Operand) -> String {
-        if let Operand::Param(param_id) = operand {
-            if let Some(i) = self.func_descriptor_index(*param_id) {
-                return format!("d{}", i);
-            }
+        if let Some(desc) = self.operand_ref_desc(operand) {
+            return desc;
         }
         let ty = self.operand_type(operand).clone();
         format!("&{}", self.tydesc_name(&ty))
+    }
+
+    /// Walk a field path from a base whose layout only its descriptor says.
+    ///
+    /// Returns the address of the field and the static type the erased
+    /// signature gives it. The offsets are read from the descriptor at each
+    /// step, and the descriptor is narrowed alongside, because a path reaches
+    /// further in one field at a time and each step's offsets live in the
+    /// previous step's descriptor.
+    ///
+    /// The static type comes back so the caller can refuse a target the
+    /// descriptor cannot settle on its own; see `erasure_is_composite`.
+    fn walk_dynamic_field_path(
+        &self,
+        base_addr: String,
+        base_desc: String,
+        base_ty: &IrType,
+        field_path: &[u32],
+    ) -> Result<(String, IrType), CAotError> {
+        let mut addr = base_addr;
+        let mut desc = base_desc;
+        let mut ty = base_ty.clone();
+        for &idx in field_path {
+            let field_types: Vec<IrType> = match &ty {
+                IrType::Tuple(tys) => tys.clone(),
+                IrType::Struct(fs) => fs.iter().map(|(_, t)| t.clone()).collect(),
+                other => return Err(CAotError::Codegen(format!(
+                    "field path steps through a {:?}, which has no fields", other))),
+            };
+            addr = format!("((uint8_t*){} + dtlv_rti_field_offset({}, {}))", addr, desc, idx);
+            desc = format!("dtlv_rti_field_tydesc({}, {})", desc, idx);
+            ty = field_types[idx as usize].clone();
+        }
+        Ok((addr, ty))
+    }
+
+    /// The descriptor for what an operand names, where its static type does not
+    /// describe it, as a C expression of pointer type.
+    ///
+    /// That is a borrowed parameter our own caller described, and any reference
+    /// projected out of one. `None` everywhere else, meaning the static type is
+    /// the truth and a constant offset is right.
+    fn operand_ref_desc(&self, operand: &Operand) -> Option<String> {
+        match operand {
+            Operand::Param(param_id) => self.func_descriptor_index(*param_id)
+                .map(|i| format!("d{}", i)),
+            Operand::Value(vid) | Operand::ValueRef(vid) => self.ref_descs.contains_key(vid)
+                .then(|| format!("__rd{}", vid.0)),
+            _ => None,
+        }
     }
 
     /// Where this function's own supplied descriptor for `param` arrives, if
@@ -2551,6 +2649,39 @@ impl<'a> FunctionCodegenContext<'a> {
         let func_ctx = self.unit.function_context().unwrap();
         let mut current_ty = func_ctx.param_types[param.0 as usize].clone();
         let mut current_addr = param_addr;
+
+        // A parameter our caller described is one whose static type says `data`
+        // where a type parameter stood, so the offsets it gives are wrong by
+        // whatever the difference in width is. Writing at one of those is the
+        // severe half of this: it puts the value past the end of what the
+        // caller owns.
+        if let Some(base_desc) = self.operand_ref_desc(&Operand::Param(param)) {
+            let (addr, field_ty) = self.walk_dynamic_field_path(
+                current_addr, base_desc, &current_ty, field_path)?;
+            if matches!(field_ty, IrType::Data) || datalove_datafun_ir::erasure_is_composite(&field_ty) {
+                return Err(CAotError::Unsupported(format!(
+                    "writing field {:?} of a borrowed generic aggregate, whose erased \
+                     type is {:?}: the value would have to be converted into the shape \
+                     the descriptor says, which is not done here",
+                    field_path, field_ty)));
+            }
+            let src_addr = self.operand_addr(value);
+            match types::ir_type_to_crepr(&field_ty) {
+                CRepr::Scalar(c_ty) => {
+                    writeln!(out, "    *({c_ty}*){addr} = *({c_ty}*){src_addr};").unwrap();
+                }
+                CRepr::Aggregate(layout) if layout.size > 0 => {
+                    writeln!(out, "    memcpy({}, {}, {});", addr, src_addr, layout.size).unwrap();
+                }
+                CRepr::Aggregate(_) => {}
+            }
+            if tracked {
+                if let Some(track_offset) = self.layout.param_tracking_byte(param.0) {
+                    writeln!(out, "    __frame[{}] = TRACK_LIVE;", track_offset).unwrap();
+                }
+            }
+            return Ok(());
+        }
 
         for &idx in field_path {
             let field_types: Vec<IrType> = match &current_ty {

@@ -1730,9 +1730,6 @@ fn lower_place_expression<'db>(
     let mut current_op = ctx.lookup_var(root_name_str)
         .unwrap_or_else(|| panic!("variable '{}' not found - typechecker should catch this", root_name_str));
 
-    // Check if there are any index steps to determine lowering strategy.
-    let has_index_steps = place.steps.iter().any(|s| matches!(s, ast::PlaceStep::Index(_)));
-
     // Process all steps. For intermediate steps, we get refs. For the final
     // index step, we use ListGet/MapGet to get a value.
     let last_idx = place.steps.len() - 1;
@@ -1749,9 +1746,14 @@ fn lower_place_expression<'db>(
                     let dest = ctx.fresh_value(result_type);
                     ctx.emit_get_field(dest, current_op, field_index);
                     return Ok(dest);
-                } else if has_index_steps {
-                    // Intermediate field step with index steps — use GetFieldRef
-                    // to keep navigating via refs.
+                } else {
+                    // Intermediate field step -- navigate by reference rather
+                    // than copying the whole intermediate out to read one field
+                    // of it. Cheaper everywhere, and the only thing that works
+                    // inside a generic: an intermediate whose static type says
+                    // `data` where a type parameter stood has a different
+                    // layout from the value it would be copied into, so the
+                    // copy garbles it before the next step even runs.
                     let field_type = field_type_from_base(&base_type, field_index);
                     let dest = ctx.fresh_value(IrType::Ref(Box::new(field_type)));
                     ctx.emit(Instruction::GetFieldRef {
@@ -1760,12 +1762,6 @@ fn lower_place_expression<'db>(
                         field_index,
                     });
                     current_op = Operand::ValueRef(dest);
-                } else {
-                    // Intermediate field step, no index steps — use GetField to walk.
-                    let field_type = field_type_from_base(&base_type, field_index);
-                    let dest = ctx.fresh_value(field_type);
-                    ctx.emit_get_field(dest, current_op, field_index);
-                    current_op = Operand::Value(dest);
                 }
             }
             ast::PlaceStep::Index(idx) => {

@@ -710,6 +710,9 @@ fn register_runtime_symbols(jit_builder: &mut JITBuilder) {
     jit_builder.symbol("dtlv_rti_debuglog_local", c::dtlv_rti_debuglog_local as *const u8);
     jit_builder.symbol("dtlv_rti_any_destroy_local", c::dtlv_rti_any_destroy_local as *const u8);
     jit_builder.symbol("dtlv_rti_mem_alloc_raw_local", c::dtlv_rti_mem_alloc_raw_local as *const u8);
+    jit_builder.symbol("dtlv_rti_field_offset", c::dtlv_rti_field_offset as *const u8);
+    jit_builder.symbol("dtlv_rti_field_tydesc", c::dtlv_rti_field_tydesc as *const u8);
+    jit_builder.symbol("dtlv_rti_field_read_local", c::dtlv_rti_field_read_local as *const u8);
 
     // String functions.
     jit_builder.symbol("dtlv_rti_string_create_local", c::dtlv_rti_string_create_local as *const u8);

@@ -1,0 +1,94 @@
+// Reading and writing a part of an aggregate borrowed inside a generic.
+//
+// Nothing is converted at a borrow, so the callee's static type for the
+// parameter is the erased one -- `{a: data, b: u32}` where `{a: u8, b: u32}`
+// was passed -- and it is a lie about the layout. A `data` is two words and a
+// `u8` is one byte, so every field after the erased one sits at an offset that
+// is wrong by the difference.
+//
+// So the offset comes from the descriptor the call site supplied, which
+// `descriptor_params` was already carrying, and a projection narrows that
+// descriptor alongside the pointer so a chain and a read through the end of one
+// each know what is really there.
+//
+// Every case here was wrong before, and wrong differently in each backend: the
+// reads returned garbage that varied run to run, and the write through `mut`
+// put the value past the end of what the caller owns, which corrupted the heap
+// under the jit and smashed the stack under the C backend.
+
+fun second<T>(ref p: {a: T, b: u32}): u32
+  ret p.b
+end fun
+
+fun tuple_second<T>(ref p: (T, u32)): u32
+  ret p.1
+end fun
+
+// The erased field itself, which has to be packed on the way out: what is
+// really there is a `u16` and the destination is the `data` the signature says.
+fun erased_field<T>(ref p: {a: T, b: u32}): T
+  ret p.a@
+end fun
+
+// A chain. The intermediate is never copied out -- copying a value whose erased
+// layout differs from its real one garbles it before the next step runs -- so
+// both steps are borrows and only the last field is read.
+fun nested<T>(ref p: {q: {a: T, b: u32}, c: u32}): u32
+  ret p.q.b
+end fun
+
+// Handing a projection on to something that borrows it. The descriptor travels
+// with it, so the callee is told what it really has.
+fun through(ref n: u32): u32
+  ret n@
+end fun
+
+fun onward<T>(ref p: {a: T, b: u32}): u32
+  ret through(ref p.b)
+end fun
+
+// Writing. The severe half: a wrong offset here is a write past the value.
+fun bump<T>(mut p: {a: T, b: u32})
+  set p.b = 99
+end fun
+
+// A field before the erased one is at the same offset either way, and a `[T]`
+// field is the same width as a `[data]`. Both were right before by luck rather
+// than by design, so they are here to stay right.
+fun erased_last<T>(ref p: {b: u32, a: T}): u32
+  ret p.b
+end fun
+
+fun container_field<T>(ref p: {a: [T], b: u32}): u32
+  ret p.b
+end fun
+
+let s: {a: u8, b: u32} = {a = 1, b = 7}
+debuglog second(ref s)
+debuglog erased_field(ref s)
+debuglog onward(ref s)
+
+let wide: {a: u16, b: u32} = {a = 300, b = 7}
+debuglog erased_field(ref wide)
+
+let t: (u8, u32) = (1, 7)
+debuglog tuple_second(ref t)
+
+let deep: {q: {a: u8, b: u32}, c: u32} = {q = {a = 1, b = 7}, c = 5}
+debuglog nested(ref deep)
+
+var m: {a: u8, b: u32} = {a = 1, b = 7}
+bump(mut m)
+debuglog m.b
+
+let last: {b: u32, a: u8} = {b = 7, a = 1}
+debuglog erased_last(ref last)
+
+let held: {a: [u8], b: u32} = {a = [1, 2], b = 7}
+debuglog container_field(ref held)
+
+// A string element makes the erased field one that cannot ride inline in a
+// `data`, so the pack allocates rather than packing into the two words.
+let owned: {a: string, b: u32} = {a = "alpha", b = 7}
+debuglog second(ref owned)
+debuglog erased_field(ref owned)

@@ -243,13 +243,27 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         builder: &mut FunctionBuilder,
         operand: &Operand,
     ) -> Result<cl_ir::Value, CraneliftError> {
-        if let Operand::Param(param_id) = operand {
-            if let Some(&supplied) = self.descriptor_values.get(param_id) {
-                return Ok(supplied);
-            }
+        if let Some(desc) = self.operand_ref_desc(operand) {
+            return Ok(desc);
         }
         let ty = self.get_operand_type(operand)?;
         self.static_tydesc(builder, &ty)
+    }
+
+    /// The descriptor for what an operand names, where its static type does not
+    /// describe it.
+    ///
+    /// That is a borrowed parameter our own caller described, and any reference
+    /// projected out of one. `None` everywhere else, meaning the static type is
+    /// the truth and a constant offset is right.
+    pub(super) fn operand_ref_desc(&self, operand: &Operand) -> Option<cl_ir::Value> {
+        match operand {
+            Operand::Param(param_id) => self.descriptor_values.get(param_id).copied(),
+            Operand::Value(vid) | Operand::ValueRef(vid) => {
+                self.ref_desc_values.get(vid).copied()
+            }
+            _ => None,
+        }
     }
 
     /// The static descriptor symbol for a type, as a runtime pointer.

@@ -558,19 +558,21 @@ this area has had.
 > **A borrowed value's erased type is a lie about its layout.** The table above
 > says every position works, and it was checked by compiling each. What none of
 > those checks covered is reading a *part* of a borrowed value whose erased
-> layout differs from its real one: `ref p: {a: T, b: u32}` is compiled against
-> `{a: data, b: u32}` while the caller holds `{a: u8, b: u32}`, so `p.b` is at
-> the wrong offset in the compiled backends and right in the interpreter. A
-> borrowed collection escapes only because `[T]` and `[data]` are the same
-> size. Under `mut` the same offset is *written*, which corrupts the heap in
-> the jit and smashes the stack in the C backend.
+> layout differs from its real one: `ref p: {a: T, b: u32}` was compiled against
+> `{a: data, b: u32}` while the caller holds `{a: u8, b: u32}`, so `p.b` was at
+> the wrong offset -- and under `mut` the same offset was *written*.
 >
-> Owned is sound, and was checked the same way: ten shapes -- a bare `T`, a
-> `[T]` field, `?T`, `!T`, nested aggregates, tuples, two parameters, three
-> levels, return position, and forwarding through a second generic -- agree
-> across all four backends. The boundary converts an owned value field by
-> field, so what breaks is the borrow rather than the aggregate.
-> See [Known issues](issues.md).
+> **Fixed for fields.** A reference now carries the descriptor of what it points
+> at, and offsets come from that; see
+> [Fat references for borrowed generic values](plan-fat-refs.md) and
+> `backend/15_borrowed_generic_aggregate.dfs`. Element references still do not,
+> which is the entry left in [Known issues](issues.md).
+>
+> Owned was sound throughout, and was checked the same way: ten shapes -- a bare
+> `T`, a `[T]` field, `?T`, `!T`, nested aggregates, tuples, two parameters,
+> three levels, return position, and forwarding through a second generic --
+> agree across all four backends. The boundary converts an owned value field by
+> field, so what broke was the borrow rather than the aggregate.
 
 > **"Everywhere" is the reading half only.** `ListGet`, `MapGet` and
 > `TensorGet` go through the runtime for an erased element and are right.

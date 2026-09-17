@@ -22,6 +22,12 @@ pub struct RuntimeImports {
     pub debuglog_local: FuncId,
     /// `dtlv_rti_any_destroy_local(rt: LocalRtHandle, value: *mut u8, tydesc: *const TyDesc) -> RtStatus`
     pub destroy_local: FuncId,
+    /// `dtlv_rti_field_offset(tydesc: *const TyDesc, index: u32) -> u32`
+    pub field_offset: FuncId,
+    /// `dtlv_rti_field_tydesc(tydesc: *const TyDesc, index: u32) -> *const TyDesc`
+    pub field_tydesc: FuncId,
+    /// `dtlv_rti_field_read_local(rt, dest, dest_td, base, base_td, index) -> RtStatus`
+    pub field_read: FuncId,
     /// `dtlv_rti_mem_alloc_raw_local(rt: LocalRtHandle, size: u32, align: u32, count: u32) -> *mut u8`
     pub mem_alloc_raw: FuncId,
     /// `dtlv_rti_string_create_local(rt: LocalRtHandle, value_out: *mut u8, tydesc: *const TyDesc) -> RtStatus`
@@ -777,12 +783,58 @@ impl RuntimeImports {
             .map_err(|e| CraneliftError::Module(
                 format!("declare dtlv_rti_clone_erased_local: {}", e)))?;
 
+        // Where a field of a borrowed generic aggregate is, and what it is.
+        // The offsets in a descriptor are the only truthful ones inside a
+        // generic, where the static type says `data` at a type parameter and a
+        // `data` is a different width from what stands behind it.
+        let field_offset = {
+            let mut sig = module.make_signature();
+            sig.params.push(AbiParam::new(PTR_TYPE));      // tydesc
+            sig.params.push(AbiParam::new(cl_types::I32)); // index
+            sig.returns.push(AbiParam::new(cl_types::I32));
+            module
+                .declare_function("dtlv_rti_field_offset", Linkage::Import, &sig)
+                .map_err(|e| CraneliftError::Module(
+                    format!("declare dtlv_rti_field_offset: {}", e)))?
+        };
+        let field_tydesc = {
+            let mut sig = module.make_signature();
+            sig.params.push(AbiParam::new(PTR_TYPE));      // tydesc
+            sig.params.push(AbiParam::new(cl_types::I32)); // index
+            sig.returns.push(AbiParam::new(PTR_TYPE));
+            module
+                .declare_function("dtlv_rti_field_tydesc", Linkage::Import, &sig)
+                .map_err(|e| CraneliftError::Module(
+                    format!("declare dtlv_rti_field_tydesc: {}", e)))?
+        };
+
+        // Reading such a field out into a value. Whether what is found wants
+        // packing on the way is the runtime's to decide, for the reason
+        // `list_get_erased` gives.
+        let field_read = {
+            let mut sig = module.make_signature();
+            sig.params.push(AbiParam::new(PTR_TYPE));      // rt
+            sig.params.push(AbiParam::new(PTR_TYPE));      // dest
+            sig.params.push(AbiParam::new(PTR_TYPE));      // dest tydesc
+            sig.params.push(AbiParam::new(PTR_TYPE));      // base
+            sig.params.push(AbiParam::new(PTR_TYPE));      // base tydesc
+            sig.params.push(AbiParam::new(cl_types::I32)); // index
+            sig.returns.push(AbiParam::new(cl_types::I8));
+            module
+                .declare_function("dtlv_rti_field_read_local", Linkage::Import, &sig)
+                .map_err(|e| CraneliftError::Module(
+                    format!("declare dtlv_rti_field_read_local: {}", e)))?
+        };
+
         Ok(Self {
             init,
             shutdown,
             set_debug_mode,
             debuglog_local,
             destroy_local,
+            field_offset,
+            field_tydesc,
+            field_read,
             mem_alloc_raw,
             string_create,
             string_push_bytes,

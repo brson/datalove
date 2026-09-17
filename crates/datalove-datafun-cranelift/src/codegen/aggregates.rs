@@ -1,6 +1,6 @@
 //! Aggregate type instruction compilation (Pack, Unpack, Copy).
 
-use cranelift_codegen::ir::{InstBuilder, MemFlagsData};
+use cranelift_codegen::ir::{self as cl_ir, types as cl_types, InstBuilder, MemFlagsData};
 use cranelift_frontend::FunctionBuilder;
 use cranelift_module::Module;
 
@@ -190,6 +190,14 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         let src_ty = self.get_operand_type(src)?;
         let repr = types::ir_type_to_cranelift(&src_ty);
 
+        // A base whose static type does not describe it has the field's offset
+        // and the field's own type read from the descriptor of what arrived.
+        // The runtime does both, and decides there whether the value wants
+        // packing on the way out; see `dtlv_rti_field_read_local`.
+        if let Some(base_desc) = self.operand_ref_desc(src) {
+            return self.compile_get_field_dynamic(builder, dest, src, base_desc, field_index);
+        }
+
         match repr {
             CraneliftRepr::Scalar(_) => {
                 // Single-element tuple that fits in a register.
@@ -260,6 +268,63 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         Ok(())
     }
 
+    /// Read a field of a base whose layout only its descriptor says.
+    ///
+    /// A scalar destination is one whose static type is the truth -- `data` is
+    /// two words and never a register -- so only the offset was in doubt and a
+    /// load off the dynamic address is the whole of it. Anything else goes
+    /// through the runtime, which is where the decision between copying the
+    /// field and packing it belongs.
+    fn compile_get_field_dynamic(
+        &mut self,
+        builder: &mut FunctionBuilder,
+        dest: ValueId,
+        src: &Operand,
+        base_desc: cl_ir::Value,
+        field_index: u32,
+    ) -> Result<(), CraneliftError> {
+        let runtime = self.runtime.ok_or_else(|| {
+            CraneliftError::Codegen("a generic field read requires runtime imports".into())
+        })?;
+        let base = self.get_operand_value(builder, src)?;
+        let dest_ty = self.func.value_types[dest.0 as usize].clone();
+        let index = builder.ins().iconst(cl_types::I32, field_index as i64);
+
+        if let CraneliftRepr::Scalar(dest_cl_ty) = types::ir_type_to_cranelift(&dest_ty) {
+            let offset_fn = self.module.declare_func_in_func(runtime.field_offset, builder.func);
+            let call = builder.ins().call(offset_fn, &[base_desc, index]);
+            let offset = builder.inst_results(call)[0];
+            let offset = builder.ins().uextend(PTR_TYPE, offset);
+            let addr = builder.ins().iadd(base, offset);
+            let val = builder.ins().load(dest_cl_ty, MemFlagsData::new(), addr, 0);
+            self.values.insert(dest, val);
+            return Ok(());
+        }
+
+        if datalove_datafun_ir::erasure_is_composite(&dest_ty) {
+            return Err(CraneliftError::Unsupported(format!(
+                "reading field {} of a borrowed generic aggregate into a {:?}: a field \
+                 whose erased type is a composite holding `data` has to be converted \
+                 piece by piece, which is not done here",
+                field_index, dest_ty)));
+        }
+
+        let rt_handle = self.rt_handle_param.ok_or_else(|| {
+            CraneliftError::Codegen("a generic field read requires a runtime handle".into())
+        })?;
+        let dest_tydesc = self.static_tydesc(builder, &dest_ty)?;
+        let frame_slot = self.frame_slot.ok_or_else(|| {
+            CraneliftError::Codegen("a generic field read requires a frame slot".into())
+        })?;
+        let dest_offset = self.layout.value_offset(dest.0);
+        let dest_addr = builder.ins().stack_addr(PTR_TYPE, frame_slot, dest_offset as i32);
+
+        let read_fn = self.module.declare_func_in_func(runtime.field_read, builder.func);
+        builder.ins().call(read_fn, &[rt_handle, dest_addr, dest_tydesc, base, base_desc, index]);
+        self.record_runtime_result(builder, dest, dest_addr);
+        Ok(())
+    }
+
     /// Compile a get_field_ref instruction (get pointer to field).
     ///
     /// Unlike get_field which copies the field value, this returns a pointer
@@ -273,6 +338,33 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
     ) -> Result<(), CraneliftError> {
         let src_ty = self.get_operand_type(src)?;
         let repr = types::ir_type_to_cranelift(&src_ty);
+
+        // A reference whose static type says `data` where a type parameter
+        // stood lies about the layout, so the offset comes from the descriptor
+        // of what really arrived, and the field's own descriptor goes on to
+        // describe this reference. Both are in there already: building a
+        // descriptor is what settled the offsets.
+        if let Some(base_desc) = self.operand_ref_desc(src) {
+            let runtime = self.runtime.ok_or_else(|| {
+                CraneliftError::Codegen("a generic field borrow requires runtime imports".into())
+            })?;
+            let base = self.get_operand_value(builder, src)?;
+            let index = builder.ins().iconst(cl_types::I32, field_index as i64);
+
+            let offset_fn = self.module.declare_func_in_func(runtime.field_offset, builder.func);
+            let call = builder.ins().call(offset_fn, &[base_desc, index]);
+            let offset = builder.inst_results(call)[0];
+            let offset = builder.ins().uextend(PTR_TYPE, offset);
+            let field_addr = builder.ins().iadd(base, offset);
+
+            let tydesc_fn = self.module.declare_func_in_func(runtime.field_tydesc, builder.func);
+            let call = builder.ins().call(tydesc_fn, &[base_desc, index]);
+            let field_desc = builder.inst_results(call)[0];
+
+            self.values.insert(dest, field_addr);
+            self.ref_desc_values.insert(dest, field_desc);
+            return Ok(());
+        }
 
         match repr {
             CraneliftRepr::Scalar(_) => {
@@ -437,9 +529,15 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             .cloned()
             .ok_or_else(|| CraneliftError::Codegen(format!("param {:?} type not found", param)))?;
 
-        // Navigate field path to find target.
+        // Navigate field path to find target. A parameter our caller described
+        // is one whose static type says `data` where a type parameter stood, so
+        // its offsets are wrong by whatever the difference in width is. Writing
+        // at one of those is the severe half of this: it puts the value past
+        // the end of what the caller owns.
+        let dynamic_base = self.operand_ref_desc(&Operand::Param(*param));
         let mut current_addr = addr;
         let mut current_ty = ty;
+        let mut current_desc = dynamic_base;
 
         for &field_idx in field_path.iter() {
             let field_types: Vec<_> = match &current_ty {
@@ -460,9 +558,44 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 )));
             }
 
-            let offsets = types::compute_tuple_field_offsets(&field_types);
-            current_addr = builder.ins().iadd_imm_s(current_addr, offsets[field_idx as usize] as i64);
+            match current_desc {
+                Some(desc) => {
+                    let runtime = self.runtime.ok_or_else(|| CraneliftError::Codegen(
+                        "a generic field write requires runtime imports".into()))?;
+                    let index = builder.ins().iconst(cl_types::I32, field_idx as i64);
+                    let offset_fn = self.module
+                        .declare_func_in_func(runtime.field_offset, builder.func);
+                    let call = builder.ins().call(offset_fn, &[desc, index]);
+                    let offset = builder.inst_results(call)[0];
+                    let offset = builder.ins().uextend(PTR_TYPE, offset);
+                    current_addr = builder.ins().iadd(current_addr, offset);
+
+                    let tydesc_fn = self.module
+                        .declare_func_in_func(runtime.field_tydesc, builder.func);
+                    let call = builder.ins().call(tydesc_fn, &[desc, index]);
+                    current_desc = Some(builder.inst_results(call)[0]);
+                }
+                None => {
+                    let offsets = types::compute_tuple_field_offsets(&field_types);
+                    current_addr = builder.ins()
+                        .iadd_imm_s(current_addr, offsets[field_idx as usize] as i64);
+                }
+            }
             current_ty = field_types[field_idx as usize].clone();
+        }
+
+        // The value being written is one this function holds, so its own type
+        // describes it. A target whose erased type is a `data` or holds one is
+        // a different shape from that, and converting it is not done here.
+        if current_desc.is_some()
+            && (matches!(current_ty, IrType::Data)
+                || datalove_datafun_ir::erasure_is_composite(&current_ty))
+        {
+            return Err(CraneliftError::Unsupported(format!(
+                "writing field {:?} of a borrowed generic aggregate, whose erased type \
+                 is {:?}: the value would have to be converted into the shape the \
+                 descriptor says, which is not done here",
+                field_path, current_ty)));
         }
 
         // Destroy old field value before overwriting.

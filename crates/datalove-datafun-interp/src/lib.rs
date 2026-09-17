@@ -1785,30 +1785,21 @@ impl IrInterpreter {
             Instruction::GetField { dest, src, field_index } => {
                 let src_val = self.read_operand(src, frame, frames);
                 let dest_slot = frame.value_dest(*dest);
-                let tag = unsafe { (*src_val.tydesc).type_tag };
-
-                match tag {
-                    rtdt::TyTag::Tuple => {
-                        let tuple_info = unsafe { (*src_val.tydesc).type_info.tuple };
-                        let field_info = unsafe { &*tuple_info.fields.add(*field_index as usize) };
-                        let field_ptr = unsafe { src_val.ptr.add(field_info.offset as usize) };
-                        let field_size = unsafe { (*field_info.tydesc).size as usize };
-                        // Copy the field value. Only copy types are allowed for field projections.
-                        unsafe {
-                            std::ptr::copy_nonoverlapping(field_ptr, dest_slot.ptr, field_size);
-                        }
-                    }
-                    rtdt::TyTag::Struct => {
-                        let struct_info = unsafe { (*src_val.tydesc).type_info.struct_ };
-                        let field_info = unsafe { &*struct_info.fields.add(*field_index as usize) };
-                        let field_ptr = unsafe { src_val.ptr.add(field_info.offset as usize) };
-                        let field_size = unsafe { (*field_info.tydesc).size as usize };
-                        // Copy the field value. Only copy types are allowed for field projections.
-                        unsafe {
-                            std::ptr::copy_nonoverlapping(field_ptr, dest_slot.ptr, field_size);
-                        }
-                    }
-                    _ => unreachable!("GetField requires tuple or struct type, got {:?}", tag),
+                // The offsets come from the descriptor of what is really there,
+                // and so does the decision about whether the field wants
+                // packing on the way out: a destination the static type calls a
+                // `data` holding something that is not one is a generic asking
+                // for a field it cannot name. Both are the runtime's, so that
+                // this and the three compiled backends give one answer.
+                unsafe {
+                    datalove_rt::c::dtlv_rti_field_read_local(
+                        self.runtime.handle(),
+                        dest_slot.ptr,
+                        dest_slot.tydesc,
+                        src_val.ptr,
+                        src_val.tydesc,
+                        *field_index,
+                    );
                 }
                 frame.mark_value_live(*dest);
             }
@@ -1837,6 +1828,15 @@ impl IrInterpreter {
                 unsafe {
                     *(dest_slot.ptr as *mut *mut u8) = field_ptr;
                 }
+                // And what it points at. Inside a generic the layout's
+                // descriptor for this value says `data`, because that is what
+                // the static type says, while the field is whatever the caller
+                // really passed. Reading through it later has no other way to
+                // find out.
+                let field_tydesc = unsafe {
+                    datalove_rt::c::dtlv_rti_field_tydesc(src_val.tydesc, *field_index)
+                };
+                frame.set_value_tydesc(*dest, field_tydesc);
                 frame.mark_value_live(*dest);
             }
             Instruction::SetField { slot, field_path, value } => {
