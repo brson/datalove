@@ -1441,19 +1441,22 @@ impl IrInterpreter {
                 let map_val = self.read_operand(map, frame, frames);
                 let key_val = self.read_operand(key, frame, frames);
 
-                let (map_tydesc, key_tydesc, value_tydesc) =
+                let (map_tydesc, _, value_tydesc) =
                     unsafe { map_tydesc_info(&map_val) };
 
-                // Get pointer to value (returns null on miss).
+                // The key's own descriptor rather than the map's, because
+                // inside a generic the key arrives packed into a `data` while
+                // the map holds the real thing. Which of the two it is is the
+                // runtime's to decide; see `borrow_lookup_key`.
                 let mut value_ptr: *mut u8 = std::ptr::null_mut();
                 let rt_handle = self.runtime.handle();
                 let status = unsafe {
-                    datalove_rt::c::dtlv_rti_btreemap_get_value_ref_local(
+                    datalove_rt::c::dtlv_rti_btreemap_get_value_ref_erased_local(
                         rt_handle,
                         map_val.ptr,
                         map_tydesc,
                         key_val.ptr,
-                        key_tydesc,
+                        key_val.tydesc,
                         &mut value_ptr,
                     )
                 };
@@ -1465,14 +1468,19 @@ impl IrInterpreter {
                 frame.mark_value_live(*is_valid);
 
                 if found {
+                    // What is in the map is the real value type and the
+                    // destination is whatever this function's static type says,
+                    // so the clone may want wrapping on the way. The same
+                    // decision `list_get_erased` makes, and the runtime's for
+                    // the same reason.
                     let dest_slot = frame.value_dest(*dest);
                     let status = unsafe {
-                        datalove_rt::c::dtlv_rti_clone_local(
+                        datalove_rt::c::dtlv_rti_clone_erased_local(
                             rt_handle,
                             value_ptr,
                             value_tydesc,
                             dest_slot.ptr,
-                            value_tydesc,
+                            dest_slot.tydesc,
                         )
                     };
                     assert_eq!(status, datalove_rt::c::RtStatus::Ok, "MapGet clone failed");
@@ -1483,18 +1491,18 @@ impl IrInterpreter {
                 let map_val = self.read_operand(map, frame, frames);
                 let key_val = self.read_operand(key, frame, frames);
 
-                let (map_tydesc, key_tydesc, _) =
-                    unsafe { map_tydesc_info(&map_val) };
+                let (map_tydesc, _, _) = unsafe { map_tydesc_info(&map_val) };
 
+                // The key's own descriptor; see the MapGet above.
                 let mut found = false;
                 let rt_handle = self.runtime.handle();
                 let status = unsafe {
-                    datalove_rt::c::dtlv_rti_btreemap_contains_key_local(
+                    datalove_rt::c::dtlv_rti_btreemap_contains_key_erased_local(
                         rt_handle,
                         map_val.ptr,
                         map_tydesc,
                         key_val.ptr,
-                        key_tydesc,
+                        key_val.tydesc,
                         &mut found,
                     )
                 };
@@ -1535,28 +1543,32 @@ impl IrInterpreter {
                 let map_val = self.read_operand(map, frame, frames);
                 let key_val = self.read_operand(key, frame, frames);
 
-                let (map_tydesc, key_tydesc, _) =
+                let (map_tydesc, _, value_tydesc) =
                     unsafe { map_tydesc_info(&map_val) };
 
+                // The key's own descriptor; see the MapGet above.
                 let mut value_ptr: *mut u8 = std::ptr::null_mut();
                 let rt_handle = self.runtime.handle();
                 let status = unsafe {
-                    datalove_rt::c::dtlv_rti_btreemap_get_value_ref_local(
+                    datalove_rt::c::dtlv_rti_btreemap_get_value_ref_erased_local(
                         rt_handle,
                         map_val.ptr,
                         map_tydesc,
                         key_val.ptr,
-                        key_tydesc,
+                        key_val.tydesc,
                         &mut value_ptr,
                     )
                 };
                 assert_eq!(status, datalove_rt::c::RtStatus::Ok, "MapValueRef failed");
 
-                // Store pointer in dest.
+                // Store pointer in dest, and what it points at: the map's real
+                // value type rather than the `data` a generic's static type
+                // claims.
                 let dest_slot = frame.value_dest(*dest);
                 unsafe {
                     *(dest_slot.ptr as *mut *mut u8) = value_ptr;
                 }
+                frame.set_value_tydesc(*dest, value_tydesc);
                 frame.mark_value_live(*dest);
             }
             Instruction::MapUpsert { map, key, value } => {
@@ -1633,15 +1645,18 @@ impl IrInterpreter {
                         let element_ptr = unsafe {
                             tensor_struct.ptr_base.add(linear_offset as usize * element_size)
                         };
+                        // What is in the tensor is the real element type and
+                        // the destination is whatever this function's static
+                        // type says, so the clone may want wrapping on the way.
                         let dest_slot = frame.value_dest(*dest);
                         let rt_handle = self.runtime.handle();
                         let status = unsafe {
-                            datalove_rt::c::dtlv_rti_clone_local(
+                            datalove_rt::c::dtlv_rti_clone_erased_local(
                                 rt_handle,
                                 element_ptr,
                                 element_tydesc,
                                 dest_slot.ptr,
-                                element_tydesc,
+                                dest_slot.tydesc,
                             )
                         };
                         assert_eq!(status, datalove_rt::c::RtStatus::Ok, "TensorGet clone failed");
@@ -1725,6 +1740,9 @@ impl IrInterpreter {
                     };
                     let dest_slot = frame.value_dest(*dest);
                     unsafe { *(dest_slot.ptr as *mut *mut u8) = element_ptr; }
+                    // And what it points at: the tensor's real element type
+                    // rather than the `data` a generic's static type claims.
+                    frame.set_value_tydesc(*dest, element_tydesc);
                 } else {
                     // Rank > 1: construct view Tensor on heap, store pointer.
                     let view = Box::new(rtdt::Tensor {

@@ -14,56 +14,12 @@ home here.
 
 ## Contents
 
-- [A generic map or tensor is indexed against a static descriptor](#user-content-a-generic-map-or-tensor-is-indexed-against-a-static-descriptor)
 - [Indexing a container a generic function owns is never unwrapped](#user-content-indexing-a-container-a-generic-function-owns-is-never-unwrapped)
 - [A part of a borrowed generic aggregate that is itself a composite is refused](#user-content-a-part-of-a-borrowed-generic-aggregate-that-is-itself-a-composite-is-refused)
 - [A unit that fails part way through leaves its index to the next one](#user-content-a-unit-that-fails-part-way-through-leaves-its-index-to-the-next-one)
 - [Inlining never triggers from a caller in an earlier unit](#user-content-inlining-never-triggers-from-a-caller-in-an-earlier-unit)
 - [A field of a const cannot be projected, but a const can be destructured](#user-content-a-field-of-a-const-cannot-be-projected-but-a-const-can-be-destructured)
 - [A specialized function keeps an original nobody calls](#user-content-a-specialized-function-keeps-an-original-nobody-calls)
-
-## A generic map or tensor is indexed against a static descriptor
-
-**Reproduced** for maps. Reasoned for tensors.
-
-```datalove
-fun take<T>(ref x: T): ?T
-  ret some (x@)
-end fun
-
-fun at<K, V>(ref m: %{K = V}, k: K): ?V with { K is ord, }
-  ret take(ref m[k]?)
-end fun
-
-let m: %{string = string} = %{"a" = "alpha", "b" = "beta"}
-debuglog at(ref m, "b")      // none, in all four backends
-```
-
-Not a crash and not a disagreement: all four say `none` for a key that is
-there, because the lookup never finds it. `emit_map_contains_key` passes
-`self.tydesc_name(&map_ty)`, a descriptor built from the static type, which
-inside a generic describes a `%{data = data}`. Comparing a `string` key against
-that ordering does not find the entry. `emit_map_value_ref` and `emit_map_get`
-take their map descriptor the same way.
-
-**The list case is fixed**, and is what this entry used to be about.
-`ListElementRef` now takes its stride from the list's own descriptor and the
-element's descriptor rides along with the pointer; see
-[Fat references for borrowed generic values](plan-fat-refs.md) and
-`backend/16_generic_element_borrow.dfs`. `RefDesc::ParamElement` and
-`RefElement` already propagate through `MapValueRef` and `TensorIndexRef` as
-well, so the descriptor is available at those sites -- what is missing is using
-it, and for maps that means the *key* descriptor too, which a list has no
-equivalent of.
-
-**The key is the part a list did not have.** Inside a generic the key arrives
-as a `data`, so a lookup has both a container described wrongly and a key in a
-shape the comparison does not expect. Only the first of those is the same
-problem the list had. That is why this was not done alongside the list.
-
-**Reach.** Not reachable from `sys/std`, whose map operations delegate to
-native riders rather than using indexing syntax. It needs user code to index a
-map inside a generic.
 
 ## Indexing a container a generic function owns is never unwrapped
 

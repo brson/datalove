@@ -1,0 +1,81 @@
+// Indexing a map or a tensor borrowed inside a generic.
+//
+// `16_generic_element_borrow` did this for lists. A map needs one thing a list
+// does not: a lookup has a *key* as well as a container, and inside a generic
+// the key parameter is erased too, so the key in hand is packed into a `data`
+// while the map holds the real thing. Both halves were wrong and in opposite
+// directions -- the compiled backends described the map by its static type,
+// which is a `%{data = data}`, and the interpreter described the key by the
+// map's real key type while holding a packed one. Either way the comparison
+// looked at the wrong bytes and the lookup returned `none` for a key that is
+// there. Silently, and in all four backends alike, so running them against each
+// other did not catch it.
+//
+// Whether the key is packed is the runtime's to decide, in `borrow_lookup_key`,
+// for the reason `unwraps_the_element` gives on the insert side: a map whose
+// keys really are `data` wants no unwrapping and the two look alike from a call
+// site.
+//
+// A tensor is the list's problem again -- a stride taken from the static
+// element type, which inside a generic is a `data`'s.
+
+fun take<T>(ref x: T): ?T
+  ret some (x@)
+end fun
+
+fun map_at<K, V>(ref m: %{K = V}, k: K): ?V with { K is ord, }
+  ret some (m[k]?@)
+end fun
+
+fun map_borrow<K, V>(ref m: %{K = V}, k: K): ?V with { K is ord, }
+  ret take(ref m[k]?)
+end fun
+
+// A map reached through a field of a borrowed generic aggregate, so the
+// descriptor is narrowed for the field and then asked what it holds.
+fun map_in_field<K, V>(ref p: {m: %{K = V}, n: u32}, k: K): ?V with { K is ord, }
+  ret some (p.m[k]?@)
+end fun
+
+fun tensor_at<T>(ref t: [|T, 1|], i: index): ?T
+  ret some (t[i]?@)
+end fun
+
+fun tensor_borrow<T>(ref t: [|T, 1|], i: index): ?T
+  ret take(ref t[i]?)
+end fun
+
+// Concrete callers, which were always right and stay right: the static type is
+// truthful there, so the stride is still a compile-time constant and the key
+// needs no unwrapping.
+fun concrete_map_at(ref m: %{string = string}, k: string): ?string
+  ret some (m[k]?@)
+end fun
+
+fun concrete_tensor_at(ref t: [|u8, 1|], i: index): ?u8
+  ret some (t[i]?@)
+end fun
+
+let words: %{string = string} = %{"a" = "alpha", "b" = "beta"}
+debuglog map_at(ref words, "b")
+debuglog map_borrow(ref words, "a")
+
+// Narrow keys and values, where a `data`'s width is wrong in both directions.
+let small: %{u8 = u8} = %{1 = 10, 2 = 20}
+debuglog map_at(ref small, 2)
+
+// A key that is missing still says so.
+debuglog map_at(ref words, "z")
+
+let held: {m: %{string = u32}, n: u32} = {m = %{"a" = 1, "b" = 2}, n = 9}
+debuglog map_in_field(ref held, "b")
+
+let wide: [|u64, 1|] = [| 100 200 300 |]
+debuglog tensor_at(ref wide, 2)
+debuglog tensor_borrow(ref wide, 0)
+
+let bytes: [|u8, 1|] = [| 1 2 3 |]
+debuglog tensor_at(ref bytes, 1)
+
+debuglog concrete_map_at(ref words, "a")
+debuglog concrete_tensor_at(ref bytes, 2)

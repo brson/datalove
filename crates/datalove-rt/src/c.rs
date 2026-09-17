@@ -3032,3 +3032,81 @@ pub unsafe extern "C-unwind" fn dtlv_rti_element_tydesc(
     debug_assert!(!tydesc.is_null(), "tydesc is null");
     unsafe { crate::impls::dyn_ops::element_tydesc(tydesc) }
 }
+
+/// Whether a key reaching a map lookup has to come out of a `data` first, and
+/// where it is if so.
+///
+/// Inside a generic a map's key parameter is erased to `data`, so the key in
+/// hand is packed while the map holds the real thing. The same reading as
+/// `unwraps_the_element` makes for an insert, running on the lookup side.
+///
+/// `scratch` is two words the caller owns for the lifetime of the lookup, which
+/// is what `data_borrow` wants for a key that rides inline in the `data`.
+unsafe fn borrow_lookup_key(
+    map_tydesc: *const rtdt::TyDesc,
+    key_ref: *const u8,
+    key_tydesc: *const rtdt::TyDesc,
+    scratch: *mut u8,
+) -> (*const u8, *const rtdt::TyDesc) {
+    unsafe {
+        let map_ty = rtdt::TyDescRef::from_ptr(map_tydesc);
+        if !unwraps_the_element(key_tydesc, map_ty.map_key_ty()) {
+            return (key_ref, key_tydesc);
+        }
+        let mut value_out: *const u8 = core::ptr::null();
+        let mut tydesc_out: *const rtdt::TyDesc = core::ptr::null();
+        crate::impls::boxing::data_borrow(key_ref, scratch, &mut value_out, &mut tydesc_out);
+        (value_out, tydesc_out)
+    }
+}
+
+/// Ask whether a map holds a key that may have arrived packed.
+///
+/// See `borrow_lookup_key`. The map's descriptor is the one the call site
+/// supplied, which inside a generic is the only truthful one: the static type
+/// there describes a `%{data = data}`, and looking a `string` up against that
+/// ordering finds nothing.
+#[unsafe(no_mangle)]
+pub unsafe extern "C-unwind" fn dtlv_rti_btreemap_contains_key_erased_local(
+    rt: LocalRtHandle,
+    btreemap_value_ref: *const u8,
+    btreemap_tydesc: *const rtdt::TyDesc,
+    key_ref: *const u8,
+    key_tydesc: *const rtdt::TyDesc,
+    result_out: *mut bool,
+) -> RtStatus {
+    debug_assert!(!btreemap_tydesc.is_null(), "btreemap_tydesc is null");
+    debug_assert!(!key_tydesc.is_null(), "key_tydesc is null");
+    unsafe {
+        let mut scratch = [0u8; 16];
+        let (key, key_ty) = borrow_lookup_key(
+            btreemap_tydesc, key_ref, key_tydesc, scratch.as_mut_ptr());
+        dtlv_rti_btreemap_contains_key_local(
+            rt, btreemap_value_ref, btreemap_tydesc, key, key_ty, result_out)
+    }
+}
+
+/// Find a map value by a key that may have arrived packed.
+///
+/// See `borrow_lookup_key`. The pointer that comes back is into the map, and
+/// what it points at is the map's real value type rather than the `data` the
+/// caller's static type claims; `dtlv_rti_element_tydesc` says which.
+#[unsafe(no_mangle)]
+pub unsafe extern "C-unwind" fn dtlv_rti_btreemap_get_value_ref_erased_local(
+    rt: LocalRtHandle,
+    btreemap_value_ref: *const u8,
+    btreemap_tydesc: *const rtdt::TyDesc,
+    key_ref: *const u8,
+    key_tydesc: *const rtdt::TyDesc,
+    value_ptr_out: *mut *mut u8,
+) -> RtStatus {
+    debug_assert!(!btreemap_tydesc.is_null(), "btreemap_tydesc is null");
+    debug_assert!(!key_tydesc.is_null(), "key_tydesc is null");
+    unsafe {
+        let mut scratch = [0u8; 16];
+        let (key, key_ty) = borrow_lookup_key(
+            btreemap_tydesc, key_ref, key_tydesc, scratch.as_mut_ptr());
+        dtlv_rti_btreemap_get_value_ref_local(
+            rt, btreemap_value_ref, btreemap_tydesc, key, key_ty, value_ptr_out)
+    }
+}

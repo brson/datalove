@@ -3092,10 +3092,14 @@ impl<'a> FunctionCodegenContext<'a> {
             ))),
         };
 
-        let map_tydesc = self.tydesc_name(&map_ty);
+        // The map's descriptor is whichever one tells the truth: inside a
+        // generic the static type describes a `%{data = data}`, and looking a
+        // `string` up against that ordering finds nothing. The key may have
+        // arrived packed, which the runtime decides rather than this.
+        let map_tydesc = self.operand_tydesc(map);
         let key_tydesc = self.tydesc_name(&key_ty);
 
-        writeln!(out, "    dtlv_rti_btreemap_contains_key_local(rt, {}, &{}, {}, &{}, (bool_t*){});",
+        writeln!(out, "    dtlv_rti_btreemap_contains_key_erased_local(rt, {}, {}, {}, &{}, (bool_t*){});",
             map_addr, map_tydesc, key_addr, key_tydesc, is_valid_addr).unwrap();
         Ok(())
     }
@@ -3123,14 +3127,17 @@ impl<'a> FunctionCodegenContext<'a> {
         };
         let value_repr = types::ir_type_to_crepr(&value_ty);
 
-        let map_tydesc = self.tydesc_name(&map_ty);
+        // The truthful map descriptor, and a key the runtime unpacks if it
+        // arrived packed. See the containment check above.
+        let map_tydesc = self.operand_tydesc(map);
         let key_tydesc = self.tydesc_name(&key_ty);
         let value_tydesc = self.tydesc_name(&value_ty);
+        let erased = self.operand_ref_desc(map).is_some();
 
         // Get pointer to value (returns null on miss).
         writeln!(out, "    {{").unwrap();
         writeln!(out, "        void* __vptr;").unwrap();
-        writeln!(out, "        dtlv_rti_btreemap_get_value_ref_local(rt, {}, &{}, {}, &{}, &__vptr);",
+        writeln!(out, "        dtlv_rti_btreemap_get_value_ref_erased_local(rt, {}, {}, {}, &{}, &__vptr);",
             map_addr, map_tydesc, key_addr, key_tydesc).unwrap();
         writeln!(out, "        *(bool_t*){} = __vptr != NULL;", is_valid_addr).unwrap();
 
@@ -3138,14 +3145,23 @@ impl<'a> FunctionCodegenContext<'a> {
         writeln!(out, "        if (__vptr != NULL) {{").unwrap();
 
         // Clone value to dest.
-        match &value_repr {
-            CRepr::Scalar(c_ty) => {
-                writeln!(out, "            *({c_ty}*){dest_addr} = *({c_ty}*)__vptr;").unwrap();
-            }
-            CRepr::Aggregate(layout) => {
-                if layout.size > 0 {
-                    writeln!(out, "            dtlv_rti_clone_local(rt, __vptr, &{}, {}, &{});",
-                        value_tydesc, dest_addr, value_tydesc).unwrap();
+        if erased {
+            // What is in the map is the real value type and the destination is
+            // whatever this function's static type says, so the clone may want
+            // wrapping on the way -- the same decision `list_get_erased` makes,
+            // and the runtime's for the same reason.
+            writeln!(out, "            dtlv_rti_clone_erased_local(rt, __vptr, dtlv_rti_element_tydesc({}), {}, &{});",
+                map_tydesc, dest_addr, value_tydesc).unwrap();
+        } else {
+            match &value_repr {
+                CRepr::Scalar(c_ty) => {
+                    writeln!(out, "            *({c_ty}*){dest_addr} = *({c_ty}*)__vptr;").unwrap();
+                }
+                CRepr::Aggregate(layout) => {
+                    if layout.size > 0 {
+                        writeln!(out, "            dtlv_rti_clone_local(rt, __vptr, &{}, {}, &{});",
+                            value_tydesc, dest_addr, value_tydesc).unwrap();
+                    }
                 }
             }
         }
@@ -3243,11 +3259,18 @@ impl<'a> FunctionCodegenContext<'a> {
             ))),
         };
 
-        let map_tydesc = self.tydesc_name(&map_ty);
+        // As at the containment check: the truthful map descriptor, and a key
+        // the runtime unpacks if it arrived packed. What the pointer reaches is
+        // the map's real value type rather than the `data` this function's
+        // static type claims, so the reference carries that descriptor on.
+        let map_tydesc = self.operand_tydesc(map);
         let key_tydesc = self.tydesc_name(&key_ty);
 
-        writeln!(out, "    dtlv_rti_btreemap_get_value_ref_local(rt, {}, &{}, {}, &{}, (void**){});",
+        writeln!(out, "    dtlv_rti_btreemap_get_value_ref_erased_local(rt, {}, {}, {}, &{}, (void**){});",
             map_addr, map_tydesc, key_addr, key_tydesc, dest_addr).unwrap();
+        if self.ref_descs.contains_key(&dest) {
+            writeln!(out, "    __rd{} = dtlv_rti_element_tydesc({});", dest.0, map_tydesc).unwrap();
+        }
         Ok(())
     }
 
@@ -3933,21 +3956,38 @@ impl<'a> FunctionCodegenContext<'a> {
 
         if rank == 1 {
             let elem_repr = types::ir_type_to_crepr(&elem_ty);
-            let elem_size = elem_repr.layout().size;
             let ptr_base_offset = std::mem::offset_of!(datalove_rtdt::Tensor, ptr_base);
             let offset_elems_offset = std::mem::offset_of!(datalove_rtdt::Tensor, offset_elems);
             let strides_offset = std::mem::offset_of!(datalove_rtdt::Tensor, strides);
+
+            // Inside a generic the static element type is a `data`, whose width
+            // is not the width of what the caller's tensor really holds, so the
+            // stride comes from the tensor's own descriptor.
+            let erased_desc = self.operand_ref_desc(tensor)
+                .map(|d| format!("dtlv_rti_element_tydesc({})", d));
+            let elem_size = match &erased_desc {
+                Some(elem) => format!("{}->size", elem),
+                None => elem_repr.layout().size.to_string(),
+            };
 
             // elem_addr = ptr_base + (offset + index * strides[0]) * elem_size
             writeln!(out, "        void* __elem = *(void**)({t} + {pb}) + (size_t)(*(index_t*)({t} + {oe}) + *(index_t*){idx} * **(index_t**)({t} + {st})) * {es};",
                 t = tensor_addr, pb = ptr_base_offset, oe = offset_elems_offset,
                 idx = index_addr, st = strides_offset, es = elem_size).unwrap();
 
-            match &elem_repr {
-                CRepr::Scalar(c_ty) => {
+            match (&erased_desc, &elem_repr) {
+                // What is in the tensor is the real element type and the
+                // destination is whatever this function's static type says, so
+                // the clone may want wrapping on the way.
+                (Some(elem), _) => {
+                    let dest_tydesc = self.tydesc_name(&elem_ty);
+                    writeln!(out, "        dtlv_rti_clone_erased_local(rt, __elem, {}, {}, &{});",
+                        elem, dest_addr, dest_tydesc).unwrap();
+                }
+                (None, CRepr::Scalar(c_ty)) => {
                     writeln!(out, "        *({c_ty}*){dest_addr} = *({c_ty}*)__elem;").unwrap();
                 }
-                CRepr::Aggregate(layout) => {
+                (None, CRepr::Aggregate(layout)) => {
                     if layout.size > 0 {
                         let tydesc = self.tydesc_name(&elem_ty);
                         writeln!(out, "        dtlv_rti_clone_local(rt, __elem, &{}, {}, &{});",
@@ -4049,8 +4089,16 @@ impl<'a> FunctionCodegenContext<'a> {
         let strides_offset = std::mem::offset_of!(datalove_rtdt::Tensor, strides);
 
         if rank == 1 {
-            let elem_repr = types::ir_type_to_crepr(&elem_ty);
-            let elem_size = elem_repr.layout().size;
+            // As at TensorGet: inside a generic the stride comes from the
+            // tensor's own descriptor, and the element's descriptor goes on to
+            // describe this reference.
+            let elem_size = match self.operand_ref_desc(tensor) {
+                Some(desc) => {
+                    writeln!(out, "    __rd{} = dtlv_rti_element_tydesc({});", dest.0, desc).unwrap();
+                    format!("__rd{}->size", dest.0)
+                }
+                None => types::ir_type_to_crepr(&elem_ty).layout().size.to_string(),
+            };
 
             // Element pointer.
             writeln!(out, "    *(void**){} = *(void**)({t} + {pb}) + (size_t)(*(index_t*)({t} + {oe}) + *(index_t*){idx} * **(index_t**)({t} + {st})) * {es};",

@@ -574,13 +574,17 @@ this area has had.
 > agree across all four backends. The boundary converts an owned value field by
 > field, so what broke was the borrow rather than the aggregate.
 
-> **"Everywhere" is the reading half only.** `ListGet`, `MapGet` and
-> `TensorGet` go through the runtime for an erased element and are right.
-> `ListElementRef`, `MapValueRef` and `TensorIndexRef` were not changed:
-> `emit_list_element_ref` and `compile_list_element_ref` still take the element
-> size from `operand_type(list)`, so a borrowed index inside a generic lands
-> between elements exactly as described above. It segfaults. See
-> [Known issues](issues.md).
+> **Both halves now.** The note here used to say that only the reading half was
+> done, and that `ListElementRef`, `MapValueRef` and `TensorIndexRef` still took
+> their stride from `operand_type(list)`, so a borrowed index inside a generic
+> landed between elements and segfaulted. They take it from the container's
+> descriptor now, and the element's descriptor travels with the reference; see
+> [Fat references for borrowed generic values](plan-fat-refs.md).
+>
+> The reading half was also less done than it said: a map lookup inside a
+> generic described the map by its static type, a `%{data = data}`, and returned
+> `none` for a key that was there -- quietly, and the same way in all four
+> backends.
 
 ## Where this stands
 

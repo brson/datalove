@@ -5,10 +5,11 @@ anything computing an address from a reference computed it from the referent's
 static type instead -- and inside a generic that type is a lie. This is the plan
 to carry the descriptor and take the layout from it.
 
-**Field projections and list element references are done**; see "What was
-built" below. Map and tensor indexing is not, and remains an open
-[Known issue](issues.md). What follows describes the design as a whole; read it
-with that split in mind.
+**Done**, for every way of reaching into a borrowed value: field projections,
+and list, map and tensor indexing. See "What was built" below. What follows
+describes the design; the one thing it does not cover is a *part* whose erased
+type is a composite holding `data`, which is still refused and is its own
+[Known issue](issues.md).
 
 ## What is already in place
 
@@ -281,23 +282,29 @@ parameter. Anything carrying its own descriptor is a pointer at the value, so
 that question became `operand_ref_desc(arg).is_some()`. Without it the callee
 took the first two words of a string for a wrapper's pointers.
 
+Maps and tensors followed, and the map needed one more thing again. A lookup has
+a **key** as well as a container, and inside a generic the key parameter is
+erased too, so the key in hand is packed into a `data` while the map holds the
+real thing. Both halves were wrong and in opposite directions: the compiled
+backends described the map by its static type, a `%{data = data}`, while the
+interpreter described the *key* by the map's real key type while holding a
+packed one. Either way the comparison read the wrong bytes and the lookup
+returned `none` for a key that was there -- silently, and identically in all
+four backends, so running them against each other did not catch it.
+`dtlv_rti_btreemap_{contains_key,get_value_ref}_erased_local` decide whether the
+key is packed, by the reading `unwraps_the_element` already makes on the insert
+side. A tensor was the list's problem again: a stride from the static element
+type. `compute_tensor_element_addr` now takes a width rather than a constant.
+
 ## What is left
 
-**Maps and tensors.** `RefDesc::ParamElement` and `RefElement` already propagate
-through `MapValueRef` and `TensorIndexRef`, so the descriptor is at those sites;
-what is missing is using it. For maps that is more than the list needed, because
-a lookup has a *key* as well as a container, and inside a generic the key
-arrives as a `data` in a shape the comparison does not expect.
-`emit_map_contains_key` fails first, so an index into a generic map finds
-nothing rather than finding the wrong thing. See [Known issues](issues.md).
-
-**The composite conversion**, which is what both remaining entries in this
-family come back to: converting a value from the shape a descriptor says into
-the shape a static type says, piece by piece. `Erase` and `Reify` do it at a
-call boundary from two static types; nothing does it with a descriptor on one
-side. That is what would let a field whose erased type is `{a: data, b: u32}` be
-read, and what would let a borrow of one cross a call boundary without the two
-ends disagreeing about what is inside the `data`.
+**The composite conversion**, which is what the remaining entry in this family
+comes back to: converting a value from the shape a descriptor says into the
+shape a static type says, piece by piece. `Erase` and `Reify` do it at a call
+boundary from two static types; nothing does it with a descriptor on one side.
+That is what would let a field whose erased type is `{a: data, b: u32}` be read,
+and what would let a borrow of one cross a call boundary without the two ends
+disagreeing about what is inside the `data`. See [Known issues](issues.md).
 
 ## Open questions
 

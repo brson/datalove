@@ -30,6 +30,10 @@ pub struct RuntimeImports {
     pub field_read: FuncId,
     /// `dtlv_rti_element_tydesc(tydesc: *const TyDesc) -> *const TyDesc`
     pub element_tydesc: FuncId,
+    /// `dtlv_rti_btreemap_contains_key_erased_local(rt, map, map_td, key, key_td, out) -> RtStatus`
+    pub map_contains_key_erased: FuncId,
+    /// `dtlv_rti_btreemap_get_value_ref_erased_local(rt, map, map_td, key, key_td, out) -> RtStatus`
+    pub map_get_value_ref_erased: FuncId,
     /// `dtlv_rti_mem_alloc_raw_local(rt: LocalRtHandle, size: u32, align: u32, count: u32) -> *mut u8`
     pub mem_alloc_raw: FuncId,
     /// `dtlv_rti_string_create_local(rt: LocalRtHandle, value_out: *mut u8, tydesc: *const TyDesc) -> RtStatus`
@@ -825,6 +829,32 @@ impl RuntimeImports {
                     format!("declare dtlv_rti_element_tydesc: {}", e)))?
         };
 
+        // The lookup half of a map inside a generic: the map's descriptor is
+        // the truthful one and the key may have arrived packed into a `data`,
+        // which the runtime unpacks so that the four backends do not each
+        // decide whether it is packed.
+        let map_lookup_sig = {
+            let mut sig = module.make_signature();
+            sig.params.push(AbiParam::new(PTR_TYPE));      // rt
+            sig.params.push(AbiParam::new(PTR_TYPE));      // map
+            sig.params.push(AbiParam::new(PTR_TYPE));      // map tydesc
+            sig.params.push(AbiParam::new(PTR_TYPE));      // key
+            sig.params.push(AbiParam::new(PTR_TYPE));      // key tydesc
+            sig.params.push(AbiParam::new(PTR_TYPE));      // out
+            sig.returns.push(AbiParam::new(cl_types::I8));
+            sig
+        };
+        let map_contains_key_erased = module
+            .declare_function("dtlv_rti_btreemap_contains_key_erased_local",
+                Linkage::Import, &map_lookup_sig)
+            .map_err(|e| CraneliftError::Module(
+                format!("declare dtlv_rti_btreemap_contains_key_erased_local: {}", e)))?;
+        let map_get_value_ref_erased = module
+            .declare_function("dtlv_rti_btreemap_get_value_ref_erased_local",
+                Linkage::Import, &map_lookup_sig)
+            .map_err(|e| CraneliftError::Module(
+                format!("declare dtlv_rti_btreemap_get_value_ref_erased_local: {}", e)))?;
+
         let field_read = {
             let mut sig = module.make_signature();
             sig.params.push(AbiParam::new(PTR_TYPE));      // rt
@@ -850,6 +880,8 @@ impl RuntimeImports {
             field_tydesc,
             field_read,
             element_tydesc,
+            map_contains_key_erased,
+            map_get_value_ref_erased,
             mem_alloc_raw,
             string_create,
             string_push_bytes,
