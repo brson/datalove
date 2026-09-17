@@ -201,11 +201,30 @@ is cheapest.
 
 ## What is not touched
 
-The owned path. An owned value is converted at the boundary field by field, so
-the layout the callee was compiled for is the layout it gets, and its static
-type tells the truth. This was checked by compiling and running ten shapes
-across all four backends; see the scope table in [Known issues](issues.md). The
-return path is the owned path in the other direction and needs nothing either.
+**Owned aggregates.** An owned aggregate is converted at the boundary field by
+field, so the layout the callee was compiled for is the layout it gets, and its
+static type tells the truth. This was checked by compiling and running ten
+shapes across all four backends; see the scope table in
+[Known issues](issues.md). The return path is the owned path in the other
+direction and needs nothing either.
+
+**Owned containers, which are a separate fault.** An owned container is *not*
+converted field by field -- it is wrapped whole into a `data`. So a generic
+holding `xs: [T]` by value holds a `data`, and lowering then emits `ListGet`
+against it without unwrapping:
+
+```
+fn first(p0):            // p0: Data
+    v0 = const 0index
+    v1, v2 = listget p0[v0]
+```
+
+Both AOT backends refuse this outright (`ListGet on non-list type: Data`), the
+jit turns the same error into a panic, and the interpreter reads the anypack's
+bytes as a list header and segfaults. No reference is involved and no
+descriptor is missing -- the value is self-describing, it is simply never
+opened. Fat references do not reach it. It has its own entry in
+[Known issues](issues.md).
 
 ## Staging
 
@@ -223,10 +242,15 @@ return path is the owned path in the other direction and needs nothing either.
 
 ## Open questions
 
-- **The interpreter needs nothing.** Its values are a pointer and a descriptor
-  already, which is why it is right in every case here. Whether it should read
-  the same table anyway, so that a disagreement is caught rather than papered
-  over, is worth deciding before step 2 rather than after.
+- **The interpreter needs the table too, for step 4.** It is right on the
+  aggregate cases, because a parameter's descriptor is per-frame
+  (`Frame::param_tydescs`). It is *not* right on a borrowed index: there is
+  nowhere to put a descriptor for an SSA value, so `Frame::value_deref` reads
+  `self.layout.value_tydescs[idx]`, which is computed from static types
+  (`datafun-interp/src/frame.rs:174`). The borrowed-index repro segfaults in
+  the interpreter as well as the compiled backends. So step 4 needs a per-frame
+  value descriptor override beside `param_tydescs`, and the claim that the
+  interpreter is right in every case here is wrong.
 - **Enum and term payloads under a borrow** were not probed. `TyInfoEnumVariant`
   carries an `offset` and a `payload` descriptor, so the same rule should
   apply, but whether payload projection goes through `GetFieldRef` or its own
