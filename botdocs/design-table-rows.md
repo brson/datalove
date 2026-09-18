@@ -7,9 +7,9 @@ is why, and what could be done about it.
 The intent behind tables is a dataframe -- relational operations, and pipelines
 that take a table of one schema to a table of another. [If the target is
 Polars](#user-content-if-the-target-is-polars) weighs the hypotheses against
-that, and [H5](#user-content-h5-types-as-compile-time-values) is the direction
-currently favoured: types as compile-time values, with the schema algebra a
-library rather than a type theory.
+that, and [H6](#user-content-h6-row-polymorphism-for-presence-comptime-for-construction)
+is the direction currently favoured: row types where a signature names the
+columns it needs, and compile-time evaluation where the schema is computed.
 
 Hypotheses, not a plan. Nothing here is implemented.
 
@@ -418,6 +418,94 @@ The other cost is honest and unavoidable: a signature stops being readable as a
 signature. `fun select(const COLS: [string], t: table R): project(R, COLS)`
 says what it does only if you go and read `project`. Zig lives with this.
 
+## H6: row polymorphism for presence, comptime for construction
+
+H3 and H5 answer the same question in opposite registers, and picking one whole
+gives up something real either way. H3 alone cannot express an operation whose
+labels come from a value. H5 alone makes every signature unreadable: `fun
+select(const COLS: [string], t: table R): project(R, COLS)` says what it does
+only if you go and read `project`.
+
+The split that makes both worth having:
+
+> **Labels written in the signature take row types. Labels computed from values
+> take comptime.**
+
+Or, in the terms the rest of this document keeps arriving at: **rows for
+reading, comptime for construction.**
+
+### Why presence belongs to the type system
+
+```datalove
+fun total_x<R>(ref t: table {x: u32 | R}): u32
+```
+
+This reads as a signature, and the checker learns something structural from it:
+inside the body, `t.x` *is* a `[u32]`, with no further step. The comptime version
+is strictly worse:
+
+```datalove
+fun total_x<R>(ref t: table R): u32 with { has_column(R, "x", u32), }
+```
+
+The constraint is a boolean. Having checked it, the checker knows nothing it can
+use -- `t.x` still has to be looked up, and whatever looks it up has to fail
+somewhere if the predicate lied. A row type makes `t.x : u32` *follow*, which is
+the whole point of having written the constraint.
+
+**Its runtime cost is one function.** A row-polymorphic column access needs the
+column's index in a row whose shape the body was not compiled for, which is a
+by-name walk of a descriptor -- the descriptors already carry names
+(`TyInfoStructField`), and `dtlv_rti_field_offset` already does the by-index
+walk. Nothing else changes: `table R` is a container of a type parameter, so
+erasure wraps it and the existing machinery carries it.
+
+### Why construction belongs to comptime
+
+`select(t, COLS)` where `COLS` is a value, `rename(t, mapping)`, and the
+aggregate schemas, all have output types that are *computed*. A row theory can
+express them only by making label lists type-level and adding restriction and
+concatenation operators with their constraint rules; CTFE expresses them by
+running a function. The second is far less machinery for the same result, and it
+is extensible -- a new combinator is a new function rather than a new rule.
+
+The two mesh if **comptime computes a row**. `project(R, COLS)` returns a row,
+which is then an ordinary row in a row-typed signature. The checker evaluates
+the call, then unifies structurally. That is normalization before unification,
+which is how Haskell's type families already work.
+
+### The precedent
+
+PureScript does exactly this split: `{ x :: Int | r }` for the declarative case,
+and `Prim.Row.Union`, `Cons` and `Nub` for the computed one. It is shipping and
+practical, and it is used for records and for the FFI rather than as a research
+exercise.
+
+The difference here is what computes the rows. PureScript's are relations solved
+by the compiler; these would be functions evaluated by CTFE. That trade is worth
+naming because it is not all upside:
+
+**A solver runs backwards; a function does not.** `Row.Cons "x" Int r r'` can be
+solved for `r` given `r'`. `project(R, COLS)` can only be evaluated forwards, so
+a computed row cannot participate in inference -- every input has to be known at
+the call site. For a pipeline that is no loss, since the input schema and the
+column list are both in hand. For inferring the type of a record *update* it
+would be, and that is the case to check before committing.
+
+### What lands where
+
+| Operation | Mechanism |
+|---|---|
+| filter, sort, slice, distinct, concat | plain `R`, no feature at all |
+| `total_x`, anything naming a column it needs | row presence |
+| join of two known schemas | comptime `concat(R, S)`, or row concatenation if a rule for disjointness is wanted |
+| select, drop, rename by a label list | comptime |
+| group_by/agg schemas | comptime |
+| pivot | nothing: the schema depends on the *data*, and no static system types it |
+
+Most of a pipeline is the first row and needs neither. The second is where a
+signature is worth reading, and the rest is where it is worth computing.
+
 ## If the target is Polars
 
 The intent behind tables is a dataframe: relational operations, and pipelines
@@ -504,8 +592,7 @@ one was weighing reading against writing and a pipeline needs writing.
 
 ## Sequencing
 
-**For a dataframe with comptime types: H2, then H4, then H5, and H3 not at all.**
-**For a dataframe without: H2, then H4, then as much of H3 as joins are worth.**
+**For a dataframe: H2, then H4, then H6.**
 **For tables as values only: H4, then H2.**
 
 The order turns on whether tables are meant to be built or only read. H4 needs
@@ -524,10 +611,11 @@ crowd wants most once the basics are there, and the one they most often fake at
 run time -- which is a reason to be sure it is wanted here before paying for it
 in the type system.
 
-H5 is the alternative to H3 rather than an addition to it: the same expressive
-power bought as a library evaluated during compilation instead of as a row
-theory in the checker. If it is taken, H3 should not be, and the two should not
-be pursued in parallel -- they answer the same question twice.
+H3 and H5 are the same question asked twice, and H6 is the answer: rows where
+the labels are written down, comptime where they are computed. Taken separately
+each gives up something -- H3 cannot express an operation whose labels come from
+a value, and H5 makes every signature unreadable. H6 should be read as the
+recommendation and H3 and H5 as the two halves it is assembled from.
 
 Either way H2 comes first. A row type is what H3 quantifies over and what H5
 computes with, and neither has anything to say until a table's schema is a type
