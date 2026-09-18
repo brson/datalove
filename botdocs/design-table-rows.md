@@ -94,6 +94,85 @@ interface, not what it presents.
 So the runtime already thinks in rows, the type already looks like a struct,
 and a column is already a well-formed array. Three invitations.
 
+## What people want from struct-of-arrays elsewhere
+
+A table is a struct of arrays with a schema, and that is a thing other languages
+have tried. Two different constituencies ask for it and they want different
+things, which is worth separating before choosing a hypothesis.
+
+### The performance constituency
+
+Jai, Zig, Odin, ISPC, and the entity-component-system engines.
+
+1. **Layout-agnostic syntax**, which is the one they ask for first. Write `p.x`
+   and let the compiler decide whether `p` lives in an array of structs or a
+   struct of arrays. The value is not the layout, it is being able to *measure
+   both* without rewriting the code that uses it.
+2. **A column as a first-class slice.** `arr.x` gives a contiguous `[]T` that
+   any function taking a slice will accept. Zig's `MultiArrayList.items(.x)`,
+   Julia's `StructArray` field access giving a real vector.
+3. **An element that behaves like a struct.** `arr[i]` yielding something you
+   can read `.x` off: either a *copy*, which costs a gather, or a *proxy
+   reference* holding one pointer per field. Odin has a dedicated pointer kind;
+   Rust macro-generates `Ref`/`RefMut` structs; Julia has a lazy row.
+4. **Growth that keeps the columns in step** -- push, pop, insert, remove, with
+   the amortization of an ordinary growable array rather than a fixed buffer.
+5. **Partial and tiled layouts.** Hot fields split out and cold fields left
+   together; tiles of N elements for SIMD, which ISPC spells `soa<N>`.
+6. **Iteration that touches only the named columns**, which is the cache
+   argument and the whole point of an ECS query.
+7. **Field-set polymorphism** -- "run this over anything with a Position and a
+   Velocity". Row polymorphism under another name.
+
+### The data constituency
+
+Arrow, Polars, pandas, R, SQL.
+
+8. **Zero-copy interop**: a column *is* the interchange buffer, handed to
+   another system without a copy.
+9. **Per-column validity**, as a bitmap beside the column rather than a byte
+   inside every element.
+10. **Relational operations**: filter, project, join, group by, aggregate.
+    Anything called a table is expected to have them.
+11. **A permutation applied across every column at once**, which is what sorting
+    by one column means and is the operation SoA makes awkward.
+12. **Heterogeneous columns with a schema**, and code that can be written
+    against a schema it did not hard-code.
+
+### The wall everyone hits
+
+**A reference to one element of a struct of arrays is not a pointer.** It is a
+tuple of pointers, or a base and an index. Languages that cannot say that end up
+with macro-generated proxy structs, lazy proxy objects, "you get a copy", or a
+new pointer kind in the language. That is the same non-first-class borrow parked
+in [plan-generics.md](plan-generics.md), reached from a different direction.
+
+The second wall is field-set polymorphism, which every ECS reimplements at run
+time because its host language cannot say "a struct with at least these fields".
+
+### Where this leaves the hypotheses
+
+The syntax here -- named columns, rows in a literal, the word "table" -- puts
+datalove in the data camp, while the columnar storage would serve either.
+Against the twelve, everything is absent except that whole-table values work.
+They map onto the hypotheses cleanly:
+
+| Want | Hypothesis |
+|---|---|
+| 2, a column as a slice | H4, and unusually cheap because a column is already contiguous |
+| 10 and 11, relational operations and permutations | follow from H4 via `sys/std/list` and `sys/std/ord` |
+| 3, an element proxy | the non-first-class borrow; not a table feature |
+| 4, growth | H2, because `push_row` needs a row type |
+| 7, field-set polymorphism | H3 |
+| 1, layout-agnostic syntax | **does not apply** |
+
+That last row is the one that should change a decision. Every other language's
+headline reason for a big struct-of-arrays feature is letting one piece of code
+run over either layout, so that the choice can be measured. There is no
+array-of-structs table here to switch to, and no plan for one, so that
+motivation is absent -- which removes the strongest argument for an ambitious
+feature and leaves the data-side wants doing all the work.
+
 ## H1: a `table` bound
 
 `fun len<T>(ref t: T): index with { T is table, }`, joining `ord`, `float` and
@@ -205,7 +284,10 @@ is the one the runtime is already built for. It also subsumes H1, so H1 is only
 worth doing if H2 is being deferred indefinitely.
 
 H3 is a real feature with real power and should be judged as a *struct* feature
-that tables inherit, not as a table fix.
+that tables inherit, not as a table fix. It is also the one the entity-component
+crowd wants most once the basics are there, and the one they most often fake at
+run time -- which is a reason to be sure it is wanted here before paying for it
+in the type system.
 
 ## What would settle it
 
@@ -213,3 +295,9 @@ Whether anyone wants to write a function over a table whose columns they do not
 know. If the answer is no -- if every table in practice has its columns written
 down at the point of use -- then H4 alone is the whole answer, and the absence
 of `sys/std/table` is correct rather than a gap.
+
+And whether a table is meant to be *built* or only written down. Everything H4
+gives is reading; a table whose rows are accumulated from data needs
+`push_row`, which needs H2. That is the question with the clearest consequence,
+because a table that cannot be built from data is a literal with a comparison,
+and nothing in the list above wants one of those.
