@@ -14,11 +14,40 @@ home here.
 
 ## Contents
 
+- [A table literal silently drops what follows a column name](#user-content-a-table-literal-silently-drops-what-follows-a-column-name)
 - [No table module, and none can be written](#user-content-no-table-module-and-none-can-be-written)
 - [A unit that fails part way through leaves its index to the next one](#user-content-a-unit-that-fails-part-way-through-leaves-its-index-to-the-next-one)
 - [Inlining never triggers from a caller in an earlier unit](#user-content-inlining-never-triggers-from-a-caller-in-an-earlier-unit)
 - [A field of a const cannot be projected, but a const can be destructured](#user-content-a-field-of-a-const-cannot-be-projected-but-a-const-can-be-destructured)
 - [A specialized function keeps an original nobody calls](#user-content-a-specialized-function-keeps-an-original-nobody-calls)
+
+## A table literal silently drops what follows a column name
+
+**Reproduced.** Accepted and wrong, with no diagnostic.
+
+```datalove
+let t: {| x: u32 |} = {| x zzz |}
+debuglog t                          // {| x |}
+
+let xs: [u32] = [1, 2]
+let u: {| x: u32 |} = {| x = xs |}
+debuglog u                          // {| x |}
+```
+
+Anything written after a column name in a table header is discarded, so a typo
+reads as a table with no rows rather than an error. `{| x = xs |}` is the same
+thing: not a columnar literal, just `{| x |}` with `= xs` thrown away.
+
+**Cause not found.** `parse_table_header` takes the first token of a header cell
+and lets the rest go, which looks like it, but making the cell require exactly
+one token did not change the behaviour, and neither did setting `had_error` on
+the D031 path -- so the extra tokens are gone before the header parser sees
+them, somewhere in `split_lines` or the tree tokenizer. The typechecker is not
+at fault: T054 and T055 do check a header's arity and names, and would have
+caught a two-column header.
+
+**What it costs.** Small but the bad kind: a misspelling produces a working
+program with an empty table rather than a refusal.
 
 ## No table module, and none can be written
 

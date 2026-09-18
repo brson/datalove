@@ -4,6 +4,11 @@ A table is a first-class opaque value: it can be built, moved, cloned, compared,
 sorted, keyed on and held inside anything, and nothing can look inside one. This
 is why, and what could be done about it.
 
+The intent behind tables is a dataframe -- relational operations, and pipelines
+that take a table of one schema to a table of another. [If the target is
+Polars](#user-content-if-the-target-is-polars) is the section that weighs the
+hypotheses against that; the rest works up to it.
+
 Hypotheses, not a plan. Nothing here is implemented.
 
 ## What a table can do today
@@ -271,17 +276,104 @@ a table with no columns to project. Those need a row type, which is H2.
 **Verdict: the most value per unit of work**, and it is already the documented
 intent rather than a new idea.
 
+## If the target is Polars
+
+The intent behind tables is a dataframe: relational operations, and pipelines
+that take a table of one schema to a table of another. That changes which
+hypothesis matters, and it brings in a constraint the list above does not.
+
+### Polars itself does not type its schemas
+
+Worth saying first, because "like Polars" can be read two ways. A Polars
+`DataFrame` is **one type**; the schema is runtime data, and `select` and `join`
+are checked when the plan is resolved rather than when the code is compiled.
+Every dataframe library in wide use works this way -- pandas, Arrow, R.
+
+Datalove has already chosen the other side: `{| x: u32, y: string |}` *is* a
+type, and the schema is in it. So the operations that a dataframe library gets
+for free by being untyped are exactly the ones that need type-level machinery
+here. That is not an argument against doing it. It is an argument for knowing
+that the precedent being copied solved this problem by declining it.
+
+The statically typed precedent is Ur/Web, which types SQL with type-level
+records, row concatenation and disjointness constraints. It is the existence
+proof, and also the measure of what it costs.
+
+### The operations sort by what they do to the schema
+
+This is the useful decomposition, because the tiers need very different things.
+
+| Tier | Operations | What it needs |
+|---|---|---|
+| **Preserving** | filter, sort, reverse, head, tail, slice, distinct, concat, sample | **H2 alone.** `fun filter<R>(t: table R, ref mask: [bool]): table R` is writable the day a row type exists |
+| **Shrinking** | select, drop | row subtraction, or written by hand per schema pair |
+| **Growing** | with_column, derive, rename | row extension, or by hand |
+| **Combining** | join, union | row concatenation with disjointness |
+| **Computing** | group_by/agg, pivot | type-level *functions* -- the output type depends on which aggregate was applied |
+
+The top row is the surprise. Every schema-preserving operation is generic in the
+row and needs no type-level computation at all, and that is a large fraction of
+a real pipeline. **H2 on its own buys a working relational vocabulary**, with
+schema changes written by hand at the points where the schema changes -- which
+in a pipeline is a handful of places, and arguably wants writing down anyway.
+
+The bottom row is where even an ambitious design gives up: the type of
+`group_by(...).agg(sum(x), mean(y))` is the grouping keys plus one column per
+aggregate, with each type decided by which aggregate it was. Writing that output
+schema by hand is what a static language should expect to do.
+
+### No first-class functions, which settles the API shape
+
+There are no function values here -- a function type in a parameter is a parse
+error, and `Type::Function` is a `todo!()` in the IR. So the Polars *expression*
+API, which is closures and lazily built expression trees (`col("x") > 5`), is
+not expressible.
+
+What is expressible is the **mask-and-column** shape:
+
+```datalove
+let mask = gt(ref t.x, : u32 / 5)      // [bool]
+let hits = filter(t, ref mask)          // table R
+```
+
+Which is what Arrow and Polars actually are underneath -- kernels over columns,
+with the expression API sitting on top as sugar. So the absence of closures
+pushes the design toward the layer that does the work, rather than away from it.
+It also means the column-wise arithmetic (`gt`, `add`, `sum`) is ordinary
+generic code over `[T]` with the bounds that already exist, and belongs in
+`sys/std/list` or a `column` module rather than in a table module at all.
+
+### What this changes
+
+**H4 stops being sufficient on its own.** Reading columns gets the kernels, but
+a pipeline has to *produce* a table at each stage, and nothing can build one
+from data. H2 is not optional for this target -- it is the half that matters.
+
+**H2 rises to first.** It gives `push_row`, the schema-preserving tier in full,
+and the row type that every later hypothesis is written in terms of.
+
+**H3 becomes the question of how much of the schema algebra to buy**, rather
+than an ECS curiosity. Row concatenation gets `join`; subtraction gets `select`.
+They can be bought separately, and the preserving tier needs neither.
+
+So for a dataframe the order is **H2, then H4, then as much of H3 as joins are
+worth** -- the reverse of the order the general analysis suggested, because that
+one was weighing reading against writing and a pipeline needs writing.
+
 ## Sequencing
 
-**H4, then H2, and H3 only if asked for.**
+**For a dataframe: H2, then H4, then as much of H3 as joins are worth.**
+**For tables as values only: H4, then H2, and H3 only if asked for.**
 
-H4 needs no type-system change, is already specified, and unblocks most of what
-anyone would want a table module for -- because the answer turns out not to be a
-table module but the list module pointed at a column.
+The order turns on whether tables are meant to be built or only read. H4 needs
+no type-system change, is already specified, and unblocks every reading
+operation -- because the answer there is not a table module but the list module
+pointed at a column. H2 is what makes the natives writable, gives the row-level
+operations, and lets a table be built from data at all.
 
-H2 is what makes the natives writable and gives the row-level operations, and it
-is the one the runtime is already built for. It also subsumes H1, so H1 is only
-worth doing if H2 is being deferred indefinitely.
+A pipeline needs both, and needs H2 more, since a stage that cannot produce a
+table is not a stage. H2 also subsumes H1, so H1 is only worth doing if H2 is
+being deferred indefinitely.
 
 H3 is a real feature with real power and should be judged as a *struct* feature
 that tables inherit, not as a table fix. It is also the one the entity-component
