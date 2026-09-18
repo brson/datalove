@@ -1,0 +1,37 @@
+require module sys/std/tensor
+
+import tensor.len
+import tensor.rank
+import tensor.is_empty
+import tensor.get
+import tensor.first
+import tensor.last
+import tensor.set_at
+import tensor.to_list
+
+// The tensor module, which is written at rank 1.
+//
+// The rank is part of a tensor's type rather than a parameter, so there is no
+// way to write "a tensor of any rank" and these all take `[|T, 1|]`. What a
+// tensor has that a list does not is a shape, which is where its length lives
+// -- `tensor_len` is a native for that reason where `list.len` could have been
+// written here. What it lacks is any way to grow, so `set_at` writes in place
+// and `to_list` is how one becomes something that can grow.
+
+let t: [|u32, 1|] = [| 10 20 30 |]
+let sizes = (len(ref t), rank(ref t), is_empty(ref t))
+let reads = (get(ref t, : index / 1), get(ref t, : index / 9), first(ref t), last(ref t))
+let listed = to_list(ref t)
+
+// One element, where first and last are the same.
+let one: [|u32, 1|] = [| 7 |]
+let single = (len(ref one), first(ref one), last(ref one), to_list(ref one))
+
+// An element that owns something, so the old one is destroyed and the new one
+// moved rather than copied.
+var words: [|string, 1|] = [| "a" "b" |]
+let wrote = set_at(mut words, : index / 1, : string / "zed")
+let past_end = set_at(mut words, : index / 9, : string / "no")
+let after = to_list(ref words)
+
+let output = (sizes, reads, listed, single, wrote, past_end, after, words)

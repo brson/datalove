@@ -14,10 +14,53 @@ home here.
 
 ## Contents
 
+- [No table module, and none can be written](#user-content-no-table-module-and-none-can-be-written)
 - [A unit that fails part way through leaves its index to the next one](#user-content-a-unit-that-fails-part-way-through-leaves-its-index-to-the-next-one)
 - [Inlining never triggers from a caller in an earlier unit](#user-content-inlining-never-triggers-from-a-caller-in-an-earlier-unit)
 - [A field of a const cannot be projected, but a const can be destructured](#user-content-a-field-of-a-const-cannot-be-projected-but-a-const-can-be-destructured)
 - [A specialized function keeps an original nobody calls](#user-content-a-specialized-function-keeps-an-original-nobody-calls)
+
+## No table module, and none can be written
+
+**Investigated, not a fault.** A table can be built, passed, cloned, dropped
+and held inside anything (`std_tests/144_table_shapes`); what it has no
+operations at all is `sys/std`. Two things stop a module being written.
+
+**There is no way to say "any table".** A table's type carries its whole column
+list -- `{| x: u32, y: string |}` -- and there is no row or column type
+parameter and no `table` bound. So `fun len(ref self: ???)` has nothing to put
+in the hole. A type parameter bound to a table does pass through a generic
+unharmed, but a function that only forwards a value is not an operation:
+
+```datalove
+fun rows<T>(ref t: T): index    // compiles, and can do nothing with `t`
+```
+
+Writing the natives over a bare `T` instead would accept a list or a string
+just as readily and read their bytes as a table's.
+
+**A column's type varies by column.** `dtlv_rti_table_get_local` takes a row
+and a column and hands back a raw pointer, because there is no one type to
+hand back. A `get(ref self, row, col)` has no return type to write: the answer
+depends on `col`, which is a value. So even a module written for one concrete
+table type could not have a general `get`; it would need one accessor per
+column, which is what column projection syntax (`t.x`) would give.
+
+**What exists underneath.** The runtime has `table_create`, `table_destroy`,
+`table_push_row`, `table_build_from_rows`, `table_get`, `table_set`,
+`table_clear` and `table_len`, none of them reachable from the language. The
+spec mentions column projections yielding a list view; `t.x` is
+`ProjectionOnNonAggregate` today, and `t[i]?` is refused because indexing wants
+a list, map or tensor.
+
+**What it would take**, in the order it would have to happen: column projection
+(`t.x`, giving `[T]`), which makes per-column access expressible; then either a
+row type parameter or a `table` bound, which is what a *generic* `len` and
+`push_row` need. The second is a type-system feature rather than a library one.
+
+**The tensor module went the other way** and is written, because a tensor's
+element *is* a type parameter -- `[|T, 1|]` -- even though its rank is not. See
+`sys/std/tensor.dfm`.
 
 ## A unit that fails part way through leaves its index to the next one
 

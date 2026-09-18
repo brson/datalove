@@ -130,6 +130,13 @@ native fun map_remove<K, V>(mut self: %{K = V}, ref key: K) with { K is ord, }
 native fun map_key_at<K, V>(ref self: %{K = V}, i: index): ?K with { K is ord, }
 native fun map_value_at<K, V>(ref self: %{K = V}, i: index): ?V with { K is ord, }
 
+// Tensors. The rank is part of the type rather than a parameter, so these are
+// written at rank 1 -- the shape a list-like walk wants. What they need that a
+// list does not is the length: a tensor's own is in its shape rather than its
+// header, and there is no other way to ask for it.
+native fun tensor_len<T>(ref self: [|T, 1|]): index
+native fun tensor_rank<T>(ref self: [|T, 1|]): index
+
 native fun set_len<T>(ref self: #{T}): index with { T is ord, }
 native fun set_clear<T>(mut self: #{T}) with { T is ord, }
 native fun set_contains<T>(ref self: #{T}, ref elem: T): bool with { T is ord, }

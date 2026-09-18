@@ -296,9 +296,13 @@ Because the innermost axis is separated by nothing but whitespace, an
 operator's spacing decides how many elements a row has (Section 2.4):
 `[| 1 -2 |]` holds two elements and `[| 1 - 2 |]` holds one.
 
-Tensor literals can be created and stored, but element access and tensor
-operations (indexing, transpose, slice, reshape) are not yet exposed to the
-language. The runtime supports these operations internally.
+Indexing a tensor is exposed: `t[i]?` reads along axis 0, and `set t[i]? = v`
+writes there. `sys/std/tensor` is written over that, at rank 1. Transpose,
+slice and reshape are not exposed; the runtime supports them internally.
+
+A tensor's rank is part of its type rather than a parameter, so a function
+takes a tensor of one rank -- `[|T, 1|]` and `[|T, 2|]` are different types and
+neither can be written as "a tensor of any rank".
 
 ### 3.3 Aggregate Types
 

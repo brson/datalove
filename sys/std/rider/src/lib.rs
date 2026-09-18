@@ -1080,6 +1080,41 @@ pub extern "C-unwind" fn dlr_std__list_len(
 }
 
 #[no_mangle]
+pub extern "C-unwind" fn dlr_std__tensor_len(
+    _rt: *mut u8,
+    tensor_ptr: *const u8, _tensor_td: *const u8,
+    out: *mut u8, _out_td: *const u8,
+) -> u8 {
+    // A tensor's length along axis 0 is the first entry of its shape. Nothing
+    // in the header says it: the header is a pointer, an offset, a capacity
+    // and the two shape arrays.
+    unsafe {
+        let tensor = &*(tensor_ptr as *const rtdt::Tensor);
+        let len = if tensor.shape.is_null() {
+            rtdt::Index::ZERO
+        } else {
+            *tensor.shape
+        };
+        *(out as *mut rtdt::Index) = len;
+    }
+    OK
+}
+
+#[no_mangle]
+pub extern "C-unwind" fn dlr_std__tensor_rank(
+    _rt: *mut u8,
+    _tensor_ptr: *const u8, tensor_td: *const u8,
+    out: *mut u8, _out_td: *const u8,
+) -> u8 {
+    unsafe {
+        let ty = rtdt::TyDescRef::from_ptr(tensor_td as *const rtdt::TyDesc);
+        let rank = (*ty.as_ptr()).type_info.tensor.rank;
+        *(out as *mut rtdt::Index) = rtdt::Index(rank as rtdt::IndexRepr);
+    }
+    OK
+}
+
+#[no_mangle]
 pub extern "C-unwind" fn dlr_std__list_get(
     rt: *mut u8,
     list_ptr: *const u8, list_td: *const u8,
