@@ -394,8 +394,10 @@ another function's body and blanks its `shape_descriptors`, because
 `DescriptorRef::Own(i)` indexes the *enclosing* function's shapes and those
 indices mean nothing once the body has moved. It now does the same to a
 `ComptimeCall`, which keeps the two arms honest. Blanking without re-resolving is
-a gap for generic callees either way -- that is pre-existing, is not reached by
-anything today, and is not this change's to fix.
+a gap for generic callees either way, and it turned out to be a live bug rather
+than a theoretical one; it is written up, along with the finding that nothing
+outside the test suite inlines at all, in
+[Known issues](../issues.md#user-content-inlining-drops-a-calls-shape-descriptors-and-nothing-but-a-test-inlines).
 
 **The refusal is `TypeError::ComptimeParamOfGenericType`**, reported against the
 parameter. It reads the *resolved* parameter type rather than the AST hint, since
