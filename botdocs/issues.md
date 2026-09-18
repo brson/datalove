@@ -22,9 +22,16 @@ home here.
 
 ## No table module, and none can be written
 
-**Investigated, not a fault.** A table can be built, passed, cloned, dropped
-and held inside anything (`std_tests/144_table_shapes`); what it has no
-operations at all is `sys/std`. Two things stop a module being written.
+**Investigated, not a fault.** A table is a first-class opaque value: built,
+moved, cloned, compared, sorted, keyed on, held inside anything
+(`std_tests/144_table_shapes`). What nothing does is look inside one -- no cell
+accessor, no row count, no push or pop -- and no module could add them. Two
+things stop one being written.
+
+Note that `ord` already reaches tables: `ord.compare` and `ord.equal` take one,
+because the comparison walks a value from its descriptor, so `ord.sorted`,
+`ord.contains` and the rest work over a `[{| ... |}]`. Whole-table operations
+are not the gap.
 
 **There is no way to say "any table".** Tables *are* generic per column --
 `fun ident<T>(t: {| x: T, y: u32 |})` compiles and runs, and
@@ -53,6 +60,10 @@ column, which is what column projection syntax (`t.x`) would give.
 spec mentions column projections yielding a list view; `t.x` is
 `ProjectionOnNonAggregate` today, and `t[i]?` is refused because indexing wants
 a list, map or tensor.
+
+Because nothing reaches `table_push_row`, a table's row count is whatever was
+written in the literal that made it, so a table cannot be built from data at
+all.
 
 **What it would take** is worked through in
 [Tables: what the type system is missing](design-table-rows.md). The short of

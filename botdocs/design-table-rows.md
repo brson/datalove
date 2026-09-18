@@ -1,10 +1,44 @@
 # Tables: what the type system is missing, and four ways out
 
-A table can be built, passed, cloned, dropped and held inside anything. It has
-no operations at all, and none can be written. This is why, and what could be
-done about it.
+A table is a first-class opaque value: it can be built, moved, cloned, compared,
+sorted, keyed on and held inside anything, and nothing can look inside one. This
+is why, and what could be done about it.
 
 Hypotheses, not a plan. Nothing here is implemented.
+
+## What a table can do today
+
+Checked by running each.
+
+**Whole-table operations all work.** Construction from a literal, printing,
+`@`, passing by `in`, `ref`, `mut` and `out`, returning, whole-table assignment,
+and passing through a generic. Tables hold anything a column type can be,
+including lists and other tables, and go inside options, results, lists, sets
+and maps, and can be written as a `const`.
+
+**Ordering works, which is further than it looks.** `ord.compare` and
+`ord.equal` take tables, because `ord_compare` walks a value structurally from
+its descriptor and a table is just another shape to walk. So every list function
+in `sys/std/ord` reaches a `[{| ... |}]`: `sorted`, `contains`, `index_of`,
+`count_of`, `least`, `greatest`, `is_sorted`, `binary_search`, `deduped`. That
+is also what lets a table be a set element or a map key.
+
+`==` and `.<` refuse a table, but they refuse a string and a list too; `ord` is
+the way to compare anything that is not a number.
+
+**Nothing reads a part of one.** `t.x` is `ProjectionOnNonAggregate`, `t[i]?` is
+"indexing requires list, map, or tensor type", and there is no cell accessor of
+any other spelling. A table's *values* can be arbitrary expressions -- `{| x; n |}`
+where `n` is a binding is fine -- so values go in and never come out except as
+part of the whole.
+
+**Nothing changes its shape.** There is no push, pop, insert or remove of a row,
+and no row count. The number of rows a table has is the number written in the
+literal that made it, so a table cannot be built from data: `table_push_row` and
+`table_build_from_rows` exist in the runtime and no syntax reaches them.
+
+So a table today is a *composite literal with a comparison*: useful as a value,
+inert as a structure.
 
 ## The problem, stated precisely
 
