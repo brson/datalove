@@ -47,6 +47,7 @@ Thorough compiler architecture, bare language.
 - human docs
 - fully reactive scripts, undo/redo
 - closures
+- table row polymorphism
 
 
 
