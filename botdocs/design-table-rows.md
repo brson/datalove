@@ -253,6 +253,55 @@ should have an obvious lowering" true.
 R}` applies to anonymous structs first and tables second. If it is wanted, it is
 wanted for structs, and tables come along.
 
+### How far up the type system this goes
+
+"Type-level functions" above is loose, and the precision matters because it
+decides how expensive H3 is.
+
+The lambda cube separates the ways one thing can depend on another:
+
+| | Depends on | Name |
+|---|---|---|
+| λ2 | terms on *types* | polymorphism -- what generics already are |
+| λω | types on *types* | type operators, "type-level functions" |
+| λP | types on *terms* | dependent types |
+
+**Row algebra is λω, not λP.** `List` is already a function from a type to a
+type; `R ++ S` is another. `join : table (K ++ A) -> table (K ++ B) -> table (K
+++ A ++ B)` never puts a *value* in a type. It is System F-omega plus a row
+theory, which is settled technology with practical designs -- Remy's, and
+Leijen's scoped labels. Dependent types are a different and much larger thing,
+and nothing in the table story needs them.
+
+**One place tempts otherwise: column names look like values.** `select(t, "x")`
+has a string deciding the output type, which is a term in a type. Every real
+system dodges it by making labels type-level entities -- Haskell's `Symbol`,
+PureScript's `Row` and `Symbol` kinds, Ur/Web's `{Nm :: Type}`. The surface
+still reads `t.x`; the label elaborates to a type-level thing and it stays in
+λω. That is the dodge to copy.
+
+**The other dodge is staging, and it costs the thing generics were built for.**
+Compute the type at compile time instead of reasoning about it -- Zig's
+`fn Foo(comptime T: type) type`, C++ templates, Rust const generics. Datalove
+has both ingredients already: CTFE that evaluates const expressions including
+calls, and const parameters monomorphized per instantiation. But a function
+cannot have const parameters and type parameters at the same time today
+(`ComptimeParamOnGeneric`), and more to the point a type computed per
+instantiation forces *checking* per instantiation -- errors at the call site
+rather than the definition, and compile work proportional to instantiations.
+That is precisely what [plan-generics.md](plan-generics.md) chose erasure to
+avoid, for a REPL. So staging is available and is not free, and it should not
+be mistaken for the cheap path.
+
+**What each tier actually needs**, against the table above:
+
+- Preserving -- λ2. Polymorphic in the row and nothing more. Most of a pipeline.
+- Shrinking, growing, combining -- λω. Costly to build, not exotic.
+- Computing -- the only tier that smells of λP, and the one every static system
+  including Ur/Web expects to be written out by hand.
+
+So the expensive end is wanted only where it would be written by hand anyway.
+
 ## H4: column projection alone, and no table module
 
 Implement what the spec already promises -- "Column projections (e.g.,
@@ -309,7 +358,7 @@ This is the useful decomposition, because the tiers need very different things.
 | **Shrinking** | select, drop | row subtraction, or written by hand per schema pair |
 | **Growing** | with_column, derive, rename | row extension, or by hand |
 | **Combining** | join, union | row concatenation with disjointness |
-| **Computing** | group_by/agg, pivot | type-level *functions* -- the output type depends on which aggregate was applied |
+| **Computing** | group_by/agg, pivot | type-level *functions* over labels -- the output type depends on which aggregate was applied. See [how far up this goes](#user-content-how-far-up-the-type-system-this-goes) |
 
 The top row is the surprise. Every schema-preserving operation is generic in the
 row and needs no type-level computation at all, and that is a large fraction of
