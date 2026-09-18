@@ -46,7 +46,7 @@ Thorough compiler architecture, bare language.
 - assert and using it in favor of hacks in test harnesses
 - human docs
 - fully reactive scripts, undo/redo
-
+- closures
 
 
 
