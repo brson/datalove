@@ -285,7 +285,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         let value_ptr = self.get_operand_ptr(builder, value)?;
         let value_tydesc_ptr = self.resolve_tydesc_ptr(builder, &s.value_ty)?;
 
-        let func_ref = self.module.declare_func_in_func(s.runtime.map_set_value, builder.func);
+        let func_ref = self.module.declare_func_in_func(s.runtime.map_set_value_erased, builder.func);
         builder.ins().call(func_ref, &[
             s.rt_handle,
             s.map_ptr,

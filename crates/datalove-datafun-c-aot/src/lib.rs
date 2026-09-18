@@ -341,6 +341,9 @@ impl CAotCompiler {
         writeln!(out, "extern const dtlv_tydesc_t* dtlv_rti_element_tydesc(const dtlv_tydesc_t* tydesc);").unwrap();
         writeln!(out, "extern uint8_t dtlv_rti_btreemap_contains_key_erased_local(void* rt, const void* map_ref, const dtlv_tydesc_t* map_tydesc, const void* key_ref, const dtlv_tydesc_t* key_tydesc, bool_t* result_out);").unwrap();
         writeln!(out, "extern uint8_t dtlv_rti_btreemap_get_value_ref_erased_local(void* rt, const void* map_ref, const dtlv_tydesc_t* map_tydesc, const void* key_ref, const dtlv_tydesc_t* key_tydesc, void** value_ptr_out);").unwrap();
+        writeln!(out, "extern uint8_t dtlv_rti_list_set_erased_local(void* rt, void* list_mut, const dtlv_tydesc_t* list_tydesc, index_t index, void* elem_in, const dtlv_tydesc_t* elem_tydesc);").unwrap();
+        writeln!(out, "extern uint8_t dtlv_rti_element_write_local(void* rt, void* slot_out, const dtlv_tydesc_t* slot_tydesc, void* value_in, const dtlv_tydesc_t* value_tydesc);").unwrap();
+        writeln!(out, "extern uint8_t dtlv_rti_btreemap_set_value_erased_local(void* rt, void* map_mut, const dtlv_tydesc_t* map_tydesc, const void* key_ref, const dtlv_tydesc_t* key_tydesc, void* value_in, const dtlv_tydesc_t* value_tydesc);").unwrap();
         writeln!(out, "extern uint8_t dtlv_rti_field_read_local(void* rt, void* dest, const dtlv_tydesc_t* dest_tydesc, const void* base, const dtlv_tydesc_t* base_tydesc, uint32_t index);").unwrap();
         writeln!(out, "extern void* dtlv_rti_mem_alloc_raw_local(void* rt, uint32_t size, uint32_t align, index_t count);").unwrap();
         writeln!(out, "extern uint8_t dtlv_rti_string_from_bytes(void* rt, const uint8_t* bytes, uint32_t len, void* result_out, const dtlv_tydesc_t* tydesc);").unwrap();

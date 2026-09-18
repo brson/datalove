@@ -305,10 +305,9 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 "TensorSet on non-tensor type: {:?}", tensor_ty
             ))),
         };
-        let elem_repr = types::ir_type_to_cranelift(&elem_ty);
         let tensor_ptr = self.get_operand_ptr(builder, tensor)?;
         let idx = self.get_operand_value(builder, index)?;
-        let (elem_size, _) = self.tensor_elem_width(builder, tensor, &elem_ty)?;
+        let (elem_size, dynamic_desc) = self.tensor_elem_width(builder, tensor, &elem_ty)?;
 
         let elem_addr = self.compute_tensor_element_addr(builder, tensor_ptr, idx, elem_size);
 
@@ -326,21 +325,14 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         let tydesc_gv = self.module.declare_data_in_func(tydesc_id, builder.func);
         let tydesc_ptr = builder.ins().symbol_value(PTR_TYPE, tydesc_gv);
 
-        // Destroy old element.
-        let destroy_ref = self.module.declare_func_in_func(runtime.destroy_local, builder.func);
-        builder.ins().call(destroy_ref, &[rt_handle, elem_addr, tydesc_ptr]);
-
-        // Store new value.
-        let val = self.get_operand_value(builder, value)?;
-        match elem_repr {
-            CraneliftRepr::Scalar(_) => {
-                builder.ins().store(MemFlagsData::new(), val, elem_addr, 0);
-            }
-            CraneliftRepr::Aggregate(_) => {
-                let move_ref = self.module.declare_func_in_func(runtime.move_value, builder.func);
-                builder.ins().call(move_ref, &[rt_handle, val, tydesc_ptr, elem_addr]);
-            }
-        }
+        // The runtime destroys what was there and decides which shape the value
+        // in hand is in: wrapped, the slot's own, or the slot's with `data` at
+        // some position inside it.
+        let elem_desc = dynamic_desc.unwrap_or(tydesc_ptr);
+        let value_ptr = self.get_operand_ptr(builder, value)?;
+        let value_tydesc = self.operand_tydesc(builder, value)?;
+        let write_ref = self.module.declare_func_in_func(runtime.element_write, builder.func);
+        builder.ins().call(write_ref, &[rt_handle, elem_addr, elem_desc, value_ptr, value_tydesc]);
 
         Ok(())
     }

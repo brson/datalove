@@ -3014,31 +3014,16 @@ impl<'a> FunctionCodegenContext<'a> {
                 "ListSet on non-list type: {:?}", list_ty
             ))),
         };
-        let elem_repr = types::ir_type_to_crepr(&elem_ty);
-        let elem_size = elem_repr.layout().size;
-        let elem_tydesc = self.tydesc_name(&elem_ty);
-
-        // Compute element address.
-        writeln!(out, "    {{ void* __elem = *(void**){} + (size_t)*(index_t*){} * {};",
-            list_addr, index_addr, elem_size).unwrap();
-
-        // Destroy old element.
-        writeln!(out, "    dtlv_rti_any_destroy_local(rt, __elem, &{});", elem_tydesc).unwrap();
-
-        // Store new value.
-        match &elem_repr {
-            CRepr::Scalar(c_ty) => {
-                writeln!(out, "    *({c_ty}*)__elem = *({c_ty}*){value_addr};").unwrap();
-            }
-            CRepr::Aggregate(layout) => {
-                if layout.size > 0 {
-                    writeln!(out, "    dtlv_rti_move_value_local(rt, {}, &{}, __elem);",
-                        value_addr, elem_tydesc).unwrap();
-                }
-            }
-        }
-
-        writeln!(out, "    }}").unwrap();
+        let _ = elem_ty;
+        // The runtime destroys what was there, decides whether the value in
+        // hand is wrapped, in the slot's shape already, or the slot's shape
+        // with `data` at some position inside it, and stores it. Inside a
+        // generic the value is a wrapper, and writing its bytes as the element
+        // stores the wrapper's tag where the number belongs.
+        let list_tydesc = self.operand_tydesc(list);
+        let value_tydesc = self.operand_tydesc(value);
+        writeln!(out, "    dtlv_rti_list_set_erased_local(rt, {}, {}, *(index_t*){}, {}, {});",
+            list_addr, list_tydesc, index_addr, value_addr, value_tydesc).unwrap();
         Ok(())
     }
 
@@ -3210,11 +3195,15 @@ impl<'a> FunctionCodegenContext<'a> {
             ))),
         };
 
-        let map_tydesc = self.tydesc_name(&map_ty);
+        let _ = value_ty;
+        // The truthful map descriptor; the key may have arrived packed and the
+        // value may be in the erased shape, both of which the runtime sorts
+        // out. See the containment check above.
+        let map_tydesc = self.operand_tydesc(map);
         let key_tydesc = self.tydesc_name(&key_ty);
-        let value_tydesc = self.tydesc_name(&value_ty);
+        let value_tydesc = self.operand_tydesc(value);
 
-        writeln!(out, "    dtlv_rti_btreemap_set_value_local(rt, {}, &{}, {}, &{}, {}, &{});",
+        writeln!(out, "    dtlv_rti_btreemap_set_value_erased_local(rt, {}, {}, {}, &{}, {}, {});",
             map_addr, map_tydesc, key_addr, key_tydesc, value_addr, value_tydesc).unwrap();
         Ok(())
     }
@@ -4044,33 +4033,27 @@ impl<'a> FunctionCodegenContext<'a> {
                 "TensorSet on non-tensor type: {:?}", tensor_ty
             ))),
         };
-        let elem_repr = types::ir_type_to_crepr(&elem_ty);
-        let elem_size = elem_repr.layout().size;
-        let elem_tydesc = self.tydesc_name(&elem_ty);
-
         let ptr_base_offset = std::mem::offset_of!(datalove_rtdt::Tensor, ptr_base);
         let offset_elems_offset = std::mem::offset_of!(datalove_rtdt::Tensor, offset_elems);
         let strides_offset = std::mem::offset_of!(datalove_rtdt::Tensor, strides);
 
-        writeln!(out, "    {{ void* __elem = *(void**)({t} + {pb}) + (size_t)(*(index_t*)({t} + {oe}) + *(index_t*){idx} * **(index_t**)({t} + {st})) * {es};",
+        // Inside a generic the static element type is a `data`, so neither the
+        // stride nor the width of what is written comes from it. The tensor's
+        // own descriptor says both, and the runtime decides whether the value
+        // in hand is wrapped, already in the slot's shape, or that shape with
+        // `data` at some position inside it.
+        let elem_desc = match self.operand_ref_desc(tensor) {
+            Some(desc) => format!("dtlv_rti_element_tydesc({})", desc),
+            None => format!("&{}", self.tydesc_name(&elem_ty)),
+        };
+        let value_tydesc = self.operand_tydesc(value);
+
+        writeln!(out, "    {{ const dtlv_tydesc_t* __et = {};", elem_desc).unwrap();
+        writeln!(out, "    void* __elem = *(void**)({t} + {pb}) + (size_t)(*(index_t*)({t} + {oe}) + *(index_t*){idx} * **(index_t**)({t} + {st})) * __et->size;",
             t = tensor_addr, pb = ptr_base_offset, oe = offset_elems_offset,
-            idx = index_addr, st = strides_offset, es = elem_size).unwrap();
-
-        // Destroy old element.
-        writeln!(out, "    dtlv_rti_any_destroy_local(rt, __elem, &{});", elem_tydesc).unwrap();
-
-        // Store new value.
-        match &elem_repr {
-            CRepr::Scalar(c_ty) => {
-                writeln!(out, "    *({c_ty}*)__elem = *({c_ty}*){value_addr};").unwrap();
-            }
-            CRepr::Aggregate(layout) => {
-                if layout.size > 0 {
-                    writeln!(out, "    dtlv_rti_move_value_local(rt, {}, &{}, __elem);",
-                        value_addr, elem_tydesc).unwrap();
-                }
-            }
-        }
+            idx = index_addr, st = strides_offset).unwrap();
+        writeln!(out, "    dtlv_rti_element_write_local(rt, __elem, __et, {}, {});",
+            value_addr, value_tydesc).unwrap();
 
         writeln!(out, "    }}").unwrap();
         Ok(())

@@ -1350,6 +1350,89 @@ pub unsafe extern "C-unwind" fn dtlv_rti_list_push_erased_local(
     }
 }
 
+/// Write a value into a slot whose type the caller names, whatever shape the
+/// value arrived in.
+///
+/// What is already in the slot is destroyed first. The value is then unwrapped
+/// if it came wrapped whole, converted position by position if it came in the
+/// slot's erased shape, and moved as it stands otherwise -- the same three
+/// cases `dtlv_rti_list_push_erased_local` decides between, for a slot whose
+/// address the caller worked out rather than one a collection owns.
+#[unsafe(no_mangle)]
+pub unsafe extern "C-unwind" fn dtlv_rti_element_write_local(
+    rt: LocalRtHandle,
+    slot_out: *mut u8,
+    slot_tydesc: *const rtdt::TyDesc,
+    value_in: *mut u8,
+    value_tydesc: *const rtdt::TyDesc,
+) -> RtStatus {
+    debug_assert!(!slot_out.is_null(), "slot_out is null");
+    debug_assert!(!slot_tydesc.is_null(), "slot_tydesc is null");
+    debug_assert!(!value_in.is_null(), "value_in is null");
+    debug_assert!(!value_tydesc.is_null(), "value_tydesc is null");
+    unsafe {
+        let status = crate::impls::destroy::any_destroy_local(rt, slot_out, slot_tydesc);
+        if status != RtStatus::Ok {
+            return status;
+        }
+        if unwraps_the_element(value_tydesc, rtdt::TyDescRef::from_ptr(slot_tydesc)) {
+            return crate::impls::boxing::data_into_local(rt, value_in, slot_out, slot_tydesc);
+        }
+        if crate::impls::boxing::needs_erasure(slot_tydesc, value_tydesc) {
+            return crate::impls::boxing::reify_local(
+                rt, value_in, value_tydesc, slot_out, slot_tydesc);
+        }
+        let size = (*slot_tydesc).size as usize;
+        core::ptr::copy_nonoverlapping(value_in as *const u8, slot_out, size);
+        RtStatus::Ok
+    }
+}
+
+/// Replace a map value, where the key or the value may have arrived in the
+/// erased shape.
+/// See `borrow_lookup_key` and `dtlv_rti_list_push_erased_local`.
+#[unsafe(no_mangle)]
+pub unsafe extern "C-unwind" fn dtlv_rti_btreemap_set_value_erased_local(
+    rt: LocalRtHandle,
+    btreemap_value_mut: *mut u8,
+    btreemap_tydesc: *const rtdt::TyDesc,
+    key_ref: *const u8,
+    key_tydesc: *const rtdt::TyDesc,
+    value_in: *mut u8,
+    value_tydesc: *const rtdt::TyDesc,
+) -> RtStatus {
+    debug_assert!(!btreemap_tydesc.is_null(), "btreemap_tydesc is null");
+    debug_assert!(!key_tydesc.is_null(), "key_tydesc is null");
+    debug_assert!(!value_tydesc.is_null(), "value_tydesc is null");
+    unsafe {
+        let map_ty = rtdt::TyDescRef::from_ptr(btreemap_tydesc);
+        let value_ty = map_ty.map_value_ty();
+        let mut key_scratch = [0u8; 16];
+        let (key, key_ty) = borrow_lookup_key(
+            btreemap_tydesc, key_ref, key_tydesc, key_scratch.as_mut_ptr());
+
+        // Taken out of the wrapper rather than borrowed from it: the map
+        // keeps the value, so the wrapper has given it up and its own
+        // allocation goes with it. Borrowing would leave the box behind.
+        if unwraps_the_element(value_tydesc, value_ty) {
+            return unwrapped_then(rt, value_in, value_ty.as_ptr(), |scratch| {
+                dtlv_rti_btreemap_set_value_local(
+                    rt, btreemap_value_mut, btreemap_tydesc, key, key_ty,
+                    scratch, value_ty.as_ptr())
+            });
+        }
+        if crate::impls::boxing::needs_erasure(value_ty.as_ptr(), value_tydesc) {
+            return reified_then(rt, value_in, value_tydesc, value_ty.as_ptr(), |scratch| {
+                dtlv_rti_btreemap_set_value_local(
+                    rt, btreemap_value_mut, btreemap_tydesc, key, key_ty,
+                    scratch, value_ty.as_ptr())
+            });
+        }
+        dtlv_rti_btreemap_set_value_local(
+            rt, btreemap_value_mut, btreemap_tydesc, key, key_ty, value_in, value_tydesc)
+    }
+}
+
 /// Take the element at an index out, in whatever shape the destination is.
 /// See `dtlv_rti_list_push_erased_local` for the three cases.
 #[unsafe(no_mangle)]
@@ -3240,6 +3323,36 @@ unsafe fn borrow_lookup_key(
         let mut tydesc_out: *const rtdt::TyDesc = core::ptr::null();
         crate::impls::boxing::data_borrow(key_ref, scratch, &mut value_out, &mut tydesc_out);
         (value_out, tydesc_out)
+    }
+}
+
+/// Move a value out of the wrapper it crossed in, and do something with it.
+///
+/// The counterpart of `reified_then` for a value that arrived wrapped whole
+/// rather than in a shape that has to be walked. `data_into_local` takes the
+/// payload and releases the box, which is right where whatever comes next
+/// keeps the value; borrowing would leave the box behind.
+unsafe fn unwrapped_then(
+    rt: LocalRtHandle,
+    data_in: *mut u8,
+    want: *const rtdt::TyDesc,
+    then: impl FnOnce(*mut u8) -> RtStatus,
+) -> RtStatus {
+    unsafe {
+        let size = (*want).size;
+        let align = (*want).align;
+        let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
+        let scratch = rt_ref.alloc.alloc(size, align, 1);
+        if scratch.is_null() {
+            return RtStatus::Error;
+        }
+        let mut status = crate::impls::boxing::data_into_local(rt, data_in, scratch, want);
+        if status == RtStatus::Ok {
+            status = then(scratch);
+        }
+        let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
+        rt_ref.alloc.free(size, align, 1, scratch);
+        status
     }
 }
 

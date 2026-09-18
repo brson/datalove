@@ -275,45 +275,57 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 "ListSet on non-list type: {:?}", list_ty
             ))),
         };
-        let elem_repr = types::ir_type_to_cranelift(&elem_ty);
-        let elem_size = elem_repr.layout().size;
-
-        let list_ptr = self.get_operand_ptr(builder, list)?;
-        let idx = self.get_operand_value(builder, index)?;
-
-        // Compute element address.
-        let elem_addr = self.compute_element_addr(builder, list_ptr, idx, elem_size);
-
-        // Get runtime imports and tydesc.
         let runtime = self.runtime.ok_or_else(|| {
             CraneliftError::Codegen("ListSet requires runtime imports".into())
         })?;
         let rt_handle = self.rt_handle_param.ok_or_else(|| {
             CraneliftError::Codegen("ListSet requires runtime handle".into())
         })?;
-        let tydesc_id = self.tydesc_emitter.get(&elem_ty).ok_or_else(|| {
-            CraneliftError::Codegen(format!(
-                "TyDesc not found for element type {:?}", elem_ty
-            ))
-        })?;
-        let tydesc_gv = self.module.declare_data_in_func(tydesc_id, builder.func);
-        let tydesc_ptr = builder.ins().symbol_value(PTR_TYPE, tydesc_gv);
 
-        // Destroy old element.
-        let destroy_ref = self.module.declare_func_in_func(runtime.destroy_local, builder.func);
-        builder.ins().call(destroy_ref, &[rt_handle, elem_addr, tydesc_ptr]);
+        let list_ptr = self.get_operand_ptr(builder, list)?;
+        let idx = self.get_operand_value(builder, index)?;
 
-        // Store new value.
-        let val = self.get_operand_value(builder, value)?;
-        match elem_repr {
-            CraneliftRepr::Scalar(_) => {
-                builder.ins().store(MemFlagsData::new(), val, elem_addr, 0);
+        // Inside a generic the static element type is a `data`, so neither the
+        // stride nor the width of what is written comes from it.
+        let (elem_size, elem_desc) = match self.operand_ref_desc(list) {
+            Some(desc) => {
+                let elem_fn = self.module
+                    .declare_func_in_func(runtime.element_tydesc, builder.func);
+                let call = builder.ins().call(elem_fn, &[desc]);
+                let elem_desc = builder.inst_results(call)[0];
+                let size_offset = std::mem::offset_of!(datalove_rtdt::TyDesc, size) as i32;
+                let size = builder.ins().load(
+                    cl_types::I32, MemFlagsData::new(), elem_desc, size_offset);
+                (builder.ins().uextend(PTR_TYPE, size), elem_desc)
             }
-            CraneliftRepr::Aggregate(_) => {
-                let move_ref = self.module.declare_func_in_func(runtime.move_value, builder.func);
-                builder.ins().call(move_ref, &[rt_handle, val, tydesc_ptr, elem_addr]);
+            None => {
+                let size = types::ir_type_to_cranelift(&elem_ty).layout().size;
+                let tydesc_id = self.tydesc_emitter.get(&elem_ty).ok_or_else(|| {
+                    CraneliftError::Codegen(format!(
+                        "TyDesc not found for element type {:?}", elem_ty))
+                })?;
+                let gv = self.module.declare_data_in_func(tydesc_id, builder.func);
+                (builder.ins().iconst(PTR_TYPE, size as i64),
+                 builder.ins().symbol_value(PTR_TYPE, gv))
             }
-        }
+        };
+
+        // Compute element address.
+        let data_ptr = builder.ins().load(PTR_TYPE, MemFlagsData::new(), list_ptr, 0);
+        let idx_wide = if INDEX_TYPE != PTR_TYPE {
+            builder.ins().uextend(PTR_TYPE, idx)
+        } else {
+            idx
+        };
+        let offset = builder.ins().imul(idx_wide, elem_size);
+        let elem_addr = builder.ins().iadd(data_ptr, offset);
+
+        // The runtime destroys what was there and decides which shape the value
+        // in hand is in.
+        let value_ptr = self.get_operand_ptr(builder, value)?;
+        let value_tydesc = self.operand_tydesc(builder, value)?;
+        let write_ref = self.module.declare_func_in_func(runtime.element_write, builder.func);
+        builder.ins().call(write_ref, &[rt_handle, elem_addr, elem_desc, value_ptr, value_tydesc]);
 
         Ok(())
     }

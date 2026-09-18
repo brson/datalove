@@ -1387,21 +1387,18 @@ impl IrInterpreter {
                 // Compute element pointer.
                 let element_ptr = unsafe { (list_struct.data as *mut u8).add(idx as usize * element_size) };
 
-                // Destroy old element.
+                // The runtime destroys what was there and decides which shape
+                // the value in hand is in: wrapped, the slot's own, or the
+                // slot's with `data` at some position inside it. Inside a
+                // generic it is the first, and copying its bytes as the element
+                // stores the wrapper's tag where the value belongs.
                 let rt_handle = self.runtime.handle();
                 let status = unsafe {
-                    datalove_rt::c::dtlv_rti_any_destroy_local(
-                        rt_handle,
-                        element_ptr,
-                        element_tydesc,
-                    )
+                    datalove_rt::c::dtlv_rti_element_write_local(
+                        rt_handle, element_ptr, element_tydesc,
+                        value_val.ptr, value_val.tydesc)
                 };
-                assert_eq!(status, datalove_rt::c::RtStatus::Ok, "ListSet destroy old failed");
-
-                // Copy new element in.
-                unsafe {
-                    std::ptr::copy_nonoverlapping(value_val.ptr, element_ptr, element_size);
-                }
+                assert_eq!(status, datalove_rt::c::RtStatus::Ok, "ListSet failed");
 
                 // Mark value operand as consumed (moved into list).
                 if let Operand::Value(v) = value {
@@ -1511,19 +1508,21 @@ impl IrInterpreter {
                 let key_val = self.read_operand(key, frame, frames);
                 let value_val = self.read_operand(value, frame, frames);
 
-                let (map_tydesc, key_tydesc, value_tydesc) =
-                    unsafe { map_tydesc_info(&map_val) };
+                let (map_tydesc, _, _) = unsafe { map_tydesc_info(&map_val) };
 
+                // Both sides by their own descriptors: the key may have arrived
+                // packed and the value may be in the erased shape. See the
+                // MapGet above and `dtlv_rti_element_write_local`.
                 let rt_handle = self.runtime.handle();
                 let status = unsafe {
-                    datalove_rt::c::dtlv_rti_btreemap_set_value_local(
+                    datalove_rt::c::dtlv_rti_btreemap_set_value_erased_local(
                         rt_handle,
                         map_val.ptr as *mut u8,
                         map_tydesc,
                         key_val.ptr,
-                        key_tydesc,
-                        value_val.ptr,
-                        value_tydesc,
+                        key_val.tydesc,
+                        value_val.ptr as *mut u8,
+                        value_val.tydesc,
                     )
                 };
                 assert_eq!(status, datalove_rt::c::RtStatus::Ok, "MapSetValue failed");
@@ -1691,21 +1690,15 @@ impl IrInterpreter {
                     (tensor_struct.ptr_base as *mut u8).add(linear_offset as usize * element_size)
                 };
 
-                // Destroy old element.
+                // As in ListSet: the runtime destroys what was there and
+                // decides which shape the value in hand is in.
                 let rt_handle = self.runtime.handle();
                 let status = unsafe {
-                    datalove_rt::c::dtlv_rti_any_destroy_local(
-                        rt_handle,
-                        element_ptr,
-                        element_tydesc,
-                    )
+                    datalove_rt::c::dtlv_rti_element_write_local(
+                        rt_handle, element_ptr, element_tydesc,
+                        value_val.ptr, value_val.tydesc)
                 };
-                assert_eq!(status, datalove_rt::c::RtStatus::Ok, "TensorSet destroy old failed");
-
-                // Copy new element in.
-                unsafe {
-                    std::ptr::copy_nonoverlapping(value_val.ptr, element_ptr, element_size);
-                }
+                assert_eq!(status, datalove_rt::c::RtStatus::Ok, "TensorSet failed");
 
                 // Mark value operand as consumed.
                 if let Operand::Value(v) = value {

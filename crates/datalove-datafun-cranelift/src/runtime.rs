@@ -34,6 +34,10 @@ pub struct RuntimeImports {
     pub map_contains_key_erased: FuncId,
     /// `dtlv_rti_btreemap_get_value_ref_erased_local(rt, map, map_td, key, key_td, out) -> RtStatus`
     pub map_get_value_ref_erased: FuncId,
+    /// `dtlv_rti_element_write_local(rt, slot, slot_td, value, value_td) -> RtStatus`
+    pub element_write: FuncId,
+    /// `dtlv_rti_btreemap_set_value_erased_local(rt, map, map_td, key, key_td, value, value_td)`
+    pub map_set_value_erased: FuncId,
     /// `dtlv_rti_mem_alloc_raw_local(rt: LocalRtHandle, size: u32, align: u32, count: u32) -> *mut u8`
     pub mem_alloc_raw: FuncId,
     /// `dtlv_rti_string_create_local(rt: LocalRtHandle, value_out: *mut u8, tydesc: *const TyDesc) -> RtStatus`
@@ -855,6 +859,26 @@ impl RuntimeImports {
             .map_err(|e| CraneliftError::Module(
                 format!("declare dtlv_rti_btreemap_get_value_ref_erased_local: {}", e)))?;
 
+        // Writing a value into a slot whose type the caller names, whatever
+        // shape the value arrived in.
+        let element_write = module
+            .declare_function("dtlv_rti_element_write_local", Linkage::Import, &erasure_sig())
+            .map_err(|e| CraneliftError::Module(
+                format!("declare dtlv_rti_element_write_local: {}", e)))?;
+
+        let map_set_value_erased = {
+            let mut sig = module.make_signature();
+            for _ in 0..7 {
+                sig.params.push(AbiParam::new(PTR_TYPE));
+            }
+            sig.returns.push(AbiParam::new(cl_types::I8));
+            module
+                .declare_function("dtlv_rti_btreemap_set_value_erased_local",
+                    Linkage::Import, &sig)
+                .map_err(|e| CraneliftError::Module(
+                    format!("declare dtlv_rti_btreemap_set_value_erased_local: {}", e)))?
+        };
+
         let field_read = {
             let mut sig = module.make_signature();
             sig.params.push(AbiParam::new(PTR_TYPE));      // rt
@@ -882,6 +906,8 @@ impl RuntimeImports {
             element_tydesc,
             map_contains_key_erased,
             map_get_value_ref_erased,
+            element_write,
+            map_set_value_erased,
             mem_alloc_raw,
             string_create,
             string_push_bytes,

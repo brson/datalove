@@ -1,0 +1,86 @@
+// Writing an element through `set c[i]? = v` inside a generic.
+//
+// The value crossing into a generic is carried as a `data`, and every write
+// path stored its bytes as though they were the element: a `u32` came back as
+// 73, which is the wrapper's tag where the number belongs. Silently, and the
+// same way in all four backends, so running them against each other did not
+// catch it. Lists, tensors and maps all had it, and only the language-level
+// `set` -- `list.set` through the rider was already right, which is why nothing
+// in `sys/std` showed it.
+//
+// `dtlv_rti_element_write_local` is the one place that decides now: it destroys
+// what was there against the slot's real descriptor, then unwraps a value that
+// came wrapped whole, converts one that came in the slot's erased shape, and
+// moves one that is already what the slot wants.
+//
+// The address was wrong too, for the same reason it was wrong for a read: a
+// stride taken from a static element type that says `data`.
+
+require module sys/std/list
+import list.len
+
+fun put_list<T>(mut l: [T], i: index, v: T): ?index
+  set l[i]? = v
+  ret some i
+end fun
+
+fun put_tensor<T>(mut t: [|T, 1|], i: index, v: T): ?index
+  set t[i]? = v
+  ret some i
+end fun
+
+fun put_map<K, V>(mut m: %{K = V}, k: K, v: V): ?index with { K is ord, }
+  set m[k]? = v
+  ret some (: index / 0)
+end fun
+
+// A concrete writer, which was always right: nothing is wrapped there.
+fun put_concrete(mut l: [u32], i: index, v: u32): ?index
+  set l[i]? = v
+  ret some i
+end fun
+
+// A one word element, where the wrapper's tag lands on the value.
+var nums: [u32] = [10, 20, 30]
+let a = put_list(mut nums, : index / 0, : u32 / 9)
+debuglog nums
+
+// A one byte element, where the stride is wrong as well.
+var bytes: [u8] = [1, 2, 3]
+let b = put_list(mut bytes, : index / 2, : u8 / 7)
+debuglog bytes
+
+// An element that owns something, so the old one has to be destroyed and the
+// new one moved rather than copied.
+var words: [string] = ["a", "b"]
+let c = put_list(mut words, : index / 1, "zed")
+debuglog words
+
+var tens: [|u32, 1|] = [| 10 20 |]
+let d = put_tensor(mut tens, : index / 0, : u32 / 9)
+debuglog tens
+
+var tenw: [|string, 1|] = [| "a" "b" |]
+let e = put_tensor(mut tenw, : index / 1, "zed")
+debuglog tenw
+
+var m: %{string = u32} = %{"a" = 1, "b" = 2}
+let k: string = "b"
+let f = put_map(mut m, k, : u32 / 9)
+debuglog m
+
+var mw: %{string = string} = %{"a" = "x"}
+let k2: string = "a"
+let g = put_map(mut mw, k2, "zed")
+debuglog mw
+
+var plain: [u32] = [10, 20]
+let h = put_concrete(mut plain, : index / 1, : u32 / 9)
+debuglog plain
+
+// Out of bounds still takes the early return rather than writing past the end.
+var short: [u32] = [1]
+let i = put_list(mut short, : index / 9, : u32 / 5)
+debuglog i
+debuglog short
+debuglog len(ref short)

@@ -712,6 +712,10 @@ fn trampoline_all_runtime_imports(
         c::dtlv_rti_btreemap_contains_key_erased_local as *const u8)?;
     tramp(jit_module, &mut runtime.map_get_value_ref_erased,
         c::dtlv_rti_btreemap_get_value_ref_erased_local as *const u8)?;
+    tramp(jit_module, &mut runtime.element_write,
+        c::dtlv_rti_element_write_local as *const u8)?;
+    tramp(jit_module, &mut runtime.map_set_value_erased,
+        c::dtlv_rti_btreemap_set_value_erased_local as *const u8)?;
 
     Ok(())
 }
@@ -738,6 +742,9 @@ fn register_runtime_symbols(jit_builder: &mut JITBuilder) {
         c::dtlv_rti_btreemap_contains_key_erased_local as *const u8);
     jit_builder.symbol("dtlv_rti_btreemap_get_value_ref_erased_local",
         c::dtlv_rti_btreemap_get_value_ref_erased_local as *const u8);
+    jit_builder.symbol("dtlv_rti_element_write_local", c::dtlv_rti_element_write_local as *const u8);
+    jit_builder.symbol("dtlv_rti_btreemap_set_value_erased_local",
+        c::dtlv_rti_btreemap_set_value_erased_local as *const u8);
 
     // String functions.
     jit_builder.symbol("dtlv_rti_string_create_local", c::dtlv_rti_string_create_local as *const u8);
