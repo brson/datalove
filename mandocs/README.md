@@ -209,35 +209,7 @@ but I do have a [vision](vision.md) about what it will be.
 - [Datalove Worlds](worlds.md)
 - [Datalove Literals Runtime Types](datalit-runtime-types.md)
 - [Novelties](novelties.md)
-- [Roadmap](roadmap.md)
-- [Influences](influences.md)
-
-</div>
-
----
-
-<div class="toc toc3">
-
-- [Compiler Guide](compiler-guide.md)
-- [Issues](issues.md)
-- [Design Notes](design-notes.md)
-- [Future Designs](future-designs.md)
-- [Potential Changes](potential-changes.md)
-- [Testing](testing-tower.md)
-- [Features](features.md)
-
-</div>
-
----
-
-<div class="toc toc4">
-
-- [More Datalit Types](more-datalit-types.md)
-- [Total Functions](total-functions.md)
-- [Panicking](panicking.md)
-- [Script Semantics](script-semantics.md)
-- [REPL UI](repl-ui.md)
-- [Zipper Heaps](zipper-heaps.md)
+- [Concise Feature List](features.md)
 
 </div>
 

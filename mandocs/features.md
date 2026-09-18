@@ -1,11 +1,11 @@
-## Features
+## Datalove Concise Feature List
 
 - Linear types with argument / binding modes for borrowing.
 - Scalar types.
 - Option and result types.
 - List, map, set.
 - Tensors (multi-dimensional arrays).
-- Tables (dataframes / struct-of-arrays).
+- Tables (dataframes).
 - Dynamic types (`data` and `error`).
 - Memoized parsing, name resolution,
   typechecking, ownership analysis, and IR lowering (via Salsa).
