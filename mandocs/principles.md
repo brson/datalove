@@ -11,6 +11,9 @@ not objects. In the design of Datalove
 consideration for the capabilities,
 memory layout and syntax of data structures comes first,
 and all else derives from that.
+Maintain the strong distinction between the Datalove literals
+declarative language model and the imperative/procedural languages built on top of it:
+understanding Datalove literals preceeds understanding Datalove.
 
 
 
@@ -24,7 +27,6 @@ prototyping of data experiments that evolve into maintainable production data tr
 The scripting environment features fast startup and compilation
 and supports incremental recompilation and side-effect-free reevaluation as prior
 statements are modified.
-
 
 
 
@@ -42,12 +44,13 @@ to inform and restrict the design trajectory of the language.
 
 
 
-## Minimal compiler passes, simple analysis
+## Ruthless simplicity, language and compiler
 
 The type system is strong but simple and restrictive.
 We want to have the startup speed of dynamic scripting languages,
 and must be ruthless about limiting features
 to establish a performance baseline.
+A simple language leads to a simple implementation with few compiler passes.
 A simple implementation makes maintenance easier,
 enables quick development.
 
@@ -70,7 +73,8 @@ but does not bloat the compiler and spec with syntactic nicities.
 
 Datalove has a linear type system
 but it does not have first-class reference types.
-Borrowing is difficult to reason about.
+Safe first-class references without GC are the most
+difficult feature to reason about in Rust and add great language and compiler complexity.
 
 We'll instead push other techniques as far as we can,
 argument modes and other reference bindings,
@@ -114,10 +118,10 @@ Datalove does not seek ultimate performance.
 
 It is no longer acceptable to silently overflow and get wrong results.
 
-Numeric types never lose information.
-They never truncate automatically, nor widen.
-Fixed-size numeric types never overflow silently.
-Divide by zero must be handled.
+Integer types never lose information.
+Fixed-size integers type never overflow silently.
+Integer divide by zero must be handled.
+Numeric types never truncate nor widen automatically.
 The syntactic and cognitive overheads this necessarily imposes are eased
 by language features to any extent reasonable.
 
@@ -131,9 +135,10 @@ Datalove reserves some symbols to strongly mean one thing.
 | When you see | it means                  |
 |--------------|---------------------------|
 | `:`          | type                      |
+| `=`          | value binding             |
 | `?`          | option                    |
 | `!`          | result                    |
-| `@`          | adapt (clone / widen )    |
+| `@`          | adapt (clone / widen / coerce) |
 | `;`          | statement break / newline |
 
 Likewise some bracket pairs are for one thing.
@@ -166,3 +171,45 @@ Few doors are closed.
 
 Datalove _procedures_ allow code to escape this restrictive regime
 around the edges of the program through I/O and other side-effects.
+
+---
+
+## Explicitness
+
+merge numerical correctness, mechanical sympathy, sigil-logic?
+the verbosity is the point?
+
+## Serve the domain of data manipulation first
+
+first-class tensors and tables
+
+## Determinism and reproducibility
+
+todo
+purity, memoization, virtual i/o,
+Any computation can be re-run, undone or replayed and get the same answer.
+
+
+## Whole-program compilation
+
+todo
+global analysis, whole-program monomorphization, erasure via a globally-complete tydesc set,
+no seperate compilation, no dynamic linking,
+
+## One failure vocabulary
+
+?/!, no exceptions, panics, nulls.
+constructs compose predictably.
+subsume sigil-logic?
+
+## User-level comprehensibility
+
+not just implementation simplicity
+re pascal/oberon
+
+## Flexible execution modes
+
+---
+
+no first-class references, minimal compiler passes, restrictive type systems
+all argue from linear type systems -> single restrictions principle
