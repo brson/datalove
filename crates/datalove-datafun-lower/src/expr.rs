@@ -288,7 +288,8 @@ fn lower_index_as_ref<'db>(
 ) -> Result<Operand, LowerError> {
     let base_op = lower_operand(ctx, index_expr.base)?;
     let key_op = lower_operand(ctx, index_expr.index)?;
-    let base_type = ctx.expr_type(index_expr.base);
+    let base_type = indexed_base_type(ctx, index_expr.base);
+    let base_op = open_container(ctx, base_op, &base_type);
     super::stmt::emit_fallible_index_check(ctx, base_op, &base_type, key_op, error_mode)?;
     let dest = super::stmt::emit_collection_element_ref(ctx, base_op, &base_type, key_op);
     Ok(Operand::Value(dest))
@@ -1654,7 +1655,8 @@ fn lower_collection_index_value<'db>(
     let temps_mark = ctx.expr_temps_mark();
     let base_op = lower_operand(ctx, index_expr.base)?;
     let key_op = lower_operand(ctx, index_expr.index)?;
-    let base_type = ctx.expr_type(index_expr.base);
+    let base_type = indexed_base_type(ctx, index_expr.base);
+    let base_op = open_container(ctx, base_op, &base_type);
     let is_map = matches!(&base_type, IrType::Map(_, _));
     let result_type = ctx.expr_type(expr);
     let dest = ctx.fresh_value(result_type);
@@ -1767,7 +1769,13 @@ fn lower_place_expression<'db>(
             ast::PlaceStep::Index(idx) => {
                 let error_mode = idx.error_mode
                     .expect("Place expression index steps always have error mode");
-                let base_type = operand_type(ctx, &current_op);
+                // A place's root has no expression node, so a wrapped container
+                // is recognised by the shape it was bound with.
+                let base_type = match operand_type(ctx, &current_op) {
+                    IrType::Data => ctx.wrapped_shape(&current_op).unwrap_or(IrType::Data),
+                    other => other,
+                };
+                current_op = open_container(ctx, current_op, &base_type);
                 // As in `lower_collection_index_value`: a get borrows its key,
                 // so anything made to hand it over is dropped on both ways out.
                 let temps_mark = ctx.expr_temps_mark();
@@ -1874,7 +1882,11 @@ fn lower_place_as_ref<'db>(
             ast::PlaceStep::Index(idx) => {
                 let error_mode = idx.error_mode
                     .expect("Place expression index steps always have error mode");
-                let base_type = operand_type(ctx, &current_op);
+                let base_type = match operand_type(ctx, &current_op) {
+                    IrType::Data => ctx.wrapped_shape(&current_op).unwrap_or(IrType::Data),
+                    other => other,
+                };
+                current_op = open_container(ctx, current_op, &base_type);
                 let key_op = lower_operand(ctx, idx.index)?;
                 super::stmt::emit_fallible_index_check(ctx, current_op, &base_type, key_op, error_mode)?;
                 let dest = super::stmt::emit_collection_element_ref(ctx, current_op, &base_type, key_op);
@@ -1888,6 +1900,75 @@ fn lower_place_as_ref<'db>(
         // Zero-step Place or field-only steps that end on a slot/param — pass through.
         other => Ok(other),
     }
+}
+
+/// The container shape behind an expression whose IR type is the wrapper.
+///
+/// `from_datalit` collapses a container of a type parameter to `data`
+/// everywhere -- parameter, local and call result alike -- so an expression of
+/// type `[T]` has IR type `data` and says nothing about being a list. Indexing
+/// one has to know which container it is and what its elements are called, and
+/// only the unerased type the typechecker gave says.
+///
+/// The shape is structural: `[T]` becomes `[data]`, whose header is the same
+/// three words a `[u32]` has. What the elements really are is the descriptor's
+/// to say, which is what a `DataBorrow` carries out of the wrapper.
+pub(crate) fn container_shape<'db>(
+    ctx: &LowerCtx<'db>,
+    expr: ExprFun<'db>,
+) -> Option<IrType> {
+    use datalove_datalit::tycheck::Type as DlType;
+    let Some(datalove_datafun_common::Type::Datalit(dl)) = ctx.expr_source_type(expr) else {
+        return None;
+    };
+    let elem = |t: &datalove_datalit::tycheck::Type<'db>| IrType::from_datalit(ctx.db, t);
+    Some(match &dl {
+        DlType::List(t) => IrType::List(Box::new(elem(&t.element_type))),
+        DlType::Set(t) => IrType::Set(Box::new(elem(&t.element_type))),
+        DlType::Map(t) => IrType::Map(
+            Box::new(elem(&t.key_type)), Box::new(elem(&t.value_type))),
+        DlType::Tensor(t) => IrType::Tensor(Box::new(elem(&t.element_type)), t.rank),
+        _ => return None,
+    })
+}
+
+/// The type to index an expression at, opened out of the wrapper if it is one.
+pub(crate) fn indexed_base_type<'db>(
+    ctx: &LowerCtx<'db>,
+    expr: ExprFun<'db>,
+) -> IrType {
+    let ty = ctx.expr_type(expr);
+    match ty {
+        IrType::Data => container_shape(ctx, expr).unwrap_or(IrType::Data),
+        other => other,
+    }
+}
+
+/// Open a container that crossed a boundary wrapped.
+///
+/// `erased_param_type` makes an owned `[T]` a `data`, because converting it to
+/// `[data]` would mean rebuilding the elements at a different stride. So inside
+/// a generic the value is a wrapper, and indexing it needs the pointer and the
+/// descriptor the rest of the runtime speaks in. `DataBorrow` reads both out,
+/// and the reference it makes carries the descriptor on, which is what every
+/// index into a borrowed container already reads.
+///
+/// `collection_type` is what the typechecker says, which is the container even
+/// where the operand's own IR type is the wrapper. Anything already in the
+/// container's shape is left alone.
+pub(crate) fn open_container(
+    ctx: &mut LowerCtx,
+    op: Operand,
+    collection_type: &IrType,
+) -> Operand {
+    if !matches!(operand_type(ctx, &op), IrType::Data)
+        || matches!(collection_type, IrType::Data)
+    {
+        return op;
+    }
+    let dest = ctx.fresh_value(IrType::Ref(Box::new(collection_type.clone())));
+    ctx.emit(Instruction::DataBorrow { dest, src: op });
+    Operand::ValueRef(dest)
 }
 
 /// Get type of an operand for place lowering.

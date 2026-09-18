@@ -205,23 +205,11 @@ shapes across all four backends; see the scope table in
 [Known issues](issues.md). The return path is the owned path in the other
 direction and needs nothing either.
 
-**Owned containers, which are a separate fault.** An owned container is *not*
-converted field by field -- it is wrapped whole into a `data`. So a generic
-holding `xs: [T]` by value holds a `data`, and lowering then emits `ListGet`
-against it without unwrapping:
-
-```
-fn first(p0):            // p0: Data
-    v0 = const 0index
-    v1, v2 = listget p0[v0]
-```
-
-Both AOT backends refuse this outright (`ListGet on non-list type: Data`), the
-jit turns the same error into a panic, and the interpreter reads the anypack's
-bytes as a list header and segfaults. No reference is involved and no
-descriptor is missing -- the value is self-describing, it is simply never
-opened. Fat references do not reach it. It has its own entry in
-[Known issues](issues.md).
+**Owned containers are not converted field by field** -- a container of a type
+parameter is wrapped whole into a `data`, because converting `[T]` to `[data]`
+would mean rebuilding the elements at a different stride. So a generic holding
+`xs: [T]` by value holds a wrapper, and `ListGet` used to be emitted straight at
+it. `DataBorrow` opens it; see "Opening a wrapped container" below.
 
 ## What was built
 
@@ -327,11 +315,39 @@ pointer that is the string's first eight bytes -- `Result/32609`, in the run
 that caught it. `needs_erasure` walks the two descriptors the way `convert`
 does, looking only for a position where one says `data` and the other does not.
 
+## Opening a wrapped container
+
+`erased_param_type` wraps an owned `[T]` whole. Inside the callee the value is a
+wrapper, and both AOT backends refused to index it (`ListGet on non-list type:
+Data`), the jit turned that into a panic, and the interpreter read the anypack's
+bytes as a list header and segfaulted.
+
+`DataBorrow` reads the pointer and the descriptor out together and makes a
+reference carrying the descriptor -- `RefDesc::Unwrapped`, a root like a
+borrowed parameter rather than a narrowing of one. Every index into a borrowed
+container already reads that, so nothing needed a new way of *indexing*, only a
+way of getting at the container.
+
+**Knowing there is a container to open is the awkward half.** `from_datalit`
+collapses a container of a type parameter to `data` everywhere -- parameter,
+local and call result alike -- so the IR type says nothing about being a list,
+and neither does the typechecker's type once erased. An index expression can ask
+for the unerased one (`container_shape`), but a *place* like `xs[0]` has no
+expression node for its root. So the shape is recorded where the binding is
+made, in `LowerBody::wrapped_shapes`, at the two places that bind a wrapper: a
+function parameter, from the type hint, and a `let` or `var`, from the
+initializer.
+
+That is the one piece of this work that is bookkeeping rather than
+descriptors. It would go away if an owned container erased structurally to
+`[data]` and took a descriptor the way a borrowed one does -- the header is the
+same three words either way, so nothing would be rebuilt -- which is worth
+considering if this table ever has to grow.
+
 ## What is left
 
-Nothing in this family. The remaining [Known issue](issues.md) nearby is the
-owned container that is never unwrapped, which is a lowering gap rather than a
-descriptor one: no reference is involved and the value describes itself.
+Nothing in this family, and nothing about generics is left in
+[Known issues](issues.md).
 
 ## Open questions
 

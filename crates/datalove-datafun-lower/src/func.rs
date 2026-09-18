@@ -147,6 +147,16 @@ pub fn lower_function_body<'db>(
         let id = ctx.fresh_param(param_type.clone(), mode);
         let operand = Operand::Param(id);
         ctx.bind_var(&param_name, operand);
+        // An owned container of a type parameter arrives wrapped, so its IR
+        // type says nothing about being a list. Indexing it needs the shape,
+        // which only the type it was written as gives.
+        if param_type == IrType::Data {
+            let shape = datalove_datafun_ir::IrType::from_type_hint_erasing(
+                ctx.db, &p.type_hint, &type_params);
+            if !matches!(shape, IrType::Data) {
+                ctx.record_wrapped_shape(operand, shape);
+            }
+        }
         // A const parameter is a constant, not a value the body owns the only
         // copy of, so reading it does not consume it -- the same as any other
         // const, and by the same route: each read takes a copy of its own.

@@ -83,6 +83,11 @@ fn lower_statement_with_id<'db>(
             let value_id = lower_expression(ctx, init_expr)?;
             let operand = Operand::Value(value_id);
             ctx.bind_var(&name, operand);
+            // A wrapped container keeps the shape it was written as; see
+            // `LowerBody::wrapped_shapes`.
+            if let Some(shape) = super::expr::container_shape(ctx, init_expr) {
+                ctx.record_wrapped_shape(operand, shape);
+            }
             // Record binding operand for drop schedule.
             ctx.record_binding_operand(operand);
             Ok(())
@@ -108,6 +113,11 @@ fn lower_statement_with_id<'db>(
 
             let operand = Operand::Slot(slot);
             ctx.bind_var(&name, operand);
+            if let Some(init_expr) = var_stmt.value {
+                if let Some(shape) = super::expr::container_shape(ctx, init_expr) {
+                    ctx.record_wrapped_shape(operand, shape);
+                }
+            }
             // Record binding operand for drop schedule. This has to happen
             // before the store, which asks whether the slot is tracked.
             ctx.record_binding_operand(operand);
@@ -781,6 +791,7 @@ pub(crate) fn emit_fallible_index_check(
     key_op: Operand,
     error_mode: ast::IndexErrorMode,
 ) -> Result<(), LowerError> {
+    let collection_op = super::expr::open_container(ctx, collection_op, collection_type);
     let is_valid = ctx.fresh_value(IrType::Bool);
     match collection_type {
         IrType::Map(_, _) => {
@@ -835,6 +846,7 @@ pub(crate) fn emit_collection_element_ref(
     collection_type: &IrType,
     key_op: Operand,
 ) -> ValueId {
+    let collection_op = super::expr::open_container(ctx, collection_op, collection_type);
     match collection_type {
         IrType::Map(_, v) => {
             let value_type = v.as_ref().clone();

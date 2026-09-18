@@ -260,6 +260,9 @@ impl<'a> FunctionCodegenContext<'a> {
             Instruction::GetFieldRef { dest, src, field_index } => {
                 self.emit_get_field_ref(out, *dest, src, *field_index)?;
             }
+            Instruction::DataBorrow { dest, src } => {
+                self.emit_data_borrow(out, *dest, src)?;
+            }
             Instruction::SetField { slot, field_path, value } => {
                 self.emit_set_field(out, slot, field_path, value, false)?;
             }
@@ -1443,6 +1446,23 @@ impl<'a> FunctionCodegenContext<'a> {
                 }
             }
         }
+        Ok(())
+    }
+
+    /// Emit a data borrow: point at the container a `data` holds, and carry
+    /// the descriptor it holds it under.
+    ///
+    /// A container is never packed into the two words -- `can_inline` admits
+    /// none -- so the wrapper always has something to point at and the scratch
+    /// `data_borrow` wants for an inline value goes unused.
+    fn emit_data_borrow(&mut self, out: &mut String, dest: ValueId, src: &Operand) -> Result<(), CAotError> {
+        let dest_addr = self.value_addr(dest);
+        let src_addr = self.operand_addr(src);
+        let name = format!("__db{}", dest.0);
+        writeln!(out, "    {{ const void* {name}_v; uint64_t {name}_s;").unwrap();
+        writeln!(out, "    dtlv_rti_data_borrow({}, &{name}_s, &{name}_v, &__rd{});",
+            src_addr, dest.0).unwrap();
+        writeln!(out, "    *(void**){} = (void*){name}_v; }}", dest_addr).unwrap();
         Ok(())
     }
 

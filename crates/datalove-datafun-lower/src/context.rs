@@ -32,6 +32,14 @@ pub struct FrameState<'db> {
     /// What the call sites add on top is worked out afterwards, once every
     /// function's own shapes are known; see the shape closure pass.
     pub built_shapes: Vec<datalove_datafun_ir::DescriptorShape>,
+    /// The container shape behind a binding whose IR type is the wrapper.
+    ///
+    /// `from_datalit` collapses a container of a type parameter to `data`
+    /// everywhere, so a `[T]` parameter or local says nothing about being a
+    /// list. Indexing one has to know which container it is, and a place walk
+    /// has only the operand to go on -- there is no expression node for a
+    /// place's root. This is where the shape it was bound with is kept.
+    pub wrapped_shapes: HashMap<Operand, IrType>,
     /// Blocks being built.
     pub blocks: Vec<IrBlock>,
     /// Instructions for current block.
@@ -129,6 +137,7 @@ impl<'db> FrameState<'db> {
         Self {
             type_params: Vec::new(),
             built_shapes: Vec::new(),
+            wrapped_shapes: HashMap::new(),
             blocks: Vec::new(),
             current_instructions: Vec::new(),
             current_block: BlockId(0),
@@ -692,6 +701,19 @@ impl<'db> LowerCtx<'db> {
     }
 
     /// Bind a variable name to an operand.
+    /// Remember the container shape a binding's wrapper holds.
+    ///
+    /// Only for a binding whose IR type is `data` where the source type was a
+    /// container; everything else describes itself.
+    pub fn record_wrapped_shape(&mut self, operand: Operand, shape: IrType) {
+        self.body.wrapped_shapes.insert(operand, shape);
+    }
+
+    /// The container shape behind an operand, if it is a wrapper.
+    pub fn wrapped_shape(&self, operand: &Operand) -> Option<IrType> {
+        self.body.wrapped_shapes.get(operand).cloned()
+    }
+
     pub fn bind_var(&mut self, name: &str, operand: Operand) {
         if let Some(scope) = self.body.variable_scopes.last_mut() {
             scope.push(ShadowedBinding {

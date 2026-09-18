@@ -581,10 +581,11 @@ this area has had.
 > descriptor now, and the element's descriptor travels with the reference; see
 > [Fat references for borrowed generic values](plan-fat-refs.md).
 >
-> The reading half was also less done than it said: a map lookup inside a
+> The reading half was also less done than it said. A map lookup inside a
 > generic described the map by its static type, a `%{data = data}`, and returned
 > `none` for a key that was there -- quietly, and the same way in all four
-> backends.
+> backends. And a container the generic *owned* was never opened at all: it
+> arrives wrapped, and the index was emitted straight at the wrapper.
 
 ## Where this stands
 

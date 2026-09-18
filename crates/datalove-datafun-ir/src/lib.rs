@@ -1334,6 +1334,21 @@ pub enum Instruction {
         field_index: u32,
     },
 
+    /// Borrow the container a `data` holds, as the container it is.
+    ///
+    /// An owned container of a type parameter crosses a boundary wrapped:
+    /// `erased_param_type` makes `[T]` a `data`, because converting it to
+    /// `[data]` would mean rebuilding the elements at a different stride. So
+    /// inside the callee the value is a wrapper, and indexing it needs the
+    /// pointer and the descriptor the rest of the runtime speaks in.
+    ///
+    /// **Ownership:** Borrows `src`, produces `dest` (Ref type, always Copy).
+    /// The `data` keeps what it holds; this only points into it.
+    DataBorrow {
+        dest: ValueId,
+        src: Operand,
+    },
+
     // ========================================================================
     // Option Construction
     // ========================================================================
@@ -2445,6 +2460,10 @@ pub enum RefDesc {
     ParamElement { param: u32 },
     /// What the container described for `base` holds.
     RefElement { base: ValueId },
+    /// The descriptor a `data` carries, which a `DataBorrow` read out of it
+    /// along with the pointer. A root like a borrowed parameter, rather than a
+    /// narrowing of one.
+    Unwrapped,
 }
 
 /// Where a reference's base got its descriptor, before it is narrowed.
@@ -2467,16 +2486,16 @@ enum Root {
 /// roots one: a local holding an erased value holds a `data` for real, so its
 /// static type is honest, and an owned parameter was converted at the boundary.
 pub fn resolve_ref_descriptors(unit: &IrCodeUnit) -> BTreeMap<ValueId, RefDesc> {
-    let Some(ctx) = unit.function_context() else {
-        return BTreeMap::new();
+    let param_slot: BTreeMap<ParamId, u32> = match unit.function_context() {
+        Some(ctx) => ctx.descriptor_params.iter()
+            .enumerate()
+            .map(|(i, p)| (*p, i as u32))
+            .collect(),
+        // A script unit has no type parameters and no borrowed parameters, but
+        // it can still call a generic, and a `DataBorrow` roots a descriptor on
+        // its own.
+        None => BTreeMap::new(),
     };
-    if ctx.descriptor_params.is_empty() {
-        return BTreeMap::new();
-    }
-    let param_slot: BTreeMap<ParamId, u32> = ctx.descriptor_params.iter()
-        .enumerate()
-        .map(|(i, p)| (*p, i as u32))
-        .collect();
 
     // A projection chain reaches further in one step at a time, and a step's
     // source is always defined before it. Rather than assume an order over the
@@ -2487,6 +2506,14 @@ pub fn resolve_ref_descriptors(unit: &IrCodeUnit) -> BTreeMap<ValueId, RefDesc> 
         let mut added = false;
         for block in &unit.blocks {
             for instr in &block.instructions {
+                // A borrow out of a wrapper reads the descriptor with the
+                // pointer, so it needs nothing from anywhere else.
+                if let Instruction::DataBorrow { dest, .. } = instr {
+                    if descs.insert(*dest, RefDesc::Unwrapped).is_none() {
+                        added = true;
+                    }
+                    continue;
+                }
                 let (dest, base, field) = match instr {
                     Instruction::GetFieldRef { dest, src, field_index } => {
                         (dest, src, Some(*field_index))

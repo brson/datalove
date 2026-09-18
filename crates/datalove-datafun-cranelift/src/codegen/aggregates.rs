@@ -317,6 +317,38 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         Ok(())
     }
 
+    /// Compile a data_borrow instruction: point at the container a `data`
+    /// holds, and carry the descriptor it holds it under.
+    ///
+    /// A container is never packed into the two words -- `can_inline` admits
+    /// none -- so the wrapper always has something to point at and the scratch
+    /// `data_borrow` wants for an inline value goes unused.
+    pub(super) fn compile_data_borrow(
+        &mut self,
+        builder: &mut FunctionBuilder,
+        dest: ValueId,
+        src: &Operand,
+    ) -> Result<(), CraneliftError> {
+        let runtime = self.runtime.ok_or_else(|| CraneliftError::Codegen(
+            "DataBorrow requires runtime imports".into()))?;
+        let slot = builder.create_sized_stack_slot(cl_ir::StackSlotData::new(
+            cl_ir::StackSlotKind::ExplicitSlot, 3 * types::PTR_SIZE,
+            types::align_shift(types::PTR_ALIGN)));
+        let value_out = builder.ins().stack_addr(PTR_TYPE, slot, 0);
+        let tydesc_out = builder.ins().stack_addr(PTR_TYPE, slot, 8);
+        let scratch = builder.ins().stack_addr(PTR_TYPE, slot, 16);
+
+        let data_ptr = self.get_operand_ptr(builder, src)?;
+        let borrow_ref = self.module.declare_func_in_func(runtime.data_borrow, builder.func);
+        builder.ins().call(borrow_ref, &[data_ptr, scratch, value_out, tydesc_out]);
+
+        let value = builder.ins().load(PTR_TYPE, MemFlagsData::new(), value_out, 0);
+        let tydesc = builder.ins().load(PTR_TYPE, MemFlagsData::new(), tydesc_out, 0);
+        self.values.insert(dest, value);
+        self.ref_desc_values.insert(dest, tydesc);
+        Ok(())
+    }
+
     /// Compile a get_field_ref instruction (get pointer to field).
     ///
     /// Unlike get_field which copies the field value, this returns a pointer

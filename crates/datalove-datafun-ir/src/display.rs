@@ -435,6 +435,9 @@ impl fmt::Display for Instruction {
             Instruction::GetFieldRef { dest, src, field_index } => {
                 write!(f, "{} = getfieldref {}.{}", dest, src, field_index)
             }
+            Instruction::DataBorrow { dest, src } => {
+                write!(f, "{} = databorrow {}", dest, src)
+            }
             Instruction::WrapSome { dest, inner } => {
                 write!(f, "{} = some {}", dest, inner)
             }

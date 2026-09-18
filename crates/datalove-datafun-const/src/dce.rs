@@ -71,6 +71,7 @@ pub fn instruction_dest(instr: &Instruction) -> Option<ValueId> {
         Instruction::Unpack { .. } => None, // Multiple dests, handled separately if needed
         Instruction::GetField { dest, .. } => Some(*dest),
         Instruction::GetFieldRef { dest, .. } => Some(*dest),
+        Instruction::DataBorrow { dest, .. } => Some(*dest),
 
         // Option/Result construction
         Instruction::WrapSome { dest, .. } => Some(*dest),
@@ -383,6 +384,7 @@ fn collect_instruction_operands(instr: &Instruction, used: &mut HashSet<ValueId>
         | Instruction::Unpack { src, .. }
         | Instruction::GetField { src, .. }
         | Instruction::GetFieldRef { src, .. }
+        | Instruction::DataBorrow { src, .. }
         | Instruction::UnwrapOption { src, .. }
         | Instruction::UnwrapResult { src, .. } => add_operand_value(src, used),
 

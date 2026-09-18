@@ -129,6 +129,10 @@ pub fn replace_params_in_instruction(
             src: replace_operand(src),
             field_index: *field_index,
         },
+        Instruction::DataBorrow { dest, src } => Instruction::DataBorrow {
+            dest: *dest,
+            src: replace_operand(src),
+        },
         Instruction::WrapSome { dest, inner } => Instruction::WrapSome {
             dest: *dest,
             inner: replace_operand(inner),

@@ -1820,6 +1820,24 @@ impl IrInterpreter {
                 }
                 frame.mark_value_live(*dest);
             }
+            Instruction::DataBorrow { dest, src } => {
+                // Point at the container the wrapper holds, and carry the
+                // descriptor it holds it under. A container is never packed
+                // into the two words, so the scratch goes unused.
+                let src_val = self.read_operand(src, frame, frames);
+                let mut scratch = [0u8; 16];
+                let mut value_ptr: *const u8 = std::ptr::null();
+                let mut tydesc: *const rtdt::TyDesc = std::ptr::null();
+                let status = unsafe {
+                    datalove_rt::c::dtlv_rti_data_borrow(
+                        src_val.ptr, scratch.as_mut_ptr(), &mut value_ptr, &mut tydesc)
+                };
+                assert_eq!(status, datalove_rt::c::RtStatus::Ok, "DataBorrow failed");
+                let dest_slot = frame.value_dest(*dest);
+                unsafe { *(dest_slot.ptr as *mut *const u8) = value_ptr; }
+                frame.set_value_tydesc(*dest, tydesc);
+                frame.mark_value_live(*dest);
+            }
             Instruction::GetFieldRef { dest, src, field_index } => {
                 // Get a reference (pointer) to a field within an aggregate.
                 // Unlike GetField, this stores the field pointer instead of copying.

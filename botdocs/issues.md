@@ -14,64 +14,10 @@ home here.
 
 ## Contents
 
-- [Indexing a container a generic function owns is never unwrapped](#user-content-indexing-a-container-a-generic-function-owns-is-never-unwrapped)
 - [A unit that fails part way through leaves its index to the next one](#user-content-a-unit-that-fails-part-way-through-leaves-its-index-to-the-next-one)
 - [Inlining never triggers from a caller in an earlier unit](#user-content-inlining-never-triggers-from-a-caller-in-an-earlier-unit)
 - [A field of a const cannot be projected, but a const can be destructured](#user-content-a-field-of-a-const-cannot-be-projected-but-a-const-can-be-destructured)
 - [A specialized function keeps an original nobody calls](#user-content-a-specialized-function-keeps-an-original-nobody-calls)
-
-## Indexing a container a generic function owns is never unwrapped
-
-**Reproduced.** Refused by both AOT backends, a panic in the jit, a segfault in
-the interpreter.
-
-```datalove
-fun first<T>(xs: [T]): ?T
-  ret some (xs[0]?@)
-end fun
-
-let ns: [u32] = [10, 20]
-debuglog first(ns)
-// aot and c-aot: "ListGet on non-list type: Data"
-// jit: panic; interpreter: SIGSEGV
-```
-
-An owned container is the one thing erasure does not walk: it is wrapped whole
-into a `data` (`erased_owned_type`, and the comment above `erased_param_type`
-says why -- rebuilding a list into a different stride is not a conversion worth
-having). So `xs` inside `first` is a `Data`. Lowering then emits `ListGet`
-against it without opening the wrapper:
-
-```
-fn first(p0):            // p0: Data
-    v0 = const 0index
-    v1, v2 = listget p0[v0]
-```
-
-`emit_list_get` matches `IrType::List` and errors on anything else
-(`c-aot/src/codegen.rs:2790`), which is why the compiled backends refuse. The
-interpreter does not check, and reads the anypack's bytes as a list header.
-
-**Not the same fault as the two above.** No reference is involved and no
-descriptor is missing -- a `data` carries its own. The value is simply never
-opened. So [fat references](plan-fat-refs.md) do not reach this, and fixing it
-is a lowering change: unwrap the owned container before indexing it, or keep
-`[T]` unwrapped when owned and convert at the boundary instead.
-
-**Scope, checked by compiling and running each.**
-
-| shape | result |
-|---|---|
-| `ref xs: [T]`, `xs[i]?@` -- borrowed, read | correct: `descriptor_params` supplies the list descriptor and `dtlv_rti_list_get_erased_local` uses it |
-| `xs: [T]`, `xs[0]?@` -- **owned**, read | **this entry** |
-| `ref xs: [T]`, `ref xs[i]?` -- borrowed, borrow | the entry above; segfaults |
-
-So of the three ways to index a generic list, one works and two do not, and
-they fail for unrelated reasons.
-
-**The plan believes the reading half is done.** `plan-generics.md` says
-indexing reads the stride from the descriptor everywhere. That is true of the
-borrowed read and false of the owned one, which never gets as far as a stride.
 
 ## A unit that fails part way through leaves its index to the next one
 

@@ -725,6 +725,10 @@ impl RemapContext {
                 src: self.remap_operand(src),
                 field_index: *field_index,
             },
+            Instruction::DataBorrow { dest, src } => Instruction::DataBorrow {
+                dest: self.remap_value(*dest),
+                src: self.remap_operand(src),
+            },
             Instruction::WrapSome { dest, inner } => Instruction::WrapSome {
                 dest: self.remap_value(*dest),
                 inner: self.remap_operand(inner),

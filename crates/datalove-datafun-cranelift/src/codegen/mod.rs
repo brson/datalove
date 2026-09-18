@@ -699,6 +699,9 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             Instruction::GetFieldRef { dest, src, field_index } => {
                 self.compile_get_field_ref(builder, *dest, src, *field_index)?;
             }
+            Instruction::DataBorrow { dest, src } => {
+                self.compile_data_borrow(builder, *dest, src)?;
+            }
             Instruction::SetField { slot, field_path, value } => {
                 self.compile_set_field(builder, slot, field_path, value)?;
             }
