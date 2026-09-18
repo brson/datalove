@@ -8,6 +8,12 @@ does everywhere; monomorphization later and only for code the JIT has already de
 hot. Const parameters are a separate feature that should drop union-branch for plain
 monomorphization.
 
+> **This is the reasoning, not the reference.** It records what was considered,
+> what was turned down and why, and how the implementation was arrived at, so it
+> keeps decisions that have since been superseded and faults that have since
+> been fixed. For a description of how generics work *now*, read
+> [Generics: how it works](generics.md).
+
 ## Contents
 
 - [Why not the const parameter machinery](#user-content-why-not-the-const-parameter-machinery)

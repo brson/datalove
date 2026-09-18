@@ -112,16 +112,11 @@ pub fn lower_operand<'db>(
         // and its neighbours clone the element -- but it clones it a second
         // time when `@` follows, which borrowing avoids.
         //
-        // Two things keep the direct read. A copy element has nothing to move
-        // out and nothing to free. And an erased one cannot be borrowed at
-        // all: the reference carries the element's static type, which inside a
-        // generic says `data`, so reading through it reads the bytes as the
-        // wrong thing. `ListGet` has a branch that asks the runtime instead,
-        // and that is the branch this leaves it on. See `botdocs/issues.md`.
+        // A copy element keeps the direct read: there is nothing to move out
+        // and nothing to free, so a borrow would buy nothing.
         ExprFunKind::Place(ref place)
             if !place.steps.is_empty()
-                && !ctx.expr_type(expr).is_copy()
-                && !matches!(ctx.expr_type(expr), IrType::Data) =>
+                && !ctx.expr_type(expr).is_copy() =>
         {
             let field_ref = lower_place_as_ref(ctx, place)?;
             Ok(operand_as_value_ref(field_ref))

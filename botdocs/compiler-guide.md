@@ -9,7 +9,7 @@ Reference for the datalove-datafun compiler architecture.
   - [Phase 5: IR Lowering Detail](#user-content-phase-5-ir-lowering-detail)
   - [Const Parameter Specialization](#user-content-const-parameter-specialization)
   - [Const Evaluation](#user-content-const-evaluation)
-- [Generics](#user-content-generics)
+- [Generics](#user-content-generics) -- orientation; the full account is [Generics: how it works](generics.md)
 - [Native Riders](#user-content-native-riders)
 - [The Shipped Binary](#user-content-the-shipped-binary)
 - [Script Compilation Pipeline](#user-content-script-compilation-pipeline)
@@ -330,20 +330,19 @@ The typechecker gates the two alike -- `NonCopyIndexProjection` unless
 Writing through an index works for a list and a map, by `mut`, by `out` and by
 assignment (`interp/950_index_write_forms`).
 
-In an operand position an index of a *known* element type is borrowed like a
-field, so `a[i]?@` clones once rather than twice. An *erased* one stays on
-`ListGet`: a reference carries the element's static type, which inside a
-generic says `data`, so reading through it reads the bytes as the wrong thing.
-That is a fault in its own right where a borrowed index reaches a generic --
-see [Known issues](issues.md).
+In an operand position a non-copy index is borrowed like a field, so `a[i]?@`
+clones once rather than cloning through `ListGet` and then cloning that. It
+holds for an erased element too: the reference carries the element's descriptor,
+narrowed from the container's, so reading through it reads the bytes as what
+they are. See
+[Generics](generics.md#user-content-getting-further-in).
+
+A copy element keeps the direct read: there is nothing to move out and nothing
+to free, so a borrow would buy nothing.
 
 A tensor index is refused in all three, with `ViewTypeMutBinding`: it gives a
 view of a row rather than an element, and a view may not be bound mutably
 (`interp/951_tensor_index_not_mutable`). Reading and cloning one is fine.
-
-That double clone is what the borrow removes. Where it cannot -- an erased
-element -- `a[i]?@` still pays two deep copies and a free: `ListGet` clones the
-element, then `@` clones that and drops the first.
 
 ### Const Evaluation
 
@@ -357,21 +356,23 @@ Function calls in const expressions work because `lowered_functions` are passed 
 
 ## Generics
 
-A generic function is compiled once, over shapes that fit whatever the call
-site supplies. A parameter the callee owns is converted into that shape at the
-call site and the value moved back out on the way back; a parameter it borrows
-is not converted at all, and the descriptor saying what the value really is
-comes from the call site, recorded in `FunctionContext::descriptor_params`.
+A generic function is compiled once, over shapes that fit whatever the call site
+supplies, with type descriptors saying what is really in those shapes.
+**[Generics: how it works](generics.md)** is the full description: erasure,
+where descriptors come from, how a projection keeps one, and what each backend
+carries. What follows is the orientation.
 
-`erased_param_type` in datafun-ir is the one place that decides what an owned
-position becomes, read by the caller and the callee both, because a call site
-converting into a shape the callee was not compiled for is not a mismatch
-anything reports -- it is two sizes disagreeing about the same bytes. Three
-answers:
+`erased_param_type` in datafun-ir is the one place that decides what a position
+becomes, read by the caller and the callee both, because a call site converting
+into a shape the callee was not compiled for is not a mismatch anything reports
+-- it is two sizes disagreeing about the same bytes. It forks on whether the
+position is borrowed.
+
+**Owned** -- `in`, `out`, the return -- is converted at the boundary:
 
 | Written | Becomes | Cost |
 |---------|---------|------|
-| `T` | `data` | already carries its own descriptor |
+| `T` | `data` | wraps; a narrow scalar rides in the two words |
 | `?T`, `!T`, `(T, u32)`, `{ a: T }`, `term W T`, an enum payload | the same shape with the parts converted | a walk over as many parts as the type has |
 | `[T]`, `#{T}`, `%{K = V}`, a tensor, a table | `data`, wrapped whole | one small allocation, elements untouched |
 
@@ -384,20 +385,25 @@ element type, and wrapping is what gives it somewhere to keep one. Converting
 is the O(n) the design avoids, and it is avoided by not doing it rather than by
 refusing the signature.
 
-The rule reaches inside a composite, so `([T], u32)` becomes `(data, u32)`: a
-tuple converts field by field, so a container field is converted too, and
-wrapping is the only conversion a container has.
+**Borrowed** -- `ref`, `mut` -- is not converted at all. The callee's static
+type for the parameter is therefore the erased one, which is a lie about the
+layout, and the descriptor for what really arrived comes from the call site,
+recorded in `FunctionContext::descriptor_params`.
 
-`dtlv_rti_data_parts` reads back through a wrapper, lending the value pointer
-and the descriptor together, which is what lets a wrapped `[T]` still be handed
-to `sys/std/list`. A call site reads through it where an argument arrives
-wrapped and the callee wants it borrowed. Both leave the same call, so neither
-can be taken from somewhere the other was not.
+That lie is what most of the machinery exists to handle. A projection of such a
+parameter narrows the descriptor alongside the pointer: `resolve_ref_descriptors`
+says what each reference points at, and field offsets, element strides and
+read-through widths come from there rather than from the static type. A value
+absent from that map is the ordinary case -- the offset folds at compile time
+and the emitted code is what it always was, so this costs nothing outside a
+generic. An owned container is opened with `DataBorrow` first, which turns it
+into the borrowed case.
 
-How the descriptor is carried is up to the backend. The interpreter needs
-nothing, since its values are already a pointer and a descriptor. The compiled
-backends take one extra pointer parameter per entry in `descriptor_params`,
-after the ordinary parameters and in that order.
+Converting between two shapes is `convert` in the runtime, walking two
+descriptor pointers and converting at each position one of them calls `data`.
+`erase_local`, `reify_local` and `clone_erased_local` are its three entry
+points. Whether anything was erased is a *structural* question rather than a
+size one: a `data` is two words and so is a `string`.
 
 The pieces: `Var` in `datalit::tycheck::Type`, built only by datafun-resolve
 seeding the alias map; `IrType::from_datalit` mapping it to `data`, which is
@@ -411,28 +417,11 @@ erased shape, and the result type already equals the erased return shape.
 Erasing an erased value boxes the box, and the callee finds a `data` where the
 value should be.
 
-A descriptor a caller supplies has to reach every point that reads it, and the
-three places it can be dropped are all now closed. `LocalCallee` pairs a
-locally-declared function with the `descriptor_params` its signature asks for,
-so a call site cannot declare one and pass the other -- reading only the
-`FuncId` is what let a script-local generic be called without its descriptors.
-The jit's stub forwards the descriptors it was handed to `__jit_dispatch_call`,
-which uses them in place of the ones its callee's signature implies, since for
-these parameters that signature says `data`.
-
-Indexing a collection whose elements are a type parameter reads the stride from
-the list's descriptor rather than from the static element type, which inside a
-generic is a `data`'s and lands between elements. Whether the element wants
-packing on the way out is decided in `dtlv_rti_list_get_erased_local` rather
-than at each call site, because a generic asking for an element it cannot name
-wants one packed while a list whose elements really are `data` does not, and
-from a call site the two look alike. Deciding it per backend is four answers to
-one question.
-
-What it does not do yet -- bounds, so nothing can be done to a `T` but move it,
-drop it, clone it and hand it back -- and why, is in
-[Where this stands](plan-generics.md#user-content-where-this-stands). Read that
-before assuming something is a bug.
+What it does not do -- bounds beyond `float`, `fixedint` and `ord`, so nothing
+can be done to a bare `T` but move it, drop it, clone it, print it and hand it
+back -- and why, is in
+[What is refused](generics.md#user-content-what-is-refused). Read that before
+assuming something is a bug.
 
 ## Native Riders
 

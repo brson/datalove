@@ -1237,16 +1237,21 @@ An operand is read for what it is rather than checked against what is wanted,
 so a call in operand position has nothing to take its type from. That is
 refused rather than guessed at.
 
-**What a bare type parameter does not admit.** Anything that would need to know
-what the type is. A `T` can be moved, dropped, cloned, printed, stored, returned and
-handed on, and that is the whole of it: `x + y` and `x == y` on two values of
-type `T` are both errors, whatever the call site supplied. Printing is the
-exception because the descriptor travelling with the value is enough to format
-it. Bounds are what would change the rest, and there are none.
+**What an *unbounded* type parameter does not admit.** Anything that would need
+to know what the type is. A `T` can be moved, dropped, cloned, printed, stored,
+returned and handed on, and that is the whole of it: `x + y` and `x == y` on two
+values of type `T` are both errors, whatever the call site supplied. Printing is
+the exception because the descriptor travelling with the value is enough to
+format it. A bound is what changes the rest; see **Bounds** above.
 
-Indexing does work, including on a collection whose elements are a type
-parameter: the stride is read from the descriptor that travels with the
-collection rather than from the static type.
+Reading a part does work, and in every mode. Indexing a collection whose
+elements are a type parameter reads the stride from the descriptor that travels
+with the collection rather than from the static type, whether the collection is
+owned, borrowed, or reached through a field; so does looking a key up in a map
+and indexing a tensor. Projecting a field of a borrowed value works the same
+way, the descriptor narrowing alongside the pointer at each step. A part
+borrowed out of one carries what it really is, so it can be handed to something
+that takes it by reference.
 
 A collection over a type parameter can be built as well as taken, stored,
 handed on and returned. `var out: [T] = []` works. A collection that arrives
@@ -1267,8 +1272,9 @@ level deeper at every call, so the set never settles. Erasure means such a
 function compiles to one body and would simply recurse for ever at run time;
 what cannot be written down is the descriptors, not the code.
 
-Why each of these is where it is, and what is planned, is in
-[Where this stands](plan-generics.md#user-content-where-this-stands).
+How this is implemented is in [Generics: how it works](generics.md); what is
+refused and why is
+[What is refused](generics.md#user-content-what-is-refused).
 
 ### 8.6 Control Flow
 
