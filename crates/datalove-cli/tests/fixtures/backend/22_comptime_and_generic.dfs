@@ -1,0 +1,121 @@
+// A function with both a const parameter and a type parameter.
+//
+// The two vary a function along different axes. Specialization deletes the
+// const parameters and substitutes their values into a copy of the body;
+// erasure replaces the type parameters with `data` and hands the callee a
+// descriptor for anything type-directed. Neither touches what the other does,
+// so a copy built for a const instantiation is still generic and still wants
+// the same descriptors the original did -- and one copy serves every type
+// instantiation, because the erased body does not depend on the type.
+//
+// The two of the three kinds of descriptor that come from the callee's
+// signature always worked, because lowering erases the arguments before it
+// branches on comptime-ness and the call site reads `descriptor_params` off
+// the callee. The third did not: descriptors for a shape the callee *builds*
+// are derived from the call instruction's `type_args`, and `ComptimeCall`
+// carried none. So this was refused outright at typecheck, and lifting the
+// refusal broke three ways at once -- the interpreter panicked on "a forwarded
+// shape is one this function declared", the cranelift AOT backend failed its
+// own verifier on an argument count, and the jit read a garbage word where a
+// descriptor pointer belonged and tried to align to it.
+
+require module sys/std/list
+import list.len
+import list.push
+import list.reversed
+import list.get
+
+fun scale(const factor: int, x: int): int
+  ret factor * x
+end fun
+
+// A bare `T`, which is erased to a `data` and needs nothing else.
+fun pick<T>(const which: int, a: T, b: T): T
+  ret a
+end fun
+
+// A borrowed collection, whose descriptor the call site reads off the argument.
+fun size<T>(const label: int, ref xs: [T]): index
+  debuglog label
+  ret len(ref xs)
+end fun
+
+// One the callee builds, whose descriptor has to be handed over as a trailing
+// argument. This is the one that was lost.
+fun rev<T>(const n: int, ref xs: [T]): [T]
+  ret reversed(ref xs)
+end fun
+
+// And one built in the body rather than borrowed from a callee.
+fun twice<T>(const n: int, a: T, b: T): [T]
+  var out: [T] = []
+  push(mut out, a)
+  push(mut out, b)
+  ret out
+end fun
+
+// A generic calling a generic, both comptime, so the descriptor is forwarded
+// through a copy rather than named at the outermost call site.
+fun rev_via<T>(const n: int, ref xs: [T]): [T]
+  ret rev(n, ref xs)
+end fun
+
+// The const parameter after the one that needs a descriptor, so the parameter
+// renumbering the copy does is not the identity.
+fun rev_last<T>(ref xs: [T], const n: int): [T]
+  ret reversed(ref xs)
+end fun
+
+// A void one, and one writing through an erased `out`. Both were dropped
+// outright until DCE learned that a comptime call is a call: its `dest` is
+// unused in a void function, and nothing else said the instruction mattered.
+fun announce<T>(const n: int, x: T)
+  debuglog x
+end fun
+
+fun first_out<T>(const n: int, a: T, out slot: T)
+  set slot = a
+end fun
+
+const ONE: int = 1
+const TWO: int = 2
+
+// The const parameter is still folded away where no type parameter is present.
+debuglog scale(TWO, : int / 21)
+
+debuglog pick(ONE, : u32 / 7, : u32 / 9)
+debuglog pick(ONE, "kept", "dropped")
+
+let nums: [u32] = [1, 2, 3]
+let words: [string] = ["a", "b"]
+
+debuglog size(TWO, ref nums)
+debuglog size(TWO, ref words)
+
+// One copy of `rev` serves both element types: the body is the same and only
+// the descriptor the call site hands over differs. A `[string]` is here so
+// that a lost drop leaks and a doubled one crashes.
+debuglog rev(ONE, ref nums)
+debuglog rev(ONE, ref words)
+debuglog rev_via(ONE, ref words)
+
+// Two instantiations of the same function, which do get separate copies.
+debuglog rev(TWO, ref nums)
+
+debuglog twice(ONE, : u32 / 4, : u32 / 5)
+debuglog twice(ONE, "x", "y")
+
+// Reading back out of one that was built inside the callee, so the element
+// comes through the erased boundary in both directions.
+let built = twice(ONE, "p", "q")
+debuglog get(ref built, : index / 1)
+debuglog len(ref built)
+
+debuglog rev_last(ref words, ONE)
+
+announce(ONE, "said")
+announce(ONE, : u32 / 5)
+
+var got: string = ""
+first_out(ONE, "written", out got)
+debuglog got

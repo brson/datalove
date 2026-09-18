@@ -95,12 +95,16 @@ pub fn replace_params_in_instruction(
                 type_args: type_args.clone(),
                 shape_descriptors: shape_descriptors.clone(),
             },
-        Instruction::ComptimeCall { dest, func, args, discriminant, comptime_param_indices } => Instruction::ComptimeCall {
+        Instruction::ComptimeCall {
+            dest, func, args, discriminant, comptime_param_indices, type_args, shape_descriptors,
+        } => Instruction::ComptimeCall {
             dest: *dest,
             func: func.clone(),
             args: args.iter().map(replace_operand).collect(),
             discriminant: *discriminant,
             comptime_param_indices: comptime_param_indices.clone(),
+            type_args: type_args.clone(),
+            shape_descriptors: shape_descriptors.clone(),
         },
         Instruction::Pack { dest, ty, fields } => Instruction::Pack {
             dest: *dest,

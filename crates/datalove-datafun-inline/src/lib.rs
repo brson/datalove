@@ -691,12 +691,16 @@ impl RemapContext {
                 type_args: type_args.clone(),
                 shape_descriptors: Vec::new(),
             },
-            Instruction::ComptimeCall { dest, func, args, discriminant, comptime_param_indices } => Instruction::ComptimeCall {
+            Instruction::ComptimeCall {
+                dest, func, args, discriminant, comptime_param_indices, type_args, ..
+            } => Instruction::ComptimeCall {
                 dest: self.remap_value(*dest),
                 func: func.clone(),
                 args: args.iter().map(|a| self.remap_operand(a)).collect(),
                 discriminant: *discriminant,
                 comptime_param_indices: comptime_param_indices.clone(),
+                type_args: type_args.clone(),
+                shape_descriptors: Vec::new(),
             },
             Instruction::Pack { dest, ty, fields } => Instruction::Pack {
                 dest: self.remap_value(*dest),

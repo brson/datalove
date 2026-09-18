@@ -1150,8 +1150,13 @@ impl<'db> LowerCtx<'db> {
         args: Vec<Operand>,
         discriminant: u32,
         comptime_param_indices: Vec<usize>,
+        type_args: Vec<datalove_datafun_ir::DescriptorShape>,
     ) {
-        self.emit(Instruction::ComptimeCall { dest, func, args, discriminant, comptime_param_indices });
+        self.emit(Instruction::ComptimeCall {
+            dest, func, args, discriminant, comptime_param_indices, type_args,
+            // Filled in once the shape sets have settled, as for `Call`.
+            shape_descriptors: Vec::new(),
+        });
     }
 
     /// Emit Pack.

@@ -399,7 +399,7 @@ impl fmt::Display for Instruction {
                 }
                 write!(f, ")")
             }
-            Instruction::ComptimeCall { dest, func, args, discriminant, comptime_param_indices } => {
+            Instruction::ComptimeCall { dest, func, args, discriminant, comptime_param_indices, .. } => {
                 write!(f, "{} = comptime_call {}(", dest, func)?;
                 for (i, arg) in args.iter().enumerate() {
                     if i > 0 {

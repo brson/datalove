@@ -194,6 +194,12 @@ Independent of generics, and worth doing regardless:
   pre-resolved `ResolvedConsts` lookups the restriction is easier to lift.
 - `ConstValue::Type` may still be wanted, for const generics such as tensor dimensions.
   It is not a step toward type parameters.
+- A function may declare both const parameters and type parameters. They vary it
+  along different axes -- specialization deletes the first, erasure replaces the
+  second -- so one copy per const instantiation serves every type instantiation.
+  What used to stop it was a phase ordering rather than a conflict, and is written
+  up in [Const Parameters and Generics](reports/report-const-params-and-generics.md).
+  A const parameter whose own *type* is a type parameter is still refused.
 
 ## What a first attempt found
 

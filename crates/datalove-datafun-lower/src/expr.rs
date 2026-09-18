@@ -718,24 +718,31 @@ pub fn lower_expression<'db>(
                 })
                 .unwrap_or_default();
 
+            // What this site bound each of the callee's type parameters to, in
+            // the callee's order and written over this function's own. Which of
+            // them the callee wants a descriptor for is settled afterwards,
+            // once every function's shapes are known.
+            //
+            // Computed for both kinds of call. A callee's const parameters and
+            // its type parameters are independent -- specialization deletes the
+            // first and erasure replaces the second -- so a comptime callee may
+            // be generic, and the copy built for an instantiation wants the same
+            // descriptors the original did.
+            let type_args: Vec<datalove_datafun_ir::DescriptorShape> = target
+                .map(|t| t.type_args(ctx.db).clone())
+                .unwrap_or_default()
+                .iter()
+                .map(|ty| ctx.shape_of(ty).unwrap_or_else(|| {
+                    datalove_datafun_ir::DescriptorShape::Concrete(
+                        IrType::from_datalit(ctx.db, ty))
+                }))
+                .collect();
+
             if !comptime_param_indices.is_empty() {
                 // Emit ComptimeCall with discriminant=0 (placeholder).
                 // Specialization pass will fill in correct discriminant from const values.
-                ctx.emit_comptime_call(dest, func_ref, args, 0, comptime_param_indices);
+                ctx.emit_comptime_call(dest, func_ref, args, 0, comptime_param_indices, type_args);
             } else {
-                // What this site bound each of the callee's type parameters to,
-                // in the callee's order and written over this function's own.
-                // Which of them the callee wants a descriptor for is settled
-                // afterwards, once every function's shapes are known.
-                let type_args: Vec<datalove_datafun_ir::DescriptorShape> = target
-                    .map(|t| t.type_args(ctx.db).clone())
-                    .unwrap_or_default()
-                    .iter()
-                    .map(|ty| ctx.shape_of(ty).unwrap_or_else(|| {
-                        datalove_datafun_ir::DescriptorShape::Concrete(
-                            IrType::from_datalit(ctx.db, ty))
-                    }))
-                    .collect();
                 ctx.emit_call_with_type_args(dest, func_ref, args, type_args);
             }
             // Move what the callee wrote to an erased out parameter back out

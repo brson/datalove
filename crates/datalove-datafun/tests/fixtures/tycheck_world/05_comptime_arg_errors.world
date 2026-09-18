@@ -36,8 +36,16 @@ fun bad_param(factor: int, x: int): int
     ret scale(factor, x)
 end fun
 
-// Const parameters and type parameters do not combine, so a function with
-// both is refused at its definition rather than going wrong quietly.
-fun bad_generic<T>(const n: int, x: T): T
+// A const parameter of an ordinary type is fine in a generic function: the two
+// vary it along different axes, so one copy per const instantiation serves
+// every type instantiation.
+fun good_generic<T>(const n: int, x: T): T
+    ret x
+end fun
+
+// A const parameter whose own type is the type parameter is not. The value
+// would be the only thing saying what `T` is, which is pinning it concretely,
+// and specialization copies a body rather than lowering one again.
+fun bad_generic<T>(const x: T): T
     ret x
 end fun

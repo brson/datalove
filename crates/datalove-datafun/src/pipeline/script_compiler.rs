@@ -1093,7 +1093,7 @@ impl<'db> ScriptCompiler<'db> {
             let mut sites = Vec::new();
             for block in &unit.blocks {
                 for instr in &block.instructions {
-                    let Instruction::Call { func, type_args, .. } = instr else { continue };
+                    let Some((func, type_args)) = instr.call_target() else { continue };
                     // Every callee's set is wanted, whether or not this site
                     // binds anything: a module callee is a fixed point that has
                     // to be in `shapes` for the closure to see it.
@@ -1105,7 +1105,7 @@ impl<'db> ScriptCompiler<'db> {
                         continue;
                     }
                     if let Some(callee) = key_of(func) {
-                        sites.push((callee, type_args.clone()));
+                        sites.push((callee, type_args.to_vec()));
                     }
                 }
             }

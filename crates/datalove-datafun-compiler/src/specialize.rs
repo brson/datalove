@@ -286,7 +286,9 @@ pub fn rewrite_comptime_calls(
         let mut instructions = Vec::with_capacity(block.instructions.len());
 
         for instr in &block.instructions {
-            let Instruction::ComptimeCall { dest, func, args, comptime_param_indices, .. } = instr
+            let Instruction::ComptimeCall {
+                dest, func, args, comptime_param_indices, type_args, shape_descriptors, ..
+            } = instr
             else {
                 instructions.push(instr.clone());
                 continue;
@@ -323,10 +325,13 @@ pub fn rewrite_comptime_calls(
                 dest: *dest,
                 func: copy_ref,
                 args: kept_args,
-                // A function with const parameters is never generic: lowering
-                // takes the comptime branch before type arguments are computed.
-                type_args: Vec::new(),
-                shape_descriptors: Vec::new(),
+                // The copy is as generic as the original: `monomorphize_function`
+                // clones `descriptor_shapes` unchanged, so what this site was
+                // going to hand the original is what the copy wants. Worked out
+                // before specialization ran, and carried across rather than
+                // recomputed, because the shape sets settled then.
+                type_args: type_args.clone(),
+                shape_descriptors: shape_descriptors.clone(),
             });
         }
 

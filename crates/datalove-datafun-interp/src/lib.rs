@@ -1117,7 +1117,7 @@ impl IrInterpreter {
             // ComptimeCall behaves exactly like Call - the specialization metadata is
             // only used by the specialization pass. Without specialization, this calls
             // the original function with original args.
-            Instruction::ComptimeCall { dest, func, args, .. } => {
+            Instruction::ComptimeCall { dest, func, args, shape_descriptors, .. } => {
                 let callee = ctx.get_unit(func, registry);
                 // The scratch is held until the call returns, because a
                 // borrowed argument with no address of its own points into it.
@@ -1126,16 +1126,28 @@ impl IrInterpreter {
                 let dest_slot = frame.value_dest(*dest);
                 Self::mark_consumed_call_args(callee, args, frame);
 
+                // A comptime callee may be generic as well, so the descriptors
+                // are handed over the way `Call` hands them over.
+                let supplied: Vec<*const rtdt::TyDesc> = shape_descriptors.iter()
+                    .map(|r| self.resolve_shape_ref(r, frame))
+                    .collect();
+
                 if let datalove_datafun_ir::CodeUnitContext::Native(native_ctx) = &callee.context {
-                    // Native function dispatch. A comptime call carries no
-                    // shapes, so there is nothing after the arguments.
+                    // Native function dispatch. The descriptors go after the
+                    // arguments, as they do at a call to a module function.
                     self.native_table.call(
-                        &native_ctx.symbol, self.runtime.handle(), &arg_vals, dest_slot, &[],
+                        &native_ctx.symbol, self.runtime.handle(), &arg_vals, dest_slot, &supplied,
                     )?;
                 } else {
                     // Try dispatcher first, fall back to interpreter.
                     // ComptimeCall doesn't have site_id, so no call_site_info.
-                    let call_result = if let Some(result) = self.try_dispatch_call(
+                    //
+                    // A callee taking shape descriptors goes straight to the
+                    // interpreter, for the reason the `Call` arm gives.
+                    let call_result = if !supplied.is_empty() {
+                        self.execute_call_with_shapes(
+                            callee, func, arg_vals, supplied, dest_slot, ctx, registry, frames)
+                    } else if let Some(result) = self.try_dispatch_call(
                         func, callee, &arg_vals, dest_slot, ctx, registry, frames, None
                     ) {
                         result

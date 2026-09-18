@@ -432,8 +432,8 @@ pub enum TypeError {
         param_idx: usize,
         reason: String,
     },
-    /// A function has both const parameters and type parameters.
-    ComptimeParamOnGeneric {
+    /// A const parameter's type is, or holds, a type parameter.
+    ComptimeParamOfGenericType {
         func_name: String,
         param_name: String,
     },

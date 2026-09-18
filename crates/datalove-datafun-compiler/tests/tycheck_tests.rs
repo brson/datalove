@@ -305,9 +305,9 @@ fn error_to_json(error: &datalove_datafun_tycheck::TypeError) -> rmx::serde_json
                 "reason": reason
             })
         }
-        TypeError::ComptimeParamOnGeneric { func_name, param_name } => {
+        TypeError::ComptimeParamOfGenericType { func_name, param_name } => {
             json!({
-                "kind": "ComptimeParamOnGeneric",
+                "kind": "ComptimeParamOfGenericType",
                 "func_name": func_name,
                 "param_name": param_name
             })

@@ -166,18 +166,35 @@ pub fn check_statement<'db>(
             let param_types = func_type.param_types(db);
             let ret_ty = func_type.return_type(db);
 
-            // Const parameters and type parameters do not combine. Lowering
-            // takes the comptime branch before a call's type arguments are
-            // computed, and specialization emits none, so a function that had
-            // both would lose the descriptors its type parameters need and
-            // read its values at the wrong type. Refused here rather than left
-            // to go wrong quietly.
+            // A const parameter fixes a value at compile time and a type
+            // parameter is erased to a `data`, so a parameter cannot be both.
+            // The const argument would be the only thing saying what the type
+            // parameter is, which means pinning it concretely for that
+            // instantiation -- and specialization builds a copy by substituting
+            // parameters into cloned blocks, so it cannot change the copy's
+            // signature, its descriptor shapes, or the erasure decisions inside
+            // its body. Left alone it goes wrong quietly: the const argument is
+            // erased before the call, `comptime_values` cannot read a constant
+            // back out of an `Erase`, and the parameter silently stays a
+            // runtime one.
+            //
+            // Only the parameter is refused. A const parameter of an ordinary
+            // type in a generic function is fine, because the two vary a
+            // function along different axes: specialization deletes const
+            // parameters and erasure replaces type parameters, so one copy per
+            // const instantiation serves every type instantiation.
             if !stmt.type_params(db).is_empty() {
-                for param in params.iter().filter(|p| p.is_comptime) {
-                    ctx.add_error(TypeError::ComptimeParamOnGeneric {
-                        func_name: name.as_str(db).to_string(),
-                        param_name: param.name.as_str(db).to_string(),
-                    });
+                for (i, param) in params.iter().enumerate().filter(|(_, p)| p.is_comptime) {
+                    let generic = matches!(
+                        param_types.get(i),
+                        Some(Type::Datalit(ty))
+                            if datalove_datafun_common::generics::contains_type_param(ty));
+                    if generic {
+                        ctx.add_error(TypeError::ComptimeParamOfGenericType {
+                            func_name: name.as_str(db).to_string(),
+                            param_name: param.name.as_str(db).to_string(),
+                        });
+                    }
                 }
             }
 

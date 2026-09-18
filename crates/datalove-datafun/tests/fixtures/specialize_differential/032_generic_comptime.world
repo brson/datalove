@@ -1,0 +1,79 @@
+----------
+module local/test/genct
+----------
+
+// A module function with both a const parameter and a type parameter.
+//
+// Specialization deletes the const parameter; erasure replaces the type
+// parameter with a `data` and hands the callee a descriptor for anything its
+// own type cannot describe. Neither touches what the other does, so the copy
+// is as generic as the original and wants the same descriptors.
+//
+// The unspecialized half of this run is what checks the other path: with
+// specialization off the call stays a `ComptimeCall` naming the original, and
+// that has to carry the descriptors too.
+
+// Building a `[T]` is what makes the callee declare a shape it has to be
+// handed a descriptor for. That is the one the rewrite used to drop, and
+// dropping it brings the interpreter down on "a shape built with is one this
+// function declared".
+fun wrap<T>(const n: int, x: T): [T]
+    var out: [T] = [x]
+    ret out
+end fun
+
+// A bare `T`, which is erased to a `data` and needs nothing alongside it.
+fun pick<T>(const n: int, a: T, b: T): T
+    ret a
+end fun
+
+// A module-side caller, so this instantiation is found by the module graph
+// pass rather than by the script one.
+fun wrap_one(x: u32): [u32]
+    const ONE: int = 1
+    ret wrap(ONE, x)
+end fun
+
+// A void one. Its `dest` is never read, and until DCE learned that a comptime
+// call is a call it read as pure and the call was removed outright -- so the
+// function was silently never run. That is not specific to generics; a plain
+// `fun shout(const n: int, s: string)` went the same way.
+fun announce(const n: int, s: string)
+    debuglog s
+end fun
+
+----------
+scriptunit-fragment
+----------
+
+require module local/test/genct
+import genct.wrap
+import genct.pick
+import genct.wrap_one
+import genct.announce
+
+const ONE: int = 1
+const TWO: int = 2
+
+// One copy of `wrap` serves both element types: the erased body does not
+// depend on `T`, so only the descriptor the call site hands over differs. A
+// string is here so that a wrong one leaks or crashes rather than printing
+// something plausible.
+debuglog wrap(ONE, : u32 / 7)
+debuglog wrap(ONE, "s")
+
+// A second const instantiation, which does get a copy of its own.
+debuglog wrap(TWO, "s")
+
+debuglog pick(ONE, : u32 / 3, : u32 / 4)
+debuglog wrap_one(: u32 / 9)
+
+announce(ONE, "spoken")
+
+let kept = pick(ONE, "kept", "dropped")
+
+----------
+scriptunit-expr
+----------
+
+kept

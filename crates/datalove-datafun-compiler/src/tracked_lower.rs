@@ -562,7 +562,7 @@ fn close_shapes_over_calls<'db>(
         let mut sites = Vec::new();
         for block in &unit.blocks {
             for instr in &block.instructions {
-                let Instruction::Call { func, type_args, .. } = instr else { continue };
+                let Some((func, type_args)) = instr.call_target() else { continue };
                 if type_args.is_empty() {
                     continue;
                 }
@@ -572,7 +572,7 @@ fn close_shapes_over_calls<'db>(
                     CodeRef::Local(id) => (key.0, FuncId(id.0)),
                     CodeRef::External { .. } => continue,
                 };
-                sites.push((callee, type_args.clone()));
+                sites.push((callee, type_args.to_vec()));
             }
         }
         calls.insert(*key, sites);

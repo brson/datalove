@@ -35,10 +35,20 @@ counts, being a const binding within the body, which is what lets one comptime f
 pass its parameter to another. Covered by `tycheck_world/05_comptime_arg_errors.world`.
 
 **Call sites.** `lower/expr.rs:653` emits `Instruction::ComptimeCall` instead of `Call`
-when the callee has comptime parameters, carrying the original arguments and the comptime
-parameter indices. Every consumer handles it: the interpreter, the Cranelift backend, the
-C backend, the inliner, DCE, and the IR printer. Where nothing rewrites it, it is a plain
-`Call` to the original function.
+when the callee has comptime parameters, carrying the original arguments, the comptime
+parameter indices, and the same `type_args` and `shape_descriptors` a `Call` carries.
+Every consumer handles it: the interpreter, the Cranelift backend, the C backend, the
+inliner, DCE, and the IR printer. Where nothing rewrites it, it is a plain `Call` to the
+original function.
+
+`Instruction::call_target` and `call_target_mut` are how a pass reaches the callee and its
+type arguments without matching on the two separately. Three do -- the module graph's shape
+closure, the script compiler's, and `resolve_call_descriptors` -- and one of them missing a
+kind is a call site and a callee disagreeing about the trailing arguments, which is the
+failure this area keeps producing. DCE's `has_side_effects` is the fourth place that has to
+know a comptime call is a call, and it did not: left out, a comptime call read as pure, so
+a *void* function with a const parameter had its call removed and was never run. That was
+true from the beginning and had no fixture.
 
 **Specialization.** `specialize_comptime_functions` in `tracked_lower.rs` runs as phase
 5c, after const evaluation and before assembly, over three functions in `specialize.rs`:
@@ -230,13 +240,39 @@ disagree, and the projection rule is where it would have to be settled: it exist
 a non-copy field moving out of a place someone still holds, which is not what reading a
 constant does.
 
-**Const parameters and generics do not combine, and are refused.** `lower/expr.rs:653`
-takes the `ComptimeCall` branch before the `type_args` computation and so never computes
-them, and `rewrite_comptime_calls` emits empty `type_args` and `shape_descriptors`, so a
-function with both would lose the descriptors its type parameters need and read its values
-at the wrong type. `TypeError::ComptimeParamOnGeneric` reports it at the definition, which
-catches the function whether or not anything calls it. Lifting the refusal means computing
-type arguments on the comptime branch too, and carrying them through the copy.
+**Const parameters and generics combine**, and the two are independent: specialization
+deletes the const parameters, erasure replaces the type parameters, and neither touches
+what the other does. A copy is therefore as generic as its original and wants the same
+descriptors, so *one* copy per const instantiation serves every type instantiation --
+`rev<T>(const n, ref xs: [T])` called at `[u32]` and at `[string]` reaches one `rev__ct1`
+and differs only in the descriptor the call site hands over.
+
+`ComptimeCall` carries `type_args` and `shape_descriptors` exactly as `Call` does, read
+through `Instruction::call_target`, and `rewrite_comptime_calls` carries both across to
+the `Call` it emits. That is sound without re-running the shape closure: a copy's
+`descriptor_shapes` is its original's, cloned unchanged, and the copy's body is the
+original's blocks with parameters substituted, so its outgoing edges and their `type_args`
+are the same ones the closure already saw. Nothing in a `DescriptorShape` can depend on
+which instantiation it is in -- there is no value form.
+
+This was refused outright until it was fixed, and the refusal was doing real work:
+lifting it broke three ways at once, with the interpreter panicking on a forwarded shape,
+the cranelift AOT backend failing its own verifier on an argument count, and the jit
+reading a garbage word where a descriptor pointer belonged. Fixtures:
+`specialize_differential/032_generic_comptime` for the specialized-against-unspecialized
+comparison, and `backend/22_comptime_and_generic` for agreement across all four backends.
+The route from the refusal to the fix is in
+[Const Parameters and Generics](reports/report-const-params-and-generics.md).
+
+**A const parameter whose own type is a type parameter is refused.** `const x: T` is the
+one case that does not fall out, because the const argument would be the only thing saying
+what `T` is: fixing it would pin `T` concretely for that instantiation, and
+`monomorphize_function` builds a copy by substituting parameters into cloned blocks, so it
+cannot change the copy's signature, its descriptor shapes, or the erasure decisions inside
+its body. Left alone it went wrong quietly -- the const argument is erased before the
+call, `comptime_values` cannot read a constant back out of an `Erase`, and the parameter
+silently stayed a runtime one. `TypeError::ComptimeParamOfGenericType` reports it at the
+definition, on the parameter rather than on the function.
 
 ## What remains
 

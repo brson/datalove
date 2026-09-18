@@ -632,8 +632,12 @@ fn has_side_effects(instr: &Instruction) -> bool {
         | Instruction::RefStoreTracked { .. }
         | Instruction::RefSetField { .. }
         | Instruction::RefSetFieldTracked { .. } => true,
-        // Call may have side effects.
-        Instruction::Call { .. } => true,
+        // Call may have side effects. A comptime call is a call: it prints,
+        // writes through a `mut` or an `out`, and is only distinguished from
+        // the other by carrying what specialization needs. Left out of here it
+        // read as pure, so a void function with a const parameter had its call
+        // removed and was never run.
+        Instruction::Call { .. } | Instruction::ComptimeCall { .. } => true,
         // DebugLog has side effects (prints).
         Instruction::DebugLog { .. } => true,
         // Intrinsics may have side effects.

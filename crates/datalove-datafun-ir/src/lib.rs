@@ -1292,6 +1292,19 @@ pub enum Instruction {
         discriminant: u32,
         /// Indices of const parameters (to be removed during specialization).
         comptime_param_indices: Vec<usize>,
+        /// What this call site bound each of the callee's type parameters to,
+        /// exactly as on [`Instruction::Call`].
+        ///
+        /// A callee's const parameters and its type parameters are independent:
+        /// specialization deletes the first and erasure replaces the second, so
+        /// a copy built for an instantiation is still generic and still wants
+        /// the same descriptors. These travel to the `Call` the rewrite emits.
+        #[serde(default)]
+        type_args: Vec<DescriptorShape>,
+        /// What this call hands over for each shape the callee declared, as on
+        /// [`Instruction::Call`] and worked out by the same pass.
+        #[serde(default)]
+        shape_descriptors: Vec<DescriptorRef>,
     },
 
     // ========================================================================
@@ -1912,6 +1925,39 @@ pub enum Instruction {
     Nop,
 }
 
+impl Instruction {
+    /// Where this instruction calls, and what it bound the callee's type
+    /// parameters to, for the two instructions that call a named function.
+    ///
+    /// `Call` and `ComptimeCall` carry the same descriptor fields and mean the
+    /// same thing by them: a callee's const parameters and its type parameters
+    /// are independent, so a comptime callee may be generic too. Read through
+    /// here rather than matched separately, because three passes have to agree
+    /// about which instructions are calls, and one of them missing a kind is a
+    /// call site and a callee disagreeing about the trailing arguments, which
+    /// is the failure this area keeps producing.
+    pub fn call_target(&self) -> Option<(&CodeRef, &[DescriptorShape])> {
+        match self {
+            Instruction::Call { func, type_args, .. }
+            | Instruction::ComptimeCall { func, type_args, .. } => Some((func, type_args)),
+            _ => None,
+        }
+    }
+
+    /// The same, for writing the resolved descriptors back.
+    pub fn call_target_mut(
+        &mut self,
+    ) -> Option<(&CodeRef, &[DescriptorShape], &mut Vec<DescriptorRef>)> {
+        match self {
+            Instruction::Call { func, type_args, shape_descriptors, .. }
+            | Instruction::ComptimeCall { func, type_args, shape_descriptors, .. } => {
+                Some((func, type_args, shape_descriptors))
+            }
+            _ => None,
+        }
+    }
+}
+
 /// Block terminator - how control leaves a basic block.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Terminator {
@@ -2283,7 +2329,7 @@ pub fn resolve_call_descriptors(
 ) -> Result<(), DescriptorShape> {
     for block in &mut unit.blocks {
         for instr in &mut block.instructions {
-            let Instruction::Call { func, type_args, shape_descriptors, .. } = instr else {
+            let Some((func, type_args, shape_descriptors)) = instr.call_target_mut() else {
                 continue;
             };
             let wanted = callee_shapes(func);

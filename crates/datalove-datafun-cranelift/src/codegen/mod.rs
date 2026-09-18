@@ -773,9 +773,8 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             // ComptimeCall behaves exactly like Call - the specialization metadata is
             // only used by the specialization pass. Without specialization, this calls
             // the original function with original args.
-            Instruction::ComptimeCall { dest, func, args, .. } => {
-                // A comptime call is not generic, so it binds nothing.
-                self.compile_call(builder, *dest, func, args, &[])?;
+            Instruction::ComptimeCall { dest, func, args, shape_descriptors, .. } => {
+                self.compile_call(builder, *dest, func, args, shape_descriptors)?;
             }
             Instruction::SlotStoreCopy { dest, value } => {
                 self.compile_slot_store(builder, dest, value, true)?;

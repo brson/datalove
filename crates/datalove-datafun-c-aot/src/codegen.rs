@@ -338,9 +338,8 @@ impl<'a> FunctionCodegenContext<'a> {
             Instruction::Call { dest, func, args, shape_descriptors, .. } => {
                 self.emit_call(out, *dest, func, args, shape_descriptors)?;
             }
-            // A comptime call is not generic, so it binds nothing.
-            Instruction::ComptimeCall { dest, func, args, .. } => {
-                self.emit_call(out, *dest, func, args, &[])?;
+            Instruction::ComptimeCall { dest, func, args, shape_descriptors, .. } => {
+                self.emit_call(out, *dest, func, args, shape_descriptors)?;
             }
             Instruction::SlotStoreCopy { dest, value } => {
                 self.emit_slot_store(out, dest, value, true, false)?;

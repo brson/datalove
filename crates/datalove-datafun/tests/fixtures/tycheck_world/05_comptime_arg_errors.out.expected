@@ -25,8 +25,8 @@
         },
         {
           "func_name": "bad_generic",
-          "kind": "ComptimeParamOnGeneric",
-          "param_name": "n"
+          "kind": "ComptimeParamOfGenericType",
+          "param_name": "x"
         }
       ],
       "functions": [
@@ -75,9 +75,16 @@
           "return_type": "int"
         },
         {
-          "name": "bad_generic",
+          "name": "good_generic",
           "params": [
             "int",
+            "T"
+          ],
+          "return_type": "T"
+        },
+        {
+          "name": "bad_generic",
+          "params": [
             "T"
           ],
           "return_type": "T"
