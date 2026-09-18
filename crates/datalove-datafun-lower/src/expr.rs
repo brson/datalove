@@ -834,22 +834,6 @@ pub fn lower_expression<'db>(
                 }
                 _ => panic!("expected List type from typechecker"),
             };
-            // A built collection's elements are converted on the way in, and
-            // the only conversion there is takes a whole `data`. An element
-            // that erases to something composite -- `(A, B)` becoming a tuple
-            // of two `data`, `?T` becoming an option of one -- has no such
-            // conversion, and pushing it as though it were a `data` writes the
-            // wrong number of bytes. Refused rather than written wrongly.
-            //
-            // A collection of one of those is broken the same way when it
-            // merely arrives, so this is a hole in the collections rather than
-            // in building them.
-            if built.is_some() && elem_type != IrType::Data {
-                return Err(crate::LowerError::NotImplemented(format!(
-                    "a list whose elements are {:?} cannot be built here: an element \
-                     of a collection built over a type parameter has to be carried as \
-                     a single `data`, and this one is not", elem_type)));
-            }
             // Lower each element and track as pending intermediate.
             let mut elements = Vec::new();
             for e in list.elements.iter() {
@@ -887,13 +871,6 @@ pub fn lower_expression<'db>(
                 }
                 _ => panic!("expected Set type from typechecker"),
             };
-            // See the list arm.
-            if built.is_some() && elem_type != IrType::Data {
-                return Err(crate::LowerError::NotImplemented(format!(
-                    "a set whose elements are {:?} cannot be built here: an element of \
-                     a collection built over a type parameter has to be carried as a \
-                     single `data`, and this one is not", elem_type)));
-            }
             // Lower each element and track as pending intermediate.
             let mut elements = Vec::new();
             for e in set.elements.iter() {
@@ -931,13 +908,6 @@ pub fn lower_expression<'db>(
                 ),
                 _ => panic!("expected Map type from typechecker"),
             };
-            // See the list arm.
-            if built.is_some() && (key_type != IrType::Data || val_type != IrType::Data) {
-                return Err(crate::LowerError::NotImplemented(format!(
-                    "a map from {:?} to {:?} cannot be built here: a key or value of a \
-                     collection built over a type parameter has to be carried as a \
-                     single `data`, and this one is not", key_type, val_type)));
-            }
             // Lower each entry and track keys/values as pending intermediates.
             let mut entries = Vec::new();
             for e in map.entries.iter() {

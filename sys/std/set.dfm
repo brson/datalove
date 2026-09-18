@@ -13,6 +13,7 @@ import std.set_insert
 import std.set_remove
 import std.set_get
 import std.list_push
+import std.list_pop
 
 // The number of elements.
 fun len<T>(ref self: #{T}): index with { T is ord, }
@@ -150,4 +151,21 @@ fun is_subset_of<T>(ref self: #{T}, ref other: #{T}): bool with { T is ord, }
     set i = icall add_wrapping_index(i, : index / 1)
   end loop
   ret all_present
+end fun
+
+// A set of the given elements, in sort order and without repeats.
+//
+// The elements are moved rather than cloned: the list is taken by value and
+// emptied from the back.
+fun from_list<T>(items: [T]): #{T} with { T is ord, }
+  var out: #{T} = #{}
+  var src: [T] = items
+  loop
+    if list_pop(mut src) |elem|
+      let fresh = insert(mut out, elem)
+    else
+      break
+    end if
+  end loop
+  ret out
 end fun

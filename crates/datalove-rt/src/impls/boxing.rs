@@ -326,14 +326,20 @@ unsafe fn convert(
 
 /// Whether `dst` is `src` with something replaced by `data`.
 ///
-/// Comparing widths does not answer this. A `data` is two words and so is a
+/// **Directional.** `needs_erasure(a, b)` and `needs_erasure(b, a)` answer
+/// different questions, and which is true says which way a value has to be
+/// converted: the first that `b` is the erased reading of `a`, the second that
+/// `a` is. A caller holding two descriptors and no other way to tell them apart
+/// asks both.
+///
+/// Comparing widths does not answer either. A `data` is two words and so is a
 /// `string`, so `{a: string, b: u32}` and `{a: data, b: u32}` are the same size
 /// and the same tag while being different layouts -- taking that for "nothing
 /// was erased" writes a string where a wrapper belongs, and what reads it back
 /// finds a descriptor pointer that is the string's first eight bytes.
 ///
 /// So the two are walked the way `convert` walks them, looking only for a
-/// position where one says `data` and the other does not.
+/// position where `dst` says `data` and `src` says something else.
 pub unsafe fn needs_erasure(
     src_tydesc: *const rtdt::TyDesc,
     dst_tydesc: *const rtdt::TyDesc,
@@ -341,8 +347,15 @@ pub unsafe fn needs_erasure(
     unsafe {
         let src_tag = (*src_tydesc).type_tag;
         let dst_tag = (*dst_tydesc).type_tag;
-        if dst_tag == TyTag::Data || src_tag == TyTag::Data {
-            return src_tag != dst_tag;
+        // A `data` on the destination side is an erased position unless the
+        // source is one too. A `data` on the source side is not: the
+        // destination is the more concrete of the two, which is the other
+        // question.
+        if dst_tag == TyTag::Data {
+            return src_tag != TyTag::Data;
+        }
+        if src_tag == TyTag::Data {
+            return false;
         }
         if src_tag != dst_tag {
             return true;
@@ -603,19 +616,34 @@ pub unsafe fn data_into_local(
                 // Move the payload out, then release the box it sat in. The
                 // payload is not destroyed: it now belongs to the destination.
                 //
-                // What went in is not always what is wanted back. A generic
-                // returning `?{a: T, b: u32}` gets a `data` from one whose own
-                // parameter was a bare `T`, so the box holds the real
+                // What went in is not always what is wanted back, and it can
+                // differ in either direction.
+                //
+                // A generic returning `?{a: T, b: u32}` gets a `data` from one
+                // whose own parameter was a bare `T`, so the box holds the real
                 // `{a: u8, b: u32}` while the destination is laid out as
-                // `{a: data, b: u32}`. Copying the destination's width out of
-                // the payload's allocation reads past the end of it.
-                if !needs_erasure(inner_tydesc, dest_tydesc) {
-                    std::ptr::copy_nonoverlapping(value_ptr, dest_out, size);
-                } else {
+                // `{a: data, b: u32}`: the destination is the more erased of
+                // the two, so the payload is erased into it.
+                //
+                // An element pushed into a collection built inside a generic is
+                // the other way round. The caller wrapped what it held, which
+                // for a `(A, B)` is a tuple of two `data`, while the slot is
+                // the real `(string, u32)` the collection's descriptor names.
+                //
+                // Either way, copying the destination's width out of the
+                // payload's allocation reads past the end of it.
+                if needs_erasure(inner_tydesc, dest_tydesc) {
                     let status = erase_local(rt, value_ptr, inner_tydesc, dest_out, dest_tydesc);
                     if status != RtStatus::Ok {
                         return status;
                     }
+                } else if needs_erasure(dest_tydesc, inner_tydesc) {
+                    let status = reify_local(rt, value_ptr, inner_tydesc, dest_out, dest_tydesc);
+                    if status != RtStatus::Ok {
+                        return status;
+                    }
+                } else {
+                    std::ptr::copy_nonoverlapping(value_ptr, dest_out, size);
                 }
                 let inner_ty = rtdt::TyDescRef::from_ptr(inner_tydesc);
                 let rt_ref = &mut *(rt as *mut crate::impls::rt_local::RtLocal);

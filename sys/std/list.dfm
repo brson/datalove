@@ -13,6 +13,9 @@
 // the two it is looking at.
 
 require rider std
+require module sys/std/option
+
+import option.zip_option
 import std.list_len
 import std.list_get
 import std.list_push
@@ -150,6 +153,34 @@ fun skip<T>(ref self: [T], n: index): [T]
   ret built
 end fun
 
+// Move every element of another list onto the end of this one, in order,
+// leaving the other empty.
+//
+// `concat` builds a third list and leaves both alone, which costs a clone of
+// every element of both. This costs none: it takes the other list by value and
+// the elements are only ever moved.
+//
+// It goes by the back twice because that is the only end a list gives an
+// element up from. The first pass reverses and the second puts it back.
+fun extend<T>(mut self: [T], other: [T])
+  var src: [T] = other
+  var back: [T] = []
+  loop
+    if pop(mut src) |elem|
+      push(mut back, elem)
+    else
+      break
+    end if
+  end loop
+  loop
+    if pop(mut back) |elem|
+      push(mut self, elem)
+    else
+      break
+    end if
+  end loop
+end fun
+
 // One list holding every element of every inner list, in order.
 fun flattened<T>(ref self: [[T]]): [T]
   var built: [T] = []
@@ -157,28 +188,40 @@ fun flattened<T>(ref self: [[T]]): [T]
   let n = len(ref self)
   loop while i .< n
     if get(ref self, i) |inner|
-      // Taken apart from the back and put back the right way round, because
-      // reaching an element of a list one owns means popping it.
-      var src: [T] = inner
-      var back: [T] = []
-      loop
-        if pop(mut src) |elem|
-          push(mut back, elem)
-        else
-          break
-        end if
-      end loop
-      loop
-        if pop(mut back) |elem|
-          push(mut built, elem)
-        else
-          break
-        end if
-      end loop
+      extend(mut built, inner)
     end if
     set i = icall add_wrapping_index(i, : index / 1)
   end loop
   ret built
+end fun
+
+// Pairs of elements at the same position, stopping at the shorter list.
+//
+// The elements are cloned, since neither list gives anything up. The pairing
+// is `option.zip_option`, which is where "both or neither" is already written.
+fun zip<A, B>(ref self: [A], ref other: [B]): [(A, B)]
+  var built: [(A, B)] = []
+  let n = len(ref self)
+  var i: index = : index / 0
+  loop while i .< n
+    if zip_option(get(ref self, i), get(ref other, i)) |pair|
+      push(mut built, pair)
+    else
+      break
+    end if
+    set i = icall add_wrapping_index(i, : index / 1)
+  end loop
+  ret built
+end fun
+
+// Drop everything past the first n elements.
+//
+// The popped element is bound and not used, which is how it is let go of; the
+// loop ends because each pop shortens the list.
+fun truncate<T>(mut self: [T], n: index)
+  loop while n .< len(ref self)
+    let gone = pop(mut self)
+  end loop
 end fun
 
 // A new list with the elements in the opposite order.

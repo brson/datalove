@@ -425,15 +425,34 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
 
     /// Compile the function and return the Cranelift FuncId.
     ///
-    /// This declares the function with Export linkage and then defines it.
-    /// Use `compile_predeclared` for functions that have already been declared.
-    pub fn compile(mut self) -> Result<FuncId, CraneliftError> {
+    /// This declares the function under its own name with Export linkage and
+    /// then defines it. Use `compile_predeclared` for functions that have
+    /// already been declared, and `compile_as` where the name has to be one the
+    /// caller chooses.
+    pub fn compile(self) -> Result<FuncId, CraneliftError> {
+        let symbol = self.func.name.clone();
+        self.compile_as(&symbol)
+    }
+
+    /// Compile the function under a symbol of the caller's choosing.
+    ///
+    /// A module's function is named by its own name alone, and two modules can
+    /// share one: `list.get` and `map.get` both compile to `get`. Declaring
+    /// both in one module is a collision, and it goes one of two ways. Where
+    /// the arities differ -- they do here, because `map.get` takes descriptors
+    /// for two type parameters and `set.get` for one -- the second declaration
+    /// is refused outright. Where they agree it is accepted, and every call
+    /// meant for one of them reaches the other.
+    ///
+    /// So anything compiling functions from more than one module into a single
+    /// module has to name them apart itself.
+    pub fn compile_as(mut self, symbol: &str) -> Result<FuncId, CraneliftError> {
         // Build function signature.
         let sig = self.build_signature();
 
         // Declare function in module.
         let func_id = self.module
-            .declare_function(&self.func.name, Linkage::Export, &sig)
+            .declare_function(symbol, Linkage::Export, &sig)
             .map_err(|e| CraneliftError::Module(format!("declare function: {}", e)))?;
 
         self.compile_body(func_id, sig)

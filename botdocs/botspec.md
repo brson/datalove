@@ -1254,7 +1254,11 @@ borrowed out of one carries what it really is, so it can be handed to something
 that takes it by reference.
 
 A collection over a type parameter can be built as well as taken, stored,
-handed on and returned. `var out: [T] = []` works. A collection that arrives
+handed on and returned. `var out: [T] = []` works, and so does a collection
+whose element is a *composite* of type parameters -- `[(A, B)]`, `[?T]` --
+which is what `list.zip` and `map.entries` are. An element crossing into such a
+collection is converted position by position against the collection's own
+descriptor, the same way an owned parameter crossing a call is. A collection that arrives
 carries a descriptor saying what its elements are; one written here has no value
 to read one off, so the call site hands one over — it is the only place that
 knows what the parameter was bound to. Nothing is worked out at run time,

@@ -1091,15 +1091,9 @@ pub extern "C-unwind" fn dlr_std__list_get(
     let out_ty = unsafe { rtdt::TyDescRef::from_ptr(out_td as *const rtdt::TyDesc) };
 
     unsafe {
-        if boxes_the_element(out_ty.option_inner_ty(), list_ty.list_element_ty()) {
-            datalove_rt::c::dtlv_rti_list_get_as_data_local(
-                rt, list_ptr, list_ty.as_ptr(), index.0, out, out_ty.as_ptr(),
-            ) as u8
-        } else {
-            datalove_rt::c::dtlv_rti_list_get_local(
-                rt, list_ptr, list_ty.as_ptr(), index.0, out, out_ty.as_ptr(),
-            ) as u8
-        }
+        datalove_rt::c::dtlv_rti_list_get_erased_local(
+            rt, list_ptr, list_ty.as_ptr(), index.0, out, out_ty.as_ptr(),
+        ) as u8
     }
 }
 
@@ -1114,15 +1108,14 @@ pub extern "C-unwind" fn dlr_std__list_push(
     let elem_ty = unsafe { rtdt::TyDescRef::from_ptr(elem_td as *const rtdt::TyDesc) };
 
     unsafe {
-        if boxes_the_element(elem_ty, list_ty.list_element_ty()) {
-            datalove_rt::c::dtlv_rti_list_push_data_local(
-                rt, list_ptr, list_ty.as_ptr(), elem_ptr,
-            ) as u8
-        } else {
-            datalove_rt::c::dtlv_rti_list_push_local(
-                rt, list_ptr, list_ty.as_ptr(), elem_ptr, elem_ty.as_ptr(),
-            ) as u8
-        }
+        // The erased entry rather than the two branches, because there are
+        // three cases and not two: an element wrapped whole, one already in
+        // the slot's shape, and one that is the slot's shape with `data` at
+        // some position inside it -- a `(A, B)` pushed into a `[(string,
+        // u32)]` -- which is converted position by position.
+        datalove_rt::c::dtlv_rti_list_push_erased_local(
+            rt, list_ptr, list_ty.as_ptr(), elem_ptr, elem_ty.as_ptr(),
+        ) as u8
     }
 }
 
@@ -1136,15 +1129,9 @@ pub extern "C-unwind" fn dlr_std__list_pop(
     let out_ty = unsafe { rtdt::TyDescRef::from_ptr(out_td as *const rtdt::TyDesc) };
 
     unsafe {
-        if boxes_the_element(out_ty.option_inner_ty(), list_ty.list_element_ty()) {
-            datalove_rt::c::dtlv_rti_list_pop_as_data_local(
-                rt, list_ptr, list_ty.as_ptr(), out, out_ty.as_ptr(),
-            ) as u8
-        } else {
-            datalove_rt::c::dtlv_rti_list_pop_local(
-                rt, list_ptr, list_ty.as_ptr(), out, out_ty.as_ptr(),
-            ) as u8
-        }
+        datalove_rt::c::dtlv_rti_list_pop_erased_local(
+            rt, list_ptr, list_ty.as_ptr(), out, out_ty.as_ptr(),
+        ) as u8
     }
 }
 
@@ -1174,15 +1161,9 @@ pub extern "C-unwind" fn dlr_std__list_set(
     let elem_ty = unsafe { rtdt::TyDescRef::from_ptr(elem_td as *const rtdt::TyDesc) };
 
     let status = unsafe {
-        if boxes_the_element(elem_ty, list_ty.list_element_ty()) {
-            datalove_rt::c::dtlv_rti_list_set_data_local(
-                rt, list_ptr, list_ty.as_ptr(), index.0, elem_ptr,
-            )
-        } else {
-            datalove_rt::c::dtlv_rti_list_set_local(
-                rt, list_ptr, list_ty.as_ptr(), index.0, elem_ptr, elem_ty.as_ptr(),
-            )
-        }
+        datalove_rt::c::dtlv_rti_list_set_erased_local(
+            rt, list_ptr, list_ty.as_ptr(), index.0, elem_ptr, elem_ty.as_ptr(),
+        )
     };
     let placed = unsafe { placed_or_dropped(rt, status, elem_ptr, elem_td) };
     unsafe { write_result(_out, placed) };
@@ -1202,15 +1183,9 @@ pub extern "C-unwind" fn dlr_std__list_insert(
     let elem_ty = unsafe { rtdt::TyDescRef::from_ptr(elem_td as *const rtdt::TyDesc) };
 
     let status = unsafe {
-        if boxes_the_element(elem_ty, list_ty.list_element_ty()) {
-            datalove_rt::c::dtlv_rti_list_insert_data_local(
-                rt, list_ptr, list_ty.as_ptr(), index.0, elem_ptr,
-            )
-        } else {
-            datalove_rt::c::dtlv_rti_list_insert_local(
-                rt, list_ptr, list_ty.as_ptr(), index.0, elem_ptr, elem_ty.as_ptr(),
-            )
-        }
+        datalove_rt::c::dtlv_rti_list_insert_erased_local(
+            rt, list_ptr, list_ty.as_ptr(), index.0, elem_ptr, elem_ty.as_ptr(),
+        )
     };
     let placed = unsafe { placed_or_dropped(rt, status, elem_ptr, elem_td) };
     unsafe { write_result(_out, placed) };
@@ -1229,15 +1204,9 @@ pub extern "C-unwind" fn dlr_std__list_remove(
     let out_ty = unsafe { rtdt::TyDescRef::from_ptr(out_td as *const rtdt::TyDesc) };
 
     unsafe {
-        if boxes_the_element(out_ty.option_inner_ty(), list_ty.list_element_ty()) {
-            datalove_rt::c::dtlv_rti_list_remove_as_data_local(
-                rt, list_ptr, list_ty.as_ptr(), index.0, out, out_ty.as_ptr(),
-            ) as u8
-        } else {
-            datalove_rt::c::dtlv_rti_list_remove_local(
-                rt, list_ptr, list_ty.as_ptr(), index.0, out, out_ty.as_ptr(),
-            ) as u8
-        }
+        datalove_rt::c::dtlv_rti_list_remove_erased_local(
+            rt, list_ptr, list_ty.as_ptr(), index.0, out, out_ty.as_ptr(),
+        ) as u8
     }
 }
 

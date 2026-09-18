@@ -221,6 +221,14 @@ really is a `data` wants a plain clone, and from a call site the two look alike.
 `dtlv_rti_list_get_erased_local` makes it for an element, `field_read` for a
 field, `clone_erased_local` for a clone.
 
+`needs_erasure` is **directional**, and both directions get asked. An element
+pushed into a collection built inside a generic is in the shape the generic
+holds it in -- a `(A, B)` is a tuple of two `data` -- while the slot is the real
+`(string, u32)` the collection's descriptor names, so that one reifies. A value
+coming back out of a `data` is usually the other way round. `data_into_local`
+asks both and picks, which is what lets a collection hold an element that is a
+composite of type parameters rather than only a bare one.
+
 ## What the runtime provides
 
 | Function | Answers |

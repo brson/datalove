@@ -29,6 +29,18 @@ use crate::JitError;
 /// region exhausted", increase this value.
 const JIT_ARENA_SIZE: usize = 64 * 1024 * 1024;
 
+/// A symbol no other function in the jit module will have.
+///
+/// Functions arrive here one at a time from whatever modules the program
+/// reached, and a module's function is named by its own name alone. Two
+/// modules sharing one -- `list.get` and `map.get` -- would otherwise collide;
+/// see `FunctionCompiler::compile_as`.
+fn unique_symbol(func: &IrCodeUnit) -> String {
+    static COUNTER: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+    let n = COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    format!("{}__jit{}", func.name, n)
+}
+
 /// Wrap a JIT compilation error with context about arena exhaustion.
 ///
 /// When the arena runs out of space, cranelift reports a generic allocation
@@ -195,7 +207,7 @@ impl JitCompiler {
         );
 
         // Compile and get the Cranelift FuncId.
-        let cl_func_id = compiler.compile()
+        let cl_func_id = compiler.compile_as(&unique_symbol(func))
             .map_err(|e| jit_err("compile", e))?;
 
         // Finalize to get executable code.
@@ -303,7 +315,7 @@ impl JitCompiler {
         compiler.set_module_funcs(module_funcs);
 
         // Compile and get the Cranelift FuncId.
-        let cl_func_id = compiler.compile()
+        let cl_func_id = compiler.compile_as(&unique_symbol(func))
             .map_err(|e| jit_err("compile", e))?;
 
         // Finalize to get executable code.

@@ -1,0 +1,60 @@
+require module sys/std/list
+require module sys/std/map
+require module sys/std/set
+
+import list.zip
+import list.extend
+import list.flattened
+import list.truncate
+import map.entries
+import map.from_entries
+import map.get
+import set.from_list
+import set.to_list
+
+// A collection whose element is a *composite* of type parameters, rather than
+// one of them on its own.
+//
+// An element of a collection built inside a generic used to have to be a whole
+// `data`: a `(A, B)` erases to a tuple of two, and pushing that as though it
+// were one wrote the wrong number of bytes, so it was refused. The refusal is
+// gone because the shapes are now walked position by position against the
+// collection's own descriptor, which is the same conversion an owned parameter
+// crossing a call already used. `needs_erasure` is what says which way to walk.
+//
+// What it buys is `zip`, `entries` and `from_entries`, none of which could be
+// written before: a pair of two type parameters is what they are all about.
+
+let names: [string] = ["a", "b", "c"]
+let nums: [u32] = [10, 20]
+
+// Pairs stop at the shorter list.
+let zipped = zip(ref names, ref nums)
+
+// A map's entries as pairs, in sort order, and back again.
+let m: %{string = u32} = %{"b" = 2, "a" = 1, "c" = 3}
+let listed = entries(ref m)
+
+let rebuilt = from_entries(entries(ref m))
+let a: string = "a"
+let z: string = "z"
+let looked_up = (get(ref rebuilt, ref a), get(ref rebuilt, ref z))
+
+// A set of pairs orders them as pairs.
+let as_set = to_list(ref from_list(zip(ref names, ref nums)))
+
+// `extend` moves the other list's elements rather than cloning them, which
+// `concat` cannot do; `flattened` is written in terms of it.
+var acc: [string] = ["x"]
+let more: [string] = ["y", "z"]
+extend(mut acc, more)
+
+let nested: [[u32]] = [[1, 2], [3], []]
+let flat = flattened(ref nested)
+
+var cut: [u32] = [1, 2, 3, 4]
+truncate(mut cut, 2)
+let short = cut@
+truncate(mut cut, 9)
+
+let output = (zipped, listed, looked_up, as_set, acc, flat, short, cut)

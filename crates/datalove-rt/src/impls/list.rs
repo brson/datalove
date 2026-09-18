@@ -430,17 +430,76 @@ pub unsafe fn list_get_erased_impl(
 ) -> RtStatus {
     let element_ty = list_tydesc.list_element_ty();
     let slot_ty = option_tydesc.option_inner_ty();
-    let packs = slot_ty.type_tag() == rtdt::TyTag::Data
-        && element_ty.type_tag() != rtdt::TyTag::Data;
-    unsafe {
-        if packs {
-            list_get_as_data_impl(rt, list_value_ref, list_tydesc, index,
-                option_value_out, option_tydesc)
-        } else {
-            list_get_impl(rt, list_value_ref, list_tydesc, index,
-                option_value_out, option_tydesc)
-        }
+    let list = unsafe { ListRef::new(list_value_ref as *const List, element_ty) };
+    let option_layout = rtdt::layout::compute_option_layout(option_tydesc);
+    let mut opt = unsafe { OptionWriter::new(option_value_out, &option_layout) };
+
+    if index >= list.size() {
+        opt.write_none();
+        return RtStatus::Ok;
     }
+
+    // The list keeps its element, so the slot gets a clone of it, in whatever
+    // shape the slot is. `clone_erased_local` is the one place that decides
+    // which of the three that is: the slot's own shape, a `data` the element
+    // is packed into, or the element's shape with `data` at some position
+    // inside it.
+    let rt_handle = rt as *mut RtLocal as crate::c::LocalRtHandle;
+    let status = unsafe {
+        crate::impls::boxing::clone_erased_local(
+            rt_handle,
+            list.element_ptr(index),
+            element_ty.as_ptr(),
+            opt.payload_ptr(),
+            slot_ty.as_ptr(),
+        )
+    };
+    if status != RtStatus::Ok {
+        return status;
+    }
+    opt.write_some_tag();
+    RtStatus::Ok
+}
+
+/// Take the last element off, in whatever shape the slot is.
+///
+/// The move-out counterpart of `list_get_erased_impl`: the list gives the
+/// element up, so `erase_local` moves it across rather than cloning.
+pub unsafe fn list_pop_erased_impl(
+    rt: &mut RtLocal,
+    list_value_mut: *mut u8,
+    list_tydesc: rtdt::TyDescRef,
+    option_value_out: *mut u8,
+    option_tydesc: rtdt::TyDescRef,
+) -> RtStatus {
+    let element_ty = list_tydesc.list_element_ty();
+    let slot_ty = option_tydesc.option_inner_ty();
+    let mut list = unsafe { ListMut::new(list_value_mut as *mut List, element_ty) };
+    let option_layout = rtdt::layout::compute_option_layout(option_tydesc);
+    let mut opt = unsafe { OptionWriter::new(option_value_out, &option_layout) };
+
+    if list.size() == 0 {
+        opt.write_none();
+        return RtStatus::Ok;
+    }
+
+    let last_index = list.size() - 1;
+    let rt_handle = rt as *mut RtLocal as crate::c::LocalRtHandle;
+    let status = unsafe {
+        crate::impls::boxing::erase_local(
+            rt_handle,
+            list.element_ptr(last_index),
+            element_ty.as_ptr(),
+            opt.payload_ptr(),
+            slot_ty.as_ptr(),
+        )
+    };
+    if status != RtStatus::Ok {
+        return status;
+    }
+    list.set_size(last_index);
+    opt.write_some_tag();
+    RtStatus::Ok
 }
 
 /// Take the last element off the list, as a `data`.
@@ -614,6 +673,55 @@ pub unsafe fn list_insert_data_impl(
 ///
 /// The element is moved rather than cloned: the list gives it up, and what
 /// follows shifts down. Out of bounds gives none.
+/// Take the element at an index out, in whatever shape the slot is.
+///
+/// The move-out counterpart of `list_get_erased_impl`, for a position rather
+/// than the end: the list gives the element up, so `erase_local` moves it
+/// across rather than cloning, and decides which of the three shapes the slot
+/// is in.
+pub unsafe fn list_remove_erased_impl(
+    rt: &mut RtLocal,
+    list_value_mut: *mut u8,
+    list_tydesc: rtdt::TyDescRef,
+    index: rtdt::IndexRepr,
+    option_value_out: *mut u8,
+    option_tydesc: rtdt::TyDescRef,
+) -> RtStatus {
+    let element_ty = list_tydesc.list_element_ty();
+    let slot_ty = option_tydesc.option_inner_ty();
+    let mut list = unsafe { ListMut::new(list_value_mut as *mut List, element_ty) };
+    let size = list.size();
+    let option_layout = rtdt::layout::compute_option_layout(option_tydesc);
+    let mut opt = unsafe { OptionWriter::new(option_value_out, &option_layout) };
+
+    if index >= size {
+        opt.write_none();
+        return RtStatus::Ok;
+    }
+
+    let rt_handle = rt as *mut RtLocal as crate::c::LocalRtHandle;
+    let element_size = element_ty.size() as usize;
+    let element_ptr = list.element_ptr_mut(index);
+    let status = unsafe {
+        crate::impls::boxing::erase_local(
+            rt_handle, element_ptr, element_ty.as_ptr(), opt.payload_ptr(), slot_ty.as_ptr(),
+        )
+    };
+    if status != RtStatus::Ok {
+        return status;
+    }
+
+    if index < size - 1 {
+        let src = unsafe { element_ptr.add(element_size) };
+        let count = (size - index - 1) as usize * element_size;
+        unsafe { std::ptr::copy(src, element_ptr, count) };
+    }
+
+    list.set_size(size - 1);
+    opt.write_some_tag();
+    RtStatus::Ok
+}
+
 pub unsafe fn list_remove_as_data_impl(
     rt: &mut RtLocal,
     list_value_mut: *mut u8,
