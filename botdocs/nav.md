@@ -26,6 +26,7 @@
 - [Clone and Coerce Operators](design-clone-and-coerce.md)
 - [Token Gluing and Operator Fixity](design-token-gluing.md)
 - [Auto-Adapt Mode](design-auto-adapt.md)
+- [Tables: What the Type System Is Missing](design-table-rows.md)
 - [Const Parameter Specialization](const-param-specialization.md)
 
 ---

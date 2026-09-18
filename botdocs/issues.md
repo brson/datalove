@@ -26,18 +26,19 @@ home here.
 and held inside anything (`std_tests/144_table_shapes`); what it has no
 operations at all is `sys/std`. Two things stop a module being written.
 
-**There is no way to say "any table".** A table's type carries its whole column
-list -- `{| x: u32, y: string |}` -- and there is no row or column type
-parameter and no `table` bound. So `fun len(ref self: ???)` has nothing to put
-in the hole. A type parameter bound to a table does pass through a generic
-unharmed, but a function that only forwards a value is not an operation:
+**There is no way to say "any table".** Tables *are* generic per column --
+`fun ident<T>(t: {| x: T, y: u32 |})` compiles and runs, and
+`bind_type_params` unifies two table types column by column. What cannot be
+written is a signature whose *column list* is not fixed: a type parameter
+stands for a column's type, and nothing stands for the set of columns.
 
 ```datalove
-fun rows<T>(ref t: T): index    // compiles, and can do nothing with `t`
+fun len(ref self: ???): index    // nothing goes in the hole
 ```
 
-Writing the natives over a bare `T` instead would accept a list or a string
-just as readily and read their bytes as a table's.
+The same hole stops the **native** being declared, which is why this is not
+merely a missing library. Writing it over a bare `T` instead would accept a
+list or a string just as readily and read their bytes as a table's.
 
 **A column's type varies by column.** `dtlv_rti_table_get_local` takes a row
 and a column and hands back a raw pointer, because there is no one type to
@@ -53,10 +54,12 @@ spec mentions column projections yielding a list view; `t.x` is
 `ProjectionOnNonAggregate` today, and `t[i]?` is refused because indexing wants
 a list, map or tensor.
 
-**What it would take**, in the order it would have to happen: column projection
-(`t.x`, giving `[T]`), which makes per-column access expressible; then either a
-row type parameter or a `table` bound, which is what a *generic* `len` and
-`push_row` need. The second is a type-system feature rather than a library one.
+**What it would take** is worked through in
+[Tables: what the type system is missing](design-table-rows.md). The short of
+it: column projection first, which needs no type-system change and is already
+specified -- and which is cheap because the storage is columnar, so a column
+view is a well-formed list header pointing into the table. Then a row type, so
+that `table R` makes the row an ordinary parameter and the natives writable.
 
 **The tensor module went the other way** and is written, because a tensor's
 element *is* a type parameter -- `[|T, 1|]` -- even though its rank is not. See
