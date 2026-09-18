@@ -159,9 +159,10 @@ directly to the code you expect,
 requiring little reconstruction to regain performance.
 It creates a canvas for advanced experiments in language
 design including simple compile-time evalution,
-global analysis, termination proofs, runtime memoization,
-logic programming via choice points.
-Few language-design doors are closed.
+global analysis, termination proofs,
+functions over types or limited dependent types, runtime memoization,
+logic programming via choice points and backtracking.
+Few doors are closed.
 
 Datalove _procedures_ allow code to escape this restrictive regime
 around the edges of the program through I/O and other side-effects.
