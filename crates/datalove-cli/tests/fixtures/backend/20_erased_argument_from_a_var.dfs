@@ -1,0 +1,63 @@
+// Giving a `var` away to a generic function that takes it by value.
+//
+// An `in` argument is consumed by the call, and the call is what ownership
+// analysis sees taking it. Where the parameter is erased there is a conversion
+// in between -- the caller wraps the list into a `data` -- so the call takes
+// the *erased value* and the binding it came from is never seen going. The var
+// was then destroyed at the end of its scope as well as by the callee, which
+// freed the same list twice: `free() called on untracked pointer` under both
+// AOT backends, while the interpreter and the jit happened to survive it.
+//
+// The binding is moved out before the conversion now, which is what says it has
+// gone. A copy type is left where it stands: it has nothing to free, and
+// reading it twice is exactly what a copy is for.
+//
+// A list written as a literal never showed this, because a literal is a value
+// rather than a binding and a value is already seen being moved. It took a var
+// built by `push`.
+
+require module sys/std/list
+import list.len
+import list.push
+import list.pop
+
+fun size<T>(items: [T]): index
+  ret len(ref items)
+end fun
+
+fun last_of<T>(items: [T]): ?T
+  var owned: [T] = items
+  ret pop(mut owned)
+end fun
+
+fun concrete_size(items: [string]): index
+  ret len(ref items)
+end fun
+
+// The var the callee takes away.
+var built: [string] = []
+push(mut built, "a")
+push(mut built, "b")
+debuglog size(built)
+
+// And again through a local inside the callee, which is what first showed it.
+var again: [string] = []
+push(mut again, "a")
+debuglog last_of(again)
+
+// A literal, which always worked, and a concrete callee, which never converts.
+debuglog size(["x", "y", "z"])
+var third: [string] = []
+push(mut third, "c")
+debuglog concrete_size(third)
+
+// A copy-typed var handed to a generic twice over: erasing it does not take it
+// away, so it is still there for the second call and for this read.
+fun identity<T>(x: T): T
+  ret x
+end fun
+
+var n: u32 = 7
+debuglog identity(n)
+debuglog identity(n)
+debuglog n

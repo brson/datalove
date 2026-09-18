@@ -278,6 +278,14 @@ merely reads as `data` because it was erased. Anything carrying its own
 descriptor is the second: `operand_ref_desc(arg).is_some()` is the test. Read
 the wrong way, a string's first two words are taken for a wrapper's pointers.
 
+And one about ownership. A call consumes its `in` arguments, and the call is
+what ownership analysis sees taking them -- but an erased parameter puts a
+conversion in between, so the call takes the *erased value* and the binding it
+came from is never seen going. A non-copy binding has to be moved out before
+the conversion, or it is destroyed at the end of its scope as well as by the
+callee. A copy binding is left where it stands, which is what lets one be
+erased into two calls.
+
 ## What is refused
 
 **No bounds, so no operations on a `T`.** A value of a bare type parameter can

@@ -14,42 +14,10 @@ home here.
 
 ## Contents
 
-- [An owned generic container moved into a local double-frees when compiled](#user-content-an-owned-generic-container-moved-into-a-local-double-frees-when-compiled)
 - [A unit that fails part way through leaves its index to the next one](#user-content-a-unit-that-fails-part-way-through-leaves-its-index-to-the-next-one)
 - [Inlining never triggers from a caller in an earlier unit](#user-content-inlining-never-triggers-from-a-caller-in-an-earlier-unit)
 - [A field of a const cannot be projected, but a const can be destructured](#user-content-a-field-of-a-const-cannot-be-projected-but-a-const-can-be-destructured)
 - [A specialized function keeps an original nobody calls](#user-content-a-specialized-function-keeps-an-original-nobody-calls)
-
-## An owned generic container moved into a local double-frees when compiled
-
-**Reproduced.** The compiled backends abort on the way out; the interpreter is
-fine.
-
-```datalove
-require module sys/std/list
-import list.push
-import list.pop
-
-fun take_last<T>(items: [T]): ?T
-  var l: [T] = items
-  ret pop(mut l)
-end fun
-
-var l: [string] = []
-push(mut l, "a")
-debuglog take_last(l)
-// interpreter: some "a"
-// aot, c-aot: some "a", then `free() called on untracked pointer`
-```
-
-The value is right; what fails is a destroy afterwards, three `any_destroy_local`
-frames deep. Popping the element out and returning it is what does it: the same
-function without the `ret` -- and `set.from_list`, which moves a list into a
-local and pops it dry without returning what it pops -- are both fine.
-
-Checked against `916abb39`, so it predates the composite-element work in
-collections; the pattern it needs -- an owned generic container moved into a
-local and popped from -- is just rare enough not to have been written before.
 
 ## A unit that fails part way through leaves its index to the next one
 

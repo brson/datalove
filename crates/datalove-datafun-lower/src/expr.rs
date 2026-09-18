@@ -657,6 +657,32 @@ pub fn lower_expression<'db>(
                         // cranelift boxed and then freed.
                         ctx.emit(Instruction::EraseTracked { dest: erased, src: operand.clone() });
                     } else {
+                        // An `in` argument is given away, and what is seen
+                        // taking it is the call. With a conversion in between,
+                        // the call takes the erased value and the binding it
+                        // came from is never seen going -- so a slot is
+                        // destroyed at the end of its scope as well as by the
+                        // callee, which frees the same list twice. Moving it
+                        // out first is what says it has gone.
+                        //
+                        // Only a non-copy slot. A copy type has nothing to free
+                        // and is read where it stands, which is what lets one
+                        // binding be erased into two calls.
+                        if mode == ParamMode::In {
+                            if let Operand::Slot(slot) = operand {
+                                let slot_ty = operand_type(ctx, &operand);
+                                if !slot_ty.is_copy() {
+                                    let moved = ctx.fresh_value(slot_ty);
+                                    if ctx.is_operand_tracked(operand) {
+                                        ctx.emit(Instruction::SlotLoadMoveTracked {
+                                            dest: moved, slot });
+                                    } else {
+                                        ctx.emit(Instruction::SlotLoadMove { dest: moved, slot });
+                                    }
+                                    operand = Operand::Value(moved);
+                                }
+                            }
+                        }
                         ctx.emit(Instruction::Erase { dest: erased, src: operand.clone() });
                     }
                     operand = Operand::Value(erased);
