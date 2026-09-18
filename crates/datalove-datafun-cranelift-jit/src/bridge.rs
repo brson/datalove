@@ -4,20 +4,47 @@
 //! All function returns use sret (pointer-based), so the bridge only needs void dispatch.
 
 use datalove_datafun_interp::{Destination, Value};
-use datalove_datafun_ir::{IrType, ParamId};
+use datalove_datafun_ir::{IrCodeUnit, IrType, ParamId};
 use datalove_rt::c::LocalRtHandle;
+use datalove_rtdt as rtdt;
 
 use crate::JitError;
 
 /// Maximum number of function parameters supported by direct dispatch.
 const MAX_DIRECT_ARGS: usize = 8;
 
+/// Whether a callee can be entered from a `CallDispatcher`.
+///
+/// A dispatcher is handed the argument values and nothing else. A callee that
+/// declares shapes wants a descriptor for each of them after the arguments, and
+/// there is nowhere here for one to come from: the call site worked them out,
+/// and the interpreter keeps such a call to itself rather than offering it
+/// round. Asked here as well, so that the bridge cannot be entered with a short
+/// argument list if that ever stops being true.
+///
+/// The trampoline is the other way in and does not use this: jit code calling
+/// jit code passes the descriptors along with the arguments, so there is
+/// something to forward.
+pub fn dispatchable(func: &IrCodeUnit) -> bool {
+    match func.function_context() {
+        Some(ctx) => ctx.descriptor_shapes.is_empty(),
+        None => true,
+    }
+}
+
 /// Call a JIT-compiled function from the interpreter.
 ///
 /// JIT functions use this calling convention:
 /// - First param: rt_handle (pointer to runtime)
 /// - Second param (non-Unit returns): sret pointer for return value
-/// - Remaining params: pointers to argument values
+/// - Next params: pointers to argument values
+/// - Then one descriptor per `descriptor_params` entry, then one per
+///   `descriptor_shapes` entry
+///
+/// The two descriptor groups and their order are `build_signature`'s, in the
+/// cranelift codegen the jit shares with the AOT backend. Leaving the second
+/// group off does not merely lose a descriptor, it hands the callee a shorter
+/// argument list than it was compiled for.
 ///
 /// All returns are written via sret pointer. No register returns.
 pub unsafe fn call_jit(
@@ -28,12 +55,15 @@ pub unsafe fn call_jit(
     ret_dest: Destination,
     _return_type: &IrType,
     descriptor_params: &[ParamId],
+    shape_descriptors: &[*const rtdt::TyDesc],
 ) -> Result<(), JitError> {
-    if args.len() + descriptor_params.len() > MAX_DIRECT_ARGS {
+    if args.len() + descriptor_params.len() + shape_descriptors.len() > MAX_DIRECT_ARGS {
         return Err(JitError::BridgeCallFailed(format!(
-            "too many arguments: {} with {} descriptors (max {})",
+            "too many arguments: {} with {} parameter descriptors and {} shape \
+             descriptors (max {})",
             args.len(),
             descriptor_params.len(),
+            shape_descriptors.len(),
             MAX_DIRECT_ARGS
         )));
     }
@@ -69,6 +99,15 @@ pub unsafe fn call_jit(
             ))
         })?;
         raw_args[arg_idx] = arg.tydesc as usize;
+        arg_idx += 1;
+    }
+
+    // Then one for each shape the callee builds a collection of. No argument
+    // carries these, so they arrive already worked out: from the call site when
+    // the interpreter is calling, or forwarded out of the caller's own trailing
+    // arguments when jit code is.
+    for tydesc in shape_descriptors {
+        raw_args[arg_idx] = *tydesc as usize;
         arg_idx += 1;
     }
 

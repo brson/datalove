@@ -313,9 +313,15 @@ impl JitEngine {
         ret_dest: Destination,
         return_type: &IrType,
         descriptor_params: &[datalove_datafun_ir::ParamId],
+        shape_descriptors: &[*const datalove_rtdt::TyDesc],
     ) -> Result<(), JitError> {
         // SAFETY: caller guarantees code_ptr and args are valid.
-        unsafe { bridge::call_jit(code_ptr, uses_sret, rt_handle, args, ret_dest, return_type, descriptor_params) }
+        unsafe {
+            bridge::call_jit(
+                code_ptr, uses_sret, rt_handle, args, ret_dest, return_type,
+                descriptor_params, shape_descriptors,
+            )
+        }
     }
 }
 
@@ -458,7 +464,8 @@ mod tests {
         // Call the JIT code. Result written to ret_dest via sret.
         let return_type = IrType::I32;
         unsafe {
-            jit.call_jit(code_ptr, uses_sret, rt_handle, &[], ret_dest, &return_type, &[]).unwrap();
+            jit.call_jit(code_ptr, uses_sret, rt_handle, &[], ret_dest, &return_type, &[], &[])
+                .unwrap();
         }
 
         // Extract i32 from the buffer.
@@ -671,7 +678,7 @@ mod tests {
         // SAFETY: code_ptr is valid JIT code.
         let return_type = IrType::I32;
         unsafe {
-            bridge::call_jit(code_ptr, uses_sret, rt_handle, &[], ret_dest, &return_type, &[])
+            bridge::call_jit(code_ptr, uses_sret, rt_handle, &[], ret_dest, &return_type, &[], &[])
                 .expect("JIT call failed");
         }
 
@@ -694,6 +701,12 @@ impl CallDispatcher for JitEngine {
         call_ctx: DispatchCallContext<'_, '_>,
     ) -> DispatchResult {
         use datalove_datafun_interp::ExecutionContext;
+
+        // A callee wanting a descriptor per shape it declares cannot be entered
+        // from here; see `bridge::dispatchable`.
+        if !bridge::dispatchable(func) {
+            return DispatchResult::NotHandled;
+        }
 
         let key = FunctionKey::of(code_ref, call_ctx.exec_ctx.unit());
 
@@ -746,6 +759,8 @@ impl CallDispatcher for JitEngine {
                         code_ptr, uses_sret, rt_handle, args, ret_dest,
                         func.return_type().expect("JIT dispatch requires function return type"),
                         func.function_context().map_or(&[][..], |c| &c.descriptor_params),
+                        // Refused above when the callee declares any.
+                        &[],
                     )
                 };
 

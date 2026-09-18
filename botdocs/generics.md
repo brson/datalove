@@ -262,15 +262,38 @@ ordinary parameters and in that order. Cranelift keeps materialized descriptors
 in `ref_desc_values`; the C backend declares a `__rd{n}` per fat reference in the
 function prologue, so a `goto` between blocks never jumps over a declaration.
 
-The **jit** needs runtime symbols registered twice: once in
+The **jit** compiles through the same cranelift codegen, so jit code passes both
+groups the same way. What it adds is two boundaries of its own, and both have to
+know that there are two groups and not one:
+
+- `bridge::call_jit` builds the argument list when the interpreter enters jit
+  code. It takes the `descriptor_params` and the shape descriptors separately
+  and appends them in that order.
+- `__jit_dispatch_call` is the trampoline out of jit code. It reads the
+  parameter descriptors off the front of the array it was handed and the shape
+  descriptors off the back, then either forwards both to `call_jit` or hands
+  them to `call_in_context_with_shapes`.
+
+This paragraph used to say that a dropped descriptor was closed by construction,
+because `LocalCallee` pairs a declared function with the `descriptor_params` its
+signature asks for and the stub forwards what it was handed. That covers the
+first group and not the second: the trampoline consumed only the parameter
+prefix and called `call_in_context`, so a jit-compiled function calling
+`sys/std/list.reversed` built its result from whatever was in the register, and
+every other backend was right. `backend/23_shape_descriptors_across_jit.dfs` is
+the case the other fixtures missed -- a plain function calling a generic that
+builds, which is ungated and therefore compiled, where every generic fixture
+before it called from the script unit body or from another generic that
+forwards.
+
+A `CallDispatcher` is the one place that still cannot pass them: it is handed
+the arguments and nothing else. The interpreter keeps a shape-taking call to
+itself rather than offering it round, and `bridge::dispatchable` says the same
+thing at the other end so the invariant is local to both.
+
+The jit also needs runtime symbols registered twice: once in
 `register_runtime_symbols` and once in `trampoline_all_runtime_imports`. Nothing
 catches a missed one at compile time -- it aborts at run time.
-
-Where a descriptor can be dropped on the way to a callee, it is closed by
-construction: `LocalCallee` pairs a locally-declared function with the
-`descriptor_params` its signature asks for, so a call site cannot declare one
-and pass the other, and the jit's stub forwards what it was handed to
-`__jit_dispatch_call`.
 
 One rule at a call site is easy to get backwards. An argument whose static type
 reads `data` may be a *wrapper* to unwrap, or a *pointer at the value* that

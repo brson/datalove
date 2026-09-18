@@ -14,7 +14,6 @@ home here.
 
 ## Contents
 
-- [The jit drops the descriptors a generic callee builds with](#user-content-the-jit-drops-the-descriptors-a-generic-callee-builds-with)
 - [Inlining drops a call's shape descriptors, and nothing but a test inlines](#user-content-inlining-drops-a-calls-shape-descriptors-and-nothing-but-a-test-inlines)
 - [A table literal silently drops what follows a column name](#user-content-a-table-literal-silently-drops-what-follows-a-column-name)
 - [No table module, and none can be written](#user-content-no-table-module-and-none-can-be-written)
@@ -22,76 +21,6 @@ home here.
 - [Inlining never triggers from a caller in an earlier unit](#user-content-inlining-never-triggers-from-a-caller-in-an-earlier-unit)
 - [A field of a const cannot be projected, but a const can be destructured](#user-content-a-field-of-a-const-cannot-be-projected-but-a-const-can-be-destructured)
 - [A specialized function keeps an original nobody calls](#user-content-a-specialized-function-keeps-an-original-nobody-calls)
-
-## The jit drops the descriptors a generic callee builds with
-
-**Reproduced**, on a shipped flag, with memory corruption rather than a
-diagnostic. This is the worst thing in this file.
-
-```datalove
-require module sys/std/list
-import list.reversed
-
-fun go(ref xs: [u32]): [u32]
-    ret reversed(ref xs)
-end fun
-
-let l: [u32] = [1, 2, 3]
-debuglog go(ref l)
-```
-
-`datalove script` prints `[3, 2, 1]`. So do both AOT backends. `datalove script
---jit` aborts:
-
-```
-list_create:value_out: pointer 0x7f4b366ef3c0 not aligned to 738201760 bytes
-```
-
-That is `reversed` building its result list from a descriptor it was never
-handed, reading whatever was in the register.
-
-**The cause is that the jit's two ABI boundaries know about `descriptor_params`
-and not about `descriptor_shapes`.** Compiled code passes trailing descriptors
-in one array, the parameter ones first and then one per shape the callee
-declared, which is what `codegen/calls.rs` emits and what an AOT build reads.
-Neither jit boundary reads the second half:
-
-- `bridge::call_jit` builds `[rt_handle, sret?, args.., param_descriptors..]`
-  and stops. Its signature takes `descriptor_params: &[ParamId]` and there is no
-  shape parameter to pass.
-- `trampoline::__jit_dispatch_call` receives the whole array but consumes only
-  `descriptor_params.len()` of it, then falls back to `interp.call_in_context`
-  rather than `call_in_context_with_shapes`.
-
-So `descriptor_shapes` appears nowhere in `datalove-datafun-cranelift-jit`
-outside its own test fixtures.
-
-**Why it is not caught.** The interpreter refuses to hand a call to the
-dispatcher when that call supplies shape descriptors -- `execute_call_with_shapes`
-comes first in the `Call` arm -- so a *direct* call to a collection-building
-generic never reaches the jit. What that does not cover is a caller of one. A
-function whose own `descriptor_shapes` is empty is ungated, gets compiled, and
-its call to the generic then goes out through the trampoline. `go` above is
-exactly that, and so is every non-generic function that calls `sys/std/list`,
-which is most code anyone would write.
-
-**Why the fixtures miss it.** `backend/*.dfs` runs all four backends and
-compares, and eight of its fixtures are generic -- but in every one the generic
-is called from the script unit body, which is not a compilable function, or
-from another generic that forwards the shape and is therefore gated too. The
-missing shape is a plain function calling a generic that builds. One fixture
-closes the hole. `interp_jit_tests` runs 407 worldfiles through the jit and not
-one of them mentions a type parameter.
-
-**What it would take.** Give both boundaries the shapes: `call_jit` appends one
-descriptor per `func_ctx.descriptor_shapes` after the parameter ones, and the
-trampoline reads that suffix and calls `call_in_context_with_shapes`. Where the
-descriptors come from on the way in is the question to settle first -- a
-`DescriptorRef::Own` has to be read from the compiled frame, which is the part
-the interpreter does through `resolve_shape_ref`.
-
-Until then `--jit` is unsound for any program where a function calls a generic
-that builds a collection, which includes most of `sys/std`.
 
 ## Inlining drops a call's shape descriptors, and nothing but a test inlines
 
@@ -128,8 +57,9 @@ function declared`, leaks 86 bytes and aborts in the destructor.
 `ListNew`, `SetNew` and `MapNew` carry a `descriptor: Some(i)` index with the
 same problem, copied verbatim into a function with a different shape list. That
 one is not reachable: a body containing one belongs to a function that declares
-shapes, and calls to such a function are gated away from the dispatcher, so it
-is never inlined. Only the `Static` blanking is live.
+shapes, and a call to such a function is never offered to a dispatcher -- the
+interpreter keeps it, and `bridge::dispatchable` refuses it at the other end --
+so it is never inlined. Only the `Static` blanking is live.
 
 **Nothing inlines outside tests.** `DynamicInliner` is constructed in exactly
 one place, `OptimizingDispatcher::with_config`, and `OptimizingDispatcher` is

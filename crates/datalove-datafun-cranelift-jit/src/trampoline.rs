@@ -214,6 +214,17 @@ pub unsafe extern "C" fn __jit_dispatch_call(
         arg_vals[param_id.0 as usize].tydesc = supplied;
     }
 
+    // The shapes the callee builds a collection of come after the ones that
+    // describe a parameter, which is the order `build_signature` lays out and
+    // the order the caller's compiled code wrote them in. Reading only the
+    // first group and dropping this one is what made a jit-compiled function
+    // calling `sys/std/list.reversed` build its result from whatever was in the
+    // register.
+    let shape_start = func_ctx.descriptor_params.len();
+    let shape_descriptors: Vec<*const rtdt::TyDesc> = (0..func_ctx.descriptor_shapes.len())
+        .map(|k| unsafe { *descriptors.add(shape_start + k) })
+        .collect();
+
     // Build return destination.
     let ret_ty = &func_ctx.return_type;
     let ret_tydesc = ctx.interp.tydesc_table_mut().get_or_create(ret_ty);
@@ -229,7 +240,10 @@ pub unsafe extern "C" fn __jit_dispatch_call(
             // Call JIT code directly.
             // SAFETY: code_ptr is valid JIT code.
             let result = unsafe {
-                crate::bridge::call_jit(code_ptr, uses_sret, rt_handle, &arg_vals, dest, &func_ctx.return_type, &func_ctx.descriptor_params)
+                crate::bridge::call_jit(
+                    code_ptr, uses_sret, rt_handle, &arg_vals, dest,
+                    &func_ctx.return_type, &func_ctx.descriptor_params, &shape_descriptors,
+                )
             };
             if let Err(e) = result {
                 panic!("JIT dispatch: JIT call failed: {}", e);
@@ -241,10 +255,11 @@ pub unsafe extern "C" fn __jit_dispatch_call(
             // JIT caller must not access these args after the call returns.
             // Note: We pass None for func_unit since JIT trampolines don't track unit context.
             // This means dynamic inlining won't apply to JIT->interpreter callbacks.
-            let result = ctx.interp.call_in_context(
+            let result = ctx.interp.call_in_context_with_shapes(
                 ir_unit,
                 None,
                 arg_vals,
+                shape_descriptors,
                 dest,
                 ctx.exec_ctx,
                 ctx.registry,

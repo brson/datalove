@@ -1,0 +1,113 @@
+// A plain function calling a generic that builds a collection.
+//
+// The descriptor for a shape a callee builds has no value to travel with, so it
+// crosses as a trailing argument after the ones that describe a parameter. That
+// is what `build_signature` lays out and what both AOT backends read. The jit
+// knew only about the first group: `bridge::call_jit` had no shape parameter at
+// all, and the trampoline consumed the parameter prefix of the descriptor array
+// and dropped the rest, then called the interpreter through `call_in_context`
+// rather than `call_in_context_with_shapes`. So a jit-compiled function calling
+// `sys/std/list.reversed` built the result list from whatever was in the
+// register: `list_create:value_out: pointer ... not aligned to 738201760 bytes`.
+//
+// Every other backend was right the whole time, which is what this file is for.
+//
+// The shape the old fixtures missed is the one here: a function whose own
+// declared shapes are empty, so nothing gates it and the jit compiles it, whose
+// body then calls something that does declare shapes. Every generic fixture
+// before this called the generic from the script unit body, which is not a
+// compilable function, or from another generic that forwards the shape and is
+// gated for the same reason. A plain function calling `sys/std` is the common
+// case and had no coverage at all.
+
+require module sys/std/list
+
+import list.len
+import list.reversed
+import list.concat
+
+// Built here rather than taken from `sys/std`, so the failure does not depend
+// on the library.
+fun wrap<T>(x: T): [T]
+  var out: [T] = [x]
+  ret out
+end fun
+
+// Concrete. Declares no shapes of its own -- the call below binds `T` to a
+// type it names, so the descriptor is static -- which is exactly why the jit
+// compiles it and why it used to hand `wrap` nothing.
+fun wrap_one(x: string): [string]
+  ret wrap(x)
+end fun
+
+fun wrap_num(x: u32): [u32]
+  ret wrap(x)
+end fun
+
+// Through the library, which is where anyone would actually hit this.
+fun rev_nums(ref xs: [u32]): [u32]
+  ret reversed(ref xs)
+end fun
+
+fun rev_words(ref xs: [string]): [string]
+  ret reversed(ref xs)
+end fun
+
+fun joined(ref a: [string], ref b: [string]): [string]
+  ret concat(ref a, ref b)
+end fun
+
+// A generic caller that still binds concretely, so it is ungated the same way.
+fun rev_via<T>(ref xs: [T]): index
+  ret len(ref xs)
+end fun
+
+fun count_words(ref xs: [string]): index
+  ret rev_via(ref xs)
+end fun
+
+// Maps and sets declare shapes too, and a map declares one per side.
+fun one_entry<K, V>(k: K, v: V): %{K = V} with { K is ord, }
+  var m: %{K = V} = %{k = v}
+  ret m
+end fun
+
+fun one_member<T>(x: T): #{T} with { T is ord, }
+  var s: #{T} = #{x}
+  ret s
+end fun
+
+fun with_entry(k: string, v: u32): %{string = u32}
+  ret one_entry(k, v)
+end fun
+
+fun with_member(x: string): #{string}
+  ret one_member(x)
+end fun
+
+// A `[string]` throughout, so a wrong descriptor leaks or crashes rather than
+// printing something plausible.
+debuglog wrap_one("a")
+debuglog wrap_num(: u32 / 7)
+
+let nums: [u32] = [1, 2, 3]
+let words: [string] = ["a", "b"]
+
+debuglog rev_nums(ref nums)
+debuglog rev_words(ref words)
+debuglog joined(ref words, ref words)
+debuglog count_words(ref words)
+
+debuglog with_entry("k", : u32 / 1)
+debuglog with_member("m")
+
+// Called enough times to pass any threshold a dispatcher might use, so this
+// still covers the jit if the CLI ever stops compiling on the first call.
+var i: int = 0
+var last: [string] = []
+loop while i .< 200
+  set last = wrap_one("hot")
+  set i = i + 1
+end loop
+debuglog last
+debuglog len(ref last)

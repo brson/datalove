@@ -133,6 +133,10 @@ impl ChaosDispatcher {
                                 ret_dest,
                                 &func_ctx.return_type,
                                 &func_ctx.descriptor_params,
+                                // No arguments are passed here either, so a
+                                // callee wanting descriptors was never callable
+                                // through this path.
+                                &[],
                             )
                         };
 
@@ -170,6 +174,12 @@ impl CallDispatcher for ChaosDispatcher {
         call_ctx: DispatchCallContext<'_, '_>,
     ) -> DispatchResult {
         use datalove_datafun_interp::ExecutionContext;
+
+        // A callee wanting a descriptor per shape it declares cannot be entered
+        // from here; see `bridge::dispatchable`.
+        if !bridge::dispatchable(func) {
+            return DispatchResult::NotHandled;
+        }
 
         let key = FunctionKey::of(code_ref, call_ctx.exec_ctx.unit());
 
@@ -225,6 +235,8 @@ impl CallDispatcher for ChaosDispatcher {
                             ret_dest,
                             func.return_type().expect("JIT dispatch requires function return type"),
                             func.function_context().map_or(&[][..], |c| &c.descriptor_params),
+                            // Refused above when the callee declares any.
+                            &[],
                         )
                     };
 

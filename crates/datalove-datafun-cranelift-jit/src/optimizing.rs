@@ -375,7 +375,12 @@ impl OptimizingDispatcher {
                 let func_ctx = func.function_context()
                     .expect("JIT function must have function context");
                 let result = unsafe {
-                    bridge::call_jit(code_ptr, uses_sret, rt_handle, args, ret_dest, &func_ctx.return_type, &func_ctx.descriptor_params)
+                    bridge::call_jit(
+                        code_ptr, uses_sret, rt_handle, args, ret_dest,
+                        &func_ctx.return_type, &func_ctx.descriptor_params,
+                        // Refused above when the callee declares any.
+                        &[],
+                    )
                 };
 
                 clear_dispatch_context();
@@ -434,6 +439,12 @@ impl CallDispatcher for OptimizingDispatcher {
         rt_handle: LocalRtHandle,
         mut call_ctx: DispatchCallContext<'_, '_>,
     ) -> DispatchResult {
+        // A callee wanting a descriptor per shape it declares cannot be entered
+        // from here; see `bridge::dispatchable`.
+        if !bridge::dispatchable(func) {
+            return DispatchResult::NotHandled;
+        }
+
         // Start timing if metrics enabled.
         let start_time = self.metrics.as_mut().and_then(|m| m.start_call());
 
