@@ -6,8 +6,10 @@ is why, and what could be done about it.
 
 The intent behind tables is a dataframe -- relational operations, and pipelines
 that take a table of one schema to a table of another. [If the target is
-Polars](#user-content-if-the-target-is-polars) is the section that weighs the
-hypotheses against that; the rest works up to it.
+Polars](#user-content-if-the-target-is-polars) weighs the hypotheses against
+that, and [H5](#user-content-h5-types-as-compile-time-values) is the direction
+currently favoured: types as compile-time values, with the schema algebra a
+library rather than a type theory.
 
 Hypotheses, not a plan. Nothing here is implemented.
 
@@ -280,18 +282,16 @@ PureScript's `Row` and `Symbol` kinds, Ur/Web's `{Nm :: Type}`. The surface
 still reads `t.x`; the label elaborates to a type-level thing and it stays in
 λω. That is the dodge to copy.
 
-**The other dodge is staging, and it costs the thing generics were built for.**
-Compute the type at compile time instead of reasoning about it -- Zig's
-`fn Foo(comptime T: type) type`, C++ templates, Rust const generics. Datalove
-has both ingredients already: CTFE that evaluates const expressions including
-calls, and const parameters monomorphized per instantiation. But a function
-cannot have const parameters and type parameters at the same time today
-(`ComptimeParamOnGeneric`), and more to the point a type computed per
-instantiation forces *checking* per instantiation -- errors at the call site
-rather than the definition, and compile work proportional to instantiations.
-That is precisely what [plan-generics.md](plan-generics.md) chose erasure to
-avoid, for a REPL. So staging is available and is not free, and it should not
-be mistaken for the cheap path.
+**The other dodge is staging.** Compute the type at compile time instead of
+reasoning about it -- Zig's `fn Foo(comptime T: type) type`, C++ templates, Rust
+const generics. Datalove has both ingredients already: CTFE that evaluates const
+expressions including calls, and const parameters. This is the direction
+[H5](#user-content-h5-types-as-compile-time-values) works through, and it turns
+out not to cost compile-once the way it does in Zig -- the type is computed at
+the call site while the body stays erased. It does move the checking of a *type
+application* to the call site, and it does need the two roles of a const
+parameter separated so that indexing a type does not also force
+monomorphization.
 
 **What each tier actually needs**, against the table above:
 
@@ -324,6 +324,99 @@ a table with no columns to project. Those need a row type, which is H2.
 
 **Verdict: the most value per unit of work**, and it is already the documented
 intent rather than a new idea.
+
+## H5: types as compile-time values
+
+The Zig bargain: types are values, a function may take and return one, and the
+type language *is* the term language run at compile time. `fn ArrayList(comptime
+T: type) type`.
+
+This is the stated inclination, and working it through it fits better than the
+staging warning above suggested -- because it does not have to mean what it
+means in Zig.
+
+### The row algebra stops being type theory
+
+With types as comptime values, `project`, `extend`, `concat` and `has_column`
+are ordinary datalove functions over a `type`, run by CTFE:
+
+```datalove
+fun project(R: type, COLS: [string]): type       // comptime
+fun select(const COLS: [string], t: table R): project(R, COLS)
+```
+
+H3 dissolves. There is no row kind, no absence constraint, no unification over
+rows -- there is a library, written in the language, evaluated during
+compilation. That is a large amount of type-system work traded for a language
+feature the codebase is already shaped for.
+
+Row *polymorphism* survives the trade too, as a comptime predicate rather than a
+constraint solver: `with { has_column(R, "x", u32), }`. Zig does exactly this,
+and inherits exactly Zig's weakness -- the constraint is checked where the
+function is used, and the error is as good as the author made it.
+
+### Why it need not monomorphize
+
+The warning earlier was that a type computed per instantiation forces *checking*
+per instantiation, which is what erasure was chosen to avoid. That is true of
+Zig, which monomorphizes everything. It need not be true here, and the reason is
+the machinery that already exists.
+
+Split the two things a compile-time value is used for:
+
+- **Computing the result type.** Happens at the *call site*, which knows the
+  argument's type and the const value. The result is a concrete type there, so
+  it has a static descriptor.
+- **Doing the work.** Happens in the body, which is descriptor-driven anyway:
+  shuffling columns means reading a descriptor and copying buffers, not knowing
+  the type structurally.
+
+So the body compiles **once**, erased, exactly as `list.reversed<T>` does today.
+It declares the output shape in `descriptor_shapes`, and the call site -- which
+computed the output type -- hands over the static descriptor as
+`DescriptorRef::Static`. Nothing is built at run time; the descriptor for the
+output schema is a static symbol at every call site, because every call site
+knows its own schemas.
+
+That is the whole of it. The existing shape channel is already "the callee
+builds something it cannot name, and the caller says what it is", which is
+precisely the shape of a schema transformation.
+
+**A consequence worth naming.** A const parameter currently means two things at
+once: known early enough to *specialize on*, and known early enough to *compute
+a type from*. Only the second is needed here. A `select` whose body reads its
+column list at run time and whose type is computed at compile time needs no
+copy of itself per instantiation. If those two roles are separated, the const
+parameter that indexes a type does not drag monomorphization along with it.
+
+### What it would take
+
+1. **A `type` type**, and `ConstValue::Type(IrType)`. Less of a leap than it
+   sounds: `ConstValue::Data` already carries an `IrType` beside its payload,
+   for the same reason -- a value that cannot say its own type.
+2. **Types in type position computed by a call**, which is the surface feature.
+3. **Phase order.** Type arguments have to be resolved before const evaluation,
+   because the type feeds the computation. Today it is the other way round,
+   which is why a function may not have both const and type parameters
+   (`ComptimeParamOnGeneric`); the guide records it as a lowering-order
+   problem rather than a fundamental one.
+4. **A CTFE quota.** Type-level computation can loop, and Zig's answer -- a
+   budget with a diagnostic -- is the practical one.
+5. **The two roles of a const parameter separated**, per above, or every
+   schema-transforming function monomorphizes and the REPL argument bites after
+   all.
+
+### What it costs
+
+Checking moves to the call site for anything whose type is computed. The *body*
+is still checked once, which is the part that matters -- what cannot be checked
+in advance is the type application, and a failure there is a CTFE trace at the
+call site rather than a mystery inside a template. That is the good end of the
+C++ problem rather than the bad end.
+
+The other cost is honest and unavoidable: a signature stops being readable as a
+signature. `fun select(const COLS: [string], t: table R): project(R, COLS)`
+says what it does only if you go and read `project`. Zig lives with this.
 
 ## If the target is Polars
 
@@ -411,8 +504,9 @@ one was weighing reading against writing and a pipeline needs writing.
 
 ## Sequencing
 
-**For a dataframe: H2, then H4, then as much of H3 as joins are worth.**
-**For tables as values only: H4, then H2, and H3 only if asked for.**
+**For a dataframe with comptime types: H2, then H4, then H5, and H3 not at all.**
+**For a dataframe without: H2, then H4, then as much of H3 as joins are worth.**
+**For tables as values only: H4, then H2.**
 
 The order turns on whether tables are meant to be built or only read. H4 needs
 no type-system change, is already specified, and unblocks every reading
@@ -429,6 +523,15 @@ that tables inherit, not as a table fix. It is also the one the entity-component
 crowd wants most once the basics are there, and the one they most often fake at
 run time -- which is a reason to be sure it is wanted here before paying for it
 in the type system.
+
+H5 is the alternative to H3 rather than an addition to it: the same expressive
+power bought as a library evaluated during compilation instead of as a row
+theory in the checker. If it is taken, H3 should not be, and the two should not
+be pursued in parallel -- they answer the same question twice.
+
+Either way H2 comes first. A row type is what H3 quantifies over and what H5
+computes with, and neither has anything to say until a table's schema is a type
+rather than a fixed column list.
 
 ## What would settle it
 
