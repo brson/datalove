@@ -36,7 +36,6 @@ Thorough compiler architecture, bare language.
 ## In progress
 
 - const param specialization - mostly done?
-- index projections in generics and fat references
 - std
 - tensors
 - tables
@@ -44,6 +43,7 @@ Thorough compiler architecture, bare language.
 
 ## On deck
 
+- assert and using it in favor of hacks in test harnesses
 - human docs
 - fully reactive scripts, undo/redo
 
@@ -75,13 +75,10 @@ Focus on ergonomic REPL experience.
 - tree-sitter
 - 128-bit ints
 - fix rt error/alloc semantics
-- worldfile generator - waiting on pipeline stability
 - closures
-- const parameter specialization
 - inline/jit tuning
 - allocation statistics
 - jit statistics
-- cleanup and specify bidirectional typechecking
 - sourceless parsing
 - lsp - needs a project/workspace concept
 - deterministic builds - compiler pipeline is already deterministic
