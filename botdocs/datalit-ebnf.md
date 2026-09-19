@@ -139,3 +139,9 @@ newline        = "\n" | "\r\n" ;
    before it: it closes the row or group it follows, which is what `[ row_sep ]`
    and the trailing commas above say. Both parsers report this as `D033` and
    neither drops the delimiter silently.
+11. **A table's column is named by one word.** `table_header` is a list of
+   `name`, so anything else in a header cell is written by mistake: `{| x zzz |}`
+   is a misspelling and `{| x = xs |}` is a struct literal reaching for the
+   wrong brace, not a table with one column. Both parsers report this as `D034`
+   rather than keeping the first word and dropping the rest, which used to read
+   as a well-formed table with no rows.

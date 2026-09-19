@@ -528,28 +528,49 @@ impl<'db> Parser<'db> {
     }
 
     /// Parse table header row (column names).
+    ///
+    /// A cell is one word and nothing else. Anything after the word is
+    /// reported rather than dropped, so that `{| x zzz |}` is a refusal and
+    /// not a one-column table.
     fn parse_table_header(&mut self, row_tokens: &[TreeToken<'db>]) -> Vec<InternedText<'db>> {
         let parts = self.split_table_cells(row_tokens);
         let mut names = Vec::new();
 
         for part in parts {
-            // Each part should be a single name token.
-            if let Some(TreeToken::Token(tok)) = part.first() {
-                if let Some(name) = tok.word_str(self.db) {
-                    names.push(InternedText::new(self.db, name.S()));
-                    continue;
-                }
+            // A group `nonempty_groups` kept has a first token.
+            let first = part.first().X();
+            let Some(name) = self.cell_word(first) else {
+                self.had_error = true;
+                let ts = self.extract_text_span(first);
+                DiagnosticBuilder::error(self.db, "expected column name in table header")
+                    .code("D031")
+                    .primary_label(ts, "expected name")
+                    .emit_parse();
+                names.push(InternedText::new(self.db, "<error>".S()));
+                continue;
+            };
+            names.push(InternedText::new(self.db, name.S()));
+
+            if let Some(extra) = part.get(1) {
+                self.had_error = true;
+                let ts = self.extract_text_span(extra);
+                DiagnosticBuilder::error(self.db,
+                    &format!("unexpected token after column name `{}`", name))
+                    .code("D034")
+                    .primary_label(ts, "a column is named by one word")
+                    .emit_parse();
             }
-            // Error: expected column name.
-            let ts = self.peek_text_span();
-            DiagnosticBuilder::error(self.db, "expected column name in table header")
-                .code("D031")
-                .primary_label(ts, "expected name")
-                .emit_parse();
-            names.push(InternedText::new(self.db, "<error>".S()));
         }
 
         names
+    }
+
+    /// The word a header cell begins with, if it begins with one.
+    fn cell_word(&self, token: &TreeToken<'db>) -> Option<&'db str> {
+        match token {
+            TreeToken::Token(tok) => tok.word_str(self.db),
+            TreeToken::Branch { .. } => None,
+        }
     }
 
     /// Parse table data row (comma-separated expressions).

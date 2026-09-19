@@ -1,0 +1,115 @@
+{
+  "ast": {
+    "statements": [
+      {
+        "kind": "Let",
+        "name": "t",
+        "type_hint": null,
+        "value": {
+          "expr": {
+            "header": [
+              "x"
+            ],
+            "kind": "Table",
+            "rows": [],
+            "type_hint": null
+          }
+        }
+      },
+      {
+        "kind": "Let",
+        "name": "u",
+        "type_hint": null,
+        "value": {
+          "expr": {
+            "header": [
+              "x"
+            ],
+            "kind": "Table",
+            "rows": [],
+            "type_hint": null
+          }
+        }
+      },
+      {
+        "kind": "Let",
+        "name": "v",
+        "type_hint": null,
+        "value": {
+          "expr": {
+            "header": [
+              "x",
+              "y"
+            ],
+            "kind": "Table",
+            "rows": [
+              {
+                "elements": [
+                  {
+                    "expr": {
+                      "kind": "Int",
+                      "type_hint": null,
+                      "value": "1"
+                    }
+                  },
+                  {
+                    "expr": {
+                      "kind": "Int",
+                      "type_hint": null,
+                      "value": "2"
+                    }
+                  }
+                ]
+              }
+            ],
+            "type_hint": null
+          }
+        }
+      }
+    ]
+  },
+  "diagnostics": [
+    {
+      "code": "D034",
+      "labels": [
+        {
+          "message": "a column is named by one word",
+          "span": [
+            13,
+            16
+          ],
+          "text": "zzz"
+        }
+      ],
+      "message": "unexpected token after column name `x`"
+    },
+    {
+      "code": "D034",
+      "labels": [
+        {
+          "message": "a column is named by one word",
+          "span": [
+            33,
+            34
+          ],
+          "text": "="
+        }
+      ],
+      "message": "unexpected token after column name `x`"
+    },
+    {
+      "code": "D034",
+      "labels": [
+        {
+          "message": "a column is named by one word",
+          "span": [
+            57,
+            61
+          ],
+          "text": "quux"
+        }
+      ],
+      "message": "unexpected token after column name `y`"
+    }
+  ]
+}

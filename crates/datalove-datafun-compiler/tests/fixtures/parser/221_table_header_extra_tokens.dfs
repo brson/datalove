@@ -1,0 +1,3 @@
+let t = {| x zzz |}
+let u = {| x = xs |}
+let v = {| x, y quux; 1, 2 |}
