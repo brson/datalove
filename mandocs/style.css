@@ -1,10 +1,11 @@
 /* ===========================================================================
- * THEME TOGGLE: min-width:0 = enabled, max-width:0 = disabled
- * To swap: change 'min' to 'max' on light, 'max' to 'min' on dark.
- * Currently: LIGHT enabled, DARK disabled.
+ * THEME: the light theme is the default, and the dark theme overrides it
+ * when the browser reports a dark color-scheme preference.
  * =========================================================================== */
 
 :root {
+    color-scheme: light dark;
+
     ---font-text: 'Cormorant Garamond', Georgia, serif;
     --font-text: 'EB Garamond', Georgia, serif;
     ---font-text: 'Spectral', Georgia, serif;
@@ -98,55 +99,54 @@
     --heath-magenta: #cc33cc;
 }
 
-/* LIGHT THEME */
-@media (min-width: 0) {
-    :root {
-        --bg: var(--cave-base07);
-        --bg: color-mix(in srgb, var(--dune-base07), white 90%);
-        --fg: var(--cave-base01);
-        --accent: var(--cave-red);
-        --accent: var(--heath-red);
-        --code-bg: var(--cave-base06);
-        --code-bg: color-mix(in srgb, var(--heath-base03), white 94%);
-        --table-header-bg: var(--cave-base06);
-        --link: color-mix(in srgb, var(--cave-violet), black 0%);
-        --syn-keyword: var(--cave-violet);
-        --syn-binding-modifier: var(--cave-red);
-        --syn-item-keyword: var(--cave-magenta);
-        --syn-control-flow: var(--cave-yellow);
-        --syn-type-name: var(--cave-cyan);
-        --syn-string: var(--cave-yellow);
-        --syn-number: var(--cave-green);
-        --syn-boolean: var(--cave-green);
-        --syn-variant: var(--cave-orange);
-        --syn-comment: var(--cave-base03);
-        --syn-function: var(--cave-blue);
-        --syn-brace: var(--cave-orange);
-        --syn-op-cmp: var(--cave-red);
-        --syn-op-result: var(--cave-orange);
-        --syn-op-option: var(--cave-violet);
-        --syn-op-clone: var(--cave-cyan);
-        --syn-op-arith: var(--cave-blue);
-        --syn-type-colon: var(--cave-red);
-        --syn-type-hint-slash: var(--cave-cyan);
-        --syn-punctuation: var(--cave-base02);
+/* LIGHT THEME (default) */
+:root {
+    --bg: var(--cave-base07);
+    --bg: color-mix(in srgb, var(--dune-base07), white 90%);
+    --fg: var(--cave-base01);
+    --accent: var(--cave-red);
+    --accent: var(--heath-red);
+    --code-bg: var(--cave-base06);
+    --code-bg: color-mix(in srgb, var(--heath-base03), white 94%);
+    --table-header-bg: var(--cave-base06);
+    --link: color-mix(in srgb, var(--cave-violet), black 40%);
+    --syn-keyword: var(--cave-violet);
+    --syn-binding-modifier: var(--cave-red);
+    --syn-item-keyword: var(--cave-magenta);
+    --syn-control-flow: var(--cave-yellow);
+    --syn-type-name: var(--cave-cyan);
+    --syn-string: var(--cave-yellow);
+    --syn-number: var(--cave-green);
+    --syn-boolean: var(--cave-green);
+    --syn-variant: var(--cave-orange);
+    --syn-comment: var(--cave-base03);
+    --syn-function: var(--cave-blue);
+    --syn-brace: var(--cave-orange);
+    --syn-op-cmp: var(--cave-red);
+    --syn-op-result: var(--cave-orange);
+    --syn-op-option: var(--cave-violet);
+    --syn-op-clone: var(--cave-cyan);
+    --syn-op-arith: var(--cave-blue);
+    --syn-type-colon: var(--cave-red);
+    --syn-type-hint-slash: var(--cave-cyan);
+    --syn-punctuation: var(--cave-base02);
 
-        --accent-1: var(--cave-cyan);
-        --accent-2: var(--cave-green);
-        --accent-3: var(--heath-yellow);
-        --accent-4: var(--cave-violet);
-    }
+    /* The accents are chosen to read against either background. */
+    --accent-1: var(--cave-cyan);
+    --accent-2: var(--cave-green);
+    --accent-3: var(--heath-yellow);
+    --accent-4: var(--cave-violet);
 }
 
 /* DARK THEME */
-@media (max-width: 0) {
+@media (prefers-color-scheme: dark) {
     :root {
         --bg: var(--cave-base00);
         --fg: var(--cave-base06);
         --accent: var(--cave-red);
-        --code-bg: var(--cave-base00);
+        --code-bg: var(--cave-base01);
         --table-header-bg: var(--cave-base01);
-        --link: var(--cave-violet);
+        --link: color-mix(in srgb, var(--cave-violet), var(--cave-base07) 30%);
         --syn-keyword: var(--cave-violet);
         --syn-binding-modifier: var(--cave-red);
         --syn-item-keyword: var(--cave-magenta);
@@ -300,8 +300,7 @@ h2 { font-size: calc(1.5rem * var(--font-size-header-scale)); letter-spacing: -0
 h3 { font-size: calc(1.25rem * var(--font-size-header-scale)); }
 
 a {
-    color: var(--font-text);
-    color: color-mix(in srgb, var(--link), black 40%);
+    color: var(--link);
     text-decoration: none;
     text-decoration: underline dotted;
     text-decoration: underline solid;

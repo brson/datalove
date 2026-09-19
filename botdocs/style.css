@@ -1,10 +1,11 @@
 /* ===========================================================================
- * THEME TOGGLE: min-width:0 = enabled, max-width:0 = disabled
- * To swap: change 'min' to 'max' on light, 'max' to 'min' on dark.
- * Currently: LIGHT enabled, DARK disabled.
+ * THEME: the light theme is the default, and the dark theme overrides it
+ * when the browser reports a dark color-scheme preference.
  * =========================================================================== */
 
 :root {
+    color-scheme: light dark;
+
     ---font-text: 'Cormorant Garamond', Georgia, serif;
     --font-text: 'EB Garamond', Georgia, serif;
     ---font-text: 'Spectral', Georgia, serif;
@@ -62,52 +63,51 @@
     --cave-magenta: #bf40bf;
 }
 
-/* LIGHT THEME */
-@media (min-width: 0) {
-    :root {
-        --bg: color-mix(in srgb, var(--lake-base07), white 90%);
-        --fg: var(--lake-base01);
-        --accent: var(--lake-blue);
-        --code-bg: color-mix(in srgb, var(--lake-base03), white 94%);
-        --table-header-bg: var(--lake-base06);
-        --link: color-mix(in srgb, var(--lake-violet), black 0%);
-        --syn-keyword: var(--lake-violet);
-        --syn-binding-modifier: var(--lake-red);
-        --syn-item-keyword: var(--lake-blue);
-        --syn-control-flow: var(--lake-yellow);
-        --syn-type-name: var(--lake-cyan);
-        --syn-string: var(--lake-yellow);
-        --syn-number: var(--lake-green);
-        --syn-boolean: var(--lake-green);
-        --syn-variant: var(--lake-orange);
-        --syn-comment: var(--lake-base03);
-        --syn-function: var(--lake-magenta);
-        --syn-brace: var(--lake-orange);
-        --syn-op-cmp: var(--lake-red);
-        --syn-op-result: var(--lake-orange);
-        --syn-op-option: var(--lake-violet);
-        --syn-op-clone: var(--lake-cyan);
-        --syn-op-arith: var(--lake-blue);
-        --syn-type-colon: var(--lake-red);
-        --syn-type-hint-slash: var(--lake-cyan);
-        --syn-punctuation: var(--lake-base02);
+/* LIGHT THEME (default) */
+:root {
+    --bg: color-mix(in srgb, var(--lake-base07), white 90%);
+    --fg: var(--lake-base01);
+    --accent: var(--lake-blue);
+    --code-bg: color-mix(in srgb, var(--lake-base03), white 94%);
+    --table-header-bg: var(--lake-base06);
+    --link: color-mix(in srgb, var(--lake-violet), black 40%);
+    --syn-keyword: var(--lake-violet);
+    --syn-binding-modifier: var(--lake-red);
+    --syn-item-keyword: var(--lake-blue);
+    --syn-control-flow: var(--lake-yellow);
+    --syn-type-name: var(--lake-cyan);
+    --syn-string: var(--lake-yellow);
+    --syn-number: var(--lake-green);
+    --syn-boolean: var(--lake-green);
+    --syn-variant: var(--lake-orange);
+    --syn-comment: var(--lake-base03);
+    --syn-function: var(--lake-magenta);
+    --syn-brace: var(--lake-orange);
+    --syn-op-cmp: var(--lake-red);
+    --syn-op-result: var(--lake-orange);
+    --syn-op-option: var(--lake-violet);
+    --syn-op-clone: var(--lake-cyan);
+    --syn-op-arith: var(--lake-blue);
+    --syn-type-colon: var(--lake-red);
+    --syn-type-hint-slash: var(--lake-cyan);
+    --syn-punctuation: var(--lake-base02);
 
-        --accent-1: var(--lake-cyan);
-        --accent-2: var(--lake-green);
-        --accent-3: var(--lake-violet);
-        --accent-4: var(--lake-magenta);
-    }
+    /* The accents are chosen to read against either background. */
+    --accent-1: var(--lake-cyan);
+    --accent-2: var(--lake-green);
+    --accent-3: var(--lake-violet);
+    --accent-4: var(--lake-magenta);
 }
 
 /* DARK THEME */
-@media (max-width: 0) {
+@media (prefers-color-scheme: dark) {
     :root {
         --bg: var(--lake-base00);
         --fg: var(--lake-base06);
         --accent: var(--lake-blue);
-        --code-bg: var(--lake-base00);
+        --code-bg: var(--lake-base01);
         --table-header-bg: var(--lake-base01);
-        --link: var(--lake-violet);
+        --link: color-mix(in srgb, var(--lake-violet), var(--lake-base07) 30%);
         --syn-keyword: var(--lake-violet);
         --syn-binding-modifier: var(--lake-red);
         --syn-item-keyword: var(--lake-blue);
@@ -261,8 +261,7 @@ h2 { font-size: calc(1.5rem * var(--font-size-header-scale)); letter-spacing: -0
 h3 { font-size: calc(1.25rem * var(--font-size-header-scale)); }
 
 a {
-    color: var(--font-text);
-    color: color-mix(in srgb, var(--link), black 40%);
+    color: var(--link);
     text-decoration: none;
     text-decoration: underline dotted;
     text-decoration: underline solid;
