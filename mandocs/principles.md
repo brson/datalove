@@ -1,13 +1,13 @@
 # Datalove Principles
 
-Datalove is a scripting language
+Datalove is a strongly-typed scripting language
 for data modeling and transformation,
 built on a comprehensive definition of the data types
 needed for modern computing tasks.
 
-With Datalove I aim to reignite the
-the feelings I had growing up in the 90s
-when the programming stack was small and comprehensible,
+With Datalove I aim to reinspire the
+programming feel I had growing up in the 90s
+when the stack was small and comprehensible,
 and we built native applications that were fast
 because they worked closely with the physical machine.
 
@@ -28,7 +28,7 @@ not objects. In the design of Datalove
 consideration for the capabilities,
 memory layout and syntax of data structures comes first,
 and all else derives from that.
-Maintain the strong distinction between the Datalove literals
+We maintain the strong distinction between the Datalove literals
 declarative language model and the imperative/procedural languages built on top of it:
 understanding Datalove literals preceeds understanding Datalove.
 
@@ -156,7 +156,7 @@ Plain threads. No green threads. No async/await state machines.
 Full memoization for efficient recompilation and compiler queries.
 Efficient IR-based interpreter with per-function JIT, or ahead-of-time compilation,
 via Cranelift or to C source code.
-Incremental script (REPL) typechecking and evaluation with full JIT support,
+Incremental typechecking and evaluation with full JIT support,
 undo/redo, virtualized I/O with record/replay.
 
 We establish broad architecture-level capabilities early
