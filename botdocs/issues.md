@@ -14,11 +14,50 @@ home here.
 
 ## Contents
 
+- [The ownership pass panics on a clone returned out of a loop](#user-content-the-ownership-pass-panics-on-a-clone-returned-out-of-a-loop)
 - [Nothing but a test inlines](#user-content-nothing-but-a-test-inlines)
 - [No table module, and none can be written](#user-content-no-table-module-and-none-can-be-written)
 - [A unit that fails part way through leaves its index to the next one](#user-content-a-unit-that-fails-part-way-through-leaves-its-index-to-the-next-one)
 - [A field of a const cannot be projected, but a const can be destructured](#user-content-a-field-of-a-const-cannot-be-projected-but-a-const-can-be-destructured)
 - [A specialized function keeps an original nobody calls](#user-content-a-specialized-function-keeps-an-original-nobody-calls)
+
+## The ownership pass panics on a clone returned out of a loop
+
+**Reproduced.** A compiler crash, not a diagnostic.
+
+```datalove
+fun build(n: u32): [u32]
+    var out: [u32] = []
+    loop
+      if n == 0
+        ret out@            // panics
+      end if
+      break
+    end loop
+    ret []
+end fun
+```
+
+`crates/datalove-datafun-ownership/src/lib.rs:1871` reads
+
+```rust
+// The binding is Moved, so mark_moved recorded where.
+let expr_key = ctx.get_moved_at(*id).X();
+```
+
+on the way to raising `MoveInLoop`, and that does not hold: a clone-through leaves the
+binding `Moved` without `mark_moved` having recorded a site, so the `X()` panics with
+`impossible None option`.
+
+Without the `@` the same program is correctly refused, with D007 `cannot move out in loop`
+and D008. So the panic is on the path that should have *accepted* it -- reading a clone out
+of a loop is the thing `@` is for, and the pass reaches the move-in-loop error branch for
+it anyway.
+
+**What it costs.** A process abort with no diagnostic on source a user would reasonably
+write. Found while writing
+[report-jit-and-inliner.md](reports/report-jit-and-inliner.md), trying to write a
+stdlib-shaped benchmark.
 
 ## Nothing but a test inlines
 
