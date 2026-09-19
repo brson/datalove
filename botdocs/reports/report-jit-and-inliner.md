@@ -35,6 +35,7 @@ The short version, in case nothing else is read:
 - [What Stage 1 did](#user-content-what-stage-1-did)
 - [What Stage 2 did](#user-content-what-stage-2-did)
 - [Why the interpreter zeroed its frames](#user-content-why-the-interpreter-zeroed-its-frames-and-why-it-no-longer-does)
+- [What Stage 3 did](#user-content-what-stage-3-did)
 - [State of the jit](#user-content-state-of-the-jit)
 - [State of the inliner](#user-content-state-of-the-inliner)
 - [What current practice does](#user-content-what-current-practice-does)
@@ -410,6 +411,55 @@ side table and setting a bool per value write; across four workloads the differe
 resolve above the machine's noise, which was about +-10% at the time. It was done because
 the backends should agree, and the measurement is only here to say it cost nothing.
 
+### What Stage 3 did
+
+The trampoline described its callee's parameters and return by looking each type up in the
+descriptor table -- `arg_count + 1` probes of a tree-shaped `IrType` key, on every call out
+of compiled code. All of it is fixed by the callee's signature, and the interpreter now
+keeps a layout per body, so `IrLayout` carries `return_tydesc` beside `param_tydescs` and
+the trampoline reads them off one cached layout.
+
+Measured against the previous commit by interleaving the two builds twice, taking the
+`fastest` column, with `loop_arith::jit` as a control since it makes twenty calls in total:
+
+| Workload | round 1 | round 2 | control moved |
+|---|---|---|---|
+| `call_chain` `jit` | **12.9% faster** | **8.8% faster** | +1.6% / +3.4% |
+| `small_callee` `jit` | **11.8% faster** | **13.2% faster** | as above |
+| `recursive` `jit` | flat | flat | as above |
+
+`recursive` is flat because `fib` does bigint arithmetic per call, so the trampoline is a
+smaller share of it; `call_chain` and `small_callee` do almost nothing per call and are
+most of trampoline.
+
+Cumulative for the jit on call-bound work: `call_chain` 27.5ms to ~13.0ms (**2.1x**),
+`small_callee` 8.52ms to ~4.3ms (**2.0x**).
+
+**The profile after Stage 3**, `call_chain` `jit`:
+
+| | |
+|---|---|
+| `__jit_dispatch_call` | 16.7% |
+| `LayoutCache::get_or_compute` | 4.8% |
+| `bridge::call_jit` | 3.7% |
+| `JitEngine::record_call_with_context` | 3.1% |
+| `malloc` + `cfree` | 5.5% |
+| `IrTyDescTable::get_or_create` | **gone** |
+| SipHash | **gone** |
+
+`__jit_dispatch_call` grew as a share because the total shrank. What is left inside it is
+three lookups of the same callee -- `get_unit` to find the IR, `layout_for` to find the
+layout, `record_call_with_context` to find the compiled code -- plus a `Vec` for the
+argument values.
+
+All three lookups are avoidable, and that is the endgame for this trampoline: a stub is
+compiled per call site with the callee's key as a constant, so it could equally carry a
+constant pointer to a record holding the resolved unit, layout and code pointer. That
+removes the remaining hash probes and leaves the argument vector as the only per-call cost.
+It is a larger change than anything above, because that record has to outlive the compiled
+code that points at it.
+
+
 ## State of the jit
 
 ### It has no idea a loop exists
@@ -755,15 +805,17 @@ the jit rather than about winning anything on its own.
 **Measures:** `recursive` must not regress. `call_chain` should improve, since a
 three-deep chain of one-line functions is what a budget should say yes to.
 
-### Stage 3 -- the descriptor lookups, which are the largest single item
+### Stage 3 -- the descriptor lookups -- **done**
 
-The stub knows every argument's type at compile time; `__jit_dispatch_call` looks each one
-up in a SipHash map at run time. Materialize the descriptors when the stub is compiled and
-pass them as constants, and cache the descriptor pointer per value type on the code unit
-for the interpreter's own paths.
+The interpreter's half went with Stages 1 and 2: the layout is cached per body and carries
+the parameter descriptors, so nothing looks a type up per call. The jit's half is the
+trampoline reading that same layout rather than probing the descriptor table once per
+argument.
 
-**Measures:** ~26% of the `jit` profile and ~7% of the `interp` profile. This is the
-cheapest large win in the report and it is independent of every other stage.
+Not done: the three per-call hash probes still inside `__jit_dispatch_call`, which want the
+stub to carry a pointer to a resolved callee record rather than a key to look one up by.
+
+**Measured.** See [What Stage 3 did](#user-content-what-stage-3-did).
 
 ### Stage 4 -- count back edges and OSR
 
@@ -822,23 +874,30 @@ largest speedup in this report.
 
 ### What to do next
 
-Stages 1 and 2 are done. The cheap, no-design-decision work in the interpreter is now
-spent: the allocator, SipHash, the clone, and the recomputed layout are all gone from the
-profiles, and what is left there is the interpreter interpreting.
+Stages 1 to 3 are done, and with them all the work that was memoization or a type
+substitution. The interpreter is 1.5-1.8x faster on call-heavy code and the jit about 2x,
+and nothing left in either profile is a lookup of something already known.
 
-**Stage 3 next.** It is the largest single remaining item, it needs no policy decisions,
-and it is now entirely a jit-side change: `__jit_dispatch_call` at 12.6% and
-`IrTyDescTable::get_or_create` at 7.8% are the top two entries in the jit profile, and the
-stub knew every one of those types when it was compiled.
+What remains is a choice between three things that are not cheap, and the measurements say
+to weigh them like this:
 
-After that the decision is between **Stage 4** (back-edge counting and OSR, which decides
-whether `loop_arith`'s 86x is available to real code or an artifact of where the loop
-happened to sit), **Stage 5** (`Context::inline`, which is where the inliner and the jit
-actually combine and which would delete trampoline calls rather than making them cheaper),
-and **Stage 7** (`-O2` for the C backend, still the single largest measured speedup in this
-report).
+**Stage 7, `-O2` for the C backend, is still the largest measured number in this report**
+-- 8.4x on `loop_arith`, and it moves that backend past the cranelift one. It is one flag
+and then however much undefined behaviour `-O2` exposes in the emitted C, which is the real
+work and is not estimable from here. The four-backend differential suite is the instrument.
 
-Going further in the *interpreter* now means a contiguous frame stack instead of a pool of
+**Stage 4, back-edge counting and OSR**, decides whether the jit's 86x on a loop is
+available to real code or an artifact of where the loop happened to sit. Today a function
+called once that loops ten million times is invisible to the jit. Nothing else in the plan
+changes that, and it is the difference between the jit being worth turning on for some
+programs and for most.
+
+**Stage 5, `Context::inline`**, is where the inliner and the jit finally combine, and it
+attacks the trampoline by deleting calls rather than making them cheaper --
+`__jit_dispatch_call` is still 16.7% of the jit profile and an inlined call is not in it at
+all. It also gives the cranelift AOT backend an inliner it does not have.
+
+Going further in the *interpreter* means a contiguous frame stack instead of a pool of
 separate frames, or specializing instruction dispatch. Both are larger than everything
 above, and current practice says specialization is where the remaining interpreter wins
 are.

@@ -20,7 +20,8 @@ use std::ptr::NonNull;
 
 use datalove_datafun_ir::{CodeRef, CodeUnitId, IrModuleId};
 use datalove_datafun_interp::{
-    Destination, ExecutionContext, FrameStore, FunctionRegistry, IrInterpreter, Value,
+    Destination, ExecutionContext, FrameStore, FuncIdentity, FunctionRegistry, IrInterpreter,
+    Value,
 };
 use datalove_rt::c::LocalRtHandle;
 use datalove_rtdt as rtdt;
@@ -193,6 +194,14 @@ pub unsafe extern "C" fn __jit_dispatch_call(
     let func_ctx = ir_unit.function_context()
         .expect("trampoline dispatch requires a function code unit");
 
+    // What describes this callee's parameters and return is fixed by its
+    // signature, so it is read off the layout the interpreter already keeps for
+    // the function rather than looked up a type at a time. Every call out of
+    // compiled code arrives here, and looking each one up was the second largest
+    // entry in the jit's profile after this function itself.
+    let layout = ctx.interp.layout_for(
+        FuncIdentity::of(&code_ref, ctx.exec_ctx.unit()), ir_unit);
+
     // Build argument Values.
     //
     // A parameter's own type describes what arrives at it, except where the
@@ -202,11 +211,9 @@ pub unsafe extern "C" fn __jit_dispatch_call(
     let mut arg_vals = Vec::with_capacity(arg_count as usize);
     for i in 0..arg_count as usize {
         let arg_ptr = unsafe { *args.add(i) };
-        let arg_ty = &func_ctx.param_types[i];
-        let tydesc = ctx.interp.tydesc_table_mut().get_or_create(arg_ty);
         arg_vals.push(Value {
             ptr: arg_ptr as *mut u8,
-            tydesc,
+            tydesc: layout.param_tydescs[i],
         });
     }
     for (k, param_id) in func_ctx.descriptor_params.iter().enumerate() {
@@ -226,11 +233,9 @@ pub unsafe extern "C" fn __jit_dispatch_call(
         .collect();
 
     // Build return destination.
-    let ret_ty = &func_ctx.return_type;
-    let ret_tydesc = ctx.interp.tydesc_table_mut().get_or_create(ret_ty);
     let dest = Destination {
         ptr: ret_dest,
-        tydesc: ret_tydesc,
+        tydesc: layout.return_tydesc.expect("a jit callee is a function"),
     };
 
     // Try to JIT compile the target function (or get existing compiled code).

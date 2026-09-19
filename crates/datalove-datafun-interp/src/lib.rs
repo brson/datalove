@@ -400,7 +400,7 @@ impl IrInterpreter {
             }
             None => Rc::new(IrLayout::compute(
                 &func.value_types, &func.slot_types, &func_ctx.param_types,
-                &mut self.tydesc_table)),
+                Some(&func_ctx.return_type), &mut self.tydesc_table)),
         };
 
         // Take a frame from the pool rather than allocating one. A function
@@ -472,8 +472,9 @@ impl IrInterpreter {
         let layout = Rc::new(IrLayout::compute(
             &unit.value_types,
             &unit.slot_types,
-            // A script unit takes no parameters.
+            // A script unit takes no parameters and returns nothing.
             &[],
+            None,
             &mut self.tydesc_table,
         ));
 
@@ -2356,6 +2357,19 @@ impl IrInterpreter {
         // Restore dispatcher.
         *self.call_dispatcher.borrow_mut() = Some(dispatcher);
         result
+    }
+
+    /// The frame layout for a function, computed once per body.
+    ///
+    /// For a caller that is about to describe the same function's parameters and
+    /// return -- the jit's trampoline does, once per call out of compiled code --
+    /// so that it reads them rather than looking each type up again.
+    pub fn layout_for(
+        &mut self,
+        func: dispatch::FuncIdentity,
+        unit: &IrCodeUnit,
+    ) -> Rc<IrLayout> {
+        self.layout_cache.get_or_compute(func, unit, &mut self.tydesc_table)
     }
 
     /// Get an optimized version of a code unit from the dispatcher if available.

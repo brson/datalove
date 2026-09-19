@@ -39,6 +39,8 @@ pub struct IrLayout {
     /// shape the callee was compiled for before handing it over. A borrowed one
     /// keeps the descriptor it arrived with instead and this is not read for it.
     pub param_tydescs: Vec<*const TyDesc>,
+    /// TyDesc for what the function returns. `None` for a script unit.
+    pub return_tydesc: Option<*const TyDesc>,
     /// Total frame size.
     pub frame_size: u32,
     /// Frame alignment.
@@ -51,6 +53,7 @@ impl IrLayout {
         value_types: &[IrType],
         slot_types: &[IrType],
         param_types: &[IrType],
+        return_type: Option<&IrType>,
         tydesc_table: &mut IrTyDescTable,
     ) -> Self {
         let mut value_offsets = Vec::with_capacity(value_types.len());
@@ -92,6 +95,7 @@ impl IrLayout {
         let param_tydescs = param_types.iter()
             .map(|ty| tydesc_table.get_or_create(ty))
             .collect();
+        let return_tydesc = return_type.map(|ty| tydesc_table.get_or_create(ty));
 
         // Final alignment for frame size.
         let frame_size = align_up(offset, max_align);
@@ -102,6 +106,7 @@ impl IrLayout {
             slot_offsets,
             slot_tydescs,
             param_tydescs,
+            return_tydesc,
             frame_size,
             frame_align: max_align,
         }
@@ -157,12 +162,12 @@ impl LayoutCache {
             }
         }
 
-        let param_types = match unit.function_context() {
-            Some(ctx) => &ctx.param_types[..],
-            None => &[],
+        let (param_types, return_type) = match unit.function_context() {
+            Some(ctx) => (&ctx.param_types[..], Some(&ctx.return_type)),
+            None => (&[][..], None),
         };
         let layout = Rc::new(IrLayout::compute(
-            &unit.value_types, &unit.slot_types, param_types, tydesc_table));
+            &unit.value_types, &unit.slot_types, param_types, return_type, tydesc_table));
         self.entries.insert(key, CachedLayout {
             value_count,
             slot_count,
