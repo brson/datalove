@@ -56,11 +56,16 @@ pub struct Frame {
     data: AlignedBuffer,
     /// Layout information.
     layout: Rc<IrLayout>,
-    /// Track which values are initialized (for DropTracked).
+    /// Track which values hold something.
     ///
-    /// Only used for script frames. Function frames don't need this tracking
-    /// since they use precise Drop instructions and are discarded on return.
-    value_initialized: Option<Vec<bool>>,
+    /// A script frame needs this for `DropTracked`. A function frame needs it
+    /// because `prepare_call_args` destroys an `out` argument's destination
+    /// before the call, and a destination that has never been written must not
+    /// be destroyed. That used to rest on the frame being zeroed, so that the
+    /// destroy read a null pointer and did nothing -- which made "uninitialized"
+    /// and "empty" the same thing, and is the one invariant the compiled
+    /// backends carry a tracking byte for rather than assume.
+    value_initialized: Vec<bool>,
     /// Track which slots are initialized.
     slot_initialized: Vec<bool>,
     /// Pointers to caller's data for each parameter.
@@ -112,12 +117,14 @@ impl Frame {
 
     /// Create a new frame for code unit execution.
     ///
-    /// Dispatches on the unit's context:
-    /// - Function frames don't track value initialization (precise Drop instructions)
-    /// - Script frames track value initialization for DropTracked cleanup
+    /// A function frame and a script frame differ only in their parameters: a
+    /// script unit has none and a function's are pointers into its caller.
+    /// Both track which values hold something.
     pub fn new(unit: &IrCodeUnit, layout: Rc<IrLayout>) -> Self {
         let slot_count = layout.slot_offsets.len();
-        let data = AlignedBuffer::with_align(
+        // Uninitialized, not zeroed: what has been written is tracked, and
+        // reading what has not is a bug rather than a value worth defining.
+        let data = AlignedBuffer::uninit(
             layout.frame_size as usize,
             layout.frame_align as usize,
         );
@@ -134,7 +141,7 @@ impl Frame {
                 Self {
                     data,
                     layout,
-                    value_initialized: None,
+                    value_initialized: vec![false; value_count],
                     slot_initialized: vec![false; slot_count],
                     param_ptrs: vec![std::ptr::null_mut(); param_count],
                     param_tydescs: vec![std::ptr::null(); param_count],
@@ -148,7 +155,7 @@ impl Frame {
                 Self {
                     data,
                     layout,
-                    value_initialized: Some(vec![false; value_count]),
+                    value_initialized: vec![false; value_count],
                     slot_initialized: vec![false; slot_count],
                     param_ptrs: Vec::new(),
                     param_tydescs: Vec::new(),
@@ -187,11 +194,9 @@ impl Frame {
         let size = layout.frame_size as usize;
         let align = layout.frame_align as usize;
         if self.data.fits(size, align) {
-            // The data a frame is entered with is zero, which is what
-            // `alloc_zeroed` gave a fresh one.
-            self.data.zero_prefix(size);
+            self.data.reset_prefix(size);
         } else {
-            self.data = AlignedBuffer::with_align(size, align);
+            self.data = AlignedBuffer::uninit(size, align);
         }
 
         let param_count = ctx.params.len();
@@ -200,46 +205,33 @@ impl Frame {
         refill(&mut self.param_tydescs, param_count, std::ptr::null());
         refill(&mut self.param_initialized, param_count, false);
         refill(&mut self.value_tydescs, layout.value_offsets.len(), std::ptr::null());
+        refill(&mut self.value_initialized, layout.value_offsets.len(), false);
 
         self.shape_descriptors.clear();
         self.own_shapes.clear();
         self.own_shapes.extend_from_slice(&ctx.descriptor_shapes);
-        self.value_initialized = None;
         self.layout = layout;
     }
 
-    /// Mark a value as initialized.
-    ///
-    /// No-op for function frames (which don't track value initialization).
+    /// Mark a value as holding something.
     pub fn mark_value_live(&mut self, id: ValueId) {
-        if let Some(ref mut initialized) = self.value_initialized {
-            let idx = id.0 as usize;
-            if idx < initialized.len() {
-                initialized[idx] = true;
-            }
+        let idx = id.0 as usize;
+        if idx < self.value_initialized.len() {
+            self.value_initialized[idx] = true;
         }
     }
 
-    /// Mark a value as dropped.
-    ///
-    /// No-op for function frames (which don't track value initialization).
+    /// Mark a value as holding nothing, having been moved or destroyed.
     pub fn mark_value_dropped(&mut self, id: ValueId) {
-        if let Some(ref mut initialized) = self.value_initialized {
-            let idx = id.0 as usize;
-            if idx < initialized.len() {
-                initialized[idx] = false;
-            }
+        let idx = id.0 as usize;
+        if idx < self.value_initialized.len() {
+            self.value_initialized[idx] = false;
         }
     }
 
-    /// Check if a value is initialized.
-    ///
-    /// Always true for function frames, which don't track value initialization.
+    /// Whether a value holds something.
     pub fn is_value_initialized(&self, id: ValueId) -> bool {
-        match &self.value_initialized {
-            Some(initialized) => initialized[id.0 as usize],
-            None => true,
-        }
+        self.value_initialized[id.0 as usize]
     }
 
     /// Get destination for a value.
@@ -411,16 +403,13 @@ impl Frame {
     ///
     /// Used when a script unit errors out before being added to FrameStore.
     /// Uses value_initialized to determine what to destroy.
-    ///
-    /// Only valid for script frames (panics if value_initialized is None).
     pub fn destroy_on_error(
         &mut self,
         rt_handle: datalove_rt::c::LocalRtHandle,
         unit_end_values: &[ValueId],
         unit_end_slots: &[SlotId],
     ) {
-        let initialized = self.value_initialized.as_mut()
-            .expect("destroy_on_error called on function frame");
+        let initialized = &mut self.value_initialized;
 
         // Destroy unit_end values that were initialized.
         for &vid in unit_end_values {
@@ -456,16 +445,13 @@ impl Frame {
     ///
     /// Called during REPL cleanup to free persistent bindings. Bindings that
     /// were moved out of are no longer initialized, so they are skipped.
-    ///
-    /// Only valid for script frames (panics if value_initialized is None).
     pub fn destroy_unit_end_bindings(
         &mut self,
         rt_handle: datalove_rt::c::LocalRtHandle,
         unit_end_values: &[ValueId],
         unit_end_slots: &[SlotId],
     ) {
-        let initialized = self.value_initialized.as_mut()
-            .expect("destroy_unit_end_bindings called on function frame");
+        let initialized = &mut self.value_initialized;
 
         // Destroy unit_end values (persistent let bindings).
         for &vid in unit_end_values {

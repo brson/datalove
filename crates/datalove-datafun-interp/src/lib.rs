@@ -2122,6 +2122,36 @@ impl IrInterpreter {
         }
     }
 
+    /// Whether an `out` argument's destination currently holds a value to free.
+    ///
+    /// A `ValueRef` is a reference into somewhere else, which the referent's own
+    /// bookkeeping covers and this frame cannot see; those are left as they were.
+    fn out_dest_holds_value(op: &Operand, frame: &Frame, frames: &FrameStore) -> bool {
+        match op {
+            Operand::Value(id) => frame.is_value_initialized(*id),
+            Operand::Slot(id) => frame.is_slot_initialized(*id),
+            Operand::Param(id) => frame.param(*id).is_some(),
+            Operand::ExternalValue { unit, value } => {
+                frames.external_value(*unit, *value).is_some()
+            }
+            Operand::ExternalSlot { unit, slot } => {
+                frames.is_external_slot_initialized(*unit, *slot)
+            }
+            Operand::ValueRef(_) => true,
+        }
+    }
+
+    /// Note that an `out` destination has been emptied, so that nothing frees
+    /// it twice before the callee writes it.
+    fn mark_out_dest_cleared(op: &Operand, frame: &mut Frame) {
+        match op {
+            Operand::Value(id) => frame.mark_value_dropped(*id),
+            Operand::Slot(id) => frame.mark_slot_dropped(*id),
+            Operand::Param(_) | Operand::ValueRef(_)
+            | Operand::ExternalValue { .. } | Operand::ExternalSlot { .. } => {}
+        }
+    }
+
     /// Get pointer to operand's destination without checking initialization.
     ///
     /// Used for Out params where we need to pass a pointer to an uninitialized slot.
@@ -2178,16 +2208,20 @@ impl IrInterpreter {
         for (i, op) in args.iter().enumerate() {
             let mode = param_mode(callee, i);
             if mode == ParamMode::Out {
-                // Out param: get destination pointer, destroy existing value.
+                // Out param: the callee writes over whatever is there, so what
+                // is there has to be destroyed first -- unless nothing is. A
+                // destination that has never been written holds no value to
+                // free, and one already passed on as an out parameter was
+                // cleared by whoever called this function.
                 //
-                // Except where this function's own out parameter is being
-                // passed straight on. That destination was cleared by whoever
-                // called this one and nothing has been written there since, so
-                // destroying it again would free what was already freed.
+                // This used to ask the memory rather than the frame, and rested
+                // on the frame being zeroed so that destroying a place that had
+                // never been written read a null pointer and did nothing. That
+                // made "uninitialized" and "empty" indistinguishable, which is
+                // the invariant the compiled backends carry a tracking byte for
+                // rather than assume.
                 let val = self.get_operand_dest(op, frame);
-                let already_cleared = matches!(op, Operand::Param(id)
-                    if frame.param(*id).is_none());
-                if !already_cleared {
+                if Self::out_dest_holds_value(op, frame, frames) {
                     unsafe {
                         datalove_rt::c::dtlv_rti_any_destroy_local(
                             self.runtime.handle(),
@@ -2195,6 +2229,7 @@ impl IrInterpreter {
                             val.tydesc,
                         );
                     }
+                    Self::mark_out_dest_cleared(op, frame);
                 }
                 arg_vals.push(val);
             } else {

@@ -22,6 +22,11 @@ The short version, in case nothing else is read:
   made it 8.4x faster and moved it past the cranelift AOT backend.
 - **Cranelift has had an inliner since 0.123**, and the tree is on 0.135. For the two
   compiled backends that is a better place to inline than the datalove IR.
+- **The three backends disagreed about uninitialized frame memory.** Neither compiled
+  backend zeroes a frame -- the cranelift one poisons it on purpose -- while the
+  interpreter zeroed and depended on it, because it had no liveness bit for a frame value
+  where the other two carry a tracking byte. It has one now
+  ([why](#user-content-why-the-interpreter-zeroed-its-frames-and-why-it-no-longer-does)).
 
 ## Contents
 
@@ -29,6 +34,7 @@ The short version, in case nothing else is read:
 - [The numbers](#user-content-the-numbers)
 - [What Stage 1 did](#user-content-what-stage-1-did)
 - [What Stage 2 did](#user-content-what-stage-2-did)
+- [Why the interpreter zeroed its frames](#user-content-why-the-interpreter-zeroed-its-frames-and-why-it-no-longer-does)
 - [State of the jit](#user-content-state-of-the-jit)
 - [State of the inliner](#user-content-state-of-the-inliner)
 - [What current practice does](#user-content-what-current-practice-does)
@@ -340,8 +346,9 @@ for the interpreter by itself.
 | `Frame::new` | **gone** |
 
 The allocator is gone from the profile entirely, from 10.9% before. `FramePool::take` at
-5.0% is what replaced it: a `memset` of the frame prefix and four `Vec` refills, which is
-the cost of preserving the semantics a freshly zeroed frame had.
+5.0% is what replaced it: a `memset` of the frame prefix and four `Vec` refills. The memset
+went away afterwards, for a different
+reason ([below](#user-content-why-the-interpreter-zeroed-its-frames-and-why-it-no-longer-does)).
 
 What is left is the interpreter interpreting. Roughly 23% is still call machinery
 (`call_in_context_with_shapes`, `prepare_call_args`, `FramePool::take`, `execute_call`,
@@ -349,6 +356,59 @@ What is left is the interpreter interpreting. Roughly 23% is still call machiner
 Getting further into that means a contiguous frame stack rather than a pool of separate
 frames, or specializing the instruction dispatch -- both of which are larger changes than
 anything done so far.
+
+### Why the interpreter zeroed its frames, and why it no longer does
+
+Asked as a question about whether the three backends agree, and they did not.
+
+**Neither compiled backend zeroes a frame.** The C backend emits a bare
+`_Alignas(N) uint8_t __frame[N];` and initializes only the tracking-byte region to
+`TRACK_UNINIT`; the frame holds whatever the C stack left. The cranelift backend allocates
+an `ExplicitSlot`, which is not zeroed, and then deliberately fills aggregate slots with
+`0xFF` -- its own comment is *"0xFF poison makes uninitialized reads obvious"* -- and
+zeroes only the tracking bytes. Both carry a liveness bit per slot and per parameter
+(`tracking_byte` in `cranelift/src/layout.rs`, `__frame[off] == TRACK_LIVE` in the C
+backend's `emit_erasure_tracked`) and consult it rather than asking the memory.
+
+**The interpreter zeroed, and that was load-bearing.** `prepare_call_args` destroys an
+`out` argument's destination before the call, because the callee is about to overwrite
+whatever is there. When the destination is a frame value that has never been written there
+is nothing to free -- and a function frame had no liveness bit for a value
+(`value_initialized` was `Some` only for script frames), so "all zeros" was doing the work
+of "nothing here yet": the destroy read a null pointer and did nothing.
+
+Filling the frame with `0xFF` on reuse instead proved it in one run. All 409 interp
+fixtures and both dispatch suites still passed; `std_all_tests` failed with
+
+```
+free() called on untracked pointer: 0xffffffffffffffff
+  at string_destroy_local
+  at IrInterpreter::prepare_call_args  (lib.rs:2192)
+```
+
+which is precisely the signal the cranelift backend's poison exists to produce.
+
+So the interpreter was the odd one out, and in the weaker direction: zeroing makes
+"uninitialized" and "empty" the same value, which is the distinction the compiled backends
+found they had to track. It now tracks it too. Function frames carry `value_initialized`
+like script frames do, `prepare_call_args` asks the frame rather than the memory, and the
+frame data is left undefined -- filled with `0xFF` in a debug build, untouched in release,
+which is at least as loud as either compiled backend in debug and as cheap as the C one in
+release.
+
+Marking was already complete, which is what made this cheap: all 45 `Instruction` variants
+that write a value dest mark it, `pass_block_args` marks a block parameter, and
+`mark_out_params_initialized` marks an `out` destination after the call.
+
+Two cases got stricter rather than merely equivalent. A `Slot` or an external destination
+was also destroyed unconditionally before, relying on the same zeroing; both now consult
+the bit they already had. And a destination is marked empty as soon as it is destroyed, so
+nothing can free it twice if the callee errors before writing.
+
+**It is not a speed change.** The `memset` that went away is offset by refilling one more
+side table and setting a bool per value write; across four workloads the difference did not
+resolve above the machine's noise, which was about +-10% at the time. It was done because
+the backends should agree, and the measurement is only here to say it cost nothing.
 
 ## State of the jit
 

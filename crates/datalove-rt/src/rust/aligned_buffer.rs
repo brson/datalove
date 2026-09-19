@@ -1,6 +1,6 @@
 //! Aligned memory buffer for runtime data.
 
-use std::alloc::{alloc_zeroed, dealloc, Layout};
+use std::alloc::{alloc, alloc_zeroed, dealloc, Layout};
 use std::ptr::NonNull;
 
 /// A byte buffer with configurable alignment.
@@ -8,6 +8,15 @@ pub struct AlignedBuffer {
     ptr: NonNull<u8>,
     layout: Layout,
 }
+
+/// What a debug build fills uninitialized storage with.
+///
+/// The cranelift backend fills an aggregate stack slot with the same pattern,
+/// so that reading one before it is written is obvious rather than plausible. A
+/// release build fills nothing, which is what the C backend's bare stack array
+/// gives. Zero would be the dangerous choice: it is a valid empty collection and
+/// a null pointer, so a read of it succeeds and says the wrong thing.
+pub const POISON: u8 = 0xFF;
 
 impl AlignedBuffer {
     /// Maximum alignment, sufficient for AVX-512, cache lines, and all scalar types.
@@ -55,19 +64,46 @@ impl AlignedBuffer {
         self.layout.size() >= size && self.layout.align() >= align
     }
 
-    /// Zero the first `len` bytes, which is how a fresh buffer arrives.
+    /// Create a buffer with specified alignment and no defined contents.
     ///
-    /// Only a prefix, because a reused buffer can be much larger than the frame
-    /// now living in it and the bytes past the end are never read.
+    /// For storage whose user tracks for itself which of it has been written,
+    /// so that zeroing it would buy nothing but the cost of the memset. A debug
+    /// build fills it with [`POISON`] instead, so that reading a part that was
+    /// never written is obvious rather than plausible.
+    pub fn uninit(size: usize, align: usize) -> Self {
+        let layout = Layout::from_size_align(size, align).expect("invalid layout");
+
+        if size == 0 {
+            // See `with_align` for why this address rather than a dangling one.
+            let ptr = NonNull::new(std::ptr::without_provenance_mut::<u8>(align))
+                .expect("alignment is non-zero");
+            return Self { ptr, layout };
+        }
+
+        // SAFETY: the layout has a non-zero size, checked above.
+        let ptr = unsafe { alloc(layout) };
+        let ptr = NonNull::new(ptr).unwrap_or_else(|| {
+            std::alloc::handle_alloc_error(layout)
+        });
+
+        let mut buffer = Self { ptr, layout };
+        buffer.reset_prefix(size);
+        buffer
+    }
+
+    /// Put the first `len` bytes back to what [`uninit`](Self::uninit) leaves.
+    ///
+    /// Nothing in a release build. Only a prefix, because a reused buffer can be
+    /// much larger than what is now living in it and the bytes past the end are
+    /// never read.
     ///
     /// Panics if `len` is past the end.
-    pub fn zero_prefix(&mut self, len: usize) {
-        assert!(len <= self.layout.size(), "zeroing past the end of the buffer");
-        if len == 0 {
-            return;
+    pub fn reset_prefix(&mut self, len: usize) {
+        assert!(len <= self.layout.size(), "resetting past the end of the buffer");
+        if cfg!(debug_assertions) && len > 0 {
+            // SAFETY: `len` is within the allocation, checked above, and we own it.
+            unsafe { std::ptr::write_bytes(self.ptr.as_ptr(), POISON, len) };
         }
-        // SAFETY: `len` is within the allocation, checked above, and we own it.
-        unsafe { std::ptr::write_bytes(self.ptr.as_ptr(), 0, len) };
     }
 
     /// Get a const pointer to the buffer.
