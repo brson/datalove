@@ -71,7 +71,7 @@ Then add I/O to it &mdash; carefully.
 <br>
 <div id="power">
 
-Datalove is built from <bold>[<em>| 3 sublanguages |</em>]</bold> of increasing power.
+Datalove is built from <bold>[<em>| 3 sublanguages |</em>]</bold> of increasing power:
 
 </div>
 <br>
