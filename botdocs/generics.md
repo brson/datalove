@@ -291,6 +291,16 @@ the arguments and nothing else. The interpreter keeps a shape-taking call to
 itself rather than offering it round, and `bridge::dispatchable` says the same
 thing at the other end so the invariant is local to both.
 
+The **inliner** has a related rule, for a different reason. `inline_call_site`
+refuses a callee whose `descriptor_shapes` is non-empty, because its body names
+those shapes by index -- `DescriptorRef::Own` on a call, `descriptor` on a
+`ListNew` -- and an index means a different shape, or nothing at all, in the
+caller's list. What it does carry across is `DescriptorRef::Static`, which names
+a whole type and so is valid in any body. A function that is concrete still
+hands static descriptors to the generics it calls, and blanking them on the way
+in entered the callee with nothing to build from
+(`interp/989_inline_static_descriptor`).
+
 The jit also needs runtime symbols registered twice: once in
 `register_runtime_symbols` and once in `trampoline_all_runtime_imports`. Nothing
 catches a missed one at compile time -- it aborts at run time.

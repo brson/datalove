@@ -2438,7 +2438,7 @@ fn growing_parameters<K: Copy + Eq + std::hash::Hash>(
     (growing, blame)
 }
 
-/// What a call site has to hand over for each shape the callee declared./// What a call site has to hand over for each shape the callee declared.
+/// What a call site has to hand over for each shape the callee declared.
 ///
 /// Substituting the callee's shape with what this site bound its type
 /// parameters to gives the type the descriptor has to describe. Concrete means
@@ -2469,7 +2469,7 @@ pub fn shape_descriptors_for(
     Ok(out)
 }
 
-/// What a call site hands over for one of the callee's shapes./// What a call site hands over for one of the callee's shapes.
+/// What a call site hands over for one of the callee's shapes.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum DescriptorRef {
     /// A static descriptor for a type this call site knows outright.

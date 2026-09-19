@@ -683,16 +683,19 @@ impl RemapContext {
                 dest: self.remap_value(*dest),
                 src: self.remap_operand(src),
             },
-            Instruction::Call { site_id, dest, func, args, type_args, .. } => Instruction::Call {
+            // `shape_descriptors` survives the move because `inline_call_site`
+            // refuses a callee that declares shapes, so every entry here is a
+            // `Static`, which names a whole type and is valid anywhere.
+            Instruction::Call { site_id, dest, func, args, type_args, shape_descriptors } => Instruction::Call {
                 site_id: self.remap_call_site(*site_id),
                 dest: self.remap_value(*dest),
                 func: func.clone(),
                 args: args.iter().map(|a| self.remap_operand(a)).collect(),
                 type_args: type_args.clone(),
-                shape_descriptors: Vec::new(),
+                shape_descriptors: shape_descriptors.clone(),
             },
             Instruction::ComptimeCall {
-                dest, func, args, discriminant, comptime_param_indices, type_args, ..
+                dest, func, args, discriminant, comptime_param_indices, type_args, shape_descriptors,
             } => Instruction::ComptimeCall {
                 dest: self.remap_value(*dest),
                 func: func.clone(),
@@ -700,7 +703,7 @@ impl RemapContext {
                 discriminant: *discriminant,
                 comptime_param_indices: comptime_param_indices.clone(),
                 type_args: type_args.clone(),
-                shape_descriptors: Vec::new(),
+                shape_descriptors: shape_descriptors.clone(),
             },
             Instruction::Pack { dest, ty, fields } => Instruction::Pack {
                 dest: self.remap_value(*dest),
@@ -1087,6 +1090,15 @@ pub fn inline_call_site(
     // Get function contexts - inlining only works on functions.
     let _caller_ctx = caller.function_context()?;
     let callee_ctx = callee.function_context()?;
+
+    // A callee that declares shapes cannot be moved. Its body refers to them by
+    // index -- `DescriptorRef::Own` on a call, `descriptor` on a `ListNew` --
+    // and an index into the callee's list means a different shape, or nothing at
+    // all, in the caller's. Renumbering them would mean merging the two lists
+    // and rewriting the caller's own signature, which is not an inlining.
+    if !callee_ctx.descriptor_shapes.is_empty() {
+        return None;
+    }
 
     let mut new_unit = caller.clone();
 

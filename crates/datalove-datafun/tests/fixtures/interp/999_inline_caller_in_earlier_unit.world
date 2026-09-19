@@ -1,0 +1,41 @@
+----------
+scriptunit-fragment
+----------
+
+// Unit 1 only defines the functions. It never calls `outer` enough to warm
+// anything, so nothing here triggers inlining.
+
+fun inner(x: int): int
+    ret x + 1
+end fun
+
+fun outer(x: int): int
+    ret inner(x)
+end fun
+
+debuglog outer(0)
+
+----------
+scriptunit-fragment
+----------
+
+// Unit 2 drives the loop. The hot call site is `inner(x)` inside `outer`, and
+// `outer` is reached from here by a `CodeRef::External`, so the caller to
+// inline into lives in a unit that has already finished. Finding it means going
+// through the registry rather than this unit's local scope.
+
+var i: int = 0
+var warm: int = 0
+loop while i .< 80
+    set warm = warm + outer(i@)
+    set i = i + 1
+end loop
+
+let total = warm
+debuglog total
+
+----------
+scriptunit-expr
+----------
+
+total

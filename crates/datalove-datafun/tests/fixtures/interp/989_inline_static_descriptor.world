@@ -1,0 +1,40 @@
+----------
+scriptunit-fragment
+----------
+
+// `wrap_i` declares no shapes of its own -- it is concrete -- but its call to
+// `wrap` carries a static descriptor for `int`, because `wrap` builds a `[T]`
+// and has to be told what a `T` is. Inlining `wrap_i` into `hot` moves that
+// call into a function with a different shape list, and the descriptor has to
+// come with it: blanking it entered `wrap` with nothing to build from.
+//
+// The loop runs past the inline threshold so that a later entry to `hot` picks
+// up the optimized body, which is the only way the moved call is ever run.
+
+fun wrap<T>(x: T): [T]
+    var out: [T] = [x]
+    ret out
+end fun
+
+fun wrap_i(x: int): [int]
+    ret wrap(x)
+end fun
+
+fun hot(x: int): [int]
+    ret wrap_i(x)
+end fun
+
+var i: int = 0
+var last: [int] = []
+loop while i .< 80
+    set last = hot(i@)
+    set i = i + 1
+end loop
+
+debuglog last
+
+----------
+scriptunit-expr
+----------
+
+last

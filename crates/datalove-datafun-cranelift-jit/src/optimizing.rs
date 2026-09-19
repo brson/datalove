@@ -455,44 +455,29 @@ impl CallDispatcher for OptimizingDispatcher {
         // The inliner tracks call sites and may trigger inlining.
         if should_inline {
             if let Some(call_site_info) = &call_ctx.call_site_info {
-                // Look up the caller function.
-                let caller = match &call_site_info.caller {
-                    CodeRef::Local(id) => {
-                        call_ctx.exec_ctx.find_local_function(*id)
-                    }
-                    CodeRef::Module { module, id } => {
-                        call_ctx.registry.get_module_function_as_unit(*module, *id)
-                    }
-                    CodeRef::External { .. } => None,
-                };
+                // The inliner resolves the caller itself, so there is nothing to
+                // look up here. Its answer is always `NotHandled` -- it counts
+                // call sites and rewrites bodies, it does not execute -- so what
+                // it did is read back out of it rather than returned.
+                self.inliner.dispatch_call(
+                    code_ref,
+                    func,
+                    args,
+                    ret_dest,
+                    rt_handle,
+                    DispatchCallContext {
+                        exec_ctx: call_ctx.exec_ctx,
+                        registry: call_ctx.registry,
+                        frames: call_ctx.frames,
+                        interp: call_ctx.interp,
+                        call_site_info: call_ctx.call_site_info.clone(),
+                    },
+                );
 
-                if let Some(caller) = caller {
-                    // Record the call in the inliner (may trigger inlining).
-                    let inliner_result = self.inliner.dispatch_call(
-                        code_ref,
-                        func,
-                        args,
-                        ret_dest,
-                        rt_handle,
-                        DispatchCallContext {
-                            exec_ctx: call_ctx.exec_ctx,
-                            registry: call_ctx.registry,
-                            frames: call_ctx.frames,
-                            interp: call_ctx.interp,
-                            call_site_info: call_ctx.call_site_info.clone(),
-                        },
-                    );
-
-                    // Check if inlining was performed.
-                    if self.inliner.get_inlined_function(call_site_info.caller_identity()).is_some() {
-                        if let Some(metrics) = &mut self.metrics {
-                            metrics.record_inlining(call_site_info.caller_identity());
-                        }
+                if self.inliner.get_inlined_function(call_site_info.caller_identity()).is_some() {
+                    if let Some(metrics) = &mut self.metrics {
+                        metrics.record_inlining(call_site_info.caller_identity());
                     }
-
-                    // Inliner always returns NotHandled, so we continue.
-                    let _ = inliner_result;
-                    let _ = caller;
                 }
             }
         }

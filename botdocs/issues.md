@@ -14,57 +14,21 @@ home here.
 
 ## Contents
 
-- [Inlining drops a call's shape descriptors, and nothing but a test inlines](#user-content-inlining-drops-a-calls-shape-descriptors-and-nothing-but-a-test-inlines)
+- [Nothing but a test inlines](#user-content-nothing-but-a-test-inlines)
 - [No table module, and none can be written](#user-content-no-table-module-and-none-can-be-written)
 - [A unit that fails part way through leaves its index to the next one](#user-content-a-unit-that-fails-part-way-through-leaves-its-index-to-the-next-one)
-- [Inlining never triggers from a caller in an earlier unit](#user-content-inlining-never-triggers-from-a-caller-in-an-earlier-unit)
 - [A field of a const cannot be projected, but a const can be destructured](#user-content-a-field-of-a-const-cannot-be-projected-but-a-const-can-be-destructured)
 - [A specialized function keeps an original nobody calls](#user-content-a-specialized-function-keeps-an-original-nobody-calls)
 
-## Inlining drops a call's shape descriptors, and nothing but a test inlines
+## Nothing but a test inlines
 
-**Reproduced**, but only through a dispatcher nothing outside the test suite
-constructs. Recorded together because the second half decides what to do about
-the first.
+**Reproduced**, in the sense that the constructors are countable.
 
-`RemapContext::remap_instruction` blanks `shape_descriptors` when it copies a
-`Call` into the body it is inlining into. That is half right: a
-`DescriptorRef::Own(i)` indexes the *enclosing* function's declared shapes and
-means nothing once the body has moved, so keeping it would be wrong. A
-`DescriptorRef::Static(ty)` is a whole type and is valid anywhere, and blanking
-throws it away. The callee is then entered with no descriptor:
-
-```datalove
-fun wrap<T>(x: T): [T]
-    var out: [T] = [x]
-    ret out
-end fun
-
-fun wrap_s(x: string): [string]     // concrete, so it declares no shapes,
-    ret wrap(x)                     // but this call carries a static one
-end fun
-
-fun hot(): [string]
-    ret wrap_s("s")
-end fun
-```
-
-Calling `hot` past the inline threshold puts `wrap_s`'s body inside it without
-the descriptor, and the interpreter panics on `a shape built with is one this
-function declared`, leaks 86 bytes and aborts in the destructor.
-
-`ListNew`, `SetNew` and `MapNew` carry a `descriptor: Some(i)` index with the
-same problem, copied verbatim into a function with a different shape list. That
-one is not reachable: a body containing one belongs to a function that declares
-shapes, and a call to such a function is never offered to a dispatcher -- the
-interpreter keeps it, and `bridge::dispatchable` refuses it at the other end --
-so it is never inlined. Only the `Static` blanking is live.
-
-**Nothing inlines outside tests.** `DynamicInliner` is constructed in exactly
-one place, `OptimizingDispatcher::with_config`, and `OptimizingDispatcher` is
-constructed in exactly two, both test binaries. `datalove script --jit` builds a
-bare `JitEngine`; the REPL, the benches and `worldfile_analysis` pass no
-dispatcher at all. So the inliner has never run in anything a user can invoke.
+`DynamicInliner` is constructed in exactly one place,
+`OptimizingDispatcher::with_config`, and `OptimizingDispatcher` is constructed
+in exactly two, both test binaries. `datalove script --jit` builds a bare
+`JitEngine`; the REPL, the benches and `worldfile_analysis` pass no dispatcher
+at all. So the inliner has never run in anything a user can invoke.
 
 The other inliner, the directive-driven `datalove-datafun-inline` API --
 `parse_inline_directives`, `inline_module`, `inline_cross_module`, and the
@@ -72,18 +36,17 @@ The other inliner, the directive-driven `datalove-datafun-inline` API --
 `ir_inline_tests`, which compares printed IR before and against after and never
 *runs* the result. 21 fixtures, none generic.
 
-What does run is the two dispatch suites, over the 407 worldfiles in
-`fixtures/interp`: 5 inlinings in tuned mode, 125 in chaos mode, checked by
-comparing against the plain interpreter. None of those 407 mentions a type
-parameter, which is why this was never seen.
+What does run is the two dispatch suites, over the 409 worldfiles in
+`fixtures/interp`: 7 inlinings in tuned mode, 151 in chaos mode, checked by
+comparing against the plain interpreter.
 
-**Worth knowing before fixing either.** An inlined body is picked up in
+**Worth knowing before spending anything here.** An inlined body is picked up in
 `execute_call`, when the function is *entered*, so an inlining performed during
 an invocation does not affect that invocation -- only a later call to the same
 caller. A hot loop inside a single call never benefits from inlining its
 callees. That is what makes the feature much weaker than the thresholds
 suggest, and it is worth deciding whether the inliner earns its place at all
-before spending anything on the descriptor handling.
+before building anything on top of it.
 
 ## No table module, and none can be written
 
@@ -161,21 +124,6 @@ disturb the counting.
 Closing it means the compiler's unit numbering and the runtime's agreeing about
 failed units, which `CodeRef::External` already assumes today. Worth examining
 as its own question rather than patching the key.
-
-## Inlining never triggers from a caller in an earlier unit
-
-**Known gap, marked in the source.**
-
-`DynamicInliner::dispatch_call` finds the caller to inline into by matching on
-its reference, and the `CodeRef::External` arm returns `None` with a TODO. So a
-call site in a later unit into an earlier unit's function never triggers
-inlining, however hot it gets.
-
-The lookup is available -- `registry.get_external_function_as_unit(unit, id)`
--- so this is about three lines. The half that used to be missing is already
-done: `FuncIdentity` folds `Local` and `External` together, so a body optimized
-while its unit was current is found when a later unit calls the same function
-externally.
 
 ## A field of a const cannot be projected, but a const can be destructured
 

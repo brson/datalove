@@ -219,10 +219,8 @@ impl CallDispatcher for DynamicInliner {
                 CodeRef::Module { module, id } => {
                     call_ctx.registry.get_module_function_as_unit(*module, *id)
                 }
-                CodeRef::External { .. } => {
-                    // External functions are from previous script units.
-                    // TODO: Could support this by looking up in registry.
-                    None
+                CodeRef::External { unit, id } => {
+                    call_ctx.registry.get_external_function_as_unit(*unit, *id)
                 }
             };
 
