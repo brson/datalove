@@ -1,7 +1,24 @@
 # Datalove Principles
 
+Datalove is a scripting language
+for data modeling and transformation,
+built on a comprehensive definition of the data types
+needed for modern computing tasks.
+
+With Datalove I aim to reignite the
+the feelings I had growing up in the 90s
+when the programming stack was small and comprehensible,
+and we built native applications that were fast
+because they worked closely with the physical machine.
+
+But I am to do this with the benefit of decades
+of experience and evolution in compiler architecture and type theory:
+the best of modern practical programming language theory in a simple package,
+with a focus on correctness uncommon in scripting languages.
 
 
+
+<!-- What Datalove is for -->
 
 ## Glorify the plain old data types
 
@@ -16,8 +33,6 @@ declarative language model and the imperative/procedural languages built on top 
 understanding Datalove literals preceeds understanding Datalove.
 
 
-
-
 ## Advance interactive scripting design
 
 Datalove applies state of the art compiler design
@@ -30,32 +45,56 @@ statements are modified.
 
 
 
-## Modern compiler and execution architecture
+<!-- What Datalove promises -->
 
-Full memoization for efficient recompilation and compiler queries.
-Efficient IR-based interpreter with per-function JIT, or ahead-of-time compilation,
-via Cranelift or to C source code.
-Incremental script (REPL) typechecking and evaluation with full JIT support,
-undo/redo, virtualized I/O with record/replay.
+## Determinism and reproducibility
 
-We establish broad architecture-level capabilities early
-to inform and restrict the design trajectory of the language.
+Purity, memoization, virtual i/o, undo/redo, record/replay.
 
 
+## Nothing happens that was not written
+
+The surface syntax of Datalove translates directly to what happens
+at the execution layer, and all is stated explicitly.
+Integers are never automatically truncated nor widened.
+Types are never automatically coerced.
+Argument passing modes are explicit.
+All error handling and early returns are expressed consistently in the syntax.
+What you see is always exactly what you get.
+Datalove is verbose, and intentionally so.
 
 
-## Ruthless simplicity, language and compiler
+## Numerical correctess
 
-The type system is strong but simple and restrictive.
-We want to have the startup speed of dynamic scripting languages,
-and must be ruthless about limiting features
-to establish a performance baseline.
-A simple language leads to a simple implementation with few compiler passes.
-A simple implementation makes maintenance easier,
-enables quick development.
+It is no longer acceptable to silently overflow and get wrong results.
+
+Integer types never lose information.
+Fixed-size integers type never overflow silently.
+Integer divide by zero must be handled.
+The syntactic and cognitive overheads this necessarily imposes are eased
+by language features to any extent reasonable.
+
+
+## Power through restricted language design
+
+Datalove has a strong linear type system.
+Datalove functions are pure and nearly total,
+with no side-effects and no exceptional control-flow,
+and have other restrictive properties.
+Strong restrictions lead to simple
+compiler analysis where the code you see lowers
+directly to the code you expect,
+requiring little reconstruction to regain performance.
+
+Datalove has a linear type system
+but it does not have first-class reference types.
+Safe first-class references without GC are the most
+difficult feature to reason about in Rust and add great language and compiler complexity.
 
 
 
+
+<!-- How Datalove reads -->
 
 ## Straightforward syntax with minimal sugar
 
@@ -65,67 +104,6 @@ for human eyes to scan and computers to parse.
 It is happily verbose.
 It provides the basic features necessary to write algorithms,
 but does not bloat the compiler and spec with syntactic nicities.
-
-
-
-
-## No first-class references
-
-Datalove has a linear type system
-but it does not have first-class reference types.
-Safe first-class references without GC are the most
-difficult feature to reason about in Rust and add great language and compiler complexity.
-
-We'll instead push other techniques as far as we can,
-argument modes and other reference bindings,
-Gleam-style `use` expressions for ergonomic continuations,
-making some cloning easy and idiomatic,
-perhaps borrow some ideas from Dada.
-
-
-
-
-## Mechanical and machine-model sympathy
-
-Datalove aims for an execution model and memory layout that
-is obvious from the syntax, and one that can be executed
-efficiently by modern computers without complex compiler transformations
-that exhibit performance characteristics that are difficult for
-human authors to reason about.
-
-Inline values, no implicit boxing.
-Plain threads. No green threads. No async/await state machines.
-
-Syntax lowers trivially to SSA-based IRs
-to minimize analysis-based reconstruction during codegen
-and support human understanding of the performance model.
-
-
-
-
-## Balance between the tradeoffs of fast compilation and fast execution
-
-Datalove is foremost a scripting language,
-and even though it is statically typed and the data and execution model
-are oriented toward mechanical sympathy,
-tradeoffs are gladly made in service of fast compilation times.
-Datalove does not seek ultimate performance.
-
-
-
-
-## Numerical correctness
-
-It is no longer acceptable to silently overflow and get wrong results.
-
-Integer types never lose information.
-Fixed-size integers type never overflow silently.
-Integer divide by zero must be handled.
-Numeric types never truncate nor widen automatically.
-The syntactic and cognitive overheads this necessarily imposes are eased
-by language features to any extent reasonable.
-
-
 
 
 ## Sigil-logic
@@ -150,66 +128,47 @@ Likewise some bracket pairs are for one thing.
 | `[` … `]`  | array-like, lists and tensors |
 
 
-
-
-## Restrictive type systems enable advanced features
-
-Datalove has a strong linear type system.
-Datalove functions are pure and nearly total,
-with no side-effects and no exceptional control-flow,
-and hove other restrictive properties.
-Strong restrictions lead to simple
-compiler analysis where the code you see lowers
-directly to the code you expect,
-requiring little reconstruction to regain performance.
-It creates a canvas for advanced experiments in language
-design including simple compile-time evalution,
-global analysis, termination proofs,
-functions over types or limited dependent types, runtime memoization,
-logic programming via choice points and backtracking.
-Few doors are closed.
-
-Datalove _procedures_ allow code to escape this restrictive regime
-around the edges of the program through I/O and other side-effects.
-
----
-
-## Explicitness
-
-merge numerical correctness, mechanical sympathy, sigil-logic?
-the verbosity is the point?
-
-## Serve the domain of data manipulation first
-
-first-class tensors and tables
-
-## Determinism and reproducibility
+## Small enough to understand and remember
 
 todo
-purity, memoization, virtual i/o,
-Any computation can be re-run, undone or replayed and get the same answer.
+
+A simple language leads to a simple implementation with few compiler passes.
+A simple implementation makes maintenance easier,
+enables quick development.
 
 
-## Whole-program compilation
+<!-- How Datalove is built -->
 
-todo
-global analysis, whole-program monomorphization, erasure via a globally-complete tydesc set,
-no seperate compilation, no dynamic linking,
+## Mechanical and machine-model sympathy
 
-## One failure vocabulary
+Datalove aims for an execution model and memory layout that
+is obvious from the syntax, and one that can be executed
+efficiently by modern computers without complex compiler transformations
+that exhibit performance characteristics that are difficult for
+human authors to reason about.
 
-?/!, no exceptions, panics, nulls.
-constructs compose predictably.
-subsume sigil-logic?
+Inline values, no implicit boxing.
+Plain threads. No green threads. No async/await state machines.
 
-## User-level comprehensibility
 
-not just implementation simplicity
-re pascal/oberon
+## Modern compiler and execution architecture
 
-## Flexible execution modes
+Full memoization for efficient recompilation and compiler queries.
+Efficient IR-based interpreter with per-function JIT, or ahead-of-time compilation,
+via Cranelift or to C source code.
+Incremental script (REPL) typechecking and evaluation with full JIT support,
+undo/redo, virtualized I/O with record/replay.
 
----
+We establish broad architecture-level capabilities early
+to inform and restrict the design trajectory of the language.
 
-no first-class references, minimal compiler passes, restrictive type systems
-all argue from linear type systems -> single restrictions principle
+
+## Fast compilation over fast execution
+
+Datalove is foremost a scripting language,
+and even though it is statically typed and the data and execution model
+are oriented toward mechanical sympathy,
+tradeoffs are gladly made in service of fast compilation times.
+Datalove does not seek ultimate performance.
+
+

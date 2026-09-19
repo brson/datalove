@@ -173,7 +173,7 @@ owned native pointers, objects with identity,
 and stack unwinding.
 _This language is not implemented yet,
 and mostly not discussed in the documentation_,
-but I do have a [vision](vision.md) about what it will be.
+but I do have a [vision](principles.md) about what it will be.
 
 
 
@@ -189,7 +189,6 @@ but I do have a [vision](vision.md) about what it will be.
 - [Datalove Literals](datalit.md)
 - [Datalove Functions](datafun.md)
 - [Principles](principles.md)
-- [Vision](vision.md)
 
 </div>
 

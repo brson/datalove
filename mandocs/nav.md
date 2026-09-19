@@ -5,7 +5,6 @@
 - [Datalove Literals](datalit.md)
 - [Datalove Functions](datafun.md)
 - [Principles](principles.md)
-- [Vision](vision.md)
 
 ---
 
