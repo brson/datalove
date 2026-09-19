@@ -7,6 +7,7 @@ edition.workspace = true
 
 [dependencies]
 rmx.workspace = true
+rustc-hash.workspace = true
 datalove-datafun-ir.path = "../datalove-datafun-ir"
 datalove-datafun-interp.path = "../datalove-datafun-interp"
 datalove-datafun-cranelift.path = "../datalove-datafun-cranelift"

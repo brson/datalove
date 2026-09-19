@@ -10,6 +10,7 @@
 
 use std::any::Any;
 use std::collections::hash_map::DefaultHasher;
+use std::rc::Rc;
 use std::hash::{Hash, Hasher};
 use std::time::Instant;
 
@@ -533,8 +534,8 @@ impl CallDispatcher for OptimizingDispatcher {
         self
     }
 
-    fn get_optimized_function(&self, func: FuncIdentity) -> Option<&IrCodeUnit> {
-        self.inliner.get_inlined_function(func)
+    fn get_optimized_function(&self, func: FuncIdentity) -> Option<Rc<IrCodeUnit>> {
+        self.inliner.get_inlined_function(func).map(Rc::clone)
     }
 }
 

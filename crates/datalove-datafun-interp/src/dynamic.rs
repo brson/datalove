@@ -3,7 +3,9 @@
 //! Tracks call site execution counts and performs inlining when thresholds are reached.
 
 use std::any::Any;
-use std::collections::HashMap;
+use std::rc::Rc;
+
+use rustc_hash::FxHashMap;
 
 use datalove_datafun_ir::{CallSiteId, CodeRef, IrCodeUnit};
 use datalove_rt::c::LocalRtHandle;
@@ -54,13 +56,16 @@ pub struct DynamicInliner {
     /// Configuration.
     config: DynamicInlinerConfig,
     /// Call site execution counts.
-    call_sites: HashMap<CallSiteKey, CallSiteState>,
+    call_sites: FxHashMap<CallSiteKey, CallSiteState>,
     /// Cache of inlined code units.
     ///
     /// When a code unit is modified by inlining, the new version is stored here.
     /// Keyed by the caller it replaces, which has to name the owning unit: a
     /// bare `CodeRef::Local` means a different function in every script unit.
-    inlined_functions: HashMap<FuncIdentity, IrCodeUnit>,
+    ///
+    /// Shared rather than owned outright so that handing one to the interpreter
+    /// costs a reference count rather than a copy of every block in the body.
+    inlined_functions: FxHashMap<FuncIdentity, Rc<IrCodeUnit>>,
     /// Statistics.
     stats: InlinerStats,
 }
@@ -86,8 +91,8 @@ impl DynamicInliner {
     pub fn with_config(config: DynamicInlinerConfig) -> Self {
         Self {
             config,
-            call_sites: HashMap::new(),
-            inlined_functions: HashMap::new(),
+            call_sites: FxHashMap::default(),
+            inlined_functions: FxHashMap::default(),
             stats: InlinerStats::default(),
         }
     }
@@ -98,7 +103,7 @@ impl DynamicInliner {
     }
 
     /// Get an inlined version of a code unit, if available.
-    pub fn get_inlined_function(&self, func: FuncIdentity) -> Option<&IrCodeUnit> {
+    pub fn get_inlined_function(&self, func: FuncIdentity) -> Option<&Rc<IrCodeUnit>> {
         self.inlined_functions.get(&func)
     }
 
@@ -175,10 +180,12 @@ impl DynamicInliner {
         let caller_to_use = self
             .inlined_functions
             .get(&call_site_info.caller_identity())
+            .map(|unit| &**unit)
             .unwrap_or(caller);
 
         if let Some(inlined_unit) = inline_call_site_by_index(caller_to_use, callee, call_index) {
-            self.inlined_functions.insert(call_site_info.caller_identity(), inlined_unit);
+            self.inlined_functions
+                .insert(call_site_info.caller_identity(), Rc::new(inlined_unit));
             self.stats.inlinings_performed += 1;
         } else {
             self.stats.inlinings_skipped += 1;
@@ -241,8 +248,8 @@ impl CallDispatcher for DynamicInliner {
         self
     }
 
-    fn get_optimized_function(&self, func: FuncIdentity) -> Option<&IrCodeUnit> {
-        self.get_inlined_function(func)
+    fn get_optimized_function(&self, func: FuncIdentity) -> Option<Rc<IrCodeUnit>> {
+        self.get_inlined_function(func).map(Rc::clone)
     }
 }
 

@@ -3,6 +3,7 @@
 //! Allows external code (like a JIT or dynamic inliner) to intercept function calls.
 
 use std::any::Any;
+use std::rc::Rc;
 
 use datalove_datafun_ir::{CallSiteId, CodeRef, CodeUnitId, IrCodeUnit, IrModuleId};
 use datalove_rt::c::LocalRtHandle;
@@ -127,7 +128,13 @@ pub trait CallDispatcher {
     ///
     /// Called before executing a function to check if there's an inlined/optimized
     /// version that should be used instead. Returns None to use the original code unit.
-    fn get_optimized_function(&self, _func: FuncIdentity) -> Option<&IrCodeUnit> {
+    ///
+    /// Shared rather than borrowed because the caller holds the dispatcher through
+    /// a `RefCell` and cannot keep that borrow across the call it is about to
+    /// make. Copying the body out instead was a deep clone of every block and
+    /// instruction, once per entry to an optimized function, and it cost more
+    /// than the inlining saved.
+    fn get_optimized_function(&self, _func: FuncIdentity) -> Option<Rc<IrCodeUnit>> {
         None
     }
 }

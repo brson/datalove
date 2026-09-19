@@ -57,7 +57,7 @@ mod tests;
 
 pub use error::InterpError;
 pub use value::{Value, Destination};
-pub use layout::IrLayout;
+pub use layout::{IrLayout, LayoutCache};
 pub use tydesc::IrTyDescTable;
 pub use frame::{Frame, FrameStore};
 pub use env::{FunctionRegistry, ModuleFunctionRegistry, UnitFunctionRegistry, ScriptEnvironment, ExecutionContext};
@@ -74,6 +74,7 @@ type BorrowScratch = Vec<Box<u64>>;
 pub use datalove_rt::c::DebugOutputMode;
 
 use std::cell::RefCell;
+use std::rc::Rc;
 
 use datalove_rtdt as rtdt;
 use datalove_datafun_ir::{
@@ -128,6 +129,8 @@ unsafe fn map_tydesc_info(map_val: &Value) -> (*const rtdt::TyDesc, *const rtdt:
 pub struct IrInterpreter {
     runtime: datalove_rt::rust::Runtime,
     tydesc_table: IrTyDescTable,
+    /// Frame layouts, kept so that calling a function does not recompute one.
+    layout_cache: LayoutCache,
     /// Optional call dispatcher for JIT integration.
     /// Uses RefCell to allow passing &mut self to dispatch_call.
     call_dispatcher: RefCell<Option<Box<dyn CallDispatcher>>>,
@@ -192,6 +195,7 @@ impl IrInterpreter {
         Self {
             runtime: datalove_rt::rust::Runtime::new_with_debug_mode(debug_mode),
             tydesc_table: IrTyDescTable::new(),
+            layout_cache: LayoutCache::new(),
             call_dispatcher: RefCell::new(call_dispatcher),
             temp_view_tensors: Vec::new(),
             native_table: NativeFunctionTable::new(),
@@ -382,12 +386,18 @@ impl IrInterpreter {
         let func_ctx = func.function_context()
             .expect("call_in_context requires a function code unit");
 
-        // Compute layout.
-        let layout = IrLayout::compute(
-            &func.value_types,
-            &func.slot_types,
-            &mut self.tydesc_table,
-        );
+        // The layout is the same at every call to the same body, so it is
+        // remembered rather than recomputed. A caller with no reference to name
+        // the callee by -- the jit's trampoline, and compile-time evaluation --
+        // has nothing to key on and pays for one.
+        let layout = match &code_ref {
+            Some(code_ref) => {
+                let key = dispatch::FuncIdentity::of(code_ref, ctx.unit());
+                self.layout_cache.get_or_compute(key, func, &mut self.tydesc_table)
+            }
+            None => Rc::new(IrLayout::compute(
+                &func.value_types, &func.slot_types, &mut self.tydesc_table)),
+        };
 
         // Create frame with param storage (no live value tracking for functions).
         let mut frame = Frame::new(func, layout);
@@ -455,11 +465,11 @@ impl IrInterpreter {
             .expect("execute_script_unit_in_env requires a script code unit");
 
         // Compute layout.
-        let layout = IrLayout::compute(
+        let layout = Rc::new(IrLayout::compute(
             &unit.value_types,
             &unit.slot_types,
             &mut self.tydesc_table,
-        );
+        ));
 
         // Create frame with live value tracking for script cleanup.
         let mut frame = Frame::new(unit, layout);
@@ -2309,10 +2319,11 @@ impl IrInterpreter {
 
     /// Get an optimized version of a code unit from the dispatcher if available.
     ///
-    /// Returns a cloned code unit to avoid lifetime issues with the dispatcher borrow.
-    fn get_optimized_function(&self, func: dispatch::FuncIdentity) -> Option<IrCodeUnit> {
+    /// Shared rather than borrowed: the dispatcher is behind a `RefCell` and the
+    /// borrow cannot be held across the call this body is about to make.
+    fn get_optimized_function(&self, func: dispatch::FuncIdentity) -> Option<Rc<IrCodeUnit>> {
         let dispatcher = self.call_dispatcher.borrow();
-        dispatcher.as_ref().and_then(|d| d.get_optimized_function(func).cloned())
+        dispatcher.as_ref().and_then(|d| d.get_optimized_function(func))
     }
 
     /// Mark Out param destinations as initialized after a call returns.
@@ -2347,7 +2358,7 @@ impl IrInterpreter {
     ) -> Result<(), InterpError> {
         let optimized = self.get_optimized_function(
             dispatch::FuncIdentity::of(code_ref, ctx.unit()));
-        let func_to_use = optimized.as_ref().unwrap_or(callee);
+        let func_to_use = optimized.as_deref().unwrap_or(callee);
         if let CodeRef::External { unit, .. } = code_ref {
             let unit_funcs = registry.unit_functions(*unit)
                 .unwrap_or_else(|| panic!("external unit {} not found", unit));
@@ -2375,7 +2386,7 @@ impl IrInterpreter {
         // Check if there's an optimized (inlined) version of this function.
         let optimized = self.get_optimized_function(
             dispatch::FuncIdentity::of(code_ref, ctx.unit()));
-        let func_to_use = optimized.as_ref().unwrap_or(callee);
+        let func_to_use = optimized.as_deref().unwrap_or(callee);
 
         if let CodeRef::External { unit, .. } = code_ref {
             let unit_funcs = registry.unit_functions(*unit)

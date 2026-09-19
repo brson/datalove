@@ -3,7 +3,7 @@
 //! Converts `IrType` to runtime `TyDesc` pointers. TyDescs provide size, alignment,
 //! and type-specific info (field offsets, element types) for runtime operations.
 
-use std::collections::HashMap;
+use rustc_hash::FxHashMap;
 
 use datalove_rtdt as rtdt;
 use datalove_rtdt::{TyDesc, TyDescRef};
@@ -12,7 +12,12 @@ use datalove_datafun_ir::IrType;
 /// Table for converting `IrType` to runtime `TyDesc` pointers.
 pub struct IrTyDescTable {
     /// Cache mapping IrType to existing TyDesc pointer.
-    cache: HashMap<IrType, *const TyDesc>,
+    ///
+    /// `FxHashMap` rather than the default: an `IrType` is a tree, the default
+    /// hasher walks all of it with SipHash, and this lookup is reached once per
+    /// value in a frame layout and once per argument at a jit call boundary. It
+    /// was the largest single entry in both profiles.
+    cache: FxHashMap<IrType, *const TyDesc>,
     /// Storage for TyDesc allocations.
     tydescs: Vec<Box<TyDesc>>,
     /// Storage for tuple field arrays.
@@ -30,7 +35,7 @@ pub struct IrTyDescTable {
 impl IrTyDescTable {
     pub fn new() -> Self {
         Self {
-            cache: HashMap::new(),
+            cache: FxHashMap::default(),
             tydescs: Vec::new(),
             tuple_fields: Vec::new(),
             struct_fields: Vec::new(),

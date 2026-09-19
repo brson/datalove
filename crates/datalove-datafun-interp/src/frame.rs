@@ -3,6 +3,8 @@
 //! A `Frame` holds all values and slots for a single function/unit execution.
 //! `FrameStore` accumulates frames from script units for cross-unit value access.
 
+use std::rc::Rc;
+
 use datalove_rt::rust::AlignedBuffer;
 use datalove_rtdt::TyDesc;
 use datalove_datafun_ir::{CodeUnitContext, IrCodeUnit, ValueId, SlotId, ParamId};
@@ -14,7 +16,7 @@ pub struct Frame {
     /// Raw frame data with proper alignment (values and slots).
     data: AlignedBuffer,
     /// Layout information.
-    layout: IrLayout,
+    layout: Rc<IrLayout>,
     /// Track which values are initialized (for DropTracked).
     ///
     /// Only used for script frames. Function frames don't need this tracking
@@ -69,7 +71,7 @@ impl Frame {
     /// Dispatches on the unit's context:
     /// - Function frames don't track value initialization (precise Drop instructions)
     /// - Script frames track value initialization for DropTracked cleanup
-    pub fn new(unit: &IrCodeUnit, layout: IrLayout) -> Self {
+    pub fn new(unit: &IrCodeUnit, layout: Rc<IrLayout>) -> Self {
         let slot_count = layout.slot_offsets.len();
         let data = AlignedBuffer::with_align(
             layout.frame_size as usize,

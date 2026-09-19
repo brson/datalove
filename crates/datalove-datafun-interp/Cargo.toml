@@ -10,6 +10,7 @@ index-64 = ["datalove-rtdt/index-64", "datalove-datafun-ir/index-64"]
 
 [dependencies]
 rmx.workspace = true
+rustc-hash.workspace = true
 datalove-datafun-inline.path = "../datalove-datafun-inline"
 datalove-datafun-intrinsics.path = "../datalove-datafun-intrinsics"
 datalove-datafun-ir.path = "../datalove-datafun-ir"

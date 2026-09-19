@@ -28,6 +28,8 @@ pub use metrics::{MetricsCollector, FunctionMetrics, AggregateMetrics, Execution
 
 use std::any::Any;
 use std::collections::HashMap;
+
+use rustc_hash::FxHashMap;
 use std::time::{Duration, Instant};
 
 use datalove_datafun_ir::{CodeUnitId, CodeRef, IrCodeUnit, IrModuleId, IrType};
@@ -154,7 +156,10 @@ pub struct JitStats {
 /// Single-threaded design - no synchronization overhead.
 pub struct JitEngine {
     /// Function states (interpreted with call count, or compiled).
-    pub(crate) states: HashMap<FunctionKey, FunctionState>,
+    ///
+    /// `FxHashMap` because this is probed on every call that reaches the
+    /// dispatcher and again on every call out of compiled code.
+    pub(crate) states: FxHashMap<FunctionKey, FunctionState>,
     /// Cranelift JIT compiler.
     compiler: JitCompiler,
     /// Call count threshold for triggering compilation.
@@ -167,7 +172,7 @@ impl JitEngine {
     /// Create a new JIT engine with the specified compilation threshold.
     pub fn new(threshold: u32) -> Result<Self, JitError> {
         Ok(Self {
-            states: HashMap::new(),
+            states: FxHashMap::default(),
             compiler: JitCompiler::new()?,
             threshold,
             stats: JitStats::default(),
