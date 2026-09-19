@@ -9,12 +9,13 @@ The short version, in case nothing else is read:
 - **The jit is worth turning on.** It is 85x on a tight arithmetic loop and 2-3.5x on
   call-heavy code. It costs a fixed 14ms of process startup and a synchronous compile
   pause per function.
-- **The inliner was a regression, by up to 2.8x, and the cause was not the inlining** --
-  it was that every entry to a function with an inlined body deep-cloned the body, and
-  that every call recomputed a frame layout that never changes. Both are fixed
-  ([Stage 1](#user-content-stage-1----stop-recomputing-and-stop-copying----done)): the
-  interpreter is 1.2-1.25x faster on call-heavy code on its own, and inlining is now a win
-  in three of the four workloads that have calls to inline rather than a loss in three.
+- **The inliner was a regression, by up to 2.8x, and the cause was not the inlining.**
+  Every entry to a function with an inlined body deep-cloned the body; every call
+  recomputed a frame layout that never changes; and every call allocated a frame out of
+  five to seven separate pieces. Fixing those three made the interpreter **1.5-1.8x
+  faster on call-heavy code on its own**, and the jit up to 1.86x with none of its own code
+  touched. Inlining went from 0.35x to roughly break-even -- which is the point: making
+  calls cheap is what makes inlining worth less.
 - **The jit never compiles an inlined body.** The combination the whole
   `OptimizingDispatcher` exists for is not wired up; only the metric label is.
 - **The C AOT backend compiles its output at `-O0`.** Changing that one flag to `-O2`
@@ -27,6 +28,7 @@ The short version, in case nothing else is read:
 - [How these were measured](#user-content-how-these-were-measured)
 - [The numbers](#user-content-the-numbers)
 - [What Stage 1 did](#user-content-what-stage-1-did)
+- [What Stage 2 did](#user-content-what-stage-2-did)
 - [State of the jit](#user-content-state-of-the-jit)
 - [State of the inliner](#user-content-state-of-the-inliner)
 - [What current practice does](#user-content-what-current-practice-does)
@@ -257,12 +259,96 @@ For comparison, before Stage 1 the same three columns had SipHash at 4.1%, 13.8%
 the clone at 6.4% of `inline`, and `IrLayout::compute` at 3.0% of `interp`.
 
 The interpreter's own loop now dominates the interpreter, which is what a profile should
-look like. What remains above it is the allocator, and that is Stage 1's unfinished
-sibling: `Frame::new` still allocates five to seven `Vec`s per call.
+look like. What remains above it is the allocator, which is
+[Stage 2](#user-content-what-stage-2-did).
 
 In the jit configuration the two remaining items are the trampoline itself and the
 per-argument `get_or_create` it does -- the lookup is cheap now but still happening, for a
 type the stub knew when it was compiled. That is Stage 3.
+
+### What Stage 2 did
+
+Landed: a frame pool, and the parameter descriptors moved into the cached layout.
+
+`Frame::new` allocated five to seven vectors plus a zeroed data block per call. Function
+frames are strictly nested -- a call returns before its caller goes on -- so a `FramePool`
+holds one frame per level of call depth and a frame handed back is free for the next call
+at that depth. `reset` reuses the data block when it is large enough and aligned well
+enough and the capacity of every side table either way. And `IrLayout` now carries
+`param_tydescs`, which removes the last `get_or_create` on the interpreter's call path: it
+was called once per owned parameter per call for a type the signature fixes.
+
+| Workload / config | after Stage 1 | after Stage 2 | |
+|---|---|---|---|
+| `call_chain` `interp` | 58.3ms | 40.9ms | **1.43x** |
+| `call_chain` `inline` | 51.8ms | 41.8ms | **1.24x** |
+| `recursive` `interp` | ~80ms | 65.5ms | **1.22x** |
+| `recursive` `inline` | ~76ms | 63.5ms | **1.20x** |
+| `small_callee` `interp` | 25.1ms | 20.3ms | **1.24x** |
+| `small_callee` `inline` | 29.4ms | 23.7ms | **1.24x** |
+| `small_callee` `jit` | 5.19ms | 5.13ms | 1.01x |
+| `stdlib_list` `interp` | 26.4ms | 23.1ms | **1.14x** |
+| `call_chain` `jit` | 15.4ms | 14.8ms | 1.04x |
+| `loop_arith` (all) | -- | -- | unchanged |
+
+**Cumulative, against the figures this report was written from:**
+
+| Workload / config | before | now | |
+|---|---|---|---|
+| `call_chain` `interp` | 72.3ms | 40.9ms | **1.77x** |
+| `call_chain` `inline` | 106.3ms | 41.8ms | **2.54x** |
+| `call_chain` `jit` | 27.5ms | 14.8ms | **1.86x** |
+| `recursive` `interp` | 108.4ms | 65.5ms | **1.66x** |
+| `recursive` `inline` | 299.6ms | 63.5ms | **4.72x** |
+| `recursive` `jit` | 48.8ms | 43.4ms | **1.13x** |
+| `small_callee` `interp` | 29.9ms | 20.3ms | **1.47x** |
+| `small_callee` `inline` | 39.4ms | 23.7ms | **1.66x** |
+| `small_callee` `jit` | 8.52ms | 5.13ms | **1.66x** |
+| `stdlib_list` `interp` | 27.8ms | 23.1ms | **1.20x** |
+| `stdlib_list` `jit` | 16.0ms | 14.1ms | **1.14x** |
+
+**And it changed the answer about the inliner again, in the other direction.** Making a
+call cheap is making inlining worth less, which is exactly what should happen:
+
+| Workload | `inline` vs `interp`: before | after Stage 1 | after Stage 2 |
+|---|---|---|---|
+| `recursive` | 0.35x | 1.18x | 1.03x |
+| `call_chain` | 0.70x | 1.12x | 0.98x |
+| `stdlib_list` | 1.50x | 1.47x | 1.33x |
+| `small_callee` | 0.77x | 0.85x | 0.86x |
+
+So the IR-level inliner is now roughly break-even under the interpreter on three of these
+and a 1.33x win on the stdlib-shaped one, where what it removes is a cross-module call
+rather than a local one. That is the conclusion to carry forward: **optimizing the call
+path undercuts the case for inlining in the interpreter**, and the inliner's justification
+is what it can feed the jit, not what it is worth alone. There is no reason to turn it on
+for the interpreter by itself.
+
+**The profile after Stage 2**, `call_chain` `interp`:
+
+| | |
+|---|---|
+| `execute_instruction` | 14.3% |
+| `execute_blocks` | 7.6% |
+| `call_in_context_with_shapes` | 7.5% |
+| `prepare_call_args` | 5.6% |
+| `FramePool::take` | 5.0% |
+| `read_operand` | 4.3% |
+| `execute_call` | 2.9% |
+| `LayoutCache::get_or_compute` | 2.1% |
+| `malloc` / `cfree` / `calloc` | **gone** |
+| `Frame::new` | **gone** |
+
+The allocator is gone from the profile entirely, from 10.9% before. `FramePool::take` at
+5.0% is what replaced it: a `memset` of the frame prefix and four `Vec` refills, which is
+the cost of preserving the semantics a freshly zeroed frame had.
+
+What is left is the interpreter interpreting. Roughly 23% is still call machinery
+(`call_in_context_with_shapes`, `prepare_call_args`, `FramePool::take`, `execute_call`,
+`LayoutCache::get_or_compute`) and the rest is the instruction loop and operand reads.
+Getting further into that means a contiguous frame stack rather than a pool of separate
+frames, or specializing the instruction dispatch -- both of which are larger changes than
+anything done so far.
 
 ## State of the jit
 
@@ -582,7 +668,22 @@ merge `FunctionKey` into `FuncIdentity`.
 
 **Measured.** See [What Stage 1 did](#user-content-what-stage-1-did).
 
-### Stage 2 -- give the inliner a cost model
+### Stage 2 -- stop allocating a frame per call -- **done**
+
+1. **A frame pool.** Function frames are strictly nested, so `FramePool` holds one per
+   level of call depth and `reset` reuses the data block and every side table's capacity.
+2. **Parameter descriptors in the cached layout.** The last `get_or_create` on the
+   interpreter's call path, once per owned parameter per call, for a type the signature
+   fixes.
+
+**Measured.** See [What Stage 2 did](#user-content-what-stage-2-did). The allocator left
+the profile entirely.
+
+### Stage 2b -- give the inliner a cost model
+
+Renumbered, and now lower priority than it looked: with the call path this much cheaper
+the inliner is break-even under the interpreter, so this is about making it safe to feed
+the jit rather than about winning anything on its own.
 
 1. Refuse self-recursion, as `resolve_directives` already does.
 2. A size budget: a callee body size limit, a caller growth cap, and a global growth cap.
@@ -661,16 +762,26 @@ largest speedup in this report.
 
 ### What to do next
 
-Stage 1 is done. The profile it left says the next item is the one Stage 1 did not
-include: **stop allocating a frame per call.** `Frame::new` plus `prepare_call_args` and
-their allocator traffic is now the largest thing in the interpreter profile after the
-instruction loop itself, at roughly 17% between them. It is the only remaining item that
-helps every configuration, and unlike the rest of the plan it has real design content --
-who owns frame memory, and how it is reused across a call that can unwind.
+Stages 1 and 2 are done. The cheap, no-design-decision work in the interpreter is now
+spent: the allocator, SipHash, the clone, and the recomputed layout are all gone from the
+profiles, and what is left there is the interpreter interpreting.
 
-After that, Stage 3, for the same reasons it was first before: largest single remaining
-item, no policy decisions, helps the interpreter and the jit at once, nothing depends on
-it.
+**Stage 3 next.** It is the largest single remaining item, it needs no policy decisions,
+and it is now entirely a jit-side change: `__jit_dispatch_call` at 12.6% and
+`IrTyDescTable::get_or_create` at 7.8% are the top two entries in the jit profile, and the
+stub knew every one of those types when it was compiled.
+
+After that the decision is between **Stage 4** (back-edge counting and OSR, which decides
+whether `loop_arith`'s 86x is available to real code or an artifact of where the loop
+happened to sit), **Stage 5** (`Context::inline`, which is where the inliner and the jit
+actually combine and which would delete trampoline calls rather than making them cheaper),
+and **Stage 7** (`-O2` for the C backend, still the single largest measured speedup in this
+report).
+
+Going further in the *interpreter* now means a contiguous frame stack instead of a pool of
+separate frames, or specializing instruction dispatch. Both are larger than everything
+above, and current practice says specialization is where the remaining interpreter wins
+are.
 
 If the question is instead "should the jit be on by default", the answer is that Stage 6
 decides it and nothing else does. The jit's speed is not in doubt; its 13.6ms of startup

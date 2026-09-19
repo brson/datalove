@@ -44,6 +44,32 @@ impl AlignedBuffer {
         Self { ptr, layout }
     }
 
+    /// Whether this buffer can be used for a request of `size` at `align`.
+    ///
+    /// A zero-size buffer was never allocated -- its pointer is an address with
+    /// no provenance -- so it can only serve another zero-size request.
+    pub fn fits(&self, size: usize, align: usize) -> bool {
+        if self.layout.size() == 0 {
+            return size == 0;
+        }
+        self.layout.size() >= size && self.layout.align() >= align
+    }
+
+    /// Zero the first `len` bytes, which is how a fresh buffer arrives.
+    ///
+    /// Only a prefix, because a reused buffer can be much larger than the frame
+    /// now living in it and the bytes past the end are never read.
+    ///
+    /// Panics if `len` is past the end.
+    pub fn zero_prefix(&mut self, len: usize) {
+        assert!(len <= self.layout.size(), "zeroing past the end of the buffer");
+        if len == 0 {
+            return;
+        }
+        // SAFETY: `len` is within the allocation, checked above, and we own it.
+        unsafe { std::ptr::write_bytes(self.ptr.as_ptr(), 0, len) };
+    }
+
     /// Get a const pointer to the buffer.
     pub fn as_ptr(&self) -> *const u8 {
         self.ptr.as_ptr()

@@ -149,8 +149,9 @@ fn test_layout_computation() {
 
     let value_types = vec![IrType::I64, IrType::Bool, IrType::I64];
     let slot_types = vec![IrType::I64];
+    let param_types = vec![IrType::Bool, IrType::I64];
 
-    let layout = IrLayout::compute(&value_types, &slot_types, &mut table);
+    let layout = IrLayout::compute(&value_types, &slot_types, &param_types, &mut table);
 
     // i64 at 0, bool at 8, i64 at 16, slot i64 at 24.
     assert_eq!(layout.value_offsets[0], 0);
@@ -158,6 +159,12 @@ fn test_layout_computation() {
     assert_eq!(layout.value_offsets[2], 16);
     assert_eq!(layout.slot_offsets[0], 24);
     assert_eq!(layout.frame_size, 32);
+
+    // A parameter lives in the caller's frame, so it takes no space here and
+    // only its descriptor is wanted.
+    assert_eq!(layout.param_tydescs.len(), 2);
+    assert_eq!(layout.param_tydescs[0], table.get_or_create(&IrType::Bool));
+    assert_eq!(layout.param_tydescs[1], table.get_or_create(&IrType::I64));
 }
 
 /// Helper to create a simple two-parameter function for testing.

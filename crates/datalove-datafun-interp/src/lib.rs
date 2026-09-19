@@ -59,7 +59,7 @@ pub use error::InterpError;
 pub use value::{Value, Destination};
 pub use layout::{IrLayout, LayoutCache};
 pub use tydesc::IrTyDescTable;
-pub use frame::{Frame, FrameStore};
+pub use frame::{Frame, FramePool, FrameStore};
 pub use env::{FunctionRegistry, ModuleFunctionRegistry, UnitFunctionRegistry, ScriptEnvironment, ExecutionContext};
 pub use dispatch::{CallDispatcher, CallSiteInfo, DispatchCallContext, DispatchResult, FuncIdentity};
 pub use dynamic::{DynamicInliner, DynamicInlinerConfig, InlinerStats};
@@ -131,6 +131,8 @@ pub struct IrInterpreter {
     tydesc_table: IrTyDescTable,
     /// Frame layouts, kept so that calling a function does not recompute one.
     layout_cache: LayoutCache,
+    /// Frames to reuse, so that calling a function does not allocate one.
+    frame_pool: FramePool,
     /// Optional call dispatcher for JIT integration.
     /// Uses RefCell to allow passing &mut self to dispatch_call.
     call_dispatcher: RefCell<Option<Box<dyn CallDispatcher>>>,
@@ -196,6 +198,7 @@ impl IrInterpreter {
             runtime: datalove_rt::rust::Runtime::new_with_debug_mode(debug_mode),
             tydesc_table: IrTyDescTable::new(),
             layout_cache: LayoutCache::new(),
+            frame_pool: FramePool::new(),
             call_dispatcher: RefCell::new(call_dispatcher),
             temp_view_tensors: Vec::new(),
             native_table: NativeFunctionTable::new(),
@@ -396,11 +399,14 @@ impl IrInterpreter {
                 self.layout_cache.get_or_compute(key, func, &mut self.tydesc_table)
             }
             None => Rc::new(IrLayout::compute(
-                &func.value_types, &func.slot_types, &mut self.tydesc_table)),
+                &func.value_types, &func.slot_types, &func_ctx.param_types,
+                &mut self.tydesc_table)),
         };
 
-        // Create frame with param storage (no live value tracking for functions).
-        let mut frame = Frame::new(func, layout);
+        // Take a frame from the pool rather than allocating one. A function
+        // frame is five to seven allocations and a call is not the place for
+        // them.
+        let mut frame = self.frame_pool.take(func, layout);
         frame.set_shape_descriptors(shape_descriptors);
 
         // Set up parameters as pointers to caller's data.
@@ -423,10 +429,7 @@ impl IrInterpreter {
                 // for, so the callee's own type is the one that describes it.
                 let tydesc = match mode {
                     ParamMode::Ref | ParamMode::Mut => src.tydesc,
-                    ParamMode::In | ParamMode::Out => {
-                        let param_type = &func_ctx.param_types[i];
-                        self.tydesc_table.get_or_create(param_type)
-                    }
+                    ParamMode::In | ParamMode::Out => frame.param_tydesc(i),
                 };
 
                 // Initialized: true for In/Ref/Mut (data exists), false for Out (callee writes first).
@@ -439,6 +442,7 @@ impl IrInterpreter {
         // Execute blocks, writing return value directly to ret_dest.
         // Functions use ret_dest for Return, not expr_dest.
         let result = self.execute_blocks(&func.blocks, &UnitTypes::of(func), &mut frame, ret_dest, None, ctx, registry, frames, code_ref.as_ref());
+        self.frame_pool.give_back(frame);
 
         // Convert UnitCompletion to () - functions always complete normally.
         result.map(|_| ())
@@ -468,6 +472,8 @@ impl IrInterpreter {
         let layout = Rc::new(IrLayout::compute(
             &unit.value_types,
             &unit.slot_types,
+            // A script unit takes no parameters.
+            &[],
             &mut self.tydesc_table,
         ));
 

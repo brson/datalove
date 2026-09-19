@@ -11,6 +11,45 @@ use datalove_datafun_ir::{CodeUnitContext, IrCodeUnit, ValueId, SlotId, ParamId}
 use crate::layout::IrLayout;
 use crate::value::{Value, Destination};
 
+/// Overwrite `v` with `len` copies of `value`, keeping the allocation it has.
+fn refill<T: Clone>(v: &mut Vec<T>, len: usize, value: T) {
+    v.clear();
+    v.resize(len, value);
+}
+
+/// A supply of frames to reuse, so that a call is not an allocation.
+///
+/// Function frames are strictly nested -- a call returns before its caller goes
+/// on -- so one frame per level of call depth is all this ever holds, and a
+/// frame handed back is free for the next call at that depth.
+#[derive(Default)]
+pub struct FramePool {
+    free: Vec<Frame>,
+}
+
+impl FramePool {
+    /// Create an empty pool.
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// A frame for `unit`, reusing one if the pool has any.
+    pub fn take(&mut self, unit: &IrCodeUnit, layout: Rc<IrLayout>) -> Frame {
+        match self.free.pop() {
+            Some(mut frame) => {
+                frame.reset(unit, layout);
+                frame
+            }
+            None => Frame::new(unit, layout),
+        }
+    }
+
+    /// Hand a frame back for the next call to use.
+    pub fn give_back(&mut self, frame: Frame) {
+        self.free.push(frame);
+    }
+}
+
 /// Execution frame for a function or script unit.
 pub struct Frame {
     /// Raw frame data with proper alignment (values and slots).
@@ -66,6 +105,11 @@ impl Frame {
         &self.own_shapes
     }
 
+    /// The descriptor this function's own signature gives for parameter `i`.
+    pub fn param_tydesc(&self, i: usize) -> *const TyDesc {
+        self.layout.param_tydescs[i]
+    }
+
     /// Create a new frame for code unit execution.
     ///
     /// Dispatches on the unit's context:
@@ -118,6 +162,50 @@ impl Frame {
                 panic!("native functions are dispatched directly, not via Frame: {}", ctx.symbol)
             }
         }
+    }
+
+    /// Point a frame that has been returned to the pool at a new body.
+    ///
+    /// Every buffer it holds is reused: the data block if it is large enough and
+    /// aligned well enough, and the capacity of each side table either way. A
+    /// function frame is five to seven separate allocations, and allocating them
+    /// per call was the largest thing in the interpreter's profile after the
+    /// instruction loop.
+    ///
+    /// Only function frames are pooled. A script unit's frame outlives its unit,
+    /// because a later unit reads the bindings it holds, so it goes to the
+    /// `FrameStore` rather than coming back here.
+    fn reset(&mut self, unit: &IrCodeUnit, layout: Rc<IrLayout>) {
+        let ctx = match &unit.context {
+            CodeUnitContext::Function(ctx) => ctx,
+            CodeUnitContext::Script(_) => panic!("script frames are not pooled"),
+            CodeUnitContext::Native(ctx) => {
+                panic!("native functions are dispatched directly, not via Frame: {}", ctx.symbol)
+            }
+        };
+
+        let size = layout.frame_size as usize;
+        let align = layout.frame_align as usize;
+        if self.data.fits(size, align) {
+            // The data a frame is entered with is zero, which is what
+            // `alloc_zeroed` gave a fresh one.
+            self.data.zero_prefix(size);
+        } else {
+            self.data = AlignedBuffer::with_align(size, align);
+        }
+
+        let param_count = ctx.params.len();
+        refill(&mut self.slot_initialized, layout.slot_offsets.len(), false);
+        refill(&mut self.param_ptrs, param_count, std::ptr::null_mut());
+        refill(&mut self.param_tydescs, param_count, std::ptr::null());
+        refill(&mut self.param_initialized, param_count, false);
+        refill(&mut self.value_tydescs, layout.value_offsets.len(), std::ptr::null());
+
+        self.shape_descriptors.clear();
+        self.own_shapes.clear();
+        self.own_shapes.extend_from_slice(&ctx.descriptor_shapes);
+        self.value_initialized = None;
+        self.layout = layout;
     }
 
     /// Mark a value as initialized.

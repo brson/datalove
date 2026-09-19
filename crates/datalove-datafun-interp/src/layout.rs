@@ -21,7 +21,9 @@ pub fn align_up(value: u32, align: u32) -> u32 {
 
 /// Layout information for a function/unit frame.
 ///
-/// Maps ValueId/SlotId to byte offsets within the frame.
+/// Maps ValueId/SlotId to byte offsets within the frame. Everything a frame can
+/// be told from its code unit alone lives here, so that entering the function
+/// reads it rather than working it out again.
 pub struct IrLayout {
     /// Offset for each ValueId.
     pub value_offsets: Vec<u32>,
@@ -31,6 +33,12 @@ pub struct IrLayout {
     pub slot_offsets: Vec<u32>,
     /// TyDesc for each SlotId.
     pub slot_tydescs: Vec<*const TyDesc>,
+    /// TyDesc for each parameter, as the callee's own signature describes it.
+    ///
+    /// What an owned parameter holds, since the caller converted it into the
+    /// shape the callee was compiled for before handing it over. A borrowed one
+    /// keeps the descriptor it arrived with instead and this is not read for it.
+    pub param_tydescs: Vec<*const TyDesc>,
     /// Total frame size.
     pub frame_size: u32,
     /// Frame alignment.
@@ -42,6 +50,7 @@ impl IrLayout {
     pub fn compute(
         value_types: &[IrType],
         slot_types: &[IrType],
+        param_types: &[IrType],
         tydesc_table: &mut IrTyDescTable,
     ) -> Self {
         let mut value_offsets = Vec::with_capacity(value_types.len());
@@ -78,6 +87,12 @@ impl IrLayout {
             max_align = max_align.max(align);
         }
 
+        // Parameters live in the caller's frame, so they take no space here and
+        // only their descriptors are wanted.
+        let param_tydescs = param_types.iter()
+            .map(|ty| tydesc_table.get_or_create(ty))
+            .collect();
+
         // Final alignment for frame size.
         let frame_size = align_up(offset, max_align);
 
@@ -86,6 +101,7 @@ impl IrLayout {
             value_tydescs,
             slot_offsets,
             slot_tydescs,
+            param_tydescs,
             frame_size,
             frame_align: max_align,
         }
@@ -141,8 +157,12 @@ impl LayoutCache {
             }
         }
 
+        let param_types = match unit.function_context() {
+            Some(ctx) => &ctx.param_types[..],
+            None => &[],
+        };
         let layout = Rc::new(IrLayout::compute(
-            &unit.value_types, &unit.slot_types, tydesc_table));
+            &unit.value_types, &unit.slot_types, param_types, tydesc_table));
         self.entries.insert(key, CachedLayout {
             value_count,
             slot_count,
