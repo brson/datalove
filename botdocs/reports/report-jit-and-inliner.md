@@ -505,15 +505,76 @@ freed. The arena is a fixed 64MB and the failure mode when it fills is a compile
 mentioning `JIT_ARENA_SIZE`. For a batch script this does not matter. For a REPL, or
 anything long-running, it is a leak with a hard ceiling.
 
-### A generic that builds a collection cannot be compiled at all
+### What cannot be jitted, counted
 
-`bridge::dispatchable` refuses any callee whose `descriptor_shapes` is non-empty, and the
-interpreter keeps such a call to itself rather than offering it round. That is correct
-today -- a `CallDispatcher` is handed the argument values and nothing else, so it has no
-way to pass the shape descriptors -- but it means the jit cannot compile
-`sys/std/list.reversed` or anything shaped like it. `stdlib_list` gets 1.8x rather than
-more for this reason. See
+Instrumented over the whole corpus -- 409 interp worldfiles, 143 `std_all_tests` fixtures,
+21 four-backend fixtures -- there are exactly three reasons a function is not compiled, and
+they are nothing like equal in weight.
+
+| Reason | Calls refused | Distinct functions |
+|---|---|---|
+| The callee declares shapes | **522** | **59** |
+| The callee is reached by `CodeRef::External` | 2-3 | 1 |
+| The other twenty-three `Unsupported` sites in the codegen | **0** | 0 |
+
+**A generic that builds a collection.** This is the whole of it. `bridge::dispatchable`
+refuses any callee whose `descriptor_shapes` is non-empty, and the interpreter keeps such a
+call before the dispatcher is even asked (`!supplied.is_empty()`), so it never appears as an
+error -- the instrumented run never reached `dispatchable` at all, which is belt-and-braces
+for a gate that already fired. The 59 are essentially `sys/std`'s generic builders: `zero`,
+`one`, `singleton`, `to_list`, `reversed`, `sorted`, `keys`, `extend`, `sum`, `product`,
+`min_value`, `max_value`, `pair`, `set_of`, `flattened`. It is why `stdlib_list` gets 1.8x
+rather than more.
+
+The reason given for the gate -- that a `CallDispatcher` is handed the argument values and
+nothing else -- is the only part still true, and it is now the *only* missing piece.
+`bridge::call_jit` takes `shape_descriptors` already, `__jit_dispatch_call` reads them off
+the back of the descriptor array already, and `build_signature` lays them out already; all
+of that landed with the two jit boundaries. The interpreter has the resolved `supplied`
+vector in its hand at the gate. So lifting this is: carry the shapes on
+`DispatchCallContext`, offer the call to the dispatcher before keeping it, forward them to
+`call_jit`, and fall back to `execute_call_with_shapes` when the dispatcher declines. See
 [What each backend carries](../generics.md#user-content-what-each-backend-carries).
+
+**A call into an earlier script unit.** `resolve_code_ref`'s `External` arm errors
+unconditionally with "not yet implemented" -- but `compile_function_with_context` does build
+a stub for an external callee, and registers it in `local_funcs`, and
+`callee_descriptor_params` and `callee_param_modes` both already read External out of that
+same map with `Local(id) | External { id, .. }`. So the metadata path handles External and
+only the `FuncId` lookup does not. `interp/053_script_to_prior_script_call` is the fixture.
+
+Three lines would fix the symptom. They should not be the fix, because `local_funcs` is
+keyed by `CodeUnitId` alone: a body calling both `Local(0)` and `External { unit: n, id: 0 }`
+puts two stubs under one key and the later insert wins, silently. That is the hazard
+`interp/947_crossunit_local_id_reuse` exists for, one level down. The keyspace wants
+splitting first.
+
+**The twenty-three that never fire.** Worth knowing what they are, because the list reads
+alarming and mostly is not:
+
+- Guards on IR that lowering does not emit: `scalar pack with multiple fields`,
+  `scalar get_field with field_index n (max 0)` -- a `Pack` or `GetField` whose destination
+  is a scalar but which names more than one field.
+- Script-only operands: `external slot store`, `set_field on external slot`. A function body
+  cannot name another unit's slots.
+- Operation and type combinations the surface language cannot express.
+  `Int binop not yet supported` covers `Div` and `Mod`, and `int / int` is refused by the
+  typechecker outright (F026 `invalid operand type 'int' for operator '/'`) while `%` is not
+  an operator at all. What is left of float's `_` arm is the bit and logic operations, which
+  do not typecheck on a float.
+- Assertions: `local function not yet declared`, `module function not pre-compiled`. The
+  stub pass fills both maps before compiling.
+
+So most of them are assertions wearing a recoverable error's clothing, and that is itself a
+problem: a *new* codegen bug that phrases itself as `unsupported:` silently turns the jit off
+for that function and nothing reports it. The three-string `contains` match in both
+dispatchers is doing load-bearing control flow on error prose.
+
+**And one thing that is not a restriction but should be.** More than eight arguments --
+counting descriptors -- aborts instead of falling back. See
+[issues.md](../issues.md#user-content-a-function-of-more-than-eight-parameters-aborts-under---jit),
+and note that lifting the shape gate enlarges the set of programs that reach it, since a
+generic's declared shapes count towards the eight.
 
 ### The metrics cannot answer the question they exist for
 

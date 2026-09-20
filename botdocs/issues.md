@@ -14,12 +14,56 @@ home here.
 
 ## Contents
 
+- [A function of more than eight parameters aborts under `--jit`](#user-content-a-function-of-more-than-eight-parameters-aborts-under---jit)
 - [The ownership pass panics on a clone returned out of a loop](#user-content-the-ownership-pass-panics-on-a-clone-returned-out-of-a-loop)
 - [Nothing but a test inlines](#user-content-nothing-but-a-test-inlines)
 - [No table module, and none can be written](#user-content-no-table-module-and-none-can-be-written)
 - [A unit that fails part way through leaves its index to the next one](#user-content-a-unit-that-fails-part-way-through-leaves-its-index-to-the-next-one)
 - [A field of a const cannot be projected, but a const can be destructured](#user-content-a-field-of-a-const-cannot-be-projected-but-a-const-can-be-destructured)
 - [A specialized function keeps an original nobody calls](#user-content-a-specialized-function-keeps-an-original-nobody-calls)
+
+## A function of more than eight parameters aborts under `--jit`
+
+**Reproduced.** On a shipped flag, and it aborts the process rather than falling back.
+
+`bridge::MAX_DIRECT_ARGS` is 8, counting the arguments plus one descriptor per
+`descriptor_params` entry plus one per `descriptor_shapes` entry. Past that, `call_jit`
+returns `JitError::BridgeCallFailed`, whose message contains none of the three strings the
+dispatchers treat as "cannot be jitted" -- `unsupported:`, `Duplicate definition`, `not yet
+declared` -- so the call is not handed back to the interpreter.
+
+```datalove
+fun nine(a: u32, b: u32, c: u32, d: u32, e: u32, f: u32, g: u32, h: u32, i: u32): u32
+    ret a
+end fun
+
+debuglog nine(0, 1, 2, 3, 4, 5, 6, 7, 8)
+```
+
+`datalove script` prints the answer. `datalove script --jit` gives
+
+```
+Error: RuntimeError("JIT bridge call failed: too many arguments: 9 with 0 parameter
+descriptors and 0 shape descriptors (max 8)")
+```
+
+and from *compiled* code it is worse, because `__jit_dispatch_call` panics rather than
+returning an error and the panic crosses a cranelift frame:
+
+```
+JIT dispatch: JIT call failed: JIT bridge call failed: too many arguments: 9 ...
+fatal runtime error: failed to initiate panic, error 5, aborting
+```
+
+**What it would take.** `dispatch_void` transmutes to one of ten `extern "C"` function
+pointer types, one per arity, so the limit is the number of arms written out. Either extend
+them, or spill past a threshold into an argument array the callee reads, or -- as the
+minimum -- recognise the error as a reason to keep the call in the interpreter, which is
+what every other compilation failure does.
+
+**Why it matters more soon.** The count includes descriptors. A generic with six parameters
+and three declared shapes reaches the cliff at six written arguments, so anything that lets
+shape-declaring callees be jitted enlarges the set of programs that hit this.
 
 ## The ownership pass panics on a clone returned out of a loop
 
