@@ -44,7 +44,7 @@ Specifications, research, design documents, implementation plans, and reports.
 
 - [Generics and Specialization](plan-generics.md)
 - [Fat References for Borrowed Generic Values](plan-fat-refs.md)
-- [Caching the Compiled Standard Library](plan-stdlib-compile-cache.md)
+- [Reusing Compilation](plan-compile-reuse.md)
 - [Const Parameter Implementation](const-param-impl-plan.md)
 - [JIT + Inliner Integration](plan-fancy-jit.md)
 - [Unified Code Unit Migration](plan-unified-code-unit.md)
