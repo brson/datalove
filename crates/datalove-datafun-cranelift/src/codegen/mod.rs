@@ -256,6 +256,13 @@ pub struct FunctionCompiler<'a, M: Module> {
     ref_desc_values: HashMap<ValueId, cl_ir::Value>,
     /// Functions compiled beside this one, by their IR id.
     local_funcs: HashMap<datalove_datafun_ir::CodeUnitId, LocalCallee>,
+    /// Functions in a script unit that finished before this one.
+    ///
+    /// Keyed by the unit as well as the id, because a `CodeUnitId` numbers a
+    /// unit's own functions from zero: unit 1's function 0 and unit 2's function
+    /// 0 are two functions with one id, and a body calling both would otherwise
+    /// put two callees under one key and reach whichever was declared second.
+    external_funcs: HashMap<(u32, datalove_datafun_ir::CodeUnitId), LocalCallee>,
     /// Mapping from module function (IrModuleId, FuncId) to Cranelift FuncId.
     module_funcs: HashMap<(IrModuleId, datalove_datafun_ir::CodeUnitId), FuncId>,
     /// Function registry for looking up module functions.
@@ -313,6 +320,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             ref_descs: datalove_datafun_ir::resolve_ref_descriptors(func),
             ref_desc_values: HashMap::new(),
             local_funcs: HashMap::new(),
+            external_funcs: HashMap::new(),
             module_funcs: HashMap::new(),
             registry: None,
             slot_vars: HashMap::new(),
@@ -361,6 +369,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             ref_descs: datalove_datafun_ir::resolve_ref_descriptors(func),
             ref_desc_values: HashMap::new(),
             local_funcs: HashMap::new(),
+            external_funcs: HashMap::new(),
             module_funcs: HashMap::new(),
             registry: None,
             slot_vars: HashMap::new(),
@@ -411,6 +420,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             ref_descs: datalove_datafun_ir::resolve_ref_descriptors(func),
             ref_desc_values: HashMap::new(),
             local_funcs: HashMap::new(),
+            external_funcs: HashMap::new(),
             module_funcs: HashMap::new(),
             registry,
             slot_vars: HashMap::new(),
@@ -942,6 +952,15 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         self.local_funcs = local_funcs;
     }
 
+    /// Set the functions reached by a `CodeRef::External`, which a script unit
+    /// after the first has and nothing else does.
+    pub fn set_external_funcs(
+        &mut self,
+        external_funcs: HashMap<(u32, datalove_datafun_ir::CodeUnitId), LocalCallee>,
+    ) {
+        self.external_funcs = external_funcs;
+    }
+
     /// Set all module function mappings at once.
     ///
     /// Use this for three-pass compilation where all module functions are declared first.
@@ -1140,7 +1159,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             }
             Operand::ExternalValue { .. } | Operand::ExternalSlot { .. } => {
                 Err(CraneliftError::Unsupported(format!(
-                    "operand type not yet implemented: {:?}",
+                    "reading {:?}, a binding of an earlier script unit",
                     op
                 )))
             }
@@ -1169,10 +1188,12 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             Operand::Slot(sid) => {
                 Ok(self.func.slot_types[sid.0 as usize].clone())
             }
-            _ => Err(CraneliftError::Unsupported(format!(
-                "get_operand_type for {:?}",
-                op
-            ))),
+            Operand::ExternalValue { .. } | Operand::ExternalSlot { .. } => {
+                Err(CraneliftError::Unsupported(format!(
+                    "the type of {:?}, a binding of an earlier script unit",
+                    op
+                )))
+            }
         }
     }
 

@@ -320,6 +320,7 @@ impl OptimizingDispatcher {
         args: &[Value],
         ret_dest: Destination,
         rt_handle: LocalRtHandle,
+        shape_descriptors: &[*const datalove_rtdt::TyDesc],
         call_ctx: &mut DispatchCallContext<'_, '_>,
         start_time: Option<Instant>,
         is_inlined: bool,
@@ -379,8 +380,7 @@ impl OptimizingDispatcher {
                     bridge::call_jit(
                         code_ptr, uses_sret, rt_handle, args, ret_dest,
                         &func_ctx.return_type, &func_ctx.descriptor_params,
-                        // Refused above when the callee declares any.
-                        &[],
+                        shape_descriptors,
                     )
                 };
 
@@ -396,30 +396,20 @@ impl OptimizingDispatcher {
                     metrics.record_call(func_id, mode, start_time);
                 }
 
-                match result {
-                    Ok(()) => Some(DispatchResult::Handled(Ok(()))),
-                    Err(e) => Some(DispatchResult::Handled(Err(InterpError::RuntimeError(e.to_string())))),
-                }
+                Some(DispatchResult::Handled(Ok(())))
             }
             Ok(None) => {
                 // Not yet compiled, fall through to interpreter.
                 None
             }
-            Err(e) => {
-                // Check if this is a fallback-worthy error.
-                let error_str = e.to_string();
-                if error_str.contains("unsupported:")
-                    || error_str.contains("Duplicate definition")
-                    || error_str.contains("not yet declared")
-                {
-                    // Mark as not JIT-able and fall back.
-                    self.jit.states.insert(key, FunctionState::Interpreted { call_count: u32::MAX });
-                    self.jit.record_compilation_failure();
-                    None
-                } else {
-                    Some(DispatchResult::Handled(Err(InterpError::RuntimeError(error_str))))
-                }
+            Err(JitError::Unsupported(_)) => {
+                // Not a failure: the function is left to the interpreter, and
+                // asking again at every call would recompile it every time.
+                self.jit.states.insert(key, FunctionState::Interpreted { call_count: u32::MAX });
+                self.jit.record_refusal();
+                None
             }
+            Err(e) => Some(DispatchResult::Handled(Err(InterpError::RuntimeError(e.to_string())))),
         }
     }
 }
@@ -440,11 +430,8 @@ impl CallDispatcher for OptimizingDispatcher {
         rt_handle: LocalRtHandle,
         mut call_ctx: DispatchCallContext<'_, '_>,
     ) -> DispatchResult {
-        // A callee wanting a descriptor per shape it declares cannot be entered
-        // from here; see `bridge::dispatchable`.
-        if !bridge::dispatchable(func) {
-            return DispatchResult::NotHandled;
-        }
+        // Taken before the context is borrowed mutably below.
+        let shape_descriptors = call_ctx.shape_descriptors;
 
         // Start timing if metrics enabled.
         let start_time = self.metrics.as_mut().and_then(|m| m.start_call());
@@ -472,6 +459,7 @@ impl CallDispatcher for OptimizingDispatcher {
                         frames: call_ctx.frames,
                         interp: call_ctx.interp,
                         call_site_info: call_ctx.call_site_info.clone(),
+                        shape_descriptors: call_ctx.shape_descriptors,
                     },
                 );
 
@@ -504,6 +492,7 @@ impl CallDispatcher for OptimizingDispatcher {
                     args,
                     ret_dest,
                     rt_handle,
+                    shape_descriptors,
                     &mut call_ctx,
                     start_time,
                     is_inlined,

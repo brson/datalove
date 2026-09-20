@@ -14,7 +14,7 @@ use datalove_datafun_interp::{
 };
 use datalove_rt::c::LocalRtHandle;
 
-use crate::{bridge, FunctionKey, FunctionState, JitEngine};
+use crate::{bridge, FunctionKey, FunctionState, JitEngine, JitError};
 use crate::{DispatchContext, set_dispatch_context, clear_dispatch_context};
 
 /// A chaos dispatcher that randomly decides JIT vs interpret.
@@ -143,7 +143,7 @@ impl ChaosDispatcher {
                         // Clear dispatch context.
                         clear_dispatch_context();
 
-                        return result.map_err(|e| InterpError::RuntimeError(e.to_string()));
+                        return Ok(());
                     }
                     // Fall through to interpreter.
                 }
@@ -174,12 +174,6 @@ impl CallDispatcher for ChaosDispatcher {
         call_ctx: DispatchCallContext<'_, '_>,
     ) -> DispatchResult {
         use datalove_datafun_interp::ExecutionContext;
-
-        // A callee wanting a descriptor per shape it declares cannot be entered
-        // from here; see `bridge::dispatchable`.
-        if !bridge::dispatchable(func) {
-            return DispatchResult::NotHandled;
-        }
 
         let key = FunctionKey::of(code_ref, call_ctx.exec_ctx.unit());
 
@@ -235,36 +229,27 @@ impl CallDispatcher for ChaosDispatcher {
                             ret_dest,
                             func.return_type().expect("JIT dispatch requires function return type"),
                             func.function_context().map_or(&[][..], |c| &c.descriptor_params),
-                            // Refused above when the callee declares any.
-                            &[],
+                            call_ctx.shape_descriptors,
                         )
                     };
 
                     // Clear dispatch context.
                     clear_dispatch_context();
 
-                    match result {
-                        Ok(()) => DispatchResult::Handled(Ok(())),
-                        Err(e) => DispatchResult::Handled(Err(InterpError::RuntimeError(e.to_string()))),
-                    }
+                    DispatchResult::Handled(Ok(()))
                 } else {
                     DispatchResult::NotHandled
                 }
             }
             Ok(None) => DispatchResult::NotHandled,
-            Err(e) => {
-                let error_str = e.to_string();
-                if error_str.contains("unsupported:")
-                    || error_str.contains("not yet declared")
-                    || error_str.contains("Duplicate definition")
-                {
-                    // Mark as non-JITable.
-                    self.jit.states.insert(key, FunctionState::Interpreted { call_count: u32::MAX });
-                    DispatchResult::NotHandled
-                } else {
-                    DispatchResult::Handled(Err(InterpError::RuntimeError(error_str)))
-                }
+            Err(JitError::Unsupported(_)) => {
+                // Not a failure: the function is left to the interpreter, and
+                // asking again at every call would recompile it every time.
+                self.jit.states.insert(key, FunctionState::Interpreted { call_count: u32::MAX });
+                self.jit.record_refusal();
+                DispatchResult::NotHandled
             }
+            Err(e) => DispatchResult::Handled(Err(InterpError::RuntimeError(e.to_string()))),
         }
     }
 

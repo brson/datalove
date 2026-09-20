@@ -95,10 +95,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                     builder.ins().fcmp(cl_ir::condcodes::FloatCC::GreaterThanOrEqual, lhs_val, rhs_val)
                 }
                 _ => {
-                    return Err(CraneliftError::Unsupported(format!(
-                        "float binop not supported: {:?}",
-                        op
-                    )));
+                    panic!("{:?} on a float, which the typechecker refuses", op);
                 }
             }
         } else {
@@ -240,10 +237,8 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             BinOp::Sub => runtime.int_sub,
             BinOp::Mul => runtime.int_mul,
             _ => {
-                return Err(CraneliftError::Unsupported(format!(
-                    "Int binop not yet supported: {:?}",
-                    op
-                )));
+                panic!("{:?} on an `int`, which the typechecker refuses: division goes through \
+                    `BinOpChecked` and the rest are not operators on one", op);
             }
         };
 
@@ -409,10 +404,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 builder.ins().icmp(cl_ir::condcodes::IntCC::NotEqual, ordering, equal)
             }
             _ => {
-                return Err(CraneliftError::Unsupported(format!(
-                    "Int comparison: unexpected op {:?}",
-                    op
-                )));
+                panic!("{:?} as an `int` comparison, which is not one", op);
             }
         };
 
@@ -512,10 +504,8 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             IrType::Index => (false, crate::index_types::INDEX_BITS, crate::index_types::INDEX_TYPE),
             IrType::Offset => (true, crate::index_types::INDEX_BITS, crate::index_types::INDEX_TYPE),
             _ => {
-                return Err(CraneliftError::Unsupported(format!(
-                    "checked binop not supported for type: {:?}",
-                    dest_ty
-                )));
+                panic!("a checked operation on {:?}; lowering emits one only for a fixed-width \
+                    integer", dest_ty);
             }
         };
 
@@ -630,10 +620,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 (result, overflow)
             }
             _ => {
-                return Err(CraneliftError::Unsupported(format!(
-                    "checked binop only supports Add/Sub/Mul/Div, got {:?}",
-                    op
-                )));
+                panic!("{:?} as a checked operation; only Add, Sub, Mul and Div can overflow", op);
             }
         };
 
@@ -658,10 +645,8 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         rhs: &Operand,
     ) -> Result<(), CraneliftError> {
         if op != BinOp::Div {
-            return Err(CraneliftError::Unsupported(format!(
-                "checked bigint binop only supports Div, got {:?}",
-                op
-            )));
+            panic!("{:?} as a checked `int` operation; only division can fail, the rest \
+                growing to fit instead", op);
         }
 
         let runtime = self.runtime.ok_or_else(|| {
@@ -842,10 +827,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
     ) -> Result<(), CraneliftError> {
         // Only negation can overflow for signed integers.
         if op != UnaryOp::Neg {
-            return Err(CraneliftError::Unsupported(format!(
-                "checked unaryop only supports Neg, got {:?}",
-                op
-            )));
+            panic!("{:?} as a checked unary operation; only negation can overflow", op);
         }
 
         let dest_ty = &self.func.value_types[dest.0 as usize];
@@ -864,10 +846,8 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             IrType::I64 => (i64::MIN, cl_types::I64),
             IrType::Offset => (datalove_rtdt::OffsetRepr::MIN as i64, crate::index_types::INDEX_TYPE),
             _ => {
-                return Err(CraneliftError::Unsupported(format!(
-                    "checked negation only supported for signed integers, got {:?}",
-                    dest_ty
-                )));
+                panic!("checked negation of {:?}; lowering emits one only for a signed integer, \
+                    an unsigned one having nothing to overflow into", dest_ty);
             }
         };
 

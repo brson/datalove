@@ -1111,19 +1111,14 @@ impl IrInterpreter {
                         }
                     });
 
-                    // A callee taking shape descriptors goes straight to the
-                    // interpreter. The dispatcher's stubs carry arguments only,
-                    // and a dropped descriptor is a wrong element type rather
-                    // than a failure.
-                    let call_result = if !supplied.is_empty() {
-                        self.execute_call_with_shapes(
-                            callee, func, arg_vals, supplied, dest_slot, ctx, registry, frames)
-                    } else if let Some(result) = self.try_dispatch_call(
-                        func, callee, &arg_vals, dest_slot, ctx, registry, frames, call_site_info
+                    let call_result = if let Some(result) = self.try_dispatch_call(
+                        func, callee, &arg_vals, &supplied, dest_slot, ctx, registry, frames,
+                        call_site_info,
                     ) {
                         result
                     } else {
-                        self.execute_call(callee, func, arg_vals, dest_slot, ctx, registry, frames)
+                        self.execute_call_with_shapes(
+                            callee, func, arg_vals, supplied, dest_slot, ctx, registry, frames)
                     };
                     call_result?;
                 }
@@ -1159,17 +1154,13 @@ impl IrInterpreter {
                     // Try dispatcher first, fall back to interpreter.
                     // ComptimeCall doesn't have site_id, so no call_site_info.
                     //
-                    // A callee taking shape descriptors goes straight to the
-                    // interpreter, for the reason the `Call` arm gives.
-                    let call_result = if !supplied.is_empty() {
-                        self.execute_call_with_shapes(
-                            callee, func, arg_vals, supplied, dest_slot, ctx, registry, frames)
-                    } else if let Some(result) = self.try_dispatch_call(
-                        func, callee, &arg_vals, dest_slot, ctx, registry, frames, None
+                    let call_result = if let Some(result) = self.try_dispatch_call(
+                        func, callee, &arg_vals, &supplied, dest_slot, ctx, registry, frames, None,
                     ) {
                         result
                     } else {
-                        self.execute_call(callee, func, arg_vals, dest_slot, ctx, registry, frames)
+                        self.execute_call_with_shapes(
+                            callee, func, arg_vals, supplied, dest_slot, ctx, registry, frames)
                     };
                     call_result?;
                 }
@@ -2329,6 +2320,7 @@ impl IrInterpreter {
         func: &CodeRef,
         callee: &IrCodeUnit,
         arg_vals: &[Value],
+        shape_descriptors: &[*const rtdt::TyDesc],
         dest: Destination,
         ctx: &ExecutionContext,
         registry: &FunctionRegistry,
@@ -2347,6 +2339,7 @@ impl IrInterpreter {
             frames,
             interp: self,
             call_site_info,
+            shape_descriptors,
         };
 
         let result = match dispatcher.dispatch_call(func, callee, arg_vals, dest, rt_handle, call_ctx) {
@@ -2425,31 +2418,6 @@ impl IrInterpreter {
             self.call_in_context_with_shapes(
                 func_to_use, Some(code_ref.clone()), arg_vals, shape_descriptors,
                 dest, ctx, registry, frames)
-        }
-    }
-
-    fn execute_call(
-        &mut self,
-        callee: &IrCodeUnit,
-        code_ref: &CodeRef,
-        arg_vals: Vec<Value>,
-        dest: Destination,
-        ctx: &ExecutionContext,
-        registry: &FunctionRegistry,
-        frames: &mut FrameStore,
-    ) -> Result<(), InterpError> {
-        // Check if there's an optimized (inlined) version of this function.
-        let optimized = self.get_optimized_function(
-            dispatch::FuncIdentity::of(code_ref, ctx.unit()));
-        let func_to_use = optimized.as_deref().unwrap_or(callee);
-
-        if let CodeRef::External { unit, .. } = code_ref {
-            let unit_funcs = registry.unit_functions(*unit)
-                .unwrap_or_else(|| panic!("external unit {} not found", unit));
-            let callee_ctx = ExecutionContext::new(*unit, unit_funcs);
-            self.call_in_context(func_to_use, Some(code_ref.clone()), arg_vals, dest, &callee_ctx, registry, frames)
-        } else {
-            self.call_in_context(func_to_use, Some(code_ref.clone()), arg_vals, dest, ctx, registry, frames)
         }
     }
 

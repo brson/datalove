@@ -43,18 +43,19 @@ use compiler::JitCompiler;
 pub enum JitError {
     /// Cranelift compilation failed.
     CompilationFailed(String),
-    /// Function not found.
-    FunctionNotFound(FunctionKey),
-    /// Bridge call failed.
-    BridgeCallFailed(String),
+    /// The backend does not implement something this function uses.
+    ///
+    /// Distinct from a failure because it is not one: the function is left to
+    /// the interpreter and the program runs. Kept as a variant rather than
+    /// recognised from the message, which is what the dispatchers used to do.
+    Unsupported(String),
 }
 
 impl std::fmt::Display for JitError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             JitError::CompilationFailed(msg) => write!(f, "JIT compilation failed: {}", msg),
-            JitError::FunctionNotFound(key) => write!(f, "function not found: {:?}", key),
-            JitError::BridgeCallFailed(msg) => write!(f, "JIT bridge call failed: {}", msg),
+            JitError::Unsupported(msg) => write!(f, "JIT cannot compile this: {}", msg),
         }
     }
 }
@@ -142,8 +143,11 @@ pub struct JitStats {
     pub total_compile_time: Duration,
     /// Total generated code size in bytes.
     pub total_code_size: usize,
-    /// Number of compilation failures (function fell back to interpreter).
-    pub compilation_failures: u32,
+    /// Functions the backend declined, which are interpreted instead.
+    ///
+    /// Not failures: a refusal is `JitError::Unsupported`, and a failure is
+    /// reported to the caller rather than counted here.
+    pub refused_count: u32,
     /// Per-function compilation times (function name -> duration).
     pub per_function_compile_time: HashMap<String, Duration>,
     /// Per-function code sizes (function name -> bytes).
@@ -255,6 +259,15 @@ impl JitEngine {
         ctx: &datalove_datafun_interp::ExecutionContext<'a>,
         registry: &datalove_datafun_interp::FunctionRegistry,
     ) -> Result<Option<(*const u8, bool)>, JitError> {
+        // A function too wide to be entered is one there is no point compiling.
+        // Asked here rather than at the call, so that every way in agrees and
+        // agrees before the work is done: finding out at the call meant a
+        // program that ran under the interpreter failed under the jit.
+        if !bridge::enterable(func) {
+            self.states.insert(key, FunctionState::Interpreted { call_count: u32::MAX });
+            return Ok(None);
+        }
+
         let state = self.states.entry(key).or_insert(FunctionState::Interpreted { call_count: 0 });
 
         match state {
@@ -297,9 +310,9 @@ impl JitEngine {
         }
     }
 
-    /// Record a compilation failure for stats tracking.
-    pub fn record_compilation_failure(&mut self) {
-        self.stats.compilation_failures += 1;
+    /// Record that the backend declined a function, for stats tracking.
+    pub fn record_refusal(&mut self) {
+        self.stats.refused_count += 1;
     }
 
     /// Call a JIT-compiled function.
@@ -319,7 +332,7 @@ impl JitEngine {
         return_type: &IrType,
         descriptor_params: &[datalove_datafun_ir::ParamId],
         shape_descriptors: &[*const datalove_rtdt::TyDesc],
-    ) -> Result<(), JitError> {
+    ) {
         // SAFETY: caller guarantees code_ptr and args are valid.
         unsafe {
             bridge::call_jit(
@@ -469,8 +482,7 @@ mod tests {
         // Call the JIT code. Result written to ret_dest via sret.
         let return_type = IrType::I32;
         unsafe {
-            jit.call_jit(code_ptr, uses_sret, rt_handle, &[], ret_dest, &return_type, &[], &[])
-                .unwrap();
+            jit.call_jit(code_ptr, uses_sret, rt_handle, &[], ret_dest, &return_type, &[], &[]);
         }
 
         // Extract i32 from the buffer.
@@ -683,8 +695,7 @@ mod tests {
         // SAFETY: code_ptr is valid JIT code.
         let return_type = IrType::I32;
         unsafe {
-            bridge::call_jit(code_ptr, uses_sret, rt_handle, &[], ret_dest, &return_type, &[], &[])
-                .expect("JIT call failed");
+            bridge::call_jit(code_ptr, uses_sret, rt_handle, &[], ret_dest, &return_type, &[], &[]);
         }
 
         // Clear dispatch context.
@@ -706,12 +717,6 @@ impl CallDispatcher for JitEngine {
         call_ctx: DispatchCallContext<'_, '_>,
     ) -> DispatchResult {
         use datalove_datafun_interp::ExecutionContext;
-
-        // A callee wanting a descriptor per shape it declares cannot be entered
-        // from here; see `bridge::dispatchable`.
-        if !bridge::dispatchable(func) {
-            return DispatchResult::NotHandled;
-        }
 
         let key = FunctionKey::of(code_ref, call_ctx.exec_ctx.unit());
 
@@ -759,43 +764,32 @@ impl CallDispatcher for JitEngine {
                 unsafe { set_dispatch_context(&mut dispatch_ctx) };
 
                 // SAFETY: code_ptr is a valid JIT-compiled function for this signature.
-                let result = unsafe {
+                unsafe {
                     bridge::call_jit(
                         code_ptr, uses_sret, rt_handle, args, ret_dest,
                         func.return_type().expect("JIT dispatch requires function return type"),
                         func.function_context().map_or(&[][..], |c| &c.descriptor_params),
-                        // Refused above when the callee declares any.
-                        &[],
+                        call_ctx.shape_descriptors,
                     )
                 };
 
                 // Clear dispatch context.
                 clear_dispatch_context();
 
-                match result {
-                    Ok(()) => DispatchResult::Handled(Ok(())),
-                    Err(e) => DispatchResult::Handled(Err(InterpError::RuntimeError(e.to_string()))),
-                }
+                DispatchResult::Handled(Ok(()))
             }
             Ok(None) => {
                 // Not yet compiled, fall through to interpreter.
                 DispatchResult::NotHandled
             }
-            Err(e) => {
-                // Check if this is an error that we should fall back for.
-                let error_str = e.to_string();
-                if error_str.contains("unsupported:")
-                    || error_str.contains("Duplicate definition")
-                    || error_str.contains("not yet declared")
-                {
-                    // Mark as not JIT-able and fall back to interpreter.
-                    self.states.insert(key, FunctionState::Interpreted { call_count: u32::MAX });
-                    DispatchResult::NotHandled
-                } else {
-                    // Compilation failed with error, report it.
-                    DispatchResult::Handled(Err(InterpError::RuntimeError(error_str)))
-                }
+            Err(JitError::Unsupported(_)) => {
+                // Not a failure: the function is left to the interpreter, and
+                // asking again at every call would recompile it every time.
+                self.states.insert(key, FunctionState::Interpreted { call_count: u32::MAX });
+                self.record_refusal();
+                DispatchResult::NotHandled
             }
+            Err(e) => DispatchResult::Handled(Err(InterpError::RuntimeError(e.to_string()))),
         }
     }
 

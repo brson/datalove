@@ -24,8 +24,8 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             SlotDest::Local(id) => *id,
             SlotDest::External { unit, slot } => {
                 return Err(CraneliftError::Unsupported(format!(
-                    "external slot store (unit={}, slot={:?}) not yet implemented",
-                    unit, slot
+                    "writing slot {:?} of script unit {}, which finished earlier",
+                    slot, unit
                 )));
             }
         };

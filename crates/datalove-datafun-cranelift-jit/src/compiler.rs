@@ -14,6 +14,7 @@ use target_lexicon::Triple;
 use datalove_datafun_ir::{CodeRef, CodeUnitId, Instruction, IrCodeUnit, IrModuleId};
 use datalove_datafun_interp::{ExecutionContext, FunctionRegistry};
 use datalove_datafun_cranelift::codegen::{self, build_signature_for_func, uses_sret};
+use datalove_datafun_cranelift::CraneliftError;
 use datalove_datafun_cranelift::runtime::RuntimeImports;
 use datalove_datafun_cranelift::tydesc_emit::{self, TyDescEmitter};
 use datalove_datafun_cranelift::types::{align_shift, PTR_ALIGN, PTR_TYPE};
@@ -54,6 +55,20 @@ fn jit_err(context: &str, err: impl std::fmt::Display) -> JitError {
         ))
     } else {
         JitError::CompilationFailed(format!("{context}: {msg}"))
+    }
+}
+
+/// Wrap a codegen error, keeping whether it says the function cannot be
+/// compiled rather than that compiling it went wrong.
+///
+/// The two used to be told apart by looking for `unsupported:` in the rendered
+/// message, which made the prose of an error load-bearing and meant a genuine
+/// codegen bug that happened to be worded that way turned the jit off for that
+/// function without saying so.
+fn codegen_err(context: &str, err: CraneliftError) -> JitError {
+    match err {
+        CraneliftError::Unsupported(msg) => JitError::Unsupported(format!("{context}: {msg}")),
+        other => jit_err(context, other),
     }
 }
 
@@ -194,7 +209,7 @@ impl JitCompiler {
         tydesc_emit::collect_types_from_code_unit(func, &mut types);
 
         self.tydesc_emitter.emit_all(&mut self.jit_module, types)
-            .map_err(|e| jit_err("tydesc emit", e))?;
+            .map_err(|e| codegen_err("tydesc emit", e))?;
 
         // Build a FunctionCompiler for this function.
         let compiler = codegen::FunctionCompiler::new_with_runtime_and_tydescs(
@@ -208,7 +223,7 @@ impl JitCompiler {
 
         // Compile and get the Cranelift FuncId.
         let cl_func_id = compiler.compile_as(&unique_symbol(func))
-            .map_err(|e| jit_err("compile", e))?;
+            .map_err(|e| codegen_err("compile", e))?;
 
         // Finalize to get executable code.
         self.jit_module.finalize_definitions()
@@ -250,6 +265,7 @@ impl JitCompiler {
 
         // Create stubs for each callee.
         let mut local_funcs: HashMap<CodeUnitId, codegen::LocalCallee> = HashMap::new();
+        let mut external_funcs: HashMap<(u32, CodeUnitId), codegen::LocalCallee> = HashMap::new();
         let mut module_funcs: HashMap<(IrModuleId, CodeUnitId), FuncId> = HashMap::new();
 
         for code_ref in callees {
@@ -289,18 +305,19 @@ impl JitCompiler {
                     module_funcs.insert((*module, CodeUnitId(id.0)), stub_id);
                 }
                 CodeRef::External { unit, id } => {
-                    // External functions go in local_funcs for now.
-                    // The stub handles the dispatch correctly.
-                    local_funcs.insert(
-                        CodeUnitId(id.0), codegen::LocalCallee::of(&callee_ir, stub_id));
-                    let _ = unit; // Silence warning; actual unit is encoded in stub.
+                    // Keyed by the unit as well, because the id alone is the
+                    // callee's position in its own unit's list and this body may
+                    // also have a local function of that number.
+                    external_funcs.insert(
+                        (*unit, CodeUnitId(id.0)),
+                        codegen::LocalCallee::of(&callee_ir, stub_id));
                 }
             }
         }
 
         // Emit TyDescs for all collected types.
         self.tydesc_emitter.emit_all(&mut self.jit_module, types)
-            .map_err(|e| jit_err("tydesc emit", e))?;
+            .map_err(|e| codegen_err("tydesc emit", e))?;
 
         // Build a FunctionCompiler with stub mappings.
         let mut compiler = codegen::FunctionCompiler::new_with_runtime_and_tydescs(
@@ -312,11 +329,12 @@ impl JitCompiler {
             Some(registry),
         );
         compiler.set_local_funcs(local_funcs);
+        compiler.set_external_funcs(external_funcs);
         compiler.set_module_funcs(module_funcs);
 
         // Compile and get the Cranelift FuncId.
         let cl_func_id = compiler.compile_as(&unique_symbol(func))
-            .map_err(|e| jit_err("compile", e))?;
+            .map_err(|e| codegen_err("compile", e))?;
 
         // Finalize to get executable code.
         self.jit_module.finalize_definitions()

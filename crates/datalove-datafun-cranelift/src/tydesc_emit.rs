@@ -1415,12 +1415,9 @@ impl TyDescEmitter {
             IrType::String => (TyTag::String as u8, size_of::<RtString>() as u32, align_of::<RtString>() as u32),
             IrType::Data => (TyTag::Data as u8, size_of::<RtData>() as u32, align_of::<RtData>() as u32),
             IrType::Error => (TyTag::Error as u8, size_of::<RtError>() as u32, align_of::<RtError>() as u32),
-            _ => {
-                return Err(CraneliftError::Unsupported(format!(
-                    "tydesc emission for type: {:?}",
-                    ty
-                )));
-            }
+            // An aggregate has its own emitter and does not reach here; `emit`
+            // routes by type before the bytes are built.
+            _ => panic!("scalar tydesc bytes for {:?}, which is not a scalar", ty),
         };
 
         // Write fields.

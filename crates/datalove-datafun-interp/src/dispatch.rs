@@ -87,6 +87,14 @@ pub struct DispatchCallContext<'a, 'b> {
     ///
     /// None for calls from JIT code or when caller context is unavailable.
     pub call_site_info: Option<CallSiteInfo>,
+    /// A descriptor for each shape the callee declared, worked out by the call
+    /// site, in the order the callee declared them.
+    ///
+    /// A shape has no value to travel with, so unlike an argument's descriptor
+    /// it has to be handed over on its own. Empty for a callee that builds no
+    /// collection of a type it was not told, which is every one outside a
+    /// generic.
+    pub shape_descriptors: &'a [*const datalove_rtdt::TyDesc],
 }
 
 /// Trait for intercepting function calls.

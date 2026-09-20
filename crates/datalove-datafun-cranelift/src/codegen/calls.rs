@@ -10,7 +10,7 @@ use datalove_datafun_ir::{CodeRef, CodeUnitId, IrType, Operand, ParamId, ParamMo
 use crate::types::{self, CraneliftRepr, PTR_TYPE};
 use crate::CraneliftError;
 
-use super::{uses_sret, FunctionCompiler};
+use super::{uses_sret, FunctionCompiler, LocalCallee};
 
 impl<'a, M: Module> FunctionCompiler<'a, M> {
     /// Compile a Call instruction.
@@ -27,6 +27,22 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             .unwrap_or_default()
     }
 
+    /// The callee a `Local` or `External` reference names, as it was declared.
+    ///
+    /// Two keyspaces, because a `CodeUnitId` numbers one unit's functions from
+    /// zero and says nothing about whose: a body that calls its own function 0
+    /// and an earlier unit's function 0 names two different functions by the
+    /// same id.
+    fn declared_callee(&self, code_ref: &CodeRef) -> Option<&LocalCallee> {
+        match code_ref {
+            CodeRef::Local(id) => self.local_funcs.get(&CodeUnitId(id.0)),
+            CodeRef::External { unit, id } => {
+                self.external_funcs.get(&(*unit, CodeUnitId(id.0)))
+            }
+            CodeRef::Module { .. } => None,
+        }
+    }
+
     /// The parameters of `code_ref` whose descriptor the call site supplies.
     ///
     /// This has to agree with what `build_signature_for_func` put in the
@@ -35,9 +51,9 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
     /// it was declared as; one in a module is read back off the registry.
     fn callee_descriptor_params(&self, code_ref: &CodeRef) -> Vec<ParamId> {
         match code_ref {
-            CodeRef::Local(id) | CodeRef::External { id, .. } => {
-                self.local_funcs.get(&CodeUnitId(id.0))
-                    .expect("resolve_code_ref rejects a local callee never declared")
+            CodeRef::Local(_) | CodeRef::External { .. } => {
+                self.declared_callee(code_ref)
+                    .expect("resolve_code_ref rejects a callee never declared")
                     .descriptor_params
                     .clone()
             }
@@ -59,10 +75,11 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
     /// takes it, and an `out` parameter is the caller's to clear.
     fn callee_param_modes(&self, code_ref: &CodeRef) -> Vec<ParamMode> {
         match code_ref {
-            CodeRef::Local(id) | CodeRef::External { id, .. } => {
-                self.local_funcs.get(&CodeUnitId(id.0))
-                    .map(|callee| callee.param_modes.clone())
-                    .unwrap_or_default()
+            CodeRef::Local(_) | CodeRef::External { .. } => {
+                self.declared_callee(code_ref)
+                    .expect("resolve_code_ref rejects a callee never declared")
+                    .param_modes
+                    .clone()
             }
             CodeRef::Module { module, id } => {
                 let Some(registry) = self.registry else {
@@ -547,31 +564,20 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
     /// Resolve a CodeRef to a Cranelift FuncId.
     pub(super) fn resolve_code_ref(&mut self, code_ref: &CodeRef) -> Result<FuncId, CraneliftError> {
         match code_ref {
-            CodeRef::Local(id) => {
-                let ir_func_id = CodeUnitId(id.0);
-                if let Some(callee) = self.local_funcs.get(&ir_func_id) {
-                    return Ok(callee.func_id);
-                }
-
-                Err(CraneliftError::Unsupported(format!(
-                    "local function {:?} not yet declared - needs two-pass compilation",
-                    id
-                )))
-            }
-            CodeRef::External { unit, id } => {
-                Err(CraneliftError::Unsupported(format!(
-                    "external function call (unit={}, id={:?}) not yet implemented",
-                    unit, id
-                )))
+            CodeRef::Local(_) | CodeRef::External { .. } => {
+                Ok(self.declared_callee(code_ref)
+                    .unwrap_or_else(|| panic!(
+                        "callee {:?} was not declared; every call target is declared \
+                         before the body naming it is compiled",
+                        code_ref))
+                    .func_id)
             }
             CodeRef::Module { module, id } => {
                 let ir_func_id = CodeUnitId(id.0);
-                self.module_funcs.get(&(*module, ir_func_id)).copied().ok_or_else(|| {
-                    CraneliftError::Unsupported(format!(
-                        "module function ({:?}, {:?}) not pre-compiled",
-                        module, id
-                    ))
-                })
+                Ok(*self.module_funcs.get(&(*module, ir_func_id)).unwrap_or_else(|| panic!(
+                    "module function {:?}::{:?} was not declared; every call target is \
+                     declared before the body naming it is compiled",
+                    module, id)))
             }
         }
     }

@@ -289,10 +289,48 @@ debuglog drive(100000)
 "#
 );
 
-// Calls into `sys/std`, which is where a real program spends its time. A
-// generic that builds a collection declares a shape, and both the jit and the
-// inliner refuse such a callee, so this measures how much of a stdlib-shaped
-// workload either can reach at all.
+// A hot callee that declares a shape, which is a generic building a collection
+// of a type it was told rather than one it knows. `ord.sorted` returns a fresh
+// `[T]`, so the call site hands it a descriptor; the jit refused any such callee
+// until the descriptors were carried across the dispatcher.
+workload!(
+    stdlib_generic,
+    r#"
+require module sys/std/list
+require module sys/std/ord
+
+import list.push
+import ord.sorted
+
+fun build(n: int): [int]
+    var out: [int] = []
+    var i: int = 0
+    loop while i .< n
+      push(mut out, n - i)
+      set i = i + 1
+    end loop
+    ret out
+end fun
+
+fun drive(reps: int, n: int): int
+    var acc: int = 0
+    var k: int = 0
+    loop while k .< reps
+      let xs = build(n@)
+      let s = sorted(ref xs)
+      set acc = acc + 1
+      set k = k + 1
+    end loop
+    ret acc
+end fun
+
+debuglog drive(150, 60)
+"#
+);
+
+// Calls into `sys/std`, which is where a real program spends its time. These
+// callees take a collection rather than building one, so they declare no shape
+// and were always compilable.
 workload!(
     stdlib_list,
     r#"

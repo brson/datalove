@@ -8,28 +8,33 @@ use datalove_datafun_ir::{IrCodeUnit, IrType, ParamId};
 use datalove_rt::c::LocalRtHandle;
 use datalove_rtdt as rtdt;
 
-use crate::JitError;
-
 /// Maximum number of function parameters supported by direct dispatch.
 const MAX_DIRECT_ARGS: usize = 8;
 
-/// Whether a callee can be entered from a `CallDispatcher`.
+/// How many words entering `func` takes, beside the runtime handle and `sret`.
 ///
-/// A dispatcher is handed the argument values and nothing else. A callee that
-/// declares shapes wants a descriptor for each of them after the arguments, and
-/// there is nowhere here for one to come from: the call site worked them out,
-/// and the interpreter keeps such a call to itself rather than offering it
-/// round. Asked here as well, so that the bridge cannot be entered with a short
-/// argument list if that ever stops being true.
-///
-/// The trampoline is the other way in and does not use this: jit code calling
-/// jit code passes the descriptors along with the arguments, so there is
-/// something to forward.
-pub fn dispatchable(func: &IrCodeUnit) -> bool {
+/// One per parameter, then one descriptor per parameter whose own type does not
+/// describe what arrives at it, then one per shape the callee declared. This is
+/// `build_signature`'s layout, counted.
+fn entry_width(func: &IrCodeUnit) -> usize {
     match func.function_context() {
-        Some(ctx) => ctx.descriptor_shapes.is_empty(),
-        None => true,
+        Some(ctx) => {
+            ctx.param_types.len() + ctx.descriptor_params.len() + ctx.descriptor_shapes.len()
+        }
+        None => 0,
     }
+}
+
+/// Whether `func` is narrow enough to be entered from outside compiled code.
+///
+/// `dispatch_void` transmutes the entry point to one of a fixed set of `extern
+/// "C"` function pointer types, one per arity, so a wider function has no type
+/// to be called through. Asked before compiling rather than at the call, because
+/// a function that cannot be entered is one there is no point compiling, and
+/// finding out at the call meant a program that ran under the interpreter failed
+/// under the jit.
+pub fn enterable(func: &IrCodeUnit) -> bool {
+    entry_width(func) <= MAX_DIRECT_ARGS
 }
 
 /// Call a JIT-compiled function from the interpreter.
@@ -56,17 +61,13 @@ pub unsafe fn call_jit(
     _return_type: &IrType,
     descriptor_params: &[ParamId],
     shape_descriptors: &[*const rtdt::TyDesc],
-) -> Result<(), JitError> {
-    if args.len() + descriptor_params.len() + shape_descriptors.len() > MAX_DIRECT_ARGS {
-        return Err(JitError::BridgeCallFailed(format!(
-            "too many arguments: {} with {} parameter descriptors and {} shape \
-             descriptors (max {})",
-            args.len(),
-            descriptor_params.len(),
-            shape_descriptors.len(),
-            MAX_DIRECT_ARGS
-        )));
-    }
+) {
+    assert!(
+        args.len() + descriptor_params.len() + shape_descriptors.len() <= MAX_DIRECT_ARGS,
+        "entering a function of {} words, which `enterable` should have refused before \
+         it was compiled",
+        args.len() + descriptor_params.len() + shape_descriptors.len(),
+    );
 
     // Build argument array: [rt_handle, sret?, arg_ptrs...]
     let mut raw_args: [usize; MAX_DIRECT_ARGS + 2] = [0; MAX_DIRECT_ARGS + 2];
@@ -91,13 +92,12 @@ pub unsafe fn call_jit(
     // Then the descriptors a generic callee cannot work out for itself. Here
     // they are simply the ones the argument values carry.
     for param_id in descriptor_params {
-        let arg = args.get(param_id.0 as usize).ok_or_else(|| {
-            JitError::BridgeCallFailed(format!(
-                "callee wants a descriptor for parameter {} but got {} arguments",
-                param_id.0,
-                args.len(),
-            ))
-        })?;
+        let arg = args.get(param_id.0 as usize).unwrap_or_else(|| panic!(
+            "callee wants a descriptor for parameter {} but got {} arguments; the \
+             signature and the call site disagree",
+            param_id.0,
+            args.len(),
+        ));
         raw_args[arg_idx] = arg.tydesc as usize;
         arg_idx += 1;
     }
@@ -121,7 +121,7 @@ unsafe fn dispatch_void(
     code_ptr: *const u8,
     args: &[usize; MAX_DIRECT_ARGS + 2],
     arg_count: usize,
-) -> Result<(), JitError> {
+) {
     type Fn1 = unsafe extern "C" fn(usize);
     type Fn2 = unsafe extern "C" fn(usize, usize);
     type Fn3 = unsafe extern "C" fn(usize, usize, usize);
@@ -145,8 +145,9 @@ unsafe fn dispatch_void(
             8 => { let f: Fn8 = std::mem::transmute(code_ptr); f(args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7]); }
             9 => { let f: Fn9 = std::mem::transmute(code_ptr); f(args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7], args[8]); }
             10 => { let f: Fn10 = std::mem::transmute(code_ptr); f(args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7], args[8], args[9]); }
-            _ => return Err(JitError::BridgeCallFailed(format!("unsupported argument count: {}", arg_count))),
+            // `enterable` caps the width at `MAX_DIRECT_ARGS`, and the runtime
+            // handle and `sret` pointer are the only two on top of it.
+            _ => panic!("entering a function of {} words, which has no arm here", arg_count),
         }
     };
-    Ok(())
 }

@@ -41,9 +41,8 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                     let val = self.get_operand_value(builder, &fields[0])?;
                     self.values.insert(dest, val);
                 } else {
-                    return Err(CraneliftError::Unsupported(
-                        "scalar pack with multiple fields".into()
-                    ));
+                    panic!("a scalar `pack` of {} fields; lowering packs one field \
+                            into a scalar and more only into an aggregate", fields.len());
                 }
             }
             CraneliftRepr::Aggregate(_layout) => {
@@ -61,10 +60,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                     IrType::Tuple(tys) => tys.clone(),
                     IrType::Struct(flds) => flds.iter().map(|(_, ty)| ty.clone()).collect(),
                     _ => {
-                        return Err(CraneliftError::Unsupported(format!(
-                            "pack for non-tuple/struct: {:?}",
-                            dest_ty
-                        )));
+                        panic!("`pack` into {:?}, which is neither a tuple nor a struct", dest_ty);
                     }
                 };
 
@@ -134,9 +130,8 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                     let val = self.get_operand_value(builder, src)?;
                     self.values.insert(dests[0], val);
                 } else {
-                    return Err(CraneliftError::Unsupported(
-                        "scalar unpack with multiple dests".into()
-                    ));
+                    panic!("a scalar `unpack` into {} destinations; lowering unpacks a \
+                            scalar into one and an aggregate into the rest", dests.len());
                 }
             }
             CraneliftRepr::Aggregate(_) => {
@@ -147,10 +142,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                     IrType::Tuple(tys) => tys.clone(),
                     IrType::Struct(flds) => flds.iter().map(|(_, ty)| ty.clone()).collect(),
                     _ => {
-                        return Err(CraneliftError::Unsupported(format!(
-                            "unpack from non-tuple/struct: {:?}",
-                            src_ty
-                        )));
+                        panic!("`unpack` of {:?}, which is neither a tuple nor a struct", src_ty);
                     }
                 };
 
@@ -205,9 +197,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                     let val = self.get_operand_value(builder, src)?;
                     self.values.insert(dest, val);
                 } else {
-                    return Err(CraneliftError::Unsupported(
-                        format!("scalar get_field with field_index {} (max 0)", field_index)
-                    ));
+                    panic!("field {} of a scalar, which has only field 0", field_index);
                 }
             }
             CraneliftRepr::Aggregate(_) => {
@@ -218,10 +208,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                     IrType::Tuple(tys) => tys.clone(),
                     IrType::Struct(flds) => flds.iter().map(|(_, ty)| ty.clone()).collect(),
                     _ => {
-                        return Err(CraneliftError::Unsupported(format!(
-                            "get_field from non-tuple/struct: {:?}",
-                            src_ty
-                        )));
+                        panic!("field of {:?}, which is neither a tuple nor a struct", src_ty);
                     }
                 };
 
@@ -395,9 +382,8 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 // Single-element tuple. Need to get address of the value.
                 // This requires spilling the scalar to memory first.
                 if field_index != 0 {
-                    return Err(CraneliftError::Unsupported(
-                        format!("scalar get_field_ref with field_index {} (max 0)", field_index)
-                    ));
+                    panic!("a reference to field {} of a scalar, which has only field 0",
+                        field_index);
                 }
                 // Get pointer to the source operand.
                 let ptr = self.get_operand_ptr(builder, src)?;
@@ -411,10 +397,8 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                     IrType::Tuple(tys) => tys.clone(),
                     IrType::Struct(flds) => flds.iter().map(|(_, ty)| ty.clone()).collect(),
                     _ => {
-                        return Err(CraneliftError::Unsupported(format!(
-                            "get_field_ref from non-tuple/struct: {:?}",
-                            src_ty
-                        )));
+                        panic!("a reference to a field of {:?}, which is neither a tuple \
+                                nor a struct", src_ty);
                     }
                 };
 
@@ -462,7 +446,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             }
             SlotDest::External { unit: _, slot: _ } => {
                 return Err(CraneliftError::Unsupported(
-                    "set_field on external slot".into()
+                    "setting a field of a slot in an earlier script unit".into()
                 ));
             }
         };

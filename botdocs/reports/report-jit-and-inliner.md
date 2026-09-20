@@ -22,6 +22,10 @@ The short version, in case nothing else is read:
   made it 8.4x faster and moved it past the cranelift AOT backend.
 - **Cranelift has had an inliner since 0.123**, and the tree is on 0.135. For the two
   compiled backends that is a better place to inline than the datalove IR.
+- **The jit refused a whole class of function for no remaining reason.** 59 of `sys/std`'s
+  generic builders, refused because a `CallDispatcher` could not be handed the shape
+  descriptors -- everything below that interface could already carry them. Lifted, along with
+  a call into an earlier script unit and an arity cliff that aborted rather than falling back.
 - **The three backends disagreed about uninitialized frame memory.** Neither compiled
   backend zeroes a frame -- the cranelift one poisons it on purpose -- while the
   interpreter zeroed and depended on it, because it had no liveness bit for a frame value
@@ -505,11 +509,11 @@ freed. The arena is a fixed 64MB and the failure mode when it fills is a compile
 mentioning `JIT_ARENA_SIZE`. For a batch script this does not matter. For a REPL, or
 anything long-running, it is a leak with a hard ceiling.
 
-### What cannot be jitted, counted
+### What could not be jitted, counted
 
 Instrumented over the whole corpus -- 409 interp worldfiles, 143 `std_all_tests` fixtures,
-21 four-backend fixtures -- there are exactly three reasons a function is not compiled, and
-they are nothing like equal in weight.
+21 four-backend fixtures -- there were exactly three reasons a function was not compiled,
+and they were nothing like equal in weight.
 
 | Reason | Calls refused | Distinct functions |
 |---|---|---|
@@ -517,7 +521,12 @@ they are nothing like equal in weight.
 | The callee is reached by `CodeRef::External` | 2-3 | 1 |
 | The other twenty-three `Unsupported` sites in the codegen | **0** | 0 |
 
-**A generic that builds a collection.** This is the whole of it. `bridge::dispatchable`
+The same instrument run afterwards reports no refusals at all, and 59 shape-declaring
+functions compiled.
+
+All three are now lifted; what follows is what they were and what lifting each took.
+
+**A generic that builds a collection.** This was the whole of it. `bridge::dispatchable`
 refuses any callee whose `descriptor_shapes` is non-empty, and the interpreter keeps such a
 call before the dispatcher is even asked (`!supplied.is_empty()`), so it never appears as an
 error -- the instrumented run never reached `dispatchable` at all, which is belt-and-braces
@@ -527,14 +536,23 @@ for a gate that already fired. The 59 are essentially `sys/std`'s generic builde
 rather than more.
 
 The reason given for the gate -- that a `CallDispatcher` is handed the argument values and
-nothing else -- is the only part still true, and it is now the *only* missing piece.
-`bridge::call_jit` takes `shape_descriptors` already, `__jit_dispatch_call` reads them off
-the back of the descriptor array already, and `build_signature` lays them out already; all
-of that landed with the two jit boundaries. The interpreter has the resolved `supplied`
-vector in its hand at the gate. So lifting this is: carry the shapes on
-`DispatchCallContext`, offer the call to the dispatcher before keeping it, forward them to
-`call_jit`, and fall back to `execute_call_with_shapes` when the dispatcher declines. See
-[What each backend carries](../generics.md#user-content-what-each-backend-carries).
+nothing else -- was the only part still true, and the only missing piece.
+`bridge::call_jit` took `shape_descriptors` already, `__jit_dispatch_call` read them off the
+back of the descriptor array already, and `build_signature` laid them out already; all of
+that landed with the two jit boundaries. **Lifted** by carrying them on
+`DispatchCallContext`, offering the call to the dispatcher before keeping it, and forwarding
+them to `call_jit`. `bridge::dispatchable` is gone, and so is `execute_call`, which was
+`execute_call_with_shapes` with an empty vector. All 59 are now compiled, `ord.sorted`,
+`list.reversed`, `to_list`, `keys`, `values`, `union_with`, `flattened` and `zip` among them.
+See [What each backend carries](../generics.md#user-content-what-each-backend-carries).
+
+It bought no measured speed. A/B'd on a workload built for it -- `stdlib_generic`, which
+calls `ord.sorted` in a loop -- with the gate as the only difference and `interp` as the
+control, the jit was within 2-3% either way across two rounds. These generics are thin
+loops over natives: the work is in the runtime's comparison and collection entry points,
+which are native however the caller got there. So this is a capability and uniformity fix --
+the jit no longer has a class of function it refuses that the AOT backends compile happily
+-- and not a throughput one.
 
 **A call into an earlier script unit.** `resolve_code_ref`'s `External` arm errors
 unconditionally with "not yet implemented" -- but `compile_function_with_context` does build
@@ -543,11 +561,13 @@ a stub for an external callee, and registers it in `local_funcs`, and
 same map with `Local(id) | External { id, .. }`. So the metadata path handles External and
 only the `FuncId` lookup does not. `interp/053_script_to_prior_script_call` is the fixture.
 
-Three lines would fix the symptom. They should not be the fix, because `local_funcs` is
-keyed by `CodeUnitId` alone: a body calling both `Local(0)` and `External { unit: n, id: 0 }`
-puts two stubs under one key and the later insert wins, silently. That is the hazard
-`interp/947_crossunit_local_id_reuse` exists for, one level down. The keyspace wants
-splitting first.
+Three lines would have fixed the symptom and would have been wrong, because `local_funcs`
+was keyed by `CodeUnitId` alone: a body calling both `Local(0)` and
+`External { unit: n, id: 0 }` put two stubs under one key and the later insert won, silently.
+That is the hazard `interp/947_crossunit_local_id_reuse` exists for, one level down.
+**Fixed** by giving an external callee its own keyspace, `(unit, CodeUnitId)`, and routing
+the three lookups that read a declared callee through one `declared_callee` helper so they
+cannot disagree about which keyspace to ask.
 
 **The twenty-three that never fire.** Worth knowing what they are, because the list reads
 alarming and mostly is not:
@@ -565,16 +585,32 @@ alarming and mostly is not:
 - Assertions: `local function not yet declared`, `module function not pre-compiled`. The
   stub pass fills both maps before compiling.
 
-So most of them are assertions wearing a recoverable error's clothing, and that is itself a
-problem: a *new* codegen bug that phrases itself as `unsupported:` silently turns the jit off
-for that function and nothing reports it. The three-string `contains` match in both
-dispatchers is doing load-bearing control flow on error prose.
+Most of them were assertions wearing a recoverable error's clothing, and that was itself the
+problem: a *new* codegen bug phrased as `unsupported:` silently turned the jit off for that
+function and nothing reported it, because the three dispatchers decided whether to fall back
+by `contains`-matching substrings of the rendered message.
 
-**And one thing that is not a restriction but should be.** More than eight arguments --
-counting descriptors -- aborts instead of falling back. See
-[issues.md](../issues.md#user-content-a-function-of-more-than-eight-parameters-aborts-under---jit),
-and note that lifting the shape gate enlarges the set of programs that reach it, since a
-generic's declared shapes count towards the eight.
+**Converted.** Nineteen of the twenty-three are now panics, saying what invariant they
+expected. Four remain as `Unsupported`, and they are one family: reading or writing a
+binding of an earlier script unit (`Operand::ExternalValue`, `Operand::ExternalSlot`,
+`SlotDest::External`, and a field of one). Those are genuinely unimplemented rather than
+impossible, and only a script unit after the first has them, so the jit -- which compiles
+functions and never script units -- cannot reach them. A multi-unit AOT build can, and gets
+an error rather than a crash.
+
+And the decision is typed now. `JitError` gained `Unsupported`, `codegen_err` maps
+`CraneliftError::Unsupported` onto it and everything else onto `CompilationFailed`, and the
+three dispatchers match the variant. `FunctionNotFound` and `BridgeCallFailed` had no
+constructors left and are gone, which let `call_jit` stop returning a `Result` at all.
+
+**And one thing that was not a restriction but should have been.** More than eight arguments
+-- counting one per declared descriptor and shape -- used to abort rather than fall back,
+because the arity was checked at the call and the resulting error matched none of the three
+strings. **Fixed** by asking `bridge::enterable` before compiling instead: a function too
+wide to enter is one there is no point compiling, so it is marked interpreted once and the
+check cannot be reached from only some of the four ways in. The check at the call is now an
+assertion. This mattered more once the shape gate went, since a generic's declared shapes
+count towards the eight.
 
 ### The metrics cannot answer the question they exist for
 
