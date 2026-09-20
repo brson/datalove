@@ -58,7 +58,6 @@ pub mod aot;
 pub mod rider_build;
 pub mod rider_load;
 pub mod c_aot;
-pub mod world_cache;
 
 // Re-export main types.
 pub use result::{
@@ -69,7 +68,6 @@ pub use result::{
 pub use compiled_modules::{SharedModuleContext, CompiledModules};
 pub use script_compiler::ScriptCompiler;
 pub use script_executor::ScriptExecutor;
-pub use world_cache::{with_world, World};
 pub use module_pipeline::{ModuleCompilationPipeline, ConstInlining};
 pub use workspace::{
     WorkspaceDescriptor, WorkspaceDelta, SystemLibrary,

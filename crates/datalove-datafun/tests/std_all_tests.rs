@@ -19,22 +19,13 @@ use datafun::pipeline::{
     aot as pipeline_aot, c_aot as pipeline_c_aot,
 };
 
-/// The compiled standard library, built once per thread and shared by every
-/// fixture and every backend.
-///
-/// This used to be called per backend per fixture, which compiled `sys/std` 572
-/// times for 534 CPU-seconds of a suite that ran in 258. The library does not
-/// depend on the fixture, so it is built once; see
-/// `botdocs/plan-stdlib-compile-cache.md`.
-fn with_sys<R>(f: impl FnOnce(datafun::pipeline::World) -> R) -> R {
-    datafun::pipeline::with_world("std_all_tests/sys-dir", describe_sys, f)
-}
-
-/// Where the library under test comes from.
-///
-/// These are the standard library's own tests, so they compile the sources in the
-/// tree rather than the copy embedded in the datalove binary.
-fn describe_sys() -> WorkspaceDescriptor {
+/// Load the package world, set up the pipeline, and compile modules.
+fn setup_and_compile(db: &datafun::Database) -> Result<(
+    WorkspaceDescriptor,
+    datafun::pipeline::CompiledModules<'_>,
+), String> {
+    // These are the standard library's own tests, so they compile the sources
+    // in the tree rather than the copy embedded in the datalove binary.
     let repo_root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .parent().unwrap()
         .parent().unwrap()
@@ -42,23 +33,24 @@ fn describe_sys() -> WorkspaceDescriptor {
     // The work dir is unique to this suite so a concurrently running suite
     // builds its own component rather than rebuilding over this one's.
     let work_dir = repo_root.join("target").join("datalove-work").join("std_all_tests");
-    rmx::futures::executor::block_on(
+    let descriptor = rmx::futures::executor::block_on(
         WorkspaceDescriptor::load_sys_dir(repo_root.join("sys"))
-    ).expect("the standard library's sources must load")
-        .with_work_dir(work_dir)
-}
+    ).map_err(|e| format!("Failed to load package world: {}", e))?
+        .with_work_dir(work_dir);
 
-/// Refuse to run any fixture if the library itself does not compile.
-///
-/// A broken library is not one fixture disagreeing with another, so it is not
-/// reported per fixture.
-fn check_library(compiled: &datafun::pipeline::CompiledModules<'_>) {
+    let mut pipeline = descriptor.to_pipeline(db);
+    let compiled = pipeline.compile_fresh(db);
+
     if let Some(err) = &compiled.resolution_error {
-        panic!("the standard library does not resolve: {}", err);
+        return Err(format!("Package resolution error: {}", err));
     }
     for (path, errors) in &compiled.path_to_errors {
-        assert!(errors.is_empty(), "typecheck errors in {}: {:?}", path, errors);
+        if !errors.is_empty() {
+            return Err(format!("Typecheck errors in {}: {:?}", path, errors));
+        }
     }
+
+    Ok((descriptor, compiled))
 }
 
 /// Build the unified native component and load it into the given executor.
@@ -258,25 +250,12 @@ fn analyze_file(path: &Path) -> Result<String, String> {
     let script_text = std::fs::read_to_string(path)
         .map_err(|e| format!("Failed to read file: {}", e))?;
 
-    with_sys(|sys| analyze_against(sys, &script_text))
-}
-
-/// Run `script_text` on all four backends against an already-compiled library.
-///
-/// The four share the database as well as the compiled modules. What each needs
-/// of its own is a `ScriptCompiler`, which accumulates units, and a
-/// `ScriptExecutor`, which owns a runtime; both are made per backend below and
-/// neither is expensive.
-fn analyze_against(
-    sys: datafun::pipeline::World,
-    script_text: &str,
-) -> Result<String, String> {
-    check_library(sys.compiled);
-    let (db, descriptor, compiled) = (sys.db, sys.descriptor, sys.compiled);
-
     // Backend 1: Interpreter.
-    let (interp_value, rider_lib_paths) =
-        run_with_executor(db, compiled, descriptor, script_text, None, "Interp")?;
+    let (interp_value, rider_lib_paths) = {
+        let db = datafun::Database::default();
+        let (descriptor, compiled) = setup_and_compile(&db)?;
+        run_with_executor(&db, &compiled, &descriptor, &script_text, None, "Interp")?
+    };
 
     // Backend 2: JIT.
     //
@@ -286,9 +265,11 @@ fn analyze_against(
     // thread, which caught the panic as a side effect of joining and was there
     // for a Cranelift relocation problem that the jit's own arena fixed.
     let jit_result: Result<String, String> = std::panic::catch_unwind(|| {
+        let db = datafun::Database::default();
+        let (descriptor, compiled) = setup_and_compile(&db)?;
         let jit = JitEngine::new(1).map_err(|e| format!("JIT engine creation failed: {}", e))?;
         let (value, _) = run_with_executor(
-            db, compiled, descriptor, script_text, Some(Box::new(jit)), "JIT")?;
+            &db, &compiled, &descriptor, &script_text, Some(Box::new(jit)), "JIT")?;
         Ok(value)
     })
     .unwrap_or_else(|panic| {
@@ -303,10 +284,18 @@ fn analyze_against(
     });
 
     // Backend 3: AOT.
-    let aot_result = run_aot(db, compiled, script_text, &rider_lib_paths);
+    let aot_result = {
+        let db = datafun::Database::default();
+        let (ref _descriptor, ref compiled) = setup_and_compile(&db)?;
+        run_aot(&db, compiled, &script_text, &rider_lib_paths)
+    };
 
     // Backend 4: C AOT.
-    let c_aot_result = run_c_aot(db, compiled, script_text, &rider_lib_paths);
+    let c_aot_result = {
+        let db = datafun::Database::default();
+        let (ref _descriptor, ref compiled) = setup_and_compile(&db)?;
+        run_c_aot(&db, compiled, &script_text, &rider_lib_paths)
+    };
 
     // Compare all backends against interpreter. All errors are fatal.
     let mut mismatches = Vec::new();
