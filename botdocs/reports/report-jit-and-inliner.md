@@ -26,6 +26,10 @@ The short version, in case nothing else is read:
   generic builders, refused because a `CallDispatcher` could not be handed the shape
   descriptors -- everything below that interface could already carry them. Lifted, along with
   a call into an earlier script unit and an arity cliff that aborted rather than falling back.
+- **The largest cost in a real invocation is not in this report's subject.** Compiling
+  `sys/std` is 81ms of every run; the largest real program in the tree adds 7.6ms on top of
+  it. And a third of stdlib-shaped execution is in the native runtime, which caps the jit at
+  the 1.8x it already gets there.
 - **The three backends disagreed about uninitialized frame memory.** Neither compiled
   backend zeroes a frame -- the cranelift one poisons it on purpose -- while the
   interpreter zeroed and depended on it, because it had no liveness bit for a frame value
@@ -40,6 +44,7 @@ The short version, in case nothing else is read:
 - [What Stage 2 did](#user-content-what-stage-2-did)
 - [Why the interpreter zeroed its frames](#user-content-why-the-interpreter-zeroed-its-frames-and-why-it-no-longer-does)
 - [What Stage 3 did](#user-content-what-stage-3-did)
+- [What a real program actually spends its time on](#user-content-what-a-real-program-actually-spends-its-time-on)
 - [State of the jit](#user-content-state-of-the-jit)
 - [State of the inliner](#user-content-state-of-the-inliner)
 - [What current practice does](#user-content-what-current-practice-does)
@@ -462,6 +467,70 @@ constant pointer to a record holding the resolved unit, layout and code pointer.
 removes the remaining hash probes and leaves the argument vector as the only per-call cost.
 It is a larger change than anything above, because that record has to outlive the compiled
 code that points at it.
+
+
+### What a real program actually spends its time on
+
+Every workload above is one written for this report, and they span 86x to 1.9x for the jit.
+That is a wide enough spread that the plan's ordering depends on which end real code sits
+at, so: measured.
+
+**Compiling the standard library is 81ms of every invocation, and nothing else comes close.**
+
+| | |
+|---|---|
+| `datalove --help` -- the process starting | 2.7ms |
+| `datalove script --no-sys` on `debuglog 1` | 3.6ms |
+| `datalove script` on `debuglog 1` | **84.8ms** |
+| `datalove script` on `botdocs/learn.dfs` -- 773 lines using the whole language | 113.2ms against a 105.6ms floor |
+
+So the front end and the interpreter together cost about 0.9ms for a trivial script, and
+`sys/std` costs 81ms before the script is looked at. `learn.dfs` is the largest real program
+in the tree, exercises most of the language and much of the library, and adds **7.6ms** on
+top of the floor -- parsing, typechecking, lowering and running all of it.
+
+For any program that does not run for about a second, the dominant cost is recompiling an
+8000-line library that did not change. That is not a jit question, an inliner question or an
+interpreter question, and it is not anywhere in the plan.
+
+Profiling the 81ms: roughly a fifth is tokenizing and parsing (`bcts`, the parser, the ast),
+about a tenth is salsa's bookkeeping, and about a third is the allocator and the page faults
+behind it -- 18% kernel, 14% libc. The rest is spread thinly across typecheck, lowering and
+ir.
+
+The compiled form is already serializable and already tested: `IrCodeUnit`,
+`ModuleFunctionRegistry` and `FunctionRegistry` all derive `Serialize`, and
+`ir_serial_tests` round-trips IR through RON and checks that the deserialized form executes
+identically on the interpreter *and* the AOT backend. Nothing caches anything. What is not
+settled is how much beyond the IR a cached library has to carry, since compiling a script
+that imports `sys/std` needs the library's exported signatures and those live in salsa.
+
+**The test suite pays it too.** `std_all_tests::analyze_file` calls `setup_and_compile` --
+which compiles `sys/std` from source -- once per backend per fixture. 143 fixtures against
+four backends is up to 572 full library compilations in one test binary, in a debug build,
+where each is much slower than the 81ms above.
+
+### And what the interpretable slice is worth
+
+The other half of the question: of the time a program spends *executing*, how much can any
+compiler tier reach at all? Percentages of cycles, by crate.
+
+| Workload | native runtime | interpreter | libc + kernel | unattributed |
+|---|---|---|---|---|
+| `stdlib_generic` | 27.8% | 30.1% | 12.0% | 27.0% |
+| `stdlib_list` | 32.9% | 32.7% | 9.7% | 21.9% |
+| `loop_arith` | 2.7% | **93.3%** | 2.3% | 0.5% |
+
+About a third of stdlib-shaped execution is in the native runtime, which is native however
+the caller got there. That caps the jit at roughly two to three times on such code -- and it
+delivers 1.8x to 1.9x, so it is already close to its ceiling there and no amount of tuning
+recovers more. The allocator is another tenth.
+
+Arithmetic-shaped code is the opposite: 93% interpreter, and the jit's 86x follows directly.
+
+So the jit and inliner work has been operating on a slice that is 93% of one shape of
+program and 30% of another. The wins on it were real. What they were not is the largest
+thing available.
 
 
 ## State of the jit
@@ -971,12 +1040,30 @@ largest speedup in this report.
 
 ### What to do next
 
+**Cache the compiled standard library.** 81ms of every invocation, against 7.6ms for the
+largest real program in the tree; see
+[what a real program actually spends its time on](#user-content-what-a-real-program-actually-spends-its-time-on).
+It is the largest number in this report by a wide margin, it is what a user waits for, and
+the serialization it needs exists and is round-trip tested. It also cuts the test suite,
+which recompiles the library once per backend per fixture. The open question is how much
+beyond the IR a cached library must carry, since a script that imports `sys/std` is
+typechecked against signatures that live in salsa.
+
+Note what this does *not* change: an AOT-compiled program pays the library at build time and
+not at run time, so this is a latency fix for the cli, the repl and the tests rather than
+for shipped artifacts.
+
+**And a limit worth holding on to.** About a third of stdlib-shaped execution is in the
+native runtime, which caps the jit at two to three times on such code -- where it already
+gets 1.8x. If stdlib-heavy programs are the target, the runtime and the allocator are where
+the remaining time is, not another compiler tier. Arithmetic-shaped code is the opposite,
+93% interpreter, and that is where the jit's 86x lives.
+
 Stages 1 to 3 are done, and with them all the work that was memoization or a type
 substitution. The interpreter is 1.5-1.8x faster on call-heavy code and the jit about 2x,
 and nothing left in either profile is a lookup of something already known.
 
-What remains is a choice between three things that are not cheap, and the measurements say
-to weigh them like this:
+Of what remains in the plan, the measurements say to weigh them like this:
 
 **Stage 7, `-O2` for the C backend, is still the largest measured number in this report**
 -- 8.4x on `loop_arith`, and it moves that backend past the cranelift one. It is one flag
