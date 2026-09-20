@@ -9,12 +9,13 @@ In memory only. Where a serialized artifact would live is deliberately left open
 
 - [What it costs](#user-content-what-it-costs)
 - [What has to be cached, and why that is awkward](#user-content-what-has-to-be-cached-and-why-that-is-awkward)
-- [The shape](#user-content-the-shape)
+- [The shape](#user-content-the-shape----done)
 - [What stays per fixture](#user-content-what-stays-per-fixture)
-- [The wrinkle, which is most of the win](#user-content-the-wrinkle-which-is-most-of-the-win)
-- [Two sources, so two slots](#user-content-two-sources-so-two-slots)
+- [The wrinkle, which is most of the win](#user-content-the-wrinkle-which-is-most-of-the-win----done)
+- [Two sources, so two keys](#user-content-two-sources-so-two-keys)
 - [What this does not solve](#user-content-what-this-does-not-solve)
 - [Order](#user-content-order)
+- [What it did](#user-content-what-it-did)
 
 ## What it costs
 
@@ -69,30 +70,35 @@ would have to move the bundle between threads under a lock -- `Send` allows that
 it can only ever be lent to one thread at a time, which serialises every fixture. Not worth
 it, given the thread-local version costs one compile per worker.
 
-## The shape
+## The shape -- **done**
 
 ```rust
-/// The compiled system library, built once per thread and kept.
-pub fn with_sys<R>(source: SysSource, f: impl FnOnce(SysWorld<'_>) -> R) -> R;
+// datalove_datafun::pipeline
+pub fn with_world<R>(
+    key: &str,
+    build: impl FnOnce() -> WorkspaceDescriptor,
+    f: impl FnOnce(World) -> R,
+) -> R;
 
-pub struct SysWorld<'a> {
-    pub db: &'a Database,
-    pub descriptor: &'a WorkspaceDescriptor,
-    pub compiled: &'a CompiledModules<'a>,
+pub struct World {
+    pub db: &'static Database,
+    pub descriptor: &'static WorkspaceDescriptor,
+    pub compiled: &'static CompiledModules<'static>,
 }
 ```
 
-A `thread_local!` holding a `OnceCell` per source, filled on first use by building the bundle
-and leaking it. This is not a new pattern in the tree: `with_world` in
-`crates/datalove-bench/benches/jit.rs` is exactly it, written because compiling `sys/std` per
-benchmark iteration was both the slowest part of the setup and enough leaked salsa state to
-exhaust memory. Generalising it is the work.
+`pipeline/world_cache.rs`, a `thread_local!` map from key to leaked bundle.
 
-**Where it lives.** It needs `datalove-datafun` and `datalove-stdlib`, and it is test and
-bench support rather than product code. Either a new `datalove-testsupport` crate depending on
-both, or a module on `datalove-datafun` behind a feature the test targets turn on. A new crate
-is the cleaner answer for the dependency DAG: `datalove-stdlib` already depends on nothing
-that would make it circular, and product code has no use for this.
+It knows nothing about `sys`, which is what let it live in `datalove-datafun` rather than in a
+new crate. `datalove-stdlib` depends on `datalove-datafun`, so the reverse is a cycle, and a
+cache that takes a descriptor-building closure and a caller-chosen name needs neither. A caller
+that wants the standard library writes the three lines that describe it, which
+`std_all_tests` and `benches/jit.rs` now both do.
+
+The key is named by the caller rather than derived from the descriptor: a descriptor is
+expensive to compare, and two callers that mean the same world know it better than anything
+here could work out. Naming two different worlds the same thing hands out the first, which is a
+caller's bug and not a detectable one.
 
 ## What stays per fixture
 
@@ -132,7 +138,7 @@ the join was also a panic boundary -- a jit that panics on one fixture was repor
 fixture disagreeing rather than taking the suite down -- so that became
 `std::panic::catch_unwind`, which keeps the boundary without the thread.
 
-## Two sources, so two slots
+## Two sources, so two keys
 
 There are two different standard libraries and a process can want both:
 
@@ -142,10 +148,9 @@ There are two different standard libraries and a process can want both:
   embedded in the binary, which is what the cli and the repl use.
 
 They are not interchangeable -- `embedded_matches_tree` exists to check they agree -- so the
-cache is keyed by which, rather than holding one and hoping. Hence `SysSource` in the
-signature above. A descriptor also carries a work dir and compiler options; if a caller varies
-those, that is part of the key too, and the honest move is to make `SysSource` carry whatever
-the descriptor was built from rather than to guess.
+cache is keyed rather than singular. `std_all_tests` asks for `"std_all_tests/sys-dir"` and
+`benches/jit.rs` for `"bench/sys-embedded"`. A descriptor also carries a work dir and compiler
+options, so a caller that varies those varies its key too; the cache cannot check that for it.
 
 ## What this does not solve
 
@@ -167,14 +172,30 @@ so none of this touches what a user's compiled program costs.
 
 1. ~~**Confirm the PIE workaround is obsolete** and drop the per-fixture spawn.~~ Done, in all
    four suites that had one.
-2. **Add `with_sys`**, generalised from `with_world` in `benches/jit.rs`, in a crate the test
-   targets can reach.
-3. **Convert `std_all_tests`**, and measure. The instrumentation to check is two `eprintln`s
-   around `setup_and_compile` and `build_and_load_riders`, summed by phase -- which is how the
-   534 seconds above was found.
-4. **Convert what else pays it**: the repl's and cli's in-process tests, and
-   `benches/jit.rs`, which should then drop its private copy.
+2. ~~**Add `with_world`.**~~ Done, `pipeline/world_cache.rs`.
+3. ~~**Convert `std_all_tests` and measure.**~~ Done. See below.
+4. ~~**Convert `benches/jit.rs`**, which had its own private copy.~~ Done.
+5. **Still to do**: the repl's and cli's in-process tests, if they turn out to pay it.
 
-**Expected effect.** `std_all_tests` goes from 572 library compilations to one per worker
-thread, so from 534 CPU-seconds to single digits. What remains of its 258 seconds is the four
-backends' own work -- the AOT `cc` invocations, and running each fixture four times.
+## What it did
+
+`std_all_tests`, measured the same way the problem was found -- `eprintln` per phase, summed:
+
+| Phase | Before | After |
+|---|---|---|
+| Compiling the library | **572 calls, 534s** | **4 calls, 3.4s** |
+| `run_aot` | -- | 143 calls, 271s |
+| `run_c_aot` | -- | 143 calls, 271s |
+| Interpreter backend | -- | 143 calls, 5.5s |
+| `build_and_load_riders` | 286 calls, 0.9s | unchanged |
+| **Suite wall time** | **258s** | **143s** |
+
+Four compilations, one per worker thread, exactly as designed. The library is no longer
+measurable in the suite.
+
+What is left is the two AOT backends, and they are now the whole of it: 542 CPU-seconds
+between them for 286 runs, about 1.9s each, which is cranelift or C codegen plus a `cc`
+invocation plus spawning the resulting executable. That is a linking-and-process problem
+rather than a compilation one and wants its own look. The four backends also still each build
+their own `ScriptCompiler` and `ScriptExecutor`, which is right -- one accumulates units and
+the other owns a runtime -- and cheap: the interpreter backend is 5.5s for all 143.

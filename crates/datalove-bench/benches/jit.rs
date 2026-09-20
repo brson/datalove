@@ -81,44 +81,13 @@ struct Prepared {
     unit: IrCodeUnit,
 }
 
-/// The database and compiled system library, built once per benchmark thread.
-///
-/// Leaked rather than owned because a `CompiledModules` borrows both the
-/// database and the pipeline it came from, and every iteration wants one. Built
-/// once because compiling `sys/std` per iteration was both the slowest part of
-/// the setup and enough leaked salsa state to exhaust memory. Thread-local
-/// because a salsa `Database` is not `Sync`.
-type World = (
-    &'static datafun::Database,
-    &'static datafun::pipeline::CompiledModules<'static>,
-    &'static datafun::pipeline::SystemLibrary,
-);
-
-thread_local! {
-    static WORLD: std::cell::OnceCell<World> = const { std::cell::OnceCell::new() };
-}
-
-fn with_world<R>(f: impl FnOnce(World) -> R) -> R {
-    WORLD.with(|cell| {
-        let world = *cell.get_or_init(|| {
-            let db: &'static datafun::Database =
-                Box::leak(Box::new(datafun::Database::default()));
-            let sys: &'static datafun::pipeline::SystemLibrary =
-                Box::leak(Box::new(datalove_stdlib::system_library()));
-            let descriptor = WorkspaceDescriptor::from_system_library(sys);
-            let pipeline: &'static mut datafun::pipeline::ModuleCompilationPipeline =
-                Box::leak(Box::new(descriptor.to_pipeline(db)));
-            let compiled = pipeline.compile_fresh(db);
-            assert!(!compiled.has_errors(), "the system library must compile");
-            (db, &*Box::leak(Box::new(compiled)), sys)
-        });
-        f(world)
-    })
-}
-
 /// Compile `source` and build an executor for it in `config`.
 fn prepare(source: &str, config: Config) -> Prepared {
-    with_world(|(db, compiled, sys)| {
+    // The system library is compiled once per thread and shared, so that a
+    // workload's setup is not dominated by it. It is loaded at all so that a
+    // workload can call `sys/std`, which is where a real program spends its time.
+    datafun::pipeline::with_world("bench/sys-embedded", describe_sys, |world| {
+    let (db, compiled) = (world.db, world.compiled);
     let mut compiler = compiled
         .script_compiler_default(db)
         .expect("module compilation failed");
@@ -132,7 +101,7 @@ fn prepare(source: &str, config: Config) -> Prepared {
     // its engine behind `jit()` and nothing in the tree hands it the symbols.
     let native_fn_ptrs = rider_load::register_linked_natives(
         &compiled.native_symbols(),
-        &sys.natives,
+        &embedded_sys().natives,
         executor.native_table_mut(),
     )
     .expect("linked natives must resolve");
@@ -152,6 +121,24 @@ fn prepare(source: &str, config: Config) -> Prepared {
         .expect("benchmark source must compile");
 
     Prepared { executor, unit }
+    })
+}
+
+/// The embedded system library, which is what a user's `datalove` runs against.
+fn describe_sys() -> WorkspaceDescriptor {
+    WorkspaceDescriptor::from_system_library(embedded_sys())
+}
+
+/// The embedded library itself, kept because its `natives` are wanted again for
+/// every executor and it holds raw function pointers, so it is neither `Send`
+/// nor a thing to rebuild per iteration.
+fn embedded_sys() -> &'static datafun::pipeline::SystemLibrary {
+    thread_local! {
+        static SYS: std::cell::OnceCell<&'static datafun::pipeline::SystemLibrary> =
+            const { std::cell::OnceCell::new() };
+    }
+    SYS.with(|cell| {
+        *cell.get_or_init(|| Box::leak(Box::new(datalove_stdlib::system_library())))
     })
 }
 
