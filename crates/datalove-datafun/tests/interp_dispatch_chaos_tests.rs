@@ -264,39 +264,36 @@ fn test_file(path: &Path) -> Result<(), String> {
 
     let seed = compute_seed(&file_bytes);
 
-    // Run in spawned thread to work around Cranelift JIT + PIE issues.
-    std::thread::spawn(move || {
-        let db = datafun::Database::default();
+    let db = datafun::Database::default();
 
-        let parsed = package_load_worldfile::parse_worldfile_sections(file_bytes.as_slice())
-            .map_err(|e| format!("Failed to parse worldfile: {}", e))?;
+    let parsed = package_load_worldfile::parse_worldfile_sections(file_bytes.as_slice())
+        .map_err(|e| format!("Failed to parse worldfile: {}", e))?;
 
-        // Run with interpreter (baseline).
-        let interp_results = run_with_interpreter(&db, &parsed);
+    // Run with interpreter (baseline).
+    let interp_results = run_with_interpreter(&db, &parsed);
 
-        // Run with chaos dispatcher (multiple iterations with different seeds).
-        for iter in 0..5 {
-            let chaos_seed = seed.wrapping_add(iter);
-            let (chaos_results, stats) = run_with_chaos_dispatcher(&db, &parsed, chaos_seed);
+    // Run with chaos dispatcher (multiple iterations with different seeds).
+    for iter in 0..5 {
+        let chaos_seed = seed.wrapping_add(iter);
+        let (chaos_results, stats) = run_with_chaos_dispatcher(&db, &parsed, chaos_seed);
 
-            // Accumulate global stats.
-            TOTAL_JIT_COMPILED.fetch_add(stats.jit_compiled, Ordering::Relaxed);
-            TOTAL_INLININGS.fetch_add(stats.inlinings_performed, Ordering::Relaxed);
-            TOTAL_CALLS_TRACKED.fetch_add(stats.calls_tracked, Ordering::Relaxed);
+        // Accumulate global stats.
+        TOTAL_JIT_COMPILED.fetch_add(stats.jit_compiled, Ordering::Relaxed);
+        TOTAL_INLININGS.fetch_add(stats.inlinings_performed, Ordering::Relaxed);
+        TOTAL_CALLS_TRACKED.fetch_add(stats.calls_tracked, Ordering::Relaxed);
 
-            // Compare chaos results with interpreter.
-            if chaos_results != interp_results {
-                return Err(format!(
-                    "Chaos dispatcher (seed={}) differs from interpreter!\n\
-                     Interpreter: {:?}\n\
-                     Chaos: {:?}",
-                    chaos_seed, interp_results, chaos_results
-                ));
-            }
+        // Compare chaos results with interpreter.
+        if chaos_results != interp_results {
+            return Err(format!(
+                "Chaos dispatcher (seed={}) differs from interpreter!\n\
+                 Interpreter: {:?}\n\
+                 Chaos: {:?}",
+                chaos_seed, interp_results, chaos_results
+            ));
         }
+    }
 
-        Ok(())
-    }).join().expect("test thread panicked")
+    Ok(())
 }
 
 fn main() {

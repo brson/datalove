@@ -109,21 +109,28 @@ the library's, and each fixture's script is a new input. The suites that deliber
 incrementality -- `durability_tests`, `span_revision_tests`, `span_backdating_tests` -- must
 keep building their own database and should not use this.
 
-## The wrinkle, which is most of the win
+## The wrinkle, which is most of the win -- **done**
 
-`std_all_tests::analyze_file` spawns **a fresh thread per fixture** for the JIT backend, with
-the comment "in spawned thread for Cranelift PIE workaround". A thread-local cache gives a
-thread that lives for one fixture nothing at all, so 143 of the 572 compiles would survive.
+Four suites spawned a fresh thread per fixture to run anything with a jit in it, three of them
+saying "to work around Cranelift JIT + PIE issues" and `interp_jit_tests` explaining it as
+"placing the JIT memory in the mmap region rather than near the PIE base". A thread-local
+cache gives a thread that lives for one fixture nothing at all, so those compiles would have
+survived it.
 
-**The workaround looks obsolete.** Nothing else in the tree does it:
+**The workaround was obsolete, and the argument is structural rather than "it passed".** It
+was added 2026-01-10. `7603fbc3`, 2026-03-22, "Fix x86_64 JIT relocation overflow for code,
+data, and imports", removed both sources of the 32-bit PC-relative overflow the thread was
+dodging: code and data now come from one contiguous `ArenaMemoryProvider` region, and every
+import -- the `dtlv_rti_*` runtime and the dispatch trampoline, which live in the main binary
+-- is reached through a local trampoline embedding the absolute address. After that, no
+relocation refers to the distance between jit memory and the executable's base, so where mmap
+landed stopped mattering.
 
-- `interp_jit_tests` builds a `JitEngine` on the test thread and runs 409 fixtures.
-- `datalove script --jit` builds one on the main thread, and that binary is a PIE.
-- `benches/jit.rs` builds one per iteration on the bench thread.
-
-So: confirm it, drop the spawn, and one world per worker thread covers all four backends.
-If it turns out to be real, the fallback is a single long-lived JIT worker fed by a channel,
-which keeps a thread-local world of its own.
+The spawns are gone from all four. In three of them the thread was only the workaround and
+`.join().expect(...)` re-panicked anyway, so removing it changes nothing. In `std_all_tests`
+the join was also a panic boundary -- a jit that panics on one fixture was reported as that
+fixture disagreeing rather than taking the suite down -- so that became
+`std::panic::catch_unwind`, which keeps the boundary without the thread.
 
 ## Two sources, so two slots
 
@@ -158,8 +165,8 @@ so none of this touches what a user's compiled program costs.
 
 ## Order
 
-1. **Confirm the PIE workaround is obsolete** and drop the per-fixture spawn in
-   `std_all_tests`. Without this the cache misses a quarter of the compiles.
+1. ~~**Confirm the PIE workaround is obsolete** and drop the per-fixture spawn.~~ Done, in all
+   four suites that had one.
 2. **Add `with_sys`**, generalised from `with_world` in `benches/jit.rs`, in a crate the test
    targets can reach.
 3. **Convert `std_all_tests`**, and measure. The instrumentation to check is two `eprintln`s

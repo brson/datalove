@@ -257,26 +257,31 @@ fn analyze_file(path: &Path) -> Result<String, String> {
         run_with_executor(&db, &compiled, &descriptor, &script_text, None, "Interp")?
     };
 
-    // Backend 2: JIT (in spawned thread for Cranelift PIE workaround).
-    let jit_result: Result<String, String> = {
-        let script_for_jit = script_text.clone();
-        std::thread::spawn(move || -> Result<String, String> {
-            let db = datafun::Database::default();
-            let (descriptor, compiled) = setup_and_compile(&db)?;
-            let jit = JitEngine::new(1).map_err(|e| format!("JIT engine creation failed: {}", e))?;
-            let (value, _) = run_with_executor(&db, &compiled, &descriptor, &script_for_jit, Some(Box::new(jit)), "JIT")?;
-            Ok(value)
-        }).join().unwrap_or_else(|panic| {
-            let msg = if let Some(s) = panic.downcast_ref::<&str>() {
-                s.to_string()
-            } else if let Some(s) = panic.downcast_ref::<String>() {
-                s.clone()
-            } else {
-                "unknown panic".to_string()
-            };
-            Err(format!("JIT thread panicked: {}", msg))
-        })
-    };
+    // Backend 2: JIT.
+    //
+    // Caught rather than allowed to propagate, so that a jit that panics on one
+    // fixture is reported as that fixture disagreeing with the interpreter
+    // rather than taking the whole suite with it. This used to be a spawned
+    // thread, which caught the panic as a side effect of joining and was there
+    // for a Cranelift relocation problem that the jit's own arena fixed.
+    let jit_result: Result<String, String> = std::panic::catch_unwind(|| {
+        let db = datafun::Database::default();
+        let (descriptor, compiled) = setup_and_compile(&db)?;
+        let jit = JitEngine::new(1).map_err(|e| format!("JIT engine creation failed: {}", e))?;
+        let (value, _) = run_with_executor(
+            &db, &compiled, &descriptor, &script_text, Some(Box::new(jit)), "JIT")?;
+        Ok(value)
+    })
+    .unwrap_or_else(|panic| {
+        let msg = if let Some(s) = panic.downcast_ref::<&str>() {
+            s.to_string()
+        } else if let Some(s) = panic.downcast_ref::<String>() {
+            s.clone()
+        } else {
+            "unknown panic".to_string()
+        };
+        Err(format!("JIT panicked: {}", msg))
+    });
 
     // Backend 3: AOT.
     let aot_result = {

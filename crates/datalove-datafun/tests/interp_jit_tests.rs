@@ -209,39 +209,30 @@ pub fn analyze_worldfile_with_jit(
 }
 
 /// Analyze a worldfile and produce RON output.
-///
-/// WORKAROUND: Cranelift JIT has issues when running in the main thread of a
-/// PIE binary. We spawn a thread to run the analysis, which works around this
-/// by placing the JIT memory in the mmap region rather than near the PIE base.
 fn analyze_file(path: &Path) -> Result<String, String> {
     let file_bytes = std::fs::read(path)
         .map_err(|e| format!("Failed to read file: {}", e))?;
 
-    // Run analysis in a spawned thread to work around Cranelift JIT limitations.
-    let result = std::thread::spawn(move || {
-        let db = datafun::Database::default();
+    let db = datafun::Database::default();
 
-        // Parse the worldfile into sections.
-        let parsed = package_load_worldfile::parse_worldfile_sections(file_bytes.as_slice())
-            .map_err(|e| format!("Failed to parse worldfile: {}", e))?;
+    // Parse the worldfile into sections.
+    let parsed = package_load_worldfile::parse_worldfile_sections(file_bytes.as_slice())
+        .map_err(|e| format!("Failed to parse worldfile: {}", e))?;
 
-        // Analyze using IR interpreter with JIT.
-        let analysis = analyze_worldfile_with_jit(&db, parsed)
-            .map_err(|e| format!("Analysis failed: {}", e))?;
+    // Analyze using IR interpreter with JIT.
+    let analysis = analyze_worldfile_with_jit(&db, parsed)
+        .map_err(|e| format!("Analysis failed: {}", e))?;
 
-        // Serialize to RON format.
-        let ron_config = ron::ser::PrettyConfig::new()
-            .struct_names(true)
-            .enumerate_arrays(false)
-            .compact_arrays(false);
+    // Serialize to RON format.
+    let ron_config = ron::ser::PrettyConfig::new()
+        .struct_names(true)
+        .enumerate_arrays(false)
+        .compact_arrays(false);
 
-        let ron_output = ron::ser::to_string_pretty(&analysis, ron_config)
-            .map_err(|e| format!("Failed to serialize to RON: {}", e))?;
+    let ron_output = ron::ser::to_string_pretty(&analysis, ron_config)
+        .map_err(|e| format!("Failed to serialize to RON: {}", e))?;
 
-        Ok(expand_ir_strings(&ron_output))
-    }).join().expect("analysis thread panicked");
-
-    result
+    Ok(expand_ir_strings(&ron_output))
 }
 
 fn main() {
