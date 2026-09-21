@@ -5,7 +5,7 @@ use serde::Serialize;
 
 use crate::{Command, ReplCommand, Eval, EvalBinding, EvalExpr, InputParse, Input};
 use datalove_datafun as datafun;
-use datafun::pipeline::{ScriptCompiler, ScriptExecutor, TypecheckResult, OwnershipResult, LoweringResult, SystemLibrary, WorkspaceDescriptor};
+use datafun::pipeline::{ScriptCompiler, ScriptExecutor, TypecheckResult, OwnershipResult, LoweringResult, ModuleCompilationPipeline, SystemLibrary, WorkspaceDescriptor};
 use datafun::pipeline::rider_load::register_linked_natives;
 use datalove_datafun_ir::ExportBinding;
 
@@ -16,6 +16,15 @@ pub struct Engine<'db> {
     sys: SystemLibrary,
     /// The workspace built from `sys`.
     workspace: WorkspaceDescriptor,
+    /// The pipeline that compiled the modules, kept rather than rebuilt.
+    ///
+    /// A pipeline owns the `Source` inputs salsa keys its queries on, so throwing
+    /// one away and making another means recompiling the library from nothing. A
+    /// reset happens on every panic recovery, and the library it recompiles cannot
+    /// have changed -- it is the copy embedded in the binary -- so keeping the
+    /// pipeline turns a reset from a full compile into salsa verifying what it
+    /// already has.
+    pipeline: ModuleCompilationPipeline,
     /// Script compiler for incremental compilation.
     compiler: ScriptCompiler<'db>,
     /// Script executor for running compiled units.
@@ -49,10 +58,9 @@ impl<'db> Session<'db> {
     /// Compile the workspace's modules and register its native riders.
     fn compile(
         db: &'db datafun::Database,
-        workspace: &WorkspaceDescriptor,
+        pipeline: &mut ModuleCompilationPipeline,
         sys: &SystemLibrary,
     ) -> AnyResult<Session<'db>> {
-        let mut pipeline = workspace.to_pipeline(db);
         let compiled = pipeline.compile_fresh(db);
 
         if compiled.has_errors() {
@@ -78,12 +86,14 @@ impl<'db> Session<'db> {
 impl<'db> Engine<'db> {
     pub fn new(db: &'db datafun::Database, sys: SystemLibrary) -> AnyResult<Engine<'db>> {
         let workspace = WorkspaceDescriptor::from_system_library(&sys);
-        let session = Session::compile(db, &workspace, &sys)?;
+        let mut pipeline = workspace.to_pipeline(db);
+        let session = Session::compile(db, &mut pipeline, &sys)?;
 
         Ok(Engine {
             db,
             sys,
             workspace,
+            pipeline,
             compiler: session.compiler,
             executor: session.executor,
         })
@@ -92,8 +102,9 @@ impl<'db> Engine<'db> {
     fn reset(&mut self) {
         // Cleanup the current executor.
         self.executor.destroy_live_values();
-        // The system library compiled at startup, so it compiles again here.
-        let session = Session::compile(self.db, &self.workspace, &self.sys)
+        // The library compiled at startup and has not changed since, so this is
+        // salsa verifying what it has rather than compiling it again.
+        let session = Session::compile(self.db, &mut self.pipeline, &self.sys)
             .expect("system library compiled successfully at startup");
         self.compiler = session.compiler;
         self.executor = session.executor;
@@ -373,3 +384,5 @@ impl<'db> Drop for Engine<'db> {
         self.executor.destroy_live_values();
     }
 }
+
+

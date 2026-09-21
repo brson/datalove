@@ -172,16 +172,74 @@ Per thread, two options, and the numbers favour the second:
 
 ## What to do
 
-1. **Give `ExampleTestRunner` a way to pass context.** Nothing else here is reachable from a
-   test without it.
-2. **`CompiledWorld`, owned.** Convert `std_all_tests` to one per worker and measure. The
-   ceiling on that phase is the 84ms-against-746ms the table gives: about 9x.
-3. **Split compile from execute** in the test suite, since execution is the parallel part and
-   compilation is not. This is also the model a batch compiler wants.
-4. **Measure salsa `persistence`** behind a feature: turn it on, serialize the library world,
-   deserialize it in a fresh process, time it against the 81ms floor. Decide between the salsa
-   artifact and an artifact of our own from that number.
-5. **Only then** decide where an artifact lives.
+1. ~~**Give `ExampleTestRunner` a way to pass context.**~~ Done. It takes an initializer as
+   well as an analyzer and lends a context per worker; `new` wraps the old signature in a
+   context of `()`, so no existing suite changed.
+2. ~~**`CompiledWorld`, owned.**~~ Done, and `std_all_tests` converted.
+3. ~~**Keep the pipeline in the repl.**~~ Done. Not originally on this list, and the clearest
+   win of the three.
+4. **Split compile from execute** -- premise largely spent for the test suite; see below.
+5. **Measure salsa `persistence`** -- sized, not attempted; see below.
+
+## What it did
+
+**`std_all_tests`**, measured by timing each phase and summing:
+
+| Phase | Before | After |
+|---|---|---|
+| Compiling the library | **572 calls, 534s** | **143 calls, 17s**, over 4 worlds |
+| **Suite wall time** | **258s** | **133s** |
+
+Four worlds, one per worker thread, and each fixture pays the warm cost rather than the cold
+one. All four backends share the database instead of building one each.
+
+Getting to one context per worker took three attempts, which is the part worth remembering:
+
+- Rayon's `map_init` calls its initializer **once per work split, not once per thread**. It
+  built 80 worlds for 143 fixtures and the compile phase was 63.9s instead of 17s.
+- One context per `par_chunks` chunk builds the fewest -- exactly one per thread -- but gives
+  up rayon's per-fixture work stealing, so a chunk of slow fixtures straggles. 140s wall.
+- A **pool** keeps both: borrow a context, run the fixture, hand it back. The pool never holds
+  more than the number of threads running at once, and rayon still schedules a fixture at a
+  time. 4 worlds, 17s, 133s wall.
+
+**The repl.** `Session::compile` built a pipeline, compiled, and dropped the pipeline, so every
+`reset` -- which happens on each panic recovery -- recompiled the library from nothing. Keeping
+the pipeline on the `Engine`: startup 664ms, reset **84ms**, second reset 74ms, debug. The
+library it recompiles is the copy embedded in the binary and cannot have changed, so reuse is
+not merely faster but obviously correct.
+
+**Splitting compile from execute** was next on the list and is now worth much less than it
+looked. The compile phase is 17s of a 133s suite; the rest is the two AOT backends, at about
+1.9s a fixture for codegen plus a `cc` invocation plus spawning the executable. Splitting
+compilation out of that does not touch the `cc`. The idea still stands for a batch compiler,
+where compiling many scripts against one world is the whole point, but it is no longer a way to
+make this suite faster.
+
+**Salsa `persistence`, sized rather than attempted.** Every item that should survive has to say
+so -- `#[salsa::tracked(persist)]`, `#[salsa::input(persist)]`, `#[salsa::interned(persist)]` --
+and everything they hold has to be `Serialize` and `Deserialize`. On the compile path that is:
+
+| | |
+|---|---|
+| `bcts` | 40 |
+| `datalove-datafun-tycheck` | 23 |
+| `datalove-datafun-compiler` | 21 |
+| `datalove-datalit` | 14 |
+| `datalove-datafun-parser` | 8 |
+| `datalove-datafun` | 8 |
+| `datalove-datafun-resolve`, `-common` | 6 each |
+| `datalove-datafun-ast` | 5 |
+| `datalove-datafun-sema` | 1 |
+| **total** | **132 across ten crates** |
+
+So it is not a spike, it is a project, and it can fail late: one tracked struct holding
+something unserializable blocks the route after most of the annotating is done. Before starting
+it, the cheaper thing to know is whether the **in-process batch** covers the actual need --
+`datalove script a.dfs b.dfs c.dfs` compiling all three against one `CompiledWorld` pays the
+library once and about a ninth of it per script after, with no serialization at all. Persisting
+across *processes* is the only thing that needs an artifact, and it should be justified against
+that baseline rather than against today's.
 
 ## Two sources, so two worlds
 
