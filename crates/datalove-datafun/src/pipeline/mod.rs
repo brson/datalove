@@ -50,6 +50,7 @@
 
 mod result;
 mod compiled_modules;
+mod compiled_world;
 mod script_compiler;
 mod script_executor;
 mod module_pipeline;
@@ -66,6 +67,7 @@ pub use result::{
     ScriptUnitResult, ScriptCompilationResult,
 };
 pub use compiled_modules::{SharedModuleContext, CompiledModules};
+pub use compiled_world::CompiledWorld;
 pub use script_compiler::ScriptCompiler;
 pub use script_executor::ScriptExecutor;
 pub use module_pipeline::{ModuleCompilationPipeline, ConstInlining};

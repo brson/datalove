@@ -19,6 +19,7 @@ use rmx::rayon::prelude::*;
 use rmx::prelude::*;
 use std::io::Write;
 use std::path::{Path, PathBuf};
+use std::sync::Mutex;
 use rmx::termcolor::{Color, ColorChoice, ColorSpec, StandardStream, WriteColor};
 
 /// Parse command-line arguments for test filtering.
@@ -56,24 +57,27 @@ pub enum TestResult {
 }
 
 /// Configuration and runner for example-based tests.
-pub struct ExampleTestRunner<F> {
+///
+/// The analyzer is handed a context as well as a fixture path. `Init` builds one
+/// per worker thread, which is how a suite keeps something expensive -- a
+/// compiled module world, say -- without sharing it between threads. A suite that
+/// wants no context uses [`new`](ExampleTestRunner::new) and never sees it.
+pub struct ExampleTestRunner<Init, F> {
     manifest_dir: PathBuf,
     fixture_subdir: String,
     file_extension: String,
     output_tag: Option<String>,
+    init: Init,
     analyzer: F,
     allow_errors: bool,
     skip_names: Vec<String>,
 }
 
-impl<F> ExampleTestRunner<F>
-where
-    F: Fn(&Path) -> Result<String, String> + Sync,
-{
-    /// Create a new test runner with the given analyzer function.
+impl ExampleTestRunner<fn(), ()> {
+    /// Create a test runner whose analyzer is given only the fixture path.
     ///
-    /// The analyzer function takes a path to a test fixture file and returns
-    /// either the test output (Ok) or an error message (Err).
+    /// The analyzer takes a path to a test fixture file and returns either the
+    /// test output (Ok) or an error message (Err).
     ///
     /// **Important:** You must pass `env!("CARGO_MANIFEST_DIR")` as the first argument.
     /// This ensures the path is resolved from the test crate, not the library crate.
@@ -82,12 +86,49 @@ where
     /// ```ignore
     /// ExampleTestRunner::new(env!("CARGO_MANIFEST_DIR"), analyze_file)
     /// ```
-    pub fn new(manifest_dir: impl Into<PathBuf>, analyzer: F) -> Self {
+    #[allow(clippy::new_ret_no_self)]
+    pub fn new<F>(
+        manifest_dir: impl Into<PathBuf>,
+        analyzer: F,
+    ) -> ExampleTestRunner<
+        fn(),
+        impl Fn(&mut (), &Path) -> Result<String, String> + Sync + Send,
+    >
+    where
+        F: Fn(&Path) -> Result<String, String> + Sync + Send,
+    {
+        fn nothing() {}
+        ExampleTestRunner::with_worker_context(
+            manifest_dir,
+            nothing as fn(),
+            move |_: &mut (), path: &Path| analyzer(path),
+        )
+    }
+}
+
+impl<Ctx, Init, F> ExampleTestRunner<Init, F>
+where
+    Ctx: Send,
+    Init: Fn() -> Ctx + Sync + Send,
+    F: Fn(&mut Ctx, &Path) -> Result<String, String> + Sync + Send,
+{
+    /// Create a test runner whose analyzer is given a context built per worker.
+    ///
+    /// `init` runs once on each thread that ends up analyzing a fixture, and the
+    /// value it returns is handed to every fixture that thread takes. It is the
+    /// place for state that is expensive to build and cannot be shared between
+    /// threads -- a salsa database is both.
+    pub fn with_worker_context(
+        manifest_dir: impl Into<PathBuf>,
+        init: Init,
+        analyzer: F,
+    ) -> Self {
         Self {
             manifest_dir: manifest_dir.into(),
             fixture_subdir: String::new(),
             file_extension: String::new(),
             output_tag: None,
+            init,
             analyzer,
             allow_errors: false,
             skip_names: Vec::new(),
@@ -163,7 +204,7 @@ where
     }
 
     /// Run a single test case.
-    fn run_test_case(&self, input_path: &Path) -> TestResult {
+    fn run_test_case(&self, ctx: &mut Ctx, input_path: &Path) -> TestResult {
         let base_path = input_path.with_extension("");
         let actual_path = self.output_path(&base_path, "actual");
 
@@ -180,7 +221,7 @@ where
         #[cfg(not(feature = "index-64"))]
         let expected_path = self.output_path(&base_path, "expected");
 
-        let analysis = match (self.analyzer)(input_path) {
+        let analysis = match (self.analyzer)(ctx, input_path) {
             Ok(result) => result,
             Err(error) => {
                 if self.allow_errors {
@@ -273,10 +314,29 @@ where
             writeln!(&mut stdout).X();
         }
 
-        // Run all tests in parallel.
+        // Run in parallel, borrowing a context from a pool rather than building
+        // one per fixture.
+        //
+        // A pool rather than rayon's `map_init`, which calls its initializer once
+        // per work split and so built eighty contexts for a hundred and forty
+        // fixtures. And a pool rather than one context per chunk, which builds the
+        // fewest but gives up rayon's per-fixture work stealing and lets a chunk
+        // of slow fixtures straggle. Borrowing keeps both: the pool never holds
+        // more contexts than there are threads running at once, and a fixture is
+        // still free to go to whichever thread is idle.
+        let pool: Mutex<Vec<Ctx>> = Mutex::new(Vec::new());
         let results: Vec<_> = fixtures
             .par_iter()
-            .map(|fixture| (fixture.clone(), self.run_test_case(fixture)))
+            .map(|fixture| {
+                let mut ctx = pool
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .pop()
+                    .unwrap_or_else(|| (self.init)());
+                let result = self.run_test_case(&mut ctx, fixture);
+                pool.lock().unwrap_or_else(|e| e.into_inner()).push(ctx);
+                (fixture.clone(), result)
+            })
             .collect();
 
         let mut passed = 0;

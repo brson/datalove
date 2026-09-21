@@ -19,13 +19,30 @@ use datafun::pipeline::{
     aot as pipeline_aot, c_aot as pipeline_c_aot,
 };
 
-/// Load the package world, set up the pipeline, and compile modules.
-fn setup_and_compile(db: &datafun::Database) -> Result<(
-    WorkspaceDescriptor,
-    datafun::pipeline::CompiledModules<'_>,
-), String> {
-    // These are the standard library's own tests, so they compile the sources
-    // in the tree rather than the copy embedded in the datalove binary.
+/// What this suite compiles against, kept for the worker that built it.
+///
+/// One per worker thread rather than one per fixture per backend, which is what
+/// it used to be: 572 compilations of `sys/std` for 534 CPU-seconds. Keeping the
+/// pipeline is what makes the difference -- see
+/// `botdocs/plan-compile-reuse.md`.
+struct Worker {
+    descriptor: WorkspaceDescriptor,
+    world: datafun::pipeline::CompiledWorld,
+}
+
+impl Worker {
+    fn new() -> Self {
+        let descriptor = describe_sys();
+        let world = datafun::pipeline::CompiledWorld::new(&descriptor);
+        Self { descriptor, world }
+    }
+}
+
+/// Where the library under test comes from.
+///
+/// These are the standard library's own tests, so they compile the sources in the
+/// tree rather than the copy embedded in the datalove binary.
+fn describe_sys() -> WorkspaceDescriptor {
     let repo_root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .parent().unwrap()
         .parent().unwrap()
@@ -33,24 +50,23 @@ fn setup_and_compile(db: &datafun::Database) -> Result<(
     // The work dir is unique to this suite so a concurrently running suite
     // builds its own component rather than rebuilding over this one's.
     let work_dir = repo_root.join("target").join("datalove-work").join("std_all_tests");
-    let descriptor = rmx::futures::executor::block_on(
+    rmx::futures::executor::block_on(
         WorkspaceDescriptor::load_sys_dir(repo_root.join("sys"))
-    ).map_err(|e| format!("Failed to load package world: {}", e))?
-        .with_work_dir(work_dir);
+    ).expect("the standard library's sources must load")
+        .with_work_dir(work_dir)
+}
 
-    let mut pipeline = descriptor.to_pipeline(db);
-    let compiled = pipeline.compile_fresh(db);
-
+/// Refuse to run a fixture if the library itself does not compile.
+///
+/// A broken library is not one fixture disagreeing with another, so it is not
+/// reported per fixture.
+fn check_library(compiled: &datafun::pipeline::CompiledModules<'_>) {
     if let Some(err) = &compiled.resolution_error {
-        return Err(format!("Package resolution error: {}", err));
+        panic!("the standard library does not resolve: {}", err);
     }
     for (path, errors) in &compiled.path_to_errors {
-        if !errors.is_empty() {
-            return Err(format!("Typecheck errors in {}: {:?}", path, errors));
-        }
+        assert!(errors.is_empty(), "typecheck errors in {}: {:?}", path, errors);
     }
-
-    Ok((descriptor, compiled))
 }
 
 /// Build the unified native component and load it into the given executor.
@@ -246,104 +262,82 @@ fn run_c_aot(
 }
 
 /// Analyze a single .dfs file across all four backends.
-fn analyze_file(path: &Path) -> Result<String, String> {
+///
+/// All four share the worker's database and compiled library. What each needs of
+/// its own is a `ScriptCompiler`, which accumulates units, and a `ScriptExecutor`,
+/// which owns a runtime; `run_with_executor` and the two AOT paths make those.
+fn analyze_file(worker: &mut Worker, path: &Path) -> Result<String, String> {
     let script_text = std::fs::read_to_string(path)
         .map_err(|e| format!("Failed to read file: {}", e))?;
 
-    // Backend 1: Interpreter.
-    let (interp_value, rider_lib_paths) = {
-        let db = datafun::Database::default();
-        let (descriptor, compiled) = setup_and_compile(&db)?;
-        run_with_executor(&db, &compiled, &descriptor, &script_text, None, "Interp")?
-    };
+    // Split so that the descriptor and the world are borrowed separately.
+    let Worker { descriptor, world } = worker;
 
-    // Backend 2: JIT.
-    //
-    // Caught rather than allowed to propagate, so that a jit that panics on one
-    // fixture is reported as that fixture disagreeing with the interpreter
-    // rather than taking the whole suite with it. This used to be a spawned
-    // thread, which caught the panic as a side effect of joining and was there
-    // for a Cranelift relocation problem that the jit's own arena fixed.
-    let jit_result: Result<String, String> = std::panic::catch_unwind(|| {
-        let db = datafun::Database::default();
-        let (descriptor, compiled) = setup_and_compile(&db)?;
-        let jit = JitEngine::new(1).map_err(|e| format!("JIT engine creation failed: {}", e))?;
-        let (value, _) = run_with_executor(
-            &db, &compiled, &descriptor, &script_text, Some(Box::new(jit)), "JIT")?;
-        Ok(value)
+    world.with_compiled(|db, compiled| {
+        check_library(compiled);
+
+        // Backend 1: Interpreter.
+        let (interp_value, rider_lib_paths) =
+            run_with_executor(db, compiled, descriptor, &script_text, None, "Interp")?;
+
+        // Backend 2: JIT.
+        //
+        // Caught rather than allowed to propagate, so that a jit that panics on
+        // one fixture is reported as that fixture disagreeing with the
+        // interpreter rather than taking the whole suite with it. This used to be
+        // a spawned thread, which caught the panic as a side effect of joining
+        // and was there for a Cranelift relocation problem that the jit's own
+        // arena fixed.
+        let jit_result: Result<String, String> = std::panic::catch_unwind(|| {
+            let jit = JitEngine::new(1)
+                .map_err(|e| format!("JIT engine creation failed: {}", e))?;
+            let (value, _) = run_with_executor(
+                db, compiled, descriptor, &script_text, Some(Box::new(jit)), "JIT")?;
+            Ok(value)
+        })
+        .unwrap_or_else(|panic| {
+            let msg = if let Some(s) = panic.downcast_ref::<&str>() {
+                s.to_string()
+            } else if let Some(s) = panic.downcast_ref::<String>() {
+                s.clone()
+            } else {
+                "unknown panic".to_string()
+            };
+            Err(format!("JIT panicked: {}", msg))
+        });
+
+        // Backend 3: AOT.
+        let aot_result = run_aot(db, compiled, &script_text, &rider_lib_paths);
+
+        // Backend 4: C AOT.
+        let c_aot_result = run_c_aot(db, compiled, &script_text, &rider_lib_paths);
+
+        // Compare all backends against interpreter. All errors are fatal.
+        let mut mismatches = Vec::new();
+        for (name, result) in [
+            ("JIT", &jit_result),
+            ("AOT", &aot_result),
+            ("C AOT", &c_aot_result),
+        ] {
+            match result {
+                Ok(value) if value != &interp_value => mismatches.push(format!(
+                    "{} output mismatch:\n  interp: {}\n  {}: {}",
+                    name, interp_value, name, value)),
+                Err(e) => mismatches.push(format!("{} error: {}", name, e)),
+                _ => {}
+            }
+        }
+        if !mismatches.is_empty() {
+            return Err(mismatches.join("\n"));
+        }
+
+        Ok(interp_value)
     })
-    .unwrap_or_else(|panic| {
-        let msg = if let Some(s) = panic.downcast_ref::<&str>() {
-            s.to_string()
-        } else if let Some(s) = panic.downcast_ref::<String>() {
-            s.clone()
-        } else {
-            "unknown panic".to_string()
-        };
-        Err(format!("JIT panicked: {}", msg))
-    });
-
-    // Backend 3: AOT.
-    let aot_result = {
-        let db = datafun::Database::default();
-        let (ref _descriptor, ref compiled) = setup_and_compile(&db)?;
-        run_aot(&db, compiled, &script_text, &rider_lib_paths)
-    };
-
-    // Backend 4: C AOT.
-    let c_aot_result = {
-        let db = datafun::Database::default();
-        let (ref _descriptor, ref compiled) = setup_and_compile(&db)?;
-        run_c_aot(&db, compiled, &script_text, &rider_lib_paths)
-    };
-
-    // Compare all backends against interpreter. All errors are fatal.
-    let mut mismatches = Vec::new();
-    match &jit_result {
-        Ok(jit_value) if jit_value != &interp_value => {
-            mismatches.push(format!(
-                "JIT output mismatch:\n  interp: {}\n  jit: {}",
-                interp_value, jit_value
-            ));
-        }
-        Err(e) => {
-            mismatches.push(format!("JIT error: {}", e));
-        }
-        _ => {}
-    }
-    match &aot_result {
-        Ok(aot_value) if aot_value != &interp_value => {
-            mismatches.push(format!(
-                "AOT output mismatch:\n  interp: {}\n  aot: {}",
-                interp_value, aot_value
-            ));
-        }
-        Err(e) => {
-            mismatches.push(format!("AOT error: {}", e));
-        }
-        _ => {}
-    }
-    match &c_aot_result {
-        Ok(c_value) if c_value != &interp_value => {
-            mismatches.push(format!(
-                "C AOT output mismatch:\n  interp: {}\n  c aot: {}",
-                interp_value, c_value
-            ));
-        }
-        Err(e) => {
-            mismatches.push(format!("C AOT error: {}", e));
-        }
-        _ => {}
-    }
-    if !mismatches.is_empty() {
-        return Err(mismatches.join("\n"));
-    }
-
-    Ok(interp_value)
 }
 
 fn main() {
-    datalove_exampletest::ExampleTestRunner::new(env!("CARGO_MANIFEST_DIR"), analyze_file)
+    datalove_exampletest::ExampleTestRunner::with_worker_context(
+        env!("CARGO_MANIFEST_DIR"), Worker::new, analyze_file)
         .fixture_subdir("std_tests")
         .file_extension("dfs")
         .allow_errors(true)
