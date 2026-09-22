@@ -388,17 +388,13 @@ th {
 .token.brace-set {
     color: color-mix(in srgb, var(--syn-brace), yellow 10%);
     opacity: 0.8;
-    text-shadow: 0 0 2px color-mix(in srgb, var(--syn-brace), yellow 90%);
 }
 .token.op-cmp { color: var(--syn-op-cmp); }
 .token.op-result { color: var(--syn-op-result); }
 .token.op-option { color: var(--syn-op-option); }
 .token.op-clone { color: var(--syn-op-clone); }
 .token.op-arith { color: var(--syn-op-arith); }
-.token.type-colon {
-    color: var(--syn-type-colon);
-    text-shadow: 0 0 2px color-mix(in srgb, var(--syn-type-colon), red 90%);
-}
+.token.type-colon { color: var(--syn-type-colon); }
 .token.type-hint-slash { color: var(--syn-type-hint-slash); }
 .token.punctuation { color: var(--syn-punctuation); }
 
