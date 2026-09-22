@@ -1404,6 +1404,7 @@ dependencies = [
  "datalove-datafun-cranelift-jit",
  "datalove-datafun-interp",
  "datalove-datafun-ir",
+ "datalove-datafun-parser",
  "datalove-datafun-resolve",
  "datalove-datafun-tycheck",
  "datalove-stdlib",

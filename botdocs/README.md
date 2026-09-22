@@ -64,6 +64,7 @@ Specifications, research, design documents, implementation plans, and reports.
 - [Stdlib Blockers](reports/report-stdlib-blockers.md)
 - [Const Parameters and Generics](reports/report-const-params-and-generics.md)
 - [The JIT and the Inliner](reports/report-jit-and-inliner.md)
+- [Profiling the Front End](reports/report-frontend-profile.md)
 - [Primary vs Full Expression Parsing](report-expr-primary.md)
 - [Datalog-Style Programming with Atoms/Terms/Enums](report-datalog.md)
 - [Overloading or Traits](report-overloading-vs-traits.md)

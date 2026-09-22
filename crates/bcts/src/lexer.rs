@@ -3,7 +3,7 @@ use rmx::prelude::*;
 use rmx::std::ops::Range;
 use rmx::std::{iter, mem};
 
-use crate::text::{Text, InternedText};
+use crate::text::InternedText;
 use crate::chunk::{Chunk, RangeKind};
 
 #[cfg(test)]
@@ -138,6 +138,49 @@ pub enum Sigil {
     Tilde,
 }
 
+/// Which sigils can begin with each byte, and whether any can.
+///
+/// The tokenizer asked two questions of the sigil set for every character it
+/// looked at: "could a sigil start here" and, if so, "which one is it". Both were
+/// a linear scan of all seventy-one variants calling `as_str` on each, and
+/// `Sigil::as_str` was 7.5% of the time spent lexing. Both are an index now.
+struct SigilTable {
+    /// Whether any sigil begins with this byte.
+    starts: [bool; 256],
+    /// The sigils beginning with this byte, in declaration order.
+    ///
+    /// Declaration order is load-bearing: `eat_sigil` takes the first match, and
+    /// the longer sigils are declared before the shorter ones they begin with, so
+    /// `+?=` is found before `+`. Grouping by first byte keeps that order among
+    /// the candidates, which is the same order the full scan saw them in.
+    by_first_byte: [Vec<Sigil>; 256],
+}
+
+impl SigilTable {
+    fn build() -> Self {
+        let mut starts = [false; 256];
+        let mut by_first_byte: [Vec<Sigil>; 256] = std::array::from_fn(|_| Vec::new());
+        for sigil in enum_iterator::all::<Sigil>() {
+            let first = sigil.as_str().as_bytes()[0];
+            assert!(first.is_ascii(), "a sigil starting outside ASCII: {:?}", sigil);
+            starts[first as usize] = true;
+            by_first_byte[first as usize].push(sigil);
+        }
+        Self { starts, by_first_byte }
+    }
+
+    /// The sigils that could begin with `byte`, longest first.
+    fn starting_with(&self, byte: u8) -> &[Sigil] {
+        &self.by_first_byte[byte as usize]
+    }
+}
+
+/// The table, built once.
+fn sigil_table() -> &'static SigilTable {
+    static TABLE: std::sync::OnceLock<SigilTable> = std::sync::OnceLock::new();
+    TABLE.get_or_init(SigilTable::build)
+}
+
 #[salsa::tracked(returns(copy))]
 pub fn lex_chunk<'db>(
     db: &'db dyn crate::Db,
@@ -172,12 +215,7 @@ pub fn lex_chunk<'db>(
                 });
             }
             (range, RangeKind::Unknown) => {
-                let mut tokenizer = Tokenizer {
-                    db,
-                    chunk,
-                    range,
-                    chunk_text: chunk_text.C(),
-                };
+                let mut tokenizer = Tokenizer { db, text: chunk_str, range };
 
                 tokens.extend(
                     iter::from_fn(|| tokenizer.next())
@@ -188,10 +226,14 @@ pub fn lex_chunk<'db>(
 
     return ChunkLex::new(db, chunk, tokens);
 
+    /// What is left of one unknown range, and where in the chunk it started.
+    ///
+    /// `text` is the whole chunk rather than a handle to fetch it with: reading
+    /// it back out of salsa on every `peek` was two field reads per character,
+    /// and `peek` is what every other method is built on.
     struct Tokenizer<'db> {
         db: &'db dyn crate::Db,
-        chunk: Chunk<'db>,
-        chunk_text: Text<'db>,
+        text: &'db str,
         range: Range<usize>,
     }
 
@@ -232,7 +274,7 @@ pub fn lex_chunk<'db>(
         }
 
         fn intern(&self, range: Range<usize>) -> InternedText<'db> {
-            InternedText::new(self.db, S(&self.chunk_text.as_str(self.db)[range]))
+            InternedText::new(self.db, S(&self.text[range]))
         }
 
         fn eat_word(&mut self) -> Token<'db> {
@@ -258,16 +300,19 @@ pub fn lex_chunk<'db>(
         }
 
         fn is_sigil_start(ch: char) -> bool {
-            enum_iterator::all::<Sigil>().map(|s| s.start_char()).any(|c| c == ch)
+            // No sigil starts with a character outside ASCII, so one index
+            // answers this. It used to ask every sigil for its first character,
+            // for every character the tokenizer classified.
+            ch.is_ascii() && sigil_table().starts[ch as usize]
         }
 
         fn eat_sigil(&mut self) -> Token<'db> {
             assert_eq!(self.peek_token(), Some(NextToken::Sigil));
 
-            let all_sigils = enum_iterator::all::<Sigil>();
-            let text = &self.chunk.text(self.db).as_str(self.db)[self.range.C()];
+            let text = &self.text[self.range.C()];
 
-            for sigil in all_sigils {
+            // Only the sigils that could start here, rather than all of them.
+            for &sigil in sigil_table().starting_with(text.as_bytes()[0]) {
                 let sigil_str = sigil.as_str();
                 if text.starts_with(sigil_str) {
                     let range_start = self.range.start;
@@ -350,13 +395,15 @@ pub fn lex_chunk<'db>(
         }
 
         fn eat_char(&mut self, ch: char) {
-            assert!(self.peek() == Some(ch));
+            // Debug only: the caller has just peeked this character, and paying
+            // for a second peek per character consumed doubled the lexer's work.
+            debug_assert!(self.peek() == Some(ch));
             self.range.start = self.range.start.checked_add(ch.len_utf8()).X();
             assert!(self.range.start <= self.range.end);
         }
 
         fn peek(&self) -> Option<char> {
-            self.chunk.text(self.db).as_str(self.db)[self.range.C()].chars().next()
+            self.text[self.range.C()].chars().next()
         }
     }
 }
@@ -500,10 +547,6 @@ impl Sigil {
             Sigil::Dollar => "$",
             Sigil::Tilde => "~",
         }
-    }
-
-    fn start_char(&self) -> char {
-        self.as_str().chars().next().X()
     }
 
     pub fn close_sigil(&self) -> Sigil {

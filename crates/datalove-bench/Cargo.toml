@@ -15,11 +15,16 @@ datalove-datafun = { path = "../datalove-datafun" }
 datalove-datafun-cranelift-jit = { path = "../datalove-datafun-cranelift-jit" }
 datalove-datafun-interp = { path = "../datalove-datafun-interp" }
 datalove-datafun-ir = { path = "../datalove-datafun-ir" }
+datalove-datafun-parser = { path = "../datalove-datafun-parser" }
 datalove-stdlib = { path = "../datalove-stdlib" }
 bct.workspace = true
 
 [[bench]]
 name = "parallel"
+harness = false
+
+[[bench]]
+name = "frontend"
 harness = false
 
 [[bench]]
