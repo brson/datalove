@@ -7,31 +7,12 @@ common data types.
 We often refer to it as _datalit_,
 and its types and datalit types.
 
+Datalove literals is intended for use in the Datalove ecosystem
+and not as a general-purpose serialization format.
+
+
 ```datalove
-: {
-  name: string,
-  version: (u32, u32, u32),
-  tag: (bool,),
-  unit: (),
-  enabled: bool,
-  score: f64,
-  flags: u32,
-  offset: i32,
-  tags: [string],
-  counts: %{string = int},
-  ids: #{int},
-  matrix: [|f64, 2|],
-  cube: [|int, 3|],
-  metrics: {| name: string, value: f64 |},
-  config: ?{ retries: u32, timeout: f64 },
-  backup: ?string,
-  status: !string,
-  failure: !u32,
-  state: atom Ready,
-  event: term Click (int, int),
-  kind: enum { atom Normal, atom Debug, term Custom string },
-  payload: data,
-} / {
+{
   name = "datalove",
   version = (0, 1, 0),
   tag = (true,),
@@ -39,14 +20,26 @@ and its types and datalit types.
   enabled = true,
   score = 99.5,
   flags = 0xFF,
-  offset = -1,
+  diff = -1,
   tags = ["fast", "typed", "portable"],
   counts = %{ "a" = 1, "b" = 2, "c" = 3 },
   ids = #{ 10, 20, 30 },
   matrix = [| 1.0 0.0, 0.0 1.0 |],
-  cube = [| 1 2, 3 4,, 5 6, 7 8 |],
-  metrics = {| name, value; "latency", 0.5; "throughput", 1000.0 |},
-  config = some { retries = 3, timeout = 30.0 },
+  cube = [|
+    1 2,
+    3 4,,
+    5 6,
+    7 8,
+  |],
+  metrics = {|
+    name, value
+    "latency", 0.5
+    "throughput", 1000.0
+  |},
+  config = some {
+    retries = 3,
+    timeout = 30.0,
+  },
   backup = none,
   status = ok "healthy",
   failure = error "oops",
@@ -66,13 +59,61 @@ may be prefixed with a type hint,
 
 Expressions are typechecked
 with a simple bidirectional discipline,
-either checking against a type hint,
-or synthesizing a type.
-All expressions
-synthesize some type in absence of type hints
-(ideally, not currently true).
+drawing their expected type from a type hint
+or synthesizing a type directly.
+Most expressions synthesize types unambiguously.
+Type hints are sometimes required, in predictable positions.
 For many uses datalit expressions are checked
 against an external type context.
+
+```datalove
+// A single top-level type hint.
+: {
+  name: string,
+  version: (u32, u32, u32),
+  tags: [string],
+  counts: %{string = int},
+} / {
+  name = "datalove",
+  version = (0, 1, 0),
+  tag = (true,),
+  counts = %{ "a" = 1, "b" = 2, "c" = 3 },
+}
+```
+
+
+```datalove
+// Embedded type hints.
+{
+  name = : string / "datalove",
+  counts = %{
+    "a" = 1,
+    "b" = 2,
+    // A deeply-embedded hint.
+    "c" = : u32 / 3,
+  },
+  kind = : enum {
+    atom ProcessData,
+    term Custom string,
+  } / enum {
+    term Custom "experiment",
+  },
+}
+```
+
+Types are generally spelled the same way as their values,
+but with the type sigil, `:`, replaced with the value-assignment sigil, `=`.
+
+```datalove
+: {
+  retries: int,
+  timeout: f32,
+} / {
+  retries = 3,
+  timeout = 30.0,
+}
+```
+
 
 ### EBNF · Expressions
 
@@ -116,7 +157,7 @@ expr           = primitive_lit
 |-------------------|------------------|
 | `bool`            | `true`, `false`  |
 | `int`             | `42`             |
-| `f32`, `f64`      | `3.14`           |
+| `f32`, `f64`      | `3.14`, `1.0e10` |
 | `string`          | `"hello"`        |
 | `u8` .. `u64`     | `: u32 / 42`     |
 | `i8` .. `i64`     | `: i32 / -1`     |
@@ -129,7 +170,10 @@ Fixed-width integers require a type hint or checking context.
 `index` is an unsigned integer
 representing the addressable size of collection types,
 `offset` is the signed version of the same size,
-both 32-bit by default.
+both 32-bit by default, 64-bit by compile-time option.
+
+Floats are always written with a decimal and
+additionally support scientific notation.
 
 Integers and floats can be created from hex literals.
 Hex literals synthesize `int`, but check
