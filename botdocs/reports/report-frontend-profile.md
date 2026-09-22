@@ -159,6 +159,8 @@ decodes UTF-8 per character. A byte cursor with an ASCII fast path would help, a
 would restructure the tokenizer.
 
 **Parsing proper is about 8ms of the 11ms** and has not been profiled in detail. It is
-now the front end's largest phase by a wide margin, and the next place to look.
+now the front end's largest phase by a wide margin, and the next place to look. Done:
+`botdocs/reports/report-parser-profile.md`, which found the same
+read-it-back-out-of-salsa mistake one layer up and took parsing proper 1.42x.
 
 **Bracing is a quarter of a millisecond** for 183KB. Nothing to do.

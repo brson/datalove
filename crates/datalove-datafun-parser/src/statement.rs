@@ -342,7 +342,7 @@ impl<'db> Parser<'db> {
         let (type_params, type_bounds) = match self.peek() {
             Some(TreeToken::Branch { sigil: Sigil::AngleOpen, .. }) => {
                 match self.next() {
-                    Some(TreeToken::Branch { inner, .. }) => self.parse_type_params(inner),
+                    Some(TreeToken::Branch { inner, .. }) => self.parse_type_params(*inner),
                     _ => unreachable!("peeked an angle branch"),
                 }
             }
@@ -353,7 +353,7 @@ impl<'db> Parser<'db> {
         let params = match self.next() {
             Some(TreeToken::Branch { sigil: Sigil::ParenOpen, open, inner, .. }) => {
                 let open_span = TextSpan::new(self.source_text(), open.span());
-                self.parse_fun_params(inner, Some((open_span, "in this parameter list")))
+                self.parse_fun_params(*inner, Some((open_span, "in this parameter list")))
             }
             _ => {
                 let ts = self.error_span();
@@ -1086,7 +1086,7 @@ impl<'db> Parser<'db> {
         let (type_params, type_bounds) = match self.peek() {
             Some(TreeToken::Branch { sigil: Sigil::AngleOpen, .. }) => {
                 match self.next() {
-                    Some(TreeToken::Branch { inner, .. }) => self.parse_type_params(inner),
+                    Some(TreeToken::Branch { inner, .. }) => self.parse_type_params(*inner),
                     _ => unreachable!("peeked an angle branch"),
                 }
             }
@@ -1097,7 +1097,7 @@ impl<'db> Parser<'db> {
         let params = match self.next() {
             Some(TreeToken::Branch { sigil: Sigil::ParenOpen, open, inner, .. }) => {
                 let open_span = TextSpan::new(self.source_text(), open.span());
-                self.parse_fun_params(inner, Some((open_span, "in this parameter list")))
+                self.parse_fun_params(*inner, Some((open_span, "in this parameter list")))
             }
             _ => {
                 let ts = self.error_span();

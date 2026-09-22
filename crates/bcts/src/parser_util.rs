@@ -85,7 +85,7 @@ pub trait TokenStreamExt<'db>: TokenStream<'db> {
     fn eat_branch(&mut self, sigil: Sigil) -> Option<BracerIter<'db>> {
         if self.peek_sigil(sigil) {
             match self.next() {
-                Some(TreeToken::Branch { inner, .. }) => Some(inner),
+                Some(TreeToken::Branch { inner, .. }) => Some(*inner),
                 _ => None,
             }
         } else {
@@ -95,15 +95,14 @@ pub trait TokenStreamExt<'db>: TokenStream<'db> {
 
     /// Try to consume any word and return it as InternedText.
     fn eat_name(&mut self) -> Option<InternedText<'db>> {
-        if self.peek_word().is_some() {
-            match self.next() {
-                Some(TreeToken::Token(token)) => {
-                    token.word_str(self.db()).map(|word| InternedText::new(self.db(), word.S()))
-                }
-                _ => None,
-            }
-        } else {
-            None
+        self.peek_word()?;
+        match self.next() {
+            // The lexer interned this text already, and `InternedText` is keyed
+            // on its string, so reading it back out as a `&str` and interning a
+            // fresh `String` of it allocated its way to the value in hand.
+            Some(TreeToken::Token(token)) => Some(token.text),
+            // `peek_word` just said the token at the cursor is a word.
+            _ => bug!(),
         }
     }
 

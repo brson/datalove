@@ -23,16 +23,20 @@ enum TokenSource<'db> {
     Vec {
         tokens: Vec<TreeToken<'db>>,
         pos: usize,
-        /// Last consumed token for span tracking.
-        last_token: Option<TreeToken<'db>>,
+        /// The end of the last token consumed, for span tracking.
+        last_end: Option<usize>,
     },
     /// Iterator-backed with lookahead buffer (zero allocation).
     Iter {
         iter: BracerIter<'db>,
         /// Lookahead buffer: [0] = current, [1] = next.
         buffer: [Option<TreeToken<'db>>; 2],
-        /// Last consumed token for span tracking.
-        last_token: Option<TreeToken<'db>>,
+        /// The end of the last token consumed, for span tracking.
+        ///
+        /// The token itself was kept here once, which meant cloning every
+        /// `TreeToken` a second time on the way past -- and a branch carries a
+        /// whole sub-iterator -- to read one `usize` back out of it.
+        last_end: Option<usize>,
     },
 }
 
@@ -125,7 +129,7 @@ impl<'db> Parser<'db> {
     ) -> Self {
         Parser {
             db,
-            source: TokenSource::Vec { tokens, pos: 0, last_token: None },
+            source: TokenSource::Vec { tokens, pos: 0, last_end: None },
             had_error: false,
             source_text,
             module_id,
@@ -199,7 +203,7 @@ impl<'db> Parser<'db> {
             source: TokenSource::Iter {
                 iter,
                 buffer: [None, None],
-                last_token: None,
+                last_end: None,
             },
             had_error: false,
             source_text,
@@ -239,7 +243,7 @@ impl<'db> Parser<'db> {
             source: TokenSource::Iter {
                 iter,
                 buffer: [None, None],
-                last_token: None,
+                last_end: None,
             },
             had_error: false,
             source_text: self.source_text,
@@ -460,12 +464,8 @@ impl<'db> Parser<'db> {
     /// Get the byte position at end of previous token (after consuming).
     pub(super) fn last_byte_end(&self) -> usize {
         match &self.source {
-            TokenSource::Vec { last_token, .. } | TokenSource::Iter { last_token, .. } => {
-                if let Some(token) = last_token {
-                    self.extract_text_span(token).end()
-                } else {
-                    0
-                }
+            TokenSource::Vec { last_end, .. } | TokenSource::Iter { last_end, .. } => {
+                last_end.unwrap_or(0)
             }
         }
     }
@@ -718,29 +718,25 @@ impl<'db> TokenStream<'db> for Parser<'db> {
     }
 
     fn prev_end(&self) -> Option<usize> {
-        let last_token = match &self.source {
-            TokenSource::Vec { last_token, .. } => last_token,
-            TokenSource::Iter { last_token, .. } => last_token,
-        };
-        last_token.as_ref().map(|token| token.span().end)
+        match &self.source {
+            TokenSource::Vec { last_end, .. } | TokenSource::Iter { last_end, .. } => *last_end,
+        }
     }
 
     fn next(&mut self) -> Option<TreeToken<'db>> {
         match &mut self.source {
-            TokenSource::Vec { tokens, pos, last_token } => {
+            TokenSource::Vec { tokens, pos, last_end } => {
                 let token = tokens.get(*pos).cloned();
-                if token.is_some() {
+                if let Some(token) = token.as_ref() {
                     *pos += 1;
-                    // Remember last consumed token.
-                    *last_token = token.C();
+                    *last_end = Some(token.span().end);
                 }
                 token
             }
-            TokenSource::Iter { iter, buffer, last_token } => {
+            TokenSource::Iter { iter, buffer, last_end } => {
                 // Take from slot 0.
                 let result = buffer[0].take();
-                // Remember last consumed token.
-                *last_token = result.C();
+                *last_end = result.as_ref().map(|token| token.span().end);
                 // Shift slot 1 to slot 0.
                 buffer[0] = buffer[1].take();
                 // Fill slot 1 from iterator.

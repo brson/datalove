@@ -25,8 +25,12 @@ enum TokenSource<'db> {
         iter: BracerIter<'db>,
         /// Lookahead buffer: [0] = current, [1] = next.
         buffer: [Option<TreeToken<'db>>; 2],
-        /// Last consumed token for span tracking.
-        last_token: Option<TreeToken<'db>>,
+        /// The end of the last token consumed, for span tracking.
+        ///
+        /// The token itself was kept here once, which meant cloning every
+        /// `TreeToken` a second time on the way past -- and a branch carries a
+        /// whole sub-iterator -- to read one `usize` back out of it.
+        last_end: Option<usize>,
     },
 }
 
@@ -83,7 +87,7 @@ impl<'db> Parser<'db> {
             source: TokenSource::Iter {
                 iter,
                 buffer: [None, None],
-                last_token: None,
+                last_end: None,
             },
             expr_spans: Vec::new(),
             expr_counter: 0,
@@ -277,9 +281,7 @@ impl<'db> TokenStream<'db> for Parser<'db> {
             TokenSource::Vec { tokens, pos } => {
                 tokens.get(pos.checked_sub(1)?).map(|token| token.span().end)
             }
-            TokenSource::Iter { last_token, .. } => {
-                last_token.as_ref().map(|token| token.span().end)
-            }
+            TokenSource::Iter { last_end, .. } => *last_end,
         }
     }
 
@@ -292,11 +294,10 @@ impl<'db> TokenStream<'db> for Parser<'db> {
                 }
                 token
             }
-            TokenSource::Iter { iter, buffer, last_token } => {
+            TokenSource::Iter { iter, buffer, last_end } => {
                 // Take from slot 0.
                 let result = buffer[0].take();
-                // Remember last consumed token.
-                *last_token = result.clone();
+                *last_end = result.as_ref().map(|token| token.span().end);
                 // Shift slot 1 to slot 0.
                 buffer[0] = buffer[1].take();
                 // Fill slot 1 from iterator.

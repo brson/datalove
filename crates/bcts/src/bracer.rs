@@ -37,10 +37,15 @@ impl<'db> Bracer<'db> {
         &self,
         db: &'db dyn crate::Db,
     ) -> BracerIter<'db> {
+        let all_tokens = self.chunk(db).tokens(db);
         BracerIter {
             db,
             tree: *self,
-            real_token_range: 0..self.chunk(db).tokens(db).len(),
+            all_tokens,
+            all_branches: self.branches(db),
+            all_inserted_closes: self.inserted_closes(db),
+            all_removed_closes: self.removed_closes(db),
+            real_token_range: 0..all_tokens.len(),
             branches: 0..self.branches(db).len(),
             inserted_closes: 0..self.inserted_closes(db).len(),
             removed_closes: 0..self.removed_closes(db).len(),
@@ -56,6 +61,19 @@ impl<'db> Bracer<'db> {
 pub struct BracerIter<'db> {
     pub db: &'db dyn crate::Db,
     tree: Bracer<'db>,
+
+    // The four sequences the iterator walks in step, borrowed once.
+    //
+    // `next` consults all four to decide what comes next, so reading them back
+    // out of salsa there cost five tracked-struct field reads -- the chunk, its
+    // tokens, and three of the bracer's own -- to advance by one token. They are
+    // `#[returns(ref)]` fields, so a `&'db` borrow of each outlives any iterator
+    // over them and the sub-iterator for a branch shares the same four.
+    all_tokens: &'db [Token<'db>],
+    all_branches: &'db [Branch],
+    all_inserted_closes: &'db [(usize, Sigil)],
+    all_removed_closes: &'db [(usize, Sigil)],
+
     real_token_range: Range<usize>,
     branches: Range<usize>,
     inserted_closes: Range<usize>,
@@ -70,13 +88,7 @@ impl<'db> Iterator for BracerIter<'db> {
     type Item = TreeToken<'db>;
 
     fn next(&mut self) -> Option<TreeToken<'db>> {
-        let res = self.next2();
-        debug!("next: {:?}", match res.as_ref() {
-            None => "none",
-            Some(TreeToken::Token(t)) => t.text.as_str(self.db),
-            Some(TreeToken::Branch { .. }) => "branch",
-        });
-        res
+        self.next2()
     }
 }
 
@@ -100,25 +112,10 @@ impl<'db> BracerIter<'db> {
 
     fn next2(&mut self) -> Option<TreeToken<'db>> {
         loop {
-            debug!("--");
-            debug!("real token range {:?}", self.real_token_range.C());
-            debug!("next branches {:?}", self.branches.C());
-            debug!("inserted closes {:?}", self.inserted_closes.C());
-            debug!("removed closes {:?}", self.removed_closes.C());
-            debug!("next token index {:?}", self.next_token_index);
-            debug!("next branch index {:?}", self.next_branch_index);
-            debug!("next inserted close index {:?}", self.next_inserted_close_index);
-            debug!("next removed close index {:?}", self.next_removed_close_index);
-            debug!("--");
-
-            let tokens = &self.tree.chunk(self.db).tokens(self.db)
-                [0..self.real_token_range.C().end];
-            let branches = &self.tree.branches(self.db)
-                [0..self.branches.C().end];
-            let inserted_closes = &self.tree.inserted_closes(self.db)
-                [0..self.inserted_closes.C().end];
-            let removed_closes = &self.tree.removed_closes(self.db)
-                [0..self.removed_closes.C().end];
+            let tokens = &self.all_tokens[0..self.real_token_range.end];
+            let branches = &self.all_branches[0..self.branches.end];
+            let inserted_closes = &self.all_inserted_closes[0..self.inserted_closes.end];
+            let removed_closes = &self.all_removed_closes[0..self.removed_closes.end];
 
             let next_token = tokens.get(self.next_token_index);
             let next_branch = branches.get(self.next_branch_index);
@@ -175,7 +172,7 @@ impl<'db> BracerIter<'db> {
                             let open_token = next_token.clone();
 
                             // Get the potential close token and check if it's a real close.
-                            let all_tokens = self.tree.chunk(self.db).tokens(self.db);
+                            let all_tokens = self.all_tokens;
                             let close_idx = next_branch.real_token_range.end.checked_sub(1);
                             let expected_close_sigil = next_branch.open_sigil.close_sigil();
                             let (close_token, end_byte) = match close_idx.and_then(|i| all_tokens.get(i)) {
@@ -198,9 +195,13 @@ impl<'db> BracerIter<'db> {
                                 open: open_token,
                                 close: close_token,
                                 end_byte,
-                                inner: BracerIter {
+                                inner: Box::new(BracerIter {
                                     db: self.db,
                                     tree: self.tree,
+                                    all_tokens: self.all_tokens,
+                                    all_branches: self.all_branches,
+                                    all_inserted_closes: self.all_inserted_closes,
+                                    all_removed_closes: self.all_removed_closes,
                                     real_token_range: branch_token_range,
                                     branches: Range::from_start_len(self.next_branch_index, next_branch.branches).X(),
                                     inserted_closes: Range::from_start_len(self.next_inserted_close_index, next_branch.inserted_closes).X(),
@@ -209,10 +210,8 @@ impl<'db> BracerIter<'db> {
                                     next_branch_index: self.next_branch_index,
                                     next_inserted_close_index: self.next_inserted_close_index,
                                     next_removed_close_index: self.next_removed_close_index,
-                                },
+                                }),
                             };
-
-                            debug!("sbi {:#?}", Range::from_start_len(self.next_branch_index, next_branch.branches).X());
 
                             self.next_token_index = next_branch.real_token_range.end;
                             self.next_branch_index = self.next_branch_index
@@ -225,8 +224,7 @@ impl<'db> BracerIter<'db> {
                             // Skip any removed_closes that are now behind our position.
                             // This handles cases where removed_closes exist at positions
                             // we've jumped past after exiting the branch.
-                            let removed_closes = &self.tree.removed_closes(self.db)
-                                [0..self.removed_closes.C().end];
+                            let removed_closes = &self.all_removed_closes[0..self.removed_closes.end];
                             while let Some(rc) = removed_closes.get(self.next_removed_close_index) {
                                 if rc.0 < self.next_token_index {
                                     self.next_removed_close_index = self.next_removed_close_index.checked_add(1).X();
@@ -263,7 +261,10 @@ pub enum TreeToken<'db> {
         open: Token<'db>,
         close: Option<Token<'db>>,
         end_byte: usize,
-        inner: BracerIter<'db>,
+        /// Boxed: a `BracerIter` is 184 bytes and a `Token` is 32, so this one
+        /// field made every `TreeToken` in the stream 264 bytes whether it was a
+        /// branch or not, and the parser moves and clones them constantly.
+        inner: Box<BracerIter<'db>>,
     },
 }
 
@@ -580,8 +581,6 @@ pub fn bracer<'db>(
         ));
         parent_brace_map.append(brace_map);
     }
-
-    debug!("bm {top_map:#?}");
 
     Bracer::new(
         db,

@@ -152,7 +152,7 @@ impl<'db> Parser<'db> {
                     let text = self.source_text();
                     let start_pos = self.current_byte_pos();
                     let inner = match self.next() {
-                        Some(TreeToken::Branch { sigil: Sigil::BracketOpen, inner, .. }) => inner,
+                        Some(TreeToken::Branch { sigil: Sigil::BracketOpen, inner, .. }) => *inner,
                         _ => unreachable!(),
                     };
                     let mut sub = self.sub_parser(inner, None);
@@ -527,7 +527,7 @@ impl<'db> Parser<'db> {
                                     self.next(); // consume "enum"
                                     // Parse the inner variant expression in braces.
                                     let iter = match self.next() {
-                                        Some(TreeToken::Branch { sigil: Sigil::BraceOpen, inner, .. }) => inner,
+                                        Some(TreeToken::Branch { sigil: Sigil::BraceOpen, inner, .. }) => *inner,
                                         _ => unreachable!(),
                                     };
                                     let mut sub = self.sub_parser(iter, None);
@@ -573,7 +573,7 @@ impl<'db> Parser<'db> {
                                             };
                                             // Intrinsics have no parameter modes; a marker
                                             // here is rejected during typechecking.
-                                            let (args, modes) = self.parse_function_call_args(args_iter, Some((open_span, "in this argument list")));
+                                            let (args, modes) = self.parse_function_call_args(*args_iter, Some((open_span, "in this argument list")));
                                             intrinsic_arg_modes = modes;
                                             args
                                         }
@@ -618,7 +618,7 @@ impl<'db> Parser<'db> {
                                             }
                                             _ => unreachable!(),
                                         };
-                                        let (args, arg_modes) = self.parse_function_call_args(args_iter, Some((open_span, "in this argument list")));
+                                        let (args, arg_modes) = self.parse_function_call_args(*args_iter, Some((open_span, "in this argument list")));
                                         // For function calls, span should include the parens, but for now just use the name span.
                                         let call = ast::ExprFunctionCall::new(
                                             self.db,
@@ -757,7 +757,7 @@ impl<'db> Parser<'db> {
             _ => unreachable!("caller must peek for ParenOpen before calling"),
         };
 
-        let mut sub = self.sub_parser(iter, Some((open_span, "in this tuple")));
+        let mut sub = self.sub_parser(*iter, Some((open_span, "in this tuple")));
         let (elements, had_comma) = sub.parse_comma_separated_with_trailing(|p| p.parse_expr_full());
         sub.error_if_not_exhausted();
         self.merge_from_sub(&mut sub);

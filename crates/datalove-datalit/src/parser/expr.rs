@@ -177,7 +177,7 @@ impl<'db> Parser<'db> {
             Some(TreeToken::Branch { sigil: Sigil::ParenOpen, .. }) => {
                 // Parenthesized expression: tuple or grouping.
                 let inner = match self.next() {
-                    Some(TreeToken::Branch { inner, .. }) => inner,
+                    Some(TreeToken::Branch { inner, .. }) => *inner,
                     _ => unreachable!(),
                 };
                 let mut sub_parser = self.sub_parser_from_branch(inner);
@@ -195,7 +195,7 @@ impl<'db> Parser<'db> {
             Some(TreeToken::Branch { sigil: Sigil::BraceOpen, .. }) => {
                 // Struct.
                 let inner = match self.next() {
-                    Some(TreeToken::Branch { inner, .. }) => inner,
+                    Some(TreeToken::Branch { inner, .. }) => *inner,
                     _ => unreachable!(),
                 };
                 let mut sub_parser = self.sub_parser_from_branch(inner);
@@ -208,7 +208,7 @@ impl<'db> Parser<'db> {
             Some(TreeToken::Branch { sigil: Sigil::BracketOpen, .. }) => {
                 // List.
                 let inner = match self.next() {
-                    Some(TreeToken::Branch { inner, .. }) => inner,
+                    Some(TreeToken::Branch { inner, .. }) => *inner,
                     _ => unreachable!(),
                 };
                 let mut sub_parser = self.sub_parser_from_branch(inner);
@@ -221,7 +221,7 @@ impl<'db> Parser<'db> {
             Some(TreeToken::Branch { sigil: Sigil::PercentBraceOpen, .. }) => {
                 // Map: %{k = v, ...}
                 let inner = match self.next() {
-                    Some(TreeToken::Branch { inner, .. }) => inner,
+                    Some(TreeToken::Branch { inner, .. }) => *inner,
                     _ => unreachable!(),
                 };
                 let mut sub_parser = self.sub_parser_from_branch(inner);
@@ -247,7 +247,7 @@ impl<'db> Parser<'db> {
             Some(TreeToken::Branch { sigil: Sigil::HashBraceOpen, .. }) => {
                 // Set: #{e, ...}
                 let inner = match self.next() {
-                    Some(TreeToken::Branch { inner, .. }) => inner,
+                    Some(TreeToken::Branch { inner, .. }) => *inner,
                     _ => unreachable!(),
                 };
                 let mut sub_parser = self.sub_parser_from_branch(inner);
@@ -259,7 +259,7 @@ impl<'db> Parser<'db> {
             Some(TreeToken::Branch { sigil: Sigil::BracePipeOpen, .. }) => {
                 // Table.
                 let inner = match self.next() {
-                    Some(TreeToken::Branch { inner, .. }) => inner,
+                    Some(TreeToken::Branch { inner, .. }) => *inner,
                     _ => unreachable!(),
                 };
                 self.parse_table_expr(inner)
@@ -267,7 +267,7 @@ impl<'db> Parser<'db> {
             Some(TreeToken::Branch { sigil: Sigil::BracketPipeOpen, .. }) => {
                 // Tensor: [| data |] with multi-comma separators.
                 let inner = match self.next() {
-                    Some(TreeToken::Branch { inner, .. }) => inner,
+                    Some(TreeToken::Branch { inner, .. }) => *inner,
                     _ => unreachable!(),
                 };
                 self.parse_tensor_expr(inner)

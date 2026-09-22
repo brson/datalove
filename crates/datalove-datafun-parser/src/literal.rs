@@ -181,7 +181,7 @@ impl<'db> Parser<'db> {
             Some("enum") if self.peek_second_sigil(Sigil::BraceOpen) => {
                 self.eat_word("enum");
                 let inner = match self.next() {
-                    Some(TreeToken::Branch { sigil: Sigil::BraceOpen, inner, .. }) => inner,
+                    Some(TreeToken::Branch { sigil: Sigil::BraceOpen, inner, .. }) => *inner,
                     _ => unreachable!("peek_second_sigil said a brace follows"),
                 };
                 let mut sub = self.sub_parser(inner, None);
@@ -241,7 +241,7 @@ impl<'db> Parser<'db> {
             Some(TreeToken::Branch { sigil: Sigil::PercentBraceOpen, .. }) => {
                 // Map: %{k = v, ...}
                 let inner = match self.next() {
-                    Some(TreeToken::Branch { sigil: Sigil::PercentBraceOpen, inner, .. }) => inner,
+                    Some(TreeToken::Branch { sigil: Sigil::PercentBraceOpen, inner, .. }) => *inner,
                     _ => unreachable!(),
                 };
                 let entries = self.parse_comma_separated_map_entries(inner);
@@ -250,7 +250,7 @@ impl<'db> Parser<'db> {
             Some(TreeToken::Branch { sigil: Sigil::HashBraceOpen, .. }) => {
                 // Set: #{e, ...}
                 let inner = match self.next() {
-                    Some(TreeToken::Branch { sigil: Sigil::HashBraceOpen, inner, .. }) => inner,
+                    Some(TreeToken::Branch { sigil: Sigil::HashBraceOpen, inner, .. }) => *inner,
                     _ => unreachable!(),
                 };
                 let elements = self.parse_comma_separated_exprs(inner);
@@ -259,7 +259,7 @@ impl<'db> Parser<'db> {
             Some(TreeToken::Branch { sigil: Sigil::BracePipeOpen, .. }) => {
                 // Table.
                 let inner = match self.next() {
-                    Some(TreeToken::Branch { sigil: Sigil::BracePipeOpen, inner, .. }) => inner,
+                    Some(TreeToken::Branch { sigil: Sigil::BracePipeOpen, inner, .. }) => *inner,
                     _ => unreachable!(),
                 };
                 return self.parse_lit_table(type_hint, inner);
@@ -267,7 +267,7 @@ impl<'db> Parser<'db> {
             Some(TreeToken::Branch { sigil: Sigil::BracketPipeOpen, .. }) => {
                 // Tensor: [| data |] with multi-comma separators.
                 let inner = match self.next() {
-                    Some(TreeToken::Branch { sigil: Sigil::BracketPipeOpen, inner, .. }) => inner,
+                    Some(TreeToken::Branch { sigil: Sigil::BracketPipeOpen, inner, .. }) => *inner,
                     _ => unreachable!(),
                 };
                 return self.parse_lit_tensor_multicomma(type_hint, inner);
@@ -343,7 +343,7 @@ impl<'db> Parser<'db> {
         type_hint: Option<datalit::ast::TypeHint<'db>>,
     ) -> ast::ExprFunKind<'db> {
         let inner = match self.next() {
-            Some(TreeToken::Branch { sigil: Sigil::ParenOpen, inner, .. }) => inner,
+            Some(TreeToken::Branch { sigil: Sigil::ParenOpen, inner, .. }) => *inner,
             _ => unreachable!("caller must peek for ParenOpen before calling"),
         };
 
@@ -359,7 +359,7 @@ impl<'db> Parser<'db> {
         type_hint: Option<datalit::ast::TypeHint<'db>>,
     ) -> ast::ExprFunKind<'db> {
         let inner = match self.next() {
-            Some(TreeToken::Branch { sigil: Sigil::BraceOpen, inner, .. }) => inner,
+            Some(TreeToken::Branch { sigil: Sigil::BraceOpen, inner, .. }) => *inner,
             _ => unreachable!("caller must peek for BraceOpen before calling"),
         };
 
@@ -375,7 +375,7 @@ impl<'db> Parser<'db> {
         type_hint: Option<datalit::ast::TypeHint<'db>>,
     ) -> ast::ExprFunKind<'db> {
         let inner = match self.next() {
-            Some(TreeToken::Branch { sigil: Sigil::BracketOpen, inner, .. }) => inner,
+            Some(TreeToken::Branch { sigil: Sigil::BracketOpen, inner, .. }) => *inner,
             _ => unreachable!("caller must peek for BracketOpen before calling"),
         };
 
