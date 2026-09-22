@@ -11,7 +11,7 @@ when the stack was small and comprehensible,
 and we built native applications that were fast
 because they worked closely with the physical machine.
 
-But I am to do this with the benefit of decades
+But I aim to do this with the benefit of decades
 of experience and evolution in compiler architecture and type theory:
 the best of modern practical programming language theory in a simple package,
 with a focus on correctness uncommon in scripting languages.
@@ -24,18 +24,18 @@ with a focus on correctness uncommon in scripting languages.
 
 Good data design leads to good algorithms,
 and most data types should be plain old data,
-not objects. In the design of Datalove
+not objects. In the design of Datalove,
 consideration for the capabilities,
 memory layout and syntax of data structures comes first,
 and all else derives from that.
-We maintain the strong distinction between the Datalove literals
-declarative language model and the imperative/procedural languages built on top of it:
-understanding Datalove literals preceeds understanding Datalove.
+We maintain a strong distinction between the declarative
+language model of Datalove literals and the imperative/procedural languages built on top of it:
+understanding Datalove literals precedes understanding Datalove.
 
 
 ## Advance interactive scripting design
 
-Datalove applies state of the art compiler design
+Datalove applies state-of-the-art compiler design
 to enable a modern interactive scripting experience with capabilities
 beyond standard REPLs and notebooks, suitable for rapid
 prototyping of data experiments that evolve into maintainable production data transformation pipelines.
@@ -53,7 +53,7 @@ Datalove functions are side-effect free, pure and often total.
 Datalove procedures use virtualized I/O.
 We leverage language properties to create an execution environment
 where both computation and I/O can be rolled back and selectively
-replayed, particularly useful in the scripting environment to edit
+replayed, which is particularly useful in the scripting environment to edit
 and retry the history.
 
 
@@ -61,7 +61,7 @@ and retry the history.
 
 The surface syntax of Datalove translates directly to what happens
 at the execution layer, and all is stated explicitly.
-Integers are never automatically truncated nor widened.
+Integers are never automatically truncated or widened.
 Types are never automatically coerced.
 Argument passing modes are explicit.
 All error handling and early returns are expressed consistently in the syntax.
@@ -69,32 +69,32 @@ What you see is always exactly what you get.
 Datalove is verbose, and intentionally so.
 
 
-## Numerical correctess
+## Numerical correctness
 
 It is no longer acceptable to silently overflow and get wrong results.
 
 Integer types never lose information.
-Fixed-size integers type never overflow silently.
-Integer divide by zero must be handled.
-The syntactic and cognitive overheads this necessarily imposes are eased
-by language features to any extent reasonable.
+Fixed-size integer types never overflow silently.
+Integer division by zero must be handled.
+The syntactic and cognitive overhead this necessarily imposes is eased
+by language features to whatever extent is reasonable.
 
 
 ## Power through restricted language design
 
 Datalove has a strong linear type system.
 Datalove functions are pure and nearly total,
-with no side-effects and no exceptional control-flow,
+with no side effects and no exceptional control flow,
 and have other restrictive properties.
 Strong restrictions lead to simple
 compiler analysis where the code you see lowers
 directly to the code you expect,
 requiring little reconstruction to regain performance.
 
-Datalove has a linear type system
+Datalove has a linear type system,
 but it does not have first-class reference types.
 Safe first-class references without GC are the most
-difficult feature to reason about in Rust and add great language and compiler complexity.
+difficult feature to reason about in Rust, and they add great language and compiler complexity.
 
 
 
@@ -104,33 +104,33 @@ difficult feature to reason about in Rust and add great language and compiler co
 ## Straightforward syntax with minimal sugar
 
 Datalove's syntax is a throwback to the Pascal family and Visual Basic,
-line oriented, with keywords everywhere that are easy
+line-oriented, with keywords everywhere that are easy
 for human eyes to scan and computers to parse.
 It is happily verbose.
 It provides the basic features necessary to write algorithms,
-but does not bloat the compiler and spec with syntactic nicities.
+but does not bloat the compiler and spec with syntactic niceties.
 
 
 ## Sigil-logic
 
 Datalove reserves some symbols to strongly mean one thing.
 
-| When you see | it means                  |
-|--------------|---------------------------|
-| `:`          | type                      |
-| `=`          | value binding             |
-| `?`          | option                    |
-| `!`          | result                    |
+| When you see | it means                       |
+|--------------|--------------------------------|
+| `:`          | type                           |
+| `=`          | value binding                  |
+| `?`          | option                         |
+| `!`          | result                         |
 | `@`          | adapt (clone / widen / coerce) |
-| `;`          | statement break / newline |
+| `;`          | statement break / newline      |
 
 Likewise some bracket pairs are strongly suggestive.
 
-| When you see | it means |
-|--------------|----------|
-| `<` … `>`    | generics |
-| `{` … `}`  | struct-like, structs and tables |
-| `[` … `]`  | array-like, lists and tensors |
+| When you see | it means                        |
+|--------------|---------------------------------|
+| `<` … `>`    | generics                        |
+| `{` … `}`    | struct-like, structs and tables |
+| `[` … `]`    | array-like, lists and tensors   |
 
 
 ## Small enough to understand and remember
