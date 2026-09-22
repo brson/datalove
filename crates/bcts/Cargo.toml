@@ -16,4 +16,5 @@ rmx.workspace = true
 salsa.workspace = true
 serde.workspace = true
 enum-iterator.workspace = true
+rustc-hash.workspace = true
 ariadne.workspace = true

@@ -92,33 +92,82 @@ Worse, it would not have been free: `char::is_ascii_whitespace` does not accept
 vertical tab and `char::is_whitespace` does, so the fast path would have quietly
 reclassified `\x0B`. Both changes were reverted.
 
-## What is left, and what it would cost
+## Interning, which was the largest item left
 
-**Every token's text is allocated and then interned.** `InternedText::new(db, S(&text[range]))`
-builds a `String` and hashes it into salsa, once per token, for whitespace and
-punctuation as much as for identifiers. In the profile after the four fixes:
+**A census first**, because the answer depended on it. The standard library's 24
+modules are 61,952 tokens:
 
-| | |
-|---|---|
-| `FxHasher` | 5.7% |
-| salsa `Configuration::execute` | 5.5% |
-| `Tokenizer::intern` | 3.3% |
-| `String` | 2.5% |
-| `malloc` + `free` | 4.9% |
-| **total** | **~22% of lexing** |
+| kind | count | bytes |
+|---|---|---|
+| word | 22,689 | 98,936 |
+| **whitespace** | **23,623** | 38,138 |
+| **sigil** | **14,597** | 15,115 |
+| comment | 1,038 | 47,845 |
+| string | 5 | 28 |
 
-A `Token` already carries `span: Range<usize>` into the chunk, so its text is
-recoverable without interning at all. Interning presumably buys `Token: Copy` and
-cheap keyword comparison, so dropping it is a change across the parser rather than a
-local one -- but it is the largest single item remaining, and most of what it interns
-is punctuation nobody compares by name.
+So **62% of everything interned is whitespace or punctuation**, and between them they
+hold a few dozen distinct strings: the sigils are drawn from at most seventy-one
+spellings, and the whitespace runs from the handful a formatter emits. Salsa
+deduplicates them, but only after hashing each occurrence -- so it was being asked
+38,220 times to be told one of about eighty answers.
+
+Two changes, measured separately because the second is a cache in front of a cache
+and has to earn that.
+
+**The allocation was pure waste.** `InternedText::new(db, S(&text[range]))` built a
+`String` for every token before interning it. Salsa's interning takes a key that only
+has to be `HashEqLike` with the stored field, and only calls the assembler on a miss,
+so `InternedText::new(db, &text[range])` interns straight from the slice and allocates
+once per *distinct* string rather than once per token. One line.
+
+**Sigils need no hash at all**, since the token kind already says which sigil it is: an
+array indexed by `Sigil as usize` answers 14,597 of the chunk's lookups by index.
+Everything else goes through a per-chunk `FxHashMap<&str, InternedText>`, which still
+costs a hash but reaches salsa's sharded concurrent map once per distinct string in
+the chunk instead of once per token.
+
+Interleaved twice, since the differences are near the noise and single readings had
+already misled once:
+
+| | round 1 | round 2 |
+|---|---|---|
+| neither | 4.161ms | 4.185ms |
+| sigil array only | 3.321ms | 3.419ms |
+| both | **3.005ms** | **3.010ms** |
+
+The array is 1.24x and the memo a further 1.12x, so both stay.
+
+## Where it ended up
+
+| | Original | Now |
+|---|---|---|
+| lex | 15.58ms | **2.82ms** (5.5x) |
+| lex + brace | 15.55ms | 3.05ms |
+| lex + brace + parse | 23.86ms | **10.95ms** (2.2x) |
+| `datalove script`, trivial script | 98.8ms | **64.8ms** |
+| repl startup | 96.8ms | **64.7ms** |
+
+Lexing went from 12 MB/s to 65 MB/s.
+
+## What is left
+
+**A `Token` still carries an `InternedText` it may not need.** Every token already has
+`span: Range<usize>` into the chunk, so its text is recoverable without interning at
+all; interning presumably buys `Token: Copy` and cheap keyword comparison. With the
+allocation gone and the common cases indexed, what remains is one hash and a probe per
+non-sigil token, which is no longer the largest thing in the profile. Removing it
+entirely would be a change across the parser rather than a local one, and should be
+measured against the current numbers rather than the original ones.
+
+**`peek` is the largest single item now.** A char-at-a-time lexer that re-slices and
+decodes UTF-8 per character. A byte cursor with an ASCII fast path would help, and
+would restructure the tokenizer.
+
+**Parsing proper is about 8ms of the 11ms** and has not been profiled in detail. It is
+now the front end's largest phase by a wide margin, and the next place to look.
 
 **`peek` is still 8.6%.** A char-at-a-time lexer that re-slices and decodes UTF-8 per
 character. A byte cursor with an ASCII fast path would help, and would restructure
 the tokenizer.
 
-**Bracing is under half a millisecond** for 183KB. Nothing to do.
-
-**Parsing proper is now about 10ms of the 15ms**, and has not been profiled in
-detail. It is the next place to look if the front end still matters after the
-interning question is settled.
+**Bracing is a quarter of a millisecond** for 183KB. Nothing to do.

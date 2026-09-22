@@ -181,6 +181,60 @@ fn sigil_table() -> &'static SigilTable {
     TABLE.get_or_init(SigilTable::build)
 }
 
+/// Interning a chunk's token texts, remembering what it has already interned.
+///
+/// Most of a chunk's tokens are whitespace and punctuation, and between them they
+/// hold a few dozen distinct strings: of the standard library's 61,952 tokens,
+/// 14,597 are sigils drawn from at most seventy-one spellings and 23,623 are
+/// whitespace runs drawn from the handful a formatter emits. Salsa deduplicates
+/// them, but only after hashing each occurrence and probing a sharded concurrent
+/// map, so asking it 38,220 times to be told one of eighty answers was most of the
+/// interning cost.
+///
+/// A sigil needs no hashing at all, the token kind already saying which one it is.
+/// Everything else is looked up by the slice it came from, which costs a hash but
+/// not salsa's map, and reaches salsa once per distinct string per chunk.
+struct Interner<'db> {
+    db: &'db dyn crate::Db,
+    text: &'db str,
+    seen: rustc_hash::FxHashMap<&'db str, InternedText<'db>>,
+    /// Indexed by `Sigil as usize`, which is its declaration order.
+    sigils: Vec<Option<InternedText<'db>>>,
+}
+
+impl<'db> Interner<'db> {
+    fn new(db: &'db dyn crate::Db, text: &'db str) -> Self {
+        Self {
+            db,
+            text,
+            seen: rustc_hash::FxHashMap::default(),
+            sigils: vec![None; enum_iterator::cardinality::<Sigil>()],
+        }
+    }
+
+    /// The interned text of `range`.
+    fn intern(&mut self, range: Range<usize>) -> InternedText<'db> {
+        let slice = &self.text[range];
+        if let Some(interned) = self.seen.get(slice) {
+            return *interned;
+        }
+        let interned = InternedText::new(self.db, slice);
+        self.seen.insert(slice, interned);
+        interned
+    }
+
+    /// The interned text of a sigil, which is the sigil's own spelling.
+    fn intern_sigil(&mut self, sigil: Sigil) -> InternedText<'db> {
+        let slot = sigil as usize;
+        if let Some(interned) = self.sigils[slot] {
+            return interned;
+        }
+        let interned = InternedText::new(self.db, sigil.as_str());
+        self.sigils[slot] = Some(interned);
+        interned
+    }
+}
+
 #[salsa::tracked(returns(copy))]
 pub fn lex_chunk<'db>(
     db: &'db dyn crate::Db,
@@ -189,33 +243,37 @@ pub fn lex_chunk<'db>(
     let mut tokens = Vec::new();
     let chunk_text = chunk.text(db);
     let chunk_str = chunk_text.as_str(db);
-    let intern = |range: Range<usize>| InternedText::new(db, S(&chunk_str[range]));
+    let mut interner = Interner::new(db, chunk_str);
 
     for range in chunk.ranges(db) {
         match range {
             (range, RangeKind::Comment) => {
                 tokens.push(Token {
-                    text: intern(range.C()),
+                    text: interner.intern(range.C()),
                     span: range,
                     kind: TokenKind::Comment,
                 });
             }
             (range, RangeKind::String) => {
                 tokens.push(Token {
-                    text: intern(range.C()),
+                    text: interner.intern(range.C()),
                     span: range,
                     kind: TokenKind::String,
                 });
             }
             (range, RangeKind::Error) => {
                 tokens.push(Token {
-                    text: intern(range.C()),
+                    text: interner.intern(range.C()),
                     span: range,
                     kind: TokenKind::Error,
                 });
             }
             (range, RangeKind::Unknown) => {
-                let mut tokenizer = Tokenizer { db, text: chunk_str, range };
+                let mut tokenizer = Tokenizer {
+                    text: chunk_str,
+                    range,
+                    interner: &mut interner,
+                };
 
                 tokens.extend(
                     iter::from_fn(|| tokenizer.next())
@@ -231,10 +289,10 @@ pub fn lex_chunk<'db>(
     /// `text` is the whole chunk rather than a handle to fetch it with: reading
     /// it back out of salsa on every `peek` was two field reads per character,
     /// and `peek` is what every other method is built on.
-    struct Tokenizer<'db> {
-        db: &'db dyn crate::Db,
+    struct Tokenizer<'db, 'a> {
         text: &'db str,
         range: Range<usize>,
+        interner: &'a mut Interner<'db>,
     }
 
     #[derive(Eq, PartialEq, Debug, Copy, Clone)]
@@ -245,7 +303,7 @@ pub fn lex_chunk<'db>(
         Error,
     }
 
-    impl<'db> Tokenizer<'db> {
+    impl<'db> Tokenizer<'db, '_> {
         fn next(&mut self) -> Option<Token<'db>> {
             match self.peek_token() {
                 None => None,
@@ -273,8 +331,8 @@ pub fn lex_chunk<'db>(
             ch.is_alphanumeric() || ch == '_'
         }
 
-        fn intern(&self, range: Range<usize>) -> InternedText<'db> {
-            InternedText::new(self.db, S(&self.text[range]))
+        fn intern(&mut self, range: Range<usize>) -> InternedText<'db> {
+            self.interner.intern(range)
         }
 
         fn eat_word(&mut self) -> Token<'db> {
@@ -319,7 +377,7 @@ pub fn lex_chunk<'db>(
                     self.range.start = range_start.checked_add(sigil_str.len()).X();
                     let span = range_start .. self.range.start;
                     return Token {
-                        text: self.intern(span.C()),
+                        text: self.interner.intern_sigil(sigil),
                         span,
                         kind: TokenKind::Sigil(sigil),
                     }

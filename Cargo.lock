@@ -385,6 +385,7 @@ version = "0.6.3"
 dependencies = [
  "ariadne",
  "enum-iterator",
+ "rustc-hash",
  "rustmax 0.0.10",
  "salsa",
  "serde",
