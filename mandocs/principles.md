@@ -49,7 +49,12 @@ statements are modified.
 
 ## Determinism and reproducibility
 
-Purity, memoization, virtual i/o, undo/redo, record/replay.
+Datalove functions are side-effect free, pure and often total.
+Datalove procedures use virtualized I/O.
+We leverage language properties to create an execution environment
+where both computation and I/O can be rolled back and selectively
+replayed, particularly useful in the scripting environment to edit
+and retry the history.
 
 
 ## Nothing happens that was not written
@@ -119,7 +124,7 @@ Datalove reserves some symbols to strongly mean one thing.
 | `@`          | adapt (clone / widen / coerce) |
 | `;`          | statement break / newline |
 
-Likewise some bracket pairs are for one thing.
+Likewise some bracket pairs are strongly suggestive.
 
 | When you see | it means |
 |--------------|----------|
@@ -130,11 +135,13 @@ Likewise some bracket pairs are for one thing.
 
 ## Small enough to understand and remember
 
-todo
-
-A simple language leads to a simple implementation with few compiler passes.
-A simple implementation makes maintenance easier,
-enables quick development.
+Datalove is a small language,
+its features driven directly by my personal needs.
+It doesn't need to be a general-purpose language.
+It doesn't need to please anybody.
+This affords us the freedom to ruthlessly omit features.
+Large languages are difficult to understand, difficult to maintain,
+difficult to extend, and are slow to compile.
 
 
 <!-- How Datalove is built -->
