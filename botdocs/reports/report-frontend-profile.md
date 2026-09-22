@@ -13,18 +13,13 @@ Corpus: **24 modules, 187,832 bytes**.
 
 ## Where the time went
 
-| | Before | After |
-|---|---|---|
-| lex | 15.58ms | **4.58ms** |
-| lex + brace | 15.55ms | 5.07ms |
-| lex + brace + parse | 23.86ms | **14.91ms** |
+At the start: lexing 15.58ms, bracing under half a millisecond, parsing proper 8.3ms,
+for a total of 23.86ms. Lexing was two thirds of the front end, and 12 MB/s -- slow
+enough for a lexer that something had to be wrong rather than merely unoptimized.
 
-So before: lexing 15.6ms, bracing under half a millisecond, parsing proper 8.3ms.
-Lexing was two thirds of the front end, and 12 MB/s -- slow enough for a lexer that
-something had to be wrong rather than merely unoptimized.
-
-End to end, `datalove script` on a trivial script went from 98.8ms to **66.3ms**, and
-repl startup from 96.8ms to **67.9ms**. Lexing is now 40 MB/s.
+Two rounds of work follow. The first four fixes took lexing to 4.58ms and the whole
+front end to 14.91ms; then interning took them to 2.82ms and 10.95ms. The table at the
+end has the final numbers.
 
 ## Four things were wrong
 
@@ -165,9 +160,5 @@ would restructure the tokenizer.
 
 **Parsing proper is about 8ms of the 11ms** and has not been profiled in detail. It is
 now the front end's largest phase by a wide margin, and the next place to look.
-
-**`peek` is still 8.6%.** A char-at-a-time lexer that re-slices and decodes UTF-8 per
-character. A byte cursor with an ASCII fast path would help, and would restructure
-the tokenizer.
 
 **Bracing is a quarter of a millisecond** for 183KB. Nothing to do.
