@@ -170,3 +170,90 @@ makes the recovery rules legible, and they are subtle.
 **Salsa allocation for AST nodes is about 3%** (`ExprFun` tracked-struct allocate,
 `ZalsaLocal::allocate`, `ExprKey::of`), and general allocation about 4.4%. Neither has
 been looked at.
+
+# Startup, Revisited
+
+Coming back to where the time goes in a cold `datalove` invocation, after the parser
+work above.
+
+| | |
+|---|---|
+| `datalove --help`, so process start | 2.9ms |
+| `script --no-sys` on a trivial script | 3.6ms |
+| `script` on the same script | 60.5ms |
+| `repl --script` on an empty script | 58.8ms |
+
+So **the standard library is 55ms and everything else is under a millisecond**, which is
+what it was before and is the only thing worth looking at.
+
+## The profile said nothing, loudly
+
+Compiling the library has no hot spot at all -- the largest single symbol is 2.2%. It is
+not concentrated in parsing, typechecking, resolution or lowering. Aggregating the flat
+profile by defining crate, and counting the unsymbolized `libc.so.6` addresses, which are
+malloc internals and `memcpy`:
+
+| | |
+|---|---|
+| `alloc`, `[malloc]`, unsymbolized libc, `hashbrown`, `std` | **~40%** |
+| `bcts` + parser + datalit (the front end) | ~17% |
+| `salsa` + `boxcar` | ~10% |
+| tycheck, lower, ownership, ir, ast, compiler | ~13% |
+
+Compiling is allocation-bound, and there was no `#[global_allocator]`: everything went
+through glibc malloc, which is not built for this shape of work. rustc ships jemalloc for
+this reason.
+
+## mimalloc on the cli, measured and not kept
+
+Four alternating rounds, 50 runs each:
+
+| | glibc | mimalloc |
+|---|---|---|
+| repl startup, min | 54.9ms | **41.1ms** |
+| repl startup, mean | 56.4ms | 42.4ms |
+| `script`, min | 55.4ms | **41.6ms** |
+| user time | 43.2ms | 37.4ms |
+| **system time** | **12.9ms** | **4.5ms** |
+
+**1.33x**, and far more consistent between rounds than anything else measured this
+session -- the four rounds land within 0.3ms of each other on both sides.
+
+The system time is the interesting column: it falls by 2.9x. Most of what glibc malloc
+was costing here was not CPU in the allocator, it was returning memory to the kernel and
+faulting it back in. Binary size goes up 146KB, 0.4%.
+
+A C toolchain is needed to build mimalloc, which costs nothing here: the AOT backend
+already shells out to `cc`.
+
+**This is not in the tree.** It was an experiment, it passed the full suite, and it was
+backed out on the call that the allocator is not the thing to change right now. The
+numbers are kept because they size the opportunity, and because the system-time column
+says something about the workload that is true whoever allocates for it.
+
+## It does not extend to the test suite, and why that matters
+
+`std_all_tests` is 108s wall with **70s of system time**, which is the same signature at
+scale, so the allocator looked like a large win there too. It segfaults instead.
+
+The cause is worth more than the speedup: the rider path builds a `cdylib` and `dlopen`s
+it, that library carries its own copy of `datalove-rt` and its own Rust allocator, and
+the two copies share `AllocLocal`'s `HashMap` on the heap. Today both resolve to glibc
+malloc so it works by coincidence. Written up in `botdocs/issues.md`; the cli is
+unaffected because it links riders in rather than loading them.
+
+## Where startup ended up
+
+What is committed is the parser work, so a cold start is 58.8ms for the repl and 60.5ms
+for a trivial `script`, down from the 63-65ms the front-end report last recorded. The
+allocator would take both to about 41ms, and is available whenever it is wanted.
+
+Next, in order of what the profile now owes: allocation is ~40% and the allocator is the
+one-line version of addressing it; the front end is ~17%, and a byte cursor for the lexer
+was written and measured at 1.48x on `lex` before being set aside; salsa's own bookkeeping
+is ~10%.
+
+Separately, and often confused with the above: the *runtime* allocator is not part of
+that 40%. It is written up in `botdocs/reports/report-runtime-allocator.md`, which found
+that it does mmap directly for payloads but keeps a leak-tracking hash map on the Rust
+heap that is enabled by default in release and costs 17% of an allocation-heavy program.
