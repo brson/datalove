@@ -24,6 +24,10 @@ name = "parallel"
 harness = false
 
 [[bench]]
+name = "incremental"
+harness = false
+
+[[bench]]
 name = "frontend"
 harness = false
 

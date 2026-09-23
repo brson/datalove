@@ -172,8 +172,8 @@ Lowering has three internal phases that handle const evaluation correctly:
 
 ```
 Phase 5a: Lower all functions
-    |   lower_all_module_functions (non-tracked)
-    |   Lowers every function to IR
+    |   lower_all_module_functions walks the graph,
+    |   lower_module_functions [tracked] does a module
     v   Reused for both CTFE and final assembly
     |
 Phase 5b: Evaluate consts
@@ -194,9 +194,15 @@ Why this structure:
 - Const evaluation happens outside tracked functions (uses interpreter state)
 - `lower_module` is tracked with pre-resolved consts as hashable input, enabling memoization
 
+Both tracked phases key on the module, so an edit lowers the module that
+changed. What makes that hold is the arguments: `reachable_func_ids` gives each
+one the entries it can actually call rather than the whole world's, and the IR
+travels as an `Arc` so neither phase copies a module to hand it on. The
+`incremental_lowering` tests assert the property directly.
+
 The `skip_const_inlining` flag skips phases 5a and 5b entirely, lowering const bindings as
-let bindings. Used for testing CTFE accuracy. Callers of the high-level pipeline pass the
-`ConstInlining` enum rather than a bare bool.
+let bindings. Used for testing CTFE accuracy. Callers of the high-level pipeline set
+`CompilerOptions::const_inlining`.
 
 ### Const Parameter Specialization
 
@@ -1102,10 +1108,15 @@ pipeline.update_source(&mut db, "local", "pkg", "main", new_source);
 let (compiled, db) = pipeline.compile(&mut db);
 ```
 
-`ModuleCompilationPipeline::from_sections(&db, &sections, ConstInlining::Enabled)`
+`ModuleCompilationPipeline::from_sections(&db, &sections, CompilerOptions::default())`
 builds one from parsed worldfile sections, which is how most tests construct it.
 `compile_fresh_with_mode` and `compile_with_mode` take an explicit
 `ParallelMode` instead of reading `DATALOVE_PARALLEL`.
+
+A pipeline's `CompilerOptions` are settled when it is built. Nothing recompiles
+under options it was not made with, so there are no setters for them, and a
+`WorkspaceDelta` that changes them says `requires_new_pipeline` rather than
+being applied to one that exists.
 
 ### Workspaces
 
