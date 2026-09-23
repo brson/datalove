@@ -141,11 +141,23 @@ impl<'a, 'db> ModuleGraphSpanLookup<'a, 'db> {
     pub fn new(parsed_graph: &'a ParsedModuleGraph<'db>, module_id: ModuleId<'db>) -> Self {
         Self { parsed_graph, module_id }
     }
+
+    /// The spans of one module, built on first ask and memoized after.
+    ///
+    /// A module nobody reports a diagnostic against never builds its table.
+    fn spans(
+        &self,
+        db: &'db dyn crate::Db,
+        module_id: ModuleId<'db>,
+    ) -> Option<&'db DatafunSpans<'db>> {
+        let module = self.parsed_graph.get_module(db, module_id)?;
+        Some(datalove_datafun_parser::module_spans(db, module))
+    }
 }
 
 impl<'db> SpanLookup<'db> for ModuleGraphSpanLookup<'_, 'db> {
     fn lookup_expr(&self, db: &'db dyn crate::Db, expr_key: ExprKey<'db>) -> Option<TextSpan<'db>> {
-        let spans = self.parsed_graph.get_spans(db, self.module_id)?;
+        let spans = self.spans(db, self.module_id)?;
         spans.lookup_key(expr_key).map(|entry| {
             let (text, span) = entry.to_text_and_span(db);
             TextSpan::new(text, span)
@@ -153,7 +165,7 @@ impl<'db> SpanLookup<'db> for ModuleGraphSpanLookup<'_, 'db> {
     }
 
     fn lookup_break(&self, db: &'db dyn crate::Db, local_index: u32) -> Option<TextSpan<'db>> {
-        let spans = self.parsed_graph.get_spans(db, self.module_id)?;
+        let spans = self.spans(db, self.module_id)?;
         spans.lookup_break(local_index).map(|entry| {
             let (text, span) = entry.to_text_and_span(db);
             TextSpan::new(text, span)
@@ -161,7 +173,7 @@ impl<'db> SpanLookup<'db> for ModuleGraphSpanLookup<'_, 'db> {
     }
 
     fn lookup_continue(&self, db: &'db dyn crate::Db, local_index: u32) -> Option<TextSpan<'db>> {
-        let spans = self.parsed_graph.get_spans(db, self.module_id)?;
+        let spans = self.spans(db, self.module_id)?;
         spans.lookup_continue(local_index).map(|entry| {
             let (text, span) = entry.to_text_and_span(db);
             TextSpan::new(text, span)
@@ -169,7 +181,7 @@ impl<'db> SpanLookup<'db> for ModuleGraphSpanLookup<'_, 'db> {
     }
 
     fn lookup_ret(&self, db: &'db dyn crate::Db, local_index: u32) -> Option<TextSpan<'db>> {
-        let spans = self.parsed_graph.get_spans(db, self.module_id)?;
+        let spans = self.spans(db, self.module_id)?;
         spans.lookup_ret(local_index).map(|entry| {
             let (text, span) = entry.to_text_and_span(db);
             TextSpan::new(text, span)
@@ -177,7 +189,7 @@ impl<'db> SpanLookup<'db> for ModuleGraphSpanLookup<'_, 'db> {
     }
 
     fn lookup_set(&self, db: &'db dyn crate::Db, local_index: u32) -> Option<TextSpan<'db>> {
-        let spans = self.parsed_graph.get_spans(db, self.module_id)?;
+        let spans = self.spans(db, self.module_id)?;
         spans.lookup_set(local_index).map(|entry| {
             let (text, span) = entry.to_text_and_span(db);
             TextSpan::new(text, span)
@@ -185,7 +197,7 @@ impl<'db> SpanLookup<'db> for ModuleGraphSpanLookup<'_, 'db> {
     }
 
     fn lookup_import(&self, db: &'db dyn crate::Db, local_index: u32) -> Option<TextSpan<'db>> {
-        let spans = self.parsed_graph.get_spans(db, self.module_id)?;
+        let spans = self.spans(db, self.module_id)?;
         spans.lookup_import(local_index).map(|entry| {
             let (text, span) = entry.to_text_and_span(db);
             TextSpan::new(text, span)
@@ -193,7 +205,7 @@ impl<'db> SpanLookup<'db> for ModuleGraphSpanLookup<'_, 'db> {
     }
 
     fn lookup_fun(&self, db: &'db dyn crate::Db, local_index: u32) -> Option<TextSpan<'db>> {
-        let spans = self.parsed_graph.get_spans(db, self.module_id)?;
+        let spans = self.spans(db, self.module_id)?;
         spans.lookup_fun(local_index).map(|entry| {
             let (text, span) = entry.to_text_and_span(db);
             TextSpan::new(text, span)
@@ -201,7 +213,7 @@ impl<'db> SpanLookup<'db> for ModuleGraphSpanLookup<'_, 'db> {
     }
 
     fn lookup_alias(&self, db: &'db dyn crate::Db, local_index: u32) -> Option<TextSpan<'db>> {
-        let spans = self.parsed_graph.get_spans(db, self.module_id)?;
+        let spans = self.spans(db, self.module_id)?;
         spans.lookup_alias(local_index).map(|entry| {
             let (text, span) = entry.to_text_and_span(db);
             TextSpan::new(text, span)
@@ -216,7 +228,7 @@ impl<'db> SpanLookup<'db> for ModuleGraphSpanLookup<'_, 'db> {
     ) -> Option<TextSpan<'db>> {
         // For module graph, look up in the specified module if provided.
         let target_module = module_id.unwrap_or(self.module_id);
-        let spans = self.parsed_graph.get_spans(db, target_module)?;
+        let spans = self.spans(db, target_module)?;
         spans.lookup_fun(local_index).map(|entry| {
             let (text, span) = entry.to_text_and_span(db);
             TextSpan::new(text, span)

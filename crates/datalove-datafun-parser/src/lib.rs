@@ -324,6 +324,34 @@ pub fn parse_module_ast<'db>(
     parse_module_full(db, module).parsed.clone()
 }
 
+/// The spans of one module, in the form diagnostics look things up in.
+///
+/// `parse_module_full` returns the side tables as the parser filled them;
+/// this is the same data keyed for lookup. Tracked and keyed on the module,
+/// so building it is a cost only the modules something actually reports a
+/// diagnostic against pay, rather than every module on every compile.
+#[salsa::tracked(returns(ref))]
+pub fn module_spans<'db>(
+    db: &'db dyn Db,
+    module: bct::module_graph::Module<'db>,
+) -> DatafunSpans<'db> {
+    let full = parse_module_full(db, module);
+    DatafunSpans::with_stmt_spans(
+        full.expr_spans.iter().map(|e| SpanMapEntry {
+            expr_key: e.expr_key,
+            entry: bct::diagnostic::SpanEntry::new(e.source, e.span.clone()),
+        }).collect(),
+        full.break_spans.clone(),
+        full.continue_spans.clone(),
+        full.ret_spans.clone(),
+        full.set_spans.clone(),
+        full.fun_spans.clone(),
+        full.type_alias_spans.clone(),
+        full.import_spans.clone(),
+        full.alias_spans.clone(),
+    )
+}
+
 /// Parse a module and return its statements and spans together.
 ///
 /// The two come from one parse, so the expression keys in the spans match the

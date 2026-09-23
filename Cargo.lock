@@ -1735,6 +1735,7 @@ dependencies = [
  "datalove-datafun-ast",
  "datalove-datafun-common",
  "datalove-datafun-intrinsics",
+ "datalove-datafun-parser",
  "datalove-datafun-sema",
  "datalove-datalit",
  "datalove-diagnostic",

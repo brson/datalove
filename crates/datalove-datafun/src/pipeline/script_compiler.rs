@@ -124,19 +124,16 @@ impl<'db> CompiledModules<'db> {
 
         let mut module_specs = Vec::new();
 
-        // Build a map of spans for quick lookup.
-        let spans_map: std::collections::HashMap<_, _> = self.shared.parsed_graph.spans(db).iter()
-            .map(|(id, spans)| (*id, spans.clone()))
-            .collect();
-
         for (salsa_module_id, parsed) in self.shared.parsed_graph.statements_only(db) {
             let module_path = salsa_module_id.path(db).clone();
-            let module_source = self.shared.module_graph.iter_modules(db)
+            let module = self.shared.module_graph.iter_modules(db)
                 .find(|m| m.id(db) == *salsa_module_id)
-                .map(|m| m.source(db))
                 .expect("module should exist in graph");
-            let spans = spans_map.get(salsa_module_id).cloned()
-                .expect("spans should exist for module");
+            let module_source = module.source(db);
+            // A `ModuleSpec` owns its spans, so this is where they get built.
+            // Building a script compiler is a deliberate act; compiling the
+            // modules is not, which is why this no longer happens there.
+            let spans = datalove_datafun_parser::module_spans(db, module).clone();
             let name_resolution = resolve_script_names(db, module_source, parsed.clone());
 
             module_specs.push(ModuleSpec::new(

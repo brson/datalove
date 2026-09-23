@@ -32,7 +32,7 @@ use datalove_datafun_ast::ast::ParsedStatements;
 
 /// Parsing a module is the parser's business; these live there now, so that
 /// name resolution can reach them without depending on this crate.
-pub use datalove_datafun_parser::{parse_module_ast, parse_module_full};
+pub use datalove_datafun_parser::{parse_module_ast, parse_module_full, module_spans};
 
 /// Parse all modules in a graph with resolved requires (internal tracked function).
 ///
@@ -46,30 +46,15 @@ pub fn parse_module_graph<'db>(
     rider_sources: Vec<(String, String)>,
 ) -> ParsedModuleGraph<'db> {
     // Sequential implementation for salsa tracking.
+    //
+    // Only the statements are collected. The spans are a query of their own
+    // now, keyed on the module, so nothing here builds a span table for a
+    // module no diagnostic ever names.
     let mut statements_only = Vec::new();
-    let mut spans_list = Vec::new();
     for module in graph.iter_modules(db) {
         let module_id = module.id(db);
-        let full_result = parse_module_full(db, module);
-        let parsed = full_result.parsed.clone();
-        let spans = datalove_datafun_ast::spans::DatafunSpans::with_stmt_spans(
-            full_result.expr_spans.iter().map(|e| {
-                datalove_datafun_ast::spans::SpanMapEntry {
-                    expr_key: e.expr_key,
-                    entry: bct::diagnostic::SpanEntry::new(e.source, e.span.clone()),
-                }
-            }).collect(),
-            full_result.break_spans.clone(),
-            full_result.continue_spans.clone(),
-            full_result.ret_spans.clone(),
-            full_result.set_spans.clone(),
-            full_result.fun_spans.clone(),
-            full_result.type_alias_spans.clone(),
-            full_result.import_spans.clone(),
-            full_result.alias_spans.clone(),
-        );
+        let parsed = parse_module_full(db, module).parsed.clone();
         statements_only.push((module_id, parsed));
-        spans_list.push((module_id, spans));
     }
 
     // Convert String aliases to InternedText.
@@ -95,7 +80,7 @@ pub fn parse_module_graph<'db>(
     // where salsa tracked struct creation (TypeFunction) is allowed.
     let resolved_riders = build_resolved_riders_from_sources(db, &rider_sources, &graph);
 
-    ParsedModuleGraph::new(db, graph, statements_only, spans_list, resolved_requires, module_content_hashes, resolved_riders)
+    ParsedModuleGraph::new(db, graph, statements_only, resolved_requires, module_content_hashes, resolved_riders)
 }
 
 /// Parse all modules in a graph with resolved requires, using parallel execution.

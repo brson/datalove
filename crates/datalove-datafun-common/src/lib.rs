@@ -162,12 +162,6 @@ pub struct ParsedModuleGraph<'db> {
     #[returns(ref)]
     pub statements_only: Vec<(ModuleId<'db>, ParsedStatements<'db>)>,
 
-    /// Expression spans for each module, separate from statements.
-    /// Changes to spans don't invalidate typecheck.
-    #[tracked]
-    #[returns(ref)]
-    pub spans: Vec<(ModuleId<'db>, DatafunSpans<'db>)>,
-
     /// Resolved module requires from package resolution.
     ///
     /// Maps each module to its resolved require aliases: (alias, target_module_id).
@@ -204,11 +198,13 @@ impl<'db> ParsedModuleGraph<'db> {
             .map(|(_, parsed)| parsed.clone())
     }
 
-    /// Get the spans for a module by its ID.
-    pub fn get_spans(&self, db: &'db dyn Db, module_id: ModuleId<'db>) -> Option<DatafunSpans> {
-        self.spans(db).iter()
-            .find(|(id, _)| *id == module_id)
-            .map(|(_, spans)| spans.clone())
+    /// The module in the graph with this id.
+    ///
+    /// Spans used to be materialized for every module whether or not anything
+    /// looked at them; they are a query keyed on the module now, so a caller
+    /// that wants them needs the module rather than its id.
+    pub fn get_module(&self, db: &'db dyn Db, module_id: ModuleId<'db>) -> Option<bct::module_graph::Module<'db>> {
+        self.graph(db).iter_modules(db).find(|m| m.id(db) == module_id)
     }
 
     /// Get the resolved require aliases for a module.
