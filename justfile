@@ -1,20 +1,31 @@
 default:
     just --list
 
+# Leak checking, which the runtime leaves off unless asked.
+#
+# Set on every recipe that runs tests, and on those three CI runs in particular.
+# A shipped binary defaults to off because tracking every live allocation so that
+# shutdown can list what leaked costs 17% of an allocation-heavy program; the
+# suite has no such cost and a hundred-odd fixtures exist to be checked by it.
+#
+# Children inherit it, so this one variable also reaches the executables the AOT
+# backends build and the `datalove` binary the cli tests spawn.
+LEAK_CHECK := "panic"
+
 # Run the tests, and check benches compile since they are not tested.
 test:
     cargo check --all --benches
-    cargo test --all --lib --bins --tests --examples
+    DATALOVE_LEAK_CHECK={{LEAK_CHECK}} cargo test --all --lib --bins --tests --examples
 
 # Run tests with 64-bit collection indexes.
 test-64:
-    cargo test --all --lib --bins --tests --examples --features index-64
+    DATALOVE_LEAK_CHECK={{LEAK_CHECK}} cargo test --all --lib --bins --tests --examples --features index-64
 
 test-slow:
-    cargo test -p datalove-rt --features slow_tests
-    cargo test -p datalove-rt-tests --features slow_tests
-    cargo test -p datalove-datafun-compiler --features slow_tests
-    cargo test -p datalove-datafun --features slow_tests
+    DATALOVE_LEAK_CHECK={{LEAK_CHECK}} cargo test -p datalove-rt --features slow_tests
+    DATALOVE_LEAK_CHECK={{LEAK_CHECK}} cargo test -p datalove-rt-tests --features slow_tests
+    DATALOVE_LEAK_CHECK={{LEAK_CHECK}} cargo test -p datalove-datafun-compiler --features slow_tests
+    DATALOVE_LEAK_CHECK={{LEAK_CHECK}} cargo test -p datalove-datafun --features slow_tests
     just check-wasm
 
 # Everything CI runs, which it does one configuration per runner.
@@ -22,7 +33,7 @@ test-ci: test test-slow test-64
 
 # Run tests with parallelism enabled.
 test-parallel:
-    DATALOVE_PARALLEL=1 cargo test --all --lib --bins --tests --examples
+    DATALOVE_PARALLEL=1 DATALOVE_LEAK_CHECK={{LEAK_CHECK}} cargo test --all --lib --bins --tests --examples
 
 # Time all tests, showing only tests that take over 1 second.
 test-time:

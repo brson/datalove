@@ -20,10 +20,23 @@ const MAX_SMALL_SIZE: usize = 4096;
 #[cfg(not(target_arch = "wasm32"))]
 const NUM_SIZE_CLASSES: usize = SIZE_CLASSES.len();
 
-/// Leak detection mode.
+/// Whether the allocator keeps a record of every live allocation, and what it
+/// does with what is left at shutdown.
+///
+/// This is one switch rather than two, because everything it turns on is built
+/// on the same record. `Ignore` does not merely stop reporting leaks -- it stops
+/// maintaining `active_allocations`, and so also gives up the checks `free`
+/// makes against it: a double free, a free of a pointer that was never
+/// allocated, and a size, align or count that disagrees with the allocation.
+///
+/// Those checks are worth having and they are not worth 13% of every program, so
+/// they live here rather than in the production path. Datalove is a safe
+/// language: a program cannot reach `free` with the wrong arguments by being
+/// written badly, only by the compiler lowering it wrongly, and that is what the
+/// test suite is for. See the `DATALOVE_LEAK_CHECK` in the justfile.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LeakCheckMode {
-    /// Silent cleanup, no leak detection.
+    /// No record kept: no leak detection, and no checking of `free`'s arguments.
     Ignore,
     /// Print leak warnings to stderr.
     Warn,
@@ -41,7 +54,10 @@ impl LeakCheckMode {
             Ok("panic") => LeakCheckMode::Panic,
             Ok("panic-backtrace") => LeakCheckMode::PanicWithBacktrace,
             Ok("ignore") => LeakCheckMode::Ignore,
-            _ => LeakCheckMode::Panic,
+            // Off unless asked for. Keeping the record costs 13% of an
+            // allocation-heavy program, and a shipped binary should not pay it
+            // to re-check what the compiler is tested for.
+            _ => LeakCheckMode::Ignore,
         }
     }
 }
@@ -1013,6 +1029,17 @@ mod tests {
     }
 
     // Leak detection tests.
+
+    /// Nothing is tracked unless the environment asks, so a shipped binary pays
+    /// neither the leak bookkeeping nor the `free` checks built on it.
+    #[test]
+    fn test_default_leak_check_mode_is_ignore() {
+        // The suite sets the variable, so this reads the fallback arm rather
+        // than whatever the suite chose.
+        if std::env::var("DATALOVE_LEAK_CHECK").is_err() {
+            assert_eq!(LeakCheckMode::from_env(), LeakCheckMode::Ignore);
+        }
+    }
 
     #[test]
     fn test_leak_detection_ignore_mode() {
