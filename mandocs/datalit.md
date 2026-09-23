@@ -51,6 +51,16 @@ and not as a general-purpose serialization format.
 ```
 
 
+## Lexical structure
+
+Source is UTF-8.
+End of line...
+
+Comments are either `//` to end of line, or `/* ... */`, nesting allowed.
+
+Reserved words...
+
+
 ## Expressions
 
 All expressions
@@ -193,6 +203,17 @@ NaNs and infinity.
 }
 ```
 
+Strings are sequences of unicode scalar values.
+
+String escape sequences:
+
+<!-- table here -->
+
+
+
+
+
+
 ### EBNF · Primitive types
 
 ```ebnf
@@ -211,8 +232,6 @@ float_lit      = [ "-" ], digit, { digit }, ".", digit, { digit } ;
 hex_lit        = [ "-" ], "0", ( "x" | "X" ), hex_digit, { hex_digit } ;
 string_lit     = '"', { string_char }, '"' ;
 ```
-
-
 
 
 ## Collections
@@ -587,6 +606,22 @@ enum_variant   = atom_type | term_type ;
 ## Comparison and total ordering
 
 todo
+
+
+
+
+## Canonical forms.
+
+
+Datalove literals has no canonical serialized form
+as might be used for consistent hashing.
+
+There is no canonical form for floats.
+
+Required type-hint insertion points are unknown.
+
+Will be revisited.
+
 
 
 
