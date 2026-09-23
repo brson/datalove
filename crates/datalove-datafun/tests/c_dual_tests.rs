@@ -24,7 +24,7 @@ use datalove_datafun as datafun;
 use datalove_datafun_c_aot::{CAotCompiler, CompilationOutput};
 use datalove_datafun_interp::FunctionRegistry;
 use datalove_datafun_pkg::package_load_worldfile::{self, WorldfileSection};
-use datafun::pipeline::ConstInlining;
+use datafun::pipeline::CompilerOptions;
 
 /// Result of dual analysis.
 #[derive(Debug, Serialize, Deserialize)]
@@ -205,7 +205,11 @@ fn analyze_worldfile_dual(parsed: package_load_worldfile::ParsedWorldfile) -> Du
         .unwrap();
 
     // Build pipeline and add modules (use consolidated constructor).
-    let mut pipeline = datafun::pipeline::ModuleCompilationPipeline::from_sections(&db, &parsed.sections, ConstInlining::Enabled);
+    let mut pipeline = datafun::pipeline::ModuleCompilationPipeline::from_sections(
+        &db,
+        &parsed.sections,
+        CompilerOptions { keep_ir_dumps: true, ..CompilerOptions::default() },
+    );
     let compiled = pipeline.compile_fresh(&db);
 
     // Check for resolution errors.
@@ -305,7 +309,7 @@ fn analyze_worldfile_dual(parsed: package_load_worldfile::ParsedWorldfile) -> Du
     interp_executor.destroy_live_values();
 
     // Build pipeline again for C AOT context.
-    let mut pipeline2 = datafun::pipeline::ModuleCompilationPipeline::from_sections(&db, &parsed.sections, ConstInlining::Enabled);
+    let mut pipeline2 = datafun::pipeline::ModuleCompilationPipeline::from_sections(&db, &parsed.sections, CompilerOptions::default());
     let compiled2 = pipeline2.compile_fresh(&db);
 
     // Run C AOT pipeline.

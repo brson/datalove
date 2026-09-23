@@ -14,7 +14,7 @@ use serde::{Serialize, Deserialize};
 use datalove_datafun_pkg::package_load_worldfile::{WorldfileSection, ParsedWorldfile};
 
 use crate::pipeline::{
-    ModuleCompilationPipeline, ConstInlining, TypecheckResult, LoweringResult,
+    ModuleCompilationPipeline, CompilerOptions, TypecheckResult, LoweringResult,
 };
 
 /// Result of analyzing a module-only worldfile with IR interpreter.
@@ -66,7 +66,11 @@ pub fn analyze_modules_worldfile(
     }
 
     // Build pipeline from sections.
-    let mut pipeline = ModuleCompilationPipeline::from_sections(db, &parsed.sections, ConstInlining::Enabled);
+    let mut pipeline = ModuleCompilationPipeline::from_sections(
+        db,
+        &parsed.sections,
+        CompilerOptions { keep_ir_dumps: true, ..CompilerOptions::default() },
+    );
 
     // Verify local/test/main module exists.
     if !pipeline.contains_module("local", "test", "main") {

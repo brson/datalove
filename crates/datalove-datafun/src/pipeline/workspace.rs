@@ -114,6 +114,12 @@ pub struct RiderDescriptor {
 pub struct CompilerOptions {
     pub const_inlining: bool,
     pub skip_specialization: bool,
+    /// Keep a printed copy of every lowered function on the compiled modules.
+    ///
+    /// Off by default, because printing them costs about as much as the whole
+    /// of phase 5a and only the fixtures and `worldfile_analysis` ever read
+    /// them. See `CompiledModules::module_ir_dumps`.
+    pub keep_ir_dumps: bool,
 }
 
 impl Default for CompilerOptions {
@@ -121,6 +127,7 @@ impl Default for CompilerOptions {
         Self {
             const_inlining: true,
             skip_specialization: false,
+            keep_ir_dumps: false,
         }
     }
 }
@@ -157,6 +164,28 @@ impl WorkspaceDelta {
         !self.riders_added.is_empty()
             || !self.riders_removed.is_empty()
             || !self.riders_changed.is_empty()
+    }
+
+    /// True when this delta cannot be applied to a pipeline that already exists.
+    ///
+    /// Compiler options are settled when a pipeline is built, because nothing
+    /// already compiled under the old ones would be recompiled under the new.
+    /// Riders are set as a whole list rather than one at a time, so a delta
+    /// naming only the ones that moved cannot say what the list becomes.
+    ///
+    /// A driver seeing this builds a new pipeline from the newer descriptor.
+    pub fn requires_new_pipeline(&self) -> bool {
+        self.new_pipeline_reason().is_some()
+    }
+
+    /// What in this delta needs a new pipeline, for the message that says so.
+    fn new_pipeline_reason(&self) -> Option<&'static str> {
+        match (self.options_changed.is_some(), self.riders_dirty()) {
+            (true, true) => Some("compiler options and riders"),
+            (true, false) => Some("compiler options"),
+            (false, true) => Some("riders"),
+            (false, false) => None,
+        }
     }
 }
 
@@ -502,7 +531,7 @@ fn package_library_from_map(
 // Pipeline integration
 // ---------------------------------------------------------------------------
 
-use super::module_pipeline::{ModuleCompilationPipeline, ConstInlining};
+use super::module_pipeline::ModuleCompilationPipeline;
 
 impl WorkspaceDescriptor {
     /// Apply this descriptor to a fresh pipeline, populating all modules and riders.
@@ -524,13 +553,7 @@ impl WorkspaceDescriptor {
 
     /// Create a fresh pipeline from this descriptor.
     pub fn to_pipeline(&self, db: &dyn salsa::Database) -> ModuleCompilationPipeline {
-        let const_inlining = if self.options.const_inlining {
-            ConstInlining::Enabled
-        } else {
-            ConstInlining::Disabled
-        };
-        let mut pipeline = ModuleCompilationPipeline::new(const_inlining);
-        pipeline.set_skip_specialization(self.options.skip_specialization);
+        let mut pipeline = ModuleCompilationPipeline::new(self.options.clone());
         self.apply_to_pipeline(&mut pipeline, db);
         pipeline
     }
@@ -538,11 +561,22 @@ impl WorkspaceDescriptor {
 
 impl WorkspaceDelta {
     /// Apply this delta to an existing pipeline for incremental recompilation.
+    ///
+    /// Modules are the only part of a workspace a live pipeline can take one
+    /// change at a time. See [`requires_new_pipeline`](Self::requires_new_pipeline)
+    /// for the rest, which this refuses rather than drops.
     pub fn apply_to_pipeline(
         &self,
         pipeline: &mut ModuleCompilationPipeline,
         db: &mut dyn salsa::Database,
     ) {
+        assert!(
+            !self.requires_new_pipeline(),
+            "this delta changes {}, which a built pipeline cannot take; \
+             build a new one from the newer descriptor instead",
+            self.new_pipeline_reason().expect("requires_new_pipeline said so"),
+        );
+
         for path in &self.modules_removed {
             let parts: Vec<&str> = path.splitn(3, '/').collect();
             if parts.len() == 3 {
@@ -563,5 +597,93 @@ impl WorkspaceDelta {
                 pipeline.update_source(db, parts[0], parts[1], parts[2], &module.source);
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A workspace of one module, optionally with a rider on its package.
+    fn descriptor(
+        source: &str,
+        rider: Option<&str>,
+        options: CompilerOptions,
+    ) -> WorkspaceDescriptor {
+        let package = PackageDescriptor {
+            name: "pkg".to_string(),
+            modules: BTreeMap::from([(
+                "main".to_string(),
+                ModuleDescriptor {
+                    name: "main".to_string(),
+                    source: Arc::from(source),
+                    origin: None,
+                },
+            )]),
+            rider: rider.map(|interface| RiderDescriptor {
+                interface_source: Arc::from(interface),
+                crate_dir: None,
+            }),
+        };
+        WorkspaceDescriptor {
+            system_library: None,
+            user_libraries: vec![PackageLibrary {
+                name: "local".to_string(),
+                packages: BTreeMap::from([("pkg".to_string(), package)]),
+            }],
+            options,
+            work_dir: None,
+        }
+    }
+
+    #[test]
+    fn an_edited_module_applies_to_the_pipeline_it_was_built_for() {
+        let before = descriptor("let x = 1", None, CompilerOptions::default());
+        let after = descriptor("let x = 2", None, CompilerOptions::default());
+        let delta = before.diff(&after);
+
+        assert_eq!(delta.modules_changed.len(), 1);
+        assert!(!delta.requires_new_pipeline());
+    }
+
+    #[test]
+    fn changed_options_need_a_new_pipeline() {
+        let before = descriptor("let x = 1", None, CompilerOptions::default());
+        let after = descriptor(
+            "let x = 1",
+            None,
+            CompilerOptions { keep_ir_dumps: true, ..CompilerOptions::default() },
+        );
+        let delta = before.diff(&after);
+
+        assert!(!delta.is_empty(), "the change is reported");
+        assert!(delta.requires_new_pipeline());
+    }
+
+    #[test]
+    fn changed_riders_need_a_new_pipeline() {
+        let before = descriptor("let x = 1", Some("native fun f()"), CompilerOptions::default());
+        let after = descriptor("let x = 1", Some("native fun g()"), CompilerOptions::default());
+        let delta = before.diff(&after);
+
+        assert!(delta.riders_dirty());
+        assert!(delta.requires_new_pipeline());
+    }
+
+    /// The case that used to pass silently, compiling under the old options.
+    #[test]
+    #[should_panic(expected = "compiler options")]
+    fn applying_changed_options_to_a_built_pipeline_is_refused() {
+        let before = descriptor("let x = 1", None, CompilerOptions::default());
+        let after = descriptor(
+            "let x = 1",
+            None,
+            CompilerOptions { skip_specialization: true, ..CompilerOptions::default() },
+        );
+        let delta = before.diff(&after);
+
+        let mut db = crate::Database::default();
+        let mut pipeline = before.to_pipeline(&db);
+        delta.apply_to_pipeline(&mut pipeline, &mut db);
     }
 }

@@ -26,7 +26,7 @@ use datalove_datafun_pkg::package_load_worldfile::{self, WorldfileSection};
 use datalove_datafun_cranelift_jit::ChaosDispatcher;
 use datalove_datafun_cranelift_aot::AotCompiler;
 use datalove_datafun_ir::FunctionRegistry;
-use datafun::pipeline::{ModuleCompilationPipeline, ConstInlining};
+use datafun::pipeline::{ModuleCompilationPipeline, CompilerOptions};
 
 /// Number of worldfiles to generate and test per run.
 const ITERATION_COUNT: u64 = 20;
@@ -59,7 +59,7 @@ fn run_with_chaos_interp(
     parsed: &package_load_worldfile::ParsedWorldfile,
     seed: u64,
 ) -> RunResult {
-    let mut pipeline = ModuleCompilationPipeline::from_sections(db, &parsed.sections, ConstInlining::Enabled);
+    let mut pipeline = ModuleCompilationPipeline::from_sections(db, &parsed.sections, CompilerOptions::default());
     let compiled = pipeline.compile_fresh(db);
 
     if let Some(err) = &compiled.resolution_error {
@@ -177,7 +177,7 @@ fn run_with_aot(
     db: &datafun::Database,
     parsed: &package_load_worldfile::ParsedWorldfile,
 ) -> RunResult {
-    let mut pipeline = ModuleCompilationPipeline::from_sections(db, &parsed.sections, ConstInlining::Enabled);
+    let mut pipeline = ModuleCompilationPipeline::from_sections(db, &parsed.sections, CompilerOptions::default());
     let compiled = pipeline.compile_fresh(db);
 
     if let Some(err) = &compiled.resolution_error {

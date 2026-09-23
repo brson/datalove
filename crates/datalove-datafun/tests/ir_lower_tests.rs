@@ -8,7 +8,7 @@ use std::path::Path;
 use datalove_datafun as datafun;
 use datalove_datafun_pkg::package_load_worldfile;
 
-use datafun::pipeline::{ModuleCompilationPipeline, ConstInlining};
+use datafun::pipeline::{ModuleCompilationPipeline, CompilerOptions};
 
 /// Analyze a worldfile and produce IR output.
 fn analyze_file(path: &Path) -> Result<String, String> {
@@ -22,7 +22,11 @@ fn analyze_file(path: &Path) -> Result<String, String> {
         .map_err(|e| format!("Failed to parse worldfile: {}", e))?;
 
     // Build pipeline from sections.
-    let mut pipeline = ModuleCompilationPipeline::from_sections(&db, &parsed.sections, ConstInlining::Enabled);
+    let mut pipeline = ModuleCompilationPipeline::from_sections(
+        &db,
+        &parsed.sections,
+        CompilerOptions { keep_ir_dumps: true, ..CompilerOptions::default() },
+    );
 
     // Verify local/test/main module exists.
     if !pipeline.contains_module("local", "test", "main") {

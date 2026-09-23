@@ -41,17 +41,7 @@ use datalove_datafun_interp::ModuleFunctionRegistry;
 
 use crate::incremental::{IncrementalModuleWorld, extract_dependencies};
 use super::compiled_modules::{SharedModuleContext, CompiledModules};
-
-/// Controls whether const bindings are evaluated at compile time.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum ConstInlining {
-    /// Evaluate const bindings at compile time and inline the results.
-    #[default]
-    Enabled,
-    /// Skip const inlining; evaluate const bindings at runtime instead.
-    /// Useful for testing and debugging const expressions.
-    Disabled,
-}
+use super::workspace::CompilerOptions;
 
 /// Module compilation pipeline with incremental recompilation support.
 ///
@@ -59,8 +49,9 @@ pub enum ConstInlining {
 /// Use `compile_fresh` for initial compilation, then `compile` for incremental updates.
 pub struct ModuleCompilationPipeline {
     world: IncrementalModuleWorld,
-    const_inlining: ConstInlining,
-    skip_specialization: bool,
+    /// Settled when the pipeline is built. Nothing recompiles under different
+    /// options than it was made with, so there is nothing here to set later.
+    options: CompilerOptions,
     /// Rider interfaces parsed from worldfile rider sections.
     /// Maps rider name to source text for deferred parsing.
     rider_sources: Vec<(String, String)>,
@@ -70,11 +61,10 @@ pub struct ModuleCompilationPipeline {
 
 impl ModuleCompilationPipeline {
     /// Create an empty pipeline.
-    pub fn new(const_inlining: ConstInlining) -> Self {
+    pub fn new(options: CompilerOptions) -> Self {
         Self {
             world: IncrementalModuleWorld::new(),
-            const_inlining,
-            skip_specialization: false,
+            options,
             rider_sources: Vec::new(),
             rider_crate_dirs: Vec::new(),
         }
@@ -84,22 +74,9 @@ impl ModuleCompilationPipeline {
     pub fn from_sections(
         db: &dyn salsa::Database,
         sections: &[WorldfileSection],
-        const_inlining: ConstInlining,
+        options: CompilerOptions,
     ) -> Self {
-        let mut pipeline = Self::new(const_inlining);
-        pipeline.add_modules_from_sections(db, sections);
-        pipeline
-    }
-
-    /// Create a pipeline from worldfile sections with skip_specialization option.
-    pub fn from_sections_with_options(
-        db: &dyn salsa::Database,
-        sections: &[WorldfileSection],
-        const_inlining: ConstInlining,
-        skip_specialization: bool,
-    ) -> Self {
-        let mut pipeline = Self::new(const_inlining);
-        pipeline.skip_specialization = skip_specialization;
+        let mut pipeline = Self::new(options);
         pipeline.add_modules_from_sections(db, sections);
         pipeline
     }
@@ -185,10 +162,7 @@ impl ModuleCompilationPipeline {
         self.rider_crate_dirs = dirs;
     }
 
-    /// Set skip_specialization option.
-    pub fn set_skip_specialization(&mut self, skip: bool) {
-        self.skip_specialization = skip;
-    }
+
 
     /// Check if a module exists.
     pub fn contains_module(&self, library: &str, package: &str, module: &str) -> bool {
@@ -310,8 +284,8 @@ impl ModuleCompilationPipeline {
                 output.ownership_analysis,
                 mode,
                 evaluator,
-                self.const_inlining == ConstInlining::Disabled,
-                self.skip_specialization,
+                !self.options.const_inlining,
+                self.options.skip_specialization,
             ))
         } else {
             None
@@ -350,12 +324,16 @@ impl ModuleCompilationPipeline {
                         lowering_errors.insert(module_path.clone(), errors.clone());
                     }
 
-                    // Collect IR dumps.
-                    let ir_dumps: Vec<String> = result.functions(db.as_salsa_db())
-                        .iter()
-                        .map(|ir_unit| format!("{}", ir_unit))
-                        .collect();
-                    module_ir_dumps.insert(module_path, ir_dumps);
+                    // Collect IR dumps, when someone has asked for them. Printing
+                    // every function costs about what lowering them does, and
+                    // only the fixtures read the result.
+                    if self.options.keep_ir_dumps {
+                        let ir_dumps: Vec<String> = result.functions(db.as_salsa_db())
+                            .iter()
+                            .map(|ir_unit| format!("{}", ir_unit))
+                            .collect();
+                        module_ir_dumps.insert(module_path, ir_dumps);
+                    }
 
                     // Add functions to registry.
                     for ir_unit in result.functions(db.as_salsa_db()) {
@@ -482,6 +460,6 @@ impl ModuleCompilationPipeline {
 
 impl Default for ModuleCompilationPipeline {
     fn default() -> Self {
-        Self::new(ConstInlining::default())
+        Self::new(CompilerOptions::default())
     }
 }

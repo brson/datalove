@@ -16,7 +16,7 @@ use datalove_datafun_inline::{
 use datalove_datafun_ir::{IrModule, IrModuleId, ModuleFunctionRegistry, SymbolTable};
 use datalove_datafun_pkg::package_load_worldfile::{self, WorldfileSection};
 
-use datafun::pipeline::{ConstInlining, ModuleCompilationPipeline};
+use datafun::pipeline::{CompilerOptions, ModuleCompilationPipeline};
 
 /// Extract inline directives from parsed worldfile sections.
 fn extract_inline_directives(sections: &[WorldfileSection]) -> Vec<InlineDirective> {
@@ -163,7 +163,7 @@ fn analyze_file(path: &Path) -> Result<String, String> {
 
     // Build pipeline from sections.
     let mut pipeline =
-        ModuleCompilationPipeline::from_sections(&db, &parsed.sections, ConstInlining::Enabled);
+        ModuleCompilationPipeline::from_sections(&db, &parsed.sections, CompilerOptions::default());
 
     // Verify local/test/main module exists.
     if !pipeline.contains_module("local", "test", "main") {

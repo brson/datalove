@@ -53,7 +53,10 @@ pub fn analyze_worldfile_with_jit(
     let mut results = Vec::new();
 
     // Build pipeline from sections.
-    let descriptor = WorkspaceDescriptor::from_worldfile_sections(&parsed.sections, CompilerOptions::default());
+    let descriptor = WorkspaceDescriptor::from_worldfile_sections(
+        &parsed.sections,
+        CompilerOptions { keep_ir_dumps: true, ..CompilerOptions::default() },
+    );
     let mut pipeline = descriptor.to_pipeline(db);
 
     // Compile modules.

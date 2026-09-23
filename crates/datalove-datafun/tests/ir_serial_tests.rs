@@ -19,7 +19,7 @@ use datalove_datafun_interp::{Destination, IrInterpreter, ScriptEnvironment};
 use datalove_datafun_ir::{expand_ir_strings, FunctionRegistry, IrCodeUnit, IrType};
 use datalove_datafun_pkg::package_load_worldfile::{self, WorldfileSection};
 use datalove_rt::rust::AlignedBuffer;
-use datafun::pipeline::ConstInlining;
+use datafun::pipeline::CompilerOptions;
 
 // ============================================================================
 // Result Types
@@ -356,7 +356,7 @@ fn analyze_worldfile_ir_serial(
 
     // Build pipeline and compile.
     let mut pipeline =
-        datafun::pipeline::ModuleCompilationPipeline::from_sections(&db, &parsed.sections, ConstInlining::Enabled);
+        datafun::pipeline::ModuleCompilationPipeline::from_sections(&db, &parsed.sections, CompilerOptions::default());
     let compiled = pipeline.compile_fresh(&db);
 
     // Check for resolution errors.

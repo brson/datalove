@@ -9,7 +9,7 @@ use std::sync::Arc;
 use datalove_datafun as datafun;
 use datalove_datafun_pkg::package_load_worldfile;
 use datalove_datafun_interp::{IrInterpreter, Value, Destination};
-use datalove_datafun::pipeline::{ModuleCompilationPipeline, ConstInlining};
+use datalove_datafun::pipeline::{ModuleCompilationPipeline, CompilerOptions};
 
 #[test]
 fn test_native_rider_int_add() {
@@ -36,7 +36,7 @@ end fun
     let parsed = package_load_worldfile::parse_worldfile_sections(worldfile.as_bytes()).X();
 
     // Build pipeline from sections.
-    let mut pipeline = ModuleCompilationPipeline::from_sections(&db, &parsed.sections, ConstInlining::Enabled);
+    let mut pipeline = ModuleCompilationPipeline::from_sections(&db, &parsed.sections, CompilerOptions::default());
 
     assert!(pipeline.contains_module("local", "test", "main"));
 

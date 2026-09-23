@@ -21,7 +21,7 @@ use serde::{Serialize, Deserialize};
 use datalove_datafun_pkg::package_load_worldfile::{WorldfileSection, ParsedWorldfile};
 
 use crate::pipeline::{
-    ModuleCompilationPipeline, ConstInlining, TypecheckResult, OwnershipResult, LoweringResult,
+    ModuleCompilationPipeline, CompilerOptions, TypecheckResult, OwnershipResult, LoweringResult,
     format_ownership_result, format_lowering_result,
 };
 
@@ -98,19 +98,15 @@ pub fn analyze_worldfile_with_options(
 ) -> AnyResult<Analysis> {
     let mut results = Vec::new();
 
-    // Determine const inlining mode.
-    let const_inlining = if options.skip_const_inlining {
-        ConstInlining::Disabled
-    } else {
-        ConstInlining::Enabled
-    };
-
-    // Build pipeline from sections with options.
-    let mut pipeline = ModuleCompilationPipeline::from_sections_with_options(
+    // This function exists to produce fixture output, which includes the IR.
+    let mut pipeline = ModuleCompilationPipeline::from_sections(
         db,
         &parsed.sections,
-        const_inlining,
-        options.skip_specialization,
+        CompilerOptions {
+            const_inlining: !options.skip_const_inlining,
+            skip_specialization: options.skip_specialization,
+            keep_ir_dumps: true,
+        },
     );
 
     // Compile modules (typecheck, drop analysis, lower).
