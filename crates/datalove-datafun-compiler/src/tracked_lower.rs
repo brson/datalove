@@ -64,12 +64,23 @@ impl<'db> FuncIdMap<'db> {
 /// modules it transitively requires, and the riders, so it is given those
 /// entries and nothing else. Adding an unrelated module then leaves this
 /// argument equal and the lowering stays cached.
+///
+/// Interned rather than returned as a plain `Vec`, because both lowering
+/// queries take it and each would otherwise intern the whole list into its own
+/// memo key, once per module per compile. As an id it is one word to either.
+#[salsa::interned]
+pub struct ReachableFuncIds<'db> {
+    #[returns(ref)]
+    pub entries: Vec<((ModuleId<'db>, String), (IrModuleId, FuncId))>,
+}
+
+#[salsa::tracked(returns(copy))]
 fn reachable_func_ids<'db>(
     db: &'db dyn salsa::Database,
     graph: bct::module_graph::ModuleGraph<'db>,
     func_id_map: FuncIdMap<'db>,
     module_id: ModuleId<'db>,
-) -> Vec<((ModuleId<'db>, String), (IrModuleId, FuncId))> {
+) -> ReachableFuncIds<'db> {
     let dependencies = graph.dependencies(db);
 
     // Transitive requires of this module.
@@ -90,11 +101,12 @@ fn reachable_func_ids<'db>(
     let in_graph: std::collections::BTreeSet<ModuleId<'db>> =
         graph.iter_modules(db).map(|m| m.id(db)).collect();
 
-    func_id_map.entries(db)
+    let entries: Vec<((ModuleId<'db>, String), (IrModuleId, FuncId))> = func_id_map.entries(db)
         .iter()
         .filter(|((mid, _), _)| reachable.contains(mid) || !in_graph.contains(mid))
         .cloned()
-        .collect()
+        .collect();
+    ReachableFuncIds::new(db, entries)
 }
 
 /// Compute the function ID map from a parsed module graph.
@@ -298,10 +310,10 @@ pub fn lower_module<'db>(
     parsed: ParsedStatements<'db>,
     typecheck_result: SingleModuleTypecheckResult<'db>,
     ownership_analysis: SingleModuleAnalysis<'db>,
-    func_ids: Vec<((ModuleId<'db>, String), (IrModuleId, FuncId))>,
+    func_ids: ReachableFuncIds<'db>,
     pre_resolved_consts: Option<ModulePreResolvedConsts<'db>>,
     skip_const_inlining: bool,
-    lowered_functions: Option<ModuleLoweredFunctions>,
+    lowered_functions: Option<Arc<ModuleLoweredFunctions>>,
 ) -> SingleModuleLoweringResult<'db> {
     let module_id = module.id(db);
     let module_path = module_id.path(db);
@@ -312,7 +324,7 @@ pub fn lower_module<'db>(
     let call_targets = typecheck_result.call_targets(db);
 
     let func_id_hashmap: HashMap<(ModuleId<'db>, String), (IrModuleId, FuncId)> =
-        func_ids.iter().cloned().collect();
+        func_ids.entries(db).iter().cloned().collect();
 
     // Get pre-computed ownership analysis results.
     let function_analyses = ownership_analysis.function_analyses(db);
@@ -463,7 +475,7 @@ pub struct ModuleLoweredFunctions {
 /// This creates a temporary registry for CTFE to use when evaluating
 /// const expressions that call functions from other modules.
 fn build_module_registry_from_lowered<'db>(
-    lowered_functions: &HashMap<ModuleId<'db>, ModuleLoweredFunctions>,
+    lowered_functions: &HashMap<ModuleId<'db>, Arc<ModuleLoweredFunctions>>,
     func_id_map: &HashMap<(ModuleId<'db>, String), (IrModuleId, FuncId)>,
 ) -> Arc<ModuleFunctionRegistry> {
     let mut registry = ModuleFunctionRegistry::new();
@@ -522,7 +534,7 @@ fn close_shapes_over_calls<'db>(
     db: &'db dyn salsa::Database,
     parsed_graph: ParsedModuleGraph<'db>,
     func_id_map: FuncIdMap<'db>,
-    lowered_functions: &mut HashMap<ModuleId<'db>, ModuleLoweredFunctions>,
+    lowered_functions: &mut HashMap<ModuleId<'db>, Arc<ModuleLoweredFunctions>>,
     errors: &mut HashMap<ModuleId<'db>, Vec<String>>,
 ) {
     use datalove_datafun_ir::{CodeRef, DescriptorShape, Instruction};
@@ -597,11 +609,26 @@ fn close_shapes_over_calls<'db>(
         return;
     }
 
+    // Phase 5a put these in a memo, and the memo holds the other half of every
+    // `Arc` here, so `Arc::make_mut` below copies a module's whole IR the first
+    // time it is asked. Both loops therefore look before they write: a program
+    // with no type parameters settles on the shapes lowering already gave it,
+    // and copying it to write back what it says would cost more than the rest
+    // of this function.
     for (key, shape_set) in &shapes {
         // A native has no lowered unit to write to; its own set was settled
         // from its signature and is stored on its `NativeContext`.
         let Some((module_id, idx)) = placement.get(key).copied() else { continue };
-        let unit = &mut lowered_functions.get_mut(&module_id).unwrap().functions[idx];
+        let changes = match &lowered_functions[&module_id].functions[idx].context {
+            datalove_datafun_ir::CodeUnitContext::Function(ctx) => {
+                ctx.descriptor_shapes != *shape_set
+            }
+            _ => false,
+        };
+        if !changes {
+            continue;
+        }
+        let unit = &mut Arc::make_mut(lowered_functions.get_mut(&module_id).unwrap()).functions[idx];
         if let datalove_datafun_ir::CodeUnitContext::Function(ctx) = &mut unit.context {
             ctx.descriptor_shapes = shape_set.clone();
         }
@@ -610,7 +637,14 @@ fn close_shapes_over_calls<'db>(
     // With the sets settled, say what each call hands over. Stored rather than
     // worked out again in each backend, so that the descriptor emitter makes a
     // descriptor for every type named only here.
+    //
+    // With no shape anywhere, every call's `wanted` is empty, so
+    // `resolve_call_descriptors` only clears descriptor lists that lowering
+    // left empty and cannot reach the arm that reports one missing.
     let lookup: HashMap<Key, Vec<DescriptorShape>> = shapes;
+    if lookup.values().all(|shapes| shapes.is_empty()) {
+        return;
+    }
     for (key, (module_id, idx)) in &placement {
         let own = lookup.get(key).cloned().unwrap_or_default();
         let module_key = key.0;
@@ -622,7 +656,7 @@ fn close_shapes_over_calls<'db>(
             };
             lookup.get(&callee).cloned().unwrap_or_default()
         };
-        let unit = &mut lowered_functions.get_mut(module_id).unwrap().functions[*idx];
+        let unit = &mut Arc::make_mut(lowered_functions.get_mut(module_id).unwrap()).functions[*idx];
         if let Err(missing) = datalove_datafun_ir::resolve_call_descriptors(
             unit, &own, &callee_shapes,
         ) {
@@ -635,14 +669,171 @@ fn close_shapes_over_calls<'db>(
     }
 }
 
+/// What lowering one module's functions produced.
+///
+/// Both fields are plain owned data with no `'db` brand, which is what lets a
+/// worker thread hand them back. See `lower_all_module_functions`.
+#[derive(Clone, PartialEq, Eq)]
+pub struct ModuleLowerOutcome {
+    /// Absent when the module declares no functions at all.
+    lowered: Option<Arc<ModuleLoweredFunctions>>,
+    /// Functions that named a module const which is not evaluated yet.
+    deferred: Vec<String>,
+}
+
+/// Lower one module's functions.
+///
+/// Tracked, so an edit re-lowers the module that changed rather than every
+/// module in the world. The arguments are what that costs: each has to be
+/// something the memo can be keyed on, and each has to be narrow enough that an
+/// unrelated edit leaves it equal.
+///
+/// The statements are pulled rather than passed. They are the same value
+/// `parse_module_graph` put in the graph, and keeping them out of the key means
+/// an edit does not re-hash every module's AST into a second memo key on top of
+/// the one `lower_module` already builds.
+///
+/// - `func_ids` comes from `reachable_func_ids` rather than the whole map, for
+///   the reason given there.
+/// - `module_consts` is sorted, since it arrives as a `HashMap` and the key has
+///   to hash the same way twice.
+/// - `restrict` is `None` on the first stratum and `Some` on the second, where
+///   it names the functions that were waiting on a module const. `Some(empty)`
+///   means this module has nothing to lower, which is not the same as `None`.
+#[salsa::tracked]
+pub fn lower_module_functions<'db>(
+    db: &'db dyn salsa::Database,
+    module: Module<'db>,
+    single_typecheck: SingleModuleTypecheckResult<'db>,
+    single_ownership: SingleModuleAnalysis<'db>,
+    func_ids: ReachableFuncIds<'db>,
+    module_consts: Vec<(String, (IrType, ConstValue))>,
+    restrict: Option<Vec<String>>,
+) -> ModuleLowerOutcome {
+    log_query("lower_functions", module.id(db).path(db), QueryPhase::Start);
+
+    let parsed = &crate::module_graph::parse_module_full(db, module).parsed;
+    let func_id_hashmap: HashMap<(ModuleId<'db>, String), (IrModuleId, FuncId)> =
+        func_ids.entries(db).iter().cloned().collect();
+    let module_consts: HashMap<String, (IrType, ConstValue)> =
+        module_consts.into_iter().collect();
+    let restricting = restrict.is_some();
+    let restrict = restrict.as_ref();
+    let func_id_hashmap = &func_id_hashmap;
+    let module_consts = &module_consts;
+
+    let expr_types = single_typecheck.expr_types(db);
+    let call_targets = single_typecheck.call_targets(db);
+    let function_analyses = single_ownership.function_analyses(db);
+
+    // Build maps of function name -> resolved types from exports.
+    let mut func_param_types: HashMap<String, Vec<IrType>> = HashMap::new();
+    let mut func_return_types: HashMap<String, IrType> = HashMap::new();
+    for (name, func_type) in single_typecheck.exports(db) {
+        let param_types: Vec<IrType> = func_type.param_types(db)
+            .iter()
+            .map(|ty| IrType::from_tycheck(db, ty))
+            .collect();
+        func_param_types.insert(name.text(db).S(), param_types);
+        let return_type = IrType::from_tycheck(db, &func_type.return_type(db));
+        func_return_types.insert(name.text(db).S(), return_type);
+    }
+
+    let mut functions = Vec::new();
+    let mut func_name_to_id = Vec::new();
+    let mut deferred = Vec::new();
+
+    // Assign FuncIds and lower each function.
+    let mut next_func_id: u32 = 0;
+    for statement in &parsed.statements {
+        if let Statement::Fun(func) = statement {
+            let func_name = func.name(db).text(db).S();
+            let func_id = FuncId(next_func_id);
+            next_func_id += 1;
+
+            func_name_to_id.push((func_name.clone(), func_id));
+
+            // On the second pass only the deferred functions are lowered.
+            // Their FuncIds still come from statement position, so the
+            // numbering matches whichever pass a function lands in.
+            if restricting {
+                let wanted = restrict
+                    .map(|names| names.iter().any(|n| n == &func_name))
+                    .unwrap_or(false);
+                if !wanted {
+                    continue;
+                }
+            }
+
+            // Get resolved param and return types for this function.
+            let resolved_params = func_param_types.get(&func_name).map(|v| v.as_slice());
+            let resolved_return = func_return_types.get(&func_name).cloned();
+
+            // Get pre-computed ownership analysis for this function.
+            let Some(single_analysis) = function_analyses.get(&func_name) else {
+                continue;
+            };
+
+            // Skip functions that had ownership analysis errors.
+            let Some(analysis) = single_analysis.analysis(db).clone() else {
+                continue;
+            };
+
+            match lower::lower_function_for_module(
+                db,
+                expr_types,
+                call_targets,
+                func_id_hashmap,
+                *func,
+                func_id,
+                analysis,
+                resolved_params,
+                resolved_return,
+                module_consts,
+            ) {
+                Ok(ir_func) => {
+                    functions.push(ir_func);
+                }
+                Err(lower::LowerError::BindingNotAvailable(_)) => {
+                    // Names a module const that has not been evaluated yet.
+                    // Recorded so the caller can lower it once it has.
+                    deferred.push(func_name);
+                    continue;
+                }
+                Err(_) => {
+                    // Errors will be reported during the main lowering phase.
+                    continue;
+                }
+            }
+        }
+    }
+
+    let lowered = if functions.is_empty() && func_name_to_id.is_empty() {
+        None
+    } else {
+        Some(Arc::new(ModuleLoweredFunctions { functions, func_name_to_id }))
+    };
+
+    log_query("lower_functions", module.id(db).path(db), QueryPhase::End);
+
+    ModuleLowerOutcome { lowered, deferred }
+}
+
 /// Lower all module functions.
 ///
 /// This lowers all functions across all modules. The lowered functions are
 /// reused for const evaluation and final module assembly.
 ///
 /// Returns a map of module_id -> lowered functions.
+///
+/// The work itself is `lower_module_functions`, which is tracked, so this walks
+/// the graph but only pays for the modules whose inputs moved. Under
+/// `ParallelMode::Parallel` the misses are computed on rayon's pool; the
+/// outcome carries no `'db` brand, so a worker hands back what it built rather
+/// than warming a cache for a second pass to read.
+#[allow(clippy::too_many_arguments)]
 pub fn lower_all_module_functions<'db>(
-    db: &'db dyn salsa::Database,
+    db: &'db dyn DbClone,
     parsed_graph: ParsedModuleGraph<'db>,
     typecheck_result: ModuleGraphTypecheckResult<'db>,
     ownership_analysis: ModuleGraphAnalysis<'db>,
@@ -650,112 +841,82 @@ pub fn lower_all_module_functions<'db>(
     module_consts: &HashMap<ModuleId<'db>, HashMap<String, (IrType, ConstValue)>>,
     deferred: &mut HashMap<ModuleId<'db>, Vec<String>>,
     restrict: Option<&HashMap<ModuleId<'db>, Vec<String>>>,
-) -> HashMap<ModuleId<'db>, ModuleLoweredFunctions> {
-    let empty_consts: HashMap<String, (IrType, ConstValue)> = HashMap::new();
-    let typecheck_module_results = typecheck_result.module_results(db);
-    let ownership_analysis_results = ownership_analysis.module_results(db);
-    let func_id_hashmap = func_id_map.to_hashmap(db);
+    mode: ParallelMode,
+) -> HashMap<ModuleId<'db>, Arc<ModuleLoweredFunctions>> {
+    use rmx::rayon::prelude::*;
+
+    let db_salsa = db.as_salsa_db();
+    let graph = parsed_graph.graph(db_salsa);
+    let typecheck_module_results = typecheck_result.module_results(db_salsa);
+    let ownership_analysis_results = ownership_analysis.module_results(db_salsa);
+    let module_map: HashMap<ModuleId<'db>, Module> = graph.iter_modules(db_salsa)
+        .map(|m| (m.id(db_salsa), m))
+        .collect();
+
+    // The modules that have everything lowering needs, in graph order, with the
+    // arguments their query is keyed on. Built here rather than in the workers
+    // so that the two modes key the query identically.
+    let ready: Vec<_> = parsed_graph.statements_only(db_salsa)
+        .iter()
+        .filter_map(|(module_id, parsed)| {
+            let module = *module_map.get(module_id)?;
+            let single_typecheck = *typecheck_module_results.get(module_id)?;
+            let single_ownership = *ownership_analysis_results.get(module_id)?;
+
+            // Sorted, because it arrives as a `HashMap` and the memo key has to
+            // hash the same way for the same consts.
+            let mut consts: Vec<(String, (IrType, ConstValue))> = module_consts
+                .get(module_id)
+                .map(|m| m.iter().map(|(k, v)| (k.clone(), v.clone())).collect())
+                .unwrap_or_default();
+            consts.sort_by(|a, b| a.0.cmp(&b.0));
+
+            Some((
+                *module_id,
+                module,
+                single_typecheck,
+                single_ownership,
+                reachable_func_ids(db_salsa, graph, func_id_map, *module_id),
+                consts,
+                restrict.map(|r| r.get(module_id).cloned().unwrap_or_default()),
+            ))
+        })
+        .collect();
+
+    let outcomes: Vec<(ModuleId<'db>, ModuleLowerOutcome)> = match mode {
+        ParallelMode::Sequential => ready.into_iter()
+            .map(|(module_id, module, tc, own, func_ids, consts, restrict)| {
+                let outcome = lower_module_functions(
+                    db_salsa, module, tc, own, func_ids, consts, restrict,
+                ).clone();
+                (module_id, outcome)
+            })
+            .collect(),
+        ParallelMode::Parallel => {
+            // Clone the database up front, one per module: `&dyn DbClone` is not
+            // `Sync`, so the clones cannot be made inside the parallel section.
+            let work: Vec<_> = ready.into_iter()
+                .map(|item| (db.dyn_clone(), item))
+                .collect();
+
+            work.into_par_iter()
+                .map(|(db_clone, (module_id, module, tc, own, func_ids, consts, restrict))| {
+                    let outcome = lower_module_functions(
+                        db_clone.as_salsa_db(), module, tc, own, func_ids, consts, restrict,
+                    ).clone();
+                    (module_id, outcome)
+                })
+                .collect()
+        }
+    };
 
     let mut result = HashMap::new();
-
-    for (module_id, parsed) in parsed_graph.statements_only(db) {
-        let Some(single_typecheck) = typecheck_module_results.get(module_id) else {
-            continue;
-        };
-        let Some(single_ownership) = ownership_analysis_results.get(module_id) else {
-            continue;
-        };
-
-        let expr_types = single_typecheck.expr_types(db);
-        let call_targets = single_typecheck.call_targets(db);
-        let function_analyses = single_ownership.function_analyses(db);
-
-        // Build maps of function name -> resolved types from exports.
-        let mut func_param_types: HashMap<String, Vec<IrType>> = HashMap::new();
-        let mut func_return_types: HashMap<String, IrType> = HashMap::new();
-        for (name, func_type) in single_typecheck.exports(db) {
-            let param_types: Vec<IrType> = func_type.param_types(db)
-                .iter()
-                .map(|ty| IrType::from_tycheck(db, ty))
-                .collect();
-            func_param_types.insert(name.text(db).S(), param_types);
-            let return_type = IrType::from_tycheck(db, &func_type.return_type(db));
-            func_return_types.insert(name.text(db).S(), return_type);
+    for (module_id, outcome) in outcomes {
+        if !outcome.deferred.is_empty() {
+            deferred.entry(module_id).or_default().extend(outcome.deferred);
         }
-
-        let mut functions = Vec::new();
-        let mut func_name_to_id = Vec::new();
-
-        // Assign FuncIds and lower each function.
-        let mut next_func_id: u32 = 0;
-        for statement in &parsed.statements {
-            if let Statement::Fun(func) = statement {
-                let func_name = func.name(db).text(db).S();
-                let func_id = FuncId(next_func_id);
-                next_func_id += 1;
-
-                func_name_to_id.push((func_name.clone(), func_id));
-
-                // On the second pass only the deferred functions are lowered.
-                // Their FuncIds still come from statement position, so the
-                // numbering matches whichever pass a function lands in.
-                if let Some(restrict) = restrict {
-                    let wanted = restrict.get(module_id)
-                        .map(|names| names.iter().any(|n| n == &func_name))
-                        .unwrap_or(false);
-                    if !wanted {
-                        continue;
-                    }
-                }
-
-                // Get resolved param and return types for this function.
-                let resolved_params = func_param_types.get(&func_name).map(|v| v.as_slice());
-                let resolved_return = func_return_types.get(&func_name).cloned();
-
-                // Get pre-computed ownership analysis for this function.
-                let Some(single_analysis) = function_analyses.get(&func_name) else {
-                    continue;
-                };
-
-                // Skip functions that had ownership analysis errors.
-                let Some(analysis) = single_analysis.analysis(db).clone() else {
-                    continue;
-                };
-
-                match lower::lower_function_for_module(
-                    db,
-                    expr_types,
-                    call_targets,
-                    &func_id_hashmap,
-                    *func,
-                    func_id,
-                    analysis,
-                    resolved_params,
-                    resolved_return,
-                    module_consts.get(module_id).unwrap_or(&empty_consts),
-                ) {
-                    Ok(ir_func) => {
-                        functions.push(ir_func);
-                    }
-                    Err(lower::LowerError::BindingNotAvailable(_)) => {
-                        // Names a module const that has not been evaluated yet.
-                        // Recorded so the caller can lower it once it has.
-                        deferred.entry(*module_id).or_default().push(func_name);
-                        continue;
-                    }
-                    Err(_) => {
-                        // Errors will be reported during the main lowering phase.
-                        continue;
-                    }
-                }
-            }
-        }
-
-        if !functions.is_empty() || !func_name_to_id.is_empty() {
-            result.insert(*module_id, ModuleLoweredFunctions {
-                functions,
-                func_name_to_id,
-            });
+        if let Some(lowered) = outcome.lowered {
+            result.insert(module_id, lowered);
         }
     }
 
@@ -781,7 +942,7 @@ pub fn evaluate_all_module_consts<'db>(
     parsed_graph: ParsedModuleGraph<'db>,
     typecheck_result: ModuleGraphTypecheckResult<'db>,
     evaluator: Rc<RefCell<dyn CtfeEvaluator>>,
-    lowered_functions: &HashMap<ModuleId<'db>, ModuleLoweredFunctions>,
+    lowered_functions: &HashMap<ModuleId<'db>, Arc<ModuleLoweredFunctions>>,
     func_id_map: FuncIdMap<'db>,
     module_consts: &HashMap<ModuleId<'db>, HashMap<String, (IrType, ConstValue)>>,
 ) -> HashMap<ModuleId<'db>, ModulePreResolvedConsts<'db>> {
@@ -919,7 +1080,7 @@ fn evaluate_module_level_consts<'db>(
     parsed_graph: ParsedModuleGraph<'db>,
     typecheck_result: ModuleGraphTypecheckResult<'db>,
     evaluator: &Rc<RefCell<dyn CtfeEvaluator>>,
-    lowered_functions: &HashMap<ModuleId<'db>, ModuleLoweredFunctions>,
+    lowered_functions: &HashMap<ModuleId<'db>, Arc<ModuleLoweredFunctions>>,
     func_id_map: FuncIdMap<'db>,
     errors_out: &mut HashMap<ModuleId<'db>, Vec<String>>,
 ) -> HashMap<ModuleId<'db>, HashMap<String, (IrType, ConstValue)>> {
@@ -1088,8 +1249,8 @@ pub fn lower_module_graph_with_evaluator<'db>(
     let no_consts_yet: HashMap<ModuleId<'db>, HashMap<String, (IrType, ConstValue)>> = HashMap::new();
     let mut deferred: HashMap<ModuleId<'db>, Vec<String>> = HashMap::new();
     let mut lowered_functions = lower_all_module_functions(
-        db_salsa, parsed_graph, typecheck_result, ownership_analysis, func_id_map,
-        &no_consts_yet, &mut deferred, None,
+        db, parsed_graph, typecheck_result, ownership_analysis, func_id_map,
+        &no_consts_yet, &mut deferred, None, mode,
     );
 
     // Phase 5a/b boundary is where every module function is lowered, so this is
@@ -1124,8 +1285,8 @@ pub fn lower_module_graph_with_evaluator<'db>(
     if !deferred.is_empty() {
         let mut still_deferred: HashMap<ModuleId<'db>, Vec<String>> = HashMap::new();
         let second = lower_all_module_functions(
-            db_salsa, parsed_graph, typecheck_result, ownership_analysis, func_id_map,
-            &module_consts, &mut still_deferred, Some(&deferred),
+            db, parsed_graph, typecheck_result, ownership_analysis, func_id_map,
+            &module_consts, &mut still_deferred, Some(&deferred), mode,
         );
         for (module_id, names) in &still_deferred {
             for name in names {
@@ -1135,10 +1296,11 @@ pub fn lower_module_graph_with_evaluator<'db>(
                 ));
             }
         }
-        for (module_id, mut module_funcs) in second {
+        for (module_id, module_funcs) in second {
             match lowered_functions.get_mut(&module_id) {
                 Some(existing) => {
-                    existing.functions.append(&mut module_funcs.functions);
+                    let existing = Arc::make_mut(existing);
+                    existing.functions.extend(module_funcs.functions.iter().cloned());
                     // Keep the IR in the order the ids were assigned, so the
                     // stratum a function landed in does not show in the output.
                     existing.functions.sort_by_key(|f| f.id.0);
@@ -1213,6 +1375,11 @@ pub fn lower_module_graph_with_evaluator<'db>(
 
     // Phase 5d: Assemble modules with lowered functions, then inline consts.
     // CTFE errors from resolved_consts are included in lower_module via pre_resolved_consts.errors.
+    //
+    // `lower_module` is tracked, so it takes its arguments by value, and a
+    // module's whole lowered IR is one of them. It gets the `Arc` that phase 5a
+    // put in the memo, so neither the parallel path's work items nor the
+    // aggregation that follows them copies an instruction.
     match mode {
         ParallelMode::Sequential => {
             assemble_module_graph(db_salsa, parsed_graph, typecheck_result, ownership_analysis, &resolved_consts, &lowered_functions, skip_const_inlining)
@@ -1302,8 +1469,8 @@ fn specialize_comptime_functions<'db>(
     evaluator: &Rc<RefCell<dyn CtfeEvaluator>>,
     func_id_map: FuncIdMap<'db>,
     module_consts: &HashMap<ModuleId<'db>, HashMap<String, (IrType, ConstValue)>>,
-    mut lowered_functions: HashMap<ModuleId<'db>, ModuleLoweredFunctions>,
-) -> (HashMap<ModuleId<'db>, ModuleLoweredFunctions>, Vec<(ModuleId<'db>, Vec<String>)>) {
+    mut lowered_functions: HashMap<ModuleId<'db>, Arc<ModuleLoweredFunctions>>,
+) -> (HashMap<ModuleId<'db>, Arc<ModuleLoweredFunctions>>, Vec<(ModuleId<'db>, Vec<String>)>) {
     // Modules in the order that decides their `IrModuleId`, which is also the
     // order the copies are numbered in.
     let graph = typecheck_result.graph(db);
@@ -1353,6 +1520,7 @@ fn specialize_comptime_functions<'db>(
             let Some(module_funcs) = lowered_functions.get_mut(module_id) else {
                 continue;
             };
+            let module_funcs = Arc::make_mut(module_funcs);
 
             let mut next_id = module_funcs.functions.iter()
                 .map(|f| f.id.0 + 1)
@@ -1439,6 +1607,7 @@ fn specialize_comptime_functions<'db>(
         let Some(module_funcs) = lowered_functions.get_mut(module_id) else {
             continue;
         };
+        let module_funcs = Arc::make_mut(module_funcs);
         module_funcs.functions = module_funcs.functions.iter()
             .map(|func| rewrite_comptime_calls(func, &plan, &module_callee_key))
             .collect();
@@ -1456,7 +1625,7 @@ fn assemble_module_graph<'db>(
     typecheck_result: ModuleGraphTypecheckResult<'db>,
     ownership_analysis: ModuleGraphAnalysis<'db>,
     resolved_consts: &HashMap<ModuleId<'db>, ModulePreResolvedConsts<'db>>,
-    lowered_functions: &HashMap<ModuleId<'db>, ModuleLoweredFunctions>,
+    lowered_functions: &HashMap<ModuleId<'db>, Arc<ModuleLoweredFunctions>>,
     skip_const_inlining: bool,
 ) -> ModuleGraphLoweringResult<'db> {
     let graph = parsed_graph.graph(db);
@@ -1538,7 +1707,7 @@ fn assemble_module_graph_parallel<'db>(
     typecheck_result: ModuleGraphTypecheckResult<'db>,
     ownership_analysis: ModuleGraphAnalysis<'db>,
     resolved_consts: &HashMap<ModuleId<'db>, ModulePreResolvedConsts<'db>>,
-    lowered_functions: &HashMap<ModuleId<'db>, ModuleLoweredFunctions>,
+    lowered_functions: &HashMap<ModuleId<'db>, Arc<ModuleLoweredFunctions>>,
     skip_const_inlining: bool,
 ) -> ModuleGraphLoweringResult<'db> {
     use rmx::rayon::prelude::*;
@@ -1651,8 +1820,9 @@ mod reachable_func_ids_tests {
     fn reachable_names<'db>(db: &'db Database, graph: ModuleGraph<'db>, module: ModuleId<'db>) -> Vec<String> {
         let map = test_func_id_map(db, graph);
         let mut names: Vec<String> = reachable_func_ids(db, graph, map, module)
-            .into_iter()
-            .map(|((_, name), _)| name)
+            .entries(db)
+            .iter()
+            .map(|((_, name), _)| name.clone())
             .collect();
         names.sort();
         names
@@ -1699,7 +1869,7 @@ mod reachable_func_ids_tests {
         let graph_before = builder.build();
         let before = reachable_func_ids(
             &db, graph_before, test_func_id_map(&db, graph_before), a,
-        );
+        ).entries(&db).clone();
 
         // The same graph plus an unrelated module, which lands after `a` and
         // so does not disturb its IR module index either.
@@ -1709,7 +1879,7 @@ mod reachable_func_ids_tests {
         let graph_after = builder.build();
         let after = reachable_func_ids(
             &db, graph_after, test_func_id_map(&db, graph_after), a2,
-        );
+        ).entries(&db).clone();
 
         assert_eq!(a, a2, "the path is the identity, so these are one module");
         assert_eq!(
