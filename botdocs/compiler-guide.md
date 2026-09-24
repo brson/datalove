@@ -891,17 +891,29 @@ as `datalove_datafun::Database`.
 
 | Function | Crate | Key Inputs | Output |
 |----------|-------|------------|--------|
-| `parse_module_full` | parser | module | `ParseResult` with spans |
+| `parse_module_full` | parser | module | `ParseResult`, statements and span side tables |
 | `parse_module_ast` | parser | module | `ParsedStatements`, projected from `parse_module_full` so a module is parsed once |
+| `module_spans` | parser | module | `DatafunSpans`, the side tables keyed for lookup |
 | `parse_module_graph` | compiler | graph, requires, rider sources | `ParsedModuleGraph` |
 | `resolve_module_names` | resolve | module | `ModuleNameResolution` |
+| `resolve_module_exports` | resolve | module, parsed | the module's exported signatures |
+| `resolve_module_imports` | tycheck | module, parsed_graph, exports, function asts | `ModuleImportResolution` |
 | `typecheck_module` | tycheck | module, parsed, name_resolution, imports | `SingleModuleTypecheckResult` |
 | `analyze_module` | compiler | module, parsed, typecheck | `SingleModuleAnalysis` |
 | `compute_func_id_map` | compiler | parsed_graph | `FuncIdMap` |
+| `reachable_func_ids` | compiler | graph, func_id_map, module | `ReachableFuncIds`, interned so the two lowering queries key on an id |
+| `lower_module_functions` | compiler | module, typecheck, ownership, func ids, consts, restrict | `ModuleLowerOutcome`, phase 5a for one module |
 | `lower_module` | compiler | module, ir_module_id, parsed, typecheck, ownership, func_ids, consts, skip_inlining, funcs | `SingleModuleLoweringResult` |
+| `dependencies_of` | datafun | package world | the dependency graph, by module path |
 | `analyze_script_fragment_tracked` | compiler | typecheck, statements, adapt mode, dead externals | `ScriptUnitOwnershipResult` |
 
-Graph-level functions aggregate per-module results.
+Graph-level functions aggregate per-module results. They hold handles rather
+than copies now -- `ParsedModuleGraph` no longer carries a span table per
+module, and `ModuleGraphTypecheckResult` no longer merges every module's
+expression types into one -- but each is still keyed on the whole graph, so an
+edit to one module re-runs every one of those walks. The walks are cheap
+because what they call is memoized; they are what stands between here and
+pulling per module.
 
 ### Incremental Compilation
 
@@ -920,9 +932,10 @@ Memoization behavior:
 - AST changes (same types): re-typechecks changed module only
 - Type changes: re-typechecks dependents
 
-`ModuleId` is a `#[salsa::input]`, so every `::new()` makes a distinct id even
-for the same path. That is why identity is preserved rather than recreated, and
-why the rider modules share one synthetic id per alias.
+`ModuleId` is `#[salsa::interned]`, so the same path gives the same id. It was
+an input once, when every `::new()` made a distinct one, which is why the world
+holds `Source` handles across an edit rather than rebuilding from paths -- a
+`Source` is the input, and it is the only handle worth keeping.
 
 ### Parallel Execution
 
@@ -946,6 +959,24 @@ pub fn parse_module_graph_parallel<'db>(db: &'db dyn DbClone, ...) -> ParsedModu
 ```
 
 Works because `dyn_clone()` shares the global memoization cache.
+
+Four of the five phases do it this way: warm, then let the sequential tracked
+aggregator read the memos back. Phase 5a is the exception and worth knowing
+about, because it is what the others would look like if they could. Its output
+-- `ModuleLoweredFunctions` and the deferred names -- carries no `'db` brand, so
+a worker hands back what it built rather than warming a cache for a second pass.
+The others return branded values, which cannot escape the borrow of the clone
+that produced them; that is a lifetime problem rather than a salsa one, and
+salsa 0.28 supports genuinely concurrent queries (see its `tests/parallel`).
+
+What caps all of this is the sequential half. Each phase's aggregator walks the
+graph whatever was edited, so the speedup is bounded by what it does: parse sits
+near 2.7x on sixteen cores and cannot go past it while the aggregator rebuilds.
+Thinning `ModuleGraphTypecheckResult` took typecheck from 1.57x to 1.78x for
+exactly that reason -- the restructure is what makes the parallelism worth
+having, not the other way round.
+
+`just test-parallel` runs the suite under `DATALOVE_PARALLEL=1`. CI does not.
 
 ## Ownership Analysis
 
@@ -1233,6 +1264,7 @@ Most live in `crates/datalove-datafun/tests`.
 | `std_tests`, `std_all_tests` | The `sys/std` library, compiled from `sys/` on disk. `std_all_tests` runs every fixture through all four backends and requires agreement, and is the only suite that puts a rider call, a bigint or a type parameter through the C backend |
 | `embedded_matches_tree` | The embedded stdlib against `sys/`, and every declared native linked (in `datalove-stdlib`) |
 | `module_memo_tests`, `incremental_memo_tests`, `no_op_recompile_tests`, `parse_firewall_tests` | Salsa memoization behavior |
+| `incremental_lowering_tests` | That an edit lowers the module that changed and an unchanged recompile runs no query at all. Asks `QueryRecorder` what salsa ran, which the `module_memo` fixtures' thread-local log cannot see across rayon |
 | `database_memory_tests` | Database growth |
 | `worldgen_tests`, `worldgen_dual_tests` | Generated worldfiles typecheck and run the same both ways |
 

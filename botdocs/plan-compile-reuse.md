@@ -49,6 +49,15 @@ keyed on. `descriptor.to_pipeline(db)` makes new inputs, so everything downstrea
 Given the same pipeline, salsa does exactly what it is for: **9x**, and what is left is the
 untracked glue in `compile_impl` that walks the graph and builds registries.
 
+**The 84ms has since been worked on, and the numbers above are the state before that.**
+Phase 5a is memoized per module, the registries share their IR rather than
+copying it, and the aggregators hold handles rather than materialized copies.
+On a 32-module synthetic world, release, an unchanged recompile went from
+15.3ms to 1.4ms and a one-module edit from 15.5ms to 3.6ms; `benches/incremental.rs`
+is the measurement. What is left of the floor is still the untracked glue, and
+most of it is now in `lower_module_graph_with_evaluator` -- see the phase 5
+section of compiler-guide.md for what stands in the way of tracking the rest.
+
 One correction to something written down elsewhere: `ModuleId` is `#[salsa::interned]`, not
 `#[salsa::input]`, so the same path gives the same id and interning is not the problem. It is
 the `Source` inputs that a new pipeline creates.
