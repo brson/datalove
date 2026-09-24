@@ -219,8 +219,11 @@ pub struct SingleModuleLoweringResult<'db> {
     pub ir_module_id: IrModuleId,
 
     /// Successfully lowered code units (functions).
+    ///
+    /// Behind `Arc`s so that building the interpreter's registry out of them
+    /// does not copy every instruction in the program.
     #[returns(ref)]
-    pub functions: Vec<IrCodeUnit>,
+    pub functions: Vec<Arc<IrCodeUnit>>,
 
     /// Lowering errors (IR generation only, not ownership analysis).
     #[returns(ref)]
@@ -282,7 +285,7 @@ impl<'db> ModuleGraphLoweringResult<'db> {
             .values()
             .flat_map(|r| {
                 let ir_mod = r.ir_module_id(db);
-                r.functions(db).iter().map(move |f| (ir_mod, FuncId(f.id.0), f.clone()))
+                r.functions(db).iter().map(move |f| (ir_mod, FuncId(f.id.0), (**f).clone()))
             })
             .collect()
     }
@@ -416,7 +419,7 @@ pub fn lower_module<'db>(
                     &module_level_consts,
                 ) {
                     Ok(ir_func) => {
-                        functions.push(ir_func);
+                        functions.push(Arc::new(ir_func));
                     }
                     Err(e) => {
                         errors.push(format!("Lowering error in {}: {}", func_name, e));
@@ -464,7 +467,10 @@ pub fn lower_module<'db>(
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub struct ModuleLoweredFunctions {
     /// The lowered IR code units (functions) for this module.
-    pub functions: Vec<IrCodeUnit>,
+    ///
+    /// Behind `Arc`s because the registries built from these copied every
+    /// instruction to do it, twice per compile.
+    pub functions: Vec<Arc<IrCodeUnit>>,
     /// Map from function name to FuncId.
     /// Sorted vector for deterministic hashing.
     pub func_name_to_id: Vec<(String, FuncId)>,
@@ -484,7 +490,7 @@ fn build_module_registry_from_lowered<'db>(
     //
     // A function's position is not its id: lowering skips the ones that
     // deferred or failed, so the list has holes.
-    let by_id: HashMap<ModuleId<'db>, HashMap<u32, &IrCodeUnit>> = lowered_functions.iter()
+    let by_id: HashMap<ModuleId<'db>, HashMap<u32, &Arc<IrCodeUnit>>> = lowered_functions.iter()
         .map(|(module_id, lowered)| {
             let units = lowered.functions.iter().map(|f| (f.id.0, f)).collect();
             (*module_id, units)
@@ -494,7 +500,7 @@ fn build_module_registry_from_lowered<'db>(
     let mut registry = ModuleFunctionRegistry::new();
     for ((module_id, _func_name), (ir_module_id, func_id)) in func_id_map {
         if let Some(unit) = by_id.get(module_id).and_then(|units| units.get(&func_id.0)) {
-            registry.add_module_code_unit(*ir_module_id, CodeUnitId(func_id.0), (*unit).clone());
+            registry.add_module_code_unit(*ir_module_id, CodeUnitId(func_id.0), Arc::clone(unit));
         }
     }
 
@@ -636,7 +642,12 @@ fn close_shapes_over_calls<'db>(
         if !changes {
             continue;
         }
-        let unit = &mut Arc::make_mut(lowered_functions.get_mut(&module_id).unwrap()).functions[idx];
+        // Two `make_mut`s: one for the module's list, one for the function in
+        // it. Both halves are shared with a memo, and the second means a module
+        // copies the function being changed rather than all of them.
+        let unit = Arc::make_mut(
+            &mut Arc::make_mut(lowered_functions.get_mut(&module_id).unwrap()).functions[idx],
+        );
         if let datalove_datafun_ir::CodeUnitContext::Function(ctx) = &mut unit.context {
             ctx.descriptor_shapes = shape_set.clone();
         }
@@ -664,7 +675,9 @@ fn close_shapes_over_calls<'db>(
             };
             lookup.get(&callee).cloned().unwrap_or_default()
         };
-        let unit = &mut Arc::make_mut(lowered_functions.get_mut(module_id).unwrap()).functions[*idx];
+        let unit = Arc::make_mut(
+            &mut Arc::make_mut(lowered_functions.get_mut(module_id).unwrap()).functions[*idx],
+        );
         if let Err(missing) = datalove_datafun_ir::resolve_call_descriptors(
             unit, &own, &callee_shapes,
         ) {
@@ -800,7 +813,7 @@ pub fn lower_module_functions<'db>(
                 module_consts,
             ) {
                 Ok(ir_func) => {
-                    functions.push(ir_func);
+                    functions.push(Arc::new(ir_func));
                 }
                 Err(lower::LowerError::BindingNotAvailable(_)) => {
                     // Names a module const that has not been evaluated yet.
@@ -965,7 +978,7 @@ pub fn evaluate_all_module_consts<'db>(
         let call_targets = single_typecheck.call_targets(db);
 
         // Get lowered functions for this module (if any).
-        let (funcs, func_map): (&[IrCodeUnit], HashMap<String, FuncId>) = match lowered_functions.get(module_id) {
+        let (funcs, func_map): (&[Arc<IrCodeUnit>], HashMap<String, FuncId>) = match lowered_functions.get(module_id) {
             Some(lf) => (lf.functions.as_slice(), lf.func_name_to_id.iter().cloned().collect()),
             None => (&[], HashMap::new()),
         };
@@ -1048,7 +1061,7 @@ pub fn evaluate_all_module_consts<'db>(
 /// resolved against units the caller already holds, so they cannot be missing.
 fn first_uncallable_target(
     unit: &IrCodeUnit,
-    lowered_functions: &[IrCodeUnit],
+    lowered_functions: &[Arc<IrCodeUnit>],
 ) -> Option<String> {
     use datalove_datafun_ir::{CodeRef, Instruction};
 
@@ -1102,7 +1115,7 @@ fn evaluate_module_level_consts<'db>(
         let expr_types = single_typecheck.expr_types(db);
         let call_targets = single_typecheck.call_targets(db);
 
-        let (funcs, func_map): (&[IrCodeUnit], HashMap<String, FuncId>) = match lowered_functions.get(module_id) {
+        let (funcs, func_map): (&[Arc<IrCodeUnit>], HashMap<String, FuncId>) = match lowered_functions.get(module_id) {
             Some(lf) => (lf.functions.as_slice(), lf.func_name_to_id.iter().cloned().collect()),
             None => (&[], HashMap::new()),
         };
@@ -1142,7 +1155,7 @@ fn evaluate_single_const<'db>(
     call_targets: &'db datalove_datafun_sema::CallTargets<'db>,
     resolved_so_far: &HashMap<String, (IrType, ConstValue)>,
     evaluator: &Rc<RefCell<dyn CtfeEvaluator>>,
-    lowered_functions: &[IrCodeUnit],
+    lowered_functions: &[Arc<IrCodeUnit>],
     func_name_to_id: &HashMap<String, FuncId>,
     func_return_type: Option<IrType>,
     func_id_map: FuncIdMap<'db>,
@@ -1417,7 +1430,7 @@ fn evaluate_instantiation_consts<'db>(
     expr_types: &'db datalove_datafun_sema::ExprTypes<'db>,
     call_targets: &'db datalove_datafun_sema::CallTargets<'db>,
     evaluator: &Rc<RefCell<dyn CtfeEvaluator>>,
-    lowered: &[IrCodeUnit],
+    lowered: &[Arc<IrCodeUnit>],
     func_name_to_id: &HashMap<String, FuncId>,
     func_id_map: FuncIdMap<'db>,
     module_level: &HashMap<String, (IrType, ConstValue)>,
@@ -1595,7 +1608,7 @@ fn specialize_comptime_functions<'db>(
             made_any |= !copies.is_empty();
             for copy in copies {
                 module_funcs.func_name_to_id.push((copy.name.clone(), FuncId(copy.id.0)));
-                module_funcs.functions.push(copy);
+                module_funcs.functions.push(Arc::new(copy));
             }
             module_funcs.functions.sort_by_key(|f| f.id.0);
             module_funcs.func_name_to_id.sort_by(|a, b| a.0.cmp(&b.0));
@@ -1617,7 +1630,7 @@ fn specialize_comptime_functions<'db>(
         };
         let module_funcs = Arc::make_mut(module_funcs);
         module_funcs.functions = module_funcs.functions.iter()
-            .map(|func| rewrite_comptime_calls(func, &plan, &module_callee_key))
+            .map(|func| Arc::new(rewrite_comptime_calls(func, &plan, &module_callee_key)))
             .collect();
     }
 

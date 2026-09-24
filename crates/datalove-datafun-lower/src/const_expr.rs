@@ -135,7 +135,7 @@ pub fn lower_const_expr_to_unit_standalone<'db>(
     call_targets: &'db CallTargets<'db>,
     resolved_consts: &HashMap<String, (IrType, ConstValue)>,
     return_type: Option<IrType>,
-    lowered_functions: &[IrCodeUnit],
+    lowered_functions: &[std::sync::Arc<IrCodeUnit>],
     func_name_to_id: &HashMap<String, datalove_datafun_ir::FuncId>,
     module_func_id_map: Option<&'db HashMap<(ModuleId<'db>, String), (IrModuleId, datalove_datafun_ir::FuncId)>>,
 ) -> Result<IrCodeUnit, LowerError> {
@@ -196,7 +196,7 @@ pub fn lower_const_expr_to_unit_standalone<'db>(
     for func_id in called_func_ids {
         // Find the function in lowered functions.
         if let Some(unit) = lowered_functions.iter().find(|f| f.id.0 == func_id.0) {
-            nested_units.push(unit.clone());
+            nested_units.push((**unit).clone());
         }
     }
 
@@ -245,7 +245,7 @@ pub fn lower_const_binding<'db>(
     call_targets: &'db CallTargets<'db>,
     resolved_consts: &HashMap<String, (IrType, ConstValue)>,
     return_type: Option<IrType>,
-    lowered_functions: &[IrCodeUnit],
+    lowered_functions: &[std::sync::Arc<IrCodeUnit>],
     func_name_to_id: &HashMap<String, datalove_datafun_ir::FuncId>,
     module_func_id_map: Option<&'db HashMap<(ModuleId<'db>, String), (IrModuleId, datalove_datafun_ir::FuncId)>>,
 ) -> Result<(Option<IrCodeUnit>, Option<ConstValue>), LowerError> {

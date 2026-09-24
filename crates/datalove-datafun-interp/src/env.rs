@@ -38,7 +38,7 @@ impl ScriptEnvironment {
     }
 
     /// Add a module code unit.
-    pub fn add_module_code_unit(&mut self, module_id: IrModuleId, unit_id: CodeUnitId, unit: IrCodeUnit) {
+    pub fn add_module_code_unit(&mut self, module_id: IrModuleId, unit_id: CodeUnitId, unit: std::sync::Arc<IrCodeUnit>) {
         self.registry.add_module_code_unit(module_id, unit_id, unit);
     }
 

@@ -451,7 +451,7 @@ impl ModuleCompilationPipeline {
                         name,
                         native_ctx,
                     );
-                    registry.add_module_code_unit(ir_module_id, code_unit.id, code_unit);
+                    registry.add_module_code_unit(ir_module_id, code_unit.id, std::sync::Arc::new(code_unit));
                 }
             }
         }

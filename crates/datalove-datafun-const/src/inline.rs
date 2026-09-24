@@ -221,13 +221,19 @@ fn inline_block_consts(block: &mut IrBlock, value_to_const: &HashMap<ValueId, Co
 ///
 /// This function modifies the functions in place.
 pub fn inline_module_functions(
-    functions: &mut [IrCodeUnit],
+    functions: &mut [std::sync::Arc<IrCodeUnit>],
     const_values: &HashMap<String, ConstValue>,
 ) {
     for func in functions {
         // For module functions, const_values has qualified names "func_name::const_name"
         // but func.const_values has just the local name "const_name".
         // We need to qualify the names when looking up.
+        //
+        // Every function is taken mutably, including one that binds no const:
+        // the dead-block and dead-code passes below run whether anything was
+        // inlined or not, and skipping them leaves instructions behind that
+        // every lowering fixture expects to be gone.
+        let func = std::sync::Arc::make_mut(func);
         let func_name = func.name.clone();
         inline_module_function_consts(func, const_values, &func_name);
     }

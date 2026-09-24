@@ -20,7 +20,11 @@ use crate::{IrCodeUnit, CodeUnitId, IrModuleId};
 /// with, so the same input produced different bytes on every run.
 #[derive(Clone, Default, Serialize, Deserialize)]
 pub struct ModuleFunctionRegistry {
-    module_functions: BTreeMap<(IrModuleId, CodeUnitId), IrCodeUnit>,
+    /// Behind an `Arc` because the registry is built from IR that is already
+    /// owned elsewhere -- the lowered functions, and the assembled module
+    /// results -- and copying every instruction to put it here was about a
+    /// quarter of what recompiling an unchanged world cost.
+    module_functions: BTreeMap<(IrModuleId, CodeUnitId), Arc<IrCodeUnit>>,
 }
 
 impl ModuleFunctionRegistry {
@@ -32,23 +36,23 @@ impl ModuleFunctionRegistry {
     }
 
     /// Add a module code unit.
-    pub fn add_module_code_unit(&mut self, module_id: IrModuleId, func_id: CodeUnitId, unit: IrCodeUnit) {
+    pub fn add_module_code_unit(&mut self, module_id: IrModuleId, func_id: CodeUnitId, unit: Arc<IrCodeUnit>) {
         self.module_functions.insert((module_id, func_id), unit);
     }
 
     /// Get a module code unit by module and function ID.
     pub fn get_module_function_as_unit(&self, module_id: IrModuleId, func_id: CodeUnitId) -> Option<&IrCodeUnit> {
-        self.module_functions.get(&(module_id, func_id))
+        self.module_functions.get(&(module_id, func_id)).map(|unit| &**unit)
     }
 
     /// Iterate over all module code units.
     pub fn iter_module_code_units(&self) -> impl Iterator<Item = &IrCodeUnit> {
-        self.module_functions.values()
+        self.module_functions.values().map(|unit| &**unit)
     }
 
     /// Iterate over all module code units with their IDs.
     pub fn iter_module_code_units_with_ids(&self) -> impl Iterator<Item = ((IrModuleId, CodeUnitId), &IrCodeUnit)> {
-        self.module_functions.iter().map(|((m, f), unit)| ((*m, *f), unit))
+        self.module_functions.iter().map(|((m, f), unit)| ((*m, *f), &**unit))
     }
 }
 
@@ -148,7 +152,7 @@ impl FunctionRegistry {
     }
 
     /// Add a module code unit.
-    pub fn add_module_code_unit(&mut self, module_id: IrModuleId, func_id: CodeUnitId, unit: IrCodeUnit) {
+    pub fn add_module_code_unit(&mut self, module_id: IrModuleId, func_id: CodeUnitId, unit: Arc<IrCodeUnit>) {
         self.module_registry_mut().add_module_code_unit(module_id, func_id, unit);
     }
 

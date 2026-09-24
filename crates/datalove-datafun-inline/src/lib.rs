@@ -1393,7 +1393,7 @@ pub fn inline_cross_module(
         }
 
         // Update the registry with the modified caller.
-        new_registry.add_module_code_unit(request.caller.module, CodeUnitId(request.caller.func.0), updated_caller);
+        new_registry.add_module_code_unit(request.caller.module, CodeUnitId(request.caller.func.0), std::sync::Arc::new(updated_caller));
     }
 
     CrossModuleInlineResult {

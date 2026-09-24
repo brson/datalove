@@ -201,7 +201,7 @@ fn analyze_file(path: &Path) -> Result<String, String> {
                             call_targets_raw,
                             &resolved_consts_map,
                             None,
-                            &lowered_functions,
+                            &lowered_functions.iter().cloned().map(std::sync::Arc::new).collect::<Vec<_>>(),
                             &func_name_to_id,
                             None, // No module functions for script tests
                         );

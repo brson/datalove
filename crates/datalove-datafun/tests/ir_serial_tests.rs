@@ -112,7 +112,7 @@ fn execute_ir_interp(ir_unit: &IrCodeUnit, registry: &FunctionRegistry) -> Strin
 
     // Copy module code units from registry to env.
     for ((module_id, func_id), unit) in registry.iter_module_code_units_with_ids() {
-        env.add_module_code_unit(module_id, func_id, unit.clone());
+        env.add_module_code_unit(module_id, func_id, std::sync::Arc::new(unit.clone()));
     }
 
     // Set up return destination.

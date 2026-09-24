@@ -83,7 +83,9 @@ struct OwnershipOutput<'db> {
 /// and the final IR assembly.
 #[derive(Clone)]
 struct LoweredFunctions {
-    functions: Vec<datalove_datafun_ir::IrCodeUnit>,
+    /// Behind `Arc`s to match what module lowering produces, so the const
+    /// evaluator takes one slice type from both paths.
+    functions: Vec<std::sync::Arc<datalove_datafun_ir::IrCodeUnit>>,
     func_name_to_id: HashMap<String, datalove_datafun_ir::FuncId>,
 }
 
@@ -626,6 +628,7 @@ impl<'db> ScriptCompiler<'db> {
             script_ctx,
         ) {
             Ok((functions, func_name_to_id)) => {
+                let functions = functions.into_iter().map(std::sync::Arc::new).collect();
                 Ok(LoweredFunctions { functions, func_name_to_id })
             }
             Err(e) => {
@@ -979,7 +982,10 @@ impl<'db> ScriptCompiler<'db> {
                 let lowered_funcs_arg = if lowered_funcs.functions.is_empty() {
                     None
                 } else {
-                    Some((lowered_funcs.functions.clone(), lowered_funcs.func_name_to_id.clone()))
+                    Some((
+                        lowered_funcs.functions.iter().map(|f| (**f).clone()).collect(),
+                        lowered_funcs.func_name_to_id.clone(),
+                    ))
                 };
 
                 lower_script_fragment_raw(
@@ -1173,7 +1179,7 @@ impl<'db> ScriptCompiler<'db> {
         call_targets: &'db datalove_datafun_tycheck::CallTargets<'db>,
         comptime_param_indices: &[usize],
         values: &[ConstValue],
-        lowered: &[IrCodeUnit],
+        lowered: &[std::sync::Arc<IrCodeUnit>],
         func_name_to_id: &HashMap<String, datalove_datafun_ir::FuncId>,
     ) -> (HashMap<String, ConstValue>, Vec<String>) {
         let Some(func_stmt) = statements.iter().find_map(|stmt| match stmt {
@@ -1295,9 +1301,9 @@ impl<'db> ScriptCompiler<'db> {
                     let Some(single) = module_results.get(module_id) else {
                         return (HashMap::new(), Vec::new());
                     };
-                    let funcs: Vec<IrCodeUnit> = registry.iter_module_code_units_with_ids()
+                    let funcs: Vec<std::sync::Arc<IrCodeUnit>> = registry.iter_module_code_units_with_ids()
                         .filter(|((m, _), _)| *m == module)
-                        .map(|(_, u)| u.clone())
+                        .map(|(_, u)| std::sync::Arc::new(u.clone()))
                         .collect();
                     let names: HashMap<String, datalove_datafun_ir::FuncId> = funcs.iter()
                         .map(|u| (u.name.clone(), datalove_datafun_ir::FuncId(u.id.0)))
