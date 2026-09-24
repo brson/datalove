@@ -557,13 +557,27 @@ fn close_shapes_over_calls<'db>(
 
     // Where each lowered unit sits, so a `CodeRef` can find it and so the
     // answers can be written back.
+    //
+    // Indexed by id first: the loop below asks a module where one of its
+    // functions sits once per function it declares, and scanning the list to
+    // answer was quadratic in a module's size. The entries are iterated
+    // rather than collected, because `to_hashmap` clones every name in the
+    // world to build a map this only walks.
+    let positions: HashMap<ModuleId<'db>, HashMap<u32, usize>> = lowered_functions.iter()
+        .map(|(module_id, lowered)| {
+            let by_id = lowered.functions.iter().enumerate()
+                .map(|(idx, f)| (f.id.0, idx))
+                .collect();
+            (*module_id, by_id)
+        })
+        .collect();
+
     let mut placement: HashMap<Key, (ModuleId<'db>, usize)> = HashMap::new();
-    for ((module_id, _), (ir_module_id, func_id)) in func_id_map.to_hashmap(db) {
-        let Some(lowered) = lowered_functions.get(&module_id) else { continue };
-        let Some(idx) = lowered.functions.iter().position(|f| f.id.0 == func_id.0) else {
+    for ((module_id, _), (ir_module_id, func_id)) in func_id_map.entries(db) {
+        let Some(idx) = positions.get(module_id).and_then(|m| m.get(&func_id.0)) else {
             continue;
         };
-        placement.insert((ir_module_id, func_id), (module_id, idx));
+        placement.insert((*ir_module_id, *func_id), (*module_id, *idx));
     }
 
     let mut calls: HashMap<Key, Vec<(Key, Vec<DescriptorShape>)>> = HashMap::new();
