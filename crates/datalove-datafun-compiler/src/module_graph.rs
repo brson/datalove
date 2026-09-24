@@ -28,7 +28,6 @@ pub use datalove_datafun_tycheck::{
     parallel_mode_from_env,
 };
 
-use datalove_datafun_ast::ast::ParsedStatements;
 
 /// Parsing a module is the parser's business; these live there now, so that
 /// name resolution can reach them without depending on this crate.
@@ -68,13 +67,11 @@ pub fn parse_module_graph<'db>(
             })
             .collect();
 
-    // Build statements map for hash computation.
-    let statements_map: BTreeMap<ModuleId<'db>, ParsedStatements<'db>> = statements_only.iter()
-        .map(|(id, parsed)| (*id, parsed.clone()))
-        .collect();
-
-    // Compute recursive content hashes based on AST (not source text).
-    let module_content_hashes = compute_module_content_hashes(db, &graph, &statements_map, &resolved_requires);
+    // Compute recursive content hashes. Named for the AST but taken from the
+    // source text and the dependencies' hashes, which is why no statements go
+    // in: the argument that used to carry them was never read, and building it
+    // cloned every module's statements a second time.
+    let module_content_hashes = compute_module_content_hashes(db, &graph, &resolved_requires);
 
     // Build RiderInterfaces from rider sources inside this tracked function,
     // where salsa tracked struct creation (TypeFunction) is allowed.
@@ -248,7 +245,6 @@ fn build_resolved_riders_from_sources<'db>(
 fn compute_module_content_hashes<'db>(
     db: &'db dyn salsa::Database,
     graph: &ModuleGraph<'db>,
-    _statements_map: &BTreeMap<ModuleId<'db>, ParsedStatements<'db>>,
     resolved_requires: &BTreeMap<ModuleId<'db>, Vec<(InternedText<'db>, ModuleId<'db>)>>,
 ) -> BTreeMap<ModuleId<'db>, u64> {
     let mut hashes = BTreeMap::new();
