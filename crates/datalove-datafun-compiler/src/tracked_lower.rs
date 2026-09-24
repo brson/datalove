@@ -478,15 +478,23 @@ fn build_module_registry_from_lowered<'db>(
     lowered_functions: &HashMap<ModuleId<'db>, Arc<ModuleLoweredFunctions>>,
     func_id_map: &HashMap<(ModuleId<'db>, String), (IrModuleId, FuncId)>,
 ) -> Arc<ModuleFunctionRegistry> {
-    let mut registry = ModuleFunctionRegistry::new();
+    // Indexed first. The loop below asks a module for one of its functions
+    // once per function that module declares, and scanning the list to answer
+    // was quadratic in a module's size.
+    //
+    // A function's position is not its id: lowering skips the ones that
+    // deferred or failed, so the list has holes.
+    let by_id: HashMap<ModuleId<'db>, HashMap<u32, &IrCodeUnit>> = lowered_functions.iter()
+        .map(|(module_id, lowered)| {
+            let units = lowered.functions.iter().map(|f| (f.id.0, f)).collect();
+            (*module_id, units)
+        })
+        .collect();
 
-    // Iterate over the func_id_map to get the IrModuleId for each function.
+    let mut registry = ModuleFunctionRegistry::new();
     for ((module_id, _func_name), (ir_module_id, func_id)) in func_id_map {
-        // Find the corresponding lowered function (code unit).
-        if let Some(lowered) = lowered_functions.get(module_id) {
-            if let Some(unit) = lowered.functions.iter().find(|f| f.id.0 == func_id.0) {
-                registry.add_module_code_unit(*ir_module_id, CodeUnitId(func_id.0), unit.clone());
-            }
+        if let Some(unit) = by_id.get(module_id).and_then(|units| units.get(&func_id.0)) {
+            registry.add_module_code_unit(*ir_module_id, CodeUnitId(func_id.0), (*unit).clone());
         }
     }
 
