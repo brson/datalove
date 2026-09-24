@@ -262,10 +262,10 @@ pub fn topological_sort(
 /// This function computes the dependency graph for all modules in the world
 /// using the package resolution system. The result maps each module path
 /// to the set of module paths it depends on.
-pub fn extract_dependencies(
+pub fn extract_dependencies<'db>(
     world: &IncrementalModuleWorld,
-    db: &dyn salsa::Database,
-) -> BTreeMap<String, BTreeSet<String>> {
+    db: &'db dyn salsa::Database,
+) -> &'db BTreeMap<String, BTreeSet<String>> {
     // Pass the sources the world already holds. Reading their text out and
     // handing it to `import_from_loader` would make a second `Source` for
     // every module on every call, and a `Source` is an input, so that is a
@@ -296,6 +296,21 @@ pub fn extract_dependencies(
 
     // Run resolution pipeline.
     let package_world = datalove_datafun_pkg::import_with_sources(db, pkglib_system, pkglib_local);
+    dependencies_of(db, package_world)
+}
+
+/// The dependency graph of an already-imported package world.
+///
+/// Tracked and keyed on the world, which is interned, so the same sources give
+/// the same world and this is answered from the memo. Resolution below it was
+/// already tracked; what was not is `to_module_graph` and the walk after it,
+/// which builds a path string for every module and every edge between them --
+/// on every compile, including one where nothing had been edited.
+#[salsa::tracked(returns(ref))]
+fn dependencies_of<'db>(
+    db: &'db dyn salsa::Database,
+    package_world: datalove_datafun_pkg::PackageWorld<'db>,
+) -> BTreeMap<String, BTreeSet<String>> {
     let resolution = crate::package_resolve::resolve_package_world_with_imports(db, package_world);
     let pkg_graph = match resolution.result(db) {
         Ok(graph) => graph,

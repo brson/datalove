@@ -88,6 +88,13 @@ fn an_unchanged_recompile_lowers_nothing() {
     let executed = recorder.take();
     assert_eq!(ran(&executed, "lower_module_functions"), 0);
     assert_eq!(ran(&executed, "lower_module"), 0);
+    // Nothing at all, in fact. The glue around the queries still runs; no
+    // query does.
+    assert!(
+        executed.is_empty(),
+        "an unchanged recompile ran {:?}",
+        executed.iter().map(|q| q.query.C()).collect::<Vec<_>>(),
+    );
 }
 
 #[test]
