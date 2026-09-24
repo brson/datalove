@@ -9,6 +9,12 @@ and its types and datalit types.
 
 Datalove literals is intended for use in the Datalove ecosystem
 and not as a general-purpose serialization format.
+Datalit files use the `.dlt` extension.
+
+Datalit is the data sublanguage of Datalove:
+every datalit expression is written the same way in Datalove,
+where it means the same value.
+Datalit has no names, no operators and no computation.
 
 
 ```datalove
@@ -31,7 +37,7 @@ and not as a general-purpose serialization format.
     5 6,
     7 8,
   |],
-  metrics = {|
+  metrics = : {| name: string, value: f64 |} / {|
     name, value
     "latency", 0.5
     "throughput", 1000.0
@@ -40,25 +46,83 @@ and not as a general-purpose serialization format.
     retries = 3,
     timeout = 30.0,
   },
-  backup = none,
+  backup = : ?string / none,
   status = ok "healthy",
-  failure = error "oops",
+  failure = : !string / error "oops",
   state = atom Ready,
   event = term Click (100, 200),
-  kind = enum { term Custom "experiment" },
+  kind = : enum { atom Ready, term Custom string } /
+    enum { term Custom "experiment" },
   payload = data [1, 2, 3],
 }
 ```
 
 
+
+
 ## Lexical structure
 
-Source is UTF-8.
-End of line...
+Source text is UTF-8.
 
-Comments are either `//` to end of line, or `/* ... */`, nesting allowed.
+Whitespace is any Unicode whitespace character.
+It separates tokens and is otherwise insignificant,
+with two exceptions:
+newlines separate table rows,
+and spaces separate the elements of a tensor row.
+A newline is `\n`; a `\r` before it is ordinary whitespace.
 
-Reserved words...
+Comments are either `//` to end of line,
+or `/* ... */`, which nest.
+Comments are whitespace.
+
+Identifiers name struct fields, table columns,
+and atom, term and enum variants.
+An identifier is a run of letters, digits and `_`
+not beginning with a digit.
+Letters are Unicode alphabetic characters, so `café` is an identifier.
+
+These words are keywords:
+
+```
+true  false  none  some  ok  er  data  error  atom  term  enum
+```
+
+In type position the primitive type names are also reserved:
+`bool`, `int`, `string`, `u8` .. `u64`, `i8` .. `i64`,
+`index`, `offset`, `f32`, `f64`, `data`, `error`.
+
+A keyword may still be used as a struct field or table column name,
+where only a name can appear: `{ none = 1 }` is a struct.
+
+Tokens that are written against each other are _glued_.
+Gluing decides how far a numeric literal reaches:
+a number is a maximal glued run of sign, digits, point and exponent,
+so `-1.5e-7` is one literal
+and `- 1`, `1 . 5` and `2.5e - 10` are errors.
+Letters glued to the end of a number are an error,
+as datalove has no numeric suffixes:
+`1u8` is written `: u8 / 1`.
+Inside a tensor, gluing is what separates `[| 1 -2 |]`, two elements,
+from `[| 1 - 2 |]`, an error.
+
+
+### EBNF · Lexical
+
+```ebnf
+ws             = { whitespace | comment } ;
+whitespace     = ? any Unicode whitespace character ? ;
+newline        = "\n" ;
+comment        = line_comment | block_comment ;
+line_comment   = "//", { ? any char except newline ? } ;
+block_comment  = "/*", { block_comment | ? any char ? }, "*/" ;
+
+ident          = ident_start, { ident_start | digit } ;
+ident_start    = ? any Unicode alphabetic character ? | "_" ;
+digit          = "0" .. "9" ;
+hex_digit      = digit | "a" .. "f" | "A" .. "F" ;
+```
+
+
 
 
 ## Expressions
@@ -81,7 +145,7 @@ against an external type context.
 : {
   name: string,
   version: (u32, u32, u32),
-  tags: [string],
+  tag: (bool,),
   counts: %{string = int},
 } / {
   name = "datalove",
@@ -96,11 +160,10 @@ against an external type context.
 // Embedded type hints.
 {
   name = : string / "datalove",
-  counts = %{
-    "a" = 1,
-    "b" = 2,
+  limits = {
+    low = 1,
     // A deeply-embedded hint.
-    "c" = : u32 / 3,
+    high = : u32 / 3,
   },
   kind = : enum {
     atom ProcessData,
@@ -124,12 +187,27 @@ but with the type sigil, `:`, replaced with the value-assignment sigil, `=`.
 }
 ```
 
+A hint covers the one expression after its `/`.
+An expression carries at most one hint;
+`: u32 / : u32 / 1` does not parse.
+Parentheses group without changing meaning:
+`(1)` is `1`, and `(: u32 / 1)` is `: u32 / 1`.
+
+A type hint may not name a type:
+datalit has no type aliases,
+so any bare name in a type is an error.
+Collections are written with their sigils,
+and `list`, `map`, `set`, `table` and `tensor` are not types.
+
+A datalit document is a single expression.
+Nothing but whitespace may follow it.
+
 
 ### EBNF · Expressions
 
 ```ebnf
 datalit        = ws, full_expr, ws ;
-full_expr      = [ type_hint ], expr ;
+full_expr      = [ type_hint, ws ], expr ;
 type_hint      = ":", ws, type, ws, "/" ;
 type           = primitive_type
                | tuple_type
@@ -146,6 +224,7 @@ type           = primitive_type
                | enum_type
                | dynamic_type ;
 expr           = primitive_lit
+               | group_expr
                | tuple_expr
                | struct_expr
                | option_expr
@@ -155,7 +234,11 @@ expr           = primitive_lit
                | set_expr
                | table_expr
                | tensor_expr
+               | atom_expr
+               | term_expr
+               | enum_expr
                | dynamic_expr ;
+group_expr     = "(", ws, full_expr, ws, ")" ;
 ```
 
 
@@ -167,27 +250,70 @@ expr           = primitive_lit
 |-------------------|------------------|
 | `bool`            | `true`, `false`  |
 | `int`             | `42`             |
-| `f32`, `f64`      | `3.14`, `1.0e10` |
+| `f64`             | `3.14`, `1.0e10` |
+| `f32`             | `: f32 / 3.14`   |
 | `string`          | `"hello"`        |
 | `u8` .. `u64`     | `: u32 / 42`     |
 | `i8` .. `i64`     | `: i32 / -1`     |
 | `index`           | `: index / 0`    |
 | `offset`          | `: offset / 0`   |
 
-Bare integer literals synthesize as `int`, the big integer type.
-Fixed-width integers require a type hint or checking context.
-
 `index` is an unsigned integer
 representing the addressable size of collection types,
 `offset` is the signed version of the same size,
 both 32-bit by default, 64-bit by compile-time option.
+They are distinct types from the fixed-width integers of the same size.
 
-Floats are always written with a decimal and
-additionally support scientific notation.
 
-Integers and floats can be created from hex literals.
+### Integers
+
+Bare integer literals synthesize as `int`, the big integer type,
+which has no range limit.
+Fixed-width integers require a type hint or checking context,
+and a literal out of the range of the type it checks against is an error.
+
+Underscores may group digits and say nothing about the value.
+A separator goes between two digits:
+`1_000_000` is an integer, `1_` is an error, and `_1` is an identifier.
+
+A sign is written glued to the digits: `-1`.
+There is no `+` sign.
+`-0` is zero.
+
+
+### Floats
+
+A float literal is written with a point, an exponent, or both:
+`42.0`, `4.2e1`, `1e-7`, `6.022E23`.
+Digits are required on both sides of a point, so `1.` and `.5` are errors.
+The exponent marker is `e` or `E`, and its sign is optional.
+Separators group digits in any run: `1_0.000_1e1_0`.
+
+Float literals synthesize `f64`,
+and check against `f32` or `f64`.
+An integer literal does not check against a float type,
+nor a float literal against an integer type.
+
+A decimal literal becomes the float nearest its exact value,
+ties to even,
+converted directly to the target width.
+A literal too large for the target width becomes infinity:
+`: f32 / 1e300` is positive infinity.
+`-0.0` is negative zero.
+
+
+### Hex literals
+
+Integers and floats can be created from hex literals,
+written `0x` or `0X` and hex digits of either case,
+which may be grouped with underscores.
 Hex literals synthesize `int`, but check
-as unsigned fixed ints or floats if provided a type hint.
+as `int`, unsigned fixed ints, `index`,
+or floats if provided a type hint.
+Hex literals do not check against signed fixed-width types or `offset`.
+
+A hex literal checked against a float type is its IEEE 754 bit pattern,
+and must fit in the float's width: 32 bits for `f32`, 64 for `f64`.
 This is the only way to write bit-exact floats,
 NaNs and infinity.
 
@@ -196,22 +322,36 @@ NaNs and infinity.
   foo: int,
   bar: u32,
   baz: f32,
+  inf: f64,
 } / {
   foo = 0x01,
   bar = 0x02,
-  baz = 0x03000000, // float hex literals must have correct # digits
+  baz = 0x3F80_0000,         // 1.0
+  inf = 0x7FF0000000000000,
 }
 ```
 
-Strings are sequences of unicode scalar values.
 
-String escape sequences:
+### Strings
 
-<!-- table here -->
+A string literal is written between double quotes,
+and holds any characters but an unescaped `"` or `\`,
+including literal newlines.
+The value is a sequence of Unicode scalar values.
+No normalization is performed.
 
+| Escape      | Character                    |
+|-------------|------------------------------|
+| `\"`        | double quote                 |
+| `\\`        | backslash                    |
+| `\n`        | line feed                    |
+| `\r`        | carriage return              |
+| `\t`        | tab                          |
+| `\0`        | NUL                          |
+| `\u{H..}`   | Unicode scalar value, 1 to 6 hex digits |
 
-
-
+Any other escape is an error,
+as is a `\u{..}` naming a surrogate or a value above `10FFFF`.
 
 
 ### EBNF · Primitive types
@@ -224,14 +364,26 @@ primitive_type = "bool"
                | "f32" | "f64"
                | "int" | "string" ;
 
-primitive_lit  = bool_lit | numeric_lit | string_lit
+primitive_lit  = bool_lit | numeric_lit | string_lit ;
 bool_lit       = "true" | "false" ;
-numeric_lit    = int_lit | float_lit | hex_lit ;
-int_lit        = [ "-" ], digit, { digit } ;
-float_lit      = [ "-" ], digit, { digit }, ".", digit, { digit } ;
-hex_lit        = [ "-" ], "0", ( "x" | "X" ), hex_digit, { hex_digit } ;
+numeric_lit    = float_lit | hex_lit | int_lit ;
+int_lit        = [ "-" ], digit_run ;
+float_lit      = [ "-" ], digit_run,
+                 ( ".", digit_run, [ exponent ] | exponent ) ;
+exponent       = ( "e" | "E" ), [ "+" | "-" ], digit_run ;
+hex_lit        = [ "-" ], "0", ( "x" | "X" ), hex_run ;
+digit_run      = digit, [ { digit | "_" }, digit ] ;
+hex_run        = hex_digit, [ { hex_digit | "_" }, hex_digit ] ;
+
 string_lit     = '"', { string_char }, '"' ;
+string_char    = escape_seq | ? any char except '"' and '\' ? ;
+escape_seq     = "\", ( '"' | "\" | "n" | "r" | "t" | "0"
+                      | "u{", hex_digit, { hex_digit }, "}" ) ;
 ```
+
+A numeric literal contains no whitespace or comments.
+
+
 
 
 ## Collections
@@ -249,30 +401,34 @@ Empty collections synthesize with unit element types
 but check against any element type:
 `: [u32] / []` is valid.
 
+Lists, maps and sets accept a trailing comma.
+
 
 ### List
 
 An ordered sequence of homogeneous elements.
 
 ```datalove
-[1, 2, 3]                     // [int]
-: [u32] / [1, 2, 3]           // [u32] via type hint
+[1, 2, 3]                      // [int]
+: [u32] / [1, 2, 3]            // [u32] via type hint
 []                             // [()], empty list
 : [string] / []                // [string], empty with hint
 ```
 
 All elements must have the same type.
-The first element's type determines the expected type for the rest.
-Bare integer elements synthesize as `int;`
-use a type hint for fixed-width element types.
+Without an expected type,
+each element synthesizes its own type
+and all must agree with the first:
+`[: u8 / 1, 2]` is an error, since `2` synthesizes `int`.
+Use a type hint on the list for fixed-width element types.
 
 
 ### Map
 
-An ordered key-value mapping.
+A key-value mapping, ordered by key.
 
 ```datalove
-%{ "a" = 1, "b" = 2 }         // %{string = int}
+%{ "a" = 1, "b" = 2 }          // %{string = int}
 : %{u32 = string} / %{ 1 = "x", 2 = "y" }
 %{}                            // %{() = ()}, empty map
 ```
@@ -281,21 +437,28 @@ Entries use `=` to separate keys from values,
 same as struct field assignment.
 All keys must have the same type,
 and all values must have the same type.
-All keys have a [total ordering].
+Any type may be a key.
+
+A map's entries are kept in the [total ordering] of their keys,
+not in the order they were written:
+`%{ 2 = 0, 1 = 0 }` and `%{ 1 = 0, 2 = 0 }` are the same map.
+A key written more than once keeps the last value written for it.
 
 
 ### Set
 
-A collection of unique elements.
+A collection of unique elements, ordered by value.
 
 ```datalove
-#{ 1, 2, 3 }                  // #{int}
+#{ 1, 2, 3 }                   // #{int}
 : #{u32} / #{ 10, 20, 30 }
 #{}                            // #{()}, empty set
 ```
 
 All elements must have the same type.
-All keys have a [total ordering].
+Any type may be an element.
+A set's elements are kept in their [total ordering],
+and an element written more than once is held once.
 
 
 ### Table
@@ -321,7 +484,9 @@ Rows are delimited by newlines or semicolons.
 Table literals always require a type hint &mdash;
 they cannot synthesize a type.
 Column names in the literal must match the type hint in order.
+Each column is named by exactly one identifier.
 Each data row must have exactly as many values as there are columns.
+A table with no rows is written with just its header row.
 
 A semicolon is written to go between two rows,
 so one with nothing before it is an error,
@@ -343,7 +508,7 @@ typed by element type and rank.
 [| 1 2 3, 4 5 6 |]             // 2D, shape [2, 3]
 [| 1 2, 3 4,, 5 6, 7 8 |]      // 3D, shape [2, 2, 2]
 : [|u32, 2|] / [| 1 2, 3 4 |]  // typed: element u32, rank 2
-[| |]                          // empty tensor, shape [0]
+[| |]                          // empty tensor, rank 1, shape [0]
 ```
 
 Shape is inferred from the multi-comma structure:
@@ -351,7 +516,11 @@ spaces separate elements along the innermost axis,
 `,` separates rows (2nd axis),
 `,,` separates slabs (3rd axis),
 `,,,` separates blocks (4th axis), and so on.
-The element count must equal the product of the shape dimensions.
+The rank is one more than the longest run of commas written.
+Whitespace between the commas of a run does not break it:
+`, ,` is `,,`.
+Every group along an axis must have the same shape,
+so the element count equals the product of the shape dimensions.
 
 Higher-dimensional tensors benefit from multiline layout,
 using blank lines to visually separate the higher axes:
@@ -389,14 +558,14 @@ but different shapes have the same type.
 All elements must have the same type.
 
 
-### EBNF - Collections
+### EBNF · Collections
 
 ```ebnf
 list_type      = "[", ws, type, ws, "]" ;
 map_type       = "%{", ws, type, ws, "=", ws, type, ws, "}" ;
 set_type       = "#{", ws, type, ws, "}" ;
-table_type     = "{|", ws, type_field_list, ws, "|}" ;
-tensor_type    = "[|", ws, type, ws, ",", ws, int_lit, ws, "|]" ;
+table_type     = "{|", ws, [ type_field_list ], ws, "|}" ;
+tensor_type    = "[|", ws, type, ws, ",", ws, digit, { digit }, ws, "|]" ;
 
 list_expr      = "[", ws, [ expr_list ], ws, "]" ;
 map_expr       = "%{", ws, [ entry_list ], ws, "}" ;
@@ -408,17 +577,20 @@ expr_list      = full_expr, { ws, ",", ws, full_expr }, [ ws, "," ] ;
 entry_list     = entry, { ws, ",", ws, entry }, [ ws, "," ] ;
 entry          = full_expr, ws, "=", ws, full_expr ;
 
-table_header   = ident, { ws, ",", ws, ident }, row_sep ;
+table_header   = ident, { ws, ",", ws, ident }, [ ws, "," ], [ row_sep ] ;
 table_rows     = { ws, table_row } ;
-table_row      = full_expr, { ws, ",", ws, full_expr }, [ row_sep ] ;
+table_row      = full_expr, { ws, ",", ws, full_expr }, [ ws, "," ], [ row_sep ] ;
 row_sep        = ";" | newline ;
 
-tensor_body    = tensor_group, { multi_comma, ws, tensor_group },
-                 [ multi_comma ] ;
-tensor_group   = tensor_row, { ws, ",", ws, tensor_row } ;
+tensor_body    = tensor_row, { ws, comma_run, ws, tensor_row },
+                 [ ws, comma_run ] ;
 tensor_row     = full_expr, { ws, full_expr } ;
-multi_comma    = ",", ",", { "," } ;
+comma_run      = ",", { ws, "," } ;
 ```
+
+Within a table, `ws` does not include newlines, which are `row_sep`.
+The grammar does not express the tensor shape rules above.
+
 
 
 
@@ -429,12 +601,14 @@ multi_comma    = ",", ",", { "," } ;
 | unit    | `()`                          | `()`                          |
 | 1-tuple | `(T1,)`                       | `(true,)`                     |
 | n-tuple | `(T1, T2)`                    | `(true, 42)`                  |
-| struct  | `{ x: T1, y: T2}`             | `{x = 1, y = 2}`              |
+| struct  | `{ x: T1, y: T2 }`            | `{ x = 1, y = 2 }`            |
 | option  | `?T`                          | `some 1` <br> `none`          |
-| result  | `!T`                          | `ok 1` <br> `er 2`            |
+| result  | `!T`                          | `ok 1` <br> `er error 2`      |
 | atom    | `atom Foo`                    | `atom Foo`                    |
 | term    | `term Foo T`                  | `term Foo 1`                  |
 | enum    | `enum { atom A, term B T }`   | `enum { atom A }`             |
+
+Tuples and structs accept a trailing comma.
 
 
 ### Tuple
@@ -447,15 +621,15 @@ if they have the same length and element types in the same order.
 ()                             // unit: the zero-element tuple
 (true,)                        // 1-tuple (trailing comma required)
 (true, 42)                     // (bool, int)
-(1, "hello", 3.14)            // (int, string, f32)
-: (u32, i32) / (1, -1)        // with type hint
+(1, "hello", 3.14)             // (int, string, f64)
+: (u32, i32) / (1, -1)         // with type hint
 ```
 
 Unit `()` is both a type and a value.
 A 1-tuple requires a trailing comma to distinguish it
 from a parenthesized expression.
 Each element synthesizes its type independently:
-`(true, 42, 3.14)` synthesizes as `(bool, int, f32)`.
+`(true, 42, 3.14)` synthesizes as `(bool, int, f64)`.
 
 
 ### Struct
@@ -465,14 +639,18 @@ Two structs are the same type
 if they have the same field names, types, and order.
 
 ```datalove
-{ x = 1, y = 2 }              // {x: int, y: int}
+{ x = 1, y = 2 }               // {x: int, y: int}
 : { x: u32, y: f32 } / { x = 1, y = 2.0 }
+{}                             // the empty struct
 ```
 
 Types use `:` between field names and types,
 while expressions use `=` between field names and values.
 Field order matters &mdash;
 `{x: u32, y: bool}` and `{y: bool, x: u32}` are different types.
+Checked against a struct type,
+a struct literal must give every field, in the type's order.
+Field names are unique within a struct.
 Each field value synthesizes its type independently.
 
 
@@ -484,27 +662,30 @@ The type is written `?T` with a prefix `?`.
 ```datalove
 some 42                        // ?int
 some "hello"                   // ?string
-none                           // absent value (requires type context)
 : ?u32 / some 1
 : ?u32 / none
+: ??u32 / some none
 ```
 
 `some` wraps a value; `none` represents absence.
 `some e` synthesizes as `?T` where `T` is the type of `e`.
 `none` cannot synthesize a type &mdash;
 it requires a type hint or checking context.
+A value does not check against an option type without `some`:
+`: ?u32 / 1` is an error.
 
 
 ### Result
 
 A success-or-failure value.
 The type is written `!T` with a prefix `!`.
+The failure side always holds an `error`.
 
 ```datalove
 ok 42                          // !int
-er error "failed"              // result with error
 : !u32 / ok 1
-: !u32 / error "oops"
+: !u32 / er error "oops"
+: !u32 / error "oops"          // implicit er
 ```
 
 `ok` wraps a success value; `er` wraps an error.
@@ -553,18 +734,20 @@ A closed union of atom and term variants.
 : enum { atom Red, atom Blue, term Custom string } /
   enum { atom Red }
 
-: enum { atom Red, atom Blue } /
+: enum { atom Red, atom Blue, term Custom string } /
   enum { term Custom "hello" }
 ```
 
 The type lists all variants;
-the expression provides a single variant.
+the expression provides a single variant,
+which must be one the type lists.
+Variant names are unique within an enum.
 Enum type equivalence compares variants by name,
 regardless of the order they are declared.
 Enum literals require a type hint.
 
 
-### EBNF - Aggregates
+### EBNF · Aggregates
 
 ```ebnf
 tuple_type     = "(", ws, [ type_list ], ws, ")" ;
@@ -575,10 +758,15 @@ atom_type      = "atom", ws, ident ;
 term_type      = "term", ws, ident, ws, type ;
 enum_type      = "enum", ws, "{", ws, enum_variant_list, ws, "}" ;
 
-tuple_expr     = "(", ws, [ expr_list ], ws, ")" ;
+tuple_expr     = "(", ws, ")"
+               | "(", ws, full_expr, ws, ",", ws, ")"
+               | "(", ws, full_expr, ws, ",", ws, expr_list, ws, ")" ;
 struct_expr    = "{", ws, [ field_list ], ws, "}" ;
-option_expr    = "some", ws, full_expr ;
+option_expr    = "none" | "some", ws, full_expr ;
 result_expr    = ( "ok" | "er" ), ws, full_expr ;
+atom_expr      = atom_type ;
+term_expr      = "term", ws, ident, ws, full_expr ;
+enum_expr      = "enum", ws, "{", ws, ( atom_expr | term_expr ), ws, "}" ;
 
 type_list      = type, { ws, ",", ws, type }, [ ws, "," ] ;
 type_field_list= type_field, { ws, ",", ws, type_field }, [ ws, "," ] ;
@@ -600,17 +788,148 @@ enum_variant   = atom_type | term_type ;
 | `data`                        | `data 1` <br> `data : u32 / 2` |
 | `error`                       | `error 1` <br> `error "oops"`  |
 
+A `data` value holds a value of any type
+together with that type.
+`data e` synthesizes `data`,
+and its payload `e` must synthesize a type of its own,
+which is the type the `data` carries:
+`data 1` holds an `int`, `data : u32 / 1` a `u32`,
+and `data none` is an error.
+
+An `error` is the same thing under a different type,
+used for the failure side of results.
+`error e` synthesizes `error`,
+and also checks against any `!T`, as `er error e`.
+
+A value is only a `data` or `error` when written as one:
+`: data / 5` is an error, and is written `data 5`.
+
+
+### EBNF · Dynamic types
+
+```ebnf
+dynamic_type   = "data" | "error" ;
+dynamic_expr   = ( "data" | "error" ), ws, full_expr ;
+```
+
+
+
+
+## Types
+
+### Type equivalence
+
+All datalit types are structural:
+two types are the same when they are spelled the same,
+with these rules for the aggregates.
+
+| Type            | Same type when                                            |
+|-----------------|-----------------------------------------------------------|
+| primitives      | same name; `index` is not `u32` or `u64`, whatever its width |
+| tuple           | same length, same element types in order                  |
+| struct          | same field names and types, in the same order             |
+| table           | same column names and types, in the same order            |
+| list, set       | same element type                                         |
+| map             | same key and value types                                  |
+| tensor          | same element type and rank; shape does not count          |
+| option, result  | same inner type                                           |
+| atom            | same name                                                 |
+| term            | same name and payload type                                |
+| enum            | same set of variants, regardless of declared order        |
+
+
+### Synthesis and checking
+
+Every expression either synthesizes a type from itself,
+or is checked against an expected type
+from a type hint or an enclosing expression.
+An expression that synthesizes can always be checked:
+it checks against a type if it synthesizes that type.
+There are no implicit conversions:
+an integer does not become a float, a value does not become an option,
+and a `u8` does not become a `u32`.
+
+| Expression      | Synthesizes                  | Also checks against                    |
+|-----------------|------------------------------|----------------------------------------|
+| `true`, `false` | `bool`                       |                                        |
+| integer         | `int`                        | fixed-width ints, `index`, `offset`, if in range |
+| float           | `f64`                        | `f32`                                  |
+| hex             | `int`                        | unsigned ints, `index`, `f32`, `f64`, if it fits |
+| string          | `string`                     |                                        |
+| tuple           | tuple of element types       | tuple of same length, elementwise      |
+| struct          | struct of field types        | struct of same fields in order, fieldwise |
+| list, set       | of the first element's type  | any element type, elementwise          |
+| empty list, set | element type `()`            | any element type                       |
+| map             | of the first entry's types   | any key and value types, entrywise     |
+| tensor          | first element's type, rank as written | same rank, elementwise        |
+| table           | &mdash;                      | same columns in order, cellwise        |
+| `some e`        | `?T` where `e` synthesizes `T` | `?T`, checking `e` against `T`       |
+| `none`          | &mdash;                      | any `?T`                               |
+| `ok e`          | `!T` where `e` synthesizes `T` | `!T`, checking `e` against `T`       |
+| `er e`          | &mdash;                      | any `!T`                               |
+| `data e`        | `data`                       |                                        |
+| `error e`       | `error`                      | any `!T`                               |
+| `atom A`        | `atom A`                     |                                        |
+| `term A e`      | `term A T` where `e` synthesizes `T` | `term A T`, checking `e` against `T` |
+| `enum { v }`    | &mdash;                      | an enum listing `v`                    |
+
+So a type hint or context is required for
+`none`, `er`, tables, enum literals,
+fixed-width numbers and `f32`,
+and empty collections of anything but `()`.
+
 
 
 
 ## Comparison and total ordering
 
-todo
+Every datalit type has a total ordering,
+so any value can be a map key or set element,
+and any two values of the same type can be compared.
+Values of different types are not compared.
+
+The ordering is the one the runtime uses to keep maps and sets,
+so it is also what decides whether two keys are the same key.
+
+| Type            | Order                                                          |
+|-----------------|----------------------------------------------------------------|
+| `bool`          | `false` before `true`                                          |
+| integers        | numeric                                                        |
+| floats          | IEEE 754 `totalOrder`: `-NaN`, `-inf`, negatives, `-0.0`, `0.0`, positives, `inf`, `NaN` |
+| `string`        | lexicographic by UTF-8 byte, which is code point order         |
+| tuple, struct   | lexicographic by element, in declared order                    |
+| list            | lexicographic by element; a prefix comes first                 |
+| set             | lexicographic by element, in element order; a prefix comes first |
+| map             | lexicographic by entry in key order, key then value; a prefix comes first |
+| table           | lexicographic by row, each row by column in declared order; a prefix comes first |
+| tensor          | by shape, lexicographically, then by element in row-major order |
+| option          | `none` first, then `some` by payload                           |
+| result          | `er` first, then `ok`; each by payload                         |
+| `data`, `error` | by the carried type, then by value                             |
+| atom            | its one value                                                  |
+| term            | by payload                                                     |
+| enum            | by variant name, then by payload                               |
+
+Floats are totally ordered by their bit patterns,
+so `-0.0` and `0.0` are different values and different keys,
+and a NaN is a value like any other,
+equal to itself and to no other NaN bit pattern.
+`#{ 0.0, -0.0 }` has two elements.
+
+The order among the types a `data` or `error` may carry
+is arbitrary and fixed by the implementation.
+Enum variant names order by UTF-8 byte.
+
+The runtime has a second, IEEE equality,
+which differs from the total ordering only for floats:
+under it `-0.0` equals `0.0` and no NaN equals anything.
+It is the equality datafun computes with,
+and is not used for keys.
 
 
 
 
-## Canonical forms.
+## Canonical forms
 
 
 Datalove literals has no canonical serialized form
@@ -622,6 +941,145 @@ Required type-hint insertion points are unknown.
 
 Will be revisited.
 
+Two printers exist today.
+The syntax printer, `lit-pretty`, reprints a parsed expression
+with the literals spelled as written, including hex,
+and entries in the order written.
+The value printer prints a runtime value:
+maps and sets in their total ordering,
+integers in decimal,
+and floats in their shortest round-tripping form,
+positional from `1e-5` up to `1e16` and with an exponent otherwise,
+always with a point or exponent.
+It prints no type hints.
+
+
+
+
+## Discrepancies, unknowns and bugs
+
+This section compares the spec above with
+`botdocs/botspec.md`, `botdocs/datalit-ebnf.md`, `botdocs/datalit-typing-rules.md`,
+and the implementation in `crates/datalove-datalit`
+as of this writing.
+Behaviour was checked with the `lit-tycheck`, `lit-pretty` and `lit-op` commands
+and against the parser's own diagnostics.
+
+### Not implemented
+
+- **Atom, term and enum expressions.**
+  The datalit parser reads `atom`, `term` and `enum` in types only.
+  `atom Red` as an expression is "unexpected identifier" (D019).
+  Instantiating any atom, term or enum type is a `todo!()`
+  in `tydesc_table.rs`.
+  Datafun does parse all three,
+  so the showcase example at the top of this document
+  is valid datafun but not yet valid datalit.
+- **`int` is not arbitrary precision when values are built.**
+  The checker accepts any integer for `int`,
+  but instantiation parses decimal through `i128` and hex through `u128`,
+  so `170141183460469231731687303715884105728` fails with
+  "number too large to fit in target type".
+
+### Bugs
+
+- **Parentheses drop an inner type hint.**
+  A grouping `( e )` returns the inner expression without its hint,
+  so `: u8 / (: u32 / 1)` checks, and builds a `u8`.
+- **Trailing input is ignored.**
+  The top-level parse does not require the input to be exhausted:
+  `true false` is `true`,
+  and `0x1.5` is `0x1`, the `.5` silently dropped.
+- **String escapes are checked only at instantiation.**
+  The parser keeps a string's raw text,
+  so `"a\q"` and `"\u{D800}"` pass parsing and typechecking
+  and fail only when the value is built.
+  The same applies to the payloads of `data` and `error`:
+  `data none` typechecks,
+  and fails with a type error only at instantiation.
+- **Duplicate struct fields are accepted.**
+  `{ x = 1, x = 2 }` synthesizes `{x: int, x: int}` and builds.
+  Duplicate enum variants in a type are not rejected either.
+- **`er error e` is double-wrapped.**
+  Instantiation stores the whole payload expression
+  in the result's error slot,
+  so `er error "x"` holds an `error` of an `error`,
+  while the implicit `: !u32 / error "x"` holds an `error` of `"x"`.
+  The two compare unequal.
+  `er data "x"` likewise holds an `error` of a `data`.
+- **Negative hex literals.**
+  The grammar and parser accept `-0x10`,
+  and it typechecks as `int`,
+  but instantiation fails with "invalid digit found in string".
+  The checker's `check_hex_fits_type` has ranges for signed types,
+  but `check.rs` never sends signed types there,
+  so `: i32 / 0x7F` is a type mismatch.
+  Whether hex should reach signed types is undecided.
+- **Some type errors carry no diagnostic.**
+  Out-of-range literals under a top-level hint (`: u8 / 300`)
+  and type aliases (`: Foo / 1`)
+  fail typechecking with no message,
+  because the span lookup misses the rebuilt, hint-stripped expression
+  or no diagnostic is emitted.
+  `lit-tycheck` also does not print parse diagnostics at all.
+- **Identifiers beginning with digits.**
+  Field names are any lexer word,
+  so `{ 1x = 1 }` is a struct with field `1x`.
+- **Empty tensors of rank above 1 cannot be written.**
+  `[| |]` is always rank 1 with shape [0],
+  and `[| , |]` does not parse,
+  so `: [|u32, 2|] / ...` has no empty value.
+  A rank-0 type `[|u32, 0|]` parses but has no literal.
+
+### Divergences from the botspec
+
+- **Implicit integer widening.**
+  The checker lets a hinted fixed-width integer check against
+  a wider same-sign type or `int`:
+  `: {a: u32} / {a = : u8 / 1}` is accepted.
+  The botspec says there is no implicit widening, only `@`.
+  This spec follows the botspec.
+- **`data` coercion.**
+  The botspec says any type coerces to `data`.
+  In datalit, `: data / 5` is a type error and `data 5` is required.
+  This spec follows the implementation.
+- **`\x` escapes.**
+  `datalit-ebnf.md` lists `\xHH`; the implementation has no such escape.
+- **`tuple ( ... )` types.**
+  The type parser accepts `tuple (u32, u32)` as a spelling of `(u32, u32)`.
+  Nothing documents it.
+- **The `f32` default.**
+  Earlier drafts of this document showed float literals as `f32`.
+  Both the botspec and the implementation default to `f64`.
+- **Payload syntax.**
+  The botspec says `some`, `ok`, `er`, `data` and `error`
+  take a primary expression in datafun.
+  In datalit they take a `full_expr`, including a type hint:
+  `some : u32 / 1`.
+  Datalit has no binary operators, so the two agree on every datalit input.
+
+### Unknowns
+
+- Whether a float literal that overflows to infinity,
+  or underflows to zero, should be an error.
+  It is silently rounded today.
+- Whether duplicate map keys and set elements should be errors
+  rather than resolved last-wins.
+- Whether field and column names may be keywords.
+  They may today.
+- Whether a byte order mark is allowed.
+  Nothing strips one.
+- The value printer writes non-finite floats as `nan`, `inf` and `-inf`,
+  which do not parse,
+  and enum values as `enum Name(payload)`,
+  which is not the datalit enum syntax.
+  Printed fixed-width values have no hints,
+  so they read back as `int` and `f64`.
+  Round-tripping through the value printer is only exact
+  for values whose types synthesize.
+- Whether `-0` as an `int` literal needs saying,
+  or `-0x0` as a float bit pattern
+  (it is rejected today, as all negative hex is for floats).
 
 
 
