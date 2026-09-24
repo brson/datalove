@@ -1461,22 +1461,43 @@ mod tests {
         let parsed2 = parse_module_graph(&db2, graph2, requires2, Vec::new());
         let result_par = resolve_and_typecheck_with_mode(&db2, parsed2, TypecheckParallelMode::Parallel);
 
-        // Compare results.
-        assert_eq!(
-            result_seq.module_errors(&db).len(),
-            result_par.module_errors(&db2).len(),
-            "should have same number of error entries"
-        );
-        assert_eq!(
-            result_seq.expr_types(&db).len(),
-            result_par.expr_types(&db2).len(),
-            "should have same number of expr types"
-        );
-        assert_eq!(
-            result_seq.call_targets(&db).len(),
-            result_par.call_targets(&db2).len(),
-            "should have same number of call targets"
-        );
+        // Compared per module, and by what a module says rather than by how
+        // much it says: the tracked structs hold salsa ids, which are two
+        // different databases' ids here and would never match.
+        //
+        // What a module says is its path, what it exports, how many
+        // expressions got a type, and what it complained about. An earlier
+        // version of this compared the length of two graph-wide tables that
+        // existed for it to compare, which is a test agreeing with itself.
+        fn summary<'db>(
+            db: &'db Database,
+            result: datalove_datafun_tycheck::ModuleGraphTypecheckResult<'db>,
+        ) -> Vec<(String, Vec<String>, usize, Vec<String>)> {
+            let mut per_module: Vec<_> = result.module_results(db).iter()
+                .map(|(module_id, single)| {
+                    let mut exports: Vec<String> = single.exports(db).iter()
+                        .map(|(name, _)| name.text(db).S())
+                        .collect();
+                    exports.sort();
+                    let errors: Vec<String> = single.errors(db).iter()
+                        .map(|e| format!("{:?}", e))
+                        .collect();
+                    (
+                        module_id.path(db).clone(),
+                        exports,
+                        single.expr_types(db).len(),
+                        errors,
+                    )
+                })
+                .collect();
+            per_module.sort();
+            per_module
+        }
+
+        let seq = summary(&db, result_seq);
+        let par = summary(&db2, result_par);
+        assert!(!seq.is_empty(), "the comparison has to be over something");
+        assert_eq!(seq, par, "parallel and sequential should agree per module");
 
         // Both should succeed (no errors).
         assert!(result_seq.is_ok(&db), "sequential should succeed");

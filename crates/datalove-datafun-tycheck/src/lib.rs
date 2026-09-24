@@ -625,20 +625,6 @@ pub struct ModuleGraphTypecheckResult<'db> {
     #[returns(ref)]
     pub module_imports: BTreeMap<ModuleId<'db>, ModuleImports<'db>>,
 
-    /// Expression types from all modules, combined.
-    ///
-    /// Indexed by ExprFun salsa ID, contains types for all expressions
-    /// across all modules in the graph.
-    #[returns(ref)]
-    pub expr_types: ExprTypes<'db>,
-
-    /// Resolved call targets from all modules, combined.
-    ///
-    /// Indexed by ExprFunctionCall salsa ID, contains resolved function ASTs
-    /// for all function calls across all modules in the graph.
-    #[returns(ref)]
-    pub call_targets: CallTargets<'db>,
-
     /// Per-module typecheck results (tracked structs with stable salsa IDs).
     ///
     /// Used by downstream phases (e.g., IR lowering) to get per-module type

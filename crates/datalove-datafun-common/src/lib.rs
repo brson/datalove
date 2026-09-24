@@ -14,7 +14,6 @@ use datalit::ast::TypeHint;
 use salsa::Database as Db;
 
 use datalove_datafun_ast::ast::{ParsedStatements, StmtFun, ParamMode, TypeBound};
-use datalove_datafun_ast::spans::DatafunSpans;
 
 // ============================================================================
 // Parallel Execution Infrastructure

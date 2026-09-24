@@ -487,8 +487,6 @@ pub fn typecheck_module_graph<'db>(
     let mut module_exports_map: BTreeMap<ModuleId<'db>, ModuleExports<'db>> = BTreeMap::new();
     let mut module_imports_map: BTreeMap<ModuleId<'db>, ModuleImports<'db>> = BTreeMap::new();
     let mut module_results_map: BTreeMap<ModuleId<'db>, SingleModuleTypecheckResult<'db>> = BTreeMap::new();
-    let mut combined_expr_types = crate::ExprTypes::new();
-    let mut combined_call_targets = crate::CallTargets::new();
 
     for module in prep.graph.iter_modules(db) {
         let module_id = module.id(db);
@@ -526,15 +524,6 @@ pub fn typecheck_module_graph<'db>(
         let imports = ModuleImports::new(db, module_id, result.imports(db).C());
         module_imports_map.insert(module_id, imports);
 
-        // Merge this module's tables in. Keys carry the module, so modules
-        // cannot tread on each other.
-        combined_expr_types.extend(
-            result.expr_types(db).iter().map(|(k, v)| (*k, v.clone()))
-        );
-        combined_call_targets.extend(
-            result.call_targets(db).iter().map(|(k, v)| (*k, *v))
-        );
-
         // Process pending diagnostics with span enrichment.
         emit_pending_diagnostics_for_module(db, &parsed_graph, module_id, result.pending_diagnostics(db));
 
@@ -543,7 +532,7 @@ pub fn typecheck_module_graph<'db>(
         module_results_map.insert(module_id, result);
     }
 
-    ModuleGraphTypecheckResult::new(db, prep.graph, module_errors, module_exports_map, module_imports_map, combined_expr_types, combined_call_targets, module_results_map)
+    ModuleGraphTypecheckResult::new(db, prep.graph, module_errors, module_exports_map, module_imports_map, module_results_map)
 }
 
 /// Typecheck a module graph using parallel execution.
