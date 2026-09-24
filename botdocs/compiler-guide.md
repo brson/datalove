@@ -200,6 +200,33 @@ one the entries it can actually call rather than the whole world's, and the IR
 travels as an `Arc` so neither phase copies a module to hand it on. The
 `incremental_lowering` tests assert the property directly.
 
+#### What is not tracked, and what stands in the way
+
+`lower_module_graph_with_evaluator` is a plain function. 5a and 5d are
+memoized under it; the passes between them are not, and run in full on every
+compile including one where nothing was edited -- `close_shapes_over_calls`
+twice, the two const evaluations, and `specialize_comptime_functions`. On a
+32-module world that driver is most of what an unchanged recompile costs.
+
+The const evaluations cannot be tracked as they stand, because they take a
+`Rc<RefCell<dyn CtfeEvaluator>>` and a trait object is not a memo key.
+
+`close_shapes_over_calls` and `specialize_comptime_functions` are pure
+functions of the lowered IR, so the obstacle there is different and worth
+naming, because it also sets what `lower_module` costs. Both take
+`HashMap<ModuleId, Arc<ModuleLoweredFunctions>>`, which is the whole program's
+IR by value. Keying a query on that means hashing every instruction to answer
+it. `lower_module` already pays this: it takes the post-shape, post-
+specialization functions as an argument, so its memo key holds a module's IR
+and hashing those keys is around a tenth of an unchanged recompile.
+
+The way out is for phase 5a to hand back a tracked struct per module rather
+than a plain value. A map of those is a map of ids, cheap to hash, and then
+the shape closure and specialization can be tracked queries over it and
+`lower_module` can take an id instead of the IR. That is a redesign of the
+phase rather than an annotation: tracked structs are immutable, and both
+passes currently mutate the functions in place.
+
 The `skip_const_inlining` flag skips phases 5a and 5b entirely, lowering const bindings as
 let bindings. Used for testing CTFE accuracy. Callers of the high-level pipeline set
 `CompilerOptions::const_inlining`.
