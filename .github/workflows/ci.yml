@@ -36,6 +36,10 @@ jobs:
             recipe: test-slow
           - name: index-64
             recipe: test-64
+          # The same suite under DATALOVE_PARALLEL=1. It has been run green by
+          # hand many times, which is not the same as anything holding it.
+          - name: parallel
+            recipe: test-parallel
     steps:
       - uses: actions/checkout@v4
 
