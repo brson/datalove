@@ -9,12 +9,23 @@ use datafun::pipeline::WorkspaceDescriptor;
 fn main() {
     let mut args = std::env::args().skip(1);
     let iterations: usize = args.next().and_then(|a| a.parse().ok()).unwrap_or(200);
-    let edit = args.next().map(|a| a == "edit").unwrap_or(false);
+    let mode = args.next().unwrap_or_else(|| "noop".to_string());
+    let edit = mode == "edit" || mode == "local";
+    // `local` edits a module of one's own that calls into the system library,
+    // which is what an editing session does. `edit` edits the system library
+    // itself, which is the worst case and not the common one.
+    let local = mode == "local";
 
     let mut db = datafun::Database::default();
     let sys = datalove_stdlib::system_library();
     let descriptor = WorkspaceDescriptor::from_system_library(&sys);
     let mut pipeline = descriptor.to_pipeline(&db);
+    let local_source = |salt: usize| format!(
+        "fun local_a(x: int): int\n  ret x + {}\nend fun\n\
+         fun local_b(x: int): int\n  ret local_a(x) * 2\nend fun\n",
+        salt,
+    );
+    pipeline.add_module(&db, "local", "app", "main", &local_source(0));
 
     let compiled = pipeline.compile_fresh(&db);
     assert!(!compiled.has_errors(), "the system library must compile");
@@ -32,7 +43,11 @@ fn main() {
         .flat_map(|(p, pkg)| pkg.modules.iter().map(move |(m, d)| (p.clone(), m.clone(), d.source.to_string())))
         .next()
         .expect("the system library has modules");
-    println!("editing sys/{}/{}", package, module);
+    if local {
+        println!("editing local/app/main");
+    } else {
+        println!("editing sys/{}/{}", package, module);
+    }
     let probe = |salt: usize| format!("{}\nfun probe_edit(): int\n  ret {}\nend fun\n", text, salt);
 
     pipeline.update_source(&mut db, "sys", &package, &module, &probe(0));
@@ -42,7 +57,9 @@ fn main() {
 
     let start = std::time::Instant::now();
     for salt in 1..=iterations {
-        if edit {
+        if local {
+            pipeline.update_source(&mut db, "local", "app", "main", &local_source(salt));
+        } else if edit {
             pipeline.update_source(&mut db, "sys", &package, &module, &probe(salt));
         }
         let (compiled, _) = pipeline.compile(&mut db);
@@ -53,7 +70,7 @@ fn main() {
     println!(
         "{} {} recompiles in {:?} ({:?} each), peak RSS {} MB",
         iterations,
-        if edit { "edit" } else { "no-op" },
+        &mode,
         elapsed,
         elapsed / iterations as u32,
         peak_rss_mb(),

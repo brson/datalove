@@ -1,11 +1,22 @@
 //! High-durability inputs are not revalidated by a low-durability edit.
 //!
 //! The system library is read once and does not change while a session runs,
-//! so its sources are created at `Durability::HIGH`. Salsa tracks the last
-//! revision at which each durability level changed, which lets it skip
-//! revalidating a query whose inputs are all more durable than anything that
-//! has been touched since. Editing a local module should therefore leave
-//! everything reached only through `sys/std` alone.
+//! so `ModuleCompilationPipeline::add_module` creates its sources at
+//! `Durability::HIGH`. Salsa tracks the last revision at which each durability
+//! level changed, which lets it mark a memo verified without walking its
+//! dependencies when everything under it is more durable than anything touched
+//! since.
+//!
+//! **These queries are this file's own, not the compiler's.** What is pinned
+//! here is that salsa's mechanism does what the compiler is relying on. That
+//! the compiler reaches for it is not pinned by anything, and cannot easily be:
+//! `mark_as_verified` fires `DidValidateMemoizedValue` on the shallow path as
+//! well as the deep one, so no event distinguishes the two, and the pipeline
+//! demands every module's queries on every compile anyway -- durability saves
+//! the depth of each walk, not the number of them. It shows up as time and
+//! nothing else. It was worth 17% of a realistic edit when it was turned on;
+//! `cargo run --release -p datalove-bench --example stdlib_recompile -- 400 local`
+//! is how that was measured.
 
 use rmx::prelude::*;
 use salsa::Setter as _;

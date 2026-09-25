@@ -93,7 +93,13 @@ impl ModuleCompilationPipeline {
         source: &str,
     ) {
         let path = format!("{}/{}/{}", library, package, module);
-        self.world.add_module(db, &path, source);
+        // The system library is read once and does not change while a session
+        // runs, so an edit to anybody's own code should not make salsa walk it.
+        let durability = match library {
+            "sys" => salsa::Durability::HIGH,
+            _ => salsa::Durability::LOW,
+        };
+        self.world.add_module_with_durability(db, &path, source, durability);
     }
 
     /// Add modules from worldfile sections.

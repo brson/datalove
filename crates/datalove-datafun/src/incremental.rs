@@ -61,7 +61,26 @@ impl IncrementalModuleWorld {
 
     /// Add a module with the given path and source text.
     pub fn add_module(&mut self, db: &dyn salsa::Database, path: &str, source: &str) {
-        self.sources.insert(path.S(), Source::new(db, source.S()));
+        self.add_module_with_durability(db, path, source, salsa::Durability::LOW);
+    }
+
+    /// The same, saying how likely the text is to change.
+    ///
+    /// The system library is read once and does not change while a session
+    /// runs. Salsa records the last revision at which each durability level
+    /// changed, so an edit to a low-durability input lets it skip revalidating
+    /// anything reached only through high-durability ones.
+    pub fn add_module_with_durability(
+        &mut self,
+        db: &dyn salsa::Database,
+        path: &str,
+        source: &str,
+        durability: salsa::Durability,
+    ) {
+        self.sources.insert(
+            path.S(),
+            Source::builder(source.S()).text_durability(durability).new(db),
+        );
     }
 
     /// Remove a module.
