@@ -1944,6 +1944,17 @@ impl Instruction {
         }
     }
 
+    /// The same, plus what the call currently says it hands over.
+    pub fn call_target_full(&self) -> Option<(&CodeRef, &[DescriptorShape], &[DescriptorRef])> {
+        match self {
+            Instruction::Call { func, type_args, shape_descriptors, .. }
+            | Instruction::ComptimeCall { func, type_args, shape_descriptors, .. } => {
+                Some((func, type_args, shape_descriptors))
+            }
+            _ => None,
+        }
+    }
+
     /// The same, for writing the resolved descriptors back.
     pub fn call_target_mut(
         &mut self,
@@ -2264,9 +2275,14 @@ pub struct GrowingShape<K> {
 /// `calls` gives, for each function, the callee and what the call site bound
 /// the callee's type parameters to. `shapes` starts as what each body builds
 /// and is grown in place.
-pub fn close_shapes<K: Copy + Eq + std::hash::Hash>(
-    calls: &std::collections::HashMap<K, Vec<(K, Vec<DescriptorShape>)>>,
-    shapes: &mut std::collections::HashMap<K, Vec<DescriptorShape>>,
+///
+/// Generic over the hasher because its caller in the module pipeline keys
+/// these on `(IrModuleId, FuncId)` and builds an entry per function in the
+/// program on every compile that changes one, where SipHash on eight bytes is
+/// a measurable share of the pass.
+pub fn close_shapes<K: Copy + Eq + std::hash::Hash, S: std::hash::BuildHasher>(
+    calls: &std::collections::HashMap<K, Vec<(K, Vec<DescriptorShape>)>, S>,
+    shapes: &mut std::collections::HashMap<K, Vec<DescriptorShape>, S>,
 ) -> Result<(), GrowingShape<K>> {
     let (growing, blame) = growing_parameters(calls);
 
@@ -2322,23 +2338,69 @@ pub fn close_shapes<K: Copy + Eq + std::hash::Hash>(
 ///
 /// Run once, after the closure, so that the backends and the descriptor emitter
 /// read one answer rather than each deriving it.
+///
+/// Worked out rather than written, and `Ok(None)` when every call already
+/// holds what it should. The module path shares its units with a salsa memo,
+/// so writing means `Arc::make_mut` and a deep copy of the function; on a
+/// program where any shape exists at all, copying every function to write back
+/// what it already said was three quarters of this pass. A caller that owns
+/// its unit outright wants `set_call_descriptors` instead.
+///
+/// The answers come back in the order the calls were walked, which is the order
+/// [`write_call_descriptors`] writes them in.
 pub fn resolve_call_descriptors(
+    unit: &IrCodeUnit,
+    own_shapes: &[DescriptorShape],
+    callee_shapes: &dyn Fn(&CodeRef) -> Vec<DescriptorShape>,
+) -> Result<Option<Vec<Vec<DescriptorRef>>>, DescriptorShape> {
+    let mut resolved = Vec::new();
+    let mut changed = false;
+
+    for block in &unit.blocks {
+        for instr in &block.instructions {
+            let Some((func, type_args, held)) = instr.call_target_full() else {
+                continue;
+            };
+            let wanted = callee_shapes(func);
+            let next = if wanted.is_empty() {
+                Vec::new()
+            } else {
+                shape_descriptors_for(&wanted, type_args, own_shapes)?
+            };
+            changed |= next != held;
+            resolved.push(next);
+        }
+    }
+
+    Ok(changed.then_some(resolved))
+}
+
+/// Write back what [`resolve_call_descriptors`] worked out.
+pub fn write_call_descriptors(unit: &mut IrCodeUnit, resolved: Vec<Vec<DescriptorRef>>) {
+    let mut resolved = resolved.into_iter();
+    for block in &mut unit.blocks {
+        for instr in &mut block.instructions {
+            let Some((_, _, shape_descriptors)) = instr.call_target_mut() else {
+                continue;
+            };
+            *shape_descriptors = resolved.next()
+                .expect("one answer per call, in the order the calls were walked");
+        }
+    }
+    debug_assert!(resolved.next().is_none(), "more answers than calls");
+}
+
+/// Resolve and write in one step, for a caller that owns its unit.
+///
+/// A script unit is built fresh every time it is compiled, so there is nothing
+/// to save by asking whether the answer moved.
+pub fn set_call_descriptors(
     unit: &mut IrCodeUnit,
     own_shapes: &[DescriptorShape],
     callee_shapes: &dyn Fn(&CodeRef) -> Vec<DescriptorShape>,
 ) -> Result<(), DescriptorShape> {
-    for block in &mut unit.blocks {
-        for instr in &mut block.instructions {
-            let Some((func, type_args, shape_descriptors)) = instr.call_target_mut() else {
-                continue;
-            };
-            let wanted = callee_shapes(func);
-            if wanted.is_empty() {
-                shape_descriptors.clear();
-                continue;
-            }
-            *shape_descriptors = shape_descriptors_for(&wanted, type_args, own_shapes)?;
-        }
+    if let Some(resolved) = resolve_call_descriptors(unit, own_shapes, callee_shapes)? {
+        write_call_descriptors(unit, resolved);
     }
     Ok(())
 }
@@ -2359,8 +2421,8 @@ pub fn resolve_call_descriptors(
 /// Returns the nodes that can reach such a cycle, and a strict edge on one, for
 /// the error to point at.
 #[allow(clippy::type_complexity)]
-fn growing_parameters<K: Copy + Eq + std::hash::Hash>(
-    calls: &std::collections::HashMap<K, Vec<(K, Vec<DescriptorShape>)>>,
+fn growing_parameters<K: Copy + Eq + std::hash::Hash, S: std::hash::BuildHasher>(
+    calls: &std::collections::HashMap<K, Vec<(K, Vec<DescriptorShape>)>, S>,
 ) -> (
     std::collections::HashSet<(K, u32)>,
     Option<(K, K, u32, DescriptorShape)>,

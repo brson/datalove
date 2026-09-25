@@ -1139,11 +1139,11 @@ impl<'db> ScriptCompiler<'db> {
         };
         for unit in &mut ir_unit.nested_units {
             let own = shapes.get(&Key::Local(unit.id.0)).cloned().unwrap_or_default();
-            let _ = datalove_datafun_ir::resolve_call_descriptors(unit, &own, &callee_shapes);
+            let _ = datalove_datafun_ir::set_call_descriptors(unit, &own, &callee_shapes);
         }
         // Failure here means the script would forward a type parameter, which
         // it has none of, so it cannot happen.
-        let _ = datalove_datafun_ir::resolve_call_descriptors(
+        let _ = datalove_datafun_ir::set_call_descriptors(
             &mut ir_unit, &[], &callee_shapes);
         ir_unit
     }

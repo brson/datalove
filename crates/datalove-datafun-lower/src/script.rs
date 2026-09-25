@@ -690,7 +690,7 @@ pub(crate) fn close_shapes_in_units(units: &mut [IrCodeUnit]) -> Result<(), Lowe
                 _ => Vec::new(),
             }
         };
-        if let Err(missing) = datalove_datafun_ir::resolve_call_descriptors(
+        if let Err(missing) = datalove_datafun_ir::set_call_descriptors(
             unit, &own, &callee_shapes,
         ) {
             return Err(LowerError::UnboundedDescriptorShape(format!(

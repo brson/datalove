@@ -25,6 +25,7 @@ index-64 = [
 rmx.workspace = true
 bct.workspace = true
 salsa.workspace = true
+rustc-hash.workspace = true
 serde = { version = "1", features = ["derive"] }
 ron = "0.8"
 datalove-ct.path = "../datalove-ct"
