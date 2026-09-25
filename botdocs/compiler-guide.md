@@ -250,6 +250,32 @@ means walking every function of every module on every compile.
 parsed graph; a program with no `const` anywhere has nothing for CTFE to
 evaluate, and the module registry built to have CTFE on hand is not free.
 
+#### The registries come out of memos
+
+There are two `ModuleFunctionRegistry`s per compile -- `ctfe_module_registry`,
+for const expressions that call across modules, and the one the pipeline hands
+to the interpreter -- and each has an entry per function in the world. Building
+them and dropping the previous pair was about two thirds of what an unchanged
+recompile of the system library cost, and about 44% of the synthetic one.
+
+Both are tracked. The CTFE one is keyed on phase 5a's handles. The pipeline's,
+`module_function_registry` in `datafun/src/pipeline/module_pipeline.rs`, is
+keyed on the `ModuleGraphLoweringResult`, which is a tracked struct whose
+identity is the per-module results it holds -- so it is a word to hash and it
+moves exactly when some module's assembled IR does. The native rider units go
+in there with it; they stay in the pipeline crate because the linker symbols
+belong at the backend boundary rather than in the compiler core.
+
+**The pipeline's is capped at `lru = 4`.** Its key moves on every edit, so the
+memo for the key before it is of no use to anyone, and uncapped it grew the
+database by about 140KB an edit. Eviction runs once per revision, so nothing is
+dropped underneath a compile, and the capacity only has to cover the one a
+recompile asks for plus the one an edit displaces.
+
+`SharedModuleContext` borrows the function id lookup (`func_id_lookup`, also
+tracked) out of its memo rather than holding a copy of every function name in
+the world.
+
 #### What is not tracked, and what stands in the way
 
 `lower_module_graph_with_evaluator` is still a plain function, and the two
