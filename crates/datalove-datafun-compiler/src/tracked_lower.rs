@@ -550,12 +550,21 @@ fn ir_map<'db>(
 
 /// Build a module function registry from lowered functions.
 ///
-/// This creates a temporary registry for CTFE to use when evaluating
-/// const expressions that call functions from other modules.
-fn build_module_registry_from_lowered<'db>(
-    lowered_functions: &HashMap<ModuleId<'db>, Arc<ModuleLoweredFunctions>>,
-    func_id_map: &HashMap<(ModuleId<'db>, String), (IrModuleId, FuncId)>,
+/// This creates a registry for CTFE to use when evaluating const expressions
+/// that call functions from other modules.
+///
+/// Tracked, because it is built from what phase 5a produced and both const
+/// phases want one: keyed on the handles it is a memo, and an unchanged
+/// recompile stops rebuilding an entry per function in the world and then
+/// dropping it.
+#[salsa::tracked(returns(ref))]
+fn ctfe_module_registry<'db>(
+    db: &'db dyn salsa::Database,
+    modules: LoweredModules<'db>,
+    func_id_map: FuncIdMap<'db>,
 ) -> Arc<ModuleFunctionRegistry> {
+    let lowered_functions = ir_map(db, &modules);
+    let func_id_map = func_id_lookup(db, func_id_map);
     // Indexed first. The loop below asks a module for one of its functions
     // once per function that module declares, and scanning the list to answer
     // was quadratic in a module's size.
@@ -1498,8 +1507,8 @@ pub fn lower_module_graph_with_evaluator<'db>(
     } else {
         let lowered_functions = ir_map(db_salsa, &lowered_modules);
         let func_ids = func_id_lookup(db_salsa, func_id_map);
-        let module_registry = build_module_registry_from_lowered(&lowered_functions, func_ids);
-        evaluator.borrow_mut().set_module_registry(module_registry);
+        let module_registry = ctfe_module_registry(db_salsa, lowered_modules.clone(), func_id_map);
+        evaluator.borrow_mut().set_module_registry(Arc::clone(module_registry));
         evaluate_module_level_consts(
             db_salsa, parsed_graph, typecheck_result, &evaluator, &lowered_functions, func_ids,
             &mut module_const_errors,
@@ -1551,8 +1560,8 @@ pub fn lower_module_graph_with_evaluator<'db>(
         // Build a module registry from lowered functions for cross-module CTFE calls.
         let lowered_functions = ir_map(db_salsa, &lowered_modules);
         let func_ids = func_id_lookup(db_salsa, func_id_map);
-        let module_registry = build_module_registry_from_lowered(&lowered_functions, func_ids);
-        evaluator.borrow_mut().set_module_registry(module_registry);
+        let module_registry = ctfe_module_registry(db_salsa, lowered_modules.clone(), func_id_map);
+        evaluator.borrow_mut().set_module_registry(Arc::clone(module_registry));
 
         evaluate_all_module_consts(db_salsa, parsed_graph, typecheck_result, evaluator.clone(), &lowered_functions, func_ids, &module_consts)
     };

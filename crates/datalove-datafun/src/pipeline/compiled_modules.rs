@@ -8,6 +8,7 @@ use rmx::std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
 
 use datalove_datafun_ir::{IrModuleId, FuncId};
+use datalove_datafun_compiler::tracked_lower::FuncIdLookup;
 use datalove_datafun_interp::ModuleFunctionRegistry;
 use datalove_datafun_tycheck::{typecheck_module_graph, AutoAdaptMode};
 use datalove_datafun_resolve::{resolve_all_names, resolve_all_exports, build_all_function_ast_maps};
@@ -25,7 +26,9 @@ pub struct SharedModuleContext<'db> {
     pub module_graph: ModuleGraph<'db>,
     pub parsed_graph: ParsedModuleGraph<'db>,
     pub graph_typecheck: ModuleGraphTypecheckResult<'db>,
-    pub func_id_map: HashMap<(ModuleId<'db>, String), (IrModuleId, FuncId)>,
+    /// Borrowed from the memo rather than copied into here: it holds an entry
+    /// per function in the world, and script compilation only reads it.
+    pub func_id_map: &'db FuncIdLookup<'db>,
     pub module_registry: Arc<ModuleFunctionRegistry>,
 }
 

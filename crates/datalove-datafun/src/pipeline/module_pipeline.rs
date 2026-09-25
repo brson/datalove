@@ -29,8 +29,10 @@ use datalove_datafun_compiler::compile::{
     compile_modules as compiler_compile_modules,
 };
 use datalove_datafun_compiler::tracked_lower::{
-    lower_module_graph_with_evaluator, ModuleGraphLoweringResult,
+    func_id_lookup, lower_module_graph_with_evaluator, FuncIdLookup,
+    ModuleGraphLoweringResult,
 };
+use datalove_datafun_tycheck::ParsedModuleGraph;
 use datalove_datafun_ir::CtfeEvaluator;
 use datalove_datafun_interp::InterpCtfeEvaluator;
 use std::cell::RefCell;
@@ -302,24 +304,27 @@ impl ModuleCompilationPipeline {
         output: ModuleCompilationOutput<'db>,
         lowering_result: Option<ModuleGraphLoweringResult<'db>>,
     ) -> CompiledModules<'db> {
-        // Build func_id_map and module registry from lowering result if available.
+        let db_salsa = db.as_salsa_db();
+
         let (func_id_map, module_registry, lowering_errors, module_ir_dumps) =
             if let Some(ref lowering) = lowering_result {
-                // Convert FuncIdMap to HashMap.
-                let func_id_map: HashMap<(ModuleId<'db>, String), (IrModuleId, FuncId)> =
-                    lowering.func_id_map(db.as_salsa_db()).to_hashmap(db.as_salsa_db());
+                let func_id_map = func_id_lookup(db_salsa, lowering.func_id_map(db_salsa));
 
-                // Build module registry from IR functions.
-                let mut registry = ModuleFunctionRegistry::new();
+                // The registry comes out of a memo. It holds an entry per
+                // function in the world, and building one and dropping the
+                // previous one was most of what an unchanged recompile of the
+                // system library cost.
+                let registry = Arc::clone(
+                    module_function_registry(db_salsa, *lowering, output.parsed_graph));
+
                 let mut lowering_errors: BTreeMap<String, Vec<String>> = BTreeMap::new();
                 let mut module_ir_dumps: BTreeMap<String, Vec<String>> = BTreeMap::new();
 
-                for (module_id, result) in lowering.module_results(db.as_salsa_db()) {
-                    let ir_module_id = result.ir_module_id(db.as_salsa_db());
-                    let module_path = module_id.path(db.as_salsa_db()).clone();
+                for (module_id, result) in lowering.module_results(db_salsa) {
+                    let module_path = module_id.path(db_salsa).clone();
 
                     // Collect lowering errors.
-                    let errors = result.errors(db.as_salsa_db());
+                    let errors = result.errors(db_salsa);
                     if !errors.is_empty() {
                         lowering_errors.insert(module_path.clone(), errors.clone());
                     }
@@ -328,33 +333,27 @@ impl ModuleCompilationPipeline {
                     // every function costs about what lowering them does, and
                     // only the fixtures read the result.
                     if self.options.keep_ir_dumps {
-                        let ir_dumps: Vec<String> = result.functions(db.as_salsa_db())
+                        let ir_dumps: Vec<String> = result.functions(db_salsa)
                             .iter()
                             .map(|ir_unit| format!("{}", ir_unit))
                             .collect();
                         module_ir_dumps.insert(module_path, ir_dumps);
                     }
-
-                    // Add functions to registry.
-                    for ir_unit in result.functions(db.as_salsa_db()) {
-                        registry.add_module_code_unit(ir_module_id, ir_unit.id, ir_unit.clone());
-                    }
                 }
-
-                // Emit native code units for rider functions.
-                Self::add_native_rider_units(
-                    db.as_salsa_db(), &output, &func_id_map, &mut registry,
-                );
 
                 (func_id_map, registry, lowering_errors, module_ir_dumps)
             } else {
                 // No lowering - use empty structures.
                 // Still need func_id_map for script compilation even without lowering.
                 use datalove_datafun_compiler::tracked_lower::compute_func_id_map;
-                let func_id_map: HashMap<(ModuleId<'db>, String), (IrModuleId, FuncId)> =
-                    compute_func_id_map(db.as_salsa_db(), output.parsed_graph)
-                        .to_hashmap(db.as_salsa_db());
-                (func_id_map, ModuleFunctionRegistry::new(), BTreeMap::new(), BTreeMap::new())
+                let func_id_map = func_id_lookup(
+                    db_salsa, compute_func_id_map(db_salsa, output.parsed_graph));
+                (
+                    func_id_map,
+                    Arc::new(ModuleFunctionRegistry::new()),
+                    BTreeMap::new(),
+                    BTreeMap::new(),
+                )
             };
 
         let shared = Arc::new(SharedModuleContext {
@@ -362,7 +361,7 @@ impl ModuleCompilationPipeline {
             parsed_graph: output.parsed_graph,
             graph_typecheck: output.typecheck_result,
             func_id_map,
-            module_registry: Arc::new(module_registry),
+            module_registry,
         });
 
         CompiledModules {
@@ -377,82 +376,122 @@ impl ModuleCompilationPipeline {
     }
 }
 
-impl ModuleCompilationPipeline {
-    /// Create native IrCodeUnits for rider functions and add them to the registry.
-    ///
-    /// Linker symbols are generated here at the backend boundary, not in the compiler core.
-    fn add_native_rider_units<'db>(
-        db: &'db dyn salsa::Database,
-        output: &ModuleCompilationOutput<'db>,
-        func_id_map: &HashMap<(ModuleId<'db>, String), (IrModuleId, FuncId)>,
-        registry: &mut ModuleFunctionRegistry,
-    ) {
-        use datalove_datafun_ir::{IrType, CodeUnitId, NativeContext};
-        use datalove_datafun_compiler::IrTypeExt;
-        use std::collections::BTreeSet;
+/// Every function in the world, under the ids the backends address it by.
+///
+/// Tracked. It is a pure function of what phase 5 produced plus the riders, and
+/// it holds an entry per function, so rebuilding it on every compile -- and
+/// dropping the one before it -- was around two thirds of what an unchanged
+/// recompile of the system library cost.
+///
+/// Keyed on the lowering result, which is a tracked struct whose identity is
+/// the per-module results it holds, so it is a word to hash and it moves
+/// exactly when some module's assembled IR does.
+///
+/// Capped, because that key moves on every edit and the memo for the key
+/// before it is of no use to anyone: left uncapped this grew by about 140KB an
+/// edit, which is half again what the rest of the pipeline already retains per
+/// revision. Eviction runs once per revision, so nothing is dropped underneath
+/// a compile, and the capacity only has to cover the one a recompile asks for
+/// plus the one an edit displaces.
+#[salsa::tracked(returns(ref), lru = 4)]
+fn module_function_registry<'db>(
+    db: &'db dyn salsa::Database,
+    lowering: ModuleGraphLoweringResult<'db>,
+    parsed_graph: ParsedModuleGraph<'db>,
+) -> Arc<ModuleFunctionRegistry> {
+    let mut registry = ModuleFunctionRegistry::new();
 
-        let mut seen_riders: BTreeSet<String> = BTreeSet::new();
+    for result in lowering.module_results(db).values() {
+        let ir_module_id = result.ir_module_id(db);
+        for ir_unit in result.functions(db) {
+            registry.add_module_code_unit(ir_module_id, ir_unit.id, ir_unit.clone());
+        }
+    }
 
-        for (_module_id, riders) in output.parsed_graph.resolved_riders(db).iter() {
-            for (alias, rider) in riders {
-                let alias_str = alias.text(db);
-                if !seen_riders.insert(alias_str.S()) {
-                    continue; // Already processed this rider.
-                }
+    add_native_rider_units(
+        db,
+        parsed_graph,
+        func_id_lookup(db, lowering.func_id_map(db)),
+        &mut registry,
+    );
 
-                let synthetic_module_id = rider.module_id;
+    Arc::new(registry)
+}
 
-                for (func_name, func_type) in &rider.functions {
-                    let name = func_name.text(db).S();
-                    let symbol = format!("dlr_{}__{}", alias_str, name);
+/// Create native IrCodeUnits for rider functions and add them to the registry.
+///
+/// Linker symbols are generated here at the backend boundary, not in the compiler core.
+fn add_native_rider_units<'db>(
+    db: &'db dyn salsa::Database,
+    parsed_graph: ParsedModuleGraph<'db>,
+    func_id_map: &HashMap<(ModuleId<'db>, String), (IrModuleId, FuncId)>,
+    registry: &mut ModuleFunctionRegistry,
+) {
+    use datalove_datafun_ir::{IrType, CodeUnitId, NativeContext};
+    use datalove_datafun_compiler::IrTypeExt;
+    use std::collections::BTreeSet;
 
-                    // Look up the assigned IrModuleId and FuncId.
-                    let Some(&(ir_module_id, func_id)) = func_id_map.get(&(synthetic_module_id, name.clone())) else {
-                        continue;
-                    };
+    let mut seen_riders: BTreeSet<String> = BTreeSet::new();
 
-                    // Convert types from tycheck to IR.
-                    let param_types: Vec<IrType> = func_type.param_types(db)
-                        .iter()
-                        .map(|ty| IrType::from_tycheck(db, ty))
-                        .collect();
-                    // Convert AST ParamMode to IR ParamMode.
-                    let param_modes: Vec<datalove_datafun_ir::ParamMode> = func_type.param_modes(db)
-                        .iter()
-                        .map(|m| match m {
-                            datalove_datafun_ast::ast::ParamMode::In => datalove_datafun_ir::ParamMode::In,
-                            datalove_datafun_ast::ast::ParamMode::Out => datalove_datafun_ir::ParamMode::Out,
-                            datalove_datafun_ast::ast::ParamMode::Ref => datalove_datafun_ir::ParamMode::Ref,
-                            datalove_datafun_ast::ast::ParamMode::Mut => datalove_datafun_ir::ParamMode::Mut,
-                        })
-                        .collect();
-                    let return_type = IrType::from_tycheck(db, &func_type.return_type(db));
+    for (_module_id, riders) in parsed_graph.resolved_riders(db).iter() {
+        for (alias, rider) in riders {
+            let alias_str = alias.text(db);
+            if !seen_riders.insert(alias_str.S()) {
+                continue; // Already processed this rider.
+            }
 
-                    // What the shape closure was told this native needs, said
-                    // the same way here so that the two cannot disagree about
-                    // the trailing arguments. A native makes no calls, so its
-                    // set is exactly what its signature says.
-                    let descriptor_shapes = rider.generic_functions.iter()
-                        .find(|(n, _)| *n == *func_name)
-                        .map(|(_, generics)| generics.undetermined.iter()
-                            .map(|i| datalove_datafun_ir::DescriptorShape::Param(*i))
-                            .collect())
-                        .unwrap_or_default();
+            let synthetic_module_id = rider.module_id;
 
-                    let native_ctx = NativeContext {
-                        param_modes,
-                        param_types,
-                        return_type,
-                        symbol,
-                        descriptor_shapes,
-                    };
-                    let code_unit = datalove_datafun_ir::IrCodeUnit::native(
-                        CodeUnitId(func_id.0),
-                        name,
-                        native_ctx,
-                    );
-                    registry.add_module_code_unit(ir_module_id, code_unit.id, std::sync::Arc::new(code_unit));
-                }
+            for (func_name, func_type) in &rider.functions {
+                let name = func_name.text(db).S();
+                let symbol = format!("dlr_{}__{}", alias_str, name);
+
+                // Look up the assigned IrModuleId and FuncId.
+                let Some(&(ir_module_id, func_id)) = func_id_map.get(&(synthetic_module_id, name.clone())) else {
+                    continue;
+                };
+
+                // Convert types from tycheck to IR.
+                let param_types: Vec<IrType> = func_type.param_types(db)
+                    .iter()
+                    .map(|ty| IrType::from_tycheck(db, ty))
+                    .collect();
+                // Convert AST ParamMode to IR ParamMode.
+                let param_modes: Vec<datalove_datafun_ir::ParamMode> = func_type.param_modes(db)
+                    .iter()
+                    .map(|m| match m {
+                        datalove_datafun_ast::ast::ParamMode::In => datalove_datafun_ir::ParamMode::In,
+                        datalove_datafun_ast::ast::ParamMode::Out => datalove_datafun_ir::ParamMode::Out,
+                        datalove_datafun_ast::ast::ParamMode::Ref => datalove_datafun_ir::ParamMode::Ref,
+                        datalove_datafun_ast::ast::ParamMode::Mut => datalove_datafun_ir::ParamMode::Mut,
+                    })
+                    .collect();
+                let return_type = IrType::from_tycheck(db, &func_type.return_type(db));
+
+                // What the shape closure was told this native needs, said
+                // the same way here so that the two cannot disagree about
+                // the trailing arguments. A native makes no calls, so its
+                // set is exactly what its signature says.
+                let descriptor_shapes = rider.generic_functions.iter()
+                    .find(|(n, _)| *n == *func_name)
+                    .map(|(_, generics)| generics.undetermined.iter()
+                        .map(|i| datalove_datafun_ir::DescriptorShape::Param(*i))
+                        .collect())
+                    .unwrap_or_default();
+
+                let native_ctx = NativeContext {
+                    param_modes,
+                    param_types,
+                    return_type,
+                    symbol,
+                    descriptor_shapes,
+                };
+                let code_unit = datalove_datafun_ir::IrCodeUnit::native(
+                    CodeUnitId(func_id.0),
+                    name,
+                    native_ctx,
+                );
+                registry.add_module_code_unit(ir_module_id, code_unit.id, std::sync::Arc::new(code_unit));
             }
         }
     }

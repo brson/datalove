@@ -18,7 +18,7 @@ use crate::{IrCodeUnit, CodeUnitId, IrModuleId};
 /// they are declared in decides the identifiers and the layout of the object
 /// file. A hash map made that order depend on the seed the process started
 /// with, so the same input produced different bytes on every run.
-#[derive(Clone, Default, Serialize, Deserialize)]
+#[derive(Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct ModuleFunctionRegistry {
     /// Behind an `Arc` because the registry is built from IR that is already
     /// owned elsewhere -- the lowered functions, and the assembled module
