@@ -5,12 +5,16 @@
 //! `perf record` and the profile is the recompile.
 //!
 //! Scratch tool, not a test. `cargo run --release -p datalove-bench --example
-//! recompile_profile -- [iterations] [edit|noop]`.
+//! recompile_profile -- [iterations] [edit|noop] [modules]`.
+//!
+//! The module count is a knob because the interesting question about an edit is
+//! not what it costs but how that cost grows: the passes that run over the whole
+//! program on every edit make it linear in the size of the world, and the size
+//! of the world in the fixtures is not the size of anybody's project.
 
 use datalove_datafun::pipeline::ModuleCompilationPipeline;
 use datalove_datafun_compiler::Database;
 
-const NUM_MODULES: usize = 32;
 const FUNCTIONS_PER_MODULE: usize = 30;
 
 fn module_source(module_idx: usize, salt: usize) -> String {
@@ -35,10 +39,11 @@ fn main() {
     let mut args = std::env::args().skip(1);
     let iterations: usize = args.next().and_then(|a| a.parse().ok()).unwrap_or(500);
     let edit = args.next().map(|a| a == "edit").unwrap_or(false);
+    let num_modules: usize = args.next().and_then(|a| a.parse().ok()).unwrap_or(32);
 
     let mut db = Database::default();
     let mut pipeline = ModuleCompilationPipeline::default();
-    for i in 0..NUM_MODULES {
+    for i in 0..num_modules {
         pipeline.add_module(&db, "local", "pkg", &format!("m{}", i), &module_source(i, 0));
     }
 
@@ -56,7 +61,8 @@ fn main() {
     let elapsed = start.elapsed();
 
     println!(
-        "{} {} recompiles in {:?} ({:?} each), peak RSS {} MB",
+        "{} modules, {} {} recompiles in {:?} ({:?} each), peak RSS {} MB",
+        num_modules,
         iterations,
         if edit { "edit" } else { "no-op" },
         elapsed,
