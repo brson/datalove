@@ -47,15 +47,16 @@ all it is an interned struct with extra steps: creating one hashes everything it
 holds, and any change to any field yields a different struct, so a consumer that
 reads one field is invalidated by a change to another.
 
-**In this codebase, 53 of 59 tracked structs have no `#[tracked]` field.**
+**In this codebase, 54 of 59 tracked structs have no `#[tracked]` field.**
 `SingleModuleTypecheckResult` has nine fields and none of them are tracked, so
 its identity is a hash of the whole type table.
 
-This is a known smell, not a settled task. Marking `expr_types` as `#[tracked]`
-compiles, passes the suite, and changed nothing the `module_memo` fixtures
-measure. If you take it on, do it as an experiment on one struct: find a
-consumer that reads a strict subset of the fields, and measure whether an edit
-to an unread field still invalidates it. Do not sweep all 53 on theory.
+This used to be written up here as a smell to be worked through. It is not:
+tracking a field is a trade, not an improvement, and the next section has both
+sides of it measured. Marking `SingleModuleTypecheckResult` and
+`SingleModuleAnalysis` tracked was tried twice -- before and after the shape
+closure was changed -- and was neutral both times. Do not sweep the rest on
+theory; the section below says what question to ask instead.
 
 ### Where the line is: coarse structs track, fine ones do not
 
