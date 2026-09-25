@@ -120,6 +120,66 @@ fn an_edit_lowers_only_the_module_that_changed() {
     );
 }
 
+/// A world with consts in it also runs nothing on an unchanged recompile.
+///
+/// The consts are the point, and the world above has none, so it could not see
+/// this. Phase 5b is not tracked -- it needs the CTFE evaluator -- so it hands
+/// its results to `lower_module` as a plain value in the memo key, and it built
+/// that value by iterating a freshly constructed `HashMap`. **Two `HashMap`s do
+/// not iterate the same way even within one process**: `RandomState::new`
+/// increments a per-thread counter, so every map instance hashes differently.
+/// `reproducible_build_tests` compares separate processes and would not catch
+/// it either.
+///
+/// So every compile handed phase 5 a key it had never seen. Without the sort in
+/// `evaluate_all_module_consts` this ran 39 queries -- most of phase 5, every
+/// time, on a world that had not changed -- and it kept doing it, compile after
+/// compile, growing the database each round.
+///
+/// One thing here is not understood: the sort is on what reaches `lower_module`,
+/// yet removing it also re-runs `lower_module_functions`, which is upstream of
+/// it and takes none of it. The fix is measured and this test pins the property;
+/// the causal path to the upstream queries is not worked out.
+#[test]
+fn an_unchanged_recompile_of_a_world_with_consts_lowers_nothing() {
+    let recorder = QueryRecorder::new();
+    let mut db = Database::recording(&recorder);
+
+    // Enough consts per module that the order they come back in is a real
+    // permutation rather than a coin flip.
+    fn const_source(index: usize) -> String {
+        let mut source = String::new();
+        for (offset, name) in ["ca", "cb", "cc", "cd"].iter().enumerate() {
+            source.push_str(&format!("const {}{}: int = {}\n", name, index, index + offset));
+        }
+        source.push_str(&format!("fun f{}(): int\n", index));
+        source.push_str(&format!("  const local{} = {}\n", index, index));
+        source.push_str(&format!("  ret ca{} + local{}\n", index, index));
+        source.push_str("end fun\n");
+        source
+    }
+
+    let mut pipeline = ModuleCompilationPipeline::default();
+    for index in 0..MODULES {
+        pipeline.add_module(&db, "local", "test", &format!("c{index}"), &const_source(index));
+    }
+    let compiled = pipeline.compile_fresh(&db);
+    assert!(compiled.is_successful(), "setup failed: {:?}", compiled.all_errors());
+    drop(compiled);
+    recorder.clear();
+
+    let (compiled, _) = pipeline.compile(&mut db);
+    assert!(compiled.is_successful(), "{:?}", compiled.all_errors());
+    drop(compiled);
+
+    let executed = recorder.take();
+    assert!(
+        executed.is_empty(),
+        "an unchanged recompile of a world with consts ran {:?}",
+        executed.iter().map(|q| q.query.C()).collect::<Vec<_>>(),
+    );
+}
+
 /// Adding a module leaves the modules it cannot reach alone.
 ///
 /// This is what `reachable_func_ids` buys: handing every module the whole

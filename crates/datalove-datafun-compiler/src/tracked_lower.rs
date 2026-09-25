@@ -1253,6 +1253,15 @@ pub fn evaluate_all_module_consts<'db>(
             }
         }
 
+        // Sorted, because the module-level ones above were read out of a
+        // `HashMap` and this ends up in `lower_module`'s memo key. Two freshly
+        // built `HashMap`s do not iterate the same way even in one process --
+        // `RandomState::new` increments a per-thread counter, so every map
+        // instance hashes differently -- so an unchanged recompile was handing
+        // `lower_module` a key it had never seen and re-assembling the modules
+        // that declare consts. Nothing downstream reads this in order.
+        consts.sort_by(|a, b| a.0.cmp(&b.0));
+
         if !consts.is_empty() || !errors.is_empty() {
             result.insert(*module_id, ModulePreResolvedConsts::with_errors(*module_id, consts, errors));
         }
