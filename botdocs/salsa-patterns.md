@@ -57,6 +57,45 @@ measure. If you take it on, do it as an experiment on one struct: find a
 consumer that reads a strict subset of the fields, and measure whether an edit
 to an unread field still invalidates it. Do not sweep all 53 on theory.
 
+### Where the line is: coarse structs track, fine ones do not
+
+The two questions -- should this be a tracked struct, and should its fields be
+`#[tracked]` -- are the same question asked about granularity, and both were
+measured on the same pair of AST types.
+
+**A tracked field is a dependency edge per read.** Validating a memo means
+walking its edges, so the cost of an edit is proportional to how many edges the
+whole program's memos hold, not to what changed. `ExprFun` was a tracked struct
+per *expression* with a tracked field, which in a 512-module world is on the
+order of a hundred thousand edges. Profiling an edit there, 44% of it was
+`salsa::Table::get_raw::<Value<ExprFun>>` and another 15% was `verify_memo`
+above it: almost none of an edit was the compiler.
+
+It bought nothing, because **every consumer was coarser than the grain**.
+`typecheck_module`, `analyze_module` and `lower_module_functions` are keyed on
+the module, so any expression changing invalidates the same consumer whichever
+expression it was. A hundred edges where one would do, all belonging to one
+reader. Untracking the field took a 512-module edit from 40ms to 15ms, and the
+win grows with the world because what it removed scaled with the program.
+
+**`StmtFun` is the opposite, and was measured too.** Its fields stay tracked, so
+its identity is `(module_id, name, local_index)` and a literal edit leaves it
+alone -- which leaves `ParsedStatements` comparing equal, which is what spares
+name resolution. That is the firewall two sections down. Untracking it was tried:
+a 512-module edit went from 16.5ms to 21.8ms and the database grew by 62MB,
+because the statements then differ on every edit and a new set of structs is
+minted each time.
+
+So the test is not "how many fields are tracked" but:
+
+> Is anything that reads this coarser than it is? If every consumer re-runs
+> whenever *any* instance changes, the grain is costing edges and saving
+> nothing.
+
+Expressions fail that test and statements pass it. There are two orders of
+magnitude more expressions than statements, which is the same thing said
+another way.
+
 ### The one that was worth it: a handle
 
 `ModuleLowered` (`datafun-compiler/src/tracked_lower.rs`) is the case the
