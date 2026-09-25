@@ -56,10 +56,31 @@ fn main() {
     let elapsed = start.elapsed();
 
     println!(
-        "{} {} recompiles in {:?} ({:?} each)",
+        "{} {} recompiles in {:?} ({:?} each), peak RSS {} MB",
         iterations,
         if edit { "edit" } else { "no-op" },
         elapsed,
         elapsed / iterations as u32,
+        peak_rss_mb(),
     );
+}
+
+/// Peak resident set, in megabytes.
+///
+/// Memoizing trades memory for time -- the module registry and the function id
+/// lookup are both held in memos now rather than rebuilt -- so a reading that
+/// does not say what it cost in memory is only half of the answer.
+fn peak_rss_mb() -> u64 {
+    std::fs::read_to_string("/proc/self/status")
+        .ok()
+        .and_then(|status| {
+            status.lines()
+                .find(|line| line.starts_with("VmHWM:"))?
+                .split_whitespace()
+                .nth(1)?
+                .parse::<u64>()
+                .ok()
+        })
+        .map(|kb| kb / 1024)
+        .unwrap_or(0)
 }
