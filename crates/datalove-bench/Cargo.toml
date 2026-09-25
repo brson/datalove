@@ -18,6 +18,8 @@ datalove-datafun-ir = { path = "../datalove-datafun-ir" }
 datalove-datafun-parser = { path = "../datalove-datafun-parser" }
 datalove-stdlib = { path = "../datalove-stdlib" }
 bct.workspace = true
+datalove-ct = { path = "../datalove-ct" }
+rmx.workspace = true
 
 [[bench]]
 name = "parallel"

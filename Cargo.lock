@@ -1400,6 +1400,7 @@ name = "datalove-bench"
 version = "0.1.0"
 dependencies = [
  "bcts",
+ "datalove-ct",
  "datalove-datafun",
  "datalove-datafun-compiler",
  "datalove-datafun-cranelift-jit",
@@ -1410,6 +1411,7 @@ dependencies = [
  "datalove-datafun-tycheck",
  "datalove-stdlib",
  "divan",
+ "rustmax 0.0.10",
 ]
 
 [[package]]
