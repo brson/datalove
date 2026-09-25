@@ -294,6 +294,65 @@ compile.
 #### What the shape closure costs, and why it is shaped as it is
 
 It is a fixpoint over the call graph -- see `close_shapes` for the rule and why
+it settles -- so it cannot be split per module and it is keyed on every module
+at once. That means the thing deciding whether an edit re-runs it is not its key
+but **what it depends on**, and the work is in what surrounds the fixpoint
+rather than in the fixpoint, which measured at a twenty-fifth of the pass.
+
+Three things, and the order they were found in is the order of how much they
+were worth:
+
+- **It does not read the IR.** `module_shape_inputs` is tracked per handle and
+  carries everything the graph-wide pass needs -- each function's declared
+  shapes, its calls that bind type parameters, its callees, and its name for the
+  error message. Reading one module's IR in the graph pass would make the
+  fixpoint depend on all of them, which is what it used to do, and then a body
+  edit anywhere re-ran the closure though no shape had moved. Memoizing the
+  extraction alone did nothing while that dependency was still taken first.
+- **The write-back asks before it writes, and is per module.**
+  `shape_closed_module` is keyed on the handle plus that module's own settled
+  shapes and the settled shapes of the functions it calls. Restricted rather
+  than given the global map, which is the trick: the global map moves whenever
+  any module's shapes do. Empty sets are dropped from both, so a module with no
+  generic near it is passed through without its IR being read.
+  `resolve_call_descriptors` returns what each call should hand over instead of
+  writing it, so `Arc::make_mut` is reached for only when the answer moved --
+  it used to copy every function in the program on any compile where a shape
+  existed anywhere.
+- **The three maps** -- placement, shapes, calls -- are keyed on
+  `(IrModuleId, FuncId)` and rebuilt whenever the pass runs. They are
+  `FxHashMap`s. This is the one place in the tree where the hasher was worth
+  changing; sweeping all of them was tried once and backed out at about 1%.
+
+`close_shapes_over_calls` no longer appears in a profile of an edit, or in
+`query_census`. On the system library, editing a module of your own went from
+3.1ms to 2.0ms across these.
+
+**A module the closure does not change keeps the handle it came in under.** A
+tracked struct's identity map belongs to the query instance that created it, so
+minting a fresh handle would give phase 5d a new key for a module whose IR is
+the same, and the graph key moves whenever a module is added. The
+`module_memo` fixtures are what catch this; they failed on precisely that
+regression while it was being built.
+
+#### What is not tracked, and what stands in the way
+
+`lower_module_graph_with_evaluator` is still a plain function, and the two
+const evaluations under it still run in full on every compile. They cannot be
+tracked as they stand, because they take a `Rc<RefCell<dyn CtfeEvaluator>>` and
+a trait object is not a memo key. The gates above mean a program with no consts
+never reaches them, which is why an unchanged recompile no longer pays for
+them; a program that does have consts still pays on every compile.
+
+`specialize_comptime_functions` has the same obstacle for the same reason: it
+evaluates a comptime function's const bindings once the instantiation is known,
+so it needs the evaluator too. `module_has_comptime_calls` gates it rather than
+memoizing it, so a program that does specialize re-specializes on every
+compile.
+
+#### What the shape closure costs, and why it is shaped as it is
+
+It is a fixpoint over the call graph -- see `close_shapes` for the rule and why
 it settles -- so it cannot be split per module and it re-runs whenever any
 module's IR moves. That part is inherent. What surrounds the fixpoint is not,
 and the three things around it were each larger than it:
