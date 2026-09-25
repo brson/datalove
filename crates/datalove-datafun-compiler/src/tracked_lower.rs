@@ -648,12 +648,15 @@ struct ShapeClosure<'db> {
 /// what it refuses. Done before anything reads a signature, because the shapes
 /// are part of one: they say what trailing arguments a call has to pass.
 ///
-/// Tracked, which is why the argument is a list of handles: it is a fixpoint
-/// over the whole call graph and so cannot be split per module, but keyed on
-/// ids it is a memo that an unchanged recompile hits instead of walking every
-/// instruction in the program again. A module whose shapes it did not move
-/// comes back out under the handle it went in under; see below for why that
-/// is not the same as minting an equal one.
+/// **This never reads the IR.** It is a fixpoint over the call graph, so it
+/// cannot be split per module and it is keyed on every module at once. That
+/// makes what it *depends on* the thing that decides whether an edit re-runs
+/// it, and it used to depend on every module's instructions -- so a body edit
+/// anywhere re-ran the whole closure even though no shape had moved. It reads
+/// `module_shape_inputs` instead, which is per module and backdates when a
+/// function's shapes and call targets come out the same, which is what an edit
+/// to a body usually does. Writing the answer back is `shape_closed_module`,
+/// also per module.
 #[salsa::tracked(returns(ref))]
 fn close_shapes_over_calls<'db>(
     db: &'db dyn salsa::Database,
@@ -661,54 +664,246 @@ fn close_shapes_over_calls<'db>(
     func_id_map: FuncIdMap<'db>,
     modules: LoweredModules<'db>,
 ) -> ShapeClosure<'db> {
-    let mut lowered_functions = ir_map(db, &modules);
-    let mut errors: HashMap<ModuleId<'db>, Vec<String>> = HashMap::new();
+    use datalove_datafun_ir::DescriptorShape;
+    use rustc_hash::FxHashMap;
 
-    close_shapes_in_place(
-        db, parsed_graph, func_id_map, &modules, &mut lowered_functions, &mut errors);
+    type Key = (IrModuleId, FuncId);
 
-    // A module the closure did not touch is handed back under the handle it
-    // came in with, rather than under a fresh one saying the same thing.
-    //
-    // That matters because a tracked struct's identity map belongs to the
-    // query instance that created it: this query is keyed on the graph, so
-    // adding a module anywhere gives it a new key, and every handle it minted
-    // would get a new id. Phase 5d is keyed on those handles, so every module
-    // in the world would assemble again. Passing the unchanged ones through
-    // leaves their ids where phase 5a put them, which is per module.
-    //
-    // `Arc::ptr_eq` is exactly the question, because the write-back above
-    // reaches for `make_mut` only when it has something to write.
-    let modules = modules.iter()
-        .map(|(module_id, incoming)| {
-            let ir = &lowered_functions[module_id];
-            if Arc::ptr_eq(ir, incoming.functions(db)) {
-                return (*module_id, *incoming);
-            }
-            (*module_id, ModuleLowered::new(db, *module_id, Arc::clone(ir)))
+    // Which `IrModuleId` each module was given, which `compute_func_id_map`
+    // assigns by position in the graph. Read off the entries rather than
+    // recomputed, and the entries are iterated rather than collected because
+    // `to_hashmap` clones every function name in the world to build a map this
+    // only walks.
+    let mut ir_module_ids: HashMap<ModuleId<'db>, IrModuleId> = HashMap::new();
+    for ((module_id, _), (ir_module_id, _)) in func_id_map.entries(db) {
+        ir_module_ids.entry(*module_id).or_insert(*ir_module_id);
+    }
+
+    // What each module puts in, out of its own memo. A module the id map does
+    // not name declares no functions, so it has nothing to put in.
+    let per_module: HashMap<ModuleId<'db>, (IrModuleId, &Vec<FunctionShapeInputs>)> = modules.iter()
+        .filter_map(|(module_id, lowered)| {
+            let ir_module_id = ir_module_ids.get(module_id).copied()?;
+            Some((*module_id, (ir_module_id, module_shape_inputs(db, *lowered, ir_module_id))))
         })
         .collect();
 
-    // Sorted by path rather than by id, so the memoized value is the same
-    // bytes from one process to the next.
-    let mut errors: Vec<(ModuleId<'db>, Vec<String>)> = errors.into_iter().collect();
-    errors.sort_by(|a, b| a.0.path(db).cmp(b.0.path(db)));
+    // Keyed on eight bytes and rebuilt whenever this runs at all, which is why
+    // the hasher was worth changing here and nowhere else.
+    let mut calls: FxHashMap<Key, Vec<(Key, Vec<DescriptorShape>)>> = FxHashMap::default();
+    let mut shapes: FxHashMap<Key, Vec<DescriptorShape>> = FxHashMap::default();
 
-    ShapeClosure { modules, errors }
+    // The natives go in first. They are not lowered units, so nothing writes an
+    // answer back to them; they are here so that a caller of one learns it has
+    // to be handed a descriptor. A native makes no calls of its own, so the
+    // closure never adds to its set and what goes in is what comes out --
+    // which is why `add_native_rider_units` can say the same thing from the
+    // signature alone and still agree.
+    for key in native_shape_keys(db, parsed_graph, func_id_map) {
+        shapes.insert(key.0, key.1);
+    }
+
+    for (ir_module_id, functions) in per_module.values() {
+        for function in functions.iter() {
+            let key = (*ir_module_id, function.func_id);
+            shapes.insert(key, function.own.clone());
+            calls.insert(key, function.calls.clone());
+        }
+    }
+
+    if let Err(growing) = datalove_datafun_ir::close_shapes(&calls, &mut shapes) {
+        let name = |key: Key| per_module.values()
+            .filter(|(ir_module_id, _)| *ir_module_id == key.0)
+            .flat_map(|(_, functions)| functions.iter())
+            .find(|function| function.func_id == key.1)
+            .map(|function| function.name.clone())
+            .unwrap_or_else(|| "?".to_string());
+        // Reported against the module the cycle runs through, or against the
+        // first there is if the growing function is a native with no module.
+        let module_id = modules.iter()
+            .map(|(module_id, _)| *module_id)
+            .find(|module_id| {
+                per_module.get(module_id)
+                    .is_some_and(|(ir_module_id, _)| *ir_module_id == growing.function.0)
+            })
+            .or_else(|| modules.first().map(|(module_id, _)| *module_id));
+        let mut errors = Vec::new();
+        if let Some(module_id) = module_id {
+            errors.push((module_id, vec![format!(
+                "`{}` calls `{}` binding its type parameter {} to `{}`, which holds \
+                 one of `{}`'s own, so every call round that cycle needs a descriptor \
+                 one level deeper than the last. `{}` would be handed `{}` and there \
+                 is no end to it",
+                name(growing.caller), name(growing.callee), growing.param, growing.bound,
+                name(growing.caller), name(growing.function), growing.shape,
+            )]));
+        }
+        return ShapeClosure { modules, errors };
+    }
+
+    // With the sets settled, hand each module the part of the answer that is
+    // about it: what its own functions carry, and what the functions it calls
+    // want of it. Restricted rather than handed the whole map, because the
+    // whole map moves whenever any module's shapes do, and then every module's
+    // apply would run again for a change it has nothing to do with.
+    //
+    // Empty sets are left out. The closure only ever adds to what a body
+    // declared, so an empty settled set means the function declared none and
+    // there is nothing to write; and a callee wanting nothing is a call whose
+    // descriptor list lowering already left empty.
+    let mut out = Vec::with_capacity(modules.len());
+    let mut errors: Vec<(ModuleId<'db>, Vec<String>)> = Vec::new();
+    for (module_id, incoming) in &modules {
+        let Some((ir_module_id, functions)) = per_module.get(module_id).copied() else {
+            out.push((*module_id, *incoming));
+            continue;
+        };
+
+        let own: Vec<(FuncId, Vec<DescriptorShape>)> = functions.iter()
+            .filter_map(|function| {
+                let settled = shapes.get(&(ir_module_id, function.func_id))?;
+                (!settled.is_empty()).then(|| (function.func_id, settled.clone()))
+            })
+            .collect();
+        let wanted: BTreeMap<Key, Vec<DescriptorShape>> = functions.iter()
+            .flat_map(|function| function.callees.iter())
+            .filter_map(|callee| {
+                let settled = shapes.get(callee)?;
+                (!settled.is_empty()).then(|| (*callee, settled.clone()))
+            })
+            .collect();
+
+        if own.is_empty() && wanted.is_empty() {
+            out.push((*module_id, *incoming));
+            continue;
+        }
+
+        let closed = shape_closed_module(
+            db, *incoming, ir_module_id, own, wanted.into_iter().collect());
+        out.push((*module_id, closed.lowered));
+        if !closed.errors.is_empty() {
+            errors.push((*module_id, closed.errors.clone()));
+        }
+    }
+
+    ShapeClosure { modules: out, errors }
+}
+
+/// One module's IR with the settled shapes written into it.
+///
+/// Per module and keyed on what that module's part of the answer is, so a
+/// module the closure did not move takes this out of a memo rather than
+/// walking its instructions. It is also the only thing here that reads the IR.
+///
+/// A module it does not change comes back under the handle it went in under,
+/// rather than under a fresh one saying the same thing: a tracked struct's
+/// identity map belongs to the query instance that created it, so minting one
+/// here would give phase 5d a new key for a module whose IR is the same.
+#[salsa::tracked(returns(ref))]
+fn shape_closed_module<'db>(
+    db: &'db dyn salsa::Database,
+    lowered: ModuleLowered<'db>,
+    ir_module_id: IrModuleId,
+    own_shapes: Vec<(FuncId, Vec<datalove_datafun_ir::DescriptorShape>)>,
+    callee_shapes: Vec<((IrModuleId, FuncId), Vec<datalove_datafun_ir::DescriptorShape>)>,
+) -> ClosedModule<'db> {
+    use datalove_datafun_ir::{CodeRef, CodeUnitContext, DescriptorShape};
+    use rustc_hash::FxHashMap;
+
+    let own_by_id: FxHashMap<FuncId, &Vec<DescriptorShape>> =
+        own_shapes.iter().map(|(func_id, shapes)| (*func_id, shapes)).collect();
+    let callees: FxHashMap<(IrModuleId, FuncId), &Vec<DescriptorShape>> =
+        callee_shapes.iter().map(|(key, shapes)| (*key, shapes)).collect();
+    let wanted = |code_ref: &CodeRef| -> Vec<DescriptorShape> {
+        let callee = match code_ref {
+            CodeRef::Module { module, id } => (*module, FuncId(id.0)),
+            CodeRef::Local(id) => (ir_module_id, FuncId(id.0)),
+            CodeRef::External { .. } => return Vec::new(),
+        };
+        callees.get(&callee).map(|shapes| (*shapes).clone()).unwrap_or_default()
+    };
+
+    let held = lowered.functions(db);
+    let mut functions: Option<ModuleLoweredFunctions> = None;
+    let mut errors = Vec::new();
+
+    for (idx, unit) in held.functions.iter().enumerate() {
+        let own: &[DescriptorShape] = own_by_id.get(&FuncId(unit.id.0))
+            .map(|shapes| shapes.as_slice())
+            .unwrap_or(&[]);
+
+        let carries = match &unit.context {
+            CodeUnitContext::Function(ctx) => ctx.descriptor_shapes != own,
+            _ => false,
+        };
+        let resolved = match datalove_datafun_ir::resolve_call_descriptors(unit, own, &wanted) {
+            Ok(resolved) => resolved,
+            Err(missing) => {
+                errors.push(format!(
+                    "`{}` hands a type parameter to a function that builds a collection \
+                     of it and was given no descriptor for `{}` to pass on",
+                    unit.name, missing,
+                ));
+                continue;
+            }
+        };
+        if !carries && resolved.is_none() {
+            continue;
+        }
+
+        // Copied only now that there is something to write. The `Arc` is shared
+        // with phase 5a's memo, so reaching for `make_mut` before knowing costs
+        // a copy of the function for nothing.
+        let functions = functions.get_or_insert_with(|| held.as_ref().clone());
+        let unit = Arc::make_mut(&mut functions.functions[idx]);
+        if let CodeUnitContext::Function(ctx) = &mut unit.context {
+            ctx.descriptor_shapes = own.to_vec();
+        }
+        if let Some(resolved) = resolved {
+            datalove_datafun_ir::write_call_descriptors(unit, resolved);
+        }
+    }
+
+    let lowered = match functions {
+        None => lowered,
+        Some(functions) => ModuleLowered::new(db, lowered.module_id(db), Arc::new(functions)),
+    };
+    ClosedModule { lowered, errors }
+}
+
+/// One module's IR after the closure, and what the closure refused in it.
+#[derive(Clone, PartialEq, Eq)]
+#[derive(salsa::SalsaValue)]
+struct ClosedModule<'db> {
+    lowered: ModuleLowered<'db>,
+    errors: Vec<String>,
 }
 
 /// What one of a module's functions puts into the shape closure.
 ///
 /// The `Vec`s are almost always empty: a function that names no type parameter
 /// builds no shape and binds none at its calls.
+///
+/// This carries everything about a function the graph-wide pass needs,
+/// including its name, so that the pass never reads the IR. That is the point
+/// of it: reading one module's IR would make the fixpoint depend on all of
+/// them, and then an edit anywhere re-runs it whether or not any shape moved.
 #[derive(Clone, PartialEq, Eq)]
 struct FunctionShapeInputs {
     /// Its id, which is also where the closure writes its answer back.
     func_id: FuncId,
+    /// Its name, for the message the closure gives when it refuses a cycle.
+    name: String,
     /// The shapes its own body builds.
     own: Vec<datalove_datafun_ir::DescriptorShape>,
     /// Its calls that bind a callee's type parameters, and to what.
     calls: Vec<((IrModuleId, FuncId), Vec<datalove_datafun_ir::DescriptorShape>)>,
+    /// Everything it calls, whether or not type parameters are bound.
+    ///
+    /// The apply step asks what each callee wants for every call, not only the
+    /// generic ones, so this is what decides which of the settled shapes reach
+    /// that module's memo key.
+    callees: Vec<(IrModuleId, FuncId)>,
 }
 
 /// One module's contribution to the shape closure, in the order its functions
@@ -734,182 +929,32 @@ fn module_shape_inputs<'db>(
                 .map(|c| c.descriptor_shapes.clone())
                 .unwrap_or_default();
             let mut calls = Vec::new();
+            let mut callees = std::collections::BTreeSet::new();
             for block in &unit.blocks {
                 for instr in &block.instructions {
                     let Some((func, type_args)) = instr.call_target() else { continue };
-                    if type_args.is_empty() {
-                        continue;
-                    }
                     let callee = match func {
                         CodeRef::Module { module, id } => (*module, FuncId(id.0)),
                         // A local reference inside a module names that module's own.
                         CodeRef::Local(id) => (ir_module_id, FuncId(id.0)),
                         CodeRef::External { .. } => continue,
                     };
+                    callees.insert(callee);
+                    if type_args.is_empty() {
+                        continue;
+                    }
                     calls.push((callee, type_args.to_vec()));
                 }
             }
-            FunctionShapeInputs { func_id: FuncId(unit.id.0), own, calls }
+            FunctionShapeInputs {
+                func_id: FuncId(unit.id.0),
+                name: unit.name.clone(),
+                own,
+                calls,
+                callees: callees.into_iter().collect(),
+            }
         })
         .collect()
-}
-
-/// The closure itself, over the maps the algorithm is written against.
-fn close_shapes_in_place<'db>(
-    db: &'db dyn salsa::Database,
-    parsed_graph: ParsedModuleGraph<'db>,
-    func_id_map: FuncIdMap<'db>,
-    modules: &LoweredModules<'db>,
-    lowered_functions: &mut HashMap<ModuleId<'db>, Arc<ModuleLoweredFunctions>>,
-    errors: &mut HashMap<ModuleId<'db>, Vec<String>>,
-) {
-    use datalove_datafun_ir::{CodeRef, DescriptorShape};
-    use rustc_hash::FxHashMap;
-
-    type Key = (IrModuleId, FuncId);
-
-    // Which `IrModuleId` each module was given, which `compute_func_id_map`
-    // assigns by position in the graph. Read off the entries rather than
-    // recomputed, and the entries are iterated rather than collected because
-    // `to_hashmap` clones every function name in the world to build a map this
-    // only walks.
-    let mut ir_module_ids: HashMap<ModuleId<'db>, IrModuleId> = HashMap::new();
-    for ((module_id, _), (ir_module_id, _)) in func_id_map.entries(db) {
-        ir_module_ids.entry(*module_id).or_insert(*ir_module_id);
-    }
-
-    // Where each lowered unit sits, so a `CodeRef` can find it and so the
-    // answers can be written back.
-    //
-    // `FxHashMap` because this is the one place in the compiler where the
-    // hasher earned changing: the key is eight bytes, there is an entry per
-    // function in the program, and all three are rebuilt on every compile that
-    // moves any module's IR. Worth 0.36ms of a 4.74ms system library edit,
-    // where sweeping the whole tree onto a faster hasher was measured at about
-    // 1% and backed out.
-    let mut placement: FxHashMap<Key, (ModuleId<'db>, usize)> = FxHashMap::default();
-    let mut calls: FxHashMap<Key, Vec<(Key, Vec<DescriptorShape>)>> = FxHashMap::default();
-    let mut shapes: FxHashMap<Key, Vec<DescriptorShape>> = FxHashMap::default();
-
-    // The natives go in first. They are not lowered units, so they are not in
-    // `placement` and nothing writes an answer back to them; they are here so
-    // that a caller of one learns it has to be handed a descriptor. A native
-    // makes no calls of its own, so the closure never adds to its set and what
-    // goes in is what comes out -- which is why `add_native_rider_units` can
-    // say the same thing from the signature alone and still agree.
-    for key in native_shape_keys(db, parsed_graph, func_id_map) {
-        shapes.insert(key.0, key.1);
-    }
-
-    for (module_id, lowered) in modules {
-        // A module the id map does not name declares no functions, so it has
-        // nothing to put in and nothing to be written back to.
-        let Some(ir_module_id) = ir_module_ids.get(module_id).copied() else {
-            continue;
-        };
-        for (idx, function) in module_shape_inputs(db, *lowered, ir_module_id).iter().enumerate() {
-            let key = (ir_module_id, function.func_id);
-            placement.insert(key, (*module_id, idx));
-            shapes.insert(key, function.own.clone());
-            calls.insert(key, function.calls.clone());
-        }
-    }
-
-    if let Err(growing) = datalove_datafun_ir::close_shapes(&calls, &mut shapes) {
-        let name = |key: Key| placement.get(&key)
-            .map(|(m, i)| lowered_functions[m].functions[*i].name.clone())
-            .unwrap_or_else(|| "?".to_string());
-        let module_id = placement.get(&growing.function).map(|(m, _)| *m)
-            .or_else(|| placement.values().next().map(|(m, _)| *m));
-        if let Some(module_id) = module_id {
-            errors.entry(module_id).or_default().push(format!(
-                "`{}` calls `{}` binding its type parameter {} to `{}`, which holds \
-                 one of `{}`'s own, so every call round that cycle needs a descriptor \
-                 one level deeper than the last. `{}` would be handed `{}` and there \
-                 is no end to it",
-                name(growing.caller), name(growing.callee), growing.param, growing.bound,
-                name(growing.caller), name(growing.function), growing.shape,
-            ));
-        }
-        return;
-    }
-
-    // Phase 5a put these in a memo, and the memo holds the other half of every
-    // `Arc` here, so `Arc::make_mut` below copies a module's whole IR the first
-    // time it is asked. Both loops therefore look before they write: a program
-    // with no type parameters settles on the shapes lowering already gave it,
-    // and copying it to write back what it says would cost more than the rest
-    // of this function.
-    for (key, shape_set) in &shapes {
-        // A native has no lowered unit to write to; its own set was settled
-        // from its signature and is stored on its `NativeContext`.
-        let Some((module_id, idx)) = placement.get(key).copied() else { continue };
-        let changes = match &lowered_functions[&module_id].functions[idx].context {
-            datalove_datafun_ir::CodeUnitContext::Function(ctx) => {
-                ctx.descriptor_shapes != *shape_set
-            }
-            _ => false,
-        };
-        if !changes {
-            continue;
-        }
-        // Two `make_mut`s: one for the module's list, one for the function in
-        // it. Both halves are shared with a memo, and the second means a module
-        // copies the function being changed rather than all of them.
-        let unit = Arc::make_mut(
-            &mut Arc::make_mut(lowered_functions.get_mut(&module_id).unwrap()).functions[idx],
-        );
-        if let datalove_datafun_ir::CodeUnitContext::Function(ctx) = &mut unit.context {
-            ctx.descriptor_shapes = shape_set.clone();
-        }
-    }
-
-    // With the sets settled, say what each call hands over. Stored rather than
-    // worked out again in each backend, so that the descriptor emitter makes a
-    // descriptor for every type named only here.
-    //
-    // With no shape anywhere, every call's `wanted` is empty, so
-    // `resolve_call_descriptors` only clears descriptor lists that lowering
-    // left empty and cannot reach the arm that reports one missing.
-    let lookup: FxHashMap<Key, Vec<DescriptorShape>> = shapes;
-    if lookup.values().all(|shapes| shapes.is_empty()) {
-        return;
-    }
-    // Asked before written, for the reason `resolve_call_descriptors` gives:
-    // these units are shared with phase 5a's memo, so writing one means copying
-    // it, and on a second compile the answer is almost always the one already
-    // there. Copying every function to write back what it said was three
-    // quarters of this pass on the system library, and it also cost every
-    // module its handle, since a copy is not `ptr_eq` to what it replaced.
-    for (key, (module_id, idx)) in &placement {
-        let own = lookup.get(key).cloned().unwrap_or_default();
-        let module_key = key.0;
-        let callee_shapes = |code_ref: &CodeRef| -> Vec<DescriptorShape> {
-            let callee = match code_ref {
-                CodeRef::Module { module, id } => (*module, FuncId(id.0)),
-                CodeRef::Local(id) => (module_key, FuncId(id.0)),
-                CodeRef::External { .. } => return Vec::new(),
-            };
-            lookup.get(&callee).cloned().unwrap_or_default()
-        };
-        let held = &lowered_functions[module_id].functions[*idx];
-        match datalove_datafun_ir::resolve_call_descriptors(held, &own, &callee_shapes) {
-            Ok(None) => {}
-            Ok(Some(resolved)) => {
-                let unit = Arc::make_mut(
-                    &mut Arc::make_mut(lowered_functions.get_mut(module_id).unwrap()).functions[*idx],
-                );
-                datalove_datafun_ir::write_call_descriptors(unit, resolved);
-            }
-            Err(missing) => {
-                errors.entry(*module_id).or_default().push(format!(
-                    "`{}` hands a type parameter to a function that builds a collection \
-                     of it and was given no descriptor for `{}` to pass on",
-                    held.name, missing,
-                ));
-            }
-        }
-    }
 }
 
 /// What lowering one module's functions produced.

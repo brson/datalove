@@ -34,7 +34,11 @@ pub struct ParamId(pub u32);
 pub struct BlockId(pub u32);
 
 /// Globally unique function identifier within a compilation context.
-#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
+///
+/// Ordered, like its two neighbours here and unlike a `salsa::Id`: this is a
+/// position assigned from source order, so sorting by it is deterministic and
+/// means something.
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize)]
 #[derive(salsa::SalsaValue)]
 pub struct FuncId(pub u32);
 
