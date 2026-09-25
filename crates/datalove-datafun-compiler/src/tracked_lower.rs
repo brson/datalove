@@ -41,6 +41,30 @@ pub struct FuncIdMap<'db> {
     pub entries: Vec<((ModuleId<'db>, String), (IrModuleId, FuncId))>,
 }
 
+/// `FuncIdMap`'s entries in a form that can be looked up in.
+pub type FuncIdLookup<'db> = HashMap<(ModuleId<'db>, String), (IrModuleId, FuncId)>;
+
+/// The lookup form of a `FuncIdMap`.
+///
+/// Building it means `to_hashmap`, which clones every function name in the
+/// world. It used to be built once per const binding evaluated, and on the
+/// system library that was most of what an unchanged recompile cost.
+///
+/// Tracked, because what it is keyed on is a tracked struct whose identity is
+/// its entries: it only has to be built again when the set of functions in the
+/// world changes, which an edit to a body does not do. So a recompile gets it
+/// for a memo hit rather than for a clone of every name.
+///
+/// Asked for past phase 5's gates rather than up front, so that a program with
+/// no const and no const parameter never builds it at all.
+#[salsa::tracked(returns(ref))]
+pub fn func_id_lookup<'db>(
+    db: &'db dyn salsa::Database,
+    func_id_map: FuncIdMap<'db>,
+) -> FuncIdLookup<'db> {
+    func_id_map.to_hashmap(db)
+}
+
 impl<'db> FuncIdMap<'db> {
     /// Look up a function's IR location by module and name.
     pub fn get(&self, db: &'db dyn salsa::Database, module_id: ModuleId<'db>, func_name: &str) -> Option<(IrModuleId, FuncId)> {
@@ -570,7 +594,19 @@ fn native_shape_keys<'db>(
 ) -> Vec<((IrModuleId, FuncId), Vec<datalove_datafun_ir::DescriptorShape>)> {
     use datalove_datafun_ir::DescriptorShape;
 
-    let ids = func_id_map.to_hashmap(db);
+    // Only the riders' entries. `to_hashmap` would clone every function name in
+    // the world to answer a handful of lookups, and this runs whenever the
+    // shape closure does.
+    let rider_modules: std::collections::BTreeSet<ModuleId<'db>> = parsed_graph.resolved_riders(db)
+        .values()
+        .flat_map(|riders| riders.iter().map(|(_, rider)| rider.module_id))
+        .collect();
+    let ids: HashMap<(ModuleId<'db>, &'db str), (IrModuleId, FuncId)> = func_id_map.entries(db)
+        .iter()
+        .filter(|((module_id, _), _)| rider_modules.contains(module_id))
+        .map(|((module_id, name), location)| ((*module_id, name.as_str()), *location))
+        .collect();
+
     let mut found = Vec::new();
     for (_module_id, riders) in parsed_graph.resolved_riders(db).iter() {
         for (_alias, rider) in riders {
@@ -578,7 +614,7 @@ fn native_shape_keys<'db>(
                 if generics.undetermined.is_empty() {
                     continue;
                 }
-                let key = (rider.module_id, func_name.text(db).S());
+                let key = (rider.module_id, func_name.text(db).as_str());
                 let Some(&(ir_module_id, func_id)) = ids.get(&key) else { continue };
                 let shapes = generics.undetermined.iter()
                     .map(|i| DescriptorShape::Param(*i)).collect();
@@ -1133,7 +1169,7 @@ pub fn evaluate_all_module_consts<'db>(
     typecheck_result: ModuleGraphTypecheckResult<'db>,
     evaluator: Rc<RefCell<dyn CtfeEvaluator>>,
     lowered_functions: &HashMap<ModuleId<'db>, Arc<ModuleLoweredFunctions>>,
-    func_id_map: FuncIdMap<'db>,
+    func_id_map: &FuncIdLookup<'db>,
     module_consts: &HashMap<ModuleId<'db>, HashMap<String, (IrType, ConstValue)>>,
 ) -> HashMap<ModuleId<'db>, ModulePreResolvedConsts<'db>> {
     let typecheck_module_results = typecheck_result.module_results(db);
@@ -1271,7 +1307,7 @@ fn evaluate_module_level_consts<'db>(
     typecheck_result: ModuleGraphTypecheckResult<'db>,
     evaluator: &Rc<RefCell<dyn CtfeEvaluator>>,
     lowered_functions: &HashMap<ModuleId<'db>, Arc<ModuleLoweredFunctions>>,
-    func_id_map: FuncIdMap<'db>,
+    func_id_map: &FuncIdLookup<'db>,
     errors_out: &mut HashMap<ModuleId<'db>, Vec<String>>,
 ) -> HashMap<ModuleId<'db>, HashMap<String, (IrType, ConstValue)>> {
     let typecheck_module_results = typecheck_result.module_results(db);
@@ -1327,7 +1363,7 @@ fn evaluate_single_const<'db>(
     lowered_functions: &[Arc<IrCodeUnit>],
     func_name_to_id: &HashMap<String, FuncId>,
     func_return_type: Option<IrType>,
-    func_id_map: FuncIdMap<'db>,
+    func_id_map: &FuncIdLookup<'db>,
     // Names whose value this function does not have one of: its const
     // parameters, and the consts already deferred for naming one.
     deferred: &std::collections::BTreeSet<String>,
@@ -1342,8 +1378,6 @@ fn evaluate_single_const<'db>(
     };
 
     // Lower the const binding using the "lower then evaluate" pattern.
-    // Convert the tracked FuncIdMap to a HashMap for lowering.
-    let func_id_map_hashmap = func_id_map.to_hashmap(db);
     let lowered = lower::lower_const_binding(
         db,
         init_expr,
@@ -1354,7 +1388,7 @@ fn evaluate_single_const<'db>(
         func_return_type,
         lowered_functions,
         func_name_to_id,
-        Some(&func_id_map_hashmap),
+        Some(func_id_map),
     );
     let (unit_opt, value_opt) = match lowered {
         Ok(pair) => pair,
@@ -1463,11 +1497,11 @@ pub fn lower_module_graph_with_evaluator<'db>(
         HashMap::new()
     } else {
         let lowered_functions = ir_map(db_salsa, &lowered_modules);
-        let func_id_hashmap = func_id_map.to_hashmap(db_salsa);
-        let module_registry = build_module_registry_from_lowered(&lowered_functions, &func_id_hashmap);
+        let func_ids = func_id_lookup(db_salsa, func_id_map);
+        let module_registry = build_module_registry_from_lowered(&lowered_functions, func_ids);
         evaluator.borrow_mut().set_module_registry(module_registry);
         evaluate_module_level_consts(
-            db_salsa, parsed_graph, typecheck_result, &evaluator, &lowered_functions, func_id_map,
+            db_salsa, parsed_graph, typecheck_result, &evaluator, &lowered_functions, func_ids,
             &mut module_const_errors,
         )
     };
@@ -1516,11 +1550,11 @@ pub fn lower_module_graph_with_evaluator<'db>(
     } else {
         // Build a module registry from lowered functions for cross-module CTFE calls.
         let lowered_functions = ir_map(db_salsa, &lowered_modules);
-        let func_id_hashmap = func_id_map.to_hashmap(db_salsa);
-        let module_registry = build_module_registry_from_lowered(&lowered_functions, &func_id_hashmap);
+        let func_ids = func_id_lookup(db_salsa, func_id_map);
+        let module_registry = build_module_registry_from_lowered(&lowered_functions, func_ids);
         evaluator.borrow_mut().set_module_registry(module_registry);
 
-        evaluate_all_module_consts(db_salsa, parsed_graph, typecheck_result, evaluator.clone(), &lowered_functions, func_id_map, &module_consts)
+        evaluate_all_module_consts(db_salsa, parsed_graph, typecheck_result, evaluator.clone(), &lowered_functions, func_ids, &module_consts)
     };
 
     // Module const failures have to reach the lowering result, or a module
@@ -1658,7 +1692,7 @@ fn evaluate_instantiation_consts<'db>(
     evaluator: &Rc<RefCell<dyn CtfeEvaluator>>,
     lowered: &[Arc<IrCodeUnit>],
     func_name_to_id: &HashMap<String, FuncId>,
-    func_id_map: FuncIdMap<'db>,
+    func_id_map: &FuncIdLookup<'db>,
     module_level: &HashMap<String, (IrType, ConstValue)>,
     comptime_param_indices: &[usize],
     values: &[ConstValue],
@@ -1751,7 +1785,7 @@ fn specialize_module_graph<'db>(
     }
 
     let (lowered_functions, errors) = specialize_comptime_functions(
-        db, parsed_graph, typecheck_result, evaluator, func_id_map,
+        db, parsed_graph, typecheck_result, evaluator, func_id_lookup(db, func_id_map),
         module_consts, ir_map(db, &modules),
     );
 
@@ -1780,7 +1814,7 @@ fn specialize_comptime_functions<'db>(
     parsed_graph: ParsedModuleGraph<'db>,
     typecheck_result: ModuleGraphTypecheckResult<'db>,
     evaluator: &Rc<RefCell<dyn CtfeEvaluator>>,
-    func_id_map: FuncIdMap<'db>,
+    func_id_map: &FuncIdLookup<'db>,
     module_consts: &HashMap<ModuleId<'db>, HashMap<String, (IrType, ConstValue)>>,
     mut lowered_functions: HashMap<ModuleId<'db>, Arc<ModuleLoweredFunctions>>,
 ) -> (HashMap<ModuleId<'db>, Arc<ModuleLoweredFunctions>>, Vec<(ModuleId<'db>, Vec<String>)>) {
