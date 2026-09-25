@@ -47,7 +47,7 @@ all it is an interned struct with extra steps: creating one hashes everything it
 holds, and any change to any field yields a different struct, so a consumer that
 reads one field is invalidated by a change to another.
 
-**In this codebase, 53 of 58 tracked structs have no `#[tracked]` field.**
+**In this codebase, 53 of 59 tracked structs have no `#[tracked]` field.**
 `SingleModuleTypecheckResult` has nine fields and none of them are tracked, so
 its identity is a hash of the whole type table.
 
@@ -56,6 +56,33 @@ compiles, passes the suite, and changed nothing the `module_memo` fixtures
 measure. If you take it on, do it as an experiment on one struct: find a
 consumer that reads a strict subset of the fields, and measure whether an edit
 to an unread field still invalidates it. Do not sweep all 53 on theory.
+
+### The one that was worth it: a handle
+
+`ModuleLowered` (`datafun-compiler/src/tracked_lower.rs`) is the case the
+distinction was made for. It has one untracked field, a `ModuleId`, and one
+`#[tracked]` field holding a module's whole lowered IR. So its *identity* is a
+module's, and the IR rides along behind a dependency edge of its own.
+
+That is what a handle is for: phase 5's passes are functions of the whole
+program's IR, and before this they took it by value, so keying a query on one
+meant hashing every instruction in the program. `lower_module` was paying that
+on every compile, and it was around a tenth of an unchanged recompile. Under
+handles the key is a list of ids, and the unchanged recompile of a 32-module
+world went from 2.0ms to 0.24ms.
+
+Two things to know before reaching for the same trick:
+
+- **A tracked struct's identity map belongs to the query instance that created
+  it.** Two calls of the same query with different arguments that each mint a
+  handle for module `m` mint two different handles. So a graph-keyed query that
+  re-mints everything invalidates every consumer as soon as a module is added
+  anywhere. `close_shapes_over_calls` hands a module back under the handle it
+  came in under when it did not change it, for exactly this reason.
+- **Backdating on the tracked field wants pointer equality to be meaningful.**
+  `Arc<T>: PartialEq` short-circuits on `ptr_eq` when `T: Eq`, so a pass that
+  only replaces what it rewrites gets the comparison for free; one that rebuilds
+  everything to write one field pays a deep compare and gets no backdating.
 
 ## Never store a salsa `Id`. Use a key of your own
 

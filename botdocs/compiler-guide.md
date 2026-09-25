@@ -168,7 +168,7 @@ There is no implicit conversion between the two families; see
 
 ### Phase 5: IR Lowering Detail
 
-Lowering has three internal phases that handle const evaluation correctly:
+Lowering has four internal phases that handle const evaluation correctly:
 
 ```
 Phase 5a: Lower all functions
@@ -182,7 +182,12 @@ Phase 5b: Evaluate consts
     |   Function-level consts qualified as "func_name::const_name"
     v   Output: HashMap<ModuleId, ModulePreResolvedConsts>
     |
-Phase 5c: Assemble modules
+Phase 5c: Specialize comptime functions
+    |   specialize_comptime_functions (non-tracked)
+    |   One copy of a callee per instantiation; see below
+    v   Output: the lowered IR, with the copies in it
+    |
+Phase 5d: Assemble modules
     |   lower_module [tracked]
     |   Reuses pre-lowered functions
     |   Inlines evaluated const values
@@ -197,39 +202,80 @@ Why this structure:
 Both tracked phases key on the module, so an edit lowers the module that
 changed. What makes that hold is the arguments: `reachable_func_ids` gives each
 one the entries it can actually call rather than the whole world's, and the IR
-travels as an `Arc` so neither phase copies a module to hand it on. The
-`incremental_lowering` tests assert the property directly.
+travels under a handle so neither phase copies a module to hand it on, or
+hashes one to look it up. The `incremental_lowering` tests assert the property
+directly.
+
+#### `ModuleLowered`, the handle the phase passes around
+
+Phase 5a hands back a `ModuleLowered` per module rather than the IR. It is a
+tracked struct with one untracked field, the `ModuleId`, and one `#[tracked]`
+field holding `Arc<ModuleLoweredFunctions>`. A tracked struct's identity is a
+hash of its untracked fields, so a handle's identity is a module's, and passing
+one to a query costs a word. The IR is read through the tracked field's own
+dependency edge, so a consumer still re-runs when the IR moves and still
+backdates when it does not.
+
+That is what lets the passes between 5a and 5d be memoized at all. They are
+functions of the whole program's IR, and keying a query on the IR itself meant
+hashing every instruction to answer it -- which `lower_module` was paying, at
+around a tenth of an unchanged recompile.
+
+```
+lower_module_functions [tracked]  ->  ModuleLowered per module
+close_shapes_over_calls [tracked] ->  ModuleLowered per module, + shape errors
+merge_module_strata [tracked]     ->  one ModuleLowered from the two strata
+specialized_module [tracked]      ->  ModuleLowered for phase 5c's rewrite
+lower_module [tracked]            ->  takes the handle, not the IR
+```
+
+**A handle is passed through, not re-minted, when its module did not change.**
+A tracked struct's identity map belongs to the query instance that created it.
+`close_shapes_over_calls` is keyed on the graph, so adding a module anywhere
+gives it a new key, and every handle it minted there would get a new id --
+which phase 5d is keyed on, so every module in the world would assemble again.
+It therefore hands a module back under the handle it came in under whenever the
+closure did not write to it, which `Arc::ptr_eq` answers exactly, since the
+write-back reaches for `make_mut` only when it has something to write. The
+`module_memo` fixtures are what catch this; they failed on precisely that
+regression while it was being built.
+
+**Phase 5c is gated on a memoized question.** `module_has_comptime_calls` is a
+tracked query per handle, and a program where no module makes one skips
+specialization without reading an instruction. Working out the plan otherwise
+means walking every function of every module on every compile.
+
+**Phase 5b is gated the same way.** `graph_declares_consts` is tracked on the
+parsed graph; a program with no `const` anywhere has nothing for CTFE to
+evaluate, and the module registry built to have CTFE on hand is not free.
 
 #### What is not tracked, and what stands in the way
 
-`lower_module_graph_with_evaluator` is a plain function. 5a and 5d are
-memoized under it; the passes between them are not, and run in full on every
-compile including one where nothing was edited -- `close_shapes_over_calls`
-twice, the two const evaluations, and `specialize_comptime_functions`. On a
-32-module world that driver is most of what an unchanged recompile costs.
+`lower_module_graph_with_evaluator` is still a plain function, and the two
+const evaluations under it still run in full on every compile. They cannot be
+tracked as they stand, because they take a `Rc<RefCell<dyn CtfeEvaluator>>` and
+a trait object is not a memo key. The gates above mean a program with no consts
+never reaches them, which is why an unchanged recompile no longer pays for
+them; a program that does have consts still pays on every compile.
 
-The const evaluations cannot be tracked as they stand, because they take a
-`Rc<RefCell<dyn CtfeEvaluator>>` and a trait object is not a memo key.
+`specialize_comptime_functions` has the same obstacle for the same reason: it
+evaluates a comptime function's const bindings once the instantiation is known,
+so it needs the evaluator too. `module_has_comptime_calls` gates it rather than
+memoizing it, so a program that does specialize re-specializes on every
+compile.
 
-`close_shapes_over_calls` and `specialize_comptime_functions` are pure
-functions of the lowered IR, so the obstacle there is different and worth
-naming, because it also sets what `lower_module` costs. Both take
-`HashMap<ModuleId, Arc<ModuleLoweredFunctions>>`, which is the whole program's
-IR by value. Keying a query on that means hashing every instruction to answer
-it. `lower_module` already pays this: it takes the post-shape, post-
-specialization functions as an argument, so its memo key holds a module's IR
-and hashing those keys is around a tenth of an unchanged recompile.
+The shape closure is memoized but is one query over the whole call graph, so
+any edit anywhere re-runs it over every instruction in the program. Splitting
+the per-module extraction -- the walk that collects a function's own shapes and
+its call sites -- into a query per handle would leave only the fixpoint, which
+is over a graph of function ids rather than of instructions. That is the next
+thing to do here if edit latency matters more than the recompile floor.
 
-The way out is for phase 5a to hand back a tracked struct per module rather
-than a plain value. A map of those is a map of ids, cheap to hash, and then
-the shape closure and specialization can be tracked queries over it and
-`lower_module` can take an id instead of the IR. That is a redesign of the
-phase rather than an annotation: tracked structs are immutable, and both
-passes currently mutate the functions in place.
-
-The `skip_const_inlining` flag skips phases 5a and 5b entirely, lowering const bindings as
-let bindings. Used for testing CTFE accuracy. Callers of the high-level pipeline set
-`CompilerOptions::const_inlining`.
+The `skip_const_inlining` flag skips phase 5b and the inlining phase 5d does after it,
+lowering const bindings as let bindings. Phase 5a still runs: a module-level const is
+resolved where its reference is lowered rather than by a later pass, so there is nothing
+there for the flag to skip. Used for testing CTFE accuracy. Callers of the high-level
+pipeline set `CompilerOptions::const_inlining`.
 
 ### Const Parameter Specialization
 
