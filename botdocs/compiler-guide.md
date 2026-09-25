@@ -223,6 +223,7 @@ around a tenth of an unchanged recompile.
 
 ```
 lower_module_functions [tracked]  ->  ModuleLowered per module
+module_shape_inputs [tracked]     ->  one module's part of the call graph
 close_shapes_over_calls [tracked] ->  ModuleLowered per module, + shape errors
 merge_module_strata [tracked]     ->  one ModuleLowered from the two strata
 specialized_module [tracked]      ->  ModuleLowered for phase 5c's rewrite
@@ -264,12 +265,36 @@ so it needs the evaluator too. `module_has_comptime_calls` gates it rather than
 memoizing it, so a program that does specialize re-specializes on every
 compile.
 
-The shape closure is memoized but is one query over the whole call graph, so
-any edit anywhere re-runs it over every instruction in the program. Splitting
-the per-module extraction -- the walk that collects a function's own shapes and
-its call sites -- into a query per handle would leave only the fixpoint, which
-is over a graph of function ids rather than of instructions. That is the next
-thing to do here if edit latency matters more than the recompile floor.
+#### What the shape closure costs, and why it is shaped as it is
+
+It is a fixpoint over the call graph -- see `close_shapes` for the rule and why
+it settles -- so it cannot be split per module and it re-runs whenever any
+module's IR moves. That part is inherent. What surrounds the fixpoint is not,
+and the three things around it were each larger than it:
+
+- **Reading the call graph out of the IR** is per function and per module, so
+  it is `module_shape_inputs`, tracked on the handle. An edit re-reads one
+  module and takes the rest out of a memo.
+- **The write-back asks before it writes.** `resolve_call_descriptors` returns
+  what each call should hand over rather than writing it, and the module path
+  reaches for `Arc::make_mut` only when the answer moved. It used to copy every
+  function in the program on every compile where any shape existed anywhere,
+  which is also why the handle pass-through never fired for a program with a
+  generic in it. `set_call_descriptors` keeps the write-through behaviour for
+  the script paths, which own their units.
+- **The three maps** -- placement, shapes, calls -- are keyed on
+  `(IrModuleId, FuncId)` and rebuilt whole, one entry per function. They are
+  `FxHashMap`s. This is the one place in the tree where the hasher was worth
+  changing; sweeping all of them was tried once and backed out at about 1%.
+
+On a system library edit the pass went from 27% of the compile to under half
+that, and the fixpoint itself was a twenty-fifth of the original.
+
+What is left is the apply step, which still *reads* every unit on every compile
+that moves any module. Making it a query per module means keying it on that
+module's settled shapes and its callees' rather than on the global map -- hand
+it the global map and every module's key moves whenever any module's shapes do,
+which is the problem it was meant to solve.
 
 The `skip_const_inlining` flag skips phase 5b and the inlining phase 5d does after it,
 lowering const bindings as let bindings. Phase 5a still runs: a module-level const is
