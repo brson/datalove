@@ -512,7 +512,6 @@ pub struct ExprFun<'db> {
     /// Sequential index within the function (identity key).
     #[returns(copy)]
     pub local_index: u32,
-    #[tracked]
     #[returns(clone)]
     pub expr: ExprFunKind<'db>,
 }
