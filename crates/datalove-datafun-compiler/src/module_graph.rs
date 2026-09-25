@@ -295,9 +295,9 @@ mod tests {
 
     impl Clone for LoggingDatabase {
         fn clone(&self) -> Self {
-            // Clone storage to share memoization cache (Arc<Zalsa>).
-            // Event handler on clones won't log to our events vec, but that's ok -
-            // we only care about events on the main db.
+            // Clone storage to share memoization cache (Arc<Zalsa>). The event
+            // callback lives on that shared `Zalsa`, so a clone's queries are
+            // logged to the same vec, whichever thread runs them.
             Self {
                 storage: self.storage.clone(),
                 events: self.events.clone(),
@@ -1256,27 +1256,34 @@ mod tests {
             executed.len(), resolve_queries.len());
     }
 
+    /// A clone shares the memo cache, and its queries reach the same event log.
+    ///
+    /// This used to parse on the original first and then check nothing, which
+    /// made the clone's parse a cache hit with nothing left to see. It ended in
+    /// an `eprintln!`. The order is the other way round now: the clone does the
+    /// work and the original is what is asked about.
     #[test]
-    fn test_logging_db_clone_works() {
-        // Test that LoggingDatabase clone shares memoization cache.
+    fn test_clone_shares_cache_and_event_log() {
         let db = LoggingDatabase::new();
         let (graph, _ids) = build_graph_logging(&db, &[("a", "let x = 1")]);
 
-        // Parse with original db.
-        let _parsed1 = parse_module_graph(&db, graph.clone(), BTreeMap::new(), Vec::new());
-        let first_queries = db.executed_queries();
-        assert!(!first_queries.is_empty(), "first parse should execute queries");
+        // Parse on a clone, with the original's log watching.
         db.clear_events();
-
-        // Clone the db and parse with clone.
         let db_clone = db.clone();
-        let _parsed2 = parse_module_graph(&db_clone, graph.clone(), BTreeMap::new(), Vec::new());
+        let _parsed = parse_module_graph(&db_clone, graph.clone(), BTreeMap::new(), Vec::new());
+        assert!(
+            !db.executed_queries().is_empty(),
+            "a clone's queries have to reach the log the original reads",
+        );
 
-        // Check if original db sees the clone's work as cached.
+        // And the original finds that work already done.
         db.clear_events();
-        let _parsed3 = parse_module_graph(&db, graph, BTreeMap::new(), Vec::new());
-        let third_queries = db.executed_queries();
-        eprintln!("Third parse queries: {:?}", third_queries);
+        let _parsed = parse_module_graph(&db, graph, BTreeMap::new(), Vec::new());
+        assert!(
+            db.executed_queries().is_empty(),
+            "the original should see the clone's work as cached, but ran {:?}",
+            db.executed_queries(),
+        );
     }
 
     #[test]
@@ -1389,10 +1396,8 @@ mod tests {
 
     #[test]
     fn test_parallel_typecheck_is_memoized() {
-        // Verify that parallel typechecking warms the cache correctly.
-        // Note: Salsa events from worker threads aren't captured by LoggingDatabase,
-        // so we verify memoization by checking that sequential typecheck after parallel
-        // is fully cached (proving the parallel phase warmed the cache).
+        // Verify that parallel typechecking warms the cache correctly: a
+        // sequential run after it executes nothing.
         let db = LoggingDatabase::new();
 
         // Create multiple modules.
@@ -1500,11 +1505,27 @@ mod tests {
         assert!(result_par.is_ok(&db2), "parallel should succeed");
     }
 
+    /// An edit under the parallel path re-typechecks the module that changed.
+    ///
+    /// Both runs used to call the *sequential* path, so the test did not test
+    /// what it is named for. It went that way because `query_log` is
+    /// thread-local and cannot see what rayon ran. `QueryRecorder` listens for
+    /// salsa's own `WillExecute`, and salsa's event callback lives on the
+    /// `Zalsa` a database clone shares, so a worker's queries are recorded like
+    /// any other.
+    ///
+    /// Counted rather than attributed: `typecheck_module` takes six arguments,
+    /// so salsa keys it on an interned tuple whose id names no module.
     #[test]
     fn test_parallel_typecheck_per_module_caching() {
-        // Verify that parallel typechecking respects per-module caching.
-        // Uses the query_log infrastructure which captures log_query calls inside functions.
-        let mut db = Database::default();
+        use datalove_ct::query_events::{ExecutedQuery, QueryRecorder};
+
+        fn typechecked(executed: &[ExecutedQuery]) -> usize {
+            executed.iter().filter(|q| q.query == "typecheck_module").count()
+        }
+
+        let recorder = QueryRecorder::new();
+        let mut db = Database::recording(&recorder);
 
         // Create modules with mutable sources.
         let source_b = bct::input::Source::new(&db, "fun helper(): i32\n  ret 1\nend fun".to_string());
@@ -1523,34 +1544,27 @@ mod tests {
             (builder.build(), requires)
         }
 
-        // First run with sequential to establish baseline (parallel doesn't log queries).
+        // First run: both modules are cold, so both typecheck. Without this the
+        // assertion below would pass on a run that typechecked nothing.
         let (graph, requires) = build(&db, source_a, source_b);
         let parsed1 = parse_module_graph(&db, graph.clone(), requires.clone(), Vec::new());
-        enable_query_logging();
-        let _result1 = resolve_and_typecheck(&db, parsed1);
-        let log1 = disable_query_logging();
-
-        let first_tc = get_executed_modules(&log1, "typecheck");
-        eprintln!("First run typechecked: {:?}", first_tc);
-        assert_eq!(first_tc.len(), 2, "first run should typecheck both modules");
+        recorder.clear();
+        let _result1 = resolve_and_typecheck_parallel(&db, parsed1);
+        assert_eq!(
+            typechecked(&recorder.take()), 2,
+            "a first run has to typecheck both modules",
+        );
 
         // Mutate only B's source.
         source_b.set_text(&mut db).to("fun helper(): i32\n  ret 999\nend fun".to_string());
 
-        // Second run with parallel: only B should re-typecheck.
-        // Using sequential typecheck for verification since parallel doesn't log to query_log.
         let (graph, requires) = build(&db, source_a, source_b);
         let parsed2 = parse_module_graph(&db, graph, requires, Vec::new());
-        enable_query_logging();
-        let _result2 = resolve_and_typecheck(&db, parsed2);
-        let log2 = disable_query_logging();
-
-        let second_tc = get_executed_modules(&log2, "typecheck");
-        eprintln!("Second run typechecked: {:?}", second_tc);
-
-        // Per-module caching: only B should re-typecheck.
-        assert_eq!(second_tc.len(), 1, "only changed module should re-typecheck");
-        assert!(second_tc.contains(&"b".to_string()), "b should re-typecheck");
-        assert!(!second_tc.contains(&"a".to_string()), "a should be cached");
+        recorder.clear();
+        let _result2 = resolve_and_typecheck_parallel(&db, parsed2);
+        assert_eq!(
+            typechecked(&recorder.take()), 1,
+            "one module changed, so one module typechecks",
+        );
     }
 }
