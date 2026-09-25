@@ -146,4 +146,14 @@ fn adding_a_module_does_not_relower_the_others() {
         "only the new module should lower; ran {:?}",
         executed.iter().map(|q| q.query.C()).collect::<Vec<_>>(),
     );
+    // And phase 5d follows it. This is the property that fails if the shape
+    // closure mints a fresh `ModuleLowered` for every module rather than
+    // handing the untouched ones back: the closure is keyed on the graph, so a
+    // ninth module gives it a new key, and a new key means new handles for all
+    // nine -- which this query is keyed on.
+    assert_eq!(
+        ran(&executed, "lower_module"),
+        1,
+        "and only the new module should be assembled",
+    );
 }

@@ -299,8 +299,9 @@ impl<'db> ModuleGraphLoweringResult<'db> {
 /// If `pre_resolved_consts` is provided, those values are used for function-level
 /// const inlining (when `skip_const_inlining` is false).
 ///
-/// If `lowered_functions` is provided, those functions are reused instead of
-/// being re-lowered from the AST.
+/// If `lowered` is provided, those functions are reused instead of being
+/// re-lowered from the AST. It arrives as a handle rather than as the IR, so
+/// this query's memo key holds a word rather than a module's instructions.
 ///
 /// Requires pre-computed ownership analysis results. Functions with ownership analysis
 /// errors are skipped (but those errors are already captured in the ownership
@@ -316,7 +317,7 @@ pub fn lower_module<'db>(
     func_ids: ReachableFuncIds<'db>,
     pre_resolved_consts: Option<ModulePreResolvedConsts<'db>>,
     skip_const_inlining: bool,
-    lowered_functions: Option<Arc<ModuleLoweredFunctions>>,
+    lowered: Option<ModuleLowered<'db>>,
 ) -> SingleModuleLoweringResult<'db> {
     let module_id = module.id(db);
     let module_path = module_id.path(db);
@@ -373,8 +374,8 @@ pub fn lower_module<'db>(
         .unwrap_or_default();
 
     // If lowered functions are provided, use them directly.
-    if let Some(ref lf) = lowered_functions {
-        functions = lf.functions.clone();
+    if let Some(lowered) = lowered {
+        functions = lowered.functions(db).functions.clone();
         // func_ids was already computed above, and should match lf.func_name_to_id.
     } else {
         // Lower functions from scratch.
@@ -476,6 +477,53 @@ pub struct ModuleLoweredFunctions {
     pub func_name_to_id: Vec<(String, FuncId)>,
 }
 
+/// A handle to one module's lowered IR.
+///
+/// The point of it is the `#[tracked]` field. A tracked struct's identity is a
+/// hash of its *untracked* fields, so this one's identity is a module's, and
+/// passing it to a query costs a word rather than a hash of every instruction
+/// the module holds. The IR itself is read through its own dependency edge, so
+/// a consumer still re-runs when the IR changes and still backdates when it
+/// does not.
+///
+/// That is what phase 5a's passes are keyed on. Before this they took
+/// `HashMap<ModuleId, Arc<ModuleLoweredFunctions>>` by value, which meant
+/// hashing the whole program's IR to answer a memo, and hashing it was around
+/// a tenth of what an unchanged recompile cost.
+#[salsa::tracked]
+pub struct ModuleLowered<'db> {
+    /// The module this is the IR of. Untracked, so it is the identity.
+    #[returns(copy)]
+    pub module_id: ModuleId<'db>,
+
+    /// The IR. Tracked, so it may change without the handle changing.
+    #[tracked]
+    #[returns(ref)]
+    pub functions: Arc<ModuleLoweredFunctions>,
+}
+
+impl<'db> ModuleLowered<'db> {
+    /// The IR as an `Arc`, for the plain passes that still take a map of them.
+    fn ir(self, db: &'db dyn salsa::Database) -> Arc<ModuleLoweredFunctions> {
+        Arc::clone(self.functions(db))
+    }
+}
+
+/// The lowered IR of every module, in graph order.
+///
+/// A `Vec` of handles rather than a map, because it is a memo key and has to
+/// hash the same way twice; graph order is the order `IrModuleId`s are
+/// assigned in, so it is the order everything else here walks modules in.
+type LoweredModules<'db> = Vec<(ModuleId<'db>, ModuleLowered<'db>)>;
+
+/// The lowered IR keyed for lookup, which is what the plain passes want.
+fn ir_map<'db>(
+    db: &'db dyn salsa::Database,
+    modules: &LoweredModules<'db>,
+) -> HashMap<ModuleId<'db>, Arc<ModuleLoweredFunctions>> {
+    modules.iter().map(|(id, lowered)| (*id, lowered.ir(db))).collect()
+}
+
 /// Build a module function registry from lowered functions.
 ///
 /// This creates a temporary registry for CTFE to use when evaluating
@@ -519,7 +567,7 @@ fn native_shape_keys<'db>(
     db: &'db dyn salsa::Database,
     parsed_graph: ParsedModuleGraph<'db>,
     func_id_map: FuncIdMap<'db>,
-) -> Vec<(((IrModuleId, FuncId)), Vec<datalove_datafun_ir::DescriptorShape>)> {
+) -> Vec<((IrModuleId, FuncId), Vec<datalove_datafun_ir::DescriptorShape>)> {
     use datalove_datafun_ir::DescriptorShape;
 
     let ids = func_id_map.to_hashmap(db);
@@ -541,17 +589,77 @@ fn native_shape_keys<'db>(
     found
 }
 
+/// The module IR after the shape closure, and what the closure refused.
+#[derive(Clone, PartialEq, Eq)]
+#[derive(salsa::SalsaValue)]
+struct ShapeClosure<'db> {
+    /// Every module's IR, in the order it came in.
+    modules: LoweredModules<'db>,
+    /// Cycles the closure could not settle, per module.
+    errors: Vec<(ModuleId<'db>, Vec<String>)>,
+}
+
 /// on a callee's behalf. See `close_shapes` for why the iteration settles and
 /// what it refuses. Done before anything reads a signature, because the shapes
 /// are part of one: they say what trailing arguments a call has to pass.
+///
+/// Tracked, which is why the argument is a list of handles: it is a fixpoint
+/// over the whole call graph and so cannot be split per module, but keyed on
+/// ids it is a memo that an unchanged recompile hits instead of walking every
+/// instruction in the program again. A module whose shapes it did not move
+/// comes back out under the handle it went in under; see below for why that
+/// is not the same as minting an equal one.
+#[salsa::tracked(returns(ref))]
 fn close_shapes_over_calls<'db>(
+    db: &'db dyn salsa::Database,
+    parsed_graph: ParsedModuleGraph<'db>,
+    func_id_map: FuncIdMap<'db>,
+    modules: LoweredModules<'db>,
+) -> ShapeClosure<'db> {
+    let mut lowered_functions = ir_map(db, &modules);
+    let mut errors: HashMap<ModuleId<'db>, Vec<String>> = HashMap::new();
+
+    close_shapes_in_place(db, parsed_graph, func_id_map, &mut lowered_functions, &mut errors);
+
+    // A module the closure did not touch is handed back under the handle it
+    // came in with, rather than under a fresh one saying the same thing.
+    //
+    // That matters because a tracked struct's identity map belongs to the
+    // query instance that created it: this query is keyed on the graph, so
+    // adding a module anywhere gives it a new key, and every handle it minted
+    // would get a new id. Phase 5d is keyed on those handles, so every module
+    // in the world would assemble again. Passing the unchanged ones through
+    // leaves their ids where phase 5a put them, which is per module.
+    //
+    // `Arc::ptr_eq` is exactly the question, because the write-back above
+    // reaches for `make_mut` only when it has something to write.
+    let modules = modules.iter()
+        .map(|(module_id, incoming)| {
+            let ir = &lowered_functions[module_id];
+            if Arc::ptr_eq(ir, incoming.functions(db)) {
+                return (*module_id, *incoming);
+            }
+            (*module_id, ModuleLowered::new(db, *module_id, Arc::clone(ir)))
+        })
+        .collect();
+
+    // Sorted by path rather than by id, so the memoized value is the same
+    // bytes from one process to the next.
+    let mut errors: Vec<(ModuleId<'db>, Vec<String>)> = errors.into_iter().collect();
+    errors.sort_by(|a, b| a.0.path(db).cmp(b.0.path(db)));
+
+    ShapeClosure { modules, errors }
+}
+
+/// The closure itself, over the maps the algorithm is written against.
+fn close_shapes_in_place<'db>(
     db: &'db dyn salsa::Database,
     parsed_graph: ParsedModuleGraph<'db>,
     func_id_map: FuncIdMap<'db>,
     lowered_functions: &mut HashMap<ModuleId<'db>, Arc<ModuleLoweredFunctions>>,
     errors: &mut HashMap<ModuleId<'db>, Vec<String>>,
 ) {
-    use datalove_datafun_ir::{CodeRef, DescriptorShape, Instruction};
+    use datalove_datafun_ir::{CodeRef, DescriptorShape};
 
     type Key = (IrModuleId, FuncId);
 
@@ -705,13 +813,11 @@ fn close_shapes_over_calls<'db>(
 }
 
 /// What lowering one module's functions produced.
-///
-/// Both fields are plain owned data with no `'db` brand, which is what lets a
-/// worker thread hand them back. See `lower_all_module_functions`.
 #[derive(Clone, PartialEq, Eq)]
-pub struct ModuleLowerOutcome {
+#[derive(salsa::SalsaValue)]
+pub struct ModuleLowerOutcome<'db> {
     /// Absent when the module declares no functions at all.
-    lowered: Option<Arc<ModuleLoweredFunctions>>,
+    lowered: Option<ModuleLowered<'db>>,
     /// Functions that named a module const which is not evaluated yet.
     deferred: Vec<String>,
 }
@@ -744,7 +850,7 @@ pub fn lower_module_functions<'db>(
     func_ids: ReachableFuncIds<'db>,
     module_consts: Vec<(String, (IrType, ConstValue))>,
     restrict: Option<Vec<String>>,
-) -> ModuleLowerOutcome {
+) -> ModuleLowerOutcome<'db> {
     log_query("lower_functions", module.id(db).path(db), QueryPhase::Start);
 
     let parsed = &crate::module_graph::parse_module_full(db, module).parsed;
@@ -846,7 +952,8 @@ pub fn lower_module_functions<'db>(
     let lowered = if functions.is_empty() && func_name_to_id.is_empty() {
         None
     } else {
-        Some(Arc::new(ModuleLoweredFunctions { functions, func_name_to_id }))
+        let ir = Arc::new(ModuleLoweredFunctions { functions, func_name_to_id });
+        Some(ModuleLowered::new(db, module.id(db), ir))
     };
 
     log_query("lower_functions", module.id(db).path(db), QueryPhase::End);
@@ -863,9 +970,10 @@ pub fn lower_module_functions<'db>(
 ///
 /// The work itself is `lower_module_functions`, which is tracked, so this walks
 /// the graph but only pays for the modules whose inputs moved. Under
-/// `ParallelMode::Parallel` the misses are computed on rayon's pool; the
-/// outcome carries no `'db` brand, so a worker hands back what it built rather
-/// than warming a cache for a second pass to read.
+/// `ParallelMode::Parallel` the misses are computed on rayon's pool and read
+/// back here: the outcome names a tracked struct, which carries the database
+/// lifetime and so cannot travel out of a worker's borrow of its own clone.
+/// The second pass is every module's memo already warm.
 #[allow(clippy::too_many_arguments)]
 pub fn lower_all_module_functions<'db>(
     db: &'db dyn DbClone,
@@ -877,7 +985,7 @@ pub fn lower_all_module_functions<'db>(
     deferred: &mut HashMap<ModuleId<'db>, Vec<String>>,
     restrict: Option<&HashMap<ModuleId<'db>, Vec<String>>>,
     mode: ParallelMode,
-) -> HashMap<ModuleId<'db>, Arc<ModuleLoweredFunctions>> {
+) -> LoweredModules<'db> {
     use rmx::rayon::prelude::*;
 
     let db_salsa = db.as_salsa_db();
@@ -893,7 +1001,7 @@ pub fn lower_all_module_functions<'db>(
     // so that the two modes key the query identically.
     let ready: Vec<_> = parsed_graph.statements_only(db_salsa)
         .iter()
-        .filter_map(|(module_id, parsed)| {
+        .filter_map(|(module_id, _parsed)| {
             let module = *module_map.get(module_id)?;
             let single_typecheck = *typecheck_module_results.get(module_id)?;
             let single_ownership = *ownership_analysis_results.get(module_id)?;
@@ -918,40 +1026,32 @@ pub fn lower_all_module_functions<'db>(
         })
         .collect();
 
-    let outcomes: Vec<(ModuleId<'db>, ModuleLowerOutcome)> = match mode {
-        ParallelMode::Sequential => ready.into_iter()
-            .map(|(module_id, module, tc, own, func_ids, consts, restrict)| {
-                let outcome = lower_module_functions(
-                    db_salsa, module, tc, own, func_ids, consts, restrict,
-                ).clone();
-                (module_id, outcome)
-            })
-            .collect(),
-        ParallelMode::Parallel => {
-            // Clone the database up front, one per module: `&dyn DbClone` is not
-            // `Sync`, so the clones cannot be made inside the parallel section.
-            let work: Vec<_> = ready.into_iter()
-                .map(|item| (db.dyn_clone(), item))
-                .collect();
+    if matches!(mode, ParallelMode::Parallel) {
+        // Clone the database up front, one per module: `&dyn DbClone` is not
+        // `Sync`, so the clones cannot be made inside the parallel section.
+        let work: Vec<_> = ready.iter()
+            .map(|item| (db.dyn_clone(), item.clone()))
+            .collect();
 
-            work.into_par_iter()
-                .map(|(db_clone, (module_id, module, tc, own, func_ids, consts, restrict))| {
-                    let outcome = lower_module_functions(
-                        db_clone.as_salsa_db(), module, tc, own, func_ids, consts, restrict,
-                    ).clone();
-                    (module_id, outcome)
-                })
-                .collect()
-        }
-    };
+        work.into_par_iter().for_each(
+            |(db_clone, (_module_id, module, tc, own, func_ids, consts, restrict))| {
+                let _ = lower_module_functions(
+                    db_clone.as_salsa_db(), module, tc, own, func_ids, consts, restrict,
+                );
+            },
+        );
+    }
 
-    let mut result = HashMap::new();
-    for (module_id, outcome) in outcomes {
+    let mut result = Vec::with_capacity(ready.len());
+    for (module_id, module, tc, own, func_ids, consts, restrict) in ready {
+        let outcome = lower_module_functions(
+            db_salsa, module, tc, own, func_ids, consts, restrict,
+        );
         if !outcome.deferred.is_empty() {
-            deferred.entry(module_id).or_default().extend(outcome.deferred);
+            deferred.entry(module_id).or_default().extend(outcome.deferred.iter().cloned());
         }
         if let Some(lowered) = outcome.lowered {
-            result.insert(module_id, lowered);
+            result.push((module_id, lowered));
         }
     }
 
@@ -1283,7 +1383,7 @@ pub fn lower_module_graph_with_evaluator<'db>(
     // const failing to evaluate rather than as anything lowering wrongly.
     let no_consts_yet: HashMap<ModuleId<'db>, HashMap<String, (IrType, ConstValue)>> = HashMap::new();
     let mut deferred: HashMap<ModuleId<'db>, Vec<String>> = HashMap::new();
-    let mut lowered_functions = lower_all_module_functions(
+    let first_stratum = lower_all_module_functions(
         db, parsed_graph, typecheck_result, ownership_analysis, func_id_map,
         &no_consts_yet, &mut deferred, None, mode,
     );
@@ -1295,9 +1395,9 @@ pub fn lower_module_graph_with_evaluator<'db>(
     //
     // Done before anything reads a signature, because the shapes are part of
     // one: they say what trailing arguments a call has to pass.
-    let mut shape_errors: HashMap<ModuleId<'db>, Vec<String>> = HashMap::new();
-    close_shapes_over_calls(
-        db_salsa, parsed_graph, func_id_map, &mut lowered_functions, &mut shape_errors);
+    let closed = close_shapes_over_calls(db_salsa, parsed_graph, func_id_map, first_stratum);
+    let mut lowered_modules = closed.modules.clone();
+    let mut shape_errors = closed.errors.clone();
 
     // Phase 5a/b boundary: evaluate module-level consts against what is lowered
     // so far. Done even when const inlining is skipped, since a module const is
@@ -1307,6 +1407,7 @@ pub fn lower_module_graph_with_evaluator<'db>(
     let module_consts = if deferred.is_empty() && !module_graph_has_module_consts(db_salsa, parsed_graph) {
         HashMap::new()
     } else {
+        let lowered_functions = ir_map(db_salsa, &lowered_modules);
         let func_id_hashmap = func_id_map.to_hashmap(db_salsa);
         let module_registry = build_module_registry_from_lowered(&lowered_functions, &func_id_hashmap);
         evaluator.borrow_mut().set_module_registry(module_registry);
@@ -1331,20 +1432,7 @@ pub fn lower_module_graph_with_evaluator<'db>(
                 ));
             }
         }
-        for (module_id, module_funcs) in second {
-            match lowered_functions.get_mut(&module_id) {
-                Some(existing) => {
-                    let existing = Arc::make_mut(existing);
-                    existing.functions.extend(module_funcs.functions.iter().cloned());
-                    // Keep the IR in the order the ids were assigned, so the
-                    // stratum a function landed in does not show in the output.
-                    existing.functions.sort_by_key(|f| f.id.0);
-                }
-                None => {
-                    lowered_functions.insert(module_id, module_funcs);
-                }
-            }
-        }
+        lowered_modules = merge_strata(db_salsa, lowered_modules, second);
 
         // And close the shapes again, over everything now that the second
         // stratum is in.
@@ -1360,15 +1448,19 @@ pub fn lower_module_graph_with_evaluator<'db>(
         // Closing again rather than only over the new ones, because a shape
         // reaches whatever calls into it: a second-stratum function is a caller
         // the first pass did not know about.
-        close_shapes_over_calls(
-            db_salsa, parsed_graph, func_id_map, &mut lowered_functions, &mut shape_errors);
+        let closed = close_shapes_over_calls(db_salsa, parsed_graph, func_id_map, lowered_modules);
+        lowered_modules = closed.modules.clone();
+        shape_errors.extend(closed.errors.iter().cloned());
     }
 
-    // Phase 5b: Evaluate consts (skip if skip_const_inlining is enabled).
-    let resolved_consts = if skip_const_inlining {
+    // Phase 5b: Evaluate consts (skip if skip_const_inlining is enabled, or if
+    // no module declares a const at all -- then there is nothing to evaluate,
+    // and building the registry to evaluate it with is pure cost).
+    let resolved_consts = if skip_const_inlining || !graph_declares_consts(db_salsa, parsed_graph) {
         HashMap::new()
     } else {
         // Build a module registry from lowered functions for cross-module CTFE calls.
+        let lowered_functions = ir_map(db_salsa, &lowered_modules);
         let func_id_hashmap = func_id_map.to_hashmap(db_salsa);
         let module_registry = build_module_registry_from_lowered(&lowered_functions, &func_id_hashmap);
         evaluator.borrow_mut().set_module_registry(module_registry);
@@ -1384,12 +1476,12 @@ pub fn lower_module_graph_with_evaluator<'db>(
     // Phase 5c: Specialize const parameter functions by monomorphization. Each
     // function with const parameters gains a copy per instantiation, and the
     // call sites that named one are pointed at it.
-    let (lowered_functions, specialize_errors) = if skip_specialization {
-        (lowered_functions, Vec::new())
+    let (lowered_modules, specialize_errors) = if skip_specialization {
+        (lowered_modules, Vec::new())
     } else {
-        specialize_comptime_functions(
+        specialize_module_graph(
             db_salsa, parsed_graph, typecheck_result, &evaluator, func_id_map,
-            &module_consts, lowered_functions,
+            &module_consts, lowered_modules,
         )
     };
 
@@ -1411,18 +1503,83 @@ pub fn lower_module_graph_with_evaluator<'db>(
     // Phase 5d: Assemble modules with lowered functions, then inline consts.
     // CTFE errors from resolved_consts are included in lower_module via pre_resolved_consts.errors.
     //
-    // `lower_module` is tracked, so it takes its arguments by value, and a
-    // module's whole lowered IR is one of them. It gets the `Arc` that phase 5a
-    // put in the memo, so neither the parallel path's work items nor the
-    // aggregation that follows them copies an instruction.
+    // `lower_module` is tracked, so it takes its arguments by value. The IR
+    // travels as a `ModuleLowered` handle, so neither the parallel path's work
+    // items nor the aggregation that follows them copies an instruction, and
+    // the memo key does not hash one either.
+    let lowered_modules: HashMap<ModuleId<'db>, ModuleLowered<'db>> =
+        lowered_modules.into_iter().collect();
     match mode {
         ParallelMode::Sequential => {
-            assemble_module_graph(db_salsa, parsed_graph, typecheck_result, ownership_analysis, &resolved_consts, &lowered_functions, skip_const_inlining)
+            assemble_module_graph(db_salsa, parsed_graph, typecheck_result, ownership_analysis, &resolved_consts, &lowered_modules, skip_const_inlining)
         }
         ParallelMode::Parallel => {
-            assemble_module_graph_parallel(db, parsed_graph, typecheck_result, ownership_analysis, &resolved_consts, &lowered_functions, skip_const_inlining)
+            assemble_module_graph_parallel(db, parsed_graph, typecheck_result, ownership_analysis, &resolved_consts, &lowered_modules, skip_const_inlining)
         }
     }
+}
+
+/// The two lowering strata for one module, as one module's IR.
+///
+/// Tracked, so an unchanged recompile takes the merge out of a memo rather
+/// than concatenating and re-sorting every module's functions. Keyed on the
+/// two handles, which is two words.
+#[salsa::tracked(returns(copy))]
+fn merge_module_strata<'db>(
+    db: &'db dyn salsa::Database,
+    first: ModuleLowered<'db>,
+    second: ModuleLowered<'db>,
+) -> ModuleLowered<'db> {
+    let mut merged = first.functions(db).as_ref().clone();
+    merged.functions.extend(second.functions(db).functions.iter().cloned());
+    // Keep the IR in the order the ids were assigned, so the stratum a
+    // function landed in does not show in the output.
+    merged.functions.sort_by_key(|f| f.id.0);
+    ModuleLowered::new(db, first.module_id(db), Arc::new(merged))
+}
+
+/// Fold the second lowering stratum into the first, module by module.
+///
+/// A module the second stratum reached but the first did not keeps the second
+/// stratum's handle; one that both reached is merged. The result is in the
+/// first stratum's order, with anything only the second stratum found after
+/// it, so it is still graph order.
+fn merge_strata<'db>(
+    db: &'db dyn salsa::Database,
+    first: LoweredModules<'db>,
+    second: LoweredModules<'db>,
+) -> LoweredModules<'db> {
+    let mut second: HashMap<ModuleId<'db>, ModuleLowered<'db>> = second.into_iter().collect();
+    let mut merged: LoweredModules<'db> = first.into_iter()
+        .map(|(module_id, first)| match second.remove(&module_id) {
+            Some(second) => (module_id, merge_module_strata(db, first, second)),
+            None => (module_id, first),
+        })
+        .collect();
+
+    let mut only_second: LoweredModules<'db> = second.into_iter().collect();
+    only_second.sort_by(|a, b| a.0.path(db).cmp(b.0.path(db)));
+    merged.extend(only_second);
+    merged
+}
+
+/// True if any module declares a const anywhere, at module level or in a body.
+///
+/// Phase 5b has nothing to do for a program with no consts in it, and the
+/// registry it builds to have CTFE on hand is not free.
+#[salsa::tracked(returns(copy))]
+fn graph_declares_consts<'db>(
+    db: &'db dyn salsa::Database,
+    parsed_graph: ParsedModuleGraph<'db>,
+) -> bool {
+    parsed_graph.statements_only(db).iter().any(|(_, parsed)| {
+        parsed.statements.iter().any(|statement| match statement {
+            Statement::Const(_) => true,
+            Statement::Fun(func) => func.body(db).iter()
+                .any(|s| matches!(s, Statement::Const(_))),
+            _ => false,
+        })
+    })
 }
 
 
@@ -1485,6 +1642,72 @@ fn evaluate_instantiation_consts<'db>(
     }
 
     (evaluated, errors)
+}
+
+/// True if any of this module's functions makes a comptime call.
+///
+/// The gate in front of phase 5c. Working out the plan means reading every
+/// instruction of every function, and for a program that names no const
+/// parameter anywhere the answer is always that there is nothing to do. Keyed
+/// on the handle, so an unchanged recompile answers from a memo.
+#[salsa::tracked(returns(copy))]
+fn module_has_comptime_calls<'db>(
+    db: &'db dyn salsa::Database,
+    lowered: ModuleLowered<'db>,
+) -> bool {
+    use datalove_datafun_ir::Instruction;
+
+    lowered.functions(db).functions.iter().any(|unit| {
+        unit.blocks.iter().any(|block| {
+            block.instructions.iter()
+                .any(|instr| matches!(instr, Instruction::ComptimeCall { .. }))
+        })
+    })
+}
+
+/// One module's IR under a handle, once specialization has rewritten it.
+///
+/// This is the one place a handle is minted from the IR rather than from
+/// another handle, so it is the one place the key holds a module's
+/// instructions. Phase 5d used to pay that for every module on every compile;
+/// now only a program that actually specializes something does, and it pays it
+/// once instead.
+#[salsa::tracked(returns(copy))]
+fn specialized_module<'db>(
+    db: &'db dyn salsa::Database,
+    module_id: ModuleId<'db>,
+    functions: Arc<ModuleLoweredFunctions>,
+) -> ModuleLowered<'db> {
+    ModuleLowered::new(db, module_id, functions)
+}
+
+/// Phase 5c over the whole graph, in and out under handles.
+fn specialize_module_graph<'db>(
+    db: &'db dyn salsa::Database,
+    parsed_graph: ParsedModuleGraph<'db>,
+    typecheck_result: ModuleGraphTypecheckResult<'db>,
+    evaluator: &Rc<RefCell<dyn CtfeEvaluator>>,
+    func_id_map: FuncIdMap<'db>,
+    module_consts: &HashMap<ModuleId<'db>, HashMap<String, (IrType, ConstValue)>>,
+    modules: LoweredModules<'db>,
+) -> (LoweredModules<'db>, Vec<(ModuleId<'db>, Vec<String>)>) {
+    if !modules.iter().any(|(_, lowered)| module_has_comptime_calls(db, *lowered)) {
+        return (modules, Vec::new());
+    }
+
+    let (lowered_functions, errors) = specialize_comptime_functions(
+        db, parsed_graph, typecheck_result, evaluator, func_id_map,
+        module_consts, ir_map(db, &modules),
+    );
+
+    let specialized = modules.iter()
+        .map(|(module_id, _)| {
+            let ir = Arc::clone(&lowered_functions[module_id]);
+            (*module_id, specialized_module(db, *module_id, ir))
+        })
+        .collect();
+
+    (specialized, errors)
 }
 
 /// Specialize functions with const parameters by monomorphization.
@@ -1660,7 +1883,7 @@ fn assemble_module_graph<'db>(
     typecheck_result: ModuleGraphTypecheckResult<'db>,
     ownership_analysis: ModuleGraphAnalysis<'db>,
     resolved_consts: &HashMap<ModuleId<'db>, ModulePreResolvedConsts<'db>>,
-    lowered_functions: &HashMap<ModuleId<'db>, Arc<ModuleLoweredFunctions>>,
+    lowered_modules: &HashMap<ModuleId<'db>, ModuleLowered<'db>>,
     skip_const_inlining: bool,
 ) -> ModuleGraphLoweringResult<'db> {
     let graph = parsed_graph.graph(db);
@@ -1706,7 +1929,7 @@ fn assemble_module_graph<'db>(
         let module_consts = resolved_consts.get(module_id).cloned();
 
         // Get lowered functions for this module.
-        let module_funcs = lowered_functions.get(module_id).cloned();
+        let module_funcs = lowered_modules.get(module_id).copied();
 
         let result = lower_module(
             db,
@@ -1742,7 +1965,7 @@ fn assemble_module_graph_parallel<'db>(
     typecheck_result: ModuleGraphTypecheckResult<'db>,
     ownership_analysis: ModuleGraphAnalysis<'db>,
     resolved_consts: &HashMap<ModuleId<'db>, ModulePreResolvedConsts<'db>>,
-    lowered_functions: &HashMap<ModuleId<'db>, Arc<ModuleLoweredFunctions>>,
+    lowered_modules: &HashMap<ModuleId<'db>, ModuleLowered<'db>>,
     skip_const_inlining: bool,
 ) -> ModuleGraphLoweringResult<'db> {
     use rmx::rayon::prelude::*;
@@ -1784,7 +2007,7 @@ fn assemble_module_graph_parallel<'db>(
             let module_consts = resolved_consts.get(module_id).cloned();
 
             // Get lowered functions for this module.
-            let module_funcs = lowered_functions.get(module_id).cloned();
+            let module_funcs = lowered_modules.get(module_id).copied();
 
             Some((
                 db.dyn_clone(),
@@ -1822,7 +2045,7 @@ fn assemble_module_graph_parallel<'db>(
 
     // Delegate to sequential function which aggregates results.
     // All lower_module calls will be cache hits from the parallel phase.
-    assemble_module_graph(db_salsa, parsed_graph, typecheck_result, ownership_analysis, resolved_consts, lowered_functions, skip_const_inlining)
+    assemble_module_graph(db_salsa, parsed_graph, typecheck_result, ownership_analysis, resolved_consts, lowered_modules, skip_const_inlining)
 }
 
 #[cfg(test)]
