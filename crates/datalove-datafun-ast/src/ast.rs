@@ -222,6 +222,38 @@ pub enum IndexErrorMode {
     Result,
 }
 
+/// A function's signature: everything a caller has to know about it.
+///
+/// One `#[tracked]` field rather than four, because a tracked field is a
+/// dependency edge per read and salsa walks every one of them when it
+/// validates a memo. Five edges per function is five where two will do, and on
+/// a 512-module world validating `StmtFun`'s was 19% of an edit.
+///
+/// Signature and body are kept apart, and that is the whole of the split that
+/// is left: name resolution and export collection read the signature and not
+/// the body, so a change to a body still leaves them alone. Folding the body in
+/// as well was tried and is 20% faster again, and it makes an edit to a body
+/// re-resolve that module's names and re-typecheck every module that depends on
+/// it. That is a cascade rather than a constant, so it loses at the scale this
+/// is all for. `parse_firewall_tests` and the `module_memo` `change_ast`
+/// fixtures both catch it.
+#[derive(Clone, Hash, PartialEq, Eq)]
+#[derive(salsa::SalsaValue)]
+pub struct FunSignature<'db> {
+    /// Type parameters, in declaration order.
+    ///
+    /// A parameter or return type may name one, and it stands for whatever type
+    /// the call site supplies. Empty for a function written without `<...>`.
+    pub type_params: Vec<InternedText<'db>>,
+    /// The bound each type parameter was written with, by the same index.
+    ///
+    /// Built beside `type_params` from one parse, so the two cannot disagree
+    /// about how many there are.
+    pub type_bounds: Vec<Option<TypeBound>>,
+    pub params: Vec<FunParam<'db>>,
+    pub return_type: Option<datalit::ast::TypeHint<'db>>,
+}
+
 #[salsa::tracked]
 pub struct StmtFun<'db> {
     /// Module this function belongs to (identity key).
@@ -231,26 +263,12 @@ pub struct StmtFun<'db> {
     /// Function name (identity key).
     #[returns(copy)]
     pub name: InternedText<'db>,
-    /// Type parameters, in declaration order.
-    ///
-    /// A parameter or return type may name one, and it stands for whatever type
-    /// the call site supplies. Empty for a function written without `<...>`.
+    /// What a caller has to know. Read through the accessors below.
     #[tracked]
     #[returns(ref)]
-    pub type_params: Vec<InternedText<'db>>,
-    /// The bound each type parameter was written with, by the same index.
-    ///
-    /// Built beside `type_params` from one parse, so the two cannot disagree
-    /// about how many there are.
-    #[tracked]
-    #[returns(ref)]
-    pub type_bounds: Vec<Option<TypeBound>>,
-    #[tracked]
-    #[returns(ref)]
-    pub params: Vec<FunParam<'db>>,
-    #[tracked]
-    #[returns(clone)]
-    pub return_type: Option<datalit::ast::TypeHint<'db>>,
+    pub signature: FunSignature<'db>,
+    /// What it does, behind an edge of its own so that reading a signature is
+    /// not a reason to re-run when a body changes.
     #[tracked]
     #[returns(ref)]
     pub body: Vec<Statement<'db>>,
@@ -258,6 +276,28 @@ pub struct StmtFun<'db> {
     #[returns(copy)]
     pub local_index: u32,
 }
+
+impl<'db> StmtFun<'db> {
+    /// Type parameters, in declaration order.
+    pub fn type_params(self, db: &'db dyn salsa::Database) -> &'db Vec<InternedText<'db>> {
+        &self.signature(db).type_params
+    }
+
+    /// The bound each type parameter was written with, by the same index.
+    pub fn type_bounds(self, db: &'db dyn salsa::Database) -> &'db Vec<Option<TypeBound>> {
+        &self.signature(db).type_bounds
+    }
+
+    pub fn params(self, db: &'db dyn salsa::Database) -> &'db Vec<FunParam<'db>> {
+        &self.signature(db).params
+    }
+
+    pub fn return_type(self, db: &'db dyn salsa::Database) -> Option<datalit::ast::TypeHint<'db>> {
+        self.signature(db).return_type.clone()
+    }
+}
+
+
 
 #[derive(Clone, Hash, PartialEq, Eq)]
 #[derive(salsa::SalsaValue)]

@@ -407,10 +407,7 @@ impl<'db> Parser<'db> {
             self.db,
             self.module_id(),
             name,
-            type_params,
-            type_bounds,
-            params,
-            return_type,
+            ast::FunSignature { type_params, type_bounds, params, return_type },
             body,
             local_index,
         ))

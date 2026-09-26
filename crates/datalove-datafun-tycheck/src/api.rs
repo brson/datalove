@@ -773,10 +773,12 @@ fn resolve_module_imports_internal<'db>(
                         db,
                         Some(synthetic_module_id),
                         item_name,
-                        type_params,
-                        type_bounds,
-                        synthetic_params,
-                        None,
+                        datalove_datafun_ast::ast::FunSignature {
+                            type_params,
+                            type_bounds,
+                            params: synthetic_params,
+                            return_type: None,
+                        },
                         vec![],
                         0,
                     );
