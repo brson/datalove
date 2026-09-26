@@ -44,7 +44,7 @@ pub fn resolve_functions<'db>(
         // Add functions from previously green units.
         for &green_idx in &green_units {
             let green_parsed = parser::parse_script_unit(db, script, green_idx);
-            for stmt in &green_parsed.statements {
+            for stmt in green_parsed.statements.iter() {
                 if let ast::Statement::Fun(fun) = stmt {
                     candidate_functions.push((green_idx, *fun));
                 }
@@ -52,7 +52,7 @@ pub fn resolve_functions<'db>(
         }
 
         // Add functions from current unit.
-        for stmt in statements {
+        for stmt in statements.iter() {
             if let ast::Statement::Fun(fun) = stmt {
                 candidate_functions.push((unit_index, *fun));
             }
@@ -125,7 +125,7 @@ pub fn resolve_let_statement<'db>(
     // Add function names.
     for &fun_idx in green_functions {
         let fun_parsed = parser::parse_script_unit(db, script, fun_idx);
-        for stmt in &fun_parsed.statements {
+        for stmt in fun_parsed.statements.iter() {
             if let ast::Statement::Fun(fun) = stmt {
                 let name = fun.name(db).as_str(db);
                 available_names.insert(name);
@@ -137,7 +137,7 @@ pub fn resolve_let_statement<'db>(
     let _units = script.units(db);
     for prev_idx in 0..unit_index {
         let prev_parsed = parser::parse_script_unit(db, script, prev_idx);
-        for stmt in &prev_parsed.statements {
+        for stmt in prev_parsed.statements.iter() {
             if let ast::Statement::Let(let_stmt) = stmt {
                 let name = let_stmt.name.as_str(db);
                 available_names.insert(name);
@@ -147,7 +147,7 @@ pub fn resolve_let_statement<'db>(
 
     // For now, we just check that there are no parse errors.
     // Real name resolution would check that all names used in the expression are available.
-    for stmt in statements {
+    for stmt in statements.iter() {
         if matches!(stmt, ast::Statement::ParseError(_)) {
             return LetResolution::new(db, false, None);
         }

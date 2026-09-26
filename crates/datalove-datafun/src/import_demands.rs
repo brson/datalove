@@ -75,7 +75,7 @@ fn module_import_demands<'db>(
 
     let mut demands = Vec::new();
 
-    for statement in &parsed.statements {
+    for statement in parsed.statements.iter() {
         if let ast::Statement::Require(ast::StmtRequire::Module(require)) = statement {
             let demand = (
                 require.import_space.as_str(db).S(),
@@ -99,7 +99,7 @@ fn module_rider_demands<'db>(
 
     let mut demands = Vec::new();
 
-    for statement in &parsed.statements {
+    for statement in parsed.statements.iter() {
         if let ast::Statement::Require(ast::StmtRequire::Rider(rider)) = statement {
             demands.push(rider.name.as_str(db).S());
         }

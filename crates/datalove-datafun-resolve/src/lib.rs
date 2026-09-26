@@ -416,7 +416,7 @@ pub fn build_all_function_ast_maps<'db>(
 
     for (module_id, parsed) in parsed_graph.statements_only(db) {
         let mut funcs = Vec::new();
-        for statement in &parsed.statements {
+        for statement in parsed.statements.iter() {
             if let Statement::Fun(func) = statement {
                 funcs.push((func.name(db), *func));
             }

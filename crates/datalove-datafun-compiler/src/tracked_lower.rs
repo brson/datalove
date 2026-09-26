@@ -149,7 +149,7 @@ pub fn compute_func_id_map<'db>(
         let ir_module_id = IrModuleId(ir_module_idx as u32);
         let mut next_func_id: u32 = 0;
 
-        for statement in &parsed.statements {
+        for statement in parsed.statements.iter() {
             if let Statement::Fun(func) = statement {
                 let func_name = func.name(db).text(db).S();
                 let func_id = FuncId(next_func_id);
@@ -378,7 +378,7 @@ pub fn lower_module<'db>(
 
     // Assign module-local FuncIds (0, 1, 2, ...).
     let mut next_func_id: u32 = 0;
-    for statement in &parsed.statements {
+    for statement in parsed.statements.iter() {
         if let Statement::Fun(func) = statement {
             let func_name = func.name(db).text(db).S();
             let func_id = FuncId(next_func_id);
@@ -405,7 +405,7 @@ pub fn lower_module<'db>(
         // Lower functions from scratch.
         functions = Vec::new();
         let mut func_idx = 0;
-        for statement in &parsed.statements {
+        for statement in parsed.statements.iter() {
             if let Statement::Fun(func) = statement {
                 let func_name = func.name(db).text(db).S();
                 let func_id = func_ids[func_idx].1;
@@ -1041,7 +1041,7 @@ pub fn lower_module_functions<'db>(
 
     // Assign FuncIds and lower each function.
     let mut next_func_id: u32 = 0;
-    for statement in &parsed.statements {
+    for statement in parsed.statements.iter() {
         if let Statement::Fun(func) = statement {
             let func_name = func.name(db).text(db).S();
             let func_id = FuncId(next_func_id);
@@ -1264,7 +1264,7 @@ pub fn evaluate_all_module_consts<'db>(
         }
 
         // Evaluate function-level consts.
-        for statement in &parsed.statements {
+        for statement in parsed.statements.iter() {
             if let Statement::Fun(func_stmt) = statement {
                 let func_name = func_stmt.name(db).text(db);
                 // Get function's return type for try operators in const expressions.
@@ -1373,7 +1373,7 @@ fn module_const_kinds<'db>(
     let parsed = &crate::module_graph::parse_module_full(db, module).parsed;
     let mut module_level = false;
     let mut anywhere = false;
-    for statement in &parsed.statements {
+    for statement in parsed.statements.iter() {
         match statement {
             Statement::Const(_) => {
                 module_level = true;
@@ -1431,7 +1431,7 @@ fn evaluate_module_level_consts<'db>(
         };
 
         let mut consts: HashMap<String, (IrType, ConstValue)> = HashMap::new();
-        for statement in &parsed.statements {
+        for statement in parsed.statements.iter() {
             if let Statement::Const(const_stmt) = statement {
                 // A module const is outside any function, so there is no return
                 // type for an early-return operator to check against, and no
@@ -1930,7 +1930,7 @@ fn specialize_comptime_functions<'db>(
     let mut func_asts: HashMap<(ModuleId<'db>, String), datalove_datafun_ast::ast::StmtFun<'db>> =
         HashMap::new();
     for (module_id, parsed) in parsed_graph.statements_only(db) {
-        for statement in &parsed.statements {
+        for statement in parsed.statements.iter() {
             if let Statement::Fun(func_stmt) = statement {
                 func_asts.insert((*module_id, func_stmt.name(db).text(db).S()), *func_stmt);
             }

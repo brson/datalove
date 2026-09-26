@@ -118,7 +118,7 @@ pub fn build_func_id_map<'db>(
         let ir_module_id = IrModuleId(ir_module_idx as u32);
         let mut next_func_id: u32 = 0;
 
-        for statement in &spec.parsed.statements {
+        for statement in spec.parsed.statements.iter() {
             if let Statement::Fun(func) = statement {
                 let func_name = func.name(db).text(db).S();
                 let func_id = FuncId(next_func_id);

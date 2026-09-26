@@ -159,7 +159,7 @@ fn parse_bracer<'db>(
 
     let lines = split::nonempty_groups(groups).into_iter();
     let (statements, spans) = parse_statements(db, lines, source_text, module_id);
-    let parsed = ast::ParsedStatements { statements };
+    let parsed = ast::ParsedStatements { statements: std::sync::Arc::new(statements) };
     ast::ParseResult {
         parsed,
         expr_spans: spans.expr_spans,

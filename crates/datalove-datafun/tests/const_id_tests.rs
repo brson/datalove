@@ -40,7 +40,7 @@ fn graph_after_warmup(warmups: &[&str]) -> ConstBindingGraph {
     let parsed_ast = &parse_result.parsed;
 
     let mut bindings = Vec::new();
-    for stmt in &parsed_ast.statements {
+    for stmt in parsed_ast.statements.iter() {
         if let Statement::Const(const_stmt) = stmt {
             bindings.push(ConstBindingInfo {
                 stmt_id: datalove_datafun_ir::ConstStmtId(bindings.len() as u32),

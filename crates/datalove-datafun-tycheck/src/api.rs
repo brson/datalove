@@ -201,12 +201,12 @@ pub fn typecheck_script_unit<'db>(
             }
 
             // Second pass: typecheck all statements.
-            for statement in &script.statements {
+            for statement in script.statements.iter() {
                 check_statement(&mut ctx, &statement);
             }
 
             // Extract new bindings for subsequent units.
-            for stmt in &script.statements {
+            for stmt in script.statements.iter() {
                 match stmt {
                     Statement::Let(let_stmt) => {
                         let name = let_stmt.name;
@@ -398,14 +398,14 @@ pub fn typecheck_module<'db>(
     // Pass 2a: module-level consts, before anything that could name one. A
     // module const is in scope for every function in the module regardless of
     // where it is written, and functions are checked in source order below.
-    for statement in &parsed.statements {
+    for statement in parsed.statements.iter() {
         if matches!(statement, Statement::Const(_)) {
             check_statement(&mut ctx, &statement);
         }
     }
 
     // Pass 2b: everything else.
-    for statement in &parsed.statements {
+    for statement in parsed.statements.iter() {
         if !matches!(statement, Statement::Const(_)) {
             check_statement(&mut ctx, &statement);
         }
@@ -703,7 +703,7 @@ fn resolve_module_imports_internal<'db>(
     let mut resolved_imports = Vec::new();
     let mut import_errors = Vec::new();
 
-    for statement in &parsed.statements {
+    for statement in parsed.statements.iter() {
         if let Statement::Import(import) = statement {
             let module_name = import.module_name;
             let item_name = import.item_name;
@@ -843,7 +843,7 @@ fn collect_module_aliases<'db>(
     script: &ParsedStatements<'db>,
 ) -> Vec<(InternedText<'db>, String)> {
     let mut aliases = Vec::new();
-    for statement in &script.statements {
+    for statement in script.statements.iter() {
         if let Statement::Require(StmtRequire::Module(req)) = statement {
             let import_space = req.import_space;
             let package_alias = req.package_alias;
@@ -885,7 +885,7 @@ fn resolve_script_imports<'db>(
     let mut resolved = Vec::new();
     let mut errors = Vec::new();
 
-    for statement in &script.statements {
+    for statement in script.statements.iter() {
         if let Statement::Import(import) = statement {
             let module_alias = import.module_name;
             let item_name = import.item_name;

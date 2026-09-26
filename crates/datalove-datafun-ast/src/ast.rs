@@ -83,10 +83,17 @@ impl<'db> ParseSpanEntry<'db> {
 }
 
 /// Result of parsing a source text into statements.
+///
+/// Behind an `Arc` because `ParsedModuleGraph::statements_only` holds one of
+/// these per module and is rebuilt whenever any module's parse moves, so
+/// cloning the statements was a copy of every statement in the program per
+/// edit -- the largest thing the compiler itself was doing. As an `Arc` it is
+/// a refcount, and the modules that did not change hand back the same
+/// allocation, which also lets the aggregate compare equal by pointer.
 #[derive(Clone, Hash, PartialEq, Eq)]
 #[derive(salsa::SalsaValue)]
 pub struct ParsedStatements<'db> {
-    pub statements: Vec<Statement<'db>>,
+    pub statements: std::sync::Arc<Vec<Statement<'db>>>,
 }
 
 /// Parse result containing parsed statements and span side tables.

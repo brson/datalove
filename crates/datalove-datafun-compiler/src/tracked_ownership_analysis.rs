@@ -124,7 +124,7 @@ pub fn analyze_module<'db>(
     let mut function_analyses = BTreeMap::new();
     let mut all_errors = Vec::new();
 
-    for statement in &parsed.statements {
+    for statement in parsed.statements.iter() {
         if let Statement::Fun(func) = statement {
             let func_name = func.name(db).text(db).S();
 
