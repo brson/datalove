@@ -10,6 +10,13 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 use crate::{IrCodeUnit, CodeUnitId, IrModuleId};
 
+/// One module's code units, by id.
+///
+/// Held behind an `Arc` by the registry so that rebuilding the registry when
+/// one module's IR moves does not rebuild the entry for every function in the
+/// world -- see [`ModuleFunctionRegistry`].
+pub type ModuleCodeUnits = BTreeMap<CodeUnitId, Arc<IrCodeUnit>>;
+
 /// Registry of module functions, shared across all scripts.
 ///
 /// Immutable after module compilation completes.
@@ -18,41 +25,58 @@ use crate::{IrCodeUnit, CodeUnitId, IrModuleId};
 /// they are declared in decides the identifiers and the layout of the object
 /// file. A hash map made that order depend on the seed the process started
 /// with, so the same input produced different bytes on every run.
+///
+/// Two levels rather than one map keyed on the pair, because the whole thing
+/// is rebuilt whenever any module's IR moves and there is an entry per function
+/// in the program. Split by module, a module the edit did not touch is one
+/// `Arc` clone rather than one insert per function it declares. Iterating the
+/// two levels in order visits the same units in the same order as the pair-keyed
+/// map did, which is the part the backends depend on.
 #[derive(Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct ModuleFunctionRegistry {
     /// Behind an `Arc` because the registry is built from IR that is already
     /// owned elsewhere -- the lowered functions, and the assembled module
     /// results -- and copying every instruction to put it here was about a
     /// quarter of what recompiling an unchanged world cost.
-    module_functions: BTreeMap<(IrModuleId, CodeUnitId), Arc<IrCodeUnit>>,
+    modules: BTreeMap<IrModuleId, Arc<ModuleCodeUnits>>,
 }
 
 impl ModuleFunctionRegistry {
     /// Create a new empty registry.
     pub fn new() -> Self {
         Self {
-            module_functions: BTreeMap::new(),
+            modules: BTreeMap::new(),
         }
     }
 
     /// Add a module code unit.
     pub fn add_module_code_unit(&mut self, module_id: IrModuleId, func_id: CodeUnitId, unit: Arc<IrCodeUnit>) {
-        self.module_functions.insert((module_id, func_id), unit);
+        Arc::make_mut(self.modules.entry(module_id).or_default()).insert(func_id, unit);
+    }
+
+    /// Put a whole module's units in at once.
+    ///
+    /// The incremental path: the units come out of a memo keyed on the module's
+    /// lowering result, so a module that did not change costs a refcount.
+    pub fn set_module_code_units(&mut self, module_id: IrModuleId, units: Arc<ModuleCodeUnits>) {
+        self.modules.insert(module_id, units);
     }
 
     /// Get a module code unit by module and function ID.
     pub fn get_module_function_as_unit(&self, module_id: IrModuleId, func_id: CodeUnitId) -> Option<&IrCodeUnit> {
-        self.module_functions.get(&(module_id, func_id)).map(|unit| &**unit)
+        self.modules.get(&module_id)?.get(&func_id).map(|unit| &**unit)
     }
 
     /// Iterate over all module code units.
     pub fn iter_module_code_units(&self) -> impl Iterator<Item = &IrCodeUnit> {
-        self.module_functions.values().map(|unit| &**unit)
+        self.modules.values().flat_map(|units| units.values()).map(|unit| &**unit)
     }
 
     /// Iterate over all module code units with their IDs.
     pub fn iter_module_code_units_with_ids(&self) -> impl Iterator<Item = ((IrModuleId, CodeUnitId), &IrCodeUnit)> {
-        self.module_functions.iter().map(|((m, f), unit)| ((*m, *f), &**unit))
+        self.modules.iter().flat_map(|(module_id, units)| {
+            units.iter().map(move |(func_id, unit)| ((*module_id, *func_id), &**unit))
+        })
     }
 }
 

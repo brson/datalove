@@ -4,7 +4,7 @@
 //! - [`SharedModuleContext`]: Shared data across script compilers/executors.
 //! - [`CompiledModules`]: Result of compiling a module graph, with error info.
 
-use rmx::std::collections::{BTreeMap, HashMap};
+use rmx::std::collections::BTreeMap;
 use std::sync::Arc;
 
 use datalove_datafun_ir::{IrModuleId, FuncId};

@@ -15,7 +15,7 @@ pub mod registry;
 
 pub use display::expand_ir_strings;
 pub use params::{replace_params_in_instruction, replace_params_in_terminator};
-pub use registry::{FunctionRegistry, ModuleFunctionRegistry, UnitFunctionRegistry};
+pub use registry::{FunctionRegistry, ModuleFunctionRegistry, UnitFunctionRegistry, ModuleCodeUnits};
 
 /// SSA value - defined exactly once, immutable.
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize)]

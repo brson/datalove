@@ -40,6 +40,7 @@ use std::rc::Rc;
 use datalove_datafun_tycheck::{DbClone, ParallelMode, parallel_mode_from_env};
 use datalove_datafun_compiler::module_graph::{ModuleGraph, ModuleId};
 use datalove_datafun_interp::ModuleFunctionRegistry;
+use datalove_datafun_ir::ModuleCodeUnits;
 
 use crate::incremental::{IncrementalModuleWorld, extract_dependencies};
 use super::compiled_modules::{SharedModuleContext, CompiledModules};
@@ -408,10 +409,10 @@ fn module_function_registry<'db>(
     let mut registry = ModuleFunctionRegistry::new();
 
     for result in lowering.module_results(db).values() {
-        let ir_module_id = result.ir_module_id(db);
-        for ir_unit in result.functions(db) {
-            registry.add_module_code_unit(ir_module_id, ir_unit.id, ir_unit.clone());
-        }
+        registry.set_module_code_units(
+            result.ir_module_id(db),
+            Arc::clone(module_code_units(db, *result)),
+        );
     }
 
     add_native_rider_units(
@@ -422,6 +423,25 @@ fn module_function_registry<'db>(
     );
 
     Arc::new(registry)
+}
+
+/// One module's code units, keyed by the id the backends address them by.
+///
+/// Tracked on the lowering result, which is a tracked struct with no tracked
+/// fields, so its identity moves exactly when that module's assembled IR does.
+/// The registry above is rebuilt whenever *any* module's does, and it holds an
+/// entry per function in the program; this is what stops that costing an insert
+/// per function rather than a refcount per module.
+#[salsa::tracked(returns(ref))]
+fn module_code_units<'db>(
+    db: &'db dyn salsa::Database,
+    result: datalove_datafun_compiler::tracked_lower::SingleModuleLoweringResult<'db>,
+) -> Arc<ModuleCodeUnits> {
+    Arc::new(
+        result.functions(db).iter()
+            .map(|unit| (unit.id, Arc::clone(unit)))
+            .collect(),
+    )
 }
 
 /// Create native IrCodeUnits for rider functions and add them to the registry.

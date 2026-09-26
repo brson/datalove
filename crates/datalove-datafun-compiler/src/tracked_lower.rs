@@ -548,6 +548,22 @@ fn ir_map<'db>(
     modules.iter().map(|(id, lowered)| (*id, lowered.ir(db))).collect()
 }
 
+/// One module's code units for CTFE, keyed by the id a `CodeRef` names.
+///
+/// Tracked on the handle, so the registry below is a refcount per module rather
+/// than an insert per function when one module's IR moves.
+#[salsa::tracked(returns(ref))]
+fn ctfe_module_units<'db>(
+    db: &'db dyn salsa::Database,
+    lowered: ModuleLowered<'db>,
+) -> Arc<datalove_datafun_ir::ModuleCodeUnits> {
+    Arc::new(
+        lowered.functions(db).functions.iter()
+            .map(|unit| (unit.id, Arc::clone(unit)))
+            .collect(),
+    )
+}
+
 /// Build a module function registry from lowered functions.
 ///
 /// This creates a registry for CTFE to use when evaluating const expressions
@@ -563,28 +579,22 @@ fn ctfe_module_registry<'db>(
     modules: LoweredModules<'db>,
     func_id_map: FuncIdMap<'db>,
 ) -> Arc<ModuleFunctionRegistry> {
-    let lowered_functions = ir_map(db, &modules);
-    let func_id_map = func_id_lookup(db, func_id_map);
-    // Indexed first. The loop below asks a module for one of its functions
-    // once per function that module declares, and scanning the list to answer
-    // was quadratic in a module's size.
-    //
-    // A function's position is not its id: lowering skips the ones that
-    // deferred or failed, so the list has holes.
-    let by_id: HashMap<ModuleId<'db>, HashMap<u32, &Arc<IrCodeUnit>>> = lowered_functions.iter()
-        .map(|(module_id, lowered)| {
-            let units = lowered.functions.iter().map(|f| (f.id.0, f)).collect();
-            (*module_id, units)
-        })
-        .collect();
-
-    let mut registry = ModuleFunctionRegistry::new();
-    for ((module_id, _func_name), (ir_module_id, func_id)) in func_id_map {
-        if let Some(unit) = by_id.get(module_id).and_then(|units| units.get(&func_id.0)) {
-            registry.add_module_code_unit(*ir_module_id, CodeUnitId(func_id.0), Arc::clone(unit));
-        }
+    // Which `IrModuleId` each module was given. The entries are iterated rather
+    // than collected, because `to_hashmap` clones every function name in the
+    // world to build a map this only walks.
+    let mut ir_module_ids: HashMap<ModuleId<'db>, IrModuleId> = HashMap::new();
+    for ((module_id, _), (ir_module_id, _)) in func_id_map.entries(db) {
+        ir_module_ids.entry(*module_id).or_insert(*ir_module_id);
     }
 
+    let mut registry = ModuleFunctionRegistry::new();
+    for (module_id, lowered) in &modules {
+        // A module the id map does not name declares no functions.
+        let Some(ir_module_id) = ir_module_ids.get(module_id).copied() else {
+            continue;
+        };
+        registry.set_module_code_units(ir_module_id, Arc::clone(ctfe_module_units(db, *lowered)));
+    }
     Arc::new(registry)
 }
 
