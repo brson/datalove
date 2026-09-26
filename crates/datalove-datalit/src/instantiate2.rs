@@ -125,15 +125,10 @@ fn instantiate_expr_into<'db>(
 
         // Hex literals for integer types.
         (Expr::Hex(hex_expr), Type::U8) => instantiate_hex_u8(rt, db, hex_expr, dest_ptr),
-        (Expr::Hex(hex_expr), Type::I8) => instantiate_hex_i8(rt, db, hex_expr, dest_ptr),
         (Expr::Hex(hex_expr), Type::U16) => instantiate_hex_u16(rt, db, hex_expr, dest_ptr),
-        (Expr::Hex(hex_expr), Type::I16) => instantiate_hex_i16(rt, db, hex_expr, dest_ptr),
         (Expr::Hex(hex_expr), Type::U32) => instantiate_hex_u32(rt, db, hex_expr, dest_ptr),
-        (Expr::Hex(hex_expr), Type::I32) => instantiate_hex_i32(rt, db, hex_expr, dest_ptr),
         (Expr::Hex(hex_expr), Type::U64) => instantiate_hex_u64(rt, db, hex_expr, dest_ptr),
-        (Expr::Hex(hex_expr), Type::I64) => instantiate_hex_i64(rt, db, hex_expr, dest_ptr),
         (Expr::Hex(hex_expr), Type::Index) => instantiate_hex_usize(rt, db, hex_expr, dest_ptr),
-        (Expr::Hex(hex_expr), Type::Offset) => instantiate_hex_isize(rt, db, hex_expr, dest_ptr),
         (Expr::Hex(hex_expr), Type::Int) => instantiate_hex_bigint(rt, db, hex_expr, dest_ptr),
 
         // Hex literals for floats - interpret as bit patterns.
@@ -396,33 +391,12 @@ fn instantiate_hex_u8(_rt: datalove_rt::c::LocalRtHandle, db: &dyn crate::Db, he
     }
 }
 
-fn instantiate_hex_i8(_rt: datalove_rt::c::LocalRtHandle, db: &dyn crate::Db, hex_expr: &ExprHex, dest_ptr: *mut u8) -> AnyResult<*const u8> {
-    debug_assert!(!dest_ptr.is_null());
-    let value_str = hex_expr.value.as_str(db);
-    // Parse as u8, then reinterpret bits as i8.
-    let value = u8::from_str_radix(&parse_hex_str(value_str), 16)?;
-    unsafe {
-        *(dest_ptr as *mut i8) = value as i8;
-        Ok(dest_ptr as *const u8)
-    }
-}
-
 fn instantiate_hex_u16(_rt: datalove_rt::c::LocalRtHandle, db: &dyn crate::Db, hex_expr: &ExprHex, dest_ptr: *mut u8) -> AnyResult<*const u8> {
     debug_assert!(!dest_ptr.is_null());
     let value_str = hex_expr.value.as_str(db);
     let value = u16::from_str_radix(&parse_hex_str(value_str), 16)?;
     unsafe {
         *(dest_ptr as *mut u16) = value;
-        Ok(dest_ptr as *const u8)
-    }
-}
-
-fn instantiate_hex_i16(_rt: datalove_rt::c::LocalRtHandle, db: &dyn crate::Db, hex_expr: &ExprHex, dest_ptr: *mut u8) -> AnyResult<*const u8> {
-    debug_assert!(!dest_ptr.is_null());
-    let value_str = hex_expr.value.as_str(db);
-    let value = u16::from_str_radix(&parse_hex_str(value_str), 16)?;
-    unsafe {
-        *(dest_ptr as *mut i16) = value as i16;
         Ok(dest_ptr as *const u8)
     }
 }
@@ -437,16 +411,6 @@ fn instantiate_hex_u32(_rt: datalove_rt::c::LocalRtHandle, db: &dyn crate::Db, h
     }
 }
 
-fn instantiate_hex_i32(_rt: datalove_rt::c::LocalRtHandle, db: &dyn crate::Db, hex_expr: &ExprHex, dest_ptr: *mut u8) -> AnyResult<*const u8> {
-    debug_assert!(!dest_ptr.is_null());
-    let value_str = hex_expr.value.as_str(db);
-    let value = u32::from_str_radix(&parse_hex_str(value_str), 16)?;
-    unsafe {
-        *(dest_ptr as *mut i32) = value as i32;
-        Ok(dest_ptr as *const u8)
-    }
-}
-
 fn instantiate_hex_u64(_rt: datalove_rt::c::LocalRtHandle, db: &dyn crate::Db, hex_expr: &ExprHex, dest_ptr: *mut u8) -> AnyResult<*const u8> {
     debug_assert!(!dest_ptr.is_null());
     let value_str = hex_expr.value.as_str(db);
@@ -457,32 +421,12 @@ fn instantiate_hex_u64(_rt: datalove_rt::c::LocalRtHandle, db: &dyn crate::Db, h
     }
 }
 
-fn instantiate_hex_i64(_rt: datalove_rt::c::LocalRtHandle, db: &dyn crate::Db, hex_expr: &ExprHex, dest_ptr: *mut u8) -> AnyResult<*const u8> {
-    debug_assert!(!dest_ptr.is_null());
-    let value_str = hex_expr.value.as_str(db);
-    let value = u64::from_str_radix(&parse_hex_str(value_str), 16)?;
-    unsafe {
-        *(dest_ptr as *mut i64) = value as i64;
-        Ok(dest_ptr as *const u8)
-    }
-}
-
 fn instantiate_hex_usize(_rt: datalove_rt::c::LocalRtHandle, db: &dyn crate::Db, hex_expr: &ExprHex, dest_ptr: *mut u8) -> AnyResult<*const u8> {
     debug_assert!(!dest_ptr.is_null());
     let value_str = hex_expr.value.as_str(db);
     let value = datalove_rtdt::IndexRepr::from_str_radix(&parse_hex_str(value_str), 16)?;
     unsafe {
         *(dest_ptr as *mut datalove_rtdt::Index) = datalove_rtdt::Index(value);
-        Ok(dest_ptr as *const u8)
-    }
-}
-
-fn instantiate_hex_isize(_rt: datalove_rt::c::LocalRtHandle, db: &dyn crate::Db, hex_expr: &ExprHex, dest_ptr: *mut u8) -> AnyResult<*const u8> {
-    debug_assert!(!dest_ptr.is_null());
-    let value_str = hex_expr.value.as_str(db);
-    let value = datalove_rtdt::IndexRepr::from_str_radix(&parse_hex_str(value_str), 16)?;
-    unsafe {
-        *(dest_ptr as *mut datalove_rtdt::Offset) = datalove_rtdt::Offset(value as datalove_rtdt::OffsetRepr);
         Ok(dest_ptr as *const u8)
     }
 }
@@ -514,10 +458,14 @@ fn instantiate_hex_f64(_rt: datalove_rt::c::LocalRtHandle, db: &dyn crate::Db, h
 fn instantiate_hex_bigint(rt: datalove_rt::c::LocalRtHandle, db: &dyn crate::Db, hex_expr: &ExprHex, dest_ptr: *mut u8) -> AnyResult<*const u8> {
     debug_assert!(!dest_ptr.is_null());
     let value_str = hex_expr.value.as_str(db);
-    let value = u128::from_str_radix(&parse_hex_str(value_str), 16)?;
-
-    // BigInt is always non-negative when parsed from hex.
-    let is_negative = false;
+    // The sign is written against the digits, and an int is the one type a
+    // negative hex literal checks against.
+    let (is_negative, unsigned) = match value_str.strip_prefix('-') {
+        Some(rest) => (true, rest),
+        None => (false, value_str),
+    };
+    let value = u128::from_str_radix(&parse_hex_str(unsigned), 16)?;
+    let is_negative = is_negative && value != 0;
 
     let mut limbs = Vec::new();
     let mut remaining = value;

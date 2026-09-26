@@ -75,6 +75,12 @@ true      type      var       while     xor
 Bare integer literals synthesize as `int` (arbitrary-precision).
 Use a type hint for fixed-width types: `: u32 / 42`.
 
+A hex literal is an unsigned integer: it checks against `int`, the unsigned
+fixed-width types and `index`, and against `f32` and `f64` as their bit
+patterns. It does not check against a signed fixed-width type or `offset`. A
+minus sign written against it, `-0x10`, is part of the literal, and only an
+`int` takes a negative one.
+
 Underscores may group digits, and say nothing about the value:
 
 ```datalove
@@ -370,7 +376,9 @@ error(some_expr)         // parenthesized for non-primary payload
 ```
 
 Both `data` and `error` take a primary expression as their payload (see Section 3.4).
-Any type coerces to `data`.
+A value is a `data` only when written as one. Nothing becomes a `data` by being
+where one is expected: `let d: data = x` is a mismatch, and `let d: data = data
+x` is how to write it. Datalit is the same.
 
 ### 3.6 Atom, Term, and Enum Types
 

@@ -121,11 +121,6 @@ pub fn check_expr<'db>(
                     ctx.store_expr_type(expr, &expected);
                     Ok(())
                 }
-                Type::Datalit(datalit::tycheck::Type::Data) => {
-                    // Any type can coerce to Data.
-                    ctx.store_expr_type(expr, &expected);
-                    Ok(())
-                }
                 _ => {
                     let synthesized = ctx.synthesize_unhinted(expr)?;
                     let expected_str = type_to_string(db, expected);
@@ -141,11 +136,6 @@ pub fn check_expr<'db>(
                 Type::Datalit(datalit::tycheck::Type::List(_)) => {
                     // Check elements against expected element type (with coercion).
                     check_list_elements(ctx, &list_expr.elements, &expected)?;
-                    ctx.store_expr_type(expr, &expected);
-                    Ok(())
-                }
-                Type::Datalit(datalit::tycheck::Type::Data) => {
-                    // Any type can coerce to Data.
                     ctx.store_expr_type(expr, &expected);
                     Ok(())
                 }
@@ -167,11 +157,6 @@ pub fn check_expr<'db>(
                     ctx.store_expr_type(expr, &expected);
                     Ok(())
                 }
-                Type::Datalit(datalit::tycheck::Type::Data) => {
-                    // Any type can coerce to Data.
-                    ctx.store_expr_type(expr, &expected);
-                    Ok(())
-                }
                 _ => {
                     let synthesized = ctx.synthesize_unhinted(expr)?;
                     let expected_str = type_to_string(db, expected);
@@ -187,11 +172,6 @@ pub fn check_expr<'db>(
                 Type::Datalit(datalit::tycheck::Type::Map(_)) => {
                     // Check entries against expected key/value types (with coercion).
                     check_map_entries(ctx, &map_expr.entries, &expected)?;
-                    ctx.store_expr_type(expr, &expected);
-                    Ok(())
-                }
-                Type::Datalit(datalit::tycheck::Type::Data) => {
-                    // Any type can coerce to Data.
                     ctx.store_expr_type(expr, &expected);
                     Ok(())
                 }
@@ -214,11 +194,6 @@ pub fn check_expr<'db>(
                     ctx.store_expr_type(expr, &expected);
                     Ok(())
                 }
-                Type::Datalit(datalit::tycheck::Type::Data) => {
-                    // Any type can coerce to Data.
-                    ctx.store_expr_type(expr, &expected);
-                    Ok(())
-                }
                 _ => {
                     let synthesized = ctx.synthesize_unhinted(expr)?;
                     let expected_str = type_to_string(db, expected);
@@ -234,11 +209,6 @@ pub fn check_expr<'db>(
                 Type::Datalit(datalit::tycheck::Type::AnonTuple(_)) => {
                     // Check elements against expected field types.
                     check_tuple_elements(ctx, &tuple_expr.elements, &expected)?;
-                    ctx.store_expr_type(expr, &expected);
-                    Ok(())
-                }
-                Type::Datalit(datalit::tycheck::Type::Data) => {
-                    // Any type can coerce to Data.
                     ctx.store_expr_type(expr, &expected);
                     Ok(())
                 }
@@ -260,11 +230,6 @@ pub fn check_expr<'db>(
                     ctx.store_expr_type(expr, &expected);
                     Ok(())
                 }
-                Type::Datalit(datalit::tycheck::Type::Data) => {
-                    // Any type can coerce to Data.
-                    ctx.store_expr_type(expr, &expected);
-                    Ok(())
-                }
                 _ => {
                     let synthesized = ctx.synthesize_unhinted(expr)?;
                     let expected_str = type_to_string(db, expected);
@@ -280,11 +245,6 @@ pub fn check_expr<'db>(
                 Type::Datalit(datalit::tycheck::Type::AnonStruct(_)) => {
                     // Check fields against expected field types.
                     check_struct_fields(ctx, &struct_expr.fields, &expected)?;
-                    ctx.store_expr_type(expr, &expected);
-                    Ok(())
-                }
-                Type::Datalit(datalit::tycheck::Type::Data) => {
-                    // Any type can coerce to Data.
                     ctx.store_expr_type(expr, &expected);
                     Ok(())
                 }
@@ -309,12 +269,7 @@ pub fn check_expr<'db>(
                     if is_fixed_int_type(expected) || is_bigint_type(expected) {
                         // Validate the literal value fits in the expected type.
                         let value_str = int_expr.value.as_str(db);
-                        check_int_fits_wrapped_type(value_str, expected_datalit_ty, db)?;
-                        ctx.store_expr_type(expr, &expected);
-                        return Ok(());
-                    }
-                    // If expected is Data, allow coercion (any type coerces to data).
-                    if let datalit::tycheck::Type::Data = expected_datalit_ty {
+                        check_int_fits_type(value_str, expected_datalit_ty)?;
                         ctx.store_expr_type(expr, &expected);
                         return Ok(());
                     }
@@ -337,48 +292,28 @@ pub fn check_expr<'db>(
             }
         }
 
-        // Handle float literals specially - they can coerce to expected float types.
-        ExprFunKind::Float(_float_expr) => {
-            match expected {
-                Type::Datalit(expected_datalit_ty) => {
-                    // Check if expected type is a float type.
-                    if is_float_type(expected) {
-                        ctx.store_expr_type(expr, &expected);
-                        return Ok(());
-                    }
-                    // If expected is Data, allow coercion (any type coerces to data).
-                    if let datalit::tycheck::Type::Data = expected_datalit_ty {
-                        ctx.store_expr_type(expr, &expected);
-                        return Ok(());
-                    }
-                    // Otherwise, synthesize and compare.
-                    let synthesized = ctx.synthesize_unhinted(expr)?;
-                    if types_equivalent(db, &synthesized, expected) {
-                        Ok(())
-                    } else {
-                        let expected_str = type_to_string(db, expected);
-                        let actual_str = type_to_string(db, &synthesized);
-                        Err(ctx.error_type_mismatch(expr, &expected_str, &actual_str, "type mismatch"))
-                    }
-                }
-                _ => {
-                    let synthesized = ctx.synthesize_unhinted(expr)?;
-                    let expected_str = type_to_string(db, expected);
-                    let actual_str = type_to_string(db, &synthesized);
-                    Err(ctx.error_type_mismatch(expr, &expected_str, &actual_str, "type mismatch"))
-                }
+        // A float literal checks against either float type, and nothing else.
+        ExprFunKind::Float(_) => {
+            if is_float_type(expected) {
+                ctx.store_expr_type(expr, &expected);
+                return Ok(());
             }
+            let synthesized = ctx.synthesize_unhinted(expr)?;
+            let expected_str = type_to_string(db, expected);
+            let actual_str = type_to_string(db, &synthesized);
+            Err(ctx.error_type_mismatch(expr, &expected_str, &actual_str, "type mismatch"))
         }
 
         // Handle hex literals specially - they can coerce to expected integer types.
         ExprFunKind::Hex(hex_expr) => {
             match expected {
                 Type::Datalit(expected_datalit_ty) => {
-                    // Check if expected type is a numeric type.
-                    if is_numeric_type(expected) {
-                        // Validate the hex value fits in the expected type.
+                    // A hex literal is an unsigned integer, or a float's bits,
+                    // as it is in datalit. It does not check against a signed
+                    // type, where what it spells would depend on the width.
+                    if is_unsigned_int_type(expected) || is_bigint_type(expected) || is_float_type(expected) {
                         let value_str = hex_expr.value.as_str(db);
-                        check_hex_fits_wrapped_type(value_str, expected_datalit_ty, db)?;
+                        check_hex_fits_type(value_str, expected_datalit_ty)?;
                         ctx.store_expr_type(expr, &expected);
                         return Ok(());
                     }
@@ -407,6 +342,17 @@ pub fn check_expr<'db>(
         // the width, so the expected type reaches through the negation to the
         // operand, the same as it would without one.
         ExprFunKind::UnaryOp(unary) if unary.op == UnaryOp::Neg => {
+            // A hex literal carries its sign the way datalit reads it, and a
+            // negative one is no unsigned integer or float bit pattern.
+            if let (ExprFunKind::Hex(hex_expr), Type::Datalit(expected_datalit_ty)) =
+                (unary.operand.expr(db), expected)
+            {
+                if is_unsigned_int_type(expected) || is_float_type(expected) {
+                    let negated = format!("-{}", hex_expr.value.as_str(db));
+                    check_hex_fits_type(&negated, expected_datalit_ty)?;
+                    unreachable!("no negative hex fits an unsigned integer or a float");
+                }
+            }
             if is_fixed_int_type(expected) || is_float_type(expected) {
                 // An integer literal is checked with its sign attached, since
                 // that is what decides the range: -2147483648 is an i32 even
@@ -419,7 +365,7 @@ pub fn check_expr<'db>(
                     if let Type::Datalit(expected_datalit_ty) = expected {
                         let value_str = int_expr.value.as_str(db);
                         let negated = format!("-{}", value_str);
-                        check_int_fits_wrapped_type(&negated, expected_datalit_ty, db)?;
+                        check_int_fits_type(&negated, expected_datalit_ty)?;
                         ctx.store_expr_type(unary.operand, expected);
                         ctx.store_expr_type(expr, expected);
                         return Ok(());
@@ -538,9 +484,6 @@ pub fn check_expr<'db>(
             // @ to widen first, or use checked/optional operators (+!, +?, etc.).
             let synthesized = ctx.synthesize_unhinted(expr)?;
             if types_equivalent(db, &synthesized, expected) {
-                return Ok(());
-            }
-            if let Type::Datalit(datalit::tycheck::Type::Data) = expected {
                 return Ok(());
             }
             // No match or coercion possible - try auto-adapt or report error.
@@ -675,9 +618,6 @@ pub fn check_expr<'db>(
             if types_equivalent(db, &synthesized, expected) {
                 return Ok(());
             }
-            if let Type::Datalit(datalit::tycheck::Type::Data) = expected {
-                return Ok(());
-            }
             ctx.check_type_mismatch_or_adapt(expr, expected, &synthesized, "type mismatch")
         }
 
@@ -686,12 +626,6 @@ pub fn check_expr<'db>(
 
             // Check for exact type match first.
             if types_equivalent(db, &synthesized, expected) {
-                return Ok(());
-            }
-
-            // Check for automatic coercion to Data.
-            if let Type::Datalit(datalit::tycheck::Type::Data) = expected {
-                // Any type can coerce to data.
                 return Ok(());
             }
 

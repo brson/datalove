@@ -13,8 +13,9 @@ DualAnalysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = const 127i32
+                        v0 = const -127int
                         debuglog v0
+                        unit_end_drop v0
                         unit_end
                 """,
             ),
@@ -23,14 +24,15 @@ DualAnalysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = const 127i32
+                        v0 = const -127int
                         debuglog v0
+                        unit_end_drop v0
                         unit_end
                 """,
             ),
             ir_match: true,
-            interp_output: "127\n",
-            aot_output: "127\n",
+            interp_output: "-127\n",
+            aot_output: "-127\n",
             output_match: true,
             aot_compile: Some(AotCompileResult(
                 status: "Success",

@@ -1129,22 +1129,20 @@ pub fn check_element_compatible<'db>(
 // ============================================================================
 
 /// Check if an integer value fits within a type (delegated to datalit).
-pub fn check_int_fits_wrapped_type<'db>(
+pub fn check_int_fits_type(
     value_str: &str,
-    ty: &datalit::tycheck::Type<'db>,
-    _db: &'db dyn Db,
+    ty: &datalit::tycheck::Type<'_>,
 ) -> Result<(), TypeError> {
-    datalit::tycheck::check_int_fits_wrapped_type(value_str, ty)
+    datalit::tycheck::check_int_fits_type(value_str, ty)
         .map_err(TypeError::from)
 }
 
 /// Check if a hex value fits within a type (delegated to datalit).
-pub fn check_hex_fits_wrapped_type<'db>(
+pub fn check_hex_fits_type(
     value_str: &str,
-    ty: &datalit::tycheck::Type<'db>,
-    _db: &'db dyn Db,
+    ty: &datalit::tycheck::Type<'_>,
 ) -> Result<(), TypeError> {
-    datalit::tycheck::check_hex_fits_wrapped_type(value_str, ty)
+    datalit::tycheck::check_hex_fits_type(value_str, ty)
         .map_err(TypeError::from)
 }
 

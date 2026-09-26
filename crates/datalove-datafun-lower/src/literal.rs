@@ -70,7 +70,7 @@ pub fn parse_decimal_to_limbs(text: &str) -> Result<(Vec<u32>, bool), ()> {
 }
 
 /// Convert a hex string to bigint limbs (little-endian base 2^32).
-pub fn parse_hex_to_limbs(hex_str: &str) -> Result<(Vec<u32>, bool), ()> {
+fn parse_hex_to_limbs(hex_str: &str) -> Result<Vec<u32>, ()> {
     let hex_str = digits(hex_str);
     let hex_str = hex_str.as_ref();
     // Parse from right to left, 8 hex digits at a time = 1 u32 limb.
@@ -96,8 +96,7 @@ pub fn parse_hex_to_limbs(hex_str: &str) -> Result<(Vec<u32>, bool), ()> {
         limbs.clear();
     }
 
-    // Hex is always non-negative for now.
-    Ok((limbs, false))
+    Ok(limbs)
 }
 
 /// Parse an integer literal into a ConstValue based on the target type.
@@ -173,22 +172,31 @@ pub fn try_parse_negated_int_const(text: &str, ty: &IrType) -> Option<ConstValue
 }
 
 /// Parse a hex literal into a ConstValue based on the target type.
-pub fn parse_hex_const(hex_str: &str, ty: &IrType) -> Result<ConstValue, ()> {
+///
+/// The text is the literal as written, prefix and all. A sign is part of it
+/// where it was written against the digits, and only an `int` takes one: the
+/// typechecker keeps hex from signed fixed-width types, and a negative bit
+/// pattern means nothing.
+pub fn parse_hex_const(text: &str, ty: &IrType) -> Result<ConstValue, ()> {
+    let (negative, unsigned) = match text.strip_prefix('-') {
+        Some(rest) => (true, rest),
+        None => (false, text),
+    };
+    let hex_str = unsigned.strip_prefix("0x").or_else(|| unsigned.strip_prefix("0X")).ok_or(())?;
     let hex_str = digits(hex_str);
     let hex_str = hex_str.as_ref();
+    if negative && *ty != IrType::Int {
+        return Err(());
+    }
     match ty {
         IrType::U8 => u8::from_str_radix(hex_str, 16).map(ConstValue::U8).map_err(|_| ()),
         IrType::U16 => u16::from_str_radix(hex_str, 16).map(ConstValue::U16).map_err(|_| ()),
         IrType::U32 => u32::from_str_radix(hex_str, 16).map(ConstValue::U32).map_err(|_| ()),
         IrType::U64 => u64::from_str_radix(hex_str, 16).map(ConstValue::U64).map_err(|_| ()),
-        IrType::I8 => i8::from_str_radix(hex_str, 16).map(ConstValue::I8).map_err(|_| ()),
-        IrType::I16 => i16::from_str_radix(hex_str, 16).map(ConstValue::I16).map_err(|_| ()),
-        IrType::I32 => i32::from_str_radix(hex_str, 16).map(ConstValue::I32).map_err(|_| ()),
-        IrType::I64 => i64::from_str_radix(hex_str, 16).map(ConstValue::I64).map_err(|_| ()),
         IrType::Index => datalove_rtdt::IndexRepr::from_str_radix(hex_str, 16).map(ConstValue::Index).map_err(|_| ()),
-        IrType::Offset => datalove_rtdt::OffsetRepr::from_str_radix(hex_str, 16).map(ConstValue::Offset).map_err(|_| ()),
         IrType::Int => {
-            let (limbs, negative) = parse_hex_to_limbs(hex_str)?;
+            let limbs = parse_hex_to_limbs(hex_str)?;
+            let negative = negative && !limbs.is_empty();
             Ok(ConstValue::Int { limbs, negative })
         }
         IrType::F32 => {

@@ -541,8 +541,7 @@ pub fn lower_expression<'db>(
             let result_type = ctx.expr_type(expr);
             let dest = ctx.fresh_value(result_type.clone());
             let text = lit.value.text(ctx.db);
-            let hex_str = text.strip_prefix("0x").or_else(|| text.strip_prefix("0X")).unwrap_or(text);
-            let const_value = parse_hex_const(hex_str, &result_type)
+            let const_value = parse_hex_const(text, &result_type)
                 .unwrap_or_else(|_| panic!("invalid hex literal '{}' for type {:?} - typechecker should catch this", text, result_type));
             ctx.emit_const(dest, const_value);
             Ok(dest)

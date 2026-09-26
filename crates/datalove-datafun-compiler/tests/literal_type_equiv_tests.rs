@@ -83,6 +83,23 @@ const CASES: &[Case] = &[
     ("u32", "(1)"),
     // Nor does a value become an option by being where one is expected.
     ("?u32", "1"),
+    // Nor a data: a data is written as one.
+    ("data", "5"),
+    ("data", "\"s\""),
+    ("[data]", "[data 1, 2]"),
+    ("data", "data 5"),
+    // A hex literal is unsigned, or a float's bits. Its sign is part of it,
+    // and only an int takes a negative one.
+    ("i32", "0x7F"),
+    ("i8", "0x7F"),
+    ("offset", "0x1"),
+    ("u32", "0x7F"),
+    ("index", "0x1"),
+    ("f32", "0x3F800000"),
+    ("u32", "-0x10"),
+    ("f32", "-0x3F800000"),
+    ("i32", "-0x10"),
+    ("int", "-0x10"),
 ];
 
 /// Text that is not a numeric literal in either language.
@@ -216,6 +233,11 @@ fn literal_types_are_decided_as_expected() {
             ("u32", "(: u32 / 1)"),
             ("{a: u32}", "{a = : u32 / 1}"),
             ("u32", "(1)"),
+            ("data", "data 5"),
+            ("u32", "0x7F"),
+            ("index", "0x1"),
+            ("f32", "0x3F800000"),
+            ("int", "-0x10"),
         ],
     );
 }

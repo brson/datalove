@@ -745,18 +745,6 @@ pub fn check_int_fits_type(value_str: &str, ty: &Type<'_>) -> Result<(), TypeErr
     }
 }
 
-/// Check if an integer value fits within the innermost integer type of a possibly wrapped type.
-pub fn check_int_fits_wrapped_type<'db>(
-    value_str: &str,
-    ty: &Type<'db>,
-) -> Result<(), TypeError> {
-    match ty {
-        Type::Option(opt) => check_int_fits_wrapped_type(value_str, &opt.inner_type),
-        Type::Result(res) => check_int_fits_wrapped_type(value_str, &res.inner_type),
-        _ => check_int_fits_type(value_str, ty),
-    }
-}
-
 /// Check if a hex value fits within a given type.
 pub fn check_hex_fits_type(value_str: &str, ty: &Type<'_>) -> Result<(), TypeError> {
     let value_str = crate::parser_util::strip_separators(value_str);
@@ -771,70 +759,17 @@ pub fn check_hex_fits_type(value_str: &str, ty: &Type<'_>) -> Result<(), TypeErr
         Type::U8 if !is_negative => {
             u8::from_str_radix(hex_part, 16).map(|_| ()).map_err(|_| TypeError::IntOutOfRange)
         }
-        Type::I8 => {
-            let value = u64::from_str_radix(hex_part, 16).map_err(|_| TypeError::IntOutOfRange)?;
-            if is_negative {
-                if value <= 128 { Ok(()) } else { Err(TypeError::IntOutOfRange) }
-            } else {
-                if value <= 127 { Ok(()) } else { Err(TypeError::IntOutOfRange) }
-            }
-        }
         Type::U16 if !is_negative => {
             u16::from_str_radix(hex_part, 16).map(|_| ()).map_err(|_| TypeError::IntOutOfRange)
-        }
-        Type::I16 => {
-            let value = u64::from_str_radix(hex_part, 16).map_err(|_| TypeError::IntOutOfRange)?;
-            if is_negative {
-                if value <= 32768 { Ok(()) } else { Err(TypeError::IntOutOfRange) }
-            } else {
-                if value <= 32767 { Ok(()) } else { Err(TypeError::IntOutOfRange) }
-            }
         }
         Type::U32 if !is_negative => {
             u32::from_str_radix(hex_part, 16).map(|_| ()).map_err(|_| TypeError::IntOutOfRange)
         }
-        Type::I32 => {
-            let value = u64::from_str_radix(hex_part, 16).map_err(|_| TypeError::IntOutOfRange)?;
-            if is_negative {
-                if value <= 2147483648 { Ok(()) } else { Err(TypeError::IntOutOfRange) }
-            } else {
-                if value <= 2147483647 { Ok(()) } else { Err(TypeError::IntOutOfRange) }
-            }
-        }
         Type::U64 if !is_negative => {
             u64::from_str_radix(hex_part, 16).map(|_| ()).map_err(|_| TypeError::IntOutOfRange)
         }
-        Type::I64 => {
-            let value = u64::from_str_radix(hex_part, 16).map_err(|_| TypeError::IntOutOfRange)?;
-            if is_negative {
-                if value <= 9223372036854775808 { Ok(()) } else { Err(TypeError::IntOutOfRange) }
-            } else {
-                if value <= 9223372036854775807 { Ok(()) } else { Err(TypeError::IntOutOfRange) }
-            }
-        }
         Type::Index if !is_negative => {
             datalove_rtdt::IndexRepr::from_str_radix(hex_part, 16).map(|_| ()).map_err(|_| TypeError::IntOutOfRange)
-        }
-        Type::Offset => {
-            // Handle signed isize similar to other signed types.
-            #[cfg(not(feature = "index-64"))]
-            {
-                let value = u64::from_str_radix(hex_part, 16).map_err(|_| TypeError::IntOutOfRange)?;
-                if is_negative {
-                    if value <= 2147483648 { Ok(()) } else { Err(TypeError::IntOutOfRange) }
-                } else {
-                    if value <= 2147483647 { Ok(()) } else { Err(TypeError::IntOutOfRange) }
-                }
-            }
-            #[cfg(feature = "index-64")]
-            {
-                let value = u64::from_str_radix(hex_part, 16).map_err(|_| TypeError::IntOutOfRange)?;
-                if is_negative {
-                    if value <= 9223372036854775808 { Ok(()) } else { Err(TypeError::IntOutOfRange) }
-                } else {
-                    if value <= 9223372036854775807 { Ok(()) } else { Err(TypeError::IntOutOfRange) }
-                }
-            }
         }
         Type::Int => Ok(()),
         Type::F32 if !is_negative => {
@@ -845,18 +780,6 @@ pub fn check_hex_fits_type(value_str: &str, ty: &Type<'_>) -> Result<(), TypeErr
         }
         _ if is_negative => Err(TypeError::IntOutOfRange),
         _ => panic!("check_hex_fits_type called with unsupported type"),
-    }
-}
-
-/// Check if a hex value fits within the innermost integer type of a possibly wrapped type.
-pub fn check_hex_fits_wrapped_type<'db>(
-    value_str: &str,
-    ty: &Type<'db>,
-) -> Result<(), TypeError> {
-    match ty {
-        Type::Option(opt) => check_hex_fits_wrapped_type(value_str, &opt.inner_type),
-        Type::Result(res) => check_hex_fits_wrapped_type(value_str, &res.inner_type),
-        _ => check_hex_fits_type(value_str, ty),
     }
 }
 
@@ -881,12 +804,6 @@ const OFFSET_RANGE: &str = "offset can represent values from -9,223,372,036,854,
 const INDEX_HEX_RANGE: &str = "index can represent hex values from 0x00000000 to 0xFFFFFFFF";
 #[cfg(feature = "index-64")]
 const INDEX_HEX_RANGE: &str = "index can represent hex values from 0x0000000000000000 to 0xFFFFFFFFFFFFFFFF";
-
-/// Hex range description for offset based on index-64 feature.
-#[cfg(not(feature = "index-64"))]
-const OFFSET_HEX_RANGE: &str = "offset can represent hex values from -0x80000000 to 0x7FFFFFFF";
-#[cfg(feature = "index-64")]
-const OFFSET_HEX_RANGE: &str = "offset can represent hex values from -0x8000000000000000 to 0x7FFFFFFFFFFFFFFF";
 
 /// Get the diagnostic code and range note for an integer type.
 pub fn int_type_range_info(ty: &Type<'_>) -> (&'static str, &'static str) {
@@ -913,12 +830,7 @@ pub fn hex_type_range_info(ty: &Type<'_>) -> (&'static str, &'static str) {
         Type::U16 => ("T007", "u16 can represent hex values from 0x0000 to 0xFFFF"),
         Type::U32 => ("T009", "u32 can represent hex values from 0x00000000 to 0xFFFFFFFF"),
         Type::U64 => ("T011", "u64 can represent hex values from 0x0000000000000000 to 0xFFFFFFFFFFFFFFFF"),
-        Type::I8 => ("T006", "i8 can represent hex values from -0x80 to 0x7F"),
-        Type::I16 => ("T008", "i16 can represent hex values from -0x8000 to 0x7FFF"),
-        Type::I32 => ("T010", "i32 can represent hex values from -0x80000000 to 0x7FFFFFFF"),
-        Type::I64 => ("T012", "i64 can represent hex values from -0x8000000000000000 to 0x7FFFFFFFFFFFFFFF"),
         Type::Index => ("T015", INDEX_HEX_RANGE),
-        Type::Offset => ("T016", OFFSET_HEX_RANGE),
         Type::Int => ("T000", "int is arbitrary precision"),
         Type::F32 => ("T013", "f32 bit patterns must be 32-bit hex values (0x00000000 to 0xFFFFFFFF)"),
         Type::F64 => ("T014", "f64 bit patterns must be 64-bit hex values (0x0000000000000000 to 0xFFFFFFFFFFFFFFFF)"),

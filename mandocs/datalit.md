@@ -311,6 +311,8 @@ Hex literals synthesize `int`, but check
 as `int`, unsigned fixed ints, `index`,
 or floats if provided a type hint.
 Hex literals do not check against signed fixed-width types or `offset`.
+A minus sign is part of a hex literal, as it is of a decimal one,
+and only `int` takes a negative hex literal: `: int / -0x10` is `-16`.
 
 A hex literal checked against a float type is its IEEE 754 bit pattern,
 and must fit in the float's width: 32 bits for `f32`, 64 for `f64`.
@@ -1011,14 +1013,6 @@ and against the parser's own diagnostics.
   while the implicit `: !u32 / error "x"` holds an `error` of `"x"`.
   The two compare unequal.
   `er data "x"` likewise holds an `error` of a `data`.
-- **Negative hex literals.**
-  The grammar and parser accept `-0x10`,
-  and it typechecks as `int`,
-  but instantiation fails with "invalid digit found in string".
-  The checker's `check_hex_fits_type` has ranges for signed types,
-  but `check.rs` never sends signed types there,
-  so `: i32 / 0x7F` is a type mismatch.
-  Whether hex should reach signed types is undecided.
 - **Some type errors carry no diagnostic.**
   Type aliases (`: Foo / 1`)
   fail typechecking with no message.
@@ -1034,10 +1028,6 @@ and against the parser's own diagnostics.
 
 ### Divergences from the botspec
 
-- **`data` coercion.**
-  The botspec says any type coerces to `data`.
-  In datalit, `: data / 5` is a type error and `data 5` is required.
-  This spec follows the implementation.
 - **`tuple ( ... )` types.**
   The type parser accepts `tuple (u32, u32)` as a spelling of `(u32, u32)`.
   Nothing documents it.
@@ -1068,9 +1058,8 @@ and against the parser's own diagnostics.
   so they read back as `int` and `f64`.
   Round-tripping through the value printer is only exact
   for values whose types synthesize.
-- Whether `-0` as an `int` literal needs saying,
-  or `-0x0` as a float bit pattern
-  (it is rejected today, as all negative hex is for floats).
+- Whether `-0x0` should be accepted as a float bit pattern.
+  It is rejected today, as all negative hex is for floats.
 
 
 

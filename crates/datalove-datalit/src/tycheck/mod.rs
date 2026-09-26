@@ -63,9 +63,7 @@ pub use types::{
     check_tensor_element_count,
     // Integer range checking.
     check_int_fits_type,
-    check_int_fits_wrapped_type,
     check_hex_fits_type,
-    check_hex_fits_wrapped_type,
     // Type conversion.
     convert_type_hint,
     // Type to string.
