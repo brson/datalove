@@ -310,16 +310,25 @@ pub enum Type<'db> {
 }
 
 /// Function type with parameter types and return type.
+///
+/// No `#[tracked]` field, so the whole signature is the identity. Two of these
+/// were tracked, which is two dependency edges per signature for salsa to walk
+/// when it validates a memo, and every consumer reads all four fields together
+/// -- `synthesize`'s call check reads them in four consecutive lines. Two edges
+/// doing no edge's work.
+///
+/// It also gives the struct an identity worth having. The identity was
+/// `hash(param_modes, param_comptime)` before, so every function taking two
+/// `in` parameters hashed alike and they were told apart by the order the
+/// typechecker happened to create them in.
 #[salsa::tracked]
 pub struct TypeFunction<'db> {
-    #[tracked]
     #[returns(ref)]
     pub param_types: Vec<Type<'db>>,
     #[returns(clone)]
     pub param_modes: Vec<ParamMode>,
     #[returns(ref)]
     pub param_comptime: Vec<bool>,
-    #[tracked]
     #[returns(clone)]
     pub return_type: Type<'db>,
 }
