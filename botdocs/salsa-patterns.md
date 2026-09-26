@@ -97,6 +97,22 @@ Expressions fail that test and statements pass it. There are two orders of
 magnitude more expressions than statements, which is the same thing said
 another way.
 
+**The same question applies field by field.** `StmtFun` had five tracked
+fields; four of them were the signature -- type parameters, their bounds, the
+parameters, the return type -- and nothing reads one of those without the
+others, so they were four edges doing one edge's work. Bundled into a
+`FunSignature`, a 512-module edit went from about 14.6ms to about 12.9ms and a
+1024-module one from 33.6ms to 27.6ms.
+
+The body is the field that stays separate, and the reason is the one thing
+worth carrying away: **a field earns its own edge when some consumer reads it
+and not the rest.** Name resolution reads the signature and not the body.
+Folding the body in too is faster again -- 19% rather than 13% -- and it makes
+an edit to a body re-resolve that module's names and re-typecheck every module
+that depends on it. A constant factor for a cascade is a bad trade at any
+scale, and a worse one the larger the program. `parse_firewall_tests` and the
+`module_memo` `change_ast` fixtures both catch it.
+
 ### The one that was worth it: a handle
 
 `ModuleLowered` (`datafun-compiler/src/tracked_lower.rs`) is the case the
