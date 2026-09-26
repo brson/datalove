@@ -111,4 +111,12 @@ fn main() {
     report(&format!("edit sys/{package}/{module}"), counts(&recorder));
 
     report_granularity(&db);
+
+    let usage = <dyn salsa::Database>::memory_usage(&db);
+    let mut rows: Vec<_> = usage.structs.iter()
+        .map(|i| (i.count(), i.debug_name(), i.size_of_fields() + i.size_of_metadata()))
+        .filter(|(c, _, _)| *c > 0).collect();
+    rows.sort();
+    println!("\n=== structs by count");
+    for (c, n, b) in rows.iter().rev().take(14) { println!("  {c:>7}  {b:>9} B  {n}"); }
 }

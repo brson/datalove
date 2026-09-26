@@ -60,13 +60,18 @@ salsa-patterns.md. Only these four earn it:
 |---|---|---|
 | `ParsedModuleGraph` | 4 of 5 | Identity is the `ModuleGraph`, so a query that reads only the graph is not disturbed by a parse. This is what lets `graph_declares_consts` and friends walk the modules without depending on their statements. |
 | `StmtFun` | 2 of 5 | `FunSignature` and `body`, apart, because name resolution reads the signature and not the body. **That split is the parse firewall.** Folding them is 19% faster and makes a body edit re-typecheck every dependent module. |
-| `ExprFunctionCall` | 3 of 6 | Untested. One per call site, so numerous; if nothing reads a strict subset of the three, they are edges doing one edge's work -- the same finding as `ExprFun` and `TypeFunction`. **A lead, not a conclusion.** |
 | `ModuleLowered` | 1 of 2 | Identity is the `ModuleId`; the IR rides behind the edge. This is the handle phase 5 passes around so a query keyed on one costs a word rather than a hash of every instruction. |
 
-`ExprFun` and `TypeFunction` used to be on this list and are not: expressions
-and signatures are read whole by consumers that are keyed per module, so the
-fine grain cost edges and bought nothing. Untracking them was 2.6x and 12% of a
-512-module edit respectively.
+`ExprFun`, `TypeFunction` and `ExprFunctionCall` used to be on this list and
+are not: expressions, signatures and call sites are read whole by consumers
+that are keyed per module, so the fine grain cost edges and bought nothing.
+Untracking them was worth 2.6x, 12% and 12% of a 512-module edit.
+
+The call site one needed a fixture with calls in it to see. The synthetic world
+in `recompile_profile` is arithmetic and has none, so it reported the change as
+free; the effect only appears once the program actually calls functions. That
+is worth remembering before concluding that a change to the AST does nothing --
+**check that the fixture contains the thing being changed.**
 
 ## The queries, by granularity
 

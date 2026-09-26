@@ -702,17 +702,14 @@ pub struct ExprFunctionCall<'db> {
     /// Sequential index within the function (identity key).
     #[returns(copy)]
     pub local_index: u32,
-    #[tracked]
     #[returns(copy)]
     pub name: InternedText<'db>,
-    #[tracked]
     #[returns(ref)]
     pub args: Vec<ExprFun<'db>>,
     /// Mode marker written before each argument, parallel to `args`.
     ///
     /// `None` where the argument carried no marker, which denotes `in`. The
     /// marker must agree with the callee's declared mode; see F050.
-    #[tracked]
     #[returns(ref)]
     pub arg_modes: Vec<Option<ParamMode>>,
 }
