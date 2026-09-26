@@ -401,12 +401,31 @@ enum { atom Red, atom Blue, term Custom string }   // type
 Enum variants are matched by name. Atoms and terms can stand alone as types,
 or combine into enums.
 
-**Coercion.** The `@` operator widens an atom or term into a compatible enum
-type:
+**Enum values.** An atom or term literal is a value of any enum that lists
+it, so where an enum type is expected it is written bare, or wrapped as an
+enum literal:
 
 ```datalove
-let c: enum { atom Red, atom Blue } = (atom Red)@
+let c: enum { atom Red, atom Blue } = atom Red
+let d: enum { atom Red, atom Blue } = enum { atom Blue }
+let e: enum { atom Red, term Custom string } = term Custom "hello"
 ```
+
+An enum literal has no type of its own and needs one expected. This is the
+same in datalit.
+
+**Coercion.** An atom or term that is not a literal -- a variable, a
+parameter, a call -- has its own atom or term type, and does not become an
+enum by being used as one. The `@` operator widens it into a compatible enum
+type (Section 6.8):
+
+```datalove
+let a = atom Red
+let c: enum { atom Red, atom Blue } = a     // error: expected enum, found `atom Red`
+let d: enum { atom Red, atom Blue } = a@    // ok
+```
+
+`@` does not widen one enum into another with more variants.
 
 **Match.** Enums are destructured with `match` (see Section 8.6).
 
@@ -670,12 +689,18 @@ let n: u8 = 255
 let x: i16 = n@         // u8 widens to i16 (value fits)
 ```
 
-**Atom/term to enum**: An atom or term widens to a compatible enum type:
+**Atom/term to enum**: A value of atom or term type widens to an enum type
+that lists it. Like every `@`, it copies, and the original stays usable:
 
 ```datalove
 type Color: enum { atom Red, atom Blue }
-let c: Color = (atom Red)@   // atom widens to enum
+let a = atom Red
+let c: Color = a@            // atom widens to enum
 ```
+
+A literal needs no `@` for this: `let c: Color = atom Red` checks the atom
+against the enum directly (Section 3.6). An enum does not widen to another
+enum.
 
 Valid widening chains:
 
