@@ -40,6 +40,26 @@ fn report(label: &str, by_query: BTreeMap<String, usize>) {
     }
 }
 
+/// Every query that memoized anything, by how many memos it kept.
+///
+/// One memo means the query is keyed on something there is one of -- the graph,
+/// the world -- and a count near the module count means it is keyed per module.
+/// That is the granularity column in `botdocs/salsa-architecture.md`, and this
+/// is how to regenerate it rather than trusting it.
+fn report_granularity(db: &datafun::Database) {
+    let usage = <dyn salsa::Database>::memory_usage(db);
+    let mut rows: Vec<(usize, String, usize)> = usage.queries.iter()
+        .map(|(name, info)| (info.count(), name.to_string(),
+                             info.size_of_fields() + info.size_of_metadata()))
+        .filter(|(count, _, _)| *count > 0)
+        .collect();
+    rows.sort();
+    println!("\n=== memos per query ({} queries kept one or more)", rows.len());
+    for (count, name, bytes) in &rows {
+        println!("  {count:>5} memo(s)  {bytes:>8} B  {name}");
+    }
+}
+
 fn main() {
     let recorder = QueryRecorder::new();
     let mut db = datafun::Database::recording(&recorder);
@@ -89,4 +109,6 @@ fn main() {
     assert!(!compiled.has_errors(), "{:?}", compiled.all_errors());
     drop(compiled);
     report(&format!("edit sys/{package}/{module}"), counts(&recorder));
+
+    report_granularity(&db);
 }

@@ -1045,31 +1045,23 @@ as `datalove_datafun::Database`.
 
 ### Tracked Functions
 
-| Function | Crate | Key Inputs | Output |
-|----------|-------|------------|--------|
-| `parse_module_full` | parser | module | `ParseResult`, statements and span side tables |
-| `parse_module_ast` | parser | module | `ParsedStatements`, projected from `parse_module_full` so a module is parsed once |
-| `module_spans` | parser | module | `DatafunSpans`, the side tables keyed for lookup |
-| `parse_module_graph` | compiler | graph, requires, rider sources | `ParsedModuleGraph` |
-| `resolve_module_names` | resolve | module | `ModuleNameResolution` |
-| `resolve_module_exports` | resolve | module, parsed | the module's exported signatures |
-| `resolve_module_imports` | tycheck | module, parsed_graph, exports, function asts | `ModuleImportResolution` |
-| `typecheck_module` | tycheck | module, parsed, name_resolution, imports | `SingleModuleTypecheckResult` |
-| `analyze_module` | compiler | module, parsed, typecheck | `SingleModuleAnalysis` |
-| `compute_func_id_map` | compiler | parsed_graph | `FuncIdMap` |
-| `reachable_func_ids` | compiler | graph, func_id_map, module | `ReachableFuncIds`, interned so the two lowering queries key on an id |
-| `lower_module_functions` | compiler | module, typecheck, ownership, func ids, consts, restrict | `ModuleLowerOutcome`, phase 5a for one module |
-| `lower_module` | compiler | module, ir_module_id, parsed, typecheck, ownership, func_ids, consts, skip_inlining, funcs | `SingleModuleLoweringResult` |
-| `dependencies_of` | datafun | package world | the dependency graph, by module path |
-| `analyze_script_fragment_tracked` | compiler | typecheck, statements, adapt mode, dead externals | `ScriptUnitOwnershipResult` |
+There are 127 of them, 43 of which keep a memo for a module compile. A table
+here went stale within a session, twice -- it listed fifteen and was six
+queries and one signature out of date when that was noticed -- so the
+inventory lives in [salsa-architecture.md](salsa-architecture.md), grouped by
+granularity, with a command that regenerates it rather than a list to trust.
 
-Graph-level functions aggregate per-module results. They hold handles rather
-than copies now -- `ParsedModuleGraph` no longer carries a span table per
-module, and `ModuleGraphTypecheckResult` no longer merges every module's
-expression types into one -- but each is still keyed on the whole graph, so an
-edit to one module re-runs every one of those walks. The walks are cheap
-because what they call is memoized; they are what stands between here and
-pulling per module.
+The thing to take from it: a query's **granularity** -- one memo, or one per
+module -- says what it is allowed to depend on. A graph-keyed query may look at
+each module and must not look at each function; a per-module query may look at
+its own module and must not look at the rest of the world. `reachable_func_ids`
+exists to make the second true of the two lowering queries.
+`compile_scaling_tests` holds both.
+
+Graph-level functions aggregate per-module results and hold handles rather than
+copies. Each is still keyed on the whole graph, so an edit to one module
+re-runs every one of those walks; the walks are cheap because what they call is
+memoized, and they are what stands between here and pulling per module.
 
 ### Incremental Compilation
 

@@ -24,6 +24,7 @@ Specifications, research, design documents, implementation plans, and reports.
 - [Operator Precedence](op-precedence.md)
 - [Sigil Assignments](sigil-assignments.md)
 - [Salsa: idiomatic and effective use](salsa-patterns.md)
+- [The compiler's salsa architecture](salsa-architecture.md)
 - [The Native Rider ABI](native-abi.md)
 - [index-64 Feature](index-64.md)
 
