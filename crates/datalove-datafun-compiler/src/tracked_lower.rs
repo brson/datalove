@@ -1359,14 +1359,46 @@ fn first_uncallable_target(
     None
 }
 
+/// Whether a module declares a const at module level, and whether it declares
+/// one anywhere -- at module level or inside a function body.
+///
+/// Per module, because the two graph-wide answers below are asked on every
+/// compile and a body edit would otherwise make them walk every statement in
+/// the program to say "no" again. Keyed on the module, so an edit re-reads one.
+#[salsa::tracked(returns(copy))]
+fn module_const_kinds<'db>(
+    db: &'db dyn salsa::Database,
+    module: Module<'db>,
+) -> (bool, bool) {
+    let parsed = &crate::module_graph::parse_module_full(db, module).parsed;
+    let mut module_level = false;
+    let mut anywhere = false;
+    for statement in &parsed.statements {
+        match statement {
+            Statement::Const(_) => {
+                module_level = true;
+                anywhere = true;
+            }
+            Statement::Fun(func) => {
+                anywhere |= func.body(db).iter().any(|s| matches!(s, Statement::Const(_)));
+            }
+            _ => {}
+        }
+    }
+    (module_level, anywhere)
+}
+
 /// True if any module in the graph declares a const at module level.
+#[salsa::tracked(returns(copy))]
 fn module_graph_has_module_consts<'db>(
     db: &'db dyn salsa::Database,
     parsed_graph: ParsedModuleGraph<'db>,
 ) -> bool {
-    parsed_graph.statements_only(db)
-        .iter()
-        .any(|(_, parsed)| parsed.statements.iter().any(|s| matches!(s, Statement::Const(_))))
+    // `graph` rather than `statements_only`: the graph is the identity field
+    // and reading it is not a dependency on every module's statements, which
+    // is the whole point of asking this per module.
+    parsed_graph.graph(db).iter_modules(db)
+        .any(|module| module_const_kinds(db, module).0)
 }
 
 /// Evaluate the module-level consts of every module.
@@ -1734,14 +1766,8 @@ fn graph_declares_consts<'db>(
     db: &'db dyn salsa::Database,
     parsed_graph: ParsedModuleGraph<'db>,
 ) -> bool {
-    parsed_graph.statements_only(db).iter().any(|(_, parsed)| {
-        parsed.statements.iter().any(|statement| match statement {
-            Statement::Const(_) => true,
-            Statement::Fun(func) => func.body(db).iter()
-                .any(|s| matches!(s, Statement::Const(_))),
-            _ => false,
-        })
-    })
+    parsed_graph.graph(db).iter_modules(db)
+        .any(|module| module_const_kinds(db, module).1)
 }
 
 
