@@ -1,0 +1,141 @@
+{
+  "ast": {
+    "expr": {
+      "AnonStruct": {
+        "fields": [
+          {
+            "name": "state",
+            "value": {
+              "expr": {
+                "Atom": {
+                  "name": "Ready"
+                }
+              },
+              "type_hint": null
+            }
+          },
+          {
+            "name": "event",
+            "value": {
+              "expr": {
+                "Term": {
+                  "name": "Click",
+                  "payload": {
+                    "expr": {
+                      "AnonTuple": {
+                        "elements": [
+                          {
+                            "expr": {
+                              "Int": {
+                                "value": "100"
+                              }
+                            },
+                            "type_hint": null
+                          },
+                          {
+                            "expr": {
+                              "Int": {
+                                "value": "200"
+                              }
+                            },
+                            "type_hint": null
+                          }
+                        ]
+                      }
+                    },
+                    "type_hint": null
+                  }
+                }
+              },
+              "type_hint": null
+            }
+          },
+          {
+            "name": "kind",
+            "value": {
+              "expr": {
+                "Enum": {
+                  "variant": {
+                    "expr": {
+                      "Term": {
+                        "name": "Custom",
+                        "payload": {
+                          "expr": {
+                            "String": {
+                              "value": "\"experiment\""
+                            }
+                          },
+                          "type_hint": null
+                        }
+                      }
+                    },
+                    "type_hint": null
+                  }
+                }
+              },
+              "type_hint": {
+                "Enum": {
+                  "variants": [
+                    {
+                      "name": "Ready",
+                      "payload": null
+                    },
+                    {
+                      "name": "Custom",
+                      "payload": "String"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        ]
+      }
+    },
+    "type_hint": null
+  },
+  "diagnostics": [],
+  "errors": [],
+  "root_type": {
+    "fields": [
+      {
+        "name": "state",
+        "type": {
+          "kind": "Atom",
+          "name": "Ready"
+        }
+      },
+      {
+        "name": "event",
+        "type": {
+          "kind": "Term",
+          "name": "Click",
+          "payload": {
+            "fields": [
+              "int",
+              "int"
+            ],
+            "kind": "AnonTuple"
+          }
+        }
+      },
+      {
+        "name": "kind",
+        "type": {
+          "kind": "Enum",
+          "variants": [
+            {
+              "name": "Custom",
+              "payload": "string"
+            },
+            {
+              "name": "Ready",
+              "payload": null
+            }
+          ]
+        }
+      }
+    ],
+    "kind": "AnonStruct"
+  }
+}

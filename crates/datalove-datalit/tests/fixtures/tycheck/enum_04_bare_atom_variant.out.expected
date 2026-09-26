@@ -1,0 +1,38 @@
+{
+  "ast": {
+    "expr": {
+      "Atom": {
+        "name": "Ready"
+      }
+    },
+    "type_hint": {
+      "Enum": {
+        "variants": [
+          {
+            "name": "Ready",
+            "payload": null
+          },
+          {
+            "name": "Custom",
+            "payload": "String"
+          }
+        ]
+      }
+    }
+  },
+  "diagnostics": [],
+  "errors": [],
+  "root_type": {
+    "kind": "Enum",
+    "variants": [
+      {
+        "name": "Custom",
+        "payload": "string"
+      },
+      {
+        "name": "Ready",
+        "payload": null
+      }
+    ]
+  }
+}

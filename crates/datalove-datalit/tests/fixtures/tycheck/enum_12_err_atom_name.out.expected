@@ -1,0 +1,38 @@
+{
+  "ast": {
+    "expr": {
+      "Atom": {
+        "name": "B"
+      }
+    },
+    "type_hint": {
+      "Atom": {
+        "name": "A"
+      }
+    }
+  },
+  "diagnostics": [
+    {
+      "code": "T057",
+      "labels": [
+        {
+          "message": "expected `atom A`, found `atom B`",
+          "span": [
+            0,
+            1
+          ],
+          "text": ":"
+        }
+      ],
+      "message": "mismatched types"
+    }
+  ],
+  "errors": [
+    {
+      "actual": "atom B",
+      "expected": "atom A",
+      "kind": "TypeMismatch"
+    }
+  ],
+  "root_type": null
+}

@@ -1,0 +1,1 @@
+: [enum { atom A, atom B, term C u8 }] / [atom B, enum { atom A }, term C 7]

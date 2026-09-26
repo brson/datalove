@@ -1,0 +1,1 @@
+: term Point (u32, u32) / term Point (1, 2)

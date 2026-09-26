@@ -1,0 +1,1 @@
+: enum { atom Ready, term Custom string } / enum { term Custom "x" }

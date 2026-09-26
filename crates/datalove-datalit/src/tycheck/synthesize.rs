@@ -178,12 +178,22 @@ pub fn synthesize<'db>(
         // Rule: Syn-Error
         Expr::Error(_) => Type::Error,
 
+        // Rule: Syn-Atom
+        Expr::Atom(a) => Type::Atom(TypeAtom { name: a.name }),
+
+        // Rule: Syn-Term
+        Expr::Term(t) => {
+            let payload = synthesize(ctx, t.payload)?;
+            Type::Term(TypeTerm { name: t.name, payload: Box::new(payload) })
+        }
+
         // Cannot synthesize for these - need type context.
-        Expr::None | Expr::Er(_) => {
+        Expr::None | Expr::Er(_) | Expr::Enum(_) => {
             if let Some(ts) = ctx.get_span(expr) {
                 let msg = match &expr_inner {
                     Expr::None => "cannot infer type for None value",
                     Expr::Er(_) => "cannot infer type for Er value",
+                    Expr::Enum(_) => "cannot infer type for enum literal",
                     _ => "cannot infer type",
                 };
                 DiagnosticBuilder::error(db, msg)

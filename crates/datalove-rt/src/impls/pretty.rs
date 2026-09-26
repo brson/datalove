@@ -403,24 +403,29 @@ unsafe fn pretty_enum(
     unsafe {
         let enum_info = tydesc.enum_info();
 
-        // Read discriminant (u8).
-        let discriminant = *value_ref;
+        let discriminant = *(value_ref as *const u32);
 
-        if (discriminant as u32) >= enum_info.num_variants() {
+        if discriminant >= enum_info.num_variants() {
             push_str(rt, string_mut, string_tydesc, b"<invalid-enum>")?;
             return Ok(());
         }
 
         if let core::option::Option::Some(variant) = enum_info.variant(discriminant as usize) {
-            push_str(rt, string_mut, string_tydesc, b"enum ")?;
-            push_str(rt, string_mut, string_tydesc, variant.name().as_bytes())?;
-
-            if let core::option::Option::Some(payload_ty) = variant.payload() {
-                push_str(rt, string_mut, string_tydesc, b"(")?;
-                let payload_value = value_ref.add(variant.offset() as usize);
-                pretty_value(rt, payload_value, payload_ty, string_mut, string_tydesc)?;
-                push_str(rt, string_mut, string_tydesc, b")")?;
+            // Written as the literal is, so that what is printed reads back.
+            match variant.payload() {
+                core::option::Option::Some(payload_ty) => {
+                    push_str(rt, string_mut, string_tydesc, b"enum { term ")?;
+                    push_str(rt, string_mut, string_tydesc, variant.name().as_bytes())?;
+                    push_str(rt, string_mut, string_tydesc, b" ")?;
+                    let payload_value = value_ref.add(variant.offset() as usize);
+                    pretty_value(rt, payload_value, payload_ty, string_mut, string_tydesc)?;
+                }
+                core::option::Option::None => {
+                    push_str(rt, string_mut, string_tydesc, b"enum { atom ")?;
+                    push_str(rt, string_mut, string_tydesc, variant.name().as_bytes())?;
+                }
             }
+            push_str(rt, string_mut, string_tydesc, b" }")?;
         }
 
         Ok(())

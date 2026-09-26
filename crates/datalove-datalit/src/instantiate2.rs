@@ -216,6 +216,25 @@ fn instantiate_expr_into<'db>(
             instantiate_table(db, rt, &table_expr.rows, &table_ty.columns, tydesc_table, tydesc, dest_ptr, resolved)
         }
 
+        (Expr::Atom(_), Type::Atom(_)) => Ok(dest_ptr as *const u8),
+
+        (Expr::Term(term_expr), Type::Term(term_ty)) => {
+            instantiate_expr_into(db, rt, term_expr.payload, &term_ty.payload, tydesc_table, dest_ptr, resolved)?;
+            Ok(dest_ptr as *const u8)
+        }
+
+        (Expr::Enum(enum_expr), Type::Enum(_)) => {
+            instantiate_expr_into(db, rt, enum_expr.variant, ty, tydesc_table, dest_ptr, resolved)
+        }
+
+        (Expr::Atom(atom_expr), Type::Enum(enum_ty)) => {
+            instantiate_variant(db, rt, atom_expr.name, None, enum_ty, ty, tydesc_table, dest_ptr, resolved)
+        }
+
+        (Expr::Term(term_expr), Type::Enum(enum_ty)) => {
+            instantiate_variant(db, rt, term_expr.name, Some(term_expr.payload), enum_ty, ty, tydesc_table, dest_ptr, resolved)
+        }
+
         _ => bail!("Unsupported expression/type combination for instantiation"),
     }
 }
@@ -1068,6 +1087,46 @@ fn instantiate_error<'db>(
         );
     }
 
+    Ok(dest_ptr as *const u8)
+}
+
+// ============================================================================
+// Enum instantiation
+// ============================================================================
+
+/// Instantiate an atom or term as a variant of an enum.
+///
+/// The discriminant is the variant's place among the type's variants, which
+/// are held in name order, and the payload goes at the variant's offset.
+fn instantiate_variant<'db>(
+    db: &'db dyn crate::Db,
+    rt: datalove_rt::c::LocalRtHandle,
+    name: bct::text::InternedText<'db>,
+    payload: Option<ExprFull<'db>>,
+    enum_ty: &TypeEnum<'db>,
+    ty: &Type<'db>,
+    tydesc_table: &mut TyDescTable<'db>,
+    dest_ptr: *mut u8,
+    resolved: ResolvedExpr<'db>,
+) -> AnyResult<*const u8> {
+    debug_assert!(!dest_ptr.is_null());
+    let index = enum_ty.variants.iter().position(|v| v.name == name)
+        .ok_or_else(|| anyhow!("Enum has no variant {}", name.as_str(db)))?;
+    let enum_tydesc = unsafe { rtdt::TyDescRef::from_ptr(tydesc_table.get_or_create(ty)) };
+    let offset = enum_tydesc.enum_info().variant(index).X().offset();
+
+    match (payload, &enum_ty.variants[index].payload) {
+        (Some(payload), Some(payload_ty)) => {
+            let payload_dest = unsafe { dest_ptr.add(offset as usize) };
+            instantiate_expr_into(db, rt, payload, payload_ty, tydesc_table, payload_dest, resolved)?;
+        }
+        (None, None) => {}
+        _ => unreachable!("typechecking matched the variant's payload"),
+    }
+
+    unsafe {
+        *(dest_ptr as *mut u32) = index as u32;
+    }
     Ok(dest_ptr as *const u8)
 }
 

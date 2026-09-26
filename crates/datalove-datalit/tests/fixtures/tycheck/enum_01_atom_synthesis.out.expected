@@ -1,0 +1,16 @@
+{
+  "ast": {
+    "expr": {
+      "Atom": {
+        "name": "Ready"
+      }
+    },
+    "type_hint": null
+  },
+  "diagnostics": [],
+  "errors": [],
+  "root_type": {
+    "kind": "Atom",
+    "name": "Ready"
+  }
+}

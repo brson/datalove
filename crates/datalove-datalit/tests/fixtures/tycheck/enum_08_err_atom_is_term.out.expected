@@ -1,0 +1,43 @@
+{
+  "ast": {
+    "expr": {
+      "Atom": {
+        "name": "Custom"
+      }
+    },
+    "type_hint": {
+      "Enum": {
+        "variants": [
+          {
+            "name": "Custom",
+            "payload": "String"
+          }
+        ]
+      }
+    }
+  },
+  "diagnostics": [
+    {
+      "code": "T057",
+      "labels": [
+        {
+          "message": "expected `enum{term Custom string}`, found `atom Custom`",
+          "span": [
+            0,
+            1
+          ],
+          "text": ":"
+        }
+      ],
+      "message": "mismatched types"
+    }
+  ],
+  "errors": [
+    {
+      "actual": "atom Custom",
+      "expected": "enum{term Custom string}",
+      "kind": "TypeMismatch"
+    }
+  ],
+  "root_type": null
+}

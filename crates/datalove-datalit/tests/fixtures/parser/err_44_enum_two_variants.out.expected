@@ -1,0 +1,46 @@
+{
+  "ast": {
+    "expr": {
+      "Enum": {
+        "variant": {
+          "expr": {
+            "Atom": {
+              "name": "A"
+            }
+          },
+          "type_hint": null
+        }
+      }
+    },
+    "type_hint": {
+      "Enum": {
+        "variants": [
+          {
+            "name": "A",
+            "payload": null
+          },
+          {
+            "name": "B",
+            "payload": null
+          }
+        ]
+      }
+    }
+  },
+  "diagnostics": [
+    {
+      "code": "D021",
+      "labels": [
+        {
+          "message": "unexpected token",
+          "span": [
+            41,
+            42
+          ],
+          "text": ","
+        }
+      ],
+      "message": "unexpected token after expression"
+    }
+  ]
+}

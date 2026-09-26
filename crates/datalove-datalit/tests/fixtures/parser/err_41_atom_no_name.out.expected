@@ -1,0 +1,26 @@
+{
+  "ast": {
+    "expr": {
+      "ParseError": {
+        "message": "expected name after 'atom'"
+      }
+    },
+    "type_hint": null
+  },
+  "diagnostics": [
+    {
+      "code": "D035",
+      "labels": [
+        {
+          "message": "expected atom name",
+          "span": [
+            0,
+            4
+          ],
+          "text": "atom"
+        }
+      ],
+      "message": "expected name after 'atom'"
+    }
+  ]
+}

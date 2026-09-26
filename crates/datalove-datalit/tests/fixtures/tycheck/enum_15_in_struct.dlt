@@ -1,0 +1,1 @@
+{ state = atom Ready, event = term Click (100, 200), kind = : enum { atom Ready, term Custom string } / enum { term Custom "experiment" } }

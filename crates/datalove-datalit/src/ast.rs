@@ -214,6 +214,9 @@ pub enum Expr<'db> {
     Er(ExprEr<'db>),
     Data(ExprData<'db>),
     Error(ExprError<'db>),
+    Atom(ExprAtom<'db>),
+    Term(ExprTerm<'db>),
+    Enum(ExprEnum<'db>),
     ParseError(ExprParseError<'db>),
 }
 
@@ -334,6 +337,26 @@ pub struct ExprData<'db> {
 #[derive(salsa::SalsaValue)]
 pub struct ExprError<'db> {
     pub value: ExprFull<'db>,
+}
+
+#[derive(Clone, Hash, PartialEq, Eq)]
+#[derive(salsa::SalsaValue)]
+pub struct ExprAtom<'db> {
+    pub name: InternedText<'db>,
+}
+
+#[derive(Clone, Hash, PartialEq, Eq)]
+#[derive(salsa::SalsaValue)]
+pub struct ExprTerm<'db> {
+    pub name: InternedText<'db>,
+    pub payload: ExprFull<'db>,
+}
+
+/// An enum literal, `enum { atom A }`, naming the one variant it holds.
+#[derive(Clone, Hash, PartialEq, Eq)]
+#[derive(salsa::SalsaValue)]
+pub struct ExprEnum<'db> {
+    pub variant: ExprFull<'db>,
 }
 
 #[derive(Clone, Hash, PartialEq, Eq)]

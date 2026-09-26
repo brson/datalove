@@ -1,1 +1,1 @@
-(term Note "moved in", enum Note("moved in and widened"), ("kept", term Note "kept"), term Note [1, 2, 3], term Count 7, term Note "written in place")
+(term Note "moved in", enum { term Note "moved in and widened" }, ("kept", term Note "kept"), term Note [1, 2, 3], term Count 7, term Note "written in place")

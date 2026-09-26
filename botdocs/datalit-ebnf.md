@@ -42,7 +42,8 @@ expr           = none_lit | bool_lit | numeric_lit | string_lit
                | option_expr | result_expr | existential_expr
                | tuple_expr | list_expr | struct_expr
                | map_expr | set_expr
-               | tensor_expr | table_expr ;
+               | tensor_expr | table_expr
+               | atom_expr | term_expr | enum_expr ;
 
 (* Literals *)
 none_lit       = "none" ;
@@ -64,6 +65,11 @@ string_lit     = '"', { string_char }, '"' ;
 option_expr    = "some", ws, full_expr ;
 result_expr    = ( "ok" | "er" ), ws, full_expr ;
 existential_expr = ( "data" | "error" ), ws, full_expr ;
+
+(* Atom/Term/Enum *)
+atom_expr      = "atom", ws, ident ;
+term_expr      = "term", ws, ident, ws, full_expr ;
+enum_expr      = "enum", ws, "{", ws, full_expr, ws, "}" ;
 
 (* Container expressions *)
 tuple_expr     = "(", ws, [ expr_list ], ws, ")" ;
@@ -100,7 +106,6 @@ digit          = "0"-"9" ;
 hex_digit      = digit | "a"-"f" | "A"-"F" ;
 string_char    = escape_seq | ? any char except '"' and '\' ? ;
 escape_seq     = "\", ( '"' | "\" | "n" | "r" | "t" | "0"
-               | ( "x", hex_digit, hex_digit )
                | ( "u", "{", hex_digit, { hex_digit }, "}" ) ) ;
 
 (* Whitespace and comments *)

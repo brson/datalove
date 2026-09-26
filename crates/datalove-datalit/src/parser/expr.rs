@@ -135,6 +135,47 @@ impl<'db> Parser<'db> {
                 let value = self.parse_expr_full();
                 return ast::Expr::Error(ast::ExprError { value });
             }
+            Some("atom") => {
+                let ts = self.peek_text_span();
+                self.eat_word("atom");
+                let Some(name) = self.eat_name() else {
+                    return self.emit_expr_error(ts,
+                        "expected name after 'atom'",
+                        "D035",
+                        "expected atom name"
+                    );
+                };
+                return ast::Expr::Atom(ast::ExprAtom { name });
+            }
+            Some("term") => {
+                let ts = self.peek_text_span();
+                self.eat_word("term");
+                let Some(name) = self.eat_name() else {
+                    return self.emit_expr_error(ts,
+                        "expected name after 'term'",
+                        "D036",
+                        "expected term name"
+                    );
+                };
+                let payload = self.parse_expr_full();
+                return ast::Expr::Term(ast::ExprTerm { name, payload });
+            }
+            Some("enum") => {
+                let ts = self.peek_text_span();
+                self.eat_word("enum");
+                let Some(inner) = self.eat_branch(Sigil::BraceOpen) else {
+                    return self.emit_expr_error(ts,
+                        "expected '{' after 'enum'",
+                        "D037",
+                        "an enum literal is written `enum { atom Name }`"
+                    );
+                };
+                let mut sub_parser = self.sub_parser_from_branch(inner);
+                let variant = sub_parser.parse_expr_full();
+                sub_parser.error_if_not_exhausted();
+                self.merge_spans_from(&mut sub_parser);
+                return ast::Expr::Enum(ast::ExprEnum { variant });
+            }
             _ => {}
         }
 

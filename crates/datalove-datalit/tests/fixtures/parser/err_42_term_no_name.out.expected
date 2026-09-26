@@ -1,0 +1,26 @@
+{
+  "ast": {
+    "expr": {
+      "ParseError": {
+        "message": "expected name after 'term'"
+      }
+    },
+    "type_hint": null
+  },
+  "diagnostics": [
+    {
+      "code": "D036",
+      "labels": [
+        {
+          "message": "expected term name",
+          "span": [
+            0,
+            4
+          ],
+          "text": "term"
+        }
+      ],
+      "message": "expected name after 'term'"
+    }
+  ]
+}

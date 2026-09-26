@@ -1,0 +1,43 @@
+{
+  "ast": {
+    "expr": {
+      "Atom": {
+        "name": "Nope"
+      }
+    },
+    "type_hint": {
+      "Enum": {
+        "variants": [
+          {
+            "name": "Ready",
+            "payload": null
+          }
+        ]
+      }
+    }
+  },
+  "diagnostics": [
+    {
+      "code": "T057",
+      "labels": [
+        {
+          "message": "expected `enum{atom Ready}`, found `atom Nope`",
+          "span": [
+            0,
+            1
+          ],
+          "text": ":"
+        }
+      ],
+      "message": "mismatched types"
+    }
+  ],
+  "errors": [
+    {
+      "actual": "atom Nope",
+      "expected": "enum{atom Ready}",
+      "kind": "TypeMismatch"
+    }
+  ],
+  "root_type": null
+}

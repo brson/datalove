@@ -105,8 +105,8 @@ DualAnalysis(
                 """,
             ),
             ir_match: true,
-            interp_output: "enum Small(7)\n7\nenum Big(1234567890123)\n1234567890123\n",
-            aot_output: "enum Small(7)\n7\nenum Big(1234567890123)\n1234567890123\n",
+            interp_output: "enum { term Small 7 }\n7\nenum { term Big 1234567890123 }\n1234567890123\n",
+            aot_output: "enum { term Small 7 }\n7\nenum { term Big 1234567890123 }\n1234567890123\n",
             output_match: true,
             aot_compile: Some(AotCompileResult(
                 status: "Success",

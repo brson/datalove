@@ -1,0 +1,53 @@
+{
+  "ast": {
+    "expr": {
+      "Enum": {
+        "variant": {
+          "expr": {
+            "Term": {
+              "name": "Custom",
+              "payload": {
+                "expr": {
+                  "String": {
+                    "value": "\"x\""
+                  }
+                },
+                "type_hint": null
+              }
+            }
+          },
+          "type_hint": null
+        }
+      }
+    },
+    "type_hint": {
+      "Enum": {
+        "variants": [
+          {
+            "name": "Ready",
+            "payload": null
+          },
+          {
+            "name": "Custom",
+            "payload": "String"
+          }
+        ]
+      }
+    }
+  },
+  "diagnostics": [],
+  "errors": [],
+  "root_type": {
+    "kind": "Enum",
+    "variants": [
+      {
+        "name": "Custom",
+        "payload": "string"
+      },
+      {
+        "name": "Ready",
+        "payload": null
+      }
+    ]
+  }
+}

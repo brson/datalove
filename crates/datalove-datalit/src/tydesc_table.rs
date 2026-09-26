@@ -31,7 +31,6 @@ pub struct TyDescTable<'db> {
     /// Storage for flexible array members.
     tuple_fields: Vec<Vec<rtdt::TyInfoTupleField>>,
     struct_fields: Vec<Vec<rtdt::TyInfoStructField>>,
-    #[allow(dead_code)]
     enum_variants: Vec<Vec<rtdt::TyInfoEnumVariant>>,
     table_columns: Vec<Vec<rtdt::TyInfoTableColumn>>,
 }
@@ -390,9 +389,9 @@ impl<'db> TyDescTable<'db> {
             Type::Result(r) => self.create_result_tydesc(*r.inner_type.clone()),
             Type::Tensor(t) => self.create_tensor_tydesc(*t.element_type.clone(), t.rank),
             Type::Table(t) => self.create_table_tydesc(&t.columns),
-            Type::Atom(_) | Type::Term(_) | Type::Enum(_) => {
-                todo!("atom/term/enum tydesc creation")
-            }
+            Type::Atom(a) => self.create_atom_tydesc(a),
+            Type::Term(t) => self.create_term_tydesc(t),
+            Type::Enum(e) => self.create_enum_tydesc(e),
         }
     }
 
@@ -524,6 +523,101 @@ impl<'db> TyDescTable<'db> {
         })
     }
 
+
+    /// Create TyDesc for an atom, which has one value and no size.
+    fn create_atom_tydesc(&mut self, atom: &TypeAtom<'db>) -> Box<rtdt::TyDesc> {
+        let name = atom.name.as_str(self.db);
+        Box::new(rtdt::TyDesc {
+            type_tag: rtdt::TyTag::Atom,
+            size: 0,
+            align: 1,
+            type_info: rtdt::TyInfo {
+                atom: rtdt::TyInfoAtom {
+                    name: name.as_ptr(),
+                    name_len: name.len() as u32,
+                },
+            },
+        })
+    }
+
+    /// Create TyDesc for a term, laid out as its payload.
+    fn create_term_tydesc(&mut self, term: &TypeTerm<'db>) -> Box<rtdt::TyDesc> {
+        let payload = self.get_or_create(&term.payload);
+        let payload_ref = unsafe { rtdt::TyDescRef::from_ptr(payload) };
+        let name = term.name.as_str(self.db);
+        Box::new(rtdt::TyDesc {
+            type_tag: rtdt::TyTag::Term,
+            size: payload_ref.size(),
+            align: payload_ref.align(),
+            type_info: rtdt::TyInfo {
+                term: rtdt::TyInfoTerm {
+                    name: name.as_ptr(),
+                    name_len: name.len() as u32,
+                    payload,
+                },
+            },
+        })
+    }
+
+    /// Create TyDesc for an enum.
+    ///
+    /// The variants are in name order, as the type holds them, so a
+    /// variant's discriminant is its place in that order.
+    fn create_enum_tydesc(&mut self, enum_ty: &TypeEnum<'db>) -> Box<rtdt::TyDesc> {
+        let payloads: Vec<*const rtdt::TyDesc> = enum_ty.variants.iter()
+            .map(|v| match &v.payload {
+                Some(payload) => self.get_or_create(payload),
+                None => std::ptr::null(),
+            })
+            .collect();
+
+        let mut variant_info: Vec<rtdt::TyInfoEnumVariant> = enum_ty.variants.iter()
+            .zip(&payloads)
+            .map(|(v, &payload)| {
+                let name = v.name.as_str(self.db);
+                rtdt::TyInfoEnumVariant {
+                    name: name.as_ptr(),
+                    name_len: name.len() as u32,
+                    offset: 0,
+                    payload,
+                }
+            })
+            .collect();
+
+        let num_variants = variant_info.len() as u32;
+        let layout = unsafe {
+            let temp_tydesc = rtdt::TyDesc {
+                type_tag: rtdt::TyTag::Enum,
+                size: 0,
+                align: 1,
+                type_info: rtdt::TyInfo {
+                    enum_: rtdt::TyInfoEnum {
+                        variants: variant_info.as_ptr(),
+                        num_variants,
+                    },
+                },
+            };
+            rtdt::layout::compute_enum_layout(rtdt::TyDescRef::from_ptr(&temp_tydesc))
+        };
+        for (info, offset) in variant_info.iter_mut().zip(&layout.variant_offsets) {
+            info.offset = *offset;
+        }
+
+        self.enum_variants.push(variant_info);
+        let variants = self.enum_variants.last().unwrap().as_ptr();
+
+        Box::new(rtdt::TyDesc {
+            type_tag: rtdt::TyTag::Enum,
+            size: layout.size,
+            align: layout.align,
+            type_info: rtdt::TyInfo {
+                enum_: rtdt::TyInfoEnum {
+                    variants,
+                    num_variants,
+                },
+            },
+        })
+    }
 
     /// Create TyDesc for list.
     fn create_list_tydesc(&mut self, element_type: Type<'db>) -> Box<rtdt::TyDesc> {

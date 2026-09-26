@@ -143,6 +143,24 @@ fn write_expr<'db>(
             write_expr_full(db, e.value, out);
         }
 
+        Expr::Atom(a) => {
+            out.push_str("atom ");
+            out.push_str(a.name.as_str(db));
+        }
+
+        Expr::Term(t) => {
+            out.push_str("term ");
+            out.push_str(t.name.as_str(db));
+            out.push(' ');
+            write_expr_full(db, t.payload, out);
+        }
+
+        Expr::Enum(e) => {
+            out.push_str("enum { ");
+            write_expr_full(db, e.variant, out);
+            out.push_str(" }");
+        }
+
         Expr::ParseError(e) => {
             out.push_str("<parse-error: ");
             out.push_str(e.message.as_str(db));

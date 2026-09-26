@@ -1,0 +1,39 @@
+{
+  "ast": {
+    "expr": {
+      "Enum": {
+        "variant": {
+          "expr": {
+            "Atom": {
+              "name": "Ready"
+            }
+          },
+          "type_hint": null
+        }
+      }
+    },
+    "type_hint": null
+  },
+  "diagnostics": [
+    {
+      "code": "T016",
+      "labels": [
+        {
+          "message": "type annotation required",
+          "span": [
+            0,
+            4
+          ],
+          "text": "enum"
+        }
+      ],
+      "message": "cannot infer type for enum literal"
+    }
+  ],
+  "errors": [
+    {
+      "kind": "CannotSynthesize"
+    }
+  ],
+  "root_type": null
+}

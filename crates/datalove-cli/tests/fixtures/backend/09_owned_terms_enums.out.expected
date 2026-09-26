@@ -1,6 +1,6 @@
 term Wrapped "hello"
 term Wrapped 7
-enum Some("there")
-enum None
-enum Some(5)
+enum { term Some "there" }
+enum { atom None }
+enum { term Some 5 }
 (term Wrapped "nested", 9)

@@ -370,6 +370,25 @@ Cannot synthesize type for er (needs context)
 
 `er` cannot be synthesized - requires Result type context.
 
+### Rule: Syn-Atom
+```
+-----------------
+atom A => atom A
+```
+
+### Rule: Syn-Term
+```
+e => T
+-----------------
+term A e => term A T
+```
+
+### Rule: Syn-Enum
+```
+-----------------
+Cannot synthesize type for enum { v } (needs context)
+```
+
 ## Checking Rules (e <= T)
 
 Checking rules verify an expression against an expected type.
@@ -609,6 +628,37 @@ data e <= data
 error e <= error
 ```
 
+### Rule: Check-Atom
+```
+----------------------
+atom A <= atom A
+
+atom A is a variant of E
+----------------------
+atom A <= E
+```
+
+### Rule: Check-Term
+```
+e <= T
+----------------------
+term A e <= term A T
+
+term A T is a variant of E    e <= T
+----------------------
+term A e <= E
+```
+
+### Rule: Check-Enum
+```
+v <= E    E is an enum type
+----------------------
+enum { v } <= E
+```
+
+An atom or term checks against an enum listing it without the
+`enum { }` wrapper, as it does in datafun.
+
 ## Type Error Codes
 
 The type checker produces the following diagnostic codes:
@@ -626,7 +676,7 @@ The type checker produces the following diagnostic codes:
 | T013 | hex | f32 bit pattern out of range |
 | T014 | hex | f64 bit pattern out of range |
 | T015 | int/hex | index out of range |
-| T016 | synth | Cannot synthesize type for none or er |
+| T016 | synth | Cannot synthesize type for none, er or an enum literal |
 | T017 | synth | Cannot type-check expression with parse errors |
 | T018 | synth | List element type mismatch; also: table requires type hint |
 | T019 | synth | Set element type mismatch |
@@ -645,6 +695,8 @@ The type checker produces the following diagnostic codes:
 | T054 | check | Table column count mismatch |
 | T055 | check | Table column name mismatch |
 | T056 | check | Table row column count mismatch |
+| T057 | check | Atom or term is not the expected atom, term or enum variant |
+| T058 | check | Enum literal checked against a type that is not an enum |
 
 ## Design Decisions Summary
 

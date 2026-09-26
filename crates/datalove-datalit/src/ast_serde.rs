@@ -146,6 +146,9 @@ pub enum Expr {
     Er(ExprEr),
     Data(ExprData),
     Error(ExprError),
+    Atom(ExprAtom),
+    Term(ExprTerm),
+    Enum(ExprEnum),
     ParseError(ExprParseError),
 }
 
@@ -247,6 +250,22 @@ pub struct ExprData {
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct ExprError {
     pub value: Box<ExprFull>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct ExprAtom {
+    pub name: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct ExprTerm {
+    pub name: String,
+    pub payload: Box<ExprFull>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct ExprEnum {
+    pub variant: Box<ExprFull>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -424,6 +443,14 @@ impl Expr {
             crate::ast::Expr::Er(e) => Expr::Er(ExprEr::from_ast(db, e)),
             crate::ast::Expr::Data(e) => Expr::Data(ExprData::from_ast(db, e)),
             crate::ast::Expr::Error(e) => Expr::Error(ExprError::from_ast(db, e)),
+            crate::ast::Expr::Atom(e) => Expr::Atom(ExprAtom { name: e.name.as_str(db).S() }),
+            crate::ast::Expr::Term(e) => Expr::Term(ExprTerm {
+                name: e.name.as_str(db).S(),
+                payload: Box::new(ExprFull::from_ast(db, e.payload)),
+            }),
+            crate::ast::Expr::Enum(e) => Expr::Enum(ExprEnum {
+                variant: Box::new(ExprFull::from_ast(db, e.variant)),
+            }),
             crate::ast::Expr::ParseError(e) => Expr::ParseError(ExprParseError::from_ast(db, e)),
         }
     }

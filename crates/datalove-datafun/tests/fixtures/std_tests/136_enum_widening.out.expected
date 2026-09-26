@@ -1,1 +1,1 @@
-(("red", "blue", "green"), (enum Red, enum Blue, enum Green), "written down", "something else", "empty", term Note "keep", enum Note("keep"))
+(("red", "blue", "green"), (enum { atom Red }, enum { atom Blue }, enum { atom Green }), "written down", "something else", "empty", term Note "keep", enum { term Note "keep" })

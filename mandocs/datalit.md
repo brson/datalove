@@ -746,6 +746,18 @@ Enum type equivalence compares variants by name,
 regardless of the order they are declared.
 Enum literals require a type hint.
 
+An atom or term checks against any enum that lists it,
+so the `enum { }` around a variant may be left off
+where the enum type is expected:
+
+```datalove
+: [enum { atom Red, atom Blue, term Custom string }] /
+  [atom Red, term Custom "hello", enum { atom Blue }]
+```
+
+Enum variants are held in name order,
+which is the order values of an enum compare in.
+
 
 ### EBNF · Aggregates
 
@@ -869,8 +881,8 @@ and a `u8` does not become a `u32`.
 | `er e`          | &mdash;                      | any `!T`                               |
 | `data e`        | `data`                       |                                        |
 | `error e`       | `error`                      | any `!T`                               |
-| `atom A`        | `atom A`                     |                                        |
-| `term A e`      | `term A T` where `e` synthesizes `T` | `term A T`, checking `e` against `T` |
+| `atom A`        | `atom A`                     | an enum listing `atom A`               |
+| `term A e`      | `term A T` where `e` synthesizes `T` | `term A T`, or an enum listing `term A T`, checking `e` against `T` |
 | `enum { v }`    | &mdash;                      | an enum listing `v`                    |
 
 So a type hint or context is required for
@@ -967,14 +979,6 @@ and against the parser's own diagnostics.
 
 ### Not implemented
 
-- **Atom, term and enum expressions.**
-  The datalit parser reads `atom`, `term` and `enum` in types only.
-  `atom Red` as an expression is "unexpected identifier" (D019).
-  Instantiating any atom, term or enum type is a `todo!()`
-  in `tydesc_table.rs`.
-  Datafun does parse all three,
-  so the showcase example at the top of this document
-  is valid datafun but not yet valid datalit.
 - **`int` is not arbitrary precision when values are built.**
   The checker accepts any integer for `int`,
   but instantiation parses decimal through `i128` and hex through `u128`,
@@ -1043,8 +1047,6 @@ and against the parser's own diagnostics.
   The botspec says any type coerces to `data`.
   In datalit, `: data / 5` is a type error and `data 5` is required.
   This spec follows the implementation.
-- **`\x` escapes.**
-  `datalit-ebnf.md` lists `\xHH`; the implementation has no such escape.
 - **`tuple ( ... )` types.**
   The type parser accepts `tuple (u32, u32)` as a spelling of `(u32, u32)`.
   Nothing documents it.
@@ -1070,9 +1072,7 @@ and against the parser's own diagnostics.
 - Whether a byte order mark is allowed.
   Nothing strips one.
 - The value printer writes non-finite floats as `nan`, `inf` and `-inf`,
-  which do not parse,
-  and enum values as `enum Name(payload)`,
-  which is not the datalit enum syntax.
+  which do not parse.
   Printed fixed-width values have no hints,
   so they read back as `int` and `f64`.
   Round-tripping through the value printer is only exact

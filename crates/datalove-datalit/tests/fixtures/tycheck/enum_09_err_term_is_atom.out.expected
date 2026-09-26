@@ -1,0 +1,51 @@
+{
+  "ast": {
+    "expr": {
+      "Term": {
+        "name": "Ready",
+        "payload": {
+          "expr": {
+            "Int": {
+              "value": "1"
+            }
+          },
+          "type_hint": null
+        }
+      }
+    },
+    "type_hint": {
+      "Enum": {
+        "variants": [
+          {
+            "name": "Ready",
+            "payload": null
+          }
+        ]
+      }
+    }
+  },
+  "diagnostics": [
+    {
+      "code": "T057",
+      "labels": [
+        {
+          "message": "expected `enum{atom Ready}`, found `term Ready`",
+          "span": [
+            0,
+            1
+          ],
+          "text": ":"
+        }
+      ],
+      "message": "mismatched types"
+    }
+  ],
+  "errors": [
+    {
+      "actual": "term Ready",
+      "expected": "enum{atom Ready}",
+      "kind": "TypeMismatch"
+    }
+  ],
+  "root_type": null
+}

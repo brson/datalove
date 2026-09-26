@@ -213,6 +213,14 @@ pub fn gen_field_name<R: Rng>(rng: &mut R) -> String {
     format!("{}{}", name, num)
 }
 
+/// Generate a variant name: a field name, capitalized as variants are.
+pub fn gen_variant_name<R: Rng>(rng: &mut R) -> String {
+    let name = gen_field_name(rng);
+    let mut chars = name.chars();
+    let first = chars.next().X();
+    first.to_uppercase().chain(chars).collect()
+}
+
 /// Generate a random TypeHint based on configuration.
 pub fn gen_type_hint<'db, R: Rng>(
     db: &'db dyn salsa::Database,
@@ -353,7 +361,26 @@ pub fn gen_type_hint<'db, R: Rng>(
                 .collect();
             TypeHint::AnonStruct(TypeHintAnonStruct { fields })
         }
-
+        21 => {
+            // At least one variant, since an enum of none has no values.
+            let max_count = config.max_collection_size.max(1).min(MAX_UNIQUE_FIELD_NAMES);
+            let count = rng.gen_range(1..=max_count);
+            let mut used_names = std::collections::HashSet::new();
+            let variants: Vec<_> = (0..count)
+                .map(|_| {
+                    let name = loop {
+                        let candidate = gen_variant_name(rng);
+                        if used_names.insert(candidate.clone()) {
+                            break InternedText::new(db, &candidate);
+                        }
+                    };
+                    let payload = rng.gen_bool(0.5)
+                        .then(|| Box::new(gen_type_hint(db, rng, config, depth + 1)));
+                    TypeHintEnumVariant { name, payload }
+                })
+                .collect();
+            TypeHint::Enum(TypeHintEnum { variants })
+        }
         22 => TypeHint::Data,
         23 => TypeHint::Error,
         24 => TypeHint::Index,
@@ -553,8 +580,26 @@ pub fn gen_expr_matching_type<'db, R: Rng>(
             Expr::Table(ExprTable { header, rows })
         }
         TypeHint::Alias(_) => Expr::None,
-        TypeHint::Atom(_) | TypeHint::Term(_) | TypeHint::Enum(_) => {
-            todo!("atom/term/enum expression generation not yet implemented")
+        TypeHint::Atom(th) => Expr::Atom(ExprAtom { name: th.name }),
+        TypeHint::Term(th) => {
+            let payload = gen_expr_full_inner(db, rng, *th.payload.clone(), config, depth + 1);
+            Expr::Term(ExprTerm { name: th.name, payload })
+        }
+        TypeHint::Enum(th) => {
+            let variant = &th.variants[rng.gen_range(0..th.variants.len())];
+            let variant_expr = match &variant.payload {
+                None => Expr::Atom(ExprAtom { name: variant.name }),
+                Some(payload_ty) => {
+                    let payload = gen_expr_full_inner(db, rng, *payload_ty.clone(), config, depth + 1);
+                    Expr::Term(ExprTerm { name: variant.name, payload })
+                }
+            };
+            // A variant checks against the enum written bare or wrapped.
+            if rng.gen_bool(0.5) {
+                variant_expr
+            } else {
+                Expr::Enum(ExprEnum { variant: ExprFull::new(db, None, None, variant_expr) })
+            }
         }
     }
 }
@@ -889,7 +934,7 @@ fn gen_expr_full_inner<'db, R: Rng>(
     // for typechecking - the typechecker explicitly rejects these without hints.
     let requires_hint = matches!(
         type_hint,
-        TypeHint::Option(_) | TypeHint::Result(_)
+        TypeHint::Option(_) | TypeHint::Result(_) | TypeHint::Enum(_)
     );
 
     let type_hint_opt = if config.include_type_hints || requires_hint {

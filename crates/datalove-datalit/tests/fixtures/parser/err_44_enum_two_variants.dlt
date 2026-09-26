@@ -1,0 +1,1 @@
+: enum { atom A, atom B } / enum { atom A, atom B }

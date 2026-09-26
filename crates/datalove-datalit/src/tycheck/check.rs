@@ -318,6 +318,63 @@ pub fn check<'db>(
             Ok(())
         }
 
+        // Rule: Check-Atom
+        (Expr::Atom(a), Type::Atom(expected_atom)) => {
+            if a.name == expected_atom.name {
+                Ok(())
+            } else {
+                Err(variant_mismatch(ctx, expr, expected, &format!("atom {}", a.name.as_str(db)), "atom name mismatch"))
+            }
+        }
+
+        // Rule: Check-AtomVariant - an atom is a value of any enum listing it.
+        (Expr::Atom(a), Type::Enum(expected_enum)) => {
+            let found = expected_enum.variants.iter()
+                .any(|v| v.name == a.name && v.payload.is_none());
+            if found {
+                Ok(())
+            } else {
+                Err(variant_mismatch(ctx, expr, expected, &format!("atom {}", a.name.as_str(db)), "atom is not a variant of this enum"))
+            }
+        }
+
+        // Rule: Check-Term
+        (Expr::Term(t), Type::Term(expected_term)) => {
+            if t.name == expected_term.name {
+                check(ctx, t.payload, &expected_term.payload)
+            } else {
+                Err(variant_mismatch(ctx, expr, expected, &format!("term {}", t.name.as_str(db)), "term name mismatch"))
+            }
+        }
+
+        // Rule: Check-TermVariant - a term is a value of any enum listing it.
+        (Expr::Term(t), Type::Enum(expected_enum)) => {
+            let payload_ty = expected_enum.variants.iter()
+                .find(|v| v.name == t.name)
+                .and_then(|v| v.payload.as_deref());
+            match payload_ty {
+                Some(payload_ty) => check(ctx, t.payload, payload_ty),
+                None => Err(variant_mismatch(ctx, expr, expected, &format!("term {}", t.name.as_str(db)), "term is not a variant of this enum")),
+            }
+        }
+
+        // Rule: Check-Enum
+        (Expr::Enum(e), Type::Enum(_)) => check(ctx, e.variant, expected),
+
+        (Expr::Enum(_), _) => {
+            if let Some(ts) = ctx.get_span(expr) {
+                DiagnosticBuilder::error(db, "mismatched types")
+                    .code("T058")
+                    .primary_label(ts.clone(), &format!("expected `{}`, found enum literal",
+                        type_to_string(db, expected)))
+                    .emit_type();
+            }
+            Err(TypeError::TypeMismatch {
+                expected: type_to_string(db, expected),
+                actual: "enum literal".to_string(),
+            })
+        }
+
         // Rule: Check-Data
         (Expr::Data(_), Type::Data) => Ok(()),
 
@@ -347,6 +404,29 @@ pub fn check<'db>(
                 })
             }
         }
+    }
+}
+
+/// Report an atom or term that is not the one the expected type names.
+fn variant_mismatch<'db>(
+    ctx: &TypeContext<'db>,
+    expr: ExprFull<'db>,
+    expected: &Type<'db>,
+    actual: &str,
+    note: &str,
+) -> TypeError {
+    let db = ctx.db;
+    if let Some(ts) = ctx.get_span(expr) {
+        DiagnosticBuilder::error(db, "mismatched types")
+            .code("T057")
+            .primary_label(ts.clone(), &format!("expected `{}`, found `{}`",
+                type_to_string(db, expected), actual))
+            .note(note)
+            .emit_type();
+    }
+    TypeError::TypeMismatch {
+        expected: type_to_string(db, expected),
+        actual: actual.to_string(),
     }
 }
 

@@ -1,0 +1,26 @@
+{
+  "ast": {
+    "expr": {
+      "ParseError": {
+        "message": "expected '{' after 'enum'"
+      }
+    },
+    "type_hint": null
+  },
+  "diagnostics": [
+    {
+      "code": "D037",
+      "labels": [
+        {
+          "message": "an enum literal is written `enum { atom Name }`",
+          "span": [
+            0,
+            4
+          ],
+          "text": "enum"
+        }
+      ],
+      "message": "expected '{' after 'enum'"
+    }
+  ]
+}

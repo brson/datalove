@@ -223,7 +223,7 @@ fn pretty_type<'db>(
         }
 
         Type::Enum(e) => {
-            out.push_str("enum{");
+            out.push_str("enum { ");
             for (i, v) in e.variants.iter().enumerate() {
                 if i > 0 {
                     out.push_str(", ");
@@ -238,7 +238,7 @@ fn pretty_type<'db>(
                     out.push_str(v.name.as_str(db));
                 }
             }
-            out.push('}');
+            out.push_str(" }");
         }
     }
 }
@@ -380,7 +380,7 @@ fn pretty_type_hint<'db>(
         }
 
         TypeHint::Enum(e) => {
-            out.push_str("enum{");
+            out.push_str("enum { ");
             for (i, v) in e.variants.iter().enumerate() {
                 if i > 0 {
                     out.push_str(", ");
@@ -395,7 +395,7 @@ fn pretty_type_hint<'db>(
                     out.push_str(v.name.as_str(db));
                 }
             }
-            out.push('}');
+            out.push_str(" }");
         }
 
         TypeHint::ParseError(e) => {
@@ -534,6 +534,24 @@ fn pretty_expr<'db>(
         Expr::Error(e) => {
             out.push_str("error ");
             pretty_expr_full(db, e.value, out, indent);
+        }
+
+        Expr::Atom(a) => {
+            out.push_str("atom ");
+            out.push_str(a.name.as_str(db));
+        }
+
+        Expr::Term(t) => {
+            out.push_str("term ");
+            out.push_str(t.name.as_str(db));
+            out.push(' ');
+            pretty_expr_full(db, t.payload, out, indent);
+        }
+
+        Expr::Enum(e) => {
+            out.push_str("enum { ");
+            pretty_expr_full(db, e.variant, out, indent);
+            out.push_str(" }");
         }
 
         Expr::ParseError(e) => {

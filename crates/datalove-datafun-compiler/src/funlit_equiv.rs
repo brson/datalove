@@ -188,6 +188,31 @@ pub fn datafun_expr_to_datalit_serde<'db>(
                 }),
             )
         }
+        ast::ExprFunKind::Atom(e) => (
+            e.type_hint,
+            datalit::ast_serde::Expr::Atom(datalit::ast_serde::ExprAtom {
+                name: e.name.as_str(db).S(),
+            }),
+        ),
+        ast::ExprFunKind::Term(e) => {
+            let payload = datafun_expr_to_datalit_serde(db, e.payload)?;
+            (
+                e.type_hint,
+                datalit::ast_serde::Expr::Term(datalit::ast_serde::ExprTerm {
+                    name: e.name.as_str(db).S(),
+                    payload: Box::new(payload),
+                }),
+            )
+        }
+        ast::ExprFunKind::EnumLiteral(e) => {
+            let variant = datafun_expr_to_datalit_serde(db, e.variant)?;
+            (
+                e.type_hint,
+                datalit::ast_serde::Expr::Enum(datalit::ast_serde::ExprEnum {
+                    variant: Box::new(variant),
+                }),
+            )
+        }
         ast::ExprFunKind::Table(e) => {
             let header = e.header.iter()
                 .map(|h| h.as_str(db).to_string())
@@ -274,9 +299,6 @@ pub fn datafun_expr_to_datalit_serde<'db>(
         }
         ast::ExprFunKind::IntrinsicCall(_) => {
             return Err(ConversionError::NotPureDatalit("IntrinsicCall".to_string()));
-        }
-        ast::ExprFunKind::Atom(_) | ast::ExprFunKind::Term(_) | ast::ExprFunKind::EnumLiteral(_) => {
-            return Err(ConversionError::NotPureDatalit("Atom/Term/Enum".to_string()));
         }
         ast::ExprFunKind::Hinted(_) => {
             // Datalit hints all sit on a literal form, which carries its own.

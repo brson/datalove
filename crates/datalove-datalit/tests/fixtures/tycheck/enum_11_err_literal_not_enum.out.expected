@@ -1,0 +1,41 @@
+{
+  "ast": {
+    "expr": {
+      "Enum": {
+        "variant": {
+          "expr": {
+            "Atom": {
+              "name": "Ready"
+            }
+          },
+          "type_hint": null
+        }
+      }
+    },
+    "type_hint": "U32"
+  },
+  "diagnostics": [
+    {
+      "code": "T058",
+      "labels": [
+        {
+          "message": "expected `u32`, found enum literal",
+          "span": [
+            0,
+            1
+          ],
+          "text": ":"
+        }
+      ],
+      "message": "mismatched types"
+    }
+  ],
+  "errors": [
+    {
+      "actual": "enum literal",
+      "expected": "u32",
+      "kind": "TypeMismatch"
+    }
+  ],
+  "root_type": null
+}

@@ -1,0 +1,55 @@
+{
+  "ast": {
+    "expr": {
+      "Term": {
+        "name": "Custom",
+        "payload": {
+          "expr": {
+            "Int": {
+              "value": "1"
+            }
+          },
+          "type_hint": null
+        }
+      }
+    },
+    "type_hint": {
+      "Enum": {
+        "variants": [
+          {
+            "name": "Ready",
+            "payload": null
+          },
+          {
+            "name": "Custom",
+            "payload": "String"
+          }
+        ]
+      }
+    }
+  },
+  "diagnostics": [
+    {
+      "code": "T032",
+      "labels": [
+        {
+          "message": "expected `string`, found `int`",
+          "span": [
+            56,
+            57
+          ],
+          "text": "1"
+        }
+      ],
+      "message": "mismatched types"
+    }
+  ],
+  "errors": [
+    {
+      "actual": "int",
+      "expected": "string",
+      "kind": "TypeMismatch"
+    }
+  ],
+  "root_type": null
+}
