@@ -472,6 +472,14 @@ let a = : u32 / n           // a name
 let b = : u32 / twice(n)    // a call
 ```
 
+A hint is the type of the expression it is on, and where something else
+expects a type of that expression, the two have to be the same. A hint is not a
+conversion: `let x: u32 = (: u8 / 1)` is a mismatch, the same as it would be
+for a `u8` variable, and `(: u8 / 1)@` is how to ask for the widening.
+Parentheses under a hint keep the hint inside them: `: u32 / (: u8 / 1)` is two
+hints that disagree, and `: u32 / (1)` is the same as `: u32 / 1`. Datalit
+checks hints the same way.
+
 Postfix lands on the expression under the hint, as it does on the payload of
 `some` and its fellows: `: u32 / o?` hints what the `?` produces, not the
 option it unwraps. A hint takes nothing of its own, so the expression under it

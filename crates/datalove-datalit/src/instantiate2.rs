@@ -216,6 +216,10 @@ fn instantiate_expr_into<'db>(
             instantiate_table(db, rt, &table_expr.rows, &table_ty.columns, tydesc_table, tydesc, dest_ptr, resolved)
         }
 
+        (Expr::Group(group), _) => {
+            instantiate_expr_into(db, rt, group.inner, ty, tydesc_table, dest_ptr, resolved)
+        }
+
         (Expr::Atom(_), Type::Atom(_)) => Ok(dest_ptr as *const u8),
 
         (Expr::Term(term_expr), Type::Term(term_ty)) => {

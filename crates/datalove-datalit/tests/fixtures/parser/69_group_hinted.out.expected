@@ -1,0 +1,18 @@
+{
+  "ast": {
+    "expr": {
+      "Group": {
+        "inner": {
+          "expr": {
+            "Int": {
+              "value": "1"
+            }
+          },
+          "type_hint": "U8"
+        }
+      }
+    },
+    "type_hint": "U8"
+  },
+  "diagnostics": []
+}

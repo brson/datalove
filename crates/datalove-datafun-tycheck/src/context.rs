@@ -689,6 +689,15 @@ impl<'db> TypeContext<'db> {
         Ok(ty)
     }
 
+    /// Synthesize an expression's type leaving aside the hint written on it.
+    ///
+    /// See [`crate::synthesize::synthesize_unhinted`].
+    pub fn synthesize_unhinted(&mut self, expr: ExprFun<'db>) -> Result<Type<'db>, TypeError> {
+        let ty = crate::synthesize::synthesize_unhinted(self, expr)?;
+        self.store_expr_type(expr, &ty);
+        Ok(ty)
+    }
+
     /// Store resolved intrinsic target for an intrinsic call expression.
     ///
     /// Keyed like [`Self::store_expr_type`] rather than indexed by the

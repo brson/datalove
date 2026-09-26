@@ -300,10 +300,18 @@ pub fn datafun_expr_to_datalit_serde<'db>(
         ast::ExprFunKind::IntrinsicCall(_) => {
             return Err(ConversionError::NotPureDatalit("IntrinsicCall".to_string()));
         }
-        ast::ExprFunKind::Hinted(_) => {
-            // Datalit hints all sit on a literal form, which carries its own.
-            // A wrapper means the expression under it was not a literal.
-            return Err(ConversionError::NotPureDatalit("Hinted".to_string()));
+        // A hint over parentheses. Datalit keeps the parentheses only where
+        // what they hold has a hint of its own, and otherwise reads them as
+        // what they hold.
+        ast::ExprFunKind::Hinted(e) => {
+            let inner = datafun_expr_to_datalit_serde(db, e.inner)?;
+            let expr_serde = match inner.type_hint {
+                Some(_) => datalit::ast_serde::Expr::Group(datalit::ast_serde::ExprGroup {
+                    inner: Box::new(inner),
+                }),
+                None => inner.expr,
+            };
+            (Some(e.type_hint), expr_serde)
         }
         ast::ExprFunKind::Index(_) => {
             return Err(ConversionError::NotPureDatalit("Index".to_string()));

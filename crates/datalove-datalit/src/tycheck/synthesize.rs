@@ -178,6 +178,9 @@ pub fn synthesize<'db>(
         // Rule: Syn-Error
         Expr::Error(_) => Type::Error,
 
+        // Rule: Syn-Group
+        Expr::Group(g) => synthesize(ctx, g.inner)?,
+
         // Rule: Syn-Atom
         Expr::Atom(a) => Type::Atom(TypeAtom { name: a.name }),
 

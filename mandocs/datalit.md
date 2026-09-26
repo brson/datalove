@@ -860,6 +860,9 @@ it checks against a type if it synthesizes that type.
 There are no implicit conversions:
 an integer does not become a float, a value does not become an option,
 and a `u8` does not become a `u32`.
+An expression with a hint has the hinted type,
+and checks only against that type:
+`: {a: u32} / {a = : u8 / 1}` is an error.
 
 | Expression      | Synthesizes                  | Also checks against                    |
 |-----------------|------------------------------|----------------------------------------|
@@ -987,9 +990,6 @@ and against the parser's own diagnostics.
 
 ### Bugs
 
-- **Parentheses drop an inner type hint.**
-  A grouping `( e )` returns the inner expression without its hint,
-  so `: u8 / (: u32 / 1)` checks, and builds a `u8`.
 - **Trailing input is ignored.**
   The top-level parse does not require the input to be exhausted:
   `true false` is `true`,
@@ -1020,11 +1020,8 @@ and against the parser's own diagnostics.
   so `: i32 / 0x7F` is a type mismatch.
   Whether hex should reach signed types is undecided.
 - **Some type errors carry no diagnostic.**
-  Out-of-range literals under a top-level hint (`: u8 / 300`)
-  and type aliases (`: Foo / 1`)
-  fail typechecking with no message,
-  because the span lookup misses the rebuilt, hint-stripped expression
-  or no diagnostic is emitted.
+  Type aliases (`: Foo / 1`)
+  fail typechecking with no message.
   `lit-tycheck` also does not print parse diagnostics at all.
 - **Identifiers beginning with digits.**
   Field names are any lexer word,
@@ -1037,12 +1034,6 @@ and against the parser's own diagnostics.
 
 ### Divergences from the botspec
 
-- **Implicit integer widening.**
-  The checker lets a hinted fixed-width integer check against
-  a wider same-sign type or `int`:
-  `: {a: u32} / {a = : u8 / 1}` is accepted.
-  The botspec says there is no implicit widening, only `@`.
-  This spec follows the botspec.
 - **`data` coercion.**
   The botspec says any type coerces to `data`.
   In datalit, `: data / 5` is a type error and `data 5` is required.

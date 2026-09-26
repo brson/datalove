@@ -1,0 +1,47 @@
+{
+  "ast": {
+    "expr": {
+      "List": {
+        "elements": [
+          {
+            "expr": {
+              "Int": {
+                "value": "-10"
+              }
+            },
+            "type_hint": "I8"
+          }
+        ]
+      }
+    },
+    "type_hint": {
+      "List": {
+        "element_type": "I16"
+      }
+    }
+  },
+  "diagnostics": [
+    {
+      "code": "T040",
+      "labels": [
+        {
+          "message": "expected `i16`, found `i8`",
+          "span": [
+            11,
+            12
+          ],
+          "text": ":"
+        }
+      ],
+      "message": "mismatched types"
+    }
+  ],
+  "errors": [
+    {
+      "actual": "i8",
+      "expected": "i16",
+      "kind": "TypeMismatch"
+    }
+  ],
+  "root_type": null
+}

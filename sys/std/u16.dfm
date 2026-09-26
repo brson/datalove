@@ -60,7 +60,7 @@ fun is_power_of_two(self: u16): bool
   if self == (: u16 / 0)
     ret false
   else
-    ret count_ones(self) == (: u16 / 1)
+    ret count_ones(self) == (: u32 / 1)
   end if
 end fun
 

@@ -65,6 +65,24 @@ const CASES: &[Case] = &[
     ("u32", "5"),
     ("u32", "-5"),
     ("index", "-5"),
+    // A hint is the type it names, and has to be the type expected. Nothing
+    // widens on the way, however lossless the widening would be; `@` is how
+    // a value asks for that.
+    ("u32", "(: u8 / 1)"),
+    ("int", "(: u8 / 1)"),
+    ("i64", "(: i32 / -1)"),
+    ("u64", "(: index / 1)"),
+    ("int", "(: index / 1)"),
+    ("f64", "(: f32 / 1.0)"),
+    ("u32", "(: u8 / 0x1)"),
+    ("{a: u32}", "{a = : u8 / 1}"),
+    ("[u32]", "[: u8 / 1]"),
+    ("?u32", "some : u8 / 1"),
+    ("u32", "(: u32 / 1)"),
+    ("{a: u32}", "{a = : u32 / 1}"),
+    ("u32", "(1)"),
+    // Nor does a value become an option by being where one is expected.
+    ("?u32", "1"),
 ];
 
 /// Text that is not a numeric literal in either language.
@@ -195,6 +213,9 @@ fn literal_types_are_decided_as_expected() {
             ("i64", "-9223372036854775808"),
             ("u8", "255"),
             ("u32", "5"),
+            ("u32", "(: u32 / 1)"),
+            ("{a: u32}", "{a = : u32 / 1}"),
+            ("u32", "(1)"),
         ],
     );
 }

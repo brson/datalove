@@ -74,38 +74,21 @@ Examples:
 
 Each enum variant is either an atom (no payload) or a term (with payload type).
 
-## Numeric Widening (same-sign only)
+## No Implicit Widening
 
-There is no implicit numeric widening in Datalove. In the full language,
-all numeric conversions require the explicit `@` (adapt) operator.
+There is no implicit numeric widening, in datalit or datafun. A value of one
+numeric type is never accepted where another is expected, however lossless the
+conversion would be; datafun converts with the explicit `@` operator, and
+datalit, having no operators, does not convert at all.
 
-Within the datalit type checker, same-sign widening is applied when checking
-typed integer expressions against an expected type:
+A type hint is what makes a datalit value one numeric type rather than
+another, so the rule shows up as a rule about hints: a hint must be the type
+that is expected of it (Check-Hinted).
 
-Unsigned integers:
 ```datalove
-u8 -> u16 -> u32 -> u64 -> int
-```
-
-Signed integers:
-```datalove
-i8 -> i16 -> i32 -> i64 -> int
-```
-
-Index/offset:
-```datalove
-index -> int
-offset -> int
-```
-
-Cross-sign widening (e.g. u8 -> i16) is NOT supported in the datalit type
-checker. It requires the `@` operator in the full language.
-
-Example:
-```datalove
-: [u16] / [: u8 / 42]                  ok (u8 widens to u16)
-: [u32] / [: u8 / 10]                  ok (u8 widens to u32)
-: [i32] / [: u32 / 100]                FAIL (cross-sign, not supported)
+: [u16] / [: u8 / 42]                  FAIL (a u8 where a u16 is expected)
+: [u16] / [42]                         ok
+: {a: f64} / {a = : f32 / 1.0}         FAIL (floats do not widen either)
 ```
 
 ## Synthesis Rules (e => T)
@@ -396,13 +379,12 @@ Checking rules verify an expression against an expected type.
 ### Rule: Check-Subsume
 ```
 e => T'
-T' = T  (or T' can widen to T)
+T' = T
 -----------
 e <= T
 ```
 
 This is the key rule that allows synthesizing expressions to be checked.
-Also applies same-sign widening.
 
 ### Rule: Check-Int (all integer types)
 ```
@@ -433,22 +415,24 @@ Examples:
 : u32 / 99999999999999999999            FAIL (out of range)
 ```
 
-### Rule: Check-TypedInt
+### Rule: Check-Hinted
 ```
-n has type hint T_hint (a direct integer type)
-n <= T_hint  (validates literal fits in hinted type)
-T_hint = T_expected OR can_widen(T_hint, T_expected)
+e : ExprFull with type_hint = Some(T_hint)
+T_hint = T
+e.expr <= T
 ------------------------------------------------
-: T_hint / n <= T_expected
+: T_hint / e.expr <= T
 ```
 
-When an integer literal has a type hint, the hint is respected. The hinted
-type must either match or widen (same-sign) to the expected type.
+Applies before every other checking rule. The hint has to be the expected
+type exactly; it is not a conversion. Parentheses keep a hint of their own
+where they are themselves under one, so `: u32 / (: u8 / 1)` is a `u8` where a
+`u32` is expected, and fails.
 
 Example:
 ```datalove
-: [u16] / [: u8 / 10]                  ok (u8 widens to u16)
-: [u8] / [: u32 / 10]                  FAIL (u32 cannot narrow to u8)
+: [u16] / [: u8 / 10]                  FAIL (u8 is not u16)
+: [u8] / [: u8 / 10]                   ok
 ```
 
 ### Rule: Check-Float

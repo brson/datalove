@@ -7,7 +7,22 @@
     },
     "type_hint": "U64"
   },
-  "diagnostics": [],
+  "diagnostics": [
+    {
+      "code": "T011",
+      "labels": [
+        {
+          "message": "value out of range",
+          "span": [
+            0,
+            1
+          ],
+          "text": ":"
+        }
+      ],
+      "message": "integer literal out of range for type u64"
+    }
+  ],
   "errors": [
     {
       "kind": "IntOutOfRange"

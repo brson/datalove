@@ -7,7 +7,22 @@
     },
     "type_hint": "U8"
   },
-  "diagnostics": [],
+  "diagnostics": [
+    {
+      "code": "T005",
+      "labels": [
+        {
+          "message": "value out of range",
+          "span": [
+            0,
+            1
+          ],
+          "text": ":"
+        }
+      ],
+      "message": "integer literal out of range for type u8"
+    }
+  ],
   "errors": [
     {
       "kind": "IntOutOfRange"

@@ -19,7 +19,31 @@ pub fn check<'db>(
     let db = ctx.db;
     let expr_inner = expr.expr(db);
 
+    // Rule: Check-Hinted - a hint says what the expression is, and it has to
+    // be what is expected. Nothing converts on the way from one to the other.
+    if let Some(type_hint) = expr.type_hint(db) {
+        let hinted = convert_type_hint(db, &type_hint)?;
+        if !types_equivalent(db, &hinted, expected) {
+            if let Some(ts) = ctx.get_span(expr) {
+                DiagnosticBuilder::error(db, "mismatched types")
+                    .code("T040")
+                    .primary_label(ts.clone(), &format!("expected `{}`, found `{}`",
+                        type_to_string(db, expected),
+                        type_to_string(db, &hinted)))
+                    .note("the type hint disagrees with the expected type")
+                    .emit_type();
+            }
+            return Err(TypeError::TypeMismatch {
+                expected: type_to_string(db, expected),
+                actual: type_to_string(db, &hinted),
+            });
+        }
+    }
+
     match (expr_inner.clone(), expected) {
+        // Rule: Check-Group
+        (Expr::Group(g), _) => check(ctx, g.inner, expected),
+
         // Rule: Check-None
         (Expr::None, Type::Option(_)) => Ok(()),
 
@@ -59,37 +83,6 @@ pub fn check<'db>(
 
         // Rule: Check-ResultErr (implicit Err wrapping)
         (Expr::Error(_), Type::Result(_)) => Ok(()),
-
-        // Rule: Check-TypedInt - respect type hints on integer literals.
-        (Expr::Int(_), _) if expr.type_hint(db).is_some() && is_direct_integer_type_hint(&expr.type_hint(db).unwrap()) => {
-            let type_hint = expr.type_hint(db).unwrap();
-            let hinted_type = convert_type_hint(db, &type_hint)?;
-
-            // First check against the hinted type to ensure the literal is valid.
-            let expr_without_hint = ExprFull::new(db, None, None, expr_inner.clone());
-            check(ctx, expr_without_hint, &hinted_type)?;
-
-            // Now check if the hinted type matches or can widen to the expected type.
-            if types_equivalent(db, &hinted_type, expected) {
-                Ok(())
-            } else if can_widen_to(&hinted_type, expected) {
-                Ok(())
-            } else {
-                if let Some(ts) = ctx.get_span(expr) {
-                    DiagnosticBuilder::error(db, "mismatched types")
-                        .code("T040")
-                        .primary_label(ts.clone(), &format!("expected `{}`, found `{}`",
-                            type_to_string(db, expected),
-                            type_to_string(db, &hinted_type)))
-                        .note("type hints on integer literals are respected")
-                        .emit_type();
-                }
-                Err(TypeError::TypeMismatch {
-                    expected: type_to_string(db, expected),
-                    actual: type_to_string(db, &hinted_type),
-                })
-            }
-        }
 
         // Rule: Check-Subsume - try synthesis first.
         (Expr::True | Expr::False | Expr::String(_), _) => {
@@ -387,8 +380,6 @@ pub fn check<'db>(
             let synthesized = synthesize(ctx, ty_without_hint)?;
             if types_equivalent(db, &synthesized, expected) {
                 Ok(())
-            } else if can_widen_to(&synthesized, expected) {
-                Ok(())
             } else {
                 if let Some(ts) = ctx.get_span(expr) {
                     DiagnosticBuilder::error(db, "mismatched types")
@@ -428,15 +419,6 @@ fn variant_mismatch<'db>(
         expected: type_to_string(db, expected),
         actual: actual.to_string(),
     }
-}
-
-/// Check if a type hint is a direct integer type (not wrapped in Option/Result).
-fn is_direct_integer_type_hint<'db>(type_hint: &TypeHint<'db>) -> bool {
-    matches!(
-        type_hint,
-        TypeHint::U8 | TypeHint::I8 | TypeHint::U16 | TypeHint::I16 |
-        TypeHint::U32 | TypeHint::I32 | TypeHint::U64 | TypeHint::I64 | TypeHint::Int
-    )
 }
 
 /// Emit a diagnostic for integer literal out of range.

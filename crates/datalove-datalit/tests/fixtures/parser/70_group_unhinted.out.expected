@@ -1,0 +1,11 @@
+{
+  "ast": {
+    "expr": {
+      "Int": {
+        "value": "1"
+      }
+    },
+    "type_hint": "U8"
+  },
+  "diagnostics": []
+}

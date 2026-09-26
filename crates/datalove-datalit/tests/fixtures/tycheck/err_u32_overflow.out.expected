@@ -7,7 +7,22 @@
     },
     "type_hint": "U32"
   },
-  "diagnostics": [],
+  "diagnostics": [
+    {
+      "code": "T009",
+      "labels": [
+        {
+          "message": "value out of range",
+          "span": [
+            0,
+            1
+          ],
+          "text": ":"
+        }
+      ],
+      "message": "integer literal out of range for type u32"
+    }
+  ],
   "errors": [
     {
       "kind": "IntOutOfRange"

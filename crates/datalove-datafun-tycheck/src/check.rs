@@ -29,6 +29,19 @@ pub fn check_expr<'db>(
     let db = ctx.db;
     let expr_kind = expr.expr(db);
 
+    // A hint says what the expression is, and it has to be what is expected.
+    // Nothing converts on the way from one to the other: a `: u8 / 1` where a
+    // `u32` is wanted is a mismatch, as a `u8` variable would be, and not a
+    // `u32` with a hint that went unread.
+    if let Some(type_hint) = expr_kind.type_hint().cloned() {
+        let hinted = ctx.convert_hint(type_hint)?;
+        if !types_equivalent(db, &hinted, expected) {
+            let expected_str = type_to_string(db, expected);
+            let hinted_str = type_to_string(db, &hinted);
+            return Err(ctx.error_type_mismatch(expr, &expected_str, &hinted_str, "the type hint disagrees with the expected type"));
+        }
+    }
+
     match expr_kind {
         // Handle None literals specially - they can check against any Option type.
         ExprFunKind::None(_lit) => {
@@ -114,7 +127,7 @@ pub fn check_expr<'db>(
                     Ok(())
                 }
                 _ => {
-                    let synthesized = ctx.synthesize_expr(expr)?;
+                    let synthesized = ctx.synthesize_unhinted(expr)?;
                     let expected_str = type_to_string(db, expected);
                     let actual_str = type_to_string(db, &synthesized);
                     Err(ctx.error_type_mismatch(expr, &expected_str, &actual_str, "type mismatch"))
@@ -137,7 +150,7 @@ pub fn check_expr<'db>(
                     Ok(())
                 }
                 _ => {
-                    let synthesized = ctx.synthesize_expr(expr)?;
+                    let synthesized = ctx.synthesize_unhinted(expr)?;
                     let expected_str = type_to_string(db, expected);
                     let actual_str = type_to_string(db, &synthesized);
                     Err(ctx.error_type_mismatch(expr, &expected_str, &actual_str, "type mismatch"))
@@ -160,7 +173,7 @@ pub fn check_expr<'db>(
                     Ok(())
                 }
                 _ => {
-                    let synthesized = ctx.synthesize_expr(expr)?;
+                    let synthesized = ctx.synthesize_unhinted(expr)?;
                     let expected_str = type_to_string(db, expected);
                     let actual_str = type_to_string(db, &synthesized);
                     Err(ctx.error_type_mismatch(expr, &expected_str, &actual_str, "type mismatch"))
@@ -183,7 +196,7 @@ pub fn check_expr<'db>(
                     Ok(())
                 }
                 _ => {
-                    let synthesized = ctx.synthesize_expr(expr)?;
+                    let synthesized = ctx.synthesize_unhinted(expr)?;
                     let expected_str = type_to_string(db, expected);
                     let actual_str = type_to_string(db, &synthesized);
                     Err(ctx.error_type_mismatch(expr, &expected_str, &actual_str, "type mismatch"))
@@ -207,7 +220,7 @@ pub fn check_expr<'db>(
                     Ok(())
                 }
                 _ => {
-                    let synthesized = ctx.synthesize_expr(expr)?;
+                    let synthesized = ctx.synthesize_unhinted(expr)?;
                     let expected_str = type_to_string(db, expected);
                     let actual_str = type_to_string(db, &synthesized);
                     Err(ctx.error_type_mismatch(expr, &expected_str, &actual_str, "type mismatch"))
@@ -230,7 +243,7 @@ pub fn check_expr<'db>(
                     Ok(())
                 }
                 _ => {
-                    let synthesized = ctx.synthesize_expr(expr)?;
+                    let synthesized = ctx.synthesize_unhinted(expr)?;
                     let expected_str = type_to_string(db, expected);
                     let actual_str = type_to_string(db, &synthesized);
                     Err(ctx.error_type_mismatch(expr, &expected_str, &actual_str, "type mismatch"))
@@ -253,7 +266,7 @@ pub fn check_expr<'db>(
                     Ok(())
                 }
                 _ => {
-                    let synthesized = ctx.synthesize_expr(expr)?;
+                    let synthesized = ctx.synthesize_unhinted(expr)?;
                     let expected_str = type_to_string(db, expected);
                     let actual_str = type_to_string(db, &synthesized);
                     Err(ctx.error_type_mismatch(expr, &expected_str, &actual_str, "type mismatch"))
@@ -276,7 +289,7 @@ pub fn check_expr<'db>(
                     Ok(())
                 }
                 _ => {
-                    let synthesized = ctx.synthesize_expr(expr)?;
+                    let synthesized = ctx.synthesize_unhinted(expr)?;
                     let expected_str = type_to_string(db, expected);
                     let actual_str = type_to_string(db, &synthesized);
                     Err(ctx.error_type_mismatch(expr, &expected_str, &actual_str, "type mismatch"))
@@ -306,7 +319,7 @@ pub fn check_expr<'db>(
                         return Ok(());
                     }
                     // Otherwise, synthesize and compare.
-                    let synthesized = ctx.synthesize_expr(expr)?;
+                    let synthesized = ctx.synthesize_unhinted(expr)?;
                     if types_equivalent(db, &synthesized, expected) {
                         Ok(())
                     } else {
@@ -316,7 +329,7 @@ pub fn check_expr<'db>(
                     }
                 }
                 _ => {
-                    let synthesized = ctx.synthesize_expr(expr)?;
+                    let synthesized = ctx.synthesize_unhinted(expr)?;
                     let expected_str = type_to_string(db, expected);
                     let actual_str = type_to_string(db, &synthesized);
                     Err(ctx.error_type_mismatch(expr, &expected_str, &actual_str, "type mismatch"))
@@ -339,7 +352,7 @@ pub fn check_expr<'db>(
                         return Ok(());
                     }
                     // Otherwise, synthesize and compare.
-                    let synthesized = ctx.synthesize_expr(expr)?;
+                    let synthesized = ctx.synthesize_unhinted(expr)?;
                     if types_equivalent(db, &synthesized, expected) {
                         Ok(())
                     } else {
@@ -349,7 +362,7 @@ pub fn check_expr<'db>(
                     }
                 }
                 _ => {
-                    let synthesized = ctx.synthesize_expr(expr)?;
+                    let synthesized = ctx.synthesize_unhinted(expr)?;
                     let expected_str = type_to_string(db, expected);
                     let actual_str = type_to_string(db, &synthesized);
                     Err(ctx.error_type_mismatch(expr, &expected_str, &actual_str, "type mismatch"))
@@ -370,7 +383,7 @@ pub fn check_expr<'db>(
                         return Ok(());
                     }
                     // Otherwise, synthesize and compare.
-                    let synthesized = ctx.synthesize_expr(expr)?;
+                    let synthesized = ctx.synthesize_unhinted(expr)?;
                     if types_equivalent(db, &synthesized, expected) {
                         Ok(())
                     } else {
@@ -380,7 +393,7 @@ pub fn check_expr<'db>(
                     }
                 }
                 _ => {
-                    let synthesized = ctx.synthesize_expr(expr)?;
+                    let synthesized = ctx.synthesize_unhinted(expr)?;
                     let expected_str = type_to_string(db, expected);
                     let actual_str = type_to_string(db, &synthesized);
                     Err(ctx.error_type_mismatch(expr, &expected_str, &actual_str, "type mismatch"))
@@ -418,7 +431,7 @@ pub fn check_expr<'db>(
                 return Ok(());
             }
             // Otherwise fall through to default synthesis behavior.
-            let synthesized = ctx.synthesize_expr(expr)?;
+            let synthesized = ctx.synthesize_unhinted(expr)?;
             if types_equivalent(db, &synthesized, expected) {
                 return Ok(());
             }
@@ -523,7 +536,7 @@ pub fn check_expr<'db>(
             // Fall through to default synthesis behavior.
             // Note: Bare arithmetic on fixed ints is a type error - they must use
             // @ to widen first, or use checked/optional operators (+!, +?, etc.).
-            let synthesized = ctx.synthesize_expr(expr)?;
+            let synthesized = ctx.synthesize_unhinted(expr)?;
             if types_equivalent(db, &synthesized, expected) {
                 return Ok(());
             }
@@ -562,7 +575,7 @@ pub fn check_expr<'db>(
                     }
                 }
                 _ => {
-                    let synthesized = ctx.synthesize_expr(expr)?;
+                    let synthesized = ctx.synthesize_unhinted(expr)?;
                     let expected_str = type_to_string(db, expected);
                     let actual_str = type_to_string(db, &synthesized);
                     Err(ctx.error_type_mismatch(expr, &expected_str, &actual_str, "type mismatch"))
@@ -613,7 +626,7 @@ pub fn check_expr<'db>(
                     }
                 }
                 _ => {
-                    let synthesized = ctx.synthesize_expr(expr)?;
+                    let synthesized = ctx.synthesize_unhinted(expr)?;
                     let expected_str = type_to_string(db, expected);
                     let actual_str = type_to_string(db, &synthesized);
                     Err(ctx.error_type_mismatch(expr, &expected_str, &actual_str, "type mismatch"))
@@ -669,7 +682,7 @@ pub fn check_expr<'db>(
         }
 
         _ => {
-            let synthesized = ctx.synthesize_expr(expr)?;
+            let synthesized = ctx.synthesize_unhinted(expr)?;
 
             // Check for exact type match first.
             if types_equivalent(db, &synthesized, expected) {

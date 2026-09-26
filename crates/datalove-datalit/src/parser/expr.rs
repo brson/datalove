@@ -41,9 +41,13 @@ impl<'db> Parser<'db> {
                 ast::ExprFull::new(self.db, Some(local_index), Some(type_hint), expr)
             }
         } else {
-            // No type hint, just parse expression.
-            let expr = self.parse_expr();
-            ast::ExprFull::new(self.db, Some(local_index), None, expr)
+            // No type hint, just parse expression. Parentheses around a hinted
+            // expression are the hinted expression, there being no second
+            // hint for them to keep apart.
+            match self.parse_expr() {
+                ast::Expr::Group(group) => return group.inner,
+                expr => ast::ExprFull::new(self.db, Some(local_index), None, expr),
+            }
         };
 
         // Record span for this expression.
@@ -228,7 +232,11 @@ impl<'db> Parser<'db> {
                 self.merge_spans_from(&mut sub_parser);
                 // Single element without comma is grouping parens, not a 1-tuple.
                 if elements.len() == 1 && !had_comma {
-                    elements.into_iter().next().unwrap().expr(self.db).clone()
+                    let inner = elements.into_iter().next().X();
+                    match inner.type_hint(self.db) {
+                        Some(_) => ast::Expr::Group(ast::ExprGroup { inner }),
+                        None => inner.expr(self.db).clone(),
+                    }
                 } else {
                     ast::Expr::AnonTuple(ast::ExprAnonTuple { elements })
                 }

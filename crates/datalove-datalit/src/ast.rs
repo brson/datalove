@@ -217,6 +217,7 @@ pub enum Expr<'db> {
     Atom(ExprAtom<'db>),
     Term(ExprTerm<'db>),
     Enum(ExprEnum<'db>),
+    Group(ExprGroup<'db>),
     ParseError(ExprParseError<'db>),
 }
 
@@ -350,6 +351,17 @@ pub struct ExprAtom<'db> {
 pub struct ExprTerm<'db> {
     pub name: InternedText<'db>,
     pub payload: ExprFull<'db>,
+}
+
+/// A parenthesized expression that keeps a hint of its own.
+///
+/// Parentheses group without meaning anything, so `(e)` is read as `e`,
+/// except where `e` has a hint and the parentheses are under another:
+/// `: u32 / (: u8 / 1)` has two hints, and an expression holds one.
+#[derive(Clone, Hash, PartialEq, Eq)]
+#[derive(salsa::SalsaValue)]
+pub struct ExprGroup<'db> {
+    pub inner: ExprFull<'db>,
 }
 
 /// An enum literal, `enum { atom A }`, naming the one variant it holds.

@@ -15,13 +15,13 @@ fun mismatch(): u32
   ret pick_first(: u32 / 1, "not a u32")
 end fun
 
-// Which type a parameter is fixed at depends on argument order. An unsuffixed
-// integer literal stands for `int` on its own, so it fixes T at `int` here and
-// the `u32` after it is accepted by widening into that. Written the other way
-// round T would be `u32` and the literal would check against it. Both are
-// fine; they just do not name the same T.
-fun order_chooses_the_type(): int
-  ret pick_first(99, : u32 / 1)
+// Which type a parameter is fixed at depends on argument order. Here the
+// `u32` comes first and fixes T, and the unsuffixed literal after it checks
+// against that. Written the other way round the literal, standing for `int` on
+// its own, would fix T at `int`, and the `u32` after it would be a mismatch:
+// nothing widens into a type parameter any more than anywhere else.
+fun order_chooses_the_type(): u32
+  ret pick_first(: u32 / 1, 99)
 end fun
 
 // Erasure converts a value into the shape the callee was compiled for. An

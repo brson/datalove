@@ -347,7 +347,20 @@ impl<'db> Parser<'db> {
             _ => unreachable!("caller must peek for ParenOpen before calling"),
         };
 
-        let elements = self.parse_comma_separated_exprs(inner);
+        let mut sub = self.sub_parser(inner, None);
+        let (mut elements, had_comma) = sub.parse_comma_separated_with_trailing(|p| p.parse_expr_full());
+        sub.error_if_not_exhausted();
+        self.merge_from_sub(&mut sub);
+
+        // One element and no comma is a parenthesized expression, as it is
+        // with no hint, and the hint is on what the parentheses hold.
+        if elements.len() == 1 && !had_comma {
+            let inner = elements.pop().X();
+            return match type_hint {
+                Some(type_hint) => ast::ExprFunKind::Hinted(ast::ExprHinted { type_hint, inner }),
+                None => inner.expr(self.db).clone(),
+            };
+        }
         ast::ExprFunKind::AnonTuple(ast::ExprAnonTuple { type_hint, elements })
     }
 

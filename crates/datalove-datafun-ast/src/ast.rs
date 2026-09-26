@@ -632,6 +632,50 @@ pub enum ExprFunKind<'db> {
     IntrinsicCall(ExprIntrinsicCall<'db>),
 }
 
+impl<'db> ExprFunKind<'db> {
+    /// The type hint written on this expression, if it has one.
+    ///
+    /// A literal form keeps its hint in its own field, and anything else is
+    /// wrapped in `Hinted`; this reads either.
+    pub fn type_hint(&self) -> Option<&datalit::ast::TypeHint<'db>> {
+        match self {
+            ExprFunKind::True(e) | ExprFunKind::False(e) | ExprFunKind::None(e) => e.type_hint.as_ref(),
+            ExprFunKind::Int(e) => e.type_hint.as_ref(),
+            ExprFunKind::Float(e) => e.type_hint.as_ref(),
+            ExprFunKind::Hex(e) => e.type_hint.as_ref(),
+            ExprFunKind::String(e) => e.type_hint.as_ref(),
+            ExprFunKind::List(e) => e.type_hint.as_ref(),
+            ExprFunKind::Set(e) => e.type_hint.as_ref(),
+            ExprFunKind::Map(e) => e.type_hint.as_ref(),
+            ExprFunKind::Tensor(e) => e.type_hint.as_ref(),
+            ExprFunKind::AnonTuple(e) => e.type_hint.as_ref(),
+            ExprFunKind::AnonStruct(e) => e.type_hint.as_ref(),
+            ExprFunKind::Some(e) => e.type_hint.as_ref(),
+            ExprFunKind::Ok(e) => e.type_hint.as_ref(),
+            ExprFunKind::Er(e) => e.type_hint.as_ref(),
+            ExprFunKind::Data(e) => e.type_hint.as_ref(),
+            ExprFunKind::Error(e) => e.type_hint.as_ref(),
+            ExprFunKind::Table(e) => e.type_hint.as_ref(),
+            ExprFunKind::Atom(e) => e.type_hint.as_ref(),
+            ExprFunKind::Term(e) => e.type_hint.as_ref(),
+            ExprFunKind::EnumLiteral(e) => e.type_hint.as_ref(),
+            ExprFunKind::Hinted(e) => Some(&e.type_hint),
+            ExprFunKind::BinOp(_)
+            | ExprFunKind::FunctionCall(_)
+            | ExprFunKind::Tuple(_)
+            | ExprFunKind::UnaryOp(_)
+            | ExprFunKind::TryOption(_)
+            | ExprFunKind::TryResult(_)
+            | ExprFunKind::CloneCoerce(_)
+            | ExprFunKind::FieldProj(_)
+            | ExprFunKind::Index(_)
+            | ExprFunKind::Place(_)
+            | ExprFunKind::ParseError(_)
+            | ExprFunKind::IntrinsicCall(_) => None,
+        }
+    }
+}
+
 #[derive(Clone, Hash, PartialEq, Eq)]
 #[derive(salsa::SalsaValue)]
 pub struct ExprBinOp<'db> {

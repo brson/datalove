@@ -15,7 +15,7 @@ use rmx::prelude::*;
 use datalove_datafun_ast::ast::*;
 use datalove_datalit as datalit;
 use crate::context::TypeContext;
-use crate::check::{check_expr, check_list_elements, check_set_elements, check_map_entries, check_tensor_shape_and_elements, check_tuple_elements, check_struct_fields, check_table_rows};
+use crate::check::check_expr;
 use crate::types::*;
 
 pub use crate::{Type, TypeError, is_copy_type};
@@ -135,7 +135,30 @@ fn require_result_return_type<'db>(
 // ============================================================================
 
 /// Synthesize a type for an expression.
+///
+/// An expression with a hint has the hint's type, and is checked against it
+/// rather than taking its word: the literal under `: u32 / true` is still a
+/// `bool`.
 pub fn synthesize_expr<'db>(
+    ctx: &mut TypeContext<'db>,
+    expr: ExprFun<'db>,
+) -> Result<Type<'db>, TypeError> {
+    let db = ctx.db;
+    if let Some(type_hint) = expr.expr(db).type_hint().cloned() {
+        let expected = ctx.convert_hint(type_hint)?;
+        check_expr(ctx, expr, &expected)?;
+        ctx.store_expr_type(expr, &expected);
+        return Ok(expected);
+    }
+    synthesize_unhinted(ctx, expr)
+}
+
+/// Synthesize a type for an expression from what it is, leaving aside any
+/// hint written on it.
+///
+/// Checking reaches for this when it has to know what an expression is by
+/// itself, having already weighed the hint against what was expected.
+pub fn synthesize_unhinted<'db>(
     ctx: &mut TypeContext<'db>,
     expr: ExprFun<'db>,
 ) -> Result<Type<'db>, TypeError> {
@@ -226,47 +249,24 @@ pub fn synthesize_expr<'db>(
 
         // New inline variants - simple literals.
         // All these check for type hints first.
-        ExprFunKind::True(lit) => {
-            if let Some(type_hint) = lit.type_hint.clone() {
-                return ctx.convert_hint(type_hint);
-            }
+        ExprFunKind::True(_) => {
             let ty = Type::Datalit(datalit::tycheck::Type::Bool);
             Ok(ty)
         }
-        ExprFunKind::False(lit) => {
-            if let Some(type_hint) = lit.type_hint.clone() {
-                return ctx.convert_hint(type_hint);
-            }
+        ExprFunKind::False(_) => {
             let ty = Type::Datalit(datalit::tycheck::Type::Bool);
             Ok(ty)
         }
-        ExprFunKind::None(lit) => {
-            // None requires type hint to determine the inner type.
-            if let Some(type_hint) = lit.type_hint.clone() {
-                return ctx.convert_hint(type_hint);
-            }
+        ExprFunKind::None(_) => {
             Err(ctx.error_cannot_synthesize(expr, "cannot infer type for None value"))
         }
-        ExprFunKind::Int(int_expr) => {
-            // If type hint present, use it and validate the value fits.
-            if let Some(type_hint) = int_expr.type_hint.clone() {
-                let result_ty = ctx.convert_hint(type_hint)?;
-                // Validate integer value fits within the type.
-                let value_str = int_expr.value.as_str(db);
-                if let Type::Datalit(ref datalit_ty) = result_ty {
-                    check_int_fits_wrapped_type(value_str, datalit_ty, db)?;
-                }
-                return Ok(result_ty);
-            }
+        ExprFunKind::Int(_) => {
             // Integer literals synthesize to bigint for REPL ergonomics.
             // Use type hints for fixed-width integers.
             let ty = Type::Datalit(datalit::tycheck::Type::Int);
             Ok(ty)
         }
-        ExprFunKind::Float(float_expr) => {
-            if let Some(type_hint) = float_expr.type_hint.clone() {
-                return ctx.convert_hint(type_hint);
-            }
+        ExprFunKind::Float(_) => {
             // A literal with nothing to infer from is an f64, the same way a
             // bare integer literal is an int: a default that has to be chosen
             // without knowing what it is for should be the one that keeps the
@@ -274,101 +274,41 @@ pub fn synthesize_expr<'db>(
             let ty = Type::Datalit(datalit::tycheck::Type::F64);
             Ok(ty)
         }
-        ExprFunKind::Hex(hex_expr) => {
-            // If type hint present, use it and validate the value fits.
-            if let Some(type_hint) = hex_expr.type_hint.clone() {
-                let result_ty = ctx.convert_hint(type_hint)?;
-                // Validate hex value fits within the type.
-                let value_str = hex_expr.value.as_str(db);
-                if let Type::Datalit(ref datalit_ty) = result_ty {
-                    check_hex_fits_wrapped_type(value_str, datalit_ty, db)?;
-                }
-                return Ok(result_ty);
-            }
+        ExprFunKind::Hex(_) => {
             // Hex literals synthesize to bigint for REPL ergonomics.
             // Use type hints for fixed-width integers.
             let ty = Type::Datalit(datalit::tycheck::Type::Int);
             Ok(ty)
         }
-        ExprFunKind::String(str_expr) => {
-            if let Some(type_hint) = str_expr.type_hint.clone() {
-                return ctx.convert_hint(type_hint);
-            }
+        ExprFunKind::String(_) => {
             let ty = Type::Datalit(datalit::tycheck::Type::String);
             Ok(ty)
         }
 
         // Collection types.
         ExprFunKind::List(ref list_expr) => {
-            if let Some(type_hint) = list_expr.type_hint.clone() {
-                let expected_ty = ctx.convert_hint(type_hint)?;
-                // Check elements against expected type.
-                check_list_elements(ctx, &list_expr.elements, &expected_ty)?;
-                return Ok(expected_ty);
-            }
             synthesize_inline_list(ctx, expr, list_expr)
         }
         ExprFunKind::Set(ref set_expr) => {
-            if let Some(type_hint) = set_expr.type_hint.clone() {
-                let expected_ty = ctx.convert_hint(type_hint)?;
-                // Check elements against expected type.
-                check_set_elements(ctx, &set_expr.elements, &expected_ty)?;
-                return Ok(expected_ty);
-            }
             synthesize_inline_set(ctx, expr, set_expr)
         }
         ExprFunKind::Map(ref map_expr) => {
-            if let Some(type_hint) = map_expr.type_hint.clone() {
-                let expected_ty = ctx.convert_hint(type_hint)?;
-                // Check entries against expected type.
-                check_map_entries(ctx, &map_expr.entries, &expected_ty)?;
-                return Ok(expected_ty);
-            }
             synthesize_inline_map(ctx, expr, map_expr)
         }
         ExprFunKind::Tensor(ref tensor_expr) => {
-            if let Some(type_hint) = tensor_expr.type_hint.clone() {
-                let expected_ty = ctx.convert_hint(type_hint)?;
-                // Check rank and elements against expected type.
-                check_tensor_shape_and_elements(ctx, tensor_expr.C(), &expected_ty)?;
-                return Ok(expected_ty);
-            }
             synthesize_inline_tensor(ctx, expr, tensor_expr)
         }
 
         // Aggregate types.
         ExprFunKind::AnonTuple(ref tuple_expr) => {
-            if let Some(type_hint) = tuple_expr.type_hint.clone() {
-                let expected_ty = ctx.convert_hint(type_hint)?;
-                // Check elements against expected type (catches arity mismatches).
-                check_tuple_elements(ctx, &tuple_expr.elements, &expected_ty)?;
-                return Ok(expected_ty);
-            }
             synthesize_inline_anon_tuple(ctx, expr, tuple_expr)
         }
         ExprFunKind::AnonStruct(ref struct_expr) => {
-            if let Some(type_hint) = struct_expr.type_hint.clone() {
-                let expected_ty = ctx.convert_hint(type_hint)?;
-                // Check fields against expected type (catches arity mismatches).
-                check_struct_fields(ctx, &struct_expr.fields, &expected_ty)?;
-                return Ok(expected_ty);
-            }
             synthesize_inline_anon_struct(ctx, expr, struct_expr)
         }
 
         // Wrapper types.
         ExprFunKind::Some(some_expr) => {
-            if let Some(type_hint) = some_expr.type_hint.clone() {
-                // Check the payload rather than take the hint's word for it.
-                // The hint says what the whole is, and nothing else here will
-                // visit what it wraps: returning the hint alone left the
-                // payload with no type recorded, which lowering then went
-                // looking for. Reachable wherever a `some` is synthesized
-                // rather than checked, which is under a `data` or an `error`.
-                let expected = ctx.convert_hint(type_hint)?;
-                check_expr(ctx, expr, &expected)?;
-                return Ok(expected);
-            }
             // Synthesize inner type and wrap in Option.
             // Synthesized expression types are always Datalit (Function types only appear in signatures).
             let payload = some_expr.payload;
@@ -383,13 +323,6 @@ pub fn synthesize_expr<'db>(
             Ok(Type::Datalit(option_ty))
         }
         ExprFunKind::Ok(ok_expr) => {
-            if let Some(type_hint) = ok_expr.type_hint.clone() {
-                // As for `some` above: the payload needs checking, because
-                // nothing else here visits it.
-                let expected = ctx.convert_hint(type_hint)?;
-                check_expr(ctx, expr, &expected)?;
-                return Ok(expected);
-            }
             // Synthesize inner type and wrap in Result.
             // Synthesized expression types are always Datalit (Function types only appear in signatures).
             let payload = ok_expr.payload;
@@ -403,63 +336,24 @@ pub fn synthesize_expr<'db>(
             );
             Ok(Type::Datalit(result_ty))
         }
-        ExprFunKind::Er(er_expr) => {
-            // Er requires type hint to determine the Ok type of the Result.
-            if let Some(type_hint) = er_expr.type_hint.clone() {
-                // Check payload against Error type.
-                let error_ty = Type::Datalit(datalit::tycheck::Type::Error
-                );
-                check_expr(ctx, er_expr.payload, &error_ty)?;
-                let result = ctx.convert_hint(type_hint)?;
-                ctx.store_expr_type(expr, &result);
-                return Ok(result);
-            }
+        ExprFunKind::Er(_) => {
+            // Er needs a type hint to know the Result's ok type.
             Err(ctx.error_cannot_synthesize(expr, "cannot infer type for Er value"))
         }
         ExprFunKind::Data(ref data_expr) => {
-            if let Some(type_hint) = data_expr.type_hint.clone() {
-                // Synthesize inner value type (Data can wrap any type).
-                ctx.synthesize_expr(data_expr.value)?;
-                let result = ctx.convert_hint(type_hint)?;
-                ctx.store_expr_type(expr, &result);
-                return Ok(result);
-            }
             synthesize_inline_data(ctx, expr, data_expr)
         }
         ExprFunKind::Error(ref err_expr) => {
-            if let Some(type_hint) = err_expr.type_hint.clone() {
-                // Synthesize inner value type (Error can wrap any type).
-                ctx.synthesize_expr(err_expr.value)?;
-                let result = ctx.convert_hint(type_hint)?;
-                ctx.store_expr_type(expr, &result);
-                return Ok(result);
-            }
             synthesize_inline_err(ctx, expr, err_expr)
         }
 
         // Table expression.
         ExprFunKind::Table(ref table_expr) => {
-            if let Some(type_hint) = table_expr.type_hint.clone() {
-                let expected_ty = ctx.convert_hint(type_hint)?;
-                // Check rows against expected table type.
-                if let Type::Datalit(datalit::tycheck::Type::Table(ref table_ty)) = expected_ty {
-                    check_table_rows(ctx, &table_expr.header, &table_expr.rows, table_ty)?;
-                }
-                return Ok(expected_ty);
-            }
             synthesize_inline_table(ctx, expr, table_expr)
         }
 
         // Atom expression: synthesize standalone Atom type.
         ExprFunKind::Atom(ref atom_expr) => {
-            if let Some(type_hint) = atom_expr.type_hint.clone() {
-                // As for `some` above: checked against the hint rather than
-                // taking its word, so that the hint is the type and a
-                // disagreement is caught here.
-                let expected = ctx.convert_hint(type_hint)?;
-                check_expr(ctx, expr, &expected)?;
-                return Ok(expected);
-            }
             let ty = Type::Datalit(datalit::tycheck::Type::Atom(
                 datalit::tycheck::TypeAtom { name: atom_expr.name }
             ));
@@ -469,12 +363,6 @@ pub fn synthesize_expr<'db>(
 
         // Term expression: synthesize standalone Term type.
         ExprFunKind::Term(ref term_expr) => {
-            if let Some(type_hint) = term_expr.type_hint.clone() {
-                // The payload needs checking, and nothing else here visits it.
-                let expected = ctx.convert_hint(type_hint)?;
-                check_expr(ctx, expr, &expected)?;
-                return Ok(expected);
-            }
             let payload_ty = ctx.synthesize_expr(term_expr.payload)?;
             let payload_datalit = match payload_ty {
                 Type::Datalit(dt) => dt.clone(),
@@ -490,23 +378,12 @@ pub fn synthesize_expr<'db>(
             Ok(ty)
         }
 
-        // A hint over an expression that has nowhere of its own to keep one.
-        // Checked against the hint, which is then the type, the same as every
-        // literal form does with the hint it carries.
-        ExprFunKind::Hinted(ref hinted) => {
-            let expected = ctx.convert_hint(hinted.type_hint.clone())?;
-            check_expr(ctx, expr, &expected)?;
-            Ok(expected)
-        }
+        // What is under the hint, the hint being left aside.
+        ExprFunKind::Hinted(ref hinted) => ctx.synthesize_expr(hinted.inner),
 
-        // Enum literal: the hint is the only context it can have here.
-        ExprFunKind::EnumLiteral(ref enum_lit) => {
-            let Some(type_hint) = enum_lit.type_hint.clone() else {
-                return Err(ctx.error_cannot_synthesize(expr, "enum literal requires type context"));
-            };
-            let expected = ctx.convert_hint(type_hint)?;
-            check_expr(ctx, expr, &expected)?;
-            Ok(expected)
+        // An enum literal has no type of its own.
+        ExprFunKind::EnumLiteral(_) => {
+            Err(ctx.error_cannot_synthesize(expr, "enum literal requires type context"))
         }
 
         // Intrinsic call expression.

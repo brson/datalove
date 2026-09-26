@@ -1,0 +1,55 @@
+{
+  "ast": {
+    "expr": {
+      "AnonStruct": {
+        "fields": [
+          {
+            "name": "a",
+            "value": {
+              "expr": {
+                "Float": {
+                  "value": "1.0"
+                }
+              },
+              "type_hint": "F32"
+            }
+          }
+        ]
+      }
+    },
+    "type_hint": {
+      "AnonStruct": {
+        "fields": [
+          {
+            "name": "a",
+            "type_hint": "F64"
+          }
+        ]
+      }
+    }
+  },
+  "diagnostics": [
+    {
+      "code": "T040",
+      "labels": [
+        {
+          "message": "expected `f64`, found `f32`",
+          "span": [
+            18,
+            19
+          ],
+          "text": ":"
+        }
+      ],
+      "message": "mismatched types"
+    }
+  ],
+  "errors": [
+    {
+      "actual": "f32",
+      "expected": "f64",
+      "kind": "TypeMismatch"
+    }
+  ],
+  "root_type": null
+}

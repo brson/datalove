@@ -161,6 +161,12 @@ fn write_expr<'db>(
             out.push_str(" }");
         }
 
+        Expr::Group(g) => {
+            out.push('(');
+            write_expr_full(db, g.inner, out);
+            out.push(')');
+        }
+
         Expr::ParseError(e) => {
             out.push_str("<parse-error: ");
             out.push_str(e.message.as_str(db));

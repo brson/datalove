@@ -149,6 +149,7 @@ pub enum Expr {
     Atom(ExprAtom),
     Term(ExprTerm),
     Enum(ExprEnum),
+    Group(ExprGroup),
     ParseError(ExprParseError),
 }
 
@@ -261,6 +262,11 @@ pub struct ExprAtom {
 pub struct ExprTerm {
     pub name: String,
     pub payload: Box<ExprFull>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct ExprGroup {
+    pub inner: Box<ExprFull>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -447,6 +453,9 @@ impl Expr {
             crate::ast::Expr::Term(e) => Expr::Term(ExprTerm {
                 name: e.name.as_str(db).S(),
                 payload: Box::new(ExprFull::from_ast(db, e.payload)),
+            }),
+            crate::ast::Expr::Group(e) => Expr::Group(ExprGroup {
+                inner: Box::new(ExprFull::from_ast(db, e.inner)),
             }),
             crate::ast::Expr::Enum(e) => Expr::Enum(ExprEnum {
                 variant: Box::new(ExprFull::from_ast(db, e.variant)),
