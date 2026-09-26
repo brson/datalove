@@ -45,16 +45,16 @@ database of their own. Compiler work uses the datafun one, re-exported as
 |---|---|---|
 | `#[salsa::input]` | 1 | `Source`. A path's text, changed with `set_text`. The only thing that comes from outside. |
 | `#[salsa::interned]` | 11 | Deduplicated by content: `InternedText`, `InternedSubText`, `ModuleId`, `Module`, `ModuleGraph`, `Package`, `PackageModule`, `PackageWorld`, `Script`, `ScriptUnit`, `ReachableFuncIds`. |
-| `#[salsa::tracked]` struct | 60 | Computed values with an identity. Four have a `#[tracked]` field; see below. |
+| `#[salsa::tracked]` struct | 60 | Computed values with an identity. Three have a `#[tracked]` field; see below. |
 | `#[salsa::tracked]` fn | 127 | Of which 43 keep a memo for a module compile; the rest are script, datalit and lexing paths. |
 
-### The four structs with a tracked field, and why
+### The three structs with a tracked field, and why
 
 A tracked struct's identity is a hash of its *untracked* fields. A `#[tracked]`
 field is read through an edge of its own, so it can change while the identity
 stays put -- and **every read of one is a dependency edge salsa must walk when
 it validates a memo**. That is the whole trade, and it is measured both ways in
-salsa-patterns.md. Only these four earn it:
+salsa-patterns.md. Only these three earn it:
 
 | struct | tracked fields | why |
 |---|---|---|
