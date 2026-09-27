@@ -640,10 +640,6 @@ Tuples and structs accept a trailing comma.
 
 The payload of `some`, `ok`, `er`, `term`, `data` and `error`
 is one expression, which may carry its own hint: `some : u32 / 1`.
-Datalit has no operators, so there is nothing more a payload could take in;
-in datalove, where there are, a payload is a primary expression
-and the postfix operators on it,
-and a binary operator after one is an error: `some (a + b)` needs its parentheses.
 
 
 ### Tuple
