@@ -1099,6 +1099,10 @@ and against the parser's own diagnostics.
 - Result types shouldn't accept data payloads.
 - Should error actually check against results?
 - What does "enum variants are held in name order" mean practically in datalit?
+- result and error check against _any_ !T?
+- Need to think harder about float total order and ergonomics.
+- "order among the types a data or error may carry is arbitrary"??
+
 
 
 
