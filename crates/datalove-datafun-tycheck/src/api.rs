@@ -679,7 +679,6 @@ pub fn resolve_module_imports<'db>(
         &parsed_graph,
         &dep_exports,
         &dep_function_asts,
-        rider_function_stubs(db, parsed_graph),
     );
 
     log_query("resolve_imports", module_path, QueryPhase::End);
@@ -687,79 +686,6 @@ pub fn resolve_module_imports<'db>(
     crate::ModuleImportResolution::new(db, module_id, imports, errors)
 }
 
-/// The synthetic `StmtFun` each rider function stands behind.
-///
-/// A rider declares signatures and no bodies, and the ownership checker wants a
-/// statement to look at, so one is synthesised per rider function.
-///
-/// **Minted here rather than at the import that needs it.** A stub is a
-/// property of the rider, not of whoever imports it, and a tracked struct's
-/// identity map belongs to the query instance that created it -- so minting one
-/// inside `resolve_module_imports` tied its id to that query's key, and every
-/// module importing from a rider re-typechecked whenever that key moved. Keyed
-/// on the graph, whose identity does not move when a module's text does. Also
-/// mints each stub once rather than once per importing module: the system
-/// library has 154 rider functions and imports them 124 times over.
-#[salsa::tracked(returns(ref))]
-fn rider_function_stubs<'db>(
-    db: &'db dyn crate::Db,
-    parsed_graph: ParsedModuleGraph<'db>,
-) -> HashMap<(ModuleId<'db>, InternedText<'db>), StmtFun<'db>> {
-    let mut stubs = HashMap::new();
-
-    // A `BTreeMap` of `Vec`s, so the mint order is the same on every run, which
-    // a tracked struct's disambiguator depends on.
-    for riders in parsed_graph.resolved_riders(db).values() {
-        for (_alias, rider) in riders {
-            for (func_name, func_type) in &rider.functions {
-                let key = (rider.module_id, *func_name);
-                if stubs.contains_key(&key) {
-                    continue;
-                }
-
-                // Synthetic params carry the declared modes, so the ownership
-                // checker knows which parameters are ref/mut/in/out.
-                let params: Vec<FunParam<'db>> = func_type.param_modes(db)
-                    .iter()
-                    .enumerate()
-                    .map(|(i, mode)| FunParam {
-                        name: InternedText::new(db, &format!("_p{}", i)),
-                        mode: *mode,
-                        is_comptime: false,
-                        type_hint: datalit::ast::TypeHint::AnonTuple(
-                            datalit::ast::TypeHintAnonTuple { fields: vec![] }),
-                    })
-                    .collect();
-
-                // A rider function may be generic, and a call site needs its
-                // type parameters in order: that is how the type arguments are
-                // recorded, which is how the descriptors a native wants are
-                // worked out. See `NativeGenerics`.
-                let (type_params, type_bounds) = rider.generic_functions.iter()
-                    .find(|(n, _)| n == func_name)
-                    .map(|(_, g)| (g.type_params.clone(), g.type_bounds.clone()))
-                    .unwrap_or_default();
-
-                let stub = StmtFun::new(
-                    db,
-                    Some(rider.module_id),
-                    *func_name,
-                    datalove_datafun_ast::ast::FunSignature {
-                        type_params,
-                        type_bounds,
-                        params,
-                        return_type: None,
-                    },
-                    vec![],
-                    0,
-                );
-                stubs.insert(key, stub);
-            }
-        }
-    }
-
-    stubs
-}
 
 /// Internal import resolution returning plain data (no tracked structs).
 ///
@@ -774,7 +700,6 @@ fn resolve_module_imports_internal<'db>(
     parsed_graph: &ParsedModuleGraph<'db>,
     all_exports: &BTreeMap<ModuleId<'db>, Vec<(InternedText<'db>, TypeFunction<'db>)>>,
     module_function_asts: &BTreeMap<ModuleId<'db>, Vec<(InternedText<'db>, StmtFun<'db>)>>,
-    rider_stubs: &HashMap<(ModuleId<'db>, InternedText<'db>), StmtFun<'db>>,
 ) -> (Vec<ResolvedImportData<'db>>, Vec<TypeError>) {
     // Build module alias map from pre-resolved requires.
     let resolved_requires = parsed_graph.get_requires(db, module_id);
@@ -832,8 +757,10 @@ fn resolve_module_imports_internal<'db>(
                 if let Some(func_type) = func_opt {
                     // Use the rider's pre-created synthetic ModuleId.
                     let synthetic_module_id = rider.module_id;
-                    let synthetic_fun = *rider_stubs.get(&(synthetic_module_id, item_name))
-                        .expect("a rider function has a stub, since both come from `rider.functions`");
+                    let synthetic_fun = rider.function_stubs.iter()
+                        .find(|(n, _)| *n == item_name)
+                        .map(|(_, stub)| *stub)
+                        .expect("a rider function has a stub, both coming from its interface");
                     resolved_imports.push(
                         (item_name, func_type, Some(synthetic_fun), synthetic_module_id, import.local_index),
                     );

@@ -158,18 +158,26 @@ Measured on the system library plus one local module, 26 modules:
 | cold compile | 639 |
 | unchanged recompile | **0** |
 | a second unchanged recompile | **0** |
-| edit one function in your own module | 28 |
-| edit one function at the bottom of the system library | 28 |
+| edit one function in your own module | 23 |
+| edit one function at the bottom of the system library | 23 |
 
 The two edits costing the same is the point and not a coincidence: what an edit
 pays for is the per-module work for the module that changed plus the
 graph-keyed passes, and which module changed does not enter into it.
 
-The 28 are: the edited module's `parse`/`lex`/`source_map` chain, its
+The 23 are: the edited module's `parse`/`lex`/`source_map` chain, its
 `typecheck_module`, `analyze_module`, `lower_module_functions`,
 `module_shape_inputs`, `lower_module` and so on -- one each -- plus the
 graph-keyed passes that must re-run because one of their inputs moved. Nothing
 runs per unchanged module.
+
+It was 28 while the rider interfaces were built inside `parse_module_graph`,
+which re-ran on every edit. That meant the rider's own source was re-lexed and
+re-parsed each time -- the second `parse`, `lex_chunk`, `bracer` and
+`source_map` in the count -- and it built the rider's `Source` with
+`Source::new` on each pass, so a compile leaked an input per rider, inputs
+never being collected. `rider_interfaces` is keyed on an interned
+`RiderSources` now, so it happens once per distinct rider source.
 
 **An edit costs the same whatever the world size.** Seventeen queries at 8
 modules and seventeen at 64 in the synthetic fixture; the 28 above is larger
@@ -189,9 +197,32 @@ which is inherent while the graph-keyed passes ask about every module.
 | a per-module query does not depend on the rest of the world | `compile_scaling_tests` |
 | the parse firewall's four rows | `parse_firewall_tests` |
 | an edit reaches the importers of what changed, and no further | `import_memo_tests` |
-| a rider's stubs are minted once for the graph, not once per importer | `import_memo_tests` |
+| a rider's stubs are minted once, from the rider sources alone | `import_memo_tests` |
+| every shape of edit reaches only what the graph says it can | `edit_reach_tests` |
+| adding or removing a module re-typechecks nothing else | `edit_reach_tests` |
 | per-module, per-phase behaviour across add/remove/change | 16 `module_memo` fixtures |
 | `extract_dependencies` costs what changed | `incremental_memo_tests` |
+
+### The one thing that is known broken
+
+**Changing the module set re-lowers and re-assembles every module.**
+`compute_func_id_map` numbers the riders' `IrModuleId`s after the regular ones
+(`rider_module_idx = regular_module_count`), so adding or removing any module
+shifts every rider's id. Every module's `reachable_func_ids` keeps every rider
+entry -- riders being the entries the graph does not account for -- so every
+module's `ReachableFuncIds` moves, `lower_module_functions` is re-keyed for all
+of them, and the `ModuleLowered` handles the rest of phase 5 is keyed on are
+re-minted.
+
+The frontend is clean: `edit_reach_tests` holds that a module appearing or
+disappearing re-typechecks nothing else. It is phase 5 that pays, and
+`changing_the_module_set_still_relowers_everything` pins the numbers so that
+fixing it shows up as that test failing.
+
+Fixing it means numbering the riders independently of how many modules there
+are, which touches the six places that derive an `IrModuleId` from a position
+and needs the backends to agree. That is the same positional numbering standing
+in the way of compiling only what is reachable, so it belongs with that work.
 
 ### What none of them hold
 

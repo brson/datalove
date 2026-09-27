@@ -144,17 +144,19 @@ fn a_signature_edit_does_not_reach_modules_that_import_from_a_rider() {
     );
 }
 
-/// The rider stubs are minted once for the graph, and an edit does not re-mint them.
+/// The rider interfaces are built once and an edit does not rebuild them.
 ///
-/// This is the mechanism underneath the test above, asserted directly: the stub
-/// table is keyed on the graph rather than on anything a module's text moves, so
-/// an edit does not re-run it and the stub ids stay put.
+/// This is the mechanism underneath the test above, asserted directly. The
+/// interfaces carry the statement behind each native, and they are keyed on the
+/// rider sources alone -- not on the graph, and not on anything a module's text
+/// moves -- so the stub ids stay put. `edit_reach_tests` holds the harder half
+/// of this, which is that adding or removing a module does not disturb them
+/// either.
 ///
 /// The cold-compile count is here so that the zero below means "did not re-run"
-/// rather than "there is no such query"; inline the mint back into
-/// `resolve_module_imports` and this test fails on the first assertion.
+/// rather than "there is no such query".
 #[test]
-fn the_rider_stubs_are_minted_once_and_an_edit_does_not_re_mint_them() {
+fn the_rider_interfaces_are_built_once_and_an_edit_does_not_rebuild_them() {
     let recorder = QueryRecorder::new();
     let db = datafun::Database::recording(&recorder);
     let worldfile = rider_worldfile(&plain_source(""));
@@ -166,8 +168,8 @@ fn the_rider_stubs_are_minted_once_and_an_edit_does_not_re_mint_them() {
     assert!(compiled.is_successful(), "{:?}", compiled.all_errors());
     drop(compiled);
     assert_eq!(
-        ran(&recorder.take(), "rider_function_stubs"), 1,
-        "one table for the graph, however many modules import from the rider",
+        ran(&recorder.take(), "rider_interfaces"), 1,
+        "one set of interfaces for the rider sources, however many modules import them",
     );
 
     let mut db = db;
@@ -176,7 +178,7 @@ fn the_rider_stubs_are_minted_once_and_an_edit_does_not_re_mint_them() {
     assert!(compiled.is_successful(), "{:?}", compiled.all_errors());
     drop(compiled);
     assert_eq!(
-        ran(&recorder.take(), "rider_function_stubs"), 0,
+        ran(&recorder.take(), "rider_interfaces"), 0,
         "the riders did not change, so nothing should re-mint their stubs",
     );
 }

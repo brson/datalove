@@ -145,11 +145,19 @@ Two things to know before reaching for the same trick:
   every memo-size test passed the whole time.
 
   The rule worth carrying: **do not mint a tracked struct in a query whose key
-  is wider than what the struct belongs to.** A rider stub belongs to the rider,
-  so it is minted by a query keyed on the graph and looked up by the importers.
-  Re-execution on its own is harmless -- the same instance re-running mints the
-  same ids. It is the *key* moving that costs, which is why this is invisible to
-  anything counting executions.
+  is wider than what the struct belongs to.** Re-execution on its own is
+  harmless -- the same instance re-running mints the same ids. It is the *key*
+  moving that costs, which is why this is invisible to anything counting
+  executions.
+
+  A rider stub belongs to the rider, so keying its minting on the graph was only
+  half a fix: it survived a signature edit and then re-minted the moment a module
+  appeared or disappeared, because `ParsedModuleGraph`'s identity *is* the module
+  graph. The stubs are built with the `RiderInterface` now, under
+  `rider_interfaces`, which is keyed on an interned `RiderSources` -- the rider
+  sources and nothing else. **A rider says nothing about the module set, so
+  nothing about the module set should be in the key.** `edit_reach_tests` holds
+  both halves.
 - **Backdating on the tracked field wants pointer equality to be meaningful.**
   `Arc<T>: PartialEq` short-circuits on `ptr_eq` when `T: Eq`, so a pass that
   only replaces what it rewrites gets the comparison for free; one that rebuilds

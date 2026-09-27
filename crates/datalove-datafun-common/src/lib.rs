@@ -112,6 +112,16 @@ pub struct RiderInterface<'db> {
     /// Synthetic ModuleId for this rider (e.g. `@rider/testlib`).
     pub module_id: ModuleId<'db>,
     pub functions: Vec<(InternedText<'db>, TypeFunction<'db>)>,
+    /// The statement each native stands behind, by the same name.
+    ///
+    /// A rider declares signatures and no bodies, and the ownership checker
+    /// wants a statement to look at, so one is synthesised per native. It is
+    /// minted here, with the interface, because **a tracked struct's identity
+    /// map belongs to the query instance that created it** -- minting these
+    /// anywhere keyed on the module graph means a module appearing or
+    /// disappearing re-mints them under fresh ids, and every module importing
+    /// from a rider re-typechecks. `edit_reach_tests` holds that it does not.
+    pub function_stubs: Vec<(InternedText<'db>, StmtFun<'db>)>,
     pub type_aliases: Vec<(InternedText<'db>, Type<'db>)>,
     /// The generic natives, by name. A native with no type parameters is left
     /// out, which is nearly all of them.

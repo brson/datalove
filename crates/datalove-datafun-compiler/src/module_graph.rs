@@ -3,11 +3,12 @@
 //! Re-exports core types from bct and adds datafun-specific parsing/orchestration.
 
 use rmx::prelude::*;
-use rmx::std::collections::BTreeMap;
+use rmx::std::collections::{BTreeMap, HashMap};
 use rmx::std::hash::{Hash, Hasher};
 use rmx::std::collections::hash_map::DefaultHasher;
 use rmx::rayon::prelude::*;
 use bct::text::InternedText;
+use datalove_datafun_ast::ast::{FunParam, FunSignature, StmtFun};
 use datalove_datafun_tycheck::DbClone;
 
 // Re-export core module graph types from bct.
@@ -184,31 +185,12 @@ fn build_resolved_riders_from_sources<'db>(
     graph: &ModuleGraph<'db>,
 ) -> BTreeMap<ModuleId<'db>, Vec<(InternedText<'db>, datalove_datafun_common::RiderInterface<'db>)>> {
     use datalove_datafun_common::RiderInterface;
-    use rmx::std::collections::HashMap;
 
     if rider_sources.is_empty() {
         return BTreeMap::new();
     }
 
-    // Parse each rider source to build RiderInterface.
-    let mut rider_interfaces: HashMap<String, RiderInterface<'db>> = HashMap::new();
-    for (name, source) in rider_sources {
-        let source_input = bct::input::Source::new(db, source.clone());
-        let parse_result = datalove_datafun_parser::parse(db, source_input);
-        let collected = datalove_datafun_resolve::resolve_names_impl(db, &parse_result.parsed.statements);
-        let rider_name = InternedText::new(db, name.clone());
-        let rider_path = format!("@rider/{}", name);
-        let module_id = ModuleId::new(db, rider_path);
-        let generic_functions = generic_natives(
-            db, &parse_result.parsed.statements, &collected.functions);
-        rider_interfaces.insert(name.clone(), RiderInterface {
-            name: rider_name,
-            module_id,
-            functions: collected.functions,
-            type_aliases: collected.type_aliases,
-            generic_functions,
-        });
-    }
+    let rider_interfaces = rider_interfaces(db, RiderSources::new(db, rider_sources.to_vec()));
 
     // Scan each module's source for `require rider X` statements.
     let mut result: BTreeMap<ModuleId<'db>, Vec<(InternedText<'db>, RiderInterface<'db>)>> = BTreeMap::new();
@@ -231,6 +213,101 @@ fn build_resolved_riders_from_sources<'db>(
     }
 
     result
+}
+
+/// The rider sources, as something a query can be keyed on.
+///
+/// Interned, so the same sources give the same handle however often the graph is
+/// rebuilt around them. That is the whole point: it is a key that the module set
+/// cannot move.
+#[salsa::interned]
+pub struct RiderSources<'db> {
+    #[returns(ref)]
+    pub sources: Vec<(String, String)>,
+}
+
+/// Each rider's interface, parsed from its source.
+///
+/// **Keyed on the rider sources and nothing else.** A rider says nothing about
+/// the module graph, and this is where its `TypeFunction`s and the statement
+/// behind each native are minted -- so keying it on anything the module set
+/// moves would re-mint them under fresh ids whenever a module appeared or
+/// disappeared, and every module importing from a rider would re-typecheck,
+/// re-analyze and re-lower. It did, until `edit_reach_tests` asked.
+#[salsa::tracked(returns(ref))]
+fn rider_interfaces<'db>(
+    db: &'db dyn salsa::Database,
+    rider_sources: RiderSources<'db>,
+) -> HashMap<String, datalove_datafun_common::RiderInterface<'db>> {
+    use datalove_datafun_common::RiderInterface;
+
+    let mut interfaces: HashMap<String, RiderInterface<'db>> = HashMap::new();
+    for (name, source) in rider_sources.sources(db) {
+        let source_input = bct::input::Source::new(db, source.clone());
+        let parse_result = datalove_datafun_parser::parse(db, source_input);
+        let collected = datalove_datafun_resolve::resolve_names_impl(db, &parse_result.parsed.statements);
+        let rider_name = InternedText::new(db, name.clone());
+        let rider_path = format!("@rider/{}", name);
+        let module_id = ModuleId::new(db, rider_path);
+        let generic_functions = generic_natives(
+            db, &parse_result.parsed.statements, &collected.functions);
+        let function_stubs = collected.functions.iter()
+            .map(|(func_name, func_type)| {
+                (*func_name, native_stub(db, module_id, *func_name, *func_type, &generic_functions))
+            })
+            .collect();
+        interfaces.insert(name.clone(), RiderInterface {
+            name: rider_name,
+            module_id,
+            functions: collected.functions,
+            function_stubs,
+            type_aliases: collected.type_aliases,
+            generic_functions,
+        });
+    }
+    interfaces
+}
+
+/// The statement a native stands behind.
+///
+/// Its identity is `(module_id, name, 0)`, where the module id is the rider's
+/// synthetic one, so it is stable as long as the query that mints it is. The
+/// parameters carry the declared modes, which is what the ownership checker
+/// reads them for; the type parameters come in declaration order, because that
+/// is the order a call site writes its type arguments and so how the descriptors
+/// a native wants are worked out. See `NativeGenerics`.
+fn native_stub<'db>(
+    db: &'db dyn salsa::Database,
+    rider_module_id: ModuleId<'db>,
+    name: InternedText<'db>,
+    func_type: datalove_datafun_common::TypeFunction<'db>,
+    generic_functions: &[(InternedText<'db>, datalove_datafun_common::NativeGenerics<'db>)],
+) -> StmtFun<'db> {
+    let params: Vec<FunParam<'db>> = func_type.param_modes(db)
+        .iter()
+        .enumerate()
+        .map(|(i, mode)| FunParam {
+            name: InternedText::new(db, format!("_p{}", i)),
+            mode: *mode,
+            is_comptime: false,
+            type_hint: datalove_datalit::ast::TypeHint::AnonTuple(
+                datalove_datalit::ast::TypeHintAnonTuple { fields: vec![] }),
+        })
+        .collect();
+
+    let (type_params, type_bounds) = generic_functions.iter()
+        .find(|(n, _)| *n == name)
+        .map(|(_, g)| (g.type_params.clone(), g.type_bounds.clone()))
+        .unwrap_or_default();
+
+    StmtFun::new(
+        db,
+        Some(rider_module_id),
+        name,
+        FunSignature { type_params, type_bounds, params, return_type: None },
+        vec![],
+        0,
+    )
 }
 
 /// Compute recursive content hashes for each module in the graph.
