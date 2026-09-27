@@ -22,7 +22,22 @@
       }
     }
   },
-  "diagnostics": [],
+  "diagnostics": [
+    {
+      "code": "T059",
+      "labels": [
+        {
+          "message": "not a type",
+          "span": [
+            0,
+            45
+          ],
+          "text": ": #{x: u32, y: string} / #{x = 1, y = \"test\"}"
+        }
+      ],
+      "message": "unknown type `x`"
+    }
+  ],
   "errors": [
     {
       "kind": "CannotSynthesize"

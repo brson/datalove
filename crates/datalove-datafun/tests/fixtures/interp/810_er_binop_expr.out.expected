@@ -49,7 +49,7 @@ Analysis(
                         unit_end
                 """,
             ),
-            output: "error 8",
+            output: "er error 8",
         ),
     ],
 )

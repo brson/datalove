@@ -1,0 +1,52 @@
+{
+  "ast": {
+    "expr": {
+      "Er": {
+        "payload": {
+          "expr": {
+            "Data": {
+              "value": {
+                "expr": {
+                  "String": {
+                    "value": "\"x\""
+                  }
+                },
+                "type_hint": null
+              }
+            }
+          },
+          "type_hint": null
+        }
+      }
+    },
+    "type_hint": {
+      "Result": {
+        "inner_type": "U32"
+      }
+    }
+  },
+  "diagnostics": [
+    {
+      "code": "T032",
+      "labels": [
+        {
+          "message": "expected `error`, found `data`",
+          "span": [
+            12,
+            20
+          ],
+          "text": "data \"x\""
+        }
+      ],
+      "message": "mismatched types"
+    }
+  ],
+  "errors": [
+    {
+      "actual": "data",
+      "expected": "error",
+      "kind": "TypeMismatch"
+    }
+  ],
+  "root_type": null
+}

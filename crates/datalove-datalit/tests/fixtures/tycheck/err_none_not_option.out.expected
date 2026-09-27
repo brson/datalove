@@ -1,0 +1,30 @@
+{
+  "ast": {
+    "expr": "None",
+    "type_hint": "U32"
+  },
+  "diagnostics": [
+    {
+      "code": "T032",
+      "labels": [
+        {
+          "message": "expected `u32`, found `none`",
+          "span": [
+            0,
+            12
+          ],
+          "text": ": u32 / none"
+        }
+      ],
+      "message": "mismatched types"
+    }
+  ],
+  "errors": [
+    {
+      "actual": "none",
+      "expected": "u32",
+      "kind": "TypeMismatch"
+    }
+  ],
+  "root_type": null
+}

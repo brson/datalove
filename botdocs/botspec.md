@@ -350,6 +350,10 @@ er primary               // wrap error value
 error "message"          // error literal
 ```
 
+The payload of `er` is checked against `error`, so a result's failure is
+written `er error "message"`. An `error` is not a result by itself: where a
+`!T` is expected, `error "message"` is a mismatch.
+
 The `some`, `ok`, `er`, `data`, and `error` keywords take a *primary* expression
 as their payload: a literal, variable, function call, or parenthesized expression.
 Binary operator expressions require parentheses:

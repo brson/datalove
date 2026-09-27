@@ -257,31 +257,27 @@ impl LitTycheckCommand {
 
         let db = datalit::Database::default();
 
-        // Read the file.
         let contents = rmx::std::fs::read_to_string(&self.file_path)?;
         let source = Source::new(&db, contents.S());
+        let cwd = rmx::std::env::current_dir().unwrap_or_default();
 
-        // Parse the expression.
         let parse_result = datalit::parser::parse(&db, source);
         let ast = parse_result.expr(&db);
-
-        // Resolve names.
-        let resolved = datalit::resolve::resolve_names(&db, source, ast);
-
-        // Type check.
-        let result = datalit::tycheck::type_check(&db, ast, resolved);
-
-        // Report errors.
-        let errors = result.errors(&db);
-        if errors.is_empty() {
-            println!("No type errors found.");
-        } else {
-            println!("Type errors found:");
-            for error in errors {
-                println!("  {:?}", error.error(&db));
-            }
+        let parse_diags = datalit::parser::parse::accumulated::<datalove_diagnostic::ParseDiagnostic>(&db, source);
+        if !parse_diags.is_empty() {
+            render::render_parse_diagnostics(&db, &parse_diags, &self.file_path, &cwd);
+            bail!("Parse error");
         }
 
+        let resolved = datalit::resolve::resolve_names(&db, source, ast);
+        let result = datalit::tycheck::type_check(&db, ast, resolved);
+        let type_diags = datalit::tycheck::type_check::accumulated::<datalove_diagnostic::TypeDiagnostic>(&db, ast, resolved);
+        render::render_type_diagnostics(&db, &type_diags, &self.file_path, &cwd);
+        if !result.errors(&db).is_empty() {
+            bail!("Type error");
+        }
+
+        println!("No type errors found.");
         Ok(())
     }
 }

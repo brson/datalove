@@ -42,7 +42,7 @@ Analysis(
                 """,
             ),
             output: "(fragment executed)",
-            debug_output: Some("error \"key not found\"\n"),
+            debug_output: Some("er error \"key not found\"\n"),
         ),
     ],
 )

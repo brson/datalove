@@ -166,11 +166,6 @@ fn instantiate_expr_into<'db>(
             instantiate_option(db, rt, true, Some(some_expr.payload), *opt.inner_type.clone(), tydesc_table, tydesc, dest_ptr, resolved)
         }
 
-        (Expr::Error(err_expr), Type::Result(res)) => {
-            let tydesc = tydesc_table.get_or_create(ty);
-            instantiate_result(db, rt, false, None, Some(err_expr.value), *res.inner_type.clone(), tydesc_table, tydesc, dest_ptr, resolved)
-        }
-
         (Expr::Er(er_expr), Type::Result(res)) => {
             let tydesc = tydesc_table.get_or_create(ty);
             instantiate_result(db, rt, false, None, Some(er_expr.payload), *res.inner_type.clone(), tydesc_table, tydesc, dest_ptr, resolved)
@@ -928,29 +923,8 @@ fn instantiate_result<'db>(
 
         let err_payload = err_payload_expr.ok_or_else(|| anyhow!("Err variant missing payload"))?;
         let payload_dest = unsafe { dest_ptr.add(layout.payload_offset as usize) };
-
-        // Typecheck the error payload using the passed resolved context.
-        let typechecked = crate::tycheck::type_check(db, err_payload, resolved);
-
-        if !typechecked.errors(db).is_empty() {
-            return Err(anyhow!("Type errors in result error payload ({} errors)", typechecked.errors(db).len()));
-        }
-
-        let inner_type = typechecked.root_type(db).clone()
-            .ok_or_else(|| anyhow!("Cannot determine type of error value"))?;
-
-        let inner_tydesc = tydesc_table.get_or_create(&inner_type);
-        let inner_value = instantiate_expr(db, rt, err_payload, &inner_type, tydesc_table, resolved)?;
-
-        let error_ptr = payload_dest as *mut rtdt::Error;
-
-        unsafe {
-            // Error has same layout as Data, so we write it as Data.
-            std::ptr::write(
-                error_ptr as *mut rtdt::Data,
-                rtdt::Data::from_pointers(inner_tydesc, inner_value)
-            );
-        }
+        // The payload is an `error` expression, and is the error in the slot.
+        instantiate_expr_into(db, rt, err_payload, &Type::Error, tydesc_table, payload_dest, resolved)?;
     }
 
     Ok(dest_ptr as *const u8)
@@ -966,15 +940,11 @@ fn instantiate_data<'db>(
     resolved: ResolvedExpr<'db>,
 ) -> AnyResult<*const u8> {
     debug_assert!(!dest_ptr.is_null());
-    // Typecheck the inner expression using the passed resolved context.
+    // Typechecked again for the type it has, which is what the value carries.
     let typechecked = crate::tycheck::type_check(db, inner_expr, resolved);
 
-    if !typechecked.errors(db).is_empty() {
-        return Err(anyhow!("Type errors in data value ({} errors)", typechecked.errors(db).len()));
-    }
-
     let inner_type = typechecked.root_type(db).clone()
-        .ok_or_else(|| anyhow!("Cannot determine type of data value"))?;
+        .expect("the typechecker checked the payload");
 
     let inner_tydesc = tydesc_table.get_or_create(&inner_type);
     let inner_value = instantiate_expr(db, rt, inner_expr, &inner_type, tydesc_table, resolved)?;
@@ -1001,15 +971,11 @@ fn instantiate_error<'db>(
     resolved: ResolvedExpr<'db>,
 ) -> AnyResult<*const u8> {
     debug_assert!(!dest_ptr.is_null());
-    // Typecheck the inner expression using the passed resolved context.
+    // Typechecked again for the type it has, which is what the value carries.
     let typechecked = crate::tycheck::type_check(db, inner_expr, resolved);
 
-    if !typechecked.errors(db).is_empty() {
-        return Err(anyhow!("Type errors in error value ({} errors)", typechecked.errors(db).len()));
-    }
-
     let inner_type = typechecked.root_type(db).clone()
-        .ok_or_else(|| anyhow!("Cannot determine type of error value"))?;
+        .expect("the typechecker checked the payload");
 
     let inner_tydesc = tydesc_table.get_or_create(&inner_type);
     let inner_value = instantiate_expr(db, rt, inner_expr, &inner_type, tydesc_table, resolved)?;
@@ -2379,7 +2345,7 @@ mod tests {
     #[test]
     fn test_instantiate_result_err() -> AnyResult<()> {
         let db = Database::default();
-        let typechecked = compile_str(&db, ": !u32 / error \"oops\"")?;
+        let typechecked = compile_str(&db, ": !u32 / er error \"oops\"")?;
         let rt = datalove_rt::rust::Runtime::new();
         let guard = RtGuard::new(rt);
         let mut tydesc_table = TyDescTable::new(&db);

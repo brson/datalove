@@ -317,6 +317,7 @@ ok 42 => !int
 
 ### Rule: Syn-Data
 ```
+e => T
 ---------------------------
 data e => data
 ```
@@ -325,7 +326,7 @@ Data expressions synthesize as `data` type.
 
 ### Rule: Syn-Error
 ```
-msg : any expression
+msg => T
 ------------------------
 error msg => error
 ```
@@ -577,40 +578,32 @@ The `ok` constructor checks payload against inner type.
 
 ### Rule: Check-Er
 ```
-e is error or data expression
+e <= error
 --------------
 er e <= !T
 ```
 
-The `er` constructor for Results. Payload must be an `error` or `data` expression.
-
-### Rule: Check-ResultErr (implicit Err wrapping)
-```
-----------------------
-error "msg" <= !T
-```
-
-Error expressions can check against any Result type as implicit Err wrapping.
-
-Example:
-```datalove
-: !u32 / error "failed"
-           |
-      error "failed" <= error  ok
-      error "failed" <= !u32   ok (implicit Err wrapping)
-```
+The `er` constructor for Results. The payload is the error the result holds,
+and is checked against `error`, so it is written `er error "failed"`. An
+`error` does not check against `!T` by itself: there is no implicit wrapping,
+in datalit or datafun.
 
 ### Rule: Check-Data
 ```
+e => T
 ----------------------
 data e <= data
 ```
 
 ### Rule: Check-Error
 ```
+e => T
 ----------------------
 error e <= error
 ```
+
+The payload has to synthesize a type of its own, which is the type the value
+carries, so `data none` is an error and `data : ?u32 / none` is not.
 
 ### Rule: Check-Atom
 ```
@@ -727,7 +720,6 @@ Option and Result values use explicit constructors:
 - `some x` for Option's Some
 - `ok x` for Result's Ok
 - `er error "msg"` for Result's Err
-- `error "msg"` can implicitly check against `!T`
 
 ### 5. Anonymous composite type synthesis
 
@@ -745,7 +737,7 @@ same type. The first element determines the expected type for the rest.
 
 - `data` type represents opaque data values
 - `error` type represents error values with messages
-- Error expressions can implicitly wrap into Result types
+- An error becomes a Result's failure only under `er`
 
 ### 7. Hex literal type restrictions
 

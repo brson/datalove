@@ -56,7 +56,7 @@ Analysis(
                 """,
             ),
             output: "(fragment executed)",
-            debug_output: Some("ok 30\nerror \"index out of bounds\"\n"),
+            debug_output: Some("ok 30\ner error \"index out of bounds\"\n"),
         ),
     ],
 )

@@ -54,7 +54,7 @@ Analysis(
                 """,
             ),
             output: "(fragment executed)",
-            debug_output: Some("ok [\"replaced\", \"world\"]\nerror \"index out of bounds\"\n"),
+            debug_output: Some("ok [\"replaced\", \"world\"]\ner error \"index out of bounds\"\n"),
         ),
     ],
 )

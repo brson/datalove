@@ -11,7 +11,22 @@
       }
     }
   },
-  "diagnostics": [],
+  "diagnostics": [
+    {
+      "code": "T017",
+      "labels": [
+        {
+          "message": "parse error occurred here",
+          "span": [
+            0,
+            10
+          ],
+          "text": ": !u32 / @"
+        }
+      ],
+      "message": "cannot type-check expression with parse errors"
+    }
+  ],
   "errors": [
     {
       "kind": "CannotSynthesize"

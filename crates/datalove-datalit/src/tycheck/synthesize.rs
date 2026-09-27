@@ -18,12 +18,23 @@ pub fn synthesize<'db>(
 
     // Rule: Syn-TypedExpr - if type hint present, check against it.
     if let Some(type_hint) = expr.type_hint(db) {
-        let expected_type = convert_type_hint(db, &type_hint)?;
+        let expected_type = ctx.convert_hint(expr, &type_hint)?;
         check(ctx, expr, &expected_type)?;
         return Ok(expected_type);
     }
+    synthesize_unhinted(ctx, expr)
+}
 
-    // Otherwise, synthesize from the expression.
+/// Synthesize a type for an expression from what it is, leaving aside any
+/// hint written on it.
+///
+/// Checking reaches for this when it has to know what an expression is by
+/// itself, having already weighed the hint against what was expected.
+pub fn synthesize_unhinted<'db>(
+    ctx: &mut TypeContext<'db>,
+    expr: ExprFull<'db>,
+) -> Result<Type<'db>, TypeError> {
+    let db = ctx.db;
     let expr_inner = expr.expr(db);
 
     let ty = match &expr_inner {
@@ -172,11 +183,18 @@ pub fn synthesize<'db>(
             Type::Result(TypeResult { inner_type: Box::new(inner_type) })
         }
 
-        // Rule: Syn-Data
-        Expr::Data(_) => Type::Data,
+        // Rule: Syn-Data - the payload has a type of its own, which is the
+        // type the data carries.
+        Expr::Data(d) => {
+            synthesize(ctx, d.value)?;
+            Type::Data
+        }
 
         // Rule: Syn-Error
-        Expr::Error(_) => Type::Error,
+        Expr::Error(e) => {
+            synthesize(ctx, e.value)?;
+            Type::Error
+        }
 
         // Rule: Syn-Group
         Expr::Group(g) => synthesize(ctx, g.inner)?,

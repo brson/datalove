@@ -7,7 +7,7 @@ use bct::diagnostic::DiagnosticBuilder;
 use datalove_diagnostic::DiagnosticBuilderExt;
 use crate::ast::*;
 use super::context::TypeContext;
-use super::synthesize::synthesize;
+use super::synthesize::{synthesize, synthesize_unhinted};
 use super::types::*;
 
 /// Check an expression against an expected type.
@@ -22,7 +22,7 @@ pub fn check<'db>(
     // Rule: Check-Hinted - a hint says what the expression is, and it has to
     // be what is expected. Nothing converts on the way from one to the other.
     if let Some(type_hint) = expr.type_hint(db) {
-        let hinted = convert_type_hint(db, &type_hint)?;
+        let hinted = ctx.convert_hint(expr, &type_hint)?;
         if !types_equivalent(db, &hinted, expected) {
             if let Some(ts) = ctx.get_span(expr) {
                 DiagnosticBuilder::error(db, "mismatched types")
@@ -57,37 +57,18 @@ pub fn check<'db>(
             check(ctx, o.payload, &res.inner_type)
         }
 
-        // Rule: Check-Er - explicit er constructor
-        (Expr::Er(e), Type::Result(_)) => {
-            // Check that the payload is a valid error expression.
-            let payload = e.payload;
-            let payload_expr = payload.expr(db);
-            match &payload_expr {
-                Expr::Error(_) => Ok(()),
-                Expr::Data(_) => Ok(()), // data can be used as error payload
-                _ => {
-                    if let Some(ts) = ctx.get_span(payload) {
-                        DiagnosticBuilder::error(db, "er payload must be an error expression")
-                            .code("T040")
-                            .primary_label(ts.clone(), "expected error expression")
-                            .note("use `er error \"message\"` to construct a result error")
-                            .emit_type();
-                    }
-                    Err(TypeError::TypeMismatch {
-                        expected: "error".to_string(),
-                        actual: "non-error".to_string(),
-                    })
-                }
-            }
-        }
+        // Rule: Check-Er - the payload is the error, and an error is written
+        // as one, as datafun has it.
+        (Expr::Er(e), Type::Result(_)) => check(ctx, e.payload, &Type::Error),
 
-        // Rule: Check-ResultErr (implicit Err wrapping)
-        (Expr::Error(_), Type::Result(_)) => Ok(()),
+        // `none` and `er` have no type of their own to report, so what they
+        // are checked against is what is wrong.
+        (Expr::None, _) => Err(constructor_mismatch(ctx, expr, expected, "none")),
+        (Expr::Er(_), _) => Err(constructor_mismatch(ctx, expr, expected, "er")),
 
         // Rule: Check-Subsume - try synthesis first.
         (Expr::True | Expr::False | Expr::String(_), _) => {
-            let expr_without_hint = ExprFull::new(db, None, None, expr_inner.clone());
-            let synthesized = synthesize(ctx, expr_without_hint)?;
+            let synthesized = synthesize_unhinted(ctx, expr)?;
             if !types_equivalent(db, &synthesized, expected) {
                 if let Some(ts) = ctx.get_span(expr) {
                     DiagnosticBuilder::error(db, "mismatched types")
@@ -368,16 +349,16 @@ pub fn check<'db>(
             })
         }
 
-        // Rule: Check-Data
-        (Expr::Data(_), Type::Data) => Ok(()),
+        // Rule: Check-Data - the payload has a type of its own, which is the
+        // type the data carries.
+        (Expr::Data(d), Type::Data) => synthesize(ctx, d.value).map(|_| ()),
 
         // Rule: Check-Error
-        (Expr::Error(_), Type::Error) => Ok(()),
+        (Expr::Error(e), Type::Error) => synthesize(ctx, e.value).map(|_| ()),
 
         // Otherwise, try subsumption.
         _ => {
-            let ty_without_hint = ExprFull::new(db, None, None, expr_inner.clone());
-            let synthesized = synthesize(ctx, ty_without_hint)?;
+            let synthesized = synthesize_unhinted(ctx, expr)?;
             if types_equivalent(db, &synthesized, expected) {
                 Ok(())
             } else {
@@ -395,6 +376,29 @@ pub fn check<'db>(
                 })
             }
         }
+    }
+}
+
+/// Report a `none` or `er` checked against a type it is no value of.
+fn constructor_mismatch<'db>(
+    ctx: &TypeContext<'db>,
+    expr: ExprFull<'db>,
+    expected: &Type<'db>,
+    constructor: &str,
+) -> TypeError {
+    let db = ctx.db;
+    let wants = if constructor == "none" { "an option" } else { "a result" };
+    if let Some(ts) = ctx.get_span(expr) {
+        DiagnosticBuilder::error(db, "mismatched types")
+            .code("T032")
+            .primary_label(ts.clone(), &format!("expected `{}`, found `{}`",
+                type_to_string(db, expected), constructor))
+            .note(&format!("`{constructor}` is a value of {wants} type only"))
+            .emit_type();
+    }
+    TypeError::TypeMismatch {
+        expected: type_to_string(db, expected),
+        actual: constructor.to_string(),
     }
 }
 

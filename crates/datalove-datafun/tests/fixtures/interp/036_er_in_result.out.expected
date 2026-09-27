@@ -20,7 +20,7 @@ Analysis(
                         unit_end v2
                 """,
             ),
-            output: "error 42",
+            output: "er error 42",
         ),
     ],
 )

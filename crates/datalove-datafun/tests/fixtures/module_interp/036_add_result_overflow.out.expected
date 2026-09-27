@@ -26,5 +26,5 @@ ModulesAnalysis(
                 return v2
         """,
     ),
-    output: "error \"arithmetic overflow\"",
+    output: "er error \"arithmetic overflow\"",
 )

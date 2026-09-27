@@ -907,7 +907,7 @@ fn test_cmp_option_some_less() -> AnyResult<()> {
 #[test]
 fn test_cmp_result_err_less_than_ok() -> AnyResult<()> {
     let db = Database::default();
-    let typechecked_a = compile_str(&db, ": !u32 / error \"oops\"")?;
+    let typechecked_a = compile_str(&db, ": !u32 / er error \"oops\"")?;
     let typechecked_b = compile_str(&db, ": !u32 / ok 42")?;
 
     let rt = Runtime::new();
@@ -943,7 +943,7 @@ fn test_cmp_result_err_less_than_ok() -> AnyResult<()> {
 fn test_cmp_result_ok_greater_than_err() -> AnyResult<()> {
     let db = Database::default();
     let typechecked_a = compile_str(&db, ": !u32 / ok 42")?;
-    let typechecked_b = compile_str(&db, ": !u32 / error \"oops\"")?;
+    let typechecked_b = compile_str(&db, ": !u32 / er error \"oops\"")?;
 
     let rt = Runtime::new();
     let mut tydesc_table = TyDescTable::new(&db);
@@ -1047,8 +1047,8 @@ fn test_cmp_result_ok_less() -> AnyResult<()> {
 #[test]
 fn test_cmp_result_err_equal() -> AnyResult<()> {
     let db = Database::default();
-    let typechecked_a = compile_str(&db, ": !u32 / error \"oops\"")?;
-    let typechecked_b = compile_str(&db, ": !u32 / error \"oops\"")?;
+    let typechecked_a = compile_str(&db, ": !u32 / er error \"oops\"")?;
+    let typechecked_b = compile_str(&db, ": !u32 / er error \"oops\"")?;
 
     let rt = Runtime::new();
     let mut tydesc_table = TyDescTable::new(&db);
@@ -1082,8 +1082,8 @@ fn test_cmp_result_err_equal() -> AnyResult<()> {
 #[test]
 fn test_cmp_result_err_less() -> AnyResult<()> {
     let db = Database::default();
-    let typechecked_a = compile_str(&db, ": !u32 / error \"aaa\"")?;
-    let typechecked_b = compile_str(&db, ": !u32 / error \"bbb\"")?;
+    let typechecked_a = compile_str(&db, ": !u32 / er error \"aaa\"")?;
+    let typechecked_b = compile_str(&db, ": !u32 / er error \"bbb\"")?;
 
     let rt = Runtime::new();
     let mut tydesc_table = TyDescTable::new(&db);

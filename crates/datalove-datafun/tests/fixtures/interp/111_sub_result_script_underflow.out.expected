@@ -37,8 +37,8 @@ Analysis(
                         return v0
                 """,
             ),
-            output: "error \"arithmetic overflow\"",
-            debug_output: Some("error \"arithmetic overflow\"\n"),
+            output: "er error \"arithmetic overflow\"",
+            debug_output: Some("er error \"arithmetic overflow\"\n"),
         ),
     ],
 )

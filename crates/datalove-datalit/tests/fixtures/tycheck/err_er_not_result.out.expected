@@ -1,0 +1,48 @@
+{
+  "ast": {
+    "expr": {
+      "Er": {
+        "payload": {
+          "expr": {
+            "Error": {
+              "value": {
+                "expr": {
+                  "String": {
+                    "value": "\"x\""
+                  }
+                },
+                "type_hint": null
+              }
+            }
+          },
+          "type_hint": null
+        }
+      }
+    },
+    "type_hint": "U32"
+  },
+  "diagnostics": [
+    {
+      "code": "T032",
+      "labels": [
+        {
+          "message": "expected `u32`, found `er`",
+          "span": [
+            0,
+            20
+          ],
+          "text": ": u32 / er error \"x\""
+        }
+      ],
+      "message": "mismatched types"
+    }
+  ],
+  "errors": [
+    {
+      "actual": "er",
+      "expected": "u32",
+      "kind": "TypeMismatch"
+    }
+  ],
+  "root_type": null
+}

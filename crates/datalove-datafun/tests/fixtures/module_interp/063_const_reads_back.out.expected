@@ -23,5 +23,5 @@ ModulesAnalysis(
                 return v12
         """,
     ),
-    output: "(data 7, data 3, data \"held\", data [1, 2], error 3, error \"went wrong\", error (34, 92, 110), error [1, 2], error {a = 5, b = \"in it\"}, error some 8, ok 5, some data 9)",
+    output: "(data 7, data 3, data \"held\", data [1, 2], error 3, error \"went wrong\", er error (34, 92, 110), er error [1, 2], er error {a = 5, b = \"in it\"}, er error some 8, ok 5, some data 9)",
 )

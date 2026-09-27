@@ -69,8 +69,8 @@ DualAnalysis(
                 """,
             ),
             ir_match: true,
-            interp_output: "error 1\n",
-            aot_output: "error 1\n",
+            interp_output: "er error 1\n",
+            aot_output: "er error 1\n",
             output_match: true,
             aot_compile: Some(AotCompileResult(
                 status: "Success",

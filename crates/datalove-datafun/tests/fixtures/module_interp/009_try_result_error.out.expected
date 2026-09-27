@@ -30,5 +30,5 @@ ModulesAnalysis(
                 return v5
         """,
     ),
-    output: "error \"module error\"",
+    output: "er error \"module error\"",
 )

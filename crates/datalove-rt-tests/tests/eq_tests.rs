@@ -1422,8 +1422,8 @@ fn test_eq_result_ok_not_equals() -> AnyResult<()> {
 #[test]
 fn test_eq_result_err_equals() -> AnyResult<()> {
     let db = Database::default();
-    let typechecked_a = compile_str(&db, r#": !u32 / error "err5""#)?;
-    let typechecked_b = compile_str(&db, r#": !u32 / error "err5""#)?;
+    let typechecked_a = compile_str(&db, r#": !u32 / er error "err5""#)?;
+    let typechecked_b = compile_str(&db, r#": !u32 / er error "err5""#)?;
 
     let rt = Runtime::new();
     let mut tydesc_table = TyDescTable::new(&db);
@@ -1478,8 +1478,8 @@ fn test_eq_result_err_equals() -> AnyResult<()> {
 #[test]
 fn test_eq_result_err_not_equals() -> AnyResult<()> {
     let db = Database::default();
-    let typechecked_a = compile_str(&db, r#": !u32 / error "err5""#)?;
-    let typechecked_b = compile_str(&db, r#": !u32 / error "err10""#)?;
+    let typechecked_a = compile_str(&db, r#": !u32 / er error "err5""#)?;
+    let typechecked_b = compile_str(&db, r#": !u32 / er error "err10""#)?;
 
     let rt = Runtime::new();
     let mut tydesc_table = TyDescTable::new(&db);
@@ -1535,7 +1535,7 @@ fn test_eq_result_err_not_equals() -> AnyResult<()> {
 fn test_eq_result_ok_vs_err() -> AnyResult<()> {
     let db = Database::default();
     let typechecked_a = compile_str(&db, ": !u32 / ok 42")?;
-    let typechecked_b = compile_str(&db, r#": !u32 / error "err5""#)?;
+    let typechecked_b = compile_str(&db, r#": !u32 / er error "err5""#)?;
 
     let rt = Runtime::new();
     let mut tydesc_table = TyDescTable::new(&db);

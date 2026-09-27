@@ -70,7 +70,7 @@ and syntax of Datalove in general.
   },
   backup = : ?string / none,
   status = ok "healthy",
-  failure = : !string / error "oops",
+  failure = : !string / er error "oops",
   state = atom Ready,
   event = term Click (100, 200),
   kind = : enum { atom Ready, term Custom string } /
@@ -710,16 +710,17 @@ The failure side always holds an `error`.
 ok 42                          // !int
 : !u32 / ok 1
 : !u32 / er error "oops"
-: !u32 / error "oops"          // implicit er
 ```
 
 `ok` wraps a success value; `er` wraps an error.
 `ok e` synthesizes as `!T` where `T` is the type of `e`.
 `er` cannot synthesize a type &mdash;
 it requires a type hint or checking context.
-The payload of `er` must be an `error` or `data` expression.
-An `error` expression can also check directly against `!T`,
-acting as implicit error wrapping.
+The payload of `er` is checked against `error`,
+so it is written as an `error` expression, `er error "oops"`,
+and is the error the result holds.
+An `error` is not a result by itself:
+`: !u32 / error "oops"` is an error.
 
 
 ### Atom
@@ -836,7 +837,7 @@ and `data none` is an error.
 An `error` is the same thing under a different type,
 used for the failure side of results.
 `error e` synthesizes `error`,
-and also checks against any `!T`, as `er error e`.
+and becomes a result's failure under `er`: `er error e`.
 
 A value is only a `data` or `error` when written as one:
 `: data / 5` is an error, and is written `data 5`.
@@ -906,9 +907,9 @@ and checks only against that type:
 | `some e`        | `?T` where `e` synthesizes `T` | `?T`, checking `e` against `T`       |
 | `none`          | &mdash;                      | any `?T`                               |
 | `ok e`          | `!T` where `e` synthesizes `T` | `!T`, checking `e` against `T`       |
-| `er e`          | &mdash;                      | any `!T`                               |
+| `er e`          | &mdash;                      | any `!T`, checking `e` against `error` |
 | `data e`        | `data`                       |                                        |
-| `error e`       | `error`                      | any `!T`                               |
+| `error e`       | `error`                      |                                        |
 | `atom A`        | `atom A`                     | an enum listing `atom A`               |
 | `term A e`      | `term A T` where `e` synthesizes `T` | `term A T`, or an enum listing `term A T`, checking `e` against `T` |
 | `enum { v }`    | &mdash;                      | an enum listing `v`                    |
@@ -1015,20 +1016,6 @@ and against the parser's own diagnostics.
 
 ### Bugs
 
-- **`data` and `error` payloads are checked only at instantiation.**
-  `data none` typechecks,
-  and fails with a type error only when the value is built.
-- **`er error e` is double-wrapped.**
-  Instantiation stores the whole payload expression
-  in the result's error slot,
-  so `er error "x"` holds an `error` of an `error`,
-  while the implicit `: !u32 / error "x"` holds an `error` of `"x"`.
-  The two compare unequal.
-  `er data "x"` likewise holds an `error` of a `data`.
-- **Some type errors carry no diagnostic.**
-  Type aliases (`: Foo / 1`)
-  fail typechecking with no message.
-  `lit-tycheck` also does not print parse diagnostics at all.
 - **Empty tensors of rank above 1 cannot be written.**
   `[| |]` is always rank 1 with shape [0],
   and `[| , |]` does not parse,

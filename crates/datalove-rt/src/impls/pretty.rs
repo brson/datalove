@@ -636,7 +636,9 @@ unsafe fn pretty_result(
                 pretty_value(rt, payload_value, ok_ty, string_mut, string_tydesc)
             }
             rtdt::ResultTag::Err => {
-                // Error is always a dynamic type.
+                // The error is written under `er`, as the literal is, since an
+                // `error` alone is no result and would not read back as one.
+                push_str(rt, string_mut, string_tydesc, b"er ")?;
                 pretty_error(rt, payload_value, string_mut, string_tydesc)
             }
         }

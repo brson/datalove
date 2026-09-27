@@ -1,0 +1,45 @@
+{
+  "ast": {
+    "expr": {
+      "Error": {
+        "value": {
+          "expr": {
+            "String": {
+              "value": "\"operation failed\""
+            }
+          },
+          "type_hint": null
+        }
+      }
+    },
+    "type_hint": {
+      "Result": {
+        "inner_type": "U32"
+      }
+    }
+  },
+  "diagnostics": [
+    {
+      "code": "T032",
+      "labels": [
+        {
+          "message": "expected `!u32`, found `error`",
+          "span": [
+            0,
+            33
+          ],
+          "text": ": !u32 / error \"operation failed\""
+        }
+      ],
+      "message": "mismatched types"
+    }
+  ],
+  "errors": [
+    {
+      "actual": "error",
+      "expected": "!u32",
+      "kind": "TypeMismatch"
+    }
+  ],
+  "root_type": null
+}

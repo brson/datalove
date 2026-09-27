@@ -50,8 +50,8 @@ Analysis(
                         unit_end v1
                 """,
             ),
-            output: "error 1",
-            debug_output: Some("error 1\n"),
+            output: "er error 1",
+            debug_output: Some("er error 1\n"),
         ),
     ],
 )
