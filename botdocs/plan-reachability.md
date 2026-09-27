@@ -141,18 +141,33 @@ Done:
 
 Next, roughly in order of what it buys:
 
-1. **Resolve from the roots, not over the world.** Resolution is a parse of every
-   module, so a compile pruned to two modules still parses twenty-five: 8.66ms of
-   its 9.29ms. Reachability is a walk, and a walk only needs to parse what it
-   reaches -- parse the roots, read their requires, parse those. That makes
-   resolution demand-driven and is what makes pruning actually pay. As it stands
-   `dependencies_of` computes the whole world's dependency map up front.
-2. **Decide the roots from the program.** Nothing yet computes a root set: the
-   CLI and the REPL both still pass `All`. For `datalove run prog.dfs` the roots
-   are the modules the script requires, which is known only once the script is
-   parsed -- so the module pipeline has to be told, and in a REPL the set grows
-   as lines arrive. Each `require` on a new line changes the module set, which is
-   a new `ModuleGraph`, which re-runs everything graph-keyed.
+1. **Decide the roots from the program.** Nothing computes a root set: the CLI and
+   the REPL both pass `All`, so none of the above is doing anything yet. For
+   `datalove script prog.dfs` the roots are the modules the script requires, which
+   is one cheap parse of one file away. `typecheck-std` wants `All`, being the
+   command that vouches for the world. In a REPL the set grows as lines arrive, so
+   each `require` is a new module set, a new `ModuleGraph`, and a re-run of
+   everything graph-keyed -- worth measuring there before assuming it is free.
+
+   **This comes first because it is where the win is and because it is what makes
+   the next item observable.** Pruning already takes a cold compile from 24.58ms
+   to 9.29ms with resolution untouched; resolving from the roots is worth nothing
+   until someone narrows them.
+
+2. **Resolve from the roots, not over the world.** Resolution is a parse of every
+   module, so a compile pruned to one module still parses twenty-five: 8.66ms of
+   its 9.29ms, pinned by `the_whole_world_is_still_parsed_however_few_modules_are_compiled`.
+   Reachability is a walk and a walk need only parse what it reaches -- ask
+   `module_import_demands` for a root, resolve its demands to paths, recurse.
+
+   Nothing blocks it. `module_import_demands` is already per-module and memoized,
+   `lookup_import` resolves one demand, and `resolve_package_world` is 0.03ms of
+   edge-building and `validate_graph`. What changes is replacing
+   `package_world_map.flatten_iter(db)` -- every module in the world -- with the
+   walk. Note it makes validation partial too: cycles and missing modules go
+   unreported among the unreachable, which is the same trade as the error
+   visibility already pinned, in a second place.
+
 3. **Stop numbering modules by position.** `ir_module_ids` numbers regular
    modules by their place in the graph, so a module appearing anywhere but the
    end renumbers what follows and those modules re-lower. Today that happens when
