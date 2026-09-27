@@ -21,8 +21,6 @@ pub use datalove_datafun_common::{
     ModuleNameResolution,
     AllModuleNameResolutions,
     CollectedNames,
-    AllModuleExports,
-    AllModuleFunctionAsts,
     Type,
     TypeFunction,
     TypeError,
@@ -366,65 +364,40 @@ pub fn resolve_script_names<'db>(
 
 /// Collect function signatures exported from a module.
 ///
-/// This is a tracked function so Salsa can cache per-module export collection.
-/// Only depends on parsed statements, not on any other module.
-#[salsa::tracked(returns(clone))]
+/// Keyed on the module alone, for the reason given on `resolve_module_names`:
+/// taking the statements as a second argument makes salsa intern the pair to
+/// key on and leaves it unable to name the module in the event it reports.
+///
+/// An importer asks this of each module it requires, rather than reading a
+/// gathered map of every module's exports. That is what keeps a signature edit
+/// from reaching a module that does not import the signature; see
+/// `resolve_module_imports`.
+#[salsa::tracked(returns(ref))]
 pub fn resolve_module_exports<'db>(
     db: &'db dyn Db,
     module: Module<'db>,
-    parsed: ParsedStatements<'db>,
 ) -> Vec<(InternedText<'db>, TypeFunction<'db>)> {
-    let _ = module; // Used as memoization key.
+    let parsed = datalove_datafun_parser::parse_module_ast(db, module);
     resolve_names_impl(db, &parsed.statements).functions
 }
 
-/// Collect exports from all modules in the graph.
+/// The functions one module declares, by name, for an importer to inline.
 ///
-/// Calls the tracked `resolve_module_exports` for each module, enabling
-/// per-module caching of export collection.
-#[salsa::tracked(returns(copy))]
-pub fn resolve_all_exports<'db>(
+/// `StmtFun`'s identity is `(module_id, name, local_index)` and its signature
+/// and body ride tracked fields, so this value stays equal across an edit to
+/// either. Keyed on the module for the same reason as the exports above.
+#[salsa::tracked(returns(ref))]
+pub fn module_function_asts<'db>(
     db: &'db dyn Db,
-    parsed_graph: ParsedModuleGraph<'db>,
-) -> AllModuleExports<'db> {
-    let graph = parsed_graph.graph(db);
-    let module_to_module_obj: HashMap<ModuleId<'db>, Module> = graph.iter_modules(db)
-        .map(|m| (m.id(db), m))
-        .collect();
-
-    let mut all_exports = BTreeMap::new();
-
-    for (module_id, parsed) in parsed_graph.statements_only(db) {
-        let module = module_to_module_obj.get(module_id)
-            .expect("module should exist in graph");
-        let exports = resolve_module_exports(db, *module, parsed.clone());
-        all_exports.insert(*module_id, exports);
-    }
-
-    AllModuleExports::new(db, all_exports)
-}
-
-/// Build function AST maps for all modules.
-///
-/// Used for function inlining - maps module ID to function name to AST.
-#[salsa::tracked(returns(copy))]
-pub fn build_all_function_ast_maps<'db>(
-    db: &'db dyn Db,
-    parsed_graph: ParsedModuleGraph<'db>,
-) -> AllModuleFunctionAsts<'db> {
-    let mut module_function_asts = BTreeMap::new();
-
-    for (module_id, parsed) in parsed_graph.statements_only(db) {
-        let mut funcs = Vec::new();
-        for statement in parsed.statements.iter() {
-            if let Statement::Fun(func) = statement {
-                funcs.push((func.name(db), *func));
-            }
-        }
-        module_function_asts.insert(*module_id, funcs);
-    }
-
-    AllModuleFunctionAsts::new(db, module_function_asts)
+    module: Module<'db>,
+) -> Vec<(InternedText<'db>, StmtFun<'db>)> {
+    let parsed = datalove_datafun_parser::parse_module_ast(db, module);
+    parsed.statements.iter()
+        .filter_map(|statement| match statement {
+            Statement::Fun(func) => Some((func.name(db), *func)),
+            _ => None,
+        })
+        .collect()
 }
 
 /// Reject a signature that puts a type parameter where an order is needed and

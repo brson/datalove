@@ -20,7 +20,7 @@ use datalove_datafun_compiler::tracked_lower::lower_module_graph_with_evaluator;
 use datalove_ct::query_log::{enable_query_logging, disable_query_logging, get_executed_modules};
 use datalove_datafun_interp::InterpCtfeEvaluator;
 use datalove_datafun_tycheck::{typecheck_module_graph, AutoAdaptMode};
-use datalove_datafun_resolve::{resolve_all_names, resolve_all_exports, build_all_function_ast_maps, ParallelMode};
+use datalove_datafun_resolve::{resolve_all_names, ParallelMode};
 use datalove_datafun_pkg::package_load_worldfile::WorldfileSection;
 
 use crate::incremental::{IncrementalModuleWorld, extract_dependencies};
@@ -341,9 +341,7 @@ pub fn analyze_memo_worldfile(content: &str) -> AnyResult<MemoAnalysis> {
 
         enable_query_logging();
         let all_names = resolve_all_names(&db, parsed_graph);
-        let all_exports = resolve_all_exports(&db, parsed_graph);
-        let all_function_asts = build_all_function_ast_maps(&db, parsed_graph);
-        let typecheck_result = typecheck_module_graph(&db, parsed_graph, all_names, all_exports, all_function_asts, AutoAdaptMode::Disabled);
+                let typecheck_result = typecheck_module_graph(&db, parsed_graph, all_names, AutoAdaptMode::Disabled);
         let typecheck_log = disable_query_logging();
         let resolved_names_modules: BTreeSet<String> = get_executed_modules(&typecheck_log, "resolve_names")
             .into_iter().collect();

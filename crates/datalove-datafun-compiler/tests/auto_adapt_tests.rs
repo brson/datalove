@@ -21,7 +21,7 @@ use datalove_datafun::{
     to_module_graph, module_graph,
 };
 use datalove_datafun_tycheck::{typecheck_module_graph, AutoAdaptMode};
-use datalove_datafun_resolve::{resolve_all_names, resolve_all_exports, build_all_function_ast_maps, ParallelMode};
+use datalove_datafun_resolve::{resolve_all_names, ParallelMode};
 use datalove_datafun_pkg::package_load_worldfile::{WorldfileSection, parse_worldfile_sections};
 use datalove_datafun::pipeline::{WorkspaceDescriptor, CompilerOptions};
 use datalove_datafun_compiler::tracked_ownership_analysis::analyze_module_graph_with_mode;
@@ -93,9 +93,7 @@ fn typecheck_sections_with_mode(
             let graph_with_requires = to_module_graph(&db, package_world, pkg_graph);
             let parsed_graph = module_graph::parse_module_graph(&db, graph_with_requires.graph, graph_with_requires.resolved_requires, Vec::new());
             let all_names = resolve_all_names(&db, parsed_graph);
-            let all_exports = resolve_all_exports(&db, parsed_graph);
-            let all_function_asts = build_all_function_ast_maps(&db, parsed_graph);
-            let typecheck_result = typecheck_module_graph(&db, parsed_graph, all_names, all_exports, all_function_asts, mode);
+                            let typecheck_result = typecheck_module_graph(&db, parsed_graph, all_names, mode);
 
             // Collect module errors.
             let module_errors = typecheck_result.module_errors(&db);
@@ -107,7 +105,7 @@ fn typecheck_sections_with_mode(
 
             // Collect module diagnostics.
             let type_diagnostics = typecheck_module_graph::accumulated::<datalove_diagnostic::TypeDiagnostic>(
-                &db, parsed_graph, all_names, all_exports, all_function_asts, mode
+                &db, parsed_graph, all_names, mode
             );
             for d in type_diagnostics.iter() {
                 let diag = d.to_diagnostic(&db);

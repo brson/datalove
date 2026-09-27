@@ -20,6 +20,24 @@ cold compile, two unchanged recompiles, an edit to your own module and an edit
 to the bottom of the system library, then every query that kept a memo and how
 many it kept. The figures below are that output for 26 modules.
 
+The counts in the next table are a source scan rather than a database one, so
+they come from a different command -- and they had drifted to 60 here and 59 in
+salsa-patterns.md before this was written down:
+
+```
+python3 -c 'import pathlib,re
+s=f=0
+for p in pathlib.Path("crates").rglob("*.rs"):
+    L=p.read_text().splitlines()
+    for i,l in enumerate(L):
+        if not re.match(r"\s*#\[salsa::tracked",l): continue
+        j=i+1
+        while j<len(L) and re.match(r"\s*#\[",L[j]): j+=1
+        if re.match(r"\s*(pub\S*\s+)?struct\b",L[j]): s+=1
+        elif re.match(r"\s*(pub\S*\s+)?fn\b",L[j]): f+=1
+print(s,"structs",f,"fns")'
+```
+
 ## The databases
 
 The compiler's is `datalove-datafun-compiler/src/lib.rs`:
@@ -45,7 +63,7 @@ database of their own. Compiler work uses the datafun one, re-exported as
 |---|---|---|
 | `#[salsa::input]` | 1 | `Source`. A path's text, changed with `set_text`. The only thing that comes from outside. |
 | `#[salsa::interned]` | 11 | Deduplicated by content: `InternedText`, `InternedSubText`, `ModuleId`, `Module`, `ModuleGraph`, `Package`, `PackageModule`, `PackageWorld`, `Script`, `ScriptUnit`, `ReachableFuncIds`. |
-| `#[salsa::tracked]` struct | 60 | Computed values with an identity. Three have a `#[tracked]` field; see below. |
+| `#[salsa::tracked]` struct | 57 | Computed values with an identity. Three have a `#[tracked]` field; see below. |
 | `#[salsa::tracked]` fn | 127 | Of which 43 keep a memo for a module compile; the rest are script, datalit and lexing paths. |
 
 ### The three structs with a tracked field, and why
@@ -88,7 +106,8 @@ look at each module; they must not look at each function.
 | query | crate | what it holds |
 |---|---|---|
 | `parse_module_graph` | compiler | `ParsedModuleGraph`: statements and resolved requires per module |
-| `resolve_all_names`, `resolve_all_exports`, `build_all_function_ast_maps` | resolve | the per-module resolutions, gathered |
+| `resolve_all_names` | resolve | the per-module name resolutions, gathered |
+| `rider_function_stubs` | tycheck | the synthetic `StmtFun` behind each rider function, minted once for the graph |
 | `compute_func_id_map` | compiler | `FuncIdMap`: every function's `(IrModuleId, FuncId)` |
 | `func_id_lookup` | compiler | the same as a lookup map, memoized so it is built once per revision rather than once per const |
 | `graph_declares_consts` | compiler | whether phase 5b has anything to do |
@@ -102,6 +121,7 @@ look at each module; they must not look at each function.
 | `close_shapes_over_calls` | 4 | twice per compile, once per lowering stratum |
 | `ctfe_module_registry` | 4 | likewise, one per stratum |
 | `create_module_graph_lowering_result`, `module_function_registry` | 4 | one per distinct lowering result; `module_function_registry` is capped at `lru = 4` because its key moves on every edit |
+| `resolve_module_exports`, `module_function_asts` | 4 | keyed per module, but only asked of a module something imports from -- four on the system library, where most modules are required by nobody |
 
 ### One memo per module: the per-module passes
 
@@ -111,7 +131,7 @@ look at the rest of the world -- which is what `reachable_func_ids` is for.
 
 `parse`, `lex_chunk`, `bracer`, `source_map`, `basic_source_map`,
 `parse_module_full`, `parse_module_ast`, `resolve_module_names`,
-`resolve_module_exports`, `resolve_module_imports`, `module_import_demands`,
+`resolve_module_imports`, `module_import_demands`,
 `typecheck_module`, `analyze_module`, `module_const_kinds`,
 `lower_module_functions`, `module_shape_inputs`, `shape_closed_module`,
 `merge_module_strata`, `module_has_comptime_calls`, `ctfe_module_units`,
@@ -121,13 +141,21 @@ Some keep more than one memo per module -- `lower_module_functions` keeps two,
 one per lowering stratum, and `reachable_func_ids` keeps one per module per
 graph shape it has seen.
 
+`resolve_module_imports` belongs here and only recently did. It was keyed on
+gathered maps of every module's exports and function ASTs, whose identity is a
+hash of the lot, so a signature edit anywhere gave it a new key for every module
+in the world. It asks `resolve_module_exports` of the modules its own module
+requires instead, so what reaches it is the dependency graph rather than the
+world. The section below on what the suites do not hold says why nothing caught
+that.
+
 ## What a recompile does
 
 Measured on the system library plus one local module, 26 modules:
 
 | | queries run |
 |---|---|
-| cold compile | 657 |
+| cold compile | 639 |
 | unchanged recompile | **0** |
 | a second unchanged recompile | **0** |
 | edit one function in your own module | 28 |
@@ -160,14 +188,22 @@ which is inherent while the graph-keyed passes ask about every module.
 | a graph-keyed query does not depend on every function | `compile_scaling_tests` |
 | a per-module query does not depend on the rest of the world | `compile_scaling_tests` |
 | the parse firewall's four rows | `parse_firewall_tests` |
+| an edit reaches the importers of what changed, and no further | `import_memo_tests` |
+| a rider's stubs are minted once for the graph, not once per importer | `import_memo_tests` |
 | per-module, per-phase behaviour across add/remove/change | 16 `module_memo` fixtures |
 | `extract_dependencies` costs what changed | `incremental_memo_tests` |
 
 ### What none of them hold
 
-- **Interned aggregates are invisible to the memo-size tests.** Widening
-  `ReachableFuncIds` to the whole world was tried against them and passes,
-  because an interned value is one dependency however much it aggregates.
+- **Aggregates are invisible to the memo-size tests, interned or tracked.**
+  Widening `ReachableFuncIds` to the whole world was tried against them and
+  passes, because an interned value is one dependency however much it
+  aggregates. The same held for `AllModuleExports`, a *tracked* struct whose
+  identity hashed every module's exports: it sat in `resolve_module_imports`'
+  key and cost eleven of twenty-five modules a full re-typecheck on any
+  signature edit, and every memo-size test passed throughout. What sees this is
+  asking how far downstream an edit travelled, which is what `import_memo_tests`
+  does and what nothing did before.
 - **Dependency-edge counts are not measured directly**, so the `#[tracked]`
   decisions rest on the memo-size proxy. Re-adding `#[tracked]` to
   `ExprFun::expr` costs 2.6x at 512 modules and passes everything.

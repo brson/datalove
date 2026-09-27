@@ -285,20 +285,6 @@ pub struct CollectedNames<'db> {
     pub errors: Vec<TypeError>,
 }
 
-/// All module exports collected from the graph.
-#[salsa::tracked]
-pub struct AllModuleExports<'db> {
-    #[returns(ref)]
-    pub exports: BTreeMap<ModuleId<'db>, Vec<(InternedText<'db>, TypeFunction<'db>)>>,
-}
-
-/// All function ASTs collected from the graph.
-#[salsa::tracked]
-pub struct AllModuleFunctionAsts<'db> {
-    #[returns(ref)]
-    pub asts: BTreeMap<ModuleId<'db>, Vec<(InternedText<'db>, StmtFun<'db>)>>,
-}
-
 /// Type representation for datafun (extends datalit types with function types).
 #[derive(Clone, Hash, PartialEq, Eq)]
 #[derive(salsa::SalsaValue)]

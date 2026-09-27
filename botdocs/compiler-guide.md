@@ -123,12 +123,12 @@ Source Text
 [Phase 2: Name Resolution]
     |   resolve_all_names_with_mode
     |   Per-module: resolve_module_names [tracked]
-    |   Also resolve_all_exports, build_all_function_ast_maps
     v   Output: AllModuleNameResolutions
     |
 [Phase 3: Typecheck]
     |   typecheck_module_graph_with_mode
-    |   Per-module: typecheck_module [tracked]
+    |   Per-module: resolve_module_imports, typecheck_module [tracked]
+    |   An importer asks resolve_module_exports of what it requires
     v   Output: ModuleGraphTypecheckResult
     |
 [Phase 4: Ownership Analysis]

@@ -14,7 +14,7 @@ use datalove_datafun_compiler::{
 };
 use datalove_datafun_interp::InterpCtfeEvaluator;
 use datalove_datafun_resolve::{
-    resolve_all_names_with_mode, resolve_all_exports, build_all_function_ast_maps,
+    resolve_all_names_with_mode,
 };
 use datalove_datafun_tycheck::{
     typecheck_module_graph, typecheck_module_graph_with_mode,
@@ -213,8 +213,6 @@ fn setup_graph<'db>(db: &'db Database, sources: &[(String, Source)]) -> ModuleGr
 fn prime_through_resolve<'db>(db: &'db Database, graph: ModuleGraph<'db>) {
     let parsed = parse_module_graph(db, graph, BTreeMap::new(), Vec::new());
     let _ = resolve_all_names_with_mode(db, parsed, TypecheckParallelMode::Sequential);
-    let _ = resolve_all_exports(db, parsed);
-    let _ = build_all_function_ast_maps(db, parsed);
 }
 
 /// Run parse and typecheck sequentially, mirroring the ordering in
@@ -231,10 +229,8 @@ fn typecheck_through<'db>(
 ) {
     let parsed = parse_module_graph(db, graph, BTreeMap::new(), Vec::new());
     let names = resolve_all_names_with_mode(db, parsed, TypecheckParallelMode::Sequential);
-    let exports = resolve_all_exports(db, parsed);
-    let function_asts = build_all_function_ast_maps(db, parsed);
     let typechecked = typecheck_module_graph(
-        db, parsed, names, exports, function_asts, AutoAdaptMode::Disabled,
+        db, parsed, names, AutoAdaptMode::Disabled,
     );
     (parsed, typechecked)
 }
@@ -329,10 +325,8 @@ fn typecheck_sequential(bencher: divan::Bencher) {
             let graph = setup_graph(&db, &srcs);
             let parsed = parse_module_graph(&db, graph, BTreeMap::new(), Vec::new()); // Memoized.
             let names = resolve_all_names_with_mode(&db, parsed, TypecheckParallelMode::Sequential);
-            let exports = resolve_all_exports(&db, parsed);
-            let function_asts = build_all_function_ast_maps(&db, parsed);
             let result = typecheck_module_graph_with_mode(
-                &db, parsed, names, exports, function_asts,
+                &db, parsed, names,
                 TypecheckParallelMode::Sequential, AutoAdaptMode::Disabled,
             );
             let _ = divan::black_box(result);
@@ -354,10 +348,8 @@ fn typecheck_parallel(bencher: divan::Bencher) {
             let graph = setup_graph(&db, &srcs);
             let parsed = parse_module_graph(&db, graph, BTreeMap::new(), Vec::new());
             let names = resolve_all_names_with_mode(&db, parsed, TypecheckParallelMode::Sequential);
-            let exports = resolve_all_exports(&db, parsed);
-            let function_asts = build_all_function_ast_maps(&db, parsed);
             let result = typecheck_module_graph_with_mode(
-                &db, parsed, names, exports, function_asts,
+                &db, parsed, names,
                 TypecheckParallelMode::Parallel, AutoAdaptMode::Disabled,
             );
             let _ = divan::black_box(result);

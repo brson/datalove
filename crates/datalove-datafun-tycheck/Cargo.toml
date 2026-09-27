@@ -6,7 +6,7 @@ authors.workspace = true
 edition.workspace = true
 
 [features]
-index-64 = ["datalove-datalit/index-64", "datalove-datafun-common/index-64", "datalove-datafun-sema/index-64"]
+index-64 = ["datalove-datalit/index-64", "datalove-datafun-common/index-64", "datalove-datafun-sema/index-64", "datalove-datafun-resolve/index-64"]
 
 [dependencies]
 rmx.workspace = true
@@ -17,6 +17,7 @@ datalove-datafun-ast.path = "../datalove-datafun-ast"
 datalove-datafun-common.path = "../datalove-datafun-common"
 datalove-datafun-intrinsics.path = "../datalove-datafun-intrinsics"
 datalove-datafun-parser.path = "../datalove-datafun-parser"
+datalove-datafun-resolve.path = "../datalove-datafun-resolve"
 datalove-datafun-sema.path = "../datalove-datafun-sema"
 datalove-datalit.path = "../datalove-datalit"
 datalove-diagnostic.path = "../datalove-diagnostic"

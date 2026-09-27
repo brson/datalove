@@ -9,6 +9,7 @@ use bct::text::InternedText;
 use datalove_ct::query_log::{log_query, QueryPhase};
 
 use datalove_datafun_ast::ast::*;
+use datalove_datafun_resolve::{module_function_asts, resolve_module_exports};
 use datalove_datalit as datalit;
 use crate::context::TypeContext;
 use crate::statement::check_statement;
@@ -34,8 +35,6 @@ pub use crate::{
     ModuleGraphTypecheckResult,
     SingleModuleTypecheckResult,
     AllModuleNameResolutions,
-    AllModuleExports,
-    AllModuleFunctionAsts,
 };
 
 /// Accumulated bindings passed to subsequent script units.
@@ -474,8 +473,6 @@ pub fn typecheck_module_graph<'db>(
     db: &'db dyn crate::Db,
     parsed_graph: ParsedModuleGraph<'db>,
     all_names: AllModuleNameResolutions<'db>,
-    all_exports: AllModuleExports<'db>,
-    all_function_asts: AllModuleFunctionAsts<'db>,
     auto_adapt_mode: crate::AutoAdaptMode,
 ) -> ModuleGraphTypecheckResult<'db> {
     let prep = prepare_typecheck(db, parsed_graph);
@@ -500,7 +497,7 @@ pub fn typecheck_module_graph<'db>(
             .expect("module should have name resolution");
 
         // Resolve imports for this module (tracked, memoized per module).
-        let import_resolution = resolve_module_imports(db, module, parsed_graph, all_exports, all_function_asts);
+        let import_resolution = resolve_module_imports(db, module, parsed_graph);
         let resolved_imports = import_resolution.imports(db).C();
         let import_errors = import_resolution.errors(db).C();
 
@@ -547,8 +544,6 @@ pub fn typecheck_module_graph_parallel<'db>(
     db: &'db dyn crate::DbClone,
     parsed_graph: ParsedModuleGraph<'db>,
     all_names: AllModuleNameResolutions<'db>,
-    all_exports: AllModuleExports<'db>,
-    all_function_asts: AllModuleFunctionAsts<'db>,
     auto_adapt_mode: crate::AutoAdaptMode,
 ) -> ModuleGraphTypecheckResult<'db> {
     use rmx::rayon::prelude::*;
@@ -581,7 +576,7 @@ pub fn typecheck_module_graph_parallel<'db>(
         let db_salsa = db_clone.as_salsa_db();
 
         // Resolve imports (tracked, memoized per module).
-        let import_resolution = resolve_module_imports(db_salsa, module, parsed_graph, all_exports, all_function_asts);
+        let import_resolution = resolve_module_imports(db_salsa, module, parsed_graph);
         let resolved_imports = import_resolution.imports(db_salsa).C();
         let import_errors = import_resolution.errors(db_salsa).C();
 
@@ -592,7 +587,7 @@ pub fn typecheck_module_graph_parallel<'db>(
 
     // Delegate to tracked function which aggregates results.
     // All resolve_module_names, resolve_module_imports, and typecheck_module calls will be cache hits.
-    typecheck_module_graph(db_salsa, parsed_graph, all_names, all_exports, all_function_asts, auto_adapt_mode)
+    typecheck_module_graph(db_salsa, parsed_graph, all_names, auto_adapt_mode)
 }
 
 /// Typecheck module graph with configurable parallelism.
@@ -604,14 +599,12 @@ pub fn typecheck_module_graph_with_mode<'db>(
     db: &'db dyn crate::DbClone,
     parsed_graph: ParsedModuleGraph<'db>,
     all_names: AllModuleNameResolutions<'db>,
-    all_exports: AllModuleExports<'db>,
-    all_function_asts: AllModuleFunctionAsts<'db>,
     mode: crate::ParallelMode,
     auto_adapt_mode: crate::AutoAdaptMode,
 ) -> ModuleGraphTypecheckResult<'db> {
     match mode {
-        crate::ParallelMode::Sequential => typecheck_module_graph(db.as_salsa_db(), parsed_graph, all_names, all_exports, all_function_asts, auto_adapt_mode),
-        crate::ParallelMode::Parallel => typecheck_module_graph_parallel(db, parsed_graph, all_names, all_exports, all_function_asts, auto_adapt_mode),
+        crate::ParallelMode::Sequential => typecheck_module_graph(db.as_salsa_db(), parsed_graph, all_names, auto_adapt_mode),
+        crate::ParallelMode::Parallel => typecheck_module_graph_parallel(db, parsed_graph, all_names, auto_adapt_mode),
     }
 }
 
@@ -637,40 +630,135 @@ fn emit_pending_diagnostics_for_module<'db>(
 /// calls this in parallel to warm the cache, then the sequential aggregation
 /// path hits the cache.
 ///
-/// Accepts pre-computed exports and function ASTs from the resolve crate.
+/// **Keyed on the module and the graph, and nothing wider.** It used to take
+/// gathered maps of every module's exports and function ASTs, whose identity is
+/// a hash of the lot, so a signature edit in any module gave this query a new
+/// key for *every* module -- and a new key is a new query instance, which
+/// re-minted the synthetic `StmtFun` a rider import stands behind under a fresh
+/// id, which re-typechecked every module that imports from a rider. Eleven of
+/// twenty-five on the system library, for an edit none of them could see. The
+/// dependencies are asked for per module instead, of the modules this one
+/// actually requires, so an edit reaches the importers of what changed and
+/// stops there. `import_memo_tests` holds it.
 #[salsa::tracked(returns(copy))]
 pub fn resolve_module_imports<'db>(
     db: &'db dyn crate::Db,
     module: Module<'db>,
     parsed_graph: ParsedModuleGraph<'db>,
-    all_exports: AllModuleExports<'db>,
-    all_function_asts: AllModuleFunctionAsts<'db>,
 ) -> crate::ModuleImportResolution<'db> {
     let module_id = module.id(db);
     let module_path = module_id.path(db);
 
     log_query("resolve_imports", module_path, QueryPhase::Start);
 
-    // Get parsed statements for this module.
-    let parsed = parsed_graph.statements_only(db)
-        .iter()
-        .find(|(id, _)| *id == module_id)
-        .map(|(_, p)| p.clone())
-        .expect("module should have been parsed");
+    // This module's own statements, asked for per module. Finding them in the
+    // graph's gathered `statements_only` instead is one dependency edge on
+    // every module's AST, which is the rest of the world by another route.
+    let parsed = datalove_datafun_parser::parse_module_ast(db, module);
+
+    // The exports and function ASTs of the modules this one requires. The graph
+    // is interned, so looking a module up in it costs nothing and depends on
+    // nothing computed.
+    let graph = parsed_graph.graph(db);
+    let mut dep_exports: BTreeMap<ModuleId<'db>, Vec<(InternedText<'db>, TypeFunction<'db>)>> =
+        BTreeMap::new();
+    let mut dep_function_asts: BTreeMap<ModuleId<'db>, Vec<(InternedText<'db>, StmtFun<'db>)>> =
+        BTreeMap::new();
+    for (_alias, target_id) in parsed_graph.get_requires(db, module_id) {
+        let dep = graph.get_module(db, *target_id)
+            .expect("a resolved require names a module in the graph");
+        dep_exports.insert(*target_id, resolve_module_exports(db, dep).clone());
+        dep_function_asts.insert(*target_id, module_function_asts(db, dep).clone());
+    }
 
     // Call internal implementation.
     let (imports, errors) = resolve_module_imports_internal(
         db,
         module_id,
-        &parsed,
+        parsed,
         &parsed_graph,
-        all_exports.exports(db),
-        all_function_asts.asts(db),
+        &dep_exports,
+        &dep_function_asts,
+        rider_function_stubs(db, parsed_graph),
     );
 
     log_query("resolve_imports", module_path, QueryPhase::End);
 
     crate::ModuleImportResolution::new(db, module_id, imports, errors)
+}
+
+/// The synthetic `StmtFun` each rider function stands behind.
+///
+/// A rider declares signatures and no bodies, and the ownership checker wants a
+/// statement to look at, so one is synthesised per rider function.
+///
+/// **Minted here rather than at the import that needs it.** A stub is a
+/// property of the rider, not of whoever imports it, and a tracked struct's
+/// identity map belongs to the query instance that created it -- so minting one
+/// inside `resolve_module_imports` tied its id to that query's key, and every
+/// module importing from a rider re-typechecked whenever that key moved. Keyed
+/// on the graph, whose identity does not move when a module's text does. Also
+/// mints each stub once rather than once per importing module: the system
+/// library has 154 rider functions and imports them 124 times over.
+#[salsa::tracked(returns(ref))]
+fn rider_function_stubs<'db>(
+    db: &'db dyn crate::Db,
+    parsed_graph: ParsedModuleGraph<'db>,
+) -> HashMap<(ModuleId<'db>, InternedText<'db>), StmtFun<'db>> {
+    let mut stubs = HashMap::new();
+
+    // A `BTreeMap` of `Vec`s, so the mint order is the same on every run, which
+    // a tracked struct's disambiguator depends on.
+    for riders in parsed_graph.resolved_riders(db).values() {
+        for (_alias, rider) in riders {
+            for (func_name, func_type) in &rider.functions {
+                let key = (rider.module_id, *func_name);
+                if stubs.contains_key(&key) {
+                    continue;
+                }
+
+                // Synthetic params carry the declared modes, so the ownership
+                // checker knows which parameters are ref/mut/in/out.
+                let params: Vec<FunParam<'db>> = func_type.param_modes(db)
+                    .iter()
+                    .enumerate()
+                    .map(|(i, mode)| FunParam {
+                        name: InternedText::new(db, &format!("_p{}", i)),
+                        mode: *mode,
+                        is_comptime: false,
+                        type_hint: datalit::ast::TypeHint::AnonTuple(
+                            datalit::ast::TypeHintAnonTuple { fields: vec![] }),
+                    })
+                    .collect();
+
+                // A rider function may be generic, and a call site needs its
+                // type parameters in order: that is how the type arguments are
+                // recorded, which is how the descriptors a native wants are
+                // worked out. See `NativeGenerics`.
+                let (type_params, type_bounds) = rider.generic_functions.iter()
+                    .find(|(n, _)| n == func_name)
+                    .map(|(_, g)| (g.type_params.clone(), g.type_bounds.clone()))
+                    .unwrap_or_default();
+
+                let stub = StmtFun::new(
+                    db,
+                    Some(rider.module_id),
+                    *func_name,
+                    datalove_datafun_ast::ast::FunSignature {
+                        type_params,
+                        type_bounds,
+                        params,
+                        return_type: None,
+                    },
+                    vec![],
+                    0,
+                );
+                stubs.insert(key, stub);
+            }
+        }
+    }
+
+    stubs
 }
 
 /// Internal import resolution returning plain data (no tracked structs).
@@ -686,6 +774,7 @@ fn resolve_module_imports_internal<'db>(
     parsed_graph: &ParsedModuleGraph<'db>,
     all_exports: &BTreeMap<ModuleId<'db>, Vec<(InternedText<'db>, TypeFunction<'db>)>>,
     module_function_asts: &BTreeMap<ModuleId<'db>, Vec<(InternedText<'db>, StmtFun<'db>)>>,
+    rider_stubs: &HashMap<(ModuleId<'db>, InternedText<'db>), StmtFun<'db>>,
 ) -> (Vec<ResolvedImportData<'db>>, Vec<TypeError>) {
     // Build module alias map from pre-resolved requires.
     let resolved_requires = parsed_graph.get_requires(db, module_id);
@@ -743,45 +832,8 @@ fn resolve_module_imports_internal<'db>(
                 if let Some(func_type) = func_opt {
                     // Use the rider's pre-created synthetic ModuleId.
                     let synthetic_module_id = rider.module_id;
-                    // Build synthetic params with correct modes so the ownership checker
-                    // knows which parameters are ref/mut/in/out.
-                    let synthetic_params: Vec<_> = func_type.param_modes(db)
-                        .iter()
-                        .enumerate()
-                        .map(|(i, mode)| {
-                            let name = InternedText::new(db, &format!("_p{}", i));
-                            FunParam {
-                                name,
-                                mode: *mode,
-                                is_comptime: false,
-                                type_hint: datalit::ast::TypeHint::AnonTuple(datalit::ast::TypeHintAnonTuple { fields: vec![] }),
-                            }
-                        })
-                        .collect();
-                    // A rider function may be generic, and a call site needs
-                    // its type parameters in order: that is how the type
-                    // arguments are recorded, which is how the descriptors a
-                    // native wants are worked out. See `NativeGenerics`.
-                    let generics = rider.generic_functions.iter()
-                        .find(|(n, _)| *n == item_name)
-                        .map(|(_, g)| g.clone());
-                    let (type_params, type_bounds) = match &generics {
-                        Some(g) => (g.type_params.clone(), g.type_bounds.clone()),
-                        None => (Vec::new(), Vec::new()),
-                    };
-                    let synthetic_fun = StmtFun::new(
-                        db,
-                        Some(synthetic_module_id),
-                        item_name,
-                        datalove_datafun_ast::ast::FunSignature {
-                            type_params,
-                            type_bounds,
-                            params: synthetic_params,
-                            return_type: None,
-                        },
-                        vec![],
-                        0,
-                    );
+                    let synthetic_fun = *rider_stubs.get(&(synthetic_module_id, item_name))
+                        .expect("a rider function has a stub, since both come from `rider.functions`");
                     resolved_imports.push(
                         (item_name, func_type, Some(synthetic_fun), synthetic_module_id, import.local_index),
                     );

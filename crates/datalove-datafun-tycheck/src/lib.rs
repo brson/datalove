@@ -27,8 +27,6 @@ pub use datalove_datafun_common::{
     ModuleNameResolution,
     AllModuleNameResolutions,
     CollectedNames,
-    AllModuleExports,
-    AllModuleFunctionAsts,
 };
 
 // Re-export ResolvedCallTarget from sema.

@@ -47,7 +47,7 @@ all it is an interned struct with extra steps: creating one hashes everything it
 holds, and any change to any field yields a different struct, so a consumer that
 reads one field is invalidated by a change to another.
 
-**In this codebase, 54 of 59 tracked structs have no `#[tracked]` field.**
+**In this codebase, 54 of 57 tracked structs have no `#[tracked]` field.**
 `SingleModuleTypecheckResult` has nine fields and none of them are tracked, so
 its identity is a hash of the whole type table.
 
@@ -135,6 +135,21 @@ Two things to know before reaching for the same trick:
   re-mints everything invalidates every consumer as soon as a module is added
   anywhere. `close_shapes_over_calls` hands a module back under the handle it
   came in under when it did not change it, for exactly this reason.
+
+  **This bit a second time, and the second one is the more instructive.**
+  `resolve_module_imports` minted a synthetic `StmtFun` per rider import, and
+  its key included a gathered map of every module's exports -- so a signature
+  edit anywhere gave it a new key, hence a new instance, hence fresh stub ids,
+  hence a full re-typecheck of every module importing from a rider. Eleven of
+  twenty-five on the system library, for an edit none of them could see, and
+  every memo-size test passed the whole time.
+
+  The rule worth carrying: **do not mint a tracked struct in a query whose key
+  is wider than what the struct belongs to.** A rider stub belongs to the rider,
+  so it is minted by a query keyed on the graph and looked up by the importers.
+  Re-execution on its own is harmless -- the same instance re-running mints the
+  same ids. It is the *key* moving that costs, which is why this is invisible to
+  anything counting executions.
 - **Backdating on the tracked field wants pointer equality to be meaningful.**
   `Arc<T>: PartialEq` short-circuits on `ptr_eq` when `T: Eq`, so a pass that
   only replaces what it rewrites gets the comparison for free; one that rebuilds

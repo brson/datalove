@@ -11,8 +11,6 @@ use bct::module_graph::{ModuleGraph, ModuleId};
 use datalove_datafun_resolve::{
     DbClone, ParallelMode,
     resolve_all_names_with_mode,
-    resolve_all_exports,
-    build_all_function_ast_maps,
     AllModuleNameResolutions,
     ParsedModuleGraph,
 };
@@ -100,16 +98,12 @@ pub fn compile_modules<'db>(
 
     // Phase 2: Name Resolution (memoized per-module, can be parallelized)
     let name_resolution = resolve_all_names_with_mode(db, parsed_graph, mode);
-    let all_exports = resolve_all_exports(db.as_salsa_db(), parsed_graph);
-    let all_function_asts = build_all_function_ast_maps(db.as_salsa_db(), parsed_graph);
 
     // Phase 3: Typecheck (receives name resolution results as parameters)
     let typecheck_result = typecheck_module_graph_with_mode(
         db,
         parsed_graph,
         name_resolution,
-        all_exports,
-        all_function_asts,
         mode,
         AutoAdaptMode::Disabled,
     );

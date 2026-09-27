@@ -11,7 +11,7 @@ use datalove_datafun_ir::{IrModuleId, FuncId};
 use datalove_datafun_compiler::tracked_lower::FuncIdLookup;
 use datalove_datafun_interp::ModuleFunctionRegistry;
 use datalove_datafun_tycheck::{typecheck_module_graph, AutoAdaptMode};
-use datalove_datafun_resolve::{resolve_all_names, resolve_all_exports, build_all_function_ast_maps};
+use datalove_datafun_resolve::resolve_all_names;
 use datalove_datafun_compiler::module_graph::{
     ModuleGraph, ModuleGraphTypecheckResult, ModuleId,
     ParsedModuleGraph,
@@ -139,8 +139,6 @@ impl<'db> CompiledModules<'db> {
     pub fn get_module_type_diagnostics(&self, db: &'db dyn salsa::Database) -> Vec<&'db datalove_diagnostic::TypeDiagnostic> {
         // Recompute resolve results (memoized, will be cache hits).
         let all_names = resolve_all_names(db, self.shared.parsed_graph);
-        let all_exports = resolve_all_exports(db, self.shared.parsed_graph);
-        let all_function_asts = build_all_function_ast_maps(db, self.shared.parsed_graph);
-        typecheck_module_graph::accumulated::<datalove_diagnostic::TypeDiagnostic>(db, self.shared.parsed_graph, all_names, all_exports, all_function_asts, AutoAdaptMode::Disabled)
+        typecheck_module_graph::accumulated::<datalove_diagnostic::TypeDiagnostic>(db, self.shared.parsed_graph, all_names, AutoAdaptMode::Disabled)
     }
 }
