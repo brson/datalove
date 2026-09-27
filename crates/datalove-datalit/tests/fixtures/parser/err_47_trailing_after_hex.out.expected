@@ -1,0 +1,26 @@
+{
+  "ast": {
+    "expr": {
+      "Hex": {
+        "value": "0x1"
+      }
+    },
+    "type_hint": null
+  },
+  "diagnostics": [
+    {
+      "code": "D021",
+      "labels": [
+        {
+          "message": "unexpected token",
+          "span": [
+            3,
+            4
+          ],
+          "text": "."
+        }
+      ],
+      "message": "unexpected token after expression"
+    }
+  ]
+}

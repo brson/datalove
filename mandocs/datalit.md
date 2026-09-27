@@ -1014,10 +1014,6 @@ and against the parser's own diagnostics.
 
 ### Bugs
 
-- **Trailing input is ignored.**
-  The top-level parse does not require the input to be exhausted:
-  `true false` is `true`,
-  and `0x1.5` is `0x1`, the `.5` silently dropped.
 - **String escapes are checked only at instantiation.**
   The parser keeps a string's raw text,
   so `"a\q"` and `"\u{D800}"` pass parsing and typechecking

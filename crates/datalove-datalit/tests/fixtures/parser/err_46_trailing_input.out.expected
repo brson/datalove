@@ -1,0 +1,22 @@
+{
+  "ast": {
+    "expr": "True",
+    "type_hint": null
+  },
+  "diagnostics": [
+    {
+      "code": "D021",
+      "labels": [
+        {
+          "message": "unexpected token",
+          "span": [
+            5,
+            10
+          ],
+          "text": "false"
+        }
+      ],
+      "message": "unexpected token after expression"
+    }
+  ]
+}

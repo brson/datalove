@@ -42,6 +42,9 @@ fn parse_bracer<'db>(
 ) -> ast::ParseResult<'db> {
     let mut parser = Parser::from_branch(db, bracer.iter(db), source_text);
     let expr = parser.parse_expr_full();
+    // A document is one expression, so anything after it was written by
+    // mistake rather than left for a caller to read.
+    parser.error_if_not_exhausted();
     ast::ParseResult::new(db, expr, parser.take_expr_spans())
 }
 
