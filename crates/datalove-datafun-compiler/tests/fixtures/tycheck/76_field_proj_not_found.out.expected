@@ -1,5 +1,20 @@
 {
-  "diagnostics": [],
+  "diagnostics": [
+    {
+      "code": "F067",
+      "labels": [
+        {
+          "message": "no such field",
+          "span": [
+            34,
+            38
+          ],
+          "text": ".age"
+        }
+      ],
+      "message": "`{name: string}` has no field `age`"
+    }
+  ],
   "errors": [
     {
       "field_name": "age",

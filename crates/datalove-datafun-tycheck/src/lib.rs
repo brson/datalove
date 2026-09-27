@@ -75,6 +75,14 @@ impl Default for RecoveryHint {
 /// module_id is Some and spans are looked up from ParsedModuleGraph. For
 /// non-module-graph paths, module_id is None and spans are looked up from
 /// TypeContext.spans.
+/// Where a field error was found: a projection, or a `set` statement's place.
+#[derive(Clone, Copy, Hash, PartialEq, Eq)]
+#[derive(salsa::SalsaValue)]
+pub enum FieldErrorSite<'db> {
+    Expr(ExprKey<'db>),
+    Set(u32),
+}
+
 #[derive(Clone, Hash, PartialEq, Eq)]
 #[derive(salsa::SalsaValue)]
 pub enum PendingDiagnostic<'db> {
@@ -156,6 +164,15 @@ pub enum PendingDiagnostic<'db> {
         module_id: Option<ModuleId<'db>>,
         message: InternedText<'db>,
         note: InternedText<'db>,
+    },
+    /// F067..F070: A field that is not there, or cannot be read from there.
+    FieldError {
+        site: FieldErrorSite<'db>,
+        module_id: Option<ModuleId<'db>>,
+        code: InternedText<'db>,
+        message: InternedText<'db>,
+        label: InternedText<'db>,
+        note: Option<InternedText<'db>>,
     },
     /// F066: A type alias defined twice.
     DuplicateTypeAlias {

@@ -1484,20 +1484,22 @@ pub(crate) fn is_view_producing_index(base_ty: &Type) -> bool {
 /// Synthesize type through a field step in a place expression.
 fn synthesize_place_field_step<'db>(
     ctx: &mut TypeContext<'db>,
-    _expr: ExprFun<'db>,
+    expr: ExprFun<'db>,
     base_ty: &Type<'db>,
     field: &FieldSelector<'db>,
 ) -> Result<Type<'db>, TypeError> {
     let db = ctx.db;
-    let field_ty = resolve_field_type(db, base_ty, field)?;
+    let site = crate::FieldErrorSite::Expr(ExprKey::of(db, expr));
+    let field_ty = resolve_field_type(db, base_ty, field)
+        .map_err(|e| ctx.report_field_error(site, e))?;
 
     // Check that field is a copy type or we're in ref context.
     // Move-type field projections are allowed in ref context.
     if let Type::Datalit(ref dt) = field_ty {
         if !is_copy_type(db, dt) && !ctx.ref_context {
-            return Err(TypeError::NonCopyFieldProjection {
+            return Err(ctx.report_field_error(site, TypeError::NonCopyFieldProjection {
                 field_ty: datalit::tycheck::type_to_string(db, dt),
-            });
+            }));
         }
     }
 
@@ -1546,7 +1548,7 @@ fn synthesize_place_index_step<'db>(
 /// Synthesize type for field projection expression.
 fn synthesize_field_proj<'db>(
     ctx: &mut TypeContext<'db>,
-    _expr: ExprFun<'db>,
+    expr: ExprFun<'db>,
     proj: &ExprFieldProj<'db>,
 ) -> Result<Type<'db>, TypeError> {
     let db = ctx.db;
@@ -1554,15 +1556,17 @@ fn synthesize_field_proj<'db>(
     // Synthesize base type.
     let base_ty = ctx.synthesize_expr(proj.base)?;
 
-    let field_ty = resolve_field_type(db, &base_ty, &proj.field)?;
+    let site = crate::FieldErrorSite::Expr(ExprKey::of(db, expr));
+    let field_ty = resolve_field_type(db, &base_ty, &proj.field)
+        .map_err(|e| ctx.report_field_error(site, e))?;
 
     // Check that field is a copy type or we're in ref context.
     // Move-type field projections are allowed in ref context.
     if let Type::Datalit(ref dt) = field_ty {
         if !is_copy_type(db, dt) && !ctx.ref_context {
-            return Err(TypeError::NonCopyFieldProjection {
+            return Err(ctx.report_field_error(site, TypeError::NonCopyFieldProjection {
                 field_ty: datalit::tycheck::type_to_string(db, dt),
-            });
+            }));
         }
     }
 

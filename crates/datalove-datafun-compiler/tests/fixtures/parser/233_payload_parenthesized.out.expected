@@ -1,0 +1,105 @@
+{
+  "ast": {
+    "statements": [
+      {
+        "kind": "Let",
+        "name": "a",
+        "type_hint": null,
+        "value": {
+          "expr": {
+            "kind": "Int",
+            "type_hint": null,
+            "value": "2"
+          }
+        }
+      },
+      {
+        "kind": "Let",
+        "name": "v",
+        "type_hint": null,
+        "value": {
+          "expr": {
+            "kind": "Some",
+            "payload": {
+              "expr": {
+                "kind": "BinOp",
+                "lhs": {
+                  "expr": {
+                    "kind": "Place",
+                    "root": "a",
+                    "steps": []
+                  }
+                },
+                "op": "Add",
+                "rhs": {
+                  "expr": {
+                    "kind": "Int",
+                    "type_hint": null,
+                    "value": "1"
+                  }
+                }
+              }
+            },
+            "type_hint": null
+          }
+        }
+      },
+      {
+        "kind": "Let",
+        "name": "w",
+        "type_hint": null,
+        "value": {
+          "expr": {
+            "kind": "Term",
+            "name": "T",
+            "payload": {
+              "expr": {
+                "kind": "BinOp",
+                "lhs": {
+                  "expr": {
+                    "kind": "Place",
+                    "root": "a",
+                    "steps": []
+                  }
+                },
+                "op": "Add",
+                "rhs": {
+                  "expr": {
+                    "kind": "Int",
+                    "type_hint": null,
+                    "value": "1"
+                  }
+                }
+              }
+            },
+            "type_hint": null
+          }
+        }
+      },
+      {
+        "kind": "Let",
+        "name": "x",
+        "type_hint": null,
+        "value": {
+          "expr": {
+            "kind": "Ok",
+            "payload": {
+              "expr": {
+                "kind": "CloneCoerce",
+                "operand": {
+                  "expr": {
+                    "kind": "Place",
+                    "root": "a",
+                    "steps": []
+                  }
+                }
+              }
+            },
+            "type_hint": null
+          }
+        }
+      }
+    ]
+  },
+  "diagnostics": []
+}

@@ -147,29 +147,29 @@ impl<'db> Parser<'db> {
             }
             Some("some") => {
                 self.eat_word("some");
-                let payload = self.parse_expr_primary();
+                let payload = self.parse_payload();
                 return ast::ExprFunKind::Some(ast::ExprSome { type_hint, payload });
             }
             Some("ok") => {
                 self.eat_word("ok");
-                let payload = self.parse_expr_primary();
+                let payload = self.parse_payload();
                 return ast::ExprFunKind::Ok(ast::ExprOk { type_hint, payload });
             }
             Some("er") => {
                 self.eat_word("er");
-                let payload = self.parse_expr_primary();
+                let payload = self.parse_payload();
                 return ast::ExprFunKind::Er(ast::ExprEr { type_hint, payload });
             }
             Some("data") => {
                 self.eat_word("data");
                 // Parse any datafun expression (superset of datalit).
-                let value = self.parse_expr_primary();
+                let value = self.parse_payload();
                 return ast::ExprFunKind::Data(ast::ExprData { type_hint, value });
             }
             Some("error") => {
                 self.eat_word("error");
                 // Parse any datafun expression (superset of datalit).
-                let value = self.parse_expr_primary();
+                let value = self.parse_payload();
                 return ast::ExprFunKind::Error(ast::ExprError { type_hint, value });
             }
             Some("atom") => {
@@ -196,7 +196,7 @@ impl<'db> Parser<'db> {
                         "expected term name",
                     ),
                 };
-                let payload = self.parse_expr_primary();
+                let payload = self.parse_payload();
                 return ast::ExprFunKind::Term(ast::ExprTerm { type_hint, name, payload });
             }
             Some("enum") if self.peek_second_sigil(Sigil::BraceOpen) => {

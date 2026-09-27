@@ -396,6 +396,34 @@ impl<'db> Parser<'db> {
     }
 
     /// Parse primary expression (literals, names, parenthesized expressions).
+    /// Parse the payload of `some`, `ok`, `er`, `data`, `error` or `term`.
+    ///
+    /// A primary expression and the postfix operators on it, so `some x@` is
+    /// `some (x@)`. Every payload is read here, whether or not a hint is
+    /// written over the constructor, so that the two read the same.
+    ///
+    /// A binary operator after a payload is refused. It could only mean the
+    /// operator applies to the constructed value, which none of these have,
+    /// or that the payload reaches further than it does; either way what was
+    /// meant needs parentheses to say.
+    pub(super) fn parse_payload(&mut self) -> ast::ExprFun<'db> {
+        let payload = self.parse_expr_primary();
+        let payload = self.parse_postfix_try_operators(payload);
+        if self.peek_binop().is_some() {
+            use datalove_diagnostic::DiagnosticBuilderExt;
+            let ts = self.peek_text_span();
+            let op = ts.text.as_str(self.db)[ts.span.clone()].S();
+            self.had_error = true;
+            bct::diagnostic::DiagnosticBuilder::error(self.db, &fmt!("`{op}` after a constructor's payload"))
+                .code("P065")
+                .primary_label(ts, "the payload ends before this")
+                .note(&fmt!("a payload is one expression. Parenthesize `a {op} b` to put the \
+operation in the payload, or the whole constructor to apply it to what is built"))
+                .emit_parse();
+        }
+        payload
+    }
+
     pub(super) fn parse_expr_primary(&mut self) -> ast::ExprFun<'db> {
         // Check for unary operators (-, -?, -!, not).
         if let Some(TreeToken::Token(token)) = self.peek() {
@@ -451,8 +479,7 @@ impl<'db> Parser<'db> {
                                     // Capture span before parsing for diagnostic reporting.
                                     let ts = self.peek_text_span();
                                     self.next(); // consume the keyword
-                                    let payload = self.parse_expr_primary();
-                                    let payload = self.parse_postfix_try_operators(payload);
+                                    let payload = self.parse_payload();
                                     let expr_kind = match word {
                                         "some" => ast::ExprFunKind::Some(ast::ExprSome { type_hint: None, payload }),
                                         "ok" => ast::ExprFunKind::Ok(ast::ExprOk { type_hint: None, payload }),
@@ -465,8 +492,7 @@ impl<'db> Parser<'db> {
                                 "data" | "error" => {
                                     let ts = self.peek_text_span();
                                     self.next(); // consume the keyword
-                                    let value = self.parse_expr_primary();
-                                    let value = self.parse_postfix_try_operators(value);
+                                    let value = self.parse_payload();
                                     let expr_kind = match word {
                                         "data" => ast::ExprFunKind::Data(ast::ExprData { type_hint: None, value }),
                                         "error" => ast::ExprFunKind::Error(ast::ExprError { type_hint: None, value }),
@@ -515,7 +541,7 @@ impl<'db> Parser<'db> {
                                             );
                                         }
                                     };
-                                    let payload = self.parse_expr_primary();
+                                    let payload = self.parse_payload();
                                     self.create_expr(
                                         ast::ExprFunKind::Term(ast::ExprTerm { type_hint: None, name, payload }),
                                         ts

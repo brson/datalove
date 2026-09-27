@@ -1,0 +1,65 @@
+{
+  "ast": {
+    "statements": [
+      {
+        "kind": "Let",
+        "name": "a",
+        "type_hint": null,
+        "value": {
+          "expr": {
+            "kind": "Int",
+            "type_hint": null,
+            "value": "2"
+          }
+        }
+      },
+      {
+        "kind": "Let",
+        "name": "v",
+        "type_hint": null,
+        "value": {
+          "expr": {
+            "kind": "BinOp",
+            "lhs": {
+              "expr": {
+                "kind": "Some",
+                "payload": {
+                  "expr": {
+                    "kind": "Place",
+                    "root": "a",
+                    "steps": []
+                  }
+                },
+                "type_hint": null
+              }
+            },
+            "op": "Add",
+            "rhs": {
+              "expr": {
+                "kind": "Int",
+                "type_hint": null,
+                "value": "1"
+              }
+            }
+          }
+        }
+      }
+    ]
+  },
+  "diagnostics": [
+    {
+      "code": "P065",
+      "labels": [
+        {
+          "message": "the payload ends before this",
+          "span": [
+            25,
+            26
+          ],
+          "text": "+"
+        }
+      ],
+      "message": "`+` after a constructor's payload"
+    }
+  ]
+}

@@ -1,5 +1,20 @@
 {
-  "diagnostics": [],
+  "diagnostics": [
+    {
+      "code": "F069",
+      "labels": [
+        {
+          "message": "no such element",
+          "span": [
+            24,
+            26
+          ],
+          "text": ".5"
+        }
+      ],
+      "message": "a tuple of 2 has no element 5"
+    }
+  ],
   "errors": [
     {
       "index": 5,

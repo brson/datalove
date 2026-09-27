@@ -638,6 +638,13 @@ The grammar does not express the tensor shape rules above.
 
 Tuples and structs accept a trailing comma.
 
+The payload of `some`, `ok`, `er`, `term`, `data` and `error`
+is one expression, which may carry its own hint: `some : u32 / 1`.
+Datalit has no operators, so there is nothing more a payload could take in;
+in datalove, where there are, a payload is a primary expression
+and the postfix operators on it,
+and a binary operator after one is an error: `some (a + b)` needs its parentheses.
+
 
 ### Tuple
 
@@ -1021,12 +1028,6 @@ It prints no type hints.
 
 ### Divergences from the botspec
 
-- **Payload syntax.**
-  The botspec says `some`, `ok`, `er`, `data` and `error`
-  take a primary expression in datafun.
-  In datalit they take a `full_expr`, including a type hint:
-  `some : u32 / 1`.
-  Datalit has no binary operators, so the two agree on every datalit input.
 
 ### Unknowns
 

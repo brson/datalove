@@ -437,6 +437,47 @@ impl<'db> TypeContext<'db> {
     }
 
     /// F026: Invalid operand type for operator.
+    /// Report a field projection that failed, and pass its error on.
+    pub fn report_field_error(&mut self, site: crate::FieldErrorSite<'db>, error: TypeError) -> TypeError {
+        let (code, message, label, note) = match &error {
+            TypeError::FieldNotFound { field_name, ty } => (
+                "F067",
+                fmt!("`{ty}` has no field `{field_name}`"),
+                S("no such field"),
+                None,
+            ),
+            TypeError::ProjectionOnNonAggregate { ty } => (
+                "F068",
+                fmt!("`{ty}` has no fields"),
+                S("only a struct or a tuple has fields"),
+                None,
+            ),
+            TypeError::FieldIndexOutOfBounds { index, tuple_size } => (
+                "F069",
+                fmt!("a tuple of {tuple_size} has no element {index}"),
+                S("no such element"),
+                None,
+            ),
+            TypeError::NonCopyFieldProjection { field_ty } => (
+                "F070",
+                fmt!("a field of type `{field_ty}` cannot be read out of what holds it"),
+                S("this would move the field out"),
+                Some(S("the field's type is not a copy type, so reading it would move it while the \
+aggregate still holds it. Borrow it with `ref`, or clone it out with `@`.")),
+            ),
+            _ => unreachable!("not a field error: {error:?}"),
+        };
+        self.pending_diagnostics.push(PendingDiagnostic::FieldError {
+            site,
+            module_id: self.current_module_id,
+            code: InternedText::new(self.db, code.S()),
+            message: InternedText::new(self.db, message),
+            label: InternedText::new(self.db, label),
+            note: note.map(|n| InternedText::new(self.db, n)),
+        });
+        error
+    }
+
     /// F065: A literal out of range for the type it is checked against.
     ///
     /// Worded as datalit words it, with the range the type has.

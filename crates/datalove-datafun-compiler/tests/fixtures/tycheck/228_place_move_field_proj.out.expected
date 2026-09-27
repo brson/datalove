@@ -1,5 +1,23 @@
 {
-  "diagnostics": [],
+  "diagnostics": [
+    {
+      "code": "F070",
+      "labels": [
+        {
+          "message": "this would move the field out",
+          "span": [
+            217,
+            219
+          ],
+          "text": ".0"
+        }
+      ],
+      "message": "a field of type `int` cannot be read out of what holds it",
+      "notes": [
+        "the field's type is not a copy type, so reading it would move it while the aggregate still holds it. Borrow it with `ref`, or clone it out with `@`."
+      ]
+    }
+  ],
   "errors": [
     {
       "field_type": "int",

@@ -1,5 +1,20 @@
 {
-  "diagnostics": [],
+  "diagnostics": [
+    {
+      "code": "F068",
+      "labels": [
+        {
+          "message": "only a struct or a tuple has fields",
+          "span": [
+            20,
+            22
+          ],
+          "text": ".0"
+        }
+      ],
+      "message": "`int` has no fields"
+    }
+  ],
   "errors": [
     {
       "kind": "ProjectionOnNonAggregate",

@@ -366,9 +366,14 @@ The payload of `er` is checked against `error`, so a result's failure is
 written `er error "message"`. An `error` is not a result by itself: where a
 `!T` is expected, `error "message"` is a mismatch.
 
-The `some`, `ok`, `er`, `data`, and `error` keywords take a *primary* expression
-as their payload: a literal, variable, function call, or parenthesized expression.
-Binary operator expressions require parentheses:
+The `some`, `ok`, `er`, `data`, `error` and `term Name` constructors take a
+*primary* expression as their payload -- a literal, variable, function call,
+parenthesized expression, hinted expression or prefix operator -- together with
+the postfix operators written on it, so `some x@` is `some (x@)` and
+`some o?` is `some (o?)`. This is the same with a hint over the constructor:
+`: ?int / some o?` is `some (o?)` too. A binary operator after a payload is
+P065: `some a + b` is refused, and is written `some (a + b)`, or `(some a) + b`
+if the operator is meant for what is built:
 
 ```datalove
 some 42                  // ok: literal is primary

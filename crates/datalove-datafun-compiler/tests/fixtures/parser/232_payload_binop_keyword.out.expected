@@ -1,0 +1,51 @@
+{
+  "ast": {
+    "statements": [
+      {
+        "kind": "Let",
+        "name": "v",
+        "type_hint": null,
+        "value": {
+          "expr": {
+            "kind": "BinOp",
+            "lhs": {
+              "expr": {
+                "kind": "Data",
+                "type_hint": null,
+                "value": {
+                  "expr": {
+                    "kind": "True",
+                    "type_hint": null
+                  }
+                }
+              }
+            },
+            "op": "And",
+            "rhs": {
+              "expr": {
+                "kind": "False",
+                "type_hint": null
+              }
+            }
+          }
+        }
+      }
+    ]
+  },
+  "diagnostics": [
+    {
+      "code": "P065",
+      "labels": [
+        {
+          "message": "the payload ends before this",
+          "span": [
+            18,
+            21
+          ],
+          "text": "and"
+        }
+      ],
+      "message": "`and` after a constructor's payload"
+    }
+  ]
+}

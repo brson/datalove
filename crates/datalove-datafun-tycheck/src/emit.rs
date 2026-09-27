@@ -362,6 +362,21 @@ drop the return type.")
                 builder.emit_type();
             }
         }
+        PendingDiagnostic::FieldError { site, module_id: _, code, message, label, note } => {
+            let ts = match site {
+                crate::FieldErrorSite::Expr(key) => spans.lookup_expr(db, *key),
+                crate::FieldErrorSite::Set(local_index) => spans.lookup_set(db, *local_index),
+            };
+            if let Some(ts) = ts {
+                let mut builder = bct::diagnostic::DiagnosticBuilder::error(db, message.as_str(db))
+                    .code(code.as_str(db))
+                    .primary_label(ts, label.as_str(db));
+                if let Some(note) = note {
+                    builder = builder.note(note.as_str(db));
+                }
+                builder.emit_type();
+            }
+        }
         PendingDiagnostic::DuplicateTypeAlias { local_index, module_id: _, name } => {
             if let Some(ts) = spans.lookup_type_alias(db, *local_index) {
                 bct::diagnostic::DiagnosticBuilder::error(db, &format!("`{}` is defined twice", name.as_str(db)))
@@ -719,6 +734,14 @@ fn format_single_diagnostic<'db>(
             } else {
                 Some(base_msg)
             }
+        }
+        PendingDiagnostic::FieldError { site, module_id: _, code, message, label: _, note: _ } => {
+            let ts = match site {
+                crate::FieldErrorSite::Expr(key) => spans.lookup_expr(db, *key)?,
+                crate::FieldErrorSite::Set(local_index) => spans.lookup_set(db, *local_index)?,
+            };
+            let loc = format_location(db, &ts);
+            Some(format!("{}: error[{}]: {}", loc, code.as_str(db), message.as_str(db)))
         }
         PendingDiagnostic::DuplicateTypeAlias { local_index, module_id: _, name } => {
             let ts = spans.lookup_type_alias(db, *local_index)?;

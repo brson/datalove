@@ -671,7 +671,8 @@ fn typecheck_place_for_set<'db>(
         let is_last = i == steps.len() - 1;
         match step {
             PlaceStep::Field(field) => {
-                current_ty = typecheck_field_step(ctx, &current_ty, field)?;
+                current_ty = typecheck_field_step(ctx, &current_ty, field)
+                    .map_err(|e| ctx.report_field_error(crate::FieldErrorSite::Set(stmt.local_index), e))?;
             }
             PlaceStep::Index(idx) => {
                 if is_last {
