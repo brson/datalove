@@ -2,7 +2,7 @@
   "ast": {
     "expr": {
       "ParseError": {
-        "message": "expected '/' after type hint"
+        "message": "unexpected token in type hint"
       }
     },
     "type_hint": {

@@ -31,6 +31,15 @@ impl<'db> Parser<'db> {
         if self.peek_sigil(Sigil::Colon) {
             self.eat_sigil(Sigil::Colon);
             let type_hint = self.parse_type_hint();
+            // A type that did not parse was reported, and what follows it is
+            // whatever the writer meant by it; a missing `/` would say the
+            // same thing twice.
+            if let datalit::ast::TypeHint::ParseError(e) = &type_hint {
+                let kind = ast::ExprFunKind::ParseError(ast::ExprFunParseError {
+                    text: e.text, span: e.span.C(), message: e.message,
+                });
+                return self.create_expr(kind, ts);
+            }
             // Expect `/` after type hint.
             if !self.eat_sigil(Sigil::SlashForward) {
                 let ts = self.peek_text_span();

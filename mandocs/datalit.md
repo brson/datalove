@@ -219,7 +219,7 @@ A type hint may not name a type beyond the built-ins:
 datalit has no type aliases,
 so any bare name in a type is an error.
 Collections are written with their sigils,
-and `list`, `map`, `set`, `table` and `tensor` are not types.
+and `tuple`, `list`, `map`, `set`, `table` and `tensor` are not types.
 
 A datalit document is a single expression.
 Nothing but whitespace may follow it.
@@ -1024,9 +1024,6 @@ and against the parser's own diagnostics.
 
 ### Divergences from the botspec
 
-- **`tuple ( ... )` types.**
-  The type parser accepts `tuple (u32, u32)` as a spelling of `(u32, u32)`.
-  Nothing documents it.
 - **Payload syntax.**
   The botspec says `some`, `ok`, `er`, `data` and `error`
   take a primary expression in datafun.

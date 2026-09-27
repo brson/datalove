@@ -1,8 +1,8 @@
 {
   "ast": {
     "expr": {
-      "Map": {
-        "entries": []
+      "ParseError": {
+        "message": "expected '=' between map key and value types"
       }
     },
     "type_hint": {

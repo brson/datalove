@@ -2,7 +2,7 @@
   "ast": {
     "expr": {
       "ParseError": {
-        "message": "expected '/' after type hint"
+        "message": "unknown type 'set', did you mean '#{T}'?"
       }
     },
     "type_hint": {
@@ -25,20 +25,6 @@
         }
       ],
       "message": "unknown type 'set', did you mean '#{T}'?"
-    },
-    {
-      "code": "D012",
-      "labels": [
-        {
-          "message": "expected '/' separator between type hint and expression",
-          "span": [
-            2,
-            5
-          ],
-          "text": "set"
-        }
-      ],
-      "message": "expected '/' after type hint"
     }
   ]
 }

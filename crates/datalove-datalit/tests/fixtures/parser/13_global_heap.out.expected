@@ -2,7 +2,7 @@
   "ast": {
     "expr": {
       "ParseError": {
-        "message": "expected '/' after type hint"
+        "message": "unexpected token in type hint"
       }
     },
     "type_hint": {
@@ -25,20 +25,6 @@
         }
       ],
       "message": "unexpected token in type hint"
-    },
-    {
-      "code": "D012",
-      "labels": [
-        {
-          "message": "expected '/' separator between type hint and expression",
-          "span": [
-            2,
-            3
-          ],
-          "text": "#"
-        }
-      ],
-      "message": "expected '/' after type hint"
     }
   ]
 }

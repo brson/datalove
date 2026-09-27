@@ -2,7 +2,7 @@
   "ast": {
     "expr": {
       "ParseError": {
-        "message": "expected '/' after type hint"
+        "message": "unknown type 'map', did you mean '%{K = V}'?"
       }
     },
     "type_hint": {
@@ -25,20 +25,6 @@
         }
       ],
       "message": "unknown type 'map', did you mean '%{K = V}'?"
-    },
-    {
-      "code": "D012",
-      "labels": [
-        {
-          "message": "expected '/' separator between type hint and expression",
-          "span": [
-            2,
-            5
-          ],
-          "text": "map"
-        }
-      ],
-      "message": "expected '/' after type hint"
     }
   ]
 }

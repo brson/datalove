@@ -139,27 +139,6 @@ pub fn parse_type_hint<'db, S: TypeHintStream<'db>>(stream: &mut S) -> ast::Type
                 )
             }
         }
-        Some("tuple") => {
-            let ts = stream.peek_text_span();
-            stream.eat_word("tuple");
-            // Check if it's anonymous (starts with () or named (starts with name).
-            if let Some(iter) = stream.eat_branch(Sigil::ParenOpen) {
-                // Anonymous tuple with explicit keyword.
-                let mut sub_parser = branch(iter, stream.alias_base());
-                let fields = sub_parser.parse_comma_separated(|p| p.parse_type_hint());
-                sub_parser.error_if_not_exhausted_type_hint();
-                stream.absorb_aliases(sub_parser.take_alias_spans(), sub_parser.alias_counter);
-                ast::TypeHint::AnonTuple(ast::TypeHintAnonTuple { fields })
-            } else {
-                stream.type_hint_error(ts,
-                    "expected () after tuple keyword",
-                    "D001",
-                    "expected '(' after 'tuple'"
-                )
-            }
-        }
-
-        // tensor/map/set keywords no longer valid as type hints; handled via sigil branches below.
         _ => {
             // Check for branches: parentheses for tuples, brackets for lists, braces for structs.
             if let Some(iter) = stream.eat_branch(Sigil::ParenOpen) {
@@ -267,17 +246,18 @@ pub fn parse_type_hint<'db, S: TypeHintStream<'db>>(stream: &mut S) -> ast::Type
                     }
                     // A collection type is written with its sigil, and these
                     // are the names of the collections rather than the types.
-                    // `tuple` and `enum` are read before this and say their
-                    // own piece about the brace that has to follow them.
-                    "list" | "map" | "set" | "table" | "tensor" => {
+                    // `enum` is read before this and says its own piece about
+                    // the brace that has to follow it.
+                    "tuple" | "list" | "map" | "set" | "table" | "tensor" => {
                         let ts = stream.peek_text_span();
                         let spelled = match lower.as_str() {
+                            "tuple" => "(T, ...)",
                             "list" => "[T]",
                             "map" => "%{K = V}",
                             "set" => "#{T}",
                             "table" => "{| name: T |}",
                             "tensor" => "[|T, N|]",
-                            _ => unreachable!("matched one of the five just above"),
+                            _ => unreachable!("matched one of the six just above"),
                         };
                         let message = format!(
                             "unknown type '{}', did you mean '{}'?", word, spelled,

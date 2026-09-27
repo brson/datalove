@@ -28,7 +28,16 @@ impl<'db> Parser<'db> {
         let expr_full = if self.peek_sigil(Sigil::Colon) {
             self.eat_sigil(Sigil::Colon);
             let type_hint = self.parse_type_hint();
-            if !self.eat_sigil(Sigil::SlashForward) {
+            if let ast::TypeHint::ParseError(e) = &type_hint {
+                // The type was reported, and what follows it is whatever the
+                // writer meant by it; a missing `/` would say the same thing
+                // twice.
+                let error_expr = ast::Expr::ParseError(ast::ExprParseError {
+                    text: e.text, span: e.span.C(), message: e.message,
+                });
+                self.eat_sigil(Sigil::SlashForward);
+                ast::ExprFull::new(self.db, Some(local_index), Some(type_hint.C()), error_expr)
+            } else if !self.eat_sigil(Sigil::SlashForward) {
                 let ts = self.peek_text_span();
                 let error_expr = self.emit_expr_error(ts,
                     "expected '/' after type hint",
