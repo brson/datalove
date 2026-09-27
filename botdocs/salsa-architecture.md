@@ -65,7 +65,7 @@ database of their own. Compiler work uses the datafun one, re-exported as
 | `#[salsa::input]` | 1 | `Source`. A path's text, changed with `set_text`. The only thing that comes from outside. |
 | `#[salsa::interned]` | 12 | Deduplicated by content: `InternedText`, `InternedSubText`, `ModuleId`, `Module`, `ModuleGraph`, `Package`, `PackageModule`, `PackageWorld`, `Script`, `ScriptUnit`, `ReachableFuncIds`, `RiderSources`. |
 | `#[salsa::tracked]` struct | 57 | Computed values with an identity. Three have a `#[tracked]` field; see below. |
-| `#[salsa::tracked]` fn | 128 | Of which 44 keep a memo for a module compile; the rest are script, datalit and lexing paths. |
+| `#[salsa::tracked]` fn | 126 | Of which 43 keep a memo for a module compile; the rest are script, datalit and lexing paths. |
 
 ### The three structs with a tracked field, and why
 
@@ -157,7 +157,7 @@ Measured on the system library plus one local module, 26 modules:
 
 | | queries run |
 |---|---|
-| cold compile | 640 |
+| cold compile | 615 |
 | unchanged recompile | **0** |
 | a second unchanged recompile | **0** |
 | edit one function in your own module | 23 |

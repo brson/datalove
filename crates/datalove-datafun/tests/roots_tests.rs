@@ -194,12 +194,11 @@ fn the_roots_can_change_between_compiles() {
 
 /// Every per-module phase sees only the reachable modules, not just some of them.
 ///
-/// The pruning is of the `ModuleGraph`, and all five phases derive their work
-/// list from it -- `parse_module_graph` and `resolve_all_names` walk it,
-/// `typecheck_module_graph` and `analyze_module_graph` walk it,
-/// `lower_all_module_functions` and the assembly pass walk it. So one change
-/// covers all five, and this is the assertion that says so rather than the
-/// reasoning.
+/// The pruning is of the `ModuleGraph`, and the phases take their work list from
+/// it, so one change covers them all. This is the assertion that says so rather
+/// than the reasoning.
+///
+/// The parse is not in this list, and that is the point of the test below it.
 #[test]
 fn every_phase_sees_only_the_reachable_modules() {
     let recorder = QueryRecorder::new();
@@ -216,7 +215,6 @@ fn every_phase_sees_only_the_reachable_modules() {
     let ran = |q: &str| executed.iter().filter(|e| e.query == q).count();
     // `mid` and `base`, out of five in the world.
     for (phase, query) in [
-        ("1 parse", "parse_module_full"),
         ("2 name resolution", "resolve_module_names"),
         ("3 typecheck", "typecheck_module"),
         ("4 ownership", "analyze_module"),
@@ -229,4 +227,38 @@ fn every_phase_sees_only_the_reachable_modules() {
             ran(query),
         );
     }
+}
+
+/// **Parsing is not pruned, because resolution is not.** Every module in the
+/// world is parsed however few of them are compiled.
+///
+/// Reading a module's `require` lines means parsing it, and `dependencies_of`
+/// builds the whole world's dependency map before anything knows what the roots
+/// reach -- so `import_demands` asks `parse_module_full` for every module, and
+/// that is the parse phase 1 then gets from the memo.
+///
+/// This is the ceiling on what `Roots` currently buys: `cold_phases` has a
+/// compile pruned to one module still spending 8.7ms of its 9.3ms in resolution.
+/// Reachability is a walk and a walk need only parse what it reaches -- parse the
+/// roots, read their requires, parse those. Doing that is the next piece of work,
+/// and when it lands this count drops to the reachable set and this test wants
+/// tightening.
+#[test]
+fn the_whole_world_is_still_parsed_however_few_modules_are_compiled() {
+    let recorder = QueryRecorder::new();
+    let db = datafun::Database::recording(&recorder);
+    let mut pipeline = ModuleCompilationPipeline::default();
+    add_fixture(&db, &mut pipeline);
+    pipeline.set_roots(roots_of(&["local/test/mid"]));
+
+    let compiled = pipeline.compile_fresh(&db);
+    assert!(compiled.is_successful(), "{:?}", compiled.all_errors());
+    drop(compiled);
+
+    let executed = recorder.take();
+    let parses = executed.iter().filter(|e| e.query == "parse_module_full").count();
+    assert_eq!(
+        parses, MODULES,
+        "resolution parses the world to find its requires; it parsed {parses}",
+    );
 }

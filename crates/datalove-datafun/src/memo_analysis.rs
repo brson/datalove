@@ -320,6 +320,15 @@ pub fn analyze_memo_worldfile(content: &str) -> AnyResult<MemoAnalysis> {
             }
         }
 
+        // The window opens before package resolution, because that is where a
+        // module is parsed. `import_demands` asks `parse_module_full` for each
+        // module, sharing phase 1's memo rather than parsing the world a second
+        // time -- so by the time `parse_module_graph` runs, the parses are memo
+        // hits and log nothing. Opening the window after resolution reported
+        // every module as unparsed, in all sixteen fixtures at once, which is
+        // this suite's documented failure mode rather than a regression.
+        enable_query_logging();
+
         // Extract dependencies after the action.
         let path_deps = extract_dependencies(&world, &db);
 
@@ -333,7 +342,6 @@ pub fn analyze_memo_worldfile(content: &str) -> AnyResult<MemoAnalysis> {
         // Prepare and run compilation with query logging.
         let (graph, resolved_requires) = world.build_graph(&db, &path_deps, &crate::incremental::Roots::All);
 
-        enable_query_logging();
         let parsed_graph = parse_module_graph(&db, graph, resolved_requires, Vec::new());
         let parse_log = disable_query_logging();
         let parsed_modules: BTreeSet<String> = get_executed_modules(&parse_log, "parse")

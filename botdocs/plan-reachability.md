@@ -26,22 +26,26 @@ system library plus one local module, 25 modules, one rider:
 
 | | whole world | reachable from a module that requires nothing |
 |---|---|---|
-| package resolve + graph | 9.59ms | 9.44ms |
-| phases 1-4 (check) | 13.81ms | 0.66ms |
-| phase 5 (lower) | 10.04ms | 0.06ms |
-| **whole** | **33.44ms** | **10.16ms** |
+| package resolve + graph | 8.75ms | 8.66ms |
+| phases 1-4 (check) | 7.10ms | 0.58ms |
+| phase 5 (lower) | 8.73ms | 0.05ms |
+| **whole** | **24.58ms** | **9.29ms** |
+
+Those are the figures after the duplicate parse was removed; they were 33.44ms
+and 10.16ms before, and the phases 1-4 column held the parse that resolution now
+holds. See the resolution section below.
 
 Three things follow, and the second was a surprise.
 
-**The frontend is the bigger half.** Phases 1-4 are 42% of a cold compile and
-phase 5 is 30%. So *check the whole world, lower from roots* -- the split that
-keeps errors eager -- caps the win at 30% and leaves most of it behind. Pruning
-the graph itself reaches both.
+**Pruning phase 5 alone is not enough.** *Check the whole world, lower from
+roots* is the split that keeps errors eager, and it caps the win at phase 5's
+share -- 30% when first measured, 36% now. Pruning the graph itself reaches the
+frontend too, which is why `Roots` prunes the graph.
 
-**Package resolution becomes the cold compile.** It is 28% before pruning and
-92% of what is left after. It cannot be pruned by reachability, because
-resolving `require`s is how you find out what is reachable. **This is the next
-thing to profile**, and until it moves, 9.4ms is the floor for any invocation.
+**Package resolution becomes the cold compile.** It is 36% before pruning and
+93% of what is left after, and it cannot be pruned by reachability as written,
+because resolving `require`s is how you find out what is reachable. It has been
+profiled; see below.
 
 **The edit loop is not what this is for.** An edit already costs 23 queries
 whatever the world size; `compile_scaling_tests` holds that and
@@ -82,6 +86,47 @@ roots is for running a program, not for vouching for a world**. CI and
 `just test` want `All`. A library wants checking whether or not this program
 calls into it.
 
+## Package resolution, profiled
+
+`cargo run --release -p datalove-bench --example resolve_profile -- 15`:
+
+| step | |
+|---|---|
+| intern packages | 0.01ms |
+| `import_demands` | 8.45ms |
+| resolve demands to modules | 0.03ms |
+| `to_module_graph` + path walk | 0.03ms |
+| `build_graph` | 0.06ms |
+
+**Resolution is `import_demands` and nothing else** -- 98.5% of it -- and
+`import_demands` is a parse of every module in the world. Resolving the demands
+once they are found, sorting the graph and interning it come to 0.13ms between
+them. So there is no resolution algorithm to speed up: there is a parse.
+
+It used to be a *second* parse. `module_import_demands` took a `Source` and
+called `parse`, which is `parse_with_module_id` with no module id; phase 1's
+`parse_module_full` passes one. Two tracked functions over one body of work, so
+every module was parsed twice and resolution's copy was discarded but for its
+`require` lines. Keying `module_import_demands` on the `Module` phase 1 uses
+makes them share: a cold compile went from 33.44ms to 24.58ms and from 640
+queries to 615, `parse` from 26 memos to one -- the rider source, which still
+goes through it.
+
+`resolve_profile`'s last row is the guard. It parses every module the way phase 1
+does, after resolution, and wants to be a memo hit: 5.33ms before, 0.02ms after.
+
+The second parse was also minting a second copy of every module's AST, which no
+timing showed. `ExprFun` went from 288 structs to 144 and `StmtFun` from 48 to
+24 -- exactly halved -- and the tracked structs a 24-module world holds went from
+135224 bytes to 107000. `database_memory_tests` found that, by failing: it asked
+for tokens to be under 40% of all tracked-struct bytes, and a 21% smaller
+denominator took them to 47% without a byte of them moving. The assertion is an
+absolute one now, for the reason written on it.
+
+What is left is one necessary parse of the world, and it is necessary only because
+resolution reads every module rather than following requires from the roots. That
+is what item 1 below is about.
+
 ## Status
 
 Done:
@@ -90,13 +135,18 @@ Done:
   `set_roots`, defaulting to `All`.
 - `roots_tests`: transitive requires, direction, unions, empty roots, roots that
   name nothing, the error-visibility change, and changing roots between compiles.
-- `cold_phases`, which is where the numbers above come from.
+- `cold_phases` and `resolve_profile`, which are where the numbers above come
+  from.
+- The duplicate parse of the world, removed.
 
 Next, roughly in order of what it buys:
 
-1. **Profile package resolution.** It is the floor now. 9.4ms for 25 modules is
-   a lot for work that only reads `require` lines, and nothing in
-   `botdocs/reports/` has looked at it.
+1. **Resolve from the roots, not over the world.** Resolution is a parse of every
+   module, so a compile pruned to two modules still parses twenty-five: 8.66ms of
+   its 9.29ms. Reachability is a walk, and a walk only needs to parse what it
+   reaches -- parse the roots, read their requires, parse those. That makes
+   resolution demand-driven and is what makes pruning actually pay. As it stands
+   `dependencies_of` computes the whole world's dependency map up front.
 2. **Decide the roots from the program.** Nothing yet computes a root set: the
    CLI and the REPL both still pass `All`. For `datalove run prog.dfs` the roots
    are the modules the script requires, which is known only once the script is

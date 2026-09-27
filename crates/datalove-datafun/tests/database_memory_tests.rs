@@ -90,23 +90,33 @@ fn the_tokens_are_still_accounted_for() {
     );
 }
 
-/// Tokens should not be the biggest thing in the database any more.
+/// Tokens cost what values cost, not what tracked structs cost.
+///
+/// As a tracked struct per token this was 1032 structs and about 78 KB counting
+/// the vector of ids; as values in the `Vec` a `ChunkLex` already held it is
+/// about 50 KB. The ceiling is the old figure, so the test fails if they go back
+/// to being structs -- which is what its sibling above checks directly, and this
+/// checks by the bill.
+///
+/// **This asserted a share of the database and that was wrong.** Tokens were 43%
+/// of all tracked-struct bytes when they were structs, so the test asked for
+/// under 40% of the total -- and then removing a duplicate parse of the world cut
+/// `ExprFun` and `StmtFun` in half, took the total from 135224 bytes to 107000,
+/// and pushed tokens to 47% without a byte of them moving. A ratio against a
+/// denominator that legitimately shrinks is a guard that fails on improvement.
+/// Tokens are in fact still the largest single ingredient; they are just cheaper
+/// than they were, which is what was actually meant.
 #[test]
-fn tokens_are_no_longer_the_largest_cost() {
+fn tokens_cost_what_values_cost() {
     let held = ingredients(24);
-    let total: usize = held.iter().map(|(_, _, bytes)| bytes).sum();
-
     let chunk_lex = held.iter()
         .find(|(name, _, _)| name.ends_with("ChunkLex"))
         .map(|(_, _, bytes)| *bytes)
-        .unwrap_or(0);
+        .expect("the database should hold a ChunkLex per module");
 
-    // Tokens were 43% of the database when each one was a tracked struct.
     assert!(
-        chunk_lex * 100 / total < 40,
-        "tokens are {}% of {} bytes; they were 43% before they became values, \
-         so this has gone backwards",
-        chunk_lex * 100 / total,
-        total,
+        chunk_lex < 66 * 1024,
+        "tokens cost {chunk_lex} bytes; as tracked structs they cost about \
+         78 KB and the structs alone were 66 KB, so this has gone backwards",
     );
 }

@@ -370,11 +370,19 @@ queries key on an interned tuple that cannot be mapped back.
 `log_query` calls, spread over 6 of the 94 tracked functions. It is thread-local, so anything
 rayon runs is invisible, and a query nobody annotated does not exist to it.
 
-Its failure mode is worth knowing, because it has bitten: moving the parse
-queries to another crate left their `log_query` calls behind, and all 16
-fixtures reported a regression. Nothing about memoization had changed. **If the
-fixtures move as a group after a refactor, check the instrumentation before
-believing them.**
+Its failure mode is worth knowing, because it has bitten twice. Moving the parse
+queries to another crate left their `log_query` calls behind, and all 16 fixtures
+reported a regression; nothing about memoization had changed. Then package
+resolution was made to share phase 1's parse, which moved the parse *earlier* --
+before the point at which the harness called `enable_query_logging` -- so by the
+time the window opened every parse was a memo hit and all 16 fixtures reported
+every module as unparsed. Again nothing had regressed; the work had moved out of
+the window.
+
+**If the fixtures move as a group after a refactor, check the instrumentation
+before believing them**, and check where the window starts as well as where the
+`log_query` calls are. A hand-placed log measures a *place*, so it breaks when
+work moves between places. `QueryRecorder` measures execution and does not.
 
 **Memory.** `<dyn salsa::Database>::memory_usage(&db)` reports per-ingredient
 counts and bytes. It sizes fields by their stack size, so a `Vec` looks like
