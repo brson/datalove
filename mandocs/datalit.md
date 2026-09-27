@@ -1040,9 +1040,6 @@ and against the parser's own diagnostics.
 - **`tuple ( ... )` types.**
   The type parser accepts `tuple (u32, u32)` as a spelling of `(u32, u32)`.
   Nothing documents it.
-- **The `f32` default.**
-  Earlier drafts of this document showed float literals as `f32`.
-  Both the botspec and the implementation default to `f64`.
 - **Payload syntax.**
   The botspec says `some`, `ok`, `er`, `data` and `error`
   take a primary expression in datafun.
