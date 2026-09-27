@@ -39,6 +39,9 @@ pub trait SpanLookup<'db> {
     /// Look up the span of a bare name in type position by local_index.
     fn lookup_alias(&self, db: &'db dyn crate::Db, local_index: u32) -> Option<TextSpan<'db>>;
 
+    /// Look up the span of a type alias definition by local_index.
+    fn lookup_type_alias(&self, db: &'db dyn crate::Db, local_index: u32) -> Option<TextSpan<'db>>;
+
     /// Look up span for a function definition in a specific module.
     ///
     /// For local spans, module_id is ignored. For module graph spans,
@@ -115,6 +118,13 @@ impl<'db> SpanLookup<'db> for LocalSpanLookup<'_, 'db> {
 
     fn lookup_alias(&self, db: &'db dyn crate::Db, local_index: u32) -> Option<TextSpan<'db>> {
         self.spans.lookup_alias(local_index).map(|entry| {
+            let (text, span) = entry.to_text_and_span(db);
+            TextSpan::new(text, span)
+        })
+    }
+
+    fn lookup_type_alias(&self, db: &'db dyn crate::Db, local_index: u32) -> Option<TextSpan<'db>> {
+        self.spans.lookup_type_alias(local_index).map(|entry| {
             let (text, span) = entry.to_text_and_span(db);
             TextSpan::new(text, span)
         })
@@ -215,6 +225,14 @@ impl<'db> SpanLookup<'db> for ModuleGraphSpanLookup<'_, 'db> {
     fn lookup_alias(&self, db: &'db dyn crate::Db, local_index: u32) -> Option<TextSpan<'db>> {
         let spans = self.spans(db, self.module_id)?;
         spans.lookup_alias(local_index).map(|entry| {
+            let (text, span) = entry.to_text_and_span(db);
+            TextSpan::new(text, span)
+        })
+    }
+
+    fn lookup_type_alias(&self, db: &'db dyn crate::Db, local_index: u32) -> Option<TextSpan<'db>> {
+        let spans = self.spans(db, self.module_id)?;
+        spans.lookup_type_alias(local_index).map(|entry| {
             let (text, span) = entry.to_text_and_span(db);
             TextSpan::new(text, span)
         })
@@ -333,11 +351,22 @@ drop the return type.")
         PendingDiagnostic::UnresolvedTypeAlias { local_index, module_id: _, name } => {
             if let Some(ts) = spans.lookup_alias(db, *local_index) {
                 let msg = format!("unknown type `{}`", name.as_str(db));
-                bct::diagnostic::DiagnosticBuilder::error(db, &msg)
+                let mut builder = bct::diagnostic::DiagnosticBuilder::error(db, &msg)
                     .code("F064")
                     .primary_label(ts, "no type of this name is in scope")
                     .note("a bare name in type position is a type alias, written `type Name: \
-<type>`, or one of the type parameters of the generic function it appears in.")
+<type>`, or one of the type parameters of the generic function it appears in.");
+                if let Some(suggestion) = datalove_datalit::parser_util::type_name_suggestion(name.as_str(db)) {
+                    builder = builder.note(&suggestion);
+                }
+                builder.emit_type();
+            }
+        }
+        PendingDiagnostic::DuplicateTypeAlias { local_index, module_id: _, name } => {
+            if let Some(ts) = spans.lookup_type_alias(db, *local_index) {
+                bct::diagnostic::DiagnosticBuilder::error(db, &format!("`{}` is defined twice", name.as_str(db)))
+                    .code("F066")
+                    .primary_label(ts, "a type alias is defined once")
                     .emit_type();
             }
         }
@@ -690,6 +719,11 @@ fn format_single_diagnostic<'db>(
             } else {
                 Some(base_msg)
             }
+        }
+        PendingDiagnostic::DuplicateTypeAlias { local_index, module_id: _, name } => {
+            let ts = spans.lookup_type_alias(db, *local_index)?;
+            let loc = format_location(db, &ts);
+            Some(format!("{}: error[F066]: `{}` is defined twice", loc, name.as_str(db)))
         }
         PendingDiagnostic::LiteralOutOfRange { expr_key, module_id: _, message, note: _ } => {
             let ts = spans.lookup_expr(db, *expr_key)?;

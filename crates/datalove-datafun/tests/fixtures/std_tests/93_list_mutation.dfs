@@ -1,6 +1,6 @@
 require module sys/std/list
 
-import list.set
+import list.replace
 import list.insert
 import list.remove
 import list.reserve
@@ -11,8 +11,8 @@ import list.last
 // Elements crossing the generic boundary in both directions, for a scalar and
 // for a type that owns memory.
 var nums: [u32] = [10, 20, 30]
-let set_ok = set(mut nums, (: index / 1), (: u32 / 99))
-let set_oob = set(mut nums, (: index / 9), (: u32 / 0))
+let set_ok = replace(mut nums, (: index / 1), (: u32 / 99))
+let set_oob = replace(mut nums, (: index / 9), (: u32 / 0))
 
 var words: [string] = ["a", "c"]
 let ins_ok = insert(mut words, (: index / 1), "b")

@@ -1,0 +1,27 @@
+{
+  "ast": {
+    "statements": [
+      {
+        "kind": "TypeAlias",
+        "name": "int",
+        "type_hint": "U32"
+      }
+    ]
+  },
+  "diagnostics": [
+    {
+      "code": "P064",
+      "labels": [
+        {
+          "message": "`int` is reserved, since it is a type, or starts one",
+          "span": [
+            5,
+            8
+          ],
+          "text": "int"
+        }
+      ],
+      "message": "`int` cannot be declared here"
+    }
+  ]
+}

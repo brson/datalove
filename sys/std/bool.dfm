@@ -1,11 +1,3 @@
-// Logical negation.
-fun not(self: bool): bool
-  if self
-    ret false
-  else
-    ret true
-  end if
-end fun
 
 // Logical AND.
 fun and(self: bool, other: bool): bool

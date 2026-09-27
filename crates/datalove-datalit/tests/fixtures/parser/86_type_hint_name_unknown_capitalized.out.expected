@@ -1,0 +1,13 @@
+{
+  "ast": {
+    "expr": {
+      "Int": {
+        "value": "42"
+      }
+    },
+    "type_hint": {
+      "Alias": "Int"
+    }
+  },
+  "diagnostics": []
+}

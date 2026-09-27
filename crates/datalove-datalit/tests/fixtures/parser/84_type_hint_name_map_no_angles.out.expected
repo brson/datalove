@@ -1,0 +1,13 @@
+{
+  "ast": {
+    "expr": {
+      "Map": {
+        "entries": []
+      }
+    },
+    "type_hint": {
+      "Alias": "map"
+    }
+  },
+  "diagnostics": []
+}

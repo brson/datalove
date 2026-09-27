@@ -1,5 +1,0 @@
-require module sys/std/bool
-
-import bool.not
-
-let output = (not(true), not(false))

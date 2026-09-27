@@ -816,6 +816,13 @@ impl<'db> TypeContext<'db> {
                     position: InternedText::new(self.db, position.S()),
                 });
             }
+            if let TypeError::DuplicateTypeAlias { name, local_index } = error {
+                self.pending_diagnostics.push(PendingDiagnostic::DuplicateTypeAlias {
+                    local_index: *local_index,
+                    module_id,
+                    name: InternedText::new(self.db, name.C()),
+                });
+            }
             // Name resolution converts the type hints in signatures and in
             // alias definitions, so a name that resolves to nothing in one of
             // those is found here rather than while checking a body.

@@ -49,19 +49,31 @@ In syntax descriptions, the following conventions apply:
 
 ## 2. Lexical Conventions
 
-### 2.1 Keywords
+### 2.1 Reserved Words
 
-The following identifiers are reserved:
+Datalove has no words reserved everywhere. A word is special in a position --
+the start of an expression, the start of a statement, a type -- and is reserved
+only for the names that are read in that position, where it would mean
+something else. It is refused where such a name is declared (P064), and free
+everywhere else.
 
-```datalove
-and       atom      break     case      continue  data
-default   else      end       enum      error     er
-false     for       fun       icall     if        import
-in        let       loop      match     mut       none
-not       ok        or        out       ref       require
-ret       some      table     term
-true      type      var       while     xor
-```
+| Name | Reserved | Why |
+|------|----------|-----|
+| value (`let`, `var`, `const`, `if`/`else`/`case` bindings) | `true` `false` `none` `some` `ok` `er` `data` `error` `atom` `term` `not` `icall` | they start an expression |
+| parameter | the value words, and `mut` `out` `ref` `const` | the mode is written where the name is |
+| function | the value words, and `let` `var` `const` `set` `fun` `native` `ret` `if` `match` `loop` `break` `continue` `require` `import` `type` `debuglog` | a call is read like a value, and a call statement starts where a statement does |
+| type alias, type parameter | `bool` `u8`..`u64` `i8`..`i64` `index` `offset` `f32` `f64` `int` `string` `data` `error` `atom` `term` `enum` | they are types, or start one |
+| module, field, column, variant | nothing | no word means anything else there |
+
+So a value may be called `type` or `list`, a type alias `table` or `Error`, and
+a module `u8` -- the standard library's modules are named after the types they
+serve. `and`, `or` and `xor` are read only after an operand, and the words
+inside constructs (`else`, `end`, `case`, `default`, `with`, `is`, `while`
+after `loop`, `module` and `rider` after `require`) only where a name cannot be,
+so none of them is reserved.
+
+The lists are in `datalove-datalit/src/parser_util.rs`, which both parsers
+read.
 
 ### 2.2 Literals
 
@@ -508,8 +520,10 @@ A name that is neither is F064, wherever the type is written: a `let`, `var` or
 `const` annotation, a hint, a parameter, a return type, or inside any of those.
 
 A collection type is written with its sigil rather than its name, so `tuple`,
-`list`, `map`, `set`, `table` and `tensor` in type position are D008 rather than
-names of anything.
+`list`, `map`, `set`, `table` and `tensor` are not types. They are names like any
+other, free for an alias or a type parameter; where none of that name is in
+scope the F064 saying so adds how the collection is written. A primitive written
+in another case, `Int`, gets the same treatment, with the spelling it meant.
 
 ## 5. Copy and Linear Types
 

@@ -58,7 +58,7 @@ fun last<T>(ref self: [T]): ?T
 end fun
 
 // Replace the element at an index. False if the index is past the end.
-fun set<T>(mut self: [T], i: index, elem: T): bool
+fun replace<T>(mut self: [T], i: index, elem: T): bool
   ret list_set(mut self, i, elem)
 end fun
 

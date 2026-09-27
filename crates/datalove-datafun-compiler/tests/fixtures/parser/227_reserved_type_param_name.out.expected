@@ -1,0 +1,47 @@
+{
+  "ast": {
+    "statements": [
+      {
+        "body": [
+          {
+            "kind": "Ret",
+            "value": {
+              "expr": {
+                "kind": "Place",
+                "root": "x",
+                "steps": []
+              }
+            }
+          }
+        ],
+        "kind": "Fun",
+        "name": "f",
+        "params": [
+          {
+            "is_comptime": false,
+            "mode": "In",
+            "name": "x",
+            "type_hint": "Bool"
+          }
+        ],
+        "return_type": "Bool"
+      }
+    ]
+  },
+  "diagnostics": [
+    {
+      "code": "P064",
+      "labels": [
+        {
+          "message": "`bool` is reserved, since it is a type, or starts one",
+          "span": [
+            6,
+            10
+          ],
+          "text": "bool"
+        }
+      ],
+      "message": "`bool` cannot be declared here"
+    }
+  ]
+}

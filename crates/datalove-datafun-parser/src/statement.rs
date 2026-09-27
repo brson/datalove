@@ -15,6 +15,7 @@ use datalove_datafun_ast::ast;
 use datalove_datalit as datalit;
 use datalove_datalit::parser_util::{TextSpan, TokenStream, TokenStreamExt};
 use super::state::Parser;
+use datalove_datalit::parser_util::NameKind;
 
 impl<'db> Parser<'db> {
     pub(super) fn parse_statement(
@@ -110,7 +111,7 @@ impl<'db> Parser<'db> {
     fn parse_let(&mut self) -> ast::Statement<'db> {
         self.eat_word("let");
 
-        let name = match self.eat_name() {
+        let name = match self.eat_declared_name(NameKind::Value) {
             Some(n) => n,
             None => {
                 let ts = self.peek_text_span();
@@ -153,7 +154,7 @@ impl<'db> Parser<'db> {
     fn parse_var(&mut self) -> ast::Statement<'db> {
         self.eat_word("var");
 
-        let name = match self.eat_name() {
+        let name = match self.eat_declared_name(NameKind::Value) {
             Some(n) => n,
             None => {
                 let ts = self.peek_text_span();
@@ -200,7 +201,7 @@ impl<'db> Parser<'db> {
     fn parse_const(&mut self) -> ast::Statement<'db> {
         self.eat_word("const");
 
-        let name = match self.eat_name() {
+        let name = match self.eat_declared_name(NameKind::Value) {
             Some(n) => n,
             None => {
                 let ts = self.peek_text_span();
@@ -325,7 +326,7 @@ impl<'db> Parser<'db> {
         let local_index = self.record_fun_span(fun_span);
         self.eat_word("fun");
 
-        let name = match self.eat_name() {
+        let name = match self.eat_declared_name(NameKind::Function) {
             Some(n) => n,
             None => {
                 let ts = self.peek_text_span();
@@ -424,7 +425,7 @@ impl<'db> Parser<'db> {
     ) -> (Vec<InternedText<'db>>, Vec<Option<ast::TypeBound>>) {
         let mut sub = Parser::from_branch_with_context(
             self.db, inner, self.source_text(), None, self.module_id());
-        let names = sub.parse_comma_separated(|p| p.eat_name());
+        let names = sub.parse_comma_separated(|p| p.eat_declared_name(NameKind::Type));
         sub.error_if_not_exhausted();
         self.had_error |= sub.had_error;
         let names: Vec<_> = names.into_iter().flatten().collect();
@@ -565,7 +566,7 @@ impl<'db> Parser<'db> {
                 .emit_parse();
         }
 
-        let name = match self.eat_name() {
+        let name = match self.eat_declared_name(NameKind::Parameter) {
             Some(n) => n,
             None => {
                 self.had_error = true;
@@ -807,7 +808,7 @@ impl<'db> Parser<'db> {
         // Parse optional then binding: |identifier|
         let then_binding = if self.peek_sigil(Sigil::Pipe) {
             self.eat_sigil(Sigil::Pipe);
-            let binding = match self.eat_name() {
+            let binding = match self.eat_declared_name(NameKind::Value) {
                 Some(n) => n,
                 None => {
                     self.had_error = true;
@@ -868,7 +869,7 @@ impl<'db> Parser<'db> {
             // Parse optional else binding: |identifier|
             let else_binding = if else_sub.peek_sigil(Sigil::Pipe) {
                 else_sub.eat_sigil(Sigil::Pipe);
-                let binding = match else_sub.eat_name() {
+                let binding = match else_sub.eat_declared_name(NameKind::Value) {
                     Some(n) => n,
                     None => {
                         else_sub.had_error = true;
@@ -1018,7 +1019,7 @@ impl<'db> Parser<'db> {
         self.eat_word("type");
         let local_index = self.record_type_alias_span(ts);
 
-        let name = match self.eat_name() {
+        let name = match self.eat_declared_name(NameKind::Type) {
             Some(n) => n,
             None => {
                 let ts = self.peek_text_span();
@@ -1067,7 +1068,7 @@ impl<'db> Parser<'db> {
         }
         self.eat_word("fun");
 
-        let name = match self.eat_name() {
+        let name = match self.eat_declared_name(NameKind::Function) {
             Some(n) => n,
             None => {
                 let ts = self.peek_text_span();
@@ -1193,7 +1194,7 @@ impl<'db> Parser<'db> {
                                     InternedText::new(self.db, "<error>".S())
                                 }
                             };
-                            let binding = match case_sub.eat_name() {
+                            let binding = match case_sub.eat_declared_name(NameKind::Value) {
                                 Some(n) => n,
                                 None => {
                                     self.had_error = true;

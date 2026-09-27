@@ -405,15 +405,13 @@ pub enum TypeError {
     /// its own, so a native declared there resolves to nothing and every call
     /// to it goes unresolved.
     NativeFunOutsideRider { name: String, fun_local_index: u32 },
-    /// Duplicate type alias definition.
-    DuplicateTypeAlias(String),
+    /// A type alias defined twice; the index is the second definition's.
+    DuplicateTypeAlias { name: String, local_index: u32 },
     /// Two imports bound the same name.
     ///
     /// The second used to overwrite the first without a word, which made a
     /// call resolve to whichever import came last.
     DuplicateImport { name: String, first: String, second: String },
-    /// Cannot shadow primitive type name.
-    CannotShadowPrimitive(String),
     /// A const expression referenced a binding that is not itself const.
     NonConstInConstExpr(String),
     /// A type parameter appeared inside a composite type.
@@ -606,19 +604,6 @@ pub fn types_equivalent<'db>(db: &'db dyn Db, t1: &Type<'db>, t2: &Type<'db>) ->
         }
         _ => false,
     }
-}
-
-// ============================================================================
-// Primitive Type Names
-// ============================================================================
-
-/// Check if a name is a primitive type name that cannot be shadowed.
-pub fn is_primitive_name(name: &str) -> bool {
-    matches!(name,
-        "bool" | "u8" | "i8" | "u16" | "i16" | "u32" | "i32" | "u64" | "i64" |
-        "index" | "offset" | "f32" | "f64" | "int" | "string" | "data" | "error" |
-        "tuple" | "enum" | "map" | "set"
-    )
 }
 
 // ============================================================================

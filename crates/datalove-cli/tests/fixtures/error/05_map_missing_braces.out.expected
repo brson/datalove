@@ -1,15 +1,11 @@
-[31m[D008] Error:[0m unknown type 'map', did you mean '%{K = V}'?
+[31m[F064] Error:[0m unknown type `map`
    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0mtests/fixtures/error/05_map_missing_braces.dfs:1:13[38;5;246m][0m
    [38;5;246m│[0m
  [38;5;246m1 │[0m [38;5;249ml[0m[38;5;249me[0m[38;5;249mt[0m[38;5;249m [0m[38;5;249mo[0m[38;5;249mu[0m[38;5;249mt[0m[38;5;249mp[0m[38;5;249mu[0m[38;5;249mt[0m[38;5;249m:[0m[38;5;249m [0m[38;5;201mm[0m[38;5;201ma[0m[38;5;201mp[0m[38;5;249m [0m[38;5;249m=[0m[38;5;249m [0m[38;5;249m4[0m[38;5;249m2[0m
  [38;5;240m  │[0m             [38;5;201m─[0m[38;5;201m┬[0m[38;5;201m─[0m  
- [38;5;240m  │[0m              [38;5;201m╰[0m[38;5;201m─[0m[38;5;201m─[0m[38;5;201m─[0m a collection type is written with its sigil
+ [38;5;240m  │[0m              [38;5;201m╰[0m[38;5;201m─[0m[38;5;201m─[0m[38;5;201m─[0m no type of this name is in scope
+ [38;5;240m  │[0m 
+ [38;5;240m  │[0m [38;5;115mNote[0m: a bare name in type position is a type alias, written `type Name: <type>`, or one of the type parameters of the generic function it appears in.
+a map type is written `%{K = V}`
 [38;5;246m───╯[0m
-[31m[D023] Error:[0m expected '=' after let binding
-   [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0mtests/fixtures/error/05_map_missing_braces.dfs:1:13[38;5;246m][0m
-   [38;5;246m│[0m
- [38;5;246m1 │[0m [38;5;249ml[0m[38;5;249me[0m[38;5;249mt[0m[38;5;249m [0m[38;5;249mo[0m[38;5;249mu[0m[38;5;249mt[0m[38;5;249mp[0m[38;5;249mu[0m[38;5;249mt[0m[38;5;249m:[0m[38;5;249m [0m[38;5;155mm[0m[38;5;155ma[0m[38;5;155mp[0m[38;5;249m [0m[38;5;249m=[0m[38;5;249m [0m[38;5;249m4[0m[38;5;249m2[0m
- [38;5;240m  │[0m             [38;5;155m─[0m[38;5;155m┬[0m[38;5;155m─[0m  
- [38;5;240m  │[0m              [38;5;155m╰[0m[38;5;155m─[0m[38;5;155m─[0m[38;5;155m─[0m expected '='
-[38;5;246m───╯[0m
-Error: Parse error
+Error: Type error

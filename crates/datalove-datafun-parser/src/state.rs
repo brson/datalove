@@ -484,6 +484,29 @@ impl<'db> Parser<'db> {
     }
 
     /// Create an expression and record its span in the side table.
+    /// Read the name a declaration introduces, reporting it if it is
+    /// reserved for this kind of declaration.
+    ///
+    /// The name is taken either way, so the declaration parses on and the one
+    /// report is the one the reader sees.
+    pub(super) fn eat_declared_name(
+        &mut self,
+        kind: datalove_datalit::parser_util::NameKind,
+    ) -> Option<InternedText<'db>> {
+        use datalove_datalit::parser_util::{reserved_complaint, reserved_for};
+        let ts = self.peek_text_span();
+        let name = self.eat_name()?;
+        if let Some(reason) = reserved_for(name.as_str(self.db), kind) {
+            self.had_error = true;
+            let (message, label) = reserved_complaint(name.as_str(self.db), reason);
+            DiagnosticBuilder::error(self.db, &message)
+                .code("P064")
+                .primary_label(ts, &label)
+                .emit_parse();
+        }
+        Some(name)
+    }
+
     pub(super) fn create_expr(&mut self, kind: ast::ExprFunKind<'db>, ts: TextSpan<'db>) -> ast::ExprFun<'db> {
         let expr = ast::ExprFun::new(
             self.db,

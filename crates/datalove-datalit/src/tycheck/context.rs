@@ -37,11 +37,15 @@ impl<'db> TypeContext<'db> {
     pub fn convert_hint(&self, expr: ExprFull<'db>, hint: &TypeHint<'db>) -> Result<Type<'db>, TypeError> {
         convert_type_hint(self.db, hint).map_err(|error| {
             if let (Some(name), Some(ts)) = (first_alias(hint), self.get_span(expr)) {
-                DiagnosticBuilder::error(self.db, &rmx::std::format!("unknown type `{}`", name.as_str(self.db)))
+                let name = name.as_str(self.db);
+                let mut builder = DiagnosticBuilder::error(self.db, &rmx::std::format!("unknown type `{name}`"))
                     .code("T059")
                     .primary_label(ts, "not a type")
-                    .note("datalit has no type aliases, so a type is written out rather than named")
-                    .emit_type();
+                    .note("datalit has no type aliases, so a type is written out rather than named");
+                if let Some(suggestion) = crate::parser_util::type_name_suggestion(name) {
+                    builder = builder.note(&suggestion);
+                }
+                builder.emit_type();
             }
             error
         })

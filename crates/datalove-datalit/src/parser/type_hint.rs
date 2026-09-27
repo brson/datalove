@@ -233,46 +233,15 @@ pub fn parse_type_hint<'db, S: TypeHintStream<'db>>(stream: &mut S) -> ast::Type
                     }
                 }
             } else if let Some(word) = stream.peek_word() {
-                // Unknown identifier - could be a type alias.
-                // Check if it looks like a mis-cased primitive first.
-                let lower = word.to_lowercase();
-                match lower.as_str() {
-                    "int" | "bool" | "string" | "data" | "error" |
-                    "u8" | "i8" | "u16" | "i16" | "u32" | "i32" |
-                    "u64" | "i64" | "index" | "offset" | "f32" | "f64" => {
-                        let ts = stream.peek_text_span();
-                        let message = format!("unknown type '{}', did you mean '{}'?", word, lower);
-                        stream.type_hint_error(ts, &message, "D008", "unexpected token in type hint")
-                    }
-                    // A collection type is written with its sigil, and these
-                    // are the names of the collections rather than the types.
-                    // `enum` is read before this and says its own piece about
-                    // the brace that has to follow it.
-                    "tuple" | "list" | "map" | "set" | "table" | "tensor" => {
-                        let ts = stream.peek_text_span();
-                        let spelled = match lower.as_str() {
-                            "tuple" => "(T, ...)",
-                            "list" => "[T]",
-                            "map" => "%{K = V}",
-                            "set" => "#{T}",
-                            "table" => "{| name: T |}",
-                            "tensor" => "[|T, N|]",
-                            _ => unreachable!("matched one of the six just above"),
-                        };
-                        let message = format!(
-                            "unknown type '{}', did you mean '{}'?", word, spelled,
-                        );
-                        stream.type_hint_error(ts, &message, "D008", "a collection type is written with its sigil")
-                    }
-                    _ => {
-                        // Treat as type alias reference.
-                        let name = InternedText::new(stream.db(), word.S());
-                        let ts = stream.peek_text_span();
-                        stream.next(); // consume the identifier
-                        let local_index = Some(stream.alias_index(ts));
-                        ast::TypeHint::Alias(ast::TypeHintAlias { name, local_index })
-                    }
-                }
+                // A name: an alias, or a type parameter. Whether one of that
+                // name exists is not known here, so what a misspelled or
+                // miscased name was meant as is said where it fails to
+                // resolve, not here, where it might be an alias of that name.
+                let name = InternedText::new(stream.db(), word.S());
+                let ts = stream.peek_text_span();
+                stream.next(); // consume the identifier
+                let local_index = Some(stream.alias_index(ts));
+                ast::TypeHint::Alias(ast::TypeHintAlias { name, local_index })
             } else {
                 let ts = stream.peek_text_span();
                 stream.type_hint_error(ts,

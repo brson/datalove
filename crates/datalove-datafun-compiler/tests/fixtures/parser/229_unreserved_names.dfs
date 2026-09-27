@@ -1,0 +1,7 @@
+type list: u32
+type Error: string
+let type = 1
+let if = 2
+fun table(x: list): list
+    ret x
+end fun

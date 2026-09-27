@@ -157,6 +157,12 @@ pub enum PendingDiagnostic<'db> {
         message: InternedText<'db>,
         note: InternedText<'db>,
     },
+    /// F066: A type alias defined twice.
+    DuplicateTypeAlias {
+        local_index: u32,
+        module_id: Option<ModuleId<'db>>,
+        name: InternedText<'db>,
+    },
     /// F026: Invalid operand type.
     InvalidOperandType {
         expr_key: ExprKey<'db>,
@@ -677,7 +683,6 @@ pub use context::TypeContext;
 pub use types::{
     convert_type_hint,
     convert_type_hint_with_aliases,
-    is_primitive_name,
     type_to_string,
     unit_type,
 };

@@ -1,0 +1,13 @@
+{
+  "ast": {
+    "expr": {
+      "Set": {
+        "elements": []
+      }
+    },
+    "type_hint": {
+      "Alias": "set"
+    }
+  },
+  "diagnostics": []
+}

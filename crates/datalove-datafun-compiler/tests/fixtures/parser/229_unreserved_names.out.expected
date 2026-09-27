@@ -1,0 +1,70 @@
+{
+  "ast": {
+    "statements": [
+      {
+        "kind": "TypeAlias",
+        "name": "list",
+        "type_hint": "U32"
+      },
+      {
+        "kind": "TypeAlias",
+        "name": "Error",
+        "type_hint": "String"
+      },
+      {
+        "kind": "Let",
+        "name": "type",
+        "type_hint": null,
+        "value": {
+          "expr": {
+            "kind": "Int",
+            "type_hint": null,
+            "value": "1"
+          }
+        }
+      },
+      {
+        "kind": "Let",
+        "name": "if",
+        "type_hint": null,
+        "value": {
+          "expr": {
+            "kind": "Int",
+            "type_hint": null,
+            "value": "2"
+          }
+        }
+      },
+      {
+        "body": [
+          {
+            "kind": "Ret",
+            "value": {
+              "expr": {
+                "kind": "Place",
+                "root": "x",
+                "steps": []
+              }
+            }
+          }
+        ],
+        "kind": "Fun",
+        "name": "table",
+        "params": [
+          {
+            "is_comptime": false,
+            "mode": "In",
+            "name": "x",
+            "type_hint": {
+              "Alias": "list"
+            }
+          }
+        ],
+        "return_type": {
+          "Alias": "list"
+        }
+      }
+    ]
+  },
+  "diagnostics": []
+}

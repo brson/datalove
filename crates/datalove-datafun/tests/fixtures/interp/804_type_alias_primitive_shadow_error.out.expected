@@ -4,9 +4,9 @@ Analysis(
             section_type: "scriptunit-fragment",
             name: None,
             typecheck: TypecheckResult(
-                status: "Error",
+                status: "ParseError",
                 errors: [
-                    "CannotShadowPrimitive(\"int\")",
+                    "`int` cannot be declared here",
                 ],
             ),
             ownership: OwnershipResult(

@@ -216,7 +216,7 @@ fn error_to_json(error: &datalove_datafun_tycheck::TypeError) -> rmx::serde_json
                 "name": name
             })
         }
-        TypeError::DuplicateTypeAlias(name) => {
+        TypeError::DuplicateTypeAlias { name, .. } => {
             json!({
                 "kind": "DuplicateTypeAlias",
                 "name": name
@@ -228,12 +228,6 @@ fn error_to_json(error: &datalove_datafun_tycheck::TypeError) -> rmx::serde_json
                 "name": name,
                 "first": first,
                 "second": second
-            })
-        }
-        TypeError::CannotShadowPrimitive(name) => {
-            json!({
-                "kind": "CannotShadowPrimitive",
-                "name": name
             })
         }
         TypeError::NonConstInConstExpr(name) => {

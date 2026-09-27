@@ -25,7 +25,6 @@ pub use datalove_datafun_common::{
     TypeFunction,
     TypeError,
     convert_type_hint_with_aliases,
-    is_primitive_name,
     unit_type,
 };
 
@@ -55,15 +54,12 @@ pub fn resolve_names_impl<'db>(
             let name = stmt.name;
             let name_str = name.as_str(db);
 
-            // Check for shadowing primitive types.
-            if is_primitive_name(name_str) {
-                errors.push(TypeError::CannotShadowPrimitive(name_str.to_string()));
-                continue;
-            }
-
             // Check for duplicate type alias.
             if type_aliases_map.contains_key(&name) {
-                errors.push(TypeError::DuplicateTypeAlias(name_str.to_string()));
+                errors.push(TypeError::DuplicateTypeAlias {
+                    name: name_str.to_string(),
+                    local_index: stmt.local_index,
+                });
                 continue;
             }
 

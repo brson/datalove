@@ -1,0 +1,40 @@
+{
+  "ast": {
+    "statements": [
+      {
+        "body": [
+          {
+            "kind": "Ret",
+            "value": {
+              "expr": {
+                "kind": "Int",
+                "type_hint": null,
+                "value": "1"
+              }
+            }
+          }
+        ],
+        "kind": "Fun",
+        "name": "data",
+        "params": [],
+        "return_type": "Int"
+      }
+    ]
+  },
+  "diagnostics": [
+    {
+      "code": "P064",
+      "labels": [
+        {
+          "message": "`data` is reserved, since it starts an expression",
+          "span": [
+            4,
+            8
+          ],
+          "text": "data"
+        }
+      ],
+      "message": "`data` cannot be declared here"
+    }
+  ]
+}

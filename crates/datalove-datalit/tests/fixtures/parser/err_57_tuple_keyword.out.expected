@@ -2,29 +2,27 @@
   "ast": {
     "expr": {
       "ParseError": {
-        "message": "unknown type 'tuple', did you mean '(T, ...)'?"
+        "message": "expected '/' after type hint"
       }
     },
     "type_hint": {
-      "ParseError": {
-        "message": "unknown type 'tuple', did you mean '(T, ...)'?"
-      }
+      "Alias": "tuple"
     }
   },
   "diagnostics": [
     {
-      "code": "D008",
+      "code": "D012",
       "labels": [
         {
-          "message": "a collection type is written with its sigil",
+          "message": "expected '/' separator between type hint and expression",
           "span": [
-            2,
-            7
+            8,
+            21
           ],
-          "text": "tuple"
+          "text": "(u32, string)"
         }
       ],
-      "message": "unknown type 'tuple', did you mean '(T, ...)'?"
+      "message": "expected '/' after type hint"
     }
   ]
 }

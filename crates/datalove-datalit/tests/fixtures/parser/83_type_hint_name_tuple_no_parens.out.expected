@@ -1,0 +1,13 @@
+{
+  "ast": {
+    "expr": {
+      "AnonTuple": {
+        "elements": []
+      }
+    },
+    "type_hint": {
+      "Alias": "tuple"
+    }
+  },
+  "diagnostics": []
+}

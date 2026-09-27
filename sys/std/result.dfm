@@ -14,7 +14,7 @@ import fixedint.zero
 fun is_ok<T>(self: !T): bool
   if self |value|
     ret true
-  else |error|
+  else |err|
     ret false
   end if
 end fun
@@ -23,7 +23,7 @@ end fun
 fun is_err<T>(self: !T): bool
   if self |value|
     ret false
-  else |error|
+  else |err|
     ret true
   end if
 end fun
@@ -32,7 +32,7 @@ end fun
 fun unwrap_or<T>(self: !T, default: T): T
   if self |value|
     ret value
-  else |error|
+  else |err|
     ret default
   end if
 end fun
@@ -99,7 +99,7 @@ end fun
 fun to_option<T>(self: !T): ?T
   if self |value|
     ret some value
-  else |error|
+  else |err|
     ret none
   end if
 end fun

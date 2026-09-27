@@ -1,0 +1,67 @@
+{
+  "ast": {
+    "statements": [
+      {
+        "kind": "Let",
+        "name": "r",
+        "type_hint": {
+          "Option": {
+            "inner_type": "Int"
+          }
+        },
+        "value": {
+          "expr": {
+            "kind": "Some",
+            "payload": {
+              "expr": {
+                "kind": "Int",
+                "type_hint": null,
+                "value": "1"
+              }
+            },
+            "type_hint": null
+          }
+        }
+      },
+      {
+        "condition": {
+          "expr": {
+            "kind": "Place",
+            "root": "r",
+            "steps": []
+          }
+        },
+        "else_body": null,
+        "kind": "If",
+        "then_body": [
+          {
+            "kind": "DebugLog",
+            "value": {
+              "expr": {
+                "kind": "Int",
+                "type_hint": null,
+                "value": "1"
+              }
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "diagnostics": [
+    {
+      "code": "P064",
+      "labels": [
+        {
+          "message": "`none` is reserved, since it starts an expression",
+          "span": [
+            27,
+            31
+          ],
+          "text": "none"
+        }
+      ],
+      "message": "`none` cannot be declared here"
+    }
+  ]
+}

@@ -103,18 +103,21 @@ An identifier is a run of letters, digits and `_`
 not beginning with a digit.
 Letters are Unicode alphabetic characters, so `café` is an identifier.
 
-These words are keywords:
+These words start an expression:
 
 ```
 true  false  none  some  ok  er  data  error  atom  term  enum
 ```
 
-In type position the primitive type names are also reserved:
+In type position the primitive type names,
 `bool`, `int`, `string`, `u8` .. `u64`, `i8` .. `i64`,
-`index`, `offset`, `f32`, `f64`, `data`, `error`.
+`index`, `offset`, `f32`, `f64`, `data`, `error`,
+and `atom`, `term` and `enum` are types or start one.
 
-A keyword may still be used as a struct field or table column name,
-where only a name can appear: `{ none = 1 }` is a struct.
+No word is reserved everywhere.
+Datalit declares no names,
+and a struct field, table column or variant may be any identifier,
+since only a name can appear there: `{ none = 1 }` is a struct.
 
 Tokens that are written against each other are _glued_.
 Gluing decides how far a numeric literal reaches:
