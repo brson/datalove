@@ -191,3 +191,42 @@ fn the_roots_can_change_between_compiles() {
          and takes the island from the memo",
     );
 }
+
+/// Every per-module phase sees only the reachable modules, not just some of them.
+///
+/// The pruning is of the `ModuleGraph`, and all five phases derive their work
+/// list from it -- `parse_module_graph` and `resolve_all_names` walk it,
+/// `typecheck_module_graph` and `analyze_module_graph` walk it,
+/// `lower_all_module_functions` and the assembly pass walk it. So one change
+/// covers all five, and this is the assertion that says so rather than the
+/// reasoning.
+#[test]
+fn every_phase_sees_only_the_reachable_modules() {
+    let recorder = QueryRecorder::new();
+    let db = datafun::Database::recording(&recorder);
+    let mut pipeline = ModuleCompilationPipeline::default();
+    add_fixture(&db, &mut pipeline);
+    pipeline.set_roots(roots_of(&["local/test/mid"]));
+
+    let compiled = pipeline.compile_fresh(&db);
+    assert!(compiled.is_successful(), "{:?}", compiled.all_errors());
+    drop(compiled);
+
+    let executed = recorder.take();
+    let ran = |q: &str| executed.iter().filter(|e| e.query == q).count();
+    // `mid` and `base`, out of five in the world.
+    for (phase, query) in [
+        ("1 parse", "parse_module_full"),
+        ("2 name resolution", "resolve_module_names"),
+        ("3 typecheck", "typecheck_module"),
+        ("4 ownership", "analyze_module"),
+        ("5a lowering", "lower_module_functions"),
+        ("5d assembly", "lower_module"),
+    ] {
+        assert_eq!(
+            ran(query), 2,
+            "phase {phase} ({query}) ran {} times for the 2 reachable modules of {MODULES}",
+            ran(query),
+        );
+    }
+}
