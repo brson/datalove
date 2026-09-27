@@ -18,7 +18,7 @@
 
 use rmx::prelude::*;
 
-use datalove_datafun::incremental::{IncrementalModuleWorld, extract_dependencies};
+use datalove_datafun::incremental::{IncrementalModuleWorld, Roots, extract_dependencies};
 use datalove_datafun_compiler::Database;
 use datalove_datafun_compiler::module_graph::parse_module_graph;
 
@@ -38,7 +38,7 @@ fn ingredients(modules: usize) -> Vec<(String, usize, usize)> {
     }
 
     let deps = extract_dependencies(&world, &db);
-    let (graph, requires) = world.build_fresh(&db, &deps);
+    let (graph, requires) = world.build_graph(&db, &deps, &Roots::All);
     let parsed = parse_module_graph(&db, graph, requires, Vec::new());
     let _ = datalove_datafun_resolve::resolve_all_names(&db, parsed);
 

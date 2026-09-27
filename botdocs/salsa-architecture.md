@@ -202,6 +202,7 @@ which is inherent while the graph-keyed passes ask about every module.
 | a rider's stubs are minted once, from the rider sources alone | `import_memo_tests` |
 | every shape of edit reaches only what the graph says it can | `edit_reach_tests` |
 | adding or removing a module at the end leaves the others entirely alone | `edit_reach_tests` |
+| `Roots::All` compiles the world and `Roots::From` only what it reaches | `roots_tests` |
 | per-module, per-phase behaviour across add/remove/change | 16 `module_memo` fixtures |
 | `extract_dependencies` costs what changed | `incremental_memo_tests` |
 

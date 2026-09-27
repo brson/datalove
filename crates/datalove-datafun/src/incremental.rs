@@ -20,13 +20,14 @@
 //! // Extract dependencies via package resolution.
 //! let path_deps = extract_dependencies(&world, &db);
 //!
-//! // Initial compilation (only needs &db).
-//! let (graph, requires) = world.build_fresh(&db, &path_deps);
+//! // Build the graph. `Roots::All` compiles the whole world; `Roots::From`
+//! // compiles only what those modules reach by `require`.
+//! let (graph, requires) = world.build_graph(&db, &path_deps, &Roots::All);
 //!
-//! // Incremental update (needs &mut db for setters).
+//! // Incremental update (needs &mut db for the setter).
 //! world.update_source(&mut db, "local/pkg/main", new_source);
 //! let path_deps = extract_dependencies(&world, &db);
-//! let (graph, requires) = world.prepare_for_compile(&mut db, &path_deps);
+//! let (graph, requires) = world.build_graph(&db, &path_deps, &Roots::All);
 //! ```
 
 use rmx::prelude::*;
@@ -34,6 +35,31 @@ use rmx::std::collections::{BTreeMap, BTreeSet};
 use bct::input::Source;
 use bct::module_graph::{Module, ModuleGraph, ModuleId};
 use salsa::Setter;
+
+/// Which of the world's modules a compilation is about.
+///
+/// The world is everything a worldfile mentions, which for any program that
+/// uses the system library is two dozen modules it may touch none of. What
+/// decides whether a module is compiled is whether something reaches it by
+/// `require`, and that is a property of the roots rather than of the world.
+///
+/// **This is a parameter and not a mode, deliberately.** `All` is what every
+/// existing caller wants and is bit-for-bit what the compiler did before
+/// there was a choice, so the two paths are one path with a different
+/// argument rather than two that drift. `ModuleGraph` is interned, so the
+/// roots become part of the graph's identity for free and switching between
+/// them cannot poison a memo.
+///
+/// Reachability changes what is an *error*: a type error in a module nothing
+/// requires stops being one. That is why `All` stays the default and why
+/// checking a whole library wants it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Roots {
+    /// Every module in the world.
+    All,
+    /// Only the modules these reach, by transitive `require`, and these.
+    From(BTreeSet<String>),
+}
 
 /// Module world with stable salsa identity for incremental compilation.
 ///
@@ -124,23 +150,29 @@ impl IncrementalModuleWorld {
         &self,
         db: &'db dyn salsa::Database,
         path_deps: &BTreeMap<String, BTreeSet<String>>,
+        roots: &Roots,
     ) -> (ModuleGraph<'db>, BTreeMap<ModuleId<'db>, Vec<(String, ModuleId<'db>)>>) {
+        let paths = self.paths_in_scope(path_deps, roots);
+
         // Dependencies before dependents.
-        let all_paths: BTreeSet<String> = self.sources.keys().cloned().collect();
-        let sorted_paths = topological_sort(&all_paths, path_deps);
+        let sorted_paths = topological_sort(&paths, path_deps);
 
         let modules: Vec<Module> = sorted_paths.iter()
             .filter_map(|p| self.module(db, p))
             .collect();
 
-        let module_by_id: BTreeMap<ModuleId<'db>, Module> = self.sources.keys()
+        let module_by_id: BTreeMap<ModuleId<'db>, Module> = paths.iter()
             .filter_map(|p| self.module(db, p).map(|m| (m.id(db), m)))
             .collect();
 
         let mut dependencies: BTreeMap<ModuleId<'db>, BTreeSet<ModuleId<'db>>> = BTreeMap::new();
         for (source_path, target_paths) in path_deps {
+            if !paths.contains(source_path) {
+                continue;
+            }
             if let Some(source_module) = self.module(db, source_path) {
                 let target_ids: BTreeSet<ModuleId<'db>> = target_paths.iter()
+                    .filter(|p| paths.contains(*p))
                     .filter_map(|p| self.module(db, p).map(|m| m.id(db)))
                     .collect();
                 dependencies.insert(source_module.id(db), target_ids);
@@ -151,25 +183,39 @@ impl IncrementalModuleWorld {
         }
 
         let graph = ModuleGraph::new(db, modules, module_by_id, dependencies);
-        (graph, self.build_resolved_requires(db, path_deps))
+        (graph, self.build_resolved_requires(db, path_deps, &paths))
     }
 
-    /// Build the graph for a first compilation.
-    pub fn build_fresh<'db>(
+    /// The modules the roots reach, or all of them.
+    ///
+    /// A root naming a path the world does not have is ignored rather than
+    /// refused: the roots come from what a program requires, and a require that
+    /// resolves to nothing is a diagnostic from resolution, not a reason to
+    /// build no graph.
+    fn paths_in_scope(
         &self,
-        db: &'db dyn salsa::Database,
         path_deps: &BTreeMap<String, BTreeSet<String>>,
-    ) -> (ModuleGraph<'db>, BTreeMap<ModuleId<'db>, Vec<(String, ModuleId<'db>)>>) {
-        self.build_graph(db, path_deps)
-    }
+        roots: &Roots,
+    ) -> BTreeSet<String> {
+        let roots = match roots {
+            Roots::All => return self.sources.keys().cloned().collect(),
+            Roots::From(roots) => roots,
+        };
 
-    /// Build the graph for a recompilation.
-    pub fn prepare_for_compile<'db>(
-        &self,
-        db: &'db dyn salsa::Database,
-        path_deps: &BTreeMap<String, BTreeSet<String>>,
-    ) -> (ModuleGraph<'db>, BTreeMap<ModuleId<'db>, Vec<(String, ModuleId<'db>)>>) {
-        self.build_graph(db, path_deps)
+        let mut reached: BTreeSet<String> = BTreeSet::new();
+        let mut queue: Vec<String> = roots.iter()
+            .filter(|p| self.sources.contains_key(*p))
+            .cloned()
+            .collect();
+        while let Some(path) = queue.pop() {
+            if !reached.insert(path.C()) {
+                continue;
+            }
+            if let Some(deps) = path_deps.get(&path) {
+                queue.extend(deps.iter().filter(|p| self.sources.contains_key(*p)).cloned());
+            }
+        }
+        reached
     }
 
     /// Get all modules that transitively depend on the given module.
@@ -204,12 +250,17 @@ impl IncrementalModuleWorld {
         &self,
         db: &'db dyn salsa::Database,
         path_deps: &BTreeMap<String, BTreeSet<String>>,
+        paths: &BTreeSet<String>,
     ) -> BTreeMap<ModuleId<'db>, Vec<(String, ModuleId<'db>)>> {
         let mut resolved_requires = BTreeMap::new();
 
         for (source_path, target_paths) in path_deps {
+            if !paths.contains(source_path) {
+                continue;
+            }
             if let Some(source_module) = self.module(db, source_path) {
                 let requires: Vec<(String, ModuleId<'db>)> = target_paths.iter()
+                    .filter(|p| paths.contains(*p))
                     .filter_map(|p| {
                         self.module(db, p).map(|m| {
                             // Use the last component of path as alias.

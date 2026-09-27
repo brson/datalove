@@ -14,7 +14,7 @@
 use rmx::prelude::*;
 
 use datalove_ct::query_events::{ExecutedQuery, QueryRecorder};
-use datalove_datafun::incremental::{IncrementalModuleWorld, extract_dependencies};
+use datalove_datafun::incremental::{IncrementalModuleWorld, Roots, extract_dependencies};
 use datalove_datafun_compiler::Database;
 use datalove_datafun_compiler::module_graph::parse_module_graph;
 
@@ -35,7 +35,7 @@ fn queries_on_unchanged_recompile(modules: usize) -> Vec<ExecutedQuery> {
 
     let compile = |world: &IncrementalModuleWorld| {
         let deps = extract_dependencies(world, &db);
-        let (graph, requires) = world.build_fresh(&db, &deps);
+        let (graph, requires) = world.build_graph(&db, &deps, &Roots::All);
         let _ = parse_module_graph(&db, graph, requires, Vec::new());
     };
 
@@ -71,7 +71,7 @@ fn a_first_compile_does_run_queries() {
 
     recorder.clear();
     let deps = extract_dependencies(&world, &db);
-    let (graph, requires) = world.build_fresh(&db, &deps);
+    let (graph, requires) = world.build_graph(&db, &deps, &Roots::All);
     let _ = parse_module_graph(&db, graph, requires, Vec::new());
 
     let ran = recorder.take();
@@ -105,7 +105,7 @@ fn an_edit_runs_fewer_queries_than_a_first_compile() {
 
     let mut compile = |world: &IncrementalModuleWorld| {
         let deps = extract_dependencies(world, &db);
-        let (graph, requires) = world.build_fresh(&db, &deps);
+        let (graph, requires) = world.build_graph(&db, &deps, &Roots::All);
         let _ = parse_module_graph(&db, graph, requires, Vec::new());
     };
 
@@ -127,7 +127,7 @@ fn an_edit_runs_fewer_queries_than_a_first_compile() {
     }
     {
         let deps = extract_dependencies(&world2, &db2);
-        let (graph, requires) = world2.build_fresh(&db2, &deps);
+        let (graph, requires) = world2.build_graph(&db2, &deps, &Roots::All);
         let _ = parse_module_graph(&db2, graph, requires, Vec::new());
     }
     world2.update_source(&mut db2, "local/test/m0", "fun f0(): i32\n  ret 99\nend fun\n");
@@ -135,7 +135,7 @@ fn an_edit_runs_fewer_queries_than_a_first_compile() {
     recorder.clear();
     {
         let deps = extract_dependencies(&world2, &db2);
-        let (graph, requires) = world2.build_fresh(&db2, &deps);
+        let (graph, requires) = world2.build_graph(&db2, &deps, &Roots::All);
         let _ = parse_module_graph(&db2, graph, requires, Vec::new());
     }
     let after_edit = recorder.take().len();

@@ -42,7 +42,7 @@ use datalove_datafun_compiler::module_graph::{ModuleGraph, ModuleId};
 use datalove_datafun_interp::ModuleFunctionRegistry;
 use datalove_datafun_ir::ModuleCodeUnits;
 
-use crate::incremental::{IncrementalModuleWorld, extract_dependencies};
+use crate::incremental::{IncrementalModuleWorld, Roots, extract_dependencies};
 use super::compiled_modules::{SharedModuleContext, CompiledModules};
 use super::workspace::CompilerOptions;
 
@@ -60,6 +60,11 @@ pub struct ModuleCompilationPipeline {
     rider_sources: Vec<(String, String)>,
     /// Rider crate directories discovered from package loading.
     rider_crate_dirs: Vec<(String, std::path::PathBuf)>,
+    /// Which of the world's modules to compile.
+    ///
+    /// `Roots::All` by default, which is the whole world and what every caller
+    /// wanted before there was a choice. See [`Roots`].
+    roots: Roots,
 }
 
 impl ModuleCompilationPipeline {
@@ -70,6 +75,7 @@ impl ModuleCompilationPipeline {
             options,
             rider_sources: Vec::new(),
             rider_crate_dirs: Vec::new(),
+            roots: Roots::All,
         }
     }
 
@@ -171,6 +177,21 @@ impl ModuleCompilationPipeline {
         self.rider_crate_dirs = dirs;
     }
 
+    /// Compile only what these modules reach, rather than the whole world.
+    ///
+    /// The roots are part of the module graph's identity, so changing them is a
+    /// different graph and not a stale memo. Changing them between compiles of
+    /// one pipeline is therefore sound, and costs what adding or removing that
+    /// many modules costs.
+    pub fn set_roots(&mut self, roots: Roots) {
+        self.roots = roots;
+    }
+
+    /// Which of the world's modules this pipeline compiles.
+    pub fn roots(&self) -> &Roots {
+        &self.roots
+    }
+
 
 
     /// Check if a module exists.
@@ -224,7 +245,8 @@ impl ModuleCompilationPipeline {
         evaluator: Rc<RefCell<dyn CtfeEvaluator>>,
     ) -> CompiledModules<'db> {
         let path_deps = extract_dependencies(&self.world, db.as_salsa_db());
-        let (module_graph, resolved_requires) = self.world.build_fresh(db.as_salsa_db(), &path_deps);
+        let (module_graph, resolved_requires) =
+            self.world.build_graph(db.as_salsa_db(), &path_deps, &self.roots);
         self.compile_impl(db, module_graph, resolved_requires, mode, evaluator)
     }
 
@@ -259,7 +281,8 @@ impl ModuleCompilationPipeline {
     ) -> (CompiledModules<'db>, &'db D) {
         // Extract dependencies first (reads from db).
         let path_deps = extract_dependencies(&self.world, db);
-        let (module_graph, resolved_requires) = self.world.prepare_for_compile(&*db, &path_deps);
+        let (module_graph, resolved_requires) =
+            self.world.build_graph(&*db, &path_deps, &self.roots);
 
         // Reborrow as immutable for the rest of compilation.
         let db_ref: &'db D = &*db;

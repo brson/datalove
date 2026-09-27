@@ -331,7 +331,7 @@ pub fn analyze_memo_worldfile(content: &str) -> AnyResult<MemoAnalysis> {
         };
 
         // Prepare and run compilation with query logging.
-        let (graph, resolved_requires) = world.prepare_for_compile(&db, &path_deps);
+        let (graph, resolved_requires) = world.build_graph(&db, &path_deps, &crate::incremental::Roots::All);
 
         enable_query_logging();
         let parsed_graph = parse_module_graph(&db, graph, resolved_requires, Vec::new());
