@@ -7,15 +7,22 @@ common data types.
 We often refer to it as _datalit_,
 and its types and datalit types.
 
-Datalove literals is intended for use in the Datalove ecosystem
-and not as a general-purpose serialization format.
-Datalit files use the `.dlt` extension.
-
-Datalit is the data sublanguage of Datalove:
+Datalove literals is the data sublanguage of Datalove:
 every datalit expression is written the same way in Datalove,
 where it means the same value.
 Datalit has no names, no operators and no computation.
+Datalit files use the `.dlt` extension.
+The format is intended for use in the Datalove ecosystem
+and not as a general-purpose serialization format.
 
+This document is an informal specification for Datalove literals
+and serves as a gentle introduction to the data model
+and syntax of Datalove in general.
+
+
+
+
+## An example
 
 ```datalove
 {
@@ -193,7 +200,7 @@ An expression carries at most one hint;
 Parentheses group without changing meaning:
 `(1)` is `1`, and `(: u32 / 1)` is `: u32 / 1`.
 
-A type hint may not name a type:
+A type hint may not name a type beyond the built-ins:
 datalit has no type aliases,
 so any bare name in a type is an error.
 Collections are written with their sigils,
@@ -1059,6 +1066,24 @@ and against the parser's own diagnostics.
   Round-tripping through the value printer is only exact
   for values whose types synthesize.
 
+### Open questions
+
+- Should empty collections synthesize?
+- What are the rules for printing disambiguating type hints?
+- What are the rules for printing disambiguating floats, etc?
+- How can we make tensors and tables accept trailing commas?
+- Should dupe map/set keys be an error?
+- Why can't tables synthesize?
+- Why are semicolons special inside tables?
+- Should we glue commas in tensors?
+- re tables: "the grammar does not express the tensor shape rules above"?
+- Enum accept trailing comma?
+- Should grouping parens actually be allowed? Are they needed?
+- Should structs require identical field order?
+- Should atom/term actually check against enums?
+- Result types shouldn't accept data payloads.
+- Should error actually check against results?
+- What does "enum variants are held in name order" mean practically in datalit?
 
 
 
