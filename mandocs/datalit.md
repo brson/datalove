@@ -20,6 +20,21 @@ and serves as a gentle introduction to the data model
 and syntax of Datalove in general.
 
 
+## Contents
+
+- [An example](#user-content-an-example)
+- [Lexical structure](#user-content-lexical-structure)
+- [Expressions](#user-content-expressions)
+- [Primitive Types](#user-content-primitive-types)
+- [Collections](#user-content-collections)
+- [Aggregates](#user-content-aggregates)
+- [Dynamic Types](#user-content-dynamic-types)
+- [Types](#user-content-types)
+- [Comparison and total ordering](#user-content-comparison-and-total-ordering)
+- [Canonical forms](#user-content-canonical-forms)
+- [Discrepancies, unknowns and bugs](#user-content-discrepancies-unknowns-and-bugs)
+
+
 
 
 ## An example
