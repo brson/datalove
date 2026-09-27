@@ -508,7 +508,8 @@ Rows are delimited by newlines or semicolons.
 Table literals always require a type hint &mdash;
 they cannot synthesize a type.
 Column names in the literal must match the type hint in order.
-Each column is named by exactly one identifier.
+Each column is named by exactly one identifier,
+and no two columns share a name.
 Each data row must have exactly as many values as there are columns.
 A table with no rows is written with just its header row.
 
@@ -1014,16 +1015,9 @@ and against the parser's own diagnostics.
 
 ### Bugs
 
-- **String escapes are checked only at instantiation.**
-  The parser keeps a string's raw text,
-  so `"a\q"` and `"\u{D800}"` pass parsing and typechecking
-  and fail only when the value is built.
-  The same applies to the payloads of `data` and `error`:
+- **`data` and `error` payloads are checked only at instantiation.**
   `data none` typechecks,
-  and fails with a type error only at instantiation.
-- **Duplicate struct fields are accepted.**
-  `{ x = 1, x = 2 }` synthesizes `{x: int, x: int}` and builds.
-  Duplicate enum variants in a type are not rejected either.
+  and fails with a type error only when the value is built.
 - **`er error e` is double-wrapped.**
   Instantiation stores the whole payload expression
   in the result's error slot,
@@ -1035,9 +1029,6 @@ and against the parser's own diagnostics.
   Type aliases (`: Foo / 1`)
   fail typechecking with no message.
   `lit-tycheck` also does not print parse diagnostics at all.
-- **Identifiers beginning with digits.**
-  Field names are any lexer word,
-  so `{ 1x = 1 }` is a struct with field `1x`.
 - **Empty tensors of rank above 1 cannot be written.**
   `[| |]` is always rank 1 with shape [0],
   and `[| , |]` does not parse,

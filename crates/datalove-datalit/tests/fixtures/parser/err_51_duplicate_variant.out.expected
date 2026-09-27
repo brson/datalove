@@ -1,0 +1,39 @@
+{
+  "ast": {
+    "expr": {
+      "Atom": {
+        "name": "A"
+      }
+    },
+    "type_hint": {
+      "Enum": {
+        "variants": [
+          {
+            "name": "A",
+            "payload": null
+          },
+          {
+            "name": "A",
+            "payload": "U32"
+          }
+        ]
+      }
+    }
+  },
+  "diagnostics": [
+    {
+      "code": "D038",
+      "labels": [
+        {
+          "message": "a variant is named once",
+          "span": [
+            22,
+            23
+          ],
+          "text": "A"
+        }
+      ],
+      "message": "`A` is named twice"
+    }
+  ]
+}

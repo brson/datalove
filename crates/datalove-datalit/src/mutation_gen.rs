@@ -541,12 +541,12 @@ fn apply_duplicate_field<'db>(
         let mut field_strs: Vec<String> = fields.iter().map(|f| {
             let name = f.name.as_str(db);
             let value = pretty_print(db, f.value);
-            format!("{}: {}", name, value)
+            format!("{} = {}", name, value)
         }).collect();
 
         // Replace second field name with first field name.
         let second_value = pretty_print(db, fields[1].value);
-        field_strs[1] = format!("{}: {}", first_name, second_value);
+        field_strs[1] = format!("{} = {}", first_name, second_value);
 
         // Build type hint string.
         let mut type_str = String::new();
@@ -556,7 +556,7 @@ fn apply_duplicate_field<'db>(
 
         Some(MutationResult {
             source,
-            expected_errors: vec!["T040"], // Duplicate field.
+            expected_errors: vec!["D038"], // Duplicate field.
             description: "Duplicated field name in struct".S(),
         })
     } else {

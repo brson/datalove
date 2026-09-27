@@ -126,7 +126,8 @@ pub fn parse_type_hint<'db, S: TypeHintStream<'db>>(stream: &mut S) -> ast::Type
             stream.eat_word("enum");
             if let Some(iter) = stream.eat_branch(Sigil::BraceOpen) {
                 let mut sub_parser = branch(iter, stream.alias_base());
-                let variants = sub_parser.parse_comma_separated(|p| p.parse_enum_variant());
+                let mut seen = crate::parser_util::SeenNames::default();
+                let variants = sub_parser.parse_comma_separated(|p| p.parse_enum_variant(&mut seen));
                 sub_parser.error_if_not_exhausted_type_hint();
                 stream.absorb_aliases(sub_parser.take_alias_spans(), sub_parser.alias_counter);
                 ast::TypeHint::Enum(ast::TypeHintEnum { variants })
@@ -178,14 +179,16 @@ pub fn parse_type_hint<'db, S: TypeHintStream<'db>>(stream: &mut S) -> ast::Type
             } else if let Some(iter) = stream.eat_branch(Sigil::BraceOpen) {
                 // Anonymous struct.
                 let mut sub_parser = branch(iter, stream.alias_base());
-                let fields = sub_parser.parse_comma_separated(|p| p.parse_type_hint_named_field());
+                let mut seen = crate::parser_util::SeenNames::default();
+                let fields = sub_parser.parse_comma_separated(|p| p.parse_type_hint_named_field(&mut seen, "field"));
                 sub_parser.error_if_not_exhausted_type_hint();
                 stream.absorb_aliases(sub_parser.take_alias_spans(), sub_parser.alias_counter);
                 ast::TypeHint::AnonStruct(ast::TypeHintAnonStruct { fields })
             } else if let Some(iter) = stream.eat_branch(Sigil::BracePipeOpen) {
                 // Table type hint.
                 let mut sub_parser = branch(iter, stream.alias_base());
-                let columns = sub_parser.parse_comma_separated(|p| p.parse_type_hint_named_field());
+                let mut seen = crate::parser_util::SeenNames::default();
+                let columns = sub_parser.parse_comma_separated(|p| p.parse_type_hint_named_field(&mut seen, "column"));
                 sub_parser.error_if_not_exhausted_type_hint();
                 stream.absorb_aliases(sub_parser.take_alias_spans(), sub_parser.alias_counter);
                 ast::TypeHint::Table(ast::TypeHintTable { columns })
@@ -341,12 +344,18 @@ impl<'db> Parser<'db> {
     }
 
     /// Parse a single enum variant: `atom Name` or `term Name Type`.
-    fn parse_enum_variant(&mut self) -> ast::TypeHintEnumVariant<'db> {
+    fn parse_enum_variant(&mut self, seen: &mut crate::parser_util::SeenNames<'db>) -> ast::TypeHintEnumVariant<'db> {
         match self.peek_word() {
             Some("atom") => {
                 self.eat_word("atom");
+                let name_ts = self.peek_text_span();
                 let name = match self.eat_name() {
-                    Some(n) => n,
+                    Some(n) => {
+                        if !seen.take(self.db, n, name_ts, "variant") {
+                            self.had_error = true;
+                        }
+                        n
+                    }
                     None => {
                         let ts = self.peek_text_span();
                         self.emit_type_hint_error(ts, "expected name after 'atom'", "D030", "expected atom name");
@@ -358,8 +367,14 @@ impl<'db> Parser<'db> {
             }
             Some("term") => {
                 self.eat_word("term");
+                let name_ts = self.peek_text_span();
                 let name = match self.eat_name() {
-                    Some(n) => n,
+                    Some(n) => {
+                        if !seen.take(self.db, n, name_ts, "variant") {
+                            self.had_error = true;
+                        }
+                        n
+                    }
                     None => {
                         let ts = self.peek_text_span();
                         self.emit_type_hint_error(ts, "expected name after 'term'", "D031", "expected term name");
@@ -380,9 +395,19 @@ impl<'db> Parser<'db> {
         }
     }
 
-    fn parse_type_hint_named_field(&mut self) -> ast::TypeHintNamedField<'db> {
+    fn parse_type_hint_named_field(
+        &mut self,
+        seen: &mut crate::parser_util::SeenNames<'db>,
+        what: &str,
+    ) -> ast::TypeHintNamedField<'db> {
+        let name_ts = self.peek_text_span();
         let name = match self.eat_name() {
-            Some(n) => n,
+            Some(n) => {
+                if !seen.take(self.db, n, name_ts, what) {
+                    self.had_error = true;
+                }
+                n
+            }
             None => {
                 // No name found - emit error and create placeholder.
                 let ts = self.peek_text_span();

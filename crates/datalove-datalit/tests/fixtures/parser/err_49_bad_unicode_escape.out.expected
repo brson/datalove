@@ -1,0 +1,26 @@
+{
+  "ast": {
+    "expr": {
+      "ParseError": {
+        "message": "invalid escape in string literal"
+      }
+    },
+    "type_hint": null
+  },
+  "diagnostics": [
+    {
+      "code": "D039",
+      "labels": [
+        {
+          "message": "invalid Unicode code point: U+D800; the escapes are \\\" \\\\ \\n \\r \\t \\0 and \\u{...}",
+          "span": [
+            0,
+            10
+          ],
+          "text": "\"\\u{D800}\""
+        }
+      ],
+      "message": "invalid escape in string literal"
+    }
+  ]
+}

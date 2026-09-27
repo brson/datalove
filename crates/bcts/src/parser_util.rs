@@ -93,9 +93,15 @@ pub trait TokenStreamExt<'db>: TokenStream<'db> {
         }
     }
 
-    /// Try to consume any word and return it as InternedText.
+    /// Try to consume a name and return it as InternedText.
+    ///
+    /// A name is a word that begins with a letter or `_`. One that begins
+    /// with a digit is a number, or a number with letters on it, and is
+    /// refused here rather than taken for a field called `1x`.
     fn eat_name(&mut self) -> Option<InternedText<'db>> {
-        self.peek_word()?;
+        if !is_identifier(self.peek_word()?) {
+            return None;
+        }
         match self.next() {
             // The lexer interned this text already, and `InternedText` is keyed
             // on its string, so reading it back out as a `&str` and interning a
@@ -492,6 +498,14 @@ fn number_word<'db>(token: &TreeToken<'db>, db: &'db dyn crate::Db) -> Option<&'
     };
     let word = token.word_str(db)?;
     is_number_word(word).then_some(word)
+}
+
+/// Whether a word is an identifier: one that begins with a letter or `_`.
+///
+/// A word is letters, digits and underscores, so this is the same as saying
+/// it does not begin with a digit, of any script.
+pub fn is_identifier(word: &str) -> bool {
+    word.starts_with(|c: char| c.is_alphabetic() || c == '_')
 }
 
 /// Whether a word is written as a hex literal.

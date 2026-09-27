@@ -215,11 +215,14 @@ impl<'db> Parser<'db> {
                         )
                     }
                     TokenKind::String => {
+                        let ts = self.peek_text_span();
                         self.next();
-                        let value = InternedText::new(
-                            self.db,
-                            token.text.as_str(self.db).S(),
-                        );
+                        let raw = token.text.as_str(self.db);
+                        if let Err(error) = parser_util::string_literal_value(raw) {
+                            let (message, label) = parser_util::escape_complaint(&error);
+                            return self.emit_expr_error(ts, &message, "D039", &label);
+                        }
+                        let value = InternedText::new(self.db, raw.S());
                         ast::Expr::String(ast::ExprString { value })
                     }
                     _ => {
@@ -262,7 +265,8 @@ impl<'db> Parser<'db> {
                     _ => unreachable!(),
                 };
                 let mut sub_parser = self.sub_parser_from_branch(inner);
-                let fields = sub_parser.parse_comma_separated(|p| p.parse_expr_struct_field());
+                let mut seen = parser_util::SeenNames::default();
+                let fields = sub_parser.parse_comma_separated(|p| p.parse_expr_struct_field(&mut seen));
                 sub_parser.error_if_not_exhausted();
                 // Merge spans from sub-parser.
                 self.merge_spans_from(&mut sub_parser);
@@ -347,9 +351,15 @@ impl<'db> Parser<'db> {
         }
     }
 
-    fn parse_expr_struct_field(&mut self) -> ast::ExprStructField<'db> {
+    fn parse_expr_struct_field(&mut self, seen: &mut parser_util::SeenNames<'db>) -> ast::ExprStructField<'db> {
+        let name_ts = self.peek_text_span();
         let name = match self.eat_name() {
-            Some(n) => n,
+            Some(n) => {
+                if !seen.take(self.db, n, name_ts, "field") {
+                    self.had_error = true;
+                }
+                n
+            }
             None => {
                 // No name found - emit error and create placeholder.
                 let ts = self.peek_text_span();
@@ -526,11 +536,12 @@ impl<'db> Parser<'db> {
     fn parse_table_header(&mut self, row_tokens: &[TreeToken<'db>]) -> Vec<InternedText<'db>> {
         let parts = self.split_table_cells(row_tokens);
         let mut names = Vec::new();
+        let mut seen = parser_util::SeenNames::default();
 
         for part in parts {
             // A group `nonempty_groups` kept has a first token.
             let first = part.first().X();
-            let Some(name) = self.cell_word(first) else {
+            let Some(name) = self.cell_word(first).filter(|w| parser_util::is_identifier(w)) else {
                 self.had_error = true;
                 let ts = self.extract_text_span(first);
                 DiagnosticBuilder::error(self.db, "expected column name in table header")
@@ -540,7 +551,12 @@ impl<'db> Parser<'db> {
                 names.push(InternedText::new(self.db, "<error>".S()));
                 continue;
             };
-            names.push(InternedText::new(self.db, name.S()));
+            let name_text = InternedText::new(self.db, name.S());
+            let ts = self.extract_text_span(first);
+            if !seen.take(self.db, name_text, ts, "column") {
+                self.had_error = true;
+            }
+            names.push(name_text);
 
             if let Some(extra) = part.get(1) {
                 self.had_error = true;

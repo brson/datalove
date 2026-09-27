@@ -9,7 +9,7 @@ use bct::{
 };
 
 use datalove_datafun_ast::ast;
-use datalove_datalit::parser_util::{TextSpan, TokenStream, TokenStreamExt};
+use datalove_datalit::parser_util::{self, TextSpan, TokenStream, TokenStreamExt};
 use super::state::Parser;
 
 impl<'db> Parser<'db> {
@@ -653,11 +653,14 @@ impl<'db> Parser<'db> {
                         }
                     }
                     TokenKind::String => {
-                        // String literal - use new inline variant.
-                        let text_str = token.text.as_str(self.db).S();
+                        let raw = token.text.as_str(self.db);
                         let ts = self.peek_text_span();
                         self.next();
-                        let value = InternedText::new(self.db, text_str);
+                        if let Err(error) = parser_util::string_literal_value(raw) {
+                            let (message, label) = parser_util::escape_complaint(&error);
+                            return self.emit_expr_error(ts, &message, "D039", &label);
+                        }
+                        let value = InternedText::new(self.db, raw.S());
                         self.create_expr(
                             ast::ExprFunKind::String(ast::ExprString {
                                 type_hint: None,

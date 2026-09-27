@@ -133,17 +133,14 @@ pub fn parse_float_const(text: &str, ty: &IrType) -> Result<ConstValue, ()> {
     }
 }
 
-/// The content of a string literal, without the quotes the source wrote it in.
+/// The string a literal holds, without its quotes and with its escapes read.
 ///
 /// The token carries the literal as it was written. Every path that turns one
 /// into a value has to strip the quotes, and one of them once did not, so the
 /// stripping lives here rather than at each site.
-pub fn string_literal_content(raw: &str) -> &str {
-    if raw.len() >= 2 && raw.starts_with('"') && raw.ends_with('"') {
-        &raw[1..raw.len() - 1]
-    } else {
-        raw
-    }
+pub fn string_literal_value(raw: &str) -> String {
+    datalove_datalit::parser_util::string_literal_value(raw)
+        .expect("the parser reads a string's escapes")
 }
 
 /// Try to parse a negated integer literal.

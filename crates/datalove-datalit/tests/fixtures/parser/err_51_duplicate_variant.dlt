@@ -1,0 +1,1 @@
+: enum { atom A, term A u32 } / atom A

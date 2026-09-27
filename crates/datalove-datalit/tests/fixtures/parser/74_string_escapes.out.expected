@@ -1,0 +1,11 @@
+{
+  "ast": {
+    "expr": {
+      "String": {
+        "value": "\"a\\n\\t\\u{41}\\\"\\\\\""
+      }
+    },
+    "type_hint": null
+  },
+  "diagnostics": []
+}

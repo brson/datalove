@@ -551,19 +551,8 @@ fn instantiate_string(
     dest_ptr: *mut u8,
 ) -> AnyResult<*const u8> {
     debug_assert!(!dest_ptr.is_null());
-    let value_str_raw = string_expr.value.as_str(db);
-
-    let value_str_escaped = if value_str_raw.starts_with('"') && value_str_raw.ends_with('"') {
-        &value_str_raw[1..value_str_raw.len()-1]
-    } else {
-        bail!("String literal missing quotes");
-    };
-
-    // Process escape sequences (e.g., \" -> ", \n -> newline).
-    let value_str = match bct::escapes::process_escape_sequences(value_str_escaped) {
-        Ok(s) => s,
-        Err(e) => bail!("Invalid escape sequence: {:?}", e),
-    };
+    let value_str = crate::parser_util::string_literal_value(string_expr.value.as_str(db))
+        .expect("the parser reads a string's escapes");
 
     unsafe {
         let string_ptr = dest_ptr as *mut rtdt::String;

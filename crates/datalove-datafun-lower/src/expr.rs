@@ -983,9 +983,9 @@ pub fn lower_expression<'db>(
         }
         ExprFunKind::String(string_expr) => {
             let raw = string_expr.value.as_str(ctx.db);
-            let content = super::literal::string_literal_content(raw);
+            let content = super::literal::string_literal_value(raw);
             let dest = ctx.fresh_value(IrType::String);
-            ctx.emit_const(dest, ConstValue::String(content.to_string()));
+            ctx.emit_const(dest, ConstValue::String(content));
             Ok(dest)
         }
         ExprFunKind::AnonStruct(struct_expr) => {
