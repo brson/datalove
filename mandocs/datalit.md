@@ -1002,12 +1002,6 @@ It prints no type hints.
 
 ## Discrepancies, unknowns and bugs
 
-This section compares the spec above with
-`botdocs/botspec.md`, `botdocs/datalit-ebnf.md`, `botdocs/datalit-typing-rules.md`,
-and the implementation in `crates/datalove-datalit`
-as of this writing.
-Behaviour was checked with the `lit-tycheck`, `lit-pretty` and `lit-op` commands
-and against the parser's own diagnostics.
 
 ### Not implemented
 
@@ -1041,8 +1035,6 @@ and against the parser's own diagnostics.
   It is silently rounded today.
 - Whether duplicate map keys and set elements should be errors
   rather than resolved last-wins.
-- Whether field and column names may be keywords.
-  They may today.
 - Whether a byte order mark is allowed.
   Nothing strips one.
 - The value printer writes non-finite floats as `nan`, `inf` and `-inf`,
