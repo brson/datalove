@@ -1022,8 +1022,6 @@ It prints no type hints.
   so `: [|u32, 2|] / ...` has no empty value.
   A rank-0 type `[|u32, 0|]` parses but has no literal.
 
-### Divergences from the botspec
-
 
 ### Unknowns
 
