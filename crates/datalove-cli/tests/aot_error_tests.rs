@@ -43,7 +43,29 @@ fn run_aot_compile(path: &Path) -> Result<String, String> {
 
     let stdout = String::from_utf8_lossy(&output.stdout);
     let stderr = String::from_utf8_lossy(&output.stderr);
-    Ok(format!("{}{}", stdout, stderr))
+    Ok(strip_colors(&format!("{}{}", stdout, stderr)))
+}
+
+/// Take out the terminal color sequences a rendered diagnostic carries.
+///
+/// The renderer colors what it writes to stderr whether or not a terminal is
+/// reading it, and the expected output is text.
+fn strip_colors(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut chars = text.chars();
+    while let Some(c) = chars.next() {
+        if c == '\x1b' {
+            // A CSI sequence: `ESC [`, parameters, then a final letter.
+            for c in chars.by_ref() {
+                if c.is_ascii_alphabetic() {
+                    break;
+                }
+            }
+        } else {
+            out.push(c);
+        }
+    }
+    out
 }
 
 fn main() {

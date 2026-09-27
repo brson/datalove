@@ -152,6 +152,13 @@ pub enum PendingDiagnostic<'db> {
         /// Recovery hint for auto-adapt mode.
         recovery_hint: RecoveryHint,
     },
+    /// F065: A literal out of range for the type it is checked against.
+    LiteralOutOfRange {
+        expr_key: ExprKey<'db>,
+        module_id: Option<ModuleId<'db>>,
+        message: InternedText<'db>,
+        note: InternedText<'db>,
+    },
     /// F026: Invalid operand type.
     InvalidOperandType {
         expr_key: ExprKey<'db>,

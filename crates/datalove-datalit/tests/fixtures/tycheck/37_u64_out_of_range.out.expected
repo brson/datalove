@@ -15,9 +15,9 @@
           "message": "value out of range",
           "span": [
             0,
-            1
+            28
           ],
-          "text": ":"
+          "text": ": u64 / 18446744073709551616"
         }
       ],
       "message": "integer literal out of range for type u64"

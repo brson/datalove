@@ -413,14 +413,14 @@ impl<'db> Parser<'db> {
             };
 
             if let Some(op) = unary_op {
+                let start = self.current_byte_pos();
+                let text = self.source_text();
                 self.next(); // Consume the operator.
                 let operand = self.parse_expr_primary();
-                return ast::ExprFun::new(
-                    self.db,
-                    self.module_id(),
-                    self.current_fn_name(),
-                    self.next_expr_index(),
-                    ast::ExprFunKind::UnaryOp(ast::ExprUnaryOp { op, operand })
+                let span = start..self.last_byte_end();
+                return self.create_expr(
+                    ast::ExprFunKind::UnaryOp(ast::ExprUnaryOp { op, operand }),
+                    TextSpan::new(text, span),
                 );
             }
         }
@@ -655,17 +655,15 @@ impl<'db> Parser<'db> {
                     TokenKind::String => {
                         // String literal - use new inline variant.
                         let text_str = token.text.as_str(self.db).S();
+                        let ts = self.peek_text_span();
                         self.next();
                         let value = InternedText::new(self.db, text_str);
-                        ast::ExprFun::new(
-                            self.db,
-                            self.module_id(),
-                            self.current_fn_name(),
-                            self.next_expr_index(),
+                        self.create_expr(
                             ast::ExprFunKind::String(ast::ExprString {
                                 type_hint: None,
                                 value
-                            })
+                            }),
+                            ts,
                         )
                     }
                     _ => {
@@ -756,6 +754,7 @@ impl<'db> Parser<'db> {
             }
             _ => unreachable!("caller must peek for ParenOpen before calling"),
         };
+        let tuple_ts = TextSpan::new(open_span.text, open_span.span.start..self.last_byte_end());
 
         let mut sub = self.sub_parser(*iter, Some((open_span, "in this tuple")));
         let (elements, had_comma) = sub.parse_comma_separated_with_trailing(|p| p.parse_expr_full());
@@ -766,13 +765,7 @@ impl<'db> Parser<'db> {
         if elements.len() == 1 && !had_comma {
             elements.into_iter().next().unwrap()
         } else {
-            ast::ExprFun::new(
-                self.db,
-                self.module_id(),
-                self.current_fn_name(),
-                self.next_expr_index(),
-                ast::ExprFunKind::Tuple(ast::ExprTuple { elements })
-            )
+            self.create_expr(ast::ExprFunKind::Tuple(ast::ExprTuple { elements }), tuple_ts)
         }
     }
 }

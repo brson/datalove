@@ -62,9 +62,9 @@
           "message": "expected 2 field(s), found 3",
           "span": [
             0,
-            1
+            42
           ],
-          "text": ":"
+          "text": ": {x: u32, y: u32} / {x = 1, y = 2, z = 3}"
         }
       ],
       "message": "struct has wrong number of fields"

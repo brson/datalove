@@ -326,9 +326,13 @@ impl Number {
 pub fn eat_number<'db, S: TokenStreamExt<'db>>(stream: &mut S) -> Option<Number> {
     let db = stream.db();
 
+    // A hex literal is a bit pattern and takes no sign, so a `-` against one
+    // is left for the caller: an operator where the language has one.
     let negative = stream.peek_sigil(Sigil::Minus)
         && stream.glued_right()
-        && stream.peek_next().and_then(|token| number_word(token, db)).is_some();
+        && stream.peek_next()
+            .and_then(|token| number_word(token, db))
+            .is_some_and(|word| !is_hex_word(word));
 
     // Decided before anything is consumed, so that a `-` that turns out not
     // to be a sign is left where the caller can read it as an operator.
@@ -488,6 +492,11 @@ fn number_word<'db>(token: &TreeToken<'db>, db: &'db dyn crate::Db) -> Option<&'
     };
     let word = token.word_str(db)?;
     is_number_word(word).then_some(word)
+}
+
+/// Whether a word is written as a hex literal.
+pub fn is_hex_word(word: &str) -> bool {
+    word.starts_with("0x") || word.starts_with("0X")
 }
 
 /// Check if a word is a numeric literal (decimal or hex).
@@ -729,7 +738,6 @@ mod tests {
         assert_eq!(read(db, "1.5"), "float 1.5");
         assert_eq!(read(db, "-1.5"), "float -1.5");
         assert_eq!(read(db, "0x1e5"), "hex 0x1e5");
-        assert_eq!(read(db, "-0x10"), "hex -0x10");
         assert_eq!(read(db, "1.0e300"), "float 1.0e300");
         assert_eq!(read(db, "2.5e-10"), "float 2.5e-10");
         assert_eq!(read(db, "2.5e+10"), "float 2.5e+10");
@@ -748,6 +756,8 @@ mod tests {
         // A sign belongs to the number only where it was written against it.
         assert_eq!(read(db, "- 5"), "-");
         assert_eq!(read(db, "-x"), "-");
+        // A hex literal takes no sign, so the `-` is left for the caller.
+        assert_eq!(read(db, "-0x10"), "-");
 
         // Letters on the end are reported, not interpreted.
         assert_eq!(read(db, "1u8"), "int 1+u8");

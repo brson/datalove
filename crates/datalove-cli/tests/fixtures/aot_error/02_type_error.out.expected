@@ -1,2 +1,8 @@
-Error: Type error:
-TypeMismatch { expected: "u32", actual: "string" }
+[F016] Error: mismatched types: expected `u32`, found `string`
+   ╭─[tests/fixtures/aot_error/02_type_error.dfs:2:19]
+   │
+ 2 │ let output: u32 = "not a number"
+   │                   ───────┬──────  
+   │                          ╰──────── type mismatch
+───╯
+Error: Type error

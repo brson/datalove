@@ -28,9 +28,9 @@
           "message": "expected `int`, found `u32`",
           "span": [
             11,
-            12
+            23
           ],
-          "text": ":"
+          "text": ": u32 / 1000"
         }
       ],
       "message": "mismatched types"

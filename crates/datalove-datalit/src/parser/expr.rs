@@ -50,11 +50,13 @@ impl<'db> Parser<'db> {
             }
         };
 
-        // Record span for this expression.
+        // Record span for this expression, from its hint if it has one to the
+        // end of the expression.
+        let end = self.prev_end().unwrap_or(ts.span.end).max(ts.span.end);
         self.expr_spans.push(ast::ParseSpanEntry::new(
             local_index,
             ts.text.source(self.db),
-            ts.span.clone(),
+            ts.span.start..end,
         ));
 
         expr_full
@@ -92,7 +94,19 @@ impl<'db> Parser<'db> {
         // A `-` no number follows is nothing else in datalit.
         if self.peek_sigil(Sigil::Minus) {
             let ts = self.peek_text_span();
+            let before_hex = self.glued_right() && matches!(
+                self.peek_next(),
+                Some(TreeToken::Token(tok)) if tok.word_str(self.db).is_some_and(parser_util::is_hex_word)
+            );
             self.next();
+            if before_hex {
+                self.next();
+                return self.emit_expr_error(ts,
+                    "a hex literal takes no sign",
+                    "D013",
+                    "a hex literal is an unsigned bit pattern; write a negative number in decimal"
+                );
+            }
             return self.emit_expr_error(ts,
                 "unexpected minus sign",
                 "D013",

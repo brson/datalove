@@ -269,7 +269,8 @@ pub fn check_expr<'db>(
                     if is_fixed_int_type(expected) || is_bigint_type(expected) {
                         // Validate the literal value fits in the expected type.
                         let value_str = int_expr.value.as_str(db);
-                        check_int_fits_type(value_str, expected_datalit_ty)?;
+                        check_int_fits_type(value_str, expected_datalit_ty)
+                            .map_err(|_| ctx.error_literal_out_of_range(expr, false, expected_datalit_ty))?;
                         ctx.store_expr_type(expr, &expected);
                         return Ok(());
                     }
@@ -313,7 +314,8 @@ pub fn check_expr<'db>(
                     // type, where what it spells would depend on the width.
                     if is_unsigned_int_type(expected) || is_bigint_type(expected) || is_float_type(expected) {
                         let value_str = hex_expr.value.as_str(db);
-                        check_hex_fits_type(value_str, expected_datalit_ty)?;
+                        check_hex_fits_type(value_str, expected_datalit_ty)
+                            .map_err(|_| ctx.error_literal_out_of_range(expr, true, expected_datalit_ty))?;
                         ctx.store_expr_type(expr, &expected);
                         return Ok(());
                     }
@@ -342,41 +344,33 @@ pub fn check_expr<'db>(
         // the width, so the expected type reaches through the negation to the
         // operand, the same as it would without one.
         ExprFunKind::UnaryOp(unary) if unary.op == UnaryOp::Neg => {
-            // A hex literal carries its sign the way datalit reads it, and a
-            // negative one is no unsigned integer or float bit pattern.
-            if let (ExprFunKind::Hex(hex_expr), Type::Datalit(expected_datalit_ty)) =
-                (unary.operand.expr(db), expected)
+            // An integer literal is checked with its sign attached, since
+            // that is what decides the range: -2147483648 is an i32 even
+            // though 2147483648 is not, and -5 is no u32 even though 5 is.
+            // This is how datalit reads a signed literal, which carries its
+            // sign in the token rather than under an operator.
+            if let (Type::Datalit(expected_datalit_ty), ExprFunKind::Int(int_expr)) =
+                (expected, unary.operand.expr(db))
             {
-                if is_unsigned_int_type(expected) || is_float_type(expected) {
-                    let negated = format!("-{}", hex_expr.value.as_str(db));
-                    check_hex_fits_type(&negated, expected_datalit_ty)?;
-                    unreachable!("no negative hex fits an unsigned integer or a float");
+                if is_fixed_int_type(expected) {
+                    let negated = format!("-{}", int_expr.value.as_str(db));
+                    check_int_fits_type(&negated, expected_datalit_ty)
+                        .map_err(|_| ctx.error_literal_out_of_range(expr, false, expected_datalit_ty))?;
+                    ctx.store_expr_type(unary.operand, expected);
+                    ctx.store_expr_type(expr, expected);
+                    return Ok(());
                 }
             }
-            if is_fixed_int_type(expected) || is_float_type(expected) {
-                // An integer literal is checked with its sign attached, since
-                // that is what decides the range: -2147483648 is an i32 even
-                // though 2147483648 is not, and -5 is no u32 even though 5 is.
-                // This is how datalit reads a signed literal, which carries
-                // its sign in the token rather than under an operator.
-                if let (true, ExprFunKind::Int(int_expr)) =
-                    (is_fixed_int_type(expected), unary.operand.expr(db))
-                {
-                    if let Type::Datalit(expected_datalit_ty) = expected {
-                        let value_str = int_expr.value.as_str(db);
-                        let negated = format!("-{}", value_str);
-                        check_int_fits_type(&negated, expected_datalit_ty)?;
-                        ctx.store_expr_type(unary.operand, expected);
-                        ctx.store_expr_type(expr, expected);
-                        return Ok(());
-                    }
-                }
-                // For other operands, check normally.
+            // A float negates to its own type, so the expected width reaches
+            // the operand.
+            if is_float_type(expected) {
                 check_expr(ctx, unary.operand, expected)?;
-                ctx.store_expr_type(expr, &expected);
+                ctx.store_expr_type(expr, expected);
                 return Ok(());
             }
-            // Otherwise fall through to default synthesis behavior.
+            // Anything else is negated as it is synthesized, which takes an
+            // int and refuses a fixed-width integer: bare `-` is not defined
+            // there, only `-?` and `-!`.
             let synthesized = ctx.synthesize_unhinted(expr)?;
             if types_equivalent(db, &synthesized, expected) {
                 return Ok(());

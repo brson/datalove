@@ -6,10 +6,10 @@
         {
           "message": "type mismatch",
           "span": [
-            14,
+            13,
             18
           ],
-          "text": "0x10"
+          "text": "-0x10"
         }
       ],
       "message": "mismatched types: expected `i32`, found `int`"
@@ -22,5 +22,11 @@
       "kind": "TypeMismatch"
     }
   ],
-  "judgements": []
+  "judgements": [
+    {
+      "kind": "variable",
+      "name": "x",
+      "type": "int"
+    }
+  ]
 }

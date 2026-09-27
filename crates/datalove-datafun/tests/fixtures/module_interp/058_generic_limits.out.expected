@@ -2,7 +2,7 @@ ModulesAnalysis(
     typecheck: TypecheckResult(
         status: "Error",
         errors: [
-            "local/test/main: TypeMismatch { expected: \"u32\", actual: \"string\" }",
+            "line 12, col 29: error[F016]: mismatched types: expected `u32`, found `string`",
         ],
     ),
     lowering: LoweringResult(

@@ -36,9 +36,9 @@
           "message": "expected `f64`, found `f32`",
           "span": [
             18,
-            19
+            29
           ],
-          "text": ":"
+          "text": ": f32 / 1.0"
         }
       ],
       "message": "mismatched types"

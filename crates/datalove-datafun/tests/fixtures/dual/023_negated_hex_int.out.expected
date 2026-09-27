@@ -13,9 +13,11 @@ DualAnalysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = const -127int
-                        debuglog v0
-                        unit_end_drop v0
+                        v0 = const 127int
+                        v1 = neg v0
+                        drop v0
+                        debuglog v1
+                        unit_end_drop v1
                         unit_end
                 """,
             ),
@@ -24,9 +26,11 @@ DualAnalysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = const -127int
-                        debuglog v0
-                        unit_end_drop v0
+                        v0 = const 127int
+                        v1 = neg v0
+                        drop v0
+                        debuglog v1
+                        unit_end_drop v1
                         unit_end
                 """,
             ),

@@ -22,9 +22,9 @@
           "message": "type annotation required",
           "span": [
             0,
-            4
+            19
           ],
-          "text": "enum"
+          "text": "enum { atom Ready }"
         }
       ],
       "message": "cannot infer type for enum literal"

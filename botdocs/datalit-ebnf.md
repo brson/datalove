@@ -54,7 +54,7 @@ float_lit      = [ "-" ], digit_run,
                  ( ".", digit_run, [ exponent ]
                  | exponent ) ;
 exponent       = ( "e" | "E" ), [ "+" | "-" ], digit_run ;
-hex_lit        = [ "-" ], "0", ( "x" | "X" ), hex_run ;
+hex_lit        = "0", ( "x" | "X" ), hex_run ;
 
 (* A separator goes between digits, so a run begins and ends with one. *)
 digit_run      = digit, { digit | "_" }, digit | digit ;

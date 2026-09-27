@@ -1,5 +1,20 @@
 {
-  "diagnostics": [],
+  "diagnostics": [
+    {
+      "code": "F026",
+      "labels": [
+        {
+          "message": "operator `-?` cannot be applied to type `string`",
+          "span": [
+            42,
+            45
+          ],
+          "text": "-?x"
+        }
+      ],
+      "message": "invalid operand type `string` for operator `-?`"
+    }
+  ],
   "errors": [
     {
       "kind": "InvalidOperandType",

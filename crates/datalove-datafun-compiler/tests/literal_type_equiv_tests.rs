@@ -88,18 +88,13 @@ const CASES: &[Case] = &[
     ("data", "\"s\""),
     ("[data]", "[data 1, 2]"),
     ("data", "data 5"),
-    // A hex literal is unsigned, or a float's bits. Its sign is part of it,
-    // and only an int takes a negative one.
+    // A hex literal is unsigned, or a float's bits.
     ("i32", "0x7F"),
     ("i8", "0x7F"),
     ("offset", "0x1"),
     ("u32", "0x7F"),
     ("index", "0x1"),
     ("f32", "0x3F800000"),
-    ("u32", "-0x10"),
-    ("f32", "-0x3F800000"),
-    ("i32", "-0x10"),
-    ("int", "-0x10"),
 ];
 
 /// Text that is not a numeric literal in either language.
@@ -112,6 +107,10 @@ const NOT_LITERALS: &[Case] = &[
     ("int", "1_"),
     ("int", "_1"),
     ("u32", "0x_FF"),
+    // A hex literal takes no sign. Datafun reads the `-` as negation, which
+    // a fixed-width integer does not have; datalit has nothing to read it as.
+    ("u32", "-0x10"),
+    ("i32", "-0x10"),
 ];
 
 /// The name of each error a typechecker raised, without its payload.
@@ -237,7 +236,6 @@ fn literal_types_are_decided_as_expected() {
             ("u32", "0x7F"),
             ("index", "0x1"),
             ("f32", "0x3F800000"),
-            ("int", "-0x10"),
         ],
     );
 }

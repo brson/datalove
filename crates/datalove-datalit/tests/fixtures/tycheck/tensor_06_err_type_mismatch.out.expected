@@ -57,9 +57,9 @@
           "message": "expected `u32`, found `f64`",
           "span": [
             25,
-            26
+            28
           ],
-          "text": "4"
+          "text": "4.0"
         }
       ],
       "message": "mismatched types"

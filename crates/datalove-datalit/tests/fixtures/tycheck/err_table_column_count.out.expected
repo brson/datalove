@@ -62,9 +62,9 @@
           "message": "expected 2 column(s), found 3",
           "span": [
             0,
-            1
+            50
           ],
-          "text": ":"
+          "text": ": {| x: u32, y: u32 |} / {|\n  x, y, z\n  1, 2, 3\n|}"
         }
       ],
       "message": "table has wrong number of columns"

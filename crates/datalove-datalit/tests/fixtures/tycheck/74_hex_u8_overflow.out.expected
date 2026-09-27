@@ -15,9 +15,9 @@
           "message": "value out of range",
           "span": [
             0,
-            1
+            12
           ],
-          "text": ":"
+          "text": ": u8 / 0x100"
         }
       ],
       "message": "hex literal out of range for type u8"

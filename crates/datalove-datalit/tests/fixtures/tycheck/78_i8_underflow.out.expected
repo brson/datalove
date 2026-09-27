@@ -15,9 +15,9 @@
           "message": "value out of range",
           "span": [
             0,
-            1
+            11
           ],
-          "text": ":"
+          "text": ": i8 / -129"
         }
       ],
       "message": "integer literal out of range for type i8"

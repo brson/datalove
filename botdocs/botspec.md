@@ -77,9 +77,13 @@ Use a type hint for fixed-width types: `: u32 / 42`.
 
 A hex literal is an unsigned integer: it checks against `int`, the unsigned
 fixed-width types and `index`, and against `f32` and `f64` as their bit
-patterns. It does not check against a signed fixed-width type or `offset`. A
-minus sign written against it, `-0x10`, is part of the literal, and only an
-`int` takes a negative one.
+patterns. It does not check against a signed fixed-width type or `offset`.
+
+A hex literal takes no sign. A `-` before one is the negation operator, as it
+would be before a name, so `-0x10` is the `int` -16 and, bare `-` not being
+defined on fixed-width integers, no `i32` or `u32`. A decimal literal does take
+its sign: `let x: i32 = -5` is an `i32`. Datalit, having no operators, reads
+`-0x10` as an error.
 
 Underscores may group digits, and say nothing about the value:
 

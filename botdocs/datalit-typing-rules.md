@@ -481,7 +481,7 @@ Examples:
 : f32 / 0x3F800000                      ok (IEEE 754 bit pattern for 1.0)
 : f64 / 0x3FF0000000000000              ok (IEEE 754 bit pattern for 1.0)
 : i32 / 0xFF                            FAIL (hex cannot check against signed)
-: i32 / -0x1                            FAIL (hex cannot check against signed)
+: i32 / -0x1                            FAIL (a hex literal takes no sign)
 ```
 
 ### Rule: Check-AnonTuple

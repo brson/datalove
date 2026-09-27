@@ -383,6 +383,15 @@ with `require rider <name>` and `import <name>.<function>`; a script has no ride
                 builder.emit_type();
             }
         }
+        PendingDiagnostic::LiteralOutOfRange { expr_key, module_id: _, message, note } => {
+            if let Some(ts) = spans.lookup_expr(db, *expr_key) {
+                bct::diagnostic::DiagnosticBuilder::error(db, message.as_str(db))
+                    .code("F065")
+                    .primary_label(ts, "value out of range")
+                    .note(note.as_str(db))
+                    .emit_type();
+            }
+        }
         PendingDiagnostic::InvalidOperandType { expr_key, module_id: _, op, ty } => {
             if let Some(ts) = spans.lookup_expr(db, *expr_key) {
                 let msg = format!(
@@ -681,6 +690,11 @@ fn format_single_diagnostic<'db>(
             } else {
                 Some(base_msg)
             }
+        }
+        PendingDiagnostic::LiteralOutOfRange { expr_key, module_id: _, message, note: _ } => {
+            let ts = spans.lookup_expr(db, *expr_key)?;
+            let loc = format_location(db, &ts);
+            Some(format!("{}: error[F065]: {}", loc, message.as_str(db)))
         }
         PendingDiagnostic::InvalidOperandType { expr_key, module_id: _, op, ty } => {
             let ts = spans.lookup_expr(db, *expr_key)?;

@@ -47,9 +47,9 @@
           "message": "expected 2 element(s), found 3",
           "span": [
             0,
-            1
+            24
           ],
-          "text": ":"
+          "text": ": (u32, u32) / (1, 2, 3)"
         }
       ],
       "message": "tuple has wrong number of elements"

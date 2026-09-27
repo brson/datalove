@@ -15,9 +15,9 @@
           "message": "value out of range",
           "span": [
             0,
-            1
+            27
           ],
-          "text": ":"
+          "text": ": i64 / 9223372036854775808"
         }
       ],
       "message": "integer literal out of range for type i64"

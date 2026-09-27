@@ -6,15 +6,15 @@
         {
           "message": "value out of range",
           "span": [
-            163,
-            165
+            12,
+            15
           ],
-          "text": "-5"
+          "text": "300"
         }
       ],
-      "message": "integer literal out of range for type u32",
+      "message": "integer literal out of range for type u8",
       "notes": [
-        "u32 can represent values from 0 to 4,294,967,295"
+        "u8 can represent values from 0 to 255"
       ]
     }
   ],

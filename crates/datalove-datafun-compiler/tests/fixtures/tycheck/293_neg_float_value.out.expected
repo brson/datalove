@@ -1,0 +1,16 @@
+{
+  "diagnostics": [],
+  "errors": [],
+  "judgements": [
+    {
+      "kind": "variable",
+      "name": "y",
+      "type": "f32"
+    },
+    {
+      "kind": "variable",
+      "name": "x",
+      "type": "f32"
+    }
+  ]
+}

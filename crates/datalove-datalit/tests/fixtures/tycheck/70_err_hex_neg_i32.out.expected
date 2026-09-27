@@ -5,7 +5,7 @@
         "message": "a hex literal takes no sign"
       }
     },
-    "type_hint": "U32"
+    "type_hint": "I32"
   },
   "diagnostics": [],
   "errors": [

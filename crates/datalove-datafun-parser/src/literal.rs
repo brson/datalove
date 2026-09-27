@@ -23,7 +23,8 @@ impl<'db> Parser<'db> {
     ///
     /// This handles the `: type / expr` pattern.
     pub(super) fn parse_lit_expr_full(&mut self) -> ast::ExprFun<'db> {
-        // Capture span before parsing for diagnostic reporting.
+        // The span runs from the hint, if there is one, to the end of what it
+        // is on, so that a diagnostic about either points at both.
         let ts = self.peek_text_span();
 
         // Check for `: type / expr` pattern.
@@ -53,6 +54,7 @@ impl<'db> Parser<'db> {
                 let inner = self.parse_postfix_try_operators(inner);
                 ast::ExprFunKind::Hinted(ast::ExprHinted { type_hint, inner })
             };
+            let ts = TextSpan::new(ts.text, ts.span.start..self.last_byte_end());
             return self.create_expr(expr_kind, ts);
         }
 
@@ -72,6 +74,16 @@ impl<'db> Parser<'db> {
             // collection or aggregate literal.
             return true;
         };
+        // A `-` is a literal's sign only where a decimal number is written
+        // against it, which is where the number reader takes it. Anywhere
+        // else it is the negation operator, over a name or a hex literal.
+        if token.kind == TokenKind::Sigil(Sigil::Minus) {
+            return self.glued_right() && matches!(
+                self.peek_next(),
+                Some(TreeToken::Token(next))
+                    if next.word_str(self.db).is_some_and(|w| Self::is_number_word(w) && !parser_util::is_hex_word(w))
+            );
+        }
         if token.kind != TokenKind::Word {
             return true;
         }

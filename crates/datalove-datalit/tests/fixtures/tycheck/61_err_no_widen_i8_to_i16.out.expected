@@ -28,9 +28,9 @@
           "message": "expected `i16`, found `i8`",
           "span": [
             11,
-            12
+            21
           ],
-          "text": ":"
+          "text": ": i8 / -10"
         }
       ],
       "message": "mismatched types"

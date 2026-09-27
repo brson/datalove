@@ -437,6 +437,31 @@ impl<'db> TypeContext<'db> {
     }
 
     /// F026: Invalid operand type for operator.
+    /// F065: A literal out of range for the type it is checked against.
+    ///
+    /// Worded as datalit words it, with the range the type has.
+    pub fn error_literal_out_of_range(
+        &mut self,
+        expr: ExprFun<'db>,
+        hex: bool,
+        ty: &datalove_datalit::tycheck::Type<'db>,
+    ) -> TypeError {
+        use datalove_datalit::tycheck::{hex_type_range_info, int_type_range_info, type_to_string};
+        let ty_str = type_to_string(self.db, ty);
+        let (message, (_, note)) = if hex {
+            (fmt!("hex literal out of range for type {ty_str}"), hex_type_range_info(ty))
+        } else {
+            (fmt!("integer literal out of range for type {ty_str}"), int_type_range_info(ty))
+        };
+        self.pending_diagnostics.push(PendingDiagnostic::LiteralOutOfRange {
+            expr_key: ExprKey::of(self.db, expr),
+            module_id: self.current_module_id,
+            message: InternedText::new(self.db, message),
+            note: InternedText::new(self.db, note.S()),
+        });
+        TypeError::IntOutOfRange
+    }
+
     pub fn error_invalid_operand_type(&mut self, expr: ExprFun<'db>, op: &str, ty: &str) -> TypeError {
         self.pending_diagnostics.push(PendingDiagnostic::InvalidOperandType {
             expr_key: ExprKey::of(self.db, expr),

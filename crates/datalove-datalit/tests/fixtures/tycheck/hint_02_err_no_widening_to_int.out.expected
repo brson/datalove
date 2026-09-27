@@ -28,9 +28,9 @@
           "message": "expected `int`, found `i32`",
           "span": [
             11,
-            12
+            20
           ],
-          "text": ":"
+          "text": ": i32 / 1"
         }
       ],
       "message": "mismatched types"

@@ -51,9 +51,9 @@
           "message": "expected field `x`, found `y`",
           "span": [
             0,
-            1
+            35
           ],
-          "text": ":"
+          "text": ": {x: u32, y: u32} / {y = 2, x = 1}"
         }
       ],
       "message": "struct fields in wrong order"

@@ -15,9 +15,9 @@
           "message": "value out of range",
           "span": [
             0,
-            1
+            19
           ],
-          "text": ":"
+          "text": ": f32 / 0x100000000"
         }
       ],
       "message": "hex literal out of range for f32 bit pattern"

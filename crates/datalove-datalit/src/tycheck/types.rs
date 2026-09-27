@@ -748,39 +748,19 @@ pub fn check_int_fits_type(value_str: &str, ty: &Type<'_>) -> Result<(), TypeErr
 /// Check if a hex value fits within a given type.
 pub fn check_hex_fits_type(value_str: &str, ty: &Type<'_>) -> Result<(), TypeError> {
     let value_str = crate::parser_util::strip_separators(value_str);
-    let value_str = value_str.as_ref();
-    let is_negative = value_str.starts_with('-');
     let hex_part = value_str
-        .trim_start_matches('-')
         .trim_start_matches("0x")
         .trim_start_matches("0X");
-
-    match ty {
-        Type::U8 if !is_negative => {
-            u8::from_str_radix(hex_part, 16).map(|_| ()).map_err(|_| TypeError::IntOutOfRange)
-        }
-        Type::U16 if !is_negative => {
-            u16::from_str_radix(hex_part, 16).map(|_| ()).map_err(|_| TypeError::IntOutOfRange)
-        }
-        Type::U32 if !is_negative => {
-            u32::from_str_radix(hex_part, 16).map(|_| ()).map_err(|_| TypeError::IntOutOfRange)
-        }
-        Type::U64 if !is_negative => {
-            u64::from_str_radix(hex_part, 16).map(|_| ()).map_err(|_| TypeError::IntOutOfRange)
-        }
-        Type::Index if !is_negative => {
-            datalove_rtdt::IndexRepr::from_str_radix(hex_part, 16).map(|_| ()).map_err(|_| TypeError::IntOutOfRange)
-        }
-        Type::Int => Ok(()),
-        Type::F32 if !is_negative => {
-            u32::from_str_radix(hex_part, 16).map(|_| ()).map_err(|_| TypeError::IntOutOfRange)
-        }
-        Type::F64 if !is_negative => {
-            u64::from_str_radix(hex_part, 16).map(|_| ()).map_err(|_| TypeError::IntOutOfRange)
-        }
-        _ if is_negative => Err(TypeError::IntOutOfRange),
+    let fits = match ty {
+        Type::U8 => u8::from_str_radix(hex_part, 16).is_ok(),
+        Type::U16 => u16::from_str_radix(hex_part, 16).is_ok(),
+        Type::U32 | Type::F32 => u32::from_str_radix(hex_part, 16).is_ok(),
+        Type::U64 | Type::F64 => u64::from_str_radix(hex_part, 16).is_ok(),
+        Type::Index => datalove_rtdt::IndexRepr::from_str_radix(hex_part, 16).is_ok(),
+        Type::Int => true,
         _ => panic!("check_hex_fits_type called with unsupported type"),
-    }
+    };
+    if fits { Ok(()) } else { Err(TypeError::IntOutOfRange) }
 }
 
 // ============================================================================

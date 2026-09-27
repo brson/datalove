@@ -15,9 +15,9 @@
           "message": "expected `i16`, found `int`",
           "span": [
             0,
-            1
+            14
           ],
-          "text": ":"
+          "text": ": i16 / 0x8000"
         }
       ],
       "message": "mismatched types"

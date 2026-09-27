@@ -11,9 +11,9 @@
           "message": "expected `f32`, found `bool`",
           "span": [
             0,
-            1
+            12
           ],
-          "text": ":"
+          "text": ": f32 / true"
         }
       ],
       "message": "mismatched types"

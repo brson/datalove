@@ -32,9 +32,9 @@
           "message": "expected `enum{atom Ready}`, found `term Ready`",
           "span": [
             0,
-            1
+            36
           ],
-          "text": ":"
+          "text": ": enum { atom Ready } / term Ready 1"
         }
       ],
       "message": "mismatched types"

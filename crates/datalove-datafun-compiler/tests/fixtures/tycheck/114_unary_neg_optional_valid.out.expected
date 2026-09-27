@@ -1,5 +1,20 @@
 {
-  "diagnostics": [],
+  "diagnostics": [
+    {
+      "code": "F026",
+      "labels": [
+        {
+          "message": "operator `-?` cannot be applied to type `u32`",
+          "span": [
+            40,
+            43
+          ],
+          "text": "-?x"
+        }
+      ],
+      "message": "invalid operand type `u32` for operator `-?`"
+    }
+  ],
   "errors": [
     {
       "kind": "InvalidOperandType",

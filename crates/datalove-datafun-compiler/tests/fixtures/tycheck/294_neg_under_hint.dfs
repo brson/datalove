@@ -1,0 +1,3 @@
+let y: int = 5
+let x = : int / -y
+let z = : int / -0x10

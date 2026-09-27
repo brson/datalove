@@ -19,9 +19,9 @@
           "message": "expected `atom A`, found `atom B`",
           "span": [
             0,
-            1
+            17
           ],
-          "text": ":"
+          "text": ": atom A / atom B"
         }
       ],
       "message": "mismatched types"

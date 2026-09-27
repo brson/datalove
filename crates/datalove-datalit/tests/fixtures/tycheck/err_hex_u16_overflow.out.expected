@@ -15,9 +15,9 @@
           "message": "value out of range",
           "span": [
             0,
-            1
+            15
           ],
-          "text": ":"
+          "text": ": u16 / 0x10000"
         }
       ],
       "message": "hex literal out of range for type u16"

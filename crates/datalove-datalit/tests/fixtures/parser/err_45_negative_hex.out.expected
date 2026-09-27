@@ -1,0 +1,26 @@
+{
+  "ast": {
+    "expr": {
+      "ParseError": {
+        "message": "a hex literal takes no sign"
+      }
+    },
+    "type_hint": null
+  },
+  "diagnostics": [
+    {
+      "code": "D013",
+      "labels": [
+        {
+          "message": "a hex literal is an unsigned bit pattern; write a negative number in decimal",
+          "span": [
+            0,
+            1
+          ],
+          "text": "-"
+        }
+      ],
+      "message": "a hex literal takes no sign"
+    }
+  ]
+}

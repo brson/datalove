@@ -173,21 +173,12 @@ pub fn try_parse_negated_int_const(text: &str, ty: &IrType) -> Option<ConstValue
 
 /// Parse a hex literal into a ConstValue based on the target type.
 ///
-/// The text is the literal as written, prefix and all. A sign is part of it
-/// where it was written against the digits, and only an `int` takes one: the
-/// typechecker keeps hex from signed fixed-width types, and a negative bit
-/// pattern means nothing.
+/// The text is the literal as written, prefix and all. A hex literal takes no
+/// sign, and the typechecker keeps it from the signed fixed-width types.
 pub fn parse_hex_const(text: &str, ty: &IrType) -> Result<ConstValue, ()> {
-    let (negative, unsigned) = match text.strip_prefix('-') {
-        Some(rest) => (true, rest),
-        None => (false, text),
-    };
-    let hex_str = unsigned.strip_prefix("0x").or_else(|| unsigned.strip_prefix("0X")).ok_or(())?;
+    let hex_str = text.strip_prefix("0x").or_else(|| text.strip_prefix("0X")).ok_or(())?;
     let hex_str = digits(hex_str);
     let hex_str = hex_str.as_ref();
-    if negative && *ty != IrType::Int {
-        return Err(());
-    }
     match ty {
         IrType::U8 => u8::from_str_radix(hex_str, 16).map(ConstValue::U8).map_err(|_| ()),
         IrType::U16 => u16::from_str_radix(hex_str, 16).map(ConstValue::U16).map_err(|_| ()),
@@ -196,8 +187,7 @@ pub fn parse_hex_const(text: &str, ty: &IrType) -> Result<ConstValue, ()> {
         IrType::Index => datalove_rtdt::IndexRepr::from_str_radix(hex_str, 16).map(ConstValue::Index).map_err(|_| ()),
         IrType::Int => {
             let limbs = parse_hex_to_limbs(hex_str)?;
-            let negative = negative && !limbs.is_empty();
-            Ok(ConstValue::Int { limbs, negative })
+            Ok(ConstValue::Int { limbs, negative: false })
         }
         IrType::F32 => {
             // Hex value represents the bit pattern of the float.

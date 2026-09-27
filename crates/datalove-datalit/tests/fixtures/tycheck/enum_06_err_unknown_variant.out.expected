@@ -24,9 +24,9 @@
           "message": "expected `enum{atom Ready}`, found `atom Nope`",
           "span": [
             0,
-            1
+            33
           ],
-          "text": ":"
+          "text": ": enum { atom Ready } / atom Nope"
         }
       ],
       "message": "mismatched types"

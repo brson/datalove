@@ -311,8 +311,8 @@ Hex literals synthesize `int`, but check
 as `int`, unsigned fixed ints, `index`,
 or floats if provided a type hint.
 Hex literals do not check against signed fixed-width types or `offset`.
-A minus sign is part of a hex literal, as it is of a decimal one,
-and only `int` takes a negative hex literal: `: int / -0x10` is `-16`.
+A hex literal takes no sign: `-0x10` is an error.
+Write a negative number in decimal.
 
 A hex literal checked against a float type is its IEEE 754 bit pattern,
 and must fit in the float's width: 32 bits for `f32`, 64 for `f64`.
@@ -373,7 +373,7 @@ int_lit        = [ "-" ], digit_run ;
 float_lit      = [ "-" ], digit_run,
                  ( ".", digit_run, [ exponent ] | exponent ) ;
 exponent       = ( "e" | "E" ), [ "+" | "-" ], digit_run ;
-hex_lit        = [ "-" ], "0", ( "x" | "X" ), hex_run ;
+hex_lit        = "0", ( "x" | "X" ), hex_run ;
 digit_run      = digit, [ { digit | "_" }, digit ] ;
 hex_run        = hex_digit, [ { hex_digit | "_" }, hex_digit ] ;
 
@@ -1058,8 +1058,6 @@ and against the parser's own diagnostics.
   so they read back as `int` and `f64`.
   Round-tripping through the value printer is only exact
   for values whose types synthesize.
-- Whether `-0x0` should be accepted as a float bit pattern.
-  It is rejected today, as all negative hex is for floats.
 
 
 

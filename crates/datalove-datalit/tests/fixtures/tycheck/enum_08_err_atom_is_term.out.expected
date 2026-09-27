@@ -24,9 +24,9 @@
           "message": "expected `enum{term Custom string}`, found `atom Custom`",
           "span": [
             0,
-            1
+            43
           ],
-          "text": ":"
+          "text": ": enum { term Custom string } / atom Custom"
         }
       ],
       "message": "mismatched types"

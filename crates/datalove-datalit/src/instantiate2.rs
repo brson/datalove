@@ -458,14 +458,10 @@ fn instantiate_hex_f64(_rt: datalove_rt::c::LocalRtHandle, db: &dyn crate::Db, h
 fn instantiate_hex_bigint(rt: datalove_rt::c::LocalRtHandle, db: &dyn crate::Db, hex_expr: &ExprHex, dest_ptr: *mut u8) -> AnyResult<*const u8> {
     debug_assert!(!dest_ptr.is_null());
     let value_str = hex_expr.value.as_str(db);
-    // The sign is written against the digits, and an int is the one type a
-    // negative hex literal checks against.
-    let (is_negative, unsigned) = match value_str.strip_prefix('-') {
-        Some(rest) => (true, rest),
-        None => (false, value_str),
-    };
-    let value = u128::from_str_radix(&parse_hex_str(unsigned), 16)?;
-    let is_negative = is_negative && value != 0;
+    let value = u128::from_str_radix(&parse_hex_str(value_str), 16)?;
+
+    // A hex literal takes no sign.
+    let is_negative = false;
 
     let mut limbs = Vec::new();
     let mut remaining = value;

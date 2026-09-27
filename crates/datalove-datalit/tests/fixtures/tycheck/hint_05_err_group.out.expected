@@ -22,9 +22,9 @@
           "message": "expected `u32`, found `u8`",
           "span": [
             9,
-            10
+            17
           ],
-          "text": ":"
+          "text": ": u8 / 1"
         }
       ],
       "message": "mismatched types"

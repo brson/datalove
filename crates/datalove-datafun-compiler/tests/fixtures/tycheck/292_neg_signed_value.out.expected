@@ -1,0 +1,32 @@
+{
+  "diagnostics": [
+    {
+      "code": "F026",
+      "labels": [
+        {
+          "message": "operator `-` cannot be applied to type `i32`",
+          "span": [
+            28,
+            30
+          ],
+          "text": "-y"
+        }
+      ],
+      "message": "invalid operand type `i32` for operator `-`"
+    }
+  ],
+  "errors": [
+    {
+      "kind": "InvalidOperandType",
+      "op": "-",
+      "type": "i32"
+    }
+  ],
+  "judgements": [
+    {
+      "kind": "variable",
+      "name": "y",
+      "type": "i32"
+    }
+  ]
+}
