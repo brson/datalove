@@ -8,14 +8,11 @@ use rmx::prelude::*;
 use std::collections::{HashMap, HashSet};
 use datalove_datafun_ast::ast::{Statement, ExprFun, ExprFunKind};
 use datalove_datafun_ir::{
-    IrType, IrModuleId, FuncId, ValueId, SlotId, ExportBinding,
+    IrType, FuncId, ValueId, SlotId, ExportBinding,
     ConstBindingInfo, ConstBindingGraph, ConstStmtId,
 };
-use datalove_datafun_tycheck::{
-    UnitTypecheckResultTracked, ModuleSpec,
-};
+use datalove_datafun_tycheck::UnitTypecheckResultTracked;
 
-use crate::module_graph::ModuleId;
 use crate::lower;
 use crate::IrTypeExt;
 
@@ -105,30 +102,6 @@ impl AccumulatedLowerBindings {
 
         self.current_unit = unit_index + 1;
     }
-}
-
-/// Build func_id_map from module specs for cross-module call resolution.
-pub fn build_func_id_map<'db>(
-    db: &'db dyn salsa::Database,
-    module_specs: &[ModuleSpec<'db>],
-) -> HashMap<(ModuleId<'db>, String), (IrModuleId, FuncId)> {
-    let mut func_id_map = HashMap::new();
-
-    for (ir_module_idx, spec) in module_specs.iter().enumerate() {
-        let ir_module_id = IrModuleId(ir_module_idx as u32);
-        let mut next_func_id: u32 = 0;
-
-        for statement in spec.parsed.statements.iter() {
-            if let Statement::Fun(func) = statement {
-                let func_name = func.name(db).text(db).S();
-                let func_id = FuncId(next_func_id);
-                next_func_id += 1;
-                func_id_map.insert((spec.module_id, func_name), (ir_module_id, func_id));
-            }
-        }
-    }
-
-    func_id_map
 }
 
 // ============================================================================

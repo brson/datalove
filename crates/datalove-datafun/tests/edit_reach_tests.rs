@@ -69,6 +69,14 @@ impl Reach {
 /// `base` is imported by `mid`, which is imported by `top`. Three modules take
 /// a function from a rider. Two are islands nothing imports.
 ///
+/// The islands are named to sort after everything else, and the module the
+/// add-a-module test appends sorts after them. That is not cosmetic:
+/// `ir_module_ids` numbers modules by position, so a module appearing or
+/// disappearing anywhere but the end shifts the numbers of everything after it,
+/// and those modules really do have to lower again -- their functions have
+/// different ids. Sorting last is what isolates the question these tests are
+/// asking from that one.
+///
 /// `shared_takes` and `private_takes` are the parameter lists of `base`'s two
 /// functions, so a test can move the signature of the one `mid` imports or the
 /// one nobody does. `base_salt` is a literal in a body, for an edit that should
@@ -133,7 +141,7 @@ impl World {
 
         for i in 0..ISLANDS {
             w.push_str(&format!(
-                "\n----------\nmodule local/test/island{i}\n----------\n\
+                "\n----------\nmodule local/test/zz_island{i}\n----------\n\
                  fun island_fn{i}({}): i32\n\x20   ret {i}\nend fun\n",
                 self.island_takes,
             ));
@@ -239,7 +247,7 @@ fn a_body_edit_reaches_only_its_own_module() {
 #[test]
 fn a_signature_edit_in_an_island_reaches_only_the_island() {
     let reach = reach_of(|db, pipeline| {
-        put(db, pipeline, "island0", &World { island_takes: "z: i32, extra: i32", ..World::default() });
+        put(db, pipeline, "zz_island0", &World { island_takes: "z: i32, extra: i32", ..World::default() });
     });
     assert_eq!(
         reach,
@@ -295,7 +303,7 @@ fn changing_an_imported_export_reaches_the_importer_and_no_further() {
 // Changing the module set
 // ============================================================================
 
-/// Adding a module that sorts last does not re-typecheck the others.
+/// Adding a module that sorts last leaves every existing module alone.
 ///
 /// `incremental_lowering_tests` holds the lowering half of this against a world
 /// with no imports and no riders. This holds the frontend half against a world
@@ -308,72 +316,31 @@ fn changing_an_imported_export_reaches_the_importer_and_no_further() {
 /// so one landing earlier renumbers everything after it and those modules really
 /// do have to lower again.
 #[test]
-fn adding_a_module_does_not_retypecheck_the_others() {
+fn adding_a_module_leaves_the_others_alone() {
     let reach = reach_of(|db, pipeline| {
         pipeline.add_module(
-            db, "local", "test", "zz_added",
+            db, "local", "test", "zzz_added",
             "fun added_fn(q: i32): i32\n\x20   ret q\nend fun\n",
         );
     });
     assert_eq!(
-        reach.frontend(), (1, 1),
+        (reach.typechecks, reach.analyses, reach.lowerings, reach.assemblies), (1, 1, 1, 1),
         "only the new module is new; the other {MODULES} did not change -- got {reach:?}",
     );
 }
 
-/// Removing an island does not re-typecheck what remains.
+/// Removing an island leaves every remaining module alone.
 #[test]
-fn removing_an_island_does_not_retypecheck_the_others() {
+fn removing_an_island_leaves_the_others_alone() {
     let reach = reach_of(|_db, pipeline| {
-        pipeline.remove_module("local", "test", "island1");
+        pipeline.remove_module("local", "test", "zz_island1");
     });
     assert_eq!(
-        reach.frontend(), (0, 0),
+        (reach.typechecks, reach.analyses, reach.lowerings, reach.assemblies), (0, 0, 0, 0),
         "nothing that remains changed, and the island sorted last -- got {reach:?}",
     );
 }
 
-/// **A known defect, pinned rather than asserted away.** Changing the module set
-/// re-lowers and re-assembles every module, riders or no riders.
-///
-/// `compute_func_id_map` numbers the riders' `IrModuleId`s *after* the regular
-/// modules -- `rider_module_idx = regular_module_count` -- so adding or removing
-/// any module shifts every rider's id. Every module's `reachable_func_ids` keeps
-/// every rider entry, riders being the entries the graph does not account for, so
-/// every module's `ReachableFuncIds` moves, which re-keys `lower_module_functions`
-/// for all of them and re-mints the `ModuleLowered` handles the rest of phase 5
-/// is keyed on.
-///
-/// The fix is to number the riders independently of how many modules there are,
-/// which means touching the six places that derive an `IrModuleId` from a
-/// position and agreeing with the backends about it. That is the same positional
-/// numbering that stands in the way of compiling only what is reachable, so it
-/// belongs with that work rather than here.
-///
-/// **When it is fixed these numbers drop and this test fails.** That is what it
-/// is for: tighten it to `(1, 1)` and `(0, 0)` then, and fold it back into the
-/// two tests above.
-#[test]
-fn changing_the_module_set_still_relowers_everything() {
-    let added = reach_of(|db, pipeline| {
-        pipeline.add_module(
-            db, "local", "test", "zz_added",
-            "fun added_fn(q: i32): i32\n\x20   ret q\nend fun\n",
-        );
-    });
-    assert_eq!(
-        added.lowering(), (MODULES + 1, MODULES + 1),
-        "adding a module re-lowers all {} of them -- got {added:?}", MODULES + 1,
-    );
-
-    let removed = reach_of(|_db, pipeline| {
-        pipeline.remove_module("local", "test", "island1");
-    });
-    assert_eq!(
-        removed.lowering(), (MODULES - 1, MODULES - 1),
-        "removing one re-lowers the {} that remain -- got {removed:?}", MODULES - 1,
-    );
-}
 
 /// An unchanged recompile of this world runs nothing.
 #[test]

@@ -133,6 +133,51 @@ fn reachable_func_ids<'db>(
     ReachableFuncIds::new(db, entries)
 }
 
+/// The `IrModuleId` of every module the program has, riders included.
+///
+/// **The riders come first, and that is the whole point.** They used to be
+/// numbered after the regular modules -- `rider_module_idx =
+/// regular_module_count` -- so adding or removing any module anywhere shifted
+/// every rider's id. Every module's `reachable_func_ids` keeps every rider
+/// entry, riders being the entries the graph does not account for, so every
+/// module's `ReachableFuncIds` moved; that re-keyed `lower_module_functions` for
+/// all of them and re-minted the `ModuleLowered` handles the rest of phase 5 is
+/// keyed on. A module appearing anywhere re-lowered and re-assembled the whole
+/// world. Numbered first, a rider's id depends on the rider sources alone.
+///
+/// **This is the one place that decides, and it is worth keeping that way.**
+/// Four other places used to derive the same numbering from a position in the
+/// graph, and all four had to agree with this one for a call to land on the
+/// function it named.
+///
+/// Riders are ordered by their synthetic path, which comes from the rider's
+/// name and so from its source. Ordering them by `ModuleId` would compare
+/// salsa ids, which is interning order.
+#[salsa::tracked(returns(ref))]
+pub fn ir_module_ids<'db>(
+    db: &'db dyn salsa::Database,
+    parsed_graph: ParsedModuleGraph<'db>,
+) -> BTreeMap<ModuleId<'db>, IrModuleId> {
+    let mut riders_by_path: BTreeMap<String, ModuleId<'db>> = BTreeMap::new();
+    for riders in parsed_graph.resolved_riders(db).values() {
+        for (_alias, rider) in riders {
+            riders_by_path.insert(rider.module_id.path(db).clone(), rider.module_id);
+        }
+    }
+
+    let mut ids = BTreeMap::new();
+    let mut next = 0u32;
+    for rider_module_id in riders_by_path.into_values() {
+        ids.insert(rider_module_id, IrModuleId(next));
+        next += 1;
+    }
+    for (module_id, _) in parsed_graph.statements_only(db) {
+        ids.insert(*module_id, IrModuleId(next));
+        next += 1;
+    }
+    ids
+}
+
 /// Compute the function ID map from a parsed module graph.
 ///
 /// This assigns module-local FuncIds (0, 1, 2, ...) to each function in each
@@ -143,10 +188,10 @@ pub fn compute_func_id_map<'db>(
     parsed_graph: ParsedModuleGraph<'db>,
 ) -> FuncIdMap<'db> {
     let mut entries = Vec::new();
-    let regular_module_count = parsed_graph.statements_only(db).len();
+    let module_ids = ir_module_ids(db, parsed_graph);
 
-    for (ir_module_idx, (module_id, parsed)) in parsed_graph.statements_only(db).iter().enumerate() {
-        let ir_module_id = IrModuleId(ir_module_idx as u32);
+    for (module_id, parsed) in parsed_graph.statements_only(db) {
+        let ir_module_id = *module_ids.get(module_id).expect("every parsed module is numbered");
         let mut next_func_id: u32 = 0;
 
         for statement in parsed.statements.iter() {
@@ -159,20 +204,13 @@ pub fn compute_func_id_map<'db>(
         }
     }
 
-    // Add rider functions. Each unique rider alias gets its own IrModuleId.
-    let mut rider_module_idx = regular_module_count;
-    let mut seen_riders: std::collections::BTreeMap<String, IrModuleId> = std::collections::BTreeMap::new();
-
+    // Add rider functions, under the ids assigned above.
     for (_module_id, riders) in parsed_graph.resolved_riders(db).iter() {
-        for (alias, rider) in riders {
-            let rider_path = format!("@rider/{}", alias.text(db));
-            let rider_ir_module_id = *seen_riders.entry(rider_path.clone()).or_insert_with(|| {
-                let id = IrModuleId(rider_module_idx as u32);
-                rider_module_idx += 1;
-                id
-            });
-
+        for (_alias, rider) in riders {
             let synthetic_module_id = rider.module_id;
+            let rider_ir_module_id = *module_ids.get(&synthetic_module_id)
+                .expect("every required rider is numbered");
+
             for (func_idx, (func_name, _func_type)) in rider.functions.iter().enumerate() {
                 let name = func_name.text(db).S();
                 let key = (synthetic_module_id, name);
@@ -1917,12 +1955,17 @@ fn specialize_comptime_functions<'db>(
     module_consts: &HashMap<ModuleId<'db>, HashMap<String, (IrType, ConstValue)>>,
     mut lowered_functions: HashMap<ModuleId<'db>, Arc<ModuleLoweredFunctions>>,
 ) -> (HashMap<ModuleId<'db>, Arc<ModuleLoweredFunctions>>, Vec<(ModuleId<'db>, Vec<String>)>) {
-    // Modules in the order that decides their `IrModuleId`, which is also the
-    // order the copies are numbered in.
+    // Modules paired with their `IrModuleId`, which is also the order the copies
+    // are numbered in. Taken from `ir_module_ids` rather than from a position in
+    // the graph, so that this cannot disagree with what a call site was compiled
+    // to expect.
     let graph = typecheck_result.graph(db);
+    let module_ids = ir_module_ids(db, parsed_graph);
     let modules: Vec<(ModuleId<'db>, IrModuleId)> = graph.iter_modules(db)
-        .enumerate()
-        .map(|(idx, module)| (module.id(db), IrModuleId(idx as u32)))
+        .map(|module| {
+            let id = module.id(db);
+            (id, *module_ids.get(&id).expect("every module in the graph is numbered"))
+        })
         .collect();
 
     // The source of each comptime function, for evaluating its consts once the
@@ -2095,8 +2138,9 @@ fn assemble_module_graph<'db>(
     let mut results_vec = Vec::new();
     let mut all_success = true;
 
-    for (ir_module_idx, (module_id, parsed)) in parsed_graph.statements_only(db).iter().enumerate() {
-        let ir_module_id = IrModuleId(ir_module_idx as u32);
+    let module_ids = ir_module_ids(db, parsed_graph);
+    for (module_id, parsed) in parsed_graph.statements_only(db) {
+        let ir_module_id = *module_ids.get(module_id).expect("every parsed module is numbered");
 
         // Skip modules with typecheck errors.
         if typecheck_errors.get(module_id).map_or(false, |e| !e.is_empty()) {
@@ -2174,10 +2218,10 @@ fn assemble_module_graph_parallel<'db>(
     let ownership_analysis_results = ownership_analysis.module_results(db_salsa);
 
     // Prepare work items for parallel execution.
+    let module_ids = ir_module_ids(db_salsa, parsed_graph);
     let work: Vec<_> = parsed_graph.statements_only(db_salsa)
         .iter()
-        .enumerate()
-        .filter_map(|(ir_module_idx, (module_id, parsed))| {
+        .filter_map(|(module_id, parsed)| {
             // Skip modules with typecheck errors.
             if typecheck_errors.get(module_id).map_or(false, |e| !e.is_empty()) {
                 return None;
@@ -2200,7 +2244,7 @@ fn assemble_module_graph_parallel<'db>(
             Some((
                 db.dyn_clone(),
                 module,
-                IrModuleId(ir_module_idx as u32),
+                *module_ids.get(module_id).expect("every parsed module is numbered"),
                 parsed.clone(),
                 single_typecheck,
                 single_ownership_analysis,

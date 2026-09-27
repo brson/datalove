@@ -35,7 +35,7 @@ use datalove_datafun_compiler::lower::{
 };
 use datalove_datafun_const::{inline_script_consts, PreparedConst, ScriptFunctionConstsResult, evaluate_prepared_const};
 use datalove_datafun_compiler::tracked_script_lower::{
-    AccumulatedLowerBindings, build_func_id_map, collect_const_graph,
+    AccumulatedLowerBindings, collect_const_graph,
 };
 use datalove_datafun_compiler::tracked_script_ownership::{
     analyze_script_fragment_tracked, analyze_script_expr_tracked, ScriptAnalysisData,
@@ -599,7 +599,6 @@ impl<'db> ScriptCompiler<'db> {
         let script_ctx = self.accumulated_lower_bindings.to_script_lower_context();
 
         // Get module function ID map for resolving module function calls.
-        let func_id_map = build_func_id_map(self.db, &self.module_specs);
 
         // Build func_param_types and func_return_types for type alias support.
         let mut func_param_types: HashMap<String, Vec<IrType>> = HashMap::new();
@@ -624,7 +623,7 @@ impl<'db> ScriptCompiler<'db> {
             &ownership.func_analyses,
             Some(&func_param_types),
             Some(&func_return_types),
-            &func_id_map,
+            self.shared_context.func_id_map,
             script_ctx,
         ) {
             Ok((functions, func_name_to_id)) => {
@@ -954,7 +953,6 @@ impl<'db> ScriptCompiler<'db> {
         _consts: &ConstEvalOutput,
         lowered_funcs: &LoweredFunctions,
     ) -> Result<IrCodeUnit, ScriptCompilationResult> {
-        let func_id_map = build_func_id_map(self.db, &self.module_specs);
         let script_ctx = self.accumulated_lower_bindings.to_script_lower_context();
 
         match unit {
@@ -992,7 +990,7 @@ impl<'db> ScriptCompiler<'db> {
                     self.db,
                     typecheck.expr_types,
                     typecheck.call_targets,
-                    &func_id_map,
+                    self.shared_context.func_id_map,
                     script_ctx,
                     stmts.clone(),
                     ownership.func_analyses.clone(),
@@ -1015,7 +1013,7 @@ impl<'db> ScriptCompiler<'db> {
                     self.db,
                     typecheck.expr_types,
                     typecheck.call_targets,
-                    &func_id_map,
+                    self.shared_context.func_id_map,
                     script_ctx,
                     *expr,
                 ).map_err(|e| {

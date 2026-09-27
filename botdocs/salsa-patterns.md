@@ -205,6 +205,25 @@ uses:
 `ExprKey` carries a hand-written `Debug` that prints `ExprKey(fn #4)` rather
 than the interned id behind `fn_name`, so keys can appear in expected output.
 
+### A key of your own still wants one place that hands them out
+
+`IrModuleId` is a key of our own, and it was derived from a module's position in
+the graph in five different places -- `compute_func_id_map`, the specializer, the
+two assembly paths and the script compiler's own `build_func_id_map`. All five
+had to agree for a call to land on the function it named, and nothing checked
+that they did.
+
+Worse, one of them numbered the riders *after* the regular modules, so adding a
+module anywhere shifted every rider's id, every module's `ReachableFuncIds` moved
+with it, and the whole world re-lowered. `ir_module_ids` is the one place that
+decides now, the riders are numbered first so their ids depend on the rider
+sources alone, and `build_func_id_map` is deleted -- it was a subset of the map
+the pipeline already had.
+
+**A key you define needs a single definition as much as it needs to be stable.**
+Five derivations of one numbering is five chances to disagree, and the numbering
+being positional is what let a change at one end of the world move the other.
+
 One deliberate exception survives: `InternedText`'s `Ord`
 (`bcts/src/text.rs`) compares by id. `Ord::cmp` receives no database, so it
 cannot compare content. See the determinism section for why it is load-bearing
