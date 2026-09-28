@@ -90,6 +90,35 @@ roots is for running a program, not for vouching for a world**. CI and
 `just test` want `All`. A library wants checking whether or not this program
 calls into it.
 
+## What it bought the test suite
+
+The suites that invoke the CLI pay for a compile per fixture, so narrowing shows
+up directly. Measured with the narrowing calls removed and put back, binaries
+pre-built both times:
+
+| suite | whole world | narrowed |
+|---|---|---|
+| `backend_tests` | 31.93s | 5.35s |
+| `error_tests` | 9.31s | 2.32s |
+| `world_error_tests` | 2.07s | 0.49s |
+| `script_tests` | 1.54s | 0.40s |
+| **total** | **44.85s** | **8.56s** |
+
+**The four biggest suites are not among them, and that is worth knowing before
+reaching for roots again.** `dual_tests` (156s), `interp_dispatch_chaos_tests`
+(72s) and `ir_serial_tests` (12s) build their worlds with
+`from_worldfile_sections` and never load the system library at all, so there is
+nothing to prune. `std_all_tests` (118s) does load it but compiles it once per
+worker thread already -- see `plan-compile-reuse.md`, which is the work that took
+it from 572 compilations of `sys/std`.
+
+Their time goes on what happens *after* lowering: `dual_tests` and
+`std_all_tests` compile and link a binary per fixture, and `std_all_tests` runs
+four backends including a C compiler. `interp_dispatch_chaos_tests` is JIT
+compilation in process. None of that is a module compile, and none of it is
+measured yet -- if the suite's wall clock is the target, that is where to look
+rather than here.
+
 ## Package resolution, profiled
 
 `cargo run --release -p datalove-bench --example resolve_profile -- 15`:
