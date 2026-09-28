@@ -229,22 +229,17 @@ fn every_phase_sees_only_the_reachable_modules() {
     }
 }
 
-/// **Parsing is not pruned, because resolution is not.** Every module in the
-/// world is parsed however few of them are compiled.
+/// Parsing is pruned too, because resolution follows the roots.
 ///
-/// Reading a module's `require` lines means parsing it, and `dependencies_of`
-/// builds the whole world's dependency map before anything knows what the roots
-/// reach -- so `import_demands` asks `parse_module_full` for every module, and
-/// that is the parse phase 1 then gets from the memo.
+/// Working out what a module requires means parsing it, so resolution used to be
+/// a parse of the whole world however few modules were compiled -- 8.7ms of a
+/// 9.3ms pruned compile. `extract_dependencies` walks `require`s from the roots
+/// instead, so a module nothing reaches is never parsed.
 ///
-/// This is the ceiling on what `Roots` currently buys: `cold_phases` has a
-/// compile pruned to one module still spending 8.7ms of its 9.3ms in resolution.
-/// Reachability is a walk and a walk need only parse what it reaches -- parse the
-/// roots, read their requires, parse those. Doing that is the next piece of work,
-/// and when it lands this count drops to the reachable set and this test wants
-/// tightening.
+/// `parse_module_full` is the query to count because resolution and phase 1 share
+/// it: reaching a module here is what makes phase 1's parse of it a memo hit.
 #[test]
-fn the_whole_world_is_still_parsed_however_few_modules_are_compiled() {
+fn only_the_reachable_modules_are_parsed() {
     let recorder = QueryRecorder::new();
     let db = datafun::Database::recording(&recorder);
     let mut pipeline = ModuleCompilationPipeline::default();
@@ -258,9 +253,27 @@ fn the_whole_world_is_still_parsed_however_few_modules_are_compiled() {
     let executed = recorder.take();
     let parses = executed.iter().filter(|e| e.query == "parse_module_full").count();
     assert_eq!(
-        parses, MODULES,
-        "resolution parses the world to find its requires; it parsed {parses}",
+        parses, 2,
+        "`mid` and `base` are reachable of {MODULES}; it parsed {parses}",
     );
+}
+
+/// And `Roots::All` still parses the world, so the test above is not vacuous.
+#[test]
+fn the_whole_world_is_parsed_when_the_roots_are_the_world() {
+    let recorder = QueryRecorder::new();
+    let db = datafun::Database::recording(&recorder);
+    let mut pipeline = ModuleCompilationPipeline::default();
+    add_fixture(&db, &mut pipeline);
+
+    let compiled = pipeline.compile_fresh(&db);
+    assert!(compiled.is_successful(), "{:?}", compiled.all_errors());
+    drop(compiled);
+
+    let parses = recorder.take().iter()
+        .filter(|e| e.query == "parse_module_full")
+        .count();
+    assert_eq!(parses, MODULES);
 }
 
 // ============================================================================

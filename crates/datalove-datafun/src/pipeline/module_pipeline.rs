@@ -308,7 +308,7 @@ impl ModuleCompilationPipeline {
         mode: ParallelMode,
         evaluator: Rc<RefCell<dyn CtfeEvaluator>>,
     ) -> CompiledModules<'db> {
-        let path_deps = extract_dependencies(&self.world, db.as_salsa_db());
+        let path_deps = extract_dependencies(&self.world, db.as_salsa_db(), &self.roots);
         let (module_graph, resolved_requires) =
             self.world.build_graph(db.as_salsa_db(), &path_deps, &self.roots);
         self.compile_impl(db, module_graph, resolved_requires, mode, evaluator)
@@ -344,7 +344,7 @@ impl ModuleCompilationPipeline {
         evaluator: Rc<RefCell<dyn CtfeEvaluator>>,
     ) -> (CompiledModules<'db>, &'db D) {
         // Extract dependencies first (reads from db).
-        let path_deps = extract_dependencies(&self.world, db);
+        let path_deps = extract_dependencies(&self.world, db, &self.roots);
         let (module_graph, resolved_requires) =
             self.world.build_graph(&*db, &path_deps, &self.roots);
 

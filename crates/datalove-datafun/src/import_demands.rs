@@ -52,7 +52,7 @@ pub fn import_demands<'db>(
 /// every module the way phase 1 does, after resolution, and wants to be a memo
 /// hit.
 #[salsa::tracked(returns(ref))]
-fn module_import_demands<'db>(
+pub fn module_import_demands<'db>(
     db: &'db dyn salsa::Database,
     module: Module<'db>,
 ) -> Vec<ImportDemand> {

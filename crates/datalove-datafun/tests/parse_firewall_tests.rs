@@ -35,7 +35,7 @@ fn after_editing_a(edit: &str) -> AfterEdit {
     world.add_module(&db, "local/test/b", "fun g(): i32\n  ret 2\nend fun\n");
 
     let compile = |db: &Database, world: &IncrementalModuleWorld| {
-        let deps = extract_dependencies(world, db);
+        let deps = extract_dependencies(world, db, &Roots::All);
         let (graph, requires) = world.build_graph(db, &deps, &Roots::All);
         let parsed = parse_module_graph(db, graph, requires, Vec::new());
         let _ = datalove_datafun_resolve::resolve_all_names(db, parsed);

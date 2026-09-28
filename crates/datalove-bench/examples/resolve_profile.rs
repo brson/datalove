@@ -81,7 +81,7 @@ fn one_run(modules: &[(String, String)]) -> Steps {
     // `dependencies_of` is tracked and sits over the three steps above, so ask
     // for it now: everything under it is warm and this is the aggregation only.
     let t = Instant::now();
-    let deps = datalove_datafun::incremental::extract_dependencies(&world, &db);
+    let deps = datalove_datafun::incremental::extract_dependencies(&world, &db, &Roots::All);
     let _ = world.build_graph(&db, deps, &Roots::All);
     steps.build = t.elapsed();
 

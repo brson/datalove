@@ -327,14 +327,20 @@ pub fn topological_sort(
     result
 }
 
-/// Extract module dependencies via the package resolution pipeline.
+/// The dependency graph of the modules `roots` reach, by path.
 ///
-/// This function computes the dependency graph for all modules in the world
-/// using the package resolution system. The result maps each module path
-/// to the set of module paths it depends on.
+/// **This follows `require`s from the roots rather than reading every module.**
+/// Working out what a module requires means parsing it, so resolution over the
+/// whole world is a parse of the whole world -- 8.45ms of an 8.58ms package
+/// resolution on the system library, and 93% of a compile already pruned to two
+/// modules. Reachability is a walk, and a walk need only parse what it reaches.
+///
+/// `Roots::All` walks from every module, which reaches every module, so it is the
+/// whole-world answer by the same code rather than by a second path.
 pub fn extract_dependencies<'db>(
     world: &IncrementalModuleWorld,
     db: &'db dyn salsa::Database,
+    roots: &Roots,
 ) -> &'db BTreeMap<String, BTreeSet<String>> {
     // Pass the sources the world already holds. Reading their text out and
     // handing it to `import_from_loader` would make a second `Source` for
@@ -364,9 +370,122 @@ pub fn extract_dependencies<'db>(
             .insert(module_name.S(), *source);
     }
 
-    // Run resolution pipeline.
     let package_world = datalove_datafun_pkg::import_with_sources(db, pkglib_system, pkglib_local);
-    dependencies_of(db, package_world)
+    let roots = match roots {
+        Roots::All => CompileRoots::new(db, None),
+        Roots::From(paths) => CompileRoots::new(db, Some(paths.iter().cloned().collect())),
+    };
+    dependencies_from_roots(db, package_world, roots)
+}
+
+/// A root set, as something a query can be keyed on.
+///
+/// Interned, so the same roots give the same handle and an unchanged recompile
+/// asks the same question. `None` is every module in the world.
+#[salsa::interned]
+pub struct CompileRoots<'db> {
+    #[returns(ref)]
+    pub paths: Option<Vec<String>>,
+}
+
+/// Walk `require`s from the roots, parsing only what is reached.
+///
+/// Tracked and keyed on the world and the roots, both interned, so an unchanged
+/// recompile takes this from the memo rather than walking again.
+///
+/// A module's requires come from `module_import_demands`, which is keyed on the
+/// `Module` and so shares phase 1's parse -- reaching a module here is what makes
+/// phase 1's parse of it a memo hit later.
+///
+/// **An unresolvable require is dropped, which is what resolution already did**:
+/// `resolve_package_world` records one as `ResolvedPackageModule::Unresolved` and
+/// `to_module_graph` leaves it out of the requires. The error is the
+/// typechecker's to report, from the import that has nothing to resolve against.
+///
+/// A cycle yields an empty map, which is also what resolution did -- `validate_graph`
+/// failed and `dependencies_of` returned nothing. That is a poor answer to give a
+/// cyclic program and it is preserved here rather than improved, so that this
+/// change is only about what gets parsed. A cycle among modules the roots do not
+/// reach is no longer seen at all, which follows from reachability.
+#[salsa::tracked(returns(ref))]
+fn dependencies_from_roots<'db>(
+    db: &'db dyn salsa::Database,
+    package_world: datalove_datafun_pkg::PackageWorld<'db>,
+    roots: CompileRoots<'db>,
+) -> BTreeMap<String, BTreeSet<String>> {
+    let world_map = datalove_datafun_pkg::package_world_map(db, package_world);
+
+    // Every module the world has, by the path a `require` names it with. Built
+    // from the package world rather than parsed, so this is a few string
+    // formats -- 0.01ms for the system library.
+    let by_path: BTreeMap<String, Module<'db>> = world_map.flatten_iter(db)
+        .map(|record| {
+            let path = format!(
+                "{}/{}/{}",
+                record.import_space, record.package_name, record.package_module.name(db),
+            );
+            let module = Module::new(
+                db, ModuleId::new(db, path.clone()), record.package_module.text(db));
+            (path, module)
+        })
+        .collect();
+
+    let start: Vec<String> = match roots.paths(db) {
+        None => by_path.keys().cloned().collect(),
+        Some(paths) => paths.iter().filter(|p| by_path.contains_key(*p)).cloned().collect(),
+    };
+
+    let mut deps: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
+    let mut queue = start;
+    while let Some(path) = queue.pop() {
+        if deps.contains_key(&path) {
+            continue;
+        }
+        let module = *by_path.get(&path).expect("the queue only holds paths the world has");
+        let targets: BTreeSet<String> = crate::import_demands::module_import_demands(db, module)
+            .iter()
+            .map(|(space, package, module)| format!("{}/{}/{}", space, package, module))
+            .filter(|target| by_path.contains_key(target))
+            .collect();
+        queue.extend(targets.iter().cloned());
+        deps.insert(path, targets);
+    }
+
+    if has_cycle(&deps) {
+        return BTreeMap::new();
+    }
+    deps
+}
+
+/// Whether the dependency graph has a cycle, which a program may not have.
+fn has_cycle(deps: &BTreeMap<String, BTreeSet<String>>) -> bool {
+    #[derive(Clone, Copy, PartialEq)]
+    enum Mark { Open, Done }
+
+    fn visit(
+        path: &str,
+        deps: &BTreeMap<String, BTreeSet<String>>,
+        marks: &mut BTreeMap<String, Mark>,
+    ) -> bool {
+        match marks.get(path) {
+            Some(Mark::Open) => return true,
+            Some(Mark::Done) => return false,
+            None => {}
+        }
+        marks.insert(path.S(), Mark::Open);
+        if let Some(targets) = deps.get(path) {
+            for target in targets {
+                if visit(target, deps, marks) {
+                    return true;
+                }
+            }
+        }
+        marks.insert(path.S(), Mark::Done);
+        false
+    }
+
+    let mut marks: BTreeMap<String, Mark> = BTreeMap::new();
+    deps.keys().any(|path| visit(path, deps, &mut marks))
 }
 
 /// The dependency graph of an already-imported package world.

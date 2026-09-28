@@ -55,7 +55,7 @@ fn one_cold_compile(
     let mut split = Split::default();
 
     let t = Instant::now();
-    let deps = extract_dependencies(&world, &db);
+    let deps = extract_dependencies(&world, &db, roots);
     let (graph, resolved_requires) = world.build_graph(&db, deps, roots);
     split.resolve = t.elapsed();
 

@@ -300,7 +300,7 @@ pub fn analyze_memo_worldfile(content: &str) -> AnyResult<MemoAnalysis> {
             .unwrap_or_else(|| "removed".to_string());
 
         // Capture dependents BEFORE applying the action (important for remove).
-        let path_deps_before = extract_dependencies(&world, &db);
+        let path_deps_before = extract_dependencies(&world, &db, &crate::incremental::Roots::All);
         let dependents_before = world.get_dependents(&section.path, &path_deps_before);
 
         // Apply action to module world.
@@ -330,7 +330,7 @@ pub fn analyze_memo_worldfile(content: &str) -> AnyResult<MemoAnalysis> {
         enable_query_logging();
 
         // Extract dependencies after the action.
-        let path_deps = extract_dependencies(&world, &db);
+        let path_deps = extract_dependencies(&world, &db, &crate::incremental::Roots::All);
 
         // Use dependents from before the action (for remove) or after (for changes).
         let dependents = if section.action == Action::ModuleRemove {

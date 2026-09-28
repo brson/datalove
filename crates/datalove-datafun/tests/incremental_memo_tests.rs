@@ -23,7 +23,7 @@ use rmx::prelude::*;
 
 use std::sync::{Arc, Mutex};
 
-use datalove_datafun::incremental::{IncrementalModuleWorld, extract_dependencies};
+use datalove_datafun::incremental::{IncrementalModuleWorld, Roots, extract_dependencies};
 
 #[salsa::db]
 #[derive(Clone)]
@@ -87,16 +87,16 @@ fn costs_for(modules: usize) -> Costs {
     }
 
     db.clear();
-    let _ = extract_dependencies(&world, &db);
+    let _ = extract_dependencies(&world, &db, &Roots::All);
     let first_build = db.executed();
 
     db.clear();
-    let _ = extract_dependencies(&world, &db);
+    let _ = extract_dependencies(&world, &db, &Roots::All);
     let rebuild_unchanged = db.executed();
 
     world.update_source(&mut db, "local/test/m0", &module_source(0, 99));
     db.clear();
-    let _ = extract_dependencies(&world, &db);
+    let _ = extract_dependencies(&world, &db, &Roots::All);
     let after_one_edit = db.executed();
 
     Costs { first_build, rebuild_unchanged, after_one_edit }

@@ -34,7 +34,7 @@ fn queries_on_unchanged_recompile(modules: usize) -> Vec<ExecutedQuery> {
     }
 
     let compile = |world: &IncrementalModuleWorld| {
-        let deps = extract_dependencies(world, &db);
+        let deps = extract_dependencies(world, &db, &Roots::All);
         let (graph, requires) = world.build_graph(&db, &deps, &Roots::All);
         let _ = parse_module_graph(&db, graph, requires, Vec::new());
     };
@@ -70,7 +70,7 @@ fn a_first_compile_does_run_queries() {
     world.add_module(&db, "local/test/a", "fun f(): i32\n  ret 1\nend fun\n");
 
     recorder.clear();
-    let deps = extract_dependencies(&world, &db);
+    let deps = extract_dependencies(&world, &db, &Roots::All);
     let (graph, requires) = world.build_graph(&db, &deps, &Roots::All);
     let _ = parse_module_graph(&db, graph, requires, Vec::new());
 
@@ -104,7 +104,7 @@ fn an_edit_runs_fewer_queries_than_a_first_compile() {
     }
 
     let mut compile = |world: &IncrementalModuleWorld| {
-        let deps = extract_dependencies(world, &db);
+        let deps = extract_dependencies(world, &db, &Roots::All);
         let (graph, requires) = world.build_graph(&db, &deps, &Roots::All);
         let _ = parse_module_graph(&db, graph, requires, Vec::new());
     };
@@ -126,7 +126,7 @@ fn an_edit_runs_fewer_queries_than_a_first_compile() {
         );
     }
     {
-        let deps = extract_dependencies(&world2, &db2);
+        let deps = extract_dependencies(&world2, &db2, &Roots::All);
         let (graph, requires) = world2.build_graph(&db2, &deps, &Roots::All);
         let _ = parse_module_graph(&db2, graph, requires, Vec::new());
     }
@@ -134,7 +134,7 @@ fn an_edit_runs_fewer_queries_than_a_first_compile() {
 
     recorder.clear();
     {
-        let deps = extract_dependencies(&world2, &db2);
+        let deps = extract_dependencies(&world2, &db2, &Roots::All);
         let (graph, requires) = world2.build_graph(&db2, &deps, &Roots::All);
         let _ = parse_module_graph(&db2, graph, requires, Vec::new());
     }

@@ -26,14 +26,18 @@ system library plus one local module, 25 modules, one rider:
 
 | | whole world | reachable from a module that requires nothing |
 |---|---|---|
-| package resolve + graph | 8.75ms | 8.66ms |
-| phases 1-4 (check) | 7.10ms | 0.58ms |
-| phase 5 (lower) | 8.73ms | 0.05ms |
-| **whole** | **24.58ms** | **9.29ms** |
+| package resolve + graph | 9.45ms | 0.07ms |
+| phases 1-4 (check) | 8.31ms | 0.62ms |
+| phase 5 (lower) | 10.37ms | 0.04ms |
+| **whole** | **~25ms** | **0.67ms** |
 
-Those are the figures after the duplicate parse was removed; they were 33.44ms
-and 10.16ms before, and the phases 1-4 column held the parse that resolution now
-holds. See the resolution section below.
+The whole-world column has not moved through any of this work and is not meant
+to: `Roots::All` is the same compile it always was. The pruned column went
+10.16ms, then 9.29ms once the world stopped being parsed twice, then 0.67ms once
+resolution stopped reading modules nothing reaches.
+
+End to end, `datalove script` on a program that requires nothing went **43.0ms to
+6.6ms**, and on one that uses `sys/std/option` **42.6ms to 7.9ms**.
 
 Three things follow, and the second was a surprise.
 
@@ -42,10 +46,10 @@ roots* is the split that keeps errors eager, and it caps the win at phase 5's
 share -- 30% when first measured, 36% now. Pruning the graph itself reaches the
 frontend too, which is why `Roots` prunes the graph.
 
-**Package resolution becomes the cold compile.** It is 36% before pruning and
-93% of what is left after, and it cannot be pruned by reachability as written,
-because resolving `require`s is how you find out what is reachable. It has been
-profiled; see below.
+**Package resolution was the cold compile, until it followed the roots.** It was
+36% before pruning and 93% of what was left after, because resolving `require`s
+means parsing, and it read every module to do it. It walks from the roots now and
+is 0.07ms of a pruned compile. See below.
 
 **The edit loop is not what this is for.** An edit already costs 23 queries
 whatever the world size; `compile_scaling_tests` holds that and
@@ -123,9 +127,15 @@ for tokens to be under 40% of all tracked-struct bytes, and a 21% smaller
 denominator took them to 47% without a byte of them moving. The assertion is an
 absolute one now, for the reason written on it.
 
-What is left is one necessary parse of the world, and it is necessary only because
-resolution reads every module rather than following requires from the roots. That
-is what item 1 below is about.
+Resolution follows the roots now, so that one parse of the world is no longer of
+the world: it is of what the roots reach. On the fixture above, resolution went
+from 8.66ms of a pruned compile to 0.07ms, and the pruned compile from 9.29ms to
+0.67ms.
+
+The walk asks `module_import_demands` for a module, resolves each demand to a
+path, and recurses -- and because that query is keyed on the `Module` phase 1
+uses, reaching a module during the walk is what makes phase 1's parse of it a memo
+hit. The two share one parse and now only of what is needed.
 
 ## Status
 
@@ -156,31 +166,17 @@ Done:
 
 Next, roughly in order of what it buys:
 
-1. **Resolve from the roots, not over the world.** Resolution is a parse of every
-   module, so a compile pruned to one module still parses twenty-five: 8.66ms of
-   its 9.29ms, pinned by `the_whole_world_is_still_parsed_however_few_modules_are_compiled`.
-   Reachability is a walk and a walk need only parse what it reaches -- ask
-   `module_import_demands` for a root, resolve its demands to paths, recurse.
-
-   Nothing blocks it. `module_import_demands` is already per-module and memoized,
-   `lookup_import` resolves one demand, and `resolve_package_world` is 0.03ms of
-   edge-building and `validate_graph`. What changes is replacing
-   `package_world_map.flatten_iter(db)` -- every module in the world -- with the
-   walk. Note it makes validation partial too: cycles and missing modules go
-   unreported among the unreachable, which is the same trade as the error
-   visibility already pinned, in a second place.
-
-2. **Stop numbering modules by position.** `ir_module_ids` numbers regular
+1. **Stop numbering modules by position.** `ir_module_ids` numbers regular
    modules by their place in the graph, so a module appearing anywhere but the
    end renumbers what follows and those modules re-lower. Today that happens when
    you add a file. Under reachability it happens whenever a program's imports
    change, which in a REPL is constantly. Deriving the id from the module's path
    rather than its position removes it. The riders already work this way.
-3. **Prune codegen.** `datalove-datafun-cranelift-aot` says "whole-world
+2. **Prune codegen.** `datalove-datafun-cranelift-aot` says "whole-world
    compilation" and walks the whole registry; DCE
    (`datalove-datafun-const/src/dce.rs`) only removes unreachable blocks within a
    function. Pruning the graph shrinks the registry, so most of this falls out --
    but an unused function in a *reachable* module is still emitted.
-4. **Rider interfaces are not pruned.** `rider_interfaces` parses every rider
+3. **Rider interfaces are not pruned.** `rider_interfaces` parses every rider
    source whether or not anything requires it. Memoized and keyed on the sources,
    so it is paid once, but it is not nothing on a short-lived invocation.
