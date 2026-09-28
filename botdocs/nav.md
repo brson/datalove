@@ -39,6 +39,7 @@
 - [JIT + Inliner Integration](plan-fancy-jit.md)
 - [Unified Code Unit Migration](plan-unified-code-unit.md)
 - [Compiling What Is Reachable](plan-reachability.md)
+- [Script Reactivity](plan-script-reactivity.md)
 
 ---
 
