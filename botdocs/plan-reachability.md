@@ -183,9 +183,9 @@ Done:
   pruning on a program whose requires are wrong would drop the module the
   diagnostic is about. `typecheck-std` and the REPL still pass `All`.
 
-  A real `datalove script` invocation goes from **43.0ms to 20.3ms**, and a script
-  that does use the standard library from 42.6ms to 20.7ms -- it pulls what
-  `sys/std/option` reaches rather than all two dozen modules.
+  A real `datalove script` invocation went **43.0ms to 20.3ms** on this change
+  alone, and to **6.6ms** once resolution followed the roots too. One that uses
+  the standard library: 42.6ms, 20.7ms, **7.9ms**.
 
   A worldfile's own modules are roots whether the script reaches them or not.
   That distinction is the thing to remember: **a module the author wrote in the
