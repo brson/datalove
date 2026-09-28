@@ -147,37 +147,67 @@ failures and say which to tighten when it is fixed.
 
 ### B. Precise keying for analysis
 
-Replace `accumulated` in `typecheck_script_unit`'s key with the resolved uses --
-the bindings this unit actually references, each paired with the unit that
-provided it.
+The goal: editing B re-typechecks B and D, and C is a memo hit.
 
-Then editing B re-keys only the units that use a name B provides. C's key is
-unchanged and C is a memo hit. That is the stated goal, for analysis.
+**The script becomes a `#[salsa::input]`,** which is what
+`mandocs/script-semantics.md` specified in the first place:
 
-There is a second way, and stage A removed the objection to it. Have
-`TypeContext` resolve an unknown name through a per-name query --
-`binding_at(script, i, name)` -- rather than being seeded with the whole
-environment up front. Salsa then records the reads itself and the dependency set
-is right by construction, with no key to get right. It is the firewall pattern
-this codebase already uses, and this plan first said it was not enough because
-stage C needs the graph as data. **That was wrong**: the recording added in stage
-A *is* the graph as data, and it is independent of how the environment is
-reached.
+```rust
+#[salsa::input]
+struct Script { units: Vec<ScriptUnitSpec> }
+```
 
-So the two are alternatives after all:
+An input's identity is independent of its value -- that is the whole reason to
+reach for one here. So:
 
-- **Key on the resolved uses.** The key is computed before the call, so it must
-  be right before the call -- and what a unit uses is only known after
-  typechecking it. That circularity is the catch: the key would have to come from
-  a previous revision's recording, or from a separate analysis, which is the walk
-  stage A avoided.
-- **Read through a per-name query.** No circularity, because the dependency is
-  the read. The cost is threading a fallback through `TypeContext`, which modules
-  share, and `binding_at` re-running per (unit, name) on an edit -- cheap, and it
-  backdates, the same trade `resolve_module_imports` already makes.
+```rust
+typecheck_script_unit(db, script, index, module_specs, auto_adapt_mode)
+```
 
-The second looks right for exactly the reason the first is awkward. Decide with a
-prototype rather than on paper; the circularity is the thing to check first.
+has a key that **does not move when any unit is edited**, because the key is a
+position in a thing with a stable identity rather than a hash of everything
+before it. That is the property the prefix aggregate cannot have.
+
+The environment is then reached lazily rather than seeded:
+
+```rust
+unit_ast(db, script, index)               -> ScriptUnitSpec
+binding_at(db, script, index, name)       -> Option<Binding>
+```
+
+`binding_at` walks back from `index - 1` for the nearest unit providing `name`.
+`TypeContext` consults it on a lookup miss instead of being pre-seeded with
+`AccumulatedBindings`, and **salsa records the dependency because the dependency
+is the read** -- there is no key to get right and nothing to keep in step.
+
+Editing B then goes: `unit_ast(script, B)` changes. `binding_at(script, i, name)`
+re-runs for `i > B` and *backdates* unless B provides that name.
+`typecheck_script_unit(script, C)` depended only on the `binding_at`s C asked
+for, all backdated, so C is a memo hit. D asked for something B provides, so D
+re-runs. Which is the goal, exactly.
+
+**Why not key on the resolved uses.** It is circular: a unit's uses are only
+known after typechecking it, so the key would have to come from a previous
+revision's recording or from a separate analysis -- and the separate analysis is
+the AST walk stage A avoided for being unsound when it misses a form. Reading
+through a query has no such problem.
+
+**The cost, and it is the awkward part.** An input is written with a setter, so
+appending or editing a unit needs `&mut db`, where `ScriptCompiler` holds
+`&'db dyn salsa::Database` today. That ripples to `Session` and `Engine`. It is
+the same shape as `IncrementalModuleWorld::update_source` needing `&mut db`,
+and `ModuleCompilationPipeline::compile` already takes `&mut D` for exactly this
+reason, so there is precedent to follow rather than a new idea to invent.
+
+Two things fall out for free. `Source`-per-`compile_fragment` stops being minted,
+so the replay row in the table above and the input leak per line both go. And
+stage D's "hold a stable handle per unit" is most of this, so D shrinks to
+re-deriving the affected suffix.
+
+**`asked_names` stays useful.** It is not the key -- the query reads are -- but it
+is the graph as data, which stage C needs, and it is how to *test* that this is
+precise: the units that re-typechecked should equal the units whose `asked_names`
+intersect what the edit changed. Assert that rather than a bare count.
 
 ### C. Per-unit lowering and execution state
 
