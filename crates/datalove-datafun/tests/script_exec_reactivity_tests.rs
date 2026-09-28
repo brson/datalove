@@ -663,3 +663,77 @@ fn rederiving_typechecks_no_more_than_analysis_would() {
         .collect();
     assert_eq!(reached, expected, "re-deriving typechecks the units the edit reaches");
 }
+
+// ============================================================================
+// The alias edge, which does not come from `asked_names`
+// ============================================================================
+
+/// Editing a `require` line reaches a later unit's `import` of that alias.
+///
+/// **This edge is the one place the graph is not derived from a read.** Stage A
+/// records the names asked of `TypeContext`'s lookups, and an alias does not go
+/// through them -- it resolves through `module_alias_at`, which walks the units'
+/// `module_aliases`. So the edge is added to the graph by hand, from a
+/// `require`'s provides and an `import`'s uses, and a test is the only thing
+/// holding it: nothing about the way it is built makes it right.
+///
+/// The edit points the `require` at a different module. An alias is the last
+/// component of the path and there is no `as` renaming, so this unbinds `utils`
+/// and the import has to be told.
+///
+/// The third unit is the control. It reaches nothing of unit 0's, so a reach
+/// that simply took every later unit would be caught here.
+#[test]
+fn editing_a_require_reaches_a_later_import_and_nothing_else() {
+    let db = datafun::Database::default();
+    let mut pipeline = ModuleCompilationPipeline::new(CompilerOptions::default());
+    pipeline.add_module(&db, "local", "test", "utils",
+        "fun ident(x: u32): u32\n    ret x\nend fun\n");
+    pipeline.add_module(&db, "local", "test", "other",
+        "fun ident(x: u32): u32\n    ret x\nend fun\n");
+    let (script, executor) = {
+        let compiled = pipeline.compile_fresh(&db);
+        assert!(compiled.is_successful(), "{:?}", compiled.all_errors());
+        let script = compiled
+            .script_compiler_default(&db)
+            .expect("a script compiler")
+            .into_session();
+        let executor = compiled
+            .script_executor(datalove_rt::c::DebugOutputMode::Buffer, None)
+            .expect("a script executor");
+        (script, executor)
+    };
+    let mut session = Session { db, pipeline, script: Some(script), executor };
+
+    session.append("require module local/test/utils\n");
+    session.append("import utils.ident\nlet v = ident(7)\ndebuglog v\n");
+    session.append("let unrelated = 100\ndebuglog unrelated\n");
+    assert_eq!(session.binding("v"), "7");
+
+    session.edit(0, "require module local/test/other\n");
+
+    // `relower_reach` rather than `rederive`, because the unit this reaches is
+    // supposed to stop compiling and `rederive` asserts that everything it
+    // touches lowers.
+    let compiled = session.pipeline.compile_fresh(&session.db);
+    let mut compiler = compiled
+        .script_compiler_resumed(&session.db, session.script.take().expect("a session"))
+        .expect("a script compiler");
+    let redone = compiler.relower_reach(0);
+    let reached: BTreeSet<usize> = redone.iter().map(|(index, _)| *index).collect();
+    let broken: Vec<usize> = redone.iter()
+        .filter(|(_, result)| result.ir_unit.is_none())
+        .map(|(index, _)| *index)
+        .collect();
+    session.script = Some(compiler.into_session());
+
+    assert_eq!(
+        reached,
+        BTreeSet::from([0, 1]),
+        "the require and the import that names its alias, and not the third unit",
+    );
+    assert_eq!(
+        broken, vec![1],
+        "unit 1 imports an alias that no longer exists, so it must stop compiling",
+    );
+}

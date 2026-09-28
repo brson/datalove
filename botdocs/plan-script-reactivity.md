@@ -394,6 +394,27 @@ Two things make this tractable now and will stop being true:
   output, so skipping a unit's execution skips nothing observable beyond it.
   `proc`s and real I/O need the virtualized I/O `script-semantics.md` describes.
 
+### The alias edge, and why it is the soft spot
+
+Every other edge in the graph comes from a read: stage A records the names asked
+of `TypeContext`'s lookups, so it cannot miss one. **A module alias does not go
+through those lookups.** `require module local/test/utils` binds the alias
+`utils` -- the last component of the path, there being no `as` renaming -- and
+`import utils.ident` resolves it through `module_alias_at`, which walks the
+units' `module_aliases`.
+
+So the alias edge is added to the graph by hand, from a `require`'s provides and
+an `import`'s uses. It works: editing a `require` reaches a later `import` of
+that alias, and `editing_a_require_reaches_a_later_import_and_nothing_else`
+holds it with a third unit as the control. But **nothing about the way it is
+built makes it right**, where the rest of the graph is right by construction.
+
+If the reach ever under-reports, this is the shape to look for: another
+resolution path that answers a name without going through the recorded lookups.
+The sound version extends the recording to cover `module_alias_at` so the edge
+comes from the read like every other one. Not urgent -- it is correct and
+tested -- but it is the one asymmetry left in the design.
+
 ### D. The edit itself
 
 `ScriptCompiler::edit_unit(i, text)` and an engine entry point: hold a stable
