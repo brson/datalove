@@ -195,12 +195,42 @@ Done:
 
 Next, roughly in order of what it buys:
 
-1. **Stop numbering modules by position.** `ir_module_ids` numbers regular
-   modules by their place in the graph, so a module appearing anywhere but the
-   end renumbers what follows and those modules re-lower. Today that happens when
-   you add a file. Under reachability it happens whenever a program's imports
-   change, which in a REPL is constantly. Deriving the id from the module's path
-   rather than its position removes it. The riders already work this way.
+1. **Narrowing the REPL, and the numbering it would need.** These are one item,
+   because neither is worth anything without the other.
+
+   `ir_module_ids` numbers regular modules by their place in the graph, so a
+   module appearing anywhere but the end renumbers what follows. Measured: a
+   newly-required module that sorts first costs 1 parse, 1 typecheck and 1
+   ownership analysis -- the frontend is clean -- but `lower_module_functions` and
+   `lower_module` run for **all** of them, because every id after the insertion
+   point moved and the ids are encoded in the IR.
+
+   **It costs nothing in any shipped path today.** `script` and friends fix their
+   roots once per invocation and compile once. The REPL passes `Roots::All`, so
+   its module set never changes: it compiles the world at startup and each line is
+   a `compile_fragment` against it. The renumbering only bites once the module set
+   moves mid-session, which only happens if the REPL narrows.
+
+   **And narrowing the REPL looks like a net loss.** It would save the startup
+   compile -- about 24ms, once -- and charge a re-lower of everything reachable on
+   every line that adds a `require`. Paying repeatedly to save once is the wrong
+   way round for an interactive session. So measure that before doing either.
+
+   If it does turn out to be wanted, the two fixes are priced very differently:
+
+   - **Hash the path to an id.** Small, but module ids are in 197 expected-output
+     files and `display.rs` renders one as `m{}`, so readable `m0.u0` dumps become
+     `m3928471029.u0` and all 197 need blessing. Collisions need deterministic
+     resolution too.
+   - **Make the IR name modules symbolically** -- an interned `ModuleId` in the
+     call target, with the dense numbering assigned at registry-build time where
+     the backends want it. This is the right end state: numbering stops being
+     observable, so it stops constraining. It touches the IR, its serialization,
+     both AOT backends, the JIT and display. A project, not an afternoon.
+
+   The riders are already numbered independently of the module count, which is
+   what stopped a module appearing from re-lowering the world. What is left is the
+   regular modules moving relative to each other.
 2. **Prune codegen.** `datalove-datafun-cranelift-aot` says "whole-world
    compilation" and walks the whole registry; DCE
    (`datalove-datafun-const/src/dce.rs`) only removes unreachable blocks within a
