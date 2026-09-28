@@ -276,31 +276,55 @@ intersect what the edit changed. Assert that rather than a bare count.
 
 ### C. Per-unit lowering and execution state
 
-This is the stage the other work is waiting on, and the reason editing is not
-merely unimplemented.
+**Half of this already exists, which the plan had wrong.** `FrameStore`
+(`datalove-datafun-interp/src/frame.rs`) is already partitioned by unit:
 
-`accumulated_lower_bindings` is a **mutable linear fold**. Phases 2 to 5 --
-ownership, lowering, const evaluation, IR assembly -- run only for the unit just
-appended, against that fold. There is no per-unit record of what a unit consumed
-or produced at the value level, so there is nothing to re-derive a suffix from.
+```rust
+pub struct FrameStore {
+    frames: Vec<Frame>,                 // indexed by unit number
+    unit_end_values: Vec<Vec<ValueId>>, // the persistent bindings to destroy
+    unit_end_slots: Vec<Vec<SlotId>>,
+}
+```
 
-So: make a unit's lowering and execution a function from its inputs to its
-outputs, with the inputs and outputs held per unit rather than folded. Then
-re-running B and D means re-running two functions, and C's outputs from the
-previous run stay valid precisely because C does not depend on B.
+So the runtime state is not a fold and never was. Re-executing B means replacing
+`frames[B]`, and C's frame is untouched -- which is the structure execution
+reactivity needs, sitting there already.
 
-Two things make this tractable *now* and are worth writing down because they
-will stop being true:
+**Why not re-lowering C is safe.** A script value is identified by
+`(unit_index, ValueId)`, so a unit's IR names the units it reads from. A unit
+that uses nothing of B's has no `(B, *)` reference in its IR at all, so B's
+values being rebuilt cannot reach it. Editing rather than removing a unit leaves
+the indices alone, so the identification stays good. That is the property that
+makes the whole stage work, and it is worth checking before relying on it.
+
+What is actually missing is two things:
+
+- **`accumulated_lower_bindings` is a mutable linear fold**
+  (`AccumulatedLowerBindings`: name to `(unit_index, ValueId | SlotId | FuncId)`
+  plus types). Phases 2 to 5 -- ownership, lowering, const evaluation, IR
+  assembly -- run only for the unit just appended, against that fold. There is
+  no per-unit record to re-derive a suffix from. Hold each unit's own produced
+  bindings instead, and build unit *i*'s context from the units before it.
+- **`FrameStore` is append-only.** It has `add_frame`,
+  `destroy_unit_end_bindings` and `destroy_live_values`, but nothing that
+  replaces unit *i*'s frame. Re-executing a unit has to destroy that unit's
+  unit-end values and put a new frame in its place, or the old values leak and
+  the indices go wrong.
+
+Then re-deriving is a walk over the graph stages A and B built: for an edit to
+unit *i*, re-lower and re-execute *i* together with the units whose
+`asked_names` reach it, **in index order**, and leave the rest.
+
+Two things make this tractable now and will stop being true:
 
 - **A unit copies out of earlier bindings rather than moving from them**
-  (`compiler-guide.md`, "Ownership across units"). So a unit's inputs are values
-  it may hold independently, and re-running B does not invalidate C's copies.
-  When non-cloneable types land this stops being available and the model needs
-  rethinking -- which `repl-architecture.md` already says.
-- **Only `fun`s exist, and they are pure.** Effects are `debuglog`, which is
-  per-unit output. `proc`s and real I/O will need the virtualized I/O
-  `script-semantics.md` describes before their execution can be skipped or
-  replayed.
+  (`compiler-guide.md`, "Ownership across units"). So re-running B cannot
+  invalidate a copy C took. Non-cloneable types remove this and the model needs
+  rethinking -- `repl-architecture.md` says so too.
+- **Only pure `fun`s exist.** The only effect is `debuglog`, which is per-unit
+  output, so skipping a unit's execution skips nothing observable beyond it.
+  `proc`s and real I/O need the virtualized I/O `script-semantics.md` describes.
 
 ### D. The edit itself
 
