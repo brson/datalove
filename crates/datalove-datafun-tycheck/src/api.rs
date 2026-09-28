@@ -50,6 +50,14 @@ pub struct AccumulatedBindings<'db> {
     pub fn_asts: Vec<(InternedText<'db>, StmtFun<'db>, Option<ModuleId<'db>>)>,
     /// Module aliases from require statements: (alias, full path).
     pub module_aliases: Vec<(InternedText<'db>, String)>,
+    /// Which of `vars` are consts rather than `let`/`var` bindings.
+    ///
+    /// Const-ness used to be lost at the unit boundary: a script `const`
+    /// arrived in the next unit's `variables` and not its `const_bindings`, so
+    /// it read as an ordinary binding. That only became visible once function
+    /// bodies stopped seeing enclosing bindings, which is what they should
+    /// never have seen -- a const is the one kind a body may name.
+    pub consts: Vec<InternedText<'db>>,
 }
 
 /// Output from typecheck_script_unit.
@@ -70,6 +78,9 @@ pub struct ScriptUnitTypecheckOutput<'db> {
     /// Module aliases from require statements: (alias, full path).
     #[returns(ref)]
     pub new_module_aliases: Vec<(InternedText<'db>, String)>,
+    /// Which of `new_vars` are consts.
+    #[returns(ref)]
+    pub new_consts: Vec<InternedText<'db>>,
     /// Every name this unit asked the environment about.
     ///
     /// The other fields say what a unit *provides*; this says what it *uses*,
@@ -142,6 +153,11 @@ pub fn typecheck_script_unit<'db>(
     for (name, ty, is_mutable) in &accumulated.vars {
         ctx.add_variable(*name, ty.clone(), *is_mutable);
     }
+    // Const-ness travels with the binding, or a const from an earlier unit
+    // reads as a `let` and a function body may not name it.
+    for name in &accumulated.consts {
+        ctx.add_const_binding(*name);
+    }
     for (name, func_ty) in &accumulated.fns {
         ctx.add_function(*name, *func_ty);
     }
@@ -151,6 +167,7 @@ pub fn typecheck_script_unit<'db>(
 
     // Track new bindings defined in this unit.
     let mut new_vars = Vec::new();
+    let mut new_consts = Vec::new();
     let mut new_fns = Vec::new();
     let mut new_fn_asts = Vec::new();
     let mut new_module_aliases = Vec::new();
@@ -233,6 +250,7 @@ pub fn typecheck_script_unit<'db>(
                         let name = const_stmt.name;
                         if let Some((ty, is_mutable)) = ctx.variables.get(&name) {
                             new_vars.push((name, ty.clone(), *is_mutable));
+                            new_consts.push(name);
                         }
                     }
                     Statement::Fun(fun_stmt) => {
@@ -277,7 +295,8 @@ pub fn typecheck_script_unit<'db>(
     );
 
     ScriptUnitTypecheckOutput::new(
-        db, result, new_vars, new_fns, new_fn_asts, new_module_aliases, asked_names)
+        db, result, new_vars, new_fns, new_fn_asts, new_module_aliases, new_consts,
+        asked_names)
 }
 
 /// Typecheck multiple script units together, with bindings shared across units.
@@ -317,6 +336,7 @@ pub fn type_check_script_units<'db>(
             accumulated.fns.extend(output.new_fns(db).iter().cloned());
             accumulated.fn_asts.extend(output.new_fn_asts(db).iter().cloned());
             accumulated.module_aliases.extend(output.new_module_aliases(db).iter().cloned());
+            accumulated.consts.extend(output.new_consts(db).iter().cloned());
         }
     }
 

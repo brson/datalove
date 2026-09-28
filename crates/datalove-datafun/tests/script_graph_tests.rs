@@ -60,6 +60,19 @@ fn graph_of(units: &[&str]) -> Vec<(Vec<String>, Vec<String>)> {
         .collect()
 }
 
+/// Compile `units` in order and hand back the last one's result, errors and all.
+fn last_result(units: &[&str]) -> datafun::pipeline::ScriptCompilationResult {
+    let db = datafun::Database::default();
+    let mut pipeline = ModuleCompilationPipeline::new(CompilerOptions::default());
+    let compiled = pipeline.compile_fresh(&db);
+    let mut compiler = compiled.script_compiler_default(&db).expect("a script compiler");
+    let mut result = None;
+    for unit in units {
+        result = Some(compiler.compile_fragment(unit));
+    }
+    result.expect("at least one unit")
+}
+
 fn provides(graph: &[(Vec<String>, Vec<String>)], unit: usize) -> &[String] {
     &graph[unit].0
 }
@@ -125,13 +138,16 @@ fn a_self_contained_unit_reaches_no_earlier_unit() {
 ///
 /// The recording sits at the lookup rather than in a walk over statements, so
 /// nesting costs nothing to support -- which is the reason for doing it that way.
+///
+/// A const, because that is the one kind of enclosing binding a body may name;
+/// see the test below.
 #[test]
 fn a_use_inside_a_function_body_counts() {
     let graph = graph_of(&[
-        "let scale = 3\n",
-        "fun apply(n: int): int\n    ret n * scale\nend fun\n",
+        "const SCALE = 3\n",
+        "fun apply(n: int): int\n    ret n * SCALE\nend fun\n",
     ]);
-    assert!(uses(&graph, 1).contains(&"scale".S()),
+    assert!(uses(&graph, 1).contains(&"SCALE".S()),
         "a use from inside a body was missed: {:?}", uses(&graph, 1));
 }
 
@@ -153,29 +169,56 @@ fn a_unit_can_use_several_earlier_units() {
         "the function does not touch `base`: {:?}", uses(&graph, 1));
 }
 
-/// A function that reads a script variable is not callable from a later unit.
+/// **A function body is not a closure.** It may not name an enclosing `let`.
 ///
-/// Not a property of the graph, recorded because it was found while building it
-/// and it bounds what the graph can be tested against. Unit 1 typechecks and its
-/// use of `scale` is recorded, but `via` does not reach unit 2:
-/// `UnresolvedName("via")`. Whatever the reason -- a function that closes over a
-/// script binding has nothing to export, presumably -- the shape of the
-/// dependency graph does not depend on it.
+/// This used to typecheck. A script unit is seeded with every earlier unit's
+/// bindings and entering a function body only *saved* that map rather than
+/// clearing it, so a body could name a `let` and pass -- and the mistake
+/// surfaced from lowering as "binding not available yet", which reads as a
+/// phase-ordering problem rather than the scoping error it is. A module has no
+/// top-level bindings, so nothing saw it there.
 #[test]
-fn a_function_capturing_a_script_variable_does_not_export() {
-    let db = datafun::Database::default();
-    let mut pipeline = ModuleCompilationPipeline::new(CompilerOptions::default());
-    let compiled = pipeline.compile_fresh(&db);
-    let mut compiler = compiled.script_compiler_default(&db).expect("a script compiler");
-
-    for unit in ["let scale = 3\n", "fun via(n: int): int\n    ret n + scale\nend fun\n"] {
-        let result = compiler.compile_fragment(unit);
-        assert!(matches!(result.typecheck, datafun::pipeline::TypecheckResult::Success { .. }),
-            "{unit:?}: {:?}", result.typecheck);
+fn a_function_body_may_not_name_an_enclosing_let() {
+    let result = last_result(&[
+        "let scale = 3\n",
+        "fun apply(n: int): int\n    ret n * scale\nend fun\n",
+    ]);
+    match result.typecheck {
+        datafun::pipeline::TypecheckResult::Error { ref errors } => assert!(
+            errors.iter().any(|e| e.contains("scale")),
+            "wrong error for a body naming a `let`: {errors:?}",
+        ),
+        other => panic!("a body named an enclosing `let` and passed: {other:?}"),
     }
-    let result = compiler.compile_fragment("let out = via(1)\n");
+}
+
+/// A function body may name an enclosing `const`, and typechecking says so.
+///
+/// Const-ness used to be lost at the unit boundary -- a script `const` arrived
+/// in the next unit's variables but not its const bindings, so it read as a
+/// `let`. Nothing noticed while bodies could name either.
+///
+/// **Lowering still cannot do it**, so this stops at the typechecker. That is
+/// the remaining half of the gap and it is a lowering one: a script const is not
+/// available to a function body being lowered, where a module const is. The
+/// program is legal and the compiler says so and then cannot build it.
+#[test]
+fn a_function_body_may_name_an_enclosing_const_but_lowering_cannot_yet() {
+    let result = last_result(&[
+        "const SCALE = 3\n",
+        "fun apply(n: int): int\n    ret n * SCALE\nend fun\n",
+    ]);
     assert!(
-        matches!(result.typecheck, datafun::pipeline::TypecheckResult::Error { .. }),
-        "calling it succeeded, so this limitation has gone: {:?}", result.typecheck,
+        matches!(result.typecheck, datafun::pipeline::TypecheckResult::Success { .. }),
+        "a const is the one enclosing binding a body may name: {:?}", result.typecheck,
     );
+    match result.lowering {
+        datafun::pipeline::LoweringResult::Error { ref message } => assert!(
+            message.contains("SCALE"),
+            "expected lowering to be the thing that cannot: {message}",
+        ),
+        other => panic!(
+            "lowering a script const into a body works now, so tighten this: {other:?}",
+        ),
+    }
 }

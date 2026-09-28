@@ -100,11 +100,25 @@ Done. `script_graph_tests` holds it: the A B C D case, a use of a variable, a us
 of a function, a use from inside a function body, a unit drawing on two earlier
 units, and a self-contained unit reaching neither.
 
-It also pins something found while building it, which bounds what the graph can
-be tested against rather than being about the graph: **a function that reads a
-script variable is not callable from a later unit.** The defining unit
-typechecks and its use of the variable is recorded, but the function does not
-export -- `UnresolvedName` at the call.
+Building it turned up a scoping hole, now fixed. **A function body is not a
+closure**, but it could name an enclosing `let` and typecheck: a script unit is
+seeded with every earlier unit's bindings, and entering a body only *saved* that
+map rather than clearing it. The mistake then surfaced from lowering as "binding
+not available yet", which reads as a phase-ordering problem rather than the
+scoping error it is. A module has no top-level bindings, so nothing saw it there.
+Entering a body now keeps only the consts.
+
+Which exposed a second one: **const-ness was lost at the unit boundary.** A
+script `const` arrived in the next unit's variables but not its const bindings,
+so it read as a `let`. Nothing noticed while bodies could name either.
+`AccumulatedBindings` carries the const names now.
+
+**Half of that remains, and it is a lowering gap.** A function body naming a
+script const typechecks and then fails to lower -- "binding not available yet" --
+where a *module* const in a module function body is fine. So the compiler agrees
+the program is legal and cannot build it.
+`a_function_body_may_name_an_enclosing_const_but_lowering_cannot_yet` pins both
+halves and says to tighten it when lowering catches up.
 
 ### B. Precise keying for analysis
 

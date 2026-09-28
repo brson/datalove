@@ -199,7 +199,22 @@ pub fn check_statement<'db>(
             }
 
             // Create new context for function body with parameters in scope.
+            //
+            // **A function body is not a closure.** It sees its parameters, the
+            // consts in scope and the functions, and nothing else. The
+            // enclosing scope's `let` and `var` bindings are dropped here
+            // rather than merely saved: a script unit seeds `variables` with
+            // every earlier unit's bindings, so leaving them visible let a body
+            // name one and typecheck, and the mistake then surfaced from
+            // lowering as "binding not available yet", which reads as a phase
+            // ordering problem rather than the scoping error it is. A module
+            // has no top-level bindings, so this was invisible there.
+            //
+            // Consts stay, which is why the filter is on `const_bindings`
+            // rather than a clear.
             let saved_variables = ctx.variables.C();
+            let consts_in_scope = ctx.const_bindings.C();
+            ctx.variables.retain(|name, _| consts_in_scope.contains(name));
             // A type parameter is in scope in the body as well as the
             // signature, so a binding there can be annotated with one:
             // `var x: T` and `let pair: (T, T)` name a type the function has,
