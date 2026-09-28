@@ -43,12 +43,10 @@ and syntax of Datalove in general.
 {
   name = "datalove",
   version = (0, 1, 0),
-  tag = (true,),
   unit = (),
   enabled = true,
   score = 99.5,
   flags = 0xFF,
-  diff = -1,
   tags = ["fast", "typed", "portable"],
   counts = %{ "a" = 1, "b" = 2, "c" = 3 },
   ids = #{ 10, 20, 30 },
@@ -73,8 +71,12 @@ and syntax of Datalove in general.
   failure = : !string / er error "oops",
   state = atom Ready,
   event = term Click (100, 200),
-  kind = : enum { atom Ready, term Custom string } /
-    enum { term Custom "experiment" },
+  kind = : enum {
+    atom Ready,
+    term Custom string,
+  } / enum {
+    term Custom "experiment",
+  },
   payload = data [1, 2, 3],
 }
 ```
