@@ -87,12 +87,22 @@ struct LoweredFunctions {
     /// evaluator takes one slice type from both paths.
     functions: Vec<std::sync::Arc<datalove_datafun_ir::IrCodeUnit>>,
     func_name_to_id: HashMap<String, datalove_datafun_ir::FuncId>,
+    /// Functions held back because they named a script const with no value yet.
+    deferred: Vec<String>,
 }
 
 /// Output from const evaluation phase.
 struct ConstEvalOutput {
     resolved_consts: ResolvedConsts,
     func_consts: HashMap<String, (IrType, ConstValue)>,
+    /// Every script-level const in scope, this unit's and earlier units'.
+    ///
+    /// Held apart from `resolved_consts` because those are what the inlining
+    /// pass substitutes, which `skip_const_inlining` turns off, while these are
+    /// what a function body naming a script const is lowered against, which it
+    /// does not: a body resolves the const where the reference is lowered, so
+    /// there is no later pass for the flag to skip.
+    script_consts: HashMap<String, (IrType, ConstValue)>,
 }
 
 /// Parsed script unit ready for compilation.
@@ -152,6 +162,7 @@ impl<'db> CompiledModules<'db> {
             db,
             accumulated_unit_specs: Vec::new(),
             accumulated_lower_bindings: AccumulatedLowerBindings::default(),
+            accumulated_script_consts: HashMap::new(),
             module_specs,
             last_source: None,
             last_batch_spec: None,
@@ -192,6 +203,12 @@ pub struct ScriptCompiler<'db> {
     db: &'db dyn salsa::Database,
     accumulated_unit_specs: Vec<ScriptUnitSpec<'db>>,
     accumulated_lower_bindings: AccumulatedLowerBindings,
+    /// Script-level const values from the units compiled so far.
+    ///
+    /// A script const outlives the unit that declared it, and a function body
+    /// in a later unit may name it, so the values accumulate the way the
+    /// bindings do. A unit redeclaring a name replaces the value.
+    accumulated_script_consts: HashMap<String, (IrType, ConstValue)>,
     module_specs: Vec<ModuleSpec<'db>>,
     last_source: Option<bct::input::Source>,
     last_batch_spec: Option<ScriptBatchSpec<'db>>,
@@ -397,7 +414,16 @@ impl<'db> ScriptCompiler<'db> {
 
         // Phase 2: Lowering
         // Functions are lowered first, then reused for const evaluation.
-        let lowered_funcs = match self.phase_lower_functions(&unit, &typecheck, &ownership) {
+        //
+        // In two strata, for the reason the module pipeline has two: a function
+        // body may name a script-level const, and evaluating a script-level
+        // const may call a function in the same unit. So the bodies that need
+        // no value from this unit's consts go first, the consts are evaluated
+        // against those, and the rest follow.
+        let accumulated_consts = self.accumulated_script_consts.clone();
+        let lowered_funcs = match self.phase_lower_functions(
+            &unit, &typecheck, &ownership, &accumulated_consts, true,
+        ) {
             Ok(lf) => lf,
             Err(result) => return result,
         };
@@ -407,6 +433,21 @@ impl<'db> ScriptCompiler<'db> {
         let consts = match self.phase_const_eval(&unit, &typecheck, &lowered_funcs) {
             Ok(c) => c,
             Err(result) => return result,
+        };
+
+        // Second stratum: the bodies that were waiting on a const's value.
+        // Everything is lowered again rather than just those, since a FuncId is
+        // the function's position among the statements either way and the
+        // bodies that did not wait lower to the same IR.
+        let lowered_funcs = if lowered_funcs.deferred.is_empty() {
+            lowered_funcs
+        } else {
+            match self.phase_lower_functions(
+                &unit, &typecheck, &ownership, &consts.script_consts, false,
+            ) {
+                Ok(lf) => lf,
+                Err(result) => return result,
+            }
         };
 
         // Phase 2 (continued): Assemble final IR
@@ -432,7 +473,7 @@ impl<'db> ScriptCompiler<'db> {
         };
 
         // Update accumulated state
-        self.update_accumulated_state(&ir_unit, &ownership);
+        self.update_accumulated_state(&ir_unit, &ownership, &consts);
 
         let ir_dump = format!("{}", ir_unit);
         ScriptCompilationResult {
@@ -596,17 +637,24 @@ impl<'db> ScriptCompiler<'db> {
     ///
     /// Functions are lowered once, then reused for const evaluation
     /// and final IR assembly.
+    ///
+    /// `script_consts` are the script-level const values a body may name.
+    /// `defer_missing_consts` holds back a body that names one with no value
+    /// yet; the caller lowers again once the consts are evaluated.
     fn phase_lower_functions(
         &mut self,
         unit: &ParsedUnit<'db>,
         typecheck: &TypecheckOutput<'db>,
         ownership: &OwnershipOutput<'db>,
+        script_consts: &HashMap<String, (IrType, ConstValue)>,
+        defer_missing_consts: bool,
     ) -> Result<LoweredFunctions, ScriptCompilationResult> {
         let ParsedUnit::Fragment { stmts, .. } = unit else {
             // Expressions don't have function definitions.
             return Ok(LoweredFunctions {
                 functions: Vec::new(),
                 func_name_to_id: HashMap::new(),
+                deferred: Vec::new(),
             });
         };
 
@@ -640,10 +688,16 @@ impl<'db> ScriptCompiler<'db> {
             Some(&func_return_types),
             self.shared_context.func_id_map,
             script_ctx,
+            script_consts,
+            defer_missing_consts,
         ) {
-            Ok((functions, func_name_to_id)) => {
-                let functions = functions.into_iter().map(std::sync::Arc::new).collect();
-                Ok(LoweredFunctions { functions, func_name_to_id })
+            Ok(lowered) => {
+                let functions = lowered.functions.into_iter().map(std::sync::Arc::new).collect();
+                Ok(LoweredFunctions {
+                    functions,
+                    func_name_to_id: lowered.func_name_to_id,
+                    deferred: lowered.deferred,
+                })
             }
             Err(e) => {
                 self.accumulated_unit_specs.pop();
@@ -679,6 +733,7 @@ impl<'db> ScriptCompiler<'db> {
             return Ok(ConstEvalOutput {
                 resolved_consts: ResolvedConsts::new(),
                 func_consts: HashMap::new(),
+                script_consts: self.accumulated_script_consts.clone(),
             });
         };
 
@@ -686,8 +741,15 @@ impl<'db> ScriptCompiler<'db> {
         let const_graph = collect_const_graph(self.db, stmts.clone(), typecheck.result);
 
         // Evaluate script-level consts.
-        // Skip if skip_const_inlining is enabled - consts will be lowered as let bindings.
-        let resolved_consts = if !self.skip_const_inlining && !const_graph.is_empty() {
+        //
+        // Done even under `skip_const_inlining`, since a function body naming a
+        // script const resolves it where the reference is lowered rather than
+        // by the inlining pass, so that flag has nothing to skip here. What it
+        // still skips is substituting the const's own definition, which
+        // `phase_const_inline` decides.
+        let resolved_consts = if const_graph.is_empty() {
+            ResolvedConsts::new()
+        } else {
             match self.evaluate_script_consts(
                 &const_graph,
                 stmts,
@@ -708,20 +770,18 @@ impl<'db> ScriptCompiler<'db> {
                     });
                 }
             }
-        } else {
-            ResolvedConsts::new()
         };
 
-        // Build script-level consts map for function const evaluation.
-        let script_level_consts: HashMap<String, (IrType, ConstValue)> = resolved_consts.iter()
-            .map(|(name, value)| {
-                let ir_type = const_graph.bindings.iter()
-                    .find(|b| &b.name == name)
-                    .map(|b| b.ir_type.clone())
-                    .unwrap_or(IrType::Unit);
-                (name.to_string(), (ir_type, value.clone()))
-            })
-            .collect();
+        // Build the script-level consts map, over the earlier units' consts,
+        // which this unit's declarations shadow.
+        let mut script_consts = self.accumulated_script_consts.clone();
+        for (name, value) in resolved_consts.iter() {
+            let ir_type = const_graph.bindings.iter()
+                .find(|b| &b.name == name)
+                .map(|b| b.ir_type.clone())
+                .expect("every resolved const is a binding of the graph it came from");
+            script_consts.insert(name.to_string(), (ir_type, value.clone()));
+        }
 
         // Evaluate function-level consts.
         // Skip if skip_const_inlining is enabled - consts will be lowered as let bindings.
@@ -730,7 +790,7 @@ impl<'db> ScriptCompiler<'db> {
                 stmts,
                 typecheck.expr_types,
                 typecheck.call_targets,
-                &script_level_consts,
+                &script_consts,
                 lowered_funcs,
             )
         } else {
@@ -752,6 +812,7 @@ impl<'db> ScriptCompiler<'db> {
         Ok(ConstEvalOutput {
             resolved_consts,
             func_consts: func_consts_result.consts,
+            script_consts,
         })
     }
 
@@ -1383,7 +1444,16 @@ impl<'db> ScriptCompiler<'db> {
     // ========================================================================
 
     /// Update accumulated state after successful compilation.
-    fn update_accumulated_state(&mut self, ir_unit: &IrCodeUnit, ownership: &OwnershipOutput<'db>) {
+    fn update_accumulated_state(
+        &mut self,
+        ir_unit: &IrCodeUnit,
+        ownership: &OwnershipOutput<'db>,
+        consts: &ConstEvalOutput,
+    ) {
+        // A script const stays in scope for the units that follow, so this
+        // unit's values join the ones already there, shadowing by name.
+        self.accumulated_script_consts = consts.script_consts.clone();
+
         // A name is live again if this unit exported or assigned to it, and
         // dead if this unit gave away what it exported.
         if let Some(script_ctx) = ir_unit.script_context() {

@@ -68,7 +68,10 @@ mod ir_ext;
 // Re-export public types and functions.
 pub use context::{LowerCtx, FrameState, ScriptLowerContext, ScriptUnitKind};
 pub use func::lower_function_for_module;
-pub use script::{lower_script_fragment_raw, lower_script_expr, lower_script_functions};
+pub use script::{
+    lower_script_fragment_raw, lower_script_expr, lower_script_functions,
+    ScriptFunctionsLowered,
+};
 pub use const_expr::{
     lower_const_binding, lower_const_expr_to_unit_standalone, try_extract_literal,
 };

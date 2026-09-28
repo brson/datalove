@@ -172,6 +172,19 @@ pub fn lower_script_fragment_raw<'db>(
     })
 }
 
+/// What lowering a script unit's functions produced.
+pub struct ScriptFunctionsLowered {
+    /// One unit per function lowered, each carrying its own `FuncId` as its id.
+    ///
+    /// A deferred function has no unit here, so this is not indexed by
+    /// `FuncId`; callers that want one function look it up by `id`.
+    pub functions: Vec<IrCodeUnit>,
+    /// Every function in the unit, deferred ones included, with its `FuncId`.
+    pub func_name_to_id: HashMap<String, FuncId>,
+    /// Functions held back because they named a const with no value yet.
+    pub deferred: Vec<String>,
+}
+
 /// Lower only the functions from a script fragment.
 ///
 /// This is used to pre-lower functions before CTFE, so that const expressions
@@ -184,7 +197,14 @@ pub fn lower_script_fragment_raw<'db>(
 /// The `func_id_map` parameter maps module functions to their IR locations,
 /// enabling calls to module functions from script functions.
 ///
-/// Returns a vector of lowered functions and a map from function name to FuncId.
+/// `script_consts` are the script-level consts a body may name, from this unit
+/// and from earlier ones. They are seeded the way `lower_function_for_module`
+/// seeds a module's consts, so a reference emits a fresh `Const`.
+///
+/// `defer_missing_consts` says what to do with a body that names a const with
+/// no value yet: record the function in `deferred` and carry on, or fail. The
+/// caller lowers again with the values once it has them, and fails then.
+#[allow(clippy::too_many_arguments)]
 pub fn lower_script_functions<'db>(
     db: &'db dyn salsa::Database,
     expr_types: &'db ExprTypes<'db>,
@@ -195,9 +215,18 @@ pub fn lower_script_functions<'db>(
     func_return_types: Option<&HashMap<String, IrType>>,
     func_id_map: &'db HashMap<(ModuleId<'db>, String), (IrModuleId, FuncId)>,
     script_ctx: ScriptLowerContext,
-) -> Result<(Vec<IrCodeUnit>, HashMap<String, FuncId>), LowerError> {
+    script_consts: &HashMap<String, (IrType, ConstValue)>,
+    defer_missing_consts: bool,
+) -> Result<ScriptFunctionsLowered, LowerError> {
     // Create a minimal context with the accumulated script context.
     let mut ctx = LowerCtx::new_for_script(db, expr_types, Some(call_targets), Some(func_id_map), script_ctx);
+
+    // Script-level consts are in scope for every body in the unit, and stay in
+    // scope for later units. Seeded before any body is lowered so that the
+    // first one may name a const declared after it.
+    for (name, (ir_type, value)) in script_consts {
+        ctx.add_const(name.clone(), ir_type.clone(), value.clone());
+    }
 
     // Pre-register all functions to enable forward references (mutual recursion).
     for stmt in stmts {
@@ -211,6 +240,7 @@ pub fn lower_script_functions<'db>(
     // Build a map of function names to FuncIds.
     let mut func_name_to_id: HashMap<String, FuncId> = HashMap::new();
     let mut lowered_units: Vec<IrCodeUnit> = Vec::new();
+    let mut deferred: Vec<String> = Vec::new();
 
     // Lower only the function statements.
     for stmt in stmts {
@@ -239,16 +269,24 @@ pub fn lower_script_functions<'db>(
                 .cloned();
 
             // Lower the function body (returns IrCodeUnit).
-            let unit = lower_function_body(&mut ctx, func_id, *fun_stmt, analysis, resolved_params, resolved_return)?;
+            let lowered = lower_function_body(
+                &mut ctx, func_id, *fun_stmt, analysis, resolved_params, resolved_return);
 
-            // Restore parent state.
+            // Restore parent state, whatever the body did, so the next function
+            // starts from the unit's state rather than this body's.
             ctx.swap_body_state(saved);
 
-            lowered_units.push(unit);
+            match lowered {
+                Ok(unit) => lowered_units.push(unit),
+                Err(LowerError::BindingNotAvailable(_)) if defer_missing_consts => {
+                    deferred.push(func_name);
+                }
+                Err(e) => return Err(e),
+            }
         }
     }
 
-    Ok((lowered_units, func_name_to_id))
+    Ok(ScriptFunctionsLowered { functions: lowered_units, func_name_to_id, deferred })
 }
 
 /// Lower a script expression unit.

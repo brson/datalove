@@ -1,0 +1,15 @@
+----------
+scriptunit-fragment
+----------
+
+const LIMIT: u32 = 77
+
+fun get_limit(): u32
+    ret LIMIT
+end fun
+
+----------
+scriptunit-expr
+----------
+
+get_limit()

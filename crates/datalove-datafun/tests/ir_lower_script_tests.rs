@@ -169,9 +169,13 @@ fn analyze_file(path: &Path) -> Result<String, String> {
                 // Lower functions so CTFE can reuse them.
                 // Use empty ScriptLowerContext since tests don't accumulate across units.
                 // Use empty func_id_map since these tests don't use modules.
-                let (lowered_functions, func_name_to_id) = lower_script_functions(
-                    &db, expr_types_raw, call_targets_raw, &stmts, &func_analyses, None, Some(&func_return_types), &func_id_map, ScriptLowerContext::new()
+                // These fixtures declare no script-level const a body names, so
+                // there is nothing to seed and nothing to defer.
+                let lowered = lower_script_functions(
+                    &db, expr_types_raw, call_targets_raw, &stmts, &func_analyses, None, Some(&func_return_types), &func_id_map, ScriptLowerContext::new(),
+                    &HashMap::new(), false,
                 ).expect("function lowering failed");
+                let (lowered_functions, func_name_to_id) = (lowered.functions, lowered.func_name_to_id);
 
                 // Evaluate const bindings using CTFE with "lower then evaluate" pattern.
                 let const_graph = build_const_graph(&db, &stmts, expr_types_raw);
