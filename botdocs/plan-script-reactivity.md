@@ -145,9 +145,74 @@ covers it now: three shapes that work, three that do not, and the module contras
 that makes it a defect rather than a missing feature. They assert today's
 failures and say which to tighten when it is fixed.
 
-### B. Precise keying for analysis
+### B. Precise keying for analysis -- done
 
-The goal: editing B re-typechecks B and D, and C is a memo hit.
+The goal: editing B re-typechecks B and D, and C is a memo hit. **That holds
+now**, and `script_reactivity_tests` pins it: editing B re-typechecks exactly the
+units whose `asked_names` intersect what B provides, which for A B C D is B and
+D, with C and A memo hits. A value-only edit reaches only the unit it is in; a
+type edit reaches the units that read the binding; appending still typechecks
+one unit.
+
+What went in, and it is the design below with one thing changed:
+
+- **`AccumulatedBindings` is gone.** `TypeContext` is no longer seeded with the
+  earlier units' bindings; it holds an optional `InheritedBindings` and consults
+  `binding_at` on a miss in `lookup_variable`, `lookup_variable_mutability`,
+  `lookup_function`, `lookup_function_ast` and `is_const_binding`. The last of
+  those was not on the list and had to be: const-ness across a unit boundary is
+  what decides whether a function body may name a binding.
+- **`unit_ast(db, unit)`** holds a unit's parse, name resolution and spans, keyed
+  on the unit alone, since none of it depends on the units around it.
+- **`unit_provides(db, script, env)`** is a firewall in front of
+  `typecheck_script_unit`, and it earns its keep: a unit's whole output moves
+  whenever anything in its body moves -- it carries the expression types -- so
+  without the projection a body edit would re-run every later unit's `binding_at`
+  walk. With it, a body edit stops there.
+- **`ScriptEnv`** interns the module specs and the auto-adapt mode. The plan had
+  those passed by value; `binding_at` is asked once per name a unit uses, and
+  hashing every module's parse and spans at each of those is the module world in
+  the key by another route.
+- **A function body had to be told it is a body.** It is not a closure, and
+  dropping the enclosing `let`s from `variables` was enough while they were
+  seeded into it. Once a miss falls through to the earlier units, the body has
+  to refuse what it may not name, so `TypeContext::in_function_body` gates the
+  inherited-variable lookup to consts.
+
+**The one change: the script is interned over each unit's `Source`, not an
+input holding the units.** The property the plan wanted from an input --
+identity independent of value -- is had one level down, because a `Source` *is*
+an input and editing a unit is `set_text` on it. `ScriptUnit` is interned over a
+source, and `Script` is a cons list of those: "this unit, and the units before
+it". So editing any unit moves no key, which is what stage B needed, and
+appending leaves the earlier handles alone without a setter at all.
+
+The reason not to use the input: **appending would have needed `&mut db` too,
+not just editing.** `set_units` is the only way to grow an input's list, so
+every REPL line would want exclusive access to the database -- and
+`ScriptCompiler` cannot be handed it. It holds `&'db dyn Database` and, behind
+that lifetime, `ModuleSpec`s and a whole `SharedModuleContext` derived from
+`CompiledModules<'db>`, and salsa's lifetimes exist precisely to stop that data
+outliving a mutation. `ModuleCompilationPipeline` gets away with `&mut D`
+because it holds nothing but `Source`s and rebuilds its `'db` data per compile;
+making the script compiler do the same means re-deriving the module compilation
+on every line and restructuring 58 call sites across 22 files. That is stage C
+and D's shape, not a keying change.
+
+`&mut db` is still what an edit costs, exactly as
+`IncrementalModuleWorld::update_source` costs it -- `ScriptCompiler::unit_sources`
+hands out the `Source` per unit for that, and the caller that owns the database
+does the `set_text`. What is not needed is `&mut db` per appended line.
+
+Two smaller things fell out. `function_types` on a unit's result no longer
+carries the earlier units' functions, because every consumer looks one up by the
+name of a function among *this* unit's statements; and it is sorted, which it
+was not -- a `HashMap`'s iteration order was deciding part of a memoized value's
+identity.
+
+What follows is the design as written before the work, kept because the argument
+for reading through a query rather than keying on resolved uses is the part that
+matters and is unchanged.
 
 **The script becomes a `#[salsa::input]`,** which is what
 `mandocs/script-semantics.md` specified in the first place:

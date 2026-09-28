@@ -16,21 +16,15 @@ use datalove_datafun_compiler::Database;
 
 /// Typecheck `text` and return the span of every diagnostic label it produced.
 fn diagnostic_label_spans(db: &Database, source: bct::input::Source) -> Vec<(usize, usize)> {
-    let script = datalove_datafun_parser::parse_for_diagnostics(db, source);
-    let spans = datalove_datafun_parser::datafun_spans(db, source);
-    let name_resolution = datalove_datafun_resolve::resolve_script_names(db, source, script.clone());
+    let _script = datalove_datafun_parser::parse_for_diagnostics(db, source);
 
-    let unit_spec = datalove_datafun_tycheck::ScriptUnitSpec::new(
-        source,
-        spans,
-        datalove_datafun_tycheck::ScriptUnitKind::Fragment(script.clone(), name_resolution),
-    );
-    let batch_spec = datalove_datafun_tycheck::create_batch_spec(db, source, vec![unit_spec], vec![]);
-    let _ = datalove_datafun_tycheck::type_check_script_units(db, batch_spec);
+    let (script_handle, env) = datalove_datafun_tycheck::single_fragment_script(
+        db, source, datalove_datafun_tycheck::AutoAdaptMode::Disabled);
+    let _ = datalove_datafun_tycheck::type_check_script_units(db, script_handle, env);
 
     let diagnostics = datalove_datafun_tycheck::type_check_script_units::accumulated::<
         datalove_diagnostic::TypeDiagnostic,
-    >(db, batch_spec);
+    >(db, script_handle, env);
 
     diagnostics
         .iter()

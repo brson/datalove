@@ -21,29 +21,11 @@ use bct::{
 };
 
 use datalove_datafun_ast::ast;
-use datalove_datafun_ast::script;
 use bct::diagnostic::DiagnosticBuilder;
 use datalove_diagnostic::DiagnosticBuilderExt;
 use state::{Parser, ScriptCounters};
 
 use salsa::Database as Db;
-
-/// Parse a specific unit from a Script.
-///
-/// Returns the parsed statements for that unit.
-/// Salsa will memoize this per unit, so unchanged units don't need re-parsing.
-#[salsa::tracked(returns(ref))]
-pub fn parse_script_unit<'db>(
-    db: &'db dyn Db,
-    script: script::Script<'db>,
-    unit_index: usize,
-) -> ast::ParsedStatements<'db> {
-    let units = &script.units(db);
-    let unit = units[unit_index];
-    let source = unit.source(db);
-    // Scripts don't have a ModuleId.
-    parse_with_module_id(db, source, None).parsed
-}
 
 /// Parse a Source into a datafun script with span information.
 ///

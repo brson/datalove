@@ -143,22 +143,14 @@ fn typecheck_sections_with_mode(
             let db = datalove_datafun_compiler::Database::default();
             let source_input = bct::input::Source::new(&db, source.S());
             let script = datalove_datafun_parser::parse_for_diagnostics(&db, source_input);
-            let spans = datalove_datafun_parser::datafun_spans(&db, source_input);
-            let name_resolution = datalove_datafun_resolve::resolve_script_names(&db, source_input, script.clone());
 
-            let unit_spec = datalove_datafun_tycheck::ScriptUnitSpec::new(
-                source_input,
-                spans,
-                datalove_datafun_tycheck::ScriptUnitKind::Fragment(script.clone(), name_resolution.clone()),
-            );
-            let batch_spec = datalove_datafun_tycheck::create_batch_spec_with_auto_adapt(
-                &db, source_input, vec![unit_spec], vec![], mode
-            );
-            let results = datalove_datafun_tycheck::type_check_script_units(&db, batch_spec);
+            let (script_handle, env) =
+                datalove_datafun_tycheck::single_fragment_script(&db, source_input, mode);
+            let results = datalove_datafun_tycheck::type_check_script_units(&db, script_handle, env);
             let tycheck_result = results.results(&db)[0];
 
             // Collect script type diagnostics.
-            let type_diagnostics = datalove_datafun_tycheck::type_check_script_units::accumulated::<datalove_diagnostic::TypeDiagnostic>(&db, batch_spec);
+            let type_diagnostics = datalove_datafun_tycheck::type_check_script_units::accumulated::<datalove_diagnostic::TypeDiagnostic>(&db, script_handle, env);
             for d in type_diagnostics.iter() {
                 let diag = d.to_diagnostic(&db);
                 let code = diag.code.map(|c| c.as_str(&db).to_string());

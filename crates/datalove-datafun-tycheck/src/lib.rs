@@ -445,49 +445,21 @@ impl<'db> ModuleSpec<'db> {
     }
 }
 
-/// Spec for a batch of script units.
+/// What a script is checked against, as a handle to key a query on.
 ///
-/// Tracked type - must be created inside a tracked function.
-#[salsa::tracked]
-pub struct ScriptBatchSpec<'db> {
-    #[returns(ref)]
-    pub units: Vec<ScriptUnitSpec<'db>>,
+/// Interned rather than passed by value, and this is not a micro-optimization:
+/// a script unit asks [`api::binding_at`] once per name it uses, and the module
+/// specs are every module's parse, spans and name resolution. Hashing that at
+/// every name lookup is the module world by another route. The modules do not
+/// change while a session runs, so the same handle comes back each time.
+#[salsa::interned]
+pub struct ScriptEnv<'db> {
+    /// The modules the script may require and import from.
     #[returns(ref)]
     pub modules: Vec<ModuleSpec<'db>>,
     /// Auto-adapt mode for type checking.
     #[returns(copy)]
     pub auto_adapt_mode: AutoAdaptMode,
-}
-
-/// A script unit with parsed content (tracked - created inside tracked fn).
-#[salsa::tracked]
-pub struct ScriptUnitInput<'db> {
-    #[returns(copy)]
-    pub source: bct::input::Source,
-    #[returns(ref)]
-    pub kind: ScriptUnitKind<'db>,
-}
-
-/// Module info with parsed content (tracked).
-#[salsa::tracked]
-pub struct ModuleInfo<'db> {
-    #[returns(ref)]
-    pub path: String,
-    #[returns(clone)]
-    pub parsed: ParsedStatements<'db>,
-    #[returns(copy)]
-    pub source: bct::input::Source,
-    #[returns(copy)]
-    pub module_id: ModuleId<'db>,
-}
-
-/// Batch of script units (tracked).
-#[salsa::tracked]
-pub struct ScriptUnitBatch<'db> {
-    #[returns(ref)]
-    pub units: Vec<ScriptUnitInput<'db>>,
-    #[returns(ref)]
-    pub modules: Vec<ModuleInfo<'db>>,
 }
 
 /// Result of typechecking one script unit.
@@ -687,22 +659,28 @@ impl<'db> ModuleGraphTypecheckResult<'db> {
 
 // Re-export public API functions.
 pub use api::{
-    create_batch_spec,
-    create_batch_spec_with_auto_adapt,
     type_check_script_units,
     type_check_single_script,
     typecheck_module_graph,
     typecheck_module_graph_parallel,
     typecheck_module_graph_with_mode,
     resolve_module_imports,
-    // Per-unit memoization types.
-    AccumulatedBindings,
+    // Per-unit memoization.
+    ScriptBinding,
     ScriptUnitTypecheckOutput,
+    UnitProvides,
+    binding_at,
+    single_fragment_script,
     typecheck_script_unit,
+    unit_ast,
+    unit_provides,
 };
 
+// The script itself, which the per-unit queries are keyed on.
+pub use datalove_datafun_ast::script::{Script, ScriptUnit};
+
 // Re-export context types.
-pub use context::TypeContext;
+pub use context::{InheritedBindings, TypeContext};
 
 // Re-export type utilities.
 pub use types::{

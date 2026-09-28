@@ -9,7 +9,6 @@ use std::path::Path;
 use std::collections::HashMap;
 use std::rc::Rc;
 use datalove_datafun as datafun;
-use datalove_datafun_resolve::resolve_script_names;
 use datalove_datafun_pkg::package_load_worldfile::{self, WorldfileSection};
 use datalove_datafun_compiler::lower::{self, ScriptLowerContext, lower_script_functions, lower_const_binding};
 use datalove_datafun_const::{inline_script_consts, PreparedConst, evaluate_prepared_const};
@@ -88,9 +87,7 @@ fn analyze_file(path: &Path) -> Result<String, String> {
                 let stmts: Vec<Statement> = parsed_ast.statements.to_vec();
 
                 // Typecheck to get expression types using production path.
-                let spans = datalove_datafun_parser::datafun_spans(&db, source_obj);
-                let name_resolution = resolve_script_names(&db, source_obj, parsed_ast.clone());
-                let tycheck_result = datalove_datafun_tycheck::type_check_single_script(&db, source_obj, spans, parsed_ast.clone(), name_resolution);
+                let tycheck_result = datalove_datafun_tycheck::type_check_single_script(&db, source_obj);
 
                 // Check for type errors - if any, skip lowering.
                 let tycheck_errors = tycheck_result.errors(&db);

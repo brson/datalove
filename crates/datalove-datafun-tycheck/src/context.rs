@@ -30,9 +30,38 @@ use datalove_datafun_common::{can_clone_coerce_to, convert_type_hint_with_aliase
 use std::cell::RefCell;
 use std::collections::{BTreeSet, HashSet};
 
+/// Where a script unit reads the bindings the units before it left behind.
+///
+/// Held as an `Option` on [`TypeContext`] because the context is shared with
+/// module typechecking and a module has no units before it.
+///
+/// **A lookup miss is the read, and the read is the dependency.** A unit used to
+/// be seeded with every earlier unit's bindings, which put the whole prefix's
+/// outputs into a per-unit memo key; asking for one name at a time means a unit
+/// depends on the names it actually used. See
+/// `botdocs/plan-script-reactivity.md`.
+#[derive(Clone, Copy)]
+pub struct InheritedBindings<'db> {
+    /// The script up to the unit *before* the one being checked.
+    pub script: crate::Script<'db>,
+    /// The modules the script is checked against.
+    pub env: crate::ScriptEnv<'db>,
+}
+
 /// Context for typechecking.
 pub struct TypeContext<'db> {
     pub(crate) db: &'db dyn crate::Db,
+    /// The earlier script units' bindings, reached on a lookup miss.
+    pub(crate) inherited: Option<InheritedBindings<'db>>,
+    /// Whether a function body is being checked.
+    ///
+    /// **A function body is not a closure.** It sees its parameters, the consts
+    /// in scope and the functions, and nothing else, so an inherited `let` or
+    /// `var` is refused here. Entering a body drops those from `variables`,
+    /// which was enough while the enclosing units' bindings were seeded into it;
+    /// now that a miss falls through to the earlier units, the body has to say
+    /// so.
+    pub(crate) in_function_body: bool,
     /// Pre-computed spans for error reporting.
     pub(crate) spans: DatafunSpans<'db>,
     /// Current module being typechecked (for pending diagnostics).
@@ -141,6 +170,8 @@ impl<'db> TypeContext<'db> {
     ) -> Self {
         TypeContext {
             db,
+            inherited: None,
+            in_function_body: false,
             spans,
             current_module_id: module_id,
             variables: HashMap::new(),
@@ -724,22 +755,49 @@ aggregate still holds it. Borrow it with `ref`, or clone it out with `@`.")),
 
     pub fn lookup_variable(&self, name: InternedText<'db>) -> Option<Type<'db>> {
         self.note_asked(name);
-        self.variables.get(&name).map(|(ty, _)| ty.clone())
+        match self.variables.get(&name) {
+            Some((ty, _)) => Some(ty.clone()),
+            None => self.inherited_variable(name).map(|(ty, _)| ty),
+        }
     }
 
     pub fn lookup_variable_mutability(&self, name: InternedText<'db>) -> Option<bool> {
         self.note_asked(name);
-        self.variables.get(&name).map(|(_, is_mutable)| *is_mutable)
+        match self.variables.get(&name) {
+            Some((_, is_mutable)) => Some(*is_mutable),
+            None => self.inherited_variable(name).map(|(_, is_mutable)| is_mutable),
+        }
     }
 
     pub fn lookup_function(&self, name: InternedText<'db>) -> Option<TypeFunction<'db>> {
         self.note_asked(name);
-        self.functions.get(&name).copied()
+        match self.functions.get(&name) {
+            Some(func_ty) => Some(*func_ty),
+            None => self.inherited(name).and_then(|binding| binding.func),
+        }
     }
 
     /// Record that something asked about `name`, found or not.
     fn note_asked(&self, name: InternedText<'db>) {
         self.asked_names.borrow_mut().insert(name);
+    }
+
+    /// What the earlier script units left behind under `name`.
+    fn inherited(&self, name: InternedText<'db>) -> Option<crate::ScriptBinding<'db>> {
+        let inherited = self.inherited?;
+        crate::api::binding_at(self.db, inherited.script, inherited.env, name)
+    }
+
+    /// The variable an earlier unit left behind under `name`, if a body may see it.
+    ///
+    /// Inside a function body only a const may be named, for the reason
+    /// [`TypeContext::in_function_body`] gives.
+    fn inherited_variable(&self, name: InternedText<'db>) -> Option<(Type<'db>, bool)> {
+        let binding = self.inherited(name)?;
+        if self.in_function_body && !binding.is_const {
+            return None;
+        }
+        binding.var
     }
 
     /// Every name asked of the environment, in order.
@@ -766,7 +824,10 @@ aggregate still holds it. Borrow it with `ref`, or clone it out with `@`.")),
     /// Look up the resolved function AST by name.
     pub fn lookup_function_ast(&self, name: InternedText<'db>) -> Option<(StmtFun<'db>, Option<ModuleId<'db>>)> {
         self.note_asked(name);
-        self.function_asts.get(&name).copied()
+        match self.function_asts.get(&name) {
+            Some(found) => Some(*found),
+            None => self.inherited(name).and_then(|binding| binding.func_ast),
+        }
     }
 
     /// Store resolved call target for a function call expression.
@@ -830,8 +891,14 @@ aggregate still holds it. Borrow it with `ref`, or clone it out with `@`.")),
     }
 
     /// Check if a name is a const binding.
+    ///
+    /// A const declared by an earlier script unit counts, which is what lets a
+    /// function body and a const expression name one across a unit boundary.
     pub fn is_const_binding(&self, name: InternedText<'db>) -> bool {
-        self.const_bindings.contains(&name)
+        if self.const_bindings.contains(&name) {
+            return true;
+        }
+        self.inherited(name).is_some_and(|binding| binding.is_const)
     }
 
     /// Seed context from a pre-computed name resolution.

@@ -1,6 +1,5 @@
 use rmx::prelude::*;
 
-pub mod resolution;
 pub mod funlit_equiv;
 
 // Re-export const inlining from const crate.

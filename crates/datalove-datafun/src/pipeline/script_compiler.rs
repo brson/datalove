@@ -28,7 +28,7 @@ use std::collections::HashMap;
 use std::rc::Rc;
 use std::sync::Arc;
 
-use datalove_datafun_ast::ast::{ExprFun, ParsedStatements, Statement};
+use datalove_datafun_ast::ast::{ExprFun, Statement};
 use datalove_datafun_compiler::lower::{
     lower_script_fragment_raw, lower_script_expr, lower_script_functions,
     lower_const_binding,
@@ -45,8 +45,8 @@ use datalove_datafun_compiler::lower::ScriptFunctionAnalyses;
 use datalove_datafun_ir::{ConstValue, CtfeEvaluator, CtfeError, IrCodeUnit, IrType, ResolvedConsts, ConstEvalError};
 use datalove_datafun_interp::InterpCtfeEvaluator;
 use datalove_datafun_tycheck::{
-    type_check_script_units, create_batch_spec_with_auto_adapt,
-    ScriptUnitSpec, ModuleSpec, ScriptBatchSpec, ScriptUnitKind,
+    type_check_script_units, unit_ast,
+    ModuleSpec, Script, ScriptEnv, ScriptUnit,
     UnitTypecheckResultTracked,
     AutoAdaptMode,
 };
@@ -108,8 +108,10 @@ struct ConstEvalOutput {
 /// Parsed script unit ready for compilation.
 enum ParsedUnit<'db> {
     /// A fragment (statements).
+    ///
+    /// The parse itself is not carried here: `unit_ast` holds it, keyed on the
+    /// unit, and these are the statements the later phases walk.
     Fragment {
-        parsed: ParsedStatements<'db>,
         stmts: Vec<Statement<'db>>,
     },
     /// A single expression.
@@ -160,12 +162,12 @@ impl<'db> CompiledModules<'db> {
 
         Some(ScriptCompiler {
             db,
-            accumulated_unit_specs: Vec::new(),
+            scripts: Vec::new(),
+            env: ScriptEnv::new(db, module_specs, AutoAdaptMode::Disabled),
+            last_script: None,
             accumulated_lower_bindings: AccumulatedLowerBindings::default(),
             accumulated_script_consts: HashMap::new(),
-            module_specs,
             last_source: None,
-            last_batch_spec: None,
             ctfe_evaluator,
             skip_const_inlining: false,
             skip_specialization: false,
@@ -201,7 +203,21 @@ impl<'db> CompiledModules<'db> {
 /// Use `compile_fragment()` or `compile_expr()` to compile units.
 pub struct ScriptCompiler<'db> {
     db: &'db dyn salsa::Database,
-    accumulated_unit_specs: Vec<ScriptUnitSpec<'db>>,
+    /// The script as it stood after each unit, so `scripts[i]` is the handle
+    /// every per-unit query about unit `i` is keyed on.
+    ///
+    /// A handle is a chain node over the unit's `Source`, so appending leaves
+    /// the earlier handles alone and editing a unit's text leaves all of them
+    /// alone. See `botdocs/plan-script-reactivity.md`.
+    scripts: Vec<Script<'db>>,
+    /// The modules the script is checked against, and the auto-adapt mode.
+    env: ScriptEnv<'db>,
+    /// The script as it stood for the last unit *attempted*.
+    ///
+    /// Held apart from `scripts` because a unit that failed is taken back off
+    /// that -- it provides nothing to what follows -- and the diagnostics the
+    /// caller is about to render are the failing unit's.
+    last_script: Option<Script<'db>>,
     accumulated_lower_bindings: AccumulatedLowerBindings,
     /// Script-level const values from the units compiled so far.
     ///
@@ -209,9 +225,7 @@ pub struct ScriptCompiler<'db> {
     /// in a later unit may name it, so the values accumulate the way the
     /// bindings do. A unit redeclaring a name replaces the value.
     accumulated_script_consts: HashMap<String, (IrType, ConstValue)>,
-    module_specs: Vec<ModuleSpec<'db>>,
     last_source: Option<bct::input::Source>,
-    last_batch_spec: Option<ScriptBatchSpec<'db>>,
     /// CTFE evaluator for const expression evaluation.
     ctfe_evaluator: Rc<RefCell<dyn CtfeEvaluator>>,
     /// When true, const bindings in functions are lowered as let bindings.
@@ -248,7 +262,7 @@ impl<'db> ScriptCompiler<'db> {
         }
 
         let stmts = parsed.statements.to_vec();
-        let unit = ParsedUnit::Fragment { parsed: parsed.clone(), stmts };
+        let unit = ParsedUnit::Fragment { stmts };
         self.compile_unit_inner(src, unit)
     }
 
@@ -275,11 +289,22 @@ impl<'db> ScriptCompiler<'db> {
     pub fn unit_typecheck_outputs(
         &self,
     ) -> Vec<datalove_datafun_tycheck::ScriptUnitTypecheckOutput<'db>> {
-        match self.last_batch_spec {
+        match self.scripts.last() {
             None => Vec::new(),
-            Some(spec) => datalove_datafun_tycheck::type_check_script_units(self.db, spec)
+            Some(script) => type_check_script_units(self.db, *script, self.env)
                 .unit_outputs(self.db),
         }
+    }
+
+    /// The source of each unit compiled so far, in order.
+    ///
+    /// A unit's `Source` is an input, so one of these is the handle an edit is
+    /// applied to: `set_text` changes that unit's text and moves no memo key.
+    /// The edit itself needs `&mut db`, which a compiler holding
+    /// `&'db dyn Database` cannot be handed -- see
+    /// `botdocs/plan-script-reactivity.md`.
+    pub fn unit_sources(&self) -> Vec<bct::input::Source> {
+        self.scripts.iter().map(|script| script.unit(self.db).source(self.db)).collect()
     }
 
     /// Get parse diagnostics from the last compilation.
@@ -293,10 +318,10 @@ impl<'db> ScriptCompiler<'db> {
 
     /// Get type diagnostics from the last compilation.
     pub fn get_type_diagnostics(&self) -> Vec<&datalove_diagnostic::TypeDiagnostic> {
-        if let Some(batch_spec) = self.last_batch_spec {
-            type_check_script_units::accumulated::<datalove_diagnostic::TypeDiagnostic>(self.db, batch_spec)
-        } else {
-            Vec::new()
+        match self.last_script {
+            Some(script) => type_check_script_units::accumulated::<datalove_diagnostic::TypeDiagnostic>(
+                self.db, script, self.env),
+            None => Vec::new(),
         }
     }
 
@@ -360,6 +385,10 @@ impl<'db> ScriptCompiler<'db> {
     /// move-in-loop) are suppressed, treating them as if `@` was inserted.
     pub fn set_auto_adapt_mode(&mut self, mode: AutoAdaptMode) {
         self.auto_adapt_mode = mode;
+        // The mode is part of what a unit is checked against, so the handle the
+        // per-unit queries are keyed on has to carry it.
+        let modules: Vec<ModuleSpec<'db>> = self.env.modules(self.db).C();
+        self.env = ScriptEnv::new(self.db, modules, mode);
     }
 
     /// Get current auto-adapt mode.
@@ -467,7 +496,7 @@ impl<'db> ScriptCompiler<'db> {
         let ir_unit = match self.phase_specialize(ir_unit, &unit, &typecheck, &lowered_funcs) {
             Ok(ir) => ir,
             Err(result) => {
-                self.accumulated_unit_specs.pop();
+                self.scripts.pop();
                 return result;
             }
         };
@@ -494,29 +523,17 @@ impl<'db> ScriptCompiler<'db> {
         src: bct::input::Source,
         unit: &ParsedUnit<'db>,
     ) -> Result<TypecheckOutput<'db>, ScriptCompilationResult> {
-        // Create unit spec.
-        let spans = datalove_datafun_parser::datafun_spans(self.db, src);
-        let unit_kind = match unit {
-            ParsedUnit::Fragment { parsed, .. } => {
-                let name_resolution = resolve_script_names(self.db, src, parsed.clone());
-                ScriptUnitKind::Fragment(parsed.clone(), name_resolution)
-            }
-            ParsedUnit::Expr(expr) => ScriptUnitKind::Expr(*expr),
-        };
-        let unit_spec = ScriptUnitSpec::new(src, spans, unit_kind);
-        self.accumulated_unit_specs.push(unit_spec);
+        // Extend the chain the per-unit queries are keyed on. The parse, name
+        // resolution and spans come from `unit_ast`, keyed on the unit alone.
+        let script_unit = ScriptUnit::new(self.db, src, matches!(unit, ParsedUnit::Expr(_)));
+        let script = Script::new(self.db, self.scripts.last().copied(), script_unit);
+        self.scripts.push(script);
+        self.last_script = Some(script);
+        self.last_spans = Some(unit_ast(self.db, script_unit).spans.clone());
 
-        // Run typechecking. The mode has to reach here too, not just ownership
-        // analysis: a mismatch `@` would fix is a type error first.
-        let batch_spec = create_batch_spec_with_auto_adapt(
-            self.db,
-            src,
-            self.accumulated_unit_specs.clone(),
-            self.module_specs.clone(),
-            self.auto_adapt_mode,
-        );
-        self.last_batch_spec = Some(batch_spec);
-        let typecheck_results = type_check_script_units(self.db, batch_spec);
+        // Run typechecking. The mode reaches here through `env`, not just
+        // ownership analysis: a mismatch `@` would fix is a type error first.
+        let typecheck_results = type_check_script_units(self.db, script, self.env);
         let all_results = typecheck_results.results(self.db);
         let result = *all_results.last().unwrap();
 
@@ -525,7 +542,7 @@ impl<'db> ScriptCompiler<'db> {
             .map(|e| format!("{:?}", e.error(self.db)))
             .collect();
         if !errors.is_empty() {
-            self.accumulated_unit_specs.pop();
+            self.scripts.pop();
             return Err(ScriptCompilationResult {
                 typecheck: TypecheckResult::Error { errors },
                 ownership: OwnershipResult::Skipped,
@@ -563,11 +580,8 @@ impl<'db> ScriptCompiler<'db> {
                 if !ownership_result.errors(self.db).is_empty() {
                     // Store structured errors and spans for CLI rendering.
                     self.last_ownership_errors = ownership_result.structured_errors(self.db).to_vec();
-                    if let Some(unit_spec) = self.accumulated_unit_specs.last() {
-                        self.last_spans = Some(unit_spec.spans.clone());
-                    }
                     let error_msg = ownership_result.errors(self.db).join("\n");
-                    self.accumulated_unit_specs.pop();
+                    self.scripts.pop();
                     return Err(ScriptCompilationResult {
                         typecheck: TypecheckResult::Success,
                         ownership: OwnershipResult::Error { message: error_msg },
@@ -607,11 +621,8 @@ impl<'db> ScriptCompiler<'db> {
                 if !ownership_result.errors(self.db).is_empty() {
                     // Store structured errors and spans for CLI rendering.
                     self.last_ownership_errors = ownership_result.structured_errors(self.db).to_vec();
-                    if let Some(unit_spec) = self.accumulated_unit_specs.last() {
-                        self.last_spans = Some(unit_spec.spans.clone());
-                    }
                     let error_msg = ownership_result.errors(self.db).join("\n");
-                    self.accumulated_unit_specs.pop();
+                    self.scripts.pop();
                     return Err(ScriptCompilationResult {
                         typecheck: TypecheckResult::Success,
                         ownership: OwnershipResult::Error { message: error_msg },
@@ -700,7 +711,7 @@ impl<'db> ScriptCompiler<'db> {
                 })
             }
             Err(e) => {
-                self.accumulated_unit_specs.pop();
+                self.scripts.pop();
                 Err(ScriptCompilationResult {
                     typecheck: TypecheckResult::Success,
                     ownership: OwnershipResult::Success,
@@ -759,7 +770,7 @@ impl<'db> ScriptCompiler<'db> {
             ) {
                 Ok(resolved) => resolved,
                 Err(e) => {
-                    self.accumulated_unit_specs.pop();
+                    self.scripts.pop();
                     return Err(ScriptCompilationResult {
                         typecheck: TypecheckResult::Success,
                         ownership: OwnershipResult::Success,
@@ -798,7 +809,7 @@ impl<'db> ScriptCompiler<'db> {
         };
 
         if !func_consts_result.errors.is_empty() {
-            self.accumulated_unit_specs.pop();
+            self.scripts.pop();
             return Err(ScriptCompilationResult {
                 typecheck: TypecheckResult::Success,
                 ownership: OwnershipResult::Success,
@@ -1084,7 +1095,7 @@ impl<'db> ScriptCompiler<'db> {
                     Some(&func_return_types),
                     lowered_funcs_arg,
                 ).map_err(|e| {
-                    self.accumulated_unit_specs.pop();
+                    self.scripts.pop();
                     ScriptCompilationResult {
                         typecheck: TypecheckResult::Success,
                         ownership: OwnershipResult::Success,
@@ -1102,7 +1113,7 @@ impl<'db> ScriptCompiler<'db> {
                     script_ctx,
                     *expr,
                 ).map_err(|e| {
-                    self.accumulated_unit_specs.pop();
+                    self.scripts.pop();
                     ScriptCompilationResult {
                         typecheck: TypecheckResult::Success,
                         ownership: OwnershipResult::Success,

@@ -9,9 +9,10 @@ use bct::text::InternedText;
 use datalove_ct::query_log::{log_query, QueryPhase};
 
 use datalove_datafun_ast::ast::*;
+use datalove_datafun_ast::script::{Script, ScriptUnit};
 use datalove_datafun_resolve::{module_function_asts, resolve_module_exports};
 use datalove_datalit as datalit;
-use crate::context::TypeContext;
+use crate::context::{InheritedBindings, TypeContext};
 use crate::statement::check_statement;
 
 pub use datalove_datafun_ast::spans::DatafunSpans;
@@ -25,7 +26,7 @@ pub use crate::{
     TypeErrorEntry,
     ScriptUnitKind,
     ScriptUnitSpec,
-    ScriptBatchSpec,
+    ScriptEnv,
     ModuleSpec,
     UnitTypecheckResultTracked,
     ScriptUnitsTypecheckResultTracked,
@@ -37,13 +38,21 @@ pub use crate::{
     AllModuleNameResolutions,
 };
 
-/// Accumulated bindings passed to subsequent script units.
+/// What one script unit leaves behind for the units after it.
 ///
-/// Plain data struct (not tracked) - compared by Salsa via Eq/Hash.
-/// Contains bindings from all prior units in the batch.
+/// A cheap projection in front of [`typecheck_script_unit`], and the firewall
+/// that makes [`binding_at`] worth having. A unit's whole typecheck output moves
+/// whenever anything in its body moves -- it holds the expression types -- so
+/// walking back over those to answer "who provides `x`" would re-run the walk on
+/// every edit anywhere earlier. This moves only when what the unit *provides*
+/// moves, so an edit that changes a body and nothing else stops here.
+///
+/// A unit that failed to typecheck provides nothing, which is what the
+/// accumulate-forward version did too: its bindings would carry types the
+/// compiler never settled on.
 #[derive(Clone, PartialEq, Eq, Hash, Default)]
 #[derive(salsa::SalsaValue)]
-pub struct AccumulatedBindings<'db> {
+pub struct UnitProvides<'db> {
     /// Variables: (name, type, is_mutable).
     pub vars: Vec<(InternedText<'db>, Type<'db>, bool)>,
     pub fns: Vec<(InternedText<'db>, TypeFunction<'db>)>,
@@ -58,6 +67,31 @@ pub struct AccumulatedBindings<'db> {
     /// bodies stopped seeing enclosing bindings, which is what they should
     /// never have seen -- a const is the one kind a body may name.
     pub consts: Vec<InternedText<'db>>,
+}
+
+/// What an earlier unit left behind under one name.
+///
+/// The slots are namespaces rather than alternatives: a name can be a variable
+/// and a function at once, because the typechecker keeps those in separate maps
+/// and resolves a use against whichever one the use is. Each slot is filled from
+/// the nearest earlier unit that provides that *kind* of binding.
+#[derive(Clone, PartialEq, Eq, Hash, Default)]
+#[derive(salsa::SalsaValue)]
+pub struct ScriptBinding<'db> {
+    /// The variable bound under this name, and whether it is mutable.
+    pub var: Option<(Type<'db>, bool)>,
+    /// Whether that variable is a `const`, which decides what a function body
+    /// may name and what a const expression may name.
+    pub is_const: bool,
+    pub func: Option<TypeFunction<'db>>,
+    pub func_ast: Option<(StmtFun<'db>, Option<ModuleId<'db>>)>,
+}
+
+impl<'db> ScriptBinding<'db> {
+    /// Whether no unit provided this name at all.
+    fn is_empty(&self) -> bool {
+        self.var.is_none() && self.func.is_none() && self.func_ast.is_none()
+    }
 }
 
 /// Output from typecheck_script_unit.
@@ -93,54 +127,152 @@ pub struct ScriptUnitTypecheckOutput<'db> {
     pub asked_names: Vec<InternedText<'db>>,
 }
 
-/// Create a ScriptBatchSpec inside a tracked function.
+/// One unit's parse, name resolution and spans.
 ///
-/// ScriptBatchSpec is a tracked type, so it must be created inside a tracked function.
-/// The Source parameter serves as the memoization key.
-#[salsa::tracked(returns(copy))]
-pub fn create_batch_spec<'db>(
+/// Keyed on the unit alone, because none of it depends on the units around it.
+/// A `ScriptUnit` is interned over a `Source`, so this key survives an edit --
+/// the text behind the source changes and this re-runs, and any unit whose text
+/// did not change is untouched.
+#[salsa::tracked(returns(ref))]
+pub fn unit_ast<'db>(
     db: &'db dyn crate::Db,
-    key: bct::input::Source,
-    unit_specs: Vec<ScriptUnitSpec<'db>>,
-    module_specs: Vec<ModuleSpec<'db>>,
-) -> ScriptBatchSpec<'db> {
-    let _ = key; // Used as memoization key.
-    ScriptBatchSpec::new(db, unit_specs, module_specs, crate::AutoAdaptMode::Disabled)
+    unit: ScriptUnit<'db>,
+) -> ScriptUnitSpec<'db> {
+    let source = unit.source(db);
+    let spans = datalove_datafun_parser::datafun_spans(db, source);
+    let kind = if unit.is_expr(db) {
+        ScriptUnitKind::Expr(datalove_datafun_parser::parse_expr(db, source))
+    } else {
+        let parsed = datalove_datafun_parser::parse(db, source).parsed.clone();
+        let names = datalove_datafun_resolve::resolve_script_names(db, source, parsed.clone());
+        ScriptUnitKind::Fragment(parsed, names)
+    };
+    ScriptUnitSpec::new(source, spans, kind)
 }
 
-/// Create a ScriptBatchSpec with auto-adapt mode inside a tracked function.
+/// What the last unit of `script` provides to the units after it.
 ///
-/// Like `create_batch_spec`, but allows specifying auto-adapt mode.
-#[salsa::tracked(returns(copy))]
-pub fn create_batch_spec_with_auto_adapt<'db>(
+/// See [`UnitProvides`] for why this is a separate query and not a read of
+/// `typecheck_script_unit`'s output.
+#[salsa::tracked(returns(ref))]
+pub fn unit_provides<'db>(
     db: &'db dyn crate::Db,
-    key: bct::input::Source,
-    unit_specs: Vec<ScriptUnitSpec<'db>>,
-    module_specs: Vec<ModuleSpec<'db>>,
-    auto_adapt_mode: crate::AutoAdaptMode,
-) -> ScriptBatchSpec<'db> {
-    let _ = key; // Used as memoization key.
-    ScriptBatchSpec::new(db, unit_specs, module_specs, auto_adapt_mode)
+    script: Script<'db>,
+    env: ScriptEnv<'db>,
+) -> UnitProvides<'db> {
+    let output = typecheck_script_unit(db, script, env);
+    if !output.result(db).errors(db).is_empty() {
+        return UnitProvides::default();
+    }
+    UnitProvides {
+        vars: output.new_vars(db).C(),
+        fns: output.new_fns(db).C(),
+        fn_asts: output.new_fn_asts(db).C(),
+        module_aliases: output.new_module_aliases(db).C(),
+        consts: output.new_consts(db).C(),
+    }
 }
 
-/// Typecheck a single script unit with accumulated context from prior units.
+/// The binding `name` resolves to among `script`'s units, newest first.
 ///
-/// Memoized: if unit_spec, module_specs, and accumulated all match a previous call,
-/// returns the cached result. This enables per-unit caching when adding new units
-/// to a batch - prior units are cache hits.
+/// **This is what replaced seeding a unit with every earlier unit's bindings.**
+/// Seeding meant the whole prefix's outputs were part of a per-unit memo key, so
+/// editing one unit re-keyed every unit after it whether or not it used anything
+/// that changed. Here the dependency *is* the read: a unit depends on the names
+/// it asked about and nothing else, and there is no key to keep in step.
+///
+/// Called with the script up to the unit *before* the one being checked, so a
+/// unit never resolves a name against itself through this.
+///
+/// The walk goes all the way back even once something is found, so that a name
+/// which is a variable in one unit and a function in another resolves the way it
+/// did when the prefix was accumulated forward: per namespace, nearest wins.
+#[salsa::tracked(returns(clone))]
+pub fn binding_at<'db>(
+    db: &'db dyn crate::Db,
+    script: Script<'db>,
+    env: ScriptEnv<'db>,
+    name: InternedText<'db>,
+) -> Option<ScriptBinding<'db>> {
+    let mut found = ScriptBinding::default();
+    let mut current = Some(script);
+    while let Some(prefix) = current {
+        let provides = unit_provides(db, prefix, env);
+        if found.var.is_none() {
+            if let Some((_, ty, is_mutable)) =
+                provides.vars.iter().rev().find(|(n, _, _)| *n == name)
+            {
+                found.var = Some((ty.clone(), *is_mutable));
+                found.is_const = provides.consts.contains(&name);
+            }
+        }
+        if found.func.is_none() {
+            if let Some((_, func_ty)) = provides.fns.iter().rev().find(|(n, _)| *n == name) {
+                found.func = Some(*func_ty);
+            }
+        }
+        if found.func_ast.is_none() {
+            if let Some((_, ast, module_id)) =
+                provides.fn_asts.iter().rev().find(|(n, _, _)| *n == name)
+            {
+                found.func_ast = Some((*ast, *module_id));
+            }
+        }
+        current = prefix.prev(db);
+    }
+    if found.is_empty() { None } else { Some(found) }
+}
+
+/// The module path `alias` names, from the nearest earlier `require`.
+///
+/// A require in one REPL line is visible to an import in a later one, and this
+/// is that, asked for one alias at a time rather than carried along as a map.
+#[salsa::tracked(returns(clone))]
+fn module_alias_at<'db>(
+    db: &'db dyn crate::Db,
+    script: Script<'db>,
+    env: ScriptEnv<'db>,
+    alias: InternedText<'db>,
+) -> Option<String> {
+    let mut current = Some(script);
+    while let Some(prefix) = current {
+        let aliases = &unit_provides(db, prefix, env).module_aliases;
+        if let Some((_, path)) = aliases.iter().rev().find(|(a, _)| *a == alias) {
+            return Some(path.C());
+        }
+        current = prefix.prev(db);
+    }
+    None
+}
+
+/// Typecheck the last unit of `script`, against the units before it.
+///
+/// **Keyed on a position in the script and nothing derived from it.** A
+/// `Script` handle is "this unit, and the units before it", built out of
+/// interned nodes over each unit's `Source`, and a source's identity is
+/// independent of its text -- so editing any unit moves no key here. What the
+/// earlier units left behind is reached through [`binding_at`] on a lookup miss,
+/// which is what confines an edit to the units that used what changed. See
+/// `botdocs/plan-script-reactivity.md`.
 #[salsa::tracked(returns(copy))]
 pub fn typecheck_script_unit<'db>(
     db: &'db dyn crate::Db,
-    unit_spec: ScriptUnitSpec<'db>,
-    module_specs: Vec<ModuleSpec<'db>>,
-    accumulated: AccumulatedBindings<'db>,
-    auto_adapt_mode: crate::AutoAdaptMode,
+    script: Script<'db>,
+    env: ScriptEnv<'db>,
 ) -> ScriptUnitTypecheckOutput<'db> {
-    // Build module function info for import resolution.
-    let (module_functions, path_to_module_id) = build_script_module_functions(db, &module_specs);
+    let module_specs = env.modules(db);
+    let auto_adapt_mode = env.auto_adapt_mode(db);
 
-    let spans = unit_spec.spans.clone();
-    let mut ctx = TypeContext::with_options(db, spans, None, auto_adapt_mode);
+    // Build module function info for import resolution.
+    let (module_functions, path_to_module_id) = build_script_module_functions(db, module_specs);
+
+    let unit_spec = unit_ast(db, script.unit(db));
+    let mut ctx = TypeContext::with_options(db, unit_spec.spans.clone(), None, auto_adapt_mode);
+
+    // The environment the earlier units left is read on a lookup miss rather
+    // than seeded into the context, which is the whole of stage B.
+    let earlier = script.prev(db);
+    ctx.inherited = earlier.map(|script| InheritedBindings { script, env });
 
     // Script units have Result<()> return type for try operators.
     let unit_tuple_ty = datalit::tycheck::Type::AnonTuple(datalit::tycheck::TypeAnonTuple { fields: Vec::new() });
@@ -148,22 +280,6 @@ pub fn typecheck_script_unit<'db>(
         datalit::tycheck::TypeResult { inner_type: Box::new(unit_tuple_ty) }
     );
     ctx.expected_return_type = Some(Type::Datalit(result_unit_ty));
-
-    // Seed with accumulated bindings from prior units.
-    for (name, ty, is_mutable) in &accumulated.vars {
-        ctx.add_variable(*name, ty.clone(), *is_mutable);
-    }
-    // Const-ness travels with the binding, or a const from an earlier unit
-    // reads as a `let` and a function body may not name it.
-    for name in &accumulated.consts {
-        ctx.add_const_binding(*name);
-    }
-    for (name, func_ty) in &accumulated.fns {
-        ctx.add_function(*name, *func_ty);
-    }
-    for (name, func_ast, module_id) in &accumulated.fn_asts {
-        ctx.function_asts.insert(*name, (*func_ast, *module_id));
-    }
 
     // Track new bindings defined in this unit.
     let mut new_vars = Vec::new();
@@ -174,20 +290,20 @@ pub fn typecheck_script_unit<'db>(
 
     // Typecheck this unit based on kind.
     match &unit_spec.kind {
-        ScriptUnitKind::Fragment(script, collected) => {
+        ScriptUnitKind::Fragment(parsed, collected) => {
             // Use pre-computed name resolution.
             ctx.seed_from_collected_names(collected, None);
 
-            // Module aliases carry forward from prior units, so a require in one
-            // REPL line is visible to an import in a later one.
-            new_module_aliases = collect_module_aliases(db, script);
-            let mut alias_to_path: HashMap<InternedText<'db>, String> =
-                accumulated.module_aliases.iter().cloned().collect();
-            alias_to_path.extend(new_module_aliases.iter().cloned());
+            new_module_aliases = collect_module_aliases(db, parsed);
 
             // Resolve imports using shared helper.
             let (resolved_imports, import_errors) = resolve_script_imports(
-                db, script, &alias_to_path, &module_functions, &path_to_module_id
+                db,
+                parsed,
+                &new_module_aliases,
+                |alias| earlier.and_then(|prev| module_alias_at(db, prev, env, alias)),
+                &module_functions,
+                &path_to_module_id,
             );
 
             // Add resolved imports to context and track as new bindings.
@@ -196,18 +312,22 @@ pub fn typecheck_script_unit<'db>(
             // import of a different function under it would decide the calls
             // that one is answering. In a session the two arrive on separate
             // lines, which is exactly where the shadowing is hardest to see.
-            let mut bound: HashMap<InternedText<'db>, Option<ModuleId<'db>>> = accumulated
-                .fn_asts.iter()
-                .map(|(name, _, module_id)| (*name, *module_id))
-                .collect();
+            let mut bound: HashMap<InternedText<'db>, Option<ModuleId<'db>>> = HashMap::new();
 
             for (item_name, func_ty, func_ast, source_module_id, local_index) in resolved_imports {
-                if let Some(first) = bound.get(&item_name) {
-                    if *first != source_module_id {
+                let first = match bound.get(&item_name) {
+                    Some(first) => Some(*first),
+                    None => earlier
+                        .and_then(|prev| binding_at(db, prev, env, item_name))
+                        .and_then(|binding| binding.func_ast)
+                        .map(|(_, module_id)| module_id),
+                };
+                if let Some(first) = first {
+                    if first != source_module_id {
                         let err = ctx.error_duplicate_import(
                             local_index,
                             item_name,
-                            &module_description(db, *first),
+                            &module_description(db, first),
                             &module_description(db, source_module_id),
                         );
                         ctx.add_error(err);
@@ -227,12 +347,12 @@ pub fn typecheck_script_unit<'db>(
             }
 
             // Second pass: typecheck all statements.
-            for statement in script.statements.iter() {
+            for statement in parsed.statements.iter() {
                 check_statement(&mut ctx, &statement);
             }
 
             // Extract new bindings for subsequent units.
-            for stmt in script.statements.iter() {
+            for stmt in parsed.statements.iter() {
                 match stmt {
                     Statement::Let(let_stmt) => {
                         let name = let_stmt.name;
@@ -289,7 +409,15 @@ pub fn typecheck_script_unit<'db>(
     let errors = ctx.errors.into_iter()
         .map(|e| TypeErrorEntry::new(db, e))
         .collect();
-    let function_types: Vec<_> = ctx.functions.into_iter().collect();
+    // This unit's own functions -- the ones it declared and the ones it
+    // imported -- and not the earlier units', which are no longer seeded here.
+    // Every consumer looks these up by the name of a function among this unit's
+    // statements, so the earlier units' were never read.
+    //
+    // Sorted because a `HashMap`'s iteration order comes from a per-process seed
+    // and this is part of a memoized value's identity.
+    let mut function_types: Vec<_> = ctx.functions.into_iter().collect();
+    function_types.sort_by(|(a, _), (b, _)| a.as_str(db).cmp(b.as_str(db)));
     let result = UnitTypecheckResultTracked::new(
         db, errors, ctx.expr_types, ctx.call_targets, function_types, adapt_sites,
     );
@@ -299,65 +427,51 @@ pub fn typecheck_script_unit<'db>(
         asked_names)
 }
 
-/// Typecheck multiple script units together, with bindings shared across units.
+/// Typecheck every unit of `script`, oldest first.
 ///
-/// Units are processed in order. Bindings from earlier units (let/var/fn)
-/// are visible in subsequent units. Delegates to `typecheck_script_unit` for
-/// per-unit memoization - prior units are cached when new units are added.
+/// An aggregation over [`typecheck_script_unit`], which is where the
+/// memoization that matters lives: this re-runs whenever a unit is appended or
+/// edited and takes all but the affected units from their memos.
 #[salsa::tracked(returns(copy))]
 pub fn type_check_script_units<'db>(
     db: &'db dyn crate::Db,
-    spec: ScriptBatchSpec<'db>,
+    script: Script<'db>,
+    env: ScriptEnv<'db>,
 ) -> ScriptUnitsTypecheckResultTracked<'db> {
-    let module_specs = spec.modules(db).clone();
-    let auto_adapt_mode = spec.auto_adapt_mode(db);
+    let mut chain = script.chain(db);
+    chain.reverse();
 
-    let mut accumulated = AccumulatedBindings::default();
     let mut results = Vec::new();
     let mut unit_outputs = Vec::new();
-
-    for unit_spec in spec.units(db) {
-        // Call per-unit tracked function - memoized on (unit_spec, module_specs, accumulated, auto_adapt_mode).
-        let output = typecheck_script_unit(
-            db,
-            unit_spec.clone(),
-            module_specs.clone(),
-            accumulated.clone(),
-            auto_adapt_mode,
-        );
-
+    for prefix in chain {
+        let output = typecheck_script_unit(db, prefix, env);
         results.push(output.result(db));
         unit_outputs.push(output);
-
-        // Only accumulate bindings from successful units.
-        // Failed units shouldn't export bindings to subsequent units.
-        if output.result(db).errors(db).is_empty() {
-            accumulated.vars.extend(output.new_vars(db).iter().cloned());
-            accumulated.fns.extend(output.new_fns(db).iter().cloned());
-            accumulated.fn_asts.extend(output.new_fn_asts(db).iter().cloned());
-            accumulated.module_aliases.extend(output.new_module_aliases(db).iter().cloned());
-            accumulated.consts.extend(output.new_consts(db).iter().cloned());
-        }
     }
 
     ScriptUnitsTypecheckResultTracked::new(db, results, unit_outputs)
 }
 
-/// Typecheck a single script using the production path.
+/// A one-unit script and an empty environment, for checking a fragment alone.
 ///
-/// Wraps `type_check_script_units()` for tests that typecheck a single script.
-/// Accepts pre-computed name resolution from the resolve crate.
+/// The environment is empty, so the fragment may not import; everything that
+/// wants modules builds its own [`ScriptEnv`].
+pub fn single_fragment_script<'db>(
+    db: &'db dyn crate::Db,
+    source: bct::input::Source,
+    auto_adapt_mode: crate::AutoAdaptMode,
+) -> (Script<'db>, ScriptEnv<'db>) {
+    let unit = ScriptUnit::new(db, source, false);
+    (Script::new(db, None, unit), ScriptEnv::new(db, Vec::new(), auto_adapt_mode))
+}
+
+/// Typecheck a single script fragment using the production path.
 pub fn type_check_single_script<'db>(
     db: &'db dyn crate::Db,
     source: bct::input::Source,
-    spans: DatafunSpans<'db>,
-    parsed: ParsedStatements<'db>,
-    name_resolution: crate::CollectedNames<'db>,
 ) -> UnitTypecheckResultTracked<'db> {
-    let unit_spec = ScriptUnitSpec::new(source, spans, ScriptUnitKind::Fragment(parsed, name_resolution));
-    let batch_spec = create_batch_spec(db, source, vec![unit_spec], vec![]);
-    let results = type_check_script_units(db, batch_spec);
-    results.results(db)[0]
+    let (script, env) = single_fragment_script(db, source, crate::AutoAdaptMode::Disabled);
+    type_check_script_units(db, script, env).results(db)[0]
 }
 
 /// Typecheck a module graph (package-agnostic).
@@ -887,12 +1001,15 @@ fn module_description<'db>(db: &'db dyn crate::Db, module_id: Option<ModuleId<'d
 
 /// Resolve imports for a script unit using path-based module lookup.
 ///
-/// Resolves import statements against the provided module functions, using
-/// `alias_to_path` to expand module aliases introduced by require statements.
+/// An alias is looked for among this unit's own `require`s first and then, by
+/// `inherited_alias`, among the earlier units' -- a `require` on one REPL line
+/// is visible to an `import` on a later one. An alias that names nothing is
+/// taken as a path, which is how a module is imported without a require.
 fn resolve_script_imports<'db>(
     db: &'db dyn crate::Db,
     script: &ParsedStatements<'db>,
-    alias_to_path: &HashMap<InternedText<'db>, String>,
+    own_aliases: &[(InternedText<'db>, String)],
+    inherited_alias: impl Fn(InternedText<'db>) -> Option<String>,
     module_functions: &HashMap<String, HashMap<InternedText<'db>, (TypeFunction<'db>, StmtFun<'db>)>>,
     path_to_module_id: &HashMap<String, ModuleId<'db>>,
 ) -> (Vec<(InternedText<'db>, TypeFunction<'db>, StmtFun<'db>, Option<ModuleId<'db>>, u32)>, Vec<TypeError>) {
@@ -906,9 +1023,13 @@ fn resolve_script_imports<'db>(
             let item_name = import.item_name;
 
             // Look up the full path from the alias.
-            let module_path = alias_to_path.get(&module_alias)
-                .map(|s| s.as_str())
-                .unwrap_or(module_alias.as_str(db));
+            let module_path = own_aliases.iter()
+                .rev()
+                .find(|(alias, _)| *alias == module_alias)
+                .map(|(_, path)| path.C())
+                .or_else(|| inherited_alias(module_alias))
+                .unwrap_or_else(|| module_alias.as_str(db).S());
+            let module_path = module_path.as_str();
 
             if let Some(funcs) = module_functions.get(module_path) {
                 if let Some((func_ty, func_ast)) = funcs.get(&item_name) {

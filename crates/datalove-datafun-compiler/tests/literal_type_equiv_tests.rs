@@ -9,7 +9,6 @@
 
 use rmx::prelude::*;
 
-use datalove_datafun_resolve::resolve_script_names;
 
 /// A type and a literal, checked against each other.
 type Case = (&'static str, &'static str);
@@ -135,10 +134,7 @@ fn datalit_errors(db: &datalove_datafun_compiler::Database, ty: &str, literal: &
 
 fn datafun_errors(db: &datalove_datafun_compiler::Database, ty: &str, literal: &str) -> Vec<String> {
     let src = bct::input::Source::new(db, format!("let x: {ty} = {literal}"));
-    let script = datalove_datafun_parser::parse_integration_test(db, src);
-    let spans = datalove_datafun_parser::datafun_spans(db, src);
-    let names = resolve_script_names(db, src, script.clone());
-    let result = datalove_datafun_tycheck::type_check_single_script(db, src, spans, script.clone(), names);
+    let result = datalove_datafun_tycheck::type_check_single_script(db, src);
 
     error_kinds(result.errors(db).iter().map(|e| format!("{:?}", e.error(db))).collect())
 }

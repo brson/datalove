@@ -5,7 +5,6 @@
 
 use rmx::prelude::*;
 
-use datalove_datafun_resolve::resolve_script_names;
 use datalove_datafun_compiler::funlit_equiv::{
     datafun_expr_to_datalit_serde,
     datalit_typecheck_to_serde,
@@ -74,9 +73,7 @@ fn test_typecheck_equiv(db: &datalove_datafun_compiler::Database, expr_text: &st
     let datafun_text = format!("let _x = {}", expr_text);
     let datafun_source = bct::input::Source::new(db, datafun_text.clone());
     let datafun_script = datalove_datafun_parser::parse_integration_test(db, datafun_source);
-    let datafun_spans = datalove_datafun_parser::datafun_spans(db, datafun_source);
-    let name_resolution = resolve_script_names(db, datafun_source, datafun_script.clone());
-    let datafun_result = datalove_datafun_tycheck::type_check_single_script(db, datafun_source, datafun_spans, datafun_script.clone(), name_resolution);
+    let datafun_result = datalove_datafun_tycheck::type_check_single_script(db, datafun_source);
 
     // Extract expression for type lookup.
     let datafun_expr = extract_let_value(db, datafun_script.clone())?;

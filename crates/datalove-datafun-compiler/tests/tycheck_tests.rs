@@ -323,23 +323,15 @@ fn analyze_file(path: &Path) -> Result<String, String> {
     let source = bct::input::Source::new(&db, source_text.S());
 
     let script = datalove_datafun_parser::parse_for_diagnostics(&db, source);
-    let spans = datalove_datafun_parser::datafun_spans(&db, source);
-
-    // Resolve names for the script.
-    let name_resolution = datalove_datafun_resolve::resolve_script_names(&db, source, script.clone());
 
     // Use the tracked functions directly so we can get accumulated diagnostics.
-    let unit_spec = datalove_datafun_tycheck::ScriptUnitSpec::new(
-        source,
-        spans,
-        datalove_datafun_tycheck::ScriptUnitKind::Fragment(script.clone(), name_resolution),
-    );
-    let batch_spec = datalove_datafun_tycheck::create_batch_spec(&db, source, vec![unit_spec], vec![]);
-    let results = datalove_datafun_tycheck::type_check_script_units(&db, batch_spec);
+    let (script_handle, env) = datalove_datafun_tycheck::single_fragment_script(
+        &db, source, datalove_datafun_tycheck::AutoAdaptMode::Disabled);
+    let results = datalove_datafun_tycheck::type_check_script_units(&db, script_handle, env);
     let tycheck_result = results.results(&db)[0];
 
     // Collect accumulated type diagnostics.
-    let type_diagnostics = datalove_datafun_tycheck::type_check_script_units::accumulated::<datalove_diagnostic::TypeDiagnostic>(&db, batch_spec);
+    let type_diagnostics = datalove_datafun_tycheck::type_check_script_units::accumulated::<datalove_diagnostic::TypeDiagnostic>(&db, script_handle, env);
     let diagnostics: Vec<_> = type_diagnostics
         .iter()
         .map(|d| {

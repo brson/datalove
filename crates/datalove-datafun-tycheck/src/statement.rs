@@ -211,10 +211,15 @@ pub fn check_statement<'db>(
             // has no top-level bindings, so this was invisible there.
             //
             // Consts stay, which is why the filter is on `const_bindings`
-            // rather than a clear.
+            // rather than a clear -- and why the flag is set as well: an
+            // earlier unit's bindings are no longer in this map at all, they
+            // are reached on a miss, and the flag is what refuses the ones a
+            // body may not name.
             let saved_variables = ctx.variables.C();
+            let saved_in_function_body = ctx.in_function_body;
             let consts_in_scope = ctx.const_bindings.C();
             ctx.variables.retain(|name, _| consts_in_scope.contains(name));
+            ctx.in_function_body = true;
             // A type parameter is in scope in the body as well as the
             // signature, so a binding there can be annotated with one:
             // `var x: T` and `let pair: (T, T)` name a type the function has,
@@ -272,6 +277,7 @@ pub fn check_statement<'db>(
 
             // Restore context.
             ctx.variables = saved_variables;
+            ctx.in_function_body = saved_in_function_body;
             ctx.type_aliases = saved_type_aliases;
             ctx.type_param_bounds = saved_type_param_bounds;
             ctx.const_bindings = saved_const_bindings;
