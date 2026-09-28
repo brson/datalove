@@ -152,6 +152,8 @@ pub fn parse_type_hint<'db, S: TypeHintStream<'db>>(stream: &mut S) -> ast::Type
                 // List type.
                 let mut sub_parser = branch(iter, stream.alias_base());
                 let element_type = sub_parser.parse_type_hint();
+                // A trailing comma closes the one item, as it may anywhere.
+                sub_parser.eat_sigil(Sigil::Comma);
                 sub_parser.error_if_not_exhausted_type_hint();
                 stream.absorb_aliases(sub_parser.take_alias_spans(), sub_parser.alias_counter);
                 ast::TypeHint::List(ast::TypeHintList { element_type: Box::new(element_type) })
@@ -184,6 +186,7 @@ pub fn parse_type_hint<'db, S: TypeHintStream<'db>>(stream: &mut S) -> ast::Type
                     );
                 }
                 let value_type = sub_parser.parse_type_hint();
+                sub_parser.eat_sigil(Sigil::Comma);
                 sub_parser.error_if_not_exhausted_type_hint();
                 stream.absorb_aliases(sub_parser.take_alias_spans(), sub_parser.alias_counter);
                 ast::TypeHint::Map(ast::TypeHintMap { key_type: Box::new(key_type), value_type: Box::new(value_type) })
@@ -191,6 +194,8 @@ pub fn parse_type_hint<'db, S: TypeHintStream<'db>>(stream: &mut S) -> ast::Type
                 // Set type hint: #{T}
                 let mut sub_parser = branch(iter, stream.alias_base());
                 let element_type = sub_parser.parse_type_hint();
+                // A trailing comma closes the one item, as it may anywhere.
+                sub_parser.eat_sigil(Sigil::Comma);
                 sub_parser.error_if_not_exhausted_type_hint();
                 stream.absorb_aliases(sub_parser.take_alias_spans(), sub_parser.alias_counter);
                 ast::TypeHint::Set(ast::TypeHintSet { element_type: Box::new(element_type) })

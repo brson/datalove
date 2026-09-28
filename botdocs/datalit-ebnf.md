@@ -19,12 +19,12 @@ scalar_type    = "bool" | "u8" | "u16" | "u32" | "u64"
 
 option_type    = "?", type ;
 result_type    = "!", type ;
-list_type      = "[", ws, type, ws, "]" ;
+list_type      = "[", ws, type, [ ws, "," ], ws, "]" ;
 tuple_type     = "(", ws, [ type_list ], ws, ")" ;
 struct_type    = "{", ws, [ type_field_list ], ws, "}" ;
 table_type     = "{|", ws, type_field_list, ws, "|}" ;
-map_type       = "%{", ws, type, ws, "=", ws, type, ws, "}" ;
-set_type       = "#{", ws, type, ws, "}" ;
+map_type       = "%{", ws, type, ws, "=", ws, type, [ ws, "," ], ws, "}" ;
+set_type       = "#{", ws, type, [ ws, "," ], ws, "}" ;
 tensor_type    = "[|", ws, type, ws, ",", ws, int_lit, ws, "|]" ;
 atom_type      = "atom", ws, ident ;
 term_type      = "term", ws, ident, ws, type ;
@@ -69,7 +69,7 @@ existential_expr = ( "data" | "error" ), ws, full_expr ;
 (* Atom/Term/Enum *)
 atom_expr      = "atom", ws, ident ;
 term_expr      = "term", ws, ident, ws, full_expr ;
-enum_expr      = "enum", ws, "{", ws, full_expr, ws, "}" ;
+enum_expr      = "enum", ws, "{", ws, full_expr, [ ws, "," ], ws, "}" ;
 
 (* Container expressions *)
 tuple_expr     = "(", ws, [ expr_list ], ws, ")" ;

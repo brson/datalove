@@ -229,6 +229,15 @@ and `tuple`, `list`, `map`, `set`, `table` and `tensor` are not types.
 A datalit document is a single expression.
 Nothing but whitespace may follow it.
 
+Anything written between brackets and separated by commas,
+in a value or a type,
+may end with a comma:
+`[1, 2,]`, `{ x = 1, }`, `: [u32,] / []`, `enum { atom A, }`.
+The comma closes the last item and means nothing more,
+so one is allowed and two are not.
+Tensors are the exception, as their commas carry shape;
+see [Tensor](#user-content-tensor).
+
 
 ### EBNF · Expressions
 
@@ -430,7 +439,6 @@ Empty collections synthesize with unit element types
 but check against any element type:
 `: [u32] / []` is valid.
 
-Lists, maps and sets accept a trailing comma.
 
 
 ### List
@@ -591,9 +599,9 @@ All elements must have the same type.
 ### EBNF · Collections
 
 ```ebnf
-list_type      = "[", ws, type, ws, "]" ;
-map_type       = "%{", ws, type, ws, "=", ws, type, ws, "}" ;
-set_type       = "#{", ws, type, ws, "}" ;
+list_type      = "[", ws, type, [ ws, "," ], ws, "]" ;
+map_type       = "%{", ws, type, ws, "=", ws, type, [ ws, "," ], ws, "}" ;
+set_type       = "#{", ws, type, [ ws, "," ], ws, "}" ;
 table_type     = "{|", ws, [ type_field_list ], ws, "|}" ;
 tensor_type    = "[|", ws, type, ws, ",", ws, digit, { digit }, ws, "|]" ;
 
@@ -638,7 +646,6 @@ The grammar does not express the tensor shape rules above.
 | term    | `term Foo T`                  | `term Foo 1`                  |
 | enum    | `enum { atom A, term B T }`   | `enum { atom A }`             |
 
-Tuples and structs accept a trailing comma.
 
 The payload of `some`, `ok`, `er`, `term`, `data` and `error`
 is one expression, which may carry its own hint: `some : u32 / 1`.
@@ -812,7 +819,7 @@ option_expr    = "none" | "some", ws, full_expr ;
 result_expr    = ( "ok" | "er" ), ws, full_expr ;
 atom_expr      = atom_type ;
 term_expr      = "term", ws, ident, ws, full_expr ;
-enum_expr      = "enum", ws, "{", ws, ( atom_expr | term_expr ), ws, "}" ;
+enum_expr      = "enum", ws, "{", ws, ( atom_expr | term_expr ), [ ws, "," ], ws, "}" ;
 
 type_list      = type, { ws, ",", ws, type }, [ ws, "," ] ;
 type_field_list= type_field, { ws, ",", ws, type_field }, [ ws, "," ] ;
@@ -1046,13 +1053,12 @@ It prints no type hints.
 - Should empty collections synthesize?
 - What are the rules for printing disambiguating type hints?
 - What are the rules for printing disambiguating floats, etc?
-- How can we make tensors and tables accept trailing commas?
+- How can we make tensors accept trailing commas? (Tables do.)
 - Should dupe map/set keys be an error?
 - Why can't tables synthesize?
 - Why are semicolons special inside tables?
 - Should we glue commas in tensors?
 - re tables: "the grammar does not express the tensor shape rules above"?
-- Enum accept trailing comma?
 - Should grouping parens actually be allowed? Are they needed?
 - Should structs require identical field order?
 - Should atom/term actually check against enums?

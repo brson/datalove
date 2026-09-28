@@ -199,6 +199,8 @@ impl<'db> Parser<'db> {
                 };
                 let mut sub_parser = self.sub_parser_from_branch(inner);
                 let variant = sub_parser.parse_expr_full();
+                // A trailing comma closes the one item, as it may anywhere.
+                sub_parser.eat_sigil(Sigil::Comma);
                 sub_parser.error_if_not_exhausted();
                 self.merge_spans_from(&mut sub_parser);
                 return ast::Expr::Enum(ast::ExprEnum { variant });

@@ -4,8 +4,16 @@
       "Enum": {
         "variant": {
           "expr": {
-            "Atom": {
-              "name": "A"
+            "Term": {
+              "name": "B",
+              "payload": {
+                "expr": {
+                  "Int": {
+                    "value": "1"
+                  }
+                },
+                "type_hint": null
+              }
             }
           },
           "type_hint": null
@@ -21,26 +29,11 @@
           },
           {
             "name": "B",
-            "payload": null
+            "payload": "U32"
           }
         ]
       }
     }
   },
-  "diagnostics": [
-    {
-      "code": "D021",
-      "labels": [
-        {
-          "message": "unexpected token",
-          "span": [
-            43,
-            47
-          ],
-          "text": "atom"
-        }
-      ],
-      "message": "unexpected token after expression"
-    }
-  ]
+  "diagnostics": []
 }
