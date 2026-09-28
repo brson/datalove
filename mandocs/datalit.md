@@ -1062,8 +1062,6 @@ It prints no type hints.
 - Should grouping parens actually be allowed? Are they needed?
 - Should structs require identical field order?
 - Should atom/term actually check against enums?
-- Result types shouldn't accept data payloads.
-- Should error actually check against results?
 - What does "enum variants are held in name order" mean practically in datalit?
 - result and error check against _any_ !T?
 - Need to think harder about float total order and ergonomics.
