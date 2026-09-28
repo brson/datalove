@@ -138,23 +138,25 @@ Done:
 - `cold_phases` and `resolve_profile`, which are where the numbers above come
   from.
 - The duplicate parse of the world, removed.
+- **The roots decided from the program**, for `script`, `script-ir`,
+  `aot-compile` and `script-world`. `narrow_roots_to_script` reads a script's
+  `require`s and narrows to them; it refuses when one does not resolve, because
+  pruning on a program whose requires are wrong would drop the module the
+  diagnostic is about. `typecheck-std` and the REPL still pass `All`.
+
+  A real `datalove script` invocation goes from **43.0ms to 20.3ms**, and a script
+  that does use the standard library from 42.6ms to 20.7ms -- it pulls what
+  `sys/std/option` reaches rather than all two dozen modules.
+
+  A worldfile's own modules are roots whether the script reaches them or not.
+  That distinction is the thing to remember: **a module the author wrote in the
+  artifact is part of what they asked to be compiled; a library module they do
+  not use is not.** 19 of `world_error_tests`' fixtures are a broken module and a
+  script that ignores it, and they are right to expect an error.
 
 Next, roughly in order of what it buys:
 
-1. **Decide the roots from the program.** Nothing computes a root set: the CLI and
-   the REPL both pass `All`, so none of the above is doing anything yet. For
-   `datalove script prog.dfs` the roots are the modules the script requires, which
-   is one cheap parse of one file away. `typecheck-std` wants `All`, being the
-   command that vouches for the world. In a REPL the set grows as lines arrive, so
-   each `require` is a new module set, a new `ModuleGraph`, and a re-run of
-   everything graph-keyed -- worth measuring there before assuming it is free.
-
-   **This comes first because it is where the win is and because it is what makes
-   the next item observable.** Pruning already takes a cold compile from 24.58ms
-   to 9.29ms with resolution untouched; resolving from the roots is worth nothing
-   until someone narrows them.
-
-2. **Resolve from the roots, not over the world.** Resolution is a parse of every
+1. **Resolve from the roots, not over the world.** Resolution is a parse of every
    module, so a compile pruned to one module still parses twenty-five: 8.66ms of
    its 9.29ms, pinned by `the_whole_world_is_still_parsed_however_few_modules_are_compiled`.
    Reachability is a walk and a walk need only parse what it reaches -- ask
@@ -168,17 +170,17 @@ Next, roughly in order of what it buys:
    unreported among the unreachable, which is the same trade as the error
    visibility already pinned, in a second place.
 
-3. **Stop numbering modules by position.** `ir_module_ids` numbers regular
+2. **Stop numbering modules by position.** `ir_module_ids` numbers regular
    modules by their place in the graph, so a module appearing anywhere but the
    end renumbers what follows and those modules re-lower. Today that happens when
    you add a file. Under reachability it happens whenever a program's imports
    change, which in a REPL is constantly. Deriving the id from the module's path
    rather than its position removes it. The riders already work this way.
-4. **Prune codegen.** `datalove-datafun-cranelift-aot` says "whole-world
+3. **Prune codegen.** `datalove-datafun-cranelift-aot` says "whole-world
    compilation" and walks the whole registry; DCE
    (`datalove-datafun-const/src/dce.rs`) only removes unreachable blocks within a
    function. Pruning the graph shrinks the registry, so most of this falls out --
    but an unused function in a *reachable* module is still emitted.
-5. **Rider interfaces are not pruned.** `rider_interfaces` parses every rider
+4. **Rider interfaces are not pruned.** `rider_interfaces` parses every rider
    source whether or not anything requires it. Memoized and keyed on the sources,
    so it is paid once, but it is not nothing on a short-lived invocation.

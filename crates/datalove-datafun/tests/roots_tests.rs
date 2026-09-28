@@ -262,3 +262,102 @@ fn the_whole_world_is_still_parsed_however_few_modules_are_compiled() {
         "resolution parses the world to find its requires; it parsed {parses}",
     );
 }
+
+// ============================================================================
+// Deciding the roots from a script, which is what the CLI does
+// ============================================================================
+
+/// Compile the fixture with roots narrowed to `script`, and report how many
+/// modules were typechecked and whether narrowing happened at all.
+fn compiled_for_script(script: &str, also: &[String]) -> (bool, usize) {
+    let recorder = QueryRecorder::new();
+    let db = datafun::Database::recording(&recorder);
+    let mut pipeline = ModuleCompilationPipeline::default();
+    add_fixture(&db, &mut pipeline);
+
+    let narrowed = pipeline.narrow_roots_to_script(&db, script, also);
+    recorder.clear();
+
+    let compiled = pipeline.compile_fresh(&db);
+    assert!(compiled.is_successful(), "{:?}", compiled.all_errors());
+    drop(compiled);
+
+    let count = recorder.take().iter()
+        .filter(|e| e.query == "typecheck_module")
+        .count();
+    (narrowed, count)
+}
+
+/// A script's `require`s are its roots, and they pull in what they reach.
+#[test]
+fn a_script_is_compiled_against_what_it_requires() {
+    let (narrowed, modules) = compiled_for_script(
+        "require module local/test/top\nimport top.top_fn\n\ndebuglog top_fn()\n", &[]);
+    assert!(narrowed);
+    assert_eq!(modules, 3, "`top` reaches `mid` reaches `base`; the islands do not");
+}
+
+/// A script that requires nothing is compiled against nothing.
+#[test]
+fn a_script_requiring_nothing_compiles_no_modules() {
+    let (narrowed, modules) = compiled_for_script("debuglog 42\n", &[]);
+    assert!(narrowed);
+    assert_eq!(modules, 0, "a program using only builtins needs no library");
+}
+
+/// **Narrowing refuses when a require does not resolve.**
+///
+/// Pruning on a program whose requires are wrong would drop the very module the
+/// diagnostic is about. The whole world goes to resolution instead, so it reports
+/// what is wrong exactly as it did before there was a choice -- which is what the
+/// CLI's `error` fixtures expect.
+#[test]
+fn a_require_that_does_not_resolve_refuses_to_narrow() {
+    let (narrowed, modules) = compiled_for_script(
+        "require module local/test/nosuchmodule\n\ndebuglog 1\n", &[]);
+    assert!(!narrowed, "it must refuse rather than prune on a program it cannot read");
+    assert_eq!(modules, MODULES, "and leave the whole world for resolution to judge");
+}
+
+/// One bad require refuses even when the others are fine.
+#[test]
+fn one_unresolvable_require_refuses_for_the_whole_script() {
+    let (narrowed, modules) = compiled_for_script(
+        "require module local/test/mid\n\
+         require module local/test/nosuchmodule\n\
+         \n\
+         debuglog 1\n", &[]);
+    assert!(!narrowed);
+    assert_eq!(modules, MODULES);
+}
+
+/// Modules named in `also` are roots whether the script reaches them or not.
+///
+/// This is what a worldfile's own modules get: the author wrote them in the file
+/// they asked to be compiled, so an error in one is an error in the worldfile even
+/// if the script ignores it. A library module gets no such treatment.
+#[test]
+fn modules_the_artifact_defines_are_roots_regardless() {
+    let (narrowed, modules) = compiled_for_script(
+        "debuglog 42\n", &["local/test/zz_island0".S()]);
+    assert!(narrowed);
+    assert_eq!(modules, 1, "the script reaches nothing, but the island was named");
+
+    let (_, modules) = compiled_for_script(
+        "require module local/test/mid\nimport mid.mid_fn\n\ndebuglog mid_fn(1)\n",
+        &["local/test/zz_island0".S(), "local/test/zz_island1".S()]);
+    assert_eq!(modules, 4, "`mid` and `base` from the script, plus the two islands");
+}
+
+/// An `also` naming a module the world does not have is dropped, not refused.
+///
+/// Unlike a script's `require`, this is not the program saying something that has
+/// to make sense -- it is a caller listing what it happens to own, and a name that
+/// is not there simply is not a root.
+#[test]
+fn an_also_that_is_not_in_the_world_is_dropped() {
+    let (narrowed, modules) = compiled_for_script(
+        "debuglog 42\n", &["local/test/nosuchmodule".S(), "local/test/zz_island0".S()]);
+    assert!(narrowed);
+    assert_eq!(modules, 1);
+}

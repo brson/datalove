@@ -192,6 +192,70 @@ impl ModuleCompilationPipeline {
         &self.roots
     }
 
+    /// Narrow the roots to the modules a script requires, plus `also`, if that is
+    /// safe.
+    ///
+    /// Returns whether it narrowed. **It refuses, leaving the roots alone, when a
+    /// `require` names a module the world does not have.** A program whose
+    /// requires do not resolve is not understood well enough to prune on: pruning
+    /// would drop the module the diagnostic is about and report nothing. Handing
+    /// resolution the whole world instead means it says what is wrong with the
+    /// program exactly as it did before there was a choice, which is what the
+    /// `error` fixtures expect of it.
+    ///
+    /// A script that requires nothing narrows to nothing, and compiles no modules
+    /// at all. That is the intended answer and not an edge case: a program using
+    /// only builtins needs no library.
+    ///
+    /// **`also` is for modules that belong to the artifact rather than to a
+    /// library, and the distinction is the whole reason it exists.** A module the
+    /// author wrote in the file being compiled is part of what they asked to be
+    /// compiled, whether or not the script happens to call into it -- a worldfile
+    /// with a broken module and a script that ignores it is a worldfile with an
+    /// error in it, and 19 of `world_error_tests`' fixtures are exactly that
+    /// shape. A module from the system library is not: not compiling one the
+    /// program never reaches is the point. So a worldfile's own modules are roots
+    /// and the system library's are not.
+    ///
+    /// This parses the script, and the script compiler parses it again later under
+    /// a `Source` of its own -- the roots have to be known before the modules are
+    /// compiled, and the script's own parse happens after. One file twice is a
+    /// fair price for not compiling two dozen modules, but it is a duplicate and
+    /// worth removing if the script compiler is ever given its `Source` from
+    /// outside.
+    pub fn narrow_roots_to_script(
+        &mut self,
+        db: &dyn salsa::Database,
+        script: &str,
+        also: &[String],
+    ) -> bool {
+        use datalove_datafun_ast::ast::{Statement, StmtRequire};
+
+        let source = bct::input::Source::new(db, script.S());
+        let parsed = datalove_datafun_parser::parse(db, source);
+
+        let mut roots: rmx::std::collections::BTreeSet<String> =
+            also.iter().filter(|p| self.world.contains(p)).cloned().collect();
+        for statement in parsed.parsed.statements.iter() {
+            let Statement::Require(StmtRequire::Module(require)) = statement else {
+                continue;
+            };
+            let path = format!(
+                "{}/{}/{}",
+                require.import_space.as_str(db),
+                require.package_alias.as_str(db),
+                require.module_alias.as_str(db),
+            );
+            if !self.world.contains(&path) {
+                return false;
+            }
+            roots.insert(path);
+        }
+
+        self.roots = Roots::From(roots);
+        true
+    }
+
 
 
     /// Check if a module exists.

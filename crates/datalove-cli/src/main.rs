@@ -469,8 +469,17 @@ impl ScriptCommand {
             WorkspaceDescriptor::from_system_library(&sys)
         };
 
+        // Read the script file, which is what says where compilation starts.
+        let script_source = rmx::std::fs::read_to_string(file_path)
+            .with_context(|| format!("Failed to read script file: {}", file_path.display()))?;
+
         // Create pipeline from descriptor and compile.
         let mut pipeline = descriptor.to_pipeline(&db);
+        // Compile only what the script reaches. A program that requires two
+        // stdlib modules should not pay for two dozen; `narrow_roots_to_script`
+        // refuses when a require does not resolve, leaving the whole world for
+        // resolution to report on.
+        pipeline.narrow_roots_to_script(&db, &script_source, &[]);
         let compiled = pipeline.compile_fresh(&db);
 
         // Check for errors using consolidated helper methods.
@@ -496,10 +505,6 @@ impl ScriptCommand {
             .expect("script_executor should succeed after error check");
 
         register_natives(&compiled, &sys, &mut executor)?;
-
-        // Read the script file.
-        let script_source = rmx::std::fs::read_to_string(file_path)
-            .with_context(|| format!("Failed to read script file: {}", file_path.display()))?;
 
         // Compile the script as a fragment.
         let compiled_unit = compiler.compile_fragment(&script_source);
@@ -560,7 +565,16 @@ impl ScriptIrCommand {
             WorkspaceDescriptor::from_system_library(&sys)
         };
 
+                // Read the script file, which is what says where compilation starts.
+        let script_source = rmx::std::fs::read_to_string(&self.file_path)
+            .with_context(|| format!("Failed to read script file: {}", self.file_path.display()))?;
+
         let mut pipeline = descriptor.to_pipeline(&db);
+        // Compile only what the script reaches. A program that requires two
+        // stdlib modules should not pay for two dozen; `narrow_roots_to_script`
+        // refuses when a require does not resolve, leaving the whole world for
+        // resolution to report on.
+        pipeline.narrow_roots_to_script(&db, &script_source, &[]);
         let compiled = pipeline.compile_fresh(&db);
 
         // Check for errors.
@@ -574,9 +588,6 @@ impl ScriptIrCommand {
         let mut compiler = compiled.script_compiler_default(&db)
             .expect("script_compiler should succeed after error check");
 
-        // Read the script file.
-        let script_source = rmx::std::fs::read_to_string(&self.file_path)
-            .with_context(|| format!("Failed to read script file: {}", self.file_path.display()))?;
 
         let compiled_unit = compiler.compile_fragment(&script_source);
 
@@ -677,7 +688,16 @@ impl AotCompileCommand {
             WorkspaceDescriptor::from_system_library(&sys)
         };
 
+                // Read the script file, which is what says where compilation starts.
+        let script_source = rmx::std::fs::read_to_string(&self.file_path)
+            .with_context(|| format!("Failed to read script file: {}", self.file_path.display()))?;
+
         let mut pipeline = descriptor.to_pipeline(&db);
+        // Compile only what the script reaches. A program that requires two
+        // stdlib modules should not pay for two dozen; `narrow_roots_to_script`
+        // refuses when a require does not resolve, leaving the whole world for
+        // resolution to report on.
+        pipeline.narrow_roots_to_script(&db, &script_source, &[]);
 
         // Compile modules (typecheck, drop analysis, lower to IR).
         let compiled = pipeline.compile_fresh(&db);
@@ -694,9 +714,6 @@ impl AotCompileCommand {
             .expect("script_compiler should succeed after error check");
         let registry = compiled.module_registry();
 
-        // Read the script file.
-        let script_source = rmx::std::fs::read_to_string(&self.file_path)
-            .with_context(|| format!("Failed to read script file: {}", self.file_path.display()))?;
 
         let compiled_unit = compiler.compile_fragment(&script_source);
 
@@ -822,6 +839,27 @@ impl ScriptWorldCommand {
         );
         let descriptor = sys_descriptor.merge(&worldfile_descriptor);
         let mut pipeline = descriptor.to_pipeline(&db);
+
+        // Compile only what the script section reaches, the same as `script`
+        // does. The worldfile's own modules are in the world alongside the
+        // system library, and a script that requires two of them should not pay
+        // for the rest.
+        // The worldfile's own modules are roots whether the script reaches them or
+        // not: the author wrote them in the file they asked to be compiled, so an
+        // error in one is an error in the worldfile. Only the system library is
+        // pruned here.
+        let worldfile_modules: Vec<String> = parsed.sections.iter()
+            .filter_map(|section| match section {
+                WorldfileSection::Module { library, package, module, .. } =>
+                    Some(format!("{}/{}/{}", library, package, module)),
+                _ => None,
+            })
+            .collect();
+        if let WorldfileSection::ScriptFragment { source } | WorldfileSection::ScriptExpr { source }
+            = script_sections[0]
+        {
+            pipeline.narrow_roots_to_script(&db, source, &worldfile_modules);
+        }
 
         // Compile modules.
         let compiled = pipeline.compile_fresh(&db);
