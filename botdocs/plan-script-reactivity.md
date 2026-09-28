@@ -115,10 +115,23 @@ so it read as a `let`. Nothing noticed while bodies could name either.
 
 **Half of that remains, and it is a lowering gap.** A function body naming a
 script const typechecks and then fails to lower -- "binding not available yet" --
-where a *module* const in a module function body is fine. So the compiler agrees
-the program is legal and cannot build it.
-`a_function_body_may_name_an_enclosing_const_but_lowering_cannot_yet` pins both
-halves and says to tighten it when lowering catches up.
+where a *module* const in a module function body compiles and runs. So the
+compiler agrees the program is legal and cannot build it.
+
+It is not about crossing a unit boundary: a const and a function reading it in
+the *same* unit fails the same way. A script-level const is simply not among
+what a function body is lowered against. `lower_module_functions` is handed the
+module's consts; the script path hands a function only its own, qualified
+`func_name::const_name`.
+
+**Nothing covered it.** `interp_constlet` has a const declared *inside* a
+function, a script const read by a script `let`, and a fixture named
+`006_script_const_cross_unit` whose const and use are in the same section. None
+puts a script-level const in a function body, and the suite runs with
+`skip_const_inlining`, so the ordinary path was thin too. `script_const_tests`
+covers it now: three shapes that work, three that do not, and the module contrast
+that makes it a defect rather than a missing feature. They assert today's
+failures and say which to tighten when it is fixed.
 
 ### B. Precise keying for analysis
 

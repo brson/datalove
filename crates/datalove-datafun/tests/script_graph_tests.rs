@@ -139,8 +139,8 @@ fn a_self_contained_unit_reaches_no_earlier_unit() {
 /// The recording sits at the lookup rather than in a walk over statements, so
 /// nesting costs nothing to support -- which is the reason for doing it that way.
 ///
-/// A const, because that is the one kind of enclosing binding a body may name;
-/// see the test below.
+/// A const, because that is the one kind of enclosing binding a body may name.
+/// `script_const_tests` has what happens when one tries to *lower* that.
 #[test]
 fn a_use_inside_a_function_body_counts() {
     let graph = graph_of(&[
@@ -192,33 +192,3 @@ fn a_function_body_may_not_name_an_enclosing_let() {
     }
 }
 
-/// A function body may name an enclosing `const`, and typechecking says so.
-///
-/// Const-ness used to be lost at the unit boundary -- a script `const` arrived
-/// in the next unit's variables but not its const bindings, so it read as a
-/// `let`. Nothing noticed while bodies could name either.
-///
-/// **Lowering still cannot do it**, so this stops at the typechecker. That is
-/// the remaining half of the gap and it is a lowering one: a script const is not
-/// available to a function body being lowered, where a module const is. The
-/// program is legal and the compiler says so and then cannot build it.
-#[test]
-fn a_function_body_may_name_an_enclosing_const_but_lowering_cannot_yet() {
-    let result = last_result(&[
-        "const SCALE = 3\n",
-        "fun apply(n: int): int\n    ret n * SCALE\nend fun\n",
-    ]);
-    assert!(
-        matches!(result.typecheck, datafun::pipeline::TypecheckResult::Success { .. }),
-        "a const is the one enclosing binding a body may name: {:?}", result.typecheck,
-    );
-    match result.lowering {
-        datafun::pipeline::LoweringResult::Error { ref message } => assert!(
-            message.contains("SCALE"),
-            "expected lowering to be the thing that cannot: {message}",
-        ),
-        other => panic!(
-            "lowering a script const into a body works now, so tighten this: {other:?}",
-        ),
-    }
-}
