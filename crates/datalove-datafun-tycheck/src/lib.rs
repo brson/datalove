@@ -522,6 +522,14 @@ pub struct ScriptUnitsTypecheckResultTracked<'db> {
     /// Per-unit results.
     #[returns(clone)]
     pub results: Vec<UnitTypecheckResultTracked<'db>>,
+    /// Each unit's whole output, which is what carries the dependency graph.
+    ///
+    /// `results` is the part the compiler's phases consume. This keeps what a
+    /// unit provided and what it asked for as well, so the graph script
+    /// reactivity is built on can be read off a compiled batch rather than
+    /// recomputed. Handles, so it costs a word per unit.
+    #[returns(clone)]
+    pub unit_outputs: Vec<ScriptUnitTypecheckOutput<'db>>,
 }
 
 // ============================================================================

@@ -27,7 +27,8 @@ pub use crate::{
 };
 
 use datalove_datafun_common::{can_clone_coerce_to, convert_type_hint_with_aliases};
-use std::collections::HashSet;
+use std::cell::RefCell;
+use std::collections::{BTreeSet, HashSet};
 
 /// Context for typechecking.
 pub struct TypeContext<'db> {
@@ -44,6 +45,24 @@ pub struct TypeContext<'db> {
     pub(crate) function_asts: HashMap<InternedText<'db>, (StmtFun<'db>, Option<ModuleId<'db>>)>,
     /// Type aliases (name -> resolved type).
     pub(crate) type_aliases: HashMap<InternedText<'db>, Type<'db>>,
+    /// Every name this unit asked the environment about.
+    ///
+    /// A script unit is typechecked against the bindings the units before it
+    /// left behind, and what it *asked for* is what it depends on -- which is
+    /// the graph script reactivity needs, and the thing nothing recorded.
+    ///
+    /// **A name that was not found is in here too, and has to be.** A unit that
+    /// asks for `x` and does not find it depends on `x` not being there: edit an
+    /// earlier unit to define one and this unit's answer changes.
+    ///
+    /// It is an over-approximation in the other direction, deliberately. A name
+    /// the unit binds itself is recorded as well, because the alternative is
+    /// tracking which binding a lookup found through every site that writes one
+    /// -- and `statement.rs` writes pattern bindings straight into `variables`,
+    /// and scopes save and restore the whole map. Over-reporting costs a
+    /// dependency that resolves to no provider; under-reporting would keep a
+    /// stale type. See `botdocs/plan-script-reactivity.md`.
+    asked_names: RefCell<BTreeSet<InternedText<'db>>>,
     /// The bound each of the enclosing function's type parameters carries.
     ///
     /// A bare parameter is absent here and nothing may be done to a value of
@@ -126,6 +145,7 @@ impl<'db> TypeContext<'db> {
             current_module_id: module_id,
             variables: HashMap::new(),
             functions: HashMap::new(),
+            asked_names: RefCell::new(BTreeSet::new()),
             function_asts: HashMap::new(),
             type_aliases: HashMap::new(),
             type_param_bounds: HashMap::new(),
@@ -703,15 +723,34 @@ aggregate still holds it. Borrow it with `ref`, or clone it out with `@`.")),
     }
 
     pub fn lookup_variable(&self, name: InternedText<'db>) -> Option<Type<'db>> {
+        self.note_asked(name);
         self.variables.get(&name).map(|(ty, _)| ty.clone())
     }
 
     pub fn lookup_variable_mutability(&self, name: InternedText<'db>) -> Option<bool> {
+        self.note_asked(name);
         self.variables.get(&name).map(|(_, is_mutable)| *is_mutable)
     }
 
     pub fn lookup_function(&self, name: InternedText<'db>) -> Option<TypeFunction<'db>> {
+        self.note_asked(name);
         self.functions.get(&name).copied()
+    }
+
+    /// Record that something asked about `name`, found or not.
+    fn note_asked(&self, name: InternedText<'db>) {
+        self.asked_names.borrow_mut().insert(name);
+    }
+
+    /// Every name asked of the environment, in order.
+    ///
+    /// Ordered because it is part of a memoized value and a `BTreeSet` of
+    /// `InternedText` iterates by salsa id; sorting by text is what keeps it the
+    /// same between runs. See the determinism section of salsa-patterns.md.
+    pub fn asked_names(&self) -> Vec<InternedText<'db>> {
+        let mut names: Vec<InternedText<'db>> = self.asked_names.borrow().iter().copied().collect();
+        names.sort_by(|a, b| a.as_str(self.db).cmp(b.as_str(self.db)));
+        names
     }
 
     /// Add a type alias to the context.
@@ -726,6 +765,7 @@ aggregate still holds it. Borrow it with `ref`, or clone it out with `@`.")),
 
     /// Look up the resolved function AST by name.
     pub fn lookup_function_ast(&self, name: InternedText<'db>) -> Option<(StmtFun<'db>, Option<ModuleId<'db>>)> {
+        self.note_asked(name);
         self.function_asts.get(&name).copied()
     }
 

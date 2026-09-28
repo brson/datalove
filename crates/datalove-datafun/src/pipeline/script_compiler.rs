@@ -250,6 +250,21 @@ impl<'db> ScriptCompiler<'db> {
         self.compile_unit_inner(src, unit)
     }
 
+    /// Each unit's typecheck output, in order, for the units compiled so far.
+    ///
+    /// What a unit provided and what it asked the environment for -- the
+    /// dependency graph over the session. Empty before anything has compiled.
+    /// See `botdocs/plan-script-reactivity.md`.
+    pub fn unit_typecheck_outputs(
+        &self,
+    ) -> Vec<datalove_datafun_tycheck::ScriptUnitTypecheckOutput<'db>> {
+        match self.last_batch_spec {
+            None => Vec::new(),
+            Some(spec) => datalove_datafun_tycheck::type_check_script_units(self.db, spec)
+                .unit_outputs(self.db),
+        }
+    }
+
     /// Get parse diagnostics from the last compilation.
     pub fn get_parse_diagnostics(&self) -> Vec<&datalove_diagnostic::ParseDiagnostic> {
         if let Some(src) = self.last_source {

@@ -70,6 +70,16 @@ pub struct ScriptUnitTypecheckOutput<'db> {
     /// Module aliases from require statements: (alias, full path).
     #[returns(ref)]
     pub new_module_aliases: Vec<(InternedText<'db>, String)>,
+    /// Every name this unit asked the environment about.
+    ///
+    /// The other fields say what a unit *provides*; this says what it *uses*,
+    /// and between them they are the dependency graph script reactivity is
+    /// built on. Resolve a name here to the nearest earlier unit that provides
+    /// it and that is the edge. See `TypeContext::asked_names` for why a name
+    /// the unit binds itself is in here too, and
+    /// `botdocs/plan-script-reactivity.md` for what it is for.
+    #[returns(ref)]
+    pub asked_names: Vec<InternedText<'db>>,
 }
 
 /// Create a ScriptBatchSpec inside a tracked function.
@@ -254,6 +264,9 @@ pub fn typecheck_script_unit<'db>(
         adapt_sites.insert(adaptation.expr_key);
     }
 
+    // What this unit asked the environment for, taken before `ctx` is consumed.
+    let asked_names = ctx.asked_names();
+
     // Build result for this unit.
     let errors = ctx.errors.into_iter()
         .map(|e| TypeErrorEntry::new(db, e))
@@ -263,7 +276,8 @@ pub fn typecheck_script_unit<'db>(
         db, errors, ctx.expr_types, ctx.call_targets, function_types, adapt_sites,
     );
 
-    ScriptUnitTypecheckOutput::new(db, result, new_vars, new_fns, new_fn_asts, new_module_aliases)
+    ScriptUnitTypecheckOutput::new(
+        db, result, new_vars, new_fns, new_fn_asts, new_module_aliases, asked_names)
 }
 
 /// Typecheck multiple script units together, with bindings shared across units.
@@ -281,6 +295,7 @@ pub fn type_check_script_units<'db>(
 
     let mut accumulated = AccumulatedBindings::default();
     let mut results = Vec::new();
+    let mut unit_outputs = Vec::new();
 
     for unit_spec in spec.units(db) {
         // Call per-unit tracked function - memoized on (unit_spec, module_specs, accumulated, auto_adapt_mode).
@@ -293,6 +308,7 @@ pub fn type_check_script_units<'db>(
         );
 
         results.push(output.result(db));
+        unit_outputs.push(output);
 
         // Only accumulate bindings from successful units.
         // Failed units shouldn't export bindings to subsequent units.
@@ -304,7 +320,7 @@ pub fn type_check_script_units<'db>(
         }
     }
 
-    ScriptUnitsTypecheckResultTracked::new(db, results)
+    ScriptUnitsTypecheckResultTracked::new(db, results, unit_outputs)
 }
 
 /// Typecheck a single script using the production path.

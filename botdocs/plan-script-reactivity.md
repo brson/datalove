@@ -61,7 +61,7 @@ aggregate with the dependencies the unit actually has.**
 
 ## The four stages
 
-### A. The unit dependency graph
+### A. The unit dependency graph -- done
 
 For each unit, what it **provides** and what it **uses**.
 
@@ -77,19 +77,34 @@ Resolution is last-writer-wins by position: a name used in unit *i* resolves to
 the nearest *j* < *i* that provides it. That gives the edges, and both later
 stages are a walk over them.
 
-**Under-reporting uses would be unsound** -- a unit would keep a stale type. Two
-ways to be sure, and they are complementary rather than alternatives:
+**Under-reporting uses would be unsound** -- a unit would keep a stale type --
+so it is recorded rather than computed. `TypeContext` notes every name asked of
+it as the typechecker resolves one, and `ScriptUnitTypecheckOutput::asked_names`
+carries the set out. A walk over the AST collecting free names was the
+alternative and would have been wrong the first time some expression form was
+forgotten; recording sits at the four lookups and cannot miss a form.
 
-- Compute uses explicitly, by a walk over the unit's statements collecting
-  referenced names minus the ones it binds itself. This is what stage C needs
-  too, since execution cannot lean on salsa's internal dependency records.
-- Have the typechecker record the names it actually resolved against the
-  incoming environment, and assert in tests that the explicit set is a superset.
-  Under-reporting then fails a test rather than producing a stale result
-  silently.
+Two things about the set as recorded, both deliberate:
 
-Do both. The second is cheap and it is the only thing that makes the first
-trustworthy.
+- **A name that was not found is in it.** A unit that asks for `x` and does not
+  find one depends on there being no `x`: define one in an earlier unit and this
+  unit's answer changes.
+- **A name the unit binds itself is in it too.** Excluding those would mean
+  knowing which binding each lookup found, and `statement.rs` writes pattern
+  bindings straight into the map while scopes save and restore the whole of it --
+  so the provenance would have to be threaded through every write site, and a
+  missed one is the unsound direction. A name with no earlier provider resolves
+  to no edge, so over-reporting costs a lookup and nothing else.
+
+Done. `script_graph_tests` holds it: the A B C D case, a use of a variable, a use
+of a function, a use from inside a function body, a unit drawing on two earlier
+units, and a self-contained unit reaching neither.
+
+It also pins something found while building it, which bounds what the graph can
+be tested against rather than being about the graph: **a function that reads a
+script variable is not callable from a later unit.** The defining unit
+typechecks and its use of the variable is recorded, but the function does not
+export -- `UnresolvedName` at the call.
 
 ### B. Precise keying for analysis
 
@@ -100,13 +115,30 @@ provided it.
 Then editing B re-keys only the units that use a name B provides. C's key is
 unchanged and C is a memo hit. That is the stated goal, for analysis.
 
-An alternative worth recording because it is tempting: have `TypeContext`
-consult a per-name query on a lookup miss, so salsa records the reads and the
-dependency set is correct by construction. Sound without any analysis, and it is
-the firewall pattern this codebase already uses. It is *not* enough on its own,
-because stage C needs the graph as data, and it would mean threading a fallback
-through `TypeContext`, which modules share. Prefer A+B, and keep this in mind if
-the explicit analysis turns out hard to get right.
+There is a second way, and stage A removed the objection to it. Have
+`TypeContext` resolve an unknown name through a per-name query --
+`binding_at(script, i, name)` -- rather than being seeded with the whole
+environment up front. Salsa then records the reads itself and the dependency set
+is right by construction, with no key to get right. It is the firewall pattern
+this codebase already uses, and this plan first said it was not enough because
+stage C needs the graph as data. **That was wrong**: the recording added in stage
+A *is* the graph as data, and it is independent of how the environment is
+reached.
+
+So the two are alternatives after all:
+
+- **Key on the resolved uses.** The key is computed before the call, so it must
+  be right before the call -- and what a unit uses is only known after
+  typechecking it. That circularity is the catch: the key would have to come from
+  a previous revision's recording, or from a separate analysis, which is the walk
+  stage A avoided.
+- **Read through a per-name query.** No circularity, because the dependency is
+  the read. The cost is threading a fallback through `TypeContext`, which modules
+  share, and `binding_at` re-running per (unit, name) on an edit -- cheap, and it
+  backdates, the same trade `resolve_module_imports` already makes.
+
+The second looks right for exactly the reason the first is awkward. Decide with a
+prototype rather than on paper; the circularity is the thing to check first.
 
 ### C. Per-unit lowering and execution state
 
@@ -149,7 +181,7 @@ from the edited one, in order, and leave the rest.
 
 ## Order, and what each stage is worth
 
-A then B then C then D. A is a prerequisite for everything. B is the visible
+A is done. Then B, C, D. A was a prerequisite for everything. B is the visible
 half of the goal and is testable on its own, by constructing batches directly
 without needing edits to work. C is the biggest piece and buys nothing until D.
 D is small once C is done.
