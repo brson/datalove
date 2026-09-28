@@ -432,8 +432,7 @@ impl LitOpCommand {
 impl ReplCommand {
     fn run(&self, _args: &Args) -> AnyResult<()> {
         if let Some(script_path) = &self.script {
-            let db = datalove_datafun::Database::default();
-            datalove_repl::Engine::run_script(&db, datalove_stdlib::system_library(), script_path)
+            datalove_repl::Engine::run_script(datalove_stdlib::system_library(), script_path)
         } else {
             datalove_repl_rat::run(datalove_stdlib::system_library)
         }

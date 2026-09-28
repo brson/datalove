@@ -41,9 +41,9 @@ impl ThreadedExecutor {
         let (worker_tx, main_rx) = channel();
 
         thread::spawn(move || {
-            // The database is created here and lives for the thread's lifetime.
-            let db = datafun::Database::default();
-            match start_engine(&db, sys()) {
+            // The engine owns the database it compiles in, and lives for the
+            // thread's lifetime.
+            match start_engine(sys()) {
                 Ok(engine) => {
                     let _ = worker_tx.send(WorkerResponse::EngineReady);
                     worker_thread(engine, worker_rx, worker_tx);
@@ -66,9 +66,9 @@ impl ThreadedExecutor {
 ///
 /// Startup compiles the whole system library, which is where a bad stdlib
 /// shows up.
-fn start_engine(db: &datafun::Database, sys: SystemLibrary) -> Result<Engine<'_>, String> {
+fn start_engine(sys: SystemLibrary) -> Result<Engine, String> {
     let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        Engine::new(db, sys)
+        Engine::new(sys)
     }));
 
     match result {

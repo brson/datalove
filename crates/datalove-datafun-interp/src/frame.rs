@@ -521,6 +521,42 @@ impl FrameStore {
         self.unit_end_slots.push(unit_end_slots);
     }
 
+    /// Put a new frame in place of unit `unit`'s, destroying what the old one
+    /// owned.
+    ///
+    /// This is what re-executing a unit needs, and the destroy is the whole of
+    /// why it is not just an assignment: the old frame owns the unit's
+    /// persistent `let` and `var` bindings, and dropping the frame frees its
+    /// buffer without destroying the values in it.
+    ///
+    /// **Nothing else in the store points at what is destroyed.** A unit
+    /// copies out of an earlier unit's bindings rather than referring to them
+    /// (`compiler-guide.md`, "Ownership across units"), so a later unit that
+    /// read one of these holds its own copy. A binding a later unit *moved*
+    /// out of is no longer initialized, so it is skipped rather than destroyed
+    /// twice.
+    pub fn replace_frame(
+        &mut self,
+        rt_handle: datalove_rt::c::LocalRtHandle,
+        unit: usize,
+        frame: Frame,
+        unit_end_values: Vec<ValueId>,
+        unit_end_slots: Vec<SlotId>,
+    ) {
+        assert!(
+            unit < self.frames.len(),
+            "unit {unit} has no frame to replace; the store holds {}",
+            self.frames.len(),
+        );
+        let old_values = std::mem::take(&mut self.unit_end_values[unit]);
+        let old_slots = std::mem::take(&mut self.unit_end_slots[unit]);
+        self.frames[unit].destroy_unit_end_bindings(rt_handle, &old_values, &old_slots);
+
+        self.frames[unit] = frame;
+        self.unit_end_values[unit] = unit_end_values;
+        self.unit_end_slots[unit] = unit_end_slots;
+    }
+
     /// How many units the store holds frames for.
     ///
     /// External operands index frames by unit, so this is also the index the

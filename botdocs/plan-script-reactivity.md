@@ -274,7 +274,75 @@ is the graph as data, which stage C needs, and it is how to *test* that this is
 precise: the units that re-typechecked should equal the units whose `asked_names`
 intersect what the edit changed. Assert that rather than a bare count.
 
-### C. Per-unit lowering and execution state
+### C. Per-unit lowering and execution state -- done
+
+The goal: editing B re-lowers and re-executes B and D, and C keeps the IR and
+the frame it had. **That holds now**, and
+`script_exec_reactivity_tests` pins it, with the engine's own tests saying the
+REPL wires it up.
+
+**The `(unit_index, ValueId)` argument checked out**, which was the thing to
+verify before relying on it. `c_holds_no_reference_to_b` serializes a unit's IR
+and walks it for every `ExternalValue`, `ExternalSlot` and `External` -- the
+three forms that carry a unit index -- so it covers instruction forms nobody
+enumerated. C refers to no earlier unit; D refers to unit 1 and nothing else.
+Walking the serialization rather than matching on the instruction set is what
+makes it hold for a form added later.
+
+What went in:
+
+- **`AccumulatedLowerBindings` is gone.** `UnitLowerRecord` holds what one unit
+  produced -- its exports and their types, the script consts it declared, its
+  dead and revived exports, and its provides and uses as owned text -- and
+  `lower_context_over`, `script_consts_over` and `dead_externals_over` fold the
+  records before unit *i* into what unit *i* is compiled against. Three folds
+  went at once: the lowering bindings, the script consts, and `dead_externals`,
+  which was the same shape and would have been missed.
+- **`FrameStore::replace_frame`**, which destroys the old frame's unit-end
+  bindings before putting the new frame in its place, and
+  `UnitFunctionRegistry::set_unit_code_units` beside it, because a
+  `CodeRef::Local` is a position in one unit's function list.
+  `IrInterpreter::reexecute_script_unit_in_env` takes the unit index rather than
+  reading it off the store, since re-executing must not move the unit.
+- **`ScriptExecutor` derives its bindings** from a per-unit record of exports
+  rather than folding into one map, for the same reason the compiler does:
+  re-executing a unit replaces what it exports, and a fold would leave the names
+  it used to export standing.
+- **`ScriptCompiler::relower_reach(i)`** walks the graph and re-lowers the
+  reach in index order. The reach is transitive -- D can depend on B only through
+  C -- and taken over the **union of the pre-edit and post-edit graphs**, since
+  either alone misses a case: a binding the edit removes is absent from the new
+  graph though the unit that read it must be told, and a name the edit
+  introduces is absent from the old one though a unit that asked for it in vain
+  now finds it. Module aliases are in `provides` as well as bindings, because a
+  `require` in one unit is what an `import` in a later one resolves through and
+  the typechecker reaches that by a different query than `asked_names`.
+- **Lowering no longer parses a unit itself.** The statements come from
+  `unit_ast`, keyed on the unit, so re-lowering costs no second parse.
+
+**The edit needs `&mut db`, so no compiler survives it.** `ScriptSession` is the
+plain-data half -- the units' `Source`s and the per-unit records -- and
+`CompiledModules::script_compiler_resumed` builds a compiler over it again
+afterwards. The `Source`s being inputs is what makes that free: interning them
+again gives back the very same `ScriptUnit` and `Script` handles, so every memo
+keyed on one is still good. **The `Engine` owns its database now** rather than
+borrowing it, and builds a compiler per operation. What that costs is
+re-deriving the module compilation each line, which is salsa verifying what it
+already has -- the same thing a crash reset has always relied on.
+
+Two things worth knowing about what it does not do:
+
+- **A unit that fails to re-lower keeps its frame.** Its record goes empty, so
+  its bindings leave the environment and no later unit can name them, but the
+  frame stays where it is: the numbering the frame store and every
+  `(unit, value)` reference share cannot have a hole in it. What that frame owns
+  is destroyed when the session ends, so nothing leaks.
+- **An edit reaches expression units too**, and running one again needs
+  somewhere for its value to land -- `UnitEnd` carries a result and the
+  interpreter panics without a destination. `ScriptExecutor::reexecute_unit`
+  handles both kinds.
+
+What follows is what it looked like before.
 
 **Half of this already exists, which the plan had wrong.** `FrameStore`
 (`datalove-datafun-interp/src/frame.rs`) is already partitioned by unit:
@@ -343,6 +411,14 @@ A is done. Then B, C, D. A was a prerequisite for everything. B is the visible
 half of the goal and is testable on its own, by constructing batches directly
 without needing edits to work. C is the biggest piece and buys nothing until D.
 D is small once C is done.
+
+**C took most of D with it.** The edit path is `ScriptSession::unit_sources` and
+`set_text`, `ScriptCompiler::relower_reach` and `Engine::edit_unit`, all of which
+C needed in order to be testable at all -- there is no way to measure the reach
+of an edit without being able to make one. What D leaves is the replay row in
+the table above and the input leak per line, neither of which C touched: a
+session still mints a `Source` per appended line, and a fresh compiler still
+re-does the session from nothing.
 
 The measurement to hold the whole thing to is the one the
 `edit_reach_tests`/`roots_tests` technique has caught three bugs with this month:

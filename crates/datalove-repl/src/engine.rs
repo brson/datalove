@@ -1,18 +1,29 @@
 //! REPL engine for evaluating Datalove expressions and statements.
 
 use rmx::prelude::*;
+use salsa::Setter as _;
 use serde::Serialize;
 
 use crate::{Command, ReplCommand, Eval, EvalBinding, EvalExpr, InputParse, Input};
 use datalove_datafun as datafun;
-use datafun::pipeline::{ScriptCompiler, ScriptExecutor, TypecheckResult, OwnershipResult, LoweringResult, ModuleCompilationPipeline, SystemLibrary, WorkspaceDescriptor};
+use datafun::pipeline::{ScriptCompiler, ScriptExecutor, ScriptSession, TypecheckResult, OwnershipResult, LoweringResult, ModuleCompilationPipeline, SystemLibrary, WorkspaceDescriptor};
 use datafun::pipeline::rider_load::register_linked_natives;
-use datalove_datafun_ir::ExportBinding;
+use datalove_datafun_ir::{ExportBinding, IrCodeUnit};
 
-pub struct Engine<'db> {
-    db: &'db datafun::Database,
+/// The engine, which owns the database the session is compiled in.
+///
+/// **It owns it rather than borrowing it**, which is what lets a unit be
+/// edited: an edit is `set_text` on the unit's `Source` and needs `&mut db`,
+/// and a `ScriptCompiler` holding `&'db dyn Database` cannot be alive across
+/// that. So no compiler is kept between calls; [`ScriptSession`] is kept
+/// instead and a compiler is built over it per operation. What that costs is
+/// re-deriving the module compilation each time, which is salsa verifying what
+/// it already has -- the same thing a crash reset has always relied on. See
+/// `botdocs/plan-script-reactivity.md`.
+pub struct Engine {
+    db: datafun::Database,
     /// The system library the session compiles against, kept so the engine can
-    /// rebuild its compiler and executor after a crash reset.
+    /// rebuild its session and executor after a crash reset.
     sys: SystemLibrary,
     /// The workspace built from `sys`.
     workspace: WorkspaceDescriptor,
@@ -25,8 +36,11 @@ pub struct Engine<'db> {
     /// pipeline turns a reset from a full compile into salsa verifying what it
     /// already has.
     pipeline: ModuleCompilationPipeline,
-    /// Script compiler for incremental compilation.
-    compiler: ScriptCompiler<'db>,
+    /// The units submitted so far and what each one's compilation produced.
+    ///
+    /// An `Option` only so that it can be handed to a compiler and taken back;
+    /// it is `Some` between operations.
+    script: Option<ScriptSession>,
     /// Script executor for running compiled units.
     executor: ScriptExecutor,
 }
@@ -40,6 +54,14 @@ pub struct InputResult {
     pub environment: Vec<EnvBinding>,
 }
 
+/// What re-deriving one unit after an edit came to.
+#[derive(Debug, Serialize)]
+pub struct UnitEdit {
+    /// The unit's index in the session.
+    pub unit: usize,
+    pub eval: Eval,
+}
+
 /// An environment binding as reported after an input.
 #[derive(Debug, Serialize)]
 pub struct EnvBinding {
@@ -48,19 +70,19 @@ pub struct EnvBinding {
     pub value: String,
 }
 
-/// A compiled session: everything the engine rebuilds when it resets.
-struct Session<'db> {
-    compiler: ScriptCompiler<'db>,
+/// A fresh session: everything the engine rebuilds when it resets.
+struct Started {
+    script: ScriptSession,
     executor: ScriptExecutor,
 }
 
-impl<'db> Session<'db> {
+impl Started {
     /// Compile the workspace's modules and register its native riders.
     fn compile(
-        db: &'db datafun::Database,
+        db: &datafun::Database,
         pipeline: &mut ModuleCompilationPipeline,
         sys: &SystemLibrary,
-    ) -> AnyResult<Session<'db>> {
+    ) -> AnyResult<Started> {
         let compiled = pipeline.compile_fresh(db);
 
         if compiled.has_errors() {
@@ -69,8 +91,9 @@ impl<'db> Session<'db> {
         }
 
         // Safe to unwrap since we checked for errors above.
-        let compiler = compiled.script_compiler_default(db)
-            .expect("script_compiler should succeed after error check");
+        let script = compiled.script_compiler_default(db)
+            .expect("script_compiler should succeed after error check")
+            .into_session();
         let mut executor = compiled.script_executor(datafun::DebugOutputMode::Disabled, None)
             .expect("script_executor should succeed after error check");
         register_linked_natives(
@@ -79,23 +102,24 @@ impl<'db> Session<'db> {
             executor.native_table_mut(),
         )?;
 
-        Ok(Session { compiler, executor })
+        Ok(Started { script, executor })
     }
 }
 
-impl<'db> Engine<'db> {
-    pub fn new(db: &'db datafun::Database, sys: SystemLibrary) -> AnyResult<Engine<'db>> {
+impl Engine {
+    pub fn new(sys: SystemLibrary) -> AnyResult<Engine> {
+        let db = datafun::Database::default();
         let workspace = WorkspaceDescriptor::from_system_library(&sys);
-        let mut pipeline = workspace.to_pipeline(db);
-        let session = Session::compile(db, &mut pipeline, &sys)?;
+        let mut pipeline = workspace.to_pipeline(&db);
+        let started = Started::compile(&db, &mut pipeline, &sys)?;
 
         Ok(Engine {
             db,
             sys,
             workspace,
             pipeline,
-            compiler: session.compiler,
-            executor: session.executor,
+            script: Some(started.script),
+            executor: started.executor,
         })
     }
 
@@ -104,10 +128,26 @@ impl<'db> Engine<'db> {
         self.executor.destroy_live_values();
         // The library compiled at startup and has not changed since, so this is
         // salsa verifying what it has rather than compiling it again.
-        let session = Session::compile(self.db, &mut self.pipeline, &self.sys)
+        let started = Started::compile(&self.db, &mut self.pipeline, &self.sys)
             .expect("system library compiled successfully at startup");
-        self.compiler = session.compiler;
-        self.executor = session.executor;
+        self.script = Some(started.script);
+        self.executor = started.executor;
+    }
+
+    /// Build a compiler over the current module compilation, run `work` with
+    /// it, and take the session back.
+    ///
+    /// Everything that needs a compiler goes through here, because a compiler
+    /// borrows the database and the engine owns it. The session is out of the
+    /// engine while `work` runs, so `work` cannot reach back into it.
+    fn with_compiler<R>(&mut self, work: impl FnOnce(&mut ScriptCompiler<'_>) -> R) -> R {
+        let compiled = self.pipeline.compile_fresh(&self.db);
+        let mut compiler = compiled
+            .script_compiler_resumed(&self.db, self.script.take().expect("a session"))
+            .expect("the library compiled at startup and has not changed");
+        let result = work(&mut compiler);
+        self.script = Some(compiler.into_session());
+        result
     }
 
     pub fn parse_input(&mut self, input: Input) -> InputParse {
@@ -204,27 +244,10 @@ impl<'db> Engine<'db> {
     }
 
     fn eval_script_statement(&mut self, source: String) -> Eval {
-        // Compile the fragment.
-        let compiled = self.compiler.compile_fragment(&source);
+        let compiled = self.with_compiler(|compiler| compiler.compile_fragment(&source));
 
-        // Check for parse errors.
-        if let TypecheckResult::ParseError { errors } = &compiled.typecheck {
-            return Eval::Error(errors.join("; "));
-        }
-
-        // Check for typecheck errors.
-        if let TypecheckResult::Error { errors } = &compiled.typecheck {
-            return Eval::Error(errors.join("; "));
-        }
-
-        // Check for ownership errors.
-        if let OwnershipResult::Error { message } = &compiled.ownership {
-            return Eval::Error(message.C());
-        }
-
-        // Check for lowering errors.
-        if let LoweringResult::Error { message } = &compiled.lowering {
-            return Eval::Error(message.C());
+        if let Some(error) = compile_error(&compiled) {
+            return Eval::Error(error);
         }
 
         let ir_unit = compiled.ir_unit.as_ref()
@@ -236,12 +259,18 @@ impl<'db> Engine<'db> {
             return Eval::Error(output);
         }
 
-        // Report the bindings the fragment defined, as the compiler recorded
-        // them. A fragment that defines nothing, like a require or a set,
-        // exports nothing.
-        let exports = &ir_unit.script_context()
+        self.report_exports(ir_unit)
+    }
+
+    /// Report the bindings a fragment defined, as the compiler recorded them.
+    ///
+    /// A fragment that defines nothing, like a require or a set, exports
+    /// nothing.
+    fn report_exports(&mut self, ir_unit: &IrCodeUnit) -> Eval {
+        let exports = ir_unit.script_context()
             .expect("a compiled fragment is a script unit")
-            .exports;
+            .exports
+            .clone();
         let bindings: Vec<EvalBinding> = exports.iter()
             .map(|(name, binding)| self.eval_binding(name, binding))
             .collect();
@@ -251,6 +280,49 @@ impl<'db> Engine<'db> {
         } else {
             Eval::Success(bindings)
         }
+    }
+
+    /// Change one unit's text and re-derive what the edit reaches.
+    ///
+    /// The units the edit does not reach keep the lowering and the frame they
+    /// already have, which is sound because a unit that uses nothing the
+    /// edited unit provides holds no reference into it. See
+    /// `botdocs/plan-script-reactivity.md`.
+    ///
+    /// Returns one report per unit re-derived, in index order, the edited unit
+    /// first. A unit whose re-lowering failed is reported as an error and keeps
+    /// the frame it had, so its bindings are gone from the environment but its
+    /// values are still there to be destroyed when the session ends.
+    pub fn edit_unit(&mut self, unit: usize, source: &str) -> Vec<UnitEdit> {
+        let sources = self.script.as_ref().expect("a session").unit_sources();
+        assert!(
+            unit < sources.len(),
+            "unit {unit} was edited but the session has {} units",
+            sources.len(),
+        );
+        sources[unit].set_text(&mut self.db).to(source.S());
+
+        let redone = self.with_compiler(|compiler| compiler.relower_reach(unit));
+
+        let mut reports = Vec::new();
+        for (index, compiled) in redone {
+            let eval = match (compile_error(&compiled), &compiled.ir_unit) {
+                (Some(error), _) => Eval::Error(error),
+                (None, None) => unreachable!("a unit that compiled without errors has ir"),
+                (None, Some(ir_unit)) => {
+                    let (ty, output) = self.executor.reexecute_unit(index, ir_unit);
+                    match (output.starts_with("Error:"), ty) {
+                        (true, _) => Eval::Error(output),
+                        // An expression unit reports the value it now comes to;
+                        // a fragment reports the bindings it defines.
+                        (false, Some(ty)) => Eval::SuccessExpr(EvalExpr { ty, value: output }),
+                        (false, None) => self.report_exports(ir_unit),
+                    }
+                }
+            };
+            reports.push(UnitEdit { unit: index, eval });
+        }
+        reports
     }
 
     /// Describe one exported binding, looking up its current value.
@@ -274,27 +346,10 @@ impl<'db> Engine<'db> {
     }
 
     fn eval_expression(&mut self, source: String) -> Eval {
-        // Compile the expression.
-        let compiled = self.compiler.compile_expr(&source);
+        let compiled = self.with_compiler(|compiler| compiler.compile_expr(&source));
 
-        // Check for parse errors.
-        if let TypecheckResult::ParseError { errors } = &compiled.typecheck {
-            return Eval::Error(errors.join("; "));
-        }
-
-        // Check for typecheck errors.
-        if let TypecheckResult::Error { errors } = &compiled.typecheck {
-            return Eval::Error(errors.join("; "));
-        }
-
-        // Check for ownership errors.
-        if let OwnershipResult::Error { message } = &compiled.ownership {
-            return Eval::Error(message.C());
-        }
-
-        // Check for lowering errors.
-        if let LoweringResult::Error { message } = &compiled.lowering {
-            return Eval::Error(message.C());
+        if let Some(error) = compile_error(&compiled) {
+            return Eval::Error(error);
         }
 
         let ir_unit = compiled.ir_unit.as_ref()
@@ -362,11 +417,10 @@ impl<'db> Engine<'db> {
 
     /// Execute a script file and print one JSON result per input.
     pub fn run_script(
-        db: &'db datafun::Database,
         sys: SystemLibrary,
         script_path: &std::path::Path,
     ) -> AnyResult<()> {
-        let mut engine = Self::new(db, sys)?;
+        let mut engine = Self::new(sys)?;
         let contents = std::fs::read_to_string(script_path)
             .context("failed to read script file")?;
 
@@ -379,10 +433,101 @@ impl<'db> Engine<'db> {
     }
 }
 
-impl<'db> Drop for Engine<'db> {
+impl Drop for Engine {
     fn drop(&mut self) {
         self.executor.destroy_live_values();
     }
 }
 
+/// The first error a compilation ran into, in phase order, if any.
+fn compile_error(compiled: &datafun::pipeline::ScriptCompilationResult) -> Option<String> {
+    match (&compiled.typecheck, &compiled.ownership, &compiled.lowering) {
+        (TypecheckResult::ParseError { errors }, _, _) => Some(errors.join("; ")),
+        (TypecheckResult::Error { errors }, _, _) => Some(errors.join("; ")),
+        (_, OwnershipResult::Error { message }, _) => Some(message.C()),
+        (_, _, LoweringResult::Error { message }) => Some(message.C()),
+        _ => None,
+    }
+}
 
+
+
+#[cfg(test)]
+mod tests {
+    //! The edit path, at the level a session actually uses it.
+    //!
+    //! `crates/datalove-datafun/tests/script_exec_reactivity_tests.rs` is where
+    //! the reach itself is measured, against a graph it derives. These say the
+    //! engine wires it up: an edit reaches the units it should and the
+    //! environment afterwards holds the values it should.
+
+    use super::*;
+
+    /// A B C D, where C uses nothing B provides and D uses `b`.
+    const SCRIPT: &str = "let a = 1\n---\nlet b = 2\n---\nlet c = 30\n---\nlet d = b + 5";
+
+    fn value_of(engine: &mut Engine, name: &str) -> String {
+        engine.get_environment().into_iter()
+            .find(|(bound, _, _)| bound == name)
+            .map(|(_, _, value)| value)
+            .unwrap_or_else(|| panic!("no binding named {name}"))
+    }
+
+    /// Editing B re-derives B and D, and `d` holds the new answer.
+    ///
+    /// A value-only edit, which is the case that needs execution to cascade
+    /// where analysis did not: no type moved, so nothing but B was
+    /// re-typechecked, and `d` would sit at 7 if D had not run again.
+    #[test]
+    fn editing_a_unit_rederives_what_it_reaches() {
+        let mut engine = Engine::new(datalove_stdlib::system_library())
+            .expect("the engine starts");
+        engine.run_source(SCRIPT);
+        assert_eq!(value_of(&mut engine, "d"), "7");
+
+        let reports = engine.edit_unit(1, "let b = 3");
+
+        assert_eq!(
+            reports.iter().map(|report| report.unit).collect::<Vec<_>>(),
+            vec![1, 3],
+            "B and D; C uses nothing B provides",
+        );
+        assert!(
+            reports.iter().all(|report| !matches!(report.eval, Eval::Error(_))),
+            "both units re-derive cleanly: {reports:?}",
+        );
+        assert_eq!(value_of(&mut engine, "b"), "3");
+        assert_eq!(value_of(&mut engine, "d"), "8", "D ran again against the new `b`");
+        assert_eq!(value_of(&mut engine, "c"), "30", "C's frame is untouched");
+    }
+
+    /// An edit that breaks a later unit reports the error against that unit.
+    #[test]
+    fn an_edit_that_breaks_a_later_unit_says_which() {
+        let mut engine = Engine::new(datalove_stdlib::system_library())
+            .expect("the engine starts");
+        engine.run_source(SCRIPT);
+
+        let reports = engine.edit_unit(1, "let b = \"two\"");
+
+        let failed: Vec<usize> = reports.iter()
+            .filter(|report| matches!(report.eval, Eval::Error(_)))
+            .map(|report| report.unit)
+            .collect();
+        assert_eq!(failed, vec![3], "`\"two\" + 5` is D's error to report");
+        assert_eq!(value_of(&mut engine, "c"), "30", "C never heard about it");
+    }
+
+    /// A line submitted after an edit is compiled against the edited session.
+    #[test]
+    fn a_unit_appended_after_an_edit_sees_the_new_values() {
+        let mut engine = Engine::new(datalove_stdlib::system_library())
+            .expect("the engine starts");
+        engine.run_source(SCRIPT);
+        engine.edit_unit(1, "let b = 3");
+
+        engine.run_source("let e = c + d");
+
+        assert_eq!(value_of(&mut engine, "e"), "38", "30 from C and 8 from the new D");
+    }
+}

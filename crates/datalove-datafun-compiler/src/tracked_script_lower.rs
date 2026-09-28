@@ -8,7 +8,7 @@ use rmx::prelude::*;
 use std::collections::{HashMap, HashSet};
 use datalove_datafun_ast::ast::{Statement, ExprFun, ExprFunKind};
 use datalove_datafun_ir::{
-    IrType, FuncId, ValueId, SlotId, ExportBinding,
+    IrType, ConstValue, ExportBinding,
     ConstBindingInfo, ConstBindingGraph, ConstStmtId,
 };
 use datalove_datafun_tycheck::UnitTypecheckResultTracked;
@@ -16,92 +16,90 @@ use datalove_datafun_tycheck::UnitTypecheckResultTracked;
 use crate::lower;
 use crate::IrTypeExt;
 
-/// Accumulated bindings passed to subsequent script units for lowering.
+/// What one script unit's compilation left for the units after it.
 ///
-/// Plain data struct (not tracked) - compared by Salsa via Eq/Hash.
-/// Contains exports from all prior units in the batch.
-#[derive(Clone, PartialEq, Eq, Hash, Default)]
-#[derive(salsa::SalsaValue)]
-pub struct AccumulatedLowerBindings {
-    /// Value bindings: (name, unit_index, value_id).
-    pub values: Vec<(String, u32, ValueId)>,
-    /// Slot bindings: (name, unit_index, slot_id).
-    pub slots: Vec<(String, u32, SlotId)>,
-    /// Value types: (name, type).
-    pub value_types: Vec<(String, IrType)>,
-    /// Slot types: (name, type).
-    pub slot_types: Vec<(String, IrType)>,
-    /// Function bindings: (name, unit_index, func_id).
-    pub functions: Vec<(String, u32, FuncId)>,
-    /// Current unit index.
-    pub current_unit: u32,
+/// **Held per unit rather than folded into a running total.** A fold describes
+/// the whole prefix and nothing else, so after an edit it describes the
+/// pre-edit suffix as well and there is no way to rebuild the context unit `i`
+/// should be lowered against. Re-lowering a unit replaces its record and leaves
+/// the others alone; the context for unit `i` is
+/// [`lower_context_over`] applied to the records before it. See
+/// `botdocs/plan-script-reactivity.md`.
+#[derive(Clone, Default)]
+pub struct UnitLowerRecord {
+    /// The names this unit exported, as its `ScriptContext` recorded them.
+    pub exports: Vec<(String, ExportBinding)>,
+    /// The unit's value types, which say what an exported value is of.
+    pub value_types: Vec<IrType>,
+    /// The unit's slot types, which say what an exported slot is of.
+    pub slot_types: Vec<IrType>,
+    /// The script-level consts this unit declared, with their values.
+    ///
+    /// A script const outlives the unit that declared it and a later unit's
+    /// function body may name one, so the values travel forward the way the
+    /// bindings do.
+    pub consts: Vec<(String, IrType, ConstValue)>,
+    /// Names this unit exported without a value behind them.
+    pub dead_exports: Vec<String>,
+    /// Names from earlier units this unit assigned to.
+    pub revived: Vec<String>,
+    /// The names this unit provides, as the typechecker recorded them.
+    ///
+    /// Kept as owned text because the reach of an edit is computed across a
+    /// database mutation, which nothing borrowed from salsa survives.
+    pub provides: Vec<String>,
+    /// Every name this unit asked its environment for.
+    pub uses: Vec<String>,
 }
 
-impl AccumulatedLowerBindings {
-    /// Convert to ScriptLowerContext for lowering.
-    pub fn to_script_lower_context(&self) -> lower::ScriptLowerContext {
-        let mut ctx = lower::ScriptLowerContext::new();
-        ctx.current_unit = self.current_unit;
-
-        for (name, unit, value_id) in &self.values {
-            ctx.values.insert(name.clone(), (*unit, *value_id));
-        }
-        for (name, unit, slot_id) in &self.slots {
-            ctx.slots.insert(name.clone(), (*unit, *slot_id));
-        }
-        for (name, ty) in &self.value_types {
-            ctx.value_types.insert(name.clone(), ty.clone());
-        }
-        for (name, ty) in &self.slot_types {
-            ctx.slot_types.insert(name.clone(), ty.clone());
-        }
-        for (name, unit, func_id) in &self.functions {
-            ctx.functions.insert(name.clone(), (*unit, *func_id));
-        }
-
-        ctx
+/// The lowering context a unit sitting after `records` is lowered against.
+///
+/// Last writer wins by position, so the records are folded oldest first and a
+/// later export shadows an earlier one of the same name whichever kind each is.
+pub fn lower_context_over(records: &[UnitLowerRecord]) -> lower::ScriptLowerContext {
+    let mut ctx = lower::ScriptLowerContext::new();
+    for (index, record) in records.iter().enumerate() {
+        ctx.add_exports(
+            index as u32,
+            &record.exports,
+            &record.value_types,
+            &record.slot_types,
+        );
     }
+    ctx.current_unit = records.len() as u32;
+    ctx
+}
 
-    /// Update from exports of a completed unit.
-    pub fn add_exports(&mut self, unit_index: u32, exports: &[(String, ExportBinding)], value_types: &[IrType], slot_types: &[IrType]) {
-        for (name, binding) in exports {
-            match binding {
-                ExportBinding::Value(v) => {
-                    // Remove any slot with same name.
-                    self.slots.retain(|(n, _, _)| n != name);
-                    self.slot_types.retain(|(n, _)| n != name);
-                    // Remove any existing value with same name (shadowing).
-                    self.values.retain(|(n, _, _)| n != name);
-                    self.value_types.retain(|(n, _)| n != name);
-
-                    self.values.push((name.clone(), unit_index, *v));
-                    if let Some(ty) = value_types.get(v.0 as usize) {
-                        self.value_types.push((name.clone(), ty.clone()));
-                    }
-                }
-                ExportBinding::Slot(s) => {
-                    // Remove any value with same name.
-                    self.values.retain(|(n, _, _)| n != name);
-                    self.value_types.retain(|(n, _)| n != name);
-                    // Remove any existing slot with same name (shadowing).
-                    self.slots.retain(|(n, _, _)| n != name);
-                    self.slot_types.retain(|(n, _)| n != name);
-
-                    self.slots.push((name.clone(), unit_index, *s));
-                    if let Some(ty) = slot_types.get(s.0 as usize) {
-                        self.slot_types.push((name.clone(), ty.clone()));
-                    }
-                }
-                ExportBinding::Function(unit_id) => {
-                    // Remove any existing function with same name.
-                    self.functions.retain(|(n, _, _)| n != name);
-                    self.functions.push((name.clone(), unit_index, FuncId(unit_id.0)));
-                }
-            }
+/// The script-level consts in scope for a unit sitting after `records`.
+pub fn script_consts_over(
+    records: &[UnitLowerRecord],
+) -> HashMap<String, (IrType, ConstValue)> {
+    let mut consts = HashMap::new();
+    for record in records {
+        for (name, ty, value) in &record.consts {
+            consts.insert(name.clone(), (ty.clone(), value.clone()));
         }
-
-        self.current_unit = unit_index + 1;
     }
+    consts
+}
+
+/// The names earlier units exported and then gave away, for a unit after
+/// `records`.
+///
+/// A name goes dead when the unit that exported it moved the value out before
+/// it ended, and comes back to life when a later unit exports or assigns to it.
+pub fn dead_externals_over(records: &[UnitLowerRecord]) -> Vec<String> {
+    let mut dead: Vec<String> = Vec::new();
+    for record in records {
+        for (name, _) in &record.exports {
+            dead.retain(|held| held != name);
+        }
+        for name in &record.revived {
+            dead.retain(|held| held != name);
+        }
+        dead.extend(record.dead_exports.iter().cloned());
+    }
+    dead
 }
 
 // ============================================================================

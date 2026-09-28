@@ -465,6 +465,42 @@ impl IrInterpreter {
         ret_dest: Destination,
         expr_dest: Option<Destination>,
     ) -> Result<UnitCompletion, InterpError> {
+        // A unit is registered once it finishes, so the count is the index this
+        // one will take, and the index its `Local` references are relative to.
+        let at = env.registry.unit_count();
+        self.run_script_unit(at, false, unit, env, ret_dest, expr_dest)
+    }
+
+    /// Run a script unit again in place of the unit already at `at`.
+    ///
+    /// **The index is given rather than taken from the store**, because the
+    /// unit's `Local` references and every `(unit, value)` reference a later
+    /// unit holds of it are relative to where it sits, and re-executing must
+    /// not move it. What the old frame owned is destroyed when the new frame
+    /// takes its place; see [`FrameStore::replace_frame`].
+    ///
+    /// A unit reads only from the units before it, so re-running one cannot
+    /// read what its own previous run left.
+    pub fn reexecute_script_unit_in_env(
+        &mut self,
+        at: u32,
+        unit: &IrCodeUnit,
+        env: &mut ScriptEnvironment,
+        ret_dest: Destination,
+        expr_dest: Option<Destination>,
+    ) -> Result<UnitCompletion, InterpError> {
+        self.run_script_unit(at, true, unit, env, ret_dest, expr_dest)
+    }
+
+    fn run_script_unit(
+        &mut self,
+        at: u32,
+        replacing: bool,
+        unit: &IrCodeUnit,
+        env: &mut ScriptEnvironment,
+        ret_dest: Destination,
+        expr_dest: Option<Destination>,
+    ) -> Result<UnitCompletion, InterpError> {
         let script_ctx = unit.script_context()
             .expect("execute_script_unit_in_env requires a script code unit");
 
@@ -481,10 +517,7 @@ impl IrInterpreter {
         // Create frame with live value tracking for script cleanup.
         let mut frame = Frame::new(unit, layout);
 
-        // Create execution context with local functions. A unit is registered
-        // once it finishes, so the count is the index this one will take, and
-        // the index its `Local` references are relative to.
-        let ctx = ExecutionContext::new(env.registry.unit_count(), &unit.nested_units);
+        let ctx = ExecutionContext::new(at, &unit.nested_units);
 
         // Execute blocks with registry for function lookups and frames for slot access.
         // Script units don't have a single function ID, so pass None.
@@ -500,7 +533,9 @@ impl IrInterpreter {
             None,
         );
 
-        // On error, destroy the frame and propagate the error.
+        // On error, destroy the frame and propagate the error. A unit being
+        // re-executed keeps the frame it had: the numbering cannot have a hole
+        // in it, and what that frame owns is destroyed when the session ends.
         if let Err(e) = result {
             frame.destroy_on_error(
                 self.runtime.handle(),
@@ -510,13 +545,24 @@ impl IrInterpreter {
             return Err(e);
         }
 
-        // Add this unit's frame and code units to the environment for future units.
-        env.add_unit(
-            frame,
-            unit.nested_units.clone(),
-            script_ctx.unit_end_values.clone(),
-            script_ctx.unit_end_slots.clone(),
-        );
+        if replacing {
+            env.replace_unit(
+                self.runtime.handle(),
+                at,
+                frame,
+                unit.nested_units.clone(),
+                script_ctx.unit_end_values.clone(),
+                script_ctx.unit_end_slots.clone(),
+            );
+        } else {
+            // Add this unit's frame and code units to the environment for future units.
+            env.add_unit(
+                frame,
+                unit.nested_units.clone(),
+                script_ctx.unit_end_values.clone(),
+                script_ctx.unit_end_slots.clone(),
+            );
+        }
 
         result
     }

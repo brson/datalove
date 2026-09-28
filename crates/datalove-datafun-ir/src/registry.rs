@@ -101,6 +101,20 @@ impl UnitFunctionRegistry {
         self.unit_functions.push(units);
     }
 
+    /// Put a re-executed unit's code units in place of the ones it had.
+    ///
+    /// A `CodeRef::Local` names a position in one unit's list, so a unit's
+    /// functions have to sit at that unit's index and nowhere else.
+    pub fn set_unit_code_units(&mut self, unit: u32, units: Vec<IrCodeUnit>) {
+        let index = unit as usize;
+        assert!(
+            index < self.unit_functions.len(),
+            "unit {unit} has no code units to replace; the registry holds {}",
+            self.unit_functions.len(),
+        );
+        self.unit_functions[index] = units;
+    }
+
     /// Look up a code unit from a previous unit.
     pub fn get_external_function_as_unit(&self, unit: u32, func_id: CodeUnitId) -> Option<&IrCodeUnit> {
         let functions = self.unit_functions.get(unit as usize)?;
@@ -183,6 +197,11 @@ impl FunctionRegistry {
     /// Add code units from a completed unit.
     pub fn add_unit_code_units(&mut self, units: Vec<IrCodeUnit>) {
         self.unit_registry.add_unit_code_units(units);
+    }
+
+    /// Put a re-executed unit's code units in place of the ones it had.
+    pub fn set_unit_code_units(&mut self, unit: u32, units: Vec<IrCodeUnit>) {
+        self.unit_registry.set_unit_code_units(unit, units);
     }
 
     /// Get a module code unit by module and function ID.

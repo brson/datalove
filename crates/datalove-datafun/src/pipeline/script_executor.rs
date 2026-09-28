@@ -27,7 +27,7 @@
 use rmx::prelude::*;
 use std::sync::Arc;
 
-use datalove_datafun_ir::{IrType, IrCodeUnit};
+use datalove_datafun_ir::{ExportBinding, IrType, IrCodeUnit};
 use datalove_datafun_compiler::lower;
 use datalove_datafun_interp::{CallDispatcher, ScriptEnvironment, UnitCompletion};
 use datalove_rt::rust::AlignedBuffer;
@@ -49,12 +49,12 @@ impl<'db> CompiledModules<'db> {
             return None;
         }
 
-        let script_ctx = lower::ScriptLowerContext::new();
         let env = ScriptEnvironment::with_module_registry(Arc::clone(&self.shared.module_registry));
         let interp = datalove_datafun_interp::IrInterpreter::new_with_options(debug_mode, call_dispatcher);
 
         Some(ScriptExecutor {
-            script_ctx,
+            script_ctx: lower::ScriptLowerContext::new(),
+            unit_exports: Vec::new(),
             env,
             interp,
         })
@@ -76,12 +76,12 @@ impl<'db> CompiledModules<'db> {
             return None;
         }
 
-        let script_ctx = lower::ScriptLowerContext::new();
         let env = ScriptEnvironment::with_module_registry(module_registry);
         let interp = datalove_datafun_interp::IrInterpreter::new_with_options(debug_mode, call_dispatcher);
 
         Some(ScriptExecutor {
-            script_ctx,
+            script_ctx: lower::ScriptLowerContext::new(),
+            unit_exports: Vec::new(),
             env,
             interp,
         })
@@ -102,9 +102,36 @@ impl<'db> CompiledModules<'db> {
 ///
 /// Handles execution only. No salsa/compilation dependency.
 pub struct ScriptExecutor {
+    /// The bindings on offer, folded from `unit_exports`.
+    ///
+    /// Derived rather than accumulated into, because re-executing unit `i`
+    /// replaces what unit `i` exports and a fold would leave the names it used
+    /// to export standing.
     script_ctx: lower::ScriptLowerContext,
+    /// What each executed unit exports, indexed by unit.
+    unit_exports: Vec<UnitExports>,
     pub env: ScriptEnvironment,
     interp: datalove_datafun_interp::IrInterpreter,
+}
+
+/// One unit's exports and the types they are of.
+#[derive(Clone, Default)]
+struct UnitExports {
+    bindings: Vec<(String, ExportBinding)>,
+    value_types: Vec<IrType>,
+    slot_types: Vec<IrType>,
+}
+
+impl UnitExports {
+    fn of(ir_unit: &IrCodeUnit) -> UnitExports {
+        let script_ctx = ir_unit.script_context()
+            .expect("only a script code unit is executed as a unit");
+        UnitExports {
+            bindings: script_ctx.exports.clone(),
+            value_types: ir_unit.value_types.clone(),
+            slot_types: ir_unit.slot_types.clone(),
+        }
+    }
 }
 
 impl ScriptExecutor {
@@ -232,16 +259,129 @@ impl ScriptExecutor {
     /// errors out leaves no frame behind.
     fn register_bindings(&mut self, ir_unit: &IrCodeUnit) {
         assert_eq!(
-            self.script_ctx.current_unit as usize,
+            self.unit_exports.len(),
             self.env.frames.unit_count(),
             "script unit index diverged from the frame store",
         );
+        self.unit_exports.push(UnitExports::of(ir_unit));
+        self.rebuild_script_ctx();
+    }
+
+    /// Fold the per-unit exports into the bindings on offer.
+    ///
+    /// Oldest first, so a later unit's export shadows an earlier one of the
+    /// same name, which is how a session resolves a name.
+    fn rebuild_script_ctx(&mut self) {
+        let mut ctx = lower::ScriptLowerContext::new();
+        for (index, exports) in self.unit_exports.iter().enumerate() {
+            ctx.add_exports(
+                index as u32,
+                &exports.bindings,
+                &exports.value_types,
+                &exports.slot_types,
+            );
+        }
+        ctx.current_unit = self.unit_exports.len() as u32;
+        self.script_ctx = ctx;
+    }
+
+    /// Run a unit again in place of the one at `index`.
+    ///
+    /// The frame that unit had is replaced and what it owned destroyed, and the
+    /// names it exports are taken from the new IR, so a binding it no longer
+    /// declares stops being on offer. The units after it keep their frames:
+    /// only the ones the edit reaches are re-executed, and a unit that uses
+    /// nothing of this one's holds no reference into it.
+    ///
+    /// Returns the result type and the printed result, the way
+    /// [`Self::execute_expr`] does, because **an edit can reach an expression
+    /// unit as readily as a fragment**: a session's history holds both, and an
+    /// expression unit computes a value that has to be given somewhere to land
+    /// and destroyed once read. Running one with no destination for it panics
+    /// in the interpreter, where `UnitEnd` carries a result.
+    pub fn reexecute_unit(
+        &mut self,
+        index: usize,
+        ir_unit: &IrCodeUnit,
+    ) -> (Option<String>, String) {
+        assert!(
+            index < self.unit_exports.len(),
+            "unit {index} has not been executed, so there is nothing to replace",
+        );
+        self.unit_exports[index] = UnitExports::of(ir_unit);
+        self.rebuild_script_ctx();
 
         let script_ctx = ir_unit.script_context()
-            .expect("register_bindings requires a script code unit");
-        let unit_index = self.script_ctx.current_unit;
-        self.script_ctx.add_exports(unit_index, &script_ctx.exports, &ir_unit.value_types, &ir_unit.slot_types);
-        self.script_ctx.current_unit += 1;
+            .expect("reexecute_unit requires a script code unit");
+        let result_id = script_ctx.result;
+        let shown_binding = script_ctx.result_name.clone();
+        let result_ty = result_id
+            .map(|id| format!("{}", &ir_unit.value_types[id.0 as usize]));
+
+        let ret_type = IrType::Result(Box::new(IrType::Unit));
+        let ret_tydesc = self.interp.tydesc_table_mut().get_or_create(&ret_type);
+        let (ret_size, ret_align) = unsafe { ((*ret_tydesc).size, (*ret_tydesc).align) };
+        let mut ret_buffer = AlignedBuffer::with_align(ret_size as usize, ret_align as usize);
+        let ret_dest = datalove_datafun_interp::Destination {
+            ptr: ret_buffer.as_mut_ptr(),
+            tydesc: ret_tydesc,
+        };
+
+        // Somewhere for an expression's value to land. A fragment computes
+        // none, and an expression that is just a name computes none either --
+        // it names a binding, which is read back below.
+        let mut expr_buffer = None;
+        let mut expr_dest = None;
+        let mut expr_tydesc = std::ptr::null();
+        if let Some(id) = result_id {
+            let expr_type = &ir_unit.value_types[id.0 as usize];
+            expr_tydesc = self.interp.tydesc_table_mut().get_or_create(expr_type);
+            let (size, align) = unsafe { ((*expr_tydesc).size, (*expr_tydesc).align) };
+            let mut buffer = AlignedBuffer::with_align(size as usize, align as usize);
+            expr_dest = Some(datalove_datafun_interp::Destination {
+                ptr: buffer.as_mut_ptr(),
+                tydesc: expr_tydesc,
+            });
+            expr_buffer = Some(buffer);
+        }
+
+        let completion = self.interp.reexecute_script_unit_in_env(
+            index as u32, ir_unit, &mut self.env, ret_dest, expr_dest);
+
+        let output = match completion {
+            Err(e) => format!("Error: {:?}", e),
+            Ok(UnitCompletion::Normal) => match (&mut expr_buffer, &shown_binding) {
+                (Some(buffer), _) => {
+                    let value = datalove_datafun_interp::Value {
+                        ptr: buffer.as_mut_ptr(),
+                        tydesc: expr_tydesc,
+                    };
+                    let printed = self.interp.pretty_print_value(&value)
+                        .unwrap_or_else(|e| format!("Error: {:?}", e));
+                    self.interp.destroy_value(&value);
+                    printed
+                }
+                (None, Some(name)) => {
+                    let name = name.C();
+                    let (ty, value) = self.get_binding(&name)
+                        .expect("the unit named a binding the executor registered");
+                    return (Some(ty), value);
+                }
+                (None, None) => "(fragment executed)".S(),
+            },
+            Ok(UnitCompletion::EarlyReturn) => {
+                let value = datalove_datafun_interp::Value {
+                    ptr: ret_buffer.as_mut_ptr(),
+                    tydesc: ret_tydesc,
+                };
+                let printed = self.interp.pretty_print_value(&value)
+                    .unwrap_or_else(|e| format!("Error: {:?}", e));
+                self.interp.destroy_value(&value);
+                printed
+            }
+        };
+
+        (result_ty, output)
     }
 
     /// Get the type and value of a binding by name.

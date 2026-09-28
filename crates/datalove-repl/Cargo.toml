@@ -9,6 +9,8 @@ edition.workspace = true
 rmx.workspace = true
 datalove-datafun.path = "../datalove-datafun"
 datalove-datafun-ir.path = "../datalove-datafun-ir"
+# For `Setter`, which is what editing a unit's source is.
+salsa.workspace = true
 serde = { version = "1.0", features = ["derive"] }
 
 [dev-dependencies]

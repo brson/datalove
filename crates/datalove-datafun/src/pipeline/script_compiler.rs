@@ -24,7 +24,7 @@
 
 use rmx::prelude::*;
 use std::cell::RefCell;
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 use std::rc::Rc;
 use std::sync::Arc;
 
@@ -35,7 +35,8 @@ use datalove_datafun_compiler::lower::{
 };
 use datalove_datafun_const::{inline_script_consts, PreparedConst, ScriptFunctionConstsResult, evaluate_prepared_const};
 use datalove_datafun_compiler::tracked_script_lower::{
-    AccumulatedLowerBindings, collect_const_graph,
+    UnitLowerRecord, collect_const_graph, dead_externals_over, lower_context_over,
+    script_consts_over,
 };
 use datalove_datafun_compiler::tracked_script_ownership::{
     analyze_script_fragment_tracked, analyze_script_expr_tracked, ScriptAnalysisData,
@@ -45,8 +46,8 @@ use datalove_datafun_compiler::lower::ScriptFunctionAnalyses;
 use datalove_datafun_ir::{ConstValue, CtfeEvaluator, CtfeError, IrCodeUnit, IrType, ResolvedConsts, ConstEvalError};
 use datalove_datafun_interp::InterpCtfeEvaluator;
 use datalove_datafun_tycheck::{
-    type_check_script_units, unit_ast,
-    ModuleSpec, Script, ScriptEnv, ScriptUnit,
+    type_check_script_units, typecheck_script_unit, unit_ast,
+    ModuleSpec, Script, ScriptEnv, ScriptUnit, ScriptUnitKind,
     UnitTypecheckResultTracked,
     AutoAdaptMode,
 };
@@ -62,6 +63,9 @@ use super::result::{TypecheckResult, OwnershipResult, LoweringResult, ScriptComp
 
 /// Output from typecheck phase.
 struct TypecheckOutput<'db> {
+    /// The unit's whole output, which carries what it provides and what it
+    /// asked for -- the dependency graph the reach of an edit is walked over.
+    output: datalove_datafun_tycheck::ScriptUnitTypecheckOutput<'db>,
     result: UnitTypecheckResultTracked<'db>,
     expr_types: &'db datalove_datafun_tycheck::ExprTypes<'db>,
     call_targets: &'db datalove_datafun_tycheck::CallTargets<'db>,
@@ -103,6 +107,8 @@ struct ConstEvalOutput {
     /// does not: a body resolves the const where the reference is lowered, so
     /// there is no later pass for the flag to skip.
     script_consts: HashMap<String, (IrType, ConstValue)>,
+    /// Just this unit's own script-level consts, for its record.
+    declared_consts: Vec<(String, IrType, ConstValue)>,
 }
 
 /// Parsed script unit ready for compilation.
@@ -165,8 +171,7 @@ impl<'db> CompiledModules<'db> {
             scripts: Vec::new(),
             env: ScriptEnv::new(db, module_specs, AutoAdaptMode::Disabled),
             last_script: None,
-            accumulated_lower_bindings: AccumulatedLowerBindings::default(),
-            accumulated_script_consts: HashMap::new(),
+            unit_records: Vec::new(),
             last_source: None,
             ctfe_evaluator,
             skip_const_inlining: false,
@@ -175,7 +180,6 @@ impl<'db> CompiledModules<'db> {
             auto_adapt_mode: AutoAdaptMode::Disabled,
             last_ownership_errors: Vec::new(),
             last_spans: None,
-            dead_externals: Vec::new(),
         })
     }
 
@@ -194,6 +198,59 @@ impl<'db> CompiledModules<'db> {
             InterpCtfeEvaluator::with_module_registry(self.shared.module_registry.clone())
         ));
         self.script_compiler(db, evaluator)
+    }
+
+    /// Create a script compiler that takes up a session an edit interrupted.
+    ///
+    /// The units' `Source`s are inputs, so interning them again gives back the
+    /// very same `ScriptUnit` and `Script` handles the session had before the
+    /// edit, and every memo keyed on one of those is still good. See
+    /// [`ScriptSession`].
+    ///
+    /// Returns `None` if module compilation failed (has errors).
+    pub fn script_compiler_resumed(
+        &self,
+        db: &'db dyn salsa::Database,
+        session: ScriptSession,
+    ) -> Option<ScriptCompiler<'db>> {
+        let mut compiler = self.script_compiler_default(db)?;
+        compiler.resume(session);
+        Some(compiler)
+    }
+}
+
+/// The part of a script compiler that survives a database mutation.
+///
+/// A [`ScriptCompiler`] borrows the database for as long as it lives, and
+/// editing a unit is `set_text` on a `Source`, which needs `&mut db`. So an
+/// edit means letting the compiler go and building another afterwards, and
+/// this is what crosses in between: the units' sources, whose identity is
+/// independent of their text, and what each unit's compilation produced.
+/// Everything tied to the database -- the interned `Script` handles, the
+/// module specs, the CTFE evaluator -- is derived again on the far side.
+///
+/// See `botdocs/plan-script-reactivity.md` for why the compiler cannot simply
+/// be handed `&mut db` instead.
+pub struct ScriptSession {
+    /// Each unit's source and whether it was submitted as a bare expression.
+    units: Vec<(bct::input::Source, bool)>,
+    /// What each unit's compilation produced, indexed by unit.
+    records: Vec<UnitLowerRecord>,
+    skip_const_inlining: bool,
+    skip_specialization: bool,
+    auto_adapt_mode: AutoAdaptMode,
+}
+
+impl ScriptSession {
+    /// The source of each unit, in order.
+    ///
+    /// A unit's `Source` is an input, so one of these is the handle an edit is
+    /// applied to: `set_text` changes that unit's text and moves no memo key.
+    /// The edit needs `&mut db`, which is why it is offered here rather than on
+    /// the compiler -- a compiler holding `&'db dyn Database` cannot be alive
+    /// across it. See `botdocs/plan-script-reactivity.md`.
+    pub fn unit_sources(&self) -> Vec<bct::input::Source> {
+        self.units.iter().map(|(source, _)| *source).collect()
     }
 }
 
@@ -218,13 +275,13 @@ pub struct ScriptCompiler<'db> {
     /// that -- it provides nothing to what follows -- and the diagnostics the
     /// caller is about to render are the failing unit's.
     last_script: Option<Script<'db>>,
-    accumulated_lower_bindings: AccumulatedLowerBindings,
-    /// Script-level const values from the units compiled so far.
+    /// What each unit's compilation produced, indexed by unit.
     ///
-    /// A script const outlives the unit that declared it, and a function body
-    /// in a later unit may name it, so the values accumulate the way the
-    /// bindings do. A unit redeclaring a name replaces the value.
-    accumulated_script_consts: HashMap<String, (IrType, ConstValue)>,
+    /// **Not a running total.** Unit `i` is lowered against the fold of the
+    /// records before it, computed on demand, so re-lowering one unit replaces
+    /// one record and leaves the rest where they are. A fold could not do that:
+    /// after an edit it would describe the pre-edit suffix as well.
+    unit_records: Vec<UnitLowerRecord>,
     last_source: Option<bct::input::Source>,
     /// CTFE evaluator for const expression evaluation.
     ctfe_evaluator: Rc<RefCell<dyn CtfeEvaluator>>,
@@ -240,12 +297,6 @@ pub struct ScriptCompiler<'db> {
     last_ownership_errors: Vec<AnalysisError<'db>>,
     /// Spans for the last compilation unit (for diagnostic rendering).
     last_spans: Option<datalove_datafun_ast::spans::DatafunSpans<'db>>,
-    /// Names earlier units exported without a value behind them.
-    ///
-    /// A unit copies out of the bindings earlier units own, so a name only
-    /// ends up here when the unit that defined it gave the value away before
-    /// it finished.
-    dead_externals: Vec<String>,
 }
 
 impl<'db> ScriptCompiler<'db> {
@@ -253,32 +304,222 @@ impl<'db> ScriptCompiler<'db> {
     pub fn compile_fragment(&mut self, source: &str) -> ScriptCompilationResult {
         let src = bct::input::Source::new(self.db, source.S());
         self.last_source = Some(src);
-        let parse_result = datalove_datafun_parser::parse(self.db, src);
-        let parsed = &parse_result.parsed;
 
         let parse_diags = datalove_datafun_parser::parse::accumulated::<datalove_diagnostic::ParseDiagnostic>(self.db, src);
         if let Some(result) = self.check_parse_errors(&parse_diags) {
             return result;
         }
 
-        let stmts = parsed.statements.to_vec();
-        let unit = ParsedUnit::Fragment { stmts };
-        self.compile_unit_inner(src, unit)
+        self.append_unit(src, false)
     }
 
     /// Compile a script expression.
     pub fn compile_expr(&mut self, source: &str) -> ScriptCompilationResult {
         let src = bct::input::Source::new(self.db, source.S());
         self.last_source = Some(src);
-        let expr = datalove_datafun_parser::parse_expr(self.db, src);
 
         let parse_diags = datalove_datafun_parser::parse_expr::accumulated::<datalove_diagnostic::ParseDiagnostic>(self.db, src);
         if let Some(result) = self.check_parse_errors(&parse_diags) {
             return result;
         }
 
-        let unit = ParsedUnit::Expr(expr);
-        self.compile_unit_inner(src, unit)
+        self.append_unit(src, true)
+    }
+
+    /// Put a new unit on the end of the script and compile it.
+    ///
+    /// A unit that fails comes back off: it provides nothing to what follows,
+    /// and leaving it in place would put a hole in the numbering the frame
+    /// store and every `(unit, value)` reference share.
+    fn append_unit(
+        &mut self,
+        src: bct::input::Source,
+        is_expr: bool,
+    ) -> ScriptCompilationResult {
+        let script_unit = ScriptUnit::new(self.db, src, is_expr);
+        let script = Script::new(self.db, self.scripts.last().copied(), script_unit);
+        self.scripts.push(script);
+        self.last_script = Some(script);
+        self.last_spans = Some(unit_ast(self.db, script_unit).spans.clone());
+        self.unit_records.push(UnitLowerRecord::default());
+
+        let index = self.scripts.len() - 1;
+        let result = self.compile_unit_at(index);
+        if result.ir_unit.is_none() {
+            self.scripts.pop();
+            self.unit_records.pop();
+        }
+        result
+    }
+
+    /// Re-lower the units an edit to unit `edited` reaches, in index order.
+    ///
+    /// The units the edit does not reach keep the IR they already have, which
+    /// is what makes this worth doing and is sound because **a script value is
+    /// identified by `(unit_index, ValueId)`**: a unit's IR names the units it
+    /// reads from, so a unit that uses nothing the edited unit provides holds
+    /// no reference to it and cannot see it change. Editing rather than
+    /// removing a unit leaves the indices alone, so the identification stays
+    /// good.
+    ///
+    /// Each returned index is paired with what compiling that unit came to.
+    /// The caller re-executes them in the order given -- which is index order,
+    /// because a unit reads only from units before it.
+    ///
+    /// A unit that fails to re-lower is left providing nothing, so its
+    /// bindings drop out of the environment; its frame stays where it is until
+    /// the session ends, because the numbering cannot have a hole in it.
+    pub fn relower_reach(&mut self, edited: usize) -> Vec<(usize, ScriptCompilationResult)> {
+        assert!(
+            edited < self.scripts.len(),
+            "unit {edited} was edited but the script has {} units",
+            self.scripts.len(),
+        );
+        self.edit_reach(edited)
+            .into_iter()
+            .map(|index| {
+                self.last_script = Some(self.scripts[index]);
+                self.last_spans =
+                    Some(unit_ast(self.db, self.scripts[index].unit(self.db)).spans.clone());
+                let result = self.compile_unit_at(index);
+                (index, result)
+            })
+            .collect()
+    }
+
+    /// The units an edit to `edited` reaches, in index order, `edited` included.
+    ///
+    /// A name a unit uses resolves to the nearest earlier unit that provides
+    /// it, so the edit reaches a unit when one of the names it uses resolves to
+    /// a unit the edit has already reached. One forward pass gives the whole
+    /// transitive reach, because a unit's providers all sit before it.
+    ///
+    /// The graph is the union of what it was before the edit and what it is
+    /// after, since either alone would miss a case: a binding the edit
+    /// *removes* is absent from the new graph although the unit that read it
+    /// has to be told, and a name the edit *introduces* is absent from the old
+    /// one although a later unit that asked for it in vain now finds it.
+    fn edit_reach(&self, edited: usize) -> Vec<usize> {
+        let count = self.unit_records.len();
+        let (now_provides, now_uses) = self.graph_now();
+        assert_eq!(
+            count, now_provides.len(),
+            "a record per unit and a typecheck output per unit, or the two graphs \
+             do not line up",
+        );
+
+        let union = |held: &[String], now: &[String]| -> BTreeSet<String> {
+            held.iter().chain(now.iter()).cloned().collect()
+        };
+        let provides: Vec<_> = (0..count)
+            .map(|unit| union(&self.unit_records[unit].provides, &now_provides[unit]))
+            .collect();
+        let uses: Vec<_> = (0..count)
+            .map(|unit| union(&self.unit_records[unit].uses, &now_uses[unit]))
+            .collect();
+
+        let mut reached = vec![false; count];
+        reached[edited] = true;
+        for unit in edited + 1..count {
+            reached[unit] = uses[unit].iter().any(|name| {
+                (0..unit)
+                    .rev()
+                    .find(|earlier| provides[*earlier].contains(name))
+                    .is_some_and(|provider| reached[provider])
+            });
+        }
+        (0..count).filter(|unit| reached[*unit]).collect()
+    }
+
+    /// What each unit provides and what it asks for, as things stand now.
+    ///
+    /// Both are the typechecker's own record -- `new_vars`, `new_fns` and
+    /// `asked_names` from stage A -- plus the module aliases, which the
+    /// typechecker resolves through a different query and so does not put in
+    /// `asked_names`: a `require` in one unit provides an alias that an
+    /// `import` in a later unit names.
+    fn graph_now(&self) -> (Vec<Vec<String>>, Vec<Vec<String>>) {
+        let outputs = self.unit_typecheck_outputs();
+        let mut provides = Vec::with_capacity(outputs.len());
+        let mut uses = Vec::with_capacity(outputs.len());
+        for (index, output) in outputs.iter().enumerate() {
+            provides.push(self.unit_provides_names(*output));
+            uses.push(self.unit_used_names(index, *output));
+        }
+        (provides, uses)
+    }
+
+    /// The names a unit provides to the units after it.
+    ///
+    /// **A unit that failed to typecheck provides nothing**, the same answer
+    /// `unit_provides` gives: its bindings would carry types the compiler never
+    /// settled on, and a later unit naming one resolves past it rather than to
+    /// it. Reading the raw output instead would claim an edge `binding_at` does
+    /// not have.
+    fn unit_provides_names(
+        &self,
+        output: datalove_datafun_tycheck::ScriptUnitTypecheckOutput<'db>,
+    ) -> Vec<String> {
+        let db = self.db;
+        if !output.result(db).errors(db).is_empty() {
+            return Vec::new();
+        }
+        output.new_vars(db).iter().map(|(name, _, _)| name.as_str(db).S())
+            .chain(output.new_fns(db).iter().map(|(name, _)| name.as_str(db).S()))
+            .chain(output.new_module_aliases(db).iter().map(|(alias, _)| alias.as_str(db).S()))
+            .collect()
+    }
+
+    /// The names a unit asks its environment for.
+    fn unit_used_names(
+        &self,
+        index: usize,
+        output: datalove_datafun_tycheck::ScriptUnitTypecheckOutput<'db>,
+    ) -> Vec<String> {
+        let db = self.db;
+        let mut used: Vec<String> =
+            output.asked_names(db).iter().map(|name| name.as_str(db).S()).collect();
+        if let ScriptUnitKind::Fragment(parsed, _) =
+            &unit_ast(db, self.scripts[index].unit(db)).kind
+        {
+            for statement in parsed.statements.iter() {
+                if let Statement::Import(import) = statement {
+                    used.push(import.module_name.as_str(db).S());
+                }
+            }
+        }
+        used
+    }
+
+    /// Take up the units and the per-unit records a session left off with.
+    fn resume(&mut self, session: ScriptSession) {
+        self.scripts = session.units.iter().fold(Vec::new(), |mut chain, (src, is_expr)| {
+            let unit = ScriptUnit::new(self.db, *src, *is_expr);
+            chain.push(Script::new(self.db, chain.last().copied(), unit));
+            chain
+        });
+        self.last_script = self.scripts.last().copied();
+        self.unit_records = session.records;
+        self.skip_const_inlining = session.skip_const_inlining;
+        self.skip_specialization = session.skip_specialization;
+        self.set_auto_adapt_mode(session.auto_adapt_mode);
+    }
+
+    /// Hand back what an edit needs to survive letting this compiler go.
+    pub fn into_session(self) -> ScriptSession {
+        let units = self.scripts.iter()
+            .map(|script| {
+                let unit = script.unit(self.db);
+                (unit.source(self.db), unit.is_expr(self.db))
+            })
+            .collect();
+        ScriptSession {
+            units,
+            records: self.unit_records,
+            skip_const_inlining: self.skip_const_inlining,
+            skip_specialization: self.skip_specialization,
+            auto_adapt_mode: self.auto_adapt_mode,
+        }
     }
 
     /// Each unit's typecheck output, in order, for the units compiled so far.
@@ -294,17 +535,6 @@ impl<'db> ScriptCompiler<'db> {
             Some(script) => type_check_script_units(self.db, *script, self.env)
                 .unit_outputs(self.db),
         }
-    }
-
-    /// The source of each unit compiled so far, in order.
-    ///
-    /// A unit's `Source` is an input, so one of these is the handle an edit is
-    /// applied to: `set_text` changes that unit's text and moves no memo key.
-    /// The edit itself needs `&mut db`, which a compiler holding
-    /// `&'db dyn Database` cannot be handed -- see
-    /// `botdocs/plan-script-reactivity.md`.
-    pub fn unit_sources(&self) -> Vec<bct::input::Source> {
-        self.scripts.iter().map(|script| script.unit(self.db).source(self.db)).collect()
     }
 
     /// Get parse diagnostics from the last compilation.
@@ -415,7 +645,21 @@ impl<'db> ScriptCompiler<'db> {
         })
     }
 
-    /// Compile a parsed unit through the pipeline.
+    /// The statements or the expression unit `index` parsed to.
+    ///
+    /// Read out of `unit_ast`, which holds the parse keyed on the unit alone,
+    /// so re-lowering a unit costs no second parse of it.
+    fn parsed_unit_at(&self, index: usize) -> ParsedUnit<'db> {
+        let spec = unit_ast(self.db, self.scripts[index].unit(self.db));
+        match &spec.kind {
+            ScriptUnitKind::Fragment(parsed, _) => {
+                ParsedUnit::Fragment { stmts: parsed.statements.to_vec() }
+            }
+            ScriptUnitKind::Expr(expr) => ParsedUnit::Expr(*expr),
+        }
+    }
+
+    /// Compile unit `index` through the pipeline, against the units before it.
     ///
     /// Pipeline phases:
     /// 1. Analysis
@@ -424,19 +668,27 @@ impl<'db> ScriptCompiler<'db> {
     /// 2. Lowering - generate IR (const bindings lowered as let bindings)
     /// 3. Const Evaluation - evaluate const expressions at compile time
     /// 4. Const Inlining - replace const bindings with evaluated values
-    fn compile_unit_inner(
-        &mut self,
-        src: bct::input::Source,
-        unit: ParsedUnit<'db>,
-    ) -> ScriptCompilationResult {
+    ///
+    /// Every exit leaves `unit_records[index]` describing what this unit now
+    /// provides -- nothing at all, if it failed.
+    fn compile_unit_at(&mut self, index: usize) -> ScriptCompilationResult {
+        let unit = self.parsed_unit_at(index);
+        let result = self.run_phases(index, &unit);
+        if result.ir_unit.is_none() {
+            self.unit_records[index] = UnitLowerRecord::default();
+        }
+        result
+    }
+
+    fn run_phases(&mut self, index: usize, unit: &ParsedUnit<'db>) -> ScriptCompilationResult {
         // Phase 1a: Typecheck
-        let typecheck = match self.phase_typecheck(src, &unit) {
+        let typecheck = match self.phase_typecheck(index) {
             Ok(tc) => tc,
             Err(result) => return result,
         };
 
         // Phase 1b: Ownership Analysis
-        let ownership = match self.phase_ownership(&unit, &typecheck) {
+        let ownership = match self.phase_ownership(index, unit, &typecheck) {
             Ok(own) => own,
             Err(result) => return result,
         };
@@ -449,9 +701,9 @@ impl<'db> ScriptCompiler<'db> {
         // const may call a function in the same unit. So the bodies that need
         // no value from this unit's consts go first, the consts are evaluated
         // against those, and the rest follow.
-        let accumulated_consts = self.accumulated_script_consts.clone();
+        let earlier_consts = script_consts_over(&self.unit_records[..index]);
         let lowered_funcs = match self.phase_lower_functions(
-            &unit, &typecheck, &ownership, &accumulated_consts, true,
+            index, unit, &typecheck, &ownership, &earlier_consts, true,
         ) {
             Ok(lf) => lf,
             Err(result) => return result,
@@ -459,7 +711,7 @@ impl<'db> ScriptCompiler<'db> {
 
         // Phase 3: Const Evaluation
         // Evaluates const expressions using the lowered functions + interpretation.
-        let consts = match self.phase_const_eval(&unit, &typecheck, &lowered_funcs) {
+        let consts = match self.phase_const_eval(index, unit, &typecheck, &lowered_funcs) {
             Ok(c) => c,
             Err(result) => return result,
         };
@@ -472,7 +724,7 @@ impl<'db> ScriptCompiler<'db> {
             lowered_funcs
         } else {
             match self.phase_lower_functions(
-                &unit, &typecheck, &ownership, &consts.script_consts, false,
+                index, unit, &typecheck, &ownership, &consts.script_consts, false,
             ) {
                 Ok(lf) => lf,
                 Err(result) => return result,
@@ -481,7 +733,7 @@ impl<'db> ScriptCompiler<'db> {
 
         // Phase 2 (continued): Assemble final IR
         // Combines lowered functions with script-level code.
-        let ir_unit = match self.phase_assemble_ir(&unit, &typecheck, &ownership, &consts, &lowered_funcs) {
+        let ir_unit = match self.phase_assemble_ir(index, unit, &typecheck, &ownership, &consts, &lowered_funcs) {
             Ok(ir) => ir,
             Err(result) => return result,
         };
@@ -493,16 +745,12 @@ impl<'db> ScriptCompiler<'db> {
         let ir_unit = self.phase_resolve_shape_descriptors(ir_unit);
 
         // Phase 5: Const parameter specialization.
-        let ir_unit = match self.phase_specialize(ir_unit, &unit, &typecheck, &lowered_funcs) {
+        let ir_unit = match self.phase_specialize(ir_unit, unit, &typecheck, &lowered_funcs) {
             Ok(ir) => ir,
-            Err(result) => {
-                self.scripts.pop();
-                return result;
-            }
+            Err(result) => return result,
         };
 
-        // Update accumulated state
-        self.update_accumulated_state(&ir_unit, &ownership, &consts);
+        self.record_unit(index, &ir_unit, &typecheck, &ownership, &consts);
 
         let ir_dump = format!("{}", ir_unit);
         ScriptCompilationResult {
@@ -517,32 +765,25 @@ impl<'db> ScriptCompiler<'db> {
     // Phase 1: Typecheck
     // ========================================================================
 
-    /// Run typechecking on the unit.
+    /// Run typechecking on unit `index`.
     fn phase_typecheck(
         &mut self,
-        src: bct::input::Source,
-        unit: &ParsedUnit<'db>,
+        index: usize,
     ) -> Result<TypecheckOutput<'db>, ScriptCompilationResult> {
-        // Extend the chain the per-unit queries are keyed on. The parse, name
-        // resolution and spans come from `unit_ast`, keyed on the unit alone.
-        let script_unit = ScriptUnit::new(self.db, src, matches!(unit, ParsedUnit::Expr(_)));
-        let script = Script::new(self.db, self.scripts.last().copied(), script_unit);
-        self.scripts.push(script);
-        self.last_script = Some(script);
-        self.last_spans = Some(unit_ast(self.db, script_unit).spans.clone());
-
-        // Run typechecking. The mode reaches here through `env`, not just
-        // ownership analysis: a mismatch `@` would fix is a type error first.
-        let typecheck_results = type_check_script_units(self.db, script, self.env);
-        let all_results = typecheck_results.results(self.db);
-        let result = *all_results.last().unwrap();
+        // Keyed on the unit's position in the script and nothing derived from
+        // the units around it, which is what lets an edit stop at the units
+        // that used what changed. See `botdocs/plan-script-reactivity.md`.
+        //
+        // The mode reaches here through `env`, not just ownership analysis: a
+        // mismatch `@` would fix is a type error first.
+        let output = typecheck_script_unit(self.db, self.scripts[index], self.env);
+        let result = output.result(self.db);
 
         // Check for errors.
         let errors: Vec<_> = result.errors(self.db).into_iter()
             .map(|e| format!("{:?}", e.error(self.db)))
             .collect();
         if !errors.is_empty() {
-            self.scripts.pop();
             return Err(ScriptCompilationResult {
                 typecheck: TypecheckResult::Error { errors },
                 ownership: OwnershipResult::Skipped,
@@ -552,6 +793,7 @@ impl<'db> ScriptCompiler<'db> {
         }
 
         Ok(TypecheckOutput {
+            output,
             result,
             expr_types: result.expr_types(self.db),
             call_targets: result.call_targets(self.db),
@@ -565,9 +807,11 @@ impl<'db> ScriptCompiler<'db> {
     /// Run ownership analysis on the unit.
     fn phase_ownership(
         &mut self,
+        index: usize,
         unit: &ParsedUnit<'db>,
         typecheck: &TypecheckOutput<'db>,
     ) -> Result<OwnershipOutput<'db>, ScriptCompilationResult> {
+        let dead_externals = dead_externals_over(&self.unit_records[..index]);
         match unit {
             ParsedUnit::Fragment { stmts, .. } => {
                 let ownership_result = analyze_script_fragment_tracked(
@@ -575,13 +819,12 @@ impl<'db> ScriptCompiler<'db> {
                     typecheck.result,
                     stmts.clone(),
                     self.auto_adapt_mode,
-                    self.dead_externals.clone(),
+                    dead_externals,
                 );
                 if !ownership_result.errors(self.db).is_empty() {
                     // Store structured errors and spans for CLI rendering.
                     self.last_ownership_errors = ownership_result.structured_errors(self.db).to_vec();
                     let error_msg = ownership_result.errors(self.db).join("\n");
-                    self.scripts.pop();
                     return Err(ScriptCompilationResult {
                         typecheck: TypecheckResult::Success,
                         ownership: OwnershipResult::Error { message: error_msg },
@@ -616,13 +859,12 @@ impl<'db> ScriptCompiler<'db> {
                     typecheck.result,
                     *expr,
                     self.auto_adapt_mode,
-                    self.dead_externals.clone(),
+                    dead_externals,
                 );
                 if !ownership_result.errors(self.db).is_empty() {
                     // Store structured errors and spans for CLI rendering.
                     self.last_ownership_errors = ownership_result.structured_errors(self.db).to_vec();
                     let error_msg = ownership_result.errors(self.db).join("\n");
-                    self.scripts.pop();
                     return Err(ScriptCompilationResult {
                         typecheck: TypecheckResult::Success,
                         ownership: OwnershipResult::Error { message: error_msg },
@@ -652,8 +894,10 @@ impl<'db> ScriptCompiler<'db> {
     /// `script_consts` are the script-level const values a body may name.
     /// `defer_missing_consts` holds back a body that names one with no value
     /// yet; the caller lowers again once the consts are evaluated.
+    #[allow(clippy::too_many_arguments)]
     fn phase_lower_functions(
         &mut self,
+        index: usize,
         unit: &ParsedUnit<'db>,
         typecheck: &TypecheckOutput<'db>,
         ownership: &OwnershipOutput<'db>,
@@ -669,8 +913,9 @@ impl<'db> ScriptCompiler<'db> {
             });
         };
 
-        // Get accumulated context for cross-unit function resolution.
-        let script_ctx = self.accumulated_lower_bindings.to_script_lower_context();
+        // The context this unit is lowered against: what the units before it
+        // provide, and nothing the units after it do.
+        let script_ctx = lower_context_over(&self.unit_records[..index]);
 
         // Get module function ID map for resolving module function calls.
 
@@ -711,7 +956,6 @@ impl<'db> ScriptCompiler<'db> {
                 })
             }
             Err(e) => {
-                self.scripts.pop();
                 Err(ScriptCompilationResult {
                     typecheck: TypecheckResult::Success,
                     ownership: OwnershipResult::Success,
@@ -735,16 +979,19 @@ impl<'db> ScriptCompiler<'db> {
     /// 2. Evaluate the IR unit via CTFE if needed
     fn phase_const_eval(
         &mut self,
+        index: usize,
         unit: &ParsedUnit<'db>,
         typecheck: &TypecheckOutput<'db>,
         lowered_funcs: &LoweredFunctions,
     ) -> Result<ConstEvalOutput, ScriptCompilationResult> {
+        let earlier_consts = script_consts_over(&self.unit_records[..index]);
         let ParsedUnit::Fragment { stmts, .. } = unit else {
             // Expressions don't have const bindings.
             return Ok(ConstEvalOutput {
                 resolved_consts: ResolvedConsts::new(),
                 func_consts: HashMap::new(),
-                script_consts: self.accumulated_script_consts.clone(),
+                script_consts: earlier_consts,
+                declared_consts: Vec::new(),
             });
         };
 
@@ -762,6 +1009,7 @@ impl<'db> ScriptCompiler<'db> {
             ResolvedConsts::new()
         } else {
             match self.evaluate_script_consts(
+                &earlier_consts,
                 &const_graph,
                 stmts,
                 typecheck.expr_types,
@@ -770,7 +1018,6 @@ impl<'db> ScriptCompiler<'db> {
             ) {
                 Ok(resolved) => resolved,
                 Err(e) => {
-                    self.scripts.pop();
                     return Err(ScriptCompilationResult {
                         typecheck: TypecheckResult::Success,
                         ownership: OwnershipResult::Success,
@@ -785,13 +1032,15 @@ impl<'db> ScriptCompiler<'db> {
 
         // Build the script-level consts map, over the earlier units' consts,
         // which this unit's declarations shadow.
-        let mut script_consts = self.accumulated_script_consts.clone();
+        let mut script_consts = earlier_consts;
+        let mut declared_consts = Vec::new();
         for (name, value) in resolved_consts.iter() {
             let ir_type = const_graph.bindings.iter()
                 .find(|b| &b.name == name)
                 .map(|b| b.ir_type.clone())
                 .expect("every resolved const is a binding of the graph it came from");
-            script_consts.insert(name.to_string(), (ir_type, value.clone()));
+            script_consts.insert(name.to_string(), (ir_type.clone(), value.clone()));
+            declared_consts.push((name.to_string(), ir_type, value.clone()));
         }
 
         // Evaluate function-level consts.
@@ -809,7 +1058,6 @@ impl<'db> ScriptCompiler<'db> {
         };
 
         if !func_consts_result.errors.is_empty() {
-            self.scripts.pop();
             return Err(ScriptCompilationResult {
                 typecheck: TypecheckResult::Success,
                 ownership: OwnershipResult::Success,
@@ -824,12 +1072,15 @@ impl<'db> ScriptCompiler<'db> {
             resolved_consts,
             func_consts: func_consts_result.consts,
             script_consts,
+            declared_consts,
         })
     }
 
     /// Evaluate script-level const bindings using "lower then evaluate" pattern.
+    #[allow(clippy::too_many_arguments)]
     fn evaluate_script_consts(
         &self,
+        earlier_consts: &HashMap<String, (IrType, ConstValue)>,
         const_graph: &datalove_datafun_ir::ConstBindingGraph,
         statements: &[Statement<'db>],
         expr_types: &'db datalove_datafun_tycheck::ExprTypes<'db>,
@@ -846,7 +1097,7 @@ impl<'db> ScriptCompiler<'db> {
         // statement order, so a redeclaration shadows the earlier value rather
         // than the other way about.
         let mut resolved_consts_map: HashMap<String, (IrType, ConstValue)> =
-            self.accumulated_script_consts.clone();
+            earlier_consts.clone();
 
         // A binding's id is its position among the const statements, so the
         // expressions only have to be gathered once.
@@ -1041,15 +1292,17 @@ impl<'db> ScriptCompiler<'db> {
     ///
     /// Const bindings are lowered as let bindings with their initializer expressions.
     /// Const inlining happens as a separate pass after IR assembly.
+    #[allow(clippy::too_many_arguments)]
     fn phase_assemble_ir(
         &mut self,
+        index: usize,
         unit: &ParsedUnit<'db>,
         typecheck: &TypecheckOutput<'db>,
         ownership: &OwnershipOutput<'db>,
         _consts: &ConstEvalOutput,
         lowered_funcs: &LoweredFunctions,
     ) -> Result<IrCodeUnit, ScriptCompilationResult> {
-        let script_ctx = self.accumulated_lower_bindings.to_script_lower_context();
+        let script_ctx = lower_context_over(&self.unit_records[..index]);
 
         match unit {
             ParsedUnit::Fragment { stmts, .. } => {
@@ -1094,14 +1347,11 @@ impl<'db> ScriptCompiler<'db> {
                     Some(&func_param_types),
                     Some(&func_return_types),
                     lowered_funcs_arg,
-                ).map_err(|e| {
-                    self.scripts.pop();
-                    ScriptCompilationResult {
-                        typecheck: TypecheckResult::Success,
-                        ownership: OwnershipResult::Success,
-                        lowering: LoweringResult::Error { message: format!("{}", e) },
-                        ir_unit: None,
-                    }
+                ).map_err(|e| ScriptCompilationResult {
+                    typecheck: TypecheckResult::Success,
+                    ownership: OwnershipResult::Success,
+                    lowering: LoweringResult::Error { message: format!("{}", e) },
+                    ir_unit: None,
                 })
             }
             ParsedUnit::Expr(expr) => {
@@ -1112,14 +1362,11 @@ impl<'db> ScriptCompiler<'db> {
                     self.shared_context.func_id_map,
                     script_ctx,
                     *expr,
-                ).map_err(|e| {
-                    self.scripts.pop();
-                    ScriptCompilationResult {
-                        typecheck: TypecheckResult::Success,
-                        ownership: OwnershipResult::Success,
-                        lowering: LoweringResult::Error { message: format!("{}", e) },
-                        ir_unit: None,
-                    }
+                ).map_err(|e| ScriptCompilationResult {
+                    typecheck: TypecheckResult::Success,
+                    ownership: OwnershipResult::Success,
+                    lowering: LoweringResult::Error { message: format!("{}", e) },
+                    ir_unit: None,
                 })
             }
         }
@@ -1460,40 +1707,32 @@ impl<'db> ScriptCompiler<'db> {
     }
 
     // ========================================================================
-    // Accumulated State
+    // Per-unit record
     // ========================================================================
 
-    /// Update accumulated state after successful compilation.
-    fn update_accumulated_state(
+    /// Record what unit `index` produced, for the units after it to be built on.
+    ///
+    /// Replaces whatever was there, which is what re-lowering a unit needs:
+    /// what the unit provided before the edit is gone, and only what it
+    /// provides now stands between the units around it.
+    fn record_unit(
         &mut self,
+        index: usize,
         ir_unit: &IrCodeUnit,
+        typecheck: &TypecheckOutput<'db>,
         ownership: &OwnershipOutput<'db>,
         consts: &ConstEvalOutput,
     ) {
-        // A script const stays in scope for the units that follow, so this
-        // unit's values join the ones already there, shadowing by name.
-        self.accumulated_script_consts = consts.script_consts.clone();
-
-        // A name is live again if this unit exported or assigned to it, and
-        // dead if this unit gave away what it exported.
-        if let Some(script_ctx) = ir_unit.script_context() {
-            for (name, _) in &script_ctx.exports {
-                self.dead_externals.retain(|dead| dead != name);
-            }
-        }
-        for name in &ownership.revived {
-            self.dead_externals.retain(|dead| dead != name);
-        }
-        self.dead_externals.extend(ownership.dead_exports.iter().cloned());
-
-        let unit_index = self.accumulated_lower_bindings.current_unit;
-        if let Some(script_ctx) = ir_unit.script_context() {
-            self.accumulated_lower_bindings.add_exports(
-                unit_index,
-                &script_ctx.exports,
-                &ir_unit.value_types,
-                &ir_unit.slot_types,
-            );
-        }
+        let script_ctx = ir_unit.script_context();
+        self.unit_records[index] = UnitLowerRecord {
+            exports: script_ctx.map(|ctx| ctx.exports.clone()).unwrap_or_default(),
+            value_types: ir_unit.value_types.clone(),
+            slot_types: ir_unit.slot_types.clone(),
+            consts: consts.declared_consts.clone(),
+            dead_exports: ownership.dead_exports.clone(),
+            revived: ownership.revived.clone(),
+            provides: self.unit_provides_names(typecheck.output),
+            uses: self.unit_used_names(index, typecheck.output),
+        };
     }
 }

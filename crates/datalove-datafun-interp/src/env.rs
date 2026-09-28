@@ -54,6 +54,26 @@ impl ScriptEnvironment {
         self.registry.add_unit_code_units(code_units);
     }
 
+    /// Put a re-executed unit's frame and code units in place of the ones it
+    /// had, destroying what the old frame owned.
+    ///
+    /// Both halves have to move together: a `(unit, value)` reference and a
+    /// `CodeRef::Local` are both positions in one unit's state, so a frame and
+    /// the functions beside it belong at the same index.
+    pub fn replace_unit(
+        &mut self,
+        rt_handle: datalove_rt::c::LocalRtHandle,
+        unit: u32,
+        frame: Frame,
+        code_units: Vec<IrCodeUnit>,
+        unit_end_values: Vec<ValueId>,
+        unit_end_slots: Vec<SlotId>,
+    ) {
+        self.frames.replace_frame(
+            rt_handle, unit as usize, frame, unit_end_values, unit_end_slots);
+        self.registry.set_unit_code_units(unit, code_units);
+    }
+
     /// Destroy live values in all frames.
     pub fn destroy_live_values(&mut self, rt_handle: datalove_rt::c::LocalRtHandle) {
         self.frames.destroy_live_values(rt_handle);

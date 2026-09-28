@@ -1798,6 +1798,7 @@ dependencies = [
  "datalove-exampletest",
  "datalove-stdlib",
  "rustmax 0.0.10",
+ "salsa",
  "serde",
 ]
 
