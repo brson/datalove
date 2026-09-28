@@ -826,7 +826,16 @@ impl<'db> ScriptCompiler<'db> {
         lowered_funcs: &LoweredFunctions,
     ) -> Result<ResolvedConsts, ConstEvalError> {
         let mut resolved = ResolvedConsts::new();
-        let mut resolved_consts_map: HashMap<String, (IrType, ConstValue)> = HashMap::new();
+
+        // Seeded with the consts earlier units left, so that a const may name
+        // one: starting empty meant `const J = K` could only see a `K` declared
+        // beside it, and reading one from an earlier unit failed to lower.
+        //
+        // This unit's own bindings are inserted below as each is resolved, in
+        // statement order, so a redeclaration shadows the earlier value rather
+        // than the other way about.
+        let mut resolved_consts_map: HashMap<String, (IrType, ConstValue)> =
+            self.accumulated_script_consts.clone();
 
         // A binding's id is its position among the const statements, so the
         // expressions only have to be gathered once.

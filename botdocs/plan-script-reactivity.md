@@ -113,7 +113,19 @@ script `const` arrived in the next unit's variables but not its const bindings,
 so it read as a `let`. Nothing noticed while bodies could name either.
 `AccumulatedBindings` carries the const names now.
 
-**Half of that remains, and it is a lowering gap.** A function body naming a
+**Both halves are fixed now.** `lower_script_functions` is handed the script's
+consts and seeds them into the lowering context, the way
+`lower_function_for_module` does with a module's, and the script compiler grew
+the two strata the module pipeline already had -- lower, evaluate, lower again
+only if a body deferred. `accumulated_script_consts` carries them across units.
+A const naming a const across units needed the same seeding in
+`evaluate_script_consts`, whose map started empty. `script_const_tests` has
+eleven cases including the shadowing one, which is what says the seeding goes in
+before this unit's own bindings rather than after.
+
+What follows is what it looked like before, kept because the shape recurs:
+
+**The gap was a lowering one.** A function body naming a
 script const typechecks and then fails to lower -- "binding not available yet" --
 where a *module* const in a module function body compiles and runs. So the
 compiler agrees the program is legal and cannot build it.

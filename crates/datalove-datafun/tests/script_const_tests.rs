@@ -207,3 +207,71 @@ fn a_module_const_read_by_a_module_function_works() {
     assert_typechecks(&result, "calling a module function that reads a module const");
     assert_lowers(&result, "calling a module function that reads a module const");
 }
+
+// ============================================================================
+// A const naming a const
+// ============================================================================
+
+/// A const may name a const beside it.
+#[test]
+fn a_const_can_read_a_const_in_its_own_unit() {
+    let (results, value) = compile_and_eval(
+        &["const K: u32 = 5\nconst J: u32 = K\nlet v = J\n"],
+        "v",
+    );
+    assert_lowers(&results[0], "a const naming a const beside it");
+    assert_eq!(value, "5", "J should carry K's value");
+}
+
+/// And one from an earlier unit.
+///
+/// `evaluate_script_consts` started its map empty, so a const could only see one
+/// declared beside it and reading an earlier unit's failed to lower -- the same
+/// shape as a function body not reaching a script const, in the const-to-const
+/// path rather than the body one. The map is seeded from the accumulated consts
+/// now.
+#[test]
+fn a_const_can_read_a_const_from_an_earlier_unit() {
+    let (results, value) = compile_and_eval(
+        &["const K: u32 = 5\n", "const J: u32 = K\nlet v = J\n"],
+        "v",
+    );
+    assert_lowers(&results[1], "a const naming an earlier unit's const");
+    assert_eq!(value, "5", "J should carry K's value across the boundary");
+}
+
+/// A redeclaration shadows the earlier value rather than being shadowed by it.
+///
+/// The seeding puts earlier units' consts in before this unit's are resolved, so
+/// the order of those two is what decides this. Getting it the wrong way round
+/// would leave `J` carrying 5.
+#[test]
+fn a_redeclared_const_shadows_the_earlier_one() {
+    let (results, value) = compile_and_eval(
+        &[
+            "const K: u32 = 5\n",
+            "const K: u32 = 9\nconst J: u32 = K\nlet v = J\n",
+        ],
+        "v",
+    );
+    assert_lowers(&results[1], "a const naming a redeclared const");
+    assert_eq!(value, "9", "the redeclaration in this unit should win");
+}
+
+/// A function body reaches a const that itself named an earlier unit's const.
+///
+/// The two fixes compose: the body is handed the script's consts, and the const
+/// it names was resolvable because its own map was seeded.
+#[test]
+fn a_function_body_reaches_a_const_chain_across_units() {
+    let (results, value) = compile_and_eval(
+        &[
+            "const K: u32 = 5\n",
+            "const J: u32 = K\n",
+            "fun f(): u32\n    ret J\nend fun\nlet v = f()\n",
+        ],
+        "v",
+    );
+    assert_lowers(&results[2], "a body naming a const that named a const");
+    assert_eq!(value, "5", "the value should reach through both hops");
+}
