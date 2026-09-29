@@ -25,14 +25,16 @@ and syntax of Datalove in general.
 - [An example](#user-content-an-example)
 - [Lexical structure](#user-content-lexical-structure)
 - [Expressions](#user-content-expressions)
-- [Primitive Types](#user-content-primitive-types)
+- [Primitive types](#user-content-primitive-types)
 - [Collections](#user-content-collections)
 - [Aggregates](#user-content-aggregates)
-- [Dynamic Types](#user-content-dynamic-types)
-- [Types](#user-content-types)
+- [Dynamic types](#user-content-dynamic-types)
+- [Type equivalence](#user-content-type-equivalence)
+- [Type synthesis and checking](#user-content-type-synthesis-and-checking)
 - [Comparison and total ordering](#user-content-comparison-and-total-ordering)
 - [Canonical forms](#user-content-canonical-forms)
-- [Discrepancies, unknowns and bugs](#user-content-discrepancies-unknowns-and-bugs)
+- [Bugs and open questions](#user-content-bugs-and-open-questions)
+
 
 
 
@@ -283,7 +285,7 @@ group_expr     = "(", ws, full_expr, ws, ")" ;
 
 
 
-## Primitive Types
+## Primitive types
 
 | Type              | Literal          |
 |-------------------|------------------|
@@ -869,7 +871,7 @@ enum_variant   = atom_type | term_type ;
 
 
 
-## Dynamic Types
+## Dynamic types
 
 | Type                          | Literal                        |
 |-------------------------------|--------------------------------|
@@ -903,9 +905,7 @@ dynamic_expr   = ( "data" | "error" ), ws, full_expr ;
 
 
 
-## Types
-
-### Type equivalence
+## Type equivalence
 
 All datalit types are structural:
 two types are the same when they are spelled the same,
@@ -926,11 +926,13 @@ with these rules for the aggregates.
 | enum            | same set of variants, regardless of declared order        |
 
 
-### Synthesis and checking
+
+
+## Type synthesis and checking
 
 Every expression either synthesizes a type from itself,
 or is checked against an expected type
-from a type hint or an enclosing expression.
+from a type hint, enclosing expression, or external type context.
 An expression that synthesizes can always be checked:
 it checks against a type if it synthesizes that type.
 There are no implicit conversions:
@@ -1014,7 +1016,6 @@ Enum variant names order by UTF-8 byte.
 
 
 ## Canonical forms
-
 
 Datalove Literals has no canonical serialized form
 as might be used for consistent hashing.
