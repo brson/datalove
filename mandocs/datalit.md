@@ -653,8 +653,16 @@ comma_run      = ",", { ws, "," } ;
 ```
 
 Within a table, `ws` does not include newlines, which are `row_sep`.
-The grammar does not express the tensor shape rules above,
-nor that a header's extents agree with its body.
+Some rules for these forms cannot be expressed in EBFN:
+
+- every table row has exactly as many values as the header has columns,
+  and the column names match the type hint's in order;
+- every group along a tensor axis has the same shape,
+  so `[| 1 2, 3 |]` is refused;
+- a tensor's rank is its longest comma run plus one,
+  and shorter runs nest inside longer ones;
+- a tensor header's extents multiply to the number of elements in a flat body,
+  or equal the shape of a structured one.
 
 
 
@@ -822,9 +830,6 @@ where the enum type is expected:
 : [enum { atom Red, atom Blue, term Custom string }] /
   [atom Red, term Custom "hello", enum { atom Blue }]
 ```
-
-Enum variants are held in name order,
-which is the order values of an enum compare in.
 
 
 ### EBNF · Aggregates
@@ -999,15 +1004,8 @@ and a NaN is a value like any other,
 equal to itself and to no other NaN bit pattern.
 `#{ 0.0, -0.0 }` has two elements.
 
-The order among the types a `data` or `error` may carry
-is arbitrary and fixed by the implementation.
+The order among the types a `data` or `error` may carry is unspecified.
 Enum variant names order by UTF-8 byte.
-
-The runtime has a second, IEEE equality,
-which differs from the total ordering only for floats:
-under it `-0.0` equals `0.0` and no NaN equals anything.
-It is the equality datafun computes with,
-and is not used for keys.
 
 
 
@@ -1017,24 +1015,9 @@ and is not used for keys.
 
 Datalove literals has no canonical serialized form
 as might be used for consistent hashing.
-
 There is no canonical form for floats.
-
 Required type-hint insertion points are unknown.
-
 Will be revisited.
-
-Two printers exist today.
-The syntax printer, `lit-pretty`, reprints a parsed expression
-with the literals spelled as written, including hex,
-and entries in the order written.
-The value printer prints a runtime value:
-maps and sets in their total ordering,
-integers in decimal,
-and floats in their shortest round-tripping form,
-positional from `1e-5` up to `1e16` and with an exponent otherwise,
-always with a point or exponent.
-It prints no type hints.
 
 
 
@@ -1067,20 +1050,15 @@ It prints no type hints.
   for values whose types synthesize.
 - Should empty collections synthesize?
 - Should empty tensors synthesize rank 1?
+- Should atom/term actually check against enums?
 - What are the rules for printing disambiguating type hints?
 - What are the rules for printing disambiguating floats, etc?
 - Should dupe map/set keys be an error?
 - Why can't tables synthesize?
 - Why are semicolons special inside tables?
-- Should we glue commas in tensors?
-- re tables: "the grammar does not express the tensor shape rules above"?
 - Should grouping parens actually be allowed? Are they needed?
 - Should structs require identical field order?
-- Should atom/term actually check against enums?
-- What does "enum variants are held in name order" mean practically in datalit?
-- result and error check against _any_ !T?
 - Need to think harder about float total order and ergonomics.
-- "order among the types a data or error may carry is arbitrary"??
 
 
 
