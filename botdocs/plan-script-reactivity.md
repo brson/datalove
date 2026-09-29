@@ -500,3 +500,46 @@ analysis-versus-execution split stage C exists for, in the module direction, and
   for C. No test puts a move across units through an edit, and
   `repl-architecture.md` says this is where non-cloneable types will break the
   model.
+
+## E. The module gap
+
+**Editing a module does not reach the script units that import from it.** They
+keep values computed against the old module and nothing notices.
+
+The diagnosis took three tries and the first two were wrong, so they are here to
+save the next person the same trip:
+
+- **Not `ScriptEnv` over-propagating.** It is interned over every module's
+  parse, spans and name resolution, so a module edit looks like it should re-key
+  every unit. Measured: it does not, either for a body change or a signature
+  one.
+- **Not a stale env.** The env is rebuilt on resume -- `ScriptSession` holds
+  units and records, not the env -- and a *new* unit can import a function the
+  module has just gained. So the script's view of the modules is current.
+- **It is a missing driver.** Stage B made typechecking lazy: an earlier unit is
+  typechecked when a later one asks `binding_at` about a name it provides.
+  Nothing asks after a module edit, so nothing re-runs. There is no entry point
+  that says "a module changed, go and re-derive what depended on it" --
+  `relower_reach` takes an edited *script unit* index and has no module-shaped
+  sibling.
+
+So the fix is a driver, not a keying change:
+
+1. **Record which modules a unit imports from.** Derivable from
+   `new_module_aliases` -- alias to full path -- plus the unit's import
+   statements. This is the module-shaped half of the alias edge and it wants to
+   be part of the graph rather than recomputed.
+2. **A module-shaped entry point.** Take the edited module paths, find the units
+   whose imports resolve into them, add their transitive script-unit dependents,
+   and re-derive in index order -- exactly what `relower_reach` does from a unit.
+3. **Engine support**, so it is reachable rather than latent. Nothing in
+   `datalove-repl` can edit a module today, which is the only reason this gap is
+   not a live bug.
+
+**One thing to be careful of.** After a module *signature* change `ScriptEnv`
+does re-intern, so any unit that is asked will re-typecheck. A driver that
+re-derives the whole script on any module edit would therefore over-propagate
+where the old behaviour under-propagated. Narrowing the env so a unit depends
+only on the modules it imports from is the sound end state -- and it is the same
+whole-world-aggregate-in-a-per-unit-key shape that has come up six times now --
+but the correctness fix is the driver, and the narrowing can follow.
