@@ -22,6 +22,8 @@ and syntax of Datalove in general.
 
 ## Contents
 
+<div class="toc toc-repeat-6">
+
 - [An example](#user-content-an-example)
 - [Lexical structure](#user-content-lexical-structure)
 - [Expressions](#user-content-expressions)
@@ -35,7 +37,7 @@ and syntax of Datalove in general.
 - [Canonical forms](#user-content-canonical-forms)
 - [Bugs and open questions](#user-content-bugs-and-open-questions)
 
-
+</div>
 
 
 

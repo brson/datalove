@@ -184,7 +184,7 @@ but I do have a [vision](principles.md) about what it will be.
 
 ---
 
-<div class="toc toc1">
+<div class="toc toc-repeat-2">
 
 - [Datalove Literals](datalit.md)
 - [Datalove Functions](datafun.md)
@@ -194,7 +194,7 @@ but I do have a [vision](principles.md) about what it will be.
 
 ---
 
-<div class="toc toc2">
+<div class="toc toc-repeat-7">
 
 - [Lexical Structure](lexer.md)
 - [Datalove Types](types.md)

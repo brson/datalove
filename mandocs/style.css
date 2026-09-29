@@ -629,11 +629,17 @@ th {
     column-gap: 2rem;
 }
 
-.toc.toc1 ul {
+.toc.toc-repeat-2 ul {
     grid-template-rows: repeat(2, auto);
+    list-style-type: decimal;
 }
-.toc.toc2 ul {
+.toc.toc-repeat-6 ul {
+    grid-template-rows: repeat(6, auto);
+    list-style-type: decimal;
+}
+.toc.toc-repeat-7 ul {
     grid-template-rows: repeat(7, auto);
+    list-style-type: decimal;
 }
 
 .toc li {
