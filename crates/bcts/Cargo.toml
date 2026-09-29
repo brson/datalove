@@ -1,6 +1,6 @@
 [package]
 name = "bcts"
-version = "0.6.3"
+version = "0.7.0"
 license = "Apache-2.0 OR MIT"
 authors = ["Brian Anderson <andersrb@gmail.com>"]
 description = "Incremental compiler infrastructure using Salsa"
