@@ -18,6 +18,7 @@ Specifications, research, design documents, implementation plans, and reports.
 - [The Datafun IR](ir.md)
 - [Generics: how it works](generics.md)
 - [REPL Architecture](repl-architecture.md)
+- [The Responsive Scripting Environment](script-reactivity-architecture.md)
 - [Datalit Grammar (EBNF)](datalit-ebnf.md)
 - [Datalit Typing Rules](datalit-typing-rules.md)
 - [Datafun Typing Rules](datafun-typing-rules.md)

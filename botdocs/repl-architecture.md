@@ -3,7 +3,8 @@
 How the REPL is put together, and the decisions that shaped it.
 
 The UI model it aims at is `mandocs/repl-ui.md`; the semantics it implements
-are `mandocs/script-semantics.md`.
+are `mandocs/script-semantics.md`. How an edit reaches the units that depend on
+it is [script-reactivity-architecture.md](script-reactivity-architecture.md).
 
 ## Crates
 

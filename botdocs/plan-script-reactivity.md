@@ -3,6 +3,10 @@
 Editing a script unit should re-analyze and re-execute the units that depend on
 it, and no others.
 
+**This is the plan, kept for why things are shaped as they are and what was tried
+and rejected.** What the code actually is, and how it is validated, is
+[script-reactivity-architecture.md](script-reactivity-architecture.md).
+
 Given units A B C D where C does not depend on B, editing B re-analyzes and
 re-executes B and D. A is untouched because it is upstream. **C is untouched
 because it does not use anything B provides**, even though it sits between them.
