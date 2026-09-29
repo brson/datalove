@@ -446,3 +446,57 @@ The measurement to hold the whole thing to is the one the
 build A B C D, edit B, and count how many units re-ran each phase. Today the
 answer for analysis is B, C and D; it should be B and D. Write that test first,
 against today's behaviour, so the target is a number rather than a description.
+
+## Confidence, and what is not covered
+
+Written after auditing the suites rather than from memory.
+
+**Solid, and falsified rather than merely asserted.** The unit-to-unit reach is
+the thing the stages were for, and it is held three ways: the graph
+(`script_graph_tests`), analysis (`script_reactivity_tests`), and lowering and
+execution (`script_exec_reactivity_tests`) -- 38 tests between them and
+`script_const_tests`. The expectations are *derived from the graph* rather than
+written down, with a separate test pinning that the fixture is the shape the
+claim is about. Every stage was checked against injected faults: stage B against
+a spurious dependency, stage C against four -- a one-step reach, a reach widened
+to every later unit, one narrowed to the edited unit, and `replace_frame` with
+its destroy removed. Each reported the old answer. The `(unit_index, ValueId)`
+property the whole design rests on is checked by walking a unit's serialized IR
+for external references rather than by argument.
+
+**The gap that matters: a module edit does not reach the script.** Editing a
+module leaves the units that import from it stale --
+`editing_a_module_does_not_reach_the_script_and_leaves_it_stale` pins it. Not
+reachable from shipped code, since nothing in `datalove-repl` can edit a module,
+so a session's modules are fixed once it starts. But it is the same
+analysis-versus-execution split stage C exists for, in the module direction, and
+`relower_reach` has no module-shaped entry point.
+
+**Thinner than it looks:**
+
+- **The lowering reach is the compiler's own answer.** There is no per-unit salsa
+  query in phases 2 to 5 to record, so unlike the analysis reach it is not
+  measured from outside -- it is held to a graph-derived expectation and to the
+  falsification experiments. `analyze_script_fragment_tracked` is not a
+  substitute: it is keyed on the typecheck result and statement handles, which a
+  value-only edit does not move.
+- **The alias edge is the one edge not derived from a read.** Correct and tested;
+  see the section above.
+- **Removing a unit is untested and probably wrong.** Everything here edits or
+  appends. The frame store's numbering and every `(unit, value)` reference share
+  an index that cannot have a hole in it, which is why a failed re-lower keeps
+  its frame -- removal has the same problem and nothing addresses it.
+- **Nothing tests a long session.** The fixtures are three or four units. The
+  reach is transitive and the records fold from the start each time, so the cost
+  per edit grows with the session; nobody has measured where that stops being
+  free.
+- **`Engine` re-derives the module compilation per line**, resting on
+  `ScriptEnv` interning to the same handle each time -- which holds because
+  `ModuleSpec` compares equal over unchanged modules. If a `ModuleSpec` field
+  ever became unstable across compiles, every script memo would be lost
+  silently, and nothing tests that.
+- **Ownership across a re-execution is untested.** A unit copies out of earlier
+  bindings rather than moving from them, which is what makes re-running B safe
+  for C. No test puts a move across units through an edit, and
+  `repl-architecture.md` says this is where non-cloneable types will break the
+  model.

@@ -737,3 +737,83 @@ fn editing_a_require_reaches_a_later_import_and_nothing_else() {
         "unit 1 imports an alias that no longer exists, so it must stop compiling",
     );
 }
+
+// ============================================================================
+// Modules, which the reach does not cover
+// ============================================================================
+
+/// **A known gap, pinned.** Editing a module does not reach the script units
+/// that import from it, and they go stale.
+///
+/// `a` is `f(1)` under a module whose `f` returns its argument. Change `f` to
+/// return 42 and `a` is still 1: no script unit re-typechecks, appending a unit
+/// afterwards re-typechecks only the new one, and nothing re-executes.
+///
+/// **Two different things are happening and only one of them is wrong.** No unit
+/// re-typechecking is *correct*: a module body change moves no type, and
+/// `ModuleSpec` holds the module's `ParsedStatements`, which compare equal
+/// because a `StmtFun`'s identity is `(module_id, name, local_index)` and its
+/// body rides a tracked field. So `ScriptEnv` interns to the same handle and
+/// nothing is re-keyed. That is the parse firewall working.
+///
+/// Execution is the wrong half, and it is the same distinction stage C exists
+/// for: a change that moves no type still moves a value, so execution has to
+/// cascade where analysis does not. Stage C's reach is driven by an edited
+/// *script unit* -- `relower_reach(index)` -- and there is no module-to-unit
+/// edge in it and no entry point to say "a module changed".
+///
+/// **Not reachable from shipped code.** Nothing in `datalove-repl` can edit a
+/// module: there is no `update_source` or workspace-delta path in the engine, so
+/// a session's modules are fixed once it starts. This is reachable only by
+/// driving the pipeline directly, as here.
+///
+/// Fixing it means an entry point that takes a module edit and re-derives the
+/// units whose imports resolve into that module, which is the module-shaped
+/// version of what `relower_reach` already does. When that lands this test wants
+/// inverting.
+#[test]
+fn editing_a_module_does_not_reach_the_script_and_leaves_it_stale() {
+    let db = datafun::Database::default();
+    let mut pipeline = ModuleCompilationPipeline::new(CompilerOptions::default());
+    pipeline.add_module(&db, "local", "test", "m",
+        "fun f(x: u32): u32\n    ret x\nend fun\n");
+    let (script, executor) = {
+        let compiled = pipeline.compile_fresh(&db);
+        assert!(compiled.is_successful(), "{:?}", compiled.all_errors());
+        let script = compiled
+            .script_compiler_default(&db).expect("a script compiler").into_session();
+        let executor = compiled
+            .script_executor(datalove_rt::c::DebugOutputMode::Buffer, None)
+            .expect("a script executor");
+        (script, executor)
+    };
+    let mut session = Session { db, pipeline, script: Some(script), executor };
+
+    session.append("require module local/test/m\nimport m.f\nlet a = f(1)\ndebuglog a\n");
+    session.append("let b = 2\ndebuglog b\n");
+    assert_eq!(session.binding("a"), "1");
+
+    // A body change, so no signature and no type moves.
+    session.pipeline.update_source(
+        &mut session.db, "local", "test", "m",
+        "fun f(x: u32): u32\n    ret 42\nend fun\n");
+
+    let compiled = session.pipeline.compile_fresh(&session.db);
+    assert!(compiled.is_successful(), "the edited module compiles: {:?}", compiled.all_errors());
+    session.script = Some(
+        compiled
+            .script_compiler_resumed(&session.db, session.script.take().expect("a session"))
+            .expect("a script compiler")
+            .into_session(),
+    );
+
+    assert_eq!(
+        session.binding("a"), "1",
+        "if this reads 42 the gap has closed -- invert this test",
+    );
+
+    // And a later append does not drag the earlier units along either.
+    session.append("let c = 3\ndebuglog c\n");
+    assert_eq!(session.binding("a"), "1", "still stale after an append");
+    assert_eq!(session.binding("c"), "3");
+}
