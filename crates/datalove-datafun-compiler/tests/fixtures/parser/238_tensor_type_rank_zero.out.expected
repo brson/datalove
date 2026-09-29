@@ -1,0 +1,42 @@
+{
+  "ast": {
+    "statements": [
+      {
+        "kind": "Let",
+        "name": "v",
+        "type_hint": {
+          "ParseError": {
+            "message": "a tensor has at least one axis"
+          }
+        },
+        "value": {
+          "expr": {
+            "elements": [],
+            "header": false,
+            "kind": "Tensor",
+            "shape": [
+              0
+            ],
+            "type_hint": null
+          }
+        }
+      }
+    ]
+  },
+  "diagnostics": [
+    {
+      "code": "D042",
+      "labels": [
+        {
+          "message": "rank 0 is refused",
+          "span": [
+            14,
+            15
+          ],
+          "text": "0"
+        }
+      ],
+      "message": "a tensor has at least one axis"
+    }
+  ]
+}

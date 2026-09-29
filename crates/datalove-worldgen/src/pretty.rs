@@ -127,9 +127,20 @@ fn write_expr<'db>(
 
         Expr::Tensor(t) => {
             out.push_str("[| ");
-            let shape = &t.shape;
-            let elements = &t.elements;
-            write_tensor_elements(db, shape, elements, out);
+            if t.header {
+                // Under a header the body goes flat, which every shape allows.
+                for extent in &t.shape {
+                    out.push_str(&extent.to_string());
+                    out.push(' ');
+                }
+                out.push('|');
+                for elem in &t.elements {
+                    out.push(' ');
+                    write_expr_full(db, *elem, out);
+                }
+            } else {
+                write_tensor_elements(db, &t.shape, &t.elements, out);
+            }
             out.push_str(" |]");
         }
 
@@ -361,20 +372,11 @@ fn write_tensor_elements<'db>(
     elements: &[ExprFull<'db>],
     out: &mut String,
 ) {
-    if elements.is_empty() || shape.is_empty() {
+    // A shape the separators cannot show was written with a header.
+    if elements.is_empty() {
         return;
     }
-    let rank = shape.len();
     write_tensor_group(db, shape, elements, 0, out);
-
-    // When the outermost dimension is 1, the highest comma level (rank - 1)
-    // never appears as a separator. Emit trailing commas so the parser can
-    // infer the correct rank.
-    if rank > 1 && shape[0] == 1 {
-        for _ in 0..(rank - 1) {
-            out.push(',');
-        }
-    }
 }
 
 fn write_tensor_group<'db>(

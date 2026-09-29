@@ -18,11 +18,20 @@
               }
             },
             "type_hint": null
+          },
+          {
+            "expr": {
+              "Int": {
+                "value": "3"
+              }
+            },
+            "type_hint": null
           }
         ],
+        "header": true,
         "shape": [
           1,
-          2
+          3
         ]
       }
     },

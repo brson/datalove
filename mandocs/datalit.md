@@ -547,6 +547,8 @@ typed by element type and rank.
 [| 1 2, 3 4,, 5 6, 7 8 |]      // 3D, shape [2, 2, 2]
 : [|u32, 2|] / [| 1 2, 3 4 |]  // typed: element u32, rank 2
 [| |]                          // empty tensor, rank 1, shape [0]
+[| 2 3 | 1 2 3 4 5 6 |]        // shape [2, 3], given in a header
+[| 0 3 | |]                    // empty tensor, shape [0, 3]
 ```
 
 Shape is inferred from the multi-comma structure:
@@ -572,22 +574,44 @@ using blank lines to visually separate the higher axes:
 
   2.0 0.0 0.0,
   0.0 2.0 0.0,
-  0.0 0.0 2.0,
+  0.0 0.0 2.0
 |]
 ```
 
-When the outermost dimension is 1,
-the highest comma level never appears as a separator.
-Trailing commas preserve rank in this case:
-`[| 1 2 3, |]` is a rank-2 tensor with shape [1, 3],
-not a rank-1 tensor with shape [3].
-The number of trailing commas equals rank minus one.
-
-Trailing is the only place a separator may have nothing beside it.
-A comma with nothing before it separates nothing,
-so `[| ,1 2 |]` does not parse.
+A comma run goes between two parts and nowhere else.
+One with nothing before it or after it separates nothing,
+so `[| ,1 2 |]` and `[| 1 2, |]` do not parse:
+unlike every other bracketed list,
+a tensor takes no trailing comma,
+since its commas say its shape.
 Blank lines are whitespace here and mean nothing to the shape,
 which is what lets the layout above breathe.
+
+Some shapes cannot be shown by separators:
+an axis of extent 0 above the innermost one has no parts to separate,
+and a leading axis of extent 1 has no separator to show it.
+These are written with a shape header,
+the extents as whole numbers and then a `|`:
+
+```datalove
+[| 1 3 | 1 2 3 |]              // shape [1, 3]
+[| 0 3 | |]                    // shape [0, 3], empty
+[| 2 0 | |]                    // shape [2, 0], empty, and not the same value
+[| 2 2 | 1 2 3 4 |]            // shape [2, 2], body written flat
+[| 2 2 | 1 2, 3 4 |]           // shape [2, 2], body shaped as the header says
+```
+
+Any tensor may have a header.
+Under one, the body is written flat, with no commas,
+filling the shape in row-major order,
+or shaped exactly as the header says;
+a body shaped any other way is an error.
+A header is the simple way to write out a large tensor:
+the extents, a `|`, and every element.
+
+A tensor has at least one axis.
+There are no rank-0 tensors,
+so neither `[|T, 0|]` nor an empty header, `[| | 7 |]`, is accepted.
 
 The type specifies element type and rank: `[|T, N|]`.
 Shape is not part of the type &mdash;
@@ -603,13 +627,16 @@ list_type      = "[", ws, type, [ ws, "," ], ws, "]" ;
 map_type       = "%{", ws, type, ws, "=", ws, type, [ ws, "," ], ws, "}" ;
 set_type       = "#{", ws, type, [ ws, "," ], ws, "}" ;
 table_type     = "{|", ws, [ type_field_list ], ws, "|}" ;
-tensor_type    = "[|", ws, type, ws, ",", ws, digit, { digit }, ws, "|]" ;
+tensor_type    = "[|", ws, type, ws, ",", ws, rank, [ ws, "," ], ws, "|]" ;
+rank           = nonzero_digit, { digit } ;
 
 list_expr      = "[", ws, [ expr_list ], ws, "]" ;
 map_expr       = "%{", ws, [ entry_list ], ws, "}" ;
 set_expr       = "#{", ws, [ expr_list ], ws, "}" ;
 table_expr     = "{|", ws, table_header, table_rows, ws, "|}" ;
-tensor_expr    = "[|", ws, [ tensor_body ], ws, "|]" ;
+tensor_expr    = "[|", ws, [ tensor_header ], [ tensor_body ], ws, "|]" ;
+tensor_header  = extent, { ws, extent }, ws, "|", ws ;
+extent         = digit_run ;
 
 expr_list      = full_expr, { ws, ",", ws, full_expr }, [ ws, "," ] ;
 entry_list     = entry, { ws, ",", ws, entry }, [ ws, "," ] ;
@@ -620,14 +647,14 @@ table_rows     = { ws, table_row } ;
 table_row      = full_expr, { ws, ",", ws, full_expr }, [ ws, "," ], [ row_sep ] ;
 row_sep        = ";" | newline ;
 
-tensor_body    = tensor_row, { ws, comma_run, ws, tensor_row },
-                 [ ws, comma_run ] ;
+tensor_body    = tensor_row, { ws, comma_run, ws, tensor_row } ;
 tensor_row     = full_expr, { ws, full_expr } ;
 comma_run      = ",", { ws, "," } ;
 ```
 
 Within a table, `ws` does not include newlines, which are `row_sep`.
-The grammar does not express the tensor shape rules above.
+The grammar does not express the tensor shape rules above,
+nor that a header's extents agree with its body.
 
 
 
@@ -1053,7 +1080,6 @@ It prints no type hints.
 - Should empty collections synthesize?
 - What are the rules for printing disambiguating type hints?
 - What are the rules for printing disambiguating floats, etc?
-- How can we make tensors accept trailing commas? (Tables do.)
 - Should dupe map/set keys be an error?
 - Why can't tables synthesize?
 - Why are semicolons special inside tables?

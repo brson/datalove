@@ -116,7 +116,11 @@ pub unsafe fn tensor_create_from_slice_impl(
     _tensor_tydesc_ref: TyDescRef,
 ) -> RtStatus {
     unsafe {
-        if tensor_value_out.is_null() || slice_ptr_ref.is_null() || shape_in.is_null() {
+        // An empty slice may have no address; the elements are only read
+        // when there are some.
+        if tensor_value_out.is_null() || shape_in.is_null()
+            || (slice_ptr_ref.is_null() && slice_len != rtdt::Index::ZERO)
+        {
             return RtStatus::Error;
         }
 
@@ -149,12 +153,17 @@ pub unsafe fn tensor_create_from_slice_impl(
         let element_size = element_tydesc_ref.size();
         let element_align = element_tydesc_ref.align();
 
-        // Allocate data buffer.
-        let data_ptr = rt_ref.alloc.alloc(element_size, element_align, total_elems);
-        if data_ptr.is_null() {
-            let _ = crate::impls::list::list_destroy_impl(rt_ref, shape_in, shape_tydesc_ref);
-            return RtStatus::Error;
-        }
+        // Allocate data buffer; an empty tensor has none, and keeps its shape.
+        let data_ptr = if total_elems == 0 {
+            std::ptr::null_mut()
+        } else {
+            let data_ptr = rt_ref.alloc.alloc(element_size, element_align, total_elems);
+            if data_ptr.is_null() {
+                let _ = crate::impls::list::list_destroy_impl(rt_ref, shape_in, shape_tydesc_ref);
+                return RtStatus::Error;
+            }
+            data_ptr
+        };
 
         // Allocate shape array (Usize per dimension).
         let shape_array_ptr = rt_ref.alloc.alloc(
@@ -163,7 +172,7 @@ pub unsafe fn tensor_create_from_slice_impl(
             rank.0,
         ) as *mut rtdt::Index;
         if shape_array_ptr.is_null() {
-            rt_ref.alloc.free(element_size, element_align, total_elems, data_ptr);
+            if !data_ptr.is_null() { rt_ref.alloc.free(element_size, element_align, total_elems, data_ptr); }
             let _ = crate::impls::list::list_destroy_impl(rt_ref, shape_in, shape_tydesc_ref);
             return RtStatus::Error;
         }
@@ -175,7 +184,7 @@ pub unsafe fn tensor_create_from_slice_impl(
             rank.0,
         ) as *mut rtdt::Index;
         if strides_array_ptr.is_null() {
-            rt_ref.alloc.free(element_size, element_align, total_elems, data_ptr);
+            if !data_ptr.is_null() { rt_ref.alloc.free(element_size, element_align, total_elems, data_ptr); }
             rt_ref.alloc.free(
                 rtdt::INDEX_SIZE,
                 rtdt::INDEX_ALIGN,
@@ -209,7 +218,7 @@ pub unsafe fn tensor_create_from_slice_impl(
                         element_tydesc_ref.as_ptr(),
                     );
                 }
-                rt_ref.alloc.free(element_size, element_align, total_elems, data_ptr);
+                if !data_ptr.is_null() { rt_ref.alloc.free(element_size, element_align, total_elems, data_ptr); }
                 rt_ref.alloc.free(
                     rtdt::INDEX_SIZE,
                     rtdt::INDEX_ALIGN,
@@ -279,19 +288,9 @@ pub unsafe fn tensor_init_impl(
             return RtStatus::Error;
         }
 
-        // Handle empty tensor case.
-        if rank == 0 || element_count == rtdt::Index::ZERO {
-            let tensor_ptr = tensor_value_out as *mut rtdt::Tensor;
-            (*tensor_ptr).ptr_base = std::ptr::null_mut();
-            (*tensor_ptr).offset_elems = rtdt::Index::ZERO;
-            (*tensor_ptr).capacity_elems = rtdt::Index::ZERO;
-            (*tensor_ptr).shape = std::ptr::null();
-            (*tensor_ptr).strides = std::ptr::null();
-            (*tensor_ptr).layout = rtdt::TensorLayout::RowMajor;
-            return RtStatus::Ok;
-        }
-
-        if element_data_in.is_null() || shape_ptr.is_null() {
+        // A tensor has at least one axis; the language has no rank-0 tensors.
+        assert!(rank > 0, "a tensor has at least one axis");
+        if shape_ptr.is_null() {
             return RtStatus::Error;
         }
 
@@ -316,16 +315,26 @@ pub unsafe fn tensor_init_impl(
         let element_size = element_tydesc_ref.size();
         let element_align = element_tydesc_ref.align();
 
-        // Allocate data buffer and copy elements (move semantics - just memcpy).
-        let data_ptr = rt_ref.alloc.alloc(element_size, element_align, total_elems);
-        if data_ptr.is_null() {
-            return RtStatus::Error;
-        }
-        std::ptr::copy_nonoverlapping(
-            element_data_in,
-            data_ptr,
-            (total_elems as usize) * (element_size as usize),
-        );
+        // An empty tensor has no data to hold, and keeps its shape all the
+        // same: a 0x3 is not a 3x0.
+        let data_ptr = if total_elems == 0 {
+            std::ptr::null_mut()
+        } else {
+            if element_data_in.is_null() {
+                return RtStatus::Error;
+            }
+            // Allocate data buffer and copy elements (move semantics - just memcpy).
+            let data_ptr = rt_ref.alloc.alloc(element_size, element_align, total_elems);
+            if data_ptr.is_null() {
+                return RtStatus::Error;
+            }
+            std::ptr::copy_nonoverlapping(
+                element_data_in,
+                data_ptr,
+                (total_elems as usize) * (element_size as usize),
+            );
+            data_ptr
+        };
 
         // Allocate shape array (Usize per dimension).
         let shape_array_ptr = rt_ref.alloc.alloc(
@@ -334,7 +343,9 @@ pub unsafe fn tensor_init_impl(
             rank.into(),
         ) as *mut rtdt::Index;
         if shape_array_ptr.is_null() {
-            rt_ref.alloc.free(element_size, element_align, total_elems, data_ptr);
+            if !data_ptr.is_null() {
+                rt_ref.alloc.free(element_size, element_align, total_elems, data_ptr);
+            }
             return RtStatus::Error;
         }
         // Convert u32 shape values to Usize.
@@ -349,7 +360,9 @@ pub unsafe fn tensor_init_impl(
             rank.into(),
         ) as *mut rtdt::Index;
         if strides_array_ptr.is_null() {
-            rt_ref.alloc.free(element_size, element_align, total_elems, data_ptr);
+            if !data_ptr.is_null() {
+                rt_ref.alloc.free(element_size, element_align, total_elems, data_ptr);
+            }
             rt_ref.alloc.free(
                 rtdt::INDEX_SIZE,
                 rtdt::INDEX_ALIGN,

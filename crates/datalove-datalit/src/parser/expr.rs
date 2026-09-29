@@ -427,18 +427,33 @@ impl<'db> Parser<'db> {
             .filter_map(|t| t.without_space())
             .collect();
 
-        if tokens_no_ws.is_empty() {
-            // Empty tensor: [| |] - rank 1, no elements.
-            return ast::Expr::Tensor(ast::ExprTensor { shape: vec![0], elements: vec![] });
+        let (header, body) = split::split_tensor_header(self.db, tokens_no_ws);
+        let header = match header {
+            None => None,
+            Some(Ok(header)) => Some(header),
+            Some(Err(e)) => {
+                let ts = TextSpan::new(self.source_text(), e.span);
+                return self.emit_expr_error(ts, &e.message, "D040", &e.label);
+            }
+        };
+
+        // The widest separator written decides the rank. `[| |]` has no
+        // separator and no element, which is the empty tensor of rank 1.
+        let rank = split::max_comma_run(&body) + 1;
+        let (shape, elements) = self.parse_tensor_multicomma(&body, rank as u32);
+
+        let Some(header) = header else {
+            return ast::Expr::Tensor(ast::ExprTensor { shape, elements, header: false });
+        };
+
+        // Under a header the body is written flat, filled in row-major order,
+        // or shaped exactly as the header says.
+        let written = crate::parser_util::tensor_body_complaint(&header.extents, rank, &shape, elements.len());
+        if let Some((message, label)) = written {
+            let ts = TextSpan::new(self.source_text(), header.span);
+            return self.emit_expr_error(ts, &message, "D041", &label);
         }
-
-        // The widest separator written decides the rank.
-        let rank = split::max_comma_run(&tokens_no_ws) + 1;
-
-        // Recursively split by comma levels and parse.
-        let (shape, elements) = self.parse_tensor_multicomma(&tokens_no_ws, rank as u32);
-
-        ast::Expr::Tensor(ast::ExprTensor { shape, elements })
+        ast::Expr::Tensor(ast::ExprTensor { shape: header.extents, elements, header: true })
     }
 
     /// Parse tensor data from tokens with multi-comma structure.
@@ -465,6 +480,12 @@ impl<'db> Parser<'db> {
         let split_level = rank - 1;
         let groups = split::split_commas(tokens.iter().cloned(), split_level as usize);
         self.report_stray_delimiters(&groups, "parts");
+        if let Some(written) = split::trailing_delimiter(&groups) {
+            self.had_error = true;
+            split::trailing_delimiter_error(self.db, self.source_text(), &written, "parts")
+                .code("D033")
+                .emit_parse();
+        }
         let groups = split::nonempty_groups(groups);
 
         if groups.is_empty() {

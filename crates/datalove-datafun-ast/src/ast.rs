@@ -895,6 +895,9 @@ pub struct ExprTensor<'db> {
     pub type_hint: Option<datalit::ast::TypeHint<'db>>,
     pub shape: Vec<u32>,
     pub elements: Vec<ExprFun<'db>>,
+    /// Whether the shape was written in a header, `[| 2 3 | ... |]`, rather
+    /// than read off the body's separators.
+    pub header: bool,
 }
 
 #[derive(Clone, Hash, PartialEq, Eq)]

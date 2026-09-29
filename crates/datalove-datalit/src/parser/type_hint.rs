@@ -215,10 +215,17 @@ pub fn parse_type_hint<'db, S: TypeHintStream<'db>>(stream: &mut S) -> ast::Type
                         "expected ',' after element type",
                     ))
                 } else {
+                    let ts = sub_parser.peek_text_span();
                     match sub_parser.parse_u32_literal() {
+                        Some(0) => Err((
+                            ts,
+                            "a tensor has at least one axis",
+                            "D042",
+                            "rank 0 is refused",
+                        )),
                         Some(r) => Ok(r),
                         None => Err((
-                            sub_parser.peek_text_span(),
+                            ts,
                             "expected rank (positive integer)",
                             "D008",
                             "expected rank",
@@ -226,6 +233,8 @@ pub fn parse_type_hint<'db, S: TypeHintStream<'db>>(stream: &mut S) -> ast::Type
                     }
                 };
                 if rank.is_ok() {
+                    // A trailing comma closes the rank, as it may in any list.
+                    sub_parser.eat_sigil(Sigil::Comma);
                     sub_parser.error_if_not_exhausted_type_hint();
                 }
                 stream.absorb_aliases(sub_parser.take_alias_spans(), sub_parser.alias_counter);

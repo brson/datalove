@@ -491,8 +491,8 @@ fn test_pretty_tensor_2d() -> AnyResult<()> {
 #[test]
 fn test_pretty_tensor_2d_single_row() -> AnyResult<()> {
     test_pretty(
-        ": [|u32, 2|] / [| 1 2 3, |]",
-        "[| 1 2 3, |]",
+        ": [|u32, 2|] / [| 1 3 | 1 2 3 |]",
+        "[| 1 3 | 1 2 3 |]",
     )
 }
 

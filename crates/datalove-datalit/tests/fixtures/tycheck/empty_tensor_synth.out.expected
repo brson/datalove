@@ -3,6 +3,7 @@
     "expr": {
       "Tensor": {
         "elements": [],
+        "header": false,
         "shape": [
           0
         ]

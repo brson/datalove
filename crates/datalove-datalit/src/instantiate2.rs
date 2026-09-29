@@ -1393,19 +1393,19 @@ fn instantiate_tensor<'db>(
             std::ptr::null_mut()
         };
 
-        // Allocate shape array (IndexRepr per dimension).
-        let shape_ptr = if rank > 0 {
+        // Allocate shape array (IndexRepr per dimension). A tensor has at
+        // least one axis, and keeps its shape even when it holds nothing.
+        assert!(rank > 0, "a tensor has at least one axis");
+        let shape_ptr = {
             let shape_array = datalove_rt::c::dtlv_rti_mem_alloc_raw_local(rt, rtdt::INDEX_SIZE, rtdt::INDEX_ALIGN, (rank as u32).into()) as *mut rtdt::IndexRepr;
             for (i, &dim) in shape.iter().enumerate() {
                 *shape_array.add(i) = dim as rtdt::IndexRepr;
             }
             shape_array as *const rtdt::Index
-        } else {
-            std::ptr::null()
         };
 
         // Allocate and compute strides array (IndexRepr per dimension).
-        let strides_ptr = if rank > 0 {
+        let strides_ptr = {
             let strides_array = datalove_rt::c::dtlv_rti_mem_alloc_raw_local(rt, rtdt::INDEX_SIZE, rtdt::INDEX_ALIGN, (rank as u32).into()) as *mut rtdt::IndexRepr;
 
             // Compute strides for row-major layout.
@@ -1416,8 +1416,6 @@ fn instantiate_tensor<'db>(
             }
 
             strides_array as *const rtdt::Index
-        } else {
-            std::ptr::null()
         };
 
         // Always use row-major layout for tensor literals.

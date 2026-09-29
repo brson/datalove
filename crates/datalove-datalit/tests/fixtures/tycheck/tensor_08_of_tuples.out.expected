@@ -104,6 +104,7 @@
             "type_hint": null
           }
         ],
+        "header": false,
         "shape": [
           2,
           2

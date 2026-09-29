@@ -52,6 +52,7 @@
             "type_hint": null
           }
         ],
+        "header": false,
         "shape": [
           3,
           2

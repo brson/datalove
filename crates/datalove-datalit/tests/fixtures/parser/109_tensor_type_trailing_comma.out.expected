@@ -1,0 +1,54 @@
+{
+  "ast": {
+    "expr": {
+      "Tensor": {
+        "elements": [
+          {
+            "expr": {
+              "Int": {
+                "value": "1"
+              }
+            },
+            "type_hint": null
+          },
+          {
+            "expr": {
+              "Int": {
+                "value": "2"
+              }
+            },
+            "type_hint": null
+          },
+          {
+            "expr": {
+              "Int": {
+                "value": "3"
+              }
+            },
+            "type_hint": null
+          },
+          {
+            "expr": {
+              "Int": {
+                "value": "4"
+              }
+            },
+            "type_hint": null
+          }
+        ],
+        "header": false,
+        "shape": [
+          2,
+          2
+        ]
+      }
+    },
+    "type_hint": {
+      "Tensor": {
+        "element_type": "U32",
+        "rank": 2
+      }
+    }
+  },
+  "diagnostics": []
+}

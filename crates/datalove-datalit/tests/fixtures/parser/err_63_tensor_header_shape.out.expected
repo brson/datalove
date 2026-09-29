@@ -1,0 +1,26 @@
+{
+  "ast": {
+    "expr": {
+      "ParseError": {
+        "message": "the shape says `2 3`, and the body is shaped `3 2`"
+      }
+    },
+    "type_hint": null
+  },
+  "diagnostics": [
+    {
+      "code": "D041",
+      "labels": [
+        {
+          "message": "a body under a shape is written flat, or shaped as it says",
+          "span": [
+            3,
+            8
+          ],
+          "text": "2 3 |"
+        }
+      ],
+      "message": "the shape says `2 3`, and the body is shaped `3 2`"
+    }
+  ]
+}

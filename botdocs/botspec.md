@@ -310,9 +310,15 @@ Type hints specify element type and rank:
 
 Shape is inferred from the multi-comma structure: spaces separate elements
 along the innermost axis, `,` separates rows (2nd axis), `,,` separates
-slabs (3rd axis), `,,,` separates blocks (4th axis), etc. When the outermost
-dimension is 1, a trailing comma run preserves rank: `[| 1 2 3, |]` is a
-rank-2 tensor with shape [1, 3].
+slabs (3rd axis), `,,,` separates blocks (4th axis), etc. A comma run goes
+only between two parts, so a tensor takes no trailing comma.
+
+A shape the separators cannot show -- a zero extent above the innermost axis,
+or a leading extent of 1 -- is written in a header before a `|`, and the body
+after it either flat, in row-major order, or shaped as the header says:
+`[| 1 3 | 1 2 3 |]` has shape [1, 3], `[| 0 3 | |]` is an empty 0x3 tensor,
+and `[| 2 3 | 1 2 3 4 5 6 |]` is a header over a flat body. A tensor has at
+least one axis: `[|T, 0|]` is refused.
 
 Because the innermost axis is separated by nothing but whitespace, an
 operator's spacing decides how many elements a row has (Section 2.4):

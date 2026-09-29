@@ -564,20 +564,12 @@ pub struct Tensor {
     pub layout: TensorLayout,
 }
 
-/// How many elements a shape describes.
+/// How many elements a tensor of this shape holds: the product of its extents.
 ///
-/// A shape with no extents describes nothing, which is not what the product of
-/// its extents says: the empty product is one. Anything that asks how many
-/// elements a tensor holds asks here, because answering one for a tensor that
-/// has no shape sends the asker off to read an element that is not there.
-///
-/// A tensor with nothing in it has no shape -- `tensor_init` nulls the shape
-/// pointer rather than storing extents -- so this is the case that arises,
-/// not a hypothetical.
+/// A tensor has at least one axis. An empty tensor keeps its shape, with a
+/// zero somewhere in it, so the product is what answers here too.
 pub fn tensor_element_count(extents: &[usize]) -> usize {
-    if extents.is_empty() {
-        return 0;
-    }
+    assert!(!extents.is_empty(), "a tensor has at least one axis");
     extents.iter().product()
 }
 

@@ -23,6 +23,7 @@
                 }
               }
             ],
+            "header": false,
             "kind": "Tensor",
             "shape": [
               1,

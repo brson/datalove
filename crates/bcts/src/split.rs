@@ -209,6 +209,103 @@ pub fn stray_delimiter_error<'db>(
         )
 }
 
+/// The delimiter that closed the last group, where nothing came after it.
+///
+/// A tensor's commas go between its parts and nowhere else, since a comma run
+/// there says which axis it separates. One at the end would close nothing and
+/// could only be read as saying something about the shape, which the header
+/// says instead.
+pub fn trailing_delimiter<'db>(groups: &[TokenGroup<'db>]) -> Option<Written> {
+    let [.., before, last] = groups else { return None };
+    if !last.is_empty() || last.end.is_some() {
+        return None;
+    }
+    match &before.end {
+        Some(Delimiter::Written(written)) => Some(written.C()),
+        Some(Delimiter::Newline) | None => None,
+    }
+}
+
+/// The diagnostic for a delimiter written with nothing after it.
+pub fn trailing_delimiter_error<'db>(
+    db: &'db dyn crate::Db,
+    text: Text<'db>,
+    written: &Written,
+    what: &str,
+) -> DiagnosticBuilder<'db> {
+    let sigil = written.as_string();
+    DiagnosticBuilder::error(db, &fmt!("nothing after this `{sigil}`"))
+        .primary_label(
+            TextSpan::new(text, written.span.C()),
+            &fmt!("a `{sigil}` goes between two {what}"),
+        )
+}
+
+/// A tensor literal's shape header, read off the front of its tokens.
+pub struct TensorHeader {
+    pub extents: Vec<u32>,
+    /// The header and the `|` that ends it.
+    pub span: Range<usize>,
+}
+
+/// What is wrong with a tensor's shape header.
+pub struct TensorHeaderError {
+    pub span: Range<usize>,
+    pub message: String,
+    pub label: String,
+}
+
+/// Split a tensor's tokens at the `|` that ends its shape header, if there
+/// is one, and read the header's extents.
+///
+/// The tokens must already have had their whitespace taken out. What comes
+/// before the first `|` is the header: whole numbers, one per axis, of which
+/// there has to be at least one, since a tensor has at least one axis.
+pub fn split_tensor_header<'db>(
+    db: &'db dyn crate::Db,
+    tokens: Vec<TreeToken<'db>>,
+) -> (Option<Result<TensorHeader, TensorHeaderError>>, Vec<TreeToken<'db>>) {
+    let is_pipe = |t: &TreeToken<'db>| {
+        matches!(t, TreeToken::Token(t) if t.kind == TokenKind::Sigil(Sigil::Pipe))
+    };
+    let Some(pipe) = tokens.iter().position(is_pipe) else {
+        return (None, tokens);
+    };
+    let mut tokens = tokens;
+    let body = tokens.split_off(pipe.checked_add(1).X());
+    let pipe_token = tokens.pop().X();
+    let header = tokens;
+
+    let start = header.first().unwrap_or(&pipe_token).span().start;
+    let span = start..pipe_token.span().end;
+    if header.is_empty() {
+        return (Some(Err(TensorHeaderError {
+            span,
+            message: S("a tensor's shape has no extents"),
+            label: S("a tensor has at least one axis, and the shape gives each its extent"),
+        })), body);
+    }
+
+    let mut extents = vec![];
+    for token in &header {
+        let extent = match token {
+            TreeToken::Token(t) => t.word_str(db)
+                .filter(|w| crate::parser_util::is_decimal_run(w))
+                .and_then(|w| crate::parser_util::strip_separators(w).parse::<u32>().ok()),
+            TreeToken::Branch { .. } => None,
+        };
+        match extent {
+            Some(extent) => extents.push(extent),
+            None => return (Some(Err(TensorHeaderError {
+                span: token.span(),
+                message: S("a tensor's shape is written as whole numbers"),
+                label: S("expected the extent of an axis"),
+            })), body),
+        }
+    }
+    (Some(Ok(TensorHeader { extents, span })), body)
+}
+
 /// The groups with tokens in them, which is what a caller parses.
 pub fn nonempty_groups<'db>(groups: Vec<TokenGroup<'db>>) -> Vec<Vec<TreeToken<'db>>> {
     groups

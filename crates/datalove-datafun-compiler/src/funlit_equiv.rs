@@ -115,6 +115,7 @@ pub fn datafun_expr_to_datalit_serde<'db>(
                 datalit::ast_serde::Expr::Tensor(datalit::ast_serde::ExprTensor {
                     shape: e.shape.C(),
                     elements,
+                    header: e.header,
                 }),
             )
         }

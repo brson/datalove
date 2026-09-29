@@ -1,0 +1,16 @@
+{
+  "ast": {
+    "expr": {
+      "Tensor": {
+        "elements": [],
+        "header": true,
+        "shape": [
+          0,
+          3
+        ]
+      }
+    },
+    "type_hint": null
+  },
+  "diagnostics": []
+}

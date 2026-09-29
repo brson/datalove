@@ -467,6 +467,7 @@ pub struct ExprTensor {
     pub type_hint: Option<datalove_datalit::ast_serde::TypeHint>,
     pub shape: Vec<u32>,
     pub elements: Vec<ExprFun>,
+    pub header: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -1118,6 +1119,7 @@ impl ExprTensor {
             type_hint: type_hint_from_ast(db, ast.type_hint.clone()),
             shape: ast.shape.clone(),
             elements: ast.elements.iter().map(|e| ExprFun::from_ast(db, *e)).collect(),
+            header: ast.header,
         }
     }
 }

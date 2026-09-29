@@ -862,75 +862,65 @@ unsafe fn eq_value(
                 let rank = td.tensor_rank();
 
                 // Compare shapes.
-                if rank > 0 {
-                    let shape_a = std::slice::from_raw_parts(tensor_a.shape, rank as usize);
-                    let shape_b = std::slice::from_raw_parts(tensor_b.shape, rank as usize);
+                assert!(rank > 0, "a tensor has at least one axis");
+                let shape_a = std::slice::from_raw_parts(tensor_a.shape, rank as usize);
+                let shape_b = std::slice::from_raw_parts(tensor_b.shape, rank as usize);
 
-                    if shape_a != shape_b {
+                if shape_a != shape_b {
+                    return false;
+                }
+
+                // Compute total number of elements.
+                let total_elems: rtdt::IndexRepr = shape_a.iter().map(|u| u.0).product();
+
+                if total_elems == 0 {
+                    return true;  // Empty tensors with matching shapes are equal.
+                }
+
+                let element_ty = td.tensor_element_ty();
+                let element_size = element_ty.size() as usize;
+                let strides_a = std::slice::from_raw_parts(tensor_a.strides, rank as usize);
+                let strides_b = std::slice::from_raw_parts(tensor_b.strides, rank as usize);
+
+                // Iterate through all multi-dimensional indices.
+                let mut indices: Vec<rtdt::IndexRepr> = vec![0; rank as usize];
+                for _ in 0..total_elems {
+                    // Compute linear offset for tensor_a.
+                    let mut offset_a = tensor_a.offset_elems.0;
+                    for (i, &idx) in indices.iter().enumerate() {
+                        offset_a += idx * strides_a[i].0;
+                    }
+                    let elem_a = tensor_a.ptr_base.add((offset_a as usize) * element_size);
+
+                    // Compute linear offset for tensor_b.
+                    let mut offset_b = tensor_b.offset_elems.0;
+                    for (i, &idx) in indices.iter().enumerate() {
+                        offset_b += idx * strides_b[i].0;
+                    }
+                    let elem_b = tensor_b.ptr_base.add((offset_b as usize) * element_size);
+
+                    // Compare elements.
+                    if !eq_value(elem_a, elem_b, element_ty, float_policy) {
                         return false;
                     }
 
-                    // Compute total number of elements.
-                    let total_elems: rtdt::IndexRepr = shape_a.iter().map(|u| u.0).product();
-
-                    if total_elems == 0 {
-                        return true;  // Empty tensors with matching shapes are equal.
-                    }
-
-                    let element_ty = td.tensor_element_ty();
-                    let element_size = element_ty.size() as usize;
-                    let strides_a = std::slice::from_raw_parts(tensor_a.strides, rank as usize);
-                    let strides_b = std::slice::from_raw_parts(tensor_b.strides, rank as usize);
-
-                    // Iterate through all multi-dimensional indices.
-                    let mut indices: Vec<rtdt::IndexRepr> = vec![0; rank as usize];
-                    for _ in 0..total_elems {
-                        // Compute linear offset for tensor_a.
-                        let mut offset_a = tensor_a.offset_elems.0;
-                        for (i, &idx) in indices.iter().enumerate() {
-                            offset_a += idx * strides_a[i].0;
+                    // Increment indices (like odometer).
+                    let mut carry: rtdt::IndexRepr = 1;
+                    for i in (0..rank as usize).rev() {
+                        if carry == 0 {
+                            break;
                         }
-                        let elem_a = tensor_a.ptr_base.add((offset_a as usize) * element_size);
-
-                        // Compute linear offset for tensor_b.
-                        let mut offset_b = tensor_b.offset_elems.0;
-                        for (i, &idx) in indices.iter().enumerate() {
-                            offset_b += idx * strides_b[i].0;
-                        }
-                        let elem_b = tensor_b.ptr_base.add((offset_b as usize) * element_size);
-
-                        // Compare elements.
-                        if !eq_value(elem_a, elem_b, element_ty, float_policy) {
-                            return false;
-                        }
-
-                        // Increment indices (like odometer).
-                        let mut carry: rtdt::IndexRepr = 1;
-                        for i in (0..rank as usize).rev() {
-                            if carry == 0 {
-                                break;
-                            }
-                            indices[i] += carry;
-                            if indices[i] >= shape_a[i].0 {
-                                indices[i] = 0;
-                                carry = 1;
-                            } else {
-                                carry = 0;
-                            }
+                        indices[i] += carry;
+                        if indices[i] >= shape_a[i].0 {
+                            indices[i] = 0;
+                            carry = 1;
+                        } else {
+                            carry = 0;
                         }
                     }
-
-                    true
-                } else {
-                    // Rank 0 tensor (scalar).
-                    let element_ty = td.tensor_element_ty();
-                    let element_size = element_ty.size() as usize;
-
-                    let elem_a = tensor_a.ptr_base.add(tensor_a.offset_elems.as_usize() * element_size);
-                    let elem_b = tensor_b.ptr_base.add(tensor_b.offset_elems.as_usize() * element_size);
-
-                    eq_value(elem_a, elem_b, element_ty, float_policy)
                 }
+
+                true
             }
             rtdt::TyTag::Table => {
                 let table_a = &*(value_a as *const rtdt::Table);
@@ -1343,86 +1333,76 @@ unsafe fn cmp_value(
                 let rank = td.tensor_rank();
 
                 // Compare shapes lexicographically.
-                if rank > 0 {
-                    let shape_a = std::slice::from_raw_parts(tensor_a.shape, rank as usize);
-                    let shape_b = std::slice::from_raw_parts(tensor_b.shape, rank as usize);
+                assert!(rank > 0, "a tensor has at least one axis");
+                let shape_a = std::slice::from_raw_parts(tensor_a.shape, rank as usize);
+                let shape_b = std::slice::from_raw_parts(tensor_b.shape, rank as usize);
 
-                    // Compare shapes dimension by dimension.
-                    for i in 0..rank as usize {
-                        if shape_a[i] < shape_b[i] {
-                            return crate::c::RtOrdering::Less;
-                        } else if shape_a[i] > shape_b[i] {
-                            return crate::c::RtOrdering::Greater;
-                        }
+                // Compare shapes dimension by dimension.
+                for i in 0..rank as usize {
+                    if shape_a[i] < shape_b[i] {
+                        return crate::c::RtOrdering::Less;
+                    } else if shape_a[i] > shape_b[i] {
+                        return crate::c::RtOrdering::Greater;
                     }
-
-                    // Shapes are equal, compare elements.
-                    let total_elems: rtdt::IndexRepr = shape_a.iter().map(|u| u.0).product();
-
-                    if total_elems == 0 {
-                        return crate::c::RtOrdering::Equal;  // Empty tensors with matching shapes are equal.
-                    }
-
-                    let element_ty = td.tensor_element_ty();
-                    let element_size = element_ty.size() as usize;
-                    let strides_a = std::slice::from_raw_parts(tensor_a.strides, rank as usize);
-                    let strides_b = std::slice::from_raw_parts(tensor_b.strides, rank as usize);
-
-                    // Iterate through all multi-dimensional indices lexicographically.
-                    let mut indices: Vec<rtdt::IndexRepr> = vec![0; rank as usize];
-                    for _ in 0..total_elems {
-                        // Compute linear offset for tensor_a.
-                        let mut offset_a = tensor_a.offset_elems.0;
-                        for (i, &idx) in indices.iter().enumerate() {
-                            offset_a += idx * strides_a[i].0;
-                        }
-                        let elem_a = tensor_a.ptr_base.add((offset_a as usize) * element_size);
-
-                        // Compute linear offset for tensor_b.
-                        let mut offset_b = tensor_b.offset_elems.0;
-                        for (i, &idx) in indices.iter().enumerate() {
-                            offset_b += idx * strides_b[i].0;
-                        }
-                        let elem_b = tensor_b.ptr_base.add((offset_b as usize) * element_size);
-
-                        // Compare elements.
-                        let elem_cmp = cmp_value(elem_a, elem_b, element_ty);
-                        match elem_cmp {
-                            crate::c::RtOrdering::Less => return crate::c::RtOrdering::Less,
-                            crate::c::RtOrdering::Greater => return crate::c::RtOrdering::Greater,
-                            crate::c::RtOrdering::Error => return crate::c::RtOrdering::Error,
-                            crate::c::RtOrdering::Equal => {
-                                // Continue to next element.
-                            }
-                        }
-
-                        // Increment indices (like odometer).
-                        let mut carry: rtdt::IndexRepr = 1;
-                        for i in (0..rank as usize).rev() {
-                            if carry == 0 {
-                                break;
-                            }
-                            indices[i] += carry;
-                            if indices[i] >= shape_a[i].0 {
-                                indices[i] = 0;
-                                carry = 1;
-                            } else {
-                                carry = 0;
-                            }
-                        }
-                    }
-
-                    crate::c::RtOrdering::Equal
-                } else {
-                    // Rank 0 tensor (scalar).
-                    let element_ty = td.tensor_element_ty();
-                    let element_size = element_ty.size() as usize;
-
-                    let elem_a = tensor_a.ptr_base.add(tensor_a.offset_elems.as_usize() * element_size);
-                    let elem_b = tensor_b.ptr_base.add(tensor_b.offset_elems.as_usize() * element_size);
-
-                    cmp_value(elem_a, elem_b, element_ty)
                 }
+
+                // Shapes are equal, compare elements.
+                let total_elems: rtdt::IndexRepr = shape_a.iter().map(|u| u.0).product();
+
+                if total_elems == 0 {
+                    return crate::c::RtOrdering::Equal;  // Empty tensors with matching shapes are equal.
+                }
+
+                let element_ty = td.tensor_element_ty();
+                let element_size = element_ty.size() as usize;
+                let strides_a = std::slice::from_raw_parts(tensor_a.strides, rank as usize);
+                let strides_b = std::slice::from_raw_parts(tensor_b.strides, rank as usize);
+
+                // Iterate through all multi-dimensional indices lexicographically.
+                let mut indices: Vec<rtdt::IndexRepr> = vec![0; rank as usize];
+                for _ in 0..total_elems {
+                    // Compute linear offset for tensor_a.
+                    let mut offset_a = tensor_a.offset_elems.0;
+                    for (i, &idx) in indices.iter().enumerate() {
+                        offset_a += idx * strides_a[i].0;
+                    }
+                    let elem_a = tensor_a.ptr_base.add((offset_a as usize) * element_size);
+
+                    // Compute linear offset for tensor_b.
+                    let mut offset_b = tensor_b.offset_elems.0;
+                    for (i, &idx) in indices.iter().enumerate() {
+                        offset_b += idx * strides_b[i].0;
+                    }
+                    let elem_b = tensor_b.ptr_base.add((offset_b as usize) * element_size);
+
+                    // Compare elements.
+                    let elem_cmp = cmp_value(elem_a, elem_b, element_ty);
+                    match elem_cmp {
+                        crate::c::RtOrdering::Less => return crate::c::RtOrdering::Less,
+                        crate::c::RtOrdering::Greater => return crate::c::RtOrdering::Greater,
+                        crate::c::RtOrdering::Error => return crate::c::RtOrdering::Error,
+                        crate::c::RtOrdering::Equal => {
+                            // Continue to next element.
+                        }
+                    }
+
+                    // Increment indices (like odometer).
+                    let mut carry: rtdt::IndexRepr = 1;
+                    for i in (0..rank as usize).rev() {
+                        if carry == 0 {
+                            break;
+                        }
+                        indices[i] += carry;
+                        if indices[i] >= shape_a[i].0 {
+                            indices[i] = 0;
+                            carry = 1;
+                        } else {
+                            carry = 0;
+                        }
+                    }
+                }
+
+                crate::c::RtOrdering::Equal
             }
             rtdt::TyTag::Table => {
                 let table_a = &*(value_a as *const rtdt::Table);

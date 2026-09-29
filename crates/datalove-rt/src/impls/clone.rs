@@ -310,13 +310,15 @@ unsafe fn clone_impl(
             let elem_size = element_ty.size();
             let elem_align = element_ty.align();
 
-            // Null pointer means genuinely empty tensor.
+            // No data means no elements, and the shape, which says how many
+            // of each there are none of, comes along all the same.
             if tensor_in.ptr_base.is_null() {
+                let rt_ref = unsafe { &mut *(rt as *mut rt_local::RtLocal) };
                 tensor_out.ptr_base = std::ptr::null_mut();
                 tensor_out.offset_elems = rtdt::Index::ZERO;
                 tensor_out.capacity_elems = rtdt::Index::ZERO;
-                tensor_out.shape = std::ptr::null();
-                tensor_out.strides = std::ptr::null();
+                tensor_out.shape = unsafe { copy_index_array(rt_ref, tensor_in.shape, rank) };
+                tensor_out.strides = unsafe { copy_index_array(rt_ref, tensor_in.strides, rank) };
                 tensor_out.layout = tensor_in.layout;
             } else if tensor_in.capacity_elems == rtdt::Index::ZERO {
                 // View tensor (capacity_elems == 0, ptr_base non-null).
@@ -351,43 +353,8 @@ unsafe fn clone_impl(
                     }
                 }
 
-                // Allocate and copy shape array.
-                let new_shape = if rank > 0 && !tensor_in.shape.is_null() {
-                    unsafe {
-                        let shape_ptr = rt_ref.alloc.alloc(
-                            rtdt::INDEX_SIZE,
-                            rtdt::INDEX_ALIGN,
-                            rank.into()
-                        ) as *mut rtdt::Index;
-                        std::ptr::copy_nonoverlapping(
-                            tensor_in.shape,
-                            shape_ptr,
-                            rank as usize
-                        );
-                        shape_ptr as *const rtdt::Index
-                    }
-                } else {
-                    std::ptr::null()
-                };
-
-                // Allocate and copy strides array.
-                let new_strides = if rank > 0 && !tensor_in.strides.is_null() {
-                    unsafe {
-                        let strides_ptr = rt_ref.alloc.alloc(
-                            rtdt::INDEX_SIZE,
-                            rtdt::INDEX_ALIGN,
-                            rank.into()
-                        ) as *mut rtdt::Index;
-                        std::ptr::copy_nonoverlapping(
-                            tensor_in.strides,
-                            strides_ptr,
-                            rank as usize
-                        );
-                        strides_ptr as *const rtdt::Index
-                    }
-                } else {
-                    std::ptr::null()
-                };
+                let new_shape = unsafe { copy_index_array(rt_ref, tensor_in.shape, rank) };
+                let new_strides = unsafe { copy_index_array(rt_ref, tensor_in.strides, rank) };
 
                 // Copy metadata.
                 tensor_out.ptr_base = new_data;
@@ -725,11 +692,12 @@ unsafe fn clone_view_tensor(
     }
 
     if total_elems == 0 {
+        // Nothing to copy, and no element for the strides ever to reach.
         tensor_out.ptr_base = std::ptr::null_mut();
         tensor_out.offset_elems = rtdt::Index::ZERO;
         tensor_out.capacity_elems = rtdt::Index::ZERO;
-        tensor_out.shape = std::ptr::null();
-        tensor_out.strides = std::ptr::null();
+        tensor_out.shape = unsafe { copy_index_array(rt_ref, tensor_in.shape, rank) };
+        tensor_out.strides = unsafe { copy_index_array(rt_ref, tensor_in.strides, rank) };
         tensor_out.layout = tensor_in.layout;
         return RtStatus::Ok;
     }
@@ -1579,5 +1547,23 @@ mod tests {
         assert_eq!(status, RtStatus::Ok);
         assert!(value_out.root.is_null());
         assert_eq!(value_out.len, rtdt::Index::ZERO);
+    }
+}
+
+/// Allocate a copy of a tensor's shape or strides, one index per axis.
+///
+/// # Safety
+///
+/// `src` must point at `rank` indices, and `rank` be at least one.
+unsafe fn copy_index_array(
+    rt_ref: &mut rt_local::RtLocal,
+    src: *const rtdt::Index,
+    rank: u32,
+) -> *const rtdt::Index {
+    assert!(!src.is_null(), "a tensor keeps its shape and strides, empty or not");
+    unsafe {
+        let dst = rt_ref.alloc.alloc(rtdt::INDEX_SIZE, rtdt::INDEX_ALIGN, rank.into()) as *mut rtdt::Index;
+        std::ptr::copy_nonoverlapping(src, dst, rank as usize);
+        dst as *const rtdt::Index
     }
 }

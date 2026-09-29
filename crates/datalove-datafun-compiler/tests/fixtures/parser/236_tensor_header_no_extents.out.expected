@@ -1,0 +1,33 @@
+{
+  "ast": {
+    "statements": [
+      {
+        "kind": "Let",
+        "name": "v",
+        "type_hint": null,
+        "value": {
+          "expr": {
+            "kind": "ParseError",
+            "message": "a tensor's shape has no extents"
+          }
+        }
+      }
+    ]
+  },
+  "diagnostics": [
+    {
+      "code": "D040",
+      "labels": [
+        {
+          "message": "a tensor has at least one axis, and the shape gives each its extent",
+          "span": [
+            11,
+            12
+          ],
+          "text": "|"
+        }
+      ],
+      "message": "a tensor's shape has no extents"
+    }
+  ]
+}

@@ -167,3 +167,50 @@ pub fn type_name_suggestion(word: &str) -> Option<String> {
     };
     Some(rmx::std::format!("a {lower} type is written `{spelled}`"))
 }
+
+/// What is wrong with a tensor body written under a shape header, if
+/// anything.
+///
+/// A body under a header is written flat, with no commas, and filled in
+/// row-major order, or shaped exactly as the header says. Both parsers ask
+/// here so that they refuse the same bodies in the same words.
+pub fn tensor_body_complaint(
+    extents: &[u32],
+    body_rank: usize,
+    body_shape: &[u32],
+    element_count: usize,
+) -> Option<(String, String)> {
+    let spelled = |shape: &[u32]| {
+        shape.iter().map(|e| e.to_string()).collect::<Vec<_>>().join(" ")
+    };
+    if body_rank == 1 {
+        let holds: u64 = extents.iter().map(|&e| e as u64).product();
+        if holds == element_count as u64 {
+            return None;
+        }
+        return Some((
+            rmx::std::format!("a tensor of shape `{}` holds {holds} elements, and {element_count} are written", spelled(extents)),
+            "the shape".to_string(),
+        ));
+    }
+    if body_shape == extents {
+        return None;
+    }
+    Some((
+        rmx::std::format!(
+            "the shape says `{}`, and the body is shaped `{}`",
+            spelled(extents), spelled(body_shape),
+        ),
+        "a body under a shape is written flat, or shaped as it says".to_string(),
+    ))
+}
+
+/// Whether a tensor of this shape can only be written with a shape header.
+///
+/// Without one, the rank is read off the widest comma run between the
+/// body's parts, and every extent off how many parts there are. So a zero
+/// extent above the innermost axis cannot be written, and nor can a leading
+/// extent of one, whose axis never shows a separator.
+pub fn tensor_needs_header(shape: &[u32]) -> bool {
+    shape.len() > 1 && (shape[0] == 1 || shape.contains(&0))
+}

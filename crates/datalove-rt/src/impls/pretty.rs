@@ -751,44 +751,46 @@ unsafe fn pretty_tensor(
         let rank = tydesc.tensor_rank() as usize;
         let elem_size = elem_ty.size() as usize;
 
-        // Read shape into a Vec for recursive processing.
-        let shape: Vec<usize> = if rank > 0 && !tensor.shape.is_null() {
-            (0..rank).map(|i| (*tensor.shape.add(i)).as_usize()).collect()
-        } else {
-            vec![]
-        };
-
+        // Every tensor has at least one axis, and keeps its shape even when
+        // it holds nothing.
+        let shape: Vec<usize> = (0..rank).map(|i| (*tensor.shape.add(i)).as_usize()).collect();
         let total_elems = rtdt::tensor_element_count(&shape);
 
-        if total_elems > 0 && !tensor.ptr_base.is_null() {
+        // A shape the separators cannot show -- a zero extent above the
+        // innermost axis, or a leading extent of one -- goes in a header,
+        // and the body after it flat.
+        if rank > 1 && (shape[0] == 1 || shape.contains(&0)) {
             push_str(rt, string_mut, string_tydesc, b"[| ")?;
-            pretty_tensor_group(
-                rt, tensor.ptr_base, elem_ty, elem_size,
-                &shape, 0, 0, total_elems,
-                string_mut, string_tydesc,
-            )?;
-
-            // When the outermost dimension is 1, the highest comma level
-            // never appears as a separator. Emit trailing commas so the
-            // parser can infer the correct rank.
-            if rank > 1 && shape.first() == Some(&1) {
-                let commas: Vec<u8> = core::iter::repeat(b',').take(rank - 1).collect();
-                push_str(rt, string_mut, string_tydesc, &commas)?;
+            for extent in &shape {
+                push_str(rt, string_mut, string_tydesc, extent.to_string().as_bytes())?;
+                push_str(rt, string_mut, string_tydesc, b" ")?;
             }
-            push_str(rt, string_mut, string_tydesc, b" |]")
-        } else {
-            push_str(rt, string_mut, string_tydesc, b"[| |]")
+            push_str(rt, string_mut, string_tydesc, b"|")?;
+            for i in 0..total_elems {
+                push_str(rt, string_mut, string_tydesc, b" ")?;
+                let elem = tensor.ptr_base.add(i * elem_size);
+                pretty_value(rt, elem, elem_ty, string_mut, string_tydesc)?;
+            }
+            return push_str(rt, string_mut, string_tydesc, b" |]");
         }
+
+        if total_elems == 0 {
+            return push_str(rt, string_mut, string_tydesc, b"[| |]");
+        }
+        push_str(rt, string_mut, string_tydesc, b"[| ")?;
+        pretty_tensor_group(
+            rt, tensor.ptr_base, elem_ty, elem_size,
+            &shape, 0, 0, total_elems,
+            string_mut, string_tydesc,
+        )?;
+        push_str(rt, string_mut, string_tydesc, b" |]")
     }
 }
 
 /// Recursively print tensor elements with multi-comma separators.
 ///
-/// `shape` has at least one extent and `dim` indexes one of them. A tensor
-/// with no shape has no elements to print and is answered with `[| |]` before
-/// reaching here -- which is what `tensor_element_count` is for, an empty
-/// product having once said such a tensor held one element and sent this
-/// walking off the end of `shape`.
+/// `shape` has at least one extent, none of them zero, and `dim` indexes one
+/// of them.
 unsafe fn pretty_tensor_group(
     rt: LocalRtHandle,
     ptr_base: *const u8,

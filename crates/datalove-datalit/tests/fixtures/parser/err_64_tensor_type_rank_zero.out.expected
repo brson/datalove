@@ -1,0 +1,30 @@
+{
+  "ast": {
+    "expr": {
+      "ParseError": {
+        "message": "a tensor has at least one axis"
+      }
+    },
+    "type_hint": {
+      "ParseError": {
+        "message": "a tensor has at least one axis"
+      }
+    }
+  },
+  "diagnostics": [
+    {
+      "code": "D042",
+      "labels": [
+        {
+          "message": "rank 0 is refused",
+          "span": [
+            9,
+            10
+          ],
+          "text": "0"
+        }
+      ],
+      "message": "a tensor has at least one axis"
+    }
+  ]
+}

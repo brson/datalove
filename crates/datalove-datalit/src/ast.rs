@@ -295,6 +295,9 @@ pub struct ExprSet<'db> {
 pub struct ExprTensor<'db> {
     pub shape: Vec<u32>,
     pub elements: Vec<ExprFull<'db>>,
+    /// Whether the shape was written in a header, `[| 2 3 | ... |]`, rather
+    /// than read off the body's separators.
+    pub header: bool,
 }
 
 #[derive(Clone, Hash, PartialEq, Eq)]

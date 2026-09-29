@@ -525,7 +525,9 @@ pub fn gen_expr_matching_type<'db, R: Rng>(
                 // Calculate max dimension size respecting both tensor config and collection budget.
                 let budget_dim = config.max_collection_size / total_elements.max(1);
                 let max_dim = budget_dim.min(config.tensor_config.max_dim_size as usize);
-                let dim_size = rng.gen_range(1..=max_dim.max(1)) as u32;
+                // Now and then an axis with nothing along it, which leaves the
+                // tensor empty and its shape to be said in a header.
+                let dim_size = if rng.gen_bool(0.05) { 0 } else { rng.gen_range(1..=max_dim.max(1)) as u32 };
                 shape.push(dim_size);
                 total_elements *= dim_size as usize;
                 // If we've hit the limit, make remaining dimensions size 1.
@@ -541,7 +543,10 @@ pub fn gen_expr_matching_type<'db, R: Rng>(
             let elements: Vec<_> = (0..total_elements)
                 .map(|_| gen_expr_full_inner(db, rng, element_type.clone(), config, depth + 1))
                 .collect();
-            Expr::Tensor(ExprTensor { shape, elements })
+            // A header where the body cannot show the shape, and now and then
+            // where it could.
+            let header = crate::parser_util::tensor_needs_header(&shape) || rng.gen_bool(0.2);
+            Expr::Tensor(ExprTensor { shape, elements, header })
         }
         TypeHint::Data => {
             let inner_type = gen_type_hint(db, rng, config, depth + 1);

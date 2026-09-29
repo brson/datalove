@@ -25,7 +25,7 @@ struct_type    = "{", ws, [ type_field_list ], ws, "}" ;
 table_type     = "{|", ws, type_field_list, ws, "|}" ;
 map_type       = "%{", ws, type, ws, "=", ws, type, [ ws, "," ], ws, "}" ;
 set_type       = "#{", ws, type, [ ws, "," ], ws, "}" ;
-tensor_type    = "[|", ws, type, ws, ",", ws, int_lit, ws, "|]" ;
+tensor_type    = "[|", ws, type, ws, ",", ws, int_lit, [ ws, "," ], ws, "|]" ;  (* rank at least 1 *)
 atom_type      = "atom", ws, ident ;
 term_type      = "term", ws, ident, ws, type ;
 enum_type      = "enum", ws, "{", ws, enum_variant_list, ws, "}" ;
@@ -86,8 +86,9 @@ entry_list     = entry, { ws, ",", ws, entry }, [ ws, "," ] ;
 entry          = full_expr, ws, "=", ws, full_expr ;
 
 (* Tensor: [| data |] with multi-comma separators *)
-tensor_expr    = "[|", ws, [ tensor_body ], ws, "|]" ;
-tensor_body    = tensor_group, { multi_comma, ws, tensor_group }, [ multi_comma ] ;
+tensor_expr    = "[|", ws, [ tensor_header ], [ tensor_body ], ws, "|]" ;
+tensor_header  = digit_run, { ws, digit_run }, ws, "|", ws ;  (* the shape, one extent per axis *)
+tensor_body    = tensor_group, { multi_comma, ws, tensor_group } ;
 tensor_group   = tensor_row, { ws, ",", ws, tensor_row } ;
 tensor_row     = full_expr, { ws, full_expr } ;  (* space-separated within row *)
 multi_comma    = ",", ",", { "," } ;  (* ,, for 3D, ,,, for 4D, etc. *)
@@ -123,9 +124,9 @@ newline        = "\n" | "\r\n" ;
 2. **Prefix notation for option/result types**: `?T` for Option, `!T` for Result
 3. **Keywords for constructors**: `some`, `ok`, `er`, `none`, `data`, `error`. Sigil constructors: `%{` for maps, `#{` for sets. Constructor payloads are `full_expr` (may include inline type hints, e.g. `some : u32 / 42`)
 4. **Struct fields use `=`** in expressions but `:` in type hints
-5. **Tensors**: `[| data |]` with multi-comma separators; spaces separate innermost elements, `,` separates rows, `,,` separates slabs, etc. Shape is inferred from structure. Trailing commas preserve rank when outermost dimension is 1.
+5. **Tensors**: `[| data |]` with multi-comma separators; spaces separate innermost elements, `,` separates rows, `,,` separates slabs, etc. Shape is inferred from structure, or given in a header before a `|` (`[| 0 3 | |]`), under which the body is flat or shaped as the header says. No trailing comma; no rank 0.
 6. **Tables**: pipe-brace delimiters `{| ... |}`, header then data rows
-7. **Trailing commas** allowed everywhere
+7. **Trailing commas** allowed everywhere but in a tensor's body
 8. **Block comments** can nest
 9. **A number is written without spaces in it.** The grammar above puts no
    `ws` inside `int_lit`, `float_lit` or `hex_lit`, and the parser holds to

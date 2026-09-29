@@ -1,0 +1,33 @@
+{
+  "ast": {
+    "statements": [
+      {
+        "kind": "Let",
+        "name": "v",
+        "type_hint": null,
+        "value": {
+          "expr": {
+            "kind": "ParseError",
+            "message": "a tensor of shape `2 3` holds 6 elements, and 5 are written"
+          }
+        }
+      }
+    ]
+  },
+  "diagnostics": [
+    {
+      "code": "D041",
+      "labels": [
+        {
+          "message": "the shape",
+          "span": [
+            11,
+            16
+          ],
+          "text": "2 3 |"
+        }
+      ],
+      "message": "a tensor of shape `2 3` holds 6 elements, and 5 are written"
+    }
+  ]
+}

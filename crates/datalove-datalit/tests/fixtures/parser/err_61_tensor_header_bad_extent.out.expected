@@ -1,0 +1,26 @@
+{
+  "ast": {
+    "expr": {
+      "ParseError": {
+        "message": "a tensor's shape is written as whole numbers"
+      }
+    },
+    "type_hint": null
+  },
+  "diagnostics": [
+    {
+      "code": "D040",
+      "labels": [
+        {
+          "message": "expected the extent of an axis",
+          "span": [
+            5,
+            6
+          ],
+          "text": "x"
+        }
+      ],
+      "message": "a tensor's shape is written as whole numbers"
+    }
+  ]
+}

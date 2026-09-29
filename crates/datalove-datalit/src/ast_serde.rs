@@ -215,6 +215,7 @@ pub struct ExprSet {
 pub struct ExprTensor {
     pub shape: Vec<u32>,
     pub elements: Vec<ExprFull>,
+    pub header: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -561,6 +562,7 @@ impl ExprTensor {
         ExprTensor {
             shape: ast.shape.clone(),
             elements: ast.elements.iter().map(|e| ExprFull::from_ast(db, *e)).collect(),
+            header: ast.header,
         }
     }
 }
