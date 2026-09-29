@@ -35,19 +35,17 @@ Thorough compiler architecture, bare language.
 
 ## In progress
 
+- human docs
 - const param specialization - mostly done?
-- std
-- tensors
-- tables
+- fully reactive scripts, undo/redo
 
 
 ## On deck
 
+- tensor std features
 - assert and using it in favor of hacks in test harnesses
-- human docs
-- fully reactive scripts, undo/redo
 - closures
-- table row polymorphism
+- table row polymorphism etc
 
 
 
@@ -68,6 +66,7 @@ Focus on ergonomic REPL experience.
 
 ## Backburner
 
+- doc generator and std docs
 - multiple scripts
 - pipeline tools
 - analysis caching
@@ -76,7 +75,6 @@ Focus on ergonomic REPL experience.
 - tree-sitter
 - 128-bit ints
 - fix rt error/alloc semantics
-- closures
 - inline/jit tuning
 - allocation statistics
 - jit statistics
@@ -101,5 +99,5 @@ Focus on ergonomic REPL experience.
 - autodiff
 - zipper heaps
 - virtualized I/O
-- true linear types with explicit dtors
+- linear types with explicit dtors
 - bidirectionality, multi-determinism, choice-points ala mercury

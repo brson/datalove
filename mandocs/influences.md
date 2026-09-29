@@ -27,10 +27,5 @@
     Tables.
 - Elixir, Erlang, Ruby, Prolog.
     Atoms.
-    
-
-
-
-## Unsorted references
-
-- https://buttondown.com/hillelwayne/archive/my-gripes-with-prolog/
+- PureData.
+    Table row polymorphism.

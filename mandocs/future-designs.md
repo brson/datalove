@@ -3,32 +3,6 @@
 
 
 
-## 2026/03/29 - Workspace descriptor
-
-See `botdocs/proposal-workspaces.md`.
-
-
-## 2026/02/20 - Workspaces, the package world, and native riders
-
-The workspace contains all the resources the compiler incorporates into a single
-interactive compilation session.
-
-It consists of:
-
-- an optional "workspace.dlt" manifest, otherwise inferred.
-- any number of scripts, typically from on disk files, ".dfs" extension
-- any number of interactive script sessions with chains of script units
-- any number of package libraries, containing packages,
-  containing a flat list of modules, ".dfm" extension
-- each module may declare one accompanying _native rider_,
-  a Rust crate that is compiled and linked specifically to support the module,
-  and whose interface is defined by an _interface file_, ".dli" extension.
-  The rider lives with the package.
-- the optional system package library and its package's riders.
-
-
-
-
 ## 2026/02/19 - Pretty symbols
 
 In a future where AI is writing most code and I'm just reviewing,
@@ -66,92 +40,8 @@ set { int }
 ⟬ int, 2 ⟭
 ```
 
-
-
-## 2026/02/18 - Generics
-
-```datalove
-
-fun push(self: mut [T], v: T) where {
-  T is move,
-}
-  rtcall dlrt_list_push(self, v)
-end fun
-
-
-```
-
-
-
-
-## 2026/02/10 - Indexing and querying
-
-All datalit aggregate and collection types have some way of
-indexing or querying,
-such that querying a node of any document can be done in one line.
-
-```datalove
-// Tuples
-let a = (0, 1)
-let x = a.0
-let y = a.1
-
-// Structs
-let a = { b: 0, c: 1 }
-let x = a.b
-let y = a.c
-
-// List
-let a = [0, 1]
-let x = a[0]?
-let y = a[1]?
-
-
-// Map
-let a = %{ 100 = 1 }
-let x = a[100]?
-
-
-// Set
-let a = #{ 100 }
-let x = a[100]?
-
-
-// Table
-let a = {| b, c ; 0, 1 ; 2, 3 }
-let x = a.b@   // column projection then clone
-let y = a.b[0]? // column projection then index
-
-// Tensor
-let a = [| 0 1, 2 3 |]
-let x = a[0]@ // row projection then clone
-let y = a[0]?[]? // row projection, row projection
-
-// Term
-let a = term Foo 0
-let x = a.0
-
-// Option
-let a = some 0
-let b = a?
-let a = some (1, 2)
-let c = grab { a?.0 }?  // grab intercepts early returns?
-
-// Result
-
-// Enum
-let a = enum { term A 1, term B 2 }
-let b = a.extract { term A }?
-
-
-```
-
-Indexes are passed by reference.
-Results are returned by reference,
-mutability determined by context.
-
-Indexing operations return an option.
-
+NB 2026/09/29: I previously did this conversion on a branch but didn't
+merge it. May still be there for reference.
 
 
 
@@ -228,63 +118,6 @@ end fun
 
 
 
-## 2026/02/10 - Ergonomic switches for repl / scripts
-
-Definitely need more ergonomics and less suprises in the repl.
-Scripts may or may not need ergonomic support.
-Onboarding repl -> script -> modules,
-can get stricter with prhogress.
-
-Needed:
-
-- auto-coerce (auto-@ insertion).
-  exists but not surfaced.
-- auto clone, at least for script unit exports,
-  bigints, strings, maybe not all types
-
-Could be toggleable:
-
-```datalove
-feature auto_coerce off
-feature auto_export_clone
-```
-
-Comparison to visual basic modes that I've forgotten, js strict mode.
-
-Makes intro scripting easy,
-gives options when moving to writing modules.
 
 
-
-
-### 2026-01-17 - `assert` statements
-
-todo
-
-```datalove
-fun test_thing()
-
-end fun
-```
-
-
-
-
-# Bitwise operators
-
-Shift operators are logical.
-For arithmetic right shift use divide by 2.
-
-Can't have << and >> because of ambiguous lex.
-Well we can have .<< and .>>.
-
-bitand
-bitor
-bitnot
-bitxor
-
-.<< .>>
-& | ~ ^
-
-to use `|` we would need to change the `if expr |arg|` syntax.
 
