@@ -464,13 +464,40 @@ its destroy removed. Each reported the old answer. The `(unit_index, ValueId)`
 property the whole design rests on is checked by walking a unit's serialized IR
 for external references rather than by argument.
 
-**The gap that matters: a module edit does not reach the script.** Editing a
-module leaves the units that import from it stale --
-`editing_a_module_does_not_reach_the_script_and_leaves_it_stale` pins it. Not
-reachable from shipped code, since nothing in `datalove-repl` can edit a module,
-so a session's modules are fixed once it starts. But it is the same
-analysis-versus-execution split stage C exists for, in the module direction, and
-`relower_reach` has no module-shaped entry point.
+**The module gap is closed**, by section E, and `Engine::edit_module` makes it
+reachable from shipped code rather than latent.
+
+**What the scenario suite added.** `script_scenario_tests` crosses the five edit
+kinds -- value-only, signature-changing, error-introducing, module body, module
+signature -- against the three positions an edit can be made at, and asserts the
+analysis reach *and* the execution reach for each, both derived from the
+typechecker's per-unit record before and after the edit. The analysis reach is
+derived by comparing what each name a unit asked about resolves to, which is
+what `binding_at` answers; that is a smaller set than the execution reach, and
+`a_value_only_edit_is_analyzed_narrowly_and_executed_widely` is what says the
+two measurements are not one measurement taken twice. The same file holds a
+twelve-unit session with a diamond, a unit drawing on two, a chain of four and
+two independent roots; the removal case; and the ownership cases.
+
+**Removing a unit turned out to be inexpressible rather than wrong.** Nothing in
+`ScriptSession`, `ScriptCompiler`, `FrameStore` or `UnitFunctionRegistry` offers
+a removal, and that is the numbering protecting itself: every script value is a
+`(unit_index, ValueId)` pair, so taking a unit out would leave every later
+unit's IR one frame off. What is expressible is *blanking* a unit, and it
+behaves -- the index and the frame stay, what the unit exported stops being on
+offer, the units that read it are told -- so that is what a "delete that line"
+has to be built out of.
+`blanking_a_unit_is_the_removal_the_numbering_allows` and
+`a_blanked_units_index_is_not_reused` hold both halves, the second of them
+stating the cost: a session that deletes lines spends an index per deletion.
+
+**Ownership across a re-execution holds.** A unit copies out of an earlier
+unit's binding, and `a_copy_out_of_an_earlier_unit_survives_its_re_execution`
+puts a list -- heap memory, so a move would be visible to the leak checker --
+through an edit to the unit it came from. A unit may only move out of a binding
+it defined itself, and `a_move_across_units_survives_an_edit` says the record of
+that survives a re-derivation: D013 is still reported for a line typed
+afterwards, which is the only observable, since the frame still holds the value.
 
 **Thinner than it looks:**
 
@@ -482,26 +509,77 @@ analysis-versus-execution split stage C exists for, in the module direction, and
   value-only edit does not move.
 - **The alias edge is the one edge not derived from a read.** Correct and tested;
   see the section above.
-- **Removing a unit is untested and probably wrong.** Everything here edits or
-  appends. The frame store's numbering and every `(unit, value)` reference share
-  an index that cannot have a hole in it, which is why a failed re-lower keeps
-  its frame -- removal has the same problem and nothing addresses it.
-- **Nothing tests a long session.** The fixtures are three or four units. The
-  reach is transitive and the records fold from the start each time, so the cost
-  per edit grows with the session; nobody has measured where that stops being
-  free.
+- **A module edit re-typechecks every unit**, because `ScriptEnv`'s identity
+  includes every module's spans. Asserted rather than merely known, and it is
+  the same whole-world-aggregate-in-a-per-unit-key shape as the rest; see
+  section E.
+- **The cost per edit is still unmeasured.** The twelve-unit session says the
+  *reach* is right at that size; it says nothing about time. The records fold
+  from the start of the session for every unit re-derived, so the cost per edit
+  grows with the session, and nobody has measured where that stops being free.
 - **`Engine` re-derives the module compilation per line**, resting on
   `ScriptEnv` interning to the same handle each time -- which holds because
   `ModuleSpec` compares equal over unchanged modules. If a `ModuleSpec` field
   ever became unstable across compiles, every script memo would be lost
-  silently, and nothing tests that.
-- **Ownership across a re-execution is untested.** A unit copies out of earlier
-  bindings rather than moving from them, which is what makes re-running B safe
-  for C. No test puts a move across units through an edit, and
-  `repl-architecture.md` says this is where non-cloneable types will break the
-  model.
+  silently, and nothing tests that. What a module *edit* does to that handle is
+  now measured; what an unchanged recompile does to it is not.
+- **Nothing can add or remove a module mid-session.** `Engine::edit_module`
+  changes a module the session started with. `WorkspaceDelta` knows how to add
+  and remove, and there is no engine path to it, so the reach for those has
+  never been asked about -- an added module can only affect a unit typed after
+  it, but a removed one leaves an import naming nothing.
 
-## E. The module gap
+## E. The module gap -- done
+
+The goal: editing a module re-lowers and re-executes the script units that
+import from it, and no others. **That holds now**, and
+`script_exec_reactivity_tests` pins it -- the test that used to pin the
+staleness is inverted -- with `engine_edit_tests` saying the REPL wires it up.
+
+What went in, and it is the three steps below with one thing the diagnosis did
+not mention:
+
+- **`ScriptUnitTypecheckOutput::imported_modules`** holds the module paths a
+  unit's imports resolve into, recorded where the import resolution already
+  computes them. An import whose function was not found is in there too, since
+  a unit that failed to import from a module still depends on it. It travels
+  into `UnitLowerRecord::imports` as owned text, the way `provides` and `uses`
+  do, because the reach is walked after the database has been mutated.
+- **`ScriptCompiler::relower_module_reach(&[path])`** seeds the reach with the
+  units whose imports resolve into the edited modules and then walks the same
+  name edges `relower_reach` walks. `edit_reach` and the module reach are one
+  function, `reach_from(seeds)`, so there is no second rule to keep in step.
+- **`Engine::edit_module`**, and **`ScriptExecutor::set_module_registry`**,
+  which is the step a unit edit does not need and the one that was not in the
+  plan. **A script unit names a module function by `CodeRef::Module`**, so
+  re-lowering the unit changes nothing about what that call lands on: the
+  executor resolves it against the `Arc<ModuleFunctionRegistry>` it was handed
+  when the session started. Without the swap the reach is right and every value
+  is still stale, which is what the injected fault confirmed.
+
+**An edit whose modules do not compile is put back.** Nothing in the engine can
+work against a module set with errors -- `script_compiler_resumed` returns
+`None` and every later line would fail to build a compiler at all -- so
+`edit_module` returns the errors as `Err` and restores the previous text.
+Reporting module errors while keeping the broken text means carrying them
+through every path that compiles, which is a larger change than this.
+
+**The over-propagation the plan warned about is real, and it is wider than
+predicted.** Measured with `QueryRecorder`: after *any* module edit, body or
+signature, every unit's `typecheck_script_unit` runs again -- and not because an
+answer moved but because the *key* moved. `ScriptEnv` is interned over every
+`ModuleSpec`, which holds the module's spans, so editing one module's body
+gives a new env handle and every `(script, env)` pair is a different question.
+The execution reach stays narrow, which is the half that decides correctness,
+and `script_scenario_tests` asserts the over-propagation outright rather than
+leaving it to be discovered. Narrowing the env so a unit depends only on the
+modules it imports from is still the sound end state.
+
+This is also where the diagnosis below is wrong: it says the env does not
+re-key, and it does. What is right about it is the conclusion -- **the gap was
+a missing driver** -- because with nothing asking, a moved key costs nothing.
+
+What follows is the diagnosis as written before the work.
 
 **Editing a module does not reach the script units that import from it.** They
 keep values computed against the old module and nothing notices.
@@ -509,10 +587,18 @@ keep values computed against the old module and nothing notices.
 The diagnosis took three tries and the first two were wrong, so they are here to
 save the next person the same trip:
 
-- **Not `ScriptEnv` over-propagating.** It is interned over every module's
-  parse, spans and name resolution, so a module edit looks like it should re-key
-  every unit. Measured: it does not, either for a body change or a signature
-  one.
+- **"`ScriptEnv` does not over-propagate" -- measured correctly, concluded
+  wrongly, and the mistake is the instructive part.** The measurement was that
+  after a module edit no unit's `typecheck_script_unit` ran, for a body change
+  or a signature one. The conclusion drawn was that the keys had not moved. They
+  had: `ScriptEnv` is interned over every `ModuleSpec`, spans included, so a
+  module edit re-keys every unit. Nothing had *asked*, because stage B made
+  typechecking lazy.
+  
+  **A recording of what ran cannot tell you what would run if asked.** That is
+  worth remembering whenever `QueryRecorder` is the instrument: it answers "what
+  executed", and "is this memo still valid" is a different question. Asking the
+  units directly is what settled it.
 - **Not a stale env.** The env is rebuilt on resume -- `ScriptSession` holds
   units and records, not the env -- and a *new* unit can import a function the
   module has just gained. So the script's view of the modules is current.

@@ -42,6 +42,15 @@ impl ScriptEnvironment {
         self.registry.add_module_code_unit(module_id, unit_id, unit);
     }
 
+    /// Put a recompiled module registry in place of the one held.
+    ///
+    /// What an edited module's functions are called through: the frames and the
+    /// units' own code stay as they are, since a module edit moves nothing a
+    /// script unit holds.
+    pub fn set_module_registry(&mut self, module_registry: Arc<ModuleFunctionRegistry>) {
+        self.registry.set_module_registry(module_registry);
+    }
+
     /// Add a completed unit's frame and code units.
     pub fn add_unit(
         &mut self,

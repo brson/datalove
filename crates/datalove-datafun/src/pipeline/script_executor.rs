@@ -384,6 +384,21 @@ impl ScriptExecutor {
         (result_ty, output)
     }
 
+    /// Point the executor at a module compilation done since it was built.
+    ///
+    /// **An edited module reaches a running session only through here.** A
+    /// script unit's IR names a module function by `CodeRef::Module` and the
+    /// executor resolves that against the registry it was given, so without
+    /// this a re-executed unit calls the module as it was when the session
+    /// started. The frames are untouched: a module edit moves nothing a script
+    /// unit owns.
+    pub fn set_module_registry(
+        &mut self,
+        module_registry: Arc<datalove_datafun_interp::ModuleFunctionRegistry>,
+    ) {
+        self.env.set_module_registry(module_registry);
+    }
+
     /// Get the type and value of a binding by name.
     pub fn get_binding(&mut self, name: &str) -> Option<(String, String)> {
         if let Some((unit, value_id)) = self.script_ctx.values.get(name) {

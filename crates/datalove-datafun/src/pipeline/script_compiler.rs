@@ -375,7 +375,44 @@ impl<'db> ScriptCompiler<'db> {
             "unit {edited} was edited but the script has {} units",
             self.scripts.len(),
         );
-        self.edit_reach(edited)
+        self.rederive(self.edit_reach(edited))
+    }
+
+    /// Re-lower the units an edit to the modules at `edited` reaches.
+    ///
+    /// The module-shaped sibling of [`Self::relower_reach`], and the reason
+    /// there has to be one: stage B made typechecking lazy, so an earlier unit
+    /// re-runs when a later one asks `binding_at` about a name it provides, and
+    /// **a module edit makes nobody ask**. Without an entry point that says "a
+    /// module changed", the units that import from it keep the values they
+    /// computed against the module as it was.
+    ///
+    /// A unit is reached when one of its imports resolves into one of `edited`,
+    /// and then the units that use what *it* provides are reached the same way
+    /// [`Self::relower_reach`] reaches them. Narrow on purpose: after a module
+    /// signature change any unit that is asked will re-typecheck anyway, so a
+    /// driver that re-derived the whole script would over-propagate where the
+    /// old behaviour under-propagated.
+    ///
+    /// `edited` are module paths in `library/package/module` form, which is
+    /// what an import resolves an alias to.
+    ///
+    /// The caller must put the new module IR in front of the executor --
+    /// `ScriptExecutor::set_module_registry` -- before re-executing what comes
+    /// back: a script unit's IR names a module function by
+    /// `CodeRef::Module`, so re-lowering it does not by itself change the code
+    /// that call lands on.
+    pub fn relower_module_reach(
+        &mut self,
+        edited: &[String],
+    ) -> Vec<(usize, ScriptCompilationResult)> {
+        let seeds = self.module_importers(edited);
+        self.rederive(self.reach_from(&seeds))
+    }
+
+    /// Compile each of `units` again, in the order given.
+    fn rederive(&mut self, units: Vec<usize>) -> Vec<(usize, ScriptCompilationResult)> {
+        units
             .into_iter()
             .map(|index| {
                 self.last_script = Some(self.scripts[index]);
@@ -388,10 +425,33 @@ impl<'db> ScriptCompiler<'db> {
     }
 
     /// The units an edit to `edited` reaches, in index order, `edited` included.
+    fn edit_reach(&self, edited: usize) -> Vec<usize> {
+        self.reach_from(&BTreeSet::from([edited]))
+    }
+
+    /// The units whose imports resolve into one of `edited`.
+    ///
+    /// Over the union of the held and the current graph, for the reason
+    /// [`Self::reach_from`] takes the union of both: an import the edit to the
+    /// *script* removed is absent from one and an import it added from the
+    /// other. A module edit moves neither, but the union costs nothing and
+    /// there is no second rule to keep in step.
+    fn module_importers(&self, edited: &[String]) -> BTreeSet<usize> {
+        let now = self.imports_now();
+        (0..self.unit_records.len())
+            .filter(|unit| {
+                self.unit_records[*unit].imports.iter()
+                    .chain(now[*unit].iter())
+                    .any(|path| edited.iter().any(|changed| changed == path))
+            })
+            .collect()
+    }
+
+    /// The units reachable from `seeds`, in index order, the seeds included.
     ///
     /// A name a unit uses resolves to the nearest earlier unit that provides
-    /// it, so the edit reaches a unit when one of the names it uses resolves to
-    /// a unit the edit has already reached. One forward pass gives the whole
+    /// it, so the reach extends to a unit when one of the names it uses
+    /// resolves to a unit already reached. One forward pass gives the whole
     /// transitive reach, because a unit's providers all sit before it.
     ///
     /// The graph is the union of what it was before the edit and what it is
@@ -399,7 +459,7 @@ impl<'db> ScriptCompiler<'db> {
     /// *removes* is absent from the new graph although the unit that read it
     /// has to be told, and a name the edit *introduces* is absent from the old
     /// one although a later unit that asked for it in vain now finds it.
-    fn edit_reach(&self, edited: usize) -> Vec<usize> {
+    fn reach_from(&self, seeds: &BTreeSet<usize>) -> Vec<usize> {
         let count = self.unit_records.len();
         let (now_provides, now_uses) = self.graph_now();
         assert_eq!(
@@ -419,14 +479,14 @@ impl<'db> ScriptCompiler<'db> {
             .collect();
 
         let mut reached = vec![false; count];
-        reached[edited] = true;
-        for unit in edited + 1..count {
-            reached[unit] = uses[unit].iter().any(|name| {
-                (0..unit)
-                    .rev()
-                    .find(|earlier| provides[*earlier].contains(name))
-                    .is_some_and(|provider| reached[provider])
-            });
+        for unit in 0..count {
+            reached[unit] = seeds.contains(&unit)
+                || uses[unit].iter().any(|name| {
+                    (0..unit)
+                        .rev()
+                        .find(|earlier| provides[*earlier].contains(name))
+                        .is_some_and(|provider| reached[provider])
+                });
         }
         (0..count).filter(|unit| reached[*unit]).collect()
     }
@@ -447,6 +507,13 @@ impl<'db> ScriptCompiler<'db> {
             uses.push(self.unit_used_names(index, *output));
         }
         (provides, uses)
+    }
+
+    /// The modules each unit imports from, as things stand now.
+    fn imports_now(&self) -> Vec<Vec<String>> {
+        self.unit_typecheck_outputs().iter()
+            .map(|output| output.imported_modules(self.db).C())
+            .collect()
     }
 
     /// The names a unit provides to the units after it.
@@ -1733,6 +1800,7 @@ impl<'db> ScriptCompiler<'db> {
             revived: ownership.revived.clone(),
             provides: self.unit_provides_names(typecheck.output),
             uses: self.unit_used_names(index, typecheck.output),
+            imports: typecheck.output.imported_modules(self.db).C(),
         };
     }
 }

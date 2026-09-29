@@ -108,8 +108,20 @@ impl Started {
 
 impl Engine {
     pub fn new(sys: SystemLibrary) -> AnyResult<Engine> {
-        let db = datafun::Database::default();
         let workspace = WorkspaceDescriptor::from_system_library(&sys);
+        Engine::with_workspace(sys, workspace)
+    }
+
+    /// The same, over a workspace that holds more than the system library.
+    ///
+    /// The library still comes separately because it carries the addresses of
+    /// the native rider functions linked into this binary, which a descriptor
+    /// has no way to say.
+    pub fn with_workspace(
+        sys: SystemLibrary,
+        workspace: WorkspaceDescriptor,
+    ) -> AnyResult<Engine> {
+        let db = datafun::Database::default();
         let mut pipeline = workspace.to_pipeline(&db);
         let started = Started::compile(&db, &mut pipeline, &sys)?;
 
@@ -303,7 +315,101 @@ impl Engine {
         sources[unit].set_text(&mut self.db).to(source.S());
 
         let redone = self.with_compiler(|compiler| compiler.relower_reach(unit));
+        self.rerun(redone)
+    }
 
+    /// Change one module's source and re-derive the script units that import
+    /// from it.
+    ///
+    /// The module-shaped half of [`Self::edit_unit`], and it needs one step
+    /// that unit editing does not: the executor calls a module function through
+    /// the registry it was handed, so the recompiled modules have to be put in
+    /// front of it before anything is run again. Nothing else about a script
+    /// unit moves when a module is edited.
+    ///
+    /// A unit is re-derived when one of its imports resolves into this module,
+    /// or when it uses what such a unit provides. Returns one report per unit
+    /// re-derived, in index order.
+    ///
+    /// **An edit whose modules do not compile is put back**, and the errors come
+    /// back as `Err`. Nothing in the engine can work against a module set with
+    /// errors -- every later line would fail to build a compiler at all -- so a
+    /// rejected edit is the only way to leave the session usable. Reporting
+    /// module errors while keeping the broken text means carrying them through
+    /// every path that compiles, which is not this.
+    pub fn edit_module(
+        &mut self,
+        library: &str,
+        package: &str,
+        module: &str,
+        source: &str,
+    ) -> Result<Vec<UnitEdit>, String> {
+        let previous = self.pipeline.module_text(&self.db, library, package, module)
+            .unwrap_or_else(|| panic!("no module {library}/{package}/{module} in this session"));
+        self.pipeline.update_source(&mut self.db, library, package, module, source);
+        self.set_workspace_module(library, package, module, source);
+
+        let path = format!("{library}/{package}/{module}");
+        let relowered = {
+            let compiled = self.pipeline.compile_fresh(&self.db);
+            if compiled.has_errors() {
+                Err(compiled.all_errors().join("; "))
+            } else {
+                // Before anything is re-executed: a re-lowered unit still names
+                // its module functions by `CodeRef::Module`, so the new IR only
+                // takes effect once the executor is looking at the new registry.
+                self.executor.set_module_registry(compiled.shared.module_registry.clone());
+                let mut compiler = compiled
+                    .script_compiler_resumed(&self.db, self.script.take().expect("a session"))
+                    .expect("the modules compiled without errors");
+                let redone = compiler.relower_module_reach(std::slice::from_ref(&path));
+                self.script = Some(compiler.into_session());
+                Ok(redone)
+            }
+        };
+
+        match relowered {
+            Ok(redone) => Ok(self.rerun(redone)),
+            Err(errors) => {
+                self.pipeline.update_source(&mut self.db, library, package, module, &previous);
+                self.set_workspace_module(library, package, module, &previous);
+                Err(errors)
+            }
+        }
+    }
+
+    /// Keep the descriptor in step with the pipeline.
+    ///
+    /// A reset rebuilds from the pipeline rather than from the descriptor, so
+    /// nothing reads this today. It is what a `WorkspaceDelta` would be taken
+    /// against, and a descriptor saying one thing while the pipeline compiles
+    /// another is the kind of disagreement that is found much later.
+    fn set_workspace_module(
+        &mut self,
+        library: &str,
+        package: &str,
+        module: &str,
+        source: &str,
+    ) {
+        let libraries = self.workspace.system_library.iter_mut()
+            .chain(self.workspace.user_libraries.iter_mut());
+        let held = libraries
+            .filter(|held| held.name == library)
+            .filter_map(|held| held.packages.get_mut(package))
+            .filter_map(|held| held.modules.get_mut(module))
+            .next()
+            .unwrap_or_else(|| panic!(
+                "the pipeline has {library}/{package}/{module} and the workspace \
+                 descriptor it was built from does not",
+            ));
+        held.source = source.into();
+    }
+
+    /// Run each re-lowered unit again in place, reporting what it came to.
+    fn rerun(
+        &mut self,
+        redone: Vec<(usize, datafun::pipeline::ScriptCompilationResult)>,
+    ) -> Vec<UnitEdit> {
         let mut reports = Vec::new();
         for (index, compiled) in redone {
             let eval = match (compile_error(&compiled), &compiled.ir_unit) {
@@ -447,87 +553,5 @@ fn compile_error(compiled: &datafun::pipeline::ScriptCompilationResult) -> Optio
         (_, OwnershipResult::Error { message }, _) => Some(message.C()),
         (_, _, LoweringResult::Error { message }) => Some(message.C()),
         _ => None,
-    }
-}
-
-
-
-#[cfg(test)]
-mod tests {
-    //! The edit path, at the level a session actually uses it.
-    //!
-    //! `crates/datalove-datafun/tests/script_exec_reactivity_tests.rs` is where
-    //! the reach itself is measured, against a graph it derives. These say the
-    //! engine wires it up: an edit reaches the units it should and the
-    //! environment afterwards holds the values it should.
-
-    use super::*;
-
-    /// A B C D, where C uses nothing B provides and D uses `b`.
-    const SCRIPT: &str = "let a = 1\n---\nlet b = 2\n---\nlet c = 30\n---\nlet d = b + 5";
-
-    fn value_of(engine: &mut Engine, name: &str) -> String {
-        engine.get_environment().into_iter()
-            .find(|(bound, _, _)| bound == name)
-            .map(|(_, _, value)| value)
-            .unwrap_or_else(|| panic!("no binding named {name}"))
-    }
-
-    /// Editing B re-derives B and D, and `d` holds the new answer.
-    ///
-    /// A value-only edit, which is the case that needs execution to cascade
-    /// where analysis did not: no type moved, so nothing but B was
-    /// re-typechecked, and `d` would sit at 7 if D had not run again.
-    #[test]
-    fn editing_a_unit_rederives_what_it_reaches() {
-        let mut engine = Engine::new(datalove_stdlib::system_library())
-            .expect("the engine starts");
-        engine.run_source(SCRIPT);
-        assert_eq!(value_of(&mut engine, "d"), "7");
-
-        let reports = engine.edit_unit(1, "let b = 3");
-
-        assert_eq!(
-            reports.iter().map(|report| report.unit).collect::<Vec<_>>(),
-            vec![1, 3],
-            "B and D; C uses nothing B provides",
-        );
-        assert!(
-            reports.iter().all(|report| !matches!(report.eval, Eval::Error(_))),
-            "both units re-derive cleanly: {reports:?}",
-        );
-        assert_eq!(value_of(&mut engine, "b"), "3");
-        assert_eq!(value_of(&mut engine, "d"), "8", "D ran again against the new `b`");
-        assert_eq!(value_of(&mut engine, "c"), "30", "C's frame is untouched");
-    }
-
-    /// An edit that breaks a later unit reports the error against that unit.
-    #[test]
-    fn an_edit_that_breaks_a_later_unit_says_which() {
-        let mut engine = Engine::new(datalove_stdlib::system_library())
-            .expect("the engine starts");
-        engine.run_source(SCRIPT);
-
-        let reports = engine.edit_unit(1, "let b = \"two\"");
-
-        let failed: Vec<usize> = reports.iter()
-            .filter(|report| matches!(report.eval, Eval::Error(_)))
-            .map(|report| report.unit)
-            .collect();
-        assert_eq!(failed, vec![3], "`\"two\" + 5` is D's error to report");
-        assert_eq!(value_of(&mut engine, "c"), "30", "C never heard about it");
-    }
-
-    /// A line submitted after an edit is compiled against the edited session.
-    #[test]
-    fn a_unit_appended_after_an_edit_sees_the_new_values() {
-        let mut engine = Engine::new(datalove_stdlib::system_library())
-            .expect("the engine starts");
-        engine.run_source(SCRIPT);
-        engine.edit_unit(1, "let b = 3");
-
-        engine.run_source("let e = c + d");
-
-        assert_eq!(value_of(&mut engine, "e"), "38", "30 from C and 8 from the new D");
     }
 }

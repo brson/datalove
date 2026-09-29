@@ -78,6 +78,31 @@ inside a fragment used to slip through as a successful binding.
 `repl --script` and the fixture tests use it, so the driver and the tests
 cannot drift.
 
+## Editing, not only appending
+
+`Engine::edit_unit(i, text)` changes one line of the session and re-derives
+what the change reaches, leaving the rest of the session with the lowering and
+the frames it had. `Engine::edit_module` does the same from a module edit: the
+units whose imports resolve into that module, and then the units that read what
+those computed. `botdocs/plan-script-reactivity.md` is the whole of how the
+reach is decided; two things about it belong here.
+
+**The engine owns its database.** An edit is `set_text` on a `Source` and needs
+`&mut db`, and a `ScriptCompiler` borrowing `&'db dyn Database` cannot be alive
+across that, so no compiler is kept between calls -- `ScriptSession` is, and a
+compiler is built over it per operation.
+
+**A module edit has to reach the executor as well as the compiler.** A script
+unit names a module function by `CodeRef::Module`, resolved against the
+`Arc<ModuleFunctionRegistry>` the executor was handed, so `set_module_registry`
+is what makes the new module IR the code that runs. Re-lowering the importing
+unit alone leaves every value stale.
+
+A module edit that does not compile is rejected whole and the previous text
+goes back, because nothing in the engine can build a compiler against a module
+set with errors: the alternative is carrying module diagnostics through every
+path that compiles. Adding and removing modules mid-session is not offered.
+
 ## When there is no engine
 
 Everything above assumes the engine started. When it does not, the app has to
@@ -144,6 +169,12 @@ an earlier unit stops being available.
   They run against `datalove_stdlib::system_library()`, so the suite covers
   the library and the linked riders the binary actually ships.
   `BLESS=1` updates them; unset `RUST_BACKTRACE` first.
+- **engine_edit_tests** - the edit path: `edit_unit` and `edit_module`, the
+  units each reaches, and the environment afterwards. Separate from
+  `engine_tests` because that one is `harness = false` and has a `main` of its
+  own, so `#[test]` functions cannot live beside it. The reach itself is
+  measured in `datalove-datafun`'s `script_exec_reactivity_tests` and
+  `script_scenario_tests`; these say the engine wires it up.
 - **app_tests** - the state machine against a scripted `MockExecutor`, with no
   engine at all, which is how the interleavings are reachable: a result
   arriving after a later input, a crash reset, the multiline round trip, the

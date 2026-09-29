@@ -264,6 +264,22 @@ impl ModuleCompilationPipeline {
         self.world.contains(&path)
     }
 
+    /// The text a module currently holds.
+    ///
+    /// What an editor of modules needs in order to put an edit back: a module
+    /// set that does not compile leaves nothing in the session able to compile,
+    /// so a caller that will not tolerate that has to be able to undo.
+    pub fn module_text(
+        &self,
+        db: &dyn salsa::Database,
+        library: &str,
+        package: &str,
+        module: &str,
+    ) -> Option<String> {
+        let path = format!("{}/{}/{}", library, package, module);
+        self.world.sources().get(&path).map(|source| source.text(db).C())
+    }
+
     /// Remove a module from the pipeline.
     pub fn remove_module(&mut self, library: &str, package: &str, module: &str) {
         let path = format!("{}/{}/{}", library, package, module);

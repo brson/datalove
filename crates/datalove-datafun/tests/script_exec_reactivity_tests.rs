@@ -31,12 +31,11 @@
 
 use rmx::prelude::*;
 use rmx::std::collections::BTreeSet;
-use salsa::Setter as _;
 
 use datalove_datafun as datafun;
-use datafun::pipeline::{
-    CompilerOptions, ModuleCompilationPipeline, ScriptExecutor, ScriptSession,
-};
+
+mod scriptsession;
+use scriptsession::{mark, Module, Session};
 
 /// A B C D, where C uses nothing B provides and D uses `b`.
 ///
@@ -50,168 +49,6 @@ const UNITS: [&str; 4] = [
     "let d = b + 5\ndebuglog \"ran D\"\n",
 ];
 
-/// The mark unit `index` leaves when it runs.
-fn mark(index: usize) -> String {
-    format!("ran {}", ["A", "B", "C", "D", "E"][index])
-}
-
-// ============================================================================
-// The harness
-// ============================================================================
-
-/// A script session that can be edited part way through.
-///
-/// A `ScriptCompiler` borrows the database for as long as it lives and an edit
-/// is `set_text`, which needs `&mut db`, so the compiler is built, used and let
-/// go within each step. [`ScriptSession`] is what crosses in between. The
-/// executor holds no salsa data at all, so it simply stays.
-struct Session {
-    db: datafun::Database,
-    pipeline: ModuleCompilationPipeline,
-    script: Option<ScriptSession>,
-    executor: ScriptExecutor,
-}
-
-impl Session {
-    fn new() -> Session {
-        Session::with_db(datafun::Database::default())
-    }
-
-    fn with_db(db: datafun::Database) -> Session {
-        let mut pipeline = ModuleCompilationPipeline::new(CompilerOptions::default());
-        let (script, executor) = {
-            let compiled = pipeline.compile_fresh(&db);
-            assert!(compiled.is_successful(), "{:?}", compiled.all_errors());
-            let script = compiled
-                .script_compiler_default(&db)
-                .expect("a script compiler")
-                .into_session();
-            let executor = compiled
-                .script_executor(datalove_rt::c::DebugOutputMode::Buffer, None)
-                .expect("a script executor");
-            (script, executor)
-        };
-        Session { db, pipeline, script: Some(script), executor }
-    }
-
-    /// Compile and run one more unit on the end of the script.
-    fn append(&mut self, text: &str) {
-        let compiled = self.pipeline.compile_fresh(&self.db);
-        let mut compiler = compiled
-            .script_compiler_resumed(&self.db, self.script.take().expect("a session"))
-            .expect("a script compiler");
-        let result = compiler.compile_fragment(text);
-        self.script = Some(compiler.into_session());
-
-        let ir_unit = result.ir_unit.as_ref().unwrap_or_else(|| {
-            panic!("appending {text:?} should compile: {:?}", result.lowering)
-        });
-        let output = self.executor.execute_fragment(ir_unit);
-        assert!(!output.starts_with("Error:"), "running {text:?}: {output}");
-    }
-
-    /// Compile and run one more unit, submitted as a bare expression.
-    ///
-    /// Returns the result type and the printed value, which is what the REPL
-    /// shows for an expression line.
-    fn append_expr(&mut self, text: &str) -> (Option<String>, String) {
-        let compiled = self.pipeline.compile_fresh(&self.db);
-        let mut compiler = compiled
-            .script_compiler_resumed(&self.db, self.script.take().expect("a session"))
-            .expect("a script compiler");
-        let result = compiler.compile_expr(text);
-        self.script = Some(compiler.into_session());
-
-        let ir_unit = result.ir_unit.as_ref().unwrap_or_else(|| {
-            panic!("the expression {text:?} should compile: {:?}", result.lowering)
-        });
-        self.executor.execute_expr(ir_unit)
-    }
-
-    /// Change unit `index`'s text, which is `set_text` on its `Source`.
-    fn edit(&mut self, index: usize, text: &str) {
-        let source = self.script.as_ref().expect("a session").unit_sources()[index];
-        source.set_text(&mut self.db).to(text.S());
-    }
-
-    /// Re-lower and re-execute what an edit to unit `edited` reaches.
-    ///
-    /// Returns the units re-lowered, which is also the units re-executed:
-    /// a unit whose lowering the edit reaches has to run again, since it is its
-    /// values the edit changed.
-    fn rederive(&mut self, edited: usize) -> BTreeSet<usize> {
-        let compiled = self.pipeline.compile_fresh(&self.db);
-        let mut compiler = compiled
-            .script_compiler_resumed(&self.db, self.script.take().expect("a session"))
-            .expect("a script compiler");
-        let redone = compiler.relower_reach(edited);
-        self.script = Some(compiler.into_session());
-
-        let mut order = Vec::new();
-        for (index, result) in redone {
-            let ir_unit = result.ir_unit.as_ref().unwrap_or_else(|| {
-                panic!("unit {index} should re-lower: {:?} {:?}",
-                    result.typecheck, result.lowering)
-            });
-            let (_, output) = self.executor.reexecute_unit(index, ir_unit);
-            assert!(!output.starts_with("Error:"), "re-running unit {index}: {output}");
-            order.push(index);
-        }
-
-        let mut sorted = order.clone();
-        sorted.sort();
-        assert_eq!(order, sorted, "units must be re-derived in index order");
-        order.into_iter().collect()
-    }
-
-    /// What each unit provides and what it uses, as owned text.
-    ///
-    /// Owned because it is read before the database is borrowed mutably for the
-    /// edit, and everything salsa hands back is tied to that borrow.
-    fn graph(&mut self) -> Graph {
-        let compiled = self.pipeline.compile_fresh(&self.db);
-        let compiler = compiled
-            .script_compiler_resumed(&self.db, self.script.take().expect("a session"))
-            .expect("a script compiler");
-        let db = &self.db;
-        let mut graph = Graph { provides: Vec::new(), uses: Vec::new() };
-        for output in compiler.unit_typecheck_outputs() {
-            graph.provides.push(
-                output.new_vars(db).iter().map(|(name, _, _)| name.as_str(db).S())
-                    .chain(output.new_fns(db).iter().map(|(name, _)| name.as_str(db).S()))
-                    .collect(),
-            );
-            graph.uses.push(
-                output.asked_names(db).iter().map(|name| name.as_str(db).S()).collect(),
-            );
-        }
-        self.script = Some(compiler.into_session());
-        graph
-    }
-
-    /// The marks left since the buffer was last cleared, as unit indices.
-    fn units_run(&mut self) -> BTreeSet<usize> {
-        let buffer = self.executor.get_debug_buffer();
-        self.executor.clear_debug_buffer();
-        (0..UNITS.len()).filter(|index| buffer.contains(&mark(*index))).collect()
-    }
-
-    fn binding(&mut self, name: &str) -> String {
-        self.executor
-            .get_binding(name)
-            .unwrap_or_else(|| panic!("no binding named {name}"))
-            .1
-    }
-}
-
-impl Drop for Session {
-    fn drop(&mut self) {
-        // Before the interpreter's runtime is shut down, which is where the
-        // leak checker has its say.
-        self.executor.destroy_live_values();
-    }
-}
-
 /// A script built from `UNITS` and run through, with the marks cleared.
 fn four_units() -> Session {
     let mut session = Session::new();
@@ -224,42 +61,6 @@ fn four_units() -> Session {
         "every unit runs once as it is appended",
     );
     session
-}
-
-// ============================================================================
-// The graph the reach is measured against
-// ============================================================================
-
-/// What each unit provides and what it uses.
-struct Graph {
-    provides: Vec<Vec<String>>,
-    uses: Vec<Vec<String>>,
-}
-
-impl Graph {
-    /// The units an edit to `edited` reaches, in index order.
-    ///
-    /// A name a unit uses resolves to the nearest earlier unit that provides
-    /// it, so the edit reaches a unit when one of the names it uses resolves to
-    /// a unit already reached. Transitive, and one forward pass gives all of
-    /// it, because a unit's providers all sit before it.
-    ///
-    /// The edited unit is always in here: `asked_names` records a name the unit
-    /// binds itself, deliberately, and that over-reporting is what makes it
-    /// sound. See `script_graph_tests`.
-    fn reach(&self, edited: usize) -> BTreeSet<usize> {
-        let mut reached = vec![false; self.uses.len()];
-        reached[edited] = true;
-        for unit in edited + 1..self.uses.len() {
-            reached[unit] = self.uses[unit].iter().any(|name| {
-                (0..unit)
-                    .rev()
-                    .find(|earlier| self.provides[*earlier].contains(name))
-                    .is_some_and(|provider| reached[provider])
-            });
-        }
-        (0..reached.len()).filter(|unit| reached[*unit]).collect()
-    }
 }
 
 /// The fixture really is the shape the claim is about.
@@ -295,13 +96,7 @@ fn c_holds_no_reference_to_b() {
     let mut session = Session::new();
     let mut units = Vec::new();
     for text in UNITS {
-        let compiled = session.pipeline.compile_fresh(&session.db);
-        let mut compiler = compiled
-            .script_compiler_resumed(&session.db, session.script.take().expect("a session"))
-            .expect("a script compiler");
-        let result = compiler.compile_fragment(text);
-        session.script = Some(compiler.into_session());
-        let ir_unit = result.ir_unit.expect("the fixture compiles");
+        let ir_unit = session.compile_append(text).ir_unit.expect("the fixture compiles");
         session.executor.execute_fragment(&ir_unit);
         units.push(ir_unit);
     }
@@ -516,12 +311,7 @@ fn an_edit_reaches_an_expression_unit() {
     assert_eq!(named, (Some("int".S()), "2".S()));
 
     session.edit(0, "let b = 5\ndebuglog \"ran B\"\n");
-    let compiled = session.pipeline.compile_fresh(&session.db);
-    let mut compiler = compiled
-        .script_compiler_resumed(&session.db, session.script.take().expect("a session"))
-        .expect("a script compiler");
-    let redone = compiler.relower_reach(0);
-    session.script = Some(compiler.into_session());
+    let redone = session.relower(0);
 
     let mut values = Vec::new();
     for (index, result) in &redone {
@@ -553,12 +343,7 @@ fn an_edit_that_breaks_a_later_unit_leaves_the_rest_alone() {
 
     session.edit(1, "let b = \"two\"\ndebuglog \"ran B\"\n");
 
-    let compiled = session.pipeline.compile_fresh(&session.db);
-    let mut compiler = compiled
-        .script_compiler_resumed(&session.db, session.script.take().expect("a session"))
-        .expect("a script compiler");
-    let redone = compiler.relower_reach(1);
-    session.script = Some(compiler.into_session());
+    let redone = session.relower(1);
 
     let reached: BTreeSet<usize> = redone.iter().map(|(index, _)| *index).collect();
     assert_eq!(reached, BTreeSet::from([1, 3]));
@@ -685,25 +470,16 @@ fn rederiving_typechecks_no_more_than_analysis_would() {
 /// that simply took every later unit would be caught here.
 #[test]
 fn editing_a_require_reaches_a_later_import_and_nothing_else() {
-    let db = datafun::Database::default();
-    let mut pipeline = ModuleCompilationPipeline::new(CompilerOptions::default());
-    pipeline.add_module(&db, "local", "test", "utils",
-        "fun ident(x: u32): u32\n    ret x\nend fun\n");
-    pipeline.add_module(&db, "local", "test", "other",
-        "fun ident(x: u32): u32\n    ret x\nend fun\n");
-    let (script, executor) = {
-        let compiled = pipeline.compile_fresh(&db);
-        assert!(compiled.is_successful(), "{:?}", compiled.all_errors());
-        let script = compiled
-            .script_compiler_default(&db)
-            .expect("a script compiler")
-            .into_session();
-        let executor = compiled
-            .script_executor(datalove_rt::c::DebugOutputMode::Buffer, None)
-            .expect("a script executor");
-        (script, executor)
-    };
-    let mut session = Session { db, pipeline, script: Some(script), executor };
+    let mut session = Session::with_modules(&[
+        Module {
+            library: "local", package: "test", module: "utils",
+            source: "fun ident(x: u32): u32\n    ret x\nend fun\n",
+        },
+        Module {
+            library: "local", package: "test", module: "other",
+            source: "fun ident(x: u32): u32\n    ret x\nend fun\n",
+        },
+    ]);
 
     session.append("require module local/test/utils\n");
     session.append("import utils.ident\nlet v = ident(7)\ndebuglog v\n");
@@ -712,20 +488,15 @@ fn editing_a_require_reaches_a_later_import_and_nothing_else() {
 
     session.edit(0, "require module local/test/other\n");
 
-    // `relower_reach` rather than `rederive`, because the unit this reaches is
+    // `relower` rather than `rederive`, because the unit this reaches is
     // supposed to stop compiling and `rederive` asserts that everything it
     // touches lowers.
-    let compiled = session.pipeline.compile_fresh(&session.db);
-    let mut compiler = compiled
-        .script_compiler_resumed(&session.db, session.script.take().expect("a session"))
-        .expect("a script compiler");
-    let redone = compiler.relower_reach(0);
+    let redone = session.relower(0);
     let reached: BTreeSet<usize> = redone.iter().map(|(index, _)| *index).collect();
     let broken: Vec<usize> = redone.iter()
         .filter(|(_, result)| result.ir_unit.is_none())
         .map(|(index, _)| *index)
         .collect();
-    session.script = Some(compiler.into_session());
 
     assert_eq!(
         reached,
@@ -739,81 +510,169 @@ fn editing_a_require_reaches_a_later_import_and_nothing_else() {
 }
 
 // ============================================================================
-// Modules, which the reach does not cover
+// Modules, which the reach now covers
 // ============================================================================
 
-/// **A known gap, pinned.** Editing a module does not reach the script units
-/// that import from it, and they go stale.
+/// **Editing a module reaches the script units that import from it.**
 ///
-/// `a` is `f(1)` under a module whose `f` returns its argument. Change `f` to
-/// return 42 and `a` is still 1: no script unit re-typechecks, appending a unit
-/// afterwards re-typechecks only the new one, and nothing re-executes.
+/// This test used to pin the opposite, which was the gap section E of
+/// `botdocs/plan-script-reactivity.md` is about. `a` is `f(1)` under a module
+/// whose `f` returns its argument; change `f` to return 42 and `a` reads 42.
 ///
-/// **Two different things are happening and only one of them is wrong.** No unit
-/// re-typechecking is *correct*: a module body change moves no type, and
-/// `ModuleSpec` holds the module's `ParsedStatements`, which compare equal
-/// because a `StmtFun`'s identity is `(module_id, name, local_index)` and its
-/// body rides a tracked field. So `ScriptEnv` interns to the same handle and
-/// nothing is re-keyed. That is the parse firewall working.
+/// **Why it needed a driver rather than a keying change.** Stage B made
+/// typechecking lazy: an earlier unit re-runs when a later one asks
+/// `binding_at` about a name it provides, and a module edit makes nobody ask.
+/// So there was nothing wrong to fix -- there was nothing to say "a module
+/// changed, go and re-derive what depended on it".
 ///
-/// Execution is the wrong half, and it is the same distinction stage C exists
-/// for: a change that moves no type still moves a value, so execution has to
-/// cascade where analysis does not. Stage C's reach is driven by an edited
-/// *script unit* -- `relower_reach(index)` -- and there is no module-to-unit
-/// edge in it and no entry point to say "a module changed".
+/// **A module body change moves no type**, and that is still true and still
+/// correct: `ModuleSpec` holds the module's `ParsedStatements`, which compare
+/// equal because a `StmtFun`'s identity is `(module_id, name, local_index)` and
+/// its body rides a tracked field. It is execution that has to cascade where
+/// analysis does not, which is the same distinction stage C exists for.
 ///
-/// **Not reachable from shipped code.** Nothing in `datalove-repl` can edit a
-/// module: there is no `update_source` or workspace-delta path in the engine, so
-/// a session's modules are fixed once it starts. This is reachable only by
-/// driving the pipeline directly, as here.
-///
-/// Fixing it means an entry point that takes a module edit and re-derives the
-/// units whose imports resolve into that module, which is the module-shaped
-/// version of what `relower_reach` already does. When that lands this test wants
-/// inverting.
+/// The second unit is the control: it uses nothing of the first unit's and
+/// imports from no module, so it must be left alone.
 #[test]
-fn editing_a_module_does_not_reach_the_script_and_leaves_it_stale() {
-    let db = datafun::Database::default();
-    let mut pipeline = ModuleCompilationPipeline::new(CompilerOptions::default());
-    pipeline.add_module(&db, "local", "test", "m",
-        "fun f(x: u32): u32\n    ret x\nend fun\n");
-    let (script, executor) = {
-        let compiled = pipeline.compile_fresh(&db);
-        assert!(compiled.is_successful(), "{:?}", compiled.all_errors());
-        let script = compiled
-            .script_compiler_default(&db).expect("a script compiler").into_session();
-        let executor = compiled
-            .script_executor(datalove_rt::c::DebugOutputMode::Buffer, None)
-            .expect("a script executor");
-        (script, executor)
+fn editing_a_module_reaches_the_units_that_import_from_it() {
+    let module = |body: &'static str| Module {
+        library: "local", package: "test", module: "m", source: body,
     };
-    let mut session = Session { db, pipeline, script: Some(script), executor };
+    let mut session = Session::with_modules(&[
+        module("fun f(x: u32): u32\n    ret x\nend fun\n"),
+    ]);
 
-    session.append("require module local/test/m\nimport m.f\nlet a = f(1)\ndebuglog a\n");
-    session.append("let b = 2\ndebuglog b\n");
+    session.append(
+        "require module local/test/m\nimport m.f\nlet a = f(1)\ndebuglog \"ran A\"\n");
+    session.append("let b = 2\ndebuglog \"ran B\"\n");
     assert_eq!(session.binding("a"), "1");
+    let _ = session.units_run();
+
+    let graph = session.graph();
+    assert_eq!(
+        graph.imports,
+        vec![vec!["local/test/m".S()], Vec::<String>::new()],
+        "the first unit imports from the module and the second imports from none",
+    );
+    let expected = graph.module_reach("local/test/m");
+    assert_eq!(expected, BTreeSet::from([0]), "only the importing unit");
 
     // A body change, so no signature and no type moves.
-    session.pipeline.update_source(
-        &mut session.db, "local", "test", "m",
-        "fun f(x: u32): u32\n    ret 42\nend fun\n");
+    let edited = module("fun f(x: u32): u32\n    ret 42\nend fun\n");
+    assert_eq!(session.rederive_module(&edited), expected);
+    assert_eq!(session.units_run(), expected, "the importing unit ran again");
 
-    let compiled = session.pipeline.compile_fresh(&session.db);
-    assert!(compiled.is_successful(), "the edited module compiles: {:?}", compiled.all_errors());
-    session.script = Some(
-        compiled
-            .script_compiler_resumed(&session.db, session.script.take().expect("a session"))
-            .expect("a script compiler")
-            .into_session(),
-    );
+    assert_eq!(session.binding("a"), "42", "the edit reached the unit that called `f`");
+    assert_eq!(session.binding("b"), "2", "the control unit was left alone");
+}
 
-    assert_eq!(
-        session.binding("a"), "1",
-        "if this reads 42 the gap has closed -- invert this test",
-    );
+/// A module edit carries on to the units that read what the importing unit
+/// computed.
+///
+/// The transitive half, and the reason the module reach is the name reach with
+/// different seeds rather than a rule of its own: a unit that never heard of
+/// the module is as stale as the one that imported from it if it read that
+/// unit's binding. The fourth unit is the control.
+#[test]
+fn a_module_edit_reaches_the_dependents_of_an_importing_unit() {
+    let module = |body: &'static str| Module {
+        library: "local", package: "test", module: "m", source: body,
+    };
+    let mut session = Session::with_modules(&[
+        module("fun f(x: int): int\n    ret x\nend fun\n"),
+    ]);
 
-    // And a later append does not drag the earlier units along either.
-    session.append("let c = 3\ndebuglog c\n");
-    assert_eq!(session.binding("a"), "1", "still stale after an append");
+    session.append("let a = 1\ndebuglog \"ran A\"\n");
+    session.append(
+        "require module local/test/m\nimport m.f\nlet b = f(2)\ndebuglog \"ran B\"\n");
+    session.append("let c = b + 1\ndebuglog \"ran C\"\n");
+    session.append("let d = a + 100\ndebuglog \"ran D\"\n");
+    let _ = session.units_run();
     assert_eq!(session.binding("c"), "3");
+
+    let graph = session.graph();
+    let expected = graph.module_reach("local/test/m");
+    assert_eq!(
+        expected, BTreeSet::from([1, 2]),
+        "the importing unit and the unit that reads `b`; A is upstream and D \
+         reads only `a`",
+    );
+
+    let edited = module("fun f(x: int): int\n    ret x * 10\nend fun\n");
+    assert_eq!(session.rederive_module(&edited), expected);
+    assert_eq!(session.units_run(), expected);
+    assert_eq!(session.binding("b"), "20");
+    assert_eq!(session.binding("c"), "21", "C was reached through B, not directly");
+    assert_eq!(session.binding("d"), "101", "D was not reached");
+}
+
+/// A module edit no unit imports from reaches nothing.
+///
+/// The other end of the rule, and what says the seeds are the imports rather
+/// than "there was a module edit": a session with two modules, importing from
+/// one of them, must not re-derive anything when the other changes.
+#[test]
+fn editing_an_unimported_module_reaches_nothing() {
+    let mut session = Session::with_modules(&[
+        Module {
+            library: "local", package: "test", module: "used",
+            source: "fun f(x: u32): u32\n    ret x\nend fun\n",
+        },
+        Module {
+            library: "local", package: "test", module: "unused",
+            source: "fun g(x: int): int\n    ret x\nend fun\n",
+        },
+    ]);
+
+    session.append(
+        "require module local/test/used\nimport used.f\nlet a = f(1)\ndebuglog \"ran A\"\n");
+    let _ = session.units_run();
+
+    let graph = session.graph();
+    assert_eq!(graph.module_reach("local/test/unused"), BTreeSet::new());
+
+    let edited = Module {
+        library: "local", package: "test", module: "unused",
+        source: "fun g(x: int): int\n    ret x + 1\nend fun\n",
+    };
+    assert_eq!(session.rederive_module(&edited), BTreeSet::new());
+    assert_eq!(session.units_run(), BTreeSet::new(), "nothing ran again");
+    assert_eq!(session.binding("a"), "1");
+}
+
+/// A module *signature* change reaches the importing unit through lowering as
+/// well, and the unit that can no longer call it says so.
+///
+/// The execution reach is the same either way -- it is the imports that decide
+/// it -- but a signature change is where the units that are *asked* re-typecheck,
+/// so this is the case the driver had to be narrow for.
+#[test]
+fn a_module_signature_change_is_reported_against_the_importing_unit() {
+    let mut session = Session::with_modules(&[
+        Module {
+            library: "local", package: "test", module: "m",
+            source: "fun f(x: u32): u32\n    ret x\nend fun\n",
+        },
+    ]);
+
+    session.append(
+        "require module local/test/m\nimport m.f\nlet a = f(1)\ndebuglog \"ran A\"\n");
+    session.append("let b = 2\ndebuglog \"ran B\"\n");
+    let _ = session.units_run();
+
+    // `f` now takes a string, so `f(1)` is no longer a call anything answers.
+    let edited = Module {
+        library: "local", package: "test", module: "m",
+        source: "fun f(x: string): u32\n    ret 7\nend fun\n",
+    };
+    let redone = session.relower_module(&edited);
+
+    let reached: BTreeSet<usize> = redone.iter().map(|(index, _)| *index).collect();
+    assert_eq!(reached, BTreeSet::from([0]), "the importing unit and nothing else");
+    let broken: Vec<usize> = redone.iter()
+        .filter(|(_, result)| result.ir_unit.is_none())
+        .map(|(index, _)| *index)
+        .collect();
+    assert_eq!(broken, vec![0], "`f(1)` no longer typechecks, and unit 0 is where it is");
+    assert_eq!(session.binding("b"), "2", "the control unit is untouched");
 }

@@ -50,6 +50,12 @@ pub struct UnitLowerRecord {
     pub provides: Vec<String>,
     /// Every name this unit asked its environment for.
     pub uses: Vec<String>,
+    /// The modules this unit's imports resolve into, by path.
+    ///
+    /// The edge a module edit travels along, held here for the same reason
+    /// `uses` is: the reach is walked after the database has been mutated, and
+    /// nothing borrowed from salsa survives that.
+    pub imports: Vec<String>,
 }
 
 /// The lowering context a unit sitting after `records` is lowered against.

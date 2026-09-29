@@ -179,6 +179,18 @@ impl FunctionRegistry {
             .expect("Cannot get mutable reference to shared module registry")
     }
 
+    /// Put a recompiled module registry in place of the one held.
+    ///
+    /// A script unit names a module function by `CodeRef::Module`, so editing a
+    /// module changes nothing the script unit holds and everything about what
+    /// that reference lands on. The whole registry is replaced rather than the
+    /// edited module's entry, because the numbering is the compilation's to
+    /// decide and a registry half from one compilation and half from another
+    /// would be nobody's answer.
+    pub fn set_module_registry(&mut self, module_registry: Arc<ModuleFunctionRegistry>) {
+        self.module_registry = module_registry;
+    }
+
     /// Get a reference to the unit registry.
     pub fn unit_registry(&self) -> &UnitFunctionRegistry {
         &self.unit_registry

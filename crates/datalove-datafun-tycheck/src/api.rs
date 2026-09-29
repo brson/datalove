@@ -125,6 +125,21 @@ pub struct ScriptUnitTypecheckOutput<'db> {
     /// `botdocs/plan-script-reactivity.md` for what it is for.
     #[returns(ref)]
     pub asked_names: Vec<InternedText<'db>>,
+    /// The modules this unit's `import` statements resolve into, by path.
+    ///
+    /// The module-shaped half of the dependency graph, and the edge a module
+    /// edit is propagated along: `asked_names` reaches the units that use what
+    /// *another unit* provides, and says nothing about the modules, so editing
+    /// a module has no edge to travel without this. Recorded here rather than
+    /// recomputed where the reach is walked, because resolving an alias to a
+    /// path is the import resolution's own answer -- an alias may come from
+    /// this unit's `require` or an earlier unit's, and an alias that names
+    /// nothing is taken as a path outright.
+    ///
+    /// Sorted and without duplicates, since it is part of a memoized value's
+    /// identity.
+    #[returns(ref)]
+    pub imported_modules: Vec<String>,
 }
 
 /// One unit's parse, name resolution and spans.
@@ -287,6 +302,7 @@ pub fn typecheck_script_unit<'db>(
     let mut new_fns = Vec::new();
     let mut new_fn_asts = Vec::new();
     let mut new_module_aliases = Vec::new();
+    let mut imported_modules = Vec::new();
 
     // Typecheck this unit based on kind.
     match &unit_spec.kind {
@@ -297,7 +313,7 @@ pub fn typecheck_script_unit<'db>(
             new_module_aliases = collect_module_aliases(db, parsed);
 
             // Resolve imports using shared helper.
-            let (resolved_imports, import_errors) = resolve_script_imports(
+            let (resolved_imports, import_errors, imports) = resolve_script_imports(
                 db,
                 parsed,
                 &new_module_aliases,
@@ -305,6 +321,7 @@ pub fn typecheck_script_unit<'db>(
                 &module_functions,
                 &path_to_module_id,
             );
+            imported_modules = imports;
 
             // Add resolved imports to context and track as new bindings.
             //
@@ -424,7 +441,7 @@ pub fn typecheck_script_unit<'db>(
 
     ScriptUnitTypecheckOutput::new(
         db, result, new_vars, new_fns, new_fn_asts, new_module_aliases, new_consts,
-        asked_names)
+        asked_names, imported_modules)
 }
 
 /// Typecheck every unit of `script`, oldest first.
@@ -1005,6 +1022,11 @@ fn module_description<'db>(db: &'db dyn crate::Db, module_id: Option<ModuleId<'d
 /// `inherited_alias`, among the earlier units' -- a `require` on one REPL line
 /// is visible to an `import` on a later one. An alias that names nothing is
 /// taken as a path, which is how a module is imported without a require.
+///
+/// The third return is every module path the unit's imports named, sorted and
+/// deduplicated -- including one whose function was not found, since a unit
+/// that failed to import from a module still depends on that module: edit it to
+/// declare the function and the unit's answer changes.
 fn resolve_script_imports<'db>(
     db: &'db dyn crate::Db,
     script: &ParsedStatements<'db>,
@@ -1012,10 +1034,15 @@ fn resolve_script_imports<'db>(
     inherited_alias: impl Fn(InternedText<'db>) -> Option<String>,
     module_functions: &HashMap<String, HashMap<InternedText<'db>, (TypeFunction<'db>, StmtFun<'db>)>>,
     path_to_module_id: &HashMap<String, ModuleId<'db>>,
-) -> (Vec<(InternedText<'db>, TypeFunction<'db>, StmtFun<'db>, Option<ModuleId<'db>>, u32)>, Vec<TypeError>) {
+) -> (
+    Vec<(InternedText<'db>, TypeFunction<'db>, StmtFun<'db>, Option<ModuleId<'db>>, u32)>,
+    Vec<TypeError>,
+    Vec<String>,
+) {
     // Resolve import statements.
     let mut resolved = Vec::new();
     let mut errors = Vec::new();
+    let mut imported = std::collections::BTreeSet::new();
 
     for statement in script.statements.iter() {
         if let Statement::Import(import) = statement {
@@ -1030,6 +1057,7 @@ fn resolve_script_imports<'db>(
                 .or_else(|| inherited_alias(module_alias))
                 .unwrap_or_else(|| module_alias.as_str(db).S());
             let module_path = module_path.as_str();
+            imported.insert(module_path.S());
 
             if let Some(funcs) = module_functions.get(module_path) {
                 if let Some((func_ty, func_ast)) = funcs.get(&item_name) {
@@ -1050,5 +1078,5 @@ fn resolve_script_imports<'db>(
         }
     }
 
-    (resolved, errors)
+    (resolved, errors, imported.into_iter().collect())
 }
