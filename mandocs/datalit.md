@@ -57,22 +57,25 @@ and syntax of Datalove in general.
     5 6,
     7 8,
   |],
-  metrics = : {| name: string, value: f64 |} / {|
-    name, value
-    "latency", 0.5
-    "throughput", 1000.0
-  |},
   config = some {
     retries = 3,
     timeout = 30.0,
   },
+  metrics_table = : {|
+    name: string, value: f64
+  |} / {|
+    name, value
+    "latency", 0.5
+    "throughput", 1000.0
+    "duration", 25.0
+  |},
   backup = : ?string / none,
   status = ok "healthy",
   failure = : !string / er error "oops",
   state = atom Ready,
   event = term Click (100, 200),
   kind = : enum {
-    atom Ready,
+    atom Observation,
     term Custom string,
   } / enum {
     term Custom "experiment",
